@@ -1,7 +1,7 @@
 ![Logo](admin/yamaha.png)
 ## ioBroker.yamaha
 
-[![NPM version](http://img.shields.io/npm/v/iobroker.yamaha.svg)](https://www.npmjs.com/package/iobroker.yamaha)
+![Number of Installations](http://iobroker.live/badges/yamaha-community-installed.svg) ![Number of Installations](http://iobroker.live/badges/yamaha-community-stable.svg) [![NPM version](http://img.shields.io/npm/v/iobroker.yamaha.svg)](https://www.npmjs.com/package/iobroker.yamaha)
 [![Tests](http://img.shields.io/travis/soef/ioBroker.yamaha/master.svg)](https://travis-ci.org/soef/ioBroker.yamaha)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat)](https://github.com/soef/iobroker.yamaha/blob/master/LICENSE)
 
