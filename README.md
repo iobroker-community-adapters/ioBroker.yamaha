@@ -13,6 +13,9 @@
 
 Adapter for Yamaha AV receivers
 
+### Initial Creation
+This adapter was initialy created by @soef at https://github.com/soef/ioBroker.yamaha but not maintained any more, so we moved it to iobroker-community so that bugs could be fixed. thanks @soef for his work.
+
 #### Configuration
 Currently without autodiscover, you have to enter the IP of your receiver
 
