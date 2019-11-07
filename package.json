@@ -41,7 +41,7 @@
     "url": "https://github.com/soef/iobroker.yamaha/issues"
   },
   "readmeFilename": "README.md",
-  "main": "yamaha.js",
+  "main": "main.js",
   "scripts": {
     "test": "node node_modules/mocha/bin/mocha --exit"
   }
