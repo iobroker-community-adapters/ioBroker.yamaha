@@ -204,7 +204,7 @@
             "type": "state",
             "common": {
                 "name": "Volume Up",
-                "type": "integer",
+                "type": "number",
                 "role": "media.volumeUp",
                 "read": true,
                 "write": true,
@@ -218,7 +218,7 @@
             "type": "state",
             "common": {
                 "name": "Volume Down",
-                "type": "integer",
+                "type": "number",
                 "role": "media.volumeDown",
                 "read": true,
                 "write": true,
@@ -232,7 +232,7 @@
             "type": "state",
             "common": {
                 "name": "Adjust Volume",
-                "type": "integer",
+                "type": "number",
                 "role": "media.adjustVolume",
                 "read": true,
                 "write": true,
@@ -260,7 +260,7 @@
             "type": "state",
             "common": {
                 "name": "Volume",
-                "type": "integer",
+                "type": "number",
                 "role": "media.volume",
                 "read": true,
                 "write": true,
