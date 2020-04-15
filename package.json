@@ -27,10 +27,10 @@
     "soef": "^0.2.1",
     "y5": "^0.2.0",
     "yamaha-nodejs-soef": "^0.7.0",
-    "@iobroker/adapter-core": "^1.0.3"
+    "@iobroker/adapter-core": "^2.3.0"
   },
   "devDependencies": {
-    "mocha": "^4.1.0",
+    "mocha": "^7.1.1",
     "chai": "^4.1.2"
   },
   "repository": {
