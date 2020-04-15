@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat)](https://github.com/soef/iobroker.yamaha/blob/master/LICENSE)
 
 <!--
-[![Build status](https://ci.appveyor.com/api/projects/status/t51976au5hcoo2mx?svg=true)](https://ci.appveyor.com/project/soef/iobroker-yamaha)
+[![Build status](https://ci.appveyor.com/api/projects/status/t51976au5hcoo2mx?svg=true)](https://ci.appveyor.com/project/soef/iobroker-yamaha) [![Greenkeeper badge](https://badges.greenkeeper.io/iobroker-community-adapters/ioBroker.yamaha-community.svg)](https://greenkeeper.io/)
 -->
 
 #### Description
