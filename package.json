@@ -24,7 +24,7 @@
   "dependencies": {
     "peer-ssdp": "0.0.5",
     "request": "^2.40.0",
-    "soef": "^0.2.1",
+    "soef": "^0.4.15",
     "y5": "^0.2.0",
     "yamaha-nodejs-soef": "^0.7.0",
     "@iobroker/adapter-core": "^1.0.3"
