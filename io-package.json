@@ -1,8 +1,20 @@
 {
     "common": {
         "name": "yamaha-community",
-        "version": "0.3.19",
+        "version": "0.3.20",
         "news": {
+            "0.3.20": {
+                "en": "fixed crash in lib/soef.js (Garfonso)\nupdated meta information. (Garfonso)",
+                "de": "Absturz in lib / soef.js (Garfonso) behoben \nupdated meta information. (Garfonso)",
+                "ru": "исправлен сбой в lib / soef.js (Garfonso) \nupdated метаинформации. (Garfonso)",
+                "pt": "falha corrigida na lib / soef.js (Garfonso) \nmeta-informações atualizadas. (Garfonso)",
+                "nl": "crash opgelost in lib / soef.js (Garfonso) \nupdate meta-informatie. (Garfonso)",
+                "fr": "correction d'un crash dans lib / soef.js (Garfonso) \ndes méta-informations mises à jour. (Garfonso)",
+                "it": "risolto crash in lib / soef.js (Garfonso) \nmeta informazioni non aggiornate. (Garfonso)",
+                "es": "Se corrigió el bloqueo en lib / soef.js (Garfonso) \n meta información actualizada. (Garfonso)",
+                "pl": "naprawiono awarię w lib / soef.js (Garfonso) \naktualizowano meta informacje. (Garfonso)",
+                "zh-cn": "修复了lib / soef.js（Garfonso）\n更新的元信息中的崩溃。 （加方索）"
+            },
             "0.3.19": {
                 "en": "Changelog added to readme",
                 "de": "Changelog der readme hinzugefügt"
