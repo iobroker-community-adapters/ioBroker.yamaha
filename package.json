@@ -10,9 +10,13 @@
     {
       "name": "soef",
       "email": "soef@gmx.net"
+    },
+    {
+      "name": "Garfonso",
+      "email": "garfonso@mobo.info"
     }
   ],
-  "homepage": "https://github.com/soef/iobroker.yamaha",
+  "homepage": "https://github.com/iobroker-community-adapters/ioBroker.yamaha-community",
   "license": "MIT",
   "keywords": [
     "ioBroker",
@@ -22,13 +26,13 @@
     "RX-V"
   ],
   "dependencies": {
+    "@iobroker/adapter-core": "^1.0.3",
+    "array-ext": "^0.1.0",
     "peer-ssdp": "0.0.5",
     "request": "^2.40.0",
-    "y5": "^0.2.0",
-    "yamaha-nodejs-soef": "^0.7.0",
-    "@iobroker/adapter-core": "^1.0.3"
     "sprintf-js": "^1.0.3",
-    "array-ext": "^0.1.0"
+    "y5": "^0.2.0",
+    "yamaha-nodejs-soef": "^0.7.0"
   },
   "devDependencies": {
     "mocha": "^4.1.0",
@@ -36,10 +40,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/soef/iobroker.yamaha"
+    "url": "https://github.com/iobroker-community-adapters/ioBroker.yamaha-community"
   },
   "bugs": {
-    "url": "https://github.com/soef/iobroker.yamaha/issues"
+    "url": "https://github.com/iobroker-community-adapters/ioBroker.yamaha-community/issues"
   },
   "readmeFilename": "README.md",
   "main": "main.js",
