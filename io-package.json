@@ -115,6 +115,8 @@
         ],
         "enabled": true,
         "type": "multimedia",
+        "connectionType": "local",
+        "dataSource": "push",
         "materialize": true,
         "compact": true,
         "authors": [
