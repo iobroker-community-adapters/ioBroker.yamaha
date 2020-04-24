@@ -5,10 +5,6 @@
 [![Tests](http://img.shields.io/travis/iobroker-community-adapters/ioBroker.yamaha/master.svg)](https://travis-ci.org/iobroker-community-adapters/ioBroker.yamaha)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat)](https://github.com/iobroker-community-adapters/iobroker.yamaha/blob/master/LICENSE)
 
-<!-- this is probably not up to date...
-[![Build status](https://ci.appveyor.com/api/projects/status/t51976au5hcoo2mx?svg=true)](https://ci.appveyor.com/project/iobroker-community-adapters/iobroker-yamaha)
--->
-
 #### Description
 
 Adapter for Yamaha AV receivers
