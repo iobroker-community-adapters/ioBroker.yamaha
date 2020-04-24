@@ -10,7 +10,8 @@ var yamaha,
     peer,
     y5,
     namedInputs = {},
-    refreshTimer = soef.Timer();
+    refreshTimer = soef.Timer(),
+    timeouts = {};
 
 soef.extendArray();
 function closePeer() {
@@ -29,7 +30,12 @@ var adapter = utils.Adapter({
             if (y5) y5.close(true);
             refreshTimer.clear();
             closePeer();
-            setTimeout(callback, 1700);
+            for (const key of Objects.keys(timeouts)) {
+                if(timeouts[key]) {
+                    clearTimeout(timeouts[key]);
+                }
+            }
+            timeouts.unload = setTimeout(callback, 1700);
         } catch (e) {
             callback();
         }
@@ -561,7 +567,7 @@ function runRealtimeFunction() {
         closePeer();
         refreshTimer.enable();
         adapter.log.debug('y5.restart');
-        setTimeout(updateStates, timeout);
+        timeouts.restart = setTimeout(updateStates, timeout);
         this.setReconnectTimer(timeout);
     };
     y5.setLog(adapter.log.debug);
@@ -569,7 +575,7 @@ function runRealtimeFunction() {
         y5.close(true);
         y5 = null;
         closePeer();
-        setTimeout(runRealtimeFunction, delay || 1000);
+        timeouts.restart2 = setTimeout(runRealtimeFunction, delay || 1000);
     };
     y5.onTimeout = onConnectionTimeout;
     y5.onData = function(data) {
@@ -706,7 +712,7 @@ function main() {
     // return;
 
     checkIP(function() {
-        setTimeout(updateStates, 1000);
+        timeouts.updateStates = setTimeout(updateStates, 1000);
         runRealtimeFunction();
 
         adapter.subscribeStates('*');

@@ -104,6 +104,7 @@
         "enabled": true,
         "type": "multimedia",
         "materialize": true,
+        "compact": true,
         "authors": [
             {
                 "name": "soef",
