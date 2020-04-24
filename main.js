@@ -756,3 +756,12 @@ function main() {
         });
     });
 }
+
+// @ts-ignore parent is a valid property on module
+if (module.parent) {
+    // Export the constructor in compact mode
+    /**
+     * @param {Partial<ioBroker.AdapterOptions>} [options={}]
+     */
+    module.exports = (options) => main() //is that correct?
+}
