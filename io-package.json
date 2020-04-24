@@ -65,6 +65,18 @@
             }
         },
         "title": "Yamaha",
+        "titleLang": {
+            "en": "Yamaha",
+            "de": "Yamaha",
+            "ru": "Yamaha",
+            "pt": "Yamaha",
+            "nl": "Yamaha",
+            "fr": "Yamaha",
+            "it": "Yamaha",
+            "es": "Yamaha",
+            "pl": "Yamaha",
+            "zh-cn": "雅马哈"
+        },
         "desc": {
             "en": "Control Yamaha AV-Recievers via Network",
             "de": "Steuern Sie Yamaha AV-Receiver über das Netzwerk",
@@ -80,7 +92,7 @@
         "platform": "Javascript/Node.js",
         "mode": "daemon",
         "icon": "yamaha.png",
-        "extIcon": "https://github.com/iobroker-community-adapters/ioBroker.yamaha/master/admin/yamaha.png",
+        "extIcon": "https://raw.githubusercontent.com/iobroker-community-adapters/ioBroker.yamaha/master/admin/yamaha.png",
         "readme": "https://github.com/iobroker-community-adapters/ioBroker.yamaha/blob/master/README.md",
         "license": "MIT",
         "loglevel": "info",
@@ -91,6 +103,7 @@
         ],
         "enabled": true,
         "type": "multimedia",
+        "materialize": true,
         "authors": [
             {
                 "name": "soef",
