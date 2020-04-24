@@ -65,7 +65,18 @@
             }
         },
         "title": "Yamaha",
-        "desc": "Yamaha AVR Adapter",
+        "desc": {
+            "en": "Control Yamaha AV-Recievers via Network",
+            "de": "Steuern Sie Yamaha AV-Receiver über das Netzwerk",
+            "ru": "Управление AV-ресиверами Yamaha через сеть",
+            "pt": "Controle os receptores AV da Yamaha via rede",
+            "nl": "Bedien Yamaha AV-ontvangers via netwerk",
+            "fr": "Contrôlez les récepteurs AV Yamaha via le réseau",
+            "it": "Controlla i ricevitori AV Yamaha tramite la rete",
+            "es": "Controle los receptores AV de Yamaha a través de la red",
+            "pl": "Kontroluj odbiorniki AV Yamaha przez sieć",
+            "zh-cn": "通过网络控制Yamaha AV接收器"
+        },
         "platform": "Javascript/Node.js",
         "mode": "daemon",
         "icon": "yamaha.png",
