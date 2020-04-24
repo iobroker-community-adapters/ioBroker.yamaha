@@ -1,7 +1,7 @@
 "use strict";
 
-var utils = require('@iobroker/adapter-core');
-var soef = require('./lib/soef'),
+const utils = require('@iobroker/adapter-core');
+const soef = require('./lib/soef'),
     devices = new soef.Devices(),
     YAMAHA = require("yamaha-nodejs-soef"),
     Y5 = require('y5');
@@ -21,37 +21,48 @@ function closePeer() {
     }
 }
 
-var adapter = utils.Adapter({
-    name: 'yamaha',
+var adapter;
 
-    unload: function (callback) {
-        try {
-            //adapter.setState(adapter.namespace + '.Realtime.MAIN.PWR', 'unloaded');
-            if (y5) y5.close(true);
-            refreshTimer.clear();
-            closePeer();
-            for (const key of Objects.keys(timeouts)) {
-                if(timeouts[key]) {
-                    clearTimeout(timeouts[key]);
-                }
-            }
-            timeouts.unload = setTimeout(callback, 1700);
-        } catch (e) {
-            callback();
-        }
-    },
-    stateChange: function (id, state) {
-        if (state) {
-            devices.setrawval(soef.ns.no(id), state.val);
-            if (!state.ack) yamaha.execCommand(id, state.val);
-        }
-    },
-    ready: function () {
-        devices.init(adapter, function (err) {
-            main();
-        });
+function startAdapter(options) {
+    if (!options) {
+        options = {};
     }
-});
+
+    Object.assign(options, {
+        name: 'yamaha',
+
+        unload: function (callback) {
+            try {
+                //adapter.setState(adapter.namespace + '.Realtime.MAIN.PWR', 'unloaded');
+                if (y5) y5.close(true);
+                refreshTimer.clear();
+                closePeer();
+                for (const key of Objects.keys(timeouts)) {
+                    if(timeouts[key]) {
+                        clearTimeout(timeouts[key]);
+                    }
+                }
+                timeouts.unload = setTimeout(callback, 1700);
+            } catch (e) {
+                callback();
+            }
+        },
+        stateChange: function (id, state) {
+            if (state) {
+                devices.setrawval(soef.ns.no(id), state.val);
+                if (!state.ack) yamaha.execCommand(id, state.val);
+            }
+        },
+        ready: function () {
+            devices.init(adapter, function (err) {
+                main();
+            });
+        }
+    });
+
+    adapter = utils.Adapter(options);
+    return adapter;
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -763,5 +774,7 @@ if (module.parent) {
     /**
      * @param {Partial<ioBroker.AdapterOptions>} [options={}]
      */
-    module.exports = (options) => main() //is that correct?
+    module.exports = startAdapter
+} else {
+    startAdapter();
 }
