@@ -21,7 +21,7 @@ function closePeer() {
 }
 
 var adapter = utils.Adapter({
-    name: 'yamaha-community',
+    name: 'yamaha',
 
     unload: function (callback) {
         try {

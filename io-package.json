@@ -1,6 +1,6 @@
 {
     "common": {
-        "name": "yamaha-community",
+        "name": "yamaha",
         "version": "0.3.20",
         "news": {
             "0.3.20": {
@@ -64,13 +64,13 @@
                 "de": "Verbindungs-Timeout reduziert"
             }
         },
-        "title": "Yamaha-Community",
+        "title": "Yamaha",
         "desc": "Yamaha AVR Adapter",
         "platform": "Javascript/Node.js",
         "mode": "daemon",
         "icon": "yamaha.png",
-        "extIcon": "https://github.com/iobroker-community-adapters/ioBroker.yamaha-community/master/admin/yamaha.png",
-        "readme": "https://github.com/iobroker-community-adapters/ioBroker.yamaha-community/blob/master/README.md",
+        "extIcon": "https://github.com/iobroker-community-adapters/ioBroker.yamaha/master/admin/yamaha.png",
+        "readme": "https://github.com/iobroker-community-adapters/ioBroker.yamaha/blob/master/README.md",
         "license": "MIT",
         "loglevel": "info",
         "keywords": [

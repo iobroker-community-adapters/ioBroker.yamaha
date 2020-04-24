@@ -1,12 +1,12 @@
 ![Logo](admin/yamaha.png)
 ## ioBroker.yamaha
 
-![Number of Installations](http://iobroker.live/badges/yamaha-community-installed.svg) ![Number of Installations](http://iobroker.live/badges/yamaha-community-stable.svg) [![NPM version](http://img.shields.io/npm/v/iobroker.yamaha.svg)](https://www.npmjs.com/package/iobroker.yamaha)
-[![Tests](http://img.shields.io/travis/iobroker-community-adapters/ioBroker.yamaha-community/master.svg)](https://travis-ci.org/iobroker-community-adapters/ioBroker.yamaha-community)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat)](https://github.com/soef/iobroker.yamaha/blob/master/LICENSE)
+![Number of Installations](http://iobroker.live/badges/yamaha-installed.svg) ![Number of Installations](http://iobroker.live/badges/yamaha-stable.svg) [![NPM version](http://img.shields.io/npm/v/iobroker.yamaha.svg)](https://www.npmjs.com/package/iobroker.yamaha)
+[![Tests](http://img.shields.io/travis/iobroker-community-adapters/ioBroker.yamaha/master.svg)](https://travis-ci.org/iobroker-community-adapters/ioBroker.yamaha)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat)](https://github.com/iobroker-community-adapters/iobroker.yamaha/blob/master/LICENSE)
 
-<!--
-[![Build status](https://ci.appveyor.com/api/projects/status/t51976au5hcoo2mx?svg=true)](https://ci.appveyor.com/project/iobroker-community-adapters/iobroker-yamaha-community)
+<!-- this is probably not up to date...
+[![Build status](https://ci.appveyor.com/api/projects/status/t51976au5hcoo2mx?svg=true)](https://ci.appveyor.com/project/iobroker-community-adapters/iobroker-yamaha)
 -->
 
 #### Description

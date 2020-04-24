@@ -1,5 +1,5 @@
 {
-  "name": "iobroker.yamaha-community",
+  "name": "iobroker.yamaha",
   "version": "0.3.20",
   "description": "ioBroker Yamaha Adapter",
   "author": {
@@ -16,7 +16,7 @@
       "email": "garfonso@mobo.info"
     }
   ],
-  "homepage": "https://github.com/iobroker-community-adapters/ioBroker.yamaha-community",
+  "homepage": "https://github.com/iobroker-community-adapters/ioBroker.yamaha",
   "license": "MIT",
   "keywords": [
     "ioBroker",
@@ -40,10 +40,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/iobroker-community-adapters/ioBroker.yamaha-community"
+    "url": "https://github.com/iobroker-community-adapters/ioBroker.yamaha"
   },
   "bugs": {
-    "url": "https://github.com/iobroker-community-adapters/ioBroker.yamaha-community/issues"
+    "url": "https://github.com/iobroker-community-adapters/ioBroker.yamaha/issues"
   },
   "readmeFilename": "README.md",
   "main": "main.js",
