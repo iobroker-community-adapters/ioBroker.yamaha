@@ -35,6 +35,9 @@ You have to enable "network standby" function in the configuration of your recei
 
 
 ## Changelog
+###0.3.21
+* (Garfonso) added admin 3 compatibility and more meta-data stuff.
+* (Garfonso) added compact mode support.
 ###0.3.20
 * (Garfonso) adjusted local copy of soef.js to js-controller 3.0
 * (Garfonso) updated meta information (links etc) to iobroker-community-adapters

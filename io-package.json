@@ -1,8 +1,20 @@
 {
     "common": {
         "name": "yamaha",
-        "version": "0.3.20",
+        "version": "0.3.21",
         "news": {
+            "0.3.21": {
+                "en": "* (Garfonso) added admin 3 compatibility and more meta-data stuff.\n* (Garfonso) added compact mode support.",
+                "de": "* (Garfonso) hat Admin 3-Kompatibilität und mehr Metadaten hinzugefügt.\n* (Garfonso) hat Unterstützung für den Kompaktmodus hinzugefügt.",
+                "ru": "* (Гарфонсо) добавлена совместимость с админом 3 и больше метаданных.\n* (Гарфонсо) добавлена поддержка компактного режима.",
+                "pt": "* (Garfonso) adicionou compatibilidade com o administrador 3 e mais informações sobre meta-dados.\n* (Garfonso) adicionou suporte ao modo compacto.",
+                "nl": "* (Garfonso) heeft compatibiliteit met admin 3 en meer metadata toegevoegd.\n* (Garfonso) ondersteuning voor compacte modus toegevoegd.",
+                "fr": "* (Garfonso) a ajouté la compatibilité admin 3 et plus de métadonnées.\n* (Garfonso) a ajouté le support du mode compact.",
+                "it": "* (Garfonso) ha aggiunto la compatibilità con admin 3 e altre informazioni sui metadati.\n* (Garfonso) aggiunto il supporto in modalità compatta.",
+                "es": "* (Garfonso) agregó compatibilidad con admin 3 y más cosas de metadatos.\n* (Garfonso) agregó soporte de modo compacto.",
+                "pl": "* (Garfonso) dodał kompatybilność z adminem 3 i więcej metadanych.\n* (Garfonso) dodano obsługę trybu kompaktowego.",
+                "zh-cn": "*（Garfonso）添加了admin 3兼容性和更多的元数据内容。\n*（Garfonso）添加了紧凑模式支持。"
+            },
             "0.3.20": {
                 "en": "fixed crash in lib/soef.js (Garfonso)\nupdated meta information. (Garfonso)",
                 "de": "Absturz in lib / soef.js (Garfonso) behoben \nupdated meta information. (Garfonso)",
