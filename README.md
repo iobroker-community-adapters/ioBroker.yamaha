@@ -1,13 +1,9 @@
 ![Logo](admin/yamaha.png)
 ## ioBroker.yamaha
 
-![Number of Installations](http://iobroker.live/badges/yamaha-community-installed.svg) ![Number of Installations](http://iobroker.live/badges/yamaha-community-stable.svg) [![NPM version](http://img.shields.io/npm/v/iobroker.yamaha.svg)](https://www.npmjs.com/package/iobroker.yamaha)
-[![Tests](http://img.shields.io/travis/soef/ioBroker.yamaha/master.svg)](https://travis-ci.org/soef/ioBroker.yamaha)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat)](https://github.com/soef/iobroker.yamaha/blob/master/LICENSE)
-
-<!--
-[![Build status](https://ci.appveyor.com/api/projects/status/t51976au5hcoo2mx?svg=true)](https://ci.appveyor.com/project/soef/iobroker-yamaha)
--->
+![Number of Installations](http://iobroker.live/badges/yamaha-installed.svg) ![Number of Installations](http://iobroker.live/badges/yamaha-stable.svg) [![NPM version](http://img.shields.io/npm/v/iobroker.yamaha.svg)](https://www.npmjs.com/package/iobroker.yamaha)
+[![Tests](http://img.shields.io/travis/iobroker-community-adapters/ioBroker.yamaha/master.svg)](https://travis-ci.org/iobroker-community-adapters/ioBroker.yamaha)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat)](https://github.com/iobroker-community-adapters/iobroker.yamaha/blob/master/LICENSE)
 
 #### Description
 
@@ -39,6 +35,9 @@ You have to enable "network standby" function in the configuration of your recei
 
 
 ## Changelog
+###0.3.20
+* (Garfonso) adjusted local copy of soef.js to js-controller 3.0
+* (Garfonso) updated meta information (links etc) to iobroker-community-adapters
 ###0.3.19
 * (soef) Changelog added to readme
 ###0.3.18

@@ -1,7 +1,7 @@
 "use strict";
 
 var utils = require('@iobroker/adapter-core');
-var soef = require('soef'),
+var soef = require('./lib/soef'),
     devices = new soef.Devices(),
     YAMAHA = require("yamaha-nodejs-soef"),
     Y5 = require('y5');
@@ -21,7 +21,7 @@ function closePeer() {
 }
 
 var adapter = utils.Adapter({
-    name: 'yamaha-community',
+    name: 'yamaha',
 
     unload: function (callback) {
         try {
