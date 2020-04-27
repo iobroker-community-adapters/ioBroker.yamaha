@@ -42,7 +42,7 @@ function startAdapter(options) {
                         clearTimeout(timeouts[key]);
                     }
                 }
-                timeouts.unload = setTimeout(callback, 1700);
+                callback();
             } catch (e) {
                 callback();
             }
