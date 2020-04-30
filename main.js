@@ -1,7 +1,7 @@
 "use strict";
 
-var utils = require('@iobroker/adapter-core');
-var soef = require('./lib/soef'),
+const utils = require('@iobroker/adapter-core');
+const soef = require('./lib/soef'),
     devices = new soef.Devices(),
     YAMAHA = require("yamaha-nodejs-soef"),
     Y5 = require('y5');
@@ -10,7 +10,8 @@ var yamaha,
     peer,
     y5,
     namedInputs = {},
-    refreshTimer = soef.Timer();
+    refreshTimer = soef.Timer(),
+    timeouts = {};
 
 soef.extendArray();
 function closePeer() {
@@ -20,32 +21,48 @@ function closePeer() {
     }
 }
 
-var adapter = utils.Adapter({
-    name: 'yamaha',
+var adapter;
 
-    unload: function (callback) {
-        try {
-            //adapter.setState(adapter.namespace + '.Realtime.MAIN.PWR', 'unloaded');
-            if (y5) y5.close(true);
-            refreshTimer.clear();
-            closePeer();
-            setTimeout(callback, 1700);
-        } catch (e) {
-            callback();
-        }
-    },
-    stateChange: function (id, state) {
-        if (state) {
-            devices.setrawval(soef.ns.no(id), state.val);
-            if (!state.ack) yamaha.execCommand(id, state.val);
-        }
-    },
-    ready: function () {
-        devices.init(adapter, function (err) {
-            main();
-        });
+function startAdapter(options) {
+    if (!options) {
+        options = {};
     }
-});
+
+    Object.assign(options, {
+        name: 'yamaha',
+
+        unload: function (callback) {
+            try {
+                //adapter.setState(adapter.namespace + '.Realtime.MAIN.PWR', 'unloaded');
+                if (y5) y5.close(true);
+                refreshTimer.clear();
+                closePeer();
+                for (const key of Objects.keys(timeouts)) {
+                    if(timeouts[key]) {
+                        clearTimeout(timeouts[key]);
+                    }
+                }
+                callback();
+            } catch (e) {
+                callback();
+            }
+        },
+        stateChange: function (id, state) {
+            if (state) {
+                devices.setrawval(soef.ns.no(id), state.val);
+                if (!state.ack) yamaha.execCommand(id, state.val);
+            }
+        },
+        ready: function () {
+            devices.init(adapter, function (err) {
+                main();
+            });
+        }
+    });
+
+    adapter = utils.Adapter(options);
+    return adapter;
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -561,7 +578,7 @@ function runRealtimeFunction() {
         closePeer();
         refreshTimer.enable();
         adapter.log.debug('y5.restart');
-        setTimeout(updateStates, timeout);
+        timeouts.restart = setTimeout(updateStates, timeout);
         this.setReconnectTimer(timeout);
     };
     y5.setLog(adapter.log.debug);
@@ -569,7 +586,7 @@ function runRealtimeFunction() {
         y5.close(true);
         y5 = null;
         closePeer();
-        setTimeout(runRealtimeFunction, delay || 1000);
+        timeouts.restart2 = setTimeout(runRealtimeFunction, delay || 1000);
     };
     y5.onTimeout = onConnectionTimeout;
     y5.onData = function(data) {
@@ -706,7 +723,7 @@ function main() {
     // return;
 
     checkIP(function() {
-        setTimeout(updateStates, 1000);
+        timeouts.updateStates = setTimeout(updateStates, 1000);
         runRealtimeFunction();
 
         adapter.subscribeStates('*');
@@ -749,4 +766,15 @@ function main() {
             dev.update();
         });
     });
+}
+
+// @ts-ignore parent is a valid property on module
+if (module.parent) {
+    // Export the constructor in compact mode
+    /**
+     * @param {Partial<ioBroker.AdapterOptions>} [options={}]
+     */
+    module.exports = startAdapter
+} else {
+    startAdapter();
 }

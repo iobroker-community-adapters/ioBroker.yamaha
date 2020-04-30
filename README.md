@@ -35,6 +35,9 @@ You have to enable "network standby" function in the configuration of your recei
 
 
 ## Changelog
+###0.3.21
+* (Garfonso) added admin 3 compatibility and more meta-data stuff.
+* (Garfonso) added compact mode support.
 ###0.3.20
 * (Garfonso) adjusted local copy of soef.js to js-controller 3.0
 * (Garfonso) updated meta information (links etc) to iobroker-community-adapters
@@ -67,7 +70,7 @@ You have to enable "network standby" function in the configuration of your recei
 ### License
 The MIT License (MIT)
 
-Copyright (c) 2015-2017 soef <soef@gmx.net>
+Copyright (c) 2015-2020 soef <soef@gmx.net>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
