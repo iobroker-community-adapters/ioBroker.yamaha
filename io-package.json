@@ -1,18 +1,18 @@
 {
     "common": {
         "name": "yamaha",
-        "version": "0.3.21",
+        "version": "0.4.0",
         "news": {
-            "0.3.21": {
-                "en": "* (Garfonso) added admin 3 compatibility and more meta-data stuff.\n* (Garfonso) added compact mode support.",
-                "de": "* (Garfonso) hat Admin 3-Kompatibilität und mehr Metadaten hinzugefügt.\n* (Garfonso) hat Unterstützung für den Kompaktmodus hinzugefügt.",
+            "0.4.0": {
+                "en": "added admin 3 compatibility and more meta-data stuff.\nadded compact mode support.",
+                "de": "hat Admin 3-Kompatibilität und mehr Metadaten hinzugefügt.\nhat Unterstützung für den Kompaktmodus hinzugefügt.",
                 "ru": "* (Гарфонсо) добавлена совместимость с админом 3 и больше метаданных.\n* (Гарфонсо) добавлена поддержка компактного режима.",
-                "pt": "* (Garfonso) adicionou compatibilidade com o administrador 3 e mais informações sobre meta-dados.\n* (Garfonso) adicionou suporte ao modo compacto.",
-                "nl": "* (Garfonso) heeft compatibiliteit met admin 3 en meer metadata toegevoegd.\n* (Garfonso) ondersteuning voor compacte modus toegevoegd.",
-                "fr": "* (Garfonso) a ajouté la compatibilité admin 3 et plus de métadonnées.\n* (Garfonso) a ajouté le support du mode compact.",
-                "it": "* (Garfonso) ha aggiunto la compatibilità con admin 3 e altre informazioni sui metadati.\n* (Garfonso) aggiunto il supporto in modalità compatta.",
-                "es": "* (Garfonso) agregó compatibilidad con admin 3 y más cosas de metadatos.\n* (Garfonso) agregó soporte de modo compacto.",
-                "pl": "* (Garfonso) dodał kompatybilność z adminem 3 i więcej metadanych.\n* (Garfonso) dodano obsługę trybu kompaktowego.",
+                "pt": "adicionou compatibilidade com o administrador 3 e mais informações sobre meta-dados.\nadicionou suporte ao modo compacto.",
+                "nl": "heeft compatibiliteit met admin 3 en meer metadata toegevoegd.\nondersteuning voor compacte modus toegevoegd.",
+                "fr": "a ajouté la compatibilité admin 3 et plus de métadonnées.\na ajouté le support du mode compact.",
+                "it": "ha aggiunto la compatibilità con admin 3 e altre informazioni sui metadati.\naggiunto il supporto in modalità compatta.",
+                "es": "agregó compatibilidad con admin 3 y más cosas de metadatos.\nagregó soporte de modo compacto.",
+                "pl": "dodał kompatybilność z adminem 3 i więcej metadanych.\ndodano obsługę trybu kompaktowego.",
                 "zh-cn": "*（Garfonso）添加了admin 3兼容性和更多的元数据内容。\n*（Garfonso）添加了紧凑模式支持。"
             },
             "0.3.20": {
@@ -123,6 +123,11 @@
             {
                 "name": "soef",
                 "email": "soef@gmx.net"
+            }
+        ],
+        "dependencies": [
+            {
+                "js-controller": ">=1.5.8"
             }
         ]
     },
