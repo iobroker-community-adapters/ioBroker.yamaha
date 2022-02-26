@@ -1,8 +1,20 @@
 {
     "common": {
         "name": "yamaha",
-        "version": "0.4.0",
+        "version": "0.4.1",
         "news": {
+            "0.4.1": {
+                "en": "\"toggleMute\" now toggle mute state (instead of always muting)",
+                "de": "\"toggleMute\" schaltet nun den Mute-Status um (anstatt immer stumm zu schalten)",
+                "ru": "«toggleMute» теперь переключает состояние отключения звука (вместо постоянного отключения звука)",
+                "pt": "\"toggleMute\" agora alterna o estado mudo (em vez de sempre silenciar)",
+                "nl": "\"toggleMute\" schakelt nu de mute-status in (in plaats van altijd te dempen)",
+                "fr": "\"toggleMute\" bascule maintenant l'état muet (au lieu de toujours muet)",
+                "it": "\"toggleMute\" ora attiva/disattiva lo stato muto (anziché sempre disattivato)",
+                "es": "\"toggleMute\" ahora alterna el estado de silencio (en lugar de silenciar siempre)",
+                "pl": "„toggleMute” przełącza teraz stan wyciszenia (zamiast ciągłego wyciszania)",
+                "zh-cn": "“toggleMute”现在切换静音状态（而不是总是静音）"
+            },
             "0.4.0": {
                 "en": "added admin 3 compatibility and more meta-data stuff.\nadded compact mode support.",
                 "de": "hat Admin 3-Kompatibilität und mehr Metadaten hinzugefügt.\nhat Unterstützung für den Kompaktmodus hinzugefügt.",

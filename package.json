@@ -1,6 +1,6 @@
 {
   "name": "iobroker.yamaha",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "ioBroker Yamaha Adapter",
   "author": {
     "name": "soef",
@@ -14,6 +14,10 @@
     {
       "name": "Garfonso",
       "email": "garfonso@mobo.info"
+    },
+    {
+      "name": "Sneak-L8",
+      "email": "git@sengler.de"
     }
   ],
   "homepage": "https://github.com/iobroker-community-adapters/ioBroker.yamaha",

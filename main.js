@@ -87,6 +87,13 @@ if (!YAMAHA.prototype.sendCommand) {
         return this.sendCommand('<Volume><Mute>' + (to ? "On" : "Off") + '</Mute></Volume>');
     };
 
+    YAMAHA.prototype.toggleMute = function () {
+        var obj = devices.get('mute');
+        if (obj && typeof obj.val == 'boolean') {
+            setMute(! obj.val);
+        }
+    };
+
     YAMAHA.prototype.sendRcCode = function (code) {   // 7C80 = Power on/off
         if (typeof code == 'number') {
             code = code.toString(16);
@@ -169,7 +176,7 @@ var commandMappings = {
     mute:               "setMute:bo",
     surround:           "setSurround:val",
     toggleMute:         "setMute:true",
-    togglemute:         "setMute:true",
+    togglemute:         "toggleMute",
     input:              "input:val",
     inputEnum:          "input:val",
     stop:               "stop:zone",
@@ -340,9 +347,15 @@ YAMAHA.prototype.execCommand = function (id, val) {
 
         default:
             var cmd = commandMappings[commandName];
-            if (cmd === undefined) return;
-            if (cmd.length === 2) this [cmd[0]] (p.result(cmd[1]) );
-            else this [cmd[0]] (p.result(cmd[1]), p.result(cmd[2]) );
+            if (cmd === undefined)
+                return;
+            if (cmd.length === 1) {
+                this [cmd[0]] ();
+            } else if (cmd.length === 2) {
+                this [cmd[0]] (p.result(cmd[1]));
+            } else {
+                this [cmd[0]] (p.result(cmd[1]), p.result(cmd[2]));
+            }
     }
 };
 
