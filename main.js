@@ -91,6 +91,8 @@ if (!YAMAHA.prototype.sendCommand) {
         var obj = devices.get('mute');
         if (obj && typeof obj.val == 'boolean') {
             setMute(! obj.val);
+        } else {
+            adapter.log.warn("unknown mute value: " + obj.val);
         }
     };
 
@@ -175,7 +177,7 @@ var commandMappings = {
     rccode:             "sendRcCode:val",
     mute:               "setMute:bo",
     surround:           "setSurround:val",
-    toggleMute:         "setMute:true",
+    toggleMute:         "toggleMute",
     togglemute:         "toggleMute",
     input:              "input:val",
     inputEnum:          "input:val",
