@@ -266,6 +266,7 @@ var defaultParams = {
     1: 1,
     2: 2,
     get bo() {
+        adapter.log.info("BO: " + typeof this.val + " = " + this.val);
         return (this.val === 'true') || !!(this.val >> 0);
     },
     get szVal() {
@@ -351,6 +352,12 @@ YAMAHA.prototype.execCommand = function (id, val) {
             var cmd = commandMappings[commandName];
             if (cmd === undefined)
                 return;
+            if (cmd.length > 0) {
+                if (! typeof this[cmd[0]] == "function") {
+                    adapter.log.info("Command " + cmd[0] + " not avaialable at the moment");
+                    return;
+                }
+            }
             if (cmd.length === 1) {
                 this [cmd[0]] ();
             } else if (cmd.length === 2) {
