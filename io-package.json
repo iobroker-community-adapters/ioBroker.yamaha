@@ -318,7 +318,7 @@
                 "role": "media.toggleMute",
                 "read": true,
                 "write": true,
-                "def": 0,
+                "def": false,
                 "desc": "Toggle Mute"
             },
             "native": {}
@@ -368,12 +368,7 @@
                 "def": "Action Game",
                 "desc": "Surround"
             },
-            "native": {
-                "values": [
-                    "AV1",
-                    "AV2"
-                ]
-            }
+            "native": {}
         },
         {
             "_id": "mute",
@@ -384,8 +379,6 @@
                 "role": "media.mute",
                 "read": true,
                 "write": true,
-                "min": false,
-                "max": true,
                 "def": false,
                 "desc": "Mute"
             },
@@ -400,8 +393,6 @@
                 "role": "media.power",
                 "read": true,
                 "write": true,
-                "min": false,
-                "max": true,
                 "def": false,
                 "desc": "Power"
             },
@@ -416,8 +407,6 @@
                 "role": "state",
                 "read": true,
                 "write": true,
-                "min": false,
-                "max": true,
                 "def": false,
                 "desc": "Refresh states now"
             },
@@ -432,8 +421,6 @@
                 "role": "media.stop",
                 "read": true,
                 "write": true,
-                "min": false,
-                "max": true,
                 "def": false,
                 "desc": "Stop"
             },
@@ -448,8 +435,6 @@
                 "role": "media.pause",
                 "read": true,
                 "write": true,
-                "min": false,
-                "max": true,
                 "def": false,
                 "desc": "Pause"
             },
@@ -464,8 +449,6 @@
                 "role": "media.skip",
                 "read": true,
                 "write": true,
-                "min": false,
-                "max": true,
                 "def": false,
                 "desc": "Skip"
             },
@@ -480,8 +463,6 @@
                 "role": "media.rewind",
                 "read": true,
                 "write": true,
-                "min": false,
-                "max": true,
                 "def": false,
                 "desc": "Rewind"
             },
@@ -496,8 +477,6 @@
                 "role": "media.skip",
                 "read": true,
                 "write": true,
-                "min": false,
-                "max": true,
                 "def": false,
                 "desc": "Skip"
             },
@@ -512,8 +491,6 @@
                 "role": "state",
                 "read": true,
                 "write": true,
-                "min": false,
-                "max": true,
                 "def": false,
                 "desc": "YPAO Volume"
             },
@@ -528,8 +505,6 @@
                 "role": "state",
                 "read": true,
                 "write": true,
-                "min": false,
-                "max": true,
                 "def": false,
                 "desc": "Extra Bass"
             },
@@ -544,8 +519,6 @@
                 "role": "state",
                 "read": true,
                 "write": true,
-                "min": false,
-                "max": true,
                 "def": false,
                 "desc": "Adaptive DRC"
             },
@@ -560,8 +533,6 @@
                 "role": "state",
                 "read": true,
                 "write": true,
-                "min": false,
-                "max": true,
                 "def": false,
                 "desc": "Party Mode"
             },
@@ -576,8 +547,6 @@
                 "role": "state",
                 "read": true,
                 "write": true,
-                "min": false,
-                "max": true,
                 "def": false,
                 "desc": "Party Mode Volume Up"
             },
@@ -592,8 +561,6 @@
                 "role": "state",
                 "read": true,
                 "write": true,
-                "min": false,
-                "max": true,
                 "def": false,
                 "desc": "Party Mode Volume Down"
             },
@@ -608,8 +575,6 @@
                 "role": "state",
                 "read": true,
                 "write": true,
-                "min": false,
-                "max": true,
                 "def": false,
                 "desc": "HDMI-1 Output"
             },
@@ -624,8 +589,6 @@
                 "role": "state",
                 "read": true,
                 "write": true,
-                "min": false,
-                "max": true,
                 "def": false,
                 "desc": "HDMI-2 Output"
             },
@@ -640,8 +603,6 @@
                 "role": "state",
                 "read": true,
                 "write": true,
-                "min": false,
-                "max": true,
                 "def": false,
                 "desc": "Pure Direct"
             },
@@ -785,8 +746,6 @@
                 "role": "state",
                 "read": true,
                 "write": true,
-                "min": false,
-                "max": true,
                 "def": true,
                 "desc": "Power Zone 1"
             },
@@ -801,8 +760,6 @@
                 "role": "state",
                 "read": true,
                 "write": true,
-                "min": false,
-                "max": true,
                 "def": false,
                 "desc": "Power Zone 2"
             },
@@ -817,8 +774,6 @@
                 "role": "state",
                 "read": true,
                 "write": true,
-                "min": false,
-                "max": true,
                 "def": false,
                 "desc": "Power Zone 3"
             },
@@ -833,8 +788,6 @@
                 "role": "state",
                 "read": true,
                 "write": true,
-                "min": false,
-                "max": true,
                 "def": false,
                 "desc": "Power Zone 4"
             },
@@ -849,8 +802,6 @@
                 "role": "state",
                 "read": true,
                 "write": true,
-                "min": false,
-                "max": true,
                 "def": false,
                 "desc": "Power all Zones"
             },
