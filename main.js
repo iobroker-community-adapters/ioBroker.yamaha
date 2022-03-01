@@ -87,15 +87,6 @@ if (!YAMAHA.prototype.sendCommand) {
         return this.sendCommand('<Volume><Mute>' + (to ? "On" : "Off") + '</Mute></Volume>');
     };
 
-    YAMAHA.prototype.toggleMute = function () {
-        var obj = devices.get('mute');
-        if (obj && typeof obj.val == 'boolean') {
-            setMute(! obj.val);
-        } else {
-            adapter.log.warn("unknown mute value: " + obj.val);
-        }
-    };
-
     YAMAHA.prototype.sendRcCode = function (code) {   // 7C80 = Power on/off
         if (typeof code == 'number') {
             code = code.toString(16);
@@ -163,6 +154,15 @@ YAMAHA.prototype.adjustVolume = function (dif) {
         obj.val += dif;
         this.setVolumeTo(obj.val);
         adapter.setState("volume", {val: obj.val, ack: true});
+    }
+};
+
+YAMAHA.prototype.toggleMute = function () {
+    var obj = devices.get('mute');
+    if (obj && typeof obj.val == 'boolean') {
+        setMute(! obj.val);
+    } else {
+        adapter.log.warn("unknown mute value: " + obj.val);
     }
 };
 
