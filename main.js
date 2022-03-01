@@ -160,7 +160,7 @@ YAMAHA.prototype.adjustVolume = function (dif) {
 YAMAHA.prototype.toggleMute = function () {
     var obj = devices.get('mute');
     if (obj && typeof obj.val == 'boolean') {
-        setMute(! obj.val);
+        this.setMute(! obj.val);
     } else {
         adapter.log.warn("unknown mute value: " + obj.val);
     }
