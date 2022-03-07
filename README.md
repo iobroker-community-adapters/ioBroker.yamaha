@@ -9,6 +9,8 @@
 
 Adapter for Yamaha AV receivers
 
+Discussion please at github or at https://forum.iobroker.net/topic/53174/weiterentwicklung-yamaha-adapter
+
 ### Initial Creation
 This adapter was initialy created by @soef at https://github.com/soef/ioBroker.yamaha but not maintained any more, so we moved it to iobroker-community so that bugs could be fixed. thanks @soef for his work.
 
