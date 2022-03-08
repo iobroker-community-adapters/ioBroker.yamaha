@@ -198,7 +198,7 @@
             "zh-cn": "雅马哈"
         },
         "desc": {
-            "en": "Control Yamaha AV-Recievers via Network",
+            "en": "Control Yamaha AV-Receivers via Network",
             "de": "Steuern Sie Yamaha AV-Receiver über das Netzwerk",
             "ru": "Управление AV-ресиверами Yamaha через сеть",
             "pt": "Controle os receptores AV da Yamaha via rede",
@@ -225,6 +225,7 @@
         "type": "multimedia",
         "connectionType": "local",
         "dataSource": "push",
+        "tier": 2,
         "materialize": true,
         "compact": true,
         "authors": [
