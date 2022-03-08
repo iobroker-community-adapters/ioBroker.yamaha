@@ -1,9 +1,15 @@
 ![Logo](admin/yamaha.png)
 ## ioBroker.yamaha
 
-![Number of Installations](http://iobroker.live/badges/yamaha-installed.svg) ![Number of Installations](http://iobroker.live/badges/yamaha-stable.svg) [![NPM version](http://img.shields.io/npm/v/iobroker.yamaha.svg)](https://www.npmjs.com/package/iobroker.yamaha)
-[![Tests](http://img.shields.io/travis/iobroker-community-adapters/ioBroker.yamaha/master.svg)](https://travis-ci.org/iobroker-community-adapters/ioBroker.yamaha)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat)](https://github.com/iobroker-community-adapters/iobroker.yamaha/blob/master/LICENSE)
+![Number of Installations](http://iobroker.live/badges/yamaha-installed.svg)
+![Number of Installations](http://iobroker.live/badges/yamaha-stable.svg)
+[![NPM version](http://img.shields.io/npm/v/iobroker.yamaha.svg)](https://www.npmjs.com/package/iobroker.yamaha)
+
+![Test and Release](https://github.com/iobroker-community-adapters/ioBroker.yamaha/workflows/Test%20and%20Release/badge.svg)
+[![Translation status](https://weblate.iobroker.net/widgets/adapters/-/yamaha/svg-badge.svg)](https://weblate.iobroker.net/engage/adapters/?utm_source=widget)
+[![Downloads](https://img.shields.io/npm/dm/iobroker.yamaha.svg)](https://www.npmjs.com/package/iobroker.yamaha)
+
+**This adapter uses Sentry libraries to automatically report exceptions and code errors to the developers.** For more details and for information how to disable the error reporting see [Sentry-Plugin Documentation](https://github.com/ioBroker/plugin-sentry#plugin-sentry)! Sentry reporting is used starting with js-controller 3.0.
 
 #### Description
 
@@ -37,6 +43,11 @@ You have to enable "network standby" function in the configuration of your recei
 
 
 ## Changelog
+
+### __ WORK IN PROGRESS__
+* IMPORTANT: js-controller 2.0 is needed at least
+* (Apollon77) Add Sentry for crash reporting
+
 ### 0.4.1
 * (Sneak-L8) "toggleMute" now toggle mute state (instead of always muting)
 ### 0.4.0

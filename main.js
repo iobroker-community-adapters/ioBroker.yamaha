@@ -664,14 +664,13 @@ function normalizeConfig() {
 // }
 
 
-function setPossibleStates(id, objarr, options, _cb) {
+function setPossibleStates(id, objarr, options, cb) {
     if (options === undefined) options = {};
     if (typeof options === 'function') {
-        _cb = options;
+        cb = options;
         options = {};
     }
     adapter.getObject(id, function(err, obj) {
-        var cb = _cb;
         if (err || !obj) return;
         if (objarr.remove || options.remove) {
             if (obj.common.states === undefined) return cb && cb('does not exist');

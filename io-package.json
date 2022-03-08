@@ -41,51 +41,147 @@
             },
             "0.3.19": {
                 "en": "Changelog added to readme",
-                "de": "Changelog der readme hinzugefügt"
+                "de": "Changelog der readme hinzugefügt",
+                "ru": "Список изменений добавлен в readme",
+                "pt": "Changelog adicionado ao leia-me",
+                "nl": "Changelog toegevoegd aan readme",
+                "fr": "Changelog ajouté au fichier readme",
+                "it": "Changelog aggiunto al readme",
+                "es": "Registro de cambios agregado a Léame",
+                "pl": "Dziennik zmian dodany do readme",
+                "zh-cn": "更改日志添加到自述文件"
             },
             "0.3.18": {
                 "en": "Update utils.js and usage, CI Testing and deps (Apollon77)",
-                "de": "utils.js und Benutzung erneuert, CI Testing (Apollon77)"
+                "de": "utils.js und Benutzung erneuert, CI Testing (Apollon77)",
+                "ru": "Обновите utils.js и использование, тестирование CI и deps (Apollon77)",
+                "pt": "Atualize utils.js e uso, teste de CI e deps (Apollon77)",
+                "nl": "Update utils.js en gebruik, CI-testen en deps (Apollon77)",
+                "fr": "Mise à jour utils.js et utilisation, CI Testing et deps (Apollon77)",
+                "it": "Aggiorna utils.js e utilizzo, test CI e deps (Apollon77)",
+                "es": "Actualice utils.js y uso, pruebas de CI y dependencias (Apollon77)",
+                "pl": "Zaktualizuj utils.js i wykorzystanie, CI Testing i deps (Apollon77)",
+                "zh-cn": "更新 utils.js 和用法、CI 测试和 deps (Apollon77)"
             },
             "0.3.17": {
                 "en": "update basic package-file testing (Apollon77)",
-                "de": "Erweiterung der Tests (Apollon77)"
+                "de": "Erweiterung der Tests (Apollon77)",
+                "ru": "обновить базовое тестирование файла пакета (Apollon77)",
+                "pt": "atualizar o teste básico de arquivo de pacote (Apollon77)",
+                "nl": "update basispakketbestand testen (Apollon77)",
+                "fr": "mise à jour des tests de base du fichier de package (Apollon77)",
+                "it": "aggiornare il test di base del file di pacchetto (Apollon77)",
+                "es": "actualizar las pruebas básicas de archivos de paquetes (Apollon77)",
+                "pl": "aktualizacja podstawowego testowania plików pakietu (Apollon77)",
+                "zh-cn": "更新基本包文件测试（Apollon77）"
             },
             "0.3.16": {
                 "en": "node 0.12 removed from testing",
-                "de": "node 0.12 auf testing entfernt"
+                "de": "node 0.12 auf testing entfernt",
+                "ru": "узел 0.12 снят с тестирования",
+                "pt": "nó 0.12 removido do teste",
+                "nl": "node 0.12 verwijderd uit testen",
+                "fr": "nœud 0.12 supprimé des tests",
+                "it": "nodo 0.12 rimosso dal test",
+                "es": "nodo 0.12 eliminado de las pruebas",
+                "pl": "węzeł 0.12 usunięty z testowania",
+                "zh-cn": "从测试中删除节点 0.12"
             },
             "0.3.15": {
                 "en": "Enhance CI testing",
-                "de": "CI testing erweitert"
+                "de": "CI testing erweitert",
+                "ru": "Улучшить тестирование CI",
+                "pt": "Melhore o teste de CI",
+                "nl": "CI-testen verbeteren",
+                "fr": "Améliorez les tests CI",
+                "it": "Migliora i test CI",
+                "es": "Mejore las pruebas de CI",
+                "pl": "Ulepsz testowanie CI",
+                "zh-cn": "增强 CI 测试"
             },
             "0.3.14": {
                 "en": "Possible exception in reconnect fixed",
-                "de": "Mögliche Schutzverletzung beim reconnect behoben"
+                "de": "Mögliche Schutzverletzung beim reconnect behoben",
+                "ru": "Исправлено возможное исключение при повторном подключении",
+                "pt": "Possível exceção na reconexão corrigida",
+                "nl": "Mogelijke uitzondering bij opnieuw verbinden opgelost",
+                "fr": "Exception possible dans la reconnexion corrigée",
+                "it": "Possibile eccezione nella riconnessione risolta",
+                "es": "Posible excepción en la reconexión arreglada",
+                "pl": "Możliwy wyjątek w ponownym połączeniu naprawiony",
+                "zh-cn": "重新连接中可能出现的异常已修复"
             },
             "0.3.12": {
                 "en": "Version incr. for npm",
-                "de": "Version fr npm erhöht"
+                "de": "Version fr npm erhöht",
+                "ru": "Версия инкр. ",
+                "pt": "Versão incr. ",
+                "nl": "Versie incl. ",
+                "fr": "Version augmentée ",
+                "it": "Versione incr. ",
+                "es": "Versión incr. ",
+                "pl": "Wersja inkr. ",
+                "zh-cn": "版本增量。"
             },
             "0.3.11": {
                 "en": "reconnect overworked",
-                "de": "Reconnect überarbeitet"
+                "de": "Reconnect überarbeitet",
+                "ru": "переподключиться",
+                "pt": "reconectar sobrecarregado",
+                "nl": "overwerkt opnieuw verbinden",
+                "fr": "reconnecter surmené",
+                "it": "riconnettersi oberati di lavoro",
+                "es": "volver a conectar con exceso de trabajo",
+                "pl": "połącz ponownie przepracowany",
+                "zh-cn": "重新连接过度劳累"
             },
             "0.3.10": {
                 "en": "realtime Ping now configurable",
-                "de": "Echtzeit-Ping nun konfigurierbar"
+                "de": "Echtzeit-Ping nun konfigurierbar",
+                "ru": "Ping в реальном времени теперь настраивается",
+                "pt": "Ping em tempo real agora configurável",
+                "nl": "realtime ping nu configureerbaar",
+                "fr": "Ping en temps réel maintenant configurable",
+                "it": "Ping in tempo reale ora configurabile",
+                "es": "Ping en tiempo real ahora configurable",
+                "pl": "Ping w czasie rzeczywistym można teraz konfigurować",
+                "zh-cn": "实时 Ping 现在可配置"
             },
             "0.3.8": {
                 "en": "realtime states optimized",
-                "de": "Optimierung der Echtzeit-Datenpunkte"
+                "de": "Optimierung der Echtzeit-Datenpunkte",
+                "ru": "оптимизированы состояния в реальном времени",
+                "pt": "estados em tempo real otimizados",
+                "nl": "realtime statussen geoptimaliseerd",
+                "fr": "états en temps réel optimisés",
+                "it": "stati in tempo reale ottimizzati",
+                "es": "estados en tiempo real optimizados",
+                "pl": "zoptymalizowane stany w czasie rzeczywistym",
+                "zh-cn": "实时状态优化"
             },
             "0.3.7": {
                 "en": "fix typo in creating realtime states",
-                "de": "Tippfehler beim Setzen der Realtime Datenpunkte"
+                "de": "Tippfehler beim Setzen der Realtime Datenpunkte",
+                "ru": "исправить опечатку в создании состояний реального времени",
+                "pt": "corrigir erro de digitação na criação de estados em tempo real",
+                "nl": "typfout corrigeren bij het maken van realtime statussen",
+                "fr": "correction d'une faute de frappe dans la création d'états en temps réel",
+                "it": "correggere errori di battitura nella creazione di stati in tempo reale",
+                "es": "corregir error tipográfico en la creación de estados en tiempo real",
+                "pl": "napraw literówkę w tworzeniu stanów w czasie rzeczywistym",
+                "zh-cn": "修复创建实时状态时的错字"
             },
             "0.3.6": {
                 "en": "timeout to connect reduced",
-                "de": "Verbindungs-Timeout reduziert"
+                "de": "Verbindungs-Timeout reduziert",
+                "ru": "таймаут на подключение уменьшен",
+                "pt": "tempo limite para conectar reduzido",
+                "nl": "time-out om verbinding te maken verminderd",
+                "fr": "délai de connexion réduit",
+                "it": "timeout di connessione ridotto",
+                "es": "tiempo de espera para conectarse reducido",
+                "pl": "skrócono czas oczekiwania na połączenie",
+                "zh-cn": "连接超时减少"
             }
         },
         "title": "Yamaha",
@@ -139,9 +235,14 @@
         ],
         "dependencies": [
             {
-                "js-controller": ">=1.5.8"
+                "js-controller": ">=2.0.0"
             }
-        ]
+        ],
+        "plugins": {
+            "sentry": {
+                "dsn": "https://651c9af0c80e486bbde477e8db0ba8b3@sentry.iobroker.net/174"
+            }
+        }
     },
     "native": {
         "ip": "",
