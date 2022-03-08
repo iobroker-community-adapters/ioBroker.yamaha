@@ -44,7 +44,7 @@ You have to enable "network standby" function in the configuration of your recei
 
 ## Changelog
 
-### __ WORK IN PROGRESS__
+### __WORK IN PROGRESS__
 * IMPORTANT: js-controller 2.0 is needed at least
 * (Apollon77) Add Sentry for crash reporting
 
