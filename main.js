@@ -266,7 +266,6 @@ var defaultParams = {
     1: 1,
     2: 2,
     get bo() {
-        adapter.log.info("BO: " + typeof this.val + " = " + this.val);
         return (this.val === 'true') || !!(this.val >> 0);
     },
     get szVal() {
