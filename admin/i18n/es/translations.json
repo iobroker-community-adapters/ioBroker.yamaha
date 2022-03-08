@@ -1,0 +1,9 @@
+{
+    "IP Address": "Dirección IP",
+    "Ping interval": "Intervalo para hacer ping a la conexión en tiempo real en segundos, (0 = ninguno)",
+    "Poll Interval": "Intervalo de encuesta",
+    "Realtime Options": "Opciones en tiempo real",
+    "Use Realtime": "Usar en tiempo real",
+    "refreshOnRealtime": "Actualizar todos los puntos de datos en un evento en tiempo real",
+    "template adapter settings": "Ajustes del adaptador para template"
+}
