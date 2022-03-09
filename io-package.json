@@ -1,8 +1,12 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "0.5.0",
+    "version": "0.5.1",
     "news": {
+      "0.5.1": {
+        "en": "fix type of \"pureDirect\"",
+        "de": "\"pureDirect\" Typ korrigiert"
+      },
       "0.5.0": {
         "en": "IMPORTANT: js-controller 2.0 is needed at least\nAdd Sentry for crash reporting",
         "de": "WICHTIG: js-controller 2.0 wird mindestens benötigt\nFügen Sie Sentry für Absturzberichte hinzu",

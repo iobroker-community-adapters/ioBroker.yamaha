@@ -43,6 +43,9 @@ You have to enable "network standby" function in the configuration of your recei
 
 
 ## Changelog
+### 0.5.1
+* (Sneak-L8) fix type of pureDirect
+
 ### 0.5.0 (2022-03-08)
 * IMPORTANT: js-controller 2.0 is needed at least
 * (Apollon77) Add Sentry for crash reporting
