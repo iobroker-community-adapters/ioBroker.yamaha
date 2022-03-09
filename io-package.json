@@ -605,11 +605,11 @@
       "type": "state",
       "common": {
         "name": "pureDirect",
-        "type": "boolean",
+        "type": "string",
         "role": "state",
         "read": true,
         "write": true,
-        "def": false,
+        "def": "not available",
         "desc": "Pure Direct"
       },
       "native": {}

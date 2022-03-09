@@ -352,14 +352,12 @@ YAMAHA.prototype.execCommand = function (id, val) {
             if (cmd === undefined)
                 return;
             if (cmd.length > 0) {
-                adapter.log.info("command: " + cmd[0] + " type: " + typeof this[cmd[0]]);
                 if (! (typeof this[cmd[0]] === "function")) {
                     adapter.log.info("Command " + cmd[0] + " not avaialable at the moment: " + typeof this[cmd[0]]);
                     return;
                 }
             }
             if (cmd.length === 1) {
-                adapter.log.info("command: " + cmd[0]);
                 this [cmd[0]] ();
             } else if (cmd.length === 2) {
                 this [cmd[0]] (p.result(cmd[1]));
