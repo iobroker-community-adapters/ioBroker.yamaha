@@ -1,8 +1,20 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "0.5.0",
+    "version": "0.5.1",
     "news": {
+      "0.5.1": {
+        "en": "Fix crash cases reported by Sentry\nfix type of pureDirect",
+        "de": "Von Sentry gemeldete Absturzfälle beheben\nfixer Typ von pureDirect",
+        "ru": "Исправить случаи сбоев, о которых сообщил Sentry\nисправить тип pureDirect",
+        "pt": "Corrigir casos de travamento relatados pelo Sentinela\ncorrigir tipo de pureDirect",
+        "nl": "Herstel crashgevallen gemeld door Sentry\nfix type pureDirect",
+        "fr": "Correction des cas de plantage signalés par Sentry\ncorrection du type de pureDirect",
+        "it": "Risolvi i casi di crash segnalati da Sentry\ncorreggere il tipo di pureDirect",
+        "es": "Solucionar casos de fallas informados por Sentry\ncorregir el tipo de pureDirect",
+        "pl": "Napraw przypadki awarii zgłoszone przez Sentry\nnapraw typ pureDirect",
+        "zh-cn": "修复 Sentry 报告的崩溃案例\n修复 pureDirect 的类型"
+      },
       "0.5.0": {
         "en": "IMPORTANT: js-controller 2.0 is needed at least\nAdd Sentry for crash reporting",
         "de": "WICHTIG: js-controller 2.0 wird mindestens benötigt\nFügen Sie Sentry für Absturzberichte hinzu",
@@ -74,18 +86,6 @@
         "es": "Actualice utils.js y uso, pruebas de CI y dependencias (Apollon77)",
         "pl": "Zaktualizuj utils.js i wykorzystanie, CI Testing i deps (Apollon77)",
         "zh-cn": "更新 utils.js 和用法、CI 测试和 deps (Apollon77)"
-      },
-      "0.3.17": {
-        "en": "update basic package-file testing (Apollon77)",
-        "de": "Erweiterung der Tests (Apollon77)",
-        "ru": "обновить базовое тестирование файла пакета (Apollon77)",
-        "pt": "atualizar o teste básico de arquivo de pacote (Apollon77)",
-        "nl": "update basispakketbestand testen (Apollon77)",
-        "fr": "mise à jour des tests de base du fichier de package (Apollon77)",
-        "it": "aggiornare il test di base del file di pacchetto (Apollon77)",
-        "es": "actualizar las pruebas básicas de archivos de paquetes (Apollon77)",
-        "pl": "aktualizacja podstawowego testowania plików pakietu (Apollon77)",
-        "zh-cn": "更新基本包文件测试（Apollon77）"
       }
     },
     "title": "Yamaha",
