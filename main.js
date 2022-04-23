@@ -79,7 +79,7 @@ if (!YAMAHA.prototype.sendCommand) {
 
     YAMAHA.prototype.sendCommand = function (command, zone) {
         zone = getZone(zone);
-        var command = '<YAMAHA_AV cmd="PUT"><' + zone + '>' + command + '</' + zone + '></YAMAHA_AV>';
+        var command = `<YAMAHA_AV cmd="PUT"><${zone}>${command}</${zone}></YAMAHA_AV>`;
         return this.SendXMLToReceiver(command);
     };
 
@@ -97,7 +97,7 @@ if (!YAMAHA.prototype.sendCommand) {
         //var command = '<YAMAHA_AV cmd="PUT"><System><Misc><Remote_Signal><Receive><Code>' + code + '</Code></Receive></Remote_Signal></Misc></System></YAMAHA_AV>';
         //var command = '<YAMAHA_AV cmd="PUT"><System><Remote_Signal><Receive><Code>' + code + '</Code></Receive></Remote_Signal></System></YAMAHA_AV>';
 
-        var command = '<YAMAHA_AV cmd="PUT"><System><Remote_Control><RC_Code>' + code + '</RC_Code></Remote_Control></System></YAMAHA_AV>';
+        var command = `<YAMAHA_AV cmd="PUT"><System><Remote_Control><RC_Code>${code}</RC_Code></Remote_Control></System></YAMAHA_AV>`;
         return this.SendXMLToReceiver(command);
     };
 
@@ -105,11 +105,11 @@ if (!YAMAHA.prototype.sendCommand) {
         return this.sendCommand('<Sound_Video><Pure_Direct><Mode>' + (bo ? 'On' : 'Off') + '</Mode></Pure_Direct></Sound_Video>');
     };
     YAMAHA.prototype.setHDMIOutput = function (no, bo) {
-        return this.sendCommand('<Sound_Video><HDMI><Output><OUT_' + no + '>' + (bo ? 'On' : 'Off') + '</OUT_' + no + '></Output></HDMI></Sound_Video>', 'System');
+        return this.sendCommand(`<Sound_Video><HDMI><Output><OUT_${no}>${bo ? 'On' : 'Off'}</OUT_${no}></Output></HDMI></Sound_Video>`, 'System');
     };
     YAMAHA.prototype.scene = function (no) {
         adapter.setState('scene', '', true);
-        return this.sendCommand('<Scene><Scene_Load>Scene ' + no + '</Scene_Load></Scene>');
+        return this.sendCommand(`<Scene><Scene_Load>Scene ${no}</Scene_Load></Scene>`);
     };
     YAMAHA.prototype.power = function (bo, zone) {
         return this.sendCommand('<Power_Control><Power>' + (bo ? 'On' : 'Standby') + '</Power></Power_Control>', zone);
@@ -124,7 +124,7 @@ if (!YAMAHA.prototype.sendCommand) {
         else if (val < 90) val = '60 min';
         else if (val < 120) val = '90 min';
         else val = '120 min';
-        return this.sendCommand('<Power_Control><Sleep>' + val + '</Sleep></Power_Control>', zone);
+        return this.sendCommand(`<Power_Control><Sleep>${val}</Sleep></Power_Control>`, zone);
     };
 
 }
@@ -132,7 +132,7 @@ if (!YAMAHA.prototype.sendCommand) {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 YAMAHA.prototype.setSurround = function (val) {
-    return this.sendCommand('<Surround><Program_Sel><Current><Sound_Program>' + val + '</Sound_Program></Current></Program_Sel></Surround>', zone);
+    return this.sendCommand(`<Surround><Program_Sel><Current><Sound_Program>${val}</Sound_Program></Current></Program_Sel></Surround>`, zone);
 };
 
 YAMAHA.prototype.YPAOVolume = function(bo){
@@ -162,7 +162,7 @@ YAMAHA.prototype.toggleMute = function () {
     if (obj && typeof obj.val == 'boolean') {
         this.setMute(! obj.val);
     } else {
-        adapter.log.warn("unknown mute value: " + obj.val);
+        adapter.log.warn(`unknown mute value: ${obj.val}`);
     }
 };
 
@@ -288,7 +288,7 @@ YAMAHA.prototype.execCommand = function (id, val) {
     var p = defaultParams;
     p.val = val;
 
-    adapter.log.debug('execCommand: id=' + id + ' val=' + val);
+    adapter.log.debug(`execCommand: id=${id} val=${val}`);
     var commandName = ar[2];
 
     switch(commandName) {
@@ -311,7 +311,7 @@ YAMAHA.prototype.execCommand = function (id, val) {
                 case 'raw': cmd = p.szVal; break;
                 default:
                     var szVal = p.szVal;
-                    if (ar[4] === 'VOL' && szVal !== '?' && szVal.indexOf('.') < 0 && szVal.length < 4) szVal = szVal + '.0';
+                    if (ar[4] === 'VOL' && szVal !== '?' && szVal.indexOf('.') < 0 && szVal.length < 4) szVal = `${szVal}.0`;
                     cmd = soef.sprintf('@%s:%s=%s', ar[3], ar[4], szVal);
                     break;
             }
@@ -331,12 +331,20 @@ YAMAHA.prototype.execCommand = function (id, val) {
             if (p.bo) refreshStates();
             break;
         case "command":
+            if (typeof val !== 'string') {
+                adapter.log.warn(`command: val ${val}is not a string`);
+                return;
+            }
             var a = p.val.split(' ');
-            this.execCommand(adapter.namespace + "." + "commands" + "." + a[0], a.length > 1 ? a[1] : false);
+            this.execCommand(`${adapter.namespace}.commands.${a[0]}`, a.length > 1 ? a[1] : false);
             break;
         case "xmlCommand":
+            if (typeof val !== 'string') {
+                adapter.log.warn(`xmlCommand: val ${val}is not a string`);
+                return;
+            }
             val = val.replace(/\[/g, "<").replace(/]/g, ">");
-            var command = '<YAMAHA_AV cmd="PUT">' + val + '</YAMAHA_AV>';
+            var command = `<YAMAHA_AV cmd="PUT">${val}</YAMAHA_AV>`;
             return this.SendXMLToReceiver(command);
         case "zone":
             zone = val;
@@ -353,7 +361,7 @@ YAMAHA.prototype.execCommand = function (id, val) {
                 return;
             if (cmd.length > 0) {
                 if (! (typeof this[cmd[0]] === "function")) {
-                    adapter.log.info("Command " + cmd[0] + " not avaialable at the moment: " + typeof this[cmd[0]]);
+                    adapter.log.info(`Command ${cmd[0]} not available at the moment: ${typeof this[cmd[0]]}`);
                     return;
                 }
             }
@@ -411,7 +419,7 @@ function callWithCatch(origPromise, onSucess, onError){
             onConnectionTimeout();
         }
         if (errorCount++ === 0) {
-            adapter.log.error('Can not connect to yamaha receiver at ' + adapter.config.ip + ' ' + error.message);
+            adapter.log.error(`Can not connect to yamaha receiver at ${adapter.config.ip} ${error.message}`);
         }
         safeCallback(onError);
     });
@@ -613,11 +621,11 @@ function runRealtimeFunction() {
     y5.onData = function(data) {
         setOnline(true);
         data = data.toString().replace(/^@|\r|\n/g, '');
-        adapter.log.debug('Rawdata: ' + data);
+        adapter.log.debug(`Rawdata: ${data}`);
         var ar = data.split('@');
         ar.forEach(function (v) {
             dev.setChannel();
-            dev.set('raw', '@' + v);
+            dev.set('raw', `@${v}`);
             handleRealtimeEvent(v);
             //var a = /^@(.*):(.*)=(.*)/.exec(v);
             var a = /(.*):(.*)=(.*)/.exec(v);
@@ -663,9 +671,10 @@ function normalizeConfig() {
 
 
 function setPossibleStates(id, objarr, options, cb) {
-    if (options === undefined) options = {};
     if (typeof options === 'function') {
         cb = options;
+        options = {};
+    } else if (options === undefined) {
         options = {};
     }
     adapter.getObject(id, function(err, obj) {
@@ -692,7 +701,7 @@ function setPossibleStates(id, objarr, options, cb) {
 }
 
 function loadDesc() {
-    var url = 'http://' + adapter.config.ip + '/YamahaRemoteControl/desc.xml';
+    var url = `http://${adapter.config.ip}/YamahaRemoteControl/desc.xml`;
     soef.getHttpData(url, {xml2json2: true }, function(err, data) {
         if (err || !data) return;
         var soundPrograms = [];
