@@ -1,8 +1,20 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "0.5.1",
+    "version": "0.5.2",
     "news": {
+      "0.5.2": {
+        "en": "Fix crash cases reported by Sentry",
+        "de": "Von Sentry gemeldete Absturzfälle beheben",
+        "ru": "Исправить случаи сбоев, о которых сообщил Sentry",
+        "pt": "Corrigir casos de travamento relatados pelo Sentinela",
+        "nl": "Herstel crashgevallen gemeld door Sentry",
+        "fr": "Correction des cas de plantage signalés par Sentry",
+        "it": "Risolvi i casi di crash segnalati da Sentry",
+        "es": "Solucionar casos de fallas informados por Sentry",
+        "pl": "Napraw przypadki awarii zgłoszone przez Sentry",
+        "zh-cn": "修复 Sentry 报告的崩溃案例"
+      },
       "0.5.1": {
         "en": "Fix crash cases reported by Sentry\nfix type of pureDirect",
         "de": "Von Sentry gemeldete Absturzfälle beheben\nfixer Typ von pureDirect",
@@ -74,18 +86,6 @@
         "es": "Registro de cambios agregado a Léame",
         "pl": "Dziennik zmian dodany do readme",
         "zh-cn": "更改日志添加到自述文件"
-      },
-      "0.3.18": {
-        "en": "Update utils.js and usage, CI Testing and deps (Apollon77)",
-        "de": "utils.js und Benutzung erneuert, CI Testing (Apollon77)",
-        "ru": "Обновите utils.js и использование, тестирование CI и deps (Apollon77)",
-        "pt": "Atualize utils.js e uso, teste de CI e deps (Apollon77)",
-        "nl": "Update utils.js en gebruik, CI-testen en deps (Apollon77)",
-        "fr": "Mise à jour utils.js et utilisation, CI Testing et deps (Apollon77)",
-        "it": "Aggiorna utils.js e utilizzo, test CI e deps (Apollon77)",
-        "es": "Actualice utils.js y uso, pruebas de CI y dependencias (Apollon77)",
-        "pl": "Zaktualizuj utils.js i wykorzystanie, CI Testing i deps (Apollon77)",
-        "zh-cn": "更新 utils.js 和用法、CI 测试和 deps (Apollon77)"
       }
     },
     "title": "Yamaha",
