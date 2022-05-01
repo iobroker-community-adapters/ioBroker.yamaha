@@ -39,7 +39,7 @@
     "yamaha-nodejs-soef": "^0.7.4"
   },
   "devDependencies": {
-    "@alcalzone/release-script": "^3.5.6",
+    "@alcalzone/release-script": "^3.5.8",
     "@alcalzone/release-script-plugin-iobroker": "^3.5.7",
     "@alcalzone/release-script-plugin-license": "^3.5.3",
     "@iobroker/testing": "^2.6.0",
