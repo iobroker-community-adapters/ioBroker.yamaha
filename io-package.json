@@ -1,8 +1,20 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "0.5.2",
+    "version": "0.5.3",
     "news": {
+      "0.5.3": {
+        "en": "Fix crash cases reported by Sentry",
+        "de": "Reparieren Crashfälle gemeldet von Sentry",
+        "ru": "Исправление случаев аварии, описанных Sentry",
+        "pt": "Corrigir casos de acidente relatados por Sentry",
+        "nl": "Vertaling:",
+        "fr": "Troubles de crash signalés par Sentry",
+        "it": "Correzione dei casi di crash segnalati da Sentry",
+        "es": "Casos de accidente fijo reportados por Sentry",
+        "pl": "Sprawy katastrofy Fix podane przez Sentry’a",
+        "zh-cn": "Sentry所报告的六例事故"
+      },
       "0.5.2": {
         "en": "Fix crash cases reported by Sentry",
         "de": "Von Sentry gemeldete Absturzfälle beheben",
@@ -74,18 +86,6 @@
         "es": "Se corrigió el bloqueo en lib / soef.js (Garfonso) \n meta información actualizada. (Garfonso)",
         "pl": "naprawiono awarię w lib / soef.js (Garfonso) \naktualizowano meta informacje. (Garfonso)",
         "zh-cn": "修复了lib / soef.js（Garfonso）\n更新的元信息中的崩溃。 （加方索）"
-      },
-      "0.3.19": {
-        "en": "Changelog added to readme",
-        "de": "Changelog der readme hinzugefügt",
-        "ru": "Список изменений добавлен в readme",
-        "pt": "Changelog adicionado ao leia-me",
-        "nl": "Changelog toegevoegd aan readme",
-        "fr": "Changelog ajouté au fichier readme",
-        "it": "Changelog aggiunto al readme",
-        "es": "Registro de cambios agregado a Léame",
-        "pl": "Dziennik zmian dodany do readme",
-        "zh-cn": "更改日志添加到自述文件"
       }
     },
     "title": "Yamaha",

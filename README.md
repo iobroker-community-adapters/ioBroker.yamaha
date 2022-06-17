@@ -43,7 +43,7 @@ You have to enable "network standby" function in the configuration of your recei
 
 
 ## Changelog
-### __WORK IN PROGRESS__
+### 0.5.3 (2022-06-17)
 * (Apollon77) Fix crash cases reported by Sentry
 
 ### 0.5.2 (2022-04-23)
