@@ -269,13 +269,13 @@ var defaultParams = {
         return (this.val === 'true') || !!(this.val >> 0);
     },
     get szVal() {
-        return this.val.toString ();
+        return this.val === null ? '': this.val.toString();
     },
     get zone() {
         return zone;
     },
     result: function(idx) {
-        return this [idx] !== undefined ? this [idx] : idx;
+        return this [idx] !== undefined ? this[idx] : idx;
     }
 };
 
