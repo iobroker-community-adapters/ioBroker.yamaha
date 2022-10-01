@@ -30,7 +30,7 @@
     "RX-V"
   ],
   "dependencies": {
-    "@iobroker/adapter-core": "^2.6.0",
+    "@iobroker/adapter-core": "^2.6.6",
     "array-ext": "^0.1.5",
     "peer-ssdp": "0.0.5",
     "request": "^2.88.2",
