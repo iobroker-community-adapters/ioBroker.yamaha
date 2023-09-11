@@ -29,6 +29,9 @@
     "receiver",
     "RX-V"
   ],
+  "engines": {
+    "node": ">=16"
+  },
   "dependencies": {
     "@iobroker/adapter-core": "^2.6.8",
     "array-ext": "^0.1.5",
