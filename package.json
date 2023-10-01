@@ -37,7 +37,7 @@
     "array-ext": "^0.1.5",
     "peer-ssdp": "0.0.5",
     "request": "^2.88.2",
-    "sprintf-js": "^1.1.2",
+    "sprintf-js": "^1.1.3",
     "y5": "^0.2.0",
     "yamaha-nodejs-soef": "^0.7.4"
   },
