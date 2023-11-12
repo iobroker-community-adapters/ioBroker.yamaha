@@ -4,6 +4,6 @@
     "Poll Interval": "Poll Interval",
     "Realtime Options": "Realtime Options",
     "Use Realtime": "Use Realtime",
-    "refreshOnRealtime": "Refresh all datapoints on realtime event",
+    "refreshOnRealtime": "Refresh all states on realtime event",
     "template adapter settings": "Adapter settings for template"
 }
