@@ -33,7 +33,7 @@
     "node": ">=16"
   },
   "dependencies": {
-    "@iobroker/adapter-core": "^2.6.8",
+    "@iobroker/adapter-core": "^3.1.4",
     "array-ext": "^0.1.5",
     "peer-ssdp": "0.0.5",
     "request": "^2.88.2",
