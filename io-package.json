@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "0.5.3",
+    "version": "0.5.4",
     "news": {
+      "0.5.4": {
+        "en": "updated packages",
+        "de": "aktualisierte pakete",
+        "ru": "обновления пакетов",
+        "pt": "pacotes atualizados",
+        "nl": "bijgewerkte pakketten",
+        "fr": "paquets mis à jour",
+        "it": "pacchetti aggiornati",
+        "es": "paquetes actualizados",
+        "pl": "zaktualizowane pakiety",
+        "uk": "оновлені пакети",
+        "zh-cn": "更新软件包"
+      },
       "0.5.3": {
         "en": "Fix crash cases reported by Sentry",
         "de": "Reparieren Crashfälle gemeldet von Sentry",
@@ -74,18 +87,6 @@
         "es": "agregó compatibilidad con admin 3 y más cosas de metadatos.\nagregó soporte de modo compacto.",
         "pl": "dodał kompatybilność z adminem 3 i więcej metadanych.\ndodano obsługę trybu kompaktowego.",
         "zh-cn": "*（Garfonso）添加了admin 3兼容性和更多的元数据内容。\n*（Garfonso）添加了紧凑模式支持。"
-      },
-      "0.3.20": {
-        "en": "fixed crash in lib/soef.js (Garfonso)\nupdated meta information. (Garfonso)",
-        "de": "Absturz in lib / soef.js (Garfonso) behoben \nupdated meta information. (Garfonso)",
-        "ru": "исправлен сбой в lib / soef.js (Garfonso) \nupdated метаинформации. (Garfonso)",
-        "pt": "falha corrigida na lib / soef.js (Garfonso) \nmeta-informações atualizadas. (Garfonso)",
-        "nl": "crash opgelost in lib / soef.js (Garfonso) \nupdate meta-informatie. (Garfonso)",
-        "fr": "correction d'un crash dans lib / soef.js (Garfonso) \ndes méta-informations mises à jour. (Garfonso)",
-        "it": "risolto crash in lib / soef.js (Garfonso) \nmeta informazioni non aggiornate. (Garfonso)",
-        "es": "Se corrigió el bloqueo en lib / soef.js (Garfonso) \n meta información actualizada. (Garfonso)",
-        "pl": "naprawiono awarię w lib / soef.js (Garfonso) \naktualizowano meta informacje. (Garfonso)",
-        "zh-cn": "修复了lib / soef.js（Garfonso）\n更新的元信息中的崩溃。 （加方索）"
       }
     },
     "title": "Yamaha",
