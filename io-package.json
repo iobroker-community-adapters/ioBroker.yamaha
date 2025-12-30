@@ -134,21 +134,24 @@
     "materialize": true,
     "compact": true,
     "authors": [
-      {
-        "name": "soef",
-        "email": "soef@gmx.net"
-      }
+      "soef <soef@gmx.net>",
+      "iobroker-community-adapters <iobroker-community-adapters@gmx.de>"
     ],
     "dependencies": [
       {
-        "js-controller": ">=2.0.0"
+        "js-controller": ">=6.0.11"
       }
     ],
     "plugins": {
       "sentry": {
         "dsn": "https://651c9af0c80e486bbde477e8db0ba8b3@sentry.iobroker.net/174"
       }
-    }
+    },
+    "globalDependencies": [
+      {
+        "admin": ">=7.6.17"
+      }
+    ]
   },
   "native": {
     "ip": "",
