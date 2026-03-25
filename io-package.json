@@ -89,7 +89,6 @@
         "zh-cn": "*（Garfonso）添加了admin 3兼容性和更多的元数据内容。\n*（Garfonso）添加了紧凑模式支持。"
       }
     },
-    "title": "Yamaha",
     "titleLang": {
       "en": "Yamaha",
       "de": "Yamaha",
@@ -119,6 +118,10 @@
     "icon": "yamaha.png",
     "extIcon": "https://raw.githubusercontent.com/iobroker-community-adapters/ioBroker.yamaha/master/admin/yamaha.png",
     "readme": "https://github.com/iobroker-community-adapters/ioBroker.yamaha/blob/master/README.md",
+    "licenseInformation": {
+      "type": "free",
+      "license": "MIT"
+    },
     "loglevel": "info",
     "keywords": [
       "yamaha",
@@ -132,14 +135,12 @@
     "tier": 2,
     "compact": true,
     "authors": [
-      {
-        "name": "soef",
-        "email": "soef@gmx.net"
-      }
+      "soef <soef@gmx.net>",
+      "iobroker-community-adapters <iobroker-community-adapters@gmx.de>"
     ],
     "dependencies": [
       {
-        "js-controller": ">=2.0.0"
+        "js-controller": ">=6.0.11"
       }
     ],
     "plugins": {
@@ -150,10 +151,11 @@
     "adminUI": {
       "config": "json"
     },
-    "licenseInformation": {
-      "license": "MIT",
-      "type": "free"
-    }
+    "globalDependencies": [
+      {
+        "admin": ">=7.7.22"
+      }
+    ]
   },
   "native": {
     "ip": "",

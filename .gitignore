@@ -53,3 +53,5 @@ npm-debug.log
 
 # ioBroker dev-server
 .dev-server/
+#ignore .commitinfo created by ioBroker release script
+.commitinfo
