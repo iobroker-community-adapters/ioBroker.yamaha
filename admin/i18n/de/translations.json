@@ -1,9 +1,9 @@
 {
-    "IP Address": "IP-Adresse",
-    "Ping interval": "Intervall zum Pingen der Echtzeitverbindung in Sekunden (0 = keine)",
-    "Poll Interval": "Abfrageintervall",
-    "Realtime Options": "Echtzeitoptionen",
-    "Use Realtime": "Echtzeitmodus verwenden",
-    "refreshOnRealtime": "Aktualisieren Sie alle Datenpunkte bei einem Echtzeitereignis",
-    "template adapter settings": "Adaptereinstellungen für template"
+  "IP Address": "IP-Adresse",
+  "Ping interval": "Intervall zum Pingen der Echtzeitverbindung in Sekunden (0 = keine)",
+  "Poll Interval": "Abfrageintervall in Sekunden",
+  "Realtime Options": "Echtzeitoptionen",
+  "Use Realtime": "Echtzeitmodus verwenden",
+  "refreshOnRealtime": "Aktualisieren Sie alle Datenpunkte bei einem Echtzeitereignis",
+  "template adapter settings": "Adaptereinstellungen für template"
 }

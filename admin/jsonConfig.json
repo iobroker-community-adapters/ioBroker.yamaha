@@ -1,0 +1,79 @@
+{
+  "i18n": true,
+  "type": "panel",
+  "label": "Yamaha",
+  "items": [
+    {
+      "type": "header",
+      "label": "Connection settings",
+      "size": 2
+    },
+    {
+      "type": "text",
+      "label": "IP Address",
+      "ref": "ip",
+      "placeholder": "192.168.1.10",
+      "help": "IP Address",
+      "xs": 12,
+      "sm": 12,
+      "md": 6,
+      "lg": 4,
+      "xl": 4
+    },
+    {
+      "type": "number",
+      "label": "Poll Interval",
+      "ref": "interval",
+      "min": 0,
+      "step": 1,
+      "help": "Poll Interval",
+      "default": 120,
+      "xs": 12,
+      "sm": 12,
+      "md": 6,
+      "lg": 4,
+      "xl": 4
+    },
+    {
+      "type": "header",
+      "label": "Realtime Options",
+      "size": 2
+    },
+    {
+      "type": "checkbox",
+      "label": "Use Realtime",
+      "ref": "useRealtime",
+      "default": true,
+      "xs": 12,
+      "sm": 12,
+      "md": 6,
+      "lg": 4,
+      "xl": 4
+    },
+    {
+      "type": "checkbox",
+      "label": "refreshOnRealtime",
+      "ref": "refreshOnRealtime",
+      "default": true,
+      "xs": 12,
+      "sm": 12,
+      "md": 6,
+      "lg": 4,
+      "xl": 4
+    },
+    {
+      "type": "number",
+      "label": "Ping interval",
+      "ref": "realtimePing",
+      "min": 0,
+      "step": 1,
+      "default": 0,
+      "help": "Ping interval",
+      "xs": 12,
+      "sm": 12,
+      "md": 6,
+      "lg": 4,
+      "xl": 4
+    }
+  ]
+}

@@ -3,8 +3,8 @@
 
 /*
  var dgram = require('dgram');
- 
- 
+
+
  // function startListener(callback) {
  //     var port = 1900;
  //
@@ -26,7 +26,7 @@
  //         msg = msg.toString();
  //     });
  // };
- 
+
  // function startListener(callback) {
  //     var port = 1900;
  //
@@ -52,13 +52,13 @@
  //         msg = msg.toString();
  //     });
  // };
- 
+
  function startListener(callback) {
  var port = 1900;
- 
+
  socket = dgram.createSocket( {type: 'udp4', reuseAddr: true} );
  socket.on('error', function (err) {
- 
+
  });
  //socket.bind(port, '192.168.1.25', function () {
  socket.bind(port, function () {
@@ -66,7 +66,7 @@
  socket.setBroadcast(true);
  socket.addMembership('239.255.255.250'); // : s.addMembership(SSDP_ADDRESS);
  socket.setMulticastLoopback(true);
- 
+
  if (callback) return callback(socket);
  });
  socket.on('message', function(msg, rinfo) {
@@ -74,14 +74,14 @@
  msg = msg.toString();
  });
  };
- 
+
  */
 
 var soef = require('soef');
-var request = require('request');
-var os = require('os');
+var request = require("request");
+var os = require("os");
 var ssdp = require("peer-ssdp");
-var SERVER = os.type() + "/" + os.release() + " UPnP/1.1 famium/0.0.1";
+var SERVER = `${os.type()}/${os.release()} UPnP/1.1 famium/0.0.1`;
 var uuid = "7B8E7EE2-B755-48A6-A36A-7B8CD1EEE9B0";
 //peer = ssdp.createPeer();
 
@@ -93,15 +93,15 @@ var reFriendlyName = /<friendlyName>([^<]*)<\/friendlyName>/;
 function findReceiver(callback) {
     var peer = ssdp.createPeer();
     var timer = soef.Timer(closePeer, 5000);
-    
+
     function closePeer(addr, info) {
         if (peer) peer.close();
         peer = null;
         callback(addr, info);
     }
-    
+
     peer.on("ready", function () {
-        peer.search({ ST: 'urn:schemas-upnp-org:device:MediaRenderer:1' });
+      peer.search({ ST: "urn:schemas-upnp-org:device:MediaRenderer:1" });
     }).on("found", function (headers, address) {
         if (headers.LOCATION) {
             request(headers.LOCATION, function (error, response, body) {
@@ -115,6 +115,7 @@ function findReceiver(callback) {
         }
     }).start();
 }
+
 module.exports.findReceiver = findReceiver;
 
 function waitForNotify(ip, callback) {
@@ -134,10 +135,10 @@ module.exports.waitForNotify = waitForNotify;
 
 
 function discoverReceiver(callback) {
-    
+
     var ip = '';
     var ips = [];
-    
+
     // function saveFoundIP(ip, callback) {
     //     adapter.getForeignObject("system.adapter." + adapter.namespace, function (err, obj) {
     //         obj.native.ip = ip;
@@ -147,7 +148,7 @@ function discoverReceiver(callback) {
     //         });
     //     });
     // }
-    
+
     function getIPAddresses() {
         // found on stackoverflow
         var interfaces = require('os').networkInterfaces();
@@ -162,41 +163,42 @@ function discoverReceiver(callback) {
         }
         //return '0.0.0.0';
     }
-    
+
     adapter.log.info('No IP configurated, trying to find a device...');
     getIPAddresses();
     if (ips.length <= 0) {
         return;
     }
-    
+
     function check() {
         var ownip = ips.pop();
         var prefixIP = ownip.split('.', 3).join('.') + '.';
         if (!request) request = require('request');
-        var i = 1;
-        
-        adapter.log.info('Own IP: ' + ownip + ' Range: ' + prefixIP + '1...255');
-        
-        function doRequest() {
-            if (!ip && i < 255) {
-                request.post(
-                    {
-                        timeout: 200,
-                        method: 'POST',
-                        uri: 'http://' + prefixIP + i + '/YamahaRemoteControl/ctrl',
-                        body: '<YAMAHA_AV cmd="GET"><System><Config>GetParam</Config></System></YAMAHA_AV>'
-                    },
-                    function (err, response, body) {
-                        if (!err && response.statusCode == 200) {
+    var i = 1;
+
+    adapter.log.info(`Own IP: ${  ownip  } Range: ${  prefixIP  }1...255`);
+
+    function doRequest() {
+      if (!ip && i < 255) {
+        request.post(
+          {
+            timeout: 200,
+            method: "POST",
+            uri: `http://${prefixIP}${i}/YamahaRemoteControl/ctrl`,
+            body: '<YAMAHA_AV cmd="GET"><System><Config>GetParam</Config></System></YAMAHA_AV>',
+          },
+          function (err, response, body) {
+            if (!err && response.statusCode == 200) {
                             ip = response.request.host;
-                            var r = body.match("<Model_Name>(.*?)</Model_Name>.*?<System_ID>(.*?)</System_ID>.*?<Version>(.*?)</Version>");
+              var r = body.match(
+                "<Model_Name>(.*?)</Model_Name>.*?<System_ID>(.*?)</System_ID>.*?<Version>(.*?)</Version>",
                             r = r || body.match("<Model_Name>(.*?)</Model_Name>");
                             if (r && r.length >= 4) {
                                 adapter.log.info('Yamaha Receiver found. IP: ' + ip + ' - Model: ' + r[1] + ' - System-ID: ' + r[2] + ' - Version: ' + r[3]);
                             } else if (r && r.length >= 2) {
                                 adapter.log.info('Yamaha Receiver found. IP: ' + ip + ' - Model: ' + r[1]);
                             }
-                            callback (ip);
+                            callback(ip);
                         }
                         i++;
                         setTimeout(doRequest, 0);
@@ -206,9 +208,10 @@ function discoverReceiver(callback) {
                 if (ips.length && !ip) setTimeout(check, 0);
             }
         }
-        
+
         doRequest();
     }
+
     check();
 }
 

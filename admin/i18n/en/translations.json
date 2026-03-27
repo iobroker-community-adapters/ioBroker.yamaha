@@ -1,9 +1,9 @@
 {
-    "IP Address": "IP Address",
-    "Ping interval": "Interval to ping the realtime connection in sec, (0=none)",
-    "Poll Interval": "Poll Interval",
-    "Realtime Options": "Realtime Options",
-    "Use Realtime": "Use Realtime",
-    "refreshOnRealtime": "Refresh all states on realtime event",
-    "template adapter settings": "Adapter settings for template"
+  "IP Address": "IP Address",
+  "Ping interval": "Interval to ping the realtime connection in sec, (0=none)",
+  "Poll Interval": "Poll Interval in seconds",
+  "Realtime Options": "Realtime Options",
+  "Use Realtime": "Use Realtime",
+  "refreshOnRealtime": "Refresh all states on realtime event",
+  "template adapter settings": "Adapter settings for template"
 }
