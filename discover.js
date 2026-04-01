@@ -2,7 +2,7 @@
 
 
 /*
- var dgram = require('dgram');
+ var dgram = require('node:dgram');
  
  
  // function startListener(callback) {
@@ -79,7 +79,7 @@
 
 var soef = require('soef');
 var request = require('request');
-var os = require('os');
+var os = require('node:os');
 var ssdp = require("peer-ssdp");
 var SERVER = os.type() + "/" + os.release() + " UPnP/1.1 famium/0.0.1";
 var uuid = "7B8E7EE2-B755-48A6-A36A-7B8CD1EEE9B0";
@@ -150,7 +150,7 @@ function discoverReceiver(callback) {
     
     function getIPAddresses() {
         // found on stackoverflow
-        var interfaces = require('os').networkInterfaces();
+        var interfaces = require('node:os').networkInterfaces();
         for (var devName in interfaces) {
             var iface = interfaces[devName];
             for (var i = 0; i < iface.length; i++) {
