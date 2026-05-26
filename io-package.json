@@ -133,7 +133,6 @@
     "connectionType": "local",
     "dataSource": "push",
     "tier": 2,
-    "materialize": true,
     "compact": true,
     "authors": [
       "soef <soef@gmx.net>",
@@ -153,7 +152,10 @@
       {
         "admin": ">=7.7.22"
       }
-    ]
+    ],
+    "adminUI": {
+      "config": "materialize"
+    }
   },
   "native": {
     "ip": "",
