@@ -4,6 +4,5 @@
     "Poll Interval": "Interwał sondowania",
     "Realtime Options": "Opcje w czasie rzeczywistym",
     "Use Realtime": "Użyj czasu rzeczywistego",
-    "refreshOnRealtime": "Odśwież wszystkie punkty danych podczas wydarzenia w czasie rzeczywistym",
-    "template adapter settings": "Ustawienia adaptera dla template"
+    "refreshOnRealtime": "Odśwież wszystkie punkty danych podczas wydarzenia w czasie rzeczywistym"
 }

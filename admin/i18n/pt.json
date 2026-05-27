@@ -4,6 +4,5 @@
     "Poll Interval": "Intervalo de votação",
     "Realtime Options": "Opções em tempo real",
     "Use Realtime": "Usar em tempo real",
-    "refreshOnRealtime": "Atualizar todos os pontos de dados no evento em tempo real",
-    "template adapter settings": "Configurações do adaptador para template"
+    "refreshOnRealtime": "Atualizar todos os pontos de dados no evento em tempo real"
 }

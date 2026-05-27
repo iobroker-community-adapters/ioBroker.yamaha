@@ -4,6 +4,5 @@
     "Poll Interval": "Интервал опроса",
     "Realtime Options": "Варианты в реальном времени",
     "Use Realtime": "Использовать в реальном времени",
-    "refreshOnRealtime": "Обновить все точки данных на событии в реальном времени",
-    "template adapter settings": "Настройки адаптера для template"
+    "refreshOnRealtime": "Обновить все точки данных на событии в реальном времени"
 }

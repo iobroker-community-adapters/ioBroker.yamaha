@@ -4,6 +4,5 @@
     "Poll Interval": "Pollinterval",
     "Realtime Options": "Realtime opties",
     "Use Realtime": "Gebruik Realtime",
-    "refreshOnRealtime": "Ververs alle datapunten op een realtime evenement",
-    "template adapter settings": "Adapterinstellingen voor template"
+    "refreshOnRealtime": "Ververs alle datapunten op een realtime evenement"
 }

@@ -4,6 +4,5 @@
     "Poll Interval": "轮询间隔",
     "Realtime Options": "实时选项",
     "Use Realtime": "使用实时",
-    "refreshOnRealtime": "在实时事件上刷新所有数据点",
-    "template adapter settings": "template的适配器设置"
+    "refreshOnRealtime": "在实时事件上刷新所有数据点"
 }
