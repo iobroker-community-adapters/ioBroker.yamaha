@@ -1,0 +1,9 @@
+{
+    "IP Address": "IP adres",
+    "Ping interval": "Interval om de realtime verbinding in seconden te pingen, (0 = geen)",
+    "Poll Interval": "Pollinterval",
+    "Realtime Options": "Realtime opties",
+    "Use Realtime": "Gebruik Realtime",
+    "refreshOnRealtime": "Ververs alle datapunten op een realtime evenement",
+    "template adapter settings": "Adapterinstellingen voor template"
+}

@@ -1,0 +1,9 @@
+{
+    "IP Address": "Indirizzo IP",
+    "Ping interval": "Intervallo per eseguire il ping della connessione in tempo reale in secondi, (0 = nessuno)",
+    "Poll Interval": "Intervallo di polling",
+    "Realtime Options": "Opzioni in tempo reale",
+    "Use Realtime": "Usa in tempo reale",
+    "refreshOnRealtime": "Aggiorna tutti i punti dati sull'evento in tempo reale",
+    "template adapter settings": "Impostazioni dell'adattatore per template"
+}

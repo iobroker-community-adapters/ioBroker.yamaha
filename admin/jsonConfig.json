@@ -1,0 +1,61 @@
+{
+  "i18n": true,
+  "type": "panel",
+  "items": {
+    "ip": {
+      "type": "text",
+      "label": "IP Address",
+      "xs": 12,
+      "sm": 12,
+      "md": 8,
+      "lg": 6,
+      "xl": 4
+    },
+    "interval": {
+      "type": "text",
+      "label": "Poll Interval",
+      "xs": 12,
+      "sm": 12,
+      "md": 8,
+      "lg": 6,
+      "xl": 4
+    },
+    "realtimeOptionsHeader": {
+      "type": "header",
+      "text": "Realtime Options",
+      "newLine": true,
+      "xs": 12,
+      "sm": 12,
+      "md": 12,
+      "lg": 12,
+      "xl": 12
+    },
+    "useRealtime": {
+      "type": "checkbox",
+      "label": "Use Realtime",
+      "xs": 12,
+      "sm": 6,
+      "md": 6,
+      "lg": 4,
+      "xl": 4
+    },
+    "refreshOnRealtime": {
+      "type": "checkbox",
+      "label": "refreshOnRealtime",
+      "xs": 12,
+      "sm": 6,
+      "md": 6,
+      "lg": 4,
+      "xl": 4
+    },
+    "realtimePing": {
+      "type": "checkbox",
+      "label": "Ping interval",
+      "xs": 12,
+      "sm": 6,
+      "md": 6,
+      "lg": 4,
+      "xl": 4
+    }
+  }
+}
