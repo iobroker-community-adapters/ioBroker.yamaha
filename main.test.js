@@ -17,7 +17,7 @@ describe('admin jsonConfig migration', () => {
         'Use Realtime',
         'refreshOnRealtime',
     ];
-    const translationLanguages = ['de', 'en', 'es', 'fr', 'it', 'nl', 'pl', 'pt', 'ru', 'zh-cn'];
+    const translationLanguages = ['de', 'en', 'es', 'fr', 'it', 'nl', 'pl', 'pt', 'ru', 'uk', 'zh-cn'];
 
     it('uses jsonConfig as admin UI', () => {
         expect(ioPackage.common.adminUI).to.deep.equal({ config: 'json' });
