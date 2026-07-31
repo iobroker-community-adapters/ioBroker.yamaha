@@ -32,7 +32,10 @@ __export(main_exports, {
 });
 module.exports = __toCommonJS(main_exports);
 var utils = __toESM(require("@iobroker/adapter-core"));
+var import_device_registry = require("./lib/device-registry");
+var import_pure_helpers = require("./lib/pure-helpers");
 class Yamaha extends utils.Adapter {
+  devices = new import_device_registry.DeviceRegistry();
   /**
    * @param options adapter options passed through by js-controller
    */
@@ -44,10 +47,15 @@ class Yamaha extends utils.Adapter {
     this.on("ready", this.onReady.bind(this));
     this.on("unload", this.onUnload.bind(this));
   }
-  /** Bring the adapter up. No transports are wired yet, so connection stays false. */
+  /** Bring the adapter up and register the configured devices. No transports are wired yet. */
   async onReady() {
     try {
       await this.setState("info.connection", { val: false, ack: true });
+      const devices = (0, import_pure_helpers.parseDevices)(this.config.devices);
+      for (const device of devices) {
+        this.devices.upsert(device);
+      }
+      this.log.debug(`Registered ${devices.length} configured device(s).`);
     } catch (e) {
       this.log.error(`onReady failed: ${e instanceof Error ? e.message : String(e)}`);
     }
