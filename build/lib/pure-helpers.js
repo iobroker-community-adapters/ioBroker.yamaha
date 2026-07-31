@@ -18,7 +18,9 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var pure_helpers_exports = {};
 __export(pure_helpers_exports, {
-  parseDevices: () => parseDevices
+  parseDevices: () => parseDevices,
+  sanitizeId: () => sanitizeId,
+  stripNamespace: () => stripNamespace
 });
 module.exports = __toCommonJS(pure_helpers_exports);
 function isConfiguredDevice(entry) {
@@ -28,6 +30,12 @@ function isConfiguredDevice(entry) {
   const candidate = entry;
   return typeof candidate.name === "string" && candidate.name.length > 0 && typeof candidate.ip === "string" && candidate.ip.length > 0;
 }
+function sanitizeId(raw) {
+  return raw.replace(/[^A-Za-z0-9\-_]/g, "_");
+}
+function stripNamespace(fullId, namespace) {
+  return fullId.slice(namespace.length + 1);
+}
 function parseDevices(raw) {
   if (!Array.isArray(raw)) {
     return [];
@@ -35,13 +43,15 @@ function parseDevices(raw) {
   const records = [];
   for (const entry of raw) {
     if (isConfiguredDevice(entry)) {
-      records.push({ id: entry.name, ip: entry.ip, protocols: /* @__PURE__ */ new Set() });
+      records.push({ id: sanitizeId(entry.name), ip: entry.ip, protocols: /* @__PURE__ */ new Set() });
     }
   }
   return records;
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
-  parseDevices
+  parseDevices,
+  sanitizeId,
+  stripNamespace
 });
 //# sourceMappingURL=pure-helpers.js.map

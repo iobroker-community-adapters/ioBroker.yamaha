@@ -32,10 +32,17 @@ __export(main_exports, {
 });
 module.exports = __toCommonJS(main_exports);
 var utils = __toESM(require("@iobroker/adapter-core"));
-var import_device_registry = require("./lib/device-registry");
 var import_pure_helpers = require("./lib/pure-helpers");
+var import_ynca_client = require("./lib/ynca/ynca-client");
+var import_device_controller = require("./lib/device-controller");
+const SWEEP_ZONES = ["MAIN", "ZONE2", "ZONE3", "ZONE4"];
+const SWEEP_FUNCS = ["PWR", "VOL", "MUTE", "INP", "SOUNDPRG"];
+const SWEEP_GETS = [
+  { subunit: "SYS", func: "MODELNAME" },
+  ...SWEEP_ZONES.flatMap((zone) => SWEEP_FUNCS.map((func) => ({ subunit: zone, func })))
+];
 class Yamaha extends utils.Adapter {
-  devices = new import_device_registry.DeviceRegistry();
+  controllers = [];
   /**
    * @param options adapter options passed through by js-controller
    */
@@ -45,19 +52,56 @@ class Yamaha extends utils.Adapter {
       name: "yamaha"
     });
     this.on("ready", this.onReady.bind(this));
+    this.on("stateChange", this.onStateChange.bind(this));
     this.on("unload", this.onUnload.bind(this));
   }
-  /** Bring the adapter up and register the configured devices. No transports are wired yet. */
+  /** Start a controller for each configured device, then subscribe to state changes. */
   async onReady() {
     try {
       await this.setState("info.connection", { val: false, ack: true });
       const devices = (0, import_pure_helpers.parseDevices)(this.config.devices);
+      this.subscribeStates("*");
+      let anyConnected = false;
       for (const device of devices) {
-        this.devices.upsert(device);
+        const controller = new import_device_controller.YncaDeviceController(device.id, {
+          client: new import_ynca_client.YncaClient(device.ip),
+          upsertObject: async (id, def) => {
+            await this.extendObject(id, { type: def.type, common: def.common, native: {} });
+          },
+          setStateAck: (id, value) => void this.setState(id, { val: value, ack: true }),
+          log: {
+            debug: (message) => this.log.debug(message),
+            info: (message) => this.log.info(message),
+            warn: (message) => this.log.warn(message)
+          }
+        });
+        this.controllers.push(controller);
+        try {
+          if (await controller.start(SWEEP_GETS)) {
+            anyConnected = true;
+          }
+        } catch (e) {
+          this.log.warn(`${device.id}: could not connect: ${e instanceof Error ? e.message : String(e)}`);
+        }
       }
-      this.log.debug(`Registered ${devices.length} configured device(s).`);
+      await this.setState("info.connection", { val: anyConnected, ack: true });
     } catch (e) {
       this.log.error(`onReady failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  /**
+   * Route a state change to the owning device controller.
+   *
+   * @param id the full state id
+   * @param state the new state (null when deleted)
+   */
+  onStateChange(id, state) {
+    if (!state) {
+      return;
+    }
+    const relative = (0, import_pure_helpers.stripNamespace)(id, this.namespace);
+    for (const controller of this.controllers) {
+      controller.handleStateChange(relative, state.ack, state.val);
     }
   }
   /**
@@ -67,6 +111,9 @@ class Yamaha extends utils.Adapter {
    */
   onUnload(callback) {
     try {
+      for (const controller of this.controllers) {
+        controller.close();
+      }
       void this.setState("info.connection", { val: false, ack: true });
       callback();
     } catch {

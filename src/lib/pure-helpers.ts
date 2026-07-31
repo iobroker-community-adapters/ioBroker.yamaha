@@ -25,6 +25,28 @@ function isConfiguredDevice(entry: unknown): entry is ConfiguredDevice {
 }
 
 /**
+ * Make a string safe for use as an ioBroker object id segment.
+ *
+ * @param raw the raw string (e.g. a device name)
+ * @returns the string with id-unsafe characters replaced by underscores
+ */
+export function sanitizeId(raw: string): string {
+  return raw.replace(/[^A-Za-z0-9\-_]/g, "_");
+}
+
+/**
+ * Strip the adapter namespace (e.g. `yamaha.0`) from a full state id, leaving the
+ * device-relative path (e.g. `living.power`).
+ *
+ * @param fullId the full state id
+ * @param namespace the adapter namespace
+ * @returns the id relative to the adapter instance
+ */
+export function stripNamespace(fullId: string, namespace: string): string {
+  return fullId.slice(namespace.length + 1);
+}
+
+/**
  * Turn the admin device table (untrusted native config) into device records.
  * Invalid rows are dropped; protocols start empty and are probed in later phases.
  *
@@ -38,7 +60,7 @@ export function parseDevices(raw: unknown): DeviceRecord[] {
   const records: DeviceRecord[] = [];
   for (const entry of raw) {
     if (isConfiguredDevice(entry)) {
-      records.push({ id: entry.name, ip: entry.ip, protocols: new Set() });
+      records.push({ id: sanitizeId(entry.name), ip: entry.ip, protocols: new Set() });
     }
   }
   return records;
