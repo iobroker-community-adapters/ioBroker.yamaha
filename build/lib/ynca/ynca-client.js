@@ -26,9 +26,15 @@ var import_node_net = require("node:net");
 var import_line_buffer = require("./line-buffer");
 var import_protocol = require("./protocol");
 var import_reconnect_strategy = require("./reconnect-strategy");
+var import_capability = require("./capability");
 const YNCA_PORT = 5e4;
 const RECONNECT_BASE_MS = 1e3;
 const RECONNECT_MAX_MS = 3e4;
+function delay(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
 function defaultFactory(host, port) {
   const socket = (0, import_node_net.connect)({ host, port });
   return {
@@ -146,6 +152,36 @@ class YncaClient {
    */
   onMessage(handler) {
     this.messageHandlers.push(handler);
+  }
+  /**
+   * Run an init sweep: send a GET for each requested function (paced by
+   * `spacingMs`), collect the responses, and build a capability report once the
+   * device has settled.
+   *
+   * @param gets the subunit/function pairs to query
+   * @param spacingMs delay between GETs (YNCA needs ~100 ms between commands)
+   * @param settleMs how long to wait after the last GET before building the report
+   * @returns the assembled capabilities
+   */
+  async readCapabilities(gets, spacingMs = 100, settleMs = 500) {
+    const collected = [];
+    const collector = (message) => {
+      collected.push(message);
+    };
+    this.messageHandlers.push(collector);
+    try {
+      for (const request of gets) {
+        this.get(request.subunit, request.func);
+        await delay(spacingMs);
+      }
+      await delay(settleMs);
+      return (0, import_capability.buildCapabilities)(collected);
+    } finally {
+      const index = this.messageHandlers.indexOf(collector);
+      if (index >= 0) {
+        this.messageHandlers.splice(index, 1);
+      }
+    }
   }
   /** Whether the connection is currently up. */
   isReachable() {

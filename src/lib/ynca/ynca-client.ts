@@ -2,12 +2,25 @@ import { connect } from "node:net";
 import { LineBuffer } from "./line-buffer";
 import { decodeLine, encodeCommand, encodeGet } from "./protocol";
 import { ReconnectStrategy } from "./reconnect-strategy";
+import { buildCapabilities, type YncaCapabilities } from "./capability";
 
 /** The YNCA control port (TCP). */
 export const YNCA_PORT = 50000;
 
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 30000;
+
+/**
+ * A small delay used to pace the init sweep.
+ *
+ * @param ms milliseconds to wait
+ * @returns a promise that resolves after the delay
+ */
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => {
+    setTimeout(resolve, ms);
+  });
+}
 
 /** A decoded message from the receiver. */
 export interface YncaMessage {
@@ -173,6 +186,41 @@ export class YncaClient {
    */
   public onMessage(handler: (message: YncaMessage) => void): void {
     this.messageHandlers.push(handler);
+  }
+
+  /**
+   * Run an init sweep: send a GET for each requested function (paced by
+   * `spacingMs`), collect the responses, and build a capability report once the
+   * device has settled.
+   *
+   * @param gets the subunit/function pairs to query
+   * @param spacingMs delay between GETs (YNCA needs ~100 ms between commands)
+   * @param settleMs how long to wait after the last GET before building the report
+   * @returns the assembled capabilities
+   */
+  public async readCapabilities(
+    gets: Array<{ subunit: string; func: string }>,
+    spacingMs = 100,
+    settleMs = 500,
+  ): Promise<YncaCapabilities> {
+    const collected: YncaMessage[] = [];
+    const collector = (message: YncaMessage): void => {
+      collected.push(message);
+    };
+    this.messageHandlers.push(collector);
+    try {
+      for (const request of gets) {
+        this.get(request.subunit, request.func);
+        await delay(spacingMs);
+      }
+      await delay(settleMs);
+      return buildCapabilities(collected);
+    } finally {
+      const index = this.messageHandlers.indexOf(collector);
+      if (index >= 0) {
+        this.messageHandlers.splice(index, 1);
+      }
+    }
   }
 
   /** Whether the connection is currently up. */

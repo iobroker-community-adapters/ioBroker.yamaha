@@ -156,4 +156,38 @@ describe("YncaClient", () => {
       vi.useRealTimers();
     }
   });
+
+  test("readCapabilities sweeps the requested gets and builds capabilities from the responses", async () => {
+    vi.useFakeTimers();
+    try {
+      const { factory, sockets } = fixtureFactory();
+      const client = new YncaClient("1.2.3.4", factory);
+      const connected = client.connect();
+      sockets[0].emitConnect();
+      await connected;
+
+      const capsPromise = client.readCapabilities(
+        [
+          { subunit: "SYS", func: "MODELNAME" },
+          { subunit: "MAIN", func: "PWR" },
+        ],
+        100,
+        300,
+      );
+      await vi.advanceTimersByTimeAsync(100);
+      sockets[0].emitData("@SYS:MODELNAME=RX-A810\r\n");
+      await vi.advanceTimersByTimeAsync(100);
+      sockets[0].emitData("@MAIN:PWR=Standby\r\n");
+      await vi.advanceTimersByTimeAsync(300);
+
+      const caps = await capsPromise;
+      expect(caps.model).toBe("RX-A810");
+      expect(caps.subunits.MAIN?.PWR).toBe("Standby");
+      expect(sockets[0].written).toContain("@SYS:MODELNAME=?\r\n");
+      expect(sockets[0].written).toContain("@MAIN:PWR=?\r\n");
+      client.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

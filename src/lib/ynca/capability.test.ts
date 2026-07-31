@@ -1,4 +1,4 @@
-import { parseCapabilities } from "./capability";
+import { buildCapabilities, parseCapabilities } from "./capability";
 import rxA810 from "./__fixtures__/RX-A810.json";
 import rN500 from "./__fixtures__/R-N500.json";
 
@@ -31,5 +31,17 @@ describe("parseCapabilities", () => {
     const caps = parseCapabilities(["@UNDEFINED", "@RESTRICTED", "@MAIN:PWR=Standby"]);
     expect(Object.keys(caps.subunits)).toEqual(["MAIN"]);
     expect(caps.subunits.MAIN?.PWR).toBe("Standby");
+  });
+});
+
+describe("buildCapabilities", () => {
+  test("assembles subunits and model from decoded messages", () => {
+    const caps = buildCapabilities([
+      { subunit: "SYS", func: "MODELNAME", value: "RX-A810" },
+      { subunit: "MAIN", func: "PWR", value: "On" },
+      { subunit: "MAIN", func: "VOL", value: "-30.0" },
+    ]);
+    expect(caps.model).toBe("RX-A810");
+    expect(caps.subunits.MAIN).toEqual({ PWR: "On", VOL: "-30.0" });
   });
 });

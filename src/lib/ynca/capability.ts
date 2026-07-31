@@ -8,22 +8,46 @@ export interface YncaCapabilities {
   subunits: Record<string, Record<string, string>>;
 }
 
+/** A decoded subunit/function/value message. */
+export interface YncaFunctionValue {
+  /** The subunit that reported (e.g. `MAIN`, `ZONE2`). */
+  subunit: string;
+  /** The function name (e.g. `PWR`, `VOL`). */
+  func: string;
+  /** The reported value. */
+  value: string;
+}
+
+/**
+ * Assemble a capability report from decoded messages: group by subunit and
+ * function, take the model from SYS:MODELNAME.
+ *
+ * @param messages the decoded ok messages from the receiver
+ * @returns the assembled capabilities
+ */
+export function buildCapabilities(messages: YncaFunctionValue[]): YncaCapabilities {
+  const subunits: Record<string, Record<string, string>> = {};
+  for (const message of messages) {
+    (subunits[message.subunit] ??= {})[message.func] = message.value;
+  }
+  return { model: subunits.SYS?.MODELNAME ?? "", subunits };
+}
+
 /**
  * Build a capability report from the lines received during the init sweep. Only
  * `@SUBUNIT:FUNC=VALUE` responses count; `@UNDEFINED`/`@RESTRICTED` (absent
- * subunits/functions) are ignored. The model comes from SYS:MODELNAME.
+ * subunits/functions) are ignored.
  *
  * @param lines response lines received from the receiver
  * @returns the assembled capabilities
  */
 export function parseCapabilities(lines: string[]): YncaCapabilities {
-  const subunits: Record<string, Record<string, string>> = {};
+  const messages: YncaFunctionValue[] = [];
   for (const line of lines) {
     const response = decodeLine(line);
-    if (response.status !== "ok") {
-      continue;
+    if (response.status === "ok") {
+      messages.push({ subunit: response.subunit, func: response.func, value: response.value });
     }
-    (subunits[response.subunit] ??= {})[response.func] = response.value;
   }
-  return { model: subunits.SYS?.MODELNAME ?? "", subunits };
+  return buildCapabilities(messages);
 }

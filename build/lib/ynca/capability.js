@@ -18,24 +18,32 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var capability_exports = {};
 __export(capability_exports, {
+  buildCapabilities: () => buildCapabilities,
   parseCapabilities: () => parseCapabilities
 });
 module.exports = __toCommonJS(capability_exports);
 var import_protocol = require("./protocol");
-function parseCapabilities(lines) {
+function buildCapabilities(messages) {
   var _a, _b, _c, _d;
   const subunits = {};
-  for (const line of lines) {
-    const response = (0, import_protocol.decodeLine)(line);
-    if (response.status !== "ok") {
-      continue;
-    }
-    ((_b = subunits[_a = response.subunit]) != null ? _b : subunits[_a] = {})[response.func] = response.value;
+  for (const message of messages) {
+    ((_b = subunits[_a = message.subunit]) != null ? _b : subunits[_a] = {})[message.func] = message.value;
   }
   return { model: (_d = (_c = subunits.SYS) == null ? void 0 : _c.MODELNAME) != null ? _d : "", subunits };
 }
+function parseCapabilities(lines) {
+  const messages = [];
+  for (const line of lines) {
+    const response = (0, import_protocol.decodeLine)(line);
+    if (response.status === "ok") {
+      messages.push({ subunit: response.subunit, func: response.func, value: response.value });
+    }
+  }
+  return buildCapabilities(messages);
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  buildCapabilities,
   parseCapabilities
 });
 //# sourceMappingURL=capability.js.map
