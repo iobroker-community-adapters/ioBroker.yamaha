@@ -1,0 +1,6 @@
+{
+  "introText": "通过网络控制 Yamaha AV 接收器和 MusicCast 设备。在下方添加每个设备的名称和 IP 地址。",
+  "devicesTable": "Yamaha 设备",
+  "columnName": "名称",
+  "columnIp": "IP 地址"
+}

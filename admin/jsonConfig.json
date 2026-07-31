@@ -1,0 +1,28 @@
+{
+  "i18n": true,
+  "type": "panel",
+  "items": {
+    "_intro": {
+      "type": "staticText",
+      "text": "introText",
+      "xs": 12,
+      "sm": 12,
+      "md": 12,
+      "lg": 12,
+      "xl": 12
+    },
+    "devices": {
+      "type": "table",
+      "label": "devicesTable",
+      "xs": 12,
+      "sm": 12,
+      "md": 12,
+      "lg": 12,
+      "xl": 12,
+      "items": [
+        { "type": "text", "attr": "name", "title": "columnName", "width": "50%" },
+        { "type": "text", "attr": "ip", "title": "columnIp", "width": "50%" }
+      ]
+    }
+  }
+}

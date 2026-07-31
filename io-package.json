@@ -99,741 +99,87 @@
       "it": "Yamaha",
       "es": "Yamaha",
       "pl": "Yamaha",
+      "uk": "Yamaha",
       "zh-cn": "雅马哈"
     },
     "desc": {
-      "en": "Control Yamaha AV-Receivers via Network",
-      "de": "Steuern Sie Yamaha AV-Receiver über das Netzwerk",
-      "ru": "Управление AV-ресиверами Yamaha через сеть",
-      "pt": "Controle os receptores AV da Yamaha via rede",
-      "nl": "Bedien Yamaha AV-ontvangers via netwerk",
-      "fr": "Contrôlez les récepteurs AV Yamaha via le réseau",
-      "it": "Controlla i ricevitori AV Yamaha tramite la rete",
-      "es": "Controle los receptores AV de Yamaha a través de la red",
-      "pl": "Kontroluj odbiorniki AV Yamaha przez sieć",
-      "zh-cn": "通过网络控制Yamaha AV接收器"
+      "en": "Control Yamaha AV receivers and MusicCast devices over the network",
+      "de": "Steuern Sie Yamaha AV-Receiver und MusicCast-Geräte über das Netzwerk",
+      "ru": "Управление AV-ресиверами и устройствами MusicCast от Yamaha через сеть",
+      "pt": "Controle os receptores AV e dispositivos MusicCast da Yamaha via rede",
+      "nl": "Bedien Yamaha AV-ontvangers en MusicCast-apparaten via netwerk",
+      "fr": "Contrôlez les récepteurs AV et les appareils MusicCast Yamaha via le réseau",
+      "it": "Controlla i ricevitori AV e i dispositivi MusicCast Yamaha tramite la rete",
+      "es": "Controle los receptores AV y dispositivos MusicCast de Yamaha a través de la red",
+      "pl": "Steruj odbiornikami AV i urządzeniami MusicCast Yamaha przez sieć",
+      "uk": "Керування AV-ресиверами та пристроями MusicCast Yamaha через мережу",
+      "zh-cn": "通过网络控制 Yamaha AV 接收器和 MusicCast 设备"
+    },
+    "keywords": [
+      "yamaha",
+      "avr",
+      "receiver",
+      "musiccast"
+    ],
+    "licenseInformation": {
+      "license": "MIT",
+      "type": "free"
     },
     "platform": "Javascript/Node.js",
     "mode": "daemon",
     "icon": "yamaha.png",
-    "extIcon": "https://raw.githubusercontent.com/iobroker-community-adapters/ioBroker.yamaha/master/admin/yamaha.png",
-    "readme": "https://github.com/iobroker-community-adapters/ioBroker.yamaha/blob/master/README.md",
-    "licenseInformation": {
-      "type": "free",
-      "license": "MIT"
-    },
+    "extIcon": "https://raw.githubusercontent.com/krobipd/ioBroker.yamaha/main/admin/yamaha.png",
+    "readme": "https://github.com/krobipd/ioBroker.yamaha/blob/main/README.md",
     "loglevel": "info",
-    "keywords": [
-      "yamaha",
-      "avr",
-      "receiver"
-    ],
-    "enabled": true,
-    "type": "multimedia",
+    "tier": 2,
+    "compact": false,
     "connectionType": "local",
     "dataSource": "push",
-    "tier": 2,
-    "compact": true,
+    "type": "multimedia",
+    "enabled": true,
     "authors": [
+      "krobi <krobi@power-dreams.com>",
       "soef <soef@gmx.net>",
       "iobroker-community-adapters <iobroker-community-adapters@gmx.de>"
     ],
+    "restartAdapters": [],
     "dependencies": [
       {
-        "js-controller": ">=6.0.11"
+        "js-controller": ">=7.2.2"
       }
     ],
-    "plugins": {
-      "sentry": {
-        "dsn": "https://651c9af0c80e486bbde477e8db0ba8b3@sentry.iobroker.net/174"
-      }
-    },
     "globalDependencies": [
       {
-        "admin": ">=7.7.22"
+        "admin": ">=7.8.23"
       }
     ],
     "adminUI": {
-      "config": "materialize"
+      "config": "json"
     }
   },
   "native": {
-    "ip": "",
-    "intervall": 120,
-    "useRealtime": true,
-    "refreshOnRealtime": true
+    "devices": []
   },
   "objects": [],
   "instanceObjects": [
     {
-      "_id": "Commands",
+      "_id": "info",
       "type": "channel",
       "common": {
-        "role": "Commands",
-        "name": ""
+        "name": "Information"
       },
       "native": {}
     },
     {
-      "_id": "Realtime",
-      "type": "device",
-      "common": {
-        "role": "Realtime",
-        "name": ""
-      },
-      "native": {}
-    },
-    {
-      "_id": "Realtime.MAIN.PWR",
+      "_id": "info.connection",
       "type": "state",
       "common": {
-        "name": "Input",
-        "type": "string",
-        "role": "media.power",
-        "read": true,
-        "write": true,
-        "def": "",
-        "desc": "Input"
-      },
-      "native": {
-        "values": [
-          "Standby",
-          "On"
-        ]
-      }
-    },
-    {
-      "_id": "SystemConfig",
-      "type": "channel",
-      "common": {
-        "role": "SystemConfig",
-        "name": ""
-      },
-      "native": {}
-    },
-    {
-      "_id": "SystemConfig.name",
-      "type": "state",
-      "common": {
-        "name": "Name",
-        "type": "string",
-        "role": "systemconfig.name",
+        "role": "indicator.connected",
+        "name": "Device or service connected",
+        "type": "boolean",
         "read": true,
         "write": false,
-        "def": "",
-        "desc": "Version"
-      },
-      "native": {}
-    },
-    {
-      "_id": "SystemConfig.version",
-      "type": "state",
-      "common": {
-        "name": "Version",
-        "type": "string",
-        "role": "systemconfig.version",
-        "read": true,
-        "write": false,
-        "def": "",
-        "desc": "Version"
-      },
-      "native": {}
-    },
-    {
-      "_id": "Commands.xmlCommand",
-      "type": "state",
-      "common": {
-        "name": "XML Command",
-        "type": "string",
-        "role": "media.xmlCommand",
-        "read": true,
-        "write": true,
-        "def": "",
-        "desc": "XML Command (eg. <Main_Zone><Volume><Mute>On</Mute></Volume></Main_Zone>)"
-      },
-      "native": {}
-    },
-    {
-      "_id": "Commands.command",
-      "type": "state",
-      "common": {
-        "name": "Command",
-        "type": "string",
-        "role": "media.command",
-        "read": true,
-        "write": true,
-        "def": "",
-        "desc": "Command (eg. volumeUp 100)"
-      },
-      "native": {}
-    },
-    {
-      "_id": "Commands.webradio",
-      "type": "state",
-      "common": {
-        "name": "WebRadio",
-        "type": "string",
-        "role": "media.webradio",
-        "read": true,
-        "write": true,
-        "def": "",
-        "desc": "Internet Radiosender selektieren"
-      },
-      "native": {}
-    },
-    {
-      "_id": "Commands.volumeUp",
-      "type": "state",
-      "common": {
-        "name": "Volume Up",
-        "type": "number",
-        "role": "media.volumeUp",
-        "read": true,
-        "write": true,
-        "def": 0,
-        "desc": "Volume Up"
-      },
-      "native": {}
-    },
-    {
-      "_id": "Commands.volumeDown",
-      "type": "state",
-      "common": {
-        "name": "Volume Down",
-        "type": "number",
-        "role": "media.volumeDown",
-        "read": true,
-        "write": true,
-        "def": 0,
-        "desc": "Volume Down"
-      },
-      "native": {}
-    },
-    {
-      "_id": "Commands.adjustVolume",
-      "type": "state",
-      "common": {
-        "name": "Adjust Volume",
-        "type": "number",
-        "role": "media.adjustVolume",
-        "read": true,
-        "write": true,
-        "def": 0,
-        "desc": "Adjust Volume"
-      },
-      "native": {}
-    },
-    {
-      "_id": "Commands.toggleMute",
-      "type": "state",
-      "common": {
-        "name": "Toggle Mute",
-        "type": "boolean",
-        "role": "media.toggleMute",
-        "read": true,
-        "write": true,
-        "def": false,
-        "desc": "Toggle Mute"
-      },
-      "native": {}
-    },
-    {
-      "_id": "volume",
-      "type": "state",
-      "common": {
-        "name": "Volume",
-        "type": "number",
-        "role": "media.volume",
-        "read": true,
-        "write": true,
-        "def": 0,
-        "desc": "Volume"
-      },
-      "native": {}
-    },
-    {
-      "_id": "input",
-      "type": "state",
-      "common": {
-        "name": "Input",
-        "type": "string",
-        "role": "media.input",
-        "read": true,
-        "write": true,
-        "def": "",
-        "desc": "Input"
-      },
-      "native": {
-        "values": [
-          "AV1",
-          "AV2"
-        ]
-      }
-    },
-    {
-      "_id": "surround",
-      "type": "state",
-      "common": {
-        "name": "Surround Program",
-        "type": "string",
-        "role": "state",
-        "read": true,
-        "write": true,
-        "def": "Action Game",
-        "desc": "Surround"
-      },
-      "native": {}
-    },
-    {
-      "_id": "mute",
-      "type": "state",
-      "common": {
-        "name": "Mute",
-        "type": "boolean",
-        "role": "media.mute",
-        "read": true,
-        "write": true,
-        "def": false,
-        "desc": "Mute"
-      },
-      "native": {}
-    },
-    {
-      "_id": "power",
-      "type": "state",
-      "common": {
-        "name": "Power",
-        "type": "boolean",
-        "role": "media.power",
-        "read": true,
-        "write": true,
-        "def": false,
-        "desc": "Power"
-      },
-      "native": {}
-    },
-    {
-      "_id": "refresh",
-      "type": "state",
-      "common": {
-        "name": "Refresh",
-        "type": "boolean",
-        "role": "state",
-        "read": true,
-        "write": true,
-        "def": false,
-        "desc": "Refresh states now"
-      },
-      "native": {}
-    },
-    {
-      "_id": "Commands.stop",
-      "type": "state",
-      "common": {
-        "name": "Stop",
-        "type": "boolean",
-        "role": "media.stop",
-        "read": true,
-        "write": true,
-        "def": false,
-        "desc": "Stop"
-      },
-      "native": {}
-    },
-    {
-      "_id": "Commands.pause",
-      "type": "state",
-      "common": {
-        "name": "Pause",
-        "type": "boolean",
-        "role": "media.pause",
-        "read": true,
-        "write": true,
-        "def": false,
-        "desc": "Pause"
-      },
-      "native": {}
-    },
-    {
-      "_id": "Commands.skip",
-      "type": "state",
-      "common": {
-        "name": "Skip",
-        "type": "boolean",
-        "role": "media.skip",
-        "read": true,
-        "write": true,
-        "def": false,
-        "desc": "Skip"
-      },
-      "native": {}
-    },
-    {
-      "_id": "Commands.rewind",
-      "type": "state",
-      "common": {
-        "name": "Rewind",
-        "type": "boolean",
-        "role": "media.rewind",
-        "read": true,
-        "write": true,
-        "def": false,
-        "desc": "Rewind"
-      },
-      "native": {}
-    },
-    {
-      "_id": "Commands.skip",
-      "type": "state",
-      "common": {
-        "name": "Skip",
-        "type": "boolean",
-        "role": "media.skip",
-        "read": true,
-        "write": true,
-        "def": false,
-        "desc": "Skip"
-      },
-      "native": {}
-    },
-    {
-      "_id": "YPAOVolume",
-      "type": "state",
-      "common": {
-        "name": "YPAOVolume",
-        "type": "boolean",
-        "role": "state",
-        "read": true,
-        "write": true,
-        "def": false,
-        "desc": "YPAO Volume"
-      },
-      "native": {}
-    },
-    {
-      "_id": "extraBass",
-      "type": "state",
-      "common": {
-        "name": "extraBass",
-        "type": "boolean",
-        "role": "state",
-        "read": true,
-        "write": true,
-        "def": false,
-        "desc": "Extra Bass"
-      },
-      "native": {}
-    },
-    {
-      "_id": "adaptiveDRC",
-      "type": "state",
-      "common": {
-        "name": "adaptiveDRC",
-        "type": "boolean",
-        "role": "state",
-        "read": true,
-        "write": true,
-        "def": false,
-        "desc": "Adaptive DRC"
-      },
-      "native": {}
-    },
-    {
-      "_id": "partyMode",
-      "type": "state",
-      "common": {
-        "name": "partyMode",
-        "type": "boolean",
-        "role": "state",
-        "read": true,
-        "write": true,
-        "def": false,
-        "desc": "Party Mode"
-      },
-      "native": {}
-    },
-    {
-      "_id": "Commands.partyModeVolumeUp",
-      "type": "state",
-      "common": {
-        "name": "partyModeVoulumeUp",
-        "type": "boolean",
-        "role": "state",
-        "read": true,
-        "write": true,
-        "def": false,
-        "desc": "Party Mode Volume Up"
-      },
-      "native": {}
-    },
-    {
-      "_id": "Commands.partyModeVolumeDown",
-      "type": "state",
-      "common": {
-        "name": "partyModeVolumeDown",
-        "type": "boolean",
-        "role": "state",
-        "read": true,
-        "write": true,
-        "def": false,
-        "desc": "Party Mode Volume Down"
-      },
-      "native": {}
-    },
-    {
-      "_id": "hdmiOut1",
-      "type": "state",
-      "common": {
-        "name": "hdmiOut1",
-        "type": "boolean",
-        "role": "state",
-        "read": true,
-        "write": true,
-        "def": false,
-        "desc": "HDMI-1 Output"
-      },
-      "native": {}
-    },
-    {
-      "_id": "hdmiOut2",
-      "type": "state",
-      "common": {
-        "name": "hdmiOut2",
-        "type": "boolean",
-        "role": "state",
-        "read": true,
-        "write": true,
-        "def": false,
-        "desc": "HDMI-2 Output"
-      },
-      "native": {}
-    },
-    {
-      "_id": "pureDirect",
-      "type": "state",
-      "common": {
-        "name": "pureDirect",
-        "type": "string",
-        "role": "state",
-        "read": true,
-        "write": true,
-        "def": "not available",
-        "desc": "Pure Direct"
-      },
-      "native": {}
-    },
-    {
-      "_id": "bass",
-      "type": "state",
-      "common": {
-        "name": "bass",
-        "type": "number",
-        "role": "state",
-        "read": true,
-        "write": true,
-        "min": -60,
-        "max": 60,
-        "def": 0,
-        "desc": "Set Bass to (-60..60)",
-        "func": "setBassTo"
-      },
-      "native": {}
-    },
-    {
-      "_id": "treble",
-      "type": "state",
-      "common": {
-        "name": "treble",
-        "type": "number",
-        "role": "state",
-        "read": true,
-        "write": true,
-        "min": -60,
-        "max": 60,
-        "def": 0,
-        "desc": "Set Treble to (-60..60)"
-      },
-      "native": {}
-    },
-    {
-      "_id": "subwooferLevel",
-      "type": "state",
-      "common": {
-        "name": "subwooferLevel",
-        "type": "number",
-        "role": "state",
-        "read": true,
-        "write": true,
-        "min": -60,
-        "max": 60,
-        "def": 0,
-        "desc": "Set Subwoofer Trim To"
-      },
-      "native": {}
-    },
-    {
-      "_id": "dialogLift",
-      "type": "state",
-      "common": {
-        "name": "dialogLift",
-        "type": "number",
-        "role": "state",
-        "read": true,
-        "write": true,
-        "min": 0,
-        "max": 5,
-        "def": 0,
-        "desc": "Set Dialog Lift To (0..5)"
-      },
-      "native": {}
-    },
-    {
-      "_id": "dialogLevel",
-      "type": "state",
-      "common": {
-        "name": "dialogLevel",
-        "type": "number",
-        "role": "state",
-        "read": true,
-        "write": true,
-        "min": 0,
-        "max": 3,
-        "def": 0,
-        "desc": "Set Dialog Level To (0..3)"
-      },
-      "native": {}
-    },
-    {
-      "_id": "Commands.InputTo",
-      "type": "state",
-      "common": {
-        "name": "InputTo",
-        "type": "number",
-        "role": "state",
-        "read": true,
-        "write": true,
-        "min": 0,
-        "max": 3,
-        "def": 0,
-        "desc": "Set Input of Zone To"
-      },
-      "native": {}
-    },
-    {
-      "_id": "scene",
-      "type": "state",
-      "common": {
-        "name": "scene",
-        "type": "number",
-        "role": "state",
-        "read": true,
-        "write": true,
-        "min": 1,
-        "max": 12,
-        "def": 1,
-        "desc": "Scene"
-      },
-      "native": {}
-    },
-    {
-      "_id": "Commands.zone",
-      "type": "state",
-      "common": {
-        "name": "zone",
-        "type": "number",
-        "role": "state",
-        "read": true,
-        "write": true,
-        "min": 1,
-        "max": 4,
-        "def": 1,
-        "desc": "Zone"
-      },
-      "native": {}
-    },
-    {
-      "_id": "zone1",
-      "type": "state",
-      "common": {
-        "name": "zone1",
-        "type": "boolean",
-        "role": "state",
-        "read": true,
-        "write": true,
-        "def": true,
-        "desc": "Power Zone 1"
-      },
-      "native": {}
-    },
-    {
-      "_id": "zone2",
-      "type": "state",
-      "common": {
-        "name": "zone2",
-        "type": "boolean",
-        "role": "state",
-        "read": true,
-        "write": true,
-        "def": false,
-        "desc": "Power Zone 2"
-      },
-      "native": {}
-    },
-    {
-      "_id": "zone3",
-      "type": "state",
-      "common": {
-        "name": "zone3",
-        "type": "boolean",
-        "role": "state",
-        "read": true,
-        "write": true,
-        "def": false,
-        "desc": "Power Zone 3"
-      },
-      "native": {}
-    },
-    {
-      "_id": "zone4",
-      "type": "state",
-      "common": {
-        "name": "zone4",
-        "type": "boolean",
-        "role": "state",
-        "read": true,
-        "write": true,
-        "def": false,
-        "desc": "Power Zone 4"
-      },
-      "native": {}
-    },
-    {
-      "_id": "powerAllZones",
-      "type": "state",
-      "common": {
-        "name": "PowerAllZones",
-        "type": "boolean",
-        "role": "state",
-        "read": true,
-        "write": true,
-        "def": false,
-        "desc": "Power all Zones"
-      },
-      "native": {}
-    },
-    {
-      "_id": "sleep",
-      "type": "state",
-      "common": {
-        "name": "sleep",
-        "type": "number",
-        "role": "state",
-        "read": true,
-        "write": true,
-        "min": 0,
-        "max": 120,
-        "def": 0,
-        "desc": "Sleep"
+        "def": false
       },
       "native": {}
     }

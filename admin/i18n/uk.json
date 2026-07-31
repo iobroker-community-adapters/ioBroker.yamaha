@@ -1,0 +1,6 @@
+{
+  "introText": "Керує AV-ресиверами та пристроями MusicCast Yamaha через мережу. Додайте нижче кожен пристрій за назвою та IP-адресою.",
+  "devicesTable": "Пристрої Yamaha",
+  "columnName": "Назва",
+  "columnIp": "IP-адреса"
+}

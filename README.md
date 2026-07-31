@@ -1,49 +1,38 @@
-![Logo](admin/yamaha.png)
-## ioBroker.yamaha
+# <img src="https://cdn.jsdelivr.net/gh/krobipd/ioBroker.yamaha@main/admin/yamaha.png" width="48" align="top" /> ioBroker.yamaha
 
-![Number of Installations](http://iobroker.live/badges/yamaha-installed.svg)
-![Number of Installations](http://iobroker.live/badges/yamaha-stable.svg)
-[![NPM version](http://img.shields.io/npm/v/iobroker.yamaha.svg)](https://www.npmjs.com/package/iobroker.yamaha)
+**Release:** [![npm version](https://img.shields.io/npm/v/iobroker.yamaha)](https://www.npmjs.com/package/iobroker.yamaha) ![stable](https://iobroker.live/badges/yamaha-stable.svg) ![Installations](https://iobroker.live/badges/yamaha-installed.svg) [![npm downloads](https://img.shields.io/npm/dt/iobroker.yamaha)](https://www.npmjs.com/package/iobroker.yamaha)
 
-![Test and Release](https://github.com/iobroker-community-adapters/ioBroker.yamaha/workflows/Test%20and%20Release/badge.svg)
-[![Translation status](https://weblate.iobroker.net/widgets/adapters/-/yamaha/svg-badge.svg)](https://weblate.iobroker.net/engage/adapters/?utm_source=widget)
-[![Downloads](https://img.shields.io/npm/dm/iobroker.yamaha.svg)](https://www.npmjs.com/package/iobroker.yamaha)
+**Build:** [![Test and Release](https://github.com/krobipd/ioBroker.yamaha/actions/workflows/test-and-release.yml/badge.svg)](https://github.com/krobipd/ioBroker.yamaha/actions/workflows/test-and-release.yml) ![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen) ![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue) [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-**This adapter uses Sentry libraries to automatically report exceptions and code errors to the developers.** For more details and for information how to disable the error reporting see [Sentry-Plugin Documentation](https://github.com/ioBroker/plugin-sentry#plugin-sentry)! Sentry reporting is used starting with js-controller 3.0.
+**Support:** [![Ko-fi](https://img.shields.io/badge/Ko--fi-Support-ff5e5b?logo=ko-fi)](https://ko-fi.com/krobipd) [![PayPal](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://paypal.me/krobipd)
 
-#### Description
+Controls Yamaha AV receivers and MusicCast devices from ioBroker over the local
+network. The adapter is being rebuilt from the ground up in TypeScript to unite
+the two protocol families Yamaha speaks — YNCA (the text control protocol of the
+networked receivers) and MusicCast / Yamaha Extended Control (the richer JSON
+protocol of the MusicCast generation) — behind one object tree, with the legacy
+XML protocol kept for the oldest networked models.
 
-Adapter for Yamaha AV receivers
+## Requirements
 
-Discussion please at github or at https://forum.iobroker.net/topic/53174/weiterentwicklung-yamaha-adapter
+- Node.js >= 22
+- js-controller >= 7.2.2
+- admin >= 7.8.23
 
-### Initial Creation
-This adapter was initialy created by @soef at https://github.com/soef/ioBroker.yamaha but not maintained any more, so we moved it to iobroker-community so that bugs could be fixed. thanks @soef for his work.
+## Installation
 
-#### Configuration
-Currently without autodiscover, you have to enter the IP of your receiver
+Install the adapter from the ioBroker admin.
 
-#### Installation
-via ioBroker Admin.
+## Configuration
 
-Otherweise execute the following command in the iobroker root directory (e.g. in /opt/iobroker)
-``
-npm install iobroker.yamaha 
-iobroker upload yamaha
-``
-
-#### Realtime
-The states will be created, when they occur. I.e. use your ir-remote and change something and you will see the new states. 
-Only one connection is accepted by yamaha devices.
-
-#### Requirements
-Yamaha Receiver
-
-You have to enable "network standby" function in the configuration of your receiver
-
+Add each Yamaha device with a name and its IP address.
 
 ## Changelog
 
+<!--
+	Placeholder for the next version (at the beginning of the line):
+	### **WORK IN PROGRESS**
+-->
 ### **WORK IN PROGRESS**
 - (copilot) Adapter requires node.js >= 22 now
 - (iobroker-bot) Adapter requires node.js >= 20 now.
@@ -115,12 +104,34 @@ You have to enable "network standby" function in the configuration of your recei
 ### 0.3.6
 * (soef) timeout to connect reduced
 
-<!--
+[Older changelogs can be found here](CHANGELOG_OLD.md)
 
-### License
+## History
+
+The yamaha adapter has a long lineage on ioBroker, and this version continues it —
+for existing users it is simply a new version of the same adapter:
+
+- **[soef](https://github.com/soef)** created the adapter in 2015 and built the
+  original control over Yamaha's XML network protocol, with realtime state updates
+  and multi-zone support.
+- **[Garfonso](https://github.com/Garfonso)**, **[Sneak-L8](https://github.com/Sneak-L8)**
+  and **[Apollon77](https://github.com/Apollon77)** contributed over the following
+  years — admin compatibility, fixes and Sentry crash reporting.
+- The **[ioBroker Community Adapters](https://github.com/iobroker-community-adapters)**
+  team — notably [foxriver76](https://github.com/foxriver76) and
+  [mcm1957](https://github.com/mcm1957) — maintained the adapter from 2020 to 2026,
+  releasing versions up to 0.5.4.
+- From this version on, [krobi](https://github.com/krobipd) rebuilds the adapter from
+  the ground up in TypeScript, uniting the YNCA, MusicCast (YXC) and legacy XML
+  protocols behind one object tree.
+
+## License
+
 The MIT License (MIT)
 
-Copyright (c) 2015-2024 soef <soef@gmx.net>
+Copyright (c) 2015-2024 soef <soef@gmx.net>  
+Copyright (c) 2026 iobroker-community-adapters <iobroker-community-adapters@gmx.de>  
+Copyright (c) 2026 krobi <krobi@power-dreams.com>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -139,6 +150,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
--->
 
-[Older changelogs can be found there](CHANGELOG_OLD.md)
+---
+
+_Developed with assistance from Claude.ai_
