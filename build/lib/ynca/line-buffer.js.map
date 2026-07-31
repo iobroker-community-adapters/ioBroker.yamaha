@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../src/lib/ynca/line-buffer.ts"],
+  "sourcesContent": ["/** Accumulates incoming text and yields complete lines (YNCA terminates each line with CR/LF). */\nexport class LineBuffer {\n  private buffer = \"\";\n\n  /**\n   * Add a received chunk and return the complete lines it makes available. The\n   * trailing partial line stays buffered until its terminator arrives.\n   *\n   * @param chunk newly received text\n   * @returns the complete, non-empty lines now available\n   */\n  public push(chunk: string): string[] {\n    this.buffer += chunk;\n    const parts = this.buffer.split(/\\r\\n|\\r|\\n/);\n    this.buffer = parts.pop() ?? \"\";\n    return parts.filter(line => line.length > 0);\n  }\n}\n"],
+  "mappings": ";;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AACO,MAAM,WAAW;AAAA,EACd,SAAS;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA,EASV,KAAK,OAAyB;AAXvC;AAYI,SAAK,UAAU;AACf,UAAM,QAAQ,KAAK,OAAO,MAAM,YAAY;AAC5C,SAAK,UAAS,WAAM,IAAI,MAAV,YAAe;AAC7B,WAAO,MAAM,OAAO,UAAQ,KAAK,SAAS,CAAC;AAAA,EAC7C;AACF;",
+  "names": []
+}
