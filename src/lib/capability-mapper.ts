@@ -14,6 +14,9 @@ export interface ObjectDef {
     read?: boolean;
     write?: boolean;
     unit?: string;
+    min?: number;
+    max?: number;
+    step?: number;
   };
 }
 

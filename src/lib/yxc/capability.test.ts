@@ -21,6 +21,11 @@ describe("parseYxcFeatures", () => {
     expect(caps.media).toContain("tuner");
   });
 
+  test("extracts a zone's raw volume range from range_step", () => {
+    const main = parseYxcFeatures(rxA2070).zones.find(z => z.id === "main");
+    expect(main?.volumeRange).toEqual({ min: 0, max: 161, step: 1 });
+  });
+
   test("returns empty capabilities for a malformed response", () => {
     expect(parseYxcFeatures(null)).toEqual({ zones: [], media: [] });
     expect(parseYxcFeatures({ zone: "nope" })).toEqual({ zones: [], media: [] });

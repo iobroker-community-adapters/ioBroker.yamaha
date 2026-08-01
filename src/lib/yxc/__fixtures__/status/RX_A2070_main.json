@@ -1,0 +1,32 @@
+{
+  "response_code": 0,
+  "power": "on",
+  "sleep": 0,
+  "volume": 66,
+  "mute": false,
+  "max_volume": 161,
+  "input": "server",
+  "distribution_enable": true,
+  "sound_program": "9ch_stereo",
+  "surr_decoder_type": "auto",
+  "pure_direct": false,
+  "enhancer": true,
+  "tone_control": {
+    "mode": "auto",
+    "bass": 0,
+    "treble": 0
+  },
+  "dialogue_level": 3,
+  "link_control": "standard",
+  "link_audio_delay": "audio_sync",
+  "link_audio_quality": "uncompressed",
+  "disable_flags": 0,
+  "actual_volume": {
+    "mode": "db",
+    "value": -47.5,
+    "unit": "dB"
+  },
+  "contents_display": true,
+  "audio_select": "unavailable",
+  "party_enable": false
+}

@@ -70,7 +70,13 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
       objects.push({ id: zoneDef.channel, type: "channel", common: { name: zoneDef.channelName ?? zoneDef.channel } });
     }
     for (const state of states) {
-      objects.push({ id: `${zoneDef.prefix}${state.state}`, type: "state", common: { ...state.common } });
+      const common = { ...state.common };
+      if (state.state === "volume" && zone.volumeRange) {
+        common.min = zone.volumeRange.min;
+        common.max = zone.volumeRange.max;
+        common.step = zone.volumeRange.step;
+      }
+      objects.push({ id: `${zoneDef.prefix}${state.state}`, type: "state", common });
     }
     if (hasInput) {
       objects.push({ id: `${zoneDef.prefix}input`, type: "state", common: { ...INPUT_COMMON } });

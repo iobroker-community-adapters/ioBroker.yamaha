@@ -1,3 +1,5 @@
+import type { StateValue } from "./types";
+
 /** A YNCA subunit/function/value triple. */
 export interface YncaTriple {
   /** Target subunit (e.g. `MAIN`, `ZONE2`). */
@@ -6,14 +8,6 @@ export interface YncaTriple {
   func: string;
   /** Wire value. */
   value: string;
-}
-
-/** A unified state id and its typed value. */
-export interface StateValue {
-  /** State id relative to the device (e.g. `power`, `zone2.volume`). */
-  id: string;
-  /** Typed value for the state. */
-  value: boolean | number | string;
 }
 
 interface StateMapping {

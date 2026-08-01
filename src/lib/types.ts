@@ -42,6 +42,14 @@ export interface StateUpdate {
   value: string | number | boolean;
 }
 
+/** A unified state id and its typed value (command-mapper / status-parser form). */
+export interface StateValue {
+  /** State id relative to the device (e.g. `power`, `zone2.volume`). */
+  id: string;
+  /** Typed value for the state. */
+  value: boolean | number | string;
+}
+
 /**
  * The uniform shape every transport client (YNCA / YXC / XML) implements, so the
  * command-router and lifecycle can treat them interchangeably. Implemented in the

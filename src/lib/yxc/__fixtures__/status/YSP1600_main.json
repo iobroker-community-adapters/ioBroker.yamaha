@@ -1,0 +1,16 @@
+{
+  "response_code": 0,
+  "power": "standby",
+  "volume": 30,
+  "mute": false,
+  "max_volume": 100,
+  "input": "hdmi",
+  "distribution_enable": true,
+  "sound_program": "stereo",
+  "clear_voice": false,
+  "subwoofer_volume": -10,
+  "link_control": "standard",
+  "link_audio_delay": "audio_sync",
+  "link_audio_quality": "compressed",
+  "disable_flags": 3
+}

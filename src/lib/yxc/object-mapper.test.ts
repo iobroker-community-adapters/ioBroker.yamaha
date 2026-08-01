@@ -35,4 +35,11 @@ describe("mapYxcToObjects", () => {
     expect(power?.common.role).toBe("switch.power");
     expect(power?.common.write).toBe(true);
   });
+
+  test("the volume state carries min/max/step from the device range", () => {
+    const vol = mapYxcToObjects(parseYxcFeatures(rxA2070)).find(o => o.id === "volume");
+    expect(vol?.common.min).toBe(0);
+    expect(vol?.common.max).toBe(161);
+    expect(vol?.common.step).toBe(1);
+  });
 });
