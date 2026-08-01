@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../src/lib/yxc/push.ts"],
+  "sourcesContent": ["/** The zone keys a YXC push event may carry \u2014 each is a getStatus re-fetch signal. */\nconst ZONE_KEYS = [\"main\", \"zone2\", \"zone3\", \"zone4\"];\n\n/**\n * Determine which zones a YXC push event asks to re-fetch. A push carries one\n * top-level block per changed area; zone blocks (`main`/`zone2`/\u2026) are re-fetch\n * signals \u2014 their current values come from a getStatus per zone, not from the\n * push itself. Media blocks (`netusb`/`tuner`/\u2026) are ignored here.\n *\n * @param pushEvent the parsed UDP push JSON\n * @returns the zones present in the event, in canonical order\n */\nexport function zonesToRefresh(pushEvent: unknown): string[] {\n  if (typeof pushEvent !== \"object\" || pushEvent === null) {\n    return [];\n  }\n  const event = pushEvent as Record<string, unknown>;\n  return ZONE_KEYS.filter(zone => zone in event);\n}\n"],
+  "mappings": ";;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AACA,MAAM,YAAY,CAAC,QAAQ,SAAS,SAAS,OAAO;AAW7C,SAAS,eAAe,WAA8B;AAC3D,MAAI,OAAO,cAAc,YAAY,cAAc,MAAM;AACvD,WAAO,CAAC;AAAA,EACV;AACA,QAAM,QAAQ;AACd,SAAO,UAAU,OAAO,UAAQ,QAAQ,KAAK;AAC/C;",
+  "names": []
+}

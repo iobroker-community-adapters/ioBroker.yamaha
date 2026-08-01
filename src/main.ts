@@ -1,7 +1,12 @@
 import * as utils from "@iobroker/adapter-core";
+import { YamahaYXC } from "yamaha-yxc-nodejs";
 import { parseDevices, stripNamespace } from "./lib/pure-helpers";
 import { YncaClient } from "./lib/ynca/ynca-client";
 import { YncaDeviceController } from "./lib/device-controller";
+import { YxcDeviceController } from "./lib/yxc/device-controller";
+import { YxcPushReceiver } from "./lib/yxc/push-receiver";
+import type { ObjectDef } from "./lib/capability-mapper";
+import type { DeviceController, DeviceRecord } from "./lib/types";
 
 /** Zones swept for their amplifier functions. */
 const SWEEP_ZONES = ["MAIN", "ZONE2", "ZONE3", "ZONE4"];
@@ -16,11 +21,14 @@ const SWEEP_GETS = [
 /**
  * ioBroker.yamaha — controls Yamaha AV receivers and MusicCast devices.
  *
- * Each configured device is driven by a controller (YNCA transport for now):
- * connect, init sweep, unified object tree, and command dispatch both ways.
+ * Each configured device is driven by one controller. YNCA is tried first (amp
+ * control over a held TCP connection, event-pushed); a device that does not
+ * speak YNCA — a MusicCast speaker or soundbar — falls back to the YXC
+ * transport. All YXC devices share one UDP push receiver, keyed by source IP.
  */
 export class Yamaha extends utils.Adapter {
-  private readonly controllers: YncaDeviceController[] = [];
+  private readonly controllers: DeviceController[] = [];
+  private pushReceiver: YxcPushReceiver | undefined;
 
   /**
    * @param options adapter options passed through by js-controller
@@ -42,27 +50,16 @@ export class Yamaha extends utils.Adapter {
       await this.setState("info.connection", { val: false, ack: true });
       const devices = parseDevices(this.config.devices);
       this.subscribeStates("*");
+      const pushReceiver = new YxcPushReceiver({
+        debug: message => this.log.debug(message),
+        warn: message => this.log.warn(message),
+      });
+      pushReceiver.start();
+      this.pushReceiver = pushReceiver;
       let anyConnected = false;
       for (const device of devices) {
-        const controller = new YncaDeviceController(device.id, {
-          client: new YncaClient(device.ip),
-          upsertObject: async (id, def) => {
-            await this.extendObject(id, { type: def.type, common: def.common, native: {} });
-          },
-          setStateAck: (id, value) => void this.setState(id, { val: value, ack: true }),
-          log: {
-            debug: message => this.log.debug(message),
-            info: message => this.log.info(message),
-            warn: message => this.log.warn(message),
-          },
-        });
-        this.controllers.push(controller);
-        try {
-          if (await controller.start(SWEEP_GETS)) {
-            anyConnected = true;
-          }
-        } catch (e) {
-          this.log.warn(`${device.id}: could not connect: ${e instanceof Error ? e.message : String(e)}`);
+        if (await this.startDevice(device, pushReceiver)) {
+          anyConnected = true;
         }
       }
       await this.setState("info.connection", { val: anyConnected, ack: true });
@@ -72,7 +69,76 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
-   * Route a state change to the owning device controller.
+   * Bring one device online: try YNCA (amp control), else fall back to YXC
+   * (MusicCast). The transport that connects owns the device's object tree, so
+   * the two mappers never collide on a shared id.
+   *
+   * @param device the configured device record
+   * @param pushReceiver the shared YXC push receiver
+   * @returns true if a transport connected
+   */
+  private async startDevice(device: DeviceRecord, pushReceiver: YxcPushReceiver): Promise<boolean> {
+    const log = {
+      debug: (message: string): void => this.log.debug(message),
+      info: (message: string): void => this.log.info(message),
+      warn: (message: string): void => this.log.warn(message),
+    };
+    const upsertObject = async (id: string, def: ObjectDef): Promise<void> => {
+      await this.extendObject(id, { type: def.type, common: def.common, native: {} });
+    };
+    const setStateAck = (id: string, value: boolean | number | string): void =>
+      void this.setState(id, { val: value, ack: true });
+
+    // 1) YNCA — amp control over a held TCP connection.
+    const ynca = new YncaDeviceController(device.id, {
+      client: new YncaClient(device.ip),
+      upsertObject,
+      setStateAck,
+      log,
+    });
+    try {
+      if (await ynca.start(SWEEP_GETS)) {
+        this.controllers.push(ynca);
+        return true;
+      }
+      ynca.close();
+    } catch (e) {
+      ynca.close();
+      this.log.debug(`${device.id}: no YNCA (${e instanceof Error ? e.message : String(e)})`);
+    }
+
+    // 2) YXC fallback — MusicCast speakers/soundbars without YNCA.
+    const yxc = new YxcDeviceController(device.id, {
+      client: new YamahaYXC(device.ip),
+      registerPush: onPush => pushReceiver.register(device.ip, onPush),
+      scheduleKeepalive: (handler, ms) => {
+        const timer = this.setInterval(handler, ms);
+        return () => {
+          if (timer) {
+            this.clearInterval(timer);
+          }
+        };
+      },
+      upsertObject,
+      setStateAck,
+      log,
+    });
+    try {
+      if (await yxc.start()) {
+        this.controllers.push(yxc);
+        return true;
+      }
+      yxc.close();
+    } catch (e) {
+      yxc.close();
+      this.log.warn(`${device.id}: neither YNCA nor YXC reachable: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    return false;
+  }
+
+  /**
+   * Route a state change to every device controller (each ignores ids outside
+   * its own subtree and its own acked echoes).
    *
    * @param id the full state id
    * @param state the new state (null when deleted)
@@ -94,6 +160,7 @@ export class Yamaha extends utils.Adapter {
    */
   private onUnload(callback: () => void): void {
     try {
+      this.pushReceiver?.close();
       for (const controller of this.controllers) {
         controller.close();
       }

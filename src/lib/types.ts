@@ -77,3 +77,20 @@ export interface TransportClient {
   /** Whether the device is currently reachable. */
   isReachable(): boolean;
 }
+
+/**
+ * The uniform per-device controller surface `main.ts` drives, whichever
+ * transport (YNCA or YXC) started the device.
+ */
+export interface DeviceController {
+  /**
+   * Handle a state change (a user write or a device echo).
+   *
+   * @param fullStateId the full state id (device id + "." + state)
+   * @param ack whether the change is acked (device-originated)
+   * @param value the new value
+   */
+  handleStateChange(fullStateId: string, ack: boolean, value: unknown): void;
+  /** Close the controller synchronously — safe to call from onUnload. */
+  close(): void;
+}

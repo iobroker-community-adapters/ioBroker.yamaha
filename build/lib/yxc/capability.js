@@ -25,6 +25,21 @@ const MEDIA_BLOCKS = ["netusb", "tuner", "cd", "clock"];
 function stringList(value) {
   return Array.isArray(value) ? value.filter((entry) => typeof entry === "string") : [];
 }
+function parseVolumeRange(rangeStep) {
+  if (!Array.isArray(rangeStep)) {
+    return void 0;
+  }
+  for (const entry of rangeStep) {
+    if (typeof entry !== "object" || entry === null) {
+      continue;
+    }
+    const range = entry;
+    if (range.id === "volume" && typeof range.min === "number" && typeof range.max === "number" && typeof range.step === "number") {
+      return { min: range.min, max: range.max, step: range.step };
+    }
+  }
+  return void 0;
+}
 function parseYxcFeatures(response) {
   if (typeof response !== "object" || response === null) {
     return { zones: [], media: [] };
@@ -38,7 +53,12 @@ function parseYxcFeatures(response) {
       }
       const zone = entry;
       if (typeof zone.id === "string") {
-        zones.push({ id: zone.id, funcs: stringList(zone.func_list), inputs: stringList(zone.input_list) });
+        zones.push({
+          id: zone.id,
+          funcs: stringList(zone.func_list),
+          inputs: stringList(zone.input_list),
+          volumeRange: parseVolumeRange(zone.range_step)
+        });
       }
     }
   }
