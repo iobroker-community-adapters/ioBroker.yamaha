@@ -9,6 +9,8 @@ export const YNCA_PORT = 50000;
 
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 30000;
+/** Fail the initial connect after this long so a non-YNCA device falls through fast. */
+const CONNECT_TIMEOUT_MS = 5000;
 
 /**
  * A small delay used to pace the init sweep.
@@ -60,6 +62,12 @@ export type SocketFactory = (host: string, port: number) => YncaSocket;
  */
 function defaultFactory(host: string, port: number): YncaSocket {
   const socket = connect({ host, port });
+  // Guard the initial connect: a device that never answers (a MusicCast-only
+  // speaker has no YNCA port) must fail fast so main.ts can fall back to YXC
+  // instead of hanging onReady. Cleared on connect; reconnect covers later drops.
+  socket.setTimeout(CONNECT_TIMEOUT_MS);
+  socket.on("timeout", () => socket.destroy(new Error("connect timeout")));
+  socket.on("connect", () => socket.setTimeout(0));
   return {
     write: data => {
       socket.write(data);
