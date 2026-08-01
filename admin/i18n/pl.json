@@ -2,5 +2,6 @@
   "introText": "Steruje odbiornikami AV i urządzeniami MusicCast Yamaha przez sieć. Dodaj poniżej każde urządzenie, podając nazwę i adres IP.",
   "devicesTable": "Urządzenia Yamaha",
   "columnName": "Nazwa",
-  "columnIp": "Adres IP"
+  "columnIp": "Adres IP",
+  "discoverBtn": "Szukaj urządzeń"
 }

@@ -32,8 +32,11 @@ __export(main_exports, {
 });
 module.exports = __toCommonJS(main_exports);
 var utils = __toESM(require("@iobroker/adapter-core"));
+var import_node_dgram = require("node:dgram");
+var import_node_http = require("node:http");
 var import_yamaha_yxc_nodejs = require("yamaha-yxc-nodejs");
 var import_pure_helpers = require("./lib/pure-helpers");
+var import_discovery = require("./lib/discovery");
 var import_ynca_client = require("./lib/ynca/ynca-client");
 var import_device_controller = require("./lib/device-controller");
 var import_device_controller2 = require("./lib/yxc/device-controller");
@@ -59,6 +62,7 @@ class Yamaha extends utils.Adapter {
     });
     this.on("ready", this.onReady.bind(this));
     this.on("stateChange", this.onStateChange.bind(this));
+    this.on("message", this.onMessage.bind(this));
     this.on("unload", this.onUnload.bind(this));
   }
   /** Start a controller for each configured device, then subscribe to state changes. */
@@ -209,6 +213,87 @@ class Yamaha extends utils.Adapter {
     } catch {
       callback();
     }
+  }
+  /**
+   * Handle an admin message: `discover` scans the network for Yamaha devices and
+   * returns the configured plus discovered devices (deduped by IP) for the table.
+   *
+   * @param obj the incoming message
+   */
+  async onMessage(obj) {
+    if (obj.command !== "discover") {
+      return;
+    }
+    try {
+      const found = await (0, import_discovery.discoverYamaha)({
+        search: (target, ms) => this.ssdpSearch(target, ms),
+        fetch: (url) => this.fetchUrl(url),
+        log: { debug: (message) => this.log.debug(message), warn: (message) => this.log.warn(message) }
+      });
+      const devices = (0, import_pure_helpers.parseDevices)(this.config.devices).map((device) => ({ name: device.id, ip: device.ip }));
+      for (const device of found) {
+        if (!devices.some((existing) => existing.ip === device.ip)) {
+          devices.push({ name: device.name || device.ip, ip: device.ip });
+        }
+      }
+      if (obj.callback) {
+        this.sendTo(obj.from, obj.command, { native: { devices } }, obj.callback);
+      }
+    } catch (e) {
+      this.log.warn(`discover failed: ${e instanceof Error ? e.message : String(e)}`);
+      if (obj.callback) {
+        this.sendTo(obj.from, obj.command, { error: "discover failed" }, obj.callback);
+      }
+    }
+  }
+  /**
+   * Run an SSDP M-SEARCH and collect the responders' description URL and address.
+   *
+   * @param target the search target (device type)
+   * @param timeoutMs how long to collect responses
+   * @returns the responders
+   */
+  ssdpSearch(target, timeoutMs) {
+    return new Promise((resolve) => {
+      const socket = (0, import_node_dgram.createSocket)("udp4");
+      const responders = [];
+      socket.on("message", (msg, rinfo) => {
+        const location = /LOCATION:\s*(\S+)/i.exec(msg.toString());
+        if (location) {
+          responders.push({ location: location[1], address: rinfo.address });
+        }
+      });
+      socket.on("error", () => socket.close());
+      socket.bind(() => {
+        const msearch = `M-SEARCH * HTTP/1.1\r
+HOST: 239.255.255.250:1900\r
+MAN: "ssdp:discover"\r
+MX: 3\r
+ST: ${target}\r
+\r
+`;
+        socket.send(msearch, 1900, "239.255.255.250");
+      });
+      this.setTimeout(() => {
+        socket.close();
+        resolve(responders);
+      }, timeoutMs);
+    });
+  }
+  /**
+   * Fetch a URL over HTTP and resolve its body.
+   *
+   * @param url the URL to fetch
+   * @returns the response body
+   */
+  fetchUrl(url) {
+    return new Promise((resolve, reject) => {
+      (0, import_node_http.get)(url, (res) => {
+        let data = "";
+        res.on("data", (chunk) => data += String(chunk));
+        res.on("end", () => resolve(data));
+      }).on("error", reject);
+    });
   }
 }
 if (require.main !== module) {

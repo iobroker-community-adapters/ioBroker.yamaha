@@ -1,4 +1,4 @@
-# <img src="https://cdn.jsdelivr.net/gh/krobipd/ioBroker.yamaha@main/admin/yamaha.png" width="48" align="top" /> ioBroker.yamaha
+# <img src="https://cdn.jsdelivr.net/gh/krobipd/ioBroker.yamaha@main/admin/yamaha.svg" width="48" align="top" /> ioBroker.yamaha
 
 **Release:** [![npm version](https://img.shields.io/npm/v/iobroker.yamaha)](https://www.npmjs.com/package/iobroker.yamaha) ![stable](https://iobroker.live/badges/yamaha-stable.svg) ![Installations](https://iobroker.live/badges/yamaha-installed.svg) [![npm downloads](https://img.shields.io/npm/dt/iobroker.yamaha)](https://www.npmjs.com/package/iobroker.yamaha)
 
@@ -7,11 +7,18 @@
 **Support:** [![Ko-fi](https://img.shields.io/badge/Ko--fi-Support-ff5e5b?logo=ko-fi)](https://ko-fi.com/krobipd) [![PayPal](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://paypal.me/krobipd)
 
 Controls Yamaha AV receivers and MusicCast devices from ioBroker over the local
-network. The adapter is being rebuilt from the ground up in TypeScript to unite
-the two protocol families Yamaha speaks — YNCA (the text control protocol of the
-networked receivers) and MusicCast / Yamaha Extended Control (the richer JSON
-protocol of the MusicCast generation) — behind one object tree, with the legacy
-XML protocol kept for the oldest networked models.
+network. It unites the two protocol families Yamaha speaks — YNCA (the text
+control protocol of the networked receivers) and MusicCast / Yamaha Extended
+Control (the richer JSON protocol of the MusicCast generation) — behind one
+object tree.
+
+## Features
+
+- **One adapter for two protocol families** — classic Yamaha AV receivers over YNCA and MusicCast devices over Yamaha Extended Control, replacing the separate yamaha and musiccast adapters.
+- **Automatic reconnect** — the YNCA connection recovers on its own after a receiver reboot or a network drop, so control keeps working without restarting the adapter.
+- **Per-zone amplifier control** — power, volume, mute, input and sound program for the main zone and each additional zone a device reports.
+- **Capability-driven object tree** — states are generated from what each device actually reports over its protocol, not from a hardcoded model list.
+- **One transport chosen per device** — YNCA where the receiver speaks it, MusicCast for the speakers and soundbars that do not.
 
 ## Requirements
 
@@ -34,11 +41,10 @@ Add each Yamaha device with a name and its IP address.
 	### **WORK IN PROGRESS**
 -->
 ### **WORK IN PROGRESS**
-- (copilot) Adapter requires node.js >= 22 now
-- (iobroker-bot) Adapter requires node.js >= 20 now.
-- (copilot) Adapter requires admin >= 7.7.22 now
-- (copilot) Adapter requires js-controller >= 6.0.11 now
-- (mcm1957) dependencies have been updated
+- Rebuilt from the ground up as one adapter for both classic Yamaha AV receivers (YNCA) and MusicCast devices, replacing the separate yamaha and musiccast adapters.
+- Network AV receivers are controlled over YNCA with an automatic reconnect that recovers the connection on its own after a receiver reboot or a network drop.
+- MusicCast speakers, soundbars and receivers are controlled over the MusicCast protocol with power, volume, mute, input and sound program per zone.
+- Now requires Node.js 22, js-controller 6 and admin 7.
 
 ### 0.5.4 (2024-06-14)
 * (foxriver76) updated packages

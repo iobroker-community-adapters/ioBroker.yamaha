@@ -2,5 +2,6 @@
   "introText": "Управляет AV-ресиверами и устройствами MusicCast от Yamaha через сеть. Добавьте ниже каждое устройство по имени и IP-адресу.",
   "devicesTable": "Устройства Yamaha",
   "columnName": "Имя",
-  "columnIp": "IP-адрес"
+  "columnIp": "IP-адрес",
+  "discoverBtn": "Поиск устройств"
 }

@@ -1,6 +1,9 @@
 import * as utils from "@iobroker/adapter-core";
+import { createSocket } from "node:dgram";
+import { get as httpGet } from "node:http";
 import { YamahaYXC } from "yamaha-yxc-nodejs";
 import { parseDevices, stripNamespace } from "./lib/pure-helpers";
+import { discoverYamaha } from "./lib/discovery";
 import { YncaClient } from "./lib/ynca/ynca-client";
 import { YncaDeviceController } from "./lib/device-controller";
 import { YxcDeviceController } from "./lib/yxc/device-controller";
@@ -43,6 +46,7 @@ export class Yamaha extends utils.Adapter {
 
     this.on("ready", this.onReady.bind(this));
     this.on("stateChange", this.onStateChange.bind(this));
+    this.on("message", this.onMessage.bind(this));
     this.on("unload", this.onUnload.bind(this));
   }
 
@@ -203,6 +207,84 @@ export class Yamaha extends utils.Adapter {
     } catch {
       callback();
     }
+  }
+
+  /**
+   * Handle an admin message: `discover` scans the network for Yamaha devices and
+   * returns the configured plus discovered devices (deduped by IP) for the table.
+   *
+   * @param obj the incoming message
+   */
+  private async onMessage(obj: ioBroker.Message): Promise<void> {
+    if (obj.command !== "discover") {
+      return;
+    }
+    try {
+      const found = await discoverYamaha({
+        search: (target, ms) => this.ssdpSearch(target, ms),
+        fetch: url => this.fetchUrl(url),
+        log: { debug: message => this.log.debug(message), warn: message => this.log.warn(message) },
+      });
+      const devices = parseDevices(this.config.devices).map(device => ({ name: device.id, ip: device.ip }));
+      for (const device of found) {
+        if (!devices.some(existing => existing.ip === device.ip)) {
+          devices.push({ name: device.name || device.ip, ip: device.ip });
+        }
+      }
+      if (obj.callback) {
+        this.sendTo(obj.from, obj.command, { native: { devices } }, obj.callback);
+      }
+    } catch (e) {
+      this.log.warn(`discover failed: ${e instanceof Error ? e.message : String(e)}`);
+      if (obj.callback) {
+        this.sendTo(obj.from, obj.command, { error: "discover failed" }, obj.callback);
+      }
+    }
+  }
+
+  /**
+   * Run an SSDP M-SEARCH and collect the responders' description URL and address.
+   *
+   * @param target the search target (device type)
+   * @param timeoutMs how long to collect responses
+   * @returns the responders
+   */
+  private ssdpSearch(target: string, timeoutMs: number): Promise<Array<{ location: string; address: string }>> {
+    return new Promise(resolve => {
+      const socket = createSocket("udp4");
+      const responders: Array<{ location: string; address: string }> = [];
+      socket.on("message", (msg, rinfo) => {
+        const location = /LOCATION:\s*(\S+)/i.exec(msg.toString());
+        if (location) {
+          responders.push({ location: location[1], address: rinfo.address });
+        }
+      });
+      socket.on("error", () => socket.close());
+      socket.bind(() => {
+        const msearch = `M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: "ssdp:discover"\r\nMX: 3\r\nST: ${target}\r\n\r\n`;
+        socket.send(msearch, 1900, "239.255.255.250");
+      });
+      this.setTimeout(() => {
+        socket.close();
+        resolve(responders);
+      }, timeoutMs);
+    });
+  }
+
+  /**
+   * Fetch a URL over HTTP and resolve its body.
+   *
+   * @param url the URL to fetch
+   * @returns the response body
+   */
+  private fetchUrl(url: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      httpGet(url, res => {
+        let data = "";
+        res.on("data", chunk => (data += String(chunk)));
+        res.on("end", () => resolve(data));
+      }).on("error", reject);
+    });
   }
 }
 

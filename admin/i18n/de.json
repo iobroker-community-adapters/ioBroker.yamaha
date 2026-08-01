@@ -2,5 +2,6 @@
   "introText": "Steuert Yamaha AV-Receiver und MusicCast-Geräte über das Netzwerk. Fügen Sie unten jedes Gerät mit Name und IP-Adresse hinzu.",
   "devicesTable": "Yamaha-Geräte",
   "columnName": "Name",
-  "columnIp": "IP-Adresse"
+  "columnIp": "IP-Adresse",
+  "discoverBtn": "Geräte suchen"
 }

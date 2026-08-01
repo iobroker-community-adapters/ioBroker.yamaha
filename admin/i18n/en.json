@@ -2,5 +2,6 @@
   "introText": "Controls Yamaha AV receivers and MusicCast devices over the network. Add each device below by name and IP address.",
   "devicesTable": "Yamaha devices",
   "columnName": "Name",
-  "columnIp": "IP address"
+  "columnIp": "IP address",
+  "discoverBtn": "Search for devices"
 }

@@ -2,5 +2,6 @@
   "introText": "Bestuurt Yamaha AV-ontvangers en MusicCast-apparaten via het netwerk. Voeg hieronder elk apparaat toe met naam en IP-adres.",
   "devicesTable": "Yamaha-apparaten",
   "columnName": "Naam",
-  "columnIp": "IP-adres"
+  "columnIp": "IP-adres",
+  "discoverBtn": "Apparaten zoeken"
 }

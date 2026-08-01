@@ -3,6 +3,19 @@
     "name": "yamaha",
     "version": "0.5.4",
     "news": {
+      "NEXT": {
+        "en": "Rebuilt as one adapter for both classic Yamaha AV receivers (YNCA) and MusicCast devices, replacing the separate yamaha and musiccast adapters, with automatic reconnect. Requires Node.js 22.",
+        "de": "Neu aufgebaut als ein Adapter für klassische Yamaha-AV-Receiver (YNCA) und MusicCast-Geräte, ersetzt die getrennten Adapter yamaha und musiccast, mit automatischem Reconnect. Benötigt Node.js 22.",
+        "ru": "Переработан в единый адаптер для классических AV-ресиверов Yamaha (YNCA) и устройств MusicCast, заменяет отдельные адаптеры yamaha и musiccast, с автоматическим переподключением. Требуется Node.js 22.",
+        "pt": "Reconstruído como um único adaptador para receptores AV Yamaha (YNCA) e dispositivos MusicCast, substituindo os adaptadores yamaha e musiccast, com reconexão automática. Requer Node.js 22.",
+        "nl": "Herbouwd als een adapter voor klassieke Yamaha AV-receivers (YNCA) en MusicCast-apparaten, vervangt de aparte adapters yamaha en musiccast, met automatische herverbinding. Vereist Node.js 22.",
+        "fr": "Reconstruit en un seul adaptateur pour les amplis AV Yamaha (YNCA) et les appareils MusicCast, remplaçant les adaptateurs yamaha et musiccast, avec reconnexion automatique. Nécessite Node.js 22.",
+        "it": "Ricostruito come un unico adattatore per ricevitori AV Yamaha (YNCA) e dispositivi MusicCast, sostituisce gli adattatori yamaha e musiccast, con riconnessione automatica. Richiede Node.js 22.",
+        "es": "Reconstruido como un único adaptador para receptores AV Yamaha (YNCA) y dispositivos MusicCast, reemplazando los adaptadores yamaha y musiccast, con reconexión automática. Requiere Node.js 22.",
+        "pl": "Przebudowany jako jeden adapter dla klasycznych amplitunerów AV Yamaha (YNCA) i urządzeń MusicCast, zastępuje osobne adaptery yamaha i musiccast, z automatycznym ponownym łączeniem. Wymaga Node.js 22.",
+        "uk": "Перероблено в єдиний адаптер для класичних AV-ресиверів Yamaha (YNCA) та пристроїв MusicCast, замінює окремі адаптери yamaha та musiccast, з автоматичним перепідключенням. Потрібен Node.js 22.",
+        "zh-cn": "重建为一个适配器，同时控制经典 Yamaha AV 功放（YNCA）和 MusicCast 设备，取代原先分开的 yamaha 和 musiccast 适配器，并支持自动重连。需要 Node.js 22。"
+      },
       "0.5.4": {
         "en": "updated packages",
         "de": "aktualisierte pakete",
@@ -26,7 +39,8 @@
         "it": "Correzione dei casi di crash segnalati da Sentry",
         "es": "Casos de accidente fijo reportados por Sentry",
         "pl": "Sprawy katastrofy Fix podane przez Sentry’a",
-        "zh-cn": "Sentry所报告的六例事故"
+        "zh-cn": "Sentry所报告的六例事故",
+        "uk": "Виправлено випадки збоїв, про які повідомляє Sentry"
       },
       "0.5.2": {
         "en": "Fix crash cases reported by Sentry",
@@ -38,7 +52,8 @@
         "it": "Risolvi i casi di crash segnalati da Sentry",
         "es": "Solucionar casos de fallas informados por Sentry",
         "pl": "Napraw przypadki awarii zgłoszone przez Sentry",
-        "zh-cn": "修复 Sentry 报告的崩溃案例"
+        "zh-cn": "修复 Sentry 报告的崩溃案例",
+        "uk": "Виправлено випадки збоїв, про які повідомляє Sentry"
       },
       "0.5.1": {
         "en": "Fix crash cases reported by Sentry\nfix type of pureDirect",
@@ -50,7 +65,8 @@
         "it": "Risolvi i casi di crash segnalati da Sentry\ncorreggere il tipo di pureDirect",
         "es": "Solucionar casos de fallas informados por Sentry\ncorregir el tipo de pureDirect",
         "pl": "Napraw przypadki awarii zgłoszone przez Sentry\nnapraw typ pureDirect",
-        "zh-cn": "修复 Sentry 报告的崩溃案例\n修复 pureDirect 的类型"
+        "zh-cn": "修复 Sentry 报告的崩溃案例\n修复 pureDirect 的类型",
+        "uk": "Виправлено випадки збоїв, про які повідомляє Sentry\nвиправлено тип pureDirect"
       },
       "0.5.0": {
         "en": "IMPORTANT: js-controller 2.0 is needed at least\nAdd Sentry for crash reporting",
@@ -62,19 +78,8 @@
         "it": "IMPORTANTE: è necessario almeno js-controller 2.0\nAggiungi Sentinella per la segnalazione degli arresti anomali",
         "es": "IMPORTANTE: se necesita js-controller 2.0 al menos\nAgregar Sentry para informes de fallas",
         "pl": "WAŻNE: potrzebny jest przynajmniej js-controller 2.0\nDodaj Sentry do zgłaszania awarii",
-        "zh-cn": "重要提示：至少需要 js-controller 2.0\n添加 Sentry 以进行崩溃报告"
-      },
-      "0.4.1": {
-        "en": "\"toggleMute\" now toggle mute state (instead of always muting)",
-        "de": "\"toggleMute\" schaltet nun den Mute-Status um (anstatt immer stumm zu schalten)",
-        "ru": "«toggleMute» теперь переключает состояние отключения звука (вместо постоянного отключения звука)",
-        "pt": "\"toggleMute\" agora alterna o estado mudo (em vez de sempre silenciar)",
-        "nl": "\"toggleMute\" schakelt nu de mute-status in (in plaats van altijd te dempen)",
-        "fr": "\"toggleMute\" bascule maintenant l'état muet (au lieu de toujours muet)",
-        "it": "\"toggleMute\" ora attiva/disattiva lo stato muto (anziché sempre disattivato)",
-        "es": "\"toggleMute\" ahora alterna el estado de silencio (en lugar de silenciar siempre)",
-        "pl": "„toggleMute” przełącza teraz stan wyciszenia (zamiast ciągłego wyciszania)",
-        "zh-cn": "“toggleMute”现在切换静音状态（而不是总是静音）"
+        "zh-cn": "重要提示：至少需要 js-controller 2.0\n添加 Sentry 以进行崩溃报告",
+        "uk": "ВАЖЛИВО: потрібен щонайменше js-controller 2.0\nДодано Sentry для звітування про збої"
       },
       "0.4.0": {
         "en": "added admin 3 compatibility and more meta-data stuff.\nadded compact mode support.",
@@ -86,7 +91,8 @@
         "it": "ha aggiunto la compatibilità con admin 3 e altre informazioni sui metadati.\naggiunto il supporto in modalità compatta.",
         "es": "agregó compatibilidad con admin 3 y más cosas de metadatos.\nagregó soporte de modo compacto.",
         "pl": "dodał kompatybilność z adminem 3 i więcej metadanych.\ndodano obsługę trybu kompaktowego.",
-        "zh-cn": "*（Garfonso）添加了admin 3兼容性和更多的元数据内容。\n*（Garfonso）添加了紧凑模式支持。"
+        "zh-cn": "*（Garfonso）添加了admin 3兼容性和更多的元数据内容。\n*（Garfonso）添加了紧凑模式支持。",
+        "uk": "додано сумісність з admin 3 та більше метаданих.\nдодано підтримку компактного режиму."
       }
     },
     "titleLang": {
@@ -132,7 +138,7 @@
     "readme": "https://github.com/krobipd/ioBroker.yamaha/blob/main/README.md",
     "loglevel": "info",
     "tier": 2,
-    "compact": false,
+    "compact": true,
     "connectionType": "local",
     "dataSource": "push",
     "type": "multimedia",
@@ -155,7 +161,8 @@
     ],
     "adminUI": {
       "config": "json"
-    }
+    },
+    "messagebox": true
   },
   "native": {
     "devices": []

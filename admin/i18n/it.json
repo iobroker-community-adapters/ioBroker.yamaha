@@ -2,5 +2,6 @@
   "introText": "Controlla i ricevitori AV e i dispositivi MusicCast Yamaha tramite la rete. Aggiungi ogni dispositivo qui sotto con nome e indirizzo IP.",
   "devicesTable": "Dispositivi Yamaha",
   "columnName": "Nome",
-  "columnIp": "Indirizzo IP"
+  "columnIp": "Indirizzo IP",
+  "discoverBtn": "Cerca dispositivi"
 }
