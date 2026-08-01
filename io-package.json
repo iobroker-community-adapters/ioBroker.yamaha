@@ -1,20 +1,20 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "0.5.4",
+    "version": "0.6.0",
     "news": {
-      "NEXT": {
-        "en": "Rebuilt as one adapter for both classic Yamaha AV receivers (YNCA) and MusicCast devices, replacing the separate yamaha and musiccast adapters, with automatic reconnect. Requires Node.js 22.",
-        "de": "Neu aufgebaut als ein Adapter für klassische Yamaha-AV-Receiver (YNCA) und MusicCast-Geräte, ersetzt die getrennten Adapter yamaha und musiccast, mit automatischem Reconnect. Benötigt Node.js 22.",
-        "ru": "Переработан в единый адаптер для классических AV-ресиверов Yamaha (YNCA) и устройств MusicCast, заменяет отдельные адаптеры yamaha и musiccast, с автоматическим переподключением. Требуется Node.js 22.",
-        "pt": "Reconstruído como um único adaptador para receptores AV Yamaha (YNCA) e dispositivos MusicCast, substituindo os adaptadores yamaha e musiccast, com reconexão automática. Requer Node.js 22.",
-        "nl": "Herbouwd als een adapter voor klassieke Yamaha AV-receivers (YNCA) en MusicCast-apparaten, vervangt de aparte adapters yamaha en musiccast, met automatische herverbinding. Vereist Node.js 22.",
-        "fr": "Reconstruit en un seul adaptateur pour les amplis AV Yamaha (YNCA) et les appareils MusicCast, remplaçant les adaptateurs yamaha et musiccast, avec reconnexion automatique. Nécessite Node.js 22.",
-        "it": "Ricostruito come un unico adattatore per ricevitori AV Yamaha (YNCA) e dispositivi MusicCast, sostituisce gli adattatori yamaha e musiccast, con riconnessione automatica. Richiede Node.js 22.",
-        "es": "Reconstruido como un único adaptador para receptores AV Yamaha (YNCA) y dispositivos MusicCast, reemplazando los adaptadores yamaha y musiccast, con reconexión automática. Requiere Node.js 22.",
-        "pl": "Przebudowany jako jeden adapter dla klasycznych amplitunerów AV Yamaha (YNCA) i urządzeń MusicCast, zastępuje osobne adaptery yamaha i musiccast, z automatycznym ponownym łączeniem. Wymaga Node.js 22.",
-        "uk": "Перероблено в єдиний адаптер для класичних AV-ресиверів Yamaha (YNCA) та пристроїв MusicCast, замінює окремі адаптери yamaha та musiccast, з автоматичним перепідключенням. Потрібен Node.js 22.",
-        "zh-cn": "重建为一个适配器，同时控制经典 Yamaha AV 功放（YNCA）和 MusicCast 设备，取代原先分开的 yamaha 和 musiccast 适配器，并支持自动重连。需要 Node.js 22。"
+      "0.6.0": {
+        "en": "Rebuilt as one adapter for classic Yamaha AV receivers, MusicCast and older models over their native protocols, with automatic reconnect and network discovery. Requires Node.js 22.",
+        "de": "Neu aufgebaut als ein Adapter für klassische Yamaha-AV-Receiver, MusicCast und ältere Modelle über ihre nativen Protokolle, mit automatischem Reconnect und Netzwerksuche. Benötigt Node.js 22.",
+        "ru": "Переработан в единый адаптер для AV-ресиверов Yamaha, MusicCast и старых моделей по их родным протоколам, с автопереподключением и поиском в сети. Требуется Node.js 22.",
+        "pt": "Reconstruído como um único adaptador para receptores AV Yamaha, MusicCast e modelos antigos pelos protocolos nativos, com reconexão automática e descoberta na rede. Requer Node.js 22.",
+        "nl": "Herbouwd als één adapter voor Yamaha AV-receivers, MusicCast en oudere modellen via hun eigen protocollen, met automatische herverbinding en netwerkdetectie. Vereist Node.js 22.",
+        "fr": "Reconstruit en un adaptateur pour amplis AV Yamaha, MusicCast et modèles anciens via leurs protocoles natifs, avec reconnexion automatique et découverte réseau. Nécessite Node.js 22.",
+        "it": "Ricostruito come un adattatore per sintoamplificatori Yamaha, MusicCast e modelli vecchi tramite i protocolli nativi, con riconnessione automatica e rilevamento in rete. Richiede Node.js 22.",
+        "es": "Reconstruido como un adaptador para receptores AV Yamaha, MusicCast y modelos antiguos por sus protocolos nativos, con reconexión automática y descubrimiento en red. Requiere Node.js 22.",
+        "pl": "Przebudowany jako jeden adapter dla amplitunerów Yamaha, MusicCast i starszych modeli przez ich natywne protokoły, z automatycznym łączeniem i wykrywaniem w sieci. Wymaga Node.js 22.",
+        "uk": "Перероблено в єдиний адаптер для AV-ресиверів Yamaha, MusicCast і старіших моделей через їхні протоколи, з автоперепідключенням і пошуком у мережі. Потрібен Node.js 22.",
+        "zh-cn": "重建为一个适配器，通过各自的原生协议控制经典 Yamaha AV 功放、MusicCast 和更老的机型，支持自动重连和网络发现。需要 Node.js 22。"
       },
       "0.5.4": {
         "en": "updated packages",
