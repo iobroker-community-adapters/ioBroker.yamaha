@@ -77,15 +77,36 @@ class Yamaha extends utils.Adapter {
       });
       pushReceiver.start();
       this.pushReceiver = pushReceiver;
+      const createdIds = /* @__PURE__ */ new Set([`${this.namespace}.info`, `${this.namespace}.info.connection`]);
       let anyConnected = false;
       for (const device of devices) {
-        if (await this.startDevice(device, pushReceiver)) {
+        if (await this.startDevice(device, pushReceiver, createdIds)) {
           anyConnected = true;
         }
       }
       await this.setState("info.connection", { val: anyConnected, ack: true });
+      await this.cleanupOrphans(createdIds);
     } catch (e) {
       this.log.error(`onReady failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  /**
+   * One-shot migration/cleanup: remove objects not created this run (the previous
+   * adapter's tree and dropped devices), deepest first so parents go last.
+   *
+   * @param createdIds the ids created this run, including parent paths
+   */
+  async cleanupOrphans(createdIds) {
+    const existing = Object.keys(await this.getAdapterObjectsAsync());
+    const orphans = (0, import_pure_helpers.orphanedObjects)(existing, createdIds, this.namespace).sort((a, b) => b.length - a.length);
+    for (const id of orphans) {
+      try {
+        await this.delObjectAsync((0, import_pure_helpers.stripNamespace)(id, this.namespace));
+      } catch {
+      }
+    }
+    if (orphans.length > 0) {
+      this.log.info(`cleaned up ${orphans.length} object(s) from a previous configuration`);
     }
   }
   /**
@@ -95,15 +116,20 @@ class Yamaha extends utils.Adapter {
    *
    * @param device the configured device record
    * @param pushReceiver the shared YXC push receiver
+   * @param createdIds collects the object ids created this run, for orphan cleanup
    * @returns true if a transport connected
    */
-  async startDevice(device, pushReceiver) {
+  async startDevice(device, pushReceiver, createdIds) {
     const log = {
       debug: (message) => this.log.debug(message),
       info: (message) => this.log.info(message),
       warn: (message) => this.log.warn(message)
     };
     const upsertObject = async (id, def) => {
+      const parts = id.split(".");
+      for (let i = 1; i <= parts.length; i++) {
+        createdIds.add(`${this.namespace}.${parts.slice(0, i).join(".")}`);
+      }
       await this.extendObject(id, { type: def.type, common: def.common, native: {} });
     };
     const setStateAck = (id, value) => void this.setState(id, { val: value, ack: true });

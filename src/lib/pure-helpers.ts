@@ -65,3 +65,19 @@ export function parseDevices(raw: unknown): DeviceRecord[] {
   }
   return records;
 }
+
+/**
+ * From all object ids currently under the instance, pick the ones to delete: those
+ * not (re)created this run and outside the adapter's own `info` branch. This is the
+ * one-shot migration — it removes the previous adapter's object tree and any
+ * devices dropped from the config.
+ *
+ * @param existing all object ids currently under the instance
+ * @param created the ids (re)created this run, including their parent paths
+ * @param namespace the adapter namespace (e.g. `yamaha.0`)
+ * @returns the orphaned ids to delete
+ */
+export function orphanedObjects(existing: string[], created: Set<string>, namespace: string): string[] {
+  const info = `${namespace}.info`;
+  return existing.filter(id => id !== info && !id.startsWith(`${info}.`) && !created.has(id));
+}

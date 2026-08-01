@@ -1,4 +1,26 @@
-import { parseDevices, sanitizeId, stripNamespace } from "./pure-helpers";
+import { orphanedObjects, parseDevices, sanitizeId, stripNamespace } from "./pure-helpers";
+
+describe("orphanedObjects", () => {
+  test("returns ids not recreated this run, keeping info and created ids", () => {
+    const existing = [
+      "yamaha.0.info",
+      "yamaha.0.info.connection",
+      "yamaha.0.living",
+      "yamaha.0.living.power",
+      "yamaha.0.oldDevice",
+      "yamaha.0.oldDevice.legacyState",
+    ];
+    const created = new Set(["yamaha.0.living", "yamaha.0.living.power"]);
+    expect(orphanedObjects(existing, created, "yamaha.0")).toEqual([
+      "yamaha.0.oldDevice",
+      "yamaha.0.oldDevice.legacyState",
+    ]);
+  });
+
+  test("deletes nothing when everything is created or in the info branch", () => {
+    expect(orphanedObjects(["yamaha.0.info", "yamaha.0.a"], new Set(["yamaha.0.a"]), "yamaha.0")).toEqual([]);
+  });
+});
 
 describe("parseDevices", () => {
   test("maps a configured entry to a device record with empty protocols", () => {

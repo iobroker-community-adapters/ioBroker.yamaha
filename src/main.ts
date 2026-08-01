@@ -2,7 +2,7 @@ import * as utils from "@iobroker/adapter-core";
 import { createSocket } from "node:dgram";
 import { get as httpGet } from "node:http";
 import { YamahaYXC } from "yamaha-yxc-nodejs";
-import { parseDevices, stripNamespace } from "./lib/pure-helpers";
+import { orphanedObjects, parseDevices, stripNamespace } from "./lib/pure-helpers";
 import { discoverYamaha } from "./lib/discovery";
 import { YncaClient } from "./lib/ynca/ynca-client";
 import { YncaDeviceController } from "./lib/device-controller";
@@ -62,15 +62,38 @@ export class Yamaha extends utils.Adapter {
       });
       pushReceiver.start();
       this.pushReceiver = pushReceiver;
+      const createdIds = new Set<string>([`${this.namespace}.info`, `${this.namespace}.info.connection`]);
       let anyConnected = false;
       for (const device of devices) {
-        if (await this.startDevice(device, pushReceiver)) {
+        if (await this.startDevice(device, pushReceiver, createdIds)) {
           anyConnected = true;
         }
       }
       await this.setState("info.connection", { val: anyConnected, ack: true });
+      await this.cleanupOrphans(createdIds);
     } catch (e) {
       this.log.error(`onReady failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  /**
+   * One-shot migration/cleanup: remove objects not created this run (the previous
+   * adapter's tree and dropped devices), deepest first so parents go last.
+   *
+   * @param createdIds the ids created this run, including parent paths
+   */
+  private async cleanupOrphans(createdIds: Set<string>): Promise<void> {
+    const existing = Object.keys(await this.getAdapterObjectsAsync());
+    const orphans = orphanedObjects(existing, createdIds, this.namespace).sort((a, b) => b.length - a.length);
+    for (const id of orphans) {
+      try {
+        await this.delObjectAsync(stripNamespace(id, this.namespace));
+      } catch {
+        // already removed with its parent
+      }
+    }
+    if (orphans.length > 0) {
+      this.log.info(`cleaned up ${orphans.length} object(s) from a previous configuration`);
     }
   }
 
@@ -81,15 +104,24 @@ export class Yamaha extends utils.Adapter {
    *
    * @param device the configured device record
    * @param pushReceiver the shared YXC push receiver
+   * @param createdIds collects the object ids created this run, for orphan cleanup
    * @returns true if a transport connected
    */
-  private async startDevice(device: DeviceRecord, pushReceiver: YxcPushReceiver): Promise<boolean> {
+  private async startDevice(
+    device: DeviceRecord,
+    pushReceiver: YxcPushReceiver,
+    createdIds: Set<string>,
+  ): Promise<boolean> {
     const log = {
       debug: (message: string): void => this.log.debug(message),
       info: (message: string): void => this.log.info(message),
       warn: (message: string): void => this.log.warn(message),
     };
     const upsertObject = async (id: string, def: ObjectDef): Promise<void> => {
+      const parts = id.split(".");
+      for (let i = 1; i <= parts.length; i++) {
+        createdIds.add(`${this.namespace}.${parts.slice(0, i).join(".")}`);
+      }
       await this.extendObject(id, { type: def.type, common: def.common, native: {} });
     };
     const setStateAck = (id: string, value: boolean | number | string): void =>

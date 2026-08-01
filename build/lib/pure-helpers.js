@@ -18,6 +18,7 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var pure_helpers_exports = {};
 __export(pure_helpers_exports, {
+  orphanedObjects: () => orphanedObjects,
   parseDevices: () => parseDevices,
   sanitizeId: () => sanitizeId,
   stripNamespace: () => stripNamespace
@@ -48,8 +49,13 @@ function parseDevices(raw) {
   }
   return records;
 }
+function orphanedObjects(existing, created, namespace) {
+  const info = `${namespace}.info`;
+  return existing.filter((id) => id !== info && !id.startsWith(`${info}.`) && !created.has(id));
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  orphanedObjects,
   parseDevices,
   sanitizeId,
   stripNamespace
