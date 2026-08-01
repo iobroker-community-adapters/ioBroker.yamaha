@@ -1,6 +1,0 @@
-build/
-legacy/
-node_modules/
-coverage/
-admin/i18n/
-package-lock.json

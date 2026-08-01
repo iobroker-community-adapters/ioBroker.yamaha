@@ -12,15 +12,24 @@ const RECONNECT_MAX_MS = 30000;
 /** Fail the initial connect after this long so a non-YNCA device falls through fast. */
 const CONNECT_TIMEOUT_MS = 5000;
 
+/** Adapter-managed timers so the client leaks no native timers past onUnload. */
+export interface YncaTimers {
+  /** Schedule a one-shot timer; returns a handle to cancel it. */
+  schedule(handler: () => void, ms: number): ioBroker.Timeout | undefined;
+  /** Cancel a scheduled timer. */
+  cancel(handle: ioBroker.Timeout | undefined): void;
+}
+
 /**
  * A small delay used to pace the init sweep.
  *
+ * @param timers adapter-managed timers
  * @param ms milliseconds to wait
  * @returns a promise that resolves after the delay
  */
-function delay(ms: number): Promise<void> {
+function delay(timers: YncaTimers, ms: number): Promise<void> {
   return new Promise(resolve => {
-    setTimeout(resolve, ms);
+    timers.schedule(resolve, ms);
   });
 }
 
@@ -100,16 +109,18 @@ export class YncaClient {
   private readonly lineBuffer = new LineBuffer();
   private readonly messageHandlers: Array<(message: YncaMessage) => void> = [];
   private readonly reconnect = new ReconnectStrategy(RECONNECT_BASE_MS, RECONNECT_MAX_MS);
-  private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  private reconnectTimer: ioBroker.Timeout | undefined;
   private reachable = false;
   private closed = false;
 
   /**
    * @param host the receiver IP or hostname
+   * @param timers adapter-managed timers, so no native timer outlives onUnload
    * @param factory socket factory (defaults to a node:net socket)
    */
   public constructor(
     private readonly host: string,
+    private readonly timers: YncaTimers,
     private readonly factory: SocketFactory = defaultFactory,
   ) {}
 
@@ -163,7 +174,7 @@ export class YncaClient {
     // only one YNCA connection, so a lingering socket would refuse the new one.
     this.socket?.destroy();
     this.socket = undefined;
-    this.reconnectTimer = setTimeout(() => this.openSocket(), this.reconnect.nextDelay());
+    this.reconnectTimer = this.timers.schedule(() => this.openSocket(), this.reconnect.nextDelay());
   }
 
   /**
@@ -219,9 +230,9 @@ export class YncaClient {
     try {
       for (const request of gets) {
         this.get(request.subunit, request.func);
-        await delay(spacingMs);
+        await delay(this.timers, spacingMs);
       }
-      await delay(settleMs);
+      await delay(this.timers, settleMs);
       return buildCapabilities(collected);
     } finally {
       const index = this.messageHandlers.indexOf(collector);
@@ -241,7 +252,7 @@ export class YncaClient {
     this.closed = true;
     this.reachable = false;
     if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
+      this.timers.cancel(this.reconnectTimer);
       this.reconnectTimer = undefined;
     }
     this.socket?.destroy();

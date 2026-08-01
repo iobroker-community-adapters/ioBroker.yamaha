@@ -30,13 +30,17 @@ var import_capability = require("./capability");
 const YNCA_PORT = 5e4;
 const RECONNECT_BASE_MS = 1e3;
 const RECONNECT_MAX_MS = 3e4;
-function delay(ms) {
+const CONNECT_TIMEOUT_MS = 5e3;
+function delay(timers, ms) {
   return new Promise((resolve) => {
-    setTimeout(resolve, ms);
+    timers.schedule(resolve, ms);
   });
 }
 function defaultFactory(host, port) {
   const socket = (0, import_node_net.connect)({ host, port });
+  socket.setTimeout(CONNECT_TIMEOUT_MS);
+  socket.on("timeout", () => socket.destroy(new Error("connect timeout")));
+  socket.on("connect", () => socket.setTimeout(0));
   return {
     write: (data) => {
       socket.write(data);
@@ -61,10 +65,12 @@ function defaultFactory(host, port) {
 class YncaClient {
   /**
    * @param host the receiver IP or hostname
+   * @param timers adapter-managed timers, so no native timer outlives onUnload
    * @param factory socket factory (defaults to a node:net socket)
    */
-  constructor(host, factory = defaultFactory) {
+  constructor(host, timers, factory = defaultFactory) {
     this.host = host;
+    this.timers = timers;
     this.factory = factory;
   }
   socket;
@@ -120,7 +126,7 @@ class YncaClient {
     }
     (_a = this.socket) == null ? void 0 : _a.destroy();
     this.socket = void 0;
-    this.reconnectTimer = setTimeout(() => this.openSocket(), this.reconnect.nextDelay());
+    this.reconnectTimer = this.timers.schedule(() => this.openSocket(), this.reconnect.nextDelay());
   }
   /**
    * Send a PUT command.
@@ -172,9 +178,9 @@ class YncaClient {
     try {
       for (const request of gets) {
         this.get(request.subunit, request.func);
-        await delay(spacingMs);
+        await delay(this.timers, spacingMs);
       }
-      await delay(settleMs);
+      await delay(this.timers, settleMs);
       return (0, import_capability.buildCapabilities)(collected);
     } finally {
       const index = this.messageHandlers.indexOf(collector);
@@ -193,7 +199,7 @@ class YncaClient {
     this.closed = true;
     this.reachable = false;
     if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
+      this.timers.cancel(this.reconnectTimer);
       this.reconnectTimer = void 0;
     }
     (_a = this.socket) == null ? void 0 : _a.destroy();

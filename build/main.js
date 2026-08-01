@@ -101,7 +101,16 @@ class Yamaha extends utils.Adapter {
       await this.extendObject(id, { type: def.type, common: def.common, native: {} });
     };
     const setStateAck = (id, value) => void this.setState(id, { val: value, ack: true });
-    const ynca = new import_device_controller.YncaDeviceController(device.id, { client: new import_ynca_client.YncaClient(device.ip), upsertObject, setStateAck, log });
+    const timers = {
+      schedule: (handler, ms) => this.setTimeout(handler, ms),
+      cancel: (handle) => this.clearTimeout(handle)
+    };
+    const ynca = new import_device_controller.YncaDeviceController(device.id, {
+      client: new import_ynca_client.YncaClient(device.ip, timers),
+      upsertObject,
+      setStateAck,
+      log
+    });
     try {
       if (await ynca.start(SWEEP_GETS)) {
         this.controllers.push(ynca);

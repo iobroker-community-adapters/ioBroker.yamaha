@@ -1,6 +1,15 @@
 import { YncaClient } from "./ynca-client";
 import type { YncaSocket } from "./ynca-client";
 
+// Test timers back onto the global clock so vi.useFakeTimers() drives them; in
+// production the adapter injects this.setTimeout (the lib uses no native timer).
+const testTimers = {
+  schedule: (handler: () => void, ms: number): ioBroker.Timeout =>
+    setTimeout(handler, ms) as unknown as ioBroker.Timeout,
+  cancel: (handle: ioBroker.Timeout | undefined): void =>
+    clearTimeout(handle as unknown as ReturnType<typeof setTimeout>),
+};
+
 class FakeSocket implements YncaSocket {
   public written: string[] = [];
   public destroyed = false;
@@ -57,7 +66,7 @@ function fixtureFactory(): { factory: (host: string, port: number) => YncaSocket
 describe("YncaClient", () => {
   test("resolves connect on the socket connect event and is reachable", async () => {
     const { factory, sockets } = fixtureFactory();
-    const client = new YncaClient("1.2.3.4", factory);
+    const client = new YncaClient("1.2.3.4", testTimers, factory);
     const connected = client.connect();
     sockets[0].emitConnect();
     await expect(connected).resolves.toBeUndefined();
@@ -66,7 +75,7 @@ describe("YncaClient", () => {
 
   test("sends a command as a CRLF-terminated YNCA line", async () => {
     const { factory, sockets } = fixtureFactory();
-    const client = new YncaClient("1.2.3.4", factory);
+    const client = new YncaClient("1.2.3.4", testTimers, factory);
     const connected = client.connect();
     sockets[0].emitConnect();
     await connected;
@@ -76,7 +85,7 @@ describe("YncaClient", () => {
 
   test("sends a GET as =? terminated line", async () => {
     const { factory, sockets } = fixtureFactory();
-    const client = new YncaClient("1.2.3.4", factory);
+    const client = new YncaClient("1.2.3.4", testTimers, factory);
     const connected = client.connect();
     sockets[0].emitConnect();
     await connected;
@@ -86,7 +95,7 @@ describe("YncaClient", () => {
 
   test("decodes incoming ok lines into messages", async () => {
     const { factory, sockets } = fixtureFactory();
-    const client = new YncaClient("1.2.3.4", factory);
+    const client = new YncaClient("1.2.3.4", testTimers, factory);
     const messages: unknown[] = [];
     client.onMessage((m) => messages.push(m));
     const connected = client.connect();
@@ -98,7 +107,7 @@ describe("YncaClient", () => {
 
   test("ignores @UNDEFINED / @RESTRICTED lines", async () => {
     const { factory, sockets } = fixtureFactory();
-    const client = new YncaClient("1.2.3.4", factory);
+    const client = new YncaClient("1.2.3.4", testTimers, factory);
     const messages: unknown[] = [];
     client.onMessage((m) => messages.push(m));
     const connected = client.connect();
@@ -110,7 +119,7 @@ describe("YncaClient", () => {
 
   test("close destroys the socket and marks unreachable", async () => {
     const { factory, sockets } = fixtureFactory();
-    const client = new YncaClient("1.2.3.4", factory);
+    const client = new YncaClient("1.2.3.4", testTimers, factory);
     const connected = client.connect();
     sockets[0].emitConnect();
     await connected;
@@ -123,7 +132,7 @@ describe("YncaClient", () => {
     vi.useFakeTimers();
     try {
       const { factory, sockets } = fixtureFactory();
-      const client = new YncaClient("1.2.3.4", factory);
+      const client = new YncaClient("1.2.3.4", testTimers, factory);
       const connected = client.connect();
       sockets[0].emitConnect();
       await connected;
@@ -145,7 +154,7 @@ describe("YncaClient", () => {
     vi.useFakeTimers();
     try {
       const { factory, sockets } = fixtureFactory();
-      const client = new YncaClient("1.2.3.4", factory);
+      const client = new YncaClient("1.2.3.4", testTimers, factory);
       const connected = client.connect();
       sockets[0].emitConnect();
       await connected;
@@ -161,7 +170,7 @@ describe("YncaClient", () => {
     vi.useFakeTimers();
     try {
       const { factory, sockets } = fixtureFactory();
-      const client = new YncaClient("1.2.3.4", factory);
+      const client = new YncaClient("1.2.3.4", testTimers, factory);
       const connected = client.connect();
       sockets[0].emitConnect();
       await connected;

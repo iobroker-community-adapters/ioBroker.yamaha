@@ -28,8 +28,6 @@ export default [
       "coverage",
       "admin",
       "node_modules",
-      // Pre-rewrite reference code (XML/SSDP source for later phases) — never lint it.
-      "legacy",
       "**/adapter-config.d.ts",
     ],
   },

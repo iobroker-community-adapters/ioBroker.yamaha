@@ -36,8 +36,10 @@ Funktionalität (voller MusicCast-Reichtum). Vorbild-Adapter (Multi-Transport): 
 - **Phase 6:** Discovery (SSDP + manuell), Admin-UI, Migration yamaha→neu.
 - **Phase 7:** Härtung, repochecker, Konsistenz-Audit, README/Wiki + Umstiegs-Doku musiccast→yamaha, Release.
 
-## legacy/ — Referenzcode (NICHT gelintet/gebaut)
-Alt-Code der Übernahme als Portierungs-Quelle, aus eslint + tsc + prettier ausgeschlossen:
+## Portierungs-Referenz (`../../Ressourcen/yamaha/legacy/`, NICHT im Adapter-Repo)
+Alt-Code der Übernahme als Portierungs-Quelle — 2026-08-01 aus dem publizierten Adapter ausgelagert
+(erzeugte sonst repochecker-Findings: fehlende Abhängigkeiten, altes `utils.adapter`-Muster, native Timer);
+per git-Historie + dort weiter abrufbar:
 - `main.js` — XML-Befehle (via `yamaha-nodejs-soef`) + YNCA-Echtzeit-Events (via `y5`).
 - `discover.js` — SSDP-Discovery (Quelle Phase 6).
 - `soef.js` / `tools.js` — Alt-Helfer.

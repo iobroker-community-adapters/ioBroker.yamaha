@@ -88,10 +88,14 @@ export class Yamaha extends utils.Adapter {
     };
     const setStateAck = (id: string, value: boolean | number | string): void =>
       void this.setState(id, { val: value, ack: true });
+    const timers = {
+      schedule: (handler: () => void, ms: number): ioBroker.Timeout | undefined => this.setTimeout(handler, ms),
+      cancel: (handle: ioBroker.Timeout | undefined): void => this.clearTimeout(handle),
+    };
 
     // 1) YNCA — amp control over a held TCP connection.
     const ynca = new YncaDeviceController(device.id, {
-      client: new YncaClient(device.ip),
+      client: new YncaClient(device.ip, timers),
       upsertObject,
       setStateAck,
       log,
