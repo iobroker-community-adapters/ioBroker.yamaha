@@ -5,6 +5,8 @@ import { YncaClient } from "./lib/ynca/ynca-client";
 import { YncaDeviceController } from "./lib/device-controller";
 import { YxcDeviceController } from "./lib/yxc/device-controller";
 import { YxcPushReceiver } from "./lib/yxc/push-receiver";
+import { XmlDeviceController } from "./lib/xml/device-controller";
+import { XmlClient } from "./lib/xml/xml-client";
 import type { ObjectDef } from "./lib/capability-mapper";
 import type { DeviceController, DeviceRecord } from "./lib/types";
 
@@ -21,10 +23,10 @@ const SWEEP_GETS = [
 /**
  * ioBroker.yamaha — controls Yamaha AV receivers and MusicCast devices.
  *
- * Each configured device is driven by one controller. YNCA is tried first (amp
- * control over a held TCP connection, event-pushed); a device that does not
- * speak YNCA — a MusicCast speaker or soundbar — falls back to the YXC
- * transport. All YXC devices share one UDP push receiver, keyed by source IP.
+ * Each configured device is driven by one controller, tried in order: YNCA (amp
+ * control over a held TCP connection, event-pushed), then YXC (MusicCast speakers
+ * and soundbars), then XML/YNC (pre-2010 receivers, polled over HTTP). All YXC
+ * devices share one UDP push receiver, keyed by source IP.
  */
 export class Yamaha extends utils.Adapter {
   private readonly controllers: DeviceController[] = [];
@@ -135,7 +137,35 @@ export class Yamaha extends utils.Adapter {
       yxc.close();
     } catch (e) {
       yxc.close();
-      this.log.warn(`${device.id}: neither YNCA nor YXC reachable: ${e instanceof Error ? e.message : String(e)}`);
+      this.log.debug(`${device.id}: no YXC (${e instanceof Error ? e.message : String(e)})`);
+    }
+
+    // 3) XML/YNC fallback — pre-2010 receivers that speak neither YNCA nor YXC.
+    const xml = new XmlDeviceController(device.id, {
+      client: new XmlClient(device.ip),
+      scheduleKeepalive: (handler, ms) => {
+        const timer = this.setInterval(handler, ms);
+        return () => {
+          if (timer) {
+            this.clearInterval(timer);
+          }
+        };
+      },
+      upsertObject,
+      setStateAck,
+      log,
+    });
+    try {
+      if (await xml.start()) {
+        this.controllers.push(xml);
+        return true;
+      }
+      xml.close();
+    } catch (e) {
+      xml.close();
+      this.log.warn(
+        `${device.id}: no reachable transport (YNCA/YXC/XML): ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
     return false;
   }

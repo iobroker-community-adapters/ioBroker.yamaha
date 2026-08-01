@@ -1,0 +1,77 @@
+"use strict";
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var xml_client_exports = {};
+__export(xml_client_exports, {
+  XmlClient: () => XmlClient
+});
+module.exports = __toCommonJS(xml_client_exports);
+var import_node_http = require("node:http");
+var import_protocol = require("./protocol");
+const CONTROL_PATH = "/YamahaRemoteControl/ctrl";
+const REQUEST_TIMEOUT_MS = 5e3;
+function defaultPoster(ip, body) {
+  return new Promise((resolve, reject) => {
+    const req = (0, import_node_http.request)(
+      { host: ip, port: 80, path: CONTROL_PATH, method: "POST", timeout: REQUEST_TIMEOUT_MS },
+      (res) => {
+        let data = "";
+        res.on("data", (chunk) => data += String(chunk));
+        res.on("end", () => resolve(data));
+      }
+    );
+    req.on("error", reject);
+    req.on("timeout", () => req.destroy(new Error("XML request timeout")));
+    req.write(body);
+    req.end();
+  });
+}
+class XmlClient {
+  /**
+   * @param ip the receiver IP
+   * @param post the XML poster (defaults to a node:http POST)
+   */
+  constructor(ip, post = defaultPoster) {
+    this.ip = ip;
+    this.post = post;
+  }
+  /**
+   * Send a zone command (wrapped in a PUT envelope).
+   *
+   * @param zone the zone element (e.g. `Main_Zone`)
+   * @param inner the inner command XML
+   */
+  async send(zone, inner) {
+    await this.post(this.ip, (0, import_protocol.encodePut)(zone, inner));
+  }
+  /**
+   * Read a zone's Basic_Status.
+   *
+   * @param zone the zone element (e.g. `Main_Zone`)
+   * @returns the parsed amplifier fields
+   */
+  async getStatus(zone) {
+    const response = await this.post(this.ip, (0, import_protocol.encodeGet)(zone, "<Basic_Status>GetParam</Basic_Status>"));
+    return (0, import_protocol.parseBasicStatus)(response);
+  }
+}
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  XmlClient
+});
+//# sourceMappingURL=xml-client.js.map

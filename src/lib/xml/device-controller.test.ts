@@ -1,0 +1,111 @@
+import { XmlDeviceController } from "./device-controller";
+import type { XmlClientLike } from "./device-controller";
+import type { BasicStatus } from "./protocol";
+
+const flush = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
+const silentLog = { debug: (): void => {}, info: (): void => {}, warn: (): void => {} };
+
+class FakeClient implements XmlClientLike {
+  public calls: Array<{ method: string; zone: string; inner?: string }> = [];
+  public constructor(private readonly statuses: Record<string, BasicStatus>) {}
+  public async getStatus(zone: string): Promise<BasicStatus> {
+    this.calls.push({ method: "getStatus", zone });
+    return this.statuses[zone] ?? {};
+  }
+  public async send(zone: string, inner: string): Promise<void> {
+    this.calls.push({ method: "send", zone, inner });
+  }
+}
+
+function setup(statuses: Record<string, BasicStatus>): {
+  controller: XmlDeviceController;
+  client: FakeClient;
+  objects: string[];
+  acks: Array<{ id: string; value: unknown }>;
+  fire: { keepalive?: () => void };
+  cancelled: () => boolean;
+} {
+  const client = new FakeClient(statuses);
+  const objects: string[] = [];
+  const acks: Array<{ id: string; value: unknown }> = [];
+  const fire: { keepalive?: () => void } = {};
+  let cancelled = false;
+  const controller = new XmlDeviceController("living", {
+    client,
+    scheduleKeepalive: handler => {
+      fire.keepalive = handler;
+      return () => {
+        cancelled = true;
+      };
+    },
+    upsertObject: async id => {
+      objects.push(id);
+    },
+    setStateAck: (id, value) => {
+      acks.push({ id, value });
+    },
+    log: silentLog,
+  });
+  return { controller, client, objects, acks, fire, cancelled: () => cancelled };
+}
+
+describe("XmlDeviceController", () => {
+  test("builds the amp tree for the main zone and seeds its state", async () => {
+    const s = setup({ Main_Zone: { power: true, volume: -30, mute: false, input: "HDMI1" } });
+    expect(await s.controller.start()).toBe(true);
+    expect(s.objects).toEqual(expect.arrayContaining(["living.power", "living.volume", "living.mute", "living.input"]));
+    expect(s.acks).toContainEqual({ id: "living.power", value: true });
+    expect(s.acks).toContainEqual({ id: "living.volume", value: -30 });
+  });
+
+  test("adds a further zone as a channel when it responds", async () => {
+    const s = setup({ Main_Zone: { power: true }, Zone_2: { power: false } });
+    await s.controller.start();
+    expect(s.objects).toContain("living.zone2");
+    expect(s.objects).toContain("living.zone2.power");
+  });
+
+  test("returns false and builds nothing when the main zone does not answer", async () => {
+    const s = setup({});
+    expect(await s.controller.start()).toBe(false);
+    expect(s.objects).toEqual([]);
+  });
+
+  test("a user write becomes the matching XML command", async () => {
+    const s = setup({ Main_Zone: { power: true } });
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.power", false, true);
+    await flush();
+    expect(s.client.calls).toContainEqual({
+      method: "send",
+      zone: "Main_Zone",
+      inner: "<Power_Control><Power>On</Power></Power_Control>",
+    });
+  });
+
+  test("an acked change is ignored", async () => {
+    const s = setup({ Main_Zone: { power: true } });
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.power", true, true);
+    await flush();
+    expect(s.client.calls).toEqual([]);
+  });
+
+  test("keepalive polls the live zones", async () => {
+    const s = setup({ Main_Zone: { power: true } });
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.fire.keepalive?.();
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "getStatus", zone: "Main_Zone" });
+  });
+
+  test("close cancels the keepalive", async () => {
+    const s = setup({ Main_Zone: { power: true } });
+    await s.controller.start();
+    s.controller.close();
+    expect(s.cancelled()).toBe(true);
+  });
+});

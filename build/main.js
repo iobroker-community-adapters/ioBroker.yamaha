@@ -38,6 +38,8 @@ var import_ynca_client = require("./lib/ynca/ynca-client");
 var import_device_controller = require("./lib/device-controller");
 var import_device_controller2 = require("./lib/yxc/device-controller");
 var import_push_receiver = require("./lib/yxc/push-receiver");
+var import_device_controller3 = require("./lib/xml/device-controller");
+var import_xml_client = require("./lib/xml/xml-client");
 const SWEEP_ZONES = ["MAIN", "ZONE2", "ZONE3", "ZONE4"];
 const SWEEP_FUNCS = ["PWR", "VOL", "MUTE", "INP", "SOUNDPRG"];
 const SWEEP_GETS = [
@@ -144,7 +146,33 @@ class Yamaha extends utils.Adapter {
       yxc.close();
     } catch (e) {
       yxc.close();
-      this.log.warn(`${device.id}: neither YNCA nor YXC reachable: ${e instanceof Error ? e.message : String(e)}`);
+      this.log.debug(`${device.id}: no YXC (${e instanceof Error ? e.message : String(e)})`);
+    }
+    const xml = new import_device_controller3.XmlDeviceController(device.id, {
+      client: new import_xml_client.XmlClient(device.ip),
+      scheduleKeepalive: (handler, ms) => {
+        const timer = this.setInterval(handler, ms);
+        return () => {
+          if (timer) {
+            this.clearInterval(timer);
+          }
+        };
+      },
+      upsertObject,
+      setStateAck,
+      log
+    });
+    try {
+      if (await xml.start()) {
+        this.controllers.push(xml);
+        return true;
+      }
+      xml.close();
+    } catch (e) {
+      xml.close();
+      this.log.warn(
+        `${device.id}: no reachable transport (YNCA/YXC/XML): ${e instanceof Error ? e.message : String(e)}`
+      );
     }
     return false;
   }
