@@ -41,6 +41,10 @@ Add each Yamaha device with a name and its IP address.
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+### 0.7.0 (2026-08-03)
+- An existing receiver from the previous adapter is now carried over into the device table on upgrade instead of being lost.
+- Receivers report and fill more datapoints at startup: added straight, enhancer, pure direct and the sleep timer, and existing states are now populated from the initial query.
+
 ### 0.6.0 (2026-08-01)
 - Rebuilt from the ground up as one adapter for classic Yamaha AV receivers, MusicCast devices and the oldest pre-2010 receivers, replacing the separate yamaha and musiccast adapters.
 - Each device is driven over the protocol it actually speaks — YNCA (with automatic reconnect after a reboot or network drop), MusicCast, or the legacy XML control protocol.
@@ -57,11 +61,7 @@ Add each Yamaha device with a name and its IP address.
 ### 0.5.2 (2022-04-23)
 * (Apollon77) Fix crash cases reported by Sentry
 
-### 0.5.1 (2022-03-29)
-* (Apollon77) Fix crash cases reported by Sentry
-* (Sneak-L8) fix type of pureDirect
-
-[Older changelogs can be found here](CHANGELOG_OLD.md)
+[Older changelogs can be found there](CHANGELOG_OLD.md)
 
 ## History
 

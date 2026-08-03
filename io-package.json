@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "0.6.0",
+    "version": "0.7.0",
     "news": {
+      "0.7.0": {
+        "en": "An existing receiver is now taken over on upgrade, and each receiver reports and fills more datapoints at startup, such as the sleep timer.",
+        "de": "Ein vorhandener Receiver wird beim Update jetzt übernommen, und jeder Receiver meldet und füllt beim Start mehr Datenpunkte, etwa den Sleep-Timer.",
+        "ru": "Существующий ресивер теперь переносится при обновлении, и каждый ресивер сообщает и заполняет больше точек данных при запуске, например таймер сна.",
+        "pt": "Um receptor existente passa a ser assumido na atualização, e cada receptor comunica e preenche mais pontos de dados no arranque, como o temporizador de suspensão.",
+        "nl": "Een bestaande receiver wordt bij het bijwerken nu overgenomen, en elke receiver meldt en vult bij het opstarten meer datapunten, zoals de slaaptimer.",
+        "fr": "Un récepteur existant est désormais repris lors de la mise à jour, et chaque récepteur signale et remplit plus de points de données au démarrage, comme la minuterie de veille.",
+        "it": "Un ricevitore esistente viene ora ripreso durante l'aggiornamento e ogni ricevitore segnala e riempie più punti dati all'avvio, come il timer di spegnimento.",
+        "es": "Un receptor existente ahora se adopta al actualizar, y cada receptor informa y rellena más puntos de datos al iniciar, como el temporizador de apagado.",
+        "pl": "Istniejący odbiornik jest teraz przejmowany podczas aktualizacji, a każdy odbiornik zgłasza i wypełnia więcej punktów danych przy starcie, np. wyłącznik czasowy.",
+        "uk": "Наявний ресивер тепер переноситься під час оновлення, і кожен ресивер повідомляє та заповнює більше точок даних під час запуску, наприклад таймер сну.",
+        "zh-cn": "现在升级时会接管现有接收机，每台接收机在启动时会报告并填充更多数据点，例如睡眠定时器。"
+      },
       "0.6.0": {
         "en": "Rebuilt as one adapter for classic Yamaha AV receivers, MusicCast and older models over their native protocols, with automatic reconnect and network discovery. Requires Node.js 22.",
         "de": "Neu aufgebaut als ein Adapter für klassische Yamaha-AV-Receiver, MusicCast und ältere Modelle über ihre nativen Protokolle, mit automatischem Reconnect und Netzwerksuche. Benötigt Node.js 22.",
@@ -80,19 +93,6 @@
         "pl": "WAŻNE: potrzebny jest przynajmniej js-controller 2.0\nDodaj Sentry do zgłaszania awarii",
         "zh-cn": "重要提示：至少需要 js-controller 2.0\n添加 Sentry 以进行崩溃报告",
         "uk": "ВАЖЛИВО: потрібен щонайменше js-controller 2.0\nДодано Sentry для звітування про збої"
-      },
-      "0.4.0": {
-        "en": "added admin 3 compatibility and more meta-data stuff.\nadded compact mode support.",
-        "de": "hat Admin 3-Kompatibilität und mehr Metadaten hinzugefügt.\nhat Unterstützung für den Kompaktmodus hinzugefügt.",
-        "ru": "* (Гарфонсо) добавлена совместимость с админом 3 и больше метаданных.\n* (Гарфонсо) добавлена поддержка компактного режима.",
-        "pt": "adicionou compatibilidade com o administrador 3 e mais informações sobre meta-dados.\nadicionou suporte ao modo compacto.",
-        "nl": "heeft compatibiliteit met admin 3 en meer metadata toegevoegd.\nondersteuning voor compacte modus toegevoegd.",
-        "fr": "a ajouté la compatibilité admin 3 et plus de métadonnées.\na ajouté le support du mode compact.",
-        "it": "ha aggiunto la compatibilità con admin 3 e altre informazioni sui metadati.\naggiunto il supporto in modalità compatta.",
-        "es": "agregó compatibilidad con admin 3 y más cosas de metadatos.\nagregó soporte de modo compacto.",
-        "pl": "dodał kompatybilność z adminem 3 i więcej metadanych.\ndodano obsługę trybu kompaktowego.",
-        "zh-cn": "*（Garfonso）添加了admin 3兼容性和更多的元数据内容。\n*（Garfonso）添加了紧凑模式支持。",
-        "uk": "додано сумісність з admin 3 та більше метаданих.\nдодано підтримку компактного режиму."
       }
     },
     "titleLang": {
