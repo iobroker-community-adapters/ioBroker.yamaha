@@ -68,6 +68,16 @@ describe("YncaDeviceController", () => {
     expect(created).toContain("living.volume");
   });
 
+  test("start seeds the states with the values read during the init sweep", async () => {
+    const client = new FakeClient();
+    client.capabilities = { model: "RX-A810", subunits: { MAIN: { PWR: "On", VOL: "-30.0", MUTE: "Off" } } };
+    const { acked, deps } = makeDeps(client);
+    await new YncaDeviceController("living", deps).start(SWEEP);
+    expect(acked).toContainEqual({ id: "living.power", value: true });
+    expect(acked).toContainEqual({ id: "living.volume", value: -30 });
+    expect(acked).toContainEqual({ id: "living.mute", value: false });
+  });
+
   test("start creates nothing and returns false when no capabilities come back", async () => {
     const client = new FakeClient();
     const { created, deps } = makeDeps(client);

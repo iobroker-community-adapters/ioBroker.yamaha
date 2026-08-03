@@ -17,7 +17,8 @@ Funktionalität (voller MusicCast-Reichtum). Vorbild-Adapter (Multi-Transport): 
   **keine reife Lib** → **TS-Eigenbau**, Python-`ynca` als Protokoll-Spec. Nur **1** Verbindung/Gerät.
 - **YXC / MusicCast** (JSON-HTTP + UDP-Push :41100) — MusicCast-Geräteklasse + Reichtum
   (Medien/Tuner/CD/Multiroom), via `yamaha-yxc-nodejs`. Re-Subscribe-Keepalive Pflicht (der musiccast-Bug).
-- **XML/YNC** (`<YAMAHA_AV>`, HTTP :80) — **tot**, nur Geräte vor ~2010 → optionaler Legacy-Zweig.
+- **XML/YNC** (`<YAMAHA_AV>`, HTTP :80) — Steuer-API der Geräte vor ~2010; **dritter, gleichberechtigter
+  Transport** (Fallback, wenn weder YNCA noch YXC antworten).
 - YNCA + YXC laufen auf einem MusicCast-AVR **parallel** (kein Konflikt) — pro Gerät/Fähigkeit geroutet.
 
 ## Architektur (geplant, govee-Pattern-first)
@@ -32,7 +33,7 @@ Funktionalität (voller MusicCast-Reichtum). Vorbild-Adapter (Multi-Transport): 
 - **Phase 2:** YNCA-TS-Client (Encoder/Decoder, Subunit-Modell, Reconnect) — Tests gegen `ynca`-debug-Logs.
 - **Phase 3:** YXC-Client um `yamaha-yxc-nodejs` + UDP-Push + Re-Subscribe.
 - **Phase 4:** capability-mapper + einheitlicher Objektbaum + Routing end-to-end.
-- **Phase 5:** XML-Legacy-Client (aus `legacy/`).
+- **Phase 5:** XML/YNC-Client (aus `legacy/` portiert) — dritter, gleichberechtigter Transport.
 - **Phase 6:** Discovery (SSDP + manuell), Admin-UI, Migration yamaha→neu.
 - **Phase 7:** Härtung, repochecker, Konsistenz-Audit, README/Wiki + Umstiegs-Doku musiccast→yamaha, Release.
 

@@ -19,6 +19,16 @@ describe("mapYncaToObjects", () => {
     expect(list).toContain("zone2.volume");
   });
 
+  test("maps the extra amplifier functions the RX-A810 reported", () => {
+    expect(ids(rxA810)).toEqual(expect.arrayContaining(["straight", "enhancer", "pureDirect", "sleep"]));
+  });
+
+  test("maps only the zone functions the device reported (Zone 2 has sleep, not straight)", () => {
+    const list = ids(rxA810);
+    expect(list).toContain("zone2.sleep");
+    expect(list).not.toContain("zone2.straight");
+  });
+
   test("power is a writable boolean with a power role", () => {
     const power = mapYncaToObjects(parseCapabilities(rxA810)).find((o) => o.id === "power");
     expect(power?.type).toBe("state");

@@ -46,6 +46,26 @@ const AMP_STATES = [
     func: "SOUNDPRG",
     state: "soundProgram",
     common: { name: "Sound program", type: "string", role: "state", read: true, write: true }
+  },
+  {
+    func: "STRAIGHT",
+    state: "straight",
+    common: { name: "Straight", type: "boolean", role: "switch", read: true, write: true }
+  },
+  {
+    func: "ENHANCER",
+    state: "enhancer",
+    common: { name: "Enhancer", type: "boolean", role: "switch", read: true, write: true }
+  },
+  {
+    func: "PUREDIRMODE",
+    state: "pureDirect",
+    common: { name: "Pure Direct", type: "boolean", role: "switch", read: true, write: true }
+  },
+  {
+    func: "SLEEP",
+    state: "sleep",
+    common: { name: "Sleep timer", type: "string", role: "state", read: true, write: true }
   }
 ];
 const ZONES = [

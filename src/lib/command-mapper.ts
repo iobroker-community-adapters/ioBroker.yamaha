@@ -23,6 +23,10 @@ const STATE_MAPPINGS: Record<string, StateMapping> = {
   mute: { func: "MUTE", toYnca: value => (value ? "On" : "Off"), fromYnca: value => value === "On" },
   input: { func: "INP", toYnca: value => String(value), fromYnca: value => value },
   soundProgram: { func: "SOUNDPRG", toYnca: value => String(value), fromYnca: value => value },
+  straight: { func: "STRAIGHT", toYnca: value => (value ? "On" : "Off"), fromYnca: value => value === "On" },
+  enhancer: { func: "ENHANCER", toYnca: value => (value ? "On" : "Off"), fromYnca: value => value === "On" },
+  pureDirect: { func: "PUREDIRMODE", toYnca: value => (value ? "On" : "Off"), fromYnca: value => value === "On" },
+  sleep: { func: "SLEEP", toYnca: value => String(value), fromYnca: value => value },
 };
 
 const ZONE_TO_SUBUNIT: Record<string, string> = { zone2: "ZONE2", zone3: "ZONE3", zone4: "ZONE4" };

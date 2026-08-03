@@ -25,6 +25,22 @@ describe("stateToYnca", () => {
     expect(stateToYnca("input", "HDMI1")).toEqual({ subunit: "MAIN", func: "INP", value: "HDMI1" });
   });
 
+  test("maps straight true to STRAIGHT On", () => {
+    expect(stateToYnca("straight", true)).toEqual({ subunit: "MAIN", func: "STRAIGHT", value: "On" });
+  });
+
+  test("maps enhancer false to ENHANCER Off", () => {
+    expect(stateToYnca("enhancer", false)).toEqual({ subunit: "MAIN", func: "ENHANCER", value: "Off" });
+  });
+
+  test("maps pureDirect true to PUREDIRMODE On", () => {
+    expect(stateToYnca("pureDirect", true)).toEqual({ subunit: "MAIN", func: "PUREDIRMODE", value: "On" });
+  });
+
+  test("maps the sleep timer as a plain string", () => {
+    expect(stateToYnca("sleep", "120 min")).toEqual({ subunit: "MAIN", func: "SLEEP", value: "120 min" });
+  });
+
   test("returns undefined for an unknown state", () => {
     expect(stateToYnca("bogus", 1)).toBeUndefined();
   });
@@ -41,6 +57,25 @@ describe("yncaToState", () => {
 
   test("maps MUTE Off to mute false", () => {
     expect(yncaToState({ subunit: "MAIN", func: "MUTE", value: "Off" })).toEqual({ id: "mute", value: false });
+  });
+
+  test("maps STRAIGHT On to straight true", () => {
+    expect(yncaToState({ subunit: "MAIN", func: "STRAIGHT", value: "On" })).toEqual({ id: "straight", value: true });
+  });
+
+  test("maps ENHANCER On to enhancer true", () => {
+    expect(yncaToState({ subunit: "MAIN", func: "ENHANCER", value: "On" })).toEqual({ id: "enhancer", value: true });
+  });
+
+  test("maps PUREDIRMODE Off to pureDirect false", () => {
+    expect(yncaToState({ subunit: "MAIN", func: "PUREDIRMODE", value: "Off" })).toEqual({
+      id: "pureDirect",
+      value: false,
+    });
+  });
+
+  test("maps the sleep timer as a plain string", () => {
+    expect(yncaToState({ subunit: "MAIN", func: "SLEEP", value: "Off" })).toEqual({ id: "sleep", value: "Off" });
   });
 
   test("returns undefined for an unmapped function", () => {

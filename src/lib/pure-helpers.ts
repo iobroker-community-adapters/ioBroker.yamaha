@@ -81,3 +81,25 @@ export function orphanedObjects(existing: string[], created: Set<string>, namesp
   const info = `${namespace}.info`;
   return existing.filter(id => id !== info && !id.startsWith(`${info}.`) && !created.has(id));
 }
+
+/**
+ * The device row to carry over from the previous adapter's single-device config,
+ * or undefined if nothing needs migrating. The old yamaha stored one receiver as
+ * `config.ip` (older installs: `config.IP`); the new adapter uses a `devices`
+ * table. Only migrates when the table is still empty, so it runs once.
+ *
+ * @param config the instance's native config
+ * @returns the row to add to the devices table, or undefined
+ */
+export function legacyDeviceRow(config: Record<string, unknown>): { name: string; ip: string } | undefined {
+  if (Array.isArray(config.devices) && config.devices.length > 0) {
+    return undefined;
+  }
+  const ip =
+    typeof config.ip === "string" && config.ip
+      ? config.ip
+      : typeof config.IP === "string" && config.IP
+        ? config.IP
+        : undefined;
+  return ip ? { name: ip, ip } : undefined;
+}

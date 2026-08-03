@@ -18,6 +18,7 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var pure_helpers_exports = {};
 __export(pure_helpers_exports, {
+  legacyDeviceRow: () => legacyDeviceRow,
   orphanedObjects: () => orphanedObjects,
   parseDevices: () => parseDevices,
   sanitizeId: () => sanitizeId,
@@ -53,8 +54,16 @@ function orphanedObjects(existing, created, namespace) {
   const info = `${namespace}.info`;
   return existing.filter((id) => id !== info && !id.startsWith(`${info}.`) && !created.has(id));
 }
+function legacyDeviceRow(config) {
+  if (Array.isArray(config.devices) && config.devices.length > 0) {
+    return void 0;
+  }
+  const ip = typeof config.ip === "string" && config.ip ? config.ip : typeof config.IP === "string" && config.IP ? config.IP : void 0;
+  return ip ? { name: ip, ip } : void 0;
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  legacyDeviceRow,
   orphanedObjects,
   parseDevices,
   sanitizeId,

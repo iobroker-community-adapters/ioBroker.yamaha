@@ -1,4 +1,22 @@
-import { orphanedObjects, parseDevices, sanitizeId, stripNamespace } from "./pure-helpers";
+import { legacyDeviceRow, orphanedObjects, parseDevices, sanitizeId, stripNamespace } from "./pure-helpers";
+
+describe("legacyDeviceRow", () => {
+  test("carries over the old single ip when the table is empty", () => {
+    expect(legacyDeviceRow({ ip: "1.2.3.4" })).toEqual({ name: "1.2.3.4", ip: "1.2.3.4" });
+  });
+
+  test("handles the capitalized legacy IP key", () => {
+    expect(legacyDeviceRow({ IP: "1.2.3.4" })).toEqual({ name: "1.2.3.4", ip: "1.2.3.4" });
+  });
+
+  test("does nothing when the devices table is already populated", () => {
+    expect(legacyDeviceRow({ ip: "1.2.3.4", devices: [{ name: "a", ip: "5.6.7.8" }] })).toBeUndefined();
+  });
+
+  test("does nothing without a legacy ip", () => {
+    expect(legacyDeviceRow({ devices: [] })).toBeUndefined();
+  });
+});
 
 describe("orphanedObjects", () => {
   test("returns ids not recreated this run, keeping info and created ids", () => {

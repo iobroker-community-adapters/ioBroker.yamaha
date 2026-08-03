@@ -2,7 +2,7 @@ import * as utils from "@iobroker/adapter-core";
 import { createSocket } from "node:dgram";
 import { get as httpGet } from "node:http";
 import { YamahaYXC } from "yamaha-yxc-nodejs";
-import { orphanedObjects, parseDevices, stripNamespace } from "./lib/pure-helpers";
+import { legacyDeviceRow, orphanedObjects, parseDevices, stripNamespace } from "./lib/pure-helpers";
 import { discoverYamaha } from "./lib/discovery";
 import { YncaClient } from "./lib/ynca/ynca-client";
 import { YncaDeviceController } from "./lib/device-controller";
@@ -15,8 +15,15 @@ import type { DeviceController, DeviceRecord } from "./lib/types";
 
 /** Zones swept for their amplifier functions. */
 const SWEEP_ZONES = ["MAIN", "ZONE2", "ZONE3", "ZONE4"];
-/** Amplifier functions queried per zone. */
-const SWEEP_FUNCS = ["PWR", "VOL", "MUTE", "INP", "SOUNDPRG"];
+/**
+ * Functions queried per zone. BASIC returns power, volume, mute, input, sound
+ * program and straight in one response, but enhancer, pure direct and the sleep
+ * timer are not in BASIC on every model (per the ynca protocol reference). The
+ * individual funcs are kept alongside BASIC so a model that answers BASIC with
+ * `@RESTRICTED` still reports the basics; duplicate answers overwrite harmlessly
+ * (buildCapabilities keys by subunit and func).
+ */
+const SWEEP_FUNCS = ["BASIC", "PWR", "VOL", "MUTE", "INP", "SOUNDPRG", "STRAIGHT", "ENHANCER", "PUREDIRMODE", "SLEEP"];
 /** The init-sweep gets: model name plus each zone's amplifier functions. */
 const SWEEP_GETS = [
   { subunit: "SYS", func: "MODELNAME" },
@@ -54,6 +61,7 @@ export class Yamaha extends utils.Adapter {
   private async onReady(): Promise<void> {
     try {
       await this.setState("info.connection", { val: false, ack: true });
+      await this.migrateLegacyDevice();
       const devices = parseDevices(this.config.devices);
       this.subscribeStates("*");
       const pushReceiver = new YxcPushReceiver({
@@ -73,6 +81,34 @@ export class Yamaha extends utils.Adapter {
       await this.cleanupOrphans(createdIds);
     } catch (e) {
       this.log.error(`onReady failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  /**
+   * Carry over the previous adapter's single-device config into the device table.
+   * The old yamaha stored one receiver as `config.ip` (older installs: `config.IP`);
+   * the new adapter uses a `devices` table, so an upgraded instance would otherwise
+   * start with an empty table and lose its receiver. Persists the row so the admin
+   * table shows it, and fills `this.config` in memory so this run already drives it.
+   */
+  private async migrateLegacyDevice(): Promise<void> {
+    const config = this.config as unknown as Record<string, unknown>;
+    const row = legacyDeviceRow(config);
+    if (!row) {
+      return;
+    }
+    // Fill the in-memory config first, so this run already drives the device even
+    // if persisting the table below fails — persistence is a convenience for the
+    // admin view, not a precondition for running.
+    config.devices = [row];
+    try {
+      await this.extendForeignObjectAsync(`system.adapter.${this.namespace}`, { native: { devices: [row] } });
+      this.log.info(`carried the previous single-device config (${row.ip}) over into the device table`);
+    } catch (e) {
+      this.log.warn(
+        `could not persist the migrated device table (${e instanceof Error ? e.message : String(e)}); ` +
+          `running with the in-memory value`,
+      );
     }
   }
 

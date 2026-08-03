@@ -75,6 +75,16 @@ export class YncaDeviceController {
     for (const object of objects) {
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
     }
+    // Seed the states with the values read during the init sweep — otherwise they
+    // stay empty until the device pushes a change of its own.
+    for (const [subunit, funcs] of Object.entries(capabilities.subunits)) {
+      for (const [func, value] of Object.entries(funcs)) {
+        const update = yncaToState({ subunit, func, value });
+        if (update) {
+          this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+        }
+      }
+    }
     this.deps.client.onMessage(message => {
       const update = yncaToState(message);
       if (update) {

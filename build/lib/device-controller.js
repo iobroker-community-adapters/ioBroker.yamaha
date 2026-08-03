@@ -49,6 +49,14 @@ class YncaDeviceController {
     for (const object of objects) {
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
     }
+    for (const [subunit, funcs] of Object.entries(capabilities.subunits)) {
+      for (const [func, value] of Object.entries(funcs)) {
+        const update = (0, import_command_mapper.yncaToState)({ subunit, func, value });
+        if (update) {
+          this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+        }
+      }
+    }
     this.deps.client.onMessage((message) => {
       const update = (0, import_command_mapper.yncaToState)(message);
       if (update) {

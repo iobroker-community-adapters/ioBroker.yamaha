@@ -27,7 +27,11 @@ const STATE_MAPPINGS = {
   volume: { func: "VOL", toYnca: (value) => Number(value).toFixed(1), fromYnca: (value) => Number.parseFloat(value) },
   mute: { func: "MUTE", toYnca: (value) => value ? "On" : "Off", fromYnca: (value) => value === "On" },
   input: { func: "INP", toYnca: (value) => String(value), fromYnca: (value) => value },
-  soundProgram: { func: "SOUNDPRG", toYnca: (value) => String(value), fromYnca: (value) => value }
+  soundProgram: { func: "SOUNDPRG", toYnca: (value) => String(value), fromYnca: (value) => value },
+  straight: { func: "STRAIGHT", toYnca: (value) => value ? "On" : "Off", fromYnca: (value) => value === "On" },
+  enhancer: { func: "ENHANCER", toYnca: (value) => value ? "On" : "Off", fromYnca: (value) => value === "On" },
+  pureDirect: { func: "PUREDIRMODE", toYnca: (value) => value ? "On" : "Off", fromYnca: (value) => value === "On" },
+  sleep: { func: "SLEEP", toYnca: (value) => String(value), fromYnca: (value) => value }
 };
 const ZONE_TO_SUBUNIT = { zone2: "ZONE2", zone3: "ZONE3", zone4: "ZONE4" };
 const SUBUNIT_TO_PREFIX = { MAIN: "", ZONE2: "zone2.", ZONE3: "zone3.", ZONE4: "zone4." };

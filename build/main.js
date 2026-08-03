@@ -44,7 +44,7 @@ var import_push_receiver = require("./lib/yxc/push-receiver");
 var import_device_controller3 = require("./lib/xml/device-controller");
 var import_xml_client = require("./lib/xml/xml-client");
 const SWEEP_ZONES = ["MAIN", "ZONE2", "ZONE3", "ZONE4"];
-const SWEEP_FUNCS = ["PWR", "VOL", "MUTE", "INP", "SOUNDPRG"];
+const SWEEP_FUNCS = ["BASIC", "PWR", "VOL", "MUTE", "INP", "SOUNDPRG", "STRAIGHT", "ENHANCER", "PUREDIRMODE", "SLEEP"];
 const SWEEP_GETS = [
   { subunit: "SYS", func: "MODELNAME" },
   ...SWEEP_ZONES.flatMap((zone) => SWEEP_FUNCS.map((func) => ({ subunit: zone, func })))
@@ -69,6 +69,7 @@ class Yamaha extends utils.Adapter {
   async onReady() {
     try {
       await this.setState("info.connection", { val: false, ack: true });
+      await this.migrateLegacyDevice();
       const devices = (0, import_pure_helpers.parseDevices)(this.config.devices);
       this.subscribeStates("*");
       const pushReceiver = new import_push_receiver.YxcPushReceiver({
@@ -88,6 +89,29 @@ class Yamaha extends utils.Adapter {
       await this.cleanupOrphans(createdIds);
     } catch (e) {
       this.log.error(`onReady failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  /**
+   * Carry over the previous adapter's single-device config into the device table.
+   * The old yamaha stored one receiver as `config.ip` (older installs: `config.IP`);
+   * the new adapter uses a `devices` table, so an upgraded instance would otherwise
+   * start with an empty table and lose its receiver. Persists the row so the admin
+   * table shows it, and fills `this.config` in memory so this run already drives it.
+   */
+  async migrateLegacyDevice() {
+    const config = this.config;
+    const row = (0, import_pure_helpers.legacyDeviceRow)(config);
+    if (!row) {
+      return;
+    }
+    config.devices = [row];
+    try {
+      await this.extendForeignObjectAsync(`system.adapter.${this.namespace}`, { native: { devices: [row] } });
+      this.log.info(`carried the previous single-device config (${row.ip}) over into the device table`);
+    } catch (e) {
+      this.log.warn(
+        `could not persist the migrated device table (${e instanceof Error ? e.message : String(e)}); running with the in-memory value`
+      );
     }
   }
   /**
