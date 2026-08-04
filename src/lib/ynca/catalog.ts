@@ -338,9 +338,60 @@ const GLOBAL_FUNCS: Array<{
   },
 ];
 
+const PLAYBACK_STATES = selfMap(["Play", "Pause", "Stop"]);
+const REPEAT_STATES = selfMap(["Off", "Single", "All"]);
+
+/** Network/media player sources — each a subunit, mapped under its own channel. */
+const PLAYER_SOURCES: Array<{ subunit: string; channel: string }> = [
+  { subunit: "NETRADIO", channel: "netRadio" },
+  { subunit: "SERVER", channel: "server" },
+  { subunit: "USB", channel: "usb" },
+  { subunit: "SPOTIFY", channel: "spotify" },
+];
+
+/** The playback functions shared by every player source (the __init__ mixin in the lib). */
+const PLAYER_FUNCS: Array<{
+  func: string;
+  state: string;
+  name: string;
+  spec: ValueSpec;
+  write: boolean;
+  role: string;
+}> = [
+  {
+    func: "PLAYBACK",
+    state: "playback",
+    name: "Playback",
+    spec: { kind: "enum", states: PLAYBACK_STATES },
+    write: true,
+    role: "media.state",
+  },
+  { func: "ARTIST", state: "artist", name: "Artist", spec: { kind: "text" }, write: false, role: "media.artist" },
+  { func: "ALBUM", state: "album", name: "Album", spec: { kind: "text" }, write: false, role: "media.album" },
+  { func: "SONG", state: "track", name: "Track", spec: { kind: "text" }, write: false, role: "media.title" },
+  {
+    func: "REPEAT",
+    state: "repeat",
+    name: "Repeat",
+    spec: { kind: "enum", states: REPEAT_STATES },
+    write: true,
+    role: "state",
+  },
+  {
+    func: "SHUFFLE",
+    state: "shuffle",
+    name: "Shuffle",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    write: true,
+    role: "switch",
+  },
+];
+
 /**
  * Build the device-agnostic YNCA catalog: every amplifier function for MAIN and
- * each zone. The per-device mapper keeps only the entries the device reports.
+ * each zone, the global SYS/TUN functions, and the playback functions for each
+ * network/media player source. The per-device mapper keeps only the entries the
+ * device reports.
  *
  * @returns the catalog entries
  */
@@ -369,6 +420,19 @@ export function buildYncaCatalog(): YncaEntry[] {
       subunit: fn.subunit,
       func: fn.func,
     });
+  }
+  for (const source of PLAYER_SOURCES) {
+    for (const fn of PLAYER_FUNCS) {
+      entries.push({
+        id: `${source.channel}.${fn.state}`,
+        name: fn.name,
+        spec: fn.spec,
+        write: fn.write,
+        role: fn.role,
+        subunit: source.subunit,
+        func: fn.func,
+      });
+    }
   }
   return entries;
 }

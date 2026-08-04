@@ -324,6 +324,43 @@ const GLOBAL_FUNCS = [
     role: "text"
   }
 ];
+const PLAYBACK_STATES = selfMap(["Play", "Pause", "Stop"]);
+const REPEAT_STATES = selfMap(["Off", "Single", "All"]);
+const PLAYER_SOURCES = [
+  { subunit: "NETRADIO", channel: "netRadio" },
+  { subunit: "SERVER", channel: "server" },
+  { subunit: "USB", channel: "usb" },
+  { subunit: "SPOTIFY", channel: "spotify" }
+];
+const PLAYER_FUNCS = [
+  {
+    func: "PLAYBACK",
+    state: "playback",
+    name: "Playback",
+    spec: { kind: "enum", states: PLAYBACK_STATES },
+    write: true,
+    role: "media.state"
+  },
+  { func: "ARTIST", state: "artist", name: "Artist", spec: { kind: "text" }, write: false, role: "media.artist" },
+  { func: "ALBUM", state: "album", name: "Album", spec: { kind: "text" }, write: false, role: "media.album" },
+  { func: "SONG", state: "track", name: "Track", spec: { kind: "text" }, write: false, role: "media.title" },
+  {
+    func: "REPEAT",
+    state: "repeat",
+    name: "Repeat",
+    spec: { kind: "enum", states: REPEAT_STATES },
+    write: true,
+    role: "state"
+  },
+  {
+    func: "SHUFFLE",
+    state: "shuffle",
+    name: "Shuffle",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    write: true,
+    role: "switch"
+  }
+];
 function buildYncaCatalog() {
   const entries = [];
   for (const zone of ZONES) {
@@ -349,6 +386,19 @@ function buildYncaCatalog() {
       subunit: fn.subunit,
       func: fn.func
     });
+  }
+  for (const source of PLAYER_SOURCES) {
+    for (const fn of PLAYER_FUNCS) {
+      entries.push({
+        id: `${source.channel}.${fn.state}`,
+        name: fn.name,
+        spec: fn.spec,
+        write: fn.write,
+        role: fn.role,
+        subunit: source.subunit,
+        func: fn.func
+      });
+    }
   }
   return entries;
 }

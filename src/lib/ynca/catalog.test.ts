@@ -70,4 +70,11 @@ describe("YNCA catalog", () => {
     expect(cat.find(e => e.id === "tuner.band")).toMatchObject({ subunit: "TUN", func: "BAND" });
     expect(cat.find(e => e.id === "zone2.sound.bass")).toMatchObject({ subunit: "ZONE2", func: "SPBASS" });
   });
+
+  test("player sources carry the shared playback functions under their channel", () => {
+    const cat = buildYncaCatalog();
+    const ids = cat.map(e => e.id);
+    expect(ids).toEqual(expect.arrayContaining(["netRadio.artist", "spotify.playback", "usb.track", "server.repeat"]));
+    expect(cat.find(e => e.id === "spotify.playback")).toMatchObject({ subunit: "SPOTIFY", func: "PLAYBACK" });
+  });
 });
