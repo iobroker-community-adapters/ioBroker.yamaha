@@ -42,4 +42,23 @@ describe("catalogToObjects", () => {
     const [channel] = catalogToObjects(entries);
     expect(channel).toEqual({ id: "airplay", type: "channel", common: { name: "Airplay" } });
   });
+
+  test("a protocol entry extends the base with its key; the same entry yields object AND sweep key (single source)", () => {
+    // A protocol catalog adds its key (here a YNCA-style function) to the base
+    // entry. build-objects reads only the object fields; the sweep/mapping reads
+    // the key — one list, no second table.
+    interface YncaEntry extends CatalogEntry {
+      func: string;
+    }
+    const entries: YncaEntry[] = [
+      { id: "power", name: "Power", spec: { kind: "onoff", on: "On", off: "Standby" }, write: true, role: "switch.power", func: "PWR" },
+    ];
+    const [obj] = catalogToObjects(entries);
+    expect(obj).toEqual({
+      id: "power",
+      type: "state",
+      common: { name: "Power", type: "boolean", role: "switch.power", read: true, write: true },
+    });
+    expect(entries[0].func).toBe("PWR");
+  });
 });

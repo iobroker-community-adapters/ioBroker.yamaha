@@ -32,6 +32,14 @@ describe("specToCommon", () => {
     expect(common.role).toBe("value");
   });
 
+  test("a numeric value without a range omits min/max/step/unit (no undefined fields)", () => {
+    const common = specToCommon({ kind: "number" }, { write: false });
+    expect(common).not.toHaveProperty("min");
+    expect(common).not.toHaveProperty("max");
+    expect(common).not.toHaveProperty("step");
+    expect(common).not.toHaveProperty("unit");
+  });
+
   test("free text becomes a plain string", () => {
     const common = specToCommon({ kind: "text" }, { write: false });
     expect(common.type).toBe("string");

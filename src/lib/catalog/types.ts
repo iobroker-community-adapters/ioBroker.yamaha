@@ -4,6 +4,14 @@ import type { ValueSpec } from "./value-coerce";
  * One catalogued device function → one ioBroker state. The catalog is
  * device-agnostic: it lists every function a protocol can expose; the
  * per-device mapper picks the entries the device actually reports.
+ *
+ * **Single source rule.** Each protocol catalog extends this with its own
+ * protocol key (YNCA: the subunit function name; YXC: the getStatus field +
+ * write method; XML: the Basic_Status field + PUT builder). The init sweep, the
+ * device→state read-back and the user-write encode are all derived from that one
+ * extended list — never a second state↔function table beside the catalog (the
+ * `AMP_STATES` vs `STATE_MAPPINGS` split this rewrite removes). `catalogToObjects`
+ * reads only the object fields below and ignores the protocol key.
  */
 export interface CatalogEntry {
   /** State id relative to the device — dotted for a channel (e.g. `power`, `sound.bass`, `zone2.power`). */

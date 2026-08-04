@@ -48,17 +48,24 @@ export function specToCommon(spec: ValueSpec, opts: { write?: boolean; role?: st
       return { type: "boolean", role: opts.role ?? "switch", read: true, write };
     case "enum":
       return { type: "string", role: opts.role ?? "state", read: true, write, states: spec.states };
-    case "number":
-      return {
-        type: "number",
-        role: opts.role ?? (write ? "level" : "value"),
-        read: true,
-        write,
-        unit: spec.unit,
-        min: spec.min,
-        max: spec.max,
-        step: spec.step,
-      };
+    case "number": {
+      // Only set the range fields the spec actually carries — a stray
+      // `{ min: undefined }` would break the object-tree fixture comparisons.
+      const common: StateCommon = { type: "number", role: opts.role ?? (write ? "level" : "value"), read: true, write };
+      if (spec.unit !== undefined) {
+        common.unit = spec.unit;
+      }
+      if (spec.min !== undefined) {
+        common.min = spec.min;
+      }
+      if (spec.max !== undefined) {
+        common.max = spec.max;
+      }
+      if (spec.step !== undefined) {
+        common.step = spec.step;
+      }
+      return common;
+    }
     case "text":
       return { type: "string", role: opts.role ?? "text", read: true, write };
   }
