@@ -24,6 +24,19 @@ __export(command_mapper_exports, {
   stateToYxc: () => stateToYxc
 });
 module.exports = __toCommonJS(command_mapper_exports);
+function readStatusField(status, mapping) {
+  if (mapping.path) {
+    let value = status;
+    for (const key of mapping.path) {
+      if (typeof value !== "object" || value === null) {
+        return void 0;
+      }
+      value = value[key];
+    }
+    return value;
+  }
+  return mapping.statusField !== void 0 ? status[mapping.statusField] : void 0;
+}
 const YXC_STATE_MAPPINGS = {
   power: { statusField: "power", method: "power", toYxc: (value) => Boolean(value), fromStatus: (value) => value === "on" },
   volume: {
@@ -62,7 +75,28 @@ const YXC_STATE_MAPPINGS = {
     method: "setSubwooferVolumeTo",
     toYxc: (value) => Number(value),
     fromStatus: (value) => Number(value)
-  }
+  },
+  bass: {
+    path: ["tone_control", "bass"],
+    method: "setBassTo",
+    toYxc: (value) => Number(value),
+    fromStatus: (value) => Number(value)
+  },
+  treble: {
+    path: ["tone_control", "treble"],
+    method: "setTrebleTo",
+    toYxc: (value) => Number(value),
+    fromStatus: (value) => Number(value)
+  },
+  sleep: { statusField: "sleep", method: "sleep", toYxc: (value) => Number(value), fromStatus: (value) => Number(value) },
+  dialogueLevel: { statusField: "dialogue_level", fromStatus: (value) => Number(value) },
+  actualVolume: { path: ["actual_volume", "value"], fromStatus: (value) => Number(value) },
+  contentsDisplay: { statusField: "contents_display", fromStatus: (value) => Boolean(value) },
+  surroundDecoder: { statusField: "surr_decoder_type", fromStatus: (value) => String(value) },
+  audioSelect: { statusField: "audio_select", fromStatus: (value) => String(value) },
+  linkControl: { statusField: "link_control", fromStatus: (value) => String(value) },
+  linkAudioDelay: { statusField: "link_audio_delay", fromStatus: (value) => String(value) },
+  linkAudioQuality: { statusField: "link_audio_quality", fromStatus: (value) => String(value) }
 };
 const NETUSB_TRANSPORT = {
   "netPlayer.play": "playNet",
@@ -90,8 +124,9 @@ function parseYxcStatus(zoneStatus, zone) {
   const status = zoneStatus;
   const updates = [];
   for (const [name, mapping] of Object.entries(YXC_STATE_MAPPINGS)) {
-    if (mapping.statusField in status) {
-      updates.push({ id: `${prefix}${name}`, value: mapping.fromStatus(status[mapping.statusField]) });
+    const raw = readStatusField(status, mapping);
+    if (raw !== void 0) {
+      updates.push({ id: `${prefix}${name}`, value: mapping.fromStatus(raw) });
     }
   }
   return updates;
@@ -116,7 +151,7 @@ function stateToYxc(stateId, value) {
     }
   }
   const mapping = YXC_STATE_MAPPINGS[name];
-  if (!mapping) {
+  if (!mapping || mapping.method === void 0 || mapping.toYxc === void 0) {
     return void 0;
   }
   return { method: mapping.method, zone, value: mapping.toYxc(value) };

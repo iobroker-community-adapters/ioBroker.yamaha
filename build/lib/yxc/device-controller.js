@@ -193,6 +193,15 @@ class YxcDeviceController {
         case "setSubwooferVolumeTo":
           await this.deps.client.setSubwooferVolumeTo(Number(value), zone);
           break;
+        case "setBassTo":
+          await this.deps.client.setBassTo(Number(value), zone);
+          break;
+        case "setTrebleTo":
+          await this.deps.client.setTrebleTo(Number(value), zone);
+          break;
+        case "sleep":
+          await this.deps.client.sleep(Number(value), zone);
+          break;
         case "playNet":
           await this.deps.client.playNet();
           break;

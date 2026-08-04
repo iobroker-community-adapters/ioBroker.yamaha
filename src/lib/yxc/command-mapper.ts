@@ -11,14 +11,37 @@ export interface YxcCommand {
 }
 
 interface YxcStateMapping {
-  /** Field name carrying this state in a getStatus response. */
-  statusField: string;
-  /** YamahaYXC method for a write to this state. */
-  method: string;
-  /** Convert a written state value into the YamahaYXC argument. */
-  toYxc: (value: unknown) => boolean | number | string;
+  /** Flat field name carrying this state in a getStatus response. */
+  statusField?: string;
+  /** Nested field path (e.g. `["tone_control","bass"]`) — used instead of statusField. */
+  path?: string[];
+  /** YamahaYXC method for a write to this state; absent means the state is read-only. */
+  method?: string;
+  /** Convert a written state value into the YamahaYXC argument; absent means read-only. */
+  toYxc?: (value: unknown) => boolean | number | string;
   /** Convert a getStatus field value into the typed state value. */
   fromStatus: (value: unknown) => boolean | number | string;
+}
+
+/**
+ * Read a mapping's raw getStatus value — flat via statusField or nested via path.
+ *
+ * @param status the getStatus response object
+ * @param mapping the state mapping
+ * @returns the raw value, or undefined if the field is absent
+ */
+function readStatusField(status: Record<string, unknown>, mapping: YxcStateMapping): unknown {
+  if (mapping.path) {
+    let value: unknown = status;
+    for (const key of mapping.path) {
+      if (typeof value !== "object" || value === null) {
+        return undefined;
+      }
+      value = (value as Record<string, unknown>)[key];
+    }
+    return value;
+  }
+  return mapping.statusField !== undefined ? status[mapping.statusField] : undefined;
 }
 
 /**
@@ -65,6 +88,27 @@ const YXC_STATE_MAPPINGS: Record<string, YxcStateMapping> = {
     toYxc: value => Number(value),
     fromStatus: value => Number(value),
   },
+  bass: {
+    path: ["tone_control", "bass"],
+    method: "setBassTo",
+    toYxc: value => Number(value),
+    fromStatus: value => Number(value),
+  },
+  treble: {
+    path: ["tone_control", "treble"],
+    method: "setTrebleTo",
+    toYxc: value => Number(value),
+    fromStatus: value => Number(value),
+  },
+  sleep: { statusField: "sleep", method: "sleep", toYxc: value => Number(value), fromStatus: value => Number(value) },
+  dialogueLevel: { statusField: "dialogue_level", fromStatus: value => Number(value) },
+  actualVolume: { path: ["actual_volume", "value"], fromStatus: value => Number(value) },
+  contentsDisplay: { statusField: "contents_display", fromStatus: value => Boolean(value) },
+  surroundDecoder: { statusField: "surr_decoder_type", fromStatus: value => String(value) },
+  audioSelect: { statusField: "audio_select", fromStatus: value => String(value) },
+  linkControl: { statusField: "link_control", fromStatus: value => String(value) },
+  linkAudioDelay: { statusField: "link_audio_delay", fromStatus: value => String(value) },
+  linkAudioQuality: { statusField: "link_audio_quality", fromStatus: value => String(value) },
 };
 
 /** Network-player transport buttons → YamahaYXC method (no zone/value). */
@@ -111,8 +155,9 @@ export function parseYxcStatus(zoneStatus: unknown, zone: string): StateValue[] 
   const status = zoneStatus as Record<string, unknown>;
   const updates: StateValue[] = [];
   for (const [name, mapping] of Object.entries(YXC_STATE_MAPPINGS)) {
-    if (mapping.statusField in status) {
-      updates.push({ id: `${prefix}${name}`, value: mapping.fromStatus(status[mapping.statusField]) });
+    const raw = readStatusField(status, mapping);
+    if (raw !== undefined) {
+      updates.push({ id: `${prefix}${name}`, value: mapping.fromStatus(raw) });
     }
   }
   return updates;
@@ -145,7 +190,7 @@ export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefi
     }
   }
   const mapping = YXC_STATE_MAPPINGS[name];
-  if (!mapping) {
+  if (!mapping || mapping.method === undefined || mapping.toYxc === undefined) {
     return undefined;
   }
   return { method: mapping.method, zone, value: mapping.toYxc(value) };

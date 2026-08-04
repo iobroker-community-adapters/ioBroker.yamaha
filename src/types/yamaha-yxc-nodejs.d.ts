@@ -85,6 +85,27 @@ declare module "yamaha-yxc-nodejs" {
      * @param zone the zone; defaults to main
      */
     setSubwooferVolumeTo(to: number, zone?: string): Promise<unknown>;
+    /**
+     * Set a zone's tone-control bass.
+     *
+     * @param to the bass value
+     * @param zone the zone; defaults to main
+     */
+    setBassTo(to: number, zone?: string): Promise<unknown>;
+    /**
+     * Set a zone's tone-control treble.
+     *
+     * @param to the treble value
+     * @param zone the zone; defaults to main
+     */
+    setTrebleTo(to: number, zone?: string): Promise<unknown>;
+    /**
+     * Set a zone's sleep timer.
+     *
+     * @param minutes the sleep timer in minutes (0, 30, 60, 90, 120)
+     * @param zone the zone; defaults to main
+     */
+    sleep(minutes: number, zone?: string): Promise<unknown>;
     /** Start playback on the network/USB player. */
     playNet(): Promise<unknown>;
     /** Pause the network/USB player. */

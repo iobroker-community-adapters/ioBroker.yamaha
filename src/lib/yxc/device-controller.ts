@@ -35,6 +35,12 @@ export interface YxcClientLike {
   setPureDirect(on: boolean, zone: string): Promise<unknown>;
   /** Set a zone's subwoofer trim. */
   setSubwooferVolumeTo(to: number, zone: string): Promise<unknown>;
+  /** Set a zone's tone-control bass. */
+  setBassTo(to: number, zone: string): Promise<unknown>;
+  /** Set a zone's tone-control treble. */
+  setTrebleTo(to: number, zone: string): Promise<unknown>;
+  /** Set a zone's sleep timer in minutes. */
+  sleep(minutes: number, zone: string): Promise<unknown>;
   /** Start the network/USB player. */
   playNet(): Promise<unknown>;
   /** Pause the network/USB player. */
@@ -258,6 +264,15 @@ export class YxcDeviceController {
           break;
         case "setSubwooferVolumeTo":
           await this.deps.client.setSubwooferVolumeTo(Number(value), zone);
+          break;
+        case "setBassTo":
+          await this.deps.client.setBassTo(Number(value), zone);
+          break;
+        case "setTrebleTo":
+          await this.deps.client.setTrebleTo(Number(value), zone);
+          break;
+        case "sleep":
+          await this.deps.client.sleep(Number(value), zone);
           break;
         case "playNet":
           await this.deps.client.playNet();

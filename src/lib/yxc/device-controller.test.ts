@@ -65,6 +65,18 @@ class FakeClient implements YxcClientLike {
     this.calls.push({ method: "setSubwooferVolumeTo", args: [to, zone] });
     return {};
   }
+  public async setBassTo(to: number, zone: string): Promise<unknown> {
+    this.calls.push({ method: "setBassTo", args: [to, zone] });
+    return {};
+  }
+  public async setTrebleTo(to: number, zone: string): Promise<unknown> {
+    this.calls.push({ method: "setTrebleTo", args: [to, zone] });
+    return {};
+  }
+  public async sleep(minutes: number, zone: string): Promise<unknown> {
+    this.calls.push({ method: "sleep", args: [minutes, zone] });
+    return {};
+  }
   public async playNet(): Promise<unknown> {
     this.calls.push({ method: "playNet", args: [] });
     return {};

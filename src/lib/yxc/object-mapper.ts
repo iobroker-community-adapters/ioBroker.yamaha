@@ -41,6 +41,61 @@ const YXC_STATES: Array<{ func: string; state: string; common: ObjectDef["common
     state: "subwooferVolume",
     common: { name: "Subwoofer trim", type: "number", role: "level", read: true, write: true },
   },
+  {
+    func: "tone_control",
+    state: "bass",
+    common: { name: "Bass", type: "number", unit: "dB", role: "level", read: true, write: true },
+  },
+  {
+    func: "tone_control",
+    state: "treble",
+    common: { name: "Treble", type: "number", unit: "dB", role: "level", read: true, write: true },
+  },
+  {
+    func: "sleep",
+    state: "sleep",
+    common: { name: "Sleep timer", type: "number", unit: "min", role: "level", read: true, write: true },
+  },
+  {
+    func: "dialogue_level",
+    state: "dialogueLevel",
+    common: { name: "Dialogue level", type: "number", role: "level", read: true, write: false },
+  },
+  {
+    func: "actual_volume",
+    state: "actualVolume",
+    common: { name: "Actual volume", type: "number", unit: "dB", role: "value", read: true, write: false },
+  },
+  {
+    func: "contents_display",
+    state: "contentsDisplay",
+    common: { name: "Contents display", type: "boolean", role: "indicator", read: true, write: false },
+  },
+  {
+    func: "surr_decoder_type",
+    state: "surroundDecoder",
+    common: { name: "Surround decoder", type: "string", role: "text", read: true, write: false },
+  },
+  {
+    func: "audio_select",
+    state: "audioSelect",
+    common: { name: "Audio select", type: "string", role: "text", read: true, write: false },
+  },
+  {
+    func: "link_control",
+    state: "linkControl",
+    common: { name: "Link control", type: "string", role: "text", read: true, write: false },
+  },
+  {
+    func: "link_audio_delay",
+    state: "linkAudioDelay",
+    common: { name: "Link audio delay", type: "string", role: "text", read: true, write: false },
+  },
+  {
+    func: "link_audio_quality",
+    state: "linkAudioQuality",
+    common: { name: "Link audio quality", type: "string", role: "text", read: true, write: false },
+  },
 ];
 
 /** Input is derived from the zone's input_list, not from func_list. */

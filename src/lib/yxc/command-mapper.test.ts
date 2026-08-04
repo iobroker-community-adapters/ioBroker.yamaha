@@ -32,6 +32,24 @@ describe("parseYxcStatus", () => {
     expect(parseYxcStatus(null, "main")).toEqual([]);
     expect(parseYxcStatus({ response_code: 0 }, "main")).toEqual([]);
   });
+
+  test("reads nested tone control and flat sleep/dialogue/actual-volume", () => {
+    const status = {
+      tone_control: { mode: "manual", bass: 3, treble: -2 },
+      sleep: 60,
+      dialogue_level: 2,
+      max_volume: 161,
+      actual_volume: { mode: "db", value: -47.5, unit: "dB" },
+      contents_display: true,
+    };
+    const u = parseYxcStatus(status, "main");
+    expect(u).toContainEqual({ id: "bass", value: 3 });
+    expect(u).toContainEqual({ id: "treble", value: -2 });
+    expect(u).toContainEqual({ id: "sleep", value: 60 });
+    expect(u).toContainEqual({ id: "dialogueLevel", value: 2 });
+    expect(u).toContainEqual({ id: "actualVolume", value: -47.5 });
+    expect(u).toContainEqual({ id: "contentsDisplay", value: true });
+  });
 });
 
 describe("parseYxcPlayInfo", () => {
@@ -109,6 +127,14 @@ describe("stateToYxc", () => {
 
   test("maps subwoofer trim to setSubwooferVolumeTo", () => {
     expect(stateToYxc("subwooferVolume", -3)).toEqual({ method: "setSubwooferVolumeTo", zone: "main", value: -3 });
+  });
+
+  test("maps tone bass/treble and sleep to their setters; read-only fields yield no command", () => {
+    expect(stateToYxc("bass", 4)).toEqual({ method: "setBassTo", zone: "main", value: 4 });
+    expect(stateToYxc("treble", -1)).toEqual({ method: "setTrebleTo", zone: "main", value: -1 });
+    expect(stateToYxc("sleep", 60)).toEqual({ method: "sleep", zone: "main", value: 60 });
+    expect(stateToYxc("dialogueLevel", 2)).toBeUndefined();
+    expect(stateToYxc("actualVolume", -40)).toBeUndefined();
   });
 
   test("maps a power write to the power method on main", () => {
