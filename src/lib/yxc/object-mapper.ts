@@ -168,6 +168,26 @@ const YXC_STATES: Array<{ func: string; state: string; common: ObjectDef["common
   },
 ];
 
+/**
+ * getStatus fields that every zone carries regardless of its func_list (they are
+ * core status fields, not advertised features), created for each active zone.
+ */
+const ALWAYS_STATES: Array<{ state: string; common: ObjectDef["common"] }> = [
+  { state: "maxVolume", common: { name: "Maximum volume", type: "number", role: "value", read: true, write: false } },
+  {
+    state: "inputText",
+    common: { name: "Input name (display)", type: "string", role: "text", read: true, write: false },
+  },
+  {
+    state: "distributionEnable",
+    common: { name: "Distribution active", type: "boolean", role: "indicator", read: true, write: false },
+  },
+  {
+    state: "partyEnable",
+    common: { name: "Party active", type: "boolean", role: "indicator", read: true, write: false },
+  },
+];
+
 /** Input is derived from the zone's input_list, not from func_list. */
 const INPUT_COMMON: ObjectDef["common"] = {
   name: "Input",
@@ -256,6 +276,9 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
         common.step = zone.volumeRange.step;
       }
       objects.push({ id: `${zoneDef.prefix}${state.state}`, type: "state", common });
+    }
+    for (const always of ALWAYS_STATES) {
+      objects.push({ id: `${zoneDef.prefix}${always.state}`, type: "state", common: { ...always.common } });
     }
     if (hasInput) {
       objects.push({ id: `${zoneDef.prefix}input`, type: "state", common: { ...INPUT_COMMON } });

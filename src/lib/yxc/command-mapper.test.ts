@@ -51,6 +51,15 @@ describe("parseYxcStatus", () => {
     expect(u).toContainEqual({ id: "contentsDisplay", value: true });
   });
 
+  test("reads the always-present getStatus fields (max volume, input text, distribution, party)", () => {
+    const status = { max_volume: 161, input_text: "HDMI-Laptop", distribution_enable: true, party_enable: false };
+    const u = parseYxcStatus(status, "main");
+    expect(u).toContainEqual({ id: "maxVolume", value: 161 });
+    expect(u).toContainEqual({ id: "inputText", value: "HDMI-Laptop" });
+    expect(u).toContainEqual({ id: "distributionEnable", value: true });
+    expect(u).toContainEqual({ id: "partyEnable", value: false });
+  });
+
   test("reads the remaining amp fields including the nested equalizer", () => {
     const status = {
       direct: false,

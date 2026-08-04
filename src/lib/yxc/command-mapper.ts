@@ -143,6 +143,10 @@ const YXC_STATE_MAPPINGS: Record<string, YxcStateMapping> = {
   equalizerLow: { path: ["equalizer", "low"], fromStatus: value => Number(value) },
   equalizerMid: { path: ["equalizer", "mid"], fromStatus: value => Number(value) },
   equalizerHigh: { path: ["equalizer", "high"], fromStatus: value => Number(value) },
+  maxVolume: { statusField: "max_volume", fromStatus: value => Number(value) },
+  inputText: { statusField: "input_text", fromStatus: value => String(value) },
+  distributionEnable: { statusField: "distribution_enable", fromStatus: value => Boolean(value) },
+  partyEnable: { statusField: "party_enable", fromStatus: value => Boolean(value) },
 };
 
 /** Network-player transport buttons → YamahaYXC method (no zone/value). */

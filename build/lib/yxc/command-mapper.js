@@ -115,7 +115,12 @@ const YXC_STATE_MAPPINGS = {
     toYxc: (value) => Boolean(value),
     fromStatus: (value) => Boolean(value)
   },
-  balance: { statusField: "balance", method: "setBalance", toYxc: (value) => Number(value), fromStatus: (value) => Number(value) },
+  balance: {
+    statusField: "balance",
+    method: "setBalance",
+    toYxc: (value) => Number(value),
+    fromStatus: (value) => Number(value)
+  },
   adaptiveDrc: { statusField: "adaptive_drc", fromStatus: (value) => Boolean(value) },
   adaptiveDspLevel: { statusField: "adaptive_dsp_level", fromStatus: (value) => Boolean(value) },
   extraBass: { statusField: "extra_bass", fromStatus: (value) => Boolean(value) },
@@ -125,7 +130,11 @@ const YXC_STATE_MAPPINGS = {
   dtsDialogueControl: { statusField: "dts_dialogue_control", fromStatus: (value) => Number(value) },
   equalizerLow: { path: ["equalizer", "low"], fromStatus: (value) => Number(value) },
   equalizerMid: { path: ["equalizer", "mid"], fromStatus: (value) => Number(value) },
-  equalizerHigh: { path: ["equalizer", "high"], fromStatus: (value) => Number(value) }
+  equalizerHigh: { path: ["equalizer", "high"], fromStatus: (value) => Number(value) },
+  maxVolume: { statusField: "max_volume", fromStatus: (value) => Number(value) },
+  inputText: { statusField: "input_text", fromStatus: (value) => String(value) },
+  distributionEnable: { statusField: "distribution_enable", fromStatus: (value) => Boolean(value) },
+  partyEnable: { statusField: "party_enable", fromStatus: (value) => Boolean(value) }
 };
 const NETUSB_TRANSPORT = {
   "netPlayer.play": "playNet",

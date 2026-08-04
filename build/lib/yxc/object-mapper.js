@@ -183,6 +183,21 @@ const YXC_STATES = [
     common: { name: "Equalizer high", type: "number", unit: "dB", role: "level", read: true, write: false }
   }
 ];
+const ALWAYS_STATES = [
+  { state: "maxVolume", common: { name: "Maximum volume", type: "number", role: "value", read: true, write: false } },
+  {
+    state: "inputText",
+    common: { name: "Input name (display)", type: "string", role: "text", read: true, write: false }
+  },
+  {
+    state: "distributionEnable",
+    common: { name: "Distribution active", type: "boolean", role: "indicator", read: true, write: false }
+  },
+  {
+    state: "partyEnable",
+    common: { name: "Party active", type: "boolean", role: "indicator", read: true, write: false }
+  }
+];
 const INPUT_COMMON = {
   name: "Input",
   type: "string",
@@ -247,6 +262,9 @@ function mapYxcToObjects(capabilities) {
         common.step = zone.volumeRange.step;
       }
       objects.push({ id: `${zoneDef.prefix}${state.state}`, type: "state", common });
+    }
+    for (const always of ALWAYS_STATES) {
+      objects.push({ id: `${zoneDef.prefix}${always.state}`, type: "state", common: { ...always.common } });
     }
     if (hasInput) {
       objects.push({ id: `${zoneDef.prefix}input`, type: "state", common: { ...INPUT_COMMON } });

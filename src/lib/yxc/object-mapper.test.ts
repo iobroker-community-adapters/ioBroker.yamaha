@@ -54,6 +54,14 @@ describe("mapYxcToObjects", () => {
     expect(ids(rxA2070)).toEqual(expect.arrayContaining(["power", "volume", "mute", "soundProgram", "input"]));
   });
 
+  test("always-present amp fields (max volume, input text) are created for an active zone", () => {
+    const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: [] });
+    const ids = objs.map(o => o.id);
+    expect(ids).toContain("maxVolume");
+    expect(ids).toContain("inputText");
+    expect(ids).toContain("distributionEnable");
+  });
+
   test("maps an additional zone as a channel with its own states", () => {
     const list = ids(rxA2070);
     expect(list).toContain("zone2");
@@ -68,7 +76,7 @@ describe("mapYxcToObjects", () => {
 
   test("adds an input state only when the zone actually has inputs", () => {
     const caps = { zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: [] };
-    expect(mapYxcToObjects(caps).map(o => o.id)).toEqual(["power"]);
+    expect(mapYxcToObjects(caps).map(o => o.id)).not.toContain("input");
   });
 
   test("power is a writable boolean with a power role", () => {
