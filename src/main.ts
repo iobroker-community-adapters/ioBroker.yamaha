@@ -65,6 +65,7 @@ export class Yamaha extends utils.Adapter {
       // reconnects on a drop, so a device that is off at start joins on its own.
       for (const device of devices) {
         this.deviceConnected.set(device.id, false);
+        await this.ensureDeviceHeader(device.id);
         const supervisor = new DeviceSupervisor({
           attempt: () => this.attemptDevice(device, pushReceiver),
           schedule: (cb, ms) => this.setTimeout(cb, ms),
@@ -94,8 +95,25 @@ export class Yamaha extends utils.Adapter {
    */
   private reportConnection(deviceId: string, connected: boolean): void {
     this.deviceConnected.set(deviceId, connected);
+    void this.setState(`${deviceId}.info.connection`, { val: connected, ack: true });
     const anyConnected = [...this.deviceConnected.values()].some(Boolean);
     void this.setState("info.connection", { val: anyConnected, ack: true });
+  }
+
+  /**
+   * Create a device's header objects (the device node, its info channel and a
+   * per-device connection indicator) so its state is visible even while offline.
+   *
+   * @param deviceId the id-safe device id
+   */
+  private async ensureDeviceHeader(deviceId: string): Promise<void> {
+    await this.setObjectNotExistsAsync(deviceId, { type: "device", common: { name: deviceId }, native: {} });
+    await this.setObjectNotExistsAsync(`${deviceId}.info`, { type: "channel", common: { name: "Info" }, native: {} });
+    await this.setObjectNotExistsAsync(`${deviceId}.info.connection`, {
+      type: "state",
+      common: { name: "Connected", type: "boolean", role: "indicator.connected", read: true, write: false, def: false },
+      native: {},
+    });
   }
 
   /**
