@@ -2,7 +2,7 @@ import * as utils from "@iobroker/adapter-core";
 import { createSocket } from "node:dgram";
 import { get as httpGet } from "node:http";
 import { YamahaYXC } from "yamaha-yxc-nodejs";
-import { legacyDeviceRow, parseDevices, stripNamespace } from "./lib/pure-helpers";
+import { legacyDeviceRow, parseDevices, staleObjects, stripNamespace } from "./lib/pure-helpers";
 import { discoverYamaha } from "./lib/discovery";
 import { YncaClient } from "./lib/ynca/ynca-client";
 import { YncaDeviceController } from "./lib/device-controller";
@@ -54,6 +54,7 @@ export class Yamaha extends utils.Adapter {
       await this.setState("info.connection", { val: false, ack: true });
       await this.migrateLegacyDevice();
       const devices = parseDevices(this.config.devices);
+      await this.cleanupStaleObjects(new Set(devices.map(device => device.id)));
       this.subscribeStates("*");
       const pushReceiver = new YxcPushReceiver({
         debug: message => this.log.debug(message),
@@ -98,6 +99,29 @@ export class Yamaha extends utils.Adapter {
     void this.setState(`${deviceId}.info.connection`, { val: connected, ack: true });
     const anyConnected = [...this.deviceConnected.values()].some(Boolean);
     void this.setState("info.connection", { val: anyConnected, ack: true });
+  }
+
+  /**
+   * One-shot startup cleanup: delete every object that does not belong to a
+   * configured device (the previous adapter's whole tree, and any device dropped
+   * from the config). Runs before the devices connect; a configured device's
+   * subtree is kept whether or not it has connected yet.
+   *
+   * @param deviceIds the ids of the currently configured devices
+   */
+  private async cleanupStaleObjects(deviceIds: Set<string>): Promise<void> {
+    const existing = Object.keys(await this.getAdapterObjectsAsync());
+    const stale = staleObjects(existing, deviceIds, this.namespace);
+    for (const fullId of stale) {
+      try {
+        await this.delObjectAsync(stripNamespace(fullId, this.namespace));
+      } catch {
+        // already removed together with its parent
+      }
+    }
+    if (stale.length > 0) {
+      this.log.info(`removed ${stale.length} object(s) from a previous configuration`);
+    }
   }
 
   /**

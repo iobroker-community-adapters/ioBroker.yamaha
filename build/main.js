@@ -70,6 +70,7 @@ class Yamaha extends utils.Adapter {
       await this.setState("info.connection", { val: false, ack: true });
       await this.migrateLegacyDevice();
       const devices = (0, import_pure_helpers.parseDevices)(this.config.devices);
+      await this.cleanupStaleObjects(new Set(devices.map((device) => device.id)));
       this.subscribeStates("*");
       const pushReceiver = new import_push_receiver.YxcPushReceiver({
         debug: (message) => this.log.debug(message),
@@ -111,6 +112,27 @@ class Yamaha extends utils.Adapter {
     void this.setState(`${deviceId}.info.connection`, { val: connected, ack: true });
     const anyConnected = [...this.deviceConnected.values()].some(Boolean);
     void this.setState("info.connection", { val: anyConnected, ack: true });
+  }
+  /**
+   * One-shot startup cleanup: delete every object that does not belong to a
+   * configured device (the previous adapter's whole tree, and any device dropped
+   * from the config). Runs before the devices connect; a configured device's
+   * subtree is kept whether or not it has connected yet.
+   *
+   * @param deviceIds the ids of the currently configured devices
+   */
+  async cleanupStaleObjects(deviceIds) {
+    const existing = Object.keys(await this.getAdapterObjectsAsync());
+    const stale = (0, import_pure_helpers.staleObjects)(existing, deviceIds, this.namespace);
+    for (const fullId of stale) {
+      try {
+        await this.delObjectAsync((0, import_pure_helpers.stripNamespace)(fullId, this.namespace));
+      } catch {
+      }
+    }
+    if (stale.length > 0) {
+      this.log.info(`removed ${stale.length} object(s) from a previous configuration`);
+    }
   }
   /**
    * Create a device's header objects (the device node, its info channel and a

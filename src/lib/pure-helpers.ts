@@ -67,19 +67,26 @@ export function parseDevices(raw: unknown): DeviceRecord[] {
 }
 
 /**
- * From all object ids currently under the instance, pick the ones to delete: those
- * not (re)created this run and outside the adapter's own `info` branch. This is the
- * one-shot migration — it removes the previous adapter's object tree and any
- * devices dropped from the config.
+ * From all object ids under the instance, pick the stale ones to delete on start:
+ * everything that does not belong to a configured device and is outside the
+ * adapter's own `info` branch. Removes the previous adapter's whole object tree
+ * and any device dropped from the config. Keyed on the configured device ids
+ * (not on what was created this run), so it works with the async connect where a
+ * device's tree may only appear later — a configured device's subtree is kept
+ * regardless of whether it has connected yet. Deepest first, so children go
+ * before their parents.
  *
  * @param existing all object ids currently under the instance
- * @param created the ids (re)created this run, including their parent paths
+ * @param deviceIds the ids of the currently configured devices
  * @param namespace the adapter namespace (e.g. `yamaha.0`)
- * @returns the orphaned ids to delete
+ * @returns the stale ids to delete, deepest first
  */
-export function orphanedObjects(existing: string[], created: Set<string>, namespace: string): string[] {
-  const info = `${namespace}.info`;
-  return existing.filter(id => id !== info && !id.startsWith(`${info}.`) && !created.has(id));
+export function staleObjects(existing: string[], deviceIds: Set<string>, namespace: string): string[] {
+  const isKept = (fullId: string): boolean => {
+    const top = stripNamespace(fullId, namespace).split(".")[0];
+    return top === "info" || deviceIds.has(top);
+  };
+  return existing.filter(id => !isKept(id)).sort((a, b) => b.length - a.length);
 }
 
 /**

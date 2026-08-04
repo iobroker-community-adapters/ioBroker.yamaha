@@ -19,9 +19,9 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var pure_helpers_exports = {};
 __export(pure_helpers_exports, {
   legacyDeviceRow: () => legacyDeviceRow,
-  orphanedObjects: () => orphanedObjects,
   parseDevices: () => parseDevices,
   sanitizeId: () => sanitizeId,
+  staleObjects: () => staleObjects,
   stripNamespace: () => stripNamespace
 });
 module.exports = __toCommonJS(pure_helpers_exports);
@@ -50,9 +50,12 @@ function parseDevices(raw) {
   }
   return records;
 }
-function orphanedObjects(existing, created, namespace) {
-  const info = `${namespace}.info`;
-  return existing.filter((id) => id !== info && !id.startsWith(`${info}.`) && !created.has(id));
+function staleObjects(existing, deviceIds, namespace) {
+  const isKept = (fullId) => {
+    const top = stripNamespace(fullId, namespace).split(".")[0];
+    return top === "info" || deviceIds.has(top);
+  };
+  return existing.filter((id) => !isKept(id)).sort((a, b) => b.length - a.length);
 }
 function legacyDeviceRow(config) {
   if (Array.isArray(config.devices) && config.devices.length > 0) {
@@ -64,9 +67,9 @@ function legacyDeviceRow(config) {
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   legacyDeviceRow,
-  orphanedObjects,
   parseDevices,
   sanitizeId,
+  staleObjects,
   stripNamespace
 });
 //# sourceMappingURL=pure-helpers.js.map

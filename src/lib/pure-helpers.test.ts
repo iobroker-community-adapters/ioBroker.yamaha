@@ -1,4 +1,4 @@
-import { legacyDeviceRow, orphanedObjects, parseDevices, sanitizeId, stripNamespace } from "./pure-helpers";
+import { legacyDeviceRow, parseDevices, sanitizeId, staleObjects, stripNamespace } from "./pure-helpers";
 
 describe("legacyDeviceRow", () => {
   test("carries over the old single ip when the table is empty", () => {
@@ -18,8 +18,8 @@ describe("legacyDeviceRow", () => {
   });
 });
 
-describe("orphanedObjects", () => {
-  test("returns ids not recreated this run, keeping info and created ids", () => {
+describe("staleObjects", () => {
+  test("keeps info and configured devices, deletes the rest deepest-first", () => {
     const existing = [
       "yamaha.0.info",
       "yamaha.0.info.connection",
@@ -28,15 +28,14 @@ describe("orphanedObjects", () => {
       "yamaha.0.oldDevice",
       "yamaha.0.oldDevice.legacyState",
     ];
-    const created = new Set(["yamaha.0.living", "yamaha.0.living.power"]);
-    expect(orphanedObjects(existing, created, "yamaha.0")).toEqual([
-      "yamaha.0.oldDevice",
+    expect(staleObjects(existing, new Set(["living"]), "yamaha.0")).toEqual([
       "yamaha.0.oldDevice.legacyState",
+      "yamaha.0.oldDevice",
     ]);
   });
 
-  test("deletes nothing when everything is created or in the info branch", () => {
-    expect(orphanedObjects(["yamaha.0.info", "yamaha.0.a"], new Set(["yamaha.0.a"]), "yamaha.0")).toEqual([]);
+  test("keeps a configured device even before its subtree exists, and never touches info", () => {
+    expect(staleObjects(["yamaha.0.info", "yamaha.0.living"], new Set(["living"]), "yamaha.0")).toEqual([]);
   });
 });
 
