@@ -1,8 +1,13 @@
-/**
- * The value semantics of a device function, protocol-agnostic. A catalog entry
- * carries one of these so the adapter can turn a raw protocol value into a
- * properly typed, user-friendly ioBroker state instead of a bare string.
- */
+/** An on/off value → a boolean state. */
+export interface OnOffSpec {
+  /** Discriminant. */
+  kind: "onoff";
+  /** Wire value that maps to `true`. */
+  on: string;
+  /** Wire value that maps to `false`. */
+  off: string;
+}
+
 /** A fixed multi-value choice → a string state with a `states` dropdown. */
 export interface EnumSpec {
   /** Discriminant. */
@@ -11,11 +16,32 @@ export interface EnumSpec {
   states: Record<string, string>;
 }
 
-export type ValueSpec =
-  | { kind: "onoff"; on: string; off: string }
-  | EnumSpec
-  | { kind: "number"; unit?: string; min?: number; max?: number; step?: number }
-  | { kind: "text" };
+/** A numeric value → a number state with an optional unit and range. */
+export interface NumberSpec {
+  /** Discriminant. */
+  kind: "number";
+  /** Unit for the numeric state (e.g. "dB"). */
+  unit?: string;
+  /** Minimum value. */
+  min?: number;
+  /** Maximum value. */
+  max?: number;
+  /** Step size. */
+  step?: number;
+}
+
+/** A free-text value → a string state. */
+export interface TextSpec {
+  /** Discriminant. */
+  kind: "text";
+}
+
+/**
+ * The value semantics of a device function, protocol-agnostic. A catalog entry
+ * carries one of these so the adapter can turn a raw protocol value into a
+ * properly typed, user-friendly ioBroker state instead of a bare string.
+ */
+export type ValueSpec = OnOffSpec | EnumSpec | NumberSpec | TextSpec;
 
 /** The ioBroker `common` fields this layer derives from a {@link ValueSpec}. */
 export interface StateCommon {

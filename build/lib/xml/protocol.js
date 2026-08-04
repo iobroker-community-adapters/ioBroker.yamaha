@@ -71,9 +71,9 @@ function parseBasicStatus(xml) {
   if (dialogueLevel) {
     status.dialogueLevel = Number(dialogueLevel[1]);
   }
-  const sleep = /<Sleep>([^<]+)<\/Sleep>/.exec(xml);
-  if (sleep) {
-    status.sleep = sleep[1];
+  const sleepMatch = /<Sleep>([^<]+)<\/Sleep>/.exec(xml);
+  if (sleepMatch) {
+    status.sleep = sleepMatch[1];
   }
   return status;
 }

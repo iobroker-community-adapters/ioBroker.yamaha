@@ -1019,9 +1019,9 @@ export function yncaObjectsFor(capabilities: YncaCapabilities): ObjectDef[] {
  * when the function is not catalogued or the value is not decodable.
  *
  * @param message the decoded YNCA message (subunit/func/value)
- * @param message.subunit
- * @param message.func
- * @param message.value
+ * @param message.subunit the message's subunit (MAIN, ZONE2, …)
+ * @param message.func the message's function name
+ * @param message.value the message's raw wire value
  * @param map the `funcToEntry` map
  * @returns the typed state update, or undefined
  */
