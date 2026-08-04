@@ -41,7 +41,22 @@ const XML_STATE_MAPPINGS = {
     toInner: (value) => `<Sound_Video><Pure_Direct><Mode>${value ? "On" : "Off"}</Mode></Pure_Direct></Sound_Video>`,
     statusField: "pureDirect"
   },
-  sleep: { toInner: (value) => `<Power_Control><Sleep>${String(value)}</Sleep></Power_Control>`, statusField: "sleep" }
+  sleep: { toInner: (value) => `<Power_Control><Sleep>${String(value)}</Sleep></Power_Control>`, statusField: "sleep" },
+  straight: {
+    toInner: (value) => `<Surround><Program_Sel><Current><Straight>${value ? "On" : "Off"}</Straight></Current></Program_Sel></Surround>`,
+    statusField: "straight"
+  },
+  direct: {
+    toInner: (value) => `<Sound_Video><Direct><Mode>${value ? "On" : "Off"}</Mode></Direct></Sound_Video>`,
+    statusField: "direct"
+  },
+  adaptiveDrc: {
+    toInner: (value) => `<Sound_Video><Adaptive_DRC>${String(value)}</Adaptive_DRC></Sound_Video>`,
+    statusField: "adaptiveDrc"
+  },
+  // Read-only: openHAB reads the Dialogue_Lvl path, but the write value structure
+  // (Val/Exp/Unit vs bare) is not confirmed by a reference, so no write is offered.
+  dialogueLevel: { statusField: "dialogueLevel" }
 };
 const ZONE_ELEMENT = { main: "Main_Zone", zone2: "Zone_2", zone3: "Zone_3", zone4: "Zone_4" };
 const ZONE_PREFIX = { main: "", zone2: "zone2.", zone3: "zone3.", zone4: "zone4." };
@@ -55,7 +70,7 @@ function stateToXml(stateId, value) {
   }
   const zone = ZONE_ELEMENT[zoneKey];
   const mapping = XML_STATE_MAPPINGS[name];
-  if (!zone || !mapping) {
+  if (!zone || !mapping || !mapping.toInner) {
     return void 0;
   }
   return { zone, inner: mapping.toInner(value) };

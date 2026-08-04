@@ -39,6 +39,13 @@ const XML_AMP_STATES: Array<{ state: string; common: ObjectDef["common"] }> = [
     common: { name: "Sound program", type: "string", role: "state", read: true, write: true },
   },
   { state: "pureDirect", common: { name: "Pure Direct", type: "boolean", role: "switch", read: true, write: true } },
+  { state: "straight", common: { name: "Straight", type: "boolean", role: "switch", read: true, write: true } },
+  { state: "direct", common: { name: "Direct", type: "boolean", role: "switch", read: true, write: true } },
+  { state: "adaptiveDrc", common: { name: "Adaptive DRC", type: "string", role: "state", read: true, write: true } },
+  {
+    state: "dialogueLevel",
+    common: { name: "Dialogue level", type: "number", role: "level", read: true, write: false },
+  },
   { state: "sleep", common: { name: "Sleep timer", type: "string", role: "state", read: true, write: true } },
 ];
 

@@ -10,8 +10,8 @@ export interface XmlCommand {
 }
 
 interface XmlStateMapping {
-  /** Build the inner command XML for a written value. */
-  toInner: (value: unknown) => string;
+  /** Build the inner command XML for a written value; absent means read-only. */
+  toInner?: (value: unknown) => string;
   /** The Basic_Status field this state reads from. */
   statusField: keyof BasicStatus;
 }
@@ -39,6 +39,22 @@ const XML_STATE_MAPPINGS: Record<string, XmlStateMapping> = {
     statusField: "pureDirect",
   },
   sleep: { toInner: value => `<Power_Control><Sleep>${String(value)}</Sleep></Power_Control>`, statusField: "sleep" },
+  straight: {
+    toInner: value =>
+      `<Surround><Program_Sel><Current><Straight>${value ? "On" : "Off"}</Straight></Current></Program_Sel></Surround>`,
+    statusField: "straight",
+  },
+  direct: {
+    toInner: value => `<Sound_Video><Direct><Mode>${value ? "On" : "Off"}</Mode></Direct></Sound_Video>`,
+    statusField: "direct",
+  },
+  adaptiveDrc: {
+    toInner: value => `<Sound_Video><Adaptive_DRC>${String(value)}</Adaptive_DRC></Sound_Video>`,
+    statusField: "adaptiveDrc",
+  },
+  // Read-only: openHAB reads the Dialogue_Lvl path, but the write value structure
+  // (Val/Exp/Unit vs bare) is not confirmed by a reference, so no write is offered.
+  dialogueLevel: { statusField: "dialogueLevel" },
 };
 
 const ZONE_ELEMENT: Record<string, string> = { main: "Main_Zone", zone2: "Zone_2", zone3: "Zone_3", zone4: "Zone_4" };
@@ -61,7 +77,7 @@ export function stateToXml(stateId: string, value: unknown): XmlCommand | undefi
   }
   const zone = ZONE_ELEMENT[zoneKey];
   const mapping = XML_STATE_MAPPINGS[name];
-  if (!zone || !mapping) {
+  if (!zone || !mapping || !mapping.toInner) {
     return undefined;
   }
   return { zone, inner: mapping.toInner(value) };

@@ -41,6 +41,18 @@ describe("parseBasicStatus", () => {
     expect(parseBasicStatus(xml)).toEqual({ power: false });
   });
 
+  test("parses straight, direct, adaptive DRC and dialogue level (rxv + openHAB paths)", () => {
+    const xml =
+      "<Surround><Program_Sel><Current><Straight>On</Straight></Current></Program_Sel></Surround>" +
+      "<Sound_Video><Direct><Mode>Off</Mode></Direct><Adaptive_DRC>Auto</Adaptive_DRC>" +
+      "<Dialogue_Adjust><Dialogue_Lvl><Val>2</Val></Dialogue_Lvl></Dialogue_Adjust></Sound_Video>";
+    const status = parseBasicStatus(xml);
+    expect(status.straight).toBe(true);
+    expect(status.direct).toBe(false);
+    expect(status.adaptiveDrc).toBe("Auto");
+    expect(status.dialogueLevel).toBe(2);
+  });
+
   test("returns nothing for a malformed response", () => {
     expect(parseBasicStatus("not xml")).toEqual({});
   });

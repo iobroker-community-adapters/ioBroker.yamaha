@@ -34,6 +34,21 @@ describe("stateToXml", () => {
     });
   });
 
+  test("maps straight and direct to their Surround/Sound_Video commands", () => {
+    expect(stateToXml("straight", true)).toEqual({
+      zone: "Main_Zone",
+      inner: "<Surround><Program_Sel><Current><Straight>On</Straight></Current></Program_Sel></Surround>",
+    });
+    expect(stateToXml("direct", false)).toEqual({
+      zone: "Main_Zone",
+      inner: "<Sound_Video><Direct><Mode>Off</Mode></Direct></Sound_Video>",
+    });
+  });
+
+  test("dialogue level is read-only — no write command", () => {
+    expect(stateToXml("dialogueLevel", 2)).toBeUndefined();
+  });
+
   test("returns undefined for an unmapped state or unknown zone", () => {
     expect(stateToXml("nonsense", 1)).toBeUndefined();
     expect(stateToXml("zone9.power", true)).toBeUndefined();
@@ -53,5 +68,14 @@ describe("parseXmlStatus", () => {
 
   test("prefixes non-main zones and skips absent fields", () => {
     expect(parseXmlStatus({ power: false }, "zone2")).toEqual([{ id: "zone2.power", value: false }]);
+  });
+
+  test("emits straight, direct, adaptive DRC and dialogue level when present", () => {
+    const bs: BasicStatus = { straight: true, direct: false, adaptiveDrc: "Auto", dialogueLevel: 2 };
+    const u = parseXmlStatus(bs, "main");
+    expect(u).toContainEqual({ id: "straight", value: true });
+    expect(u).toContainEqual({ id: "direct", value: false });
+    expect(u).toContainEqual({ id: "adaptiveDrc", value: "Auto" });
+    expect(u).toContainEqual({ id: "dialogueLevel", value: 2 });
   });
 });

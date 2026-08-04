@@ -55,6 +55,22 @@ function parseBasicStatus(xml) {
   if (pureDirect) {
     status.pureDirect = pureDirect[1] === "On";
   }
+  const straight = /<Straight>(On|Off)<\/Straight>/.exec(xml);
+  if (straight) {
+    status.straight = straight[1] === "On";
+  }
+  const direct = /<Direct>\s*<Mode>(On|Off)<\/Mode>/.exec(xml);
+  if (direct) {
+    status.direct = direct[1] === "On";
+  }
+  const adaptiveDrc = /<Adaptive_DRC>(Auto|Off)<\/Adaptive_DRC>/.exec(xml);
+  if (adaptiveDrc) {
+    status.adaptiveDrc = adaptiveDrc[1];
+  }
+  const dialogueLevel = /<Dialogue_Lvl>\s*<Val>(-?\d+)<\/Val>/.exec(xml);
+  if (dialogueLevel) {
+    status.dialogueLevel = Number(dialogueLevel[1]);
+  }
   const sleep = /<Sleep>([^<]+)<\/Sleep>/.exec(xml);
   if (sleep) {
     status.sleep = sleep[1];
