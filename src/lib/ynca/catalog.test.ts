@@ -61,4 +61,13 @@ describe("YNCA catalog", () => {
     expect(yncaCommand("zone2.mute", false, map)).toEqual({ subunit: "ZONE2", func: "MUTE", value: "Off" });
     expect(yncaCommand("nope", 1, map)).toBeUndefined();
   });
+
+  test("the catalog covers sound, HDMI, DSP and global (SYS/TUN) functions", () => {
+    const cat = buildYncaCatalog();
+    const ids = cat.map(e => e.id);
+    expect(ids).toEqual(expect.arrayContaining(["sound.bass", "sound.treble", "hdmiOut", "surroundAI", "party", "tuner.band"]));
+    expect(cat.find(e => e.id === "party")).toMatchObject({ subunit: "SYS", func: "PARTY" });
+    expect(cat.find(e => e.id === "tuner.band")).toMatchObject({ subunit: "TUN", func: "BAND" });
+    expect(cat.find(e => e.id === "zone2.sound.bass")).toMatchObject({ subunit: "ZONE2", func: "SPBASS" });
+  });
 });

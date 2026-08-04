@@ -130,6 +130,23 @@ const SOUNDPRG_STATES = selfMap([
 ]);
 
 const SLEEP_STATES = selfMap(["Off", "30 min", "60 min", "90 min", "120 min"]);
+const HDMIOUT_STATES = selfMap(["Off", "OUT1", "OUT2", "OUT1 + 2"]);
+const ADAPTIVEDRC_STATES = selfMap(["Off", "Auto"]);
+const DECODER_STATES = selfMap([
+  "Auto",
+  "Dolby PL",
+  "Dolby PLII Movie",
+  "Dolby PLII Music",
+  "Dolby PLII Game",
+  "Dolby PLIIx Movie",
+  "Dolby PLIIx Music",
+  "Dolby PLIIx Game",
+  "Dolby Surround",
+  "DTS NEO:6 Cinema",
+  "DTS NEO:6 Music",
+  "DTS Neural:X",
+  "AURO-3D",
+]);
 
 /** Amplifier functions shared by MAIN and each zone: state id + YNCA func + value spec. */
 const AMP_FUNCS: Array<{ func: string; state: string; name: string; spec: ValueSpec; write: boolean; role: string }> = [
@@ -205,7 +222,65 @@ const AMP_FUNCS: Array<{ func: string; state: string; name: string; spec: ValueS
     write: true,
     role: "state",
   },
+  {
+    func: "SPBASS",
+    state: "sound.bass",
+    name: "Bass",
+    spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5 },
+    write: true,
+    role: "level",
+  },
+  {
+    func: "SPTREBLE",
+    state: "sound.treble",
+    name: "Treble",
+    spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5 },
+    write: true,
+    role: "level",
+  },
+  {
+    func: "HDMIOUT",
+    state: "hdmiOut",
+    name: "HDMI output",
+    spec: { kind: "enum", states: HDMIOUT_STATES },
+    write: true,
+    role: "state",
+  },
+  {
+    func: "ADAPTIVEDRC",
+    state: "adaptiveDrc",
+    name: "Adaptive DRC",
+    spec: { kind: "enum", states: ADAPTIVEDRC_STATES },
+    write: true,
+    role: "state",
+  },
+  {
+    func: "SURROUNDAI",
+    state: "surroundAI",
+    name: "Surround AI",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    write: true,
+    role: "switch",
+  },
+  {
+    func: "DIRMODE",
+    state: "directMode",
+    name: "Direct mode",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    write: true,
+    role: "switch",
+  },
+  {
+    func: "2CHDECODER",
+    state: "surroundDecoder",
+    name: "Surround decoder",
+    spec: { kind: "enum", states: DECODER_STATES },
+    write: true,
+    role: "state",
+  },
 ];
+
+const BAND_STATES = selfMap(["AM", "FM"]);
 
 /** The zones the catalog maps: MAIN flat, ZONE2-4 each under their own prefix. */
 const ZONES: Array<{ subunit: string; prefix: string }> = [
@@ -213,6 +288,54 @@ const ZONES: Array<{ subunit: string; prefix: string }> = [
   { subunit: "ZONE2", prefix: "zone2." },
   { subunit: "ZONE3", prefix: "zone3." },
   { subunit: "ZONE4", prefix: "zone4." },
+];
+
+/** Global (non-zone) functions: one subunit each. State id carries its own channel. */
+const GLOBAL_FUNCS: Array<{
+  subunit: string;
+  func: string;
+  state: string;
+  name: string;
+  spec: ValueSpec;
+  write: boolean;
+  role: string;
+}> = [
+  {
+    subunit: "SYS",
+    func: "PARTY",
+    state: "party",
+    name: "Party mode",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    write: true,
+    role: "switch",
+  },
+  {
+    subunit: "TUN",
+    func: "BAND",
+    state: "tuner.band",
+    name: "Band",
+    spec: { kind: "enum", states: BAND_STATES },
+    write: true,
+    role: "state",
+  },
+  {
+    subunit: "TUN",
+    func: "RDSTXTA",
+    state: "tuner.rdsText",
+    name: "RDS text",
+    spec: { kind: "text" },
+    write: false,
+    role: "text",
+  },
+  {
+    subunit: "TUN",
+    func: "RDSPRGSERVICE",
+    state: "tuner.rdsService",
+    name: "RDS station",
+    spec: { kind: "text" },
+    write: false,
+    role: "text",
+  },
 ];
 
 /**
@@ -235,6 +358,17 @@ export function buildYncaCatalog(): YncaEntry[] {
         func: fn.func,
       });
     }
+  }
+  for (const fn of GLOBAL_FUNCS) {
+    entries.push({
+      id: fn.state,
+      name: fn.name,
+      spec: fn.spec,
+      write: fn.write,
+      role: fn.role,
+      subunit: fn.subunit,
+      func: fn.func,
+    });
   }
   return entries;
 }
@@ -295,6 +429,9 @@ export function yncaObjectsFor(capabilities: YncaCapabilities): ObjectDef[] {
  * when the function is not catalogued or the value is not decodable.
  *
  * @param message the decoded YNCA message (subunit/func/value)
+ * @param message.subunit
+ * @param message.func
+ * @param message.value
  * @param map the `funcToEntry` map
  * @returns the typed state update, or undefined
  */
