@@ -22,6 +22,44 @@ describe("YNCA catalog", () => {
     expect(states).toHaveProperty("Spotify");
   });
 
+  test("extra bass is an on/off boolean (Auto/Off) on every zone", () => {
+    const cat = buildYncaCatalog();
+    expect(cat.find(e => e.id === "extraBass")).toMatchObject({ subunit: "MAIN", func: "EXBASS" });
+    expect(cat.find(e => e.id === "extraBass")?.spec).toEqual({ kind: "onoff", on: "Auto", off: "Off" });
+    expect(cat.find(e => e.id === "zone2.extraBass")).toMatchObject({ subunit: "ZONE2", func: "EXBASS" });
+  });
+
+  test("max volume and initial volume level are numbers with a dB unit", () => {
+    const cat = buildYncaCatalog();
+    expect(cat.find(e => e.id === "maxVolume")).toMatchObject({ subunit: "MAIN", func: "MAXVOL" });
+    expect(cat.find(e => e.id === "maxVolume")?.spec).toMatchObject({ kind: "number", unit: "dB" });
+    expect(cat.find(e => e.id === "initialVolume.level")?.spec).toMatchObject({ kind: "number", unit: "dB" });
+  });
+
+  test("lip-sync offsets are numbers in ms", () => {
+    expect(buildYncaCatalog().find(e => e.id === "lipSync.hdmiOut1")?.spec).toMatchObject({ kind: "number", unit: "ms" });
+  });
+
+  test("3D Cinema DSP keeps its wire function name 3DCINEMA", () => {
+    expect(buildYncaCatalog().find(e => e.id === "cinemaDsp3d")).toMatchObject({ func: "3DCINEMA", subunit: "MAIN" });
+  });
+
+  test("Zone B and speaker A/B functions exist on MAIN only", () => {
+    const cat = buildYncaCatalog();
+    expect(cat.find(e => e.id === "zoneB.volume")).toMatchObject({ subunit: "MAIN", func: "ZONEBVOL" });
+    expect(cat.find(e => e.id === "zone2.zoneB.volume")).toBeUndefined();
+    expect(cat.find(e => e.id === "speakerA")).toMatchObject({ subunit: "MAIN", func: "SPEAKERA" });
+    expect(cat.find(e => e.id === "zoneB.power")?.spec).toEqual({ kind: "onoff", on: "On", off: "Standby" });
+  });
+
+  test("scene names are read-only text on MAIN (1..12)", () => {
+    const cat = buildYncaCatalog();
+    const s1 = cat.find(e => e.id === "scene.name1");
+    expect(s1).toMatchObject({ subunit: "MAIN", func: "SCENE1NAME", write: false });
+    expect(s1?.spec).toEqual({ kind: "text" });
+    expect(cat.find(e => e.id === "scene.name12")).toMatchObject({ func: "SCENE12NAME" });
+  });
+
   test("the init sweep asks each function once per subunit", () => {
     const gets = sweepGets(buildYncaCatalog());
     expect(gets).toContainEqual({ subunit: "MAIN", func: "PWR" });

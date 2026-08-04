@@ -293,6 +293,129 @@ const AMP_FUNCS = [
     spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5 },
     write: true,
     role: "level"
+  },
+  {
+    func: "EXBASS",
+    state: "extraBass",
+    name: "Extra Bass",
+    spec: { kind: "onoff", on: "Auto", off: "Off" },
+    write: true,
+    role: "switch"
+  },
+  {
+    func: "3DCINEMA",
+    state: "cinemaDsp3d",
+    name: "CINEMA DSP 3D",
+    spec: { kind: "onoff", on: "Auto", off: "Off" },
+    write: true,
+    role: "switch"
+  },
+  {
+    func: "INITVOLMODE",
+    state: "initialVolume.mode",
+    name: "Initial volume mode",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    write: true,
+    role: "switch"
+  },
+  {
+    func: "INITVOLLVL",
+    state: "initialVolume.level",
+    name: "Initial volume level",
+    spec: { kind: "number", unit: "dB", min: -80.5, max: 16.5, step: 0.5 },
+    write: true,
+    role: "level.volume"
+  },
+  {
+    func: "MAXVOL",
+    state: "maxVolume",
+    name: "Maximum volume",
+    spec: { kind: "number", unit: "dB", min: -30, max: 16.5, step: 5 },
+    write: true,
+    role: "level.volume"
+  },
+  {
+    func: "LIPSYNCHDMIOUT1OFFSET",
+    state: "lipSync.hdmiOut1",
+    name: "Lip sync HDMI OUT1 offset",
+    spec: { kind: "number", unit: "ms" },
+    write: true,
+    role: "level"
+  },
+  {
+    func: "LIPSYNCHDMIOUT2OFFSET",
+    state: "lipSync.hdmiOut2",
+    name: "Lip sync HDMI OUT2 offset",
+    spec: { kind: "number", unit: "ms" },
+    write: true,
+    role: "level"
+  },
+  {
+    func: "ZONENAME",
+    state: "zoneName",
+    name: "Zone name",
+    spec: { kind: "text" },
+    write: true,
+    role: "text"
+  }
+];
+const ZONEB_AVAIL_STATES = selfMap(["Not Connected", "Not Ready", "Ready"]);
+const MAIN_ONLY_FUNCS = [
+  {
+    func: "SPEAKERA",
+    state: "speakerA",
+    name: "Speaker A",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    write: true,
+    role: "switch"
+  },
+  {
+    func: "SPEAKERB",
+    state: "speakerB",
+    name: "Speaker B",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    write: true,
+    role: "switch"
+  },
+  {
+    func: "PWRB",
+    state: "zoneB.power",
+    name: "Zone B power",
+    spec: { kind: "onoff", on: "On", off: "Standby" },
+    write: true,
+    role: "switch.power"
+  },
+  {
+    func: "ZONEBAVAIL",
+    state: "zoneB.available",
+    name: "Zone B availability",
+    spec: { kind: "enum", states: ZONEB_AVAIL_STATES },
+    write: false,
+    role: "state"
+  },
+  {
+    func: "ZONEBMUTE",
+    state: "zoneB.mute",
+    name: "Zone B mute",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    write: true,
+    role: "media.mute"
+  },
+  {
+    func: "ZONEBVOL",
+    state: "zoneB.volume",
+    name: "Zone B volume",
+    spec: { kind: "number", unit: "dB", min: -80.5, max: 16.5, step: 0.5 },
+    write: true,
+    role: "level.volume"
+  },
+  {
+    func: "ZONEBNAME",
+    state: "zoneB.name",
+    name: "Zone B name",
+    spec: { kind: "text" },
+    write: true,
+    role: "text"
   }
 ];
 const BAND_STATES = selfMap(["AM", "FM"]);
@@ -421,6 +544,28 @@ function buildYncaCatalog() {
         func: fn.func
       });
     }
+  }
+  for (const fn of MAIN_ONLY_FUNCS) {
+    entries.push({
+      id: fn.state,
+      name: fn.name,
+      spec: fn.spec,
+      write: fn.write,
+      role: fn.role,
+      subunit: "MAIN",
+      func: fn.func
+    });
+  }
+  for (let n = 1; n <= 12; n++) {
+    entries.push({
+      id: `scene.name${n}`,
+      name: `Scene ${n} name`,
+      spec: { kind: "text" },
+      write: false,
+      role: "text",
+      subunit: "MAIN",
+      func: `SCENE${n}NAME`
+    });
   }
   for (const fn of GLOBAL_FUNCS) {
     entries.push({
