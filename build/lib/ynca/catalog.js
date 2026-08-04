@@ -277,6 +277,22 @@ const AMP_FUNCS = [
     spec: { kind: "enum", states: DECODER_STATES },
     write: true,
     role: "state"
+  },
+  {
+    func: "HPBASS",
+    state: "sound.headphoneBass",
+    name: "Headphone bass",
+    spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5 },
+    write: true,
+    role: "level"
+  },
+  {
+    func: "HPTREBLE",
+    state: "sound.headphoneTreble",
+    name: "Headphone treble",
+    spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5 },
+    write: true,
+    role: "level"
   }
 ];
 const BAND_STATES = selfMap(["AM", "FM"]);
@@ -322,6 +338,24 @@ const GLOBAL_FUNCS = [
     spec: { kind: "text" },
     write: false,
     role: "text"
+  },
+  {
+    subunit: "TUN",
+    func: "AMFREQ",
+    state: "tuner.amFrequency",
+    name: "AM frequency",
+    spec: { kind: "number", unit: "kHz" },
+    write: true,
+    role: "level"
+  },
+  {
+    subunit: "TUN",
+    func: "FMFREQ",
+    state: "tuner.fmFrequency",
+    name: "FM frequency",
+    spec: { kind: "number", unit: "kHz" },
+    write: true,
+    role: "level"
   }
 ];
 const PLAYBACK_STATES = selfMap(["Play", "Pause", "Stop"]);
@@ -330,7 +364,19 @@ const PLAYER_SOURCES = [
   { subunit: "NETRADIO", channel: "netRadio" },
   { subunit: "SERVER", channel: "server" },
   { subunit: "USB", channel: "usb" },
-  { subunit: "SPOTIFY", channel: "spotify" }
+  { subunit: "SPOTIFY", channel: "spotify" },
+  { subunit: "DEEZER", channel: "deezer" },
+  { subunit: "TIDAL", channel: "tidal" },
+  { subunit: "NAPSTER", channel: "napster" },
+  { subunit: "PANDORA", channel: "pandora" },
+  { subunit: "RHAP", channel: "rhapsody" },
+  { subunit: "SIRIUS", channel: "sirius" },
+  { subunit: "AIRPLAY", channel: "airplay" },
+  { subunit: "BT", channel: "bluetooth" },
+  { subunit: "PC", channel: "pc" },
+  { subunit: "MCLINK", channel: "musicCastLink" },
+  { subunit: "IPOD", channel: "ipod" },
+  { subunit: "IPODUSB", channel: "ipodUsb" }
 ];
 const PLAYER_FUNCS = [
   {

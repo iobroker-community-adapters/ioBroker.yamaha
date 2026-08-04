@@ -278,6 +278,22 @@ const AMP_FUNCS: Array<{ func: string; state: string; name: string; spec: ValueS
     write: true,
     role: "state",
   },
+  {
+    func: "HPBASS",
+    state: "sound.headphoneBass",
+    name: "Headphone bass",
+    spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5 },
+    write: true,
+    role: "level",
+  },
+  {
+    func: "HPTREBLE",
+    state: "sound.headphoneTreble",
+    name: "Headphone treble",
+    spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5 },
+    write: true,
+    role: "level",
+  },
 ];
 
 const BAND_STATES = selfMap(["AM", "FM"]);
@@ -336,17 +352,50 @@ const GLOBAL_FUNCS: Array<{
     write: false,
     role: "text",
   },
+  {
+    subunit: "TUN",
+    func: "AMFREQ",
+    state: "tuner.amFrequency",
+    name: "AM frequency",
+    spec: { kind: "number", unit: "kHz" },
+    write: true,
+    role: "level",
+  },
+  {
+    subunit: "TUN",
+    func: "FMFREQ",
+    state: "tuner.fmFrequency",
+    name: "FM frequency",
+    spec: { kind: "number", unit: "kHz" },
+    write: true,
+    role: "level",
+  },
 ];
 
 const PLAYBACK_STATES = selfMap(["Play", "Pause", "Stop"]);
 const REPEAT_STATES = selfMap(["Off", "Single", "All"]);
 
-/** Network/media player sources — each a subunit, mapped under its own channel. */
+/**
+ * Network/media player sources — each a subunit, mapped under its own channel. Only
+ * the entries a device reports are created, so listing every source is safe.
+ */
 const PLAYER_SOURCES: Array<{ subunit: string; channel: string }> = [
   { subunit: "NETRADIO", channel: "netRadio" },
   { subunit: "SERVER", channel: "server" },
   { subunit: "USB", channel: "usb" },
   { subunit: "SPOTIFY", channel: "spotify" },
+  { subunit: "DEEZER", channel: "deezer" },
+  { subunit: "TIDAL", channel: "tidal" },
+  { subunit: "NAPSTER", channel: "napster" },
+  { subunit: "PANDORA", channel: "pandora" },
+  { subunit: "RHAP", channel: "rhapsody" },
+  { subunit: "SIRIUS", channel: "sirius" },
+  { subunit: "AIRPLAY", channel: "airplay" },
+  { subunit: "BT", channel: "bluetooth" },
+  { subunit: "PC", channel: "pc" },
+  { subunit: "MCLINK", channel: "musicCastLink" },
+  { subunit: "IPOD", channel: "ipod" },
+  { subunit: "IPODUSB", channel: "ipodUsb" },
 ];
 
 /** The playback functions shared by every player source (the __init__ mixin in the lib). */
