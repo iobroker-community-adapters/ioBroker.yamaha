@@ -92,6 +92,12 @@ const PLAYER_STATES = [
   { state: "next", common: { name: "Next", type: "boolean", role: "button", read: false, write: true } },
   { state: "prev", common: { name: "Previous", type: "boolean", role: "button", read: false, write: true } }
 ];
+function pushPlayerBlock(objects, prefix, channelName) {
+  objects.push({ id: prefix, type: "channel", common: { name: channelName } });
+  for (const player of PLAYER_STATES) {
+    objects.push({ id: `${prefix}.${player.state}`, type: "state", common: { ...player.common } });
+  }
+}
 function mapYxcToObjects(capabilities) {
   var _a;
   const objects = [];
@@ -122,10 +128,28 @@ function mapYxcToObjects(capabilities) {
     }
   }
   if (capabilities.media.includes("netusb")) {
-    objects.push({ id: "netPlayer", type: "channel", common: { name: "Network player" } });
-    for (const player of PLAYER_STATES) {
-      objects.push({ id: `netPlayer.${player.state}`, type: "state", common: { ...player.common } });
-    }
+    pushPlayerBlock(objects, "netPlayer", "Network player");
+  }
+  if (capabilities.media.includes("cd")) {
+    pushPlayerBlock(objects, "cd", "CD");
+  }
+  if (capabilities.media.includes("tuner")) {
+    objects.push({ id: "tuner", type: "channel", common: { name: "Tuner" } });
+    objects.push({
+      id: "tuner.band",
+      type: "state",
+      common: { name: "Band", type: "string", role: "media.input", read: true, write: false }
+    });
+    objects.push({
+      id: "tuner.frequency",
+      type: "state",
+      common: { name: "Frequency", type: "number", role: "value", read: true, write: false }
+    });
+    objects.push({
+      id: "tuner.rdsText",
+      type: "state",
+      common: { name: "RDS text", type: "string", role: "text", read: true, write: false }
+    });
   }
   return objects;
 }

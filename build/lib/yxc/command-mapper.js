@@ -20,6 +20,7 @@ var command_mapper_exports = {};
 __export(command_mapper_exports, {
   parseYxcPlayInfo: () => parseYxcPlayInfo,
   parseYxcStatus: () => parseYxcStatus,
+  parseYxcTunerInfo: () => parseYxcTunerInfo,
   stateToYxc: () => stateToYxc
 });
 module.exports = __toCommonJS(command_mapper_exports);
@@ -70,6 +71,13 @@ const NETUSB_TRANSPORT = {
   "netPlayer.next": "nextNet",
   "netPlayer.prev": "prevNet"
 };
+const CD_TRANSPORT = {
+  "cd.play": "play",
+  "cd.pause": "pause",
+  "cd.stop": "stop",
+  "cd.next": "next",
+  "cd.prev": "previous"
+};
 const ZONE_PREFIX = { main: "", zone2: "zone2.", zone3: "zone3.", zone4: "zone4." };
 function parseYxcStatus(zoneStatus, zone) {
   if (typeof zoneStatus !== "object" || zoneStatus === null) {
@@ -93,6 +101,10 @@ function stateToYxc(stateId, value) {
   if (transport) {
     return { method: transport, zone: "netusb", value: true };
   }
+  const cdAction = CD_TRANSPORT[stateId];
+  if (cdAction) {
+    return { method: "setCDPlayback", zone: "cd", value: cdAction };
+  }
   let zone = "main";
   let name = stateId;
   const dot = stateId.indexOf(".");
@@ -109,7 +121,7 @@ function stateToYxc(stateId, value) {
   }
   return { method: mapping.method, zone, value: mapping.toYxc(value) };
 }
-function parseYxcPlayInfo(playInfo) {
+function parseYxcPlayInfo(playInfo, prefix = "netPlayer") {
   if (typeof playInfo !== "object" || playInfo === null) {
     return [];
   }
@@ -118,7 +130,33 @@ function parseYxcPlayInfo(playInfo) {
   for (const field of ["playback", "artist", "album", "track"]) {
     const value = info[field];
     if (typeof value === "string") {
-      updates.push({ id: `netPlayer.${field}`, value });
+      updates.push({ id: `${prefix}.${field}`, value });
+    }
+  }
+  return updates;
+}
+function parseYxcTunerInfo(tunerInfo) {
+  if (typeof tunerInfo !== "object" || tunerInfo === null) {
+    return [];
+  }
+  const info = tunerInfo;
+  const updates = [];
+  const band = info.band;
+  if (typeof band === "string") {
+    updates.push({ id: "tuner.band", value: band });
+    const bandInfo = info[band];
+    if (typeof bandInfo === "object" && bandInfo !== null) {
+      const freq = bandInfo.freq;
+      if (typeof freq === "number") {
+        updates.push({ id: "tuner.frequency", value: freq });
+      }
+    }
+  }
+  const rds = info.rds;
+  if (typeof rds === "object" && rds !== null) {
+    const text = rds.radio_text_a;
+    if (typeof text === "string") {
+      updates.push({ id: "tuner.rdsText", value: text });
     }
   }
   return updates;
@@ -127,6 +165,7 @@ function parseYxcPlayInfo(playInfo) {
 0 && (module.exports = {
   parseYxcPlayInfo,
   parseYxcStatus,
+  parseYxcTunerInfo,
   stateToYxc
 });
 //# sourceMappingURL=command-mapper.js.map

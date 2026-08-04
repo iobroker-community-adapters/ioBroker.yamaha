@@ -21,6 +21,12 @@ describe("parseYxcFeatures", () => {
     expect(caps.media).toContain("tuner");
   });
 
+  test("does not treat the clock (alarm/timer) subsystem as a media player", () => {
+    const caps = parseYxcFeatures({ zone: [{ id: "main" }], clock: {}, netusb: {}, cd: {} });
+    expect(caps.media).toEqual(expect.arrayContaining(["netusb", "cd"]));
+    expect(caps.media).not.toContain("clock");
+  });
+
   test("extracts a zone's raw volume range from range_step", () => {
     const main = parseYxcFeatures(rxA2070).zones.find(z => z.id === "main");
     expect(main?.volumeRange).toEqual({ min: 0, max: 161, step: 1 });

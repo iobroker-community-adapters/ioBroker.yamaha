@@ -15,6 +15,41 @@ describe("mapYxcToObjects", () => {
     expect(ids).toEqual(expect.arrayContaining(["netPlayer.playback", "netPlayer.artist", "netPlayer.track"]));
   });
 
+  test("creates the tuner channel with band, frequency and RDS when the device offers a tuner", () => {
+    const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: ["tuner"] });
+    const ids = objs.map(o => o.id);
+    expect(ids).toContain("tuner");
+    expect(ids).toEqual(expect.arrayContaining(["tuner.band", "tuner.frequency", "tuner.rdsText"]));
+  });
+
+  test("creates the cd channel with read states and transport buttons when the device offers a cd", () => {
+    const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: ["cd"] });
+    const ids = objs.map(o => o.id);
+    expect(ids).toContain("cd");
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        "cd.playback",
+        "cd.artist",
+        "cd.album",
+        "cd.track",
+        "cd.play",
+        "cd.pause",
+        "cd.stop",
+        "cd.next",
+        "cd.prev",
+      ]),
+    );
+  });
+
+  test("a cd transport button is a write-only boolean button", () => {
+    const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: ["cd"] });
+    const play = objs.find(o => o.id === "cd.play");
+    expect(play?.common.type).toBe("boolean");
+    expect(play?.common.role).toBe("button");
+    expect(play?.common.write).toBe(true);
+    expect(play?.common.read).toBe(false);
+  });
+
   test("maps main-zone functions to top-level states", () => {
     expect(ids(rxA2070)).toEqual(expect.arrayContaining(["power", "volume", "mute", "soundProgram", "input"]));
   });

@@ -14,11 +14,14 @@ export interface YxcZone {
 export interface YxcCapabilities {
   /** The device's zones. */
   zones: YxcZone[];
-  /** Media blocks the device offers (netusb, tuner, cd, clock). */
+  /** Media-player sources the device offers (netusb, tuner, cd). */
   media: string[];
 }
 
-const MEDIA_BLOCKS = ["netusb", "tuner", "cd", "clock"];
+// Only true media-player sources — subsystems that report play info and
+// transport. The `clock` block (alarm/timer) and `dist` (MusicCast link) are
+// getFeatures top-level keys too, but they are not players and get no media tree.
+const MEDIA_BLOCKS = ["netusb", "tuner", "cd"];
 
 /**
  * Keep only the string entries of an unknown array.

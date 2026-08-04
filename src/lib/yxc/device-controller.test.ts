@@ -47,8 +47,18 @@ class FakeClient implements YxcClientLike {
     this.calls.push({ method: "setPureDirect", args: [on, zone] });
     return {};
   }
-  public async getPlayInfo(): Promise<unknown> {
-    this.calls.push({ method: "getPlayInfo", args: [] });
+  public async getPlayInfo(source?: string): Promise<unknown> {
+    this.calls.push({ method: "getPlayInfo", args: source === undefined ? [] : [source] });
+    if (source === "tuner") {
+      return { band: "fm", fm: { freq: 8830 }, rds: { radio_text_a: "Hit" } };
+    }
+    if (source === "cd") {
+      return { playback: "play", track: "Track 1" };
+    }
+    return {};
+  }
+  public async setCDPlayback(action: string): Promise<unknown> {
+    this.calls.push({ method: "setCDPlayback", args: [action] });
     return {};
   }
   public async setSubwooferVolumeTo(to: number, zone: string): Promise<unknown> {
@@ -175,5 +185,37 @@ describe("YxcDeviceController", () => {
     await s.controller.start();
     s.controller.close();
     expect(s.cancelled()).toBe(true);
+  });
+
+  test("creates cd and tuner blocks and seeds them from their play info", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], cd: {}, tuner: {} };
+    const s = setup(features, ysp);
+    await s.controller.start();
+    expect(s.objects).toEqual(expect.arrayContaining(["living.cd.playback", "living.tuner.band"]));
+    expect(s.client.calls).toContainEqual({ method: "getPlayInfo", args: ["cd"] });
+    expect(s.client.calls).toContainEqual({ method: "getPlayInfo", args: ["tuner"] });
+    expect(s.acks).toContainEqual({ id: "living.cd.track", value: "Track 1" });
+    expect(s.acks).toContainEqual({ id: "living.tuner.frequency", value: 8830 });
+  });
+
+  test("a cd transport write becomes a setCDPlayback call", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], cd: {} };
+    const s = setup(features, ysp);
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.cd.play", false, true);
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "setCDPlayback", args: ["play"] });
+  });
+
+  test("keepalive also refreshes tuner and cd when present", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], cd: {}, tuner: {} };
+    const s = setup(features, ysp);
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.fire.keepalive?.();
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "getPlayInfo", args: ["cd"] });
+    expect(s.client.calls).toContainEqual({ method: "getPlayInfo", args: ["tuner"] });
   });
 });

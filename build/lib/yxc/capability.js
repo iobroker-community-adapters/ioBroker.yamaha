@@ -21,7 +21,7 @@ __export(capability_exports, {
   parseYxcFeatures: () => parseYxcFeatures
 });
 module.exports = __toCommonJS(capability_exports);
-const MEDIA_BLOCKS = ["netusb", "tuner", "cd", "clock"];
+const MEDIA_BLOCKS = ["netusb", "tuner", "cd"];
 function stringList(value) {
   return Array.isArray(value) ? value.filter((entry) => typeof entry === "string") : [];
 }

@@ -1,4 +1,4 @@
-import { parseYxcPlayInfo, parseYxcStatus, stateToYxc } from "./command-mapper";
+import { parseYxcPlayInfo, parseYxcStatus, parseYxcTunerInfo, stateToYxc } from "./command-mapper";
 import ysp from "./__fixtures__/status/YSP1600_main.json";
 import rx from "./__fixtures__/status/RX_A2070_main.json";
 
@@ -44,8 +44,40 @@ describe("parseYxcPlayInfo", () => {
     ]);
   });
 
+  test("maps play-info fields to a cd source when given the cd prefix", () => {
+    expect(parseYxcPlayInfo({ playback: "play", artist: "A", album: "B", track: "T" }, "cd")).toEqual([
+      { id: "cd.playback", value: "play" },
+      { id: "cd.artist", value: "A" },
+      { id: "cd.album", value: "B" },
+      { id: "cd.track", value: "T" },
+    ]);
+  });
+
   test("returns an empty list for a malformed response", () => {
     expect(parseYxcPlayInfo(null)).toEqual([]);
+  });
+});
+
+describe("parseYxcTunerInfo", () => {
+  test("maps band, the active band's frequency and RDS radio text", () => {
+    expect(
+      parseYxcTunerInfo({ band: "fm", fm: { freq: 8830, preset_no: 5 }, am: { freq: 0 }, rds: { radio_text_a: "Hit" } }),
+    ).toEqual([
+      { id: "tuner.band", value: "fm" },
+      { id: "tuner.frequency", value: 8830 },
+      { id: "tuner.rdsText", value: "Hit" },
+    ]);
+  });
+
+  test("reads the AM frequency when the active band is am, and tolerates a missing rds block", () => {
+    expect(parseYxcTunerInfo({ band: "am", am: { freq: 1440 }, fm: { freq: 0 } })).toEqual([
+      { id: "tuner.band", value: "am" },
+      { id: "tuner.frequency", value: 1440 },
+    ]);
+  });
+
+  test("returns an empty list for a malformed response", () => {
+    expect(parseYxcTunerInfo(null)).toEqual([]);
   });
 });
 
@@ -53,6 +85,12 @@ describe("stateToYxc", () => {
   test("maps network-player transport buttons to their YXC method", () => {
     expect(stateToYxc("netPlayer.play", true)).toEqual({ method: "playNet", zone: "netusb", value: true });
     expect(stateToYxc("netPlayer.next", true)).toEqual({ method: "nextNet", zone: "netusb", value: true });
+  });
+
+  test("maps cd transport buttons to setCDPlayback with the YXC action word", () => {
+    expect(stateToYxc("cd.play", true)).toEqual({ method: "setCDPlayback", zone: "cd", value: "play" });
+    expect(stateToYxc("cd.prev", true)).toEqual({ method: "setCDPlayback", zone: "cd", value: "previous" });
+    expect(stateToYxc("cd.next", true)).toEqual({ method: "setCDPlayback", zone: "cd", value: "next" });
   });
 
   test("maps subwoofer trim to setSubwooferVolumeTo", () => {

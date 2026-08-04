@@ -71,8 +71,13 @@ declare module "yamaha-yxc-nodejs" {
      * @param zone the zone; defaults to main
      */
     setPureDirect(on: boolean, zone?: string): Promise<unknown>;
-    /** Read a network/USB source's play info (playback, artist, album, track). */
-    getPlayInfo(): Promise<unknown>;
+    /**
+     * Read a player source's play info (playback, artist, album, track; for the
+     * tuner: band/frequency/RDS). The one method serves every source.
+     *
+     * @param source `"cd"` reads the disc player, `"tuner"` the tuner, omitted the network/USB player
+     */
+    getPlayInfo(source?: string): Promise<unknown>;
     /**
      * Set a zone's subwoofer trim.
      *
@@ -90,5 +95,12 @@ declare module "yamaha-yxc-nodejs" {
     nextNet(): Promise<unknown>;
     /** Skip to the previous track on the network/USB player. */
     prevNet(): Promise<unknown>;
+    /**
+     * Drive the CD transport. Takes a YXC action word — `play`, `pause`, `stop`,
+     * `next`, `previous` (also `play_pause`, `fast_reverse_start/end`, …).
+     *
+     * @param action the transport action word
+     */
+    setCDPlayback(action: string): Promise<unknown>;
   }
 }

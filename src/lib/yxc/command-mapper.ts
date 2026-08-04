@@ -76,6 +76,19 @@ const NETUSB_TRANSPORT: Record<string, string> = {
   "netPlayer.prev": "prevNet",
 };
 
+/**
+ * CD transport buttons → the YXC action word for `setCDPlayback`. Routed through
+ * the one `setCDPlayback(action)` method (not the per-action `pauseCD()` helpers,
+ * one of which sends the wrong command in the library).
+ */
+const CD_TRANSPORT: Record<string, string> = {
+  "cd.play": "play",
+  "cd.pause": "pause",
+  "cd.stop": "stop",
+  "cd.next": "next",
+  "cd.prev": "previous",
+};
+
 const ZONE_PREFIX: Record<string, string> = { main: "", zone2: "zone2.", zone3: "zone3.", zone4: "zone4." };
 
 /**
@@ -117,6 +130,10 @@ export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefi
   if (transport) {
     return { method: transport, zone: "netusb", value: true };
   }
+  const cdAction = CD_TRANSPORT[stateId];
+  if (cdAction) {
+    return { method: "setCDPlayback", zone: "cd", value: cdAction };
+  }
   let zone = "main";
   let name = stateId;
   const dot = stateId.indexOf(".");
@@ -135,13 +152,15 @@ export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefi
 }
 
 /**
- * Parse a YXC getPlayInfo response into the network player's state updates
- * (read-only: playback status plus artist/album/track metadata).
+ * Parse a YXC getPlayInfo response into a player's read-only state updates
+ * (playback status plus artist/album/track metadata). The same response shape is
+ * used by every player source, so the target channel is chosen via `prefix`.
  *
  * @param playInfo the getPlayInfo response object
+ * @param prefix the target player channel (`netPlayer` for netusb, `cd` for the disc player)
  * @returns the player state updates, empty if malformed
  */
-export function parseYxcPlayInfo(playInfo: unknown): StateValue[] {
+export function parseYxcPlayInfo(playInfo: unknown, prefix = "netPlayer"): StateValue[] {
   if (typeof playInfo !== "object" || playInfo === null) {
     return [];
   }
@@ -150,7 +169,43 @@ export function parseYxcPlayInfo(playInfo: unknown): StateValue[] {
   for (const field of ["playback", "artist", "album", "track"]) {
     const value = info[field];
     if (typeof value === "string") {
-      updates.push({ id: `netPlayer.${field}`, value });
+      updates.push({ id: `${prefix}.${field}`, value });
+    }
+  }
+  return updates;
+}
+
+/**
+ * Parse a YXC `/tuner/getPlayInfo` response into the tuner's read-only states:
+ * the current band, the active band's raw frequency (nested under the band key,
+ * e.g. `fm.freq`), and the RDS radio text. Fields absent from the response are
+ * skipped, so a device without RDS simply yields no rdsText update.
+ *
+ * @param tunerInfo the getPlayInfo("tuner") response object
+ * @returns the tuner state updates, empty if malformed
+ */
+export function parseYxcTunerInfo(tunerInfo: unknown): StateValue[] {
+  if (typeof tunerInfo !== "object" || tunerInfo === null) {
+    return [];
+  }
+  const info = tunerInfo as Record<string, unknown>;
+  const updates: StateValue[] = [];
+  const band = info.band;
+  if (typeof band === "string") {
+    updates.push({ id: "tuner.band", value: band });
+    const bandInfo = info[band];
+    if (typeof bandInfo === "object" && bandInfo !== null) {
+      const freq = (bandInfo as Record<string, unknown>).freq;
+      if (typeof freq === "number") {
+        updates.push({ id: "tuner.frequency", value: freq });
+      }
+    }
+  }
+  const rds = info.rds;
+  if (typeof rds === "object" && rds !== null) {
+    const text = (rds as Record<string, unknown>).radio_text_a;
+    if (typeof text === "string") {
+      updates.push({ id: "tuner.rdsText", value: text });
     }
   }
   return updates;

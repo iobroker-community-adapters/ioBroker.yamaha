@@ -1,6 +1,6 @@
 import { parseYxcFeatures } from "./capability";
 import { mapYxcToObjects } from "./object-mapper";
-import { parseYxcPlayInfo, parseYxcStatus, stateToYxc, type YxcCommand } from "./command-mapper";
+import { parseYxcPlayInfo, parseYxcStatus, parseYxcTunerInfo, stateToYxc, type YxcCommand } from "./command-mapper";
 import { zonesToRefresh } from "./push";
 import type { ObjectDef } from "../catalog/types";
 
@@ -13,8 +13,11 @@ export interface YxcClientLike {
   getFeatures(): Promise<unknown>;
   /** Read a zone's current status. */
   getStatus(zone: string): Promise<unknown>;
-  /** Read the network/USB player's play info (playback, artist, album, track). */
-  getPlayInfo(): Promise<unknown>;
+  /**
+   * Read a player source's play info. `undefined` reads the network/USB player,
+   * `"cd"` the disc player, `"tuner"` the tuner (band/frequency/RDS).
+   */
+  getPlayInfo(source?: string): Promise<unknown>;
   /** Set a zone's power. */
   power(on: boolean, zone: string): Promise<unknown>;
   /** Set a zone's absolute volume (raw YXC scale). */
@@ -41,6 +44,8 @@ export interface YxcClientLike {
   nextNet(): Promise<unknown>;
   /** Skip to the previous track. */
   prevNet(): Promise<unknown>;
+  /** Drive the CD transport with a YXC action word (`play`, `pause`, `stop`, `next`, `previous`). */
+  setCDPlayback(action: string): Promise<unknown>;
 }
 
 /** Log surface the controller needs. */
@@ -79,6 +84,8 @@ export interface YxcControllerDeps {
 export class YxcDeviceController {
   private zones: string[] = [];
   private hasPlayer = false;
+  private hasCd = false;
+  private hasTuner = false;
   private cancelKeepalive: (() => void) | undefined;
 
   /**
@@ -112,9 +119,9 @@ export class YxcDeviceController {
       await this.refreshZone(zone);
     }
     this.hasPlayer = capabilities.media.includes("netusb");
-    if (this.hasPlayer) {
-      await this.refreshPlayer();
-    }
+    this.hasCd = capabilities.media.includes("cd");
+    this.hasTuner = capabilities.media.includes("tuner");
+    await this.refreshMedia();
     this.deps.registerPush(event => this.onPush(event));
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), KEEPALIVE_MS);
     this.deps.log.info(`${this.deviceId}: MusicCast device ready`);
@@ -166,20 +173,41 @@ export class YxcDeviceController {
   /** Poll the primary zone, which renews the push registration and refreshes state. */
   private async keepalive(): Promise<void> {
     await this.refreshZone(this.zones[0] ?? "main");
+    await this.refreshMedia();
+  }
+
+  /** Refresh every player source the device offers (network player, cd, tuner). */
+  private async refreshMedia(): Promise<void> {
     if (this.hasPlayer) {
-      await this.refreshPlayer();
+      await this.refreshPlayInfo(undefined, parseYxcPlayInfo, "getPlayInfo");
+    }
+    if (this.hasCd) {
+      await this.refreshPlayInfo("cd", info => parseYxcPlayInfo(info, "cd"), 'getPlayInfo("cd")');
+    }
+    if (this.hasTuner) {
+      await this.refreshPlayInfo("tuner", parseYxcTunerInfo, 'getPlayInfo("tuner")');
     }
   }
 
-  /** Fetch the network player's play info and write its states with ack. */
-  private async refreshPlayer(): Promise<void> {
+  /**
+   * Fetch a player source's play info and write the parsed states with ack.
+   *
+   * @param source the play-info source (undefined = network player, `cd`, `tuner`)
+   * @param parse turn the response into state updates
+   * @param label how to name the call in a debug log on failure
+   */
+  private async refreshPlayInfo(
+    source: string | undefined,
+    parse: (info: unknown) => Array<{ id: string; value: boolean | number | string }>,
+    label: string,
+  ): Promise<void> {
     try {
-      const info = await this.deps.client.getPlayInfo();
-      for (const update of parseYxcPlayInfo(info)) {
+      const info = await this.deps.client.getPlayInfo(source);
+      for (const update of parse(info)) {
         this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
       }
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: getPlayInfo failed: ${e instanceof Error ? e.message : String(e)}`);
+      this.deps.log.debug(`${this.deviceId}: ${label} failed: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
@@ -246,6 +274,9 @@ export class YxcDeviceController {
           break;
         case "prevNet":
           await this.deps.client.prevNet();
+          break;
+        case "setCDPlayback":
+          await this.deps.client.setCDPlayback(String(value));
           break;
       }
     } catch (e) {

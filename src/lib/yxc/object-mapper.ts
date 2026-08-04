@@ -60,7 +60,7 @@ const ZONES: Array<{ id: string; prefix: string; channel?: string; channelName?:
   { id: "zone4", prefix: "zone4.", channel: "zone4", channelName: "Zone 4" },
 ];
 
-/** Network/USB media-player states, from getPlayInfo — created when the device offers netusb. */
+/** Media-player states shared by every player source (netusb, cd): read metadata + transport buttons. */
 const PLAYER_STATES: Array<{ state: string; common: ObjectDef["common"] }> = [
   {
     state: "playback",
@@ -84,10 +84,26 @@ const PLAYER_STATES: Array<{ state: string; common: ObjectDef["common"] }> = [
 ];
 
 /**
+ * Append a media-player block (channel + the shared player states) under a
+ * dotted prefix. Used for every player source the device reports.
+ *
+ * @param objects the object list to append to
+ * @param prefix the channel/state prefix (e.g. `netPlayer`, `cd`)
+ * @param channelName the human-readable channel name
+ */
+function pushPlayerBlock(objects: ObjectDef[], prefix: string, channelName: string): void {
+  objects.push({ id: prefix, type: "channel", common: { name: channelName } });
+  for (const player of PLAYER_STATES) {
+    objects.push({ id: `${prefix}.${player.state}`, type: "state", common: { ...player.common } });
+  }
+}
+
+/**
  * Turn YXC capabilities into the unified object tree: main's functions as
  * top-level states, each additional zone as a channel with its own states. An
- * input state is added when the zone offers inputs. Only reported functions are
- * created, parents before children.
+ * input state is added when the zone offers inputs. Player sources (netusb, cd)
+ * and the tuner get their own channel. Only reported functions are created,
+ * parents before children.
  *
  * @param capabilities the parsed YXC capabilities
  * @returns the object definitions to create
@@ -121,10 +137,30 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
     }
   }
   if (capabilities.media.includes("netusb")) {
-    objects.push({ id: "netPlayer", type: "channel", common: { name: "Network player" } });
-    for (const player of PLAYER_STATES) {
-      objects.push({ id: `netPlayer.${player.state}`, type: "state", common: { ...player.common } });
-    }
+    pushPlayerBlock(objects, "netPlayer", "Network player");
+  }
+  if (capabilities.media.includes("cd")) {
+    pushPlayerBlock(objects, "cd", "CD");
+  }
+  if (capabilities.media.includes("tuner")) {
+    objects.push({ id: "tuner", type: "channel", common: { name: "Tuner" } });
+    objects.push({
+      id: "tuner.band",
+      type: "state",
+      common: { name: "Band", type: "string", role: "media.input", read: true, write: false },
+    });
+    // Raw YXC frequency; its unit is band-dependent (FM in 10 kHz steps, AM in
+    // kHz), so no fixed unit is claimed — the value mirrors what the app shows.
+    objects.push({
+      id: "tuner.frequency",
+      type: "state",
+      common: { name: "Frequency", type: "number", role: "value", read: true, write: false },
+    });
+    objects.push({
+      id: "tuner.rdsText",
+      type: "state",
+      common: { name: "RDS text", type: "string", role: "text", read: true, write: false },
+    });
   }
   return objects;
 }
