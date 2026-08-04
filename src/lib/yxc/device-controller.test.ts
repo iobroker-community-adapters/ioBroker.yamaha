@@ -50,7 +50,7 @@ class FakeClient implements YxcClientLike {
   public async getPlayInfo(source?: string): Promise<unknown> {
     this.calls.push({ method: "getPlayInfo", args: source === undefined ? [] : [source] });
     if (source === "tuner") {
-      return { band: "fm", fm: { freq: 8830 }, rds: { radio_text_a: "Hit" } };
+      return { band: "fm", fm: { freq: 100900 }, rds: { radio_text_a: "Hit" } };
     }
     if (source === "cd") {
       return { playback: "play", track: "Track 1" };
@@ -195,7 +195,7 @@ describe("YxcDeviceController", () => {
     expect(s.client.calls).toContainEqual({ method: "getPlayInfo", args: ["cd"] });
     expect(s.client.calls).toContainEqual({ method: "getPlayInfo", args: ["tuner"] });
     expect(s.acks).toContainEqual({ id: "living.cd.track", value: "Track 1" });
-    expect(s.acks).toContainEqual({ id: "living.tuner.frequency", value: 8830 });
+    expect(s.acks).toContainEqual({ id: "living.tuner.frequency", value: 100900 });
   });
 
   test("a cd transport write becomes a setCDPlayback call", async () => {
@@ -206,6 +206,19 @@ describe("YxcDeviceController", () => {
     s.controller.handleStateChange("living.cd.play", false, true);
     await flush();
     expect(s.client.calls).toContainEqual({ method: "setCDPlayback", args: ["play"] });
+  });
+
+  test("a media push refreshes only the named player source, not every zone", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], cd: {}, tuner: {} };
+    const s = setup(features, ysp);
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.acks.length = 0;
+    s.fire.push?.({ tuner: { play_info_updated: true } });
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "getPlayInfo", args: ["tuner"] });
+    expect(s.client.calls).not.toContainEqual({ method: "getPlayInfo", args: ["cd"] });
+    expect(s.acks).toContainEqual({ id: "living.tuner.band", value: "fm" });
   });
 
   test("keepalive also refreshes tuner and cd when present", async () => {

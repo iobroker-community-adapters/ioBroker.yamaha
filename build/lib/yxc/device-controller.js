@@ -36,9 +36,7 @@ class YxcDeviceController {
     this.deps = deps;
   }
   zones = [];
-  hasPlayer = false;
-  hasCd = false;
-  hasTuner = false;
+  mediaBlocks = [];
   cancelKeepalive;
   /**
    * Read capabilities, create the object tree, seed state, and wire up push +
@@ -60,9 +58,7 @@ class YxcDeviceController {
     for (const zone of this.zones) {
       await this.refreshZone(zone);
     }
-    this.hasPlayer = capabilities.media.includes("netusb");
-    this.hasCd = capabilities.media.includes("cd");
-    this.hasTuner = capabilities.media.includes("tuner");
+    this.mediaBlocks = capabilities.media;
     await this.refreshMedia();
     this.deps.registerPush((event) => this.onPush(event));
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), KEEPALIVE_MS);
@@ -97,8 +93,10 @@ class YxcDeviceController {
     this.cancelKeepalive = void 0;
   }
   /**
-   * Handle a device push: each named zone is re-fetched via getStatus (the push
-   * itself is a change signal, not a value carrier).
+   * Handle a device push: each named zone is re-fetched via getStatus, each named
+   * media source via getPlayInfo (the push itself is a change signal, not a value
+   * carrier). Refreshing only the named sources keeps a track-change push from
+   * re-polling every source.
    *
    * @param event the parsed push event
    */
@@ -106,6 +104,11 @@ class YxcDeviceController {
     for (const zone of (0, import_push.zonesToRefresh)(event)) {
       if (this.zones.includes(zone)) {
         void this.refreshZone(zone);
+      }
+    }
+    for (const block of (0, import_push.mediaToRefresh)(event)) {
+      if (this.mediaBlocks.includes(block)) {
+        void this.refreshMediaSource(block);
       }
     }
   }
@@ -117,31 +120,29 @@ class YxcDeviceController {
   }
   /** Refresh every player source the device offers (network player, cd, tuner). */
   async refreshMedia() {
-    if (this.hasPlayer) {
-      await this.refreshPlayInfo(void 0, import_command_mapper.parseYxcPlayInfo, "getPlayInfo");
-    }
-    if (this.hasCd) {
-      await this.refreshPlayInfo("cd", (info) => (0, import_command_mapper.parseYxcPlayInfo)(info, "cd"), 'getPlayInfo("cd")');
-    }
-    if (this.hasTuner) {
-      await this.refreshPlayInfo("tuner", import_command_mapper.parseYxcTunerInfo, 'getPlayInfo("tuner")');
+    for (const block of this.mediaBlocks) {
+      await this.refreshMediaSource(block);
     }
   }
   /**
-   * Fetch a player source's play info and write the parsed states with ack.
+   * Fetch one media source's play info and write the parsed states with ack. The
+   * source picks the getPlayInfo argument and the parser: netusb and cd share the
+   * play-info shape (different channel), the tuner has its own band/frequency/RDS.
    *
-   * @param source the play-info source (undefined = network player, `cd`, `tuner`)
-   * @param parse turn the response into state updates
-   * @param label how to name the call in a debug log on failure
+   * @param block the media block (`netusb`, `cd`, `tuner`)
    */
-  async refreshPlayInfo(source, parse, label) {
+  async refreshMediaSource(block) {
+    const arg = block === "netusb" ? void 0 : block;
+    const parse = (info) => block === "tuner" ? (0, import_command_mapper.parseYxcTunerInfo)(info) : (0, import_command_mapper.parseYxcPlayInfo)(info, block === "cd" ? "cd" : "netPlayer");
     try {
-      const info = await this.deps.client.getPlayInfo(source);
+      const info = await this.deps.client.getPlayInfo(arg);
       for (const update of parse(info)) {
         this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
       }
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: ${label} failed: ${e instanceof Error ? e.message : String(e)}`);
+      this.deps.log.debug(
+        `${this.deviceId}: getPlayInfo(${arg != null ? arg : ""}) failed: ${e instanceof Error ? e.message : String(e)}`
+      );
     }
   }
   /**

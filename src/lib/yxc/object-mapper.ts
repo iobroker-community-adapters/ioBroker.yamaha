@@ -149,12 +149,12 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
       type: "state",
       common: { name: "Band", type: "string", role: "media.input", read: true, write: false },
     });
-    // Raw YXC frequency; its unit is band-dependent (FM in 10 kHz steps, AM in
-    // kHz), so no fixed unit is claimed — the value mirrors what the app shows.
+    // Frequency in kHz — FM/AM/DAB all report kHz in getPlayInfo (FM 100900 =
+    // 100.9 MHz, AM 1080, DAB 180064), verified against real device captures.
     objects.push({
       id: "tuner.frequency",
       type: "state",
-      common: { name: "Frequency", type: "number", role: "value", read: true, write: false },
+      common: { name: "Frequency", type: "number", unit: "kHz", role: "value", read: true, write: false },
     });
     objects.push({
       id: "tuner.rdsText",

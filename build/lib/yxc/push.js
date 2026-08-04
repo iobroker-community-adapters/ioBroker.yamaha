@@ -18,10 +18,12 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var push_exports = {};
 __export(push_exports, {
+  mediaToRefresh: () => mediaToRefresh,
   zonesToRefresh: () => zonesToRefresh
 });
 module.exports = __toCommonJS(push_exports);
 const ZONE_KEYS = ["main", "zone2", "zone3", "zone4"];
+const MEDIA_KEYS = ["netusb", "cd", "tuner"];
 function zonesToRefresh(pushEvent) {
   if (typeof pushEvent !== "object" || pushEvent === null) {
     return [];
@@ -29,8 +31,16 @@ function zonesToRefresh(pushEvent) {
   const event = pushEvent;
   return ZONE_KEYS.filter((zone) => zone in event);
 }
+function mediaToRefresh(pushEvent) {
+  if (typeof pushEvent !== "object" || pushEvent === null) {
+    return [];
+  }
+  const event = pushEvent;
+  return MEDIA_KEYS.filter((block) => block in event);
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  mediaToRefresh,
   zonesToRefresh
 });
 //# sourceMappingURL=push.js.map

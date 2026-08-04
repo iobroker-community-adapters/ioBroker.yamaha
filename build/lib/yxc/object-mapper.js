@@ -143,7 +143,7 @@ function mapYxcToObjects(capabilities) {
     objects.push({
       id: "tuner.frequency",
       type: "state",
-      common: { name: "Frequency", type: "number", role: "value", read: true, write: false }
+      common: { name: "Frequency", type: "number", unit: "kHz", role: "value", read: true, write: false }
     });
     objects.push({
       id: "tuner.rdsText",

@@ -59,13 +59,27 @@ describe("parseYxcPlayInfo", () => {
 });
 
 describe("parseYxcTunerInfo", () => {
-  test("maps band, the active band's frequency and RDS radio text", () => {
+  test("maps band, the active band's frequency (kHz) and RDS radio text", () => {
+    // Real RX-V685 tuner getPlayInfo shape: band + nested per-band freq + rds.
     expect(
-      parseYxcTunerInfo({ band: "fm", fm: { freq: 8830, preset_no: 5 }, am: { freq: 0 }, rds: { radio_text_a: "Hit" } }),
+      parseYxcTunerInfo({
+        band: "fm",
+        fm: { preset: 0, freq: 100900, tuned: false },
+        am: { preset: 0, freq: 1080 },
+        rds: { radio_text_a: "Hit", radio_text_b: "" },
+      }),
     ).toEqual([
       { id: "tuner.band", value: "fm" },
-      { id: "tuner.frequency", value: 8830 },
+      { id: "tuner.frequency", value: 100900 },
       { id: "tuner.rdsText", value: "Hit" },
+    ]);
+  });
+
+  test("reads the DAB frequency when the active band is dab", () => {
+    // RX-A2070 reports band "dab" with the frequency nested under dab.
+    expect(parseYxcTunerInfo({ band: "dab", dab: { freq: 180064, service_label: "ENERGY" } })).toEqual([
+      { id: "tuner.band", value: "dab" },
+      { id: "tuner.frequency", value: 180064 },
     ]);
   });
 
