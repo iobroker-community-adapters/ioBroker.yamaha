@@ -86,6 +86,20 @@ describe("YNCA catalog", () => {
     expect(cat.find(e => e.id === "tuner.searchMode")?.spec.kind).toBe("enum");
   });
 
+  test("the DAB tuner is catalogued as its own DAB subunit under a dab channel", () => {
+    const cat = buildYncaCatalog();
+    expect(cat.find(e => e.id === "dab.band")).toMatchObject({ subunit: "DAB", func: "BAND" });
+    expect(cat.find(e => e.id === "dab.band")?.spec.kind).toBe("enum");
+    expect(cat.find(e => e.id === "dab.serviceLabel")).toMatchObject({
+      subunit: "DAB",
+      func: "DABSERVICELABEL",
+      write: false,
+    });
+    expect(cat.find(e => e.id === "dab.dls")?.spec).toEqual({ kind: "text" });
+    expect(cat.find(e => e.id === "dab.fmFrequency")?.spec).toMatchObject({ kind: "number", unit: "kHz" });
+    expect(cat.find(e => e.id === "dab.fmSearchMode")?.spec.kind).toBe("enum");
+  });
+
   test("the init sweep asks each function once per subunit", () => {
     const gets = sweepGets(buildYncaCatalog());
     expect(gets).toContainEqual({ subunit: "MAIN", func: "PWR" });

@@ -435,6 +435,7 @@ const MAIN_ONLY_FUNCS: Array<{
 
 const BAND_STATES = selfMap(["AM", "FM"]);
 const TUN_SEARCHMODE_STATES = selfMap(["Preset", "Tuning"]);
+const DAB_BAND_STATES = selfMap(["DAB", "FM"]);
 
 /** The zones the catalog maps: MAIN flat, ZONE2-4 each under their own prefix. */
 const ZONES: Array<{ subunit: string; prefix: string }> = [
@@ -665,6 +666,90 @@ const INPUT_NAME_KEYS = [
   "vaux",
 ];
 
+/**
+ * DAB tuner functions (the `@DAB` subunit on DAB+-capable receivers). Mapped under
+ * a `dab` channel of their own so DAB/FM labels never collide with the AM/FM `@TUN`
+ * tuner's `tuner.*` states. The subunit also carries an FM frequency (FMFREQ).
+ */
+const DAB_FUNCS: Array<{ func: string; state: string; name: string; spec: ValueSpec; write: boolean; role: string }> = [
+  {
+    func: "BAND",
+    state: "dab.band",
+    name: "DAB band",
+    spec: { kind: "enum", states: DAB_BAND_STATES },
+    write: true,
+    role: "media.input",
+  },
+  {
+    func: "DABCHLABEL",
+    state: "dab.channelLabel",
+    name: "DAB channel",
+    spec: { kind: "text" },
+    write: false,
+    role: "text",
+  },
+  { func: "DABDLSLABEL", state: "dab.dls", name: "DAB DLS text", spec: { kind: "text" }, write: false, role: "text" },
+  {
+    func: "DABENSEMBLELABEL",
+    state: "dab.ensembleLabel",
+    name: "DAB ensemble",
+    spec: { kind: "text" },
+    write: false,
+    role: "text",
+  },
+  {
+    func: "DABSERVICELABEL",
+    state: "dab.serviceLabel",
+    name: "DAB service",
+    spec: { kind: "text" },
+    write: false,
+    role: "text",
+  },
+  { func: "DABPRESET", state: "dab.preset", name: "DAB preset", spec: { kind: "text" }, write: false, role: "text" },
+  {
+    func: "DABPRGTYPE",
+    state: "dab.programType",
+    name: "DAB program type",
+    spec: { kind: "text" },
+    write: false,
+    role: "text",
+  },
+  { func: "FMPRESET", state: "dab.fmPreset", name: "FM preset", spec: { kind: "text" }, write: false, role: "text" },
+  {
+    func: "FMRDSPRGSERVICE",
+    state: "dab.fmRdsService",
+    name: "FM RDS station",
+    spec: { kind: "text" },
+    write: false,
+    role: "text",
+  },
+  {
+    func: "FMRDSPRGTYPE",
+    state: "dab.fmRdsProgramType",
+    name: "FM RDS program type",
+    spec: { kind: "text" },
+    write: false,
+    role: "text",
+  },
+  { func: "FMRDSTXT", state: "dab.fmRdsText", name: "FM RDS text", spec: { kind: "text" }, write: false, role: "text" },
+  {
+    func: "FMSEARCHMODE",
+    state: "dab.fmSearchMode",
+    name: "FM search mode",
+    spec: { kind: "enum", states: TUN_SEARCHMODE_STATES },
+    write: true,
+    role: "state",
+  },
+  {
+    func: "FMFREQ",
+    state: "dab.fmFrequency",
+    name: "FM frequency",
+    spec: { kind: "number", unit: "kHz" },
+    write: true,
+    role: "level",
+  },
+];
+
 const PLAYBACK_STATES = selfMap(["Play", "Pause", "Stop"]);
 const REPEAT_STATES = selfMap(["Off", "Single", "All"]);
 
@@ -808,6 +893,17 @@ export function buildYncaCatalog(): YncaEntry[] {
       role: "text",
       subunit: "SYS",
       func: `INPNAME${upper}`,
+    });
+  }
+  for (const fn of DAB_FUNCS) {
+    entries.push({
+      id: fn.state,
+      name: fn.name,
+      spec: fn.spec,
+      write: fn.write,
+      role: fn.role,
+      subunit: "DAB",
+      func: fn.func,
     });
   }
   for (const source of PLAYER_SOURCES) {
