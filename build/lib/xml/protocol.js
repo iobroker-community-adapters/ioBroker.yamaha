@@ -47,6 +47,18 @@ function parseBasicStatus(xml) {
   if (input) {
     status.input = input[1];
   }
+  const soundProgram = /<Sound_Program>([^<]+)<\/Sound_Program>/.exec(xml);
+  if (soundProgram) {
+    status.soundProgram = soundProgram[1];
+  }
+  const pureDirect = /<Pure_Direct>\s*<Mode>(On|Off)<\/Mode>/.exec(xml);
+  if (pureDirect) {
+    status.pureDirect = pureDirect[1] === "On";
+  }
+  const sleep = /<Sleep>([^<]+)<\/Sleep>/.exec(xml);
+  if (sleep) {
+    status.sleep = sleep[1];
+  }
   return status;
 }
 // Annotate the CommonJS export names for ESM import in node:

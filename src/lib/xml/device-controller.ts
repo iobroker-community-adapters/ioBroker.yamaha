@@ -34,6 +34,12 @@ const XML_AMP_STATES: Array<{ state: string; common: ObjectDef["common"] }> = [
   },
   { state: "mute", common: { name: "Mute", type: "boolean", role: "media.mute", read: true, write: true } },
   { state: "input", common: { name: "Input", type: "string", role: "media.input", read: true, write: true } },
+  {
+    state: "soundProgram",
+    common: { name: "Sound program", type: "string", role: "state", read: true, write: true },
+  },
+  { state: "pureDirect", common: { name: "Pure Direct", type: "boolean", role: "switch", read: true, write: true } },
+  { state: "sleep", common: { name: "Sleep timer", type: "string", role: "state", read: true, write: true } },
 ];
 
 /** The subset of the XML client the controller uses (so tests can inject a fake). */

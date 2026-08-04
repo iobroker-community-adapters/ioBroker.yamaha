@@ -32,7 +32,16 @@ const XML_STATE_MAPPINGS = {
     statusField: "volume"
   },
   mute: { toInner: (value) => `<Volume><Mute>${value ? "On" : "Off"}</Mute></Volume>`, statusField: "mute" },
-  input: { toInner: (value) => `<Input><Input_Sel>${String(value)}</Input_Sel></Input>`, statusField: "input" }
+  input: { toInner: (value) => `<Input><Input_Sel>${String(value)}</Input_Sel></Input>`, statusField: "input" },
+  soundProgram: {
+    toInner: (value) => `<Surround><Program_Sel><Current><Sound_Program>${String(value)}</Sound_Program></Current></Program_Sel></Surround>`,
+    statusField: "soundProgram"
+  },
+  pureDirect: {
+    toInner: (value) => `<Sound_Video><Pure_Direct><Mode>${value ? "On" : "Off"}</Mode></Pure_Direct></Sound_Video>`,
+    statusField: "pureDirect"
+  },
+  sleep: { toInner: (value) => `<Power_Control><Sleep>${String(value)}</Sleep></Power_Control>`, statusField: "sleep" }
 };
 const ZONE_ELEMENT = { main: "Main_Zone", zone2: "Zone_2", zone3: "Zone_3", zone4: "Zone_4" };
 const ZONE_PREFIX = { main: "", zone2: "zone2.", zone3: "zone3.", zone4: "zone4." };

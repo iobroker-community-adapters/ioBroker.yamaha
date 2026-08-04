@@ -15,6 +15,17 @@ describe("encodePut / encodeGet", () => {
 });
 
 describe("parseBasicStatus", () => {
+  test("parses sound program, pure direct and sleep from an extended Basic_Status", () => {
+    const xml =
+      "<Surround><Program_Sel><Current><Sound_Program>Movie</Sound_Program></Current></Program_Sel></Surround>" +
+      "<Sound_Video><Pure_Direct><Mode>On</Mode></Pure_Direct></Sound_Video>" +
+      "<Power_Control><Sleep>30 min</Sleep></Power_Control>";
+    const status = parseBasicStatus(xml);
+    expect(status.soundProgram).toBe("Movie");
+    expect(status.pureDirect).toBe(true);
+    expect(status.sleep).toBe("30 min");
+  });
+
   test("extracts power, volume (dB), mute and input from a Basic_Status response", () => {
     const xml = `<YAMAHA_AV rsp="GET" RC="0"><Main_Zone><Basic_Status>
       <Power_Control><Power>On</Power></Power_Control>
