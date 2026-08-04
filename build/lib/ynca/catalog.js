@@ -419,6 +419,7 @@ const MAIN_ONLY_FUNCS = [
   }
 ];
 const BAND_STATES = selfMap(["AM", "FM"]);
+const TUN_SEARCHMODE_STATES = selfMap(["Preset", "Tuning"]);
 const ZONES = [
   { subunit: "MAIN", prefix: "" },
   { subunit: "ZONE2", prefix: "zone2." },
@@ -479,7 +480,152 @@ const GLOBAL_FUNCS = [
     spec: { kind: "number", unit: "kHz" },
     write: true,
     role: "level"
+  },
+  {
+    subunit: "TUN",
+    func: "RDSTXTB",
+    state: "tuner.rdsTextB",
+    name: "RDS text B",
+    spec: { kind: "text" },
+    write: false,
+    role: "text"
+  },
+  {
+    subunit: "TUN",
+    func: "RDSPRGTYPE",
+    state: "tuner.rdsProgramType",
+    name: "RDS program type",
+    spec: { kind: "text" },
+    write: false,
+    role: "text"
+  },
+  {
+    subunit: "TUN",
+    func: "SEARCHMODE",
+    state: "tuner.searchMode",
+    name: "Search mode",
+    spec: { kind: "enum", states: TUN_SEARCHMODE_STATES },
+    write: true,
+    role: "state"
   }
+];
+const SPPATTERN_STATES = selfMap(["Pattern 1", "Pattern 2"]);
+const SWFR_CNFG_STATES = selfMap(["None", "Use"]);
+const SYS_FUNCS = [
+  { func: "MODELNAME", state: "system.model", name: "Model", spec: { kind: "text" }, write: false, role: "text" },
+  {
+    func: "VERSION",
+    state: "system.version",
+    name: "Firmware version",
+    spec: { kind: "text" },
+    write: false,
+    role: "text"
+  },
+  {
+    func: "PWR",
+    state: "system.power",
+    name: "System power",
+    spec: { kind: "onoff", on: "On", off: "Standby" },
+    write: true,
+    role: "switch.power"
+  },
+  {
+    func: "PARTYMUTE",
+    state: "partyMute",
+    name: "Party mute",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    write: true,
+    role: "media.mute"
+  },
+  {
+    func: "HDMIOUT1",
+    state: "system.hdmiOut1",
+    name: "HDMI OUT1",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    write: true,
+    role: "switch"
+  },
+  {
+    func: "HDMIOUT2",
+    state: "system.hdmiOut2",
+    name: "HDMI OUT2",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    write: true,
+    role: "switch"
+  },
+  {
+    func: "HDMIOUT3",
+    state: "system.hdmiOut3",
+    name: "HDMI OUT3",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    write: true,
+    role: "switch"
+  },
+  {
+    func: "SPPATTERN",
+    state: "system.speakerPattern",
+    name: "Speaker pattern",
+    spec: { kind: "enum", states: SPPATTERN_STATES },
+    write: true,
+    role: "state"
+  },
+  {
+    func: "SPPATTERN1SWFR1CNFG",
+    state: "system.speakerPattern1Swfr1",
+    name: "Speaker pattern 1 subwoofer 1",
+    spec: { kind: "enum", states: SWFR_CNFG_STATES },
+    write: true,
+    role: "state"
+  },
+  {
+    func: "SPPATTERN1SWFR2CNFG",
+    state: "system.speakerPattern1Swfr2",
+    name: "Speaker pattern 1 subwoofer 2",
+    spec: { kind: "enum", states: SWFR_CNFG_STATES },
+    write: true,
+    role: "state"
+  },
+  {
+    func: "SPPATTERN2SWFR1CNFG",
+    state: "system.speakerPattern2Swfr1",
+    name: "Speaker pattern 2 subwoofer 1",
+    spec: { kind: "enum", states: SWFR_CNFG_STATES },
+    write: true,
+    role: "state"
+  },
+  {
+    func: "SPPATTERN2SWFR2CNFG",
+    state: "system.speakerPattern2Swfr2",
+    name: "Speaker pattern 2 subwoofer 2",
+    spec: { kind: "enum", states: SWFR_CNFG_STATES },
+    write: true,
+    role: "state"
+  }
+];
+const INPUT_NAME_KEYS = [
+  "audio1",
+  "audio2",
+  "audio3",
+  "audio4",
+  "av1",
+  "av2",
+  "av3",
+  "av4",
+  "av5",
+  "av6",
+  "av7",
+  "dock",
+  "hdmi1",
+  "hdmi2",
+  "hdmi3",
+  "hdmi4",
+  "hdmi5",
+  "hdmi6",
+  "hdmi7",
+  "multich",
+  "phono",
+  "usb",
+  "vaux"
 ];
 const PLAYBACK_STATES = selfMap(["Play", "Pause", "Stop"]);
 const REPEAT_STATES = selfMap(["Off", "Single", "All"]);
@@ -576,6 +722,29 @@ function buildYncaCatalog() {
       role: fn.role,
       subunit: fn.subunit,
       func: fn.func
+    });
+  }
+  for (const fn of SYS_FUNCS) {
+    entries.push({
+      id: fn.state,
+      name: fn.name,
+      spec: fn.spec,
+      write: fn.write,
+      role: fn.role,
+      subunit: "SYS",
+      func: fn.func
+    });
+  }
+  for (const key of INPUT_NAME_KEYS) {
+    const upper = key.toUpperCase();
+    entries.push({
+      id: `system.inputName.${key}`,
+      name: `Input name ${upper}`,
+      spec: { kind: "text" },
+      write: false,
+      role: "text",
+      subunit: "SYS",
+      func: `INPNAME${upper}`
     });
   }
   for (const source of PLAYER_SOURCES) {

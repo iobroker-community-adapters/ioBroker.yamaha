@@ -60,6 +60,32 @@ describe("YNCA catalog", () => {
     expect(cat.find(e => e.id === "scene.name12")).toMatchObject({ func: "SCENE12NAME" });
   });
 
+  test("system info and controls carry intelligent types", () => {
+    const cat = buildYncaCatalog();
+    expect(cat.find(e => e.id === "system.model")).toMatchObject({ subunit: "SYS", func: "MODELNAME", write: false });
+    expect(cat.find(e => e.id === "system.model")?.spec).toEqual({ kind: "text" });
+    expect(cat.find(e => e.id === "system.power")?.spec).toEqual({ kind: "onoff", on: "On", off: "Standby" });
+    expect(cat.find(e => e.id === "system.hdmiOut1")?.spec).toEqual({ kind: "onoff", on: "On", off: "Off" });
+    expect(cat.find(e => e.id === "system.speakerPattern")?.spec.kind).toBe("enum");
+  });
+
+  test("all 23 input names are read-only text states on SYS", () => {
+    const cat = buildYncaCatalog();
+    expect(cat.find(e => e.id === "system.inputName.hdmi1")).toMatchObject({
+      subunit: "SYS",
+      func: "INPNAMEHDMI1",
+      write: false,
+    });
+    expect(cat.filter(e => e.id.startsWith("system.inputName.")).length).toBe(23);
+  });
+
+  test("the AM/FM tuner is complete: RDS text B, program type and search mode", () => {
+    const cat = buildYncaCatalog();
+    expect(cat.find(e => e.id === "tuner.rdsTextB")).toMatchObject({ subunit: "TUN", func: "RDSTXTB", write: false });
+    expect(cat.find(e => e.id === "tuner.rdsProgramType")?.spec).toEqual({ kind: "text" });
+    expect(cat.find(e => e.id === "tuner.searchMode")?.spec.kind).toBe("enum");
+  });
+
   test("the init sweep asks each function once per subunit", () => {
     const gets = sweepGets(buildYncaCatalog());
     expect(gets).toContainEqual({ subunit: "MAIN", func: "PWR" });
