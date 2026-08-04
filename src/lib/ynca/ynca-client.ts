@@ -1,14 +1,11 @@
 import { connect } from "node:net";
 import { LineBuffer } from "./line-buffer";
 import { decodeLine, encodeCommand, encodeGet } from "./protocol";
-import { ReconnectStrategy } from "./reconnect-strategy";
 import { buildCapabilities, type YncaCapabilities } from "./capability";
 
 /** The YNCA control port (TCP). */
 export const YNCA_PORT = 50000;
 
-const RECONNECT_BASE_MS = 1000;
-const RECONNECT_MAX_MS = 30000;
 /** Fail the initial connect after this long so a non-YNCA device falls through fast. */
 const CONNECT_TIMEOUT_MS = 5000;
 
@@ -108,8 +105,7 @@ export class YncaClient {
   private socket: YncaSocket | undefined;
   private readonly lineBuffer = new LineBuffer();
   private readonly messageHandlers: Array<(message: YncaMessage) => void> = [];
-  private readonly reconnect = new ReconnectStrategy(RECONNECT_BASE_MS, RECONNECT_MAX_MS);
-  private reconnectTimer: ioBroker.Timeout | undefined;
+  private dropHandler: (() => void) | undefined;
   private reachable = false;
   private closed = false;
 
@@ -141,7 +137,6 @@ export class YncaClient {
     this.socket = socket;
     socket.onConnect(() => {
       this.reachable = true;
-      this.reconnect.reset();
       onFirstConnect?.();
     });
     socket.onData(chunk => this.handleData(chunk));
@@ -170,11 +165,13 @@ export class YncaClient {
     if (this.closed) {
       return;
     }
-    // Fully close the old socket before scheduling a reopen — the receiver allows
-    // only one YNCA connection, so a lingering socket would refuse the new one.
+    // Fully close the old socket — the receiver allows only one YNCA connection, so
+    // a lingering one would refuse the fresh connection. Reconnect lives one level
+    // up in the supervisor (single level): report the drop and let it re-attempt,
+    // which rebuilds/re-seeds through a fresh controller.
     this.socket?.destroy();
     this.socket = undefined;
-    this.reconnectTimer = this.timers.schedule(() => this.openSocket(), this.reconnect.nextDelay());
+    this.dropHandler?.();
   }
 
   /**
@@ -205,6 +202,16 @@ export class YncaClient {
    */
   public onMessage(handler: (message: YncaMessage) => void): void {
     this.messageHandlers.push(handler);
+  }
+
+  /**
+   * Register the handler called once when the connection drops unexpectedly (not
+   * on an explicit close). The supervisor uses it to reconnect.
+   *
+   * @param handler called on each unexpected drop
+   */
+  public onDrop(handler: () => void): void {
+    this.dropHandler = handler;
   }
 
   /**
@@ -251,10 +258,6 @@ export class YncaClient {
   public close(): void {
     this.closed = true;
     this.reachable = false;
-    if (this.reconnectTimer) {
-      this.timers.cancel(this.reconnectTimer);
-      this.reconnectTimer = undefined;
-    }
     this.socket?.destroy();
     this.socket = undefined;
   }

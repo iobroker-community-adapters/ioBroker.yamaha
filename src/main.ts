@@ -2,7 +2,7 @@ import * as utils from "@iobroker/adapter-core";
 import { createSocket } from "node:dgram";
 import { get as httpGet } from "node:http";
 import { YamahaYXC } from "yamaha-yxc-nodejs";
-import { legacyDeviceRow, orphanedObjects, parseDevices, stripNamespace } from "./lib/pure-helpers";
+import { legacyDeviceRow, parseDevices, stripNamespace } from "./lib/pure-helpers";
 import { discoverYamaha } from "./lib/discovery";
 import { YncaClient } from "./lib/ynca/ynca-client";
 import { YncaDeviceController } from "./lib/device-controller";
@@ -11,7 +11,9 @@ import { YxcPushReceiver } from "./lib/yxc/push-receiver";
 import { XmlDeviceController } from "./lib/xml/device-controller";
 import { XmlClient } from "./lib/xml/xml-client";
 import type { ObjectDef } from "./lib/capability-mapper";
-import type { DeviceController, DeviceRecord } from "./lib/types";
+import type { DeviceRecord } from "./lib/types";
+import { DeviceSupervisor, type ConnectionHandle } from "./lib/lifecycle/device-supervisor";
+import { ReconnectStrategy } from "./lib/lifecycle/reconnect-strategy";
 
 /** Zones swept for their amplifier functions. */
 const SWEEP_ZONES = ["MAIN", "ZONE2", "ZONE3", "ZONE4"];
@@ -30,16 +32,22 @@ const SWEEP_GETS = [
   ...SWEEP_ZONES.flatMap(zone => SWEEP_FUNCS.map(func => ({ subunit: zone, func }))),
 ];
 
+/** Supervisor reconnect backoff bounds (exponential: 1s, 2s … capped at 60s). */
+const RECONNECT_BASE_MS = 1000;
+const RECONNECT_MAX_MS = 60000;
+
 /**
  * ioBroker.yamaha — controls Yamaha AV receivers and MusicCast devices.
  *
- * Each configured device is driven by one controller, tried in order: YNCA (amp
- * control over a held TCP connection, event-pushed), then YXC (MusicCast speakers
- * and soundbars), then XML/YNC (pre-2010 receivers, polled over HTTP). All YXC
- * devices share one UDP push receiver, keyed by source IP.
+ * Each configured device is driven by a supervisor that keeps one transport
+ * controller online, tried in order: YNCA (amp control over a held TCP
+ * connection, event-pushed), then YXC (MusicCast speakers and soundbars), then
+ * XML/YNC (pre-2010 receivers, polled over HTTP). All YXC devices share one UDP
+ * push receiver, keyed by source IP.
  */
 export class Yamaha extends utils.Adapter {
-  private readonly controllers: DeviceController[] = [];
+  private readonly supervisors: DeviceSupervisor[] = [];
+  private readonly deviceConnected = new Map<string, boolean>();
   private pushReceiver: YxcPushReceiver | undefined;
 
   /**
@@ -57,7 +65,7 @@ export class Yamaha extends utils.Adapter {
     this.on("unload", this.onUnload.bind(this));
   }
 
-  /** Start a controller for each configured device, then subscribe to state changes. */
+  /** Start a supervisor for each configured device, then subscribe to state changes. */
   private async onReady(): Promise<void> {
     try {
       await this.setState("info.connection", { val: false, ack: true });
@@ -70,18 +78,41 @@ export class Yamaha extends utils.Adapter {
       });
       pushReceiver.start();
       this.pushReceiver = pushReceiver;
-      const createdIds = new Set<string>([`${this.namespace}.info`, `${this.namespace}.info.connection`]);
-      let anyConnected = false;
+      // One supervisor per device: it keeps retrying until a transport connects and
+      // reconnects on a drop, so a device that is off at start joins on its own.
       for (const device of devices) {
-        if (await this.startDevice(device, pushReceiver, createdIds)) {
-          anyConnected = true;
-        }
+        this.deviceConnected.set(device.id, false);
+        const supervisor = new DeviceSupervisor({
+          attempt: () => this.attemptDevice(device, pushReceiver),
+          schedule: (cb, ms) => this.setTimeout(cb, ms),
+          cancel: handle => this.clearTimeout(handle as ioBroker.Timeout | undefined),
+          onConnectionChange: connected => this.reportConnection(device.id, connected),
+          backoff: new ReconnectStrategy(RECONNECT_BASE_MS, RECONNECT_MAX_MS),
+          log: {
+            debug: message => this.log.debug(message),
+            info: message => this.log.info(message),
+            warn: message => this.log.warn(message),
+          },
+        });
+        this.supervisors.push(supervisor);
+        supervisor.start();
       }
-      await this.setState("info.connection", { val: anyConnected, ack: true });
-      await this.cleanupOrphans(createdIds);
     } catch (e) {
       this.log.error(`onReady failed: ${e instanceof Error ? e.message : String(e)}`);
     }
+  }
+
+  /**
+   * Aggregate one device's connection state into the adapter's `info.connection`
+   * (true while at least one device is connected).
+   *
+   * @param deviceId the device reporting
+   * @param connected whether that device is currently connected
+   */
+  private reportConnection(deviceId: string, connected: boolean): void {
+    this.deviceConnected.set(deviceId, connected);
+    const anyConnected = [...this.deviceConnected.values()].some(Boolean);
+    void this.setState("info.connection", { val: anyConnected, ack: true });
   }
 
   /**
@@ -113,51 +144,23 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
-   * One-shot migration/cleanup: remove objects not created this run (the previous
-   * adapter's tree and dropped devices), deepest first so parents go last.
-   *
-   * @param createdIds the ids created this run, including parent paths
-   */
-  private async cleanupOrphans(createdIds: Set<string>): Promise<void> {
-    const existing = Object.keys(await this.getAdapterObjectsAsync());
-    const orphans = orphanedObjects(existing, createdIds, this.namespace).sort((a, b) => b.length - a.length);
-    for (const id of orphans) {
-      try {
-        await this.delObjectAsync(stripNamespace(id, this.namespace));
-      } catch {
-        // already removed with its parent
-      }
-    }
-    if (orphans.length > 0) {
-      this.log.info(`cleaned up ${orphans.length} object(s) from a previous configuration`);
-    }
-  }
-
-  /**
-   * Bring one device online: try YNCA (amp control), else fall back to YXC
-   * (MusicCast). The transport that connects owns the device's object tree, so
-   * the two mappers never collide on a shared id.
+   * Bring one device online across its transports, tried in order: YNCA (amp
+   * control over a held TCP connection), then YXC (MusicCast), then XML/YNC
+   * (pre-2010). Returns a connection handle the supervisor keeps, or null when no
+   * transport answers this attempt. The transport that connects owns the device's
+   * object tree, so the mappers never collide on a shared id.
    *
    * @param device the configured device record
    * @param pushReceiver the shared YXC push receiver
-   * @param createdIds collects the object ids created this run, for orphan cleanup
-   * @returns true if a transport connected
+   * @returns a connection handle, or null when no transport connected
    */
-  private async startDevice(
-    device: DeviceRecord,
-    pushReceiver: YxcPushReceiver,
-    createdIds: Set<string>,
-  ): Promise<boolean> {
+  private async attemptDevice(device: DeviceRecord, pushReceiver: YxcPushReceiver): Promise<ConnectionHandle | null> {
     const log = {
       debug: (message: string): void => this.log.debug(message),
       info: (message: string): void => this.log.info(message),
       warn: (message: string): void => this.log.warn(message),
     };
     const upsertObject = async (id: string, def: ObjectDef): Promise<void> => {
-      const parts = id.split(".");
-      for (let i = 1; i <= parts.length; i++) {
-        createdIds.add(`${this.namespace}.${parts.slice(0, i).join(".")}`);
-      }
       await this.extendObject(id, { type: def.type, common: def.common, native: {} });
     };
     const setStateAck = (id: string, value: boolean | number | string): void =>
@@ -167,17 +170,17 @@ export class Yamaha extends utils.Adapter {
       cancel: (handle: ioBroker.Timeout | undefined): void => this.clearTimeout(handle),
     };
 
-    // 1) YNCA — amp control over a held TCP connection.
-    const ynca = new YncaDeviceController(device.id, {
-      client: new YncaClient(device.ip, timers),
-      upsertObject,
-      setStateAck,
-      log,
-    });
+    // 1) YNCA — amp control over a held TCP connection; a socket drop reconnects
+    //    through the supervisor (the client no longer reconnects on its own).
+    const yncaClient = new YncaClient(device.ip, timers);
+    const ynca = new YncaDeviceController(device.id, { client: yncaClient, upsertObject, setStateAck, log });
     try {
       if (await ynca.start(SWEEP_GETS)) {
-        this.controllers.push(ynca);
-        return true;
+        return {
+          onDrop: cb => yncaClient.onDrop(cb),
+          handleStateChange: (id, ack, value) => ynca.handleStateChange(id, ack, value),
+          close: () => ynca.close(),
+        };
       }
       ynca.close();
     } catch (e) {
@@ -185,7 +188,8 @@ export class Yamaha extends utils.Adapter {
       this.log.debug(`${device.id}: no YNCA (${e instanceof Error ? e.message : String(e)})`);
     }
 
-    // 2) YXC fallback — MusicCast speakers/soundbars without YNCA.
+    // 2) YXC fallback — MusicCast; polled + push, no socket-drop event (no-op onDrop,
+    //    the keepalive poll recovers on its own).
     const yxc = new YxcDeviceController(device.id, {
       client: new YamahaYXC(device.ip),
       registerPush: onPush => pushReceiver.register(device.ip, onPush),
@@ -203,8 +207,11 @@ export class Yamaha extends utils.Adapter {
     });
     try {
       if (await yxc.start()) {
-        this.controllers.push(yxc);
-        return true;
+        return {
+          onDrop: () => {},
+          handleStateChange: (id, ack, value) => yxc.handleStateChange(id, ack, value),
+          close: () => yxc.close(),
+        };
       }
       yxc.close();
     } catch (e) {
@@ -212,7 +219,7 @@ export class Yamaha extends utils.Adapter {
       this.log.debug(`${device.id}: no YXC (${e instanceof Error ? e.message : String(e)})`);
     }
 
-    // 3) XML/YNC fallback — pre-2010 receivers that speak neither YNCA nor YXC.
+    // 3) XML/YNC fallback — pre-2010 receivers; polled, no drop event.
     const xml = new XmlDeviceController(device.id, {
       client: new XmlClient(device.ip),
       scheduleKeepalive: (handler, ms) => {
@@ -229,8 +236,11 @@ export class Yamaha extends utils.Adapter {
     });
     try {
       if (await xml.start()) {
-        this.controllers.push(xml);
-        return true;
+        return {
+          onDrop: () => {},
+          handleStateChange: (id, ack, value) => xml.handleStateChange(id, ack, value),
+          close: () => xml.close(),
+        };
       }
       xml.close();
     } catch (e) {
@@ -239,12 +249,12 @@ export class Yamaha extends utils.Adapter {
         `${device.id}: no reachable transport (YNCA/YXC/XML): ${e instanceof Error ? e.message : String(e)}`,
       );
     }
-    return false;
+    return null;
   }
 
   /**
-   * Route a state change to every device controller (each ignores ids outside
-   * its own subtree and its own acked echoes).
+   * Route a state change to every device's supervisor (each forwards to its
+   * active controller, which ignores ids outside its subtree and its acked echoes).
    *
    * @param id the full state id
    * @param state the new state (null when deleted)
@@ -254,8 +264,8 @@ export class Yamaha extends utils.Adapter {
       return;
     }
     const relative = stripNamespace(id, this.namespace);
-    for (const controller of this.controllers) {
-      controller.handleStateChange(relative, state.ack, state.val);
+    for (const supervisor of this.supervisors) {
+      supervisor.handleStateChange(relative, state.ack, state.val);
     }
   }
 
@@ -267,8 +277,8 @@ export class Yamaha extends utils.Adapter {
   private onUnload(callback: () => void): void {
     try {
       this.pushReceiver?.close();
-      for (const controller of this.controllers) {
-        controller.close();
+      for (const supervisor of this.supervisors) {
+        supervisor.close();
       }
       void this.setState("info.connection", { val: false, ack: true });
       callback();

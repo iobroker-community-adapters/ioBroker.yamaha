@@ -43,14 +43,19 @@ var import_device_controller2 = require("./lib/yxc/device-controller");
 var import_push_receiver = require("./lib/yxc/push-receiver");
 var import_device_controller3 = require("./lib/xml/device-controller");
 var import_xml_client = require("./lib/xml/xml-client");
+var import_device_supervisor = require("./lib/lifecycle/device-supervisor");
+var import_reconnect_strategy = require("./lib/lifecycle/reconnect-strategy");
 const SWEEP_ZONES = ["MAIN", "ZONE2", "ZONE3", "ZONE4"];
 const SWEEP_FUNCS = ["BASIC", "PWR", "VOL", "MUTE", "INP", "SOUNDPRG", "STRAIGHT", "ENHANCER", "PUREDIRMODE", "SLEEP"];
 const SWEEP_GETS = [
   { subunit: "SYS", func: "MODELNAME" },
   ...SWEEP_ZONES.flatMap((zone) => SWEEP_FUNCS.map((func) => ({ subunit: zone, func })))
 ];
+const RECONNECT_BASE_MS = 1e3;
+const RECONNECT_MAX_MS = 6e4;
 class Yamaha extends utils.Adapter {
-  controllers = [];
+  supervisors = [];
+  deviceConnected = /* @__PURE__ */ new Map();
   pushReceiver;
   /**
    * @param options adapter options passed through by js-controller
@@ -65,7 +70,7 @@ class Yamaha extends utils.Adapter {
     this.on("message", this.onMessage.bind(this));
     this.on("unload", this.onUnload.bind(this));
   }
-  /** Start a controller for each configured device, then subscribe to state changes. */
+  /** Start a supervisor for each configured device, then subscribe to state changes. */
   async onReady() {
     try {
       await this.setState("info.connection", { val: false, ack: true });
@@ -78,18 +83,38 @@ class Yamaha extends utils.Adapter {
       });
       pushReceiver.start();
       this.pushReceiver = pushReceiver;
-      const createdIds = /* @__PURE__ */ new Set([`${this.namespace}.info`, `${this.namespace}.info.connection`]);
-      let anyConnected = false;
       for (const device of devices) {
-        if (await this.startDevice(device, pushReceiver, createdIds)) {
-          anyConnected = true;
-        }
+        this.deviceConnected.set(device.id, false);
+        const supervisor = new import_device_supervisor.DeviceSupervisor({
+          attempt: () => this.attemptDevice(device, pushReceiver),
+          schedule: (cb, ms) => this.setTimeout(cb, ms),
+          cancel: (handle) => this.clearTimeout(handle),
+          onConnectionChange: (connected) => this.reportConnection(device.id, connected),
+          backoff: new import_reconnect_strategy.ReconnectStrategy(RECONNECT_BASE_MS, RECONNECT_MAX_MS),
+          log: {
+            debug: (message) => this.log.debug(message),
+            info: (message) => this.log.info(message),
+            warn: (message) => this.log.warn(message)
+          }
+        });
+        this.supervisors.push(supervisor);
+        supervisor.start();
       }
-      await this.setState("info.connection", { val: anyConnected, ack: true });
-      await this.cleanupOrphans(createdIds);
     } catch (e) {
       this.log.error(`onReady failed: ${e instanceof Error ? e.message : String(e)}`);
     }
+  }
+  /**
+   * Aggregate one device's connection state into the adapter's `info.connection`
+   * (true while at least one device is connected).
+   *
+   * @param deviceId the device reporting
+   * @param connected whether that device is currently connected
+   */
+  reportConnection(deviceId, connected) {
+    this.deviceConnected.set(deviceId, connected);
+    const anyConnected = [...this.deviceConnected.values()].some(Boolean);
+    void this.setState("info.connection", { val: anyConnected, ack: true });
   }
   /**
    * Carry over the previous adapter's single-device config into the device table.
@@ -115,45 +140,23 @@ class Yamaha extends utils.Adapter {
     }
   }
   /**
-   * One-shot migration/cleanup: remove objects not created this run (the previous
-   * adapter's tree and dropped devices), deepest first so parents go last.
-   *
-   * @param createdIds the ids created this run, including parent paths
-   */
-  async cleanupOrphans(createdIds) {
-    const existing = Object.keys(await this.getAdapterObjectsAsync());
-    const orphans = (0, import_pure_helpers.orphanedObjects)(existing, createdIds, this.namespace).sort((a, b) => b.length - a.length);
-    for (const id of orphans) {
-      try {
-        await this.delObjectAsync((0, import_pure_helpers.stripNamespace)(id, this.namespace));
-      } catch {
-      }
-    }
-    if (orphans.length > 0) {
-      this.log.info(`cleaned up ${orphans.length} object(s) from a previous configuration`);
-    }
-  }
-  /**
-   * Bring one device online: try YNCA (amp control), else fall back to YXC
-   * (MusicCast). The transport that connects owns the device's object tree, so
-   * the two mappers never collide on a shared id.
+   * Bring one device online across its transports, tried in order: YNCA (amp
+   * control over a held TCP connection), then YXC (MusicCast), then XML/YNC
+   * (pre-2010). Returns a connection handle the supervisor keeps, or null when no
+   * transport answers this attempt. The transport that connects owns the device's
+   * object tree, so the mappers never collide on a shared id.
    *
    * @param device the configured device record
    * @param pushReceiver the shared YXC push receiver
-   * @param createdIds collects the object ids created this run, for orphan cleanup
-   * @returns true if a transport connected
+   * @returns a connection handle, or null when no transport connected
    */
-  async startDevice(device, pushReceiver, createdIds) {
+  async attemptDevice(device, pushReceiver) {
     const log = {
       debug: (message) => this.log.debug(message),
       info: (message) => this.log.info(message),
       warn: (message) => this.log.warn(message)
     };
     const upsertObject = async (id, def) => {
-      const parts = id.split(".");
-      for (let i = 1; i <= parts.length; i++) {
-        createdIds.add(`${this.namespace}.${parts.slice(0, i).join(".")}`);
-      }
       await this.extendObject(id, { type: def.type, common: def.common, native: {} });
     };
     const setStateAck = (id, value) => void this.setState(id, { val: value, ack: true });
@@ -161,16 +164,15 @@ class Yamaha extends utils.Adapter {
       schedule: (handler, ms) => this.setTimeout(handler, ms),
       cancel: (handle) => this.clearTimeout(handle)
     };
-    const ynca = new import_device_controller.YncaDeviceController(device.id, {
-      client: new import_ynca_client.YncaClient(device.ip, timers),
-      upsertObject,
-      setStateAck,
-      log
-    });
+    const yncaClient = new import_ynca_client.YncaClient(device.ip, timers);
+    const ynca = new import_device_controller.YncaDeviceController(device.id, { client: yncaClient, upsertObject, setStateAck, log });
     try {
       if (await ynca.start(SWEEP_GETS)) {
-        this.controllers.push(ynca);
-        return true;
+        return {
+          onDrop: (cb) => yncaClient.onDrop(cb),
+          handleStateChange: (id, ack, value) => ynca.handleStateChange(id, ack, value),
+          close: () => ynca.close()
+        };
       }
       ynca.close();
     } catch (e) {
@@ -194,8 +196,12 @@ class Yamaha extends utils.Adapter {
     });
     try {
       if (await yxc.start()) {
-        this.controllers.push(yxc);
-        return true;
+        return {
+          onDrop: () => {
+          },
+          handleStateChange: (id, ack, value) => yxc.handleStateChange(id, ack, value),
+          close: () => yxc.close()
+        };
       }
       yxc.close();
     } catch (e) {
@@ -218,8 +224,12 @@ class Yamaha extends utils.Adapter {
     });
     try {
       if (await xml.start()) {
-        this.controllers.push(xml);
-        return true;
+        return {
+          onDrop: () => {
+          },
+          handleStateChange: (id, ack, value) => xml.handleStateChange(id, ack, value),
+          close: () => xml.close()
+        };
       }
       xml.close();
     } catch (e) {
@@ -228,11 +238,11 @@ class Yamaha extends utils.Adapter {
         `${device.id}: no reachable transport (YNCA/YXC/XML): ${e instanceof Error ? e.message : String(e)}`
       );
     }
-    return false;
+    return null;
   }
   /**
-   * Route a state change to every device controller (each ignores ids outside
-   * its own subtree and its own acked echoes).
+   * Route a state change to every device's supervisor (each forwards to its
+   * active controller, which ignores ids outside its subtree and its acked echoes).
    *
    * @param id the full state id
    * @param state the new state (null when deleted)
@@ -242,8 +252,8 @@ class Yamaha extends utils.Adapter {
       return;
     }
     const relative = (0, import_pure_helpers.stripNamespace)(id, this.namespace);
-    for (const controller of this.controllers) {
-      controller.handleStateChange(relative, state.ack, state.val);
+    for (const supervisor of this.supervisors) {
+      supervisor.handleStateChange(relative, state.ack, state.val);
     }
   }
   /**
@@ -255,8 +265,8 @@ class Yamaha extends utils.Adapter {
     var _a;
     try {
       (_a = this.pushReceiver) == null ? void 0 : _a.close();
-      for (const controller of this.controllers) {
-        controller.close();
+      for (const supervisor of this.supervisors) {
+        supervisor.close();
       }
       void this.setState("info.connection", { val: false, ack: true });
       callback();

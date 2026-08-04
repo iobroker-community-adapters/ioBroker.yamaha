@@ -7,6 +7,14 @@ export interface ConnectionHandle {
    * @param cb invoked once when the connection is lost
    */
   onDrop(cb: () => void): void;
+  /**
+   * Route a state change (a user write or a device echo) to the active controller.
+   *
+   * @param fullStateId the full state id (device id + "." + state)
+   * @param ack whether the change is acked (device-originated)
+   * @param value the new value
+   */
+  handleStateChange(fullStateId: string, ack: boolean, value: unknown): void;
   /** Close the connection synchronously — safe to call from onUnload. */
   close(): void;
 }
@@ -65,6 +73,18 @@ export class DeviceSupervisor {
   /** Begin supervising: attempt now, then retry/reconnect as needed. */
   public start(): void {
     void this.attemptOnce();
+  }
+
+  /**
+   * Route a state change to the currently connected controller (a no-op while the
+   * device is offline, so a user write during a reconnect is simply dropped).
+   *
+   * @param fullStateId the full state id (device id + "." + state)
+   * @param ack whether the change is acked (device-originated)
+   * @param value the new value
+   */
+  public handleStateChange(fullStateId: string, ack: boolean, value: unknown): void {
+    this.handle?.handleStateChange(fullStateId, ack, value);
   }
 
   private async attemptOnce(): Promise<void> {

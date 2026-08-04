@@ -14,7 +14,7 @@ describe("DeviceSupervisor", () => {
     const supervisor = new DeviceSupervisor({
       attempt: async () => {
         attempts++;
-        return attempts >= 3 ? { onDrop: () => {}, close: () => {} } : null;
+        return attempts >= 3 ? { onDrop: () => {}, handleStateChange: () => {}, close: () => {} } : null;
       },
       schedule: cb => {
         scheduled.push(cb);
@@ -46,7 +46,7 @@ describe("DeviceSupervisor", () => {
     const supervisor = new DeviceSupervisor({
       attempt: async () => {
         attempts++;
-        return { onDrop: cb => (dropCb = cb), close: () => {} };
+        return { onDrop: cb => (dropCb = cb), handleStateChange: () => {}, close: () => {} };
       },
       schedule: cb => {
         scheduled.push(cb);
@@ -78,7 +78,7 @@ describe("DeviceSupervisor", () => {
     const supervisor = new DeviceSupervisor({
       attempt: async () => {
         attempts++;
-        return { onDrop: cb => (dropCb = cb), close: () => {} };
+        return { onDrop: cb => (dropCb = cb), handleStateChange: () => {}, close: () => {} };
       },
       schedule: cb => {
         scheduled.push(cb);
@@ -108,7 +108,7 @@ describe("DeviceSupervisor", () => {
         if (attempts === 1) {
           throw new Error("boom");
         }
-        return { onDrop: () => {}, close: () => {} };
+        return { onDrop: () => {}, handleStateChange: () => {}, close: () => {} };
       },
       schedule: cb => {
         scheduled.push(cb);
@@ -126,5 +126,29 @@ describe("DeviceSupervisor", () => {
     scheduled.shift()?.();
     await tick(); // attempt 2 → connected
     expect(attempts).toBe(2);
+  });
+
+  test("routes state changes to the active connection, dropping them while offline", async () => {
+    const calls: Array<[string, boolean, unknown]> = [];
+    const supervisor = new DeviceSupervisor({
+      attempt: async () => ({
+        onDrop: () => {},
+        handleStateChange: (id, ack, val) => calls.push([id, ack, val]),
+        close: () => {},
+      }),
+      schedule: () => 0,
+      cancel: () => {},
+      onConnectionChange: () => {},
+      backoff: fastBackoff(),
+      log: silentLog,
+    });
+
+    supervisor.handleStateChange("dev.power", false, true); // offline → dropped
+    expect(calls).toHaveLength(0);
+
+    supervisor.start();
+    await tick(); // connected
+    supervisor.handleStateChange("dev.power", false, true);
+    expect(calls).toEqual([["dev.power", false, true]]);
   });
 });

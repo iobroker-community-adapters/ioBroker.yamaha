@@ -1,6 +1,6 @@
 {
   "version": 3,
-  "sources": ["../../../src/lib/ynca/reconnect-strategy.ts"],
+  "sources": ["../../../src/lib/lifecycle/reconnect-strategy.ts"],
   "sourcesContent": ["/** Exponential backoff for reconnect attempts, capped at a maximum delay. */\nexport class ReconnectStrategy {\n  private attempt = 0;\n\n  /**\n   * @param baseMs the first delay in milliseconds\n   * @param maxMs the maximum delay in milliseconds\n   */\n  public constructor(\n    private readonly baseMs: number,\n    private readonly maxMs: number,\n  ) {}\n\n  /**\n   * Get the next backoff delay and advance the attempt counter.\n   *\n   * @returns the delay in milliseconds for the next reconnect attempt\n   */\n  public nextDelay(): number {\n    const delay = Math.min(this.baseMs * 2 ** this.attempt, this.maxMs);\n    this.attempt++;\n    return delay;\n  }\n\n  /** Reset the backoff to the base delay after a successful connection. */\n  public reset(): void {\n    this.attempt = 0;\n  }\n}\n"],
   "mappings": ";;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AACO,MAAM,kBAAkB;AAAA;AAAA;AAAA;AAAA;AAAA,EAOtB,YACY,QACA,OACjB;AAFiB;AACA;AAAA,EAChB;AAAA,EATK,UAAU;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA,EAgBX,YAAoB;AACzB,UAAM,QAAQ,KAAK,IAAI,KAAK,SAAS,KAAK,KAAK,SAAS,KAAK,KAAK;AAClE,SAAK;AACL,WAAO;AAAA,EACT;AAAA;AAAA,EAGO,QAAc;AACnB,SAAK,UAAU;AAAA,EACjB;AACF;",
   "names": []

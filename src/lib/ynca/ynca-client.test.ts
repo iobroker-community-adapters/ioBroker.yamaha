@@ -128,42 +128,37 @@ describe("YncaClient", () => {
     expect(client.isReachable()).toBe(false);
   });
 
-  test("reconnects after an unexpected close, opening a fresh socket only after the old one is destroyed", async () => {
-    vi.useFakeTimers();
-    try {
-      const { factory, sockets } = fixtureFactory();
-      const client = new YncaClient("1.2.3.4", testTimers, factory);
-      const connected = client.connect();
-      sockets[0].emitConnect();
-      await connected;
+  test("fires onDrop after an unexpected close and destroys the old socket, without reopening itself", async () => {
+    const { factory, sockets } = fixtureFactory();
+    const client = new YncaClient("1.2.3.4", testTimers, factory);
+    let dropped = 0;
+    client.onDrop(() => dropped++);
+    const connected = client.connect();
+    sockets[0].emitConnect();
+    await connected;
 
-      sockets[0].emitClose();
-      expect(client.isReachable()).toBe(false);
-      expect(sockets).toHaveLength(1); // not reopened synchronously
-      expect(sockets[0].destroyed).toBe(true); // old socket closed first (1 connection/receiver)
+    sockets[0].emitClose();
 
-      await vi.advanceTimersByTimeAsync(1000); // backoff base delay
-      expect(sockets).toHaveLength(2); // fresh socket opened
-      client.close();
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(client.isReachable()).toBe(false);
+    expect(sockets[0].destroyed).toBe(true); // old socket closed (1 connection/receiver)
+    expect(dropped).toBe(1); // the supervisor owns reconnect now
+    expect(sockets).toHaveLength(1); // the client does not reopen on its own
   });
 
-  test("does not reconnect after an explicit close", async () => {
-    vi.useFakeTimers();
-    try {
-      const { factory, sockets } = fixtureFactory();
-      const client = new YncaClient("1.2.3.4", testTimers, factory);
-      const connected = client.connect();
-      sockets[0].emitConnect();
-      await connected;
-      client.close();
-      await vi.advanceTimersByTimeAsync(60000);
-      expect(sockets).toHaveLength(1);
-    } finally {
-      vi.useRealTimers();
-    }
+  test("does not fire onDrop after an explicit close", async () => {
+    const { factory, sockets } = fixtureFactory();
+    const client = new YncaClient("1.2.3.4", testTimers, factory);
+    let dropped = 0;
+    client.onDrop(() => dropped++);
+    const connected = client.connect();
+    sockets[0].emitConnect();
+    await connected;
+
+    client.close();
+    sockets[0].emitClose(); // the socket's close event may still fire after destroy()
+
+    expect(dropped).toBe(0);
+    expect(sockets).toHaveLength(1);
   });
 
   test("readCapabilities sweeps the requested gets and builds capabilities from the responses", async () => {

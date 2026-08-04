@@ -25,11 +25,8 @@ module.exports = __toCommonJS(ynca_client_exports);
 var import_node_net = require("node:net");
 var import_line_buffer = require("./line-buffer");
 var import_protocol = require("./protocol");
-var import_reconnect_strategy = require("./reconnect-strategy");
 var import_capability = require("./capability");
 const YNCA_PORT = 5e4;
-const RECONNECT_BASE_MS = 1e3;
-const RECONNECT_MAX_MS = 3e4;
 const CONNECT_TIMEOUT_MS = 5e3;
 function delay(timers, ms) {
   return new Promise((resolve) => {
@@ -76,8 +73,7 @@ class YncaClient {
   socket;
   lineBuffer = new import_line_buffer.LineBuffer();
   messageHandlers = [];
-  reconnect = new import_reconnect_strategy.ReconnectStrategy(RECONNECT_BASE_MS, RECONNECT_MAX_MS);
-  reconnectTimer;
+  dropHandler;
   reachable = false;
   closed = false;
   /**
@@ -96,7 +92,6 @@ class YncaClient {
     this.socket = socket;
     socket.onConnect(() => {
       this.reachable = true;
-      this.reconnect.reset();
       onFirstConnect == null ? void 0 : onFirstConnect();
     });
     socket.onData((chunk) => this.handleData(chunk));
@@ -119,14 +114,14 @@ class YncaClient {
     }
   }
   handleClose() {
-    var _a;
+    var _a, _b;
     this.reachable = false;
     if (this.closed) {
       return;
     }
     (_a = this.socket) == null ? void 0 : _a.destroy();
     this.socket = void 0;
-    this.reconnectTimer = this.timers.schedule(() => this.openSocket(), this.reconnect.nextDelay());
+    (_b = this.dropHandler) == null ? void 0 : _b.call(this);
   }
   /**
    * Send a PUT command.
@@ -158,6 +153,15 @@ class YncaClient {
    */
   onMessage(handler) {
     this.messageHandlers.push(handler);
+  }
+  /**
+   * Register the handler called once when the connection drops unexpectedly (not
+   * on an explicit close). The supervisor uses it to reconnect.
+   *
+   * @param handler called on each unexpected drop
+   */
+  onDrop(handler) {
+    this.dropHandler = handler;
   }
   /**
    * Run an init sweep: send a GET for each requested function (paced by
@@ -198,10 +202,6 @@ class YncaClient {
     var _a;
     this.closed = true;
     this.reachable = false;
-    if (this.reconnectTimer) {
-      this.timers.cancel(this.reconnectTimer);
-      this.reconnectTimer = void 0;
-    }
     (_a = this.socket) == null ? void 0 : _a.destroy();
     this.socket = void 0;
   }
