@@ -2,7 +2,7 @@ import { parseYxcFeatures } from "./capability";
 import { mapYxcToObjects } from "./object-mapper";
 import { parseYxcStatus, stateToYxc, type YxcCommand } from "./command-mapper";
 import { zonesToRefresh } from "./push";
-import type { ObjectDef } from "../capability-mapper";
+import type { ObjectDef } from "../catalog/types";
 
 /** Renew interval for the push registration + state poll, well under the ~20 min expiry. */
 const KEEPALIVE_MS = 5 * 60 * 1000;

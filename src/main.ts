@@ -10,27 +10,10 @@ import { YxcDeviceController } from "./lib/yxc/device-controller";
 import { YxcPushReceiver } from "./lib/yxc/push-receiver";
 import { XmlDeviceController } from "./lib/xml/device-controller";
 import { XmlClient } from "./lib/xml/xml-client";
-import type { ObjectDef } from "./lib/capability-mapper";
+import type { ObjectDef } from "./lib/catalog/types";
 import type { DeviceRecord } from "./lib/types";
 import { DeviceSupervisor, type ConnectionHandle } from "./lib/lifecycle/device-supervisor";
 import { ReconnectStrategy } from "./lib/lifecycle/reconnect-strategy";
-
-/** Zones swept for their amplifier functions. */
-const SWEEP_ZONES = ["MAIN", "ZONE2", "ZONE3", "ZONE4"];
-/**
- * Functions queried per zone. BASIC returns power, volume, mute, input, sound
- * program and straight in one response, but enhancer, pure direct and the sleep
- * timer are not in BASIC on every model (per the ynca protocol reference). The
- * individual funcs are kept alongside BASIC so a model that answers BASIC with
- * `@RESTRICTED` still reports the basics; duplicate answers overwrite harmlessly
- * (buildCapabilities keys by subunit and func).
- */
-const SWEEP_FUNCS = ["BASIC", "PWR", "VOL", "MUTE", "INP", "SOUNDPRG", "STRAIGHT", "ENHANCER", "PUREDIRMODE", "SLEEP"];
-/** The init-sweep gets: model name plus each zone's amplifier functions. */
-const SWEEP_GETS = [
-  { subunit: "SYS", func: "MODELNAME" },
-  ...SWEEP_ZONES.flatMap(zone => SWEEP_FUNCS.map(func => ({ subunit: zone, func }))),
-];
 
 /** Supervisor reconnect backoff bounds (exponential: 1s, 2s … capped at 60s). */
 const RECONNECT_BASE_MS = 1000;
@@ -175,7 +158,7 @@ export class Yamaha extends utils.Adapter {
     const yncaClient = new YncaClient(device.ip, timers);
     const ynca = new YncaDeviceController(device.id, { client: yncaClient, upsertObject, setStateAck, log });
     try {
-      if (await ynca.start(SWEEP_GETS)) {
+      if (await ynca.start()) {
         return {
           onDrop: cb => yncaClient.onDrop(cb),
           handleStateChange: (id, ack, value) => ynca.handleStateChange(id, ack, value),

@@ -1,5 +1,8 @@
-import type { CatalogEntry } from "../catalog/types";
-import type { ValueSpec } from "../catalog/value-coerce";
+import { catalogToObjects } from "../catalog/build-objects";
+import type { CatalogEntry, ObjectDef } from "../catalog/types";
+import { decode, encode, type ValueSpec } from "../catalog/value-coerce";
+import type { StateValue } from "../types";
+import type { YncaCapabilities } from "./capability";
 
 /**
  * A YNCA catalog entry: the object part ({@link CatalogEntry}) plus its subunit
@@ -273,4 +276,57 @@ export function funcToEntry(entries: YncaEntry[]): Map<string, YncaEntry> {
  */
 export function idToEntry(entries: YncaEntry[]): Map<string, YncaEntry> {
   return new Map(entries.map(entry => [entry.id, entry]));
+}
+
+/**
+ * Build the object tree for a device from its reported capabilities: keep only
+ * the catalog entries the device answered for, then turn them into objects.
+ *
+ * @param capabilities the device's YNCA capabilities from the init sweep
+ * @returns the object definitions to create
+ */
+export function yncaObjectsFor(capabilities: YncaCapabilities): ObjectDef[] {
+  const present = buildYncaCatalog().filter(entry => capabilities.subunits[entry.subunit]?.[entry.func] !== undefined);
+  return catalogToObjects(present);
+}
+
+/**
+ * Turn a device line into a typed state update via the func map, or undefined
+ * when the function is not catalogued or the value is not decodable.
+ *
+ * @param message the decoded YNCA message (subunit/func/value)
+ * @param map the `funcToEntry` map
+ * @returns the typed state update, or undefined
+ */
+export function yncaStateUpdate(
+  message: { subunit: string; func: string; value: string },
+  map: Map<string, YncaEntry>,
+): StateValue | undefined {
+  const entry = map.get(`${message.subunit}:${message.func}`);
+  if (!entry) {
+    return undefined;
+  }
+  const value = decode(entry.spec, message.value);
+  return value === undefined ? undefined : { id: entry.id, value };
+}
+
+/**
+ * Turn a user write into a YNCA subunit/func/value triple via the id map, or
+ * undefined when the state is not catalogued.
+ *
+ * @param stateId the state id relative to the device
+ * @param value the value written to the state
+ * @param map the `idToEntry` map
+ * @returns the triple to send, or undefined
+ */
+export function yncaCommand(
+  stateId: string,
+  value: unknown,
+  map: Map<string, YncaEntry>,
+): { subunit: string; func: string; value: string } | undefined {
+  const entry = map.get(stateId);
+  if (!entry) {
+    return undefined;
+  }
+  return { subunit: entry.subunit, func: entry.func, value: encode(entry.spec, value as boolean | number | string) };
 }

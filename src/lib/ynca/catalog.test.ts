@@ -1,5 +1,6 @@
-import { buildYncaCatalog, funcToEntry, idToEntry, sweepGets } from "./catalog";
+import { buildYncaCatalog, funcToEntry, idToEntry, sweepGets, yncaCommand, yncaObjectsFor, yncaStateUpdate } from "./catalog";
 import type { EnumSpec } from "../catalog/value-coerce";
+import type { YncaCapabilities } from "./capability";
 
 describe("YNCA catalog", () => {
   test("a MAIN amplifier function becomes a top-level state carrying its YNCA function", () => {
@@ -35,5 +36,29 @@ describe("YNCA catalog", () => {
 
   test("idToEntry maps a state write back to its subunit and function", () => {
     expect(idToEntry(buildYncaCatalog()).get("zone2.volume")).toMatchObject({ subunit: "ZONE2", func: "VOL" });
+  });
+
+  test("yncaObjectsFor builds only the objects a device reported", () => {
+    const caps: YncaCapabilities = { model: "RX", subunits: { MAIN: { PWR: "On", VOL: "-30.0" } } };
+    const objs = yncaObjectsFor(caps);
+    const ids = objs.map(o => o.id);
+    expect(ids).toContain("power");
+    expect(ids).toContain("volume");
+    expect(ids).not.toContain("mute"); // not reported
+    expect(objs.find(o => o.id === "power")?.common.type).toBe("boolean");
+  });
+
+  test("yncaStateUpdate decodes a device line to a typed state via the func map", () => {
+    const map = funcToEntry(buildYncaCatalog());
+    expect(yncaStateUpdate({ subunit: "MAIN", func: "PWR", value: "On" }, map)).toEqual({ id: "power", value: true });
+    expect(yncaStateUpdate({ subunit: "MAIN", func: "VOL", value: "-30.0" }, map)).toEqual({ id: "volume", value: -30 });
+    expect(yncaStateUpdate({ subunit: "MAIN", func: "NOPE", value: "x" }, map)).toBeUndefined();
+  });
+
+  test("yncaCommand encodes a state write to a subunit/func/value triple via the id map", () => {
+    const map = idToEntry(buildYncaCatalog());
+    expect(yncaCommand("power", true, map)).toEqual({ subunit: "MAIN", func: "PWR", value: "On" });
+    expect(yncaCommand("zone2.mute", false, map)).toEqual({ subunit: "ZONE2", func: "MUTE", value: "Off" });
+    expect(yncaCommand("nope", 1, map)).toBeUndefined();
   });
 });

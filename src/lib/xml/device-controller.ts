@@ -1,4 +1,4 @@
-import type { ObjectDef } from "../capability-mapper";
+import type { ObjectDef } from "../catalog/types";
 import type { BasicStatus } from "./protocol";
 import { parseXmlStatus, stateToXml, type XmlCommand } from "./command-mapper";
 

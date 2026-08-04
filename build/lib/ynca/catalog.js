@@ -21,9 +21,14 @@ __export(catalog_exports, {
   buildYncaCatalog: () => buildYncaCatalog,
   funcToEntry: () => funcToEntry,
   idToEntry: () => idToEntry,
-  sweepGets: () => sweepGets
+  sweepGets: () => sweepGets,
+  yncaCommand: () => yncaCommand,
+  yncaObjectsFor: () => yncaObjectsFor,
+  yncaStateUpdate: () => yncaStateUpdate
 });
 module.exports = __toCommonJS(catalog_exports);
+var import_build_objects = require("../catalog/build-objects");
+var import_value_coerce = require("../catalog/value-coerce");
 function selfMap(values) {
   return Object.fromEntries(values.map((value) => [value, value]));
 }
@@ -242,11 +247,36 @@ function funcToEntry(entries) {
 function idToEntry(entries) {
   return new Map(entries.map((entry) => [entry.id, entry]));
 }
+function yncaObjectsFor(capabilities) {
+  const present = buildYncaCatalog().filter((entry) => {
+    var _a;
+    return ((_a = capabilities.subunits[entry.subunit]) == null ? void 0 : _a[entry.func]) !== void 0;
+  });
+  return (0, import_build_objects.catalogToObjects)(present);
+}
+function yncaStateUpdate(message, map) {
+  const entry = map.get(`${message.subunit}:${message.func}`);
+  if (!entry) {
+    return void 0;
+  }
+  const value = (0, import_value_coerce.decode)(entry.spec, message.value);
+  return value === void 0 ? void 0 : { id: entry.id, value };
+}
+function yncaCommand(stateId, value, map) {
+  const entry = map.get(stateId);
+  if (!entry) {
+    return void 0;
+  }
+  return { subunit: entry.subunit, func: entry.func, value: (0, import_value_coerce.encode)(entry.spec, value) };
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   buildYncaCatalog,
   funcToEntry,
   idToEntry,
-  sweepGets
+  sweepGets,
+  yncaCommand,
+  yncaObjectsFor,
+  yncaStateUpdate
 });
 //# sourceMappingURL=catalog.js.map

@@ -21,8 +21,11 @@ __export(device_controller_exports, {
   YncaDeviceController: () => YncaDeviceController
 });
 module.exports = __toCommonJS(device_controller_exports);
-var import_capability_mapper = require("./capability-mapper");
-var import_command_mapper = require("./command-mapper");
+var import_catalog = require("./ynca/catalog");
+const CATALOG = (0, import_catalog.buildYncaCatalog)();
+const FUNC_MAP = (0, import_catalog.funcToEntry)(CATALOG);
+const ID_MAP = (0, import_catalog.idToEntry)(CATALOG);
+const SWEEP = [{ subunit: "SYS", func: "MODELNAME" }, ...(0, import_catalog.sweepGets)(CATALOG)];
 class YncaDeviceController {
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
@@ -33,15 +36,16 @@ class YncaDeviceController {
     this.deps = deps;
   }
   /**
-   * Connect, sweep the device, and create its object tree; wire up push updates.
+   * Connect, sweep the device from the catalog, and create its object tree; wire
+   * up push updates. The catalog is the single source: it drives the sweep, the
+   * device→state read-back and (in handleStateChange) the state→wire encode.
    *
-   * @param sweepGets the subunit/function pairs to query in the init sweep
    * @returns true if the device reported capabilities and its tree was created
    */
-  async start(sweepGets) {
+  async start() {
     await this.deps.client.connect();
-    const capabilities = await this.deps.client.readCapabilities(sweepGets);
-    const objects = (0, import_capability_mapper.mapYncaToObjects)(capabilities);
+    const capabilities = await this.deps.client.readCapabilities(SWEEP);
+    const objects = (0, import_catalog.yncaObjectsFor)(capabilities);
     if (objects.length === 0) {
       this.deps.log.warn(`${this.deviceId}: no capabilities reported \u2014 creating no objects`);
       return false;
@@ -51,14 +55,14 @@ class YncaDeviceController {
     }
     for (const [subunit, funcs] of Object.entries(capabilities.subunits)) {
       for (const [func, value] of Object.entries(funcs)) {
-        const update = (0, import_command_mapper.yncaToState)({ subunit, func, value });
+        const update = (0, import_catalog.yncaStateUpdate)({ subunit, func, value }, FUNC_MAP);
         if (update) {
           this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
         }
       }
     }
     this.deps.client.onMessage((message) => {
-      const update = (0, import_command_mapper.yncaToState)(message);
+      const update = (0, import_catalog.yncaStateUpdate)(message, FUNC_MAP);
       if (update) {
         this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
       }
@@ -82,7 +86,7 @@ class YncaDeviceController {
     if (!fullStateId.startsWith(prefix)) {
       return;
     }
-    const triple = (0, import_command_mapper.stateToYnca)(fullStateId.slice(prefix.length), value);
+    const triple = (0, import_catalog.yncaCommand)(fullStateId.slice(prefix.length), value, ID_MAP);
     if (triple) {
       this.deps.client.send(triple.subunit, triple.func, triple.value);
     }

@@ -1,6 +1,21 @@
 import type { YncaCapabilities } from "./ynca/capability";
-import { mapYncaToObjects, type ObjectDef } from "./capability-mapper";
-import { stateToYnca, yncaToState } from "./command-mapper";
+import type { ObjectDef } from "./catalog/types";
+import {
+  buildYncaCatalog,
+  funcToEntry,
+  idToEntry,
+  sweepGets,
+  yncaCommand,
+  yncaObjectsFor,
+  yncaStateUpdate,
+} from "./ynca/catalog";
+
+// The YNCA catalog and its lookup maps are static — built once for all devices.
+const CATALOG = buildYncaCatalog();
+const FUNC_MAP = funcToEntry(CATALOG);
+const ID_MAP = idToEntry(CATALOG);
+// The init sweep: the model name (for the ready log line) plus every catalogued function.
+const SWEEP = [{ subunit: "SYS", func: "MODELNAME" }, ...sweepGets(CATALOG)];
 
 /** The subset of the YNCA client the controller uses (so tests can inject a fake). */
 export interface YncaClientLike {
@@ -58,15 +73,16 @@ export class YncaDeviceController {
   ) {}
 
   /**
-   * Connect, sweep the device, and create its object tree; wire up push updates.
+   * Connect, sweep the device from the catalog, and create its object tree; wire
+   * up push updates. The catalog is the single source: it drives the sweep, the
+   * device→state read-back and (in handleStateChange) the state→wire encode.
    *
-   * @param sweepGets the subunit/function pairs to query in the init sweep
    * @returns true if the device reported capabilities and its tree was created
    */
-  public async start(sweepGets: Array<{ subunit: string; func: string }>): Promise<boolean> {
+  public async start(): Promise<boolean> {
     await this.deps.client.connect();
-    const capabilities = await this.deps.client.readCapabilities(sweepGets);
-    const objects = mapYncaToObjects(capabilities);
+    const capabilities = await this.deps.client.readCapabilities(SWEEP);
+    const objects = yncaObjectsFor(capabilities);
     if (objects.length === 0) {
       this.deps.log.warn(`${this.deviceId}: no capabilities reported — creating no objects`);
       return false;
@@ -79,14 +95,14 @@ export class YncaDeviceController {
     // stay empty until the device pushes a change of its own.
     for (const [subunit, funcs] of Object.entries(capabilities.subunits)) {
       for (const [func, value] of Object.entries(funcs)) {
-        const update = yncaToState({ subunit, func, value });
+        const update = yncaStateUpdate({ subunit, func, value }, FUNC_MAP);
         if (update) {
           this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
         }
       }
     }
     this.deps.client.onMessage(message => {
-      const update = yncaToState(message);
+      const update = yncaStateUpdate(message, FUNC_MAP);
       if (update) {
         this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
       }
@@ -111,7 +127,7 @@ export class YncaDeviceController {
     if (!fullStateId.startsWith(prefix)) {
       return;
     }
-    const triple = stateToYnca(fullStateId.slice(prefix.length), value);
+    const triple = yncaCommand(fullStateId.slice(prefix.length), value, ID_MAP);
     if (triple) {
       this.deps.client.send(triple.subunit, triple.func, triple.value);
     }

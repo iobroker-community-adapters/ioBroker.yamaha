@@ -45,12 +45,6 @@ var import_device_controller3 = require("./lib/xml/device-controller");
 var import_xml_client = require("./lib/xml/xml-client");
 var import_device_supervisor = require("./lib/lifecycle/device-supervisor");
 var import_reconnect_strategy = require("./lib/lifecycle/reconnect-strategy");
-const SWEEP_ZONES = ["MAIN", "ZONE2", "ZONE3", "ZONE4"];
-const SWEEP_FUNCS = ["BASIC", "PWR", "VOL", "MUTE", "INP", "SOUNDPRG", "STRAIGHT", "ENHANCER", "PUREDIRMODE", "SLEEP"];
-const SWEEP_GETS = [
-  { subunit: "SYS", func: "MODELNAME" },
-  ...SWEEP_ZONES.flatMap((zone) => SWEEP_FUNCS.map((func) => ({ subunit: zone, func })))
-];
 const RECONNECT_BASE_MS = 1e3;
 const RECONNECT_MAX_MS = 6e4;
 class Yamaha extends utils.Adapter {
@@ -167,7 +161,7 @@ class Yamaha extends utils.Adapter {
     const yncaClient = new import_ynca_client.YncaClient(device.ip, timers);
     const ynca = new import_device_controller.YncaDeviceController(device.id, { client: yncaClient, upsertObject, setStateAck, log });
     try {
-      if (await ynca.start(SWEEP_GETS)) {
+      if (await ynca.start()) {
         return {
           onDrop: (cb) => yncaClient.onDrop(cb),
           handleStateChange: (id, ack, value) => ynca.handleStateChange(id, ack, value),

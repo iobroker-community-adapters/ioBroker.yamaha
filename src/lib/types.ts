@@ -42,7 +42,7 @@ export interface StateUpdate {
   value: string | number | boolean;
 }
 
-/** A unified state id and its typed value (command-mapper / status-parser form). */
+/** A unified state id and its typed value (catalog / status-parser form). */
 export interface StateValue {
   /** State id relative to the device (e.g. `power`, `zone2.volume`). */
   id: string;

@@ -1,4 +1,4 @@
-import type { ObjectDef } from "../capability-mapper";
+import type { ObjectDef } from "../catalog/types";
 import type { YxcCapabilities } from "./capability";
 
 // NOTE: the state commons here mirror the YNCA mapper's amp states (same roles/
