@@ -29,6 +29,18 @@ export interface YxcClientLike {
   setEnhancer(on: boolean, zone: string): Promise<unknown>;
   /** Turn a zone's pure direct on/off. */
   setPureDirect(on: boolean, zone: string): Promise<unknown>;
+  /** Set a zone's subwoofer trim. */
+  setSubwooferVolumeTo(to: number, zone: string): Promise<unknown>;
+  /** Start the network/USB player. */
+  playNet(): Promise<unknown>;
+  /** Pause the network/USB player. */
+  pauseNet(): Promise<unknown>;
+  /** Stop the network/USB player. */
+  stopNet(): Promise<unknown>;
+  /** Skip to the next track. */
+  nextNet(): Promise<unknown>;
+  /** Skip to the previous track. */
+  prevNet(): Promise<unknown>;
 }
 
 /** Log surface the controller needs. */
@@ -216,6 +228,24 @@ export class YxcDeviceController {
           break;
         case "setPureDirect":
           await this.deps.client.setPureDirect(Boolean(value), zone);
+          break;
+        case "setSubwooferVolumeTo":
+          await this.deps.client.setSubwooferVolumeTo(Number(value), zone);
+          break;
+        case "playNet":
+          await this.deps.client.playNet();
+          break;
+        case "pauseNet":
+          await this.deps.client.pauseNet();
+          break;
+        case "stopNet":
+          await this.deps.client.stopNet();
+          break;
+        case "nextNet":
+          await this.deps.client.nextNet();
+          break;
+        case "prevNet":
+          await this.deps.client.prevNet();
           break;
       }
     } catch (e) {

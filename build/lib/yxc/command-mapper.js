@@ -55,7 +55,20 @@ const YXC_STATE_MAPPINGS = {
     method: "setPureDirect",
     toYxc: (value) => Boolean(value),
     fromStatus: (value) => Boolean(value)
+  },
+  subwooferVolume: {
+    statusField: "subwoofer_volume",
+    method: "setSubwooferVolumeTo",
+    toYxc: (value) => Number(value),
+    fromStatus: (value) => Number(value)
   }
+};
+const NETUSB_TRANSPORT = {
+  "netPlayer.play": "playNet",
+  "netPlayer.pause": "pauseNet",
+  "netPlayer.stop": "stopNet",
+  "netPlayer.next": "nextNet",
+  "netPlayer.prev": "prevNet"
 };
 const ZONE_PREFIX = { main: "", zone2: "zone2.", zone3: "zone3.", zone4: "zone4." };
 function parseYxcStatus(zoneStatus, zone) {
@@ -76,6 +89,10 @@ function parseYxcStatus(zoneStatus, zone) {
   return updates;
 }
 function stateToYxc(stateId, value) {
+  const transport = NETUSB_TRANSPORT[stateId];
+  if (transport) {
+    return { method: transport, zone: "netusb", value: true };
+  }
   let zone = "main";
   let name = stateId;
   const dot = stateId.indexOf(".");

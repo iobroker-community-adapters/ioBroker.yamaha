@@ -171,6 +171,24 @@ class YxcDeviceController {
         case "setPureDirect":
           await this.deps.client.setPureDirect(Boolean(value), zone);
           break;
+        case "setSubwooferVolumeTo":
+          await this.deps.client.setSubwooferVolumeTo(Number(value), zone);
+          break;
+        case "playNet":
+          await this.deps.client.playNet();
+          break;
+        case "pauseNet":
+          await this.deps.client.pauseNet();
+          break;
+        case "stopNet":
+          await this.deps.client.stopNet();
+          break;
+        case "nextNet":
+          await this.deps.client.nextNet();
+          break;
+        case "prevNet":
+          await this.deps.client.prevNet();
+          break;
       }
     } catch (e) {
       this.deps.log.warn(`${this.deviceId}: ${command.method} failed: ${e instanceof Error ? e.message : String(e)}`);

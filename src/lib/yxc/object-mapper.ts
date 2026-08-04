@@ -36,6 +36,11 @@ const YXC_STATES: Array<{ func: string; state: string; common: ObjectDef["common
     state: "pureDirect",
     common: { name: "Pure Direct", type: "boolean", role: "switch", read: true, write: true },
   },
+  {
+    func: "subwoofer_volume",
+    state: "subwooferVolume",
+    common: { name: "Subwoofer trim", type: "number", role: "level", read: true, write: true },
+  },
 ];
 
 /** Input is derived from the zone's input_list, not from func_list. */
@@ -71,6 +76,11 @@ const PLAYER_STATES: Array<{ state: string; common: ObjectDef["common"] }> = [
   { state: "artist", common: { name: "Artist", type: "string", role: "media.artist", read: true, write: false } },
   { state: "album", common: { name: "Album", type: "string", role: "media.album", read: true, write: false } },
   { state: "track", common: { name: "Track", type: "string", role: "media.title", read: true, write: false } },
+  { state: "play", common: { name: "Play", type: "boolean", role: "button", read: false, write: true } },
+  { state: "pause", common: { name: "Pause", type: "boolean", role: "button", read: false, write: true } },
+  { state: "stop", common: { name: "Stop", type: "boolean", role: "button", read: false, write: true } },
+  { state: "next", common: { name: "Next", type: "boolean", role: "button", read: false, write: true } },
+  { state: "prev", common: { name: "Previous", type: "boolean", role: "button", read: false, write: true } },
 ];
 
 /**

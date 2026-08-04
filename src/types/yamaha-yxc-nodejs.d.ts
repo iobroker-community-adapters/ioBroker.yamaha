@@ -73,5 +73,22 @@ declare module "yamaha-yxc-nodejs" {
     setPureDirect(on: boolean, zone?: string): Promise<unknown>;
     /** Read a network/USB source's play info (playback, artist, album, track). */
     getPlayInfo(): Promise<unknown>;
+    /**
+     * Set a zone's subwoofer trim.
+     *
+     * @param to the subwoofer trim value
+     * @param zone the zone; defaults to main
+     */
+    setSubwooferVolumeTo(to: number, zone?: string): Promise<unknown>;
+    /** Start playback on the network/USB player. */
+    playNet(): Promise<unknown>;
+    /** Pause the network/USB player. */
+    pauseNet(): Promise<unknown>;
+    /** Stop the network/USB player. */
+    stopNet(): Promise<unknown>;
+    /** Skip to the next track on the network/USB player. */
+    nextNet(): Promise<unknown>;
+    /** Skip to the previous track on the network/USB player. */
+    prevNet(): Promise<unknown>;
   }
 }

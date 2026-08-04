@@ -51,6 +51,30 @@ class FakeClient implements YxcClientLike {
     this.calls.push({ method: "getPlayInfo", args: [] });
     return {};
   }
+  public async setSubwooferVolumeTo(to: number, zone: string): Promise<unknown> {
+    this.calls.push({ method: "setSubwooferVolumeTo", args: [to, zone] });
+    return {};
+  }
+  public async playNet(): Promise<unknown> {
+    this.calls.push({ method: "playNet", args: [] });
+    return {};
+  }
+  public async pauseNet(): Promise<unknown> {
+    this.calls.push({ method: "pauseNet", args: [] });
+    return {};
+  }
+  public async stopNet(): Promise<unknown> {
+    this.calls.push({ method: "stopNet", args: [] });
+    return {};
+  }
+  public async nextNet(): Promise<unknown> {
+    this.calls.push({ method: "nextNet", args: [] });
+    return {};
+  }
+  public async prevNet(): Promise<unknown> {
+    this.calls.push({ method: "prevNet", args: [] });
+    return {};
+  }
 }
 
 function setup(features: unknown, status: unknown): {

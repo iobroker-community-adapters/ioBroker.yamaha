@@ -50,6 +50,15 @@ describe("parseYxcPlayInfo", () => {
 });
 
 describe("stateToYxc", () => {
+  test("maps network-player transport buttons to their YXC method", () => {
+    expect(stateToYxc("netPlayer.play", true)).toEqual({ method: "playNet", zone: "netusb", value: true });
+    expect(stateToYxc("netPlayer.next", true)).toEqual({ method: "nextNet", zone: "netusb", value: true });
+  });
+
+  test("maps subwoofer trim to setSubwooferVolumeTo", () => {
+    expect(stateToYxc("subwooferVolume", -3)).toEqual({ method: "setSubwooferVolumeTo", zone: "main", value: -3 });
+  });
+
   test("maps a power write to the power method on main", () => {
     expect(stateToYxc("power", true)).toEqual({ method: "power", zone: "main", value: true });
   });
