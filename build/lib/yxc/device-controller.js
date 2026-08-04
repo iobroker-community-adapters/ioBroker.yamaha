@@ -146,6 +146,12 @@ class YxcDeviceController {
         case "setSound":
           await this.deps.client.setSound(String(value), zone);
           break;
+        case "setEnhancer":
+          await this.deps.client.setEnhancer(Boolean(value), zone);
+          break;
+        case "setPureDirect":
+          await this.deps.client.setPureDirect(Boolean(value), zone);
+          break;
       }
     } catch (e) {
       this.deps.log.warn(`${this.deviceId}: ${command.method} failed: ${e instanceof Error ? e.message : String(e)}`);

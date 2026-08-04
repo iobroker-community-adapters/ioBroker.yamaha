@@ -41,6 +41,16 @@ const YXC_STATES = [
     func: "sound_program",
     state: "soundProgram",
     common: { name: "Sound program", type: "string", role: "state", read: true, write: true }
+  },
+  {
+    func: "enhancer",
+    state: "enhancer",
+    common: { name: "Enhancer", type: "boolean", role: "switch", read: true, write: true }
+  },
+  {
+    func: "pure_direct",
+    state: "pureDirect",
+    common: { name: "Pure Direct", type: "boolean", role: "switch", read: true, write: true }
   }
 ];
 const INPUT_COMMON = {

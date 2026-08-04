@@ -42,6 +42,18 @@ const YXC_STATE_MAPPINGS = {
     method: "setSound",
     toYxc: (value) => String(value),
     fromStatus: (value) => String(value)
+  },
+  enhancer: {
+    statusField: "enhancer",
+    method: "setEnhancer",
+    toYxc: (value) => Boolean(value),
+    fromStatus: (value) => Boolean(value)
+  },
+  pureDirect: {
+    statusField: "pure_direct",
+    method: "setPureDirect",
+    toYxc: (value) => Boolean(value),
+    fromStatus: (value) => Boolean(value)
   }
 };
 const ZONE_PREFIX = { main: "", zone2: "zone2.", zone3: "zone3.", zone4: "zone4." };

@@ -57,5 +57,21 @@ declare module "yamaha-yxc-nodejs" {
      * @param zone the zone; defaults to main
      */
     setSound(program: string, zone?: string): Promise<unknown>;
+    /**
+     * Turn a zone's Compressed Music Enhancer on or off.
+     *
+     * @param on whether the enhancer is on
+     * @param zone the zone; defaults to main
+     */
+    setEnhancer(on: boolean, zone?: string): Promise<unknown>;
+    /**
+     * Turn a zone's Pure Direct mode on or off.
+     *
+     * @param on whether pure direct is on
+     * @param zone the zone; defaults to main
+     */
+    setPureDirect(on: boolean, zone?: string): Promise<unknown>;
+    /** Read a network/USB source's play info (playback, artist, album, track). */
+    getPlayInfo(): Promise<unknown>;
   }
 }

@@ -23,6 +23,10 @@ export interface YxcClientLike {
   setInput(input: string, zone: string): Promise<unknown>;
   /** Select a zone's sound program. */
   setSound(program: string, zone: string): Promise<unknown>;
+  /** Turn a zone's enhancer on/off. */
+  setEnhancer(on: boolean, zone: string): Promise<unknown>;
+  /** Turn a zone's pure direct on/off. */
+  setPureDirect(on: boolean, zone: string): Promise<unknown>;
 }
 
 /** Log surface the controller needs. */
@@ -184,6 +188,12 @@ export class YxcDeviceController {
           break;
         case "setSound":
           await this.deps.client.setSound(String(value), zone);
+          break;
+        case "setEnhancer":
+          await this.deps.client.setEnhancer(Boolean(value), zone);
+          break;
+        case "setPureDirect":
+          await this.deps.client.setPureDirect(Boolean(value), zone);
           break;
       }
     } catch (e) {

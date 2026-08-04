@@ -26,6 +26,16 @@ const YXC_STATES: Array<{ func: string; state: string; common: ObjectDef["common
     state: "soundProgram",
     common: { name: "Sound program", type: "string", role: "state", read: true, write: true },
   },
+  {
+    func: "enhancer",
+    state: "enhancer",
+    common: { name: "Enhancer", type: "boolean", role: "switch", read: true, write: true },
+  },
+  {
+    func: "pure_direct",
+    state: "pureDirect",
+    common: { name: "Pure Direct", type: "boolean", role: "switch", read: true, write: true },
+  },
 ];
 
 /** Input is derived from the zone's input_list, not from func_list. */
