@@ -96,6 +96,76 @@ const YXC_STATES: Array<{ func: string; state: string; common: ObjectDef["common
     state: "linkAudioQuality",
     common: { name: "Link audio quality", type: "string", role: "text", read: true, write: false },
   },
+  {
+    func: "direct",
+    state: "direct",
+    common: { name: "Direct", type: "boolean", role: "switch", read: true, write: true },
+  },
+  {
+    func: "clear_voice",
+    state: "clearVoice",
+    common: { name: "Clear Voice", type: "boolean", role: "switch", read: true, write: true },
+  },
+  {
+    func: "bass_extension",
+    state: "bassExtension",
+    common: { name: "Bass extension", type: "boolean", role: "switch", read: true, write: true },
+  },
+  {
+    func: "balance",
+    state: "balance",
+    common: { name: "Balance", type: "number", role: "level", read: true, write: true },
+  },
+  {
+    func: "adaptive_drc",
+    state: "adaptiveDrc",
+    common: { name: "Adaptive DRC", type: "boolean", role: "indicator", read: true, write: false },
+  },
+  {
+    func: "adaptive_dsp_level",
+    state: "adaptiveDspLevel",
+    common: { name: "Adaptive DSP level", type: "boolean", role: "indicator", read: true, write: false },
+  },
+  {
+    func: "extra_bass",
+    state: "extraBass",
+    common: { name: "Extra Bass", type: "boolean", role: "indicator", read: true, write: false },
+  },
+  {
+    func: "mono",
+    state: "monaural",
+    common: { name: "Monaural", type: "boolean", role: "indicator", read: true, write: false },
+  },
+  {
+    func: "surround_3d",
+    state: "surround3d",
+    common: { name: "Surround 3D", type: "boolean", role: "indicator", read: true, write: false },
+  },
+  {
+    func: "dialogue_lift",
+    state: "dialogueLift",
+    common: { name: "Dialogue lift", type: "number", role: "level", read: true, write: false },
+  },
+  {
+    func: "dts_dialogue_control",
+    state: "dtsDialogueControl",
+    common: { name: "DTS dialogue control", type: "number", role: "level", read: true, write: false },
+  },
+  {
+    func: "equalizer",
+    state: "equalizerLow",
+    common: { name: "Equalizer low", type: "number", unit: "dB", role: "level", read: true, write: false },
+  },
+  {
+    func: "equalizer",
+    state: "equalizerMid",
+    common: { name: "Equalizer mid", type: "number", unit: "dB", role: "level", read: true, write: false },
+  },
+  {
+    func: "equalizer",
+    state: "equalizerHigh",
+    common: { name: "Equalizer high", type: "number", unit: "dB", role: "level", read: true, write: false },
+  },
 ];
 
 /** Input is derived from the zone's input_list, not from func_list. */

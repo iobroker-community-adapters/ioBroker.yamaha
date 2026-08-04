@@ -202,6 +202,18 @@ class YxcDeviceController {
         case "sleep":
           await this.deps.client.sleep(Number(value), zone);
           break;
+        case "setDirect":
+          await this.deps.client.setDirect(Boolean(value), zone);
+          break;
+        case "setClearVoice":
+          await this.deps.client.setClearVoice(Boolean(value), zone);
+          break;
+        case "setBassExtension":
+          await this.deps.client.setBassExtension(Boolean(value), zone);
+          break;
+        case "setBalance":
+          await this.deps.client.setBalance(Number(value), zone);
+          break;
         case "playNet":
           await this.deps.client.playNet();
           break;

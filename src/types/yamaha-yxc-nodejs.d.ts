@@ -106,6 +106,34 @@ declare module "yamaha-yxc-nodejs" {
      * @param zone the zone; defaults to main
      */
     sleep(minutes: number, zone?: string): Promise<unknown>;
+    /**
+     * Turn a zone's Direct mode on or off.
+     *
+     * @param on whether direct is on
+     * @param zone the zone; defaults to main
+     */
+    setDirect(on: boolean, zone?: string): Promise<unknown>;
+    /**
+     * Turn a zone's Clear Voice on or off.
+     *
+     * @param on whether clear voice is on
+     * @param zone the zone; defaults to main
+     */
+    setClearVoice(on: boolean, zone?: string): Promise<unknown>;
+    /**
+     * Turn a zone's bass extension on or off.
+     *
+     * @param on whether bass extension is on
+     * @param zone the zone; defaults to main
+     */
+    setBassExtension(on: boolean, zone?: string): Promise<unknown>;
+    /**
+     * Set a zone's balance.
+     *
+     * @param value the balance value
+     * @param zone the zone; defaults to main
+     */
+    setBalance(value: number, zone?: string): Promise<unknown>;
     /** Start playback on the network/USB player. */
     playNet(): Promise<unknown>;
     /** Pause the network/USB player. */

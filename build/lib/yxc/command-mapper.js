@@ -96,7 +96,36 @@ const YXC_STATE_MAPPINGS = {
   audioSelect: { statusField: "audio_select", fromStatus: (value) => String(value) },
   linkControl: { statusField: "link_control", fromStatus: (value) => String(value) },
   linkAudioDelay: { statusField: "link_audio_delay", fromStatus: (value) => String(value) },
-  linkAudioQuality: { statusField: "link_audio_quality", fromStatus: (value) => String(value) }
+  linkAudioQuality: { statusField: "link_audio_quality", fromStatus: (value) => String(value) },
+  direct: {
+    statusField: "direct",
+    method: "setDirect",
+    toYxc: (value) => Boolean(value),
+    fromStatus: (value) => Boolean(value)
+  },
+  clearVoice: {
+    statusField: "clear_voice",
+    method: "setClearVoice",
+    toYxc: (value) => Boolean(value),
+    fromStatus: (value) => Boolean(value)
+  },
+  bassExtension: {
+    statusField: "bass_extension",
+    method: "setBassExtension",
+    toYxc: (value) => Boolean(value),
+    fromStatus: (value) => Boolean(value)
+  },
+  balance: { statusField: "balance", method: "setBalance", toYxc: (value) => Number(value), fromStatus: (value) => Number(value) },
+  adaptiveDrc: { statusField: "adaptive_drc", fromStatus: (value) => Boolean(value) },
+  adaptiveDspLevel: { statusField: "adaptive_dsp_level", fromStatus: (value) => Boolean(value) },
+  extraBass: { statusField: "extra_bass", fromStatus: (value) => Boolean(value) },
+  monaural: { statusField: "mono", fromStatus: (value) => Boolean(value) },
+  surround3d: { statusField: "surround_3d", fromStatus: (value) => Boolean(value) },
+  dialogueLift: { statusField: "dialogue_lift", fromStatus: (value) => Number(value) },
+  dtsDialogueControl: { statusField: "dts_dialogue_control", fromStatus: (value) => Number(value) },
+  equalizerLow: { path: ["equalizer", "low"], fromStatus: (value) => Number(value) },
+  equalizerMid: { path: ["equalizer", "mid"], fromStatus: (value) => Number(value) },
+  equalizerHigh: { path: ["equalizer", "high"], fromStatus: (value) => Number(value) }
 };
 const NETUSB_TRANSPORT = {
   "netPlayer.play": "playNet",

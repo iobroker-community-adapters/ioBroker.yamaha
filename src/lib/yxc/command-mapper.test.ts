@@ -50,6 +50,32 @@ describe("parseYxcStatus", () => {
     expect(u).toContainEqual({ id: "actualVolume", value: -47.5 });
     expect(u).toContainEqual({ id: "contentsDisplay", value: true });
   });
+
+  test("reads the remaining amp fields including the nested equalizer", () => {
+    const status = {
+      direct: false,
+      clear_voice: true,
+      bass_extension: true,
+      balance: 3,
+      adaptive_drc: false,
+      extra_bass: true,
+      mono: false,
+      surround_3d: true,
+      dialogue_lift: 2,
+      dts_dialogue_control: 1,
+      equalizer: { mode: "manual", low: 10, mid: 7, high: 8 },
+    };
+    const u = parseYxcStatus(status, "main");
+    expect(u).toContainEqual({ id: "direct", value: false });
+    expect(u).toContainEqual({ id: "clearVoice", value: true });
+    expect(u).toContainEqual({ id: "bassExtension", value: true });
+    expect(u).toContainEqual({ id: "balance", value: 3 });
+    expect(u).toContainEqual({ id: "extraBass", value: true });
+    expect(u).toContainEqual({ id: "surround3d", value: true });
+    expect(u).toContainEqual({ id: "equalizerLow", value: 10 });
+    expect(u).toContainEqual({ id: "equalizerMid", value: 7 });
+    expect(u).toContainEqual({ id: "equalizerHigh", value: 8 });
+  });
 });
 
 describe("parseYxcPlayInfo", () => {
@@ -135,6 +161,16 @@ describe("stateToYxc", () => {
     expect(stateToYxc("sleep", 60)).toEqual({ method: "sleep", zone: "main", value: 60 });
     expect(stateToYxc("dialogueLevel", 2)).toBeUndefined();
     expect(stateToYxc("actualVolume", -40)).toBeUndefined();
+  });
+
+  test("maps the writable amp fields to their YXC setter; read-only ones yield no command", () => {
+    expect(stateToYxc("direct", true)).toEqual({ method: "setDirect", zone: "main", value: true });
+    expect(stateToYxc("balance", 3)).toEqual({ method: "setBalance", zone: "main", value: 3 });
+    expect(stateToYxc("bassExtension", true)).toEqual({ method: "setBassExtension", zone: "main", value: true });
+    expect(stateToYxc("clearVoice", true)).toEqual({ method: "setClearVoice", zone: "main", value: true });
+    expect(stateToYxc("extraBass", true)).toBeUndefined();
+    expect(stateToYxc("equalizerLow", 5)).toBeUndefined();
+    expect(stateToYxc("surround3d", true)).toBeUndefined();
   });
 
   test("maps a power write to the power method on main", () => {

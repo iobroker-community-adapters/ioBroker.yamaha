@@ -41,6 +41,14 @@ export interface YxcClientLike {
   setTrebleTo(to: number, zone: string): Promise<unknown>;
   /** Set a zone's sleep timer in minutes. */
   sleep(minutes: number, zone: string): Promise<unknown>;
+  /** Turn a zone's Direct mode on/off. */
+  setDirect(on: boolean, zone: string): Promise<unknown>;
+  /** Turn a zone's Clear Voice on/off. */
+  setClearVoice(on: boolean, zone: string): Promise<unknown>;
+  /** Turn a zone's bass extension on/off. */
+  setBassExtension(on: boolean, zone: string): Promise<unknown>;
+  /** Set a zone's balance. */
+  setBalance(value: number, zone: string): Promise<unknown>;
   /** Start the network/USB player. */
   playNet(): Promise<unknown>;
   /** Pause the network/USB player. */
@@ -273,6 +281,18 @@ export class YxcDeviceController {
           break;
         case "sleep":
           await this.deps.client.sleep(Number(value), zone);
+          break;
+        case "setDirect":
+          await this.deps.client.setDirect(Boolean(value), zone);
+          break;
+        case "setClearVoice":
+          await this.deps.client.setClearVoice(Boolean(value), zone);
+          break;
+        case "setBassExtension":
+          await this.deps.client.setBassExtension(Boolean(value), zone);
+          break;
+        case "setBalance":
+          await this.deps.client.setBalance(Number(value), zone);
           break;
         case "playNet":
           await this.deps.client.playNet();
