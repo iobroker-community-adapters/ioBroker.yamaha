@@ -15,9 +15,9 @@ of the oldest pre-2010 models — behind one object tree.
 ## Features
 
 - **One adapter for three protocols** — classic Yamaha AV receivers over YNCA, MusicCast devices over Yamaha Extended Control, and pre-2010 receivers over the legacy XML protocol, replacing the separate yamaha and musiccast adapters.
-- **Automatic reconnect** — the YNCA connection recovers on its own after a receiver reboot or a network drop, so control keeps working without restarting the adapter.
-- **Per-zone amplifier control** — power, volume, mute and input for the main zone and each additional zone a device reports.
-- **Capability-driven object tree** — states are generated from what each device actually reports over its protocol, not from a hardcoded model list.
+- **Self-healing connection** — a receiver that is off when the adapter starts joins on its own once it answers, and every connection recovers after a reboot or network drop, with a per-device connection indicator.
+- **Rich, intelligently typed datapoints** — amplifier, tone control, HDMI output, DSP and decoder modes, sound programs, party mode, tuner with RDS, and network/USB/server/Spotify players; on/off is a boolean, fixed choices are dropdowns, numbers carry their unit and range.
+- **Capability-driven object tree** — states are generated from what each device actually reports over its protocol, not from a hardcoded model list, and only for the functions it offers.
 - **One transport chosen per device** — YNCA where the receiver speaks it, MusicCast for speakers and soundbars, XML for the oldest models.
 - **Network discovery** — a search button finds Yamaha devices over SSDP and fills the device table.
 
@@ -41,6 +41,12 @@ Add each Yamaha device with a name and its IP address.
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+### **WORK IN PROGRESS**
+- Rebuilt the datapoint layer with intelligent typing: on/off values are real booleans, fixed choices are dropdowns, and numbers carry their unit and range instead of raw protocol strings.
+- Full datapoint catalog per protocol: amplifier plus tone control, HDMI output, DSP and surround-decoder modes, sound programs, party mode, tuner with RDS, and network/USB/server/Spotify players with artist, album and track.
+- A receiver that is offline when the adapter starts now joins on its own once it answers, and reconnects after a drop — no more re-discovering the device after an update.
+- Added a per-device connection indicator so each receiver's online state is visible on its own.
+
 ### 0.7.0 (2026-08-03)
 - An existing receiver from the previous adapter is now carried over into the device table on upgrade instead of being lost.
 - Receivers report and fill more datapoints at startup: added straight, enhancer, pure direct and the sleep timer, and existing states are now populated from the initial query.
