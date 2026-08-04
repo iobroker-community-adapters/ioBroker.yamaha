@@ -29,6 +29,10 @@ __export(catalog_exports, {
 module.exports = __toCommonJS(catalog_exports);
 var import_build_objects = require("../catalog/build-objects");
 var import_value_coerce = require("../catalog/value-coerce");
+function readFuncOf(entry) {
+  var _a;
+  return (_a = entry.readFunc) != null ? _a : entry.func;
+}
 function selfMap(values) {
   return Object.fromEntries(values.map((value) => [value, value]));
 }
@@ -729,6 +733,7 @@ const PLAYER_SOURCES = [
 const PLAYER_FUNCS = [
   {
     func: "PLAYBACK",
+    readFunc: "PLAYBACKINFO",
     state: "playback",
     name: "Playback",
     spec: { kind: "enum", states: PLAYBACK_STATES },
@@ -738,6 +743,25 @@ const PLAYER_FUNCS = [
   { func: "ARTIST", state: "artist", name: "Artist", spec: { kind: "text" }, write: false, role: "media.artist" },
   { func: "ALBUM", state: "album", name: "Album", spec: { kind: "text" }, write: false, role: "media.album" },
   { func: "SONG", state: "track", name: "Track", spec: { kind: "text" }, write: false, role: "media.title" },
+  { func: "STATION", state: "station", name: "Station", spec: { kind: "text" }, write: false, role: "text" },
+  { func: "CHNAME", state: "channelName", name: "Channel name", spec: { kind: "text" }, write: false, role: "text" },
+  { func: "PRESET", state: "preset", name: "Preset", spec: { kind: "text" }, write: false, role: "text" },
+  {
+    func: "TOTALTIME",
+    state: "totalTime",
+    name: "Total time",
+    spec: { kind: "text" },
+    write: false,
+    role: "media.duration.text"
+  },
+  {
+    func: "ELAPSEDTIME",
+    state: "elapsedTime",
+    name: "Elapsed time",
+    spec: { kind: "text" },
+    write: false,
+    role: "media.elapsed.text"
+  },
   {
     func: "REPEAT",
     state: "repeat",
@@ -846,7 +870,8 @@ function buildYncaCatalog() {
         write: fn.write,
         role: fn.role,
         subunit: source.subunit,
-        func: fn.func
+        func: fn.func,
+        readFunc: fn.readFunc
       });
     }
   }
@@ -856,16 +881,17 @@ function sweepGets(entries) {
   const seen = /* @__PURE__ */ new Set();
   const gets = [];
   for (const entry of entries) {
-    const key = `${entry.subunit}:${entry.func}`;
+    const func = readFuncOf(entry);
+    const key = `${entry.subunit}:${func}`;
     if (!seen.has(key)) {
       seen.add(key);
-      gets.push({ subunit: entry.subunit, func: entry.func });
+      gets.push({ subunit: entry.subunit, func });
     }
   }
   return gets;
 }
 function funcToEntry(entries) {
-  return new Map(entries.map((entry) => [`${entry.subunit}:${entry.func}`, entry]));
+  return new Map(entries.map((entry) => [`${entry.subunit}:${readFuncOf(entry)}`, entry]));
 }
 function idToEntry(entries) {
   return new Map(entries.map((entry) => [entry.id, entry]));

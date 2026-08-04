@@ -86,6 +86,21 @@ describe("YNCA catalog", () => {
     expect(cat.find(e => e.id === "tuner.searchMode")?.spec.kind).toBe("enum");
   });
 
+  test("playback reads from PLAYBACKINFO but writes to PLAYBACK", () => {
+    const cat = buildYncaCatalog();
+    expect(cat.find(e => e.id === "spotify.playback")).toMatchObject({ subunit: "SPOTIFY", func: "PLAYBACK", write: true });
+    expect(sweepGets(cat)).toContainEqual({ subunit: "SPOTIFY", func: "PLAYBACKINFO" });
+    expect(funcToEntry(cat).get("SPOTIFY:PLAYBACKINFO")?.id).toBe("spotify.playback");
+  });
+
+  test("player sources expose station, total/elapsed time, preset and channel metadata", () => {
+    const cat = buildYncaCatalog();
+    expect(cat.find(e => e.id === "netRadio.station")).toMatchObject({ subunit: "NETRADIO", func: "STATION" });
+    expect(cat.find(e => e.id === "server.totalTime")).toMatchObject({ subunit: "SERVER", func: "TOTALTIME" });
+    expect(cat.find(e => e.id === "usb.elapsedTime")).toMatchObject({ subunit: "USB", func: "ELAPSEDTIME" });
+    expect(cat.find(e => e.id === "netRadio.preset")?.spec).toEqual({ kind: "text" });
+  });
+
   test("the DAB tuner is catalogued as its own DAB subunit under a dab channel", () => {
     const cat = buildYncaCatalog();
     expect(cat.find(e => e.id === "dab.band")).toMatchObject({ subunit: "DAB", func: "BAND" });

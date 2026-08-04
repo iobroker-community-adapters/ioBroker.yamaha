@@ -12,8 +12,26 @@ import type { YncaCapabilities } from "./capability";
 export interface YncaEntry extends CatalogEntry {
   /** The YNCA subunit (MAIN, ZONE2, SYS, TUN, …). */
   subunit: string;
-  /** The YNCA function name (PWR, VOL, …). */
+  /** The YNCA function name used to WRITE this state (PWR, VOL, …). */
   func: string;
+  /**
+   * The function the device REPORTS this state under, when it differs from the
+   * write function — e.g. playback writes to PLAYBACK but is reported via
+   * PLAYBACKINFO. The init sweep and the device→state read-back key on this;
+   * defaults to {@link func}.
+   */
+  readFunc?: string;
+}
+
+/**
+ * The function a device reports an entry under: its explicit readFunc, or its
+ * write func when none is set.
+ *
+ * @param entry the catalog entry
+ * @returns the function to key reads on
+ */
+function readFuncOf(entry: YncaEntry): string {
+  return entry.readFunc ?? entry.func;
 }
 
 /**
@@ -779,6 +797,7 @@ const PLAYER_SOURCES: Array<{ subunit: string; channel: string }> = [
 /** The playback functions shared by every player source (the __init__ mixin in the lib). */
 const PLAYER_FUNCS: Array<{
   func: string;
+  readFunc?: string;
   state: string;
   name: string;
   spec: ValueSpec;
@@ -787,6 +806,7 @@ const PLAYER_FUNCS: Array<{
 }> = [
   {
     func: "PLAYBACK",
+    readFunc: "PLAYBACKINFO",
     state: "playback",
     name: "Playback",
     spec: { kind: "enum", states: PLAYBACK_STATES },
@@ -796,6 +816,25 @@ const PLAYER_FUNCS: Array<{
   { func: "ARTIST", state: "artist", name: "Artist", spec: { kind: "text" }, write: false, role: "media.artist" },
   { func: "ALBUM", state: "album", name: "Album", spec: { kind: "text" }, write: false, role: "media.album" },
   { func: "SONG", state: "track", name: "Track", spec: { kind: "text" }, write: false, role: "media.title" },
+  { func: "STATION", state: "station", name: "Station", spec: { kind: "text" }, write: false, role: "text" },
+  { func: "CHNAME", state: "channelName", name: "Channel name", spec: { kind: "text" }, write: false, role: "text" },
+  { func: "PRESET", state: "preset", name: "Preset", spec: { kind: "text" }, write: false, role: "text" },
+  {
+    func: "TOTALTIME",
+    state: "totalTime",
+    name: "Total time",
+    spec: { kind: "text" },
+    write: false,
+    role: "media.duration.text",
+  },
+  {
+    func: "ELAPSEDTIME",
+    state: "elapsedTime",
+    name: "Elapsed time",
+    spec: { kind: "text" },
+    write: false,
+    role: "media.elapsed.text",
+  },
   {
     func: "REPEAT",
     state: "repeat",
@@ -916,6 +955,7 @@ export function buildYncaCatalog(): YncaEntry[] {
         role: fn.role,
         subunit: source.subunit,
         func: fn.func,
+        readFunc: fn.readFunc,
       });
     }
   }
@@ -932,10 +972,11 @@ export function sweepGets(entries: YncaEntry[]): Array<{ subunit: string; func: 
   const seen = new Set<string>();
   const gets: Array<{ subunit: string; func: string }> = [];
   for (const entry of entries) {
-    const key = `${entry.subunit}:${entry.func}`;
+    const func = readFuncOf(entry);
+    const key = `${entry.subunit}:${func}`;
     if (!seen.has(key)) {
       seen.add(key);
-      gets.push({ subunit: entry.subunit, func: entry.func });
+      gets.push({ subunit: entry.subunit, func });
     }
   }
   return gets;
@@ -948,7 +989,7 @@ export function sweepGets(entries: YncaEntry[]): Array<{ subunit: string; func: 
  * @returns the lookup map keyed `SUBUNIT:FUNC`
  */
 export function funcToEntry(entries: YncaEntry[]): Map<string, YncaEntry> {
-  return new Map(entries.map(entry => [`${entry.subunit}:${entry.func}`, entry]));
+  return new Map(entries.map(entry => [`${entry.subunit}:${readFuncOf(entry)}`, entry]));
 }
 
 /**
