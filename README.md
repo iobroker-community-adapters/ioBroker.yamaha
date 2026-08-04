@@ -41,11 +41,13 @@ Add each Yamaha device with a name and its IP address.
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
-- Rebuilt the datapoint layer with intelligent typing: on/off values are real booleans, fixed choices are dropdowns, and numbers carry their unit and range instead of raw protocol strings.
-- Full datapoint catalog per protocol: amplifier plus tone control, HDMI output, DSP and surround-decoder modes, sound programs, party mode, tuner with RDS, and network/USB/server/Spotify players with artist, album and track.
-- A receiver that is offline when the adapter starts now joins on its own once it answers, and reconnects after a drop — no more re-discovering the device after an update.
-- Added a per-device connection indicator so each receiver's online state is visible on its own.
+### 0.8.0 (2026-08-04)
+- Every value now arrives in a form you can use directly: on/off states are switches, fixed choices are dropdowns, and measurements are numbers with their unit — not raw text to interpret.
+- Your receiver now shows and controls far more of what it can do — tone, DSP, HDMI and surround modes, AM/FM and DAB radio with RDS, and network, USB, server and CD playback with track details.
+- MusicCast devices now show and control their tuner, CD player and the full amplifier — bass, treble, balance, direct and sleep — not just power, volume and input.
+- Fixed the playback status never updating on network and USB sources, so play, pause and stop are now shown correctly, not just controllable.
+- Track title, station and playback state now update the moment they change on the device, instead of only every minute or so.
+- A receiver offline at adapter start joins on its own once it answers and reconnects after a drop, and each device shows its own connection state.
 
 ### 0.7.0 (2026-08-03)
 - An existing receiver from the previous adapter is now carried over into the device table on upgrade instead of being lost.
@@ -62,9 +64,6 @@ Add each Yamaha device with a name and its IP address.
 * (foxriver76) updated packages
 
 ### 0.5.3 (2022-06-17)
-* (Apollon77) Fix crash cases reported by Sentry
-
-### 0.5.2 (2022-04-23)
 * (Apollon77) Fix crash cases reported by Sentry
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)

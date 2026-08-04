@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "0.7.0",
+    "version": "0.8.0",
     "news": {
+      "0.8.0": {
+        "en": "Far more of your Yamaha is usable from ioBroker now: values come through as switches, lists and numbers to read and set, not raw text, and the playback status is finally correct.",
+        "de": "Viel mehr von deinem Yamaha ist jetzt aus ioBroker nutzbar: Werte kommen als Schalter, Listen und Zahlen zum Lesen und Setzen statt als roher Text, und der Wiedergabe-Status stimmt endlich.",
+        "ru": "Теперь из ioBroker доступно гораздо больше возможностей Yamaha: значения приходят как переключатели, списки и числа для чтения и записи, а не сырой текст, и статус воспроизведения наконец верен.",
+        "pt": "Muito mais do seu Yamaha é utilizável no ioBroker: os valores chegam como interruptores, listas e números para ler e definir, não texto bruto, e o estado de reprodução está finalmente correto.",
+        "nl": "Veel meer van je Yamaha is nu bruikbaar vanuit ioBroker: waarden komen als schakelaars, lijsten en getallen om te lezen en in te stellen, geen ruwe tekst, en de afspeelstatus klopt eindelijk.",
+        "fr": "Une grande partie de votre Yamaha est utilisable depuis ioBroker : les valeurs arrivent en interrupteurs, listes et nombres à lire et régler, pas en texte brut, et l'état de lecture est enfin correct.",
+        "it": "Molto di più del tuo Yamaha è usabile da ioBroker: i valori arrivano come interruttori, elenchi e numeri da leggere e impostare, non testo grezzo, e lo stato di riproduzione è finalmente corretto.",
+        "es": "Mucho más de tu Yamaha ya es utilizable desde ioBroker: los valores llegan como interruptores, listas y números para leer y ajustar, no texto en bruto, y el estado de reproducción por fin es correcto.",
+        "pl": "Znacznie więcej twojego Yamaha można teraz używać z ioBroker: wartości są przełącznikami, listami i liczbami do odczytu i ustawiania, nie surowym tekstem, a status odtwarzania jest wreszcie poprawny.",
+        "uk": "З ioBroker доступно набагато більше можливостей Yamaha: значення надходять як перемикачі, списки та числа для читання й запису, а не сирий текст, і статус відтворення нарешті правильний.",
+        "zh-cn": "现在可以从 ioBroker 使用你的 Yamaha 更多功能：数值以开关、列表和数字的形式呈现，可读取和设置，而非原始文本，播放状态终于正确。"
+      },
       "0.7.0": {
         "en": "An existing receiver is now taken over on upgrade, and each receiver reports and fills more datapoints at startup, such as the sleep timer.",
         "de": "Ein vorhandener Receiver wird beim Update jetzt übernommen, und jeder Receiver meldet und füllt beim Start mehr Datenpunkte, etwa den Sleep-Timer.",
@@ -80,19 +93,6 @@
         "pl": "Napraw przypadki awarii zgłoszone przez Sentry\nnapraw typ pureDirect",
         "zh-cn": "修复 Sentry 报告的崩溃案例\n修复 pureDirect 的类型",
         "uk": "Виправлено випадки збоїв, про які повідомляє Sentry\nвиправлено тип pureDirect"
-      },
-      "0.5.0": {
-        "en": "IMPORTANT: js-controller 2.0 is needed at least\nAdd Sentry for crash reporting",
-        "de": "WICHTIG: js-controller 2.0 wird mindestens benötigt\nFügen Sie Sentry für Absturzberichte hinzu",
-        "ru": "ВАЖНО: нужен js-контроллер 2.0 не ниже\nДобавьте Sentry для отчетов о сбоях",
-        "pt": "IMPORTANTE: o js-controller 2.0 é necessário pelo menos\nAdicionar Sentinela para relatórios de falhas",
-        "nl": "BELANGRIJK: js-controller 2.0 is minimaal nodig\nSentry toevoegen voor crashrapportage",
-        "fr": "IMPORTANT: js-controller 2.0 est nécessaire au moins\nAjouter Sentry pour les rapports de plantage",
-        "it": "IMPORTANTE: è necessario almeno js-controller 2.0\nAggiungi Sentinella per la segnalazione degli arresti anomali",
-        "es": "IMPORTANTE: se necesita js-controller 2.0 al menos\nAgregar Sentry para informes de fallas",
-        "pl": "WAŻNE: potrzebny jest przynajmniej js-controller 2.0\nDodaj Sentry do zgłaszania awarii",
-        "zh-cn": "重要提示：至少需要 js-controller 2.0\n添加 Sentry 以进行崩溃报告",
-        "uk": "ВАЖЛИВО: потрібен щонайменше js-controller 2.0\nДодано Sentry для звітування про збої"
       }
     },
     "titleLang": {
