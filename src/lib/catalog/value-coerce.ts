@@ -3,9 +3,17 @@
  * carries one of these so the adapter can turn a raw protocol value into a
  * properly typed, user-friendly ioBroker state instead of a bare string.
  */
+/** A fixed multi-value choice → a string state with a `states` dropdown. */
+export interface EnumSpec {
+  /** Discriminant. */
+  kind: "enum";
+  /** Wire value → display label (usually identical for YNCA). */
+  states: Record<string, string>;
+}
+
 export type ValueSpec =
   | { kind: "onoff"; on: string; off: string }
-  | { kind: "enum"; states: Record<string, string> }
+  | EnumSpec
   | { kind: "number"; unit?: string; min?: number; max?: number; step?: number }
   | { kind: "text" };
 

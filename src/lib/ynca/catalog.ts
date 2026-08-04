@@ -1,0 +1,276 @@
+import type { CatalogEntry } from "../catalog/types";
+import type { ValueSpec } from "../catalog/value-coerce";
+
+/**
+ * A YNCA catalog entry: the object part ({@link CatalogEntry}) plus its subunit
+ * and function — the single source from which the init sweep, the device→state
+ * read-back and the state→wire encode are all derived (no second table).
+ */
+export interface YncaEntry extends CatalogEntry {
+  /** The YNCA subunit (MAIN, ZONE2, SYS, TUN, …). */
+  subunit: string;
+  /** The YNCA function name (PWR, VOL, …). */
+  func: string;
+}
+
+/**
+ * Build a wire-value → label map — YNCA enum labels equal their wire value.
+ *
+ * @param values the enum wire values
+ * @returns the states map for a dropdown
+ */
+function selfMap(values: string[]): Record<string, string> {
+  return Object.fromEntries(values.map(value => [value, value]));
+}
+
+// The full device-agnostic input list (every input any Yamaha may report); a
+// device shows only the ones it has, but the dropdown offers all valid values.
+const INPUT_STATES = selfMap([
+  "AUDIO",
+  "AUDIO1",
+  "AUDIO2",
+  "AUDIO3",
+  "AUDIO4",
+  "AUDIO5",
+  "AV1",
+  "AV2",
+  "AV3",
+  "AV4",
+  "AV5",
+  "AV6",
+  "AV7",
+  "CD",
+  "COAXIAL1",
+  "COAXIAL2",
+  "DOCK",
+  "HDMI1",
+  "HDMI2",
+  "HDMI3",
+  "HDMI4",
+  "HDMI5",
+  "HDMI6",
+  "HDMI7",
+  "LINE1",
+  "LINE2",
+  "LINE3",
+  "Main Zone Sync",
+  "MULTI CH",
+  "OPTICAL1",
+  "OPTICAL2",
+  "PHONO",
+  "TV",
+  "V-AUX",
+  "AirPlay",
+  "Bluetooth",
+  "Deezer",
+  "iPod",
+  "iPod (USB)",
+  "MusicCast Link",
+  "Napster",
+  "NET RADIO",
+  "Pandora",
+  "PC",
+  "Rhapsody",
+  "SERVER",
+  "SIRIUS",
+  "SIRIUS InternetRadio",
+  "SiriusXM",
+  "Spotify",
+  "TIDAL",
+  "TUNER",
+  "UAW",
+  "USB",
+]);
+
+const SOUNDPRG_STATES = selfMap([
+  "Action Game",
+  "Adventure",
+  "Arena",
+  "Cellar Club",
+  "Chamber",
+  "Church in Freiburg",
+  "Church in Royaumont",
+  "Church in Tokyo",
+  "Disco",
+  "Drama",
+  "Enhanced",
+  "Hall in Amsterdam",
+  "Hall in Frankfurt",
+  "Hall in Munich",
+  "Hall in Munich A",
+  "Hall in Munich B",
+  "Hall in Stuttgart",
+  "Hall in USA A",
+  "Hall in USA B",
+  "Hall in Vienna",
+  "Mono Movie",
+  "Music Video",
+  "Pavilion",
+  "Recital/Opera",
+  "Roleplaying Game",
+  "Sci-Fi",
+  "Spectacle",
+  "Sports",
+  "Standard",
+  "Surround Decoder",
+  "The Bottom Line",
+  "The Roxy Theatre",
+  "Village Gate",
+  "Village Vanguard",
+  "Warehouse Loft",
+  "2ch Stereo",
+  "5ch Stereo",
+  "7ch Stereo",
+  "9ch Stereo",
+  "11ch Stereo",
+  "All-Ch Stereo",
+]);
+
+const SLEEP_STATES = selfMap(["Off", "30 min", "60 min", "90 min", "120 min"]);
+
+/** Amplifier functions shared by MAIN and each zone: state id + YNCA func + value spec. */
+const AMP_FUNCS: Array<{ func: string; state: string; name: string; spec: ValueSpec; write: boolean; role: string }> = [
+  {
+    func: "PWR",
+    state: "power",
+    name: "Power",
+    spec: { kind: "onoff", on: "On", off: "Standby" },
+    write: true,
+    role: "switch.power",
+  },
+  {
+    func: "VOL",
+    state: "volume",
+    name: "Volume",
+    spec: { kind: "number", unit: "dB", min: -80.5, max: 16.5, step: 0.5 },
+    write: true,
+    role: "level.volume",
+  },
+  {
+    func: "MUTE",
+    state: "mute",
+    name: "Mute",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    write: true,
+    role: "media.mute",
+  },
+  {
+    func: "INP",
+    state: "input",
+    name: "Input",
+    spec: { kind: "enum", states: INPUT_STATES },
+    write: true,
+    role: "media.input",
+  },
+  {
+    func: "SOUNDPRG",
+    state: "soundProgram",
+    name: "Sound program",
+    spec: { kind: "enum", states: SOUNDPRG_STATES },
+    write: true,
+    role: "state",
+  },
+  {
+    func: "STRAIGHT",
+    state: "straight",
+    name: "Straight",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    write: true,
+    role: "switch",
+  },
+  {
+    func: "ENHANCER",
+    state: "enhancer",
+    name: "Enhancer",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    write: true,
+    role: "switch",
+  },
+  {
+    func: "PUREDIRMODE",
+    state: "pureDirect",
+    name: "Pure Direct",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    write: true,
+    role: "switch",
+  },
+  {
+    func: "SLEEP",
+    state: "sleep",
+    name: "Sleep timer",
+    spec: { kind: "enum", states: SLEEP_STATES },
+    write: true,
+    role: "state",
+  },
+];
+
+/** The zones the catalog maps: MAIN flat, ZONE2-4 each under their own prefix. */
+const ZONES: Array<{ subunit: string; prefix: string }> = [
+  { subunit: "MAIN", prefix: "" },
+  { subunit: "ZONE2", prefix: "zone2." },
+  { subunit: "ZONE3", prefix: "zone3." },
+  { subunit: "ZONE4", prefix: "zone4." },
+];
+
+/**
+ * Build the device-agnostic YNCA catalog: every amplifier function for MAIN and
+ * each zone. The per-device mapper keeps only the entries the device reports.
+ *
+ * @returns the catalog entries
+ */
+export function buildYncaCatalog(): YncaEntry[] {
+  const entries: YncaEntry[] = [];
+  for (const zone of ZONES) {
+    for (const fn of AMP_FUNCS) {
+      entries.push({
+        id: `${zone.prefix}${fn.state}`,
+        name: fn.name,
+        spec: fn.spec,
+        write: fn.write,
+        role: fn.role,
+        subunit: zone.subunit,
+        func: fn.func,
+      });
+    }
+  }
+  return entries;
+}
+
+/**
+ * The init-sweep GETs: each (subunit, func) once.
+ *
+ * @param entries the catalog entries
+ * @returns the subunit/function pairs to query
+ */
+export function sweepGets(entries: YncaEntry[]): Array<{ subunit: string; func: string }> {
+  const seen = new Set<string>();
+  const gets: Array<{ subunit: string; func: string }> = [];
+  for (const entry of entries) {
+    const key = `${entry.subunit}:${entry.func}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      gets.push({ subunit: entry.subunit, func: entry.func });
+    }
+  }
+  return gets;
+}
+
+/**
+ * Map `subunit:func` → catalog entry, for turning a device line into a state.
+ *
+ * @param entries the catalog entries
+ * @returns the lookup map keyed `SUBUNIT:FUNC`
+ */
+export function funcToEntry(entries: YncaEntry[]): Map<string, YncaEntry> {
+  return new Map(entries.map(entry => [`${entry.subunit}:${entry.func}`, entry]));
+}
+
+/**
+ * Map state id → catalog entry, for turning a user write into a YNCA command.
+ *
+ * @param entries the catalog entries
+ * @returns the lookup map keyed by state id
+ */
+export function idToEntry(entries: YncaEntry[]): Map<string, YncaEntry> {
+  return new Map(entries.map(entry => [entry.id, entry]));
+}
