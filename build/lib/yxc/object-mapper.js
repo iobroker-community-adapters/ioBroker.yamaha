@@ -66,6 +66,22 @@ const ZONES = [
   { id: "zone3", prefix: "zone3.", channel: "zone3", channelName: "Zone 3" },
   { id: "zone4", prefix: "zone4.", channel: "zone4", channelName: "Zone 4" }
 ];
+const PLAYER_STATES = [
+  {
+    state: "playback",
+    common: {
+      name: "Playback",
+      type: "string",
+      role: "media.state",
+      read: true,
+      write: false,
+      states: { play: "play", pause: "pause", stop: "stop" }
+    }
+  },
+  { state: "artist", common: { name: "Artist", type: "string", role: "media.artist", read: true, write: false } },
+  { state: "album", common: { name: "Album", type: "string", role: "media.album", read: true, write: false } },
+  { state: "track", common: { name: "Track", type: "string", role: "media.title", read: true, write: false } }
+];
 function mapYxcToObjects(capabilities) {
   var _a;
   const objects = [];
@@ -93,6 +109,12 @@ function mapYxcToObjects(capabilities) {
     }
     if (hasInput) {
       objects.push({ id: `${zoneDef.prefix}input`, type: "state", common: { ...INPUT_COMMON } });
+    }
+  }
+  if (capabilities.media.includes("netusb")) {
+    objects.push({ id: "netPlayer", type: "channel", common: { name: "Network player" } });
+    for (const player of PLAYER_STATES) {
+      objects.push({ id: `netPlayer.${player.state}`, type: "state", common: { ...player.common } });
     }
   }
   return objects;

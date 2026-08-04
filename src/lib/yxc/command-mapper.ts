@@ -114,3 +114,25 @@ export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefi
   }
   return { method: mapping.method, zone, value: mapping.toYxc(value) };
 }
+
+/**
+ * Parse a YXC getPlayInfo response into the network player's state updates
+ * (read-only: playback status plus artist/album/track metadata).
+ *
+ * @param playInfo the getPlayInfo response object
+ * @returns the player state updates, empty if malformed
+ */
+export function parseYxcPlayInfo(playInfo: unknown): StateValue[] {
+  if (typeof playInfo !== "object" || playInfo === null) {
+    return [];
+  }
+  const info = playInfo as Record<string, unknown>;
+  const updates: StateValue[] = [];
+  for (const field of ["playback", "artist", "album", "track"]) {
+    const value = info[field];
+    if (typeof value === "string") {
+      updates.push({ id: `netPlayer.${field}`, value });
+    }
+  }
+  return updates;
+}

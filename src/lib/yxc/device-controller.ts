@@ -1,6 +1,6 @@
 import { parseYxcFeatures } from "./capability";
 import { mapYxcToObjects } from "./object-mapper";
-import { parseYxcStatus, stateToYxc, type YxcCommand } from "./command-mapper";
+import { parseYxcPlayInfo, parseYxcStatus, stateToYxc, type YxcCommand } from "./command-mapper";
 import { zonesToRefresh } from "./push";
 import type { ObjectDef } from "../catalog/types";
 
@@ -13,6 +13,8 @@ export interface YxcClientLike {
   getFeatures(): Promise<unknown>;
   /** Read a zone's current status. */
   getStatus(zone: string): Promise<unknown>;
+  /** Read the network/USB player's play info (playback, artist, album, track). */
+  getPlayInfo(): Promise<unknown>;
   /** Set a zone's power. */
   power(on: boolean, zone: string): Promise<unknown>;
   /** Set a zone's absolute volume (raw YXC scale). */
@@ -64,6 +66,7 @@ export interface YxcControllerDeps {
  */
 export class YxcDeviceController {
   private zones: string[] = [];
+  private hasPlayer = false;
   private cancelKeepalive: (() => void) | undefined;
 
   /**
@@ -95,6 +98,10 @@ export class YxcDeviceController {
     this.zones = capabilities.zones.map(zone => zone.id);
     for (const zone of this.zones) {
       await this.refreshZone(zone);
+    }
+    this.hasPlayer = capabilities.media.includes("netusb");
+    if (this.hasPlayer) {
+      await this.refreshPlayer();
     }
     this.deps.registerPush(event => this.onPush(event));
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), KEEPALIVE_MS);
@@ -147,6 +154,21 @@ export class YxcDeviceController {
   /** Poll the primary zone, which renews the push registration and refreshes state. */
   private async keepalive(): Promise<void> {
     await this.refreshZone(this.zones[0] ?? "main");
+    if (this.hasPlayer) {
+      await this.refreshPlayer();
+    }
+  }
+
+  /** Fetch the network player's play info and write its states with ack. */
+  private async refreshPlayer(): Promise<void> {
+    try {
+      const info = await this.deps.client.getPlayInfo();
+      for (const update of parseYxcPlayInfo(info)) {
+        this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: getPlayInfo failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
   /**

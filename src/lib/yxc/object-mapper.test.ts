@@ -8,6 +8,13 @@ function ids(fixture: unknown): string[] {
 }
 
 describe("mapYxcToObjects", () => {
+  test("creates the network player channel and states when the device offers netusb", () => {
+    const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: ["netusb"] });
+    const ids = objs.map(o => o.id);
+    expect(ids).toContain("netPlayer");
+    expect(ids).toEqual(expect.arrayContaining(["netPlayer.playback", "netPlayer.artist", "netPlayer.track"]));
+  });
+
   test("maps main-zone functions to top-level states", () => {
     expect(ids(rxA2070)).toEqual(expect.arrayContaining(["power", "volume", "mute", "soundProgram", "input"]));
   });

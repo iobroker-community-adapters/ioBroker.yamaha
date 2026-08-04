@@ -36,6 +36,7 @@ class YxcDeviceController {
     this.deps = deps;
   }
   zones = [];
+  hasPlayer = false;
   cancelKeepalive;
   /**
    * Read capabilities, create the object tree, seed state, and wire up push +
@@ -56,6 +57,10 @@ class YxcDeviceController {
     this.zones = capabilities.zones.map((zone) => zone.id);
     for (const zone of this.zones) {
       await this.refreshZone(zone);
+    }
+    this.hasPlayer = capabilities.media.includes("netusb");
+    if (this.hasPlayer) {
+      await this.refreshPlayer();
     }
     this.deps.registerPush((event) => this.onPush(event));
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), KEEPALIVE_MS);
@@ -106,6 +111,20 @@ class YxcDeviceController {
   async keepalive() {
     var _a;
     await this.refreshZone((_a = this.zones[0]) != null ? _a : "main");
+    if (this.hasPlayer) {
+      await this.refreshPlayer();
+    }
+  }
+  /** Fetch the network player's play info and write its states with ack. */
+  async refreshPlayer() {
+    try {
+      const info = await this.deps.client.getPlayInfo();
+      for (const update of (0, import_command_mapper.parseYxcPlayInfo)(info)) {
+        this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: getPlayInfo failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
   /**
    * Fetch a zone's status and write its amp states with ack.

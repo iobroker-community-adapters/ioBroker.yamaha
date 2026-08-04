@@ -47,6 +47,10 @@ class FakeClient implements YxcClientLike {
     this.calls.push({ method: "setPureDirect", args: [on, zone] });
     return {};
   }
+  public async getPlayInfo(): Promise<unknown> {
+    this.calls.push({ method: "getPlayInfo", args: [] });
+    return {};
+  }
 }
 
 function setup(features: unknown, status: unknown): {

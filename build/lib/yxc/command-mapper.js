@@ -18,6 +18,7 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var command_mapper_exports = {};
 __export(command_mapper_exports, {
+  parseYxcPlayInfo: () => parseYxcPlayInfo,
   parseYxcStatus: () => parseYxcStatus,
   stateToYxc: () => stateToYxc
 });
@@ -91,8 +92,23 @@ function stateToYxc(stateId, value) {
   }
   return { method: mapping.method, zone, value: mapping.toYxc(value) };
 }
+function parseYxcPlayInfo(playInfo) {
+  if (typeof playInfo !== "object" || playInfo === null) {
+    return [];
+  }
+  const info = playInfo;
+  const updates = [];
+  for (const field of ["playback", "artist", "album", "track"]) {
+    const value = info[field];
+    if (typeof value === "string") {
+      updates.push({ id: `netPlayer.${field}`, value });
+    }
+  }
+  return updates;
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  parseYxcPlayInfo,
   parseYxcStatus,
   stateToYxc
 });

@@ -55,6 +55,24 @@ const ZONES: Array<{ id: string; prefix: string; channel?: string; channelName?:
   { id: "zone4", prefix: "zone4.", channel: "zone4", channelName: "Zone 4" },
 ];
 
+/** Network/USB media-player states, from getPlayInfo — created when the device offers netusb. */
+const PLAYER_STATES: Array<{ state: string; common: ObjectDef["common"] }> = [
+  {
+    state: "playback",
+    common: {
+      name: "Playback",
+      type: "string",
+      role: "media.state",
+      read: true,
+      write: false,
+      states: { play: "play", pause: "pause", stop: "stop" },
+    },
+  },
+  { state: "artist", common: { name: "Artist", type: "string", role: "media.artist", read: true, write: false } },
+  { state: "album", common: { name: "Album", type: "string", role: "media.album", read: true, write: false } },
+  { state: "track", common: { name: "Track", type: "string", role: "media.title", read: true, write: false } },
+];
+
 /**
  * Turn YXC capabilities into the unified object tree: main's functions as
  * top-level states, each additional zone as a channel with its own states. An
@@ -90,6 +108,12 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
     }
     if (hasInput) {
       objects.push({ id: `${zoneDef.prefix}input`, type: "state", common: { ...INPUT_COMMON } });
+    }
+  }
+  if (capabilities.media.includes("netusb")) {
+    objects.push({ id: "netPlayer", type: "channel", common: { name: "Network player" } });
+    for (const player of PLAYER_STATES) {
+      objects.push({ id: `netPlayer.${player.state}`, type: "state", common: { ...player.common } });
     }
   }
   return objects;

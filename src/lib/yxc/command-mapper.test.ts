@@ -1,4 +1,4 @@
-import { parseYxcStatus, stateToYxc } from "./command-mapper";
+import { parseYxcPlayInfo, parseYxcStatus, stateToYxc } from "./command-mapper";
 import ysp from "./__fixtures__/status/YSP1600_main.json";
 import rx from "./__fixtures__/status/RX_A2070_main.json";
 
@@ -31,6 +31,21 @@ describe("parseYxcStatus", () => {
   test("returns no updates for malformed input or a status without amp fields", () => {
     expect(parseYxcStatus(null, "main")).toEqual([]);
     expect(parseYxcStatus({ response_code: 0 }, "main")).toEqual([]);
+  });
+});
+
+describe("parseYxcPlayInfo", () => {
+  test("maps play-info fields to read-only network player states", () => {
+    expect(parseYxcPlayInfo({ playback: "play", artist: "A", album: "B", track: "T", extra: 1 })).toEqual([
+      { id: "netPlayer.playback", value: "play" },
+      { id: "netPlayer.artist", value: "A" },
+      { id: "netPlayer.album", value: "B" },
+      { id: "netPlayer.track", value: "T" },
+    ]);
+  });
+
+  test("returns an empty list for a malformed response", () => {
+    expect(parseYxcPlayInfo(null)).toEqual([]);
   });
 });
 
