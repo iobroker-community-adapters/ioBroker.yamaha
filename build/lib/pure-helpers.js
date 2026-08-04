@@ -51,6 +51,9 @@ function parseDevices(raw) {
   return records;
 }
 function staleObjects(existing, deviceIds, namespace) {
+  if (deviceIds.size === 0) {
+    return [];
+  }
   const isKept = (fullId) => {
     const top = stripNamespace(fullId, namespace).split(".")[0];
     return top === "info" || deviceIds.has(top);

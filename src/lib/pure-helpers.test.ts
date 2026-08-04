@@ -37,6 +37,11 @@ describe("staleObjects", () => {
   test("keeps a configured device even before its subtree exists, and never touches info", () => {
     expect(staleObjects(["yamaha.0.info", "yamaha.0.living"], new Set(["living"]), "yamaha.0")).toEqual([]);
   });
+
+  test("deletes nothing when no devices are configured (never wipe on an empty table)", () => {
+    const existing = ["yamaha.0.info", "yamaha.0.living.power", "yamaha.0.old.state"];
+    expect(staleObjects(existing, new Set(), "yamaha.0")).toEqual([]);
+  });
 });
 
 describe("parseDevices", () => {

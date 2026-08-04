@@ -82,6 +82,11 @@ export function parseDevices(raw: unknown): DeviceRecord[] {
  * @returns the stale ids to delete, deepest first
  */
 export function staleObjects(existing: string[], deviceIds: Set<string>, namespace: string): string[] {
+  // No configured devices → never wipe the whole tree (a user who cleared the
+  // device table by accident would otherwise lose every object in one pass).
+  if (deviceIds.size === 0) {
+    return [];
+  }
   const isKept = (fullId: string): boolean => {
     const top = stripNamespace(fullId, namespace).split(".")[0];
     return top === "info" || deviceIds.has(top);
