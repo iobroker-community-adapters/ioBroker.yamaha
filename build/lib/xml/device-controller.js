@@ -24,7 +24,7 @@ module.exports = __toCommonJS(device_controller_exports);
 var import_command_mapper = require("./command-mapper");
 var import_catalog = require("./catalog");
 var import_util = require("../util");
-const KEEPALIVE_MS = 60 * 1e3;
+const DEFAULT_POLL_INTERVAL_MS = 60 * 1e3;
 const MAX_KEEPALIVE_FAILURES = 3;
 const XML_ZONES = [
   { key: "main", element: "Main_Zone", prefix: "" },
@@ -36,10 +36,12 @@ class XmlDeviceController {
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
    * @param deps the client and adapter callbacks
+   * @param pollIntervalMs how often to poll the device for state (default 60 s)
    */
-  constructor(deviceId, deps) {
+  constructor(deviceId, deps, pollIntervalMs = DEFAULT_POLL_INTERVAL_MS) {
     this.deviceId = deviceId;
     this.deps = deps;
+    this.pollIntervalMs = pollIntervalMs;
   }
   zones = [];
   cancelKeepalive;
@@ -84,7 +86,7 @@ class XmlDeviceController {
         this.seedZone(zone, status);
       }
     }
-    this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), KEEPALIVE_MS);
+    this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), this.pollIntervalMs);
     this.deps.log.info(`${this.deviceId}: Yamaha (XML) device ready`);
     return true;
   }

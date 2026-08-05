@@ -19,6 +19,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var pure_helpers_exports = {};
 __export(pure_helpers_exports, {
   legacyDeviceRow: () => legacyDeviceRow,
+  mergeDiscovered: () => mergeDiscovered,
   parseDevices: () => parseDevices,
   sanitizeId: () => sanitizeId,
   staleObjects: () => staleObjects,
@@ -57,6 +58,29 @@ function parseDevices(raw) {
   }
   return records;
 }
+function mergeDiscovered(known, found) {
+  const byIp = /* @__PURE__ */ new Map();
+  const takenIds = /* @__PURE__ */ new Set(["info"]);
+  for (const device of known) {
+    if (byIp.has(device.ip) || takenIds.has(device.id)) {
+      continue;
+    }
+    byIp.set(device.ip, device);
+    takenIds.add(device.id);
+  }
+  for (const device of found) {
+    if (byIp.has(device.ip)) {
+      continue;
+    }
+    const id = sanitizeId(device.name || device.ip);
+    if (takenIds.has(id)) {
+      continue;
+    }
+    takenIds.add(id);
+    byIp.set(device.ip, { id, ip: device.ip });
+  }
+  return [...byIp.values()];
+}
 function staleObjects(existing, deviceIds, namespace) {
   if (deviceIds.size === 0) {
     return [];
@@ -77,6 +101,7 @@ function legacyDeviceRow(config) {
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   legacyDeviceRow,
+  mergeDiscovered,
   parseDevices,
   sanitizeId,
   staleObjects,

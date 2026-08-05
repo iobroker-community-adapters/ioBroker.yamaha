@@ -3,6 +3,19 @@
     "name": "yamaha",
     "version": "0.9.0",
     "news": {
+      "NEXT": {
+        "en": "Devices no longer need adding by hand — leave the table empty and MusicCast receivers are found and set up on their own; the settings are clearer too.",
+        "de": "Geräte müssen nicht mehr von Hand angelegt werden — lass die Tabelle leer, dann werden MusicCast-Receiver von selbst gefunden und eingerichtet; die Einstellungen sind übersichtlicher.",
+        "ru": "Устройства больше не нужно добавлять вручную — оставьте таблицу пустой, и ресиверы MusicCast найдутся и настроятся сами; настройки стали понятнее.",
+        "pt": "Os dispositivos já não precisam de ser adicionados à mão — deixe a tabela vazia e os recetores MusicCast são encontrados e configurados sozinhos; as definições estão mais claras.",
+        "nl": "Apparaten hoeven niet meer met de hand te worden toegevoegd — laat de tabel leeg en MusicCast-receivers worden vanzelf gevonden en ingesteld; de instellingen zijn overzichtelijker.",
+        "fr": "Plus besoin d'ajouter les appareils à la main — laissez le tableau vide et les récepteurs MusicCast sont trouvés et configurés tout seuls ; les réglages sont plus clairs.",
+        "it": "Non serve più aggiungere i dispositivi a mano — lascia la tabella vuota e i ricevitori MusicCast vengono trovati e configurati da soli; le impostazioni sono più chiare.",
+        "es": "Ya no hay que añadir los dispositivos a mano — deja la tabla vacía y los receptores MusicCast se encuentran y configuran solos; los ajustes son más claros.",
+        "pl": "Urządzeń nie trzeba już dodawać ręcznie — zostaw tabelę pustą, a amplitunery MusicCast zostaną same znalezione i skonfigurowane; ustawienia są czytelniejsze.",
+        "uk": "Пристрої більше не потрібно додавати вручну — залиште таблицю порожньою, і ресивери MusicCast знайдуться та налаштуються самі; налаштування стали зрозумілішими.",
+        "zh-cn": "无需再手动添加设备——将表格留空，MusicCast 接收机会被自动找到并设置好；设置页面也更清晰了。"
+      },
       "0.9.0": {
         "en": "MusicCast and older receivers now recover their connection by themselves after a drop, like YNCA, and their datapoints are more consistent.",
         "de": "MusicCast- und ältere Receiver stellen ihre Verbindung nach einem Abbruch jetzt selbst wieder her, wie YNCA, und ihre Datenpunkte sind konsistenter.",
@@ -79,19 +92,6 @@
         "es": "Casos de accidente fijo reportados por Sentry",
         "pl": "Sprawy katastrofy Fix podane przez Sentry’a",
         "zh-cn": "Sentry所报告的六例事故",
-        "uk": "Виправлено випадки збоїв, про які повідомляє Sentry"
-      },
-      "0.5.2": {
-        "en": "Fix crash cases reported by Sentry",
-        "de": "Von Sentry gemeldete Absturzfälle beheben",
-        "ru": "Исправить случаи сбоев, о которых сообщил Sentry",
-        "pt": "Corrigir casos de travamento relatados pelo Sentinela",
-        "nl": "Herstel crashgevallen gemeld door Sentry",
-        "fr": "Correction des cas de plantage signalés par Sentry",
-        "it": "Risolvi i casi di crash segnalati da Sentry",
-        "es": "Solucionar casos de fallas informados por Sentry",
-        "pl": "Napraw przypadki awarii zgłoszone przez Sentry",
-        "zh-cn": "修复 Sentry 报告的崩溃案例",
         "uk": "Виправлено випадки збоїв, про які повідомляє Sentry"
       }
     },

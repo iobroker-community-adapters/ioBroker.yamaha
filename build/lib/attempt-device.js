@@ -58,15 +58,20 @@ async function attemptDevice(device, deps) {
     yxc.close();
     log.debug(`${device.id}: no YXC (${(0, import_util.errorMessage)(e)})`);
   }
-  const xml = new import_device_controller3.XmlDeviceController(device.id, {
-    client: new import_xml_client.XmlClient(device.ip),
-    scheduleKeepalive: deps.scheduleKeepalive,
-    upsertObject,
-    setStateAck,
-    log
-  });
+  const xml = new import_device_controller3.XmlDeviceController(
+    device.id,
+    {
+      client: new import_xml_client.XmlClient(device.ip),
+      scheduleKeepalive: deps.scheduleKeepalive,
+      upsertObject,
+      setStateAck,
+      log
+    },
+    deps.xmlPollIntervalMs
+  );
   try {
     if (await xml.start()) {
+      deps.onXmlConnected();
       return xml;
     }
     xml.close();
