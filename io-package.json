@@ -1,9 +1,9 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "0.9.0",
+    "version": "0.10.0",
     "news": {
-      "NEXT": {
+      "0.10.0": {
         "en": "Devices no longer need adding by hand — leave the table empty and MusicCast receivers are found and set up on their own; the settings are clearer too.",
         "de": "Geräte müssen nicht mehr von Hand angelegt werden — lass die Tabelle leer, dann werden MusicCast-Receiver von selbst gefunden und eingerichtet; die Einstellungen sind übersichtlicher.",
         "ru": "Устройства больше не нужно добавлять вручную — оставьте таблицу пустой, и ресиверы MusicCast найдутся и настроятся сами; настройки стали понятнее.",

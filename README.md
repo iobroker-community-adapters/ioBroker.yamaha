@@ -43,7 +43,7 @@ Older Yamaha receivers (before ~2010, the XML protocol) do not announce themselv
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 0.10.0 (2026-08-05)
 
 - You no longer have to add every device by hand — leave the device table empty and the adapter finds MusicCast receivers on its own at startup and sets them up.
 - The settings page is clearer and follows the standard layout; the manual search button is gone because discovery now runs by itself.
@@ -77,10 +77,6 @@ Older Yamaha receivers (before ~2010, the XML protocol) do not announce themselv
 - Every device exposes power, volume, mute and input per zone, generated from what it actually reports rather than a hardcoded model list.
 - Finds Yamaha devices on the network by itself: a search button in the settings fills the device table over SSDP.
 - Now requires Node.js 22, js-controller 7 and admin 7.
-
-### 0.5.4 (2024-06-14)
-
-- (foxriver76) updated packages
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 
