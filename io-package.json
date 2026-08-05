@@ -165,7 +165,9 @@
     "messagebox": true
   },
   "native": {
-    "devices": []
+    "devices": [],
+    "xmlPollInterval": 60,
+    "hasXmlDevice": false
   },
   "objects": [],
   "instanceObjects": [

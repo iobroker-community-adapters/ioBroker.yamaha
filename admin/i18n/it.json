@@ -1,7 +1,13 @@
 {
-  "introText": "Controlla i ricevitori AV e i dispositivi MusicCast Yamaha tramite la rete. Aggiungi ogni dispositivo qui sotto con nome e indirizzo IP.",
+  "header_devices": "Dispositivi",
+  "introText": "Lascia la tabella vuota e l'adattatore trova da solo i dispositivi MusicCast sulla rete all'avvio — niente da inserire. Aggiungi dispositivi (nome + IP) per usare solo quelli. I ricevitori più vecchi (prima del ~2010, protocollo XML) non si annunciano sulla rete e vanno sempre aggiunti qui manualmente.",
   "devicesTable": "Dispositivi Yamaha",
   "columnName": "Nome",
   "columnIp": "Indirizzo IP",
-  "discoverBtn": "Cerca dispositivi"
+  "label_xmlPollInterval": "Intervallo di interrogazione XML (secondi)",
+  "tooltip_xmlPollInterval": "Questo campo appare perché un dispositivo è collegato tramite il vecchio protocollo XML (un ricevitore di prima del ~2010). Tali dispositivi non segnalano le modifiche da soli, vengono interrogati. Predefinito: ogni 60 secondi — più che sufficiente per un sintoamplificatore.",
+  "supportHeader": "Sostieni lo sviluppo",
+  "aboutInfo": "Se questo adattatore ti è utile, puoi sostenere il suo sviluppo:",
+  "donateKofi": "Ko-fi",
+  "donatePaypal": "PayPal"
 }

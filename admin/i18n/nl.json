@@ -1,7 +1,13 @@
 {
-  "introText": "Bestuurt Yamaha AV-ontvangers en MusicCast-apparaten via het netwerk. Voeg hieronder elk apparaat toe met naam en IP-adres.",
+  "header_devices": "Apparaten",
+  "introText": "Laat de tabel leeg en de adapter vindt bij het opstarten zelf MusicCast-apparaten op het netwerk — niets in te voeren. Voeg apparaten (naam + IP) toe om alleen die te gebruiken. Oudere receivers (van vóór ~2010, XML-protocol) melden zich niet op het netwerk en moeten hier altijd handmatig worden toegevoegd.",
   "devicesTable": "Yamaha-apparaten",
   "columnName": "Naam",
   "columnIp": "IP-adres",
-  "discoverBtn": "Apparaten zoeken"
+  "label_xmlPollInterval": "XML-opvraaginterval (seconden)",
+  "tooltip_xmlPollInterval": "Dit veld verschijnt omdat een apparaat via het oude XML-protocol is verbonden (een receiver van vóór ~2010). Zulke apparaten melden wijzigingen niet zelf, ze worden opgevraagd. Standaard: elke 60 seconden — ruim voldoende voor een AV-receiver.",
+  "supportHeader": "Ontwikkeling steunen",
+  "aboutInfo": "Als deze adapter nuttig voor je is, kun je de ontwikkeling steunen:",
+  "donateKofi": "Ko-fi",
+  "donatePaypal": "PayPal"
 }

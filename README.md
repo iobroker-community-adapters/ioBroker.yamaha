@@ -19,7 +19,7 @@ of the oldest pre-2010 models — behind one object tree.
 - **Rich, intelligently typed datapoints** — amplifier, tone control, HDMI output, DSP and decoder modes, sound programs, party mode, tuner with RDS, and network/USB/server/Spotify players; on/off is a boolean, fixed choices are dropdowns, numbers carry their unit and range.
 - **Capability-driven object tree** — states are generated from what each device actually reports over its protocol, not from a hardcoded model list, and only for the functions it offers.
 - **One transport chosen per device** — YNCA where the receiver speaks it, MusicCast for speakers and soundbars, XML for the oldest models.
-- **Network discovery** — a search button finds Yamaha devices over SSDP and fills the device table.
+- **Automatic discovery** — leave the device table empty and MusicCast devices are found on the network and set up on their own at startup; fill the table to pin specific devices instead.
 
 ## Requirements
 
@@ -33,7 +33,9 @@ Install the adapter from the ioBroker admin.
 
 ## Configuration
 
-Add each Yamaha device with a name and its IP address.
+**Leave the device table empty** and the adapter finds MusicCast devices on the network by itself at startup — nothing to enter. **Add devices** (name and IP address) to the table to use only those instead.
+
+Older Yamaha receivers (before ~2010, the XML protocol) do not announce themselves on the network and must always be added to the table manually with their IP address. Once such a device is connected, an **XML query interval** field appears in the settings — these devices are polled rather than pushing their changes, and the default of 60 seconds is plenty for an AV receiver.
 
 ## Changelog
 

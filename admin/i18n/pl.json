@@ -1,7 +1,13 @@
 {
-  "introText": "Steruje odbiornikami AV i urządzeniami MusicCast Yamaha przez sieć. Dodaj poniżej każde urządzenie, podając nazwę i adres IP.",
+  "header_devices": "Urządzenia",
+  "introText": "Pozostaw tabelę pustą, a adapter sam znajdzie urządzenia MusicCast w sieci przy starcie — nic nie trzeba wpisywać. Dodaj urządzenia (nazwa + IP), aby używać tylko ich. Starsze amplitunery (sprzed ~2010, protokół XML) nie zgłaszają się w sieci i zawsze dodaje się je tutaj ręcznie.",
   "devicesTable": "Urządzenia Yamaha",
   "columnName": "Nazwa",
   "columnIp": "Adres IP",
-  "discoverBtn": "Szukaj urządzeń"
+  "label_xmlPollInterval": "Interwał odpytywania XML (sekundy)",
+  "tooltip_xmlPollInterval": "To pole pojawia się, ponieważ urządzenie jest połączone przez stary protokół XML (amplituner sprzed ~2010). Takie urządzenia nie zgłaszają zmian samodzielnie, są odpytywane. Domyślnie: co 60 sekund — w zupełności wystarczy dla amplitunera AV.",
+  "supportHeader": "Wesprzyj rozwój",
+  "aboutInfo": "Jeśli ten adapter jest dla Ciebie przydatny, możesz wesprzeć jego rozwój:",
+  "donateKofi": "Ko-fi",
+  "donatePaypal": "PayPal"
 }

@@ -1,7 +1,13 @@
 {
-  "introText": "通过网络控制 Yamaha AV 接收器和 MusicCast 设备。在下方添加每个设备的名称和 IP 地址。",
+  "header_devices": "设备",
+  "introText": "将表格留空，适配器会在启动时自动在网络中查找 MusicCast 设备——无需输入。添加设备（名称 + IP）则只使用这些设备。较旧的接收机（约 2010 年之前，XML 协议）不会在网络中通告自己，必须始终在此手动添加。",
   "devicesTable": "Yamaha 设备",
   "columnName": "名称",
   "columnIp": "IP 地址",
-  "discoverBtn": "搜索设备"
+  "label_xmlPollInterval": "XML 查询间隔（秒）",
+  "tooltip_xmlPollInterval": "此字段出现是因为有设备通过旧的 XML 协议连接（约 2010 年之前的接收机）。这类设备不会自行报告变化，而是被轮询。默认：每 60 秒一次——对 AV 接收机来说绰绰有余。",
+  "supportHeader": "支持开发",
+  "aboutInfo": "如果此适配器对你有用，你可以支持它的开发：",
+  "donateKofi": "Ko-fi",
+  "donatePaypal": "PayPal"
 }
