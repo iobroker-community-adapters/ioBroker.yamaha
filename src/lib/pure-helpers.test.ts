@@ -1,4 +1,4 @@
-import { legacyDeviceRow, parseDevices, sanitizeId, staleObjects, stripNamespace } from "./pure-helpers";
+import { legacyDeviceRow, mergeDiscovered, parseDevices, sanitizeId, staleObjects, stripNamespace } from "./pure-helpers";
 
 describe("legacyDeviceRow", () => {
   test("carries over the old single ip when the table is empty", () => {
@@ -15,6 +15,39 @@ describe("legacyDeviceRow", () => {
 
   test("does nothing without a legacy ip", () => {
     expect(legacyDeviceRow({ devices: [] })).toBeUndefined();
+  });
+});
+
+describe("mergeDiscovered", () => {
+  test("turns a fresh discovery into device records", () => {
+    expect(mergeDiscovered([], [{ ip: "1.1.1.1", name: "Living" }])).toEqual([{ id: "Living", ip: "1.1.1.1" }]);
+  });
+
+  test("keeps a known device the scan did not find this run (standby)", () => {
+    expect(mergeDiscovered([{ id: "Living", ip: "1.1.1.1" }], [])).toEqual([{ id: "Living", ip: "1.1.1.1" }]);
+  });
+
+  test("keeps the known id and ip when the same device is rediscovered", () => {
+    expect(mergeDiscovered([{ id: "Living", ip: "1.1.1.1" }], [{ ip: "1.1.1.1", name: "Renamed" }])).toEqual([
+      { id: "Living", ip: "1.1.1.1" },
+    ]);
+  });
+
+  test("adds a newly discovered address to the known ones", () => {
+    expect(mergeDiscovered([{ id: "Living", ip: "1.1.1.1" }], [{ ip: "2.2.2.2", name: "Kitchen" }])).toEqual([
+      { id: "Living", ip: "1.1.1.1" },
+      { id: "Kitchen", ip: "2.2.2.2" },
+    ]);
+  });
+
+  test("falls back to the ip as id when a device advertises no name", () => {
+    expect(mergeDiscovered([], [{ ip: "3.3.3.3", name: "" }])).toEqual([{ id: "3_3_3_3", ip: "3.3.3.3" }]);
+  });
+
+  test("skips a discovery whose id would collide with a kept device", () => {
+    expect(mergeDiscovered([{ id: "Living", ip: "1.1.1.1" }], [{ ip: "9.9.9.9", name: "Living" }])).toEqual([
+      { id: "Living", ip: "1.1.1.1" },
+    ]);
   });
 });
 

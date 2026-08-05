@@ -1,4 +1,5 @@
 import type { DeviceRecord } from "./types";
+import type { DiscoveredDevice } from "./discovery";
 
 interface ConfiguredDevice {
   name: string;
@@ -74,6 +75,42 @@ export function parseDevices(raw: unknown): DeviceRecord[] {
     records.push({ id, ip: entry.ip });
   }
   return records;
+}
+
+/**
+ * Merge freshly discovered devices into the set already known from earlier runs
+ * (the auto-discovery standby protection). A known device is kept even when this
+ * run's scan did not find it — a receiver in deep standby answers no SSDP, and its
+ * object tree must survive. New addresses are added; a discovered device is turned
+ * into a record via its friendly name (or its ip when it advertises none), and one
+ * whose id would collide with an already-kept device is skipped. De-duplicated by ip.
+ *
+ * @param known the device records remembered from earlier runs
+ * @param found the devices discovered this run
+ * @returns the merged records, de-duplicated by ip
+ */
+export function mergeDiscovered(known: DeviceRecord[], found: DiscoveredDevice[]): DeviceRecord[] {
+  const byIp = new Map<string, DeviceRecord>();
+  const takenIds = new Set<string>(["info"]); // reserved: the adapter's own info channel
+  for (const device of known) {
+    if (byIp.has(device.ip) || takenIds.has(device.id)) {
+      continue;
+    }
+    byIp.set(device.ip, device);
+    takenIds.add(device.id);
+  }
+  for (const device of found) {
+    if (byIp.has(device.ip)) {
+      continue;
+    }
+    const id = sanitizeId(device.name || device.ip);
+    if (takenIds.has(id)) {
+      continue;
+    }
+    takenIds.add(id);
+    byIp.set(device.ip, { id, ip: device.ip });
+  }
+  return [...byIp.values()];
 }
 
 /**
