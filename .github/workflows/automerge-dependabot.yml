@@ -25,7 +25,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           ssh-key: ${{ secrets.LOCKFIX_DEPLOY_KEY }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22.x
       - name: Recompute lockfile and push back if out of sync
