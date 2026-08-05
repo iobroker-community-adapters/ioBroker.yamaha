@@ -41,8 +41,7 @@ Add each Yamaha device with a name and its IP address.
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
-
-### **WORK IN PROGRESS**
+### 0.9.0 (2026-08-05)
 
 - MusicCast and older XML receivers now report their connection correctly and reconnect on their own after a drop — as YNCA already did — instead of staying stuck on "connected".
 - A multi-zone MusicCast receiver now keeps every zone up to date, not just the main one, so zones 2–4 no longer freeze when live updates pause.
@@ -74,10 +73,6 @@ Add each Yamaha device with a name and its IP address.
 ### 0.5.4 (2024-06-14)
 
 - (foxriver76) updated packages
-
-### 0.5.3 (2022-06-17)
-
-- (Apollon77) Fix crash cases reported by Sentry
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 

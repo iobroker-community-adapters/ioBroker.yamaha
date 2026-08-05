@@ -1,9 +1,9 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "0.8.0",
+    "version": "0.9.0",
     "news": {
-      "NEXT": {
+      "0.9.0": {
         "en": "MusicCast and older receivers now recover their connection by themselves after a drop, like YNCA, and their datapoints are more consistent.",
         "de": "MusicCast- und ältere Receiver stellen ihre Verbindung nach einem Abbruch jetzt selbst wieder her, wie YNCA, und ihre Datenpunkte sind konsistenter.",
         "ru": "Устройства MusicCast и старые ресиверы теперь сами восстанавливают связь после обрыва, как YNCA, а их точки данных стали согласованнее.",
@@ -121,7 +121,12 @@
       "uk": "Керування AV-ресиверами та пристроями MusicCast Yamaha через мережу",
       "zh-cn": "通过网络控制 Yamaha AV 接收器和 MusicCast 设备"
     },
-    "keywords": ["yamaha", "avr", "receiver", "musiccast"],
+    "keywords": [
+      "yamaha",
+      "avr",
+      "receiver",
+      "musiccast"
+    ],
     "licenseInformation": {
       "license": "MIT",
       "type": "free"
