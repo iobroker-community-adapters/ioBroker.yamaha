@@ -1,6 +1,6 @@
 import { connect } from "node:net";
 import { LineBuffer } from "./line-buffer";
-import { decodeLine, encodeCommand, encodeGet } from "./protocol";
+import { decodeLine, encodeCommand, encodeGet, type YncaMessage } from "./protocol";
 import { buildCapabilities, type YncaCapabilities } from "./capability";
 
 /** The YNCA control port (TCP). */
@@ -8,6 +8,15 @@ export const YNCA_PORT = 50000;
 
 /** Fail the initial connect after this long so a non-YNCA device falls through fast. */
 const CONNECT_TIMEOUT_MS = 5000;
+
+/**
+ * Poll a keepalive this often while connected. The receiver closes an idle YNCA
+ * socket after roughly a minute, so — with no keepalive — the connection drops and
+ * the supervisor reconnects on a loop. The ynca protocol keeps it open by polling
+ * `@SYS:MODELNAME=?` (supported by every model); the reference lib (python `ynca`)
+ * uses the same 30 s interval.
+ */
+const KEEPALIVE_INTERVAL_MS = 30000;
 
 /** Adapter-managed timers so the client leaks no native timers past onUnload. */
 export interface YncaTimers {
@@ -30,15 +39,9 @@ function delay(timers: YncaTimers, ms: number): Promise<void> {
   });
 }
 
-/** A decoded message from the receiver. */
-export interface YncaMessage {
-  /** The subunit that reported (e.g. `MAIN`, `ZONE2`, `TUN`). */
-  subunit: string;
-  /** The function name (e.g. `PWR`, `VOL`). */
-  func: string;
-  /** The reported value. */
-  value: string;
-}
+// YncaMessage is the canonical shape defined in ./protocol; re-exported so existing
+// importers keep resolving it from the client.
+export type { YncaMessage };
 
 /** The minimal socket surface the client needs — abstracted so tests can inject a fake. */
 export interface YncaSocket {
@@ -99,15 +102,18 @@ function defaultFactory(host: string, port: number): YncaSocket {
 /**
  * A YNCA transport client for one receiver over TCP. Only one YNCA connection per
  * receiver is allowed, so a dropped connection is fully closed before a fresh one
- * is opened, with exponential backoff.
+ * is opened; reconnect and its backoff live one level up, in the supervisor.
  */
 export class YncaClient {
   private socket: YncaSocket | undefined;
   private readonly lineBuffer = new LineBuffer();
   private readonly messageHandlers: Array<(message: YncaMessage) => void> = [];
-  private dropHandler: (() => void) | undefined;
+  private dropHandler: ((reason?: Error) => void) | undefined;
   private reachable = false;
+  private everReachable = false;
   private closed = false;
+  private keepaliveTimer: ioBroker.Timeout | undefined;
+  private lastError: Error | undefined;
 
   /**
    * @param host the receiver IP or hostname
@@ -137,11 +143,17 @@ export class YncaClient {
     this.socket = socket;
     socket.onConnect(() => {
       this.reachable = true;
+      this.everReachable = true;
+      // Keepalive is started by the controller AFTER the init sweep (startKeepalive),
+      // not here — a 30 s poll firing into the paced sweep would break its spacing.
       onFirstConnect?.();
     });
     socket.onData(chunk => this.handleData(chunk));
     socket.onClose(() => this.handleClose());
     socket.onError(err => {
+      // Remember the cause so a later drop can report why; before the first connect
+      // it also rejects the connect() promise.
+      this.lastError = err;
       if (!this.reachable) {
         onFirstError?.(err);
       }
@@ -162,6 +174,7 @@ export class YncaClient {
 
   private handleClose(): void {
     this.reachable = false;
+    this.stopKeepalive();
     if (this.closed) {
       return;
     }
@@ -171,7 +184,31 @@ export class YncaClient {
     // which rebuilds/re-seeds through a fresh controller.
     this.socket?.destroy();
     this.socket = undefined;
-    this.dropHandler?.();
+    // Only a genuine drop (we were connected) fires onDrop; a socket that never
+    // connected already rejected connect() and must not also signal a drop.
+    if (this.everReachable) {
+      this.dropHandler?.(this.lastError);
+    }
+  }
+
+  /**
+   * Start the keepalive poll. Call once, AFTER the init sweep has finished — not on
+   * connect — so the 30 s `@SYS:MODELNAME=?` poll never fires a command into the
+   * paced sweep and breaks the ~100 ms spacing the receiver needs. The poll keeps
+   * the otherwise-idle YNCA socket open (the ynca-spec keepalive, supported by every
+   * model); it self-reschedules and is stopped on drop and on close.
+   */
+  public startKeepalive(): void {
+    this.keepaliveTimer = this.timers.schedule(() => {
+      this.get("SYS", "MODELNAME");
+      this.startKeepalive();
+    }, KEEPALIVE_INTERVAL_MS);
+  }
+
+  /** Cancel the keepalive timer, if any. */
+  private stopKeepalive(): void {
+    this.timers.cancel(this.keepaliveTimer);
+    this.keepaliveTimer = undefined;
   }
 
   /**
@@ -205,12 +242,13 @@ export class YncaClient {
   }
 
   /**
-   * Register the handler called once when the connection drops unexpectedly (not
-   * on an explicit close). The supervisor uses it to reconnect.
+   * Register the handler called once when an established connection drops (not on an
+   * explicit close, and not for a socket that never connected). The supervisor uses
+   * it to reconnect; the optional reason is the last socket error, for logging.
    *
-   * @param handler called on each unexpected drop
+   * @param handler called on an unexpected drop, with the last error if any
    */
-  public onDrop(handler: () => void): void {
+  public onDrop(handler: (reason?: Error) => void): void {
     this.dropHandler = handler;
   }
 
@@ -236,8 +274,16 @@ export class YncaClient {
     this.messageHandlers.push(collector);
     try {
       for (const request of gets) {
+        // A drop mid-sweep makes get() a silent no-op; without this check the loop
+        // would run to the end and hand back a partial report as if it were complete.
+        if (!this.reachable) {
+          throw new Error("connection lost during capability sweep");
+        }
         this.get(request.subunit, request.func);
         await delay(this.timers, spacingMs);
+      }
+      if (!this.reachable) {
+        throw new Error("connection lost during capability sweep");
       }
       await delay(this.timers, settleMs);
       return buildCapabilities(collected);
@@ -258,6 +304,7 @@ export class YncaClient {
   public close(): void {
     this.closed = true;
     this.reachable = false;
+    this.stopKeepalive();
     this.socket?.destroy();
     this.socket = undefined;
   }

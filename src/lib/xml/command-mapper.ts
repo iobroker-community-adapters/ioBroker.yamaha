@@ -1,5 +1,7 @@
 import type { StateValue } from "../types";
 import type { BasicStatus } from "./protocol";
+import { isWritableValue } from "../catalog/value-coerce";
+import { XML_AMP_CATALOG } from "./catalog";
 
 /** A zone-scoped XML command: the zone element and the inner command XML. */
 export interface XmlCommand {
@@ -9,59 +11,11 @@ export interface XmlCommand {
   inner: string;
 }
 
-interface XmlStateMapping {
-  /** Build the inner command XML for a written value; absent means read-only. */
-  toInner?: (value: unknown) => string;
-  /** The Basic_Status field this state reads from. */
-  statusField: keyof BasicStatus;
-}
-
-/** Unified state name → inner-XML builder and the Basic_Status field it reads. */
-const XML_STATE_MAPPINGS: Record<string, XmlStateMapping> = {
-  power: {
-    toInner: value => `<Power_Control><Power>${value ? "On" : "Standby"}</Power></Power_Control>`,
-    statusField: "power",
-  },
-  volume: {
-    toInner: value =>
-      `<Volume><Lvl><Val>${Math.round(Number(value) * 10)}</Val><Exp>1</Exp><Unit>dB</Unit></Lvl></Volume>`,
-    statusField: "volume",
-  },
-  mute: { toInner: value => `<Volume><Mute>${value ? "On" : "Off"}</Mute></Volume>`, statusField: "mute" },
-  input: { toInner: value => `<Input><Input_Sel>${String(value)}</Input_Sel></Input>`, statusField: "input" },
-  soundProgram: {
-    toInner: value =>
-      `<Surround><Program_Sel><Current><Sound_Program>${String(value)}</Sound_Program></Current></Program_Sel></Surround>`,
-    statusField: "soundProgram",
-  },
-  pureDirect: {
-    toInner: value => `<Sound_Video><Pure_Direct><Mode>${value ? "On" : "Off"}</Mode></Pure_Direct></Sound_Video>`,
-    statusField: "pureDirect",
-  },
-  sleep: { toInner: value => `<Power_Control><Sleep>${String(value)}</Sleep></Power_Control>`, statusField: "sleep" },
-  straight: {
-    toInner: value =>
-      `<Surround><Program_Sel><Current><Straight>${value ? "On" : "Off"}</Straight></Current></Program_Sel></Surround>`,
-    statusField: "straight",
-  },
-  direct: {
-    toInner: value => `<Sound_Video><Direct><Mode>${value ? "On" : "Off"}</Mode></Direct></Sound_Video>`,
-    statusField: "direct",
-  },
-  adaptiveDrc: {
-    toInner: value => `<Sound_Video><Adaptive_DRC>${String(value)}</Adaptive_DRC></Sound_Video>`,
-    statusField: "adaptiveDrc",
-  },
-  // Read-only: openHAB reads the Dialogue_Lvl path, but the write value structure
-  // (Val/Exp/Unit vs bare) is not confirmed by a reference, so no write is offered.
-  dialogueLevel: { statusField: "dialogueLevel" },
-};
-
 const ZONE_ELEMENT: Record<string, string> = { main: "Main_Zone", zone2: "Zone_2", zone3: "Zone_3", zone4: "Zone_4" };
 const ZONE_PREFIX: Record<string, string> = { main: "", zone2: "zone2.", zone3: "zone3.", zone4: "zone4." };
 
 /**
- * Map a unified state write to a zone-scoped XML command.
+ * Map a unified state write to a zone-scoped XML command, via {@link XML_AMP_CATALOG}.
  *
  * @param stateId the state id (e.g. `power`, `zone2.volume`)
  * @param value the value written to the state
@@ -76,11 +30,11 @@ export function stateToXml(stateId: string, value: unknown): XmlCommand | undefi
     name = stateId.slice(dot + 1);
   }
   const zone = ZONE_ELEMENT[zoneKey];
-  const mapping = XML_STATE_MAPPINGS[name];
-  if (!zone || !mapping || !mapping.toInner) {
+  const entry = XML_AMP_CATALOG.find(e => e.state === name);
+  if (!zone || !entry?.toInner || !isWritableValue(value, entry.common.type === "number")) {
     return undefined;
   }
-  return { zone, inner: mapping.toInner(value) };
+  return { zone, inner: entry.toInner(value) };
 }
 
 /**
@@ -97,10 +51,10 @@ export function parseXmlStatus(status: BasicStatus, zone: string): StateValue[] 
     return [];
   }
   const updates: StateValue[] = [];
-  for (const [name, mapping] of Object.entries(XML_STATE_MAPPINGS)) {
-    const value = status[mapping.statusField];
+  for (const entry of XML_AMP_CATALOG) {
+    const value = status[entry.statusField];
     if (value !== undefined) {
-      updates.push({ id: `${prefix}${name}`, value });
+      updates.push({ id: `${prefix}${entry.state}`, value });
     }
   }
   return updates;

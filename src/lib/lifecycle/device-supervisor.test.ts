@@ -99,6 +99,30 @@ describe("DeviceSupervisor", () => {
     expect(attempts).toBe(1);
   });
 
+  test("closes the dropped connection and ignores a second drop from the same handle", async () => {
+    let dropCb: (reason?: Error) => void = () => {};
+    let closes = 0;
+    const scheduled: Array<() => void> = [];
+    const supervisor = new DeviceSupervisor({
+      attempt: async () => ({ onDrop: cb => (dropCb = cb), handleStateChange: () => {}, close: () => closes++ }),
+      schedule: cb => {
+        scheduled.push(cb);
+        return scheduled.length;
+      },
+      cancel: () => {},
+      onConnectionChange: () => {},
+      backoff: fastBackoff(),
+      log: silentLog,
+    });
+
+    supervisor.start();
+    await tick(); // connected
+    dropCb(); // first drop: closes the handle, schedules one retry
+    dropCb(); // second drop from the same (superseded) handle: ignored
+    expect(closes).toBe(1);
+    expect(scheduled).toHaveLength(1);
+  });
+
   test("an attempt that throws is treated as not connected and retried", async () => {
     let attempts = 0;
     const scheduled: Array<() => void> = [];

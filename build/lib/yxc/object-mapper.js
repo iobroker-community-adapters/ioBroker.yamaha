@@ -21,190 +21,7 @@ __export(object_mapper_exports, {
   mapYxcToObjects: () => mapYxcToObjects
 });
 module.exports = __toCommonJS(object_mapper_exports);
-const YXC_STATES = [
-  {
-    func: "power",
-    state: "power",
-    common: { name: "Power", type: "boolean", role: "switch.power", read: true, write: true }
-  },
-  {
-    func: "volume",
-    state: "volume",
-    common: { name: "Volume", type: "number", role: "level.volume", read: true, write: true }
-  },
-  {
-    func: "mute",
-    state: "mute",
-    common: { name: "Mute", type: "boolean", role: "media.mute", read: true, write: true }
-  },
-  {
-    func: "sound_program",
-    state: "soundProgram",
-    common: { name: "Sound program", type: "string", role: "state", read: true, write: true }
-  },
-  {
-    func: "enhancer",
-    state: "enhancer",
-    common: { name: "Enhancer", type: "boolean", role: "switch", read: true, write: true }
-  },
-  {
-    func: "pure_direct",
-    state: "pureDirect",
-    common: { name: "Pure Direct", type: "boolean", role: "switch", read: true, write: true }
-  },
-  {
-    func: "subwoofer_volume",
-    state: "subwooferVolume",
-    common: { name: "Subwoofer trim", type: "number", role: "level", read: true, write: true }
-  },
-  {
-    func: "tone_control",
-    state: "bass",
-    common: { name: "Bass", type: "number", unit: "dB", role: "level", read: true, write: true }
-  },
-  {
-    func: "tone_control",
-    state: "treble",
-    common: { name: "Treble", type: "number", unit: "dB", role: "level", read: true, write: true }
-  },
-  {
-    func: "sleep",
-    state: "sleep",
-    common: { name: "Sleep timer", type: "number", unit: "min", role: "level", read: true, write: true }
-  },
-  {
-    func: "dialogue_level",
-    state: "dialogueLevel",
-    common: { name: "Dialogue level", type: "number", role: "level", read: true, write: false }
-  },
-  {
-    func: "actual_volume",
-    state: "actualVolume",
-    common: { name: "Actual volume", type: "number", unit: "dB", role: "value", read: true, write: false }
-  },
-  {
-    func: "contents_display",
-    state: "contentsDisplay",
-    common: { name: "Contents display", type: "boolean", role: "indicator", read: true, write: false }
-  },
-  {
-    func: "surr_decoder_type",
-    state: "surroundDecoder",
-    common: { name: "Surround decoder", type: "string", role: "text", read: true, write: false }
-  },
-  {
-    func: "audio_select",
-    state: "audioSelect",
-    common: { name: "Audio select", type: "string", role: "text", read: true, write: false }
-  },
-  {
-    func: "link_control",
-    state: "linkControl",
-    common: { name: "Link control", type: "string", role: "text", read: true, write: false }
-  },
-  {
-    func: "link_audio_delay",
-    state: "linkAudioDelay",
-    common: { name: "Link audio delay", type: "string", role: "text", read: true, write: false }
-  },
-  {
-    func: "link_audio_quality",
-    state: "linkAudioQuality",
-    common: { name: "Link audio quality", type: "string", role: "text", read: true, write: false }
-  },
-  {
-    func: "direct",
-    state: "direct",
-    common: { name: "Direct", type: "boolean", role: "switch", read: true, write: true }
-  },
-  {
-    func: "clear_voice",
-    state: "clearVoice",
-    common: { name: "Clear Voice", type: "boolean", role: "switch", read: true, write: true }
-  },
-  {
-    func: "bass_extension",
-    state: "bassExtension",
-    common: { name: "Bass extension", type: "boolean", role: "switch", read: true, write: true }
-  },
-  {
-    func: "balance",
-    state: "balance",
-    common: { name: "Balance", type: "number", role: "level", read: true, write: true }
-  },
-  {
-    func: "adaptive_drc",
-    state: "adaptiveDrc",
-    common: { name: "Adaptive DRC", type: "boolean", role: "indicator", read: true, write: false }
-  },
-  {
-    func: "adaptive_dsp_level",
-    state: "adaptiveDspLevel",
-    common: { name: "Adaptive DSP level", type: "boolean", role: "indicator", read: true, write: false }
-  },
-  {
-    func: "extra_bass",
-    state: "extraBass",
-    common: { name: "Extra Bass", type: "boolean", role: "indicator", read: true, write: false }
-  },
-  {
-    func: "mono",
-    state: "monaural",
-    common: { name: "Monaural", type: "boolean", role: "indicator", read: true, write: false }
-  },
-  {
-    func: "surround_3d",
-    state: "surround3d",
-    common: { name: "Surround 3D", type: "boolean", role: "indicator", read: true, write: false }
-  },
-  {
-    func: "dialogue_lift",
-    state: "dialogueLift",
-    common: { name: "Dialogue lift", type: "number", role: "level", read: true, write: false }
-  },
-  {
-    func: "dts_dialogue_control",
-    state: "dtsDialogueControl",
-    common: { name: "DTS dialogue control", type: "number", role: "level", read: true, write: false }
-  },
-  {
-    func: "equalizer",
-    state: "equalizerLow",
-    common: { name: "Equalizer low", type: "number", unit: "dB", role: "level", read: true, write: false }
-  },
-  {
-    func: "equalizer",
-    state: "equalizerMid",
-    common: { name: "Equalizer mid", type: "number", unit: "dB", role: "level", read: true, write: false }
-  },
-  {
-    func: "equalizer",
-    state: "equalizerHigh",
-    common: { name: "Equalizer high", type: "number", unit: "dB", role: "level", read: true, write: false }
-  }
-];
-const ALWAYS_STATES = [
-  { state: "maxVolume", common: { name: "Maximum volume", type: "number", role: "value", read: true, write: false } },
-  {
-    state: "inputText",
-    common: { name: "Input name (display)", type: "string", role: "text", read: true, write: false }
-  },
-  {
-    state: "distributionEnable",
-    common: { name: "Distribution active", type: "boolean", role: "indicator", read: true, write: false }
-  },
-  {
-    state: "partyEnable",
-    common: { name: "Party active", type: "boolean", role: "indicator", read: true, write: false }
-  }
-];
-const INPUT_COMMON = {
-  name: "Input",
-  type: "string",
-  role: "media.input",
-  read: true,
-  write: true
-};
+var import_catalog = require("./catalog");
 const ZONES = [
   { id: "main", prefix: "" },
   { id: "zone2", prefix: "zone2.", channel: "zone2", channelName: "Zone 2" },
@@ -246,28 +63,30 @@ function mapYxcToObjects(capabilities) {
     if (!zone) {
       continue;
     }
-    const states = YXC_STATES.filter((state) => zone.funcs.includes(state.func));
     const hasInput = zone.inputs.length > 0;
-    if (states.length === 0 && !hasInput) {
+    const entries = import_catalog.YXC_AMP_CATALOG.filter((entry) => {
+      if (entry.create.kind === "always") {
+        return true;
+      }
+      if (entry.create.kind === "input") {
+        return hasInput;
+      }
+      return zone.funcs.includes(entry.create.func);
+    });
+    if (!entries.some((entry) => entry.create.kind !== "always")) {
       continue;
     }
     if (zoneDef.channel) {
       objects.push({ id: zoneDef.channel, type: "channel", common: { name: (_a = zoneDef.channelName) != null ? _a : zoneDef.channel } });
     }
-    for (const state of states) {
-      const common = { ...state.common };
-      if (state.state === "volume" && zone.volumeRange) {
+    for (const entry of entries) {
+      const common = { ...entry.common };
+      if (entry.state === "volume" && zone.volumeRange) {
         common.min = zone.volumeRange.min;
         common.max = zone.volumeRange.max;
         common.step = zone.volumeRange.step;
       }
-      objects.push({ id: `${zoneDef.prefix}${state.state}`, type: "state", common });
-    }
-    for (const always of ALWAYS_STATES) {
-      objects.push({ id: `${zoneDef.prefix}${always.state}`, type: "state", common: { ...always.common } });
-    }
-    if (hasInput) {
-      objects.push({ id: `${zoneDef.prefix}input`, type: "state", common: { ...INPUT_COMMON } });
+      objects.push({ id: `${zoneDef.prefix}${entry.state}`, type: "state", common });
     }
   }
   if (capabilities.media.includes("netusb")) {
@@ -281,7 +100,7 @@ function mapYxcToObjects(capabilities) {
     objects.push({
       id: "tuner.band",
       type: "state",
-      common: { name: "Band", type: "string", role: "media.input", read: true, write: false }
+      common: { name: "Band", type: "string", role: "state", read: true, write: false }
     });
     objects.push({
       id: "tuner.frequency",

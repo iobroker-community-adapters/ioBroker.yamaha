@@ -51,6 +51,7 @@ describe("parseBasicStatus", () => {
     expect(status.direct).toBe(false);
     expect(status.adaptiveDrc).toBe("Auto");
     expect(status.dialogueLevel).toBe(2);
+    expect(status.volume).toBeUndefined(); // Dialogue_Lvl's <Val> must not be read as the volume
   });
 
   test("returns nothing for a malformed response", () => {

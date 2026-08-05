@@ -24,10 +24,12 @@ __export(command_mapper_exports, {
   stateToYxc: () => stateToYxc
 });
 module.exports = __toCommonJS(command_mapper_exports);
-function readStatusField(status, mapping) {
-  if (mapping.path) {
+var import_value_coerce = require("../catalog/value-coerce");
+var import_catalog = require("./catalog");
+function readStatusField(status, read) {
+  if ("path" in read) {
     let value = status;
-    for (const key of mapping.path) {
+    for (const key of read.path) {
       if (typeof value !== "object" || value === null) {
         return void 0;
       }
@@ -35,107 +37,8 @@ function readStatusField(status, mapping) {
     }
     return value;
   }
-  return mapping.statusField !== void 0 ? status[mapping.statusField] : void 0;
+  return status[read.field];
 }
-const YXC_STATE_MAPPINGS = {
-  power: { statusField: "power", method: "power", toYxc: (value) => Boolean(value), fromStatus: (value) => value === "on" },
-  volume: {
-    statusField: "volume",
-    method: "setVolumeTo",
-    toYxc: (value) => Number(value),
-    fromStatus: (value) => Number(value)
-  },
-  mute: { statusField: "mute", method: "mute", toYxc: (value) => Boolean(value), fromStatus: (value) => Boolean(value) },
-  input: {
-    statusField: "input",
-    method: "setInput",
-    toYxc: (value) => String(value),
-    fromStatus: (value) => String(value)
-  },
-  soundProgram: {
-    statusField: "sound_program",
-    method: "setSound",
-    toYxc: (value) => String(value),
-    fromStatus: (value) => String(value)
-  },
-  enhancer: {
-    statusField: "enhancer",
-    method: "setEnhancer",
-    toYxc: (value) => Boolean(value),
-    fromStatus: (value) => Boolean(value)
-  },
-  pureDirect: {
-    statusField: "pure_direct",
-    method: "setPureDirect",
-    toYxc: (value) => Boolean(value),
-    fromStatus: (value) => Boolean(value)
-  },
-  subwooferVolume: {
-    statusField: "subwoofer_volume",
-    method: "setSubwooferVolumeTo",
-    toYxc: (value) => Number(value),
-    fromStatus: (value) => Number(value)
-  },
-  bass: {
-    path: ["tone_control", "bass"],
-    method: "setBassTo",
-    toYxc: (value) => Number(value),
-    fromStatus: (value) => Number(value)
-  },
-  treble: {
-    path: ["tone_control", "treble"],
-    method: "setTrebleTo",
-    toYxc: (value) => Number(value),
-    fromStatus: (value) => Number(value)
-  },
-  sleep: { statusField: "sleep", method: "sleep", toYxc: (value) => Number(value), fromStatus: (value) => Number(value) },
-  dialogueLevel: { statusField: "dialogue_level", fromStatus: (value) => Number(value) },
-  actualVolume: { path: ["actual_volume", "value"], fromStatus: (value) => Number(value) },
-  contentsDisplay: { statusField: "contents_display", fromStatus: (value) => Boolean(value) },
-  surroundDecoder: { statusField: "surr_decoder_type", fromStatus: (value) => String(value) },
-  audioSelect: { statusField: "audio_select", fromStatus: (value) => String(value) },
-  linkControl: { statusField: "link_control", fromStatus: (value) => String(value) },
-  linkAudioDelay: { statusField: "link_audio_delay", fromStatus: (value) => String(value) },
-  linkAudioQuality: { statusField: "link_audio_quality", fromStatus: (value) => String(value) },
-  direct: {
-    statusField: "direct",
-    method: "setDirect",
-    toYxc: (value) => Boolean(value),
-    fromStatus: (value) => Boolean(value)
-  },
-  clearVoice: {
-    statusField: "clear_voice",
-    method: "setClearVoice",
-    toYxc: (value) => Boolean(value),
-    fromStatus: (value) => Boolean(value)
-  },
-  bassExtension: {
-    statusField: "bass_extension",
-    method: "setBassExtension",
-    toYxc: (value) => Boolean(value),
-    fromStatus: (value) => Boolean(value)
-  },
-  balance: {
-    statusField: "balance",
-    method: "setBalance",
-    toYxc: (value) => Number(value),
-    fromStatus: (value) => Number(value)
-  },
-  adaptiveDrc: { statusField: "adaptive_drc", fromStatus: (value) => Boolean(value) },
-  adaptiveDspLevel: { statusField: "adaptive_dsp_level", fromStatus: (value) => Boolean(value) },
-  extraBass: { statusField: "extra_bass", fromStatus: (value) => Boolean(value) },
-  monaural: { statusField: "mono", fromStatus: (value) => Boolean(value) },
-  surround3d: { statusField: "surround_3d", fromStatus: (value) => Boolean(value) },
-  dialogueLift: { statusField: "dialogue_lift", fromStatus: (value) => Number(value) },
-  dtsDialogueControl: { statusField: "dts_dialogue_control", fromStatus: (value) => Number(value) },
-  equalizerLow: { path: ["equalizer", "low"], fromStatus: (value) => Number(value) },
-  equalizerMid: { path: ["equalizer", "mid"], fromStatus: (value) => Number(value) },
-  equalizerHigh: { path: ["equalizer", "high"], fromStatus: (value) => Number(value) },
-  maxVolume: { statusField: "max_volume", fromStatus: (value) => Number(value) },
-  inputText: { statusField: "input_text", fromStatus: (value) => String(value) },
-  distributionEnable: { statusField: "distribution_enable", fromStatus: (value) => Boolean(value) },
-  partyEnable: { statusField: "party_enable", fromStatus: (value) => Boolean(value) }
-};
 const NETUSB_TRANSPORT = {
   "netPlayer.play": "playNet",
   "netPlayer.pause": "pauseNet",
@@ -161,10 +64,10 @@ function parseYxcStatus(zoneStatus, zone) {
   }
   const status = zoneStatus;
   const updates = [];
-  for (const [name, mapping] of Object.entries(YXC_STATE_MAPPINGS)) {
-    const raw = readStatusField(status, mapping);
+  for (const entry of import_catalog.YXC_AMP_CATALOG) {
+    const raw = readStatusField(status, entry.read);
     if (raw !== void 0) {
-      updates.push({ id: `${prefix}${name}`, value: mapping.fromStatus(raw) });
+      updates.push({ id: `${prefix}${entry.state}`, value: entry.fromStatus(raw) });
     }
   }
   return updates;
@@ -188,11 +91,11 @@ function stateToYxc(stateId, value) {
       return void 0;
     }
   }
-  const mapping = YXC_STATE_MAPPINGS[name];
-  if (!mapping || mapping.method === void 0 || mapping.toYxc === void 0) {
+  const entry = import_catalog.YXC_AMP_CATALOG.find((e) => e.state === name);
+  if (!(entry == null ? void 0 : entry.write) || !(0, import_value_coerce.isWritableValue)(value, entry.common.type === "number")) {
     return void 0;
   }
-  return { method: mapping.method, zone, value: mapping.toYxc(value) };
+  return { method: entry.write.method, zone, value: entry.write.toYxc(value) };
 }
 function parseYxcPlayInfo(playInfo, prefix = "netPlayer") {
   if (typeof playInfo !== "object" || playInfo === null) {

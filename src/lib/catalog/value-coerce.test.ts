@@ -1,4 +1,4 @@
-import { decode, encode, specToCommon } from "./value-coerce";
+import { decode, encode, isWritableValue, specToCommon } from "./value-coerce";
 
 describe("specToCommon", () => {
   test("an on/off value becomes a boolean switch", () => {
@@ -71,6 +71,13 @@ describe("decode", () => {
     expect(decode({ kind: "enum", states: { HDMI1: "HDMI1" } }, "HDMI1")).toBe("HDMI1");
     expect(decode({ kind: "text" }, "My Scene")).toBe("My Scene");
   });
+
+  test("on/off returns undefined for a wire value that is neither on nor off", () => {
+    const spec = { kind: "onoff", on: "On", off: "Standby" } as const;
+    expect(decode(spec, "On")).toBe(true);
+    expect(decode(spec, "Standby")).toBe(false);
+    expect(decode(spec, "Sleep")).toBeUndefined(); // not silently false
+  });
 });
 
 describe("encode", () => {
@@ -86,5 +93,23 @@ describe("encode", () => {
 
   test("an enum encodes to its string value", () => {
     expect(encode({ kind: "enum", states: { HDMI1: "HDMI1" } }, "HDMI1")).toBe("HDMI1");
+  });
+});
+
+describe("isWritableValue", () => {
+  test("rejects null and undefined for any state", () => {
+    expect(isWritableValue(null, false)).toBe(false);
+    expect(isWritableValue(undefined, true)).toBe(false);
+  });
+
+  test("rejects a non-finite value for a numeric state", () => {
+    expect(isWritableValue("abc", true)).toBe(false);
+    expect(isWritableValue(Number.NaN, true)).toBe(false);
+    expect(isWritableValue(-42.5, true)).toBe(true);
+  });
+
+  test("accepts any non-null value for a non-numeric state", () => {
+    expect(isWritableValue("On", false)).toBe(true);
+    expect(isWritableValue(true, false)).toBe(true);
   });
 });

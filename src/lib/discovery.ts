@@ -1,3 +1,5 @@
+import { errorMessage } from "./util";
+
 const YAMAHA_MANUFACTURER = /<manufacturer>[^<]*yamaha[^<]*<\/manufacturer>/i;
 const FRIENDLY_NAME = /<friendlyName>([^<]*)<\/friendlyName>/;
 /** The UPnP device type networked Yamaha devices advertise. */
@@ -61,7 +63,7 @@ export async function discoverYamaha(deps: DiscoveryDeps): Promise<DiscoveredDev
         seen.add(address);
       }
     } catch (e) {
-      deps.log.debug(`discovery: ${address} description fetch failed: ${e instanceof Error ? e.message : String(e)}`);
+      deps.log.debug(`discovery: ${address} description fetch failed: ${errorMessage(e)}`);
     }
   }
   return devices;

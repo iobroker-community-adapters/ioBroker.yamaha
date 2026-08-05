@@ -639,7 +639,7 @@ const DAB_FUNCS = [
     name: "DAB band",
     spec: { kind: "enum", states: DAB_BAND_STATES },
     write: true,
-    role: "media.input"
+    role: "state"
   },
   {
     func: "DABCHLABEL",
@@ -779,32 +779,23 @@ const PLAYER_FUNCS = [
     role: "switch"
   }
 ];
+function fnEntries(fns, subunit, prefix = "") {
+  return fns.map((fn) => ({
+    id: `${prefix}${fn.state}`,
+    name: fn.name,
+    spec: fn.spec,
+    write: fn.write,
+    role: fn.role,
+    subunit,
+    func: fn.func
+  }));
+}
 function buildYncaCatalog() {
   const entries = [];
   for (const zone of ZONES) {
-    for (const fn of AMP_FUNCS) {
-      entries.push({
-        id: `${zone.prefix}${fn.state}`,
-        name: fn.name,
-        spec: fn.spec,
-        write: fn.write,
-        role: fn.role,
-        subunit: zone.subunit,
-        func: fn.func
-      });
-    }
+    entries.push(...fnEntries(AMP_FUNCS, zone.subunit, zone.prefix));
   }
-  for (const fn of MAIN_ONLY_FUNCS) {
-    entries.push({
-      id: fn.state,
-      name: fn.name,
-      spec: fn.spec,
-      write: fn.write,
-      role: fn.role,
-      subunit: "MAIN",
-      func: fn.func
-    });
-  }
+  entries.push(...fnEntries(MAIN_ONLY_FUNCS, "MAIN"));
   for (let n = 1; n <= 12; n++) {
     entries.push({
       id: `scene.name${n}`,
@@ -817,27 +808,9 @@ function buildYncaCatalog() {
     });
   }
   for (const fn of GLOBAL_FUNCS) {
-    entries.push({
-      id: fn.state,
-      name: fn.name,
-      spec: fn.spec,
-      write: fn.write,
-      role: fn.role,
-      subunit: fn.subunit,
-      func: fn.func
-    });
+    entries.push(...fnEntries([fn], fn.subunit));
   }
-  for (const fn of SYS_FUNCS) {
-    entries.push({
-      id: fn.state,
-      name: fn.name,
-      spec: fn.spec,
-      write: fn.write,
-      role: fn.role,
-      subunit: "SYS",
-      func: fn.func
-    });
-  }
+  entries.push(...fnEntries(SYS_FUNCS, "SYS"));
   for (const key of INPUT_NAME_KEYS) {
     const upper = key.toUpperCase();
     entries.push({
@@ -850,17 +823,7 @@ function buildYncaCatalog() {
       func: `INPNAME${upper}`
     });
   }
-  for (const fn of DAB_FUNCS) {
-    entries.push({
-      id: fn.state,
-      name: fn.name,
-      spec: fn.spec,
-      write: fn.write,
-      role: fn.role,
-      subunit: "DAB",
-      func: fn.func
-    });
-  }
+  entries.push(...fnEntries(DAB_FUNCS, "DAB"));
   for (const source of PLAYER_SOURCES) {
     for (const fn of PLAYER_FUNCS) {
       entries.push({
@@ -897,10 +860,12 @@ function idToEntry(entries) {
   return new Map(entries.map((entry) => [entry.id, entry]));
 }
 function yncaObjectsFor(capabilities) {
-  const present = buildYncaCatalog().filter((entry) => {
-    var _a;
-    return ((_a = capabilities.subunits[entry.subunit]) == null ? void 0 : _a[entry.func]) !== void 0;
-  });
+  const present = buildYncaCatalog().filter(
+    (entry) => {
+      var _a;
+      return ((_a = capabilities.subunits[entry.subunit]) == null ? void 0 : _a[readFuncOf(entry)]) !== void 0;
+    }
+  );
   return (0, import_build_objects.catalogToObjects)(present);
 }
 function yncaStateUpdate(message, map) {
@@ -914,6 +879,9 @@ function yncaStateUpdate(message, map) {
 function yncaCommand(stateId, value, map) {
   const entry = map.get(stateId);
   if (!entry) {
+    return void 0;
+  }
+  if (!(0, import_value_coerce.isWritableValue)(value, entry.spec.kind === "number")) {
     return void 0;
   }
   return { subunit: entry.subunit, func: entry.func, value: (0, import_value_coerce.encode)(entry.spec, value) };

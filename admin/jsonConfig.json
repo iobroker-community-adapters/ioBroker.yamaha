@@ -28,6 +28,7 @@
     "devices": {
       "type": "table",
       "label": "devicesTable",
+      "uniqueColumns": ["ip"],
       "xs": 12,
       "sm": 12,
       "md": 12,

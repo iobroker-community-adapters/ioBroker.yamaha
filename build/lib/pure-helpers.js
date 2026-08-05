@@ -43,10 +43,17 @@ function parseDevices(raw) {
     return [];
   }
   const records = [];
+  const taken = /* @__PURE__ */ new Set(["info"]);
   for (const entry of raw) {
-    if (isConfiguredDevice(entry)) {
-      records.push({ id: sanitizeId(entry.name), ip: entry.ip, protocols: /* @__PURE__ */ new Set() });
+    if (!isConfiguredDevice(entry)) {
+      continue;
     }
+    const id = sanitizeId(entry.name);
+    if (taken.has(id)) {
+      continue;
+    }
+    taken.add(id);
+    records.push({ id, ip: entry.ip });
   }
   return records;
 }

@@ -4,7 +4,13 @@ import type { CatalogEntry } from "./types";
 describe("catalogToObjects", () => {
   test("a top-level on/off entry becomes a boolean state object", () => {
     const entries: CatalogEntry[] = [
-      { id: "power", name: "Power", spec: { kind: "onoff", on: "On", off: "Standby" }, write: true, role: "switch.power" },
+      {
+        id: "power",
+        name: "Power",
+        spec: { kind: "onoff", on: "On", off: "Standby" },
+        write: true,
+        role: "switch.power",
+      },
     ];
     expect(catalogToObjects(entries)).toEqual([
       {
@@ -17,7 +23,13 @@ describe("catalogToObjects", () => {
 
   test("an enum entry carries its states dropdown", () => {
     const entries: CatalogEntry[] = [
-      { id: "input", name: "Input", spec: { kind: "enum", states: { HDMI1: "HDMI1" } }, write: true, role: "media.input" },
+      {
+        id: "input",
+        name: "Input",
+        spec: { kind: "enum", states: { HDMI1: "HDMI1" } },
+        write: true,
+        role: "media.input",
+      },
     ];
     const [obj] = catalogToObjects(entries);
     expect(obj.common.type).toBe("string");
@@ -36,11 +48,15 @@ describe("catalogToObjects", () => {
   });
 
   test("an unknown channel id falls back to its capitalised segment", () => {
-    const entries: CatalogEntry[] = [
-      { id: "airplay.artist", name: "Artist", spec: { kind: "text" }, write: false },
-    ];
+    const entries: CatalogEntry[] = [{ id: "widget.artist", name: "Artist", spec: { kind: "text" }, write: false }];
     const [channel] = catalogToObjects(entries);
-    expect(channel).toEqual({ id: "airplay", type: "channel", common: { name: "Airplay" } });
+    expect(channel).toEqual({ id: "widget", type: "channel", common: { name: "Widget" } });
+  });
+
+  test("a known channel id uses its curated display name, not the raw capitalised id", () => {
+    const entries: CatalogEntry[] = [{ id: "pc.artist", name: "Artist", spec: { kind: "text" }, write: false }];
+    const [channel] = catalogToObjects(entries);
+    expect(channel.common.name).toBe("PC"); // curated, not "Pc"
   });
 
   test("a protocol entry extends the base with its key; the same entry yields object AND sweep key (single source)", () => {
@@ -51,7 +67,14 @@ describe("catalogToObjects", () => {
       func: string;
     }
     const entries: YncaEntry[] = [
-      { id: "power", name: "Power", spec: { kind: "onoff", on: "On", off: "Standby" }, write: true, role: "switch.power", func: "PWR" },
+      {
+        id: "power",
+        name: "Power",
+        spec: { kind: "onoff", on: "On", off: "Standby" },
+        write: true,
+        role: "switch.power",
+        func: "PWR",
+      },
     ];
     const [obj] = catalogToObjects(entries);
     expect(obj).toEqual({

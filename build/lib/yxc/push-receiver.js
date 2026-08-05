@@ -23,6 +23,7 @@ __export(push_receiver_exports, {
 module.exports = __toCommonJS(push_receiver_exports);
 var import_node_dgram = require("node:dgram");
 const YXC_PUSH_PORT = 41100;
+const REBIND_DELAY_MS = 1e4;
 function defaultFactory() {
   const socket = (0, import_node_dgram.createSocket)("udp4");
   return {
@@ -45,45 +46,72 @@ function defaultFactory() {
 }
 class YxcPushReceiver {
   /**
-   * @param log logger for diagnostics
+   * @param deps adapter logger and timer callbacks
    * @param factory socket factory (defaults to a node:dgram socket)
    */
-  constructor(log, factory = defaultFactory) {
-    this.log = log;
+  constructor(deps, factory = defaultFactory) {
+    this.deps = deps;
     this.factory = factory;
   }
   socket;
   handlers = /* @__PURE__ */ new Map();
+  listening = false;
+  closed = false;
+  retryTimer;
   /**
    * Register a handler for pushes from a device IP.
    *
    * @param ip the device IP, matched against the UDP source address
    * @param onPush invoked with each parsed push event from that IP
+   * @returns a function that unregisters this handler
    */
   register(ip, onPush) {
     this.handlers.set(ip, onPush);
+    return () => {
+      this.handlers.delete(ip);
+    };
   }
   /** Open the shared socket and start listening on :41100. */
   start() {
     const socket = this.factory();
     this.socket = socket;
-    socket.onError((err) => {
-      this.log.warn(`YXC push port unavailable \u2014 MusicCast devices are polled, not pushed: ${err.message}`);
-      this.socket = void 0;
-    });
+    socket.onError((err) => this.handleError(err));
     socket.onMessage((payload, address) => this.dispatch(payload, address));
-    socket.onListening(() => this.log.debug(`YXC push receiver listening on :${YXC_PUSH_PORT}`));
+    socket.onListening(() => {
+      this.listening = true;
+      this.deps.log.debug(`YXC push receiver listening on :${YXC_PUSH_PORT}`);
+    });
     socket.bind(YXC_PUSH_PORT);
   }
-  /** Close the socket synchronously — safe to call from onUnload. */
+  handleError(err) {
+    var _a;
+    (_a = this.socket) == null ? void 0 : _a.close();
+    this.socket = void 0;
+    if (this.closed) {
+      return;
+    }
+    if (!this.listening) {
+      this.deps.log.warn(
+        `YXC push port :${YXC_PUSH_PORT} unavailable \u2014 MusicCast devices are polled, not pushed: ${err.message}`
+      );
+      return;
+    }
+    this.listening = false;
+    this.deps.log.warn(`YXC push socket error, rebinding in ${REBIND_DELAY_MS / 1e3}s: ${err.message}`);
+    this.retryTimer = this.deps.schedule(() => this.start(), REBIND_DELAY_MS);
+  }
+  /** Close the socket and cancel any pending rebind. Synchronous — safe from onUnload. */
   close() {
     var _a;
+    this.closed = true;
+    this.deps.cancel(this.retryTimer);
+    this.retryTimer = void 0;
     (_a = this.socket) == null ? void 0 : _a.close();
     this.socket = void 0;
   }
   /**
-   * Route one datagram to the handler for its source IP, ignoring unknown
-   * senders and malformed payloads.
+   * Route one datagram to the handler for its source IP, ignoring unknown senders
+   * and malformed payloads.
    *
    * @param payload the datagram payload text
    * @param address the source IP
@@ -97,7 +125,7 @@ class YxcPushReceiver {
     try {
       event = JSON.parse(payload);
     } catch {
-      this.log.debug(`ignoring malformed YXC push from ${address}`);
+      this.deps.log.debug(`ignoring malformed YXC push from ${address}`);
       return;
     }
     handler(event);

@@ -48,20 +48,30 @@ export function stripNamespace(fullId: string, namespace: string): string {
 
 /**
  * Turn the admin device table (untrusted native config) into device records.
- * Invalid rows are dropped; protocols start empty and are probed in later phases.
+ * Invalid rows are dropped, as are rows whose id collides with the adapter's own
+ * reserved `info` branch or with an id already taken — two names that sanitise to
+ * the same id (e.g. "Living Room" and "Living.Room") would otherwise share one
+ * object tree.
  *
  * @param raw the raw `native.devices` value
- * @returns validated device records
+ * @returns validated, de-duplicated device records
  */
 export function parseDevices(raw: unknown): DeviceRecord[] {
   if (!Array.isArray(raw)) {
     return [];
   }
   const records: DeviceRecord[] = [];
+  const taken = new Set<string>(["info"]); // reserved: the adapter's own info channel
   for (const entry of raw) {
-    if (isConfiguredDevice(entry)) {
-      records.push({ id: sanitizeId(entry.name), ip: entry.ip, protocols: new Set() });
+    if (!isConfiguredDevice(entry)) {
+      continue;
     }
+    const id = sanitizeId(entry.name);
+    if (taken.has(id)) {
+      continue;
+    }
+    taken.add(id);
+    records.push({ id, ip: entry.ip });
   }
   return records;
 }

@@ -45,10 +45,17 @@ describe("staleObjects", () => {
 });
 
 describe("parseDevices", () => {
-  test("maps a configured entry to a device record with empty protocols", () => {
-    expect(parseDevices([{ name: "Living", ip: "1.2.3.4" }])).toEqual([
-      { id: "Living", ip: "1.2.3.4", protocols: new Set() },
+  test("maps a configured entry to a device record", () => {
+    expect(parseDevices([{ name: "Living", ip: "1.2.3.4" }])).toEqual([{ id: "Living", ip: "1.2.3.4" }]);
+  });
+
+  test("drops a duplicate id and the reserved 'info' name (would share one object tree)", () => {
+    const result = parseDevices([
+      { name: "Living Room", ip: "1.1.1.1" },
+      { name: "Living.Room", ip: "2.2.2.2" }, // sanitises to the same id → dropped
+      { name: "info", ip: "3.3.3.3" }, // reserved → dropped
     ]);
+    expect(result).toEqual([{ id: "Living_Room", ip: "1.1.1.1" }]);
   });
 
   test("drops entries with a missing or empty name or ip, and non-objects", () => {

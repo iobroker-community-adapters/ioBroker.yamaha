@@ -22,34 +22,15 @@ __export(device_controller_exports, {
 });
 module.exports = __toCommonJS(device_controller_exports);
 var import_command_mapper = require("./command-mapper");
+var import_catalog = require("./catalog");
+var import_util = require("../util");
 const KEEPALIVE_MS = 60 * 1e3;
+const MAX_KEEPALIVE_FAILURES = 3;
 const XML_ZONES = [
   { key: "main", element: "Main_Zone", prefix: "" },
   { key: "zone2", element: "Zone_2", prefix: "zone2.", channel: "zone2", channelName: "Zone 2" },
   { key: "zone3", element: "Zone_3", prefix: "zone3.", channel: "zone3", channelName: "Zone 3" },
   { key: "zone4", element: "Zone_4", prefix: "zone4.", channel: "zone4", channelName: "Zone 4" }
-];
-const XML_AMP_STATES = [
-  { state: "power", common: { name: "Power", type: "boolean", role: "switch.power", read: true, write: true } },
-  {
-    state: "volume",
-    common: { name: "Volume", type: "number", role: "level.volume", read: true, write: true, unit: "dB" }
-  },
-  { state: "mute", common: { name: "Mute", type: "boolean", role: "media.mute", read: true, write: true } },
-  { state: "input", common: { name: "Input", type: "string", role: "media.input", read: true, write: true } },
-  {
-    state: "soundProgram",
-    common: { name: "Sound program", type: "string", role: "state", read: true, write: true }
-  },
-  { state: "pureDirect", common: { name: "Pure Direct", type: "boolean", role: "switch", read: true, write: true } },
-  { state: "straight", common: { name: "Straight", type: "boolean", role: "switch", read: true, write: true } },
-  { state: "direct", common: { name: "Direct", type: "boolean", role: "switch", read: true, write: true } },
-  { state: "adaptiveDrc", common: { name: "Adaptive DRC", type: "string", role: "state", read: true, write: true } },
-  {
-    state: "dialogueLevel",
-    common: { name: "Dialogue level", type: "number", role: "level", read: true, write: false }
-  },
-  { state: "sleep", common: { name: "Sleep timer", type: "string", role: "state", read: true, write: true } }
 ];
 class XmlDeviceController {
   /**
@@ -62,6 +43,9 @@ class XmlDeviceController {
   }
   zones = [];
   cancelKeepalive;
+  dropHandler;
+  failedKeepalives = 0;
+  dropped = false;
   /**
    * Probe each zone, create the tree for the ones that answer, seed state, and
    * start the keepalive poll.
@@ -70,18 +54,15 @@ class XmlDeviceController {
    */
   async start() {
     var _a;
-    for (const zone of XML_ZONES) {
-      const status = await this.tryGetStatus(zone.element);
-      if (status && Object.keys(status).length > 0) {
-        this.zones.push(zone);
-      } else if (zone.key === "main") {
-        this.deps.log.debug(`${this.deviceId}: no XML main zone \u2014 creating no objects`);
-        return false;
-      }
-    }
-    if (this.zones.length === 0) {
+    const probes = await Promise.all(
+      XML_ZONES.map(async (zone) => ({ zone, status: await this.tryGetStatus(zone.element) }))
+    );
+    const answered = probes.filter((probe) => probe.status && Object.keys(probe.status).length > 0);
+    if (!answered.some((probe) => probe.zone.key === "main")) {
+      this.deps.log.debug(`${this.deviceId}: no XML main zone \u2014 creating no objects`);
       return false;
     }
+    this.zones = answered.map((probe) => probe.zone);
     for (const zone of this.zones) {
       if (zone.channel) {
         await this.deps.upsertObject(`${this.deviceId}.${zone.channel}`, {
@@ -90,16 +71,18 @@ class XmlDeviceController {
           common: { name: (_a = zone.channelName) != null ? _a : zone.channel }
         });
       }
-      for (const state of XML_AMP_STATES) {
-        await this.deps.upsertObject(`${this.deviceId}.${zone.prefix}${state.state}`, {
-          id: `${zone.prefix}${state.state}`,
+      for (const entry of import_catalog.XML_AMP_CATALOG) {
+        await this.deps.upsertObject(`${this.deviceId}.${zone.prefix}${entry.state}`, {
+          id: `${zone.prefix}${entry.state}`,
           type: "state",
-          common: { ...state.common }
+          common: { ...entry.common }
         });
       }
     }
-    for (const zone of this.zones) {
-      await this.refreshZone(zone);
+    for (const { zone, status } of answered) {
+      if (status) {
+        this.seedZone(zone, status);
+      }
     }
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), KEEPALIVE_MS);
     this.deps.log.info(`${this.deviceId}: Yamaha (XML) device ready`);
@@ -126,28 +109,69 @@ class XmlDeviceController {
       void this.applyCommand(command);
     }
   }
+  /**
+   * Register the supervisor's drop handler. XML has no push/socket-drop event, so a
+   * drop is inferred from a run of failed polls (see keepalive).
+   *
+   * @param cb invoked once when the device is judged gone
+   */
+  onDrop(cb) {
+    this.dropHandler = cb;
+  }
   /** Cancel the keepalive poll. Synchronous — safe to call from onUnload. */
   close() {
     var _a;
     (_a = this.cancelKeepalive) == null ? void 0 : _a.call(this);
     this.cancelKeepalive = void 0;
   }
-  /** Poll every live zone's status. */
+  /**
+   * Poll every live zone. If every zone fails for MAX_KEEPALIVE_FAILURES polls in a
+   * row, the device is judged gone and a drop is reported so the supervisor reconnects.
+   */
   async keepalive() {
+    let anyOk = false;
     for (const zone of this.zones) {
-      await this.refreshZone(zone);
+      if (await this.refreshZone(zone)) {
+        anyOk = true;
+      }
     }
+    if (anyOk) {
+      this.failedKeepalives = 0;
+    } else if (++this.failedKeepalives >= MAX_KEEPALIVE_FAILURES) {
+      this.reportDrop();
+    }
+  }
+  /** Report a drop once — the supervisor then closes this controller and reconnects. */
+  reportDrop() {
+    var _a;
+    if (this.dropped) {
+      return;
+    }
+    this.dropped = true;
+    (_a = this.dropHandler) == null ? void 0 : _a.call(this, new Error(`${MAX_KEEPALIVE_FAILURES} polls failed`));
   }
   /**
    * Fetch a zone's status and write its amp states with ack.
    *
    * @param zone the zone to refresh
+   * @returns true if the status was fetched, false if the request failed
    */
   async refreshZone(zone) {
     const status = await this.tryGetStatus(zone.element);
     if (!status) {
-      return;
+      return false;
     }
+    this.seedZone(zone, status);
+    return true;
+  }
+  /**
+   * Write a zone's amp states from an already-fetched Basic_Status (used to seed
+   * from the start-up probe without a second round-trip).
+   *
+   * @param zone the zone the status belongs to
+   * @param status the parsed Basic_Status
+   */
+  seedZone(zone, status) {
     for (const update of (0, import_command_mapper.parseXmlStatus)(status, zone.key)) {
       this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
     }
@@ -162,9 +186,7 @@ class XmlDeviceController {
     try {
       return await this.deps.client.getStatus(element);
     } catch (e) {
-      this.deps.log.debug(
-        `${this.deviceId}: getStatus(${element}) failed: ${e instanceof Error ? e.message : String(e)}`
-      );
+      this.deps.log.debug(`${this.deviceId}: getStatus(${element}) failed: ${(0, import_util.errorMessage)(e)}`);
       return void 0;
     }
   }
@@ -177,7 +199,7 @@ class XmlDeviceController {
     try {
       await this.deps.client.send(command.zone, command.inner);
     } catch (e) {
-      this.deps.log.warn(`${this.deviceId}: XML command failed: ${e instanceof Error ? e.message : String(e)}`);
+      this.deps.log.warn(`${this.deviceId}: XML command failed: ${(0, import_util.errorMessage)(e)}`);
     }
   }
 }

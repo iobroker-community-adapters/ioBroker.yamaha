@@ -1,6 +1,6 @@
 import { catalogToObjects } from "../catalog/build-objects";
 import type { CatalogEntry, ObjectDef } from "../catalog/types";
-import { decode, encode, type ValueSpec } from "../catalog/value-coerce";
+import { decode, encode, isWritableValue, type ValueSpec } from "../catalog/value-coerce";
 import type { StateValue } from "../types";
 import type { YncaCapabilities } from "./capability";
 
@@ -167,7 +167,17 @@ const DECODER_STATES = selfMap([
 ]);
 
 /** Amplifier functions shared by MAIN and each zone: state id + YNCA func + value spec. */
-const AMP_FUNCS: Array<{ func: string; state: string; name: string; spec: ValueSpec; write: boolean; role: string }> = [
+/** A per-function catalog definition, before its zone/subunit prefix and id are applied. */
+interface FuncDef {
+  func: string;
+  state: string;
+  name: string;
+  spec: ValueSpec;
+  write: boolean;
+  role: string;
+}
+
+const AMP_FUNCS: FuncDef[] = [
   {
     func: "PWR",
     state: "power",
@@ -385,14 +395,7 @@ const ZONEB_AVAIL_STATES = selfMap(["Not Connected", "Not Ready", "Ready"]);
  * the main subunit exposes), the A/B speaker toggles, and the 12 scene names.
  * Kept out of AMP_FUNCS so they are not created for ZONE2-4.
  */
-const MAIN_ONLY_FUNCS: Array<{
-  func: string;
-  state: string;
-  name: string;
-  spec: ValueSpec;
-  write: boolean;
-  role: string;
-}> = [
+const MAIN_ONLY_FUNCS: FuncDef[] = [
   {
     func: "SPEAKERA",
     state: "speakerA",
@@ -464,15 +467,7 @@ const ZONES: Array<{ subunit: string; prefix: string }> = [
 ];
 
 /** Global (non-zone) functions: one subunit each. State id carries its own channel. */
-const GLOBAL_FUNCS: Array<{
-  subunit: string;
-  func: string;
-  state: string;
-  name: string;
-  spec: ValueSpec;
-  write: boolean;
-  role: string;
-}> = [
+const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
   {
     subunit: "SYS",
     func: "PARTY",
@@ -564,7 +559,7 @@ const SWFR_CNFG_STATES = selfMap(["None", "Use"]);
  * (all zones), the party mute, the HDMI-output toggles and the speaker patterns.
  * The 23 assignable input names are generated separately from {@link INPUT_NAME_KEYS}.
  */
-const SYS_FUNCS: Array<{ func: string; state: string; name: string; spec: ValueSpec; write: boolean; role: string }> = [
+const SYS_FUNCS: FuncDef[] = [
   { func: "MODELNAME", state: "system.model", name: "Model", spec: { kind: "text" }, write: false, role: "text" },
   {
     func: "VERSION",
@@ -689,14 +684,14 @@ const INPUT_NAME_KEYS = [
  * a `dab` channel of their own so DAB/FM labels never collide with the AM/FM `@TUN`
  * tuner's `tuner.*` states. The subunit also carries an FM frequency (FMFREQ).
  */
-const DAB_FUNCS: Array<{ func: string; state: string; name: string; spec: ValueSpec; write: boolean; role: string }> = [
+const DAB_FUNCS: FuncDef[] = [
   {
     func: "BAND",
     state: "dab.band",
     name: "DAB band",
     spec: { kind: "enum", states: DAB_BAND_STATES },
     write: true,
-    role: "media.input",
+    role: "state",
   },
   {
     func: "DABCHLABEL",
@@ -854,40 +849,40 @@ const PLAYER_FUNCS: Array<{
 ];
 
 /**
- * Build the device-agnostic YNCA catalog: every amplifier function for MAIN and
- * each zone, the global SYS/TUN functions, and the playback functions for each
- * network/media player source. The per-device mapper keeps only the entries the
- * device reports.
+ * Turn a list of function definitions into catalog entries on one subunit, applying
+ * an optional id prefix — the shared shape behind the amp/zone/SYS/DAB/global blocks.
+ *
+ * @param fns the function definitions
+ * @param subunit the subunit the functions live on
+ * @param prefix optional id prefix (e.g. a zone's `zone2.`)
+ * @returns the catalog entries
+ */
+function fnEntries(fns: readonly FuncDef[], subunit: string, prefix = ""): YncaEntry[] {
+  return fns.map(fn => ({
+    id: `${prefix}${fn.state}`,
+    name: fn.name,
+    spec: fn.spec,
+    write: fn.write,
+    role: fn.role,
+    subunit,
+    func: fn.func,
+  }));
+}
+
+/**
+ * Build the device-agnostic YNCA catalog: every amplifier function for MAIN and each
+ * zone, the global SYS/TUN functions, and the playback functions for each network/media
+ * player source. The per-device mapper keeps only the entries the device reports.
  *
  * @returns the catalog entries
  */
 export function buildYncaCatalog(): YncaEntry[] {
   const entries: YncaEntry[] = [];
   for (const zone of ZONES) {
-    for (const fn of AMP_FUNCS) {
-      entries.push({
-        id: `${zone.prefix}${fn.state}`,
-        name: fn.name,
-        spec: fn.spec,
-        write: fn.write,
-        role: fn.role,
-        subunit: zone.subunit,
-        func: fn.func,
-      });
-    }
+    entries.push(...fnEntries(AMP_FUNCS, zone.subunit, zone.prefix));
   }
   // MAIN-only functions (Zone B sub-zone, speaker toggles).
-  for (const fn of MAIN_ONLY_FUNCS) {
-    entries.push({
-      id: fn.state,
-      name: fn.name,
-      spec: fn.spec,
-      write: fn.write,
-      role: fn.role,
-      subunit: "MAIN",
-      func: fn.func,
-    });
-  }
+  entries.push(...fnEntries(MAIN_ONLY_FUNCS, "MAIN"));
   // The 12 scene names (read-only) live on MAIN.
   for (let n = 1; n <= 12; n++) {
     entries.push({
@@ -900,28 +895,11 @@ export function buildYncaCatalog(): YncaEntry[] {
       func: `SCENE${n}NAME`,
     });
   }
+  // Global functions each carry their own subunit.
   for (const fn of GLOBAL_FUNCS) {
-    entries.push({
-      id: fn.state,
-      name: fn.name,
-      spec: fn.spec,
-      write: fn.write,
-      role: fn.role,
-      subunit: fn.subunit,
-      func: fn.func,
-    });
+    entries.push(...fnEntries([fn], fn.subunit));
   }
-  for (const fn of SYS_FUNCS) {
-    entries.push({
-      id: fn.state,
-      name: fn.name,
-      spec: fn.spec,
-      write: fn.write,
-      role: fn.role,
-      subunit: "SYS",
-      func: fn.func,
-    });
-  }
+  entries.push(...fnEntries(SYS_FUNCS, "SYS"));
   for (const key of INPUT_NAME_KEYS) {
     const upper = key.toUpperCase();
     entries.push({
@@ -934,17 +912,7 @@ export function buildYncaCatalog(): YncaEntry[] {
       func: `INPNAME${upper}`,
     });
   }
-  for (const fn of DAB_FUNCS) {
-    entries.push({
-      id: fn.state,
-      name: fn.name,
-      spec: fn.spec,
-      write: fn.write,
-      role: fn.role,
-      subunit: "DAB",
-      func: fn.func,
-    });
-  }
+  entries.push(...fnEntries(DAB_FUNCS, "DAB"));
   for (const source of PLAYER_SOURCES) {
     for (const fn of PLAYER_FUNCS) {
       entries.push({
@@ -1010,7 +978,9 @@ export function idToEntry(entries: YncaEntry[]): Map<string, YncaEntry> {
  * @returns the object definitions to create
  */
 export function yncaObjectsFor(capabilities: YncaCapabilities): ObjectDef[] {
-  const present = buildYncaCatalog().filter(entry => capabilities.subunits[entry.subunit]?.[entry.func] !== undefined);
+  const present = buildYncaCatalog().filter(
+    entry => capabilities.subunits[entry.subunit]?.[readFuncOf(entry)] !== undefined,
+  );
   return catalogToObjects(present);
 }
 
@@ -1053,6 +1023,11 @@ export function yncaCommand(
 ): { subunit: string; func: string; value: string } | undefined {
   const entry = map.get(stateId);
   if (!entry) {
+    return undefined;
+  }
+  // Guard the write value: a null/undefined or non-finite-number write must not be
+  // turned into a bogus command (e.g. `@TUN:AMFREQ=null`).
+  if (!isWritableValue(value, entry.spec.kind === "number")) {
     return undefined;
   }
   return { subunit: entry.subunit, func: entry.func, value: encode(entry.spec, value as boolean | number | string) };

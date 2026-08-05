@@ -19,10 +19,12 @@ class FakeSocket implements YxcPushSocket {
   }
   public bind(port: number): void {
     this.boundPort = port;
-    this.listeningHandler?.();
   }
   public close(): void {
     this.closed = true;
+  }
+  public emitListening(): void {
+    this.listeningHandler?.();
   }
   public emitMessage(payload: string, address: string): void {
     this.messageHandler?.(payload, address);
@@ -32,18 +34,40 @@ class FakeSocket implements YxcPushSocket {
   }
 }
 
-const silentLog = { debug: (): void => {}, warn: (): void => {} };
+/** Deps that record warnings and collect scheduled rebinds so tests fire them manually. */
+function makeDeps(): {
+  deps: ConstructorParameters<typeof YxcPushReceiver>[0];
+  warnings: string[];
+  fireScheduled: () => void;
+  scheduledCount: () => number;
+} {
+  const warnings: string[] = [];
+  const scheduled: Array<() => void> = [];
+  return {
+    warnings,
+    fireScheduled: () => scheduled.shift()?.(),
+    scheduledCount: () => scheduled.length,
+    deps: {
+      log: { debug: () => {}, warn: m => warnings.push(m) },
+      schedule: cb => {
+        scheduled.push(cb);
+        return scheduled.length as unknown as ioBroker.Timeout;
+      },
+      cancel: () => {},
+    },
+  };
+}
 
 describe("YxcPushReceiver", () => {
   test("binds the shared socket to :41100", () => {
     const fake = new FakeSocket();
-    new YxcPushReceiver(silentLog, () => fake).start();
+    new YxcPushReceiver(makeDeps().deps, () => fake).start();
     expect(fake.boundPort).toBe(41100);
   });
 
   test("routes a push to the handler registered for its source ip", () => {
     const fake = new FakeSocket();
-    const receiver = new YxcPushReceiver(silentLog, () => fake);
+    const receiver = new YxcPushReceiver(makeDeps().deps, () => fake);
     const seen: unknown[] = [];
     receiver.register("192.168.1.5", e => seen.push(e));
     receiver.start();
@@ -51,9 +75,22 @@ describe("YxcPushReceiver", () => {
     expect(seen).toEqual([{ main: { power: "on" } }]);
   });
 
+  test("register returns an unregister that stops routing to that ip", () => {
+    const fake = new FakeSocket();
+    const receiver = new YxcPushReceiver(makeDeps().deps, () => fake);
+    let called = false;
+    const unregister = receiver.register("192.168.1.5", () => {
+      called = true;
+    });
+    receiver.start();
+    unregister();
+    fake.emitMessage("{}", "192.168.1.5");
+    expect(called).toBe(false);
+  });
+
   test("ignores a push from an unregistered ip", () => {
     const fake = new FakeSocket();
-    const receiver = new YxcPushReceiver(silentLog, () => fake);
+    const receiver = new YxcPushReceiver(makeDeps().deps, () => fake);
     receiver.register("192.168.1.5", () => {
       throw new Error("must not be called");
     });
@@ -63,7 +100,7 @@ describe("YxcPushReceiver", () => {
 
   test("survives a malformed payload without calling the handler", () => {
     const fake = new FakeSocket();
-    const receiver = new YxcPushReceiver(silentLog, () => fake);
+    const receiver = new YxcPushReceiver(makeDeps().deps, () => fake);
     let called = false;
     receiver.register("192.168.1.5", () => {
       called = true;
@@ -73,18 +110,40 @@ describe("YxcPushReceiver", () => {
     expect(called).toBe(false);
   });
 
-  test("survives a bind error (port in use) with a warning, not a throw", () => {
+  test("a bind-time error warns, closes the socket and runs poll-only without a rebind", () => {
     const fake = new FakeSocket();
-    const warnings: string[] = [];
-    const receiver = new YxcPushReceiver({ debug: () => {}, warn: m => warnings.push(m) }, () => fake);
+    const d = makeDeps();
+    const receiver = new YxcPushReceiver(d.deps, () => fake);
+    receiver.start(); // bind, but 'listening' never fires → bind failed
+    fake.emitError(new Error("EADDRINUSE"));
+    expect(d.warnings).toHaveLength(1);
+    expect(d.warnings[0]).toMatch(/unavailable/);
+    expect(fake.closed).toBe(true); // closed, not orphaned
+    expect(d.scheduledCount()).toBe(0); // a bind failure is not retried
+  });
+
+  test("a runtime error after listening closes the socket and rebinds a fresh one", () => {
+    const sockets: FakeSocket[] = [];
+    const d = makeDeps();
+    const receiver = new YxcPushReceiver(d.deps, () => {
+      const s = new FakeSocket();
+      sockets.push(s);
+      return s;
+    });
     receiver.start();
-    expect(() => fake.emitError(new Error("EADDRINUSE"))).not.toThrow();
-    expect(warnings).toHaveLength(1);
+    sockets[0].emitListening(); // socket came up
+    sockets[0].emitError(new Error("EIO")); // runtime fault
+    expect(sockets[0].closed).toBe(true);
+    expect(d.warnings[0]).toMatch(/rebinding/);
+    expect(d.scheduledCount()).toBe(1);
+    d.fireScheduled(); // the rebind runs
+    expect(sockets).toHaveLength(2);
+    expect(sockets[1].boundPort).toBe(41100);
   });
 
   test("close closes the socket", () => {
     const fake = new FakeSocket();
-    const receiver = new YxcPushReceiver(silentLog, () => fake);
+    const receiver = new YxcPushReceiver(makeDeps().deps, () => fake);
     receiver.start();
     receiver.close();
     expect(fake.closed).toBe(true);

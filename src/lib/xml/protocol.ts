@@ -60,9 +60,12 @@ export function parseBasicStatus(xml: string): BasicStatus {
   if (power) {
     status.power = power[1] === "On";
   }
-  const val = /<Val>(-?\d+)<\/Val>/.exec(xml);
-  if (val) {
-    status.volume = Number(val[1]) / 10;
+  // Scope the volume to its <Volume><Lvl> parent — a bare <Val> also matches
+  // Dialogue_Lvl and other <Val>-carrying fields, so an unscoped match would read
+  // the wrong field as the volume.
+  const volume = /<Volume>\s*<Lvl>\s*<Val>(-?\d+)<\/Val>/.exec(xml);
+  if (volume) {
+    status.volume = Number(volume[1]) / 10;
   }
   const mute = /<Mute>(On|Off)<\/Mute>/.exec(xml);
   if (mute) {

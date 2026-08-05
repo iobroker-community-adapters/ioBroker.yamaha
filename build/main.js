@@ -34,19 +34,16 @@ module.exports = __toCommonJS(main_exports);
 var utils = __toESM(require("@iobroker/adapter-core"));
 var import_node_dgram = require("node:dgram");
 var import_node_http = require("node:http");
-var import_yamaha_yxc_nodejs = require("yamaha-yxc-nodejs");
+var import_attempt_device = require("./lib/attempt-device");
 var import_pure_helpers = require("./lib/pure-helpers");
+var import_util = require("./lib/util");
 var import_discovery = require("./lib/discovery");
-var import_ynca_client = require("./lib/ynca/ynca-client");
-var import_device_controller = require("./lib/device-controller");
-var import_device_controller2 = require("./lib/yxc/device-controller");
 var import_push_receiver = require("./lib/yxc/push-receiver");
-var import_device_controller3 = require("./lib/xml/device-controller");
-var import_xml_client = require("./lib/xml/xml-client");
 var import_device_supervisor = require("./lib/lifecycle/device-supervisor");
 var import_reconnect_strategy = require("./lib/lifecycle/reconnect-strategy");
 const RECONNECT_BASE_MS = 1e3;
 const RECONNECT_MAX_MS = 6e4;
+const FETCH_TIMEOUT_MS = 4e3;
 class Yamaha extends utils.Adapter {
   supervisors = [];
   deviceConnected = /* @__PURE__ */ new Map();
@@ -73,8 +70,9 @@ class Yamaha extends utils.Adapter {
       await this.cleanupStaleObjects(new Set(devices.map((device) => device.id)));
       this.subscribeStates("*");
       const pushReceiver = new import_push_receiver.YxcPushReceiver({
-        debug: (message) => this.log.debug(message),
-        warn: (message) => this.log.warn(message)
+        log: { debug: (message) => this.log.debug(message), warn: (message) => this.log.warn(message) },
+        schedule: (cb, ms) => this.setTimeout(cb, ms),
+        cancel: (handle) => this.clearTimeout(handle)
       });
       pushReceiver.start();
       this.pushReceiver = pushReceiver;
@@ -97,7 +95,7 @@ class Yamaha extends utils.Adapter {
         supervisor.start();
       }
     } catch (e) {
-      this.log.error(`onReady failed: ${e instanceof Error ? e.message : String(e)}`);
+      this.log.error(`onReady failed: ${(0, import_util.errorMessage)(e)}`);
     }
   }
   /**
@@ -168,7 +166,7 @@ class Yamaha extends utils.Adapter {
       this.log.info(`carried the previous single-device config (${row.ip}) over into the device table`);
     } catch (e) {
       this.log.warn(
-        `could not persist the migrated device table (${e instanceof Error ? e.message : String(e)}); running with the in-memory value`
+        `could not persist the migrated device table (${(0, import_util.errorMessage)(e)}); running with the in-memory value`
       );
     }
   }
@@ -183,38 +181,22 @@ class Yamaha extends utils.Adapter {
    * @param pushReceiver the shared YXC push receiver
    * @returns a connection handle, or null when no transport connected
    */
-  async attemptDevice(device, pushReceiver) {
-    const log = {
-      debug: (message) => this.log.debug(message),
-      info: (message) => this.log.info(message),
-      warn: (message) => this.log.warn(message)
-    };
-    const upsertObject = async (id, def) => {
-      await this.extendObject(id, { type: def.type, common: def.common, native: {} });
-    };
-    const setStateAck = (id, value) => void this.setState(id, { val: value, ack: true });
-    const timers = {
-      schedule: (handler, ms) => this.setTimeout(handler, ms),
-      cancel: (handle) => this.clearTimeout(handle)
-    };
-    const yncaClient = new import_ynca_client.YncaClient(device.ip, timers);
-    const ynca = new import_device_controller.YncaDeviceController(device.id, { client: yncaClient, upsertObject, setStateAck, log });
-    try {
-      if (await ynca.start()) {
-        return {
-          onDrop: (cb) => yncaClient.onDrop(cb),
-          handleStateChange: (id, ack, value) => ynca.handleStateChange(id, ack, value),
-          close: () => ynca.close()
-        };
-      }
-      ynca.close();
-    } catch (e) {
-      ynca.close();
-      this.log.debug(`${device.id}: no YNCA (${e instanceof Error ? e.message : String(e)})`);
-    }
-    const yxc = new import_device_controller2.YxcDeviceController(device.id, {
-      client: new import_yamaha_yxc_nodejs.YamahaYXC(device.ip),
-      registerPush: (onPush) => pushReceiver.register(device.ip, onPush),
+  attemptDevice(device, pushReceiver) {
+    return (0, import_attempt_device.attemptDevice)(device, {
+      log: {
+        debug: (message) => this.log.debug(message),
+        info: (message) => this.log.info(message),
+        warn: (message) => this.log.warn(message)
+      },
+      upsertObject: async (id, def) => {
+        await this.extendObject(id, { type: def.type, common: def.common, native: {} });
+      },
+      setStateAck: (id, value) => void this.setState(id, { val: value, ack: true }),
+      timers: {
+        schedule: (handler, ms) => this.setTimeout(handler, ms),
+        cancel: (handle) => this.clearTimeout(handle)
+      },
+      registerPush: (ip, onPush) => pushReceiver.register(ip, onPush),
       scheduleKeepalive: (handler, ms) => {
         const timer = this.setInterval(handler, ms);
         return () => {
@@ -222,56 +204,8 @@ class Yamaha extends utils.Adapter {
             this.clearInterval(timer);
           }
         };
-      },
-      upsertObject,
-      setStateAck,
-      log
-    });
-    try {
-      if (await yxc.start()) {
-        return {
-          onDrop: () => {
-          },
-          handleStateChange: (id, ack, value) => yxc.handleStateChange(id, ack, value),
-          close: () => yxc.close()
-        };
       }
-      yxc.close();
-    } catch (e) {
-      yxc.close();
-      this.log.debug(`${device.id}: no YXC (${e instanceof Error ? e.message : String(e)})`);
-    }
-    const xml = new import_device_controller3.XmlDeviceController(device.id, {
-      client: new import_xml_client.XmlClient(device.ip),
-      scheduleKeepalive: (handler, ms) => {
-        const timer = this.setInterval(handler, ms);
-        return () => {
-          if (timer) {
-            this.clearInterval(timer);
-          }
-        };
-      },
-      upsertObject,
-      setStateAck,
-      log
     });
-    try {
-      if (await xml.start()) {
-        return {
-          onDrop: () => {
-          },
-          handleStateChange: (id, ack, value) => xml.handleStateChange(id, ack, value),
-          close: () => xml.close()
-        };
-      }
-      xml.close();
-    } catch (e) {
-      xml.close();
-      this.log.warn(
-        `${device.id}: no reachable transport (YNCA/YXC/XML): ${e instanceof Error ? e.message : String(e)}`
-      );
-    }
-    return null;
   }
   /**
    * Route a state change to every device's supervisor (each forwards to its
@@ -333,7 +267,7 @@ class Yamaha extends utils.Adapter {
         this.sendTo(obj.from, obj.command, { native: { devices } }, obj.callback);
       }
     } catch (e) {
-      this.log.warn(`discover failed: ${e instanceof Error ? e.message : String(e)}`);
+      this.log.warn(`discover failed: ${(0, import_util.errorMessage)(e)}`);
       if (obj.callback) {
         this.sendTo(obj.from, obj.command, { error: "discover failed" }, obj.callback);
       }
@@ -381,11 +315,13 @@ ST: ${target}\r
    */
   fetchUrl(url) {
     return new Promise((resolve, reject) => {
-      (0, import_node_http.get)(url, (res) => {
+      const req = (0, import_node_http.get)(url, (res) => {
         let data = "";
         res.on("data", (chunk) => data += String(chunk));
         res.on("end", () => resolve(data));
-      }).on("error", reject);
+      });
+      req.on("error", reject);
+      req.setTimeout(FETCH_TIMEOUT_MS, () => req.destroy(new Error(`fetch timed out: ${url}`)));
     });
   }
 }

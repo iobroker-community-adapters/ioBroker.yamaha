@@ -20,6 +20,7 @@ var value_coerce_exports = {};
 __export(value_coerce_exports, {
   decode: () => decode,
   encode: () => encode,
+  isWritableValue: () => isWritableValue,
   specToCommon: () => specToCommon
 });
 module.exports = __toCommonJS(value_coerce_exports);
@@ -55,7 +56,13 @@ const DECIMAL_RE = /^-?\d+(\.\d+)?$/;
 function decode(spec, wire) {
   switch (spec.kind) {
     case "onoff":
-      return wire === spec.on;
+      if (wire === spec.on) {
+        return true;
+      }
+      if (wire === spec.off) {
+        return false;
+      }
+      return void 0;
     case "number": {
       const trimmed = wire.trim();
       return DECIMAL_RE.test(trimmed) ? Number(trimmed) : void 0;
@@ -64,6 +71,12 @@ function decode(spec, wire) {
     case "text":
       return wire;
   }
+}
+function isWritableValue(value, numeric) {
+  if (value === null || value === void 0) {
+    return false;
+  }
+  return numeric ? Number.isFinite(Number(value)) : true;
 }
 function encode(spec, value) {
   switch (spec.kind) {
@@ -79,6 +92,7 @@ function encode(spec, value) {
 0 && (module.exports = {
   decode,
   encode,
+  isWritableValue,
   specToCommon
 });
 //# sourceMappingURL=value-coerce.js.map

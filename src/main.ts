@@ -1,16 +1,11 @@
 import * as utils from "@iobroker/adapter-core";
 import { createSocket } from "node:dgram";
 import { get as httpGet } from "node:http";
-import { YamahaYXC } from "yamaha-yxc-nodejs";
+import { attemptDevice } from "./lib/attempt-device";
 import { legacyDeviceRow, parseDevices, staleObjects, stripNamespace } from "./lib/pure-helpers";
+import { errorMessage } from "./lib/util";
 import { discoverYamaha } from "./lib/discovery";
-import { YncaClient } from "./lib/ynca/ynca-client";
-import { YncaDeviceController } from "./lib/device-controller";
-import { YxcDeviceController } from "./lib/yxc/device-controller";
 import { YxcPushReceiver } from "./lib/yxc/push-receiver";
-import { XmlDeviceController } from "./lib/xml/device-controller";
-import { XmlClient } from "./lib/xml/xml-client";
-import type { ObjectDef } from "./lib/catalog/types";
 import type { DeviceRecord } from "./lib/types";
 import { DeviceSupervisor, type ConnectionHandle } from "./lib/lifecycle/device-supervisor";
 import { ReconnectStrategy } from "./lib/lifecycle/reconnect-strategy";
@@ -18,6 +13,9 @@ import { ReconnectStrategy } from "./lib/lifecycle/reconnect-strategy";
 /** Supervisor reconnect backoff bounds (exponential: 1s, 2s … capped at 60s). */
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 60000;
+
+/** Abort a discovery description fetch after this long, so a dead device cannot hang it. */
+const FETCH_TIMEOUT_MS = 4000;
 
 /**
  * ioBroker.yamaha — controls Yamaha AV receivers and MusicCast devices.
@@ -57,8 +55,9 @@ export class Yamaha extends utils.Adapter {
       await this.cleanupStaleObjects(new Set(devices.map(device => device.id)));
       this.subscribeStates("*");
       const pushReceiver = new YxcPushReceiver({
-        debug: message => this.log.debug(message),
-        warn: message => this.log.warn(message),
+        log: { debug: message => this.log.debug(message), warn: message => this.log.warn(message) },
+        schedule: (cb, ms) => this.setTimeout(cb, ms),
+        cancel: handle => this.clearTimeout(handle),
       });
       pushReceiver.start();
       this.pushReceiver = pushReceiver;
@@ -83,7 +82,7 @@ export class Yamaha extends utils.Adapter {
         supervisor.start();
       }
     } catch (e) {
-      this.log.error(`onReady failed: ${e instanceof Error ? e.message : String(e)}`);
+      this.log.error(`onReady failed: ${errorMessage(e)}`);
     }
   }
 
@@ -162,8 +161,7 @@ export class Yamaha extends utils.Adapter {
       this.log.info(`carried the previous single-device config (${row.ip}) over into the device table`);
     } catch (e) {
       this.log.warn(
-        `could not persist the migrated device table (${e instanceof Error ? e.message : String(e)}); ` +
-          `running with the in-memory value`,
+        `could not persist the migrated device table (${errorMessage(e)}); ` + `running with the in-memory value`,
       );
     }
   }
@@ -179,45 +177,22 @@ export class Yamaha extends utils.Adapter {
    * @param pushReceiver the shared YXC push receiver
    * @returns a connection handle, or null when no transport connected
    */
-  private async attemptDevice(device: DeviceRecord, pushReceiver: YxcPushReceiver): Promise<ConnectionHandle | null> {
-    const log = {
-      debug: (message: string): void => this.log.debug(message),
-      info: (message: string): void => this.log.info(message),
-      warn: (message: string): void => this.log.warn(message),
-    };
-    const upsertObject = async (id: string, def: ObjectDef): Promise<void> => {
-      await this.extendObject(id, { type: def.type, common: def.common, native: {} });
-    };
-    const setStateAck = (id: string, value: boolean | number | string): void =>
-      void this.setState(id, { val: value, ack: true });
-    const timers = {
-      schedule: (handler: () => void, ms: number): ioBroker.Timeout | undefined => this.setTimeout(handler, ms),
-      cancel: (handle: ioBroker.Timeout | undefined): void => this.clearTimeout(handle),
-    };
-
-    // 1) YNCA — amp control over a held TCP connection; a socket drop reconnects
-    //    through the supervisor (the client no longer reconnects on its own).
-    const yncaClient = new YncaClient(device.ip, timers);
-    const ynca = new YncaDeviceController(device.id, { client: yncaClient, upsertObject, setStateAck, log });
-    try {
-      if (await ynca.start()) {
-        return {
-          onDrop: cb => yncaClient.onDrop(cb),
-          handleStateChange: (id, ack, value) => ynca.handleStateChange(id, ack, value),
-          close: () => ynca.close(),
-        };
-      }
-      ynca.close();
-    } catch (e) {
-      ynca.close();
-      this.log.debug(`${device.id}: no YNCA (${e instanceof Error ? e.message : String(e)})`);
-    }
-
-    // 2) YXC fallback — MusicCast; polled + push, no socket-drop event (no-op onDrop,
-    //    the keepalive poll recovers on its own).
-    const yxc = new YxcDeviceController(device.id, {
-      client: new YamahaYXC(device.ip),
-      registerPush: onPush => pushReceiver.register(device.ip, onPush),
+  private attemptDevice(device: DeviceRecord, pushReceiver: YxcPushReceiver): Promise<ConnectionHandle | null> {
+    return attemptDevice(device, {
+      log: {
+        debug: message => this.log.debug(message),
+        info: message => this.log.info(message),
+        warn: message => this.log.warn(message),
+      },
+      upsertObject: async (id, def) => {
+        await this.extendObject(id, { type: def.type, common: def.common, native: {} });
+      },
+      setStateAck: (id, value) => void this.setState(id, { val: value, ack: true }),
+      timers: {
+        schedule: (handler, ms) => this.setTimeout(handler, ms),
+        cancel: handle => this.clearTimeout(handle),
+      },
+      registerPush: (ip, onPush) => pushReceiver.register(ip, onPush),
       scheduleKeepalive: (handler, ms) => {
         const timer = this.setInterval(handler, ms);
         return () => {
@@ -226,55 +201,7 @@ export class Yamaha extends utils.Adapter {
           }
         };
       },
-      upsertObject,
-      setStateAck,
-      log,
     });
-    try {
-      if (await yxc.start()) {
-        return {
-          onDrop: () => {},
-          handleStateChange: (id, ack, value) => yxc.handleStateChange(id, ack, value),
-          close: () => yxc.close(),
-        };
-      }
-      yxc.close();
-    } catch (e) {
-      yxc.close();
-      this.log.debug(`${device.id}: no YXC (${e instanceof Error ? e.message : String(e)})`);
-    }
-
-    // 3) XML/YNC fallback — pre-2010 receivers; polled, no drop event.
-    const xml = new XmlDeviceController(device.id, {
-      client: new XmlClient(device.ip),
-      scheduleKeepalive: (handler, ms) => {
-        const timer = this.setInterval(handler, ms);
-        return () => {
-          if (timer) {
-            this.clearInterval(timer);
-          }
-        };
-      },
-      upsertObject,
-      setStateAck,
-      log,
-    });
-    try {
-      if (await xml.start()) {
-        return {
-          onDrop: () => {},
-          handleStateChange: (id, ack, value) => xml.handleStateChange(id, ack, value),
-          close: () => xml.close(),
-        };
-      }
-      xml.close();
-    } catch (e) {
-      xml.close();
-      this.log.warn(
-        `${device.id}: no reachable transport (YNCA/YXC/XML): ${e instanceof Error ? e.message : String(e)}`,
-      );
-    }
-    return null;
   }
 
   /**
@@ -338,7 +265,7 @@ export class Yamaha extends utils.Adapter {
         this.sendTo(obj.from, obj.command, { native: { devices } }, obj.callback);
       }
     } catch (e) {
-      this.log.warn(`discover failed: ${e instanceof Error ? e.message : String(e)}`);
+      this.log.warn(`discover failed: ${errorMessage(e)}`);
       if (obj.callback) {
         this.sendTo(obj.from, obj.command, { error: "discover failed" }, obj.callback);
       }
@@ -382,11 +309,13 @@ export class Yamaha extends utils.Adapter {
    */
   private fetchUrl(url: string): Promise<string> {
     return new Promise((resolve, reject) => {
-      httpGet(url, res => {
+      const req = httpGet(url, res => {
         let data = "";
         res.on("data", chunk => (data += String(chunk)));
         res.on("end", () => resolve(data));
-      }).on("error", reject);
+      });
+      req.on("error", reject);
+      req.setTimeout(FETCH_TIMEOUT_MS, () => req.destroy(new Error(`fetch timed out: ${url}`)));
     });
   }
 }

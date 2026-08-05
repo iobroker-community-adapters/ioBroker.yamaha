@@ -21,6 +21,7 @@ __export(line_buffer_exports, {
   LineBuffer: () => LineBuffer
 });
 module.exports = __toCommonJS(line_buffer_exports);
+const MAX_BUFFER = 64 * 1024;
 class LineBuffer {
   buffer = "";
   /**
@@ -35,6 +36,9 @@ class LineBuffer {
     this.buffer += chunk;
     const parts = this.buffer.split(/\r\n|\r|\n/);
     this.buffer = (_a = parts.pop()) != null ? _a : "";
+    if (this.buffer.length > MAX_BUFFER) {
+      this.buffer = "";
+    }
     return parts.filter((line) => line.length > 0);
   }
 }

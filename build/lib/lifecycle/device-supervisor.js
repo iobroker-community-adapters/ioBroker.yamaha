@@ -65,16 +65,20 @@ class DeviceSupervisor {
       this.handle = handle;
       this.deps.backoff.reset();
       this.deps.onConnectionChange(true);
-      handle.onDrop(() => this.handleDrop());
+      handle.onDrop((reason) => this.handleDrop(handle, reason));
     } else {
       this.deps.onConnectionChange(false);
       this.scheduleRetry();
     }
   }
-  handleDrop() {
-    if (this.closed) {
+  handleDrop(handle, reason) {
+    if (this.closed || this.handle !== handle) {
       return;
     }
+    if (reason) {
+      this.deps.log.debug(`connection dropped, reconnecting: ${reason.message}`);
+    }
+    handle.close();
     this.handle = void 0;
     this.deps.onConnectionChange(false);
     this.scheduleRetry();

@@ -1,7 +1,0 @@
-{
-  "version": 3,
-  "sources": ["../../src/lib/device-registry.ts"],
-  "sourcesContent": ["import type { DeviceRecord } from \"./types\";\n\n/**\n * In-memory store of the configured devices, keyed by id. The command-router and\n * transport clients look devices up here; discovery/config fill it on startup.\n */\nexport class DeviceRegistry {\n  private readonly devices = new Map<string, DeviceRecord>();\n\n  /**\n   * Insert a device, or replace the existing one with the same id.\n   *\n   * @param device the device record to store\n   */\n  public upsert(device: DeviceRecord): void {\n    this.devices.set(device.id, device);\n  }\n\n  /**\n   * Look a device up by id.\n   *\n   * @param id the device id\n   * @returns the device record, or undefined if none is registered\n   */\n  public get(id: string): DeviceRecord | undefined {\n    return this.devices.get(id);\n  }\n}\n"],
-  "mappings": ";;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAMO,MAAM,eAAe;AAAA,EACT,UAAU,oBAAI,IAA0B;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA,EAOlD,OAAO,QAA4B;AACxC,SAAK,QAAQ,IAAI,OAAO,IAAI,MAAM;AAAA,EACpC;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA,EAQO,IAAI,IAAsC;AAC/C,WAAO,KAAK,QAAQ,IAAI,EAAE;AAAA,EAC5B;AACF;",
-  "names": []
-}

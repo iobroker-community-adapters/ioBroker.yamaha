@@ -1,4 +1,13 @@
-import { buildYncaCatalog, funcToEntry, idToEntry, sweepGets, yncaCommand, yncaObjectsFor, yncaStateUpdate } from "./catalog";
+import {
+  buildYncaCatalog,
+  funcToEntry,
+  idToEntry,
+  sweepGets,
+  yncaCommand,
+  yncaObjectsFor,
+  yncaStateUpdate,
+} from "./catalog";
+import { CHANNEL_NAMES } from "../catalog/types";
 import type { EnumSpec } from "../catalog/value-coerce";
 import type { YncaCapabilities } from "./capability";
 
@@ -37,7 +46,10 @@ describe("YNCA catalog", () => {
   });
 
   test("lip-sync offsets are numbers in ms", () => {
-    expect(buildYncaCatalog().find(e => e.id === "lipSync.hdmiOut1")?.spec).toMatchObject({ kind: "number", unit: "ms" });
+    expect(buildYncaCatalog().find(e => e.id === "lipSync.hdmiOut1")?.spec).toMatchObject({
+      kind: "number",
+      unit: "ms",
+    });
   });
 
   test("3D Cinema DSP keeps its wire function name 3DCINEMA", () => {
@@ -88,7 +100,11 @@ describe("YNCA catalog", () => {
 
   test("playback reads from PLAYBACKINFO but writes to PLAYBACK", () => {
     const cat = buildYncaCatalog();
-    expect(cat.find(e => e.id === "spotify.playback")).toMatchObject({ subunit: "SPOTIFY", func: "PLAYBACK", write: true });
+    expect(cat.find(e => e.id === "spotify.playback")).toMatchObject({
+      subunit: "SPOTIFY",
+      func: "PLAYBACK",
+      write: true,
+    });
     expect(sweepGets(cat)).toContainEqual({ subunit: "SPOTIFY", func: "PLAYBACKINFO" });
     expect(funcToEntry(cat).get("SPOTIFY:PLAYBACKINFO")?.id).toBe("spotify.playback");
   });
@@ -141,10 +157,21 @@ describe("YNCA catalog", () => {
     expect(objs.find(o => o.id === "power")?.common.type).toBe("boolean");
   });
 
+  test("yncaObjectsFor builds a playback object when the device reports PLAYBACKINFO (readFunc, not func)", () => {
+    // The device answers the sweep under the readFunc (PLAYBACKINFO); the object must
+    // still be created, or the seed writes <source>.playback with no object behind it.
+    const caps: YncaCapabilities = { model: "RX", subunits: { SPOTIFY: { PLAYBACKINFO: "Play" } } };
+    const ids = yncaObjectsFor(caps).map(o => o.id);
+    expect(ids).toContain("spotify.playback");
+  });
+
   test("yncaStateUpdate decodes a device line to a typed state via the func map", () => {
     const map = funcToEntry(buildYncaCatalog());
     expect(yncaStateUpdate({ subunit: "MAIN", func: "PWR", value: "On" }, map)).toEqual({ id: "power", value: true });
-    expect(yncaStateUpdate({ subunit: "MAIN", func: "VOL", value: "-30.0" }, map)).toEqual({ id: "volume", value: -30 });
+    expect(yncaStateUpdate({ subunit: "MAIN", func: "VOL", value: "-30.0" }, map)).toEqual({
+      id: "volume",
+      value: -30,
+    });
     expect(yncaStateUpdate({ subunit: "MAIN", func: "NOPE", value: "x" }, map)).toBeUndefined();
   });
 
@@ -153,12 +180,16 @@ describe("YNCA catalog", () => {
     expect(yncaCommand("power", true, map)).toEqual({ subunit: "MAIN", func: "PWR", value: "On" });
     expect(yncaCommand("zone2.mute", false, map)).toEqual({ subunit: "ZONE2", func: "MUTE", value: "Off" });
     expect(yncaCommand("nope", 1, map)).toBeUndefined();
+    expect(yncaCommand("volume", null, map)).toBeUndefined(); // null is not a valid write
+    expect(yncaCommand("volume", "abc", map)).toBeUndefined(); // non-finite number is dropped
   });
 
   test("the catalog covers sound, HDMI, DSP and global (SYS/TUN) functions", () => {
     const cat = buildYncaCatalog();
     const ids = cat.map(e => e.id);
-    expect(ids).toEqual(expect.arrayContaining(["sound.bass", "sound.treble", "hdmiOut", "surroundAI", "party", "tuner.band"]));
+    expect(ids).toEqual(
+      expect.arrayContaining(["sound.bass", "sound.treble", "hdmiOut", "surroundAI", "party", "tuner.band"]),
+    );
     expect(cat.find(e => e.id === "party")).toMatchObject({ subunit: "SYS", func: "PARTY" });
     expect(cat.find(e => e.id === "tuner.band")).toMatchObject({ subunit: "TUN", func: "BAND" });
     expect(cat.find(e => e.id === "zone2.sound.bass")).toMatchObject({ subunit: "ZONE2", func: "SPBASS" });
@@ -169,5 +200,17 @@ describe("YNCA catalog", () => {
     const ids = cat.map(e => e.id);
     expect(ids).toEqual(expect.arrayContaining(["netRadio.artist", "spotify.playback", "usb.track", "server.repeat"]));
     expect(cat.find(e => e.id === "spotify.playback")).toMatchObject({ subunit: "SPOTIFY", func: "PLAYBACK" });
+  });
+
+  test("every channel the catalog creates has a curated display name (no raw-id fallback)", () => {
+    const segments = new Set<string>();
+    for (const entry of buildYncaCatalog()) {
+      const parts = entry.id.split(".");
+      for (let i = 1; i < parts.length; i++) {
+        segments.add(parts[i - 1]);
+      }
+    }
+    const uncurated = [...segments].filter(segment => !(segment in CHANNEL_NAMES));
+    expect(uncurated).toEqual([]);
   });
 });

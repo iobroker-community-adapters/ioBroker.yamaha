@@ -1,9 +1,16 @@
+/** A decoded subunit/function/value message — the canonical shape across the YNCA layer. */
+export interface YncaMessage {
+  /** The subunit that reported (e.g. `MAIN`, `ZONE2`, `TUN`). */
+  subunit: string;
+  /** The function name (e.g. `PWR`, `VOL`). */
+  func: string;
+  /** The reported value. */
+  value: string;
+}
+
 /** A decoded YNCA response line. */
 export type YncaResponse =
-  | { status: "ok"; subunit: string; func: string; value: string }
-  | { status: "undefined" }
-  | { status: "restricted" }
-  | { status: "unknown" };
+  ({ status: "ok" } & YncaMessage) | { status: "undefined" } | { status: "restricted" } | { status: "unknown" };
 
 /**
  * Decode one YNCA protocol line into a structured response. Handles the bare

@@ -3,6 +3,9 @@ import { createSocket } from "node:dgram";
 /** The UDP port MusicCast devices push unsolicited events to. */
 const YXC_PUSH_PORT = 41100;
 
+/** Rebind this long after a runtime socket error (a bind-time failure is not retried). */
+const REBIND_DELAY_MS = 10000;
+
 /** The parts of a UDP socket the push receiver uses (a seam for testing). */
 export interface YxcPushSocket {
   /** Register a handler for received datagrams (payload text + source address). */
@@ -46,29 +49,40 @@ function defaultFactory(): YxcPushSocket {
   };
 }
 
-/** Logger the push receiver needs. */
-interface Logger {
-  debug: (message: string) => void;
-  warn: (message: string) => void;
+/** The callbacks the push receiver needs from the adapter. */
+export interface YxcPushReceiverDeps {
+  /** Diagnostics. */
+  log: { debug: (message: string) => void; warn: (message: string) => void };
+  /** Schedule the rebind after a runtime socket error; returns a cancellable handle. */
+  schedule(handler: () => void, ms: number): ioBroker.Timeout | undefined;
+  /** Cancel a scheduled rebind. */
+  cancel(handle: ioBroker.Timeout | undefined): void;
 }
 
 /**
  * The single UDP receiver for all MusicCast (YXC) devices. Yamaha devices send
  * unsolicited events to `<client-ip>:41100`; one socket serves every device and
- * routes each event to the handler registered for its source IP. If the port is
- * already taken (another MusicCast consumer on the host), it warns and lets the
- * adapter run poll-only rather than crashing onReady.
+ * routes each event to the handler registered for its source IP.
+ *
+ * Error handling separates the two failure modes: a bind-time failure (the port is
+ * already taken by another MusicCast consumer) is expected — it warns and runs
+ * poll-only, no retry. A runtime error on an already-listening socket closes the
+ * socket and rebinds after a delay, so a transient fault does not silently drop all
+ * devices to poll-only forever. Registrations survive a rebind.
  */
 export class YxcPushReceiver {
   private socket: YxcPushSocket | undefined;
   private readonly handlers = new Map<string, (event: unknown) => void>();
+  private listening = false;
+  private closed = false;
+  private retryTimer: ioBroker.Timeout | undefined;
 
   /**
-   * @param log logger for diagnostics
+   * @param deps adapter logger and timer callbacks
    * @param factory socket factory (defaults to a node:dgram socket)
    */
   public constructor(
-    private readonly log: Logger,
+    private readonly deps: YxcPushReceiverDeps,
     private readonly factory: PushSocketFactory = defaultFactory,
   ) {}
 
@@ -77,33 +91,62 @@ export class YxcPushReceiver {
    *
    * @param ip the device IP, matched against the UDP source address
    * @param onPush invoked with each parsed push event from that IP
+   * @returns a function that unregisters this handler
    */
-  public register(ip: string, onPush: (event: unknown) => void): void {
+  public register(ip: string, onPush: (event: unknown) => void): () => void {
     this.handlers.set(ip, onPush);
+    return () => {
+      this.handlers.delete(ip);
+    };
   }
 
   /** Open the shared socket and start listening on :41100. */
   public start(): void {
     const socket = this.factory();
     this.socket = socket;
-    socket.onError(err => {
-      this.log.warn(`YXC push port unavailable — MusicCast devices are polled, not pushed: ${err.message}`);
-      this.socket = undefined;
-    });
+    socket.onError(err => this.handleError(err));
     socket.onMessage((payload, address) => this.dispatch(payload, address));
-    socket.onListening(() => this.log.debug(`YXC push receiver listening on :${YXC_PUSH_PORT}`));
+    socket.onListening(() => {
+      this.listening = true;
+      this.deps.log.debug(`YXC push receiver listening on :${YXC_PUSH_PORT}`);
+    });
     socket.bind(YXC_PUSH_PORT);
   }
 
-  /** Close the socket synchronously — safe to call from onUnload. */
+  private handleError(err: Error): void {
+    // Close the failed socket rather than orphaning it — node:dgram does not close it
+    // on 'error', and a lingering reference makes close() below a silent no-op.
+    this.socket?.close();
+    this.socket = undefined;
+    if (this.closed) {
+      return;
+    }
+    if (!this.listening) {
+      // Bind-time failure: another MusicCast consumer holds the port. Expected.
+      this.deps.log.warn(
+        `YXC push port :${YXC_PUSH_PORT} unavailable — MusicCast devices are polled, not pushed: ${err.message}`,
+      );
+      return;
+    }
+    // Runtime error on a socket that was listening — not normal; rebind after a delay
+    // (registrations survive). listening resets so a failed rebind falls back cleanly.
+    this.listening = false;
+    this.deps.log.warn(`YXC push socket error, rebinding in ${REBIND_DELAY_MS / 1000}s: ${err.message}`);
+    this.retryTimer = this.deps.schedule(() => this.start(), REBIND_DELAY_MS);
+  }
+
+  /** Close the socket and cancel any pending rebind. Synchronous — safe from onUnload. */
   public close(): void {
+    this.closed = true;
+    this.deps.cancel(this.retryTimer);
+    this.retryTimer = undefined;
     this.socket?.close();
     this.socket = undefined;
   }
 
   /**
-   * Route one datagram to the handler for its source IP, ignoring unknown
-   * senders and malformed payloads.
+   * Route one datagram to the handler for its source IP, ignoring unknown senders
+   * and malformed payloads.
    *
    * @param payload the datagram payload text
    * @param address the source IP
@@ -117,7 +160,7 @@ export class YxcPushReceiver {
     try {
       event = JSON.parse(payload);
     } catch {
-      this.log.debug(`ignoring malformed YXC push from ${address}`);
+      this.deps.log.debug(`ignoring malformed YXC push from ${address}`);
       return;
     }
     handler(event);

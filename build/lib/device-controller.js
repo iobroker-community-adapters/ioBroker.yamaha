@@ -67,6 +67,7 @@ class YncaDeviceController {
         this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
       }
     });
+    this.deps.client.startKeepalive();
     this.deps.log.info(`${this.deviceId}: ${capabilities.model || "device"} ready`);
     return true;
   }
@@ -90,6 +91,15 @@ class YncaDeviceController {
     if (triple) {
       this.deps.client.send(triple.subunit, triple.func, triple.value);
     }
+  }
+  /**
+   * Register the supervisor's drop handler — delegated to the client's socket drop,
+   * which is YNCA's genuine connection-lost signal.
+   *
+   * @param cb invoked once when the connection drops, with the reason if known
+   */
+  onDrop(cb) {
+    this.deps.client.onDrop(cb);
   }
   /** Close the client. Synchronous — safe to call from onUnload. */
   close() {

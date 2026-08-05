@@ -1,4 +1,6 @@
 import type { StateValue } from "../types";
+import { isWritableValue } from "../catalog/value-coerce";
+import { YXC_AMP_CATALOG } from "./catalog";
 
 /** A YXC amplifier command: a YamahaYXC method with its target zone and value. */
 export interface YxcCommand {
@@ -10,30 +12,17 @@ export interface YxcCommand {
   value: boolean | number | string;
 }
 
-interface YxcStateMapping {
-  /** Flat field name carrying this state in a getStatus response. */
-  statusField?: string;
-  /** Nested field path (e.g. `["tone_control","bass"]`) — used instead of statusField. */
-  path?: string[];
-  /** YamahaYXC method for a write to this state; absent means the state is read-only. */
-  method?: string;
-  /** Convert a written state value into the YamahaYXC argument; absent means read-only. */
-  toYxc?: (value: unknown) => boolean | number | string;
-  /** Convert a getStatus field value into the typed state value. */
-  fromStatus: (value: unknown) => boolean | number | string;
-}
-
 /**
- * Read a mapping's raw getStatus value — flat via statusField or nested via path.
+ * Read a catalog entry's raw getStatus value — a flat field or a nested path.
  *
  * @param status the getStatus response object
- * @param mapping the state mapping
+ * @param read the entry's read location
  * @returns the raw value, or undefined if the field is absent
  */
-function readStatusField(status: Record<string, unknown>, mapping: YxcStateMapping): unknown {
-  if (mapping.path) {
+function readStatusField(status: Record<string, unknown>, read: { field: string } | { path: string[] }): unknown {
+  if ("path" in read) {
     let value: unknown = status;
-    for (const key of mapping.path) {
+    for (const key of read.path) {
       if (typeof value !== "object" || value === null) {
         return undefined;
       }
@@ -41,113 +30,8 @@ function readStatusField(status: Record<string, unknown>, mapping: YxcStateMappi
     }
     return value;
   }
-  return mapping.statusField !== undefined ? status[mapping.statusField] : undefined;
+  return status[read.field];
 }
-
-/**
- * Unified state name → YXC getStatus field, write method, and value conversions.
- * `sound_program` (getStatus) maps to the unified `soundProgram` state and the
- * `setSound` method — the method name is `setSound`, not `setSoundProgram`.
- */
-const YXC_STATE_MAPPINGS: Record<string, YxcStateMapping> = {
-  power: { statusField: "power", method: "power", toYxc: value => Boolean(value), fromStatus: value => value === "on" },
-  volume: {
-    statusField: "volume",
-    method: "setVolumeTo",
-    toYxc: value => Number(value),
-    fromStatus: value => Number(value),
-  },
-  mute: { statusField: "mute", method: "mute", toYxc: value => Boolean(value), fromStatus: value => Boolean(value) },
-  input: {
-    statusField: "input",
-    method: "setInput",
-    toYxc: value => String(value),
-    fromStatus: value => String(value),
-  },
-  soundProgram: {
-    statusField: "sound_program",
-    method: "setSound",
-    toYxc: value => String(value),
-    fromStatus: value => String(value),
-  },
-  enhancer: {
-    statusField: "enhancer",
-    method: "setEnhancer",
-    toYxc: value => Boolean(value),
-    fromStatus: value => Boolean(value),
-  },
-  pureDirect: {
-    statusField: "pure_direct",
-    method: "setPureDirect",
-    toYxc: value => Boolean(value),
-    fromStatus: value => Boolean(value),
-  },
-  subwooferVolume: {
-    statusField: "subwoofer_volume",
-    method: "setSubwooferVolumeTo",
-    toYxc: value => Number(value),
-    fromStatus: value => Number(value),
-  },
-  bass: {
-    path: ["tone_control", "bass"],
-    method: "setBassTo",
-    toYxc: value => Number(value),
-    fromStatus: value => Number(value),
-  },
-  treble: {
-    path: ["tone_control", "treble"],
-    method: "setTrebleTo",
-    toYxc: value => Number(value),
-    fromStatus: value => Number(value),
-  },
-  sleep: { statusField: "sleep", method: "sleep", toYxc: value => Number(value), fromStatus: value => Number(value) },
-  dialogueLevel: { statusField: "dialogue_level", fromStatus: value => Number(value) },
-  actualVolume: { path: ["actual_volume", "value"], fromStatus: value => Number(value) },
-  contentsDisplay: { statusField: "contents_display", fromStatus: value => Boolean(value) },
-  surroundDecoder: { statusField: "surr_decoder_type", fromStatus: value => String(value) },
-  audioSelect: { statusField: "audio_select", fromStatus: value => String(value) },
-  linkControl: { statusField: "link_control", fromStatus: value => String(value) },
-  linkAudioDelay: { statusField: "link_audio_delay", fromStatus: value => String(value) },
-  linkAudioQuality: { statusField: "link_audio_quality", fromStatus: value => String(value) },
-  direct: {
-    statusField: "direct",
-    method: "setDirect",
-    toYxc: value => Boolean(value),
-    fromStatus: value => Boolean(value),
-  },
-  clearVoice: {
-    statusField: "clear_voice",
-    method: "setClearVoice",
-    toYxc: value => Boolean(value),
-    fromStatus: value => Boolean(value),
-  },
-  bassExtension: {
-    statusField: "bass_extension",
-    method: "setBassExtension",
-    toYxc: value => Boolean(value),
-    fromStatus: value => Boolean(value),
-  },
-  balance: {
-    statusField: "balance",
-    method: "setBalance",
-    toYxc: value => Number(value),
-    fromStatus: value => Number(value),
-  },
-  adaptiveDrc: { statusField: "adaptive_drc", fromStatus: value => Boolean(value) },
-  adaptiveDspLevel: { statusField: "adaptive_dsp_level", fromStatus: value => Boolean(value) },
-  extraBass: { statusField: "extra_bass", fromStatus: value => Boolean(value) },
-  monaural: { statusField: "mono", fromStatus: value => Boolean(value) },
-  surround3d: { statusField: "surround_3d", fromStatus: value => Boolean(value) },
-  dialogueLift: { statusField: "dialogue_lift", fromStatus: value => Number(value) },
-  dtsDialogueControl: { statusField: "dts_dialogue_control", fromStatus: value => Number(value) },
-  equalizerLow: { path: ["equalizer", "low"], fromStatus: value => Number(value) },
-  equalizerMid: { path: ["equalizer", "mid"], fromStatus: value => Number(value) },
-  equalizerHigh: { path: ["equalizer", "high"], fromStatus: value => Number(value) },
-  maxVolume: { statusField: "max_volume", fromStatus: value => Number(value) },
-  inputText: { statusField: "input_text", fromStatus: value => String(value) },
-  distributionEnable: { statusField: "distribution_enable", fromStatus: value => Boolean(value) },
-  partyEnable: { statusField: "party_enable", fromStatus: value => Boolean(value) },
-};
 
 /** Network-player transport buttons → YamahaYXC method (no zone/value). */
 const NETUSB_TRANSPORT: Record<string, string> = {
@@ -176,7 +60,8 @@ const ZONE_PREFIX: Record<string, string> = { main: "", zone2: "zone2.", zone3: 
 /**
  * Parse a YXC getStatus response into unified amp state updates for a zone. Only
  * fields the response actually carries are emitted (presence-checked, so a
- * `mute: false` is kept), each prefixed for its zone.
+ * `mute: false` is kept), each prefixed for its zone. States and their conversions
+ * come from {@link YXC_AMP_CATALOG}.
  *
  * @param zoneStatus the getStatus response object
  * @param zone the zone the status belongs to (`main`, `zone2`, …)
@@ -192,10 +77,10 @@ export function parseYxcStatus(zoneStatus: unknown, zone: string): StateValue[] 
   }
   const status = zoneStatus as Record<string, unknown>;
   const updates: StateValue[] = [];
-  for (const [name, mapping] of Object.entries(YXC_STATE_MAPPINGS)) {
-    const raw = readStatusField(status, mapping);
+  for (const entry of YXC_AMP_CATALOG) {
+    const raw = readStatusField(status, entry.read);
     if (raw !== undefined) {
-      updates.push({ id: `${prefix}${name}`, value: mapping.fromStatus(raw) });
+      updates.push({ id: `${prefix}${entry.state}`, value: entry.fromStatus(raw) });
     }
   }
   return updates;
@@ -227,11 +112,11 @@ export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefi
       return undefined;
     }
   }
-  const mapping = YXC_STATE_MAPPINGS[name];
-  if (!mapping || mapping.method === undefined || mapping.toYxc === undefined) {
+  const entry = YXC_AMP_CATALOG.find(e => e.state === name);
+  if (!entry?.write || !isWritableValue(value, entry.common.type === "number")) {
     return undefined;
   }
-  return { method: mapping.method, zone, value: mapping.toYxc(value) };
+  return { method: entry.write.method, zone, value: entry.write.toYxc(value) };
 }
 
 /**

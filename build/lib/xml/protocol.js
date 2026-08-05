@@ -35,9 +35,9 @@ function parseBasicStatus(xml) {
   if (power) {
     status.power = power[1] === "On";
   }
-  const val = /<Val>(-?\d+)<\/Val>/.exec(xml);
-  if (val) {
-    status.volume = Number(val[1]) / 10;
+  const volume = /<Volume>\s*<Lvl>\s*<Val>(-?\d+)<\/Val>/.exec(xml);
+  if (volume) {
+    status.volume = Number(volume[1]) / 10;
   }
   const mute = /<Mute>(On|Off)<\/Mute>/.exec(xml);
   if (mute) {

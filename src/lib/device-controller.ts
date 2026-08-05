@@ -1,5 +1,6 @@
 import type { YncaCapabilities } from "./ynca/capability";
 import type { ObjectDef } from "./catalog/types";
+import type { ConnectionHandle, ControllerLog } from "./controller";
 import {
   buildYncaCatalog,
   funcToEntry,
@@ -31,19 +32,15 @@ export interface YncaClientLike {
   send(subunit: string, func: string, value: string): void;
   /** Register a handler for pushed messages. */
   onMessage(handler: (message: { subunit: string; func: string; value: string }) => void): void;
+  /** Register the socket-drop handler the supervisor reconnects on. */
+  onDrop(handler: (reason?: Error) => void): void;
+  /** Start the keepalive poll — called after the init sweep, not on connect. */
+  startKeepalive(): void;
   /** Close the connection synchronously. */
   close(): void;
 }
 
-/** Log surface the controller needs. */
-export interface ControllerLog {
-  /** Routine detail. */
-  debug(message: string): void;
-  /** Relevant events. */
-  info(message: string): void;
-  /** Warnings. */
-  warn(message: string): void;
-}
+export type { ControllerLog };
 
 /** The adapter callbacks the controller drives — narrow, so no adapter mock is needed in tests. */
 export interface ControllerDeps {
@@ -62,7 +59,7 @@ export interface ControllerDeps {
  * commands both ways. Create-only — orphan cleanup and legacy migration are
  * separate, gated steps.
  */
-export class YncaDeviceController {
+export class YncaDeviceController implements ConnectionHandle {
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
    * @param deps the client and adapter callbacks
@@ -107,6 +104,9 @@ export class YncaDeviceController {
         this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
       }
     });
+    // Start the keepalive only now the sweep is done, so its 30 s poll never collides
+    // with the paced init sweep.
+    this.deps.client.startKeepalive();
     this.deps.log.info(`${this.deviceId}: ${capabilities.model || "device"} ready`);
     return true;
   }
@@ -131,6 +131,16 @@ export class YncaDeviceController {
     if (triple) {
       this.deps.client.send(triple.subunit, triple.func, triple.value);
     }
+  }
+
+  /**
+   * Register the supervisor's drop handler — delegated to the client's socket drop,
+   * which is YNCA's genuine connection-lost signal.
+   *
+   * @param cb invoked once when the connection drops, with the reason if known
+   */
+  public onDrop(cb: (reason?: Error) => void): void {
+    this.deps.client.onDrop(cb);
   }
 
   /** Close the client. Synchronous — safe to call from onUnload. */

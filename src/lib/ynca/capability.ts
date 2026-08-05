@@ -1,4 +1,4 @@
-import { decodeLine } from "./protocol";
+import { decodeLine, type YncaMessage } from "./protocol";
 
 /** A device's YNCA capabilities: model plus each subunit's functions and their init-sweep values. */
 export interface YncaCapabilities {
@@ -8,16 +8,6 @@ export interface YncaCapabilities {
   subunits: Record<string, Record<string, string>>;
 }
 
-/** A decoded subunit/function/value message. */
-export interface YncaFunctionValue {
-  /** The subunit that reported (e.g. `MAIN`, `ZONE2`). */
-  subunit: string;
-  /** The function name (e.g. `PWR`, `VOL`). */
-  func: string;
-  /** The reported value. */
-  value: string;
-}
-
 /**
  * Assemble a capability report from decoded messages: group by subunit and
  * function, take the model from SYS:MODELNAME.
@@ -25,7 +15,7 @@ export interface YncaFunctionValue {
  * @param messages the decoded ok messages from the receiver
  * @returns the assembled capabilities
  */
-export function buildCapabilities(messages: YncaFunctionValue[]): YncaCapabilities {
+export function buildCapabilities(messages: YncaMessage[]): YncaCapabilities {
   const subunits: Record<string, Record<string, string>> = {};
   for (const message of messages) {
     (subunits[message.subunit] ??= {})[message.func] = message.value;
@@ -42,7 +32,7 @@ export function buildCapabilities(messages: YncaFunctionValue[]): YncaCapabiliti
  * @returns the assembled capabilities
  */
 export function parseCapabilities(lines: string[]): YncaCapabilities {
-  const messages: YncaFunctionValue[] = [];
+  const messages: YncaMessage[] = [];
   for (const line of lines) {
     const response = decodeLine(line);
     if (response.status === "ok") {

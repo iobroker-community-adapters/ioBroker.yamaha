@@ -1,9 +1,19 @@
 import type { ObjectDef } from "../catalog/types";
 import type { BasicStatus } from "./protocol";
 import { parseXmlStatus, stateToXml, type XmlCommand } from "./command-mapper";
+import { XML_AMP_CATALOG } from "./catalog";
+import type { ConnectionHandle, ControllerLog } from "../controller";
+import { errorMessage } from "../util";
 
 /** XML/YNC has no push channel, so the state is polled at this interval. */
 const KEEPALIVE_MS = 60 * 1000;
+
+/**
+ * Report a drop after this many consecutive polls in which every zone failed. XML
+ * has neither push nor a socket-drop event, so a run of failed polls is the only
+ * signal that the device is gone — letting the supervisor reconnect.
+ */
+const MAX_KEEPALIVE_FAILURES = 3;
 
 interface XmlZone {
   /** Unified zone key (`main`, `zone2`, …). */
@@ -25,46 +35,12 @@ const XML_ZONES: XmlZone[] = [
   { key: "zone4", element: "Zone_4", prefix: "zone4.", channel: "zone4", channelName: "Zone 4" },
 ];
 
-/** The amplifier states an XML zone exposes (Basic_Status fields). */
-const XML_AMP_STATES: Array<{ state: string; common: ObjectDef["common"] }> = [
-  { state: "power", common: { name: "Power", type: "boolean", role: "switch.power", read: true, write: true } },
-  {
-    state: "volume",
-    common: { name: "Volume", type: "number", role: "level.volume", read: true, write: true, unit: "dB" },
-  },
-  { state: "mute", common: { name: "Mute", type: "boolean", role: "media.mute", read: true, write: true } },
-  { state: "input", common: { name: "Input", type: "string", role: "media.input", read: true, write: true } },
-  {
-    state: "soundProgram",
-    common: { name: "Sound program", type: "string", role: "state", read: true, write: true },
-  },
-  { state: "pureDirect", common: { name: "Pure Direct", type: "boolean", role: "switch", read: true, write: true } },
-  { state: "straight", common: { name: "Straight", type: "boolean", role: "switch", read: true, write: true } },
-  { state: "direct", common: { name: "Direct", type: "boolean", role: "switch", read: true, write: true } },
-  { state: "adaptiveDrc", common: { name: "Adaptive DRC", type: "string", role: "state", read: true, write: true } },
-  {
-    state: "dialogueLevel",
-    common: { name: "Dialogue level", type: "number", role: "level", read: true, write: false },
-  },
-  { state: "sleep", common: { name: "Sleep timer", type: "string", role: "state", read: true, write: true } },
-];
-
 /** The subset of the XML client the controller uses (so tests can inject a fake). */
 export interface XmlClientLike {
   /** Read a zone's Basic_Status. */
   getStatus(zone: string): Promise<BasicStatus>;
   /** Send an inner command to a zone. */
   send(zone: string, inner: string): Promise<void>;
-}
-
-/** Log surface the controller needs. */
-export interface XmlControllerLog {
-  /** Routine detail. */
-  debug(message: string): void;
-  /** Relevant events. */
-  info(message: string): void;
-  /** Warnings. */
-  warn(message: string): void;
 }
 
 /** The adapter callbacks the controller drives — narrow, so no adapter mock is needed in tests. */
@@ -78,7 +54,7 @@ export interface XmlControllerDeps {
   /** Write a state value with ack (device-originated). */
   setStateAck(id: string, value: boolean | number | string): void;
   /** Adapter log. */
-  log: XmlControllerLog;
+  log: ControllerLog;
 }
 
 /**
@@ -86,9 +62,12 @@ export interface XmlControllerDeps {
  * state, and route commands both ways. XML has no push, so state is refreshed by
  * a keepalive poll. Create-only.
  */
-export class XmlDeviceController {
+export class XmlDeviceController implements ConnectionHandle {
   private zones: XmlZone[] = [];
   private cancelKeepalive: (() => void) | undefined;
+  private dropHandler: ((reason?: Error) => void) | undefined;
+  private failedKeepalives = 0;
+  private dropped = false;
 
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
@@ -106,18 +85,17 @@ export class XmlDeviceController {
    * @returns true if the main zone answered and the tree was created
    */
   public async start(): Promise<boolean> {
-    for (const zone of XML_ZONES) {
-      const status = await this.tryGetStatus(zone.element);
-      if (status && Object.keys(status).length > 0) {
-        this.zones.push(zone);
-      } else if (zone.key === "main") {
-        this.deps.log.debug(`${this.deviceId}: no XML main zone — creating no objects`);
-        return false;
-      }
-    }
-    if (this.zones.length === 0) {
+    // Probe all zones in parallel and keep each answering zone's status, so a zone is
+    // fetched once (for the probe) and seeded from that same response — not twice.
+    const probes = await Promise.all(
+      XML_ZONES.map(async zone => ({ zone, status: await this.tryGetStatus(zone.element) })),
+    );
+    const answered = probes.filter(probe => probe.status && Object.keys(probe.status).length > 0);
+    if (!answered.some(probe => probe.zone.key === "main")) {
+      this.deps.log.debug(`${this.deviceId}: no XML main zone — creating no objects`);
       return false;
     }
+    this.zones = answered.map(probe => probe.zone);
     for (const zone of this.zones) {
       if (zone.channel) {
         await this.deps.upsertObject(`${this.deviceId}.${zone.channel}`, {
@@ -126,16 +104,19 @@ export class XmlDeviceController {
           common: { name: zone.channelName ?? zone.channel },
         });
       }
-      for (const state of XML_AMP_STATES) {
-        await this.deps.upsertObject(`${this.deviceId}.${zone.prefix}${state.state}`, {
-          id: `${zone.prefix}${state.state}`,
+      for (const entry of XML_AMP_CATALOG) {
+        await this.deps.upsertObject(`${this.deviceId}.${zone.prefix}${entry.state}`, {
+          id: `${zone.prefix}${entry.state}`,
           type: "state",
-          common: { ...state.common },
+          common: { ...entry.common },
         });
       }
     }
-    for (const zone of this.zones) {
-      await this.refreshZone(zone);
+    // Seed from the statuses already fetched during the probe — no second round-trip.
+    for (const { zone, status } of answered) {
+      if (status) {
+        this.seedZone(zone, status);
+      }
     }
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), KEEPALIVE_MS);
     this.deps.log.info(`${this.deviceId}: Yamaha (XML) device ready`);
@@ -164,29 +145,72 @@ export class XmlDeviceController {
     }
   }
 
+  /**
+   * Register the supervisor's drop handler. XML has no push/socket-drop event, so a
+   * drop is inferred from a run of failed polls (see keepalive).
+   *
+   * @param cb invoked once when the device is judged gone
+   */
+  public onDrop(cb: (reason?: Error) => void): void {
+    this.dropHandler = cb;
+  }
+
   /** Cancel the keepalive poll. Synchronous — safe to call from onUnload. */
   public close(): void {
     this.cancelKeepalive?.();
     this.cancelKeepalive = undefined;
   }
 
-  /** Poll every live zone's status. */
+  /**
+   * Poll every live zone. If every zone fails for MAX_KEEPALIVE_FAILURES polls in a
+   * row, the device is judged gone and a drop is reported so the supervisor reconnects.
+   */
   private async keepalive(): Promise<void> {
+    let anyOk = false;
     for (const zone of this.zones) {
-      await this.refreshZone(zone);
+      if (await this.refreshZone(zone)) {
+        anyOk = true;
+      }
     }
+    if (anyOk) {
+      this.failedKeepalives = 0;
+    } else if (++this.failedKeepalives >= MAX_KEEPALIVE_FAILURES) {
+      this.reportDrop();
+    }
+  }
+
+  /** Report a drop once — the supervisor then closes this controller and reconnects. */
+  private reportDrop(): void {
+    if (this.dropped) {
+      return;
+    }
+    this.dropped = true;
+    this.dropHandler?.(new Error(`${MAX_KEEPALIVE_FAILURES} polls failed`));
   }
 
   /**
    * Fetch a zone's status and write its amp states with ack.
    *
    * @param zone the zone to refresh
+   * @returns true if the status was fetched, false if the request failed
    */
-  private async refreshZone(zone: XmlZone): Promise<void> {
+  private async refreshZone(zone: XmlZone): Promise<boolean> {
     const status = await this.tryGetStatus(zone.element);
     if (!status) {
-      return;
+      return false;
     }
+    this.seedZone(zone, status);
+    return true;
+  }
+
+  /**
+   * Write a zone's amp states from an already-fetched Basic_Status (used to seed
+   * from the start-up probe without a second round-trip).
+   *
+   * @param zone the zone the status belongs to
+   * @param status the parsed Basic_Status
+   */
+  private seedZone(zone: XmlZone, status: BasicStatus): void {
     for (const update of parseXmlStatus(status, zone.key)) {
       this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
     }
@@ -202,9 +226,7 @@ export class XmlDeviceController {
     try {
       return await this.deps.client.getStatus(element);
     } catch (e) {
-      this.deps.log.debug(
-        `${this.deviceId}: getStatus(${element}) failed: ${e instanceof Error ? e.message : String(e)}`,
-      );
+      this.deps.log.debug(`${this.deviceId}: getStatus(${element}) failed: ${errorMessage(e)}`);
       return undefined;
     }
   }
@@ -218,7 +240,7 @@ export class XmlDeviceController {
     try {
       await this.deps.client.send(command.zone, command.inner);
     } catch (e) {
-      this.deps.log.warn(`${this.deviceId}: XML command failed: ${e instanceof Error ? e.message : String(e)}`);
+      this.deps.log.warn(`${this.deviceId}: XML command failed: ${errorMessage(e)}`);
     }
   }
 }

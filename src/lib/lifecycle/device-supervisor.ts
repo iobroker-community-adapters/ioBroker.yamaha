@@ -1,23 +1,7 @@
-/** A live connection to a device, handed back by a successful attempt. */
-export interface ConnectionHandle {
-  /**
-   * Register the callback the transport calls when this connection drops, so the
-   * supervisor can reconnect.
-   *
-   * @param cb invoked once when the connection is lost
-   */
-  onDrop(cb: () => void): void;
-  /**
-   * Route a state change (a user write or a device echo) to the active controller.
-   *
-   * @param fullStateId the full state id (device id + "." + state)
-   * @param ack whether the change is acked (device-originated)
-   * @param value the new value
-   */
-  handleStateChange(fullStateId: string, ack: boolean, value: unknown): void;
-  /** Close the connection synchronously — safe to call from onUnload. */
-  close(): void;
-}
+import type { ConnectionHandle } from "../controller";
+
+// Re-exported so existing importers (main.ts) keep resolving it from here.
+export type { ConnectionHandle };
 
 /** The dependencies the supervisor drives — injectable so tests need no real device. */
 export interface SupervisorDeps {
@@ -105,17 +89,25 @@ export class DeviceSupervisor {
       this.handle = handle;
       this.deps.backoff.reset();
       this.deps.onConnectionChange(true);
-      handle.onDrop(() => this.handleDrop());
+      // Bind the drop to THIS handle: a second drop, or a drop from a handle a
+      // reconnect has already superseded, must not schedule another retry.
+      handle.onDrop(reason => this.handleDrop(handle, reason));
     } else {
       this.deps.onConnectionChange(false);
       this.scheduleRetry();
     }
   }
 
-  private handleDrop(): void {
-    if (this.closed) {
+  private handleDrop(handle: ConnectionHandle, reason?: Error): void {
+    if (this.closed || this.handle !== handle) {
       return;
     }
+    if (reason) {
+      this.deps.log.debug(`connection dropped, reconnecting: ${reason.message}`);
+    }
+    // Release the dropped connection's resources (keepalive timer, push registration,
+    // socket) before reconnecting — not every transport self-cleans on drop.
+    handle.close();
     this.handle = undefined;
     this.deps.onConnectionChange(false);
     this.scheduleRetry();

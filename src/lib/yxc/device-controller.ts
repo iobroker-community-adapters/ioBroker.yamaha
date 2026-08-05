@@ -4,9 +4,18 @@ import { parseYxcPlayInfo, parseYxcStatus, parseYxcTunerInfo, stateToYxc, type Y
 import { mediaToRefresh, zonesToRefresh } from "./push";
 import type { ObjectDef } from "../catalog/types";
 import type { StateValue } from "../types";
+import type { ConnectionHandle, ControllerLog } from "../controller";
+import { errorMessage } from "../util";
 
 /** Renew interval for the push registration + state poll, well under the ~20 min expiry. */
 const KEEPALIVE_MS = 5 * 60 * 1000;
+
+/**
+ * Report a drop after this many consecutive keepalive polls in which every zone
+ * failed. MusicCast has no socket-drop event, so a run of failed polls is how a
+ * gone device is noticed — letting the supervisor flip info.connection and reconnect.
+ */
+const MAX_KEEPALIVE_FAILURES = 3;
 
 /** The subset of the YamahaYXC client the controller uses (so tests can inject a fake). */
 export interface YxcClientLike {
@@ -63,22 +72,12 @@ export interface YxcClientLike {
   setCDPlayback(action: string): Promise<unknown>;
 }
 
-/** Log surface the controller needs. */
-export interface YxcControllerLog {
-  /** Routine detail. */
-  debug(message: string): void;
-  /** Relevant events. */
-  info(message: string): void;
-  /** Warnings. */
-  warn(message: string): void;
-}
-
 /** The adapter callbacks the controller drives — narrow, so no adapter mock is needed in tests. */
 export interface YxcControllerDeps {
   /** The YXC (MusicCast) client for this device. */
   client: YxcClientLike;
-  /** Register a handler for pushes from this device (wired to the shared receiver by IP). */
-  registerPush(onPush: (event: unknown) => void): void;
+  /** Register a push handler for this device (by IP); returns a function that unregisters it. */
+  registerPush(onPush: (event: unknown) => void): () => void;
   /** Schedule the keepalive handler; returns a function that cancels it. */
   scheduleKeepalive(handler: () => void, ms: number): () => void;
   /** Create or update an object in the device tree. */
@@ -86,7 +85,7 @@ export interface YxcControllerDeps {
   /** Write a state value with ack (device-originated). */
   setStateAck(id: string, value: boolean | number | string): void;
   /** Adapter log. */
-  log: YxcControllerLog;
+  log: ControllerLog;
 }
 
 /**
@@ -96,10 +95,14 @@ export interface YxcControllerDeps {
  * registration (the fix for the musiccast "stops updating" bug) and doubles as
  * the poll-only fallback when the push port is unavailable. Create-only.
  */
-export class YxcDeviceController {
+export class YxcDeviceController implements ConnectionHandle {
   private zones: string[] = [];
   private mediaBlocks: string[] = [];
   private cancelKeepalive: (() => void) | undefined;
+  private cancelPush: (() => void) | undefined;
+  private dropHandler: ((reason?: Error) => void) | undefined;
+  private failedKeepalives = 0;
+  private dropped = false;
 
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
@@ -133,7 +136,7 @@ export class YxcDeviceController {
     }
     this.mediaBlocks = capabilities.media;
     await this.refreshMedia();
-    this.deps.registerPush(event => this.onPush(event));
+    this.cancelPush = this.deps.registerPush(event => this.onPush(event));
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), KEEPALIVE_MS);
     this.deps.log.info(`${this.deviceId}: MusicCast device ready`);
     return true;
@@ -161,10 +164,24 @@ export class YxcDeviceController {
     }
   }
 
-  /** Cancel the keepalive. Synchronous — safe to call from onUnload. */
+  /**
+   * Register the supervisor's drop handler. MusicCast has no socket-drop event, so a
+   * drop is inferred from a run of failed keepalive polls (see keepalive).
+   *
+   * @param cb invoked once when the device is judged gone
+   */
+  public onDrop(cb: (reason?: Error) => void): void {
+    this.dropHandler = cb;
+  }
+
+  /** Cancel the keepalive and unregister the push handler. Synchronous — safe from onUnload. */
   public close(): void {
     this.cancelKeepalive?.();
     this.cancelKeepalive = undefined;
+    // Unregister from the shared push receiver — otherwise a push arriving after
+    // teardown would setState on a controller the adapter has already dropped.
+    this.cancelPush?.();
+    this.cancelPush = undefined;
   }
 
   /**
@@ -188,10 +205,34 @@ export class YxcDeviceController {
     }
   }
 
-  /** Poll the primary zone, which renews the push registration and refreshes state. */
+  /**
+   * Poll every zone (which renews the push registration and refreshes state) and the
+   * media sources. If every zone poll fails for MAX_KEEPALIVE_FAILURES runs in a row,
+   * the device is judged gone and a drop is reported so the supervisor can flip
+   * info.connection and reconnect.
+   */
   private async keepalive(): Promise<void> {
-    await this.refreshZone(this.zones[0] ?? "main");
+    let anyOk = false;
+    for (const zone of this.zones.length > 0 ? this.zones : ["main"]) {
+      if (await this.refreshZone(zone)) {
+        anyOk = true;
+      }
+    }
     await this.refreshMedia();
+    if (anyOk) {
+      this.failedKeepalives = 0;
+    } else if (++this.failedKeepalives >= MAX_KEEPALIVE_FAILURES) {
+      this.reportDrop();
+    }
+  }
+
+  /** Report a drop once — the supervisor then closes this controller and reconnects. */
+  private reportDrop(): void {
+    if (this.dropped) {
+      return;
+    }
+    this.dropped = true;
+    this.dropHandler?.(new Error(`${MAX_KEEPALIVE_FAILURES} keepalive polls failed`));
   }
 
   /** Refresh every player source the device offers (network player, cd, tuner). */
@@ -218,9 +259,7 @@ export class YxcDeviceController {
         this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
       }
     } catch (e) {
-      this.deps.log.debug(
-        `${this.deviceId}: getPlayInfo(${arg ?? ""}) failed: ${e instanceof Error ? e.message : String(e)}`,
-      );
+      this.deps.log.debug(`${this.deviceId}: getPlayInfo(${arg ?? ""}) failed: ${errorMessage(e)}`);
     }
   }
 
@@ -228,15 +267,18 @@ export class YxcDeviceController {
    * Fetch a zone's status and write its amp states with ack.
    *
    * @param zone the zone to refresh
+   * @returns true if the status was fetched, false if the request failed
    */
-  private async refreshZone(zone: string): Promise<void> {
+  private async refreshZone(zone: string): Promise<boolean> {
     try {
       const status = await this.deps.client.getStatus(zone);
       for (const update of parseYxcStatus(status, zone)) {
         this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
       }
+      return true;
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: getStatus(${zone}) failed: ${e instanceof Error ? e.message : String(e)}`);
+      this.deps.log.debug(`${this.deviceId}: getStatus(${zone}) failed: ${errorMessage(e)}`);
+      return false;
     }
   }
 
@@ -312,9 +354,11 @@ export class YxcDeviceController {
         case "setCDPlayback":
           await this.deps.client.setCDPlayback(String(value));
           break;
+        default:
+          this.deps.log.warn(`${this.deviceId}: unknown YXC command "${command.method}" — ignored`);
       }
     } catch (e) {
-      this.deps.log.warn(`${this.deviceId}: ${command.method} failed: ${e instanceof Error ? e.message : String(e)}`);
+      this.deps.log.warn(`${this.deviceId}: ${command.method} failed: ${errorMessage(e)}`);
     }
   }
 }

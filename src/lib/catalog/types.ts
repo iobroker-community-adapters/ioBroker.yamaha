@@ -49,20 +49,47 @@ export interface ObjectDef {
 
 /**
  * Display names for the channel ids the catalogs use. A channel id not listed
- * here falls back to its capitalised segment, so a new channel still renders.
+ * here falls back to its capitalised segment, so a new channel still renders — but
+ * every channel a catalog actually creates is named here, so nothing shows a raw id
+ * like "Pc" or "Ipod" in the object browser. Keys match the real channel segments
+ * (verified against the built catalogs); do not add speculative entries.
  */
 export const CHANNEL_NAMES: Record<string, string> = {
+  // Zones
   zone2: "Zone 2",
   zone3: "Zone 3",
   zone4: "Zone 4",
+  zoneB: "Zone B",
+  // Amplifier groups
   sound: "Sound",
   hdmi: "HDMI",
-  scenes: "Scenes",
+  scene: "Scenes",
+  system: "System",
+  inputName: "Input names",
+  initialVolume: "Initial volume",
+  lipSync: "Lip sync",
+  // Tuner
   tuner: "Tuner",
-  net: "Network player",
-  usb: "USB",
-  server: "Media server",
-  cd: "CD",
   dab: "DAB",
+  // Media player sources
+  netRadio: "Net radio",
+  server: "Media server",
+  usb: "USB",
+  spotify: "Spotify",
+  deezer: "Deezer",
+  tidal: "Tidal",
+  napster: "Napster",
+  pandora: "Pandora",
+  rhapsody: "Rhapsody",
+  sirius: "SiriusXM",
+  airplay: "AirPlay",
+  bluetooth: "Bluetooth",
+  pc: "PC",
+  musicCastLink: "MusicCast Link",
+  ipod: "iPod",
+  ipodUsb: "iPod (USB)",
+  // YXC/XML media channels
+  cd: "CD",
+  netPlayer: "Network player",
   clock: "Clock",
 };

@@ -22,6 +22,7 @@ __export(discovery_exports, {
   parseYamahaDescription: () => parseYamahaDescription
 });
 module.exports = __toCommonJS(discovery_exports);
+var import_util = require("./util");
 const YAMAHA_MANUFACTURER = /<manufacturer>[^<]*yamaha[^<]*<\/manufacturer>/i;
 const FRIENDLY_NAME = /<friendlyName>([^<]*)<\/friendlyName>/;
 const MEDIA_RENDERER = "urn:schemas-upnp-org:device:MediaRenderer:1";
@@ -49,7 +50,7 @@ async function discoverYamaha(deps) {
         seen.add(address);
       }
     } catch (e) {
-      deps.log.debug(`discovery: ${address} description fetch failed: ${e instanceof Error ? e.message : String(e)}`);
+      deps.log.debug(`discovery: ${address} description fetch failed: ${(0, import_util.errorMessage)(e)}`);
     }
   }
   return devices;

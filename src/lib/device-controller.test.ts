@@ -11,6 +11,7 @@ interface Msg {
 class FakeClient implements YncaClientLike {
   public sent: Msg[] = [];
   public closed = false;
+  public keepaliveStarted = false;
   public capabilities: YncaCapabilities = { model: "", subunits: {} };
   private handler?: (message: Msg) => void;
 
@@ -23,6 +24,10 @@ class FakeClient implements YncaClientLike {
   }
   public onMessage(handler: (message: Msg) => void): void {
     this.handler = handler;
+  }
+  public onDrop(): void {}
+  public startKeepalive(): void {
+    this.keepaliveStarted = true;
   }
   public close(): void {
     this.closed = true;
@@ -56,6 +61,16 @@ function makeDeps(client: FakeClient): {
 }
 
 describe("YncaDeviceController", () => {
+  test("start arms the keepalive once, after the sweep", async () => {
+    const client = new FakeClient();
+    client.capabilities = { model: "RX", subunits: { MAIN: { PWR: "On" } } };
+    const { deps } = makeDeps(client);
+    const controller = new YncaDeviceController("dev", deps);
+    expect(client.keepaliveStarted).toBe(false);
+    await controller.start();
+    expect(client.keepaliveStarted).toBe(true);
+  });
+
   test("start creates the object tree from the swept capabilities", async () => {
     const client = new FakeClient();
     client.capabilities = { model: "RX-A810", subunits: { MAIN: { PWR: "On", VOL: "-30.0" } } };

@@ -123,7 +123,15 @@ const DECIMAL_RE = /^-?\d+(\.\d+)?$/;
 export function decode(spec: ValueSpec, wire: string): boolean | number | string | undefined {
   switch (spec.kind) {
     case "onoff":
-      return wire === spec.on;
+      // A third, unexpected wire value must not silently become `false` — that would
+      // write back an explicit "off" command. Report it as unknown (undefined).
+      if (wire === spec.on) {
+        return true;
+      }
+      if (wire === spec.off) {
+        return false;
+      }
+      return undefined;
     case "number": {
       const trimmed = wire.trim();
       return DECIMAL_RE.test(trimmed) ? Number(trimmed) : undefined;
@@ -132,6 +140,23 @@ export function decode(spec: ValueSpec, wire: string): boolean | number | string
     case "text":
       return wire;
   }
+}
+
+/**
+ * Whether a written state value may be sent to the device: never `null`/`undefined`
+ * (both are regular ioBroker state values but not valid commands), and a finite
+ * number for a numeric state — so a stray `null` or `"abc"` is dropped rather than
+ * turned into a bogus command (`@TUN:AMFREQ=null`, `<Val>NaN</Val>`).
+ *
+ * @param value the value written to the state
+ * @param numeric whether the target state is numeric
+ * @returns true if the value is safe to encode and send
+ */
+export function isWritableValue(value: unknown, numeric: boolean): boolean {
+  if (value === null || value === undefined) {
+    return false;
+  }
+  return numeric ? Number.isFinite(Number(value)) : true;
 }
 
 /**

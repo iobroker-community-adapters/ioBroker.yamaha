@@ -8,6 +8,7 @@ const silentLog = { debug: (): void => {}, info: (): void => {}, warn: (): void 
 
 class FakeClient implements YxcClientLike {
   public calls: Array<{ method: string; args: unknown[] }> = [];
+  public failStatus = false;
   public constructor(
     private readonly features: unknown,
     private readonly status: unknown,
@@ -17,6 +18,9 @@ class FakeClient implements YxcClientLike {
   }
   public async getStatus(zone: string): Promise<unknown> {
     this.calls.push({ method: "getStatus", args: [zone] });
+    if (this.failStatus) {
+      throw new Error("device offline");
+    }
     return this.status;
   }
   public async power(on: boolean, zone: string): Promise<unknown> {
@@ -115,23 +119,31 @@ class FakeClient implements YxcClientLike {
   }
 }
 
-function setup(features: unknown, status: unknown): {
+function setup(
+  features: unknown,
+  status: unknown,
+): {
   controller: YxcDeviceController;
   client: FakeClient;
   objects: string[];
   acks: Array<{ id: string; value: unknown }>;
   fire: { push?: (event: unknown) => void; keepalive?: () => void };
   cancelled: () => boolean;
+  unregistered: () => boolean;
 } {
   const client = new FakeClient(features, status);
   const objects: string[] = [];
   const acks: Array<{ id: string; value: unknown }> = [];
   const fire: { push?: (event: unknown) => void; keepalive?: () => void } = {};
   let cancelled = false;
+  let unregistered = false;
   const controller = new YxcDeviceController("living", {
     client,
     registerPush: onPush => {
       fire.push = onPush;
+      return () => {
+        unregistered = true;
+      };
     },
     scheduleKeepalive: handler => {
       fire.keepalive = handler;
@@ -147,7 +159,7 @@ function setup(features: unknown, status: unknown): {
     },
     log: silentLog,
   });
-  return { controller, client, objects, acks, fire, cancelled: () => cancelled };
+  return { controller, client, objects, acks, fire, cancelled: () => cancelled, unregistered: () => unregistered };
 }
 
 describe("YxcDeviceController", () => {
@@ -258,5 +270,62 @@ describe("YxcDeviceController", () => {
     await flush();
     expect(s.client.calls).toContainEqual({ method: "getPlayInfo", args: ["cd"] });
     expect(s.client.calls).toContainEqual({ method: "getPlayInfo", args: ["tuner"] });
+  });
+
+  test("keepalive renews every zone, not just the first", async () => {
+    const features = {
+      zone: [
+        { id: "main", func_list: ["power"] },
+        { id: "zone2", func_list: ["power"] },
+      ],
+    };
+    const s = setup(features, ysp);
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.fire.keepalive?.();
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "getStatus", args: ["main"] });
+    expect(s.client.calls).toContainEqual({ method: "getStatus", args: ["zone2"] });
+  });
+
+  test("reports a drop after three consecutive keepalive polls in which every zone fails", async () => {
+    const s = setup(wx10, ysp);
+    await s.controller.start();
+    let dropped = 0;
+    s.controller.onDrop(() => dropped++);
+    s.client.failStatus = true; // device goes offline
+    for (let i = 0; i < 3; i++) {
+      s.fire.keepalive?.();
+      await flush();
+    }
+    expect(dropped).toBe(1);
+  });
+
+  test("a single failed poll does not report a drop, and a recovery resets the count", async () => {
+    const s = setup(wx10, ysp);
+    await s.controller.start();
+    let dropped = 0;
+    s.controller.onDrop(() => dropped++);
+    s.client.failStatus = true;
+    s.fire.keepalive?.();
+    await flush();
+    s.fire.keepalive?.();
+    await flush();
+    s.client.failStatus = false; // recovers before the third failure
+    s.fire.keepalive?.();
+    await flush();
+    s.client.failStatus = true;
+    s.fire.keepalive?.();
+    await flush();
+    s.fire.keepalive?.();
+    await flush();
+    expect(dropped).toBe(0); // never three in a row
+  });
+
+  test("close unregisters from the shared push receiver", async () => {
+    const s = setup(wx10, ysp);
+    await s.controller.start();
+    s.controller.close();
+    expect(s.unregistered()).toBe(true);
   });
 });

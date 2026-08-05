@@ -16,33 +16,16 @@ var __copyProps = (to, from, except, desc) => {
   return to;
 };
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
-var device_registry_exports = {};
-__export(device_registry_exports, {
-  DeviceRegistry: () => DeviceRegistry
+var util_exports = {};
+__export(util_exports, {
+  errorMessage: () => errorMessage
 });
-module.exports = __toCommonJS(device_registry_exports);
-class DeviceRegistry {
-  devices = /* @__PURE__ */ new Map();
-  /**
-   * Insert a device, or replace the existing one with the same id.
-   *
-   * @param device the device record to store
-   */
-  upsert(device) {
-    this.devices.set(device.id, device);
-  }
-  /**
-   * Look a device up by id.
-   *
-   * @param id the device id
-   * @returns the device record, or undefined if none is registered
-   */
-  get(id) {
-    return this.devices.get(id);
-  }
+module.exports = __toCommonJS(util_exports);
+function errorMessage(e) {
+  return e instanceof Error ? e.message : String(e);
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
-  DeviceRegistry
+  errorMessage
 });
-//# sourceMappingURL=device-registry.js.map
+//# sourceMappingURL=util.js.map

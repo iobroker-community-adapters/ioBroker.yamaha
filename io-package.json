@@ -3,6 +3,19 @@
     "name": "yamaha",
     "version": "0.8.0",
     "news": {
+      "NEXT": {
+        "en": "MusicCast and older receivers now recover their connection by themselves after a drop, like YNCA, and their datapoints are more consistent.",
+        "de": "MusicCast- und ältere Receiver stellen ihre Verbindung nach einem Abbruch jetzt selbst wieder her, wie YNCA, und ihre Datenpunkte sind konsistenter.",
+        "ru": "Устройства MusicCast и старые ресиверы теперь сами восстанавливают связь после обрыва, как YNCA, а их точки данных стали согласованнее.",
+        "pt": "Os dispositivos MusicCast e recetores antigos restauram agora a ligação sozinhos após uma queda, como o YNCA, e os seus dados são mais consistentes.",
+        "nl": "MusicCast- en oudere receivers herstellen hun verbinding nu zelf na een onderbreking, net als YNCA, en hun datapunten zijn consistenter.",
+        "fr": "Les appareils MusicCast et récepteurs anciens rétablissent seuls leur connexion après une coupure, comme YNCA, et leurs données sont plus cohérentes.",
+        "it": "I dispositivi MusicCast e i ricevitori più vecchi ripristinano da soli la connessione dopo un'interruzione, come YNCA, e i loro dati sono più coerenti.",
+        "es": "Los dispositivos MusicCast y receptores antiguos ahora restauran su conexión solos tras una caída, como YNCA, y sus datos son más coherentes.",
+        "pl": "Urządzenia MusicCast i starsze amplitunery same przywracają połączenie po zerwaniu, jak YNCA, a ich punkty danych są bardziej spójne.",
+        "uk": "Пристрої MusicCast і старіші ресивери тепер самі відновлюють з'єднання після обриву, як YNCA, а їхні дані узгодженіші.",
+        "zh-cn": "MusicCast 设备和较旧的接收机现在会像 YNCA 一样在断开后自行恢复连接，数据点也更一致。"
+      },
       "0.8.0": {
         "en": "Far more of your Yamaha is usable from ioBroker now: values come through as switches, lists and numbers to read and set, not raw text, and the playback status is finally correct.",
         "de": "Viel mehr von deinem Yamaha ist jetzt aus ioBroker nutzbar: Werte kommen als Schalter, Listen und Zahlen zum Lesen und Setzen statt als roher Text, und der Wiedergabe-Status stimmt endlich.",
@@ -80,19 +93,6 @@
         "pl": "Napraw przypadki awarii zgłoszone przez Sentry",
         "zh-cn": "修复 Sentry 报告的崩溃案例",
         "uk": "Виправлено випадки збоїв, про які повідомляє Sentry"
-      },
-      "0.5.1": {
-        "en": "Fix crash cases reported by Sentry\nfix type of pureDirect",
-        "de": "Von Sentry gemeldete Absturzfälle beheben\nfixer Typ von pureDirect",
-        "ru": "Исправить случаи сбоев, о которых сообщил Sentry\nисправить тип pureDirect",
-        "pt": "Corrigir casos de travamento relatados pelo Sentinela\ncorrigir tipo de pureDirect",
-        "nl": "Herstel crashgevallen gemeld door Sentry\nfix type pureDirect",
-        "fr": "Correction des cas de plantage signalés par Sentry\ncorrection du type de pureDirect",
-        "it": "Risolvi i casi di crash segnalati da Sentry\ncorreggere il tipo di pureDirect",
-        "es": "Solucionar casos de fallas informados por Sentry\ncorregir el tipo de pureDirect",
-        "pl": "Napraw przypadki awarii zgłoszone przez Sentry\nnapraw typ pureDirect",
-        "zh-cn": "修复 Sentry 报告的崩溃案例\n修复 pureDirect 的类型",
-        "uk": "Виправлено випадки збоїв, про які повідомляє Sentry\nвиправлено тип pureDirect"
       }
     },
     "titleLang": {
@@ -121,12 +121,7 @@
       "uk": "Керування AV-ресиверами та пристроями MusicCast Yamaha через мережу",
       "zh-cn": "通过网络控制 Yamaha AV 接收器和 MusicCast 设备"
     },
-    "keywords": [
-      "yamaha",
-      "avr",
-      "receiver",
-      "musiccast"
-    ],
+    "keywords": ["yamaha", "avr", "receiver", "musiccast"],
     "licenseInformation": {
       "license": "MIT",
       "type": "free"
