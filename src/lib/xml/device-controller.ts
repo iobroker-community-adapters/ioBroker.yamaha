@@ -5,8 +5,8 @@ import { XML_AMP_CATALOG } from "./catalog";
 import type { ConnectionHandle, ControllerLog } from "../controller";
 import { errorMessage } from "../util";
 
-/** XML/YNC has no push channel, so the state is polled at this interval. */
-const KEEPALIVE_MS = 60 * 1000;
+/** XML/YNC has no push channel, so the state is polled at this interval by default. */
+const DEFAULT_POLL_INTERVAL_MS = 60 * 1000;
 
 /**
  * Report a drop after this many consecutive polls in which every zone failed. XML
@@ -72,10 +72,12 @@ export class XmlDeviceController implements ConnectionHandle {
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
    * @param deps the client and adapter callbacks
+   * @param pollIntervalMs how often to poll the device for state (default 60 s)
    */
   public constructor(
     private readonly deviceId: string,
     private readonly deps: XmlControllerDeps,
+    private readonly pollIntervalMs: number = DEFAULT_POLL_INTERVAL_MS,
   ) {}
 
   /**
@@ -118,7 +120,7 @@ export class XmlDeviceController implements ConnectionHandle {
         this.seedZone(zone, status);
       }
     }
-    this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), KEEPALIVE_MS);
+    this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), this.pollIntervalMs);
     this.deps.log.info(`${this.deviceId}: Yamaha (XML) device ready`);
     return true;
   }

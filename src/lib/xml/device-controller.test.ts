@@ -17,39 +17,59 @@ class FakeClient implements XmlClientLike {
   }
 }
 
-function setup(statuses: Record<string, BasicStatus>): {
+function setup(
+  statuses: Record<string, BasicStatus>,
+  pollIntervalMs?: number,
+): {
   controller: XmlDeviceController;
   client: FakeClient;
   objects: string[];
   acks: Array<{ id: string; value: unknown }>;
-  fire: { keepalive?: () => void };
+  fire: { keepalive?: () => void; keepaliveMs?: number };
   cancelled: () => boolean;
 } {
   const client = new FakeClient(statuses);
   const objects: string[] = [];
   const acks: Array<{ id: string; value: unknown }> = [];
-  const fire: { keepalive?: () => void } = {};
+  const fire: { keepalive?: () => void; keepaliveMs?: number } = {};
   let cancelled = false;
-  const controller = new XmlDeviceController("living", {
-    client,
-    scheduleKeepalive: handler => {
-      fire.keepalive = handler;
-      return () => {
-        cancelled = true;
-      };
+  const controller = new XmlDeviceController(
+    "living",
+    {
+      client,
+      scheduleKeepalive: (handler, ms) => {
+        fire.keepalive = handler;
+        fire.keepaliveMs = ms;
+        return () => {
+          cancelled = true;
+        };
+      },
+      upsertObject: async id => {
+        objects.push(id);
+      },
+      setStateAck: (id, value) => {
+        acks.push({ id, value });
+      },
+      log: silentLog,
     },
-    upsertObject: async id => {
-      objects.push(id);
-    },
-    setStateAck: (id, value) => {
-      acks.push({ id, value });
-    },
-    log: silentLog,
-  });
+    pollIntervalMs,
+  );
   return { controller, client, objects, acks, fire, cancelled: () => cancelled };
 }
 
 describe("XmlDeviceController", () => {
+  test("polls at the configured interval", async () => {
+    const s = setup({ Main_Zone: { power: true } }, 15000);
+    await s.controller.start();
+    expect(s.fire.keepaliveMs).toBe(15000);
+  });
+
+  test("defaults to a 60 s poll interval", async () => {
+    const s = setup({ Main_Zone: { power: true } });
+    await s.controller.start();
+    expect(s.fire.keepaliveMs).toBe(60000);
+  });
+
   test("builds the amp tree for the main zone and seeds its state", async () => {
     const s = setup({ Main_Zone: { power: true, volume: -30, mute: false, input: "HDMI1" } });
     expect(await s.controller.start()).toBe(true);
