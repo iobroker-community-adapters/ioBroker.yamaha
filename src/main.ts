@@ -1,10 +1,13 @@
 import * as utils from "@iobroker/adapter-core";
 import { createSocket } from "node:dgram";
 import { get as httpGet } from "node:http";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { attemptDevice } from "./lib/attempt-device";
-import { legacyDeviceRow, parseDevices, staleObjects, stripNamespace } from "./lib/pure-helpers";
+import { legacyDeviceRow, mergeDiscovered, parseDevices, staleObjects, stripNamespace } from "./lib/pure-helpers";
 import { errorMessage } from "./lib/util";
 import { discoverYamaha } from "./lib/discovery";
+import { readDiscovered, writeDiscovered, type DiscoveredStoreDeps } from "./lib/discovered-store";
 import { YxcPushReceiver } from "./lib/yxc/push-receiver";
 import type { DeviceRecord } from "./lib/types";
 import { DeviceSupervisor, type ConnectionHandle } from "./lib/lifecycle/device-supervisor";
@@ -30,6 +33,8 @@ export class Yamaha extends utils.Adapter {
   private readonly supervisors: DeviceSupervisor[] = [];
   private readonly deviceConnected = new Map<string, boolean>();
   private pushReceiver: YxcPushReceiver | undefined;
+  /** Set once a device has connected over XML, so `native.hasXmlDevice` is written only once. */
+  private xmlMarked = false;
 
   /**
    * @param options adapter options passed through by js-controller
@@ -42,7 +47,6 @@ export class Yamaha extends utils.Adapter {
 
     this.on("ready", this.onReady.bind(this));
     this.on("stateChange", this.onStateChange.bind(this));
-    this.on("message", this.onMessage.bind(this));
     this.on("unload", this.onUnload.bind(this));
   }
 
@@ -51,7 +55,11 @@ export class Yamaha extends utils.Adapter {
     try {
       await this.setState("info.connection", { val: false, ack: true });
       await this.migrateLegacyDevice();
-      const devices = parseDevices(this.config.devices);
+      // The device table is the switch: filled → use exactly those (manual); empty
+      // → discover on the network and run what is found (auto). XML/pre-2010 devices
+      // never answer SSDP, so they always go into the table manually.
+      const configured = parseDevices(this.config.devices);
+      const devices = configured.length > 0 ? configured : await this.autoDiscover();
       await this.cleanupStaleObjects(new Set(devices.map(device => device.id)));
       this.subscribeStates("*");
       const pushReceiver = new YxcPushReceiver({
@@ -201,6 +209,8 @@ export class Yamaha extends utils.Adapter {
           }
         };
       },
+      xmlPollIntervalMs: this.xmlPollIntervalMs(),
+      onXmlConnected: () => void this.markXmlDevice(),
     });
   }
 
@@ -240,36 +250,84 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
-   * Handle an admin message: `discover` scans the network for Yamaha devices and
-   * returns the configured plus discovered devices (deduped by IP) for the table.
+   * Auto-discovery for an empty device table: scan the network, merge the finds with
+   * the devices remembered from earlier runs (standby protection), persist the merged
+   * set and return it. XML/pre-2010 receivers do not answer SSDP and never appear here.
    *
-   * @param obj the incoming message
+   * @returns the device records to run this session
    */
-  private async onMessage(obj: ioBroker.Message): Promise<void> {
-    if (obj.command !== "discover") {
-      return;
-    }
+  private async autoDiscover(): Promise<DeviceRecord[]> {
+    const store = this.discoveredStoreDeps();
+    const known = await readDiscovered(store);
+    let found: Array<{ ip: string; name: string }> = [];
     try {
-      const found = await discoverYamaha({
+      found = await discoverYamaha({
         search: (target, ms) => this.ssdpSearch(target, ms),
         fetch: url => this.fetchUrl(url),
         log: { debug: message => this.log.debug(message), warn: message => this.log.warn(message) },
       });
-      const devices = parseDevices(this.config.devices).map(device => ({ name: device.id, ip: device.ip }));
-      for (const device of found) {
-        if (!devices.some(existing => existing.ip === device.ip)) {
-          devices.push({ name: device.name || device.ip, ip: device.ip });
-        }
-      }
-      if (obj.callback) {
-        this.sendTo(obj.from, obj.command, { native: { devices } }, obj.callback);
-      }
     } catch (e) {
-      this.log.warn(`discover failed: ${errorMessage(e)}`);
-      if (obj.callback) {
-        this.sendTo(obj.from, obj.command, { error: "discover failed" }, obj.callback);
-      }
+      this.log.warn(`auto-discovery scan failed, using the remembered devices: ${errorMessage(e)}`);
     }
+    const merged = mergeDiscovered(known, found);
+    await writeDiscovered(store, merged);
+    this.log.info(
+      `auto-discovery: ${found.length} found, running ${merged.length} device(s); ` +
+        `add devices to the table to switch to manual mode`,
+    );
+    return merged;
+  }
+
+  /**
+   * File access for the discovered-devices store — a JSON file in the instance data
+   * directory (no `native` write, so no restart). A missing file reads as absent.
+   *
+   * @returns the store's read/write/log dependencies
+   */
+  private discoveredStoreDeps(): DiscoveredStoreDeps {
+    const path = join(utils.getAbsoluteInstanceDataDir(this), "discovered.json");
+    return {
+      read: async () => {
+        try {
+          return await readFile(path, "utf8");
+        } catch {
+          return undefined;
+        }
+      },
+      write: async content => {
+        await mkdir(dirname(path), { recursive: true });
+        await writeFile(path, content, "utf8");
+      },
+      log: { debug: message => this.log.debug(message) },
+    };
+  }
+
+  /**
+   * The XML/YNC poll interval in milliseconds, from `config.xmlPollInterval`
+   * (seconds, default 60).
+   *
+   * @returns the interval in ms
+   */
+  private xmlPollIntervalMs(): number {
+    const seconds = Number((this.config as unknown as Record<string, unknown>).xmlPollInterval);
+    return (Number.isFinite(seconds) && seconds > 0 ? seconds : 60) * 1000;
+  }
+
+  /**
+   * Remember, once, that a device connected over the XML transport, so the admin can
+   * reveal the XML poll-interval field (`hidden: "!data.hasXmlDevice"`). Writing to
+   * `native` restarts the instance a single time — the same one-off as the legacy
+   * migration; guarded so it never loops.
+   */
+  private markXmlDevice(): void {
+    if (this.xmlMarked || (this.config as unknown as Record<string, unknown>).hasXmlDevice === true) {
+      this.xmlMarked = true;
+      return;
+    }
+    this.xmlMarked = true;
+    void this.extendForeignObject(`system.adapter.${this.namespace}`, { native: { hasXmlDevice: true } }).catch(e =>
+      this.log.warn(`could not persist hasXmlDevice: ${errorMessage(e)}`),
+    );
   }
 
   /**

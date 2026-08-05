@@ -28,6 +28,10 @@ export interface AttemptDeps {
   registerPush(ip: string, onPush: (event: unknown) => void): () => void;
   /** Schedule a repeating keepalive; returns a function that cancels it. */
   scheduleKeepalive(handler: () => void, ms: number): () => void;
+  /** How often to poll an XML/YNC device for state (ms). */
+  xmlPollIntervalMs: number;
+  /** Called once a device connects over the XML/YNC transport (a pre-2010 receiver). */
+  onXmlConnected(): void;
 }
 
 /**
@@ -80,15 +84,20 @@ export async function attemptDevice(device: DeviceRecord, deps: AttemptDeps): Pr
 
   // 3) XML/YNC fallback — pre-2010 receivers; polled. A drop is reported after a
   //    run of failed polls.
-  const xml = new XmlDeviceController(device.id, {
-    client: new XmlClient(device.ip),
-    scheduleKeepalive: deps.scheduleKeepalive,
-    upsertObject,
-    setStateAck,
-    log,
-  });
+  const xml = new XmlDeviceController(
+    device.id,
+    {
+      client: new XmlClient(device.ip),
+      scheduleKeepalive: deps.scheduleKeepalive,
+      upsertObject,
+      setStateAck,
+      log,
+    },
+    deps.xmlPollIntervalMs,
+  );
   try {
     if (await xml.start()) {
+      deps.onXmlConnected();
       return xml;
     }
     xml.close();
