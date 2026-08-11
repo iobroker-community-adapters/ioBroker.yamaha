@@ -22,6 +22,13 @@ export interface YncaEntry extends CatalogEntry {
    */
   readFunc?: string;
   /**
+   * Additional wire functions that report into this same state, beyond {@link readFunc}.
+   * Some sources answer the same datum under a different function name (e.g. streaming
+   * sources report the title under TRACK, older sources under SONG). Each alias is swept
+   * and read-mapped to this one entry, without creating a second object for the state.
+   */
+  readAliases?: string[];
+  /**
    * Write-only command (e.g. scene recall): the device never pushes it, so it is
    * kept out of {@link funcToEntry} (no device→state mapping). Its {@link readFunc}
    * is reused purely to gate object creation on a related reported function.
@@ -43,6 +50,18 @@ export interface YncaEntry extends CatalogEntry {
  */
 function readFuncOf(entry: YncaEntry): string {
   return entry.readFunc ?? entry.func;
+}
+
+/**
+ * Every wire function a device may report an entry under: its read func plus any
+ * {@link YncaEntry.readAliases}. Used by the sweep, the device→state map and the
+ * object-creation gate so an aliased state is filled whichever function carries it.
+ *
+ * @param entry the catalog entry
+ * @returns the functions to key reads on (at least one)
+ */
+function readFuncsOf(entry: YncaEntry): string[] {
+  return entry.readAliases ? [readFuncOf(entry), ...entry.readAliases] : [readFuncOf(entry)];
 }
 
 /**
@@ -809,6 +828,7 @@ const PLAYER_SOURCES: Array<{ subunit: string; channel: string }> = [
 const PLAYER_FUNCS: Array<{
   func: string;
   readFunc?: string;
+  readAliases?: string[];
   state: string;
   name: string;
   spec: ValueSpec;
@@ -826,7 +846,17 @@ const PLAYER_FUNCS: Array<{
   },
   { func: "ARTIST", state: "artist", name: "Artist", spec: { kind: "text" }, write: false, role: "media.artist" },
   { func: "ALBUM", state: "album", name: "Album", spec: { kind: "text" }, write: false, role: "media.album" },
-  { func: "SONG", state: "track", name: "Track", spec: { kind: "text" }, write: false, role: "media.title" },
+  // Streaming sources (Spotify/Tidal/Deezer, and Pandora firmware-dependent) report the
+  // title under TRACK; older sources (server/usb/netradio/…) under SONG. Both feed `track`.
+  {
+    func: "SONG",
+    readAliases: ["TRACK"],
+    state: "track",
+    name: "Track",
+    spec: { kind: "text" },
+    write: false,
+    role: "media.title",
+  },
   { func: "STATION", state: "station", name: "Station", spec: { kind: "text" }, write: false, role: "text" },
   { func: "CHNAME", state: "channelName", name: "Channel name", spec: { kind: "text" }, write: false, role: "text" },
   { func: "PRESET", state: "preset", name: "Preset", spec: { kind: "text" }, write: false, role: "text" },
@@ -956,6 +986,7 @@ export function buildYncaCatalog(): YncaEntry[] {
         subunit: source.subunit,
         func: fn.func,
         readFunc: fn.readFunc,
+        readAliases: fn.readAliases,
       });
     }
   }
@@ -972,11 +1003,12 @@ export function sweepGets(entries: YncaEntry[]): Array<{ subunit: string; func: 
   const seen = new Set<string>();
   const gets: Array<{ subunit: string; func: string }> = [];
   for (const entry of entries) {
-    const func = readFuncOf(entry);
-    const key = `${entry.subunit}:${func}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      gets.push({ subunit: entry.subunit, func });
+    for (const func of readFuncsOf(entry)) {
+      const key = `${entry.subunit}:${func}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        gets.push({ subunit: entry.subunit, func });
+      }
     }
   }
   return gets;
@@ -990,7 +1022,9 @@ export function sweepGets(entries: YncaEntry[]): Array<{ subunit: string; func: 
  */
 export function funcToEntry(entries: YncaEntry[]): Map<string, YncaEntry> {
   return new Map(
-    entries.filter(entry => !entry.writeOnly).map(entry => [`${entry.subunit}:${readFuncOf(entry)}`, entry]),
+    entries
+      .filter(entry => !entry.writeOnly)
+      .flatMap(entry => readFuncsOf(entry).map(func => [`${entry.subunit}:${func}`, entry] as const)),
   );
 }
 
@@ -1012,8 +1046,8 @@ export function idToEntry(entries: YncaEntry[]): Map<string, YncaEntry> {
  * @returns the object definitions to create
  */
 export function yncaObjectsFor(capabilities: YncaCapabilities): ObjectDef[] {
-  const present = buildYncaCatalog().filter(
-    entry => capabilities.subunits[entry.subunit]?.[readFuncOf(entry)] !== undefined,
+  const present = buildYncaCatalog().filter(entry =>
+    readFuncsOf(entry).some(func => capabilities.subunits[entry.subunit]?.[func] !== undefined),
   );
   return catalogToObjects(present);
 }

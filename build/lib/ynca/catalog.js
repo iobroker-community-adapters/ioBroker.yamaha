@@ -33,6 +33,9 @@ function readFuncOf(entry) {
   var _a;
   return (_a = entry.readFunc) != null ? _a : entry.func;
 }
+function readFuncsOf(entry) {
+  return entry.readAliases ? [readFuncOf(entry), ...entry.readAliases] : [readFuncOf(entry)];
+}
 function selfMap(values) {
   return Object.fromEntries(values.map((value) => [value, value]));
 }
@@ -744,7 +747,17 @@ const PLAYER_FUNCS = [
   },
   { func: "ARTIST", state: "artist", name: "Artist", spec: { kind: "text" }, write: false, role: "media.artist" },
   { func: "ALBUM", state: "album", name: "Album", spec: { kind: "text" }, write: false, role: "media.album" },
-  { func: "SONG", state: "track", name: "Track", spec: { kind: "text" }, write: false, role: "media.title" },
+  // Streaming sources (Spotify/Tidal/Deezer, and Pandora firmware-dependent) report the
+  // title under TRACK; older sources (server/usb/netradio/…) under SONG. Both feed `track`.
+  {
+    func: "SONG",
+    readAliases: ["TRACK"],
+    state: "track",
+    name: "Track",
+    spec: { kind: "text" },
+    write: false,
+    role: "media.title"
+  },
   { func: "STATION", state: "station", name: "Station", spec: { kind: "text" }, write: false, role: "text" },
   { func: "CHNAME", state: "channelName", name: "Channel name", spec: { kind: "text" }, write: false, role: "text" },
   { func: "PRESET", state: "preset", name: "Preset", spec: { kind: "text" }, write: false, role: "text" },
@@ -848,7 +861,8 @@ function buildYncaCatalog() {
         role: fn.role,
         subunit: source.subunit,
         func: fn.func,
-        readFunc: fn.readFunc
+        readFunc: fn.readFunc,
+        readAliases: fn.readAliases
       });
     }
   }
@@ -858,18 +872,19 @@ function sweepGets(entries) {
   const seen = /* @__PURE__ */ new Set();
   const gets = [];
   for (const entry of entries) {
-    const func = readFuncOf(entry);
-    const key = `${entry.subunit}:${func}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      gets.push({ subunit: entry.subunit, func });
+    for (const func of readFuncsOf(entry)) {
+      const key = `${entry.subunit}:${func}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        gets.push({ subunit: entry.subunit, func });
+      }
     }
   }
   return gets;
 }
 function funcToEntry(entries) {
   return new Map(
-    entries.filter((entry) => !entry.writeOnly).map((entry) => [`${entry.subunit}:${readFuncOf(entry)}`, entry])
+    entries.filter((entry) => !entry.writeOnly).flatMap((entry) => readFuncsOf(entry).map((func) => [`${entry.subunit}:${func}`, entry]))
   );
 }
 function idToEntry(entries) {
@@ -877,10 +892,10 @@ function idToEntry(entries) {
 }
 function yncaObjectsFor(capabilities) {
   const present = buildYncaCatalog().filter(
-    (entry) => {
+    (entry) => readFuncsOf(entry).some((func) => {
       var _a;
-      return ((_a = capabilities.subunits[entry.subunit]) == null ? void 0 : _a[readFuncOf(entry)]) !== void 0;
-    }
+      return ((_a = capabilities.subunits[entry.subunit]) == null ? void 0 : _a[func]) !== void 0;
+    })
   );
   return (0, import_build_objects.catalogToObjects)(present);
 }

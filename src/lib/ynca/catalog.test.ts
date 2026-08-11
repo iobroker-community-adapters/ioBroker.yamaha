@@ -194,6 +194,21 @@ describe("YNCA catalog", () => {
     expect(ids).toContain("spotify.playback");
   });
 
+  test("a streaming source reporting TRACK (not SONG) still gets a track object (Spotify/Tidal/Deezer)", () => {
+    // Spotify/Tidal/Deezer/Pandora answer the title under TRACK, the older sources under SONG;
+    // both wire funcs must feed the one `track` state or the title stays empty on the streamers.
+    const caps: YncaCapabilities = { model: "RX", subunits: { SPOTIFY: { TRACK: "Yellow" } } };
+    expect(yncaObjectsFor(caps).map(o => o.id)).toContain("spotify.track");
+  });
+
+  test("a device line under TRACK decodes to the track state", () => {
+    const map = funcToEntry(buildYncaCatalog());
+    expect(yncaStateUpdate({ subunit: "SPOTIFY", func: "TRACK", value: "Yellow" }, map)).toEqual({
+      id: "spotify.track",
+      value: "Yellow",
+    });
+  });
+
   test("yncaStateUpdate decodes a device line to a typed state via the func map", () => {
     const map = funcToEntry(buildYncaCatalog());
     expect(yncaStateUpdate({ subunit: "MAIN", func: "PWR", value: "On" }, map)).toEqual({ id: "power", value: true });
