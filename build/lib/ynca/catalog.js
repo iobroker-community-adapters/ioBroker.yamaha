@@ -531,7 +531,7 @@ const SYS_FUNCS = [
   {
     func: "PWR",
     state: "system.power",
-    name: "System power",
+    name: "Master power (all zones)",
     spec: { kind: "onoff", on: "On", off: "Standby" },
     write: true,
     role: "switch.power"
