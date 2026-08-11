@@ -21,6 +21,7 @@ __export(device_controller_exports, {
   YxcDeviceController: () => YxcDeviceController
 });
 module.exports = __toCommonJS(device_controller_exports);
+var import_node_crypto = require("node:crypto");
 var import_capability = require("./capability");
 var import_object_mapper = require("./object-mapper");
 var import_command_mapper = require("./command-mapper");
@@ -103,6 +104,10 @@ class YxcDeviceController {
     const stateId = fullStateId.slice(prefix.length);
     if (stateId === "dist.leaveGroup") {
       void this.leaveGroup();
+      return;
+    }
+    if (stateId === "dist.linkClient") {
+      void this.linkClient(String(value));
       return;
     }
     const command = (0, import_command_mapper.stateToYxc)(stateId, value);
@@ -238,6 +243,30 @@ class YxcDeviceController {
       await this.refreshDistribution();
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: leaveGroup failed: ${(0, import_util.errorMessage)(e)}`);
+    }
+  }
+  /**
+   * Form a MusicCast-Link group with another configured device: give the client the shared
+   * group id, add it to this device's roster as the server, and start distributing. The group
+   * id is derived from this device's id, so re-linking reuses the same group rather than a new one.
+   *
+   * @param clientIp the IP of the client device to add (must be a configured device)
+   */
+  async linkClient(clientIp) {
+    var _a, _b;
+    const clientClient = (_b = (_a = this.deps).clientFor) == null ? void 0 : _b.call(_a, clientIp);
+    if (!clientClient) {
+      this.deps.log.warn(`${this.deviceId}: cannot link ${clientIp} \u2014 not a known device`);
+      return;
+    }
+    try {
+      const groupId = (0, import_node_crypto.createHash)("md5").update(this.deviceId).digest("hex");
+      await clientClient.setClientInfo({ group_id: groupId, zone: ["main"] });
+      await this.deps.client.setServerInfo({ group_id: groupId, zone: "main", type: "add", client_list: [clientIp] });
+      await this.deps.client.startDistribution(0);
+      await this.refreshDistribution();
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: linkClient(${clientIp}) failed: ${(0, import_util.errorMessage)(e)}`);
     }
   }
   /**

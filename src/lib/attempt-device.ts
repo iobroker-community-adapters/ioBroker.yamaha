@@ -32,6 +32,8 @@ export interface AttemptDeps {
   xmlPollIntervalMs: number;
   /** Called once a device connects over the XML/YNC transport (a pre-2010 receiver). */
   onXmlConnected(): void;
+  /** IPs of all configured devices, so a MusicCast group can resolve a client device by IP. */
+  knownDeviceIps: Set<string>;
 }
 
 /**
@@ -66,6 +68,8 @@ export async function attemptDevice(device: DeviceRecord, deps: AttemptDeps): Pr
   //    controller reports a drop after a run of failed keepalive polls.
   const yxc = new YxcDeviceController(device.id, {
     client: new YamahaYxcClient(device.ip),
+    // Resolve another configured device's client for a multiroom link — never this device itself.
+    clientFor: ip => (ip !== device.ip && deps.knownDeviceIps.has(ip) ? new YamahaYxcClient(ip) : undefined),
     registerPush: onPush => deps.registerPush(device.ip, onPush),
     scheduleKeepalive: deps.scheduleKeepalive,
     upsertObject,

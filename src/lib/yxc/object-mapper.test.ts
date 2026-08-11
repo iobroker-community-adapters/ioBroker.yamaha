@@ -53,6 +53,20 @@ describe("mapYxcToObjects", () => {
     expect(objs.find(o => o.id === "dist.groupName")?.common.write).toBe(false);
   });
 
+  test("a distribution device exposes the leave-group button and the link-client input", () => {
+    const objs = mapYxcToObjects({
+      zones: [{ id: "main", funcs: ["power"], inputs: [] }],
+      media: [],
+      hasDistribution: true,
+    });
+    const leave = objs.find(o => o.id === "dist.leaveGroup");
+    expect(leave?.common.role).toBe("button");
+    expect(leave?.common.write).toBe(true);
+    const link = objs.find(o => o.id === "dist.linkClient");
+    expect(link?.common.write).toBe(true);
+    expect(link?.common.read).toBe(false);
+  });
+
   test("a device without a distribution block gets no multiroom channel", () => {
     const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: [] });
     expect(objs.map(o => o.id)).not.toContain("dist");

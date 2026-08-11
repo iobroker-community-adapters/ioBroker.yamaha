@@ -43,6 +43,8 @@ async function attemptDevice(device, deps) {
   }
   const yxc = new import_device_controller2.YxcDeviceController(device.id, {
     client: new import_http_client.YamahaYxcClient(device.ip),
+    // Resolve another configured device's client for a multiroom link — never this device itself.
+    clientFor: (ip) => ip !== device.ip && deps.knownDeviceIps.has(ip) ? new import_http_client.YamahaYxcClient(ip) : void 0,
     registerPush: (onPush) => deps.registerPush(device.ip, onPush),
     scheduleKeepalive: deps.scheduleKeepalive,
     upsertObject,

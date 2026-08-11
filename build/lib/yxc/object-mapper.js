@@ -162,6 +162,11 @@ function mapYxcToObjects(capabilities) {
       type: "state",
       common: { name: "Leave group", type: "boolean", role: "button", read: false, write: true }
     });
+    objects.push({
+      id: "dist.linkClient",
+      type: "state",
+      common: { name: "Link a client (its IP)", type: "string", role: "text", read: false, write: true }
+    });
   }
   return objects;
 }

@@ -67,6 +67,7 @@ export class Yamaha extends utils.Adapter {
       // never answer SSDP, so they always go into the table manually.
       const configured = parseDevices(this.config.devices);
       const devices = configured.length > 0 ? configured : await this.autoDiscover();
+      const knownDeviceIps = new Set(devices.map(device => device.ip));
       await this.cleanupStaleObjects(new Set(devices.map(device => device.id)));
       this.subscribeStates("*");
       const pushReceiver = new YxcPushReceiver({
@@ -82,7 +83,7 @@ export class Yamaha extends utils.Adapter {
         this.deviceConnected.set(device.id, false);
         await this.ensureDeviceHeader(device.id);
         const supervisor = new DeviceSupervisor({
-          attempt: () => this.attemptDevice(device, pushReceiver),
+          attempt: () => this.attemptDevice(device, pushReceiver, knownDeviceIps),
           schedule: (cb, ms) => this.setTimeout(cb, ms),
           cancel: handle => this.clearTimeout(handle as ioBroker.Timeout | undefined),
           onConnectionChange: connected => this.reportConnection(device.id, connected),
@@ -210,7 +211,11 @@ export class Yamaha extends utils.Adapter {
    * @param pushReceiver the shared YXC push receiver
    * @returns a connection handle, or null when no transport connected
    */
-  private attemptDevice(device: DeviceRecord, pushReceiver: YxcPushReceiver): Promise<ConnectionHandle | null> {
+  private attemptDevice(
+    device: DeviceRecord,
+    pushReceiver: YxcPushReceiver,
+    knownDeviceIps: Set<string>,
+  ): Promise<ConnectionHandle | null> {
     return attemptDevice(device, {
       log: {
         debug: message => this.log.debug(message),
@@ -236,6 +241,7 @@ export class Yamaha extends utils.Adapter {
       },
       xmlPollIntervalMs: this.xmlPollIntervalMs(),
       onXmlConnected: () => void this.markXmlDevice(),
+      knownDeviceIps,
     });
   }
 

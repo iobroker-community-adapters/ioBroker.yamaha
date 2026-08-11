@@ -183,6 +183,7 @@ class FakeClient implements YxcClientLike {
 function setup(
   features: unknown,
   status: unknown,
+  linkTargets: Record<string, YxcClientLike> = {},
 ): {
   controller: YxcDeviceController;
   client: FakeClient;
@@ -200,6 +201,7 @@ function setup(
   let unregistered = false;
   const controller = new YxcDeviceController("living", {
     client,
+    clientFor: ip => linkTargets[ip],
     registerPush: onPush => {
       fire.push = onPush;
       return () => {
@@ -350,6 +352,34 @@ describe("YxcDeviceController", () => {
     s.controller.handleStateChange("living.dist.leaveGroup", false, true);
     await flush();
     expect(s.client.calls).toContainEqual({ method: "setClientInfo", args: [{ group_id: "", zone: ["main"] }] });
+  });
+
+  test("linking a client sends it the group, adds it on the server, and starts distribution", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], distribution: { version: 2 } };
+    const clientDevice = new FakeClient({}, {});
+    const s = setup(features, ysp, { "1.2.3.9": clientDevice });
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.dist.linkClient", false, "1.2.3.9");
+    await flush();
+    const join = clientDevice.calls.find(c => c.method === "setClientInfo");
+    const add = s.client.calls.find(c => c.method === "setServerInfo");
+    expect(add?.args[0]).toMatchObject({ type: "add", client_list: ["1.2.3.9"], zone: "main" });
+    expect(s.client.calls).toContainEqual({ method: "startDistribution", args: [0] });
+    // The client and server carry the same (non-empty) group id.
+    const clientGroup = (join?.args[0] as { group_id: string }).group_id;
+    expect(clientGroup).toBeTruthy();
+    expect(clientGroup).toBe((add?.args[0] as { group_id: string }).group_id);
+  });
+
+  test("linking an unknown ip does nothing", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], distribution: { version: 2 } };
+    const s = setup(features, ysp);
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.dist.linkClient", false, "9.9.9.9");
+    await flush();
+    expect(s.client.calls).toEqual([]);
   });
 
   test("a media push refreshes only the named player source, not every zone", async () => {

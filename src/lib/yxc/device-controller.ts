@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { parseYxcFeatures } from "./capability";
 import { mapYxcToObjects } from "./object-mapper";
 import {
@@ -118,6 +119,8 @@ export interface YxcClientLike {
 export interface YxcControllerDeps {
   /** The YXC (MusicCast) client for this device. */
   client: YxcClientLike;
+  /** Resolve another configured device's client by IP, for forming a multiroom group. */
+  clientFor?: (ip: string) => YxcClientLike | undefined;
   /** Register a push handler for this device (by IP); returns a function that unregisters it. */
   registerPush(onPush: (event: unknown) => void): () => void;
   /** Schedule the keepalive handler; returns a function that cancels it. */
@@ -216,6 +219,10 @@ export class YxcDeviceController implements ConnectionHandle {
     // Multiroom writes need controller state (the cached role), so they bypass the pure command map.
     if (stateId === "dist.leaveGroup") {
       void this.leaveGroup();
+      return;
+    }
+    if (stateId === "dist.linkClient") {
+      void this.linkClient(String(value));
       return;
     }
     const command = stateToYxc(stateId, value);
@@ -361,6 +368,30 @@ export class YxcDeviceController implements ConnectionHandle {
       await this.refreshDistribution();
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: leaveGroup failed: ${errorMessage(e)}`);
+    }
+  }
+
+  /**
+   * Form a MusicCast-Link group with another configured device: give the client the shared
+   * group id, add it to this device's roster as the server, and start distributing. The group
+   * id is derived from this device's id, so re-linking reuses the same group rather than a new one.
+   *
+   * @param clientIp the IP of the client device to add (must be a configured device)
+   */
+  private async linkClient(clientIp: string): Promise<void> {
+    const clientClient = this.deps.clientFor?.(clientIp);
+    if (!clientClient) {
+      this.deps.log.warn(`${this.deviceId}: cannot link ${clientIp} — not a known device`);
+      return;
+    }
+    try {
+      const groupId = createHash("md5").update(this.deviceId).digest("hex");
+      await clientClient.setClientInfo({ group_id: groupId, zone: ["main"] });
+      await this.deps.client.setServerInfo({ group_id: groupId, zone: "main", type: "add", client_list: [clientIp] });
+      await this.deps.client.startDistribution(0);
+      await this.refreshDistribution();
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: linkClient(${clientIp}) failed: ${errorMessage(e)}`);
     }
   }
 

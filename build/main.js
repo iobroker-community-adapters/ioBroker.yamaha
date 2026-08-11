@@ -72,6 +72,7 @@ class Yamaha extends utils.Adapter {
       await this.migrateLegacyDevice();
       const configured = (0, import_pure_helpers.parseDevices)(this.config.devices);
       const devices = configured.length > 0 ? configured : await this.autoDiscover();
+      const knownDeviceIps = new Set(devices.map((device) => device.ip));
       await this.cleanupStaleObjects(new Set(devices.map((device) => device.id)));
       this.subscribeStates("*");
       const pushReceiver = new import_push_receiver.YxcPushReceiver({
@@ -85,7 +86,7 @@ class Yamaha extends utils.Adapter {
         this.deviceConnected.set(device.id, false);
         await this.ensureDeviceHeader(device.id);
         const supervisor = new import_device_supervisor.DeviceSupervisor({
-          attempt: () => this.attemptDevice(device, pushReceiver),
+          attempt: () => this.attemptDevice(device, pushReceiver, knownDeviceIps),
           schedule: (cb, ms) => this.setTimeout(cb, ms),
           cancel: (handle) => this.clearTimeout(handle),
           onConnectionChange: (connected) => this.reportConnection(device.id, connected),
@@ -198,7 +199,7 @@ class Yamaha extends utils.Adapter {
    * @param pushReceiver the shared YXC push receiver
    * @returns a connection handle, or null when no transport connected
    */
-  attemptDevice(device, pushReceiver) {
+  attemptDevice(device, pushReceiver, knownDeviceIps) {
     return (0, import_attempt_device.attemptDevice)(device, {
       log: {
         debug: (message) => this.log.debug(message),
@@ -223,7 +224,8 @@ class Yamaha extends utils.Adapter {
         };
       },
       xmlPollIntervalMs: this.xmlPollIntervalMs(),
-      onXmlConnected: () => void this.markXmlDevice()
+      onXmlConnected: () => void this.markXmlDevice(),
+      knownDeviceIps
     });
   }
   /**
