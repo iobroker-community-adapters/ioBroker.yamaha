@@ -134,11 +134,25 @@ export function parseYxcPlayInfo(playInfo: unknown, prefix = "netPlayer"): State
   }
   const info = playInfo as Record<string, unknown>;
   const updates: StateValue[] = [];
-  for (const field of ["playback", "artist", "album", "track"]) {
+  // String metadata whose field name doubles as the state id.
+  for (const field of ["playback", "artist", "album", "track", "repeat", "shuffle"]) {
     const value = info[field];
     if (typeof value === "string") {
       updates.push({ id: `${prefix}.${field}`, value });
     }
+  }
+  // Album art URL and the elapsed/total play time (renamed from the YXC field names).
+  const albumArt = info.albumart_url;
+  if (typeof albumArt === "string") {
+    updates.push({ id: `${prefix}.albumArt`, value: albumArt });
+  }
+  const elapsed = info.play_time;
+  if (typeof elapsed === "number") {
+    updates.push({ id: `${prefix}.elapsedTime`, value: elapsed });
+  }
+  const total = info.total_time;
+  if (typeof total === "number") {
+    updates.push({ id: `${prefix}.totalTime`, value: total });
   }
   return updates;
 }

@@ -103,11 +103,23 @@ function parseYxcPlayInfo(playInfo, prefix = "netPlayer") {
   }
   const info = playInfo;
   const updates = [];
-  for (const field of ["playback", "artist", "album", "track"]) {
+  for (const field of ["playback", "artist", "album", "track", "repeat", "shuffle"]) {
     const value = info[field];
     if (typeof value === "string") {
       updates.push({ id: `${prefix}.${field}`, value });
     }
+  }
+  const albumArt = info.albumart_url;
+  if (typeof albumArt === "string") {
+    updates.push({ id: `${prefix}.albumArt`, value: albumArt });
+  }
+  const elapsed = info.play_time;
+  if (typeof elapsed === "number") {
+    updates.push({ id: `${prefix}.elapsedTime`, value: elapsed });
+  }
+  const total = info.total_time;
+  if (typeof total === "number") {
+    updates.push({ id: `${prefix}.totalTime`, value: total });
   }
   return updates;
 }

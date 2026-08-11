@@ -109,6 +109,26 @@ describe("parseYxcPlayInfo", () => {
   test("returns an empty list for a malformed response", () => {
     expect(parseYxcPlayInfo(null)).toEqual([]);
   });
+
+  test("reads repeat, shuffle, elapsed/total time and album art (verified against captures)", () => {
+    expect(
+      parseYxcPlayInfo({
+        playback: "play",
+        repeat: "one",
+        shuffle: "off",
+        play_time: 42,
+        total_time: 215,
+        albumart_url: "/cover.jpg",
+      }),
+    ).toEqual([
+      { id: "netPlayer.playback", value: "play" },
+      { id: "netPlayer.repeat", value: "one" },
+      { id: "netPlayer.shuffle", value: "off" },
+      { id: "netPlayer.albumArt", value: "/cover.jpg" },
+      { id: "netPlayer.elapsedTime", value: 42 },
+      { id: "netPlayer.totalTime", value: 215 },
+    ]);
+  });
 });
 
 describe("parseYxcTunerInfo", () => {

@@ -26,6 +26,18 @@ const PLAYER_STATES: Array<{ state: string; common: ObjectDef["common"] }> = [
   { state: "artist", common: { name: "Artist", type: "string", role: "media.artist", read: true, write: false } },
   { state: "album", common: { name: "Album", type: "string", role: "media.album", read: true, write: false } },
   { state: "track", common: { name: "Track", type: "string", role: "media.title", read: true, write: false } },
+  // Read-only playback metadata to match what YNCA sources expose (audit finding F2).
+  { state: "repeat", common: { name: "Repeat", type: "string", role: "state", read: true, write: false } },
+  { state: "shuffle", common: { name: "Shuffle", type: "string", role: "state", read: true, write: false } },
+  {
+    state: "elapsedTime",
+    common: { name: "Elapsed time", type: "number", unit: "s", role: "media.elapsed", read: true, write: false },
+  },
+  {
+    state: "totalTime",
+    common: { name: "Total time", type: "number", unit: "s", role: "media.duration", read: true, write: false },
+  },
+  { state: "albumArt", common: { name: "Album art", type: "string", role: "media.cover", read: true, write: false } },
   { state: "play", common: { name: "Play", type: "boolean", role: "button", read: false, write: true } },
   { state: "pause", common: { name: "Pause", type: "boolean", role: "button", read: false, write: true } },
   { state: "stop", common: { name: "Stop", type: "boolean", role: "button", read: false, write: true } },

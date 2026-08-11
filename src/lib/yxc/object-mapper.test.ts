@@ -15,6 +15,21 @@ describe("mapYxcToObjects", () => {
     expect(ids).toEqual(expect.arrayContaining(["netPlayer.playback", "netPlayer.artist", "netPlayer.track"]));
   });
 
+  test("the network player exposes repeat, shuffle, elapsed/total time and album art (F2 parity)", () => {
+    const ids = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: ["netusb"] }).map(
+      o => o.id,
+    );
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        "netPlayer.repeat",
+        "netPlayer.shuffle",
+        "netPlayer.elapsedTime",
+        "netPlayer.totalTime",
+        "netPlayer.albumArt",
+      ]),
+    );
+  });
+
   test("creates the tuner channel with band, frequency and RDS when the device offers a tuner", () => {
     const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: ["tuner"] });
     const ids = objs.map(o => o.id);
