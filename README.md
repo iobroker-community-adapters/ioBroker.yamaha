@@ -43,6 +43,14 @@ Older Yamaha receivers (before ~2010, the XML protocol) do not announce themselv
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+### 0.12.0 (2026-08-11)
+
+- Much more of your MusicCast device answers to ioBroker now — repeat and shuffle, the CD tray, the tuner, party mode and your saved presets all switch straight from the object tree.
+- The graphic equalizer is yours to set now, not just to read — dial in its low, mid and high from ioBroker.
+- Group your MusicCast speakers from ioBroker: see who is in a group, drop a device out of one, or pull another in so they play together.
+- Streaming services such as Spotify, Tidal and Deezer now show the track you are playing, the same as your other sources.
+- Older receivers can send a remote-control code again, so a scene can reach a button that has no datapoint of its own.
+
 ### 0.11.0 (2026-08-11)
 
 - Scenes can now be triggered from ioBroker, not just shown by name — recall any scene on your receiver.
@@ -73,11 +81,6 @@ Older Yamaha receivers (before ~2010, the XML protocol) do not announce themselv
 - Fixed the playback status never updating on network and USB sources, so play, pause and stop are now shown correctly, not just controllable.
 - Track title, station and playback state now update the moment they change on the device, instead of only every minute or so.
 - A receiver offline at adapter start joins on its own once it answers and reconnects after a drop, and each device shows its own connection state.
-
-### 0.7.0 (2026-08-03)
-
-- An existing receiver from the previous adapter is now carried over into the device table on upgrade instead of being lost.
-- Receivers report and fill more datapoints at startup: added straight, enhancer, pure direct and the sleep timer, and existing states are now populated from the initial query.
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 

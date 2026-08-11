@@ -209,6 +209,7 @@ export class Yamaha extends utils.Adapter {
    *
    * @param device the configured device record
    * @param pushReceiver the shared YXC push receiver
+   * @param knownDeviceIps IPs of all configured devices, for resolving a multiroom client
    * @returns a connection handle, or null when no transport connected
    */
   private attemptDevice(

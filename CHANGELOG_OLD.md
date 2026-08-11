@@ -1,4 +1,9 @@
 # Older changes
+## 0.7.0 (2026-08-03)
+
+- An existing receiver from the previous adapter is now carried over into the device table on upgrade instead of being lost.
+- Receivers report and fill more datapoints at startup: added straight, enhancer, pure direct and the sleep timer, and existing states are now populated from the initial query.
+
 ## 0.6.0 (2026-08-01)
 
 - Rebuilt from the ground up as one adapter for classic Yamaha AV receivers, MusicCast devices and the oldest pre-2010 receivers, replacing the separate yamaha and musiccast adapters.

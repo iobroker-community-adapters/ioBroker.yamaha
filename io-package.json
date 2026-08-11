@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "0.11.0",
+    "version": "0.12.0",
     "news": {
+      "0.12.0": {
+        "en": "Much more of your MusicCast is controllable from ioBroker now — playback, tuner, presets, the equalizer and full multiroom — and streaming services show the current track.",
+        "de": "Viel mehr am MusicCast-Gerät ist jetzt aus ioBroker steuerbar — Wiedergabe, Tuner, Presets, Equalizer und volles Multiroom — und Streaming-Dienste zeigen den laufenden Titel.",
+        "ru": "Гораздо больше в устройстве MusicCast теперь управляется из ioBroker — воспроизведение, тюнер, пресеты, эквалайзер и полный мультирум — а стриминг показывает текущий трек.",
+        "pt": "Muito mais do dispositivo MusicCast é controlável a partir do ioBroker — reprodução, sintonizador, predefinições, equalizador e multiroom completo — e o streaming mostra a faixa atual.",
+        "nl": "Veel meer van je MusicCast-apparaat is nu bedienbaar vanuit ioBroker — weergave, tuner, presets, equalizer en volledige multiroom — en streamingdiensten tonen de huidige track.",
+        "fr": "Bien plus de votre MusicCast est réglable depuis ioBroker — lecture, tuner, présélections, égaliseur et multiroom complet — et le streaming affiche la piste en cours.",
+        "it": "Molto di più del dispositivo MusicCast è controllabile da ioBroker — riproduzione, sintonizzatore, preset, equalizzatore e multiroom completo — e lo streaming mostra il brano attuale.",
+        "es": "Mucho más de tu dispositivo MusicCast se controla desde ioBroker — reproducción, sintonizador, presets, ecualizador y multiroom completo — y el streaming muestra la pista actual.",
+        "pl": "Znacznie więcej w urządzeniu MusicCast można teraz sterować z ioBroker — odtwarzanie, tuner, presety, korektor i pełne multiroom — a streaming pokazuje bieżący utwór.",
+        "uk": "Значно більше у пристрої MusicCast тепер керується з ioBroker — відтворення, тюнер, пресети, еквалайзер і повний мультирум — а стрімінг показує поточний трек.",
+        "zh-cn": "MusicCast 设备现在有更多功能可从 ioBroker 控制——播放、调谐器、预设、均衡器和完整多房间——流媒体服务还会显示当前曲目。"
+      },
       "0.11.0": {
         "en": "Scenes can be triggered from ioBroker, far more is controllable, classic receivers can skip tracks, and the object tree is tidier with a per-device online symbol.",
         "de": "Szenen lassen sich aus ioBroker auslösen, viel mehr ist steuerbar, klassische Receiver springen Titel, und die Datenpunkte sind aufgeräumter mit Online-Symbol je Gerät.",
@@ -67,19 +80,6 @@
         "pl": "Istniejący odbiornik jest teraz przejmowany podczas aktualizacji, a każdy odbiornik zgłasza i wypełnia więcej punktów danych przy starcie, np. wyłącznik czasowy.",
         "uk": "Наявний ресивер тепер переноситься під час оновлення, і кожен ресивер повідомляє та заповнює більше точок даних під час запуску, наприклад таймер сну.",
         "zh-cn": "现在升级时会接管现有接收机，每台接收机在启动时会报告并填充更多数据点，例如睡眠定时器。"
-      },
-      "0.6.0": {
-        "en": "Rebuilt as one adapter for classic Yamaha AV receivers, MusicCast and older models over their native protocols, with automatic reconnect and network discovery. Requires Node.js 22.",
-        "de": "Neu aufgebaut als ein Adapter für klassische Yamaha-AV-Receiver, MusicCast und ältere Modelle über ihre nativen Protokolle, mit automatischem Reconnect und Netzwerksuche. Benötigt Node.js 22.",
-        "ru": "Переработан в единый адаптер для AV-ресиверов Yamaha, MusicCast и старых моделей по их родным протоколам, с автопереподключением и поиском в сети. Требуется Node.js 22.",
-        "pt": "Reconstruído como um único adaptador para receptores AV Yamaha, MusicCast e modelos antigos pelos protocolos nativos, com reconexão automática e descoberta na rede. Requer Node.js 22.",
-        "nl": "Herbouwd als één adapter voor Yamaha AV-receivers, MusicCast en oudere modellen via hun eigen protocollen, met automatische herverbinding en netwerkdetectie. Vereist Node.js 22.",
-        "fr": "Reconstruit en un adaptateur pour amplis AV Yamaha, MusicCast et modèles anciens via leurs protocoles natifs, avec reconnexion automatique et découverte réseau. Nécessite Node.js 22.",
-        "it": "Ricostruito come un adattatore per sintoamplificatori Yamaha, MusicCast e modelli vecchi tramite i protocolli nativi, con riconnessione automatica e rilevamento in rete. Richiede Node.js 22.",
-        "es": "Reconstruido como un adaptador para receptores AV Yamaha, MusicCast y modelos antiguos por sus protocolos nativos, con reconexión automática y descubrimiento en red. Requiere Node.js 22.",
-        "pl": "Przebudowany jako jeden adapter dla amplitunerów Yamaha, MusicCast i starszych modeli przez ich natywne protokoły, z automatycznym łączeniem i wykrywaniem w sieci. Wymaga Node.js 22.",
-        "uk": "Перероблено в єдиний адаптер для AV-ресиверів Yamaha, MusicCast і старіших моделей через їхні протоколи, з автоперепідключенням і пошуком у мережі. Потрібен Node.js 22.",
-        "zh-cn": "重建为一个适配器，通过各自的原生协议控制经典 Yamaha AV 功放、MusicCast 和更老的机型，支持自动重连和网络发现。需要 Node.js 22。"
       },
       "0.5.4": {
         "en": "updated packages",
