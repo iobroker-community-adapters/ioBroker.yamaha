@@ -1,6 +1,13 @@
 import { parseYxcFeatures } from "./capability";
 import { mapYxcToObjects } from "./object-mapper";
-import { parseYxcPlayInfo, parseYxcStatus, parseYxcTunerInfo, stateToYxc, type YxcCommand } from "./command-mapper";
+import {
+  parseYxcDistribution,
+  parseYxcPlayInfo,
+  parseYxcStatus,
+  parseYxcTunerInfo,
+  stateToYxc,
+  type YxcCommand,
+} from "./command-mapper";
 import { mediaToRefresh, zonesToRefresh } from "./push";
 import type { ObjectDef } from "../catalog/types";
 import type { StateValue } from "../types";
@@ -58,6 +65,7 @@ export interface YxcClientLike {
   setBassExtension(on: boolean, zone: string): Promise<unknown>;
   /** Set a zone's balance. */
   setBalance(value: number, zone: string): Promise<unknown>;
+  /** Set the manual equalizer's three bands (low/mid/high) in one call. */
   setEqualizer(low: number, mid: number, high: number, zone: string): Promise<unknown>;
   /** Start the network/USB player. */
   playNet(): Promise<unknown>;
@@ -89,6 +97,21 @@ export interface YxcClientLike {
   setPartyMode(on: boolean): Promise<unknown>;
   /** Recall a network/USB preset. */
   recallPreset(num: number, zone: string): Promise<unknown>;
+  /** Read the MusicCast-Link distribution info (role, group, client list). */
+  getDistributionInfo(): Promise<unknown>;
+  /** Set the group master's client roster (link/unlink sequence). */
+  setServerInfo(info: {
+    group_id: string;
+    zone: string;
+    type: "add" | "remove";
+    client_list: string[];
+  }): Promise<unknown>;
+  /** Set a group member's membership (link/unlink sequence). */
+  setClientInfo(info: { group_id: string; zone: string[] }): Promise<unknown>;
+  /** Start distributing to the group's clients (called on the master). */
+  startDistribution(num: number): Promise<unknown>;
+  /** Stop distributing, breaking up the group (called on the master). */
+  stopDistribution(): Promise<unknown>;
 }
 
 /** The adapter callbacks the controller drives — narrow, so no adapter mock is needed in tests. */
@@ -126,6 +149,8 @@ export class YxcDeviceController implements ConnectionHandle {
   private lastTunerBand = "fm";
   /** Each zone's last-seen equalizer bands, cached so one band write can supply the other two. */
   private readonly lastEqualizer = new Map<string, { low: number; mid: number; high: number }>();
+  /** Whether the device reports MusicCast-Link distribution (gates the dist poll and objects). */
+  private hasDistribution = false;
 
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
@@ -159,6 +184,10 @@ export class YxcDeviceController implements ConnectionHandle {
     }
     this.mediaBlocks = capabilities.media;
     await this.refreshMedia();
+    this.hasDistribution = capabilities.hasDistribution ?? false;
+    if (this.hasDistribution) {
+      await this.refreshDistribution();
+    }
     this.cancelPush = this.deps.registerPush(event => this.onPush(event));
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), KEEPALIVE_MS);
     this.deps.log.info(`${this.deviceId}: MusicCast device ready`);
@@ -242,6 +271,9 @@ export class YxcDeviceController implements ConnectionHandle {
       }
     }
     await this.refreshMedia();
+    if (this.hasDistribution) {
+      await this.refreshDistribution();
+    }
     if (anyOk) {
       this.failedKeepalives = 0;
     } else if (++this.failedKeepalives >= MAX_KEEPALIVE_FAILURES) {
@@ -286,6 +318,21 @@ export class YxcDeviceController implements ConnectionHandle {
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getPlayInfo(${arg ?? ""}) failed: ${errorMessage(e)}`);
+    }
+  }
+
+  /**
+   * Fetch the MusicCast-Link distribution info and write the parsed dist states with ack,
+   * caching the role for the leave-group path.
+   */
+  private async refreshDistribution(): Promise<void> {
+    try {
+      const info = await this.deps.client.getDistributionInfo();
+      for (const update of parseYxcDistribution(info)) {
+        this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: getDistributionInfo failed: ${errorMessage(e)}`);
     }
   }
 

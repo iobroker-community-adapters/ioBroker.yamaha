@@ -105,6 +105,26 @@ class FakeClient implements YxcClientLike {
     this.calls.push({ method: "setEqualizer", args: [low, mid, high, zone] });
     return {};
   }
+  public async getDistributionInfo(): Promise<unknown> {
+    this.calls.push({ method: "getDistributionInfo", args: [] });
+    return { role: "server", group_id: "g1", group_name: "Group 1", server_zone: "main", client_list: ["1.2.3.5"] };
+  }
+  public async setServerInfo(info: { group_id: string; zone: string; type: string; client_list: string[] }): Promise<unknown> {
+    this.calls.push({ method: "setServerInfo", args: [info] });
+    return {};
+  }
+  public async setClientInfo(info: { group_id: string; zone: string[] }): Promise<unknown> {
+    this.calls.push({ method: "setClientInfo", args: [info] });
+    return {};
+  }
+  public async startDistribution(num: number): Promise<unknown> {
+    this.calls.push({ method: "startDistribution", args: [num] });
+    return {};
+  }
+  public async stopDistribution(): Promise<unknown> {
+    this.calls.push({ method: "stopDistribution", args: [] });
+    return {};
+  }
   public async setSubwooferVolumeTo(to: number, zone: string): Promise<unknown> {
     this.calls.push({ method: "setSubwooferVolumeTo", args: [to, zone] });
     return {};
@@ -298,6 +318,16 @@ describe("YxcDeviceController", () => {
     await flush();
     // low from the write, mid/high from the cached status, on the main zone.
     expect(s.client.calls).toContainEqual({ method: "setEqualizer", args: [7, 2, 3, "main"] });
+  });
+
+  test("seeds the multiroom channel from getDistributionInfo when the device reports distribution", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], distribution: { version: 2 } };
+    const s = setup(features, ysp);
+    await s.controller.start();
+    expect(s.objects).toContain("living.dist.role");
+    expect(s.client.calls).toContainEqual({ method: "getDistributionInfo", args: [] });
+    expect(s.acks).toContainEqual({ id: "living.dist.role", value: "server" });
+    expect(s.acks).toContainEqual({ id: "living.dist.clientList", value: '["1.2.3.5"]' });
   });
 
   test("a media push refreshes only the named player source, not every zone", async () => {

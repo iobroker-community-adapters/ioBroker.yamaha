@@ -48,6 +48,8 @@ class YxcDeviceController {
   lastTunerBand = "fm";
   /** Each zone's last-seen equalizer bands, cached so one band write can supply the other two. */
   lastEqualizer = /* @__PURE__ */ new Map();
+  /** Whether the device reports MusicCast-Link distribution (gates the dist poll and objects). */
+  hasDistribution = false;
   /**
    * Read capabilities, create the object tree, seed state, and wire up push +
    * keepalive.
@@ -55,6 +57,7 @@ class YxcDeviceController {
    * @returns true if the device reported capabilities and its tree was created
    */
   async start() {
+    var _a;
     const capabilities = (0, import_capability.parseYxcFeatures)(await this.deps.client.getFeatures());
     const objects = (0, import_object_mapper.mapYxcToObjects)(capabilities);
     if (objects.length === 0) {
@@ -70,6 +73,10 @@ class YxcDeviceController {
     }
     this.mediaBlocks = capabilities.media;
     await this.refreshMedia();
+    this.hasDistribution = (_a = capabilities.hasDistribution) != null ? _a : false;
+    if (this.hasDistribution) {
+      await this.refreshDistribution();
+    }
     this.cancelPush = this.deps.registerPush((event) => this.onPush(event));
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), KEEPALIVE_MS);
     this.deps.log.info(`${this.deviceId}: MusicCast device ready`);
@@ -147,6 +154,9 @@ class YxcDeviceController {
       }
     }
     await this.refreshMedia();
+    if (this.hasDistribution) {
+      await this.refreshDistribution();
+    }
     if (anyOk) {
       this.failedKeepalives = 0;
     } else if (++this.failedKeepalives >= MAX_KEEPALIVE_FAILURES) {
@@ -188,6 +198,20 @@ class YxcDeviceController {
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getPlayInfo(${arg != null ? arg : ""}) failed: ${(0, import_util.errorMessage)(e)}`);
+    }
+  }
+  /**
+   * Fetch the MusicCast-Link distribution info and write the parsed dist states with ack,
+   * caching the role for the leave-group path.
+   */
+  async refreshDistribution() {
+    try {
+      const info = await this.deps.client.getDistributionInfo();
+      for (const update of (0, import_command_mapper.parseYxcDistribution)(info)) {
+        this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: getDistributionInfo failed: ${(0, import_util.errorMessage)(e)}`);
     }
   }
   /**
