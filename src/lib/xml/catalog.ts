@@ -180,4 +180,14 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     writeZone: "System",
     toInner: value => `<Party_Mode><Mode>${value ? "On" : "Off"}</Mode></Party_Mode>`,
   },
+  // Send a raw IR remote code (the predecessor's sendRcCode, legacy/main.js:100) — a write-only
+  // System command, no Basic_Status field to read back. Lets a scene/automation reach any button
+  // the device's remote has (power 7C80, etc.) when no dedicated datapoint exists.
+  {
+    state: "remoteCode",
+    common: { name: "Remote IR code", type: "string", role: "text", read: false, write: true },
+    mainOnly: true,
+    writeZone: "System",
+    toInner: value => `<Remote_Control><RC_Code>${String(value)}</RC_Code></Remote_Control>`,
+  },
 ];
