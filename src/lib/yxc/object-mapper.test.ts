@@ -15,6 +15,20 @@ describe("mapYxcToObjects", () => {
     expect(ids).toEqual(expect.arrayContaining(["netPlayer.playback", "netPlayer.artist", "netPlayer.track"]));
   });
 
+  test("control datapoints are writable: toggles, tray, tuner band/frequency, preset", () => {
+    const withPlayers = mapYxcToObjects({
+      zones: [{ id: "main", funcs: ["power"], inputs: [] }],
+      media: ["netusb", "cd", "tuner"],
+    });
+    const w = (id: string): boolean | undefined => withPlayers.find(o => o.id === id)?.common.write;
+    expect(w("netPlayer.repeatToggle")).toBe(true);
+    expect(w("netPlayer.shuffleToggle")).toBe(true);
+    expect(w("netPlayer.preset")).toBe(true);
+    expect(w("cd.tray")).toBe(true);
+    expect(w("tuner.band")).toBe(true);
+    expect(w("tuner.frequency")).toBe(true);
+  });
+
   test("the network player exposes repeat, shuffle, elapsed/total time and album art (F2 parity)", () => {
     const ids = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: ["netusb"] }).map(
       o => o.id,

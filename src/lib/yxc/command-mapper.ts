@@ -55,6 +55,15 @@ const CD_TRANSPORT: Record<string, string> = {
   "cd.prev": "previous",
 };
 
+/** Repeat/shuffle/tray toggle buttons → the YamahaYXC method (no zone or value). */
+const TOGGLE_ACTIONS: Record<string, string> = {
+  "netPlayer.repeatToggle": "toggleNetRepeat",
+  "netPlayer.shuffleToggle": "toggleNetShuffle",
+  "cd.repeatToggle": "toggleCDRepeat",
+  "cd.shuffleToggle": "toggleCDShuffle",
+  "cd.tray": "toggleTray",
+};
+
 const ZONE_PREFIX: Record<string, string> = { main: "", zone2: "zone2.", zone3: "zone3.", zone4: "zone4." };
 
 /**
@@ -101,6 +110,20 @@ export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefi
   const cdAction = CD_TRANSPORT[stateId];
   if (cdAction) {
     return { method: "setCDPlayback", zone: "cd", value: cdAction };
+  }
+  const toggle = TOGGLE_ACTIONS[stateId];
+  if (toggle) {
+    return { method: toggle, zone: "netusb", value: true };
+  }
+  if (stateId === "tuner.band" && isWritableValue(value, false)) {
+    return { method: "setBand", zone: "tuner", value: String(value) };
+  }
+  if (stateId === "tuner.frequency" && isWritableValue(value, true)) {
+    // The controller supplies the current band; the value carries only the frequency.
+    return { method: "setFreq", zone: "tuner", value: Number(value) };
+  }
+  if (stateId === "netPlayer.preset" && isWritableValue(value, true)) {
+    return { method: "recallPreset", zone: "netusb", value: Number(value) };
   }
   let zone = "main";
   let name = stateId;

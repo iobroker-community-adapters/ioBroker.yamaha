@@ -87,6 +87,26 @@ describe("parseYxcStatus", () => {
   });
 });
 
+describe("stateToYxc control methods (repeat/shuffle/tray, tuner, party, preset)", () => {
+  test("toggle buttons map to their toggle method", () => {
+    expect(stateToYxc("netPlayer.repeatToggle", true)).toEqual({ method: "toggleNetRepeat", zone: "netusb", value: true });
+    expect(stateToYxc("netPlayer.shuffleToggle", true)).toEqual({
+      method: "toggleNetShuffle",
+      zone: "netusb",
+      value: true,
+    });
+    expect(stateToYxc("cd.repeatToggle", true)).toEqual({ method: "toggleCDRepeat", zone: "netusb", value: true });
+    expect(stateToYxc("cd.tray", true)).toEqual({ method: "toggleTray", zone: "netusb", value: true });
+  });
+
+  test("tuner band/frequency, preset and party become their control commands", () => {
+    expect(stateToYxc("tuner.band", "fm")).toEqual({ method: "setBand", zone: "tuner", value: "fm" });
+    expect(stateToYxc("tuner.frequency", 100900)).toEqual({ method: "setFreq", zone: "tuner", value: 100900 });
+    expect(stateToYxc("netPlayer.preset", 3)).toEqual({ method: "recallPreset", zone: "netusb", value: 3 });
+    expect(stateToYxc("partyEnable", true)).toEqual({ method: "setPartyMode", zone: "main", value: true });
+  });
+});
+
 describe("parseYxcPlayInfo", () => {
   test("maps play-info fields to read-only network player states", () => {
     expect(parseYxcPlayInfo({ playback: "play", artist: "A", album: "B", track: "T", extra: 1 })).toEqual([

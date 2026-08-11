@@ -305,9 +305,10 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
   },
   {
     state: "partyEnable",
-    common: { name: "Party active", type: "boolean", role: "indicator", read: true, write: false },
+    common: { name: "Party", type: "boolean", role: "switch", read: true, write: true },
     create: { kind: "always" },
     read: { field: "party_enable" },
     fromStatus: bool,
+    write: { method: "setPartyMode", toYxc: bool },
   },
 ];

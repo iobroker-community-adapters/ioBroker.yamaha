@@ -65,6 +65,42 @@ class FakeClient implements YxcClientLike {
     this.calls.push({ method: "setCDPlayback", args: [action] });
     return {};
   }
+  public async toggleNetRepeat(): Promise<unknown> {
+    this.calls.push({ method: "toggleNetRepeat", args: [] });
+    return {};
+  }
+  public async toggleNetShuffle(): Promise<unknown> {
+    this.calls.push({ method: "toggleNetShuffle", args: [] });
+    return {};
+  }
+  public async toggleCDRepeat(): Promise<unknown> {
+    this.calls.push({ method: "toggleCDRepeat", args: [] });
+    return {};
+  }
+  public async toggleCDShuffle(): Promise<unknown> {
+    this.calls.push({ method: "toggleCDShuffle", args: [] });
+    return {};
+  }
+  public async toggleTray(): Promise<unknown> {
+    this.calls.push({ method: "toggleTray", args: [] });
+    return {};
+  }
+  public async setBand(band: string): Promise<unknown> {
+    this.calls.push({ method: "setBand", args: [band] });
+    return {};
+  }
+  public async setFreq(band: string, freq: number): Promise<unknown> {
+    this.calls.push({ method: "setFreq", args: [band, freq] });
+    return {};
+  }
+  public async setPartyMode(on: boolean): Promise<unknown> {
+    this.calls.push({ method: "setPartyMode", args: [on] });
+    return {};
+  }
+  public async recallPreset(num: number, zone: string): Promise<unknown> {
+    this.calls.push({ method: "recallPreset", args: [num, zone] });
+    return {};
+  }
   public async setSubwooferVolumeTo(to: number, zone: string): Promise<unknown> {
     this.calls.push({ method: "setSubwooferVolumeTo", args: [to, zone] });
     return {};

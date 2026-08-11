@@ -53,6 +53,13 @@ const CD_TRANSPORT = {
   "cd.next": "next",
   "cd.prev": "previous"
 };
+const TOGGLE_ACTIONS = {
+  "netPlayer.repeatToggle": "toggleNetRepeat",
+  "netPlayer.shuffleToggle": "toggleNetShuffle",
+  "cd.repeatToggle": "toggleCDRepeat",
+  "cd.shuffleToggle": "toggleCDShuffle",
+  "cd.tray": "toggleTray"
+};
 const ZONE_PREFIX = { main: "", zone2: "zone2.", zone3: "zone3.", zone4: "zone4." };
 function parseYxcStatus(zoneStatus, zone) {
   if (typeof zoneStatus !== "object" || zoneStatus === null) {
@@ -80,6 +87,19 @@ function stateToYxc(stateId, value) {
   const cdAction = CD_TRANSPORT[stateId];
   if (cdAction) {
     return { method: "setCDPlayback", zone: "cd", value: cdAction };
+  }
+  const toggle = TOGGLE_ACTIONS[stateId];
+  if (toggle) {
+    return { method: toggle, zone: "netusb", value: true };
+  }
+  if (stateId === "tuner.band" && (0, import_value_coerce.isWritableValue)(value, false)) {
+    return { method: "setBand", zone: "tuner", value: String(value) };
+  }
+  if (stateId === "tuner.frequency" && (0, import_value_coerce.isWritableValue)(value, true)) {
+    return { method: "setFreq", zone: "tuner", value: Number(value) };
+  }
+  if (stateId === "netPlayer.preset" && (0, import_value_coerce.isWritableValue)(value, true)) {
+    return { method: "recallPreset", zone: "netusb", value: Number(value) };
   }
   let zone = "main";
   let name = stateId;

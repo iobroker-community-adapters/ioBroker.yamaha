@@ -44,6 +44,8 @@ class YxcDeviceController {
   dropHandler;
   failedKeepalives = 0;
   dropped = false;
+  /** The tuner's current band, cached so a frequency write can supply it (setFreq needs band + freq). */
+  lastTunerBand = "fm";
   /**
    * Read capabilities, create the object tree, seed state, and wire up push +
    * keepalive.
@@ -178,6 +180,9 @@ class YxcDeviceController {
       const info = await this.deps.client.getPlayInfo(arg);
       for (const update of parse(info)) {
         this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+        if (update.id === "tuner.band") {
+          this.lastTunerBand = String(update.value);
+        }
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getPlayInfo(${arg != null ? arg : ""}) failed: ${(0, import_util.errorMessage)(e)}`);
@@ -272,6 +277,33 @@ class YxcDeviceController {
           break;
         case "setCDPlayback":
           await this.deps.client.setCDPlayback(String(value));
+          break;
+        case "toggleNetRepeat":
+          await this.deps.client.toggleNetRepeat();
+          break;
+        case "toggleNetShuffle":
+          await this.deps.client.toggleNetShuffle();
+          break;
+        case "toggleCDRepeat":
+          await this.deps.client.toggleCDRepeat();
+          break;
+        case "toggleCDShuffle":
+          await this.deps.client.toggleCDShuffle();
+          break;
+        case "toggleTray":
+          await this.deps.client.toggleTray();
+          break;
+        case "setPartyMode":
+          await this.deps.client.setPartyMode(Boolean(value));
+          break;
+        case "setBand":
+          await this.deps.client.setBand(String(value));
+          break;
+        case "setFreq":
+          await this.deps.client.setFreq(this.lastTunerBand, Number(value));
+          break;
+        case "recallPreset":
+          await this.deps.client.recallPreset(Number(value), zone);
           break;
         default:
           this.deps.log.warn(`${this.deviceId}: unknown YXC command "${command.method}" \u2014 ignored`);

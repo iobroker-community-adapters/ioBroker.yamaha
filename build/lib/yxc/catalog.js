@@ -294,10 +294,11 @@ const YXC_AMP_CATALOG = [
   },
   {
     state: "partyEnable",
-    common: { name: "Party active", type: "boolean", role: "indicator", read: true, write: false },
+    common: { name: "Party", type: "boolean", role: "switch", read: true, write: true },
     create: { kind: "always" },
     read: { field: "party_enable" },
-    fromStatus: bool
+    fromStatus: bool,
+    write: { method: "setPartyMode", toYxc: bool }
   }
 ];
 // Annotate the CommonJS export names for ESM import in node:

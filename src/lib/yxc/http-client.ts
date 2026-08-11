@@ -313,4 +313,91 @@ export class YamahaYxcClient {
   public setCDPlayback(action: string): Promise<unknown> {
     return this.send(`/cd/setPlayback?playback=${action}`);
   }
+
+  /**
+   * Toggle the network/USB player's repeat mode.
+   *
+   * @returns the command response
+   */
+  public toggleNetRepeat(): Promise<unknown> {
+    return this.send("/netusb/toggleRepeat");
+  }
+
+  /**
+   * Toggle the network/USB player's shuffle mode.
+   *
+   * @returns the command response
+   */
+  public toggleNetShuffle(): Promise<unknown> {
+    return this.send("/netusb/toggleShuffle");
+  }
+
+  /**
+   * Toggle the CD player's repeat mode.
+   *
+   * @returns the command response
+   */
+  public toggleCDRepeat(): Promise<unknown> {
+    return this.send("/cd/toggleRepeat");
+  }
+
+  /**
+   * Toggle the CD player's shuffle mode.
+   *
+   * @returns the command response
+   */
+  public toggleCDShuffle(): Promise<unknown> {
+    return this.send("/cd/toggleShuffle");
+  }
+
+  /**
+   * Open or close the CD tray.
+   *
+   * @returns the command response
+   */
+  public toggleTray(): Promise<unknown> {
+    return this.send("/cd/toggleTray");
+  }
+
+  /**
+   * Set the tuner band (`am`, `fm`, `dab`).
+   *
+   * @param band the band
+   * @returns the command response
+   */
+  public setBand(band: string): Promise<unknown> {
+    return this.send(`/tuner/setBand?band=${band}`);
+  }
+
+  /**
+   * Set the tuner frequency for a band (the device needs both band and value).
+   *
+   * @param band the band the frequency belongs to
+   * @param freq the frequency (kHz, as the device reports it)
+   * @returns the command response
+   */
+  public setFreq(band: string, freq: number): Promise<unknown> {
+    return this.send(`/tuner/setFreq?band=${band}&num=${freq}`);
+  }
+
+  /**
+   * Turn party mode on/off (system-wide).
+   *
+   * @param on whether to enable
+   * @returns the command response
+   */
+  public setPartyMode(on: boolean): Promise<unknown> {
+    return this.send(`/system/setPartyMode?enable=${on ? "true" : "false"}`);
+  }
+
+  /**
+   * Recall a stored network/USB preset.
+   *
+   * @param num the preset number
+   * @param zone the zone
+   * @returns the command response
+   */
+  public recallPreset(num: number, zone: string): Promise<unknown> {
+    return this.send(`/netusb/recallPreset?zone=${zoneSeg(zone)}&num=${num}`);
+  }
 }

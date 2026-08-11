@@ -70,6 +70,24 @@ export interface YxcClientLike {
   prevNet(): Promise<unknown>;
   /** Drive the CD transport with a YXC action word (`play`, `pause`, `stop`, `next`, `previous`). */
   setCDPlayback(action: string): Promise<unknown>;
+  /** Toggle network/USB repeat. */
+  toggleNetRepeat(): Promise<unknown>;
+  /** Toggle network/USB shuffle. */
+  toggleNetShuffle(): Promise<unknown>;
+  /** Toggle CD repeat. */
+  toggleCDRepeat(): Promise<unknown>;
+  /** Toggle CD shuffle. */
+  toggleCDShuffle(): Promise<unknown>;
+  /** Open/close the CD tray. */
+  toggleTray(): Promise<unknown>;
+  /** Set the tuner band. */
+  setBand(band: string): Promise<unknown>;
+  /** Set the tuner frequency for a band. */
+  setFreq(band: string, freq: number): Promise<unknown>;
+  /** Turn party mode on/off. */
+  setPartyMode(on: boolean): Promise<unknown>;
+  /** Recall a network/USB preset. */
+  recallPreset(num: number, zone: string): Promise<unknown>;
 }
 
 /** The adapter callbacks the controller drives — narrow, so no adapter mock is needed in tests. */
@@ -103,6 +121,8 @@ export class YxcDeviceController implements ConnectionHandle {
   private dropHandler: ((reason?: Error) => void) | undefined;
   private failedKeepalives = 0;
   private dropped = false;
+  /** The tuner's current band, cached so a frequency write can supply it (setFreq needs band + freq). */
+  private lastTunerBand = "fm";
 
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
@@ -257,6 +277,9 @@ export class YxcDeviceController implements ConnectionHandle {
       const info = await this.deps.client.getPlayInfo(arg);
       for (const update of parse(info)) {
         this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+        if (update.id === "tuner.band") {
+          this.lastTunerBand = String(update.value);
+        }
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getPlayInfo(${arg ?? ""}) failed: ${errorMessage(e)}`);
@@ -353,6 +376,33 @@ export class YxcDeviceController implements ConnectionHandle {
           break;
         case "setCDPlayback":
           await this.deps.client.setCDPlayback(String(value));
+          break;
+        case "toggleNetRepeat":
+          await this.deps.client.toggleNetRepeat();
+          break;
+        case "toggleNetShuffle":
+          await this.deps.client.toggleNetShuffle();
+          break;
+        case "toggleCDRepeat":
+          await this.deps.client.toggleCDRepeat();
+          break;
+        case "toggleCDShuffle":
+          await this.deps.client.toggleCDShuffle();
+          break;
+        case "toggleTray":
+          await this.deps.client.toggleTray();
+          break;
+        case "setPartyMode":
+          await this.deps.client.setPartyMode(Boolean(value));
+          break;
+        case "setBand":
+          await this.deps.client.setBand(String(value));
+          break;
+        case "setFreq":
+          await this.deps.client.setFreq(this.lastTunerBand, Number(value));
+          break;
+        case "recallPreset":
+          await this.deps.client.recallPreset(Number(value), zone);
           break;
         default:
           this.deps.log.warn(`${this.deviceId}: unknown YXC command "${command.method}" — ignored`);

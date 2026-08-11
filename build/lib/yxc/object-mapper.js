@@ -59,7 +59,15 @@ const PLAYER_STATES = [
   { state: "pause", common: { name: "Pause", type: "boolean", role: "button", read: false, write: true } },
   { state: "stop", common: { name: "Stop", type: "boolean", role: "button", read: false, write: true } },
   { state: "next", common: { name: "Next", type: "boolean", role: "button", read: false, write: true } },
-  { state: "prev", common: { name: "Previous", type: "boolean", role: "button", read: false, write: true } }
+  { state: "prev", common: { name: "Previous", type: "boolean", role: "button", read: false, write: true } },
+  {
+    state: "repeatToggle",
+    common: { name: "Toggle repeat", type: "boolean", role: "button", read: false, write: true }
+  },
+  {
+    state: "shuffleToggle",
+    common: { name: "Toggle shuffle", type: "boolean", role: "button", read: false, write: true }
+  }
 ];
 function pushPlayerBlock(objects, prefix, channelName) {
   objects.push({ id: prefix, type: "channel", common: { name: channelName } });
@@ -103,21 +111,31 @@ function mapYxcToObjects(capabilities) {
   }
   if (capabilities.media.includes("netusb")) {
     pushPlayerBlock(objects, "netPlayer", "Network player");
+    objects.push({
+      id: "netPlayer.preset",
+      type: "state",
+      common: { name: "Recall preset", type: "number", role: "level", read: true, write: true, min: 1 }
+    });
   }
   if (capabilities.media.includes("cd")) {
     pushPlayerBlock(objects, "cd", "CD");
+    objects.push({
+      id: "cd.tray",
+      type: "state",
+      common: { name: "Toggle tray", type: "boolean", role: "button", read: false, write: true }
+    });
   }
   if (capabilities.media.includes("tuner")) {
     objects.push({ id: "tuner", type: "channel", common: { name: "Tuner" } });
     objects.push({
       id: "tuner.band",
       type: "state",
-      common: { name: "Band", type: "string", role: "state", read: true, write: false }
+      common: { name: "Band", type: "string", role: "state", read: true, write: true }
     });
     objects.push({
       id: "tuner.frequency",
       type: "state",
-      common: { name: "Frequency", type: "number", unit: "kHz", role: "value", read: true, write: false }
+      common: { name: "Frequency", type: "number", unit: "kHz", role: "level", read: true, write: true }
     });
     objects.push({
       id: "tuner.rdsText",
