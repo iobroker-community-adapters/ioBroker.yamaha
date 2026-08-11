@@ -105,9 +105,10 @@ class FakeClient implements YxcClientLike {
     this.calls.push({ method: "setEqualizer", args: [low, mid, high, zone] });
     return {};
   }
+  public distRole = "server";
   public async getDistributionInfo(): Promise<unknown> {
     this.calls.push({ method: "getDistributionInfo", args: [] });
-    return { role: "server", group_id: "g1", group_name: "Group 1", server_zone: "main", client_list: ["1.2.3.5"] };
+    return { role: this.distRole, group_id: "g1", group_name: "Group 1", server_zone: "main", client_list: ["1.2.3.5"] };
   }
   public async setServerInfo(info: { group_id: string; zone: string; type: string; client_list: string[] }): Promise<unknown> {
     this.calls.push({ method: "setServerInfo", args: [info] });
@@ -328,6 +329,27 @@ describe("YxcDeviceController", () => {
     expect(s.client.calls).toContainEqual({ method: "getDistributionInfo", args: [] });
     expect(s.acks).toContainEqual({ id: "living.dist.role", value: "server" });
     expect(s.acks).toContainEqual({ id: "living.dist.clientList", value: '["1.2.3.5"]' });
+  });
+
+  test("leaving a group as the server stops distribution", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], distribution: { version: 2 } };
+    const s = setup(features, ysp);
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.dist.leaveGroup", false, true);
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "stopDistribution", args: [] });
+  });
+
+  test("leaving a group as a client clears its client info", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], distribution: { version: 2 } };
+    const s = setup(features, ysp);
+    s.client.distRole = "client";
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.dist.leaveGroup", false, true);
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "setClientInfo", args: [{ group_id: "", zone: ["main"] }] });
   });
 
   test("a media push refreshes only the named player source, not every zone", async () => {

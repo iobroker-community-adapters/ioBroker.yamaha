@@ -165,6 +165,11 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
     distState("groupName", "Group name", "text");
     distState("serverZone", "Server zone", "text");
     distState("clientList", "Client list", "json");
+    objects.push({
+      id: "dist.leaveGroup",
+      type: "state",
+      common: { name: "Leave group", type: "boolean", role: "button", read: false, write: true },
+    });
   }
   return objects;
 }

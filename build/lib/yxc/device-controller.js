@@ -50,6 +50,8 @@ class YxcDeviceController {
   lastEqualizer = /* @__PURE__ */ new Map();
   /** Whether the device reports MusicCast-Link distribution (gates the dist poll and objects). */
   hasDistribution = false;
+  /** The device's last-seen distribution role (none/server/client), for the leave-group path. */
+  lastDistRole = "none";
   /**
    * Read capabilities, create the object tree, seed state, and wire up push +
    * keepalive.
@@ -98,7 +100,12 @@ class YxcDeviceController {
     if (!fullStateId.startsWith(prefix)) {
       return;
     }
-    const command = (0, import_command_mapper.stateToYxc)(fullStateId.slice(prefix.length), value);
+    const stateId = fullStateId.slice(prefix.length);
+    if (stateId === "dist.leaveGroup") {
+      void this.leaveGroup();
+      return;
+    }
+    const command = (0, import_command_mapper.stateToYxc)(stateId, value);
     if (command) {
       void this.applyCommand(command);
     }
@@ -209,9 +216,28 @@ class YxcDeviceController {
       const info = await this.deps.client.getDistributionInfo();
       for (const update of (0, import_command_mapper.parseYxcDistribution)(info)) {
         this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+        if (update.id === "dist.role") {
+          this.lastDistRole = String(update.value);
+        }
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getDistributionInfo failed: ${(0, import_util.errorMessage)(e)}`);
+    }
+  }
+  /**
+   * Leave the current MusicCast-Link group: a server stops distributing, a client clears
+   * its membership. Then re-read the distribution state so the tree reflects the change.
+   */
+  async leaveGroup() {
+    try {
+      if (this.lastDistRole === "server") {
+        await this.deps.client.stopDistribution();
+      } else {
+        await this.deps.client.setClientInfo({ group_id: "", zone: ["main"] });
+      }
+      await this.refreshDistribution();
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: leaveGroup failed: ${(0, import_util.errorMessage)(e)}`);
     }
   }
   /**
