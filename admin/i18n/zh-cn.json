@@ -9,5 +9,6 @@
   "supportHeader": "支持开发",
   "aboutInfo": "如果此适配器对你有用，你可以支持它的开发：",
   "donateKofi": "Ko-fi",
-  "donatePaypal": "PayPal"
+  "donatePaypal": "PayPal",
+  "invalidIp": "无效的 IP 地址"
 }

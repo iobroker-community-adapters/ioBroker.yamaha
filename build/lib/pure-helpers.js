@@ -34,7 +34,7 @@ function isConfiguredDevice(entry) {
     return false;
   }
   const candidate = entry;
-  return typeof candidate.name === "string" && candidate.name.length > 0 && typeof candidate.ip === "string" && candidate.ip.length > 0;
+  return typeof candidate.ip === "string" && candidate.ip.length > 0 && (candidate.name === void 0 || typeof candidate.name === "string");
 }
 function sanitizeId(raw) {
   return raw.replace(/[^A-Za-z0-9\-_]/g, "_");
@@ -52,7 +52,7 @@ function parseDevices(raw) {
     if (!isConfiguredDevice(entry)) {
       continue;
     }
-    const id = sanitizeId(entry.name);
+    const id = sanitizeId(entry.name && entry.name.length > 0 ? entry.name : entry.ip);
     if (taken.has(id)) {
       continue;
     }

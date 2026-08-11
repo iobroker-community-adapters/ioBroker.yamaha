@@ -115,14 +115,14 @@ const YXC_AMP_CATALOG = [
   },
   {
     state: "dialogueLevel",
-    common: { name: "Dialogue level", type: "number", role: "level", read: true, write: false },
+    common: { name: "Dialogue level", type: "number", role: "value", read: true, write: false },
     create: { kind: "func", func: "dialogue_level" },
     read: { field: "dialogue_level" },
     fromStatus: num
   },
   {
     state: "actualVolume",
-    common: { name: "Actual volume", type: "number", unit: "dB", role: "value", read: true, write: false },
+    common: { name: "Volume (dB)", type: "number", unit: "dB", role: "value", read: true, write: false },
     create: { kind: "func", func: "actual_volume" },
     read: { path: ["actual_volume", "value"] },
     fromStatus: num
@@ -238,35 +238,35 @@ const YXC_AMP_CATALOG = [
   },
   {
     state: "dialogueLift",
-    common: { name: "Dialogue lift", type: "number", role: "level", read: true, write: false },
+    common: { name: "Dialogue lift", type: "number", role: "value", read: true, write: false },
     create: { kind: "func", func: "dialogue_lift" },
     read: { field: "dialogue_lift" },
     fromStatus: num
   },
   {
     state: "dtsDialogueControl",
-    common: { name: "DTS dialogue control", type: "number", role: "level", read: true, write: false },
+    common: { name: "DTS dialogue control", type: "number", role: "value", read: true, write: false },
     create: { kind: "func", func: "dts_dialogue_control" },
     read: { field: "dts_dialogue_control" },
     fromStatus: num
   },
   {
     state: "equalizerLow",
-    common: { name: "Equalizer low", type: "number", unit: "dB", role: "level", read: true, write: false },
+    common: { name: "Equalizer low", type: "number", unit: "dB", role: "value", read: true, write: false },
     create: { kind: "func", func: "equalizer" },
     read: { path: ["equalizer", "low"] },
     fromStatus: num
   },
   {
     state: "equalizerMid",
-    common: { name: "Equalizer mid", type: "number", unit: "dB", role: "level", read: true, write: false },
+    common: { name: "Equalizer mid", type: "number", unit: "dB", role: "value", read: true, write: false },
     create: { kind: "func", func: "equalizer" },
     read: { path: ["equalizer", "mid"] },
     fromStatus: num
   },
   {
     state: "equalizerHigh",
-    common: { name: "Equalizer high", type: "number", unit: "dB", role: "level", read: true, write: false },
+    common: { name: "Equalizer high", type: "number", unit: "dB", role: "value", read: true, write: false },
     create: { kind: "func", func: "equalizer" },
     read: { path: ["equalizer", "high"] },
     fromStatus: num

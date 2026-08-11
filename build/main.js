@@ -148,11 +148,19 @@ class Yamaha extends utils.Adapter {
    * @param deviceId the id-safe device id
    */
   async ensureDeviceHeader(deviceId) {
-    await this.setObjectNotExistsAsync(deviceId, { type: "device", common: { name: deviceId }, native: {} });
+    await this.extendObject(
+      deviceId,
+      {
+        type: "device",
+        common: { name: deviceId, statusStates: { onlineId: `${this.namespace}.${deviceId}.info.connection` } },
+        native: {}
+      },
+      { preserve: { common: ["name"] } }
+    );
     await this.setObjectNotExistsAsync(`${deviceId}.info`, { type: "channel", common: { name: "Info" }, native: {} });
     await this.setObjectNotExistsAsync(`${deviceId}.info.connection`, {
       type: "state",
-      common: { name: "Connected", type: "boolean", role: "indicator.connected", read: true, write: false, def: false },
+      common: { name: "Connected", type: "boolean", role: "indicator.reachable", read: true, write: false, def: false },
       native: {}
     });
   }

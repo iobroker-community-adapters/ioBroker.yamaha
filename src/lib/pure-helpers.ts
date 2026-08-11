@@ -2,12 +2,14 @@ import type { DeviceRecord } from "./types";
 import type { DiscoveredDevice } from "./discovery";
 
 interface ConfiguredDevice {
-  name: string;
+  name?: string;
   ip: string;
 }
 
 /**
- * True when a raw config row carries a non-empty string name and ip.
+ * True when a raw config row carries a non-empty ip (the name is optional — a row
+ * with an ip but no name is valid and falls back to the ip as its id, so a device
+ * is never silently dropped just because its name was left blank).
  *
  * @param entry a raw config row from the admin device table
  * @returns whether the row is a valid configured device
@@ -16,12 +18,11 @@ function isConfiguredDevice(entry: unknown): entry is ConfiguredDevice {
   if (typeof entry !== "object" || entry === null) {
     return false;
   }
-  const candidate = entry as Partial<ConfiguredDevice>;
+  const candidate = entry as { name?: unknown; ip?: unknown };
   return (
-    typeof candidate.name === "string" &&
-    candidate.name.length > 0 &&
     typeof candidate.ip === "string" &&
-    candidate.ip.length > 0
+    candidate.ip.length > 0 &&
+    (candidate.name === undefined || typeof candidate.name === "string")
   );
 }
 
@@ -67,7 +68,9 @@ export function parseDevices(raw: unknown): DeviceRecord[] {
     if (!isConfiguredDevice(entry)) {
       continue;
     }
-    const id = sanitizeId(entry.name);
+    // Fall back to the ip as the id when the name is blank, so the device still appears
+    // instead of vanishing silently.
+    const id = sanitizeId(entry.name && entry.name.length > 0 ? entry.name : entry.ip);
     if (taken.has(id)) {
       continue;
     }

@@ -90,7 +90,7 @@ const XML_AMP_CATALOG = [
     // Read-only: openHAB reads the Dialogue_Lvl path, but the write value structure
     // (Val/Exp/Unit vs bare) is not confirmed by a reference, so no write is offered.
     state: "dialogueLevel",
-    common: { name: "Dialogue level", type: "number", role: "level", read: true, write: false },
+    common: { name: "Dialogue level", type: "number", role: "value", read: true, write: false },
     statusField: "dialogueLevel"
   },
   {

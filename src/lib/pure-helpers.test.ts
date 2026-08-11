@@ -99,16 +99,16 @@ describe("parseDevices", () => {
     expect(result).toEqual([{ id: "Living_Room", ip: "1.1.1.1" }]);
   });
 
-  test("drops entries with a missing or empty name or ip, and non-objects", () => {
+  test("falls back to the ip as id when the name is blank, drops rows without an ip", () => {
     const result = parseDevices([
       { name: "ok", ip: "1.1.1.1" },
-      { name: "", ip: "2.2.2.2" },
-      { name: "no-ip" },
-      { ip: "3.3.3.3" },
+      { name: "", ip: "2.2.2.2" }, // blank name -> ip as id
+      { name: "no-ip" }, // no ip -> dropped
+      { ip: "3.3.3.3" }, // no name -> ip as id
       "garbage",
       null,
     ]);
-    expect(result.map(d => d.id)).toEqual(["ok"]);
+    expect(result.map(d => d.id)).toEqual(["ok", "2_2_2_2", "3_3_3_3"]);
   });
 
   test("returns an empty array for non-array input", () => {

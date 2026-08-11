@@ -9,5 +9,6 @@
   "supportHeader": "Підтримати розробку",
   "aboutInfo": "Якщо цей адаптер вам корисний, ви можете підтримати його розробку:",
   "donateKofi": "Ko-fi",
-  "donatePaypal": "PayPal"
+  "donatePaypal": "PayPal",
+  "invalidIp": "Недійсна IP-адреса"
 }

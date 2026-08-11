@@ -151,11 +151,23 @@ export class Yamaha extends utils.Adapter {
    * @param deviceId the id-safe device id
    */
   private async ensureDeviceHeader(deviceId: string): Promise<void> {
-    await this.setObjectNotExistsAsync(deviceId, { type: "device", common: { name: deviceId }, native: {} });
+    // statusStates.onlineId lets the admin paint a green/red reachability symbol on the
+    // device object itself (as govee does), fed by the per-device connection state.
+    // extendObject with preserve:name so an upgrade adds the symbol without overwriting
+    // a name the user changed.
+    await this.extendObject(
+      deviceId,
+      {
+        type: "device",
+        common: { name: deviceId, statusStates: { onlineId: `${this.namespace}.${deviceId}.info.connection` } },
+        native: {},
+      },
+      { preserve: { common: ["name"] } },
+    );
     await this.setObjectNotExistsAsync(`${deviceId}.info`, { type: "channel", common: { name: "Info" }, native: {} });
     await this.setObjectNotExistsAsync(`${deviceId}.info.connection`, {
       type: "state",
-      common: { name: "Connected", type: "boolean", role: "indicator.connected", read: true, write: false, def: false },
+      common: { name: "Connected", type: "boolean", role: "indicator.reachable", read: true, write: false, def: false },
       native: {},
     });
   }
