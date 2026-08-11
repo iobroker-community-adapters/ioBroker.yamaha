@@ -39,6 +39,25 @@ describe("mapYxcToObjects", () => {
     expect(objs.find(o => o.id === "equalizerHigh")?.common.write).toBe(true);
   });
 
+  test("a device reporting a distribution block gets the read-only multiroom channel", () => {
+    const objs = mapYxcToObjects({
+      zones: [{ id: "main", funcs: ["power"], inputs: [] }],
+      media: [],
+      hasDistribution: true,
+    });
+    const ids = objs.map(o => o.id);
+    expect(ids).toEqual(
+      expect.arrayContaining(["dist", "dist.role", "dist.groupId", "dist.groupName", "dist.serverZone", "dist.clientList"]),
+    );
+    // Group name is read-only (the library's setGroupName payload is unverified).
+    expect(objs.find(o => o.id === "dist.groupName")?.common.write).toBe(false);
+  });
+
+  test("a device without a distribution block gets no multiroom channel", () => {
+    const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: [] });
+    expect(objs.map(o => o.id)).not.toContain("dist");
+  });
+
   test("the network player exposes repeat, shuffle, elapsed/total time and album art (F2 parity)", () => {
     const ids = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: ["netusb"] }).map(
       o => o.id,

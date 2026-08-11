@@ -16,6 +16,8 @@ export interface YxcCapabilities {
   zones: YxcZone[];
   /** Media-player sources the device offers (netusb, tuner, cd). */
   media: string[];
+  /** Whether the device reports a MusicCast-Link distribution block (getFeatures `distribution`). */
+  hasDistribution?: boolean;
 }
 
 // Only true media-player sources — subsystems that report play info and
@@ -69,7 +71,7 @@ function parseVolumeRange(rangeStep: unknown): { min: number; max: number; step:
  */
 export function parseYxcFeatures(response: unknown): YxcCapabilities {
   if (typeof response !== "object" || response === null) {
-    return { zones: [], media: [] };
+    return { zones: [], media: [], hasDistribution: false };
   }
   const obj = response as Record<string, unknown>;
   const zones: YxcZone[] = [];
@@ -90,5 +92,5 @@ export function parseYxcFeatures(response: unknown): YxcCapabilities {
     }
   }
   const media = MEDIA_BLOCKS.filter(block => block in obj);
-  return { zones, media };
+  return { zones, media, hasDistribution: "distribution" in obj };
 }

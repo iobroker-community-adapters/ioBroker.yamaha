@@ -149,5 +149,22 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
       common: { name: "RDS text", type: "string", role: "text", read: true, write: false },
     });
   }
+  if (capabilities.hasDistribution) {
+    // MusicCast-Link state read from getDistributionInfo. Group name stays read-only —
+    // the library's setGroupName is broken, so its payload shape is unverified.
+    objects.push({ id: "dist", type: "channel", common: { name: "Multiroom" } });
+    const distState = (id: string, name: string, role: string): void => {
+      objects.push({
+        id: `dist.${id}`,
+        type: "state",
+        common: { name, type: "string", role, read: true, write: false },
+      });
+    };
+    distState("role", "Role", "state");
+    distState("groupId", "Group ID", "text");
+    distState("groupName", "Group name", "text");
+    distState("serverZone", "Server zone", "text");
+    distState("clientList", "Client list", "json");
+  }
   return objects;
 }

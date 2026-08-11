@@ -33,7 +33,12 @@ describe("parseYxcFeatures", () => {
   });
 
   test("returns empty capabilities for a malformed response", () => {
-    expect(parseYxcFeatures(null)).toEqual({ zones: [], media: [] });
-    expect(parseYxcFeatures({ zone: "nope" })).toEqual({ zones: [], media: [] });
+    expect(parseYxcFeatures(null)).toEqual({ zones: [], media: [], hasDistribution: false });
+    expect(parseYxcFeatures({ zone: "nope" })).toEqual({ zones: [], media: [], hasDistribution: false });
+  });
+
+  test("flags a device that reports a distribution block for multiroom", () => {
+    expect(parseYxcFeatures({ zone: [{ id: "main" }], distribution: { version: 2 } }).hasDistribution).toBe(true);
+    expect(parseYxcFeatures({ zone: [{ id: "main" }] }).hasDistribution).toBe(false);
   });
 });

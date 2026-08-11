@@ -42,7 +42,7 @@ function parseVolumeRange(rangeStep) {
 }
 function parseYxcFeatures(response) {
   if (typeof response !== "object" || response === null) {
-    return { zones: [], media: [] };
+    return { zones: [], media: [], hasDistribution: false };
   }
   const obj = response;
   const zones = [];
@@ -63,7 +63,7 @@ function parseYxcFeatures(response) {
     }
   }
   const media = MEDIA_BLOCKS.filter((block) => block in obj);
-  return { zones, media };
+  return { zones, media, hasDistribution: "distribution" in obj };
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
