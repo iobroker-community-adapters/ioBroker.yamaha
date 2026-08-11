@@ -1,4 +1,12 @@
 # Older changes
+## 0.6.0 (2026-08-01)
+
+- Rebuilt from the ground up as one adapter for classic Yamaha AV receivers, MusicCast devices and the oldest pre-2010 receivers, replacing the separate yamaha and musiccast adapters.
+- Each device is driven over the protocol it actually speaks — YNCA (with automatic reconnect after a reboot or network drop), MusicCast, or the legacy XML control protocol.
+- Every device exposes power, volume, mute and input per zone, generated from what it actually reports rather than a hardcoded model list.
+- Finds Yamaha devices on the network by itself: a search button in the settings fills the device table over SSDP.
+- Now requires Node.js 22, js-controller 7 and admin 7.
+
 ## 0.5.4 (2024-06-14)
 
 - (foxriver76) updated packages

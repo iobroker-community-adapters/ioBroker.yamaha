@@ -43,6 +43,15 @@ Older Yamaha receivers (before ~2010, the XML protocol) do not announce themselv
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+### 0.11.0 (2026-08-11)
+
+- Scenes can now be triggered from ioBroker, not just shown by name — recall any scene on your receiver.
+- Far more of the receiver is controllable now, from tone and subwoofer to the HDMI outputs and party mode, and MusicCast devices add repeat, shuffle, play time and cover art.
+- Classic receivers can skip to the next or previous track on their network and USB players.
+- Older pre-2010 receivers can again control their tone, subwoofer, Extra Bass, YPAO and HDMI outputs.
+- The object tree is tidier: model and firmware now sit under the device's info, and the cluttered system folder is gone.
+- Every device shows a green or red online symbol in the admin now, and leaving a device's name blank no longer makes it vanish.
+
 ### 0.10.0 (2026-08-05)
 
 - You no longer have to add every device by hand — leave the device table empty and the adapter finds MusicCast receivers on its own at startup and sets them up.
@@ -69,14 +78,6 @@ Older Yamaha receivers (before ~2010, the XML protocol) do not announce themselv
 
 - An existing receiver from the previous adapter is now carried over into the device table on upgrade instead of being lost.
 - Receivers report and fill more datapoints at startup: added straight, enhancer, pure direct and the sleep timer, and existing states are now populated from the initial query.
-
-### 0.6.0 (2026-08-01)
-
-- Rebuilt from the ground up as one adapter for classic Yamaha AV receivers, MusicCast devices and the oldest pre-2010 receivers, replacing the separate yamaha and musiccast adapters.
-- Each device is driven over the protocol it actually speaks — YNCA (with automatic reconnect after a reboot or network drop), MusicCast, or the legacy XML control protocol.
-- Every device exposes power, volume, mute and input per zone, generated from what it actually reports rather than a hardcoded model list.
-- Finds Yamaha devices on the network by itself: a search button in the settings fills the device table over SSDP.
-- Now requires Node.js 22, js-controller 7 and admin 7.
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 
