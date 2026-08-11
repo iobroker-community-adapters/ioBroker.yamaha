@@ -65,9 +65,9 @@ export const CHANNEL_NAMES: Record<string, string> = {
   // Amplifier groups
   sound: "Sound",
   hdmi: "HDMI",
+  speakers: "Speakers",
   scene: "Scenes",
-  system: "System",
-  inputName: "Input names",
+  inputNames: "Input names",
   initialVolume: "Initial volume",
   lipSync: "Lip sync",
   // Tuner

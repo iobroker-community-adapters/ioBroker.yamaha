@@ -18,6 +18,7 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var pure_helpers_exports = {};
 __export(pure_helpers_exports, {
+  RENAMED_CHANNELS: () => RENAMED_CHANNELS,
   RENAMED_STATE_IDS: () => RENAMED_STATE_IDS,
   legacyDeviceRow: () => legacyDeviceRow,
   mergeDiscovered: () => mergeDiscovered,
@@ -93,19 +94,25 @@ function staleObjects(existing, deviceIds, namespace) {
   };
   return existing.filter((id) => !isKept(id)).sort((a, b) => b.length - a.length);
 }
-const RENAMED_STATE_IDS = ["system.model", "system.version"];
+const RENAMED_STATE_IDS = ["hdmiOut", "directMode"];
+const RENAMED_CHANNELS = ["system"];
 function renamedObjectIds(existing, deviceIds, namespace) {
-  const present = new Set(existing);
   const stale = [];
   for (const deviceId of deviceIds) {
-    for (const rel of RENAMED_STATE_IDS) {
-      const full = `${namespace}.${deviceId}.${rel}`;
-      if (present.has(full)) {
+    const base = `${namespace}.${deviceId}.`;
+    for (const full of existing) {
+      if (!full.startsWith(base)) {
+        continue;
+      }
+      const rel = full.slice(base.length);
+      const renamedState = RENAMED_STATE_IDS.includes(rel);
+      const underRenamedChannel = RENAMED_CHANNELS.some((ch) => rel === ch || rel.startsWith(`${ch}.`));
+      if (renamedState || underRenamedChannel) {
         stale.push(full);
       }
     }
   }
-  return stale;
+  return stale.sort((a, b) => b.length - a.length);
 }
 function legacyDeviceRow(config) {
   if (Array.isArray(config.devices) && config.devices.length > 0) {
@@ -116,6 +123,7 @@ function legacyDeviceRow(config) {
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  RENAMED_CHANNELS,
   RENAMED_STATE_IDS,
   legacyDeviceRow,
   mergeDiscovered,

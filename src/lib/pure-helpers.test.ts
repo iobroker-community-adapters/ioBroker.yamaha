@@ -147,15 +147,21 @@ describe("renamedObjectIds", () => {
   test("returns the old renamed states present under a configured device", () => {
     const existing = [
       "yamaha.0.living.system.model",
-      "yamaha.0.living.system.version",
+      "yamaha.0.living.system",
+      "yamaha.0.living.hdmiOut",
+      "yamaha.0.living.directMode",
       "yamaha.0.living.power",
       "yamaha.0.other.system.model",
     ];
     const result = renamedObjectIds(existing, new Set(["living"]), "yamaha.0");
-    expect(result).toContain("yamaha.0.living.system.model");
-    expect(result).toContain("yamaha.0.living.system.version");
+    expect(result).toContain("yamaha.0.living.system.model"); // under the old system channel
+    expect(result).toContain("yamaha.0.living.system"); // the old system channel itself
+    expect(result).toContain("yamaha.0.living.hdmiOut"); // exact rename -> hdmi.output
+    expect(result).toContain("yamaha.0.living.directMode"); // exact rename -> direct
     expect(result).not.toContain("yamaha.0.living.power"); // not renamed
     expect(result).not.toContain("yamaha.0.other.system.model"); // not a configured device
+    // deepest first: the state under system before the system channel itself
+    expect(result.indexOf("yamaha.0.living.system.model")).toBeLessThan(result.indexOf("yamaha.0.living.system"));
   });
 
   test("returns nothing when the old renamed state is absent", () => {

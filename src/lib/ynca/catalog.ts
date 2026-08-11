@@ -279,7 +279,7 @@ const AMP_FUNCS: FuncDef[] = [
   },
   {
     func: "HDMIOUT",
-    state: "hdmiOut",
+    state: "hdmi.output",
     name: "HDMI output",
     spec: { kind: "enum", states: HDMIOUT_STATES },
     write: true,
@@ -303,8 +303,8 @@ const AMP_FUNCS: FuncDef[] = [
   },
   {
     func: "DIRMODE",
-    state: "directMode",
-    name: "Direct mode",
+    state: "direct",
+    name: "Direct",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
     role: "switch",
@@ -584,7 +584,7 @@ const SYS_FUNCS: FuncDef[] = [
   },
   {
     func: "PWR",
-    state: "system.power",
+    state: "masterPower",
     name: "Master power (all zones)",
     spec: { kind: "onoff", on: "On", off: "Standby" },
     write: true,
@@ -600,7 +600,7 @@ const SYS_FUNCS: FuncDef[] = [
   },
   {
     func: "HDMIOUT1",
-    state: "system.hdmiOut1",
+    state: "hdmi.out1",
     name: "HDMI OUT1",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
@@ -608,7 +608,7 @@ const SYS_FUNCS: FuncDef[] = [
   },
   {
     func: "HDMIOUT2",
-    state: "system.hdmiOut2",
+    state: "hdmi.out2",
     name: "HDMI OUT2",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
@@ -616,7 +616,7 @@ const SYS_FUNCS: FuncDef[] = [
   },
   {
     func: "HDMIOUT3",
-    state: "system.hdmiOut3",
+    state: "hdmi.out3",
     name: "HDMI OUT3",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
@@ -624,7 +624,7 @@ const SYS_FUNCS: FuncDef[] = [
   },
   {
     func: "SPPATTERN",
-    state: "system.speakerPattern",
+    state: "speakers.pattern",
     name: "Speaker pattern",
     spec: { kind: "enum", states: SPPATTERN_STATES },
     write: true,
@@ -632,7 +632,7 @@ const SYS_FUNCS: FuncDef[] = [
   },
   {
     func: "SPPATTERN1SWFR1CNFG",
-    state: "system.speakerPattern1Swfr1",
+    state: "speakers.pattern1Swfr1",
     name: "Speaker pattern 1 subwoofer 1",
     spec: { kind: "enum", states: SWFR_CNFG_STATES },
     write: true,
@@ -640,7 +640,7 @@ const SYS_FUNCS: FuncDef[] = [
   },
   {
     func: "SPPATTERN1SWFR2CNFG",
-    state: "system.speakerPattern1Swfr2",
+    state: "speakers.pattern1Swfr2",
     name: "Speaker pattern 1 subwoofer 2",
     spec: { kind: "enum", states: SWFR_CNFG_STATES },
     write: true,
@@ -648,7 +648,7 @@ const SYS_FUNCS: FuncDef[] = [
   },
   {
     func: "SPPATTERN2SWFR1CNFG",
-    state: "system.speakerPattern2Swfr1",
+    state: "speakers.pattern2Swfr1",
     name: "Speaker pattern 2 subwoofer 1",
     spec: { kind: "enum", states: SWFR_CNFG_STATES },
     write: true,
@@ -656,7 +656,7 @@ const SYS_FUNCS: FuncDef[] = [
   },
   {
     func: "SPPATTERN2SWFR2CNFG",
-    state: "system.speakerPattern2Swfr2",
+    state: "speakers.pattern2Swfr2",
     name: "Speaker pattern 2 subwoofer 2",
     spec: { kind: "enum", states: SWFR_CNFG_STATES },
     write: true,
@@ -935,7 +935,7 @@ export function buildYncaCatalog(): YncaEntry[] {
   for (const key of INPUT_NAME_KEYS) {
     const upper = key.toUpperCase();
     entries.push({
-      id: `system.inputName.${key}`,
+      id: `inputNames.${key}`,
       name: `Input name ${upper}`,
       spec: { kind: "text" },
       write: false,

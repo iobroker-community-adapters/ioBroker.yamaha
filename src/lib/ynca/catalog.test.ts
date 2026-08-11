@@ -93,19 +93,19 @@ describe("YNCA catalog", () => {
     expect(cat.find(e => e.id === "info.model")).toMatchObject({ subunit: "SYS", func: "MODELNAME", write: false });
     expect(cat.find(e => e.id === "info.model")?.spec).toEqual({ kind: "text" });
     expect(cat.find(e => e.id === "info.firmware")).toMatchObject({ subunit: "SYS", func: "VERSION", write: false });
-    expect(cat.find(e => e.id === "system.power")?.spec).toEqual({ kind: "onoff", on: "On", off: "Standby" });
-    expect(cat.find(e => e.id === "system.hdmiOut1")?.spec).toEqual({ kind: "onoff", on: "On", off: "Off" });
-    expect(cat.find(e => e.id === "system.speakerPattern")?.spec.kind).toBe("enum");
+    expect(cat.find(e => e.id === "masterPower")?.spec).toEqual({ kind: "onoff", on: "On", off: "Standby" });
+    expect(cat.find(e => e.id === "hdmi.out1")?.spec).toEqual({ kind: "onoff", on: "On", off: "Off" });
+    expect(cat.find(e => e.id === "speakers.pattern")?.spec.kind).toBe("enum");
   });
 
   test("all 23 input names are read-only text states on SYS", () => {
     const cat = buildYncaCatalog();
-    expect(cat.find(e => e.id === "system.inputName.hdmi1")).toMatchObject({
+    expect(cat.find(e => e.id === "inputNames.hdmi1")).toMatchObject({
       subunit: "SYS",
       func: "INPNAMEHDMI1",
       write: false,
     });
-    expect(cat.filter(e => e.id.startsWith("system.inputName.")).length).toBe(23);
+    expect(cat.filter(e => e.id.startsWith("inputNames.")).length).toBe(23);
   });
 
   test("the AM/FM tuner is complete: RDS text B, program type and search mode", () => {
@@ -217,7 +217,7 @@ describe("YNCA catalog", () => {
     const cat = buildYncaCatalog();
     const ids = cat.map(e => e.id);
     expect(ids).toEqual(
-      expect.arrayContaining(["sound.bass", "sound.treble", "hdmiOut", "surroundAI", "party", "tuner.band"]),
+      expect.arrayContaining(["sound.bass", "sound.treble", "hdmi.output", "surroundAI", "party", "tuner.band"]),
     );
     expect(cat.find(e => e.id === "party")).toMatchObject({ subunit: "SYS", func: "PARTY" });
     expect(cat.find(e => e.id === "tuner.band")).toMatchObject({ subunit: "TUN", func: "BAND" });

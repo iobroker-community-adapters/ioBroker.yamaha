@@ -147,29 +147,43 @@ export function staleObjects(existing: string[], deviceIds: Set<string>, namespa
  * linger orphaned beside the new one — {@link staleObjects} only removes whole
  * non-configured device trees, not renamed states inside a device that is kept.
  */
-export const RENAMED_STATE_IDS = ["system.model", "system.version"];
+export const RENAMED_STATE_IDS = ["hdmiOut", "directMode"];
 
 /**
- * The full ids of renamed old states that still exist under a configured device, to
- * be deleted on start-up so no orphan lingers beside the new object.
+ * Old channel prefixes whose whole subtree this version moved out — the `system`
+ * grab-bag is gone (model/firmware → info, HDMI outputs → hdmi, speaker patterns →
+ * speakers, input names → inputNames, master power → masterPower). The channel and
+ * every state under it are removed.
+ */
+export const RENAMED_CHANNELS = ["system"];
+
+/**
+ * The full ids of renamed old states (and old channel subtrees) that still exist
+ * under a configured device, to be deleted on start-up so no orphan lingers beside
+ * the new object. Deepest first, so children go before their parents.
  *
  * @param existing all object ids currently under the instance
  * @param deviceIds the ids of the currently configured devices
  * @param namespace the adapter namespace (e.g. `yamaha.0`)
- * @returns the full old ids to delete
+ * @returns the full old ids to delete, deepest first
  */
 export function renamedObjectIds(existing: string[], deviceIds: Set<string>, namespace: string): string[] {
-  const present = new Set(existing);
   const stale: string[] = [];
   for (const deviceId of deviceIds) {
-    for (const rel of RENAMED_STATE_IDS) {
-      const full = `${namespace}.${deviceId}.${rel}`;
-      if (present.has(full)) {
+    const base = `${namespace}.${deviceId}.`;
+    for (const full of existing) {
+      if (!full.startsWith(base)) {
+        continue;
+      }
+      const rel = full.slice(base.length);
+      const renamedState = RENAMED_STATE_IDS.includes(rel);
+      const underRenamedChannel = RENAMED_CHANNELS.some(ch => rel === ch || rel.startsWith(`${ch}.`));
+      if (renamedState || underRenamedChannel) {
         stale.push(full);
       }
     }
   }
-  return stale;
+  return stale.sort((a, b) => b.length - a.length);
 }
 
 /**
