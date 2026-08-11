@@ -25,8 +25,9 @@ var import_node_http = require("node:http");
 const REQUEST_TIMEOUT_MS = 4e3;
 const API_BASE = "/YamahaExtendedControl/v1";
 function defaultSend(ip) {
-  return (command) => new Promise((resolve, reject) => {
-    const req = (0, import_node_http.get)(`http://${ip}${API_BASE}${command}`, (res) => {
+  return (command, body) => new Promise((resolve, reject) => {
+    const url = `http://${ip}${API_BASE}${command}`;
+    const onResponse = (res) => {
       let data = "";
       res.on("data", (chunk) => data += String(chunk));
       res.on("end", () => {
@@ -36,9 +37,13 @@ function defaultSend(ip) {
           reject(e instanceof Error ? e : new Error(String(e)));
         }
       });
-    });
+    };
+    const req = body === void 0 ? (0, import_node_http.get)(url, onResponse) : (0, import_node_http.request)(url, { method: "POST", headers: { "Content-Type": "application/json" } }, onResponse);
     req.on("error", reject);
     req.setTimeout(REQUEST_TIMEOUT_MS, () => req.destroy(new Error(`YXC request timed out: ${command}`)));
+    if (body !== void 0) {
+      req.end(body);
+    }
   });
 }
 function zoneSeg(zone) {
@@ -242,6 +247,49 @@ class YamahaYxcClient {
    */
   setEqualizer(low, mid, high, zone) {
     return this.send(`/${zoneSeg(zone)}/setEqualizer?mode=manual&low=${low}&mid=${mid}&high=${high}`);
+  }
+  /**
+   * Read the device's MusicCast-Link distribution state (role, group, client list).
+   *
+   * @returns the getDistributionInfo response
+   */
+  getDistributionInfo() {
+    return this.send("/dist/getDistributionInfo");
+  }
+  /**
+   * Set the group master's client roster (POST); part of the link/unlink sequence.
+   *
+   * @param info the server-info payload
+   * @returns the device response
+   */
+  setServerInfo(info) {
+    return this.send("/dist/setServerInfo", JSON.stringify(info));
+  }
+  /**
+   * Set a group member's membership (POST); part of the link/unlink sequence.
+   *
+   * @param info the client-info payload
+   * @returns the device response
+   */
+  setClientInfo(info) {
+    return this.send("/dist/setClientInfo", JSON.stringify(info));
+  }
+  /**
+   * Start distributing to the group's clients — called on the master after the infos are set.
+   *
+   * @param num the distribution number (0 for the default)
+   * @returns the device response
+   */
+  startDistribution(num) {
+    return this.send(`/dist/startDistribution?num=${num}`);
+  }
+  /**
+   * Stop distributing — called on the master to break up the group.
+   *
+   * @returns the device response
+   */
+  stopDistribution() {
+    return this.send("/dist/stopDistribution");
   }
   /**
    * Start the network/USB player.

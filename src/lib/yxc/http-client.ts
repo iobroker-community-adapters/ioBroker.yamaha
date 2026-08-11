@@ -1,4 +1,4 @@
-import { get as httpGet } from "node:http";
+import { get as httpGet, request as httpRequest, type IncomingMessage } from "node:http";
 
 /** Timeout for a single YXC HTTP request, so an unresponsive device cannot hang the keepalive. */
 const REQUEST_TIMEOUT_MS = 4000;
@@ -7,19 +7,35 @@ const REQUEST_TIMEOUT_MS = 4000;
 const API_BASE = "/YamahaExtendedControl/v1";
 
 /** Sends a command path and resolves the parsed JSON body — the injectable transport seam. */
-export type YxcSend = (command: string) => Promise<unknown>;
+export type YxcSend = (command: string, body?: string) => Promise<unknown>;
+
+/** Payload for `/dist/setServerInfo` — the group master's client roster (link_unlink.js). */
+export interface YxcServerInfo {
+  group_id: string;
+  zone: string;
+  type: "add" | "remove";
+  client_list: string[];
+}
+
+/** Payload for `/dist/setClientInfo` — a group member joining or leaving (link_unlink.js). */
+export interface YxcClientInfo {
+  group_id: string;
+  zone: string[];
+}
 
 /**
- * GET `http://<ip><API_BASE><command>` over node:http and resolve its parsed JSON,
- * with a timeout. Used as the default transport.
+ * Send `http://<ip><API_BASE><command>` over node:http and resolve its parsed JSON,
+ * with a timeout. A GET by default; a POST with a JSON body when `body` is given (the
+ * distribution setters need POST). Used as the default transport.
  *
  * @param ip the device IP or hostname
  * @returns a send function bound to that device
  */
 function defaultSend(ip: string): YxcSend {
-  return command =>
+  return (command, body) =>
     new Promise((resolve, reject) => {
-      const req = httpGet(`http://${ip}${API_BASE}${command}`, res => {
+      const url = `http://${ip}${API_BASE}${command}`;
+      const onResponse = (res: IncomingMessage): void => {
         let data = "";
         res.on("data", chunk => (data += String(chunk)));
         res.on("end", () => {
@@ -29,9 +45,16 @@ function defaultSend(ip: string): YxcSend {
             reject(e instanceof Error ? e : new Error(String(e)));
           }
         });
-      });
+      };
+      const req =
+        body === undefined
+          ? httpGet(url, onResponse)
+          : httpRequest(url, { method: "POST", headers: { "Content-Type": "application/json" } }, onResponse);
       req.on("error", reject);
       req.setTimeout(REQUEST_TIMEOUT_MS, () => req.destroy(new Error(`YXC request timed out: ${command}`)));
+      if (body !== undefined) {
+        req.end(body);
+      }
     });
 }
 
@@ -271,6 +294,54 @@ export class YamahaYxcClient {
    */
   public setEqualizer(low: number, mid: number, high: number, zone: string): Promise<unknown> {
     return this.send(`/${zoneSeg(zone)}/setEqualizer?mode=manual&low=${low}&mid=${mid}&high=${high}`);
+  }
+
+  /**
+   * Read the device's MusicCast-Link distribution state (role, group, client list).
+   *
+   * @returns the getDistributionInfo response
+   */
+  public getDistributionInfo(): Promise<unknown> {
+    return this.send("/dist/getDistributionInfo");
+  }
+
+  /**
+   * Set the group master's client roster (POST); part of the link/unlink sequence.
+   *
+   * @param info the server-info payload
+   * @returns the device response
+   */
+  public setServerInfo(info: YxcServerInfo): Promise<unknown> {
+    return this.send("/dist/setServerInfo", JSON.stringify(info));
+  }
+
+  /**
+   * Set a group member's membership (POST); part of the link/unlink sequence.
+   *
+   * @param info the client-info payload
+   * @returns the device response
+   */
+  public setClientInfo(info: YxcClientInfo): Promise<unknown> {
+    return this.send("/dist/setClientInfo", JSON.stringify(info));
+  }
+
+  /**
+   * Start distributing to the group's clients — called on the master after the infos are set.
+   *
+   * @param num the distribution number (0 for the default)
+   * @returns the device response
+   */
+  public startDistribution(num: number): Promise<unknown> {
+    return this.send(`/dist/startDistribution?num=${num}`);
+  }
+
+  /**
+   * Stop distributing — called on the master to break up the group.
+   *
+   * @returns the device response
+   */
+  public stopDistribution(): Promise<unknown> {
+    return this.send("/dist/stopDistribution");
   }
 
   /**

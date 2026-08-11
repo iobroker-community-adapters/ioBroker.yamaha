@@ -82,4 +82,32 @@ describe("YamahaYxcClient URL construction", () => {
     await client.getStatus("");
     expect(last()).toBe("/main/getStatus");
   });
+
+  test("builds the setEqualizer path with all three bands in one call", async () => {
+    const { client, last } = capture();
+    await client.setEqualizer(1, 2, 3, "main");
+    expect(last()).toBe("/main/setEqualizer?mode=manual&low=1&mid=2&high=3");
+  });
+
+  test("builds the distribution paths, POSTing a JSON body for the info setters", async () => {
+    let cmd = "";
+    let body: string | undefined;
+    const client = new YamahaYxcClient("1.2.3.4", (c, b) => {
+      cmd = c;
+      body = b;
+      return Promise.resolve({});
+    });
+    await client.getDistributionInfo();
+    expect(cmd).toBe("/dist/getDistributionInfo");
+    await client.startDistribution(0);
+    expect(cmd).toBe("/dist/startDistribution?num=0");
+    await client.stopDistribution();
+    expect(cmd).toBe("/dist/stopDistribution");
+    await client.setClientInfo({ group_id: "g", zone: ["main"] });
+    expect(cmd).toBe("/dist/setClientInfo");
+    expect(body).toBe('{"group_id":"g","zone":["main"]}');
+    await client.setServerInfo({ group_id: "g", zone: "main", type: "add", client_list: ["1.2.3.5"] });
+    expect(cmd).toBe("/dist/setServerInfo");
+    expect(body).toBe('{"group_id":"g","zone":"main","type":"add","client_list":["1.2.3.5"]}');
+  });
 });
