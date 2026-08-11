@@ -1,4 +1,4 @@
-import { parseYxcPlayInfo, parseYxcStatus, parseYxcTunerInfo, stateToYxc } from "./command-mapper";
+import { parseYxcDistribution, parseYxcPlayInfo, parseYxcStatus, parseYxcTunerInfo, stateToYxc } from "./command-mapper";
 import ysp from "./__fixtures__/status/YSP1600_main.json";
 import rx from "./__fixtures__/status/RX_A2070_main.json";
 
@@ -113,6 +113,30 @@ describe("stateToYxc control methods (repeat/shuffle/tray, tuner, party, preset)
     expect(stateToYxc("equalizerMid", -2)).toEqual({ method: "setEqualizerMid", zone: "main", value: -2 });
     expect(stateToYxc("equalizerHigh", 5)).toEqual({ method: "setEqualizerHigh", zone: "main", value: 5 });
     expect(stateToYxc("zone2.equalizerLow", 1)).toEqual({ method: "setEqualizerLow", zone: "zone2", value: 1 });
+  });
+});
+
+describe("parseYxcDistribution", () => {
+  test("maps getDistributionInfo to the read-only multiroom states", () => {
+    expect(
+      parseYxcDistribution({
+        group_id: "abc",
+        group_name: "Kitchen",
+        role: "server",
+        server_zone: "main",
+        client_list: ["1.2.3.5"],
+      }),
+    ).toEqual([
+      { id: "dist.role", value: "server" },
+      { id: "dist.groupId", value: "abc" },
+      { id: "dist.groupName", value: "Kitchen" },
+      { id: "dist.serverZone", value: "main" },
+      { id: "dist.clientList", value: '["1.2.3.5"]' },
+    ]);
+  });
+
+  test("returns an empty list for a malformed response", () => {
+    expect(parseYxcDistribution(null)).toEqual([]);
   });
 });
 

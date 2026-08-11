@@ -18,6 +18,7 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var command_mapper_exports = {};
 __export(command_mapper_exports, {
+  parseYxcDistribution: () => parseYxcDistribution,
   parseYxcPlayInfo: () => parseYxcPlayInfo,
   parseYxcStatus: () => parseYxcStatus,
   parseYxcTunerInfo: () => parseYxcTunerInfo,
@@ -122,6 +123,29 @@ function stateToYxc(stateId, value) {
   }
   return { method: entry.write.method, zone, value: entry.write.toYxc(value) };
 }
+function parseYxcDistribution(info) {
+  if (typeof info !== "object" || info === null) {
+    return [];
+  }
+  const d = info;
+  const updates = [];
+  if (typeof d.role === "string") {
+    updates.push({ id: "dist.role", value: d.role });
+  }
+  if (typeof d.group_id === "string") {
+    updates.push({ id: "dist.groupId", value: d.group_id });
+  }
+  if (typeof d.group_name === "string") {
+    updates.push({ id: "dist.groupName", value: d.group_name });
+  }
+  if (typeof d.server_zone === "string") {
+    updates.push({ id: "dist.serverZone", value: d.server_zone });
+  }
+  if (Array.isArray(d.client_list)) {
+    updates.push({ id: "dist.clientList", value: JSON.stringify(d.client_list) });
+  }
+  return updates;
+}
 function parseYxcPlayInfo(playInfo, prefix = "netPlayer") {
   if (typeof playInfo !== "object" || playInfo === null) {
     return [];
@@ -176,6 +200,7 @@ function parseYxcTunerInfo(tunerInfo) {
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  parseYxcDistribution,
   parseYxcPlayInfo,
   parseYxcStatus,
   parseYxcTunerInfo,

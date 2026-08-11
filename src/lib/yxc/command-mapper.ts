@@ -151,6 +151,36 @@ export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefi
 }
 
 /**
+ * Parse a getDistributionInfo response into the read-only multiroom (dist) states.
+ *
+ * @param info the getDistributionInfo response object
+ * @returns the dist state updates, or an empty list if malformed
+ */
+export function parseYxcDistribution(info: unknown): StateValue[] {
+  if (typeof info !== "object" || info === null) {
+    return [];
+  }
+  const d = info as Record<string, unknown>;
+  const updates: StateValue[] = [];
+  if (typeof d.role === "string") {
+    updates.push({ id: "dist.role", value: d.role });
+  }
+  if (typeof d.group_id === "string") {
+    updates.push({ id: "dist.groupId", value: d.group_id });
+  }
+  if (typeof d.group_name === "string") {
+    updates.push({ id: "dist.groupName", value: d.group_name });
+  }
+  if (typeof d.server_zone === "string") {
+    updates.push({ id: "dist.serverZone", value: d.server_zone });
+  }
+  if (Array.isArray(d.client_list)) {
+    updates.push({ id: "dist.clientList", value: JSON.stringify(d.client_list) });
+  }
+  return updates;
+}
+
+/**
  * Parse a YXC getPlayInfo response into a player's read-only state updates
  * (playback status plus artist/album/track metadata). The same response shape is
  * used by every player source, so the target channel is chosen via `prefix`.
