@@ -64,6 +64,9 @@ const TOGGLE_ACTIONS: Record<string, string> = {
   "cd.tray": "toggleTray",
 };
 
+/** Equalizer band state (without zone prefix) → the band suffix of its setEqualizer<Band> method. */
+const EQ_CHANNELS: Record<string, string> = { equalizerLow: "Low", equalizerMid: "Mid", equalizerHigh: "High" };
+
 const ZONE_PREFIX: Record<string, string> = { main: "", zone2: "zone2.", zone3: "zone3.", zone4: "zone4." };
 
 /**
@@ -134,6 +137,11 @@ export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefi
     if (ZONE_PREFIX[zone] === undefined || zone === "main") {
       return undefined;
     }
+  }
+  const eqBand = EQ_CHANNELS[name];
+  if (eqBand && isWritableValue(value, true)) {
+    // The controller supplies the other two bands; the value carries only this band.
+    return { method: `setEqualizer${eqBand}`, zone, value: Number(value) };
   }
   const entry = YXC_AMP_CATALOG.find(e => e.state === name);
   if (!entry?.write || !isWritableValue(value, entry.common.type === "number")) {

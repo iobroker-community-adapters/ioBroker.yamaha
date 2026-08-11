@@ -60,6 +60,7 @@ const TOGGLE_ACTIONS = {
   "cd.shuffleToggle": "toggleCDShuffle",
   "cd.tray": "toggleTray"
 };
+const EQ_CHANNELS = { equalizerLow: "Low", equalizerMid: "Mid", equalizerHigh: "High" };
 const ZONE_PREFIX = { main: "", zone2: "zone2.", zone3: "zone3.", zone4: "zone4." };
 function parseYxcStatus(zoneStatus, zone) {
   if (typeof zoneStatus !== "object" || zoneStatus === null) {
@@ -110,6 +111,10 @@ function stateToYxc(stateId, value) {
     if (ZONE_PREFIX[zone] === void 0 || zone === "main") {
       return void 0;
     }
+  }
+  const eqBand = EQ_CHANNELS[name];
+  if (eqBand && (0, import_value_coerce.isWritableValue)(value, true)) {
+    return { method: `setEqualizer${eqBand}`, zone, value: Number(value) };
   }
   const entry = import_catalog.YXC_AMP_CATALOG.find((e) => e.state === name);
   if (!(entry == null ? void 0 : entry.write) || !(0, import_value_coerce.isWritableValue)(value, entry.common.type === "number")) {

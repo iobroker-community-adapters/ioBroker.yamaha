@@ -105,6 +105,15 @@ describe("stateToYxc control methods (repeat/shuffle/tray, tuner, party, preset)
     expect(stateToYxc("netPlayer.preset", 3)).toEqual({ method: "recallPreset", zone: "netusb", value: 3 });
     expect(stateToYxc("partyEnable", true)).toEqual({ method: "setPartyMode", zone: "main", value: true });
   });
+
+  test("equalizer bands route to their per-channel setEqualizer method (main and zoned)", () => {
+    // setEqualizer sets low/mid/high together; the controller supplies the other two from
+    // the last status, so each state carries only its own band value.
+    expect(stateToYxc("equalizerLow", 3)).toEqual({ method: "setEqualizerLow", zone: "main", value: 3 });
+    expect(stateToYxc("equalizerMid", -2)).toEqual({ method: "setEqualizerMid", zone: "main", value: -2 });
+    expect(stateToYxc("equalizerHigh", 5)).toEqual({ method: "setEqualizerHigh", zone: "main", value: 5 });
+    expect(stateToYxc("zone2.equalizerLow", 1)).toEqual({ method: "setEqualizerLow", zone: "zone2", value: 1 });
+  });
 });
 
 describe("parseYxcPlayInfo", () => {
@@ -218,7 +227,6 @@ describe("stateToYxc", () => {
     expect(stateToYxc("bassExtension", true)).toEqual({ method: "setBassExtension", zone: "main", value: true });
     expect(stateToYxc("clearVoice", true)).toEqual({ method: "setClearVoice", zone: "main", value: true });
     expect(stateToYxc("extraBass", true)).toBeUndefined();
-    expect(stateToYxc("equalizerLow", 5)).toBeUndefined();
     expect(stateToYxc("surround3d", true)).toBeUndefined();
   });
 

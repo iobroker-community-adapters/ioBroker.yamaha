@@ -46,6 +46,8 @@ class YxcDeviceController {
   dropped = false;
   /** The tuner's current band, cached so a frequency write can supply it (setFreq needs band + freq). */
   lastTunerBand = "fm";
+  /** Each zone's last-seen equalizer bands, cached so one band write can supply the other two. */
+  lastEqualizer = /* @__PURE__ */ new Map();
   /**
    * Read capabilities, create the object tree, seed state, and wire up push +
    * keepalive.
@@ -197,9 +199,11 @@ class YxcDeviceController {
   async refreshZone(zone) {
     try {
       const status = await this.deps.client.getStatus(zone);
-      for (const update of (0, import_command_mapper.parseYxcStatus)(status, zone)) {
+      const updates = (0, import_command_mapper.parseYxcStatus)(status, zone);
+      for (const update of updates) {
         this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
       }
+      this.cacheEqualizer(zone, updates);
       return true;
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getStatus(${zone}) failed: ${(0, import_util.errorMessage)(e)}`);
@@ -207,11 +211,36 @@ class YxcDeviceController {
     }
   }
   /**
+   * Cache a zone's equalizer bands from its status updates, so a later single-band
+   * write can send setEqualizer with all three (the device sets them together).
+   *
+   * @param zone the zone the updates belong to
+   * @param updates the parsed status updates for that zone
+   */
+  cacheEqualizer(zone, updates) {
+    var _a, _b, _c, _d;
+    const prefix = zone === "main" ? "" : `${zone}.`;
+    const band = (b) => {
+      const u = updates.find((x) => x.id === `${prefix}equalizer${b}`);
+      return typeof (u == null ? void 0 : u.value) === "number" ? u.value : void 0;
+    };
+    if (band("Low") === void 0 && band("Mid") === void 0 && band("High") === void 0) {
+      return;
+    }
+    const cur = (_a = this.lastEqualizer.get(zone)) != null ? _a : { low: 0, mid: 0, high: 0 };
+    this.lastEqualizer.set(zone, {
+      low: (_b = band("Low")) != null ? _b : cur.low,
+      mid: (_c = band("Mid")) != null ? _c : cur.mid,
+      high: (_d = band("High")) != null ? _d : cur.high
+    });
+  }
+  /**
    * Send a mapped command to the device through the matching client method.
    *
    * @param command the YXC command to apply
    */
   async applyCommand(command) {
+    var _a;
     const { zone, value } = command;
     try {
       switch (command.method) {
@@ -260,6 +289,15 @@ class YxcDeviceController {
         case "setBalance":
           await this.deps.client.setBalance(Number(value), zone);
           break;
+        case "setEqualizerLow":
+        case "setEqualizerMid":
+        case "setEqualizerHigh": {
+          const band = command.method.slice("setEqualizer".length).toLowerCase();
+          const next = { ...(_a = this.lastEqualizer.get(zone)) != null ? _a : { low: 0, mid: 0, high: 0 }, [band]: Number(value) };
+          await this.deps.client.setEqualizer(next.low, next.mid, next.high, zone);
+          this.lastEqualizer.set(zone, next);
+          break;
+        }
         case "playNet":
           await this.deps.client.playNet();
           break;

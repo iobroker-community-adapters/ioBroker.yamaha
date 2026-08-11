@@ -252,21 +252,21 @@ const YXC_AMP_CATALOG = [
   },
   {
     state: "equalizerLow",
-    common: { name: "Equalizer low", type: "number", unit: "dB", role: "value", read: true, write: false },
+    common: { name: "Equalizer low", type: "number", unit: "dB", role: "level", read: true, write: true },
     create: { kind: "func", func: "equalizer" },
     read: { path: ["equalizer", "low"] },
     fromStatus: num
   },
   {
     state: "equalizerMid",
-    common: { name: "Equalizer mid", type: "number", unit: "dB", role: "value", read: true, write: false },
+    common: { name: "Equalizer mid", type: "number", unit: "dB", role: "level", read: true, write: true },
     create: { kind: "func", func: "equalizer" },
     read: { path: ["equalizer", "mid"] },
     fromStatus: num
   },
   {
     state: "equalizerHigh",
-    common: { name: "Equalizer high", type: "number", unit: "dB", role: "value", read: true, write: false },
+    common: { name: "Equalizer high", type: "number", unit: "dB", role: "level", read: true, write: true },
     create: { kind: "func", func: "equalizer" },
     read: { path: ["equalizer", "high"] },
     fromStatus: num

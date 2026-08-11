@@ -58,6 +58,7 @@ export interface YxcClientLike {
   setBassExtension(on: boolean, zone: string): Promise<unknown>;
   /** Set a zone's balance. */
   setBalance(value: number, zone: string): Promise<unknown>;
+  setEqualizer(low: number, mid: number, high: number, zone: string): Promise<unknown>;
   /** Start the network/USB player. */
   playNet(): Promise<unknown>;
   /** Pause the network/USB player. */
@@ -123,6 +124,8 @@ export class YxcDeviceController implements ConnectionHandle {
   private dropped = false;
   /** The tuner's current band, cached so a frequency write can supply it (setFreq needs band + freq). */
   private lastTunerBand = "fm";
+  /** Each zone's last-seen equalizer bands, cached so one band write can supply the other two. */
+  private readonly lastEqualizer = new Map<string, { low: number; mid: number; high: number }>();
 
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
@@ -295,14 +298,40 @@ export class YxcDeviceController implements ConnectionHandle {
   private async refreshZone(zone: string): Promise<boolean> {
     try {
       const status = await this.deps.client.getStatus(zone);
-      for (const update of parseYxcStatus(status, zone)) {
+      const updates = parseYxcStatus(status, zone);
+      for (const update of updates) {
         this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
       }
+      this.cacheEqualizer(zone, updates);
       return true;
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getStatus(${zone}) failed: ${errorMessage(e)}`);
       return false;
     }
+  }
+
+  /**
+   * Cache a zone's equalizer bands from its status updates, so a later single-band
+   * write can send setEqualizer with all three (the device sets them together).
+   *
+   * @param zone the zone the updates belong to
+   * @param updates the parsed status updates for that zone
+   */
+  private cacheEqualizer(zone: string, updates: StateValue[]): void {
+    const prefix = zone === "main" ? "" : `${zone}.`;
+    const band = (b: string): number | undefined => {
+      const u = updates.find(x => x.id === `${prefix}equalizer${b}`);
+      return typeof u?.value === "number" ? u.value : undefined;
+    };
+    if (band("Low") === undefined && band("Mid") === undefined && band("High") === undefined) {
+      return;
+    }
+    const cur = this.lastEqualizer.get(zone) ?? { low: 0, mid: 0, high: 0 };
+    this.lastEqualizer.set(zone, {
+      low: band("Low") ?? cur.low,
+      mid: band("Mid") ?? cur.mid,
+      high: band("High") ?? cur.high,
+    });
   }
 
   /**
@@ -359,6 +388,16 @@ export class YxcDeviceController implements ConnectionHandle {
         case "setBalance":
           await this.deps.client.setBalance(Number(value), zone);
           break;
+        case "setEqualizerLow":
+        case "setEqualizerMid":
+        case "setEqualizerHigh": {
+          // The method name carries the band; the other two come from the cached status.
+          const band = command.method.slice("setEqualizer".length).toLowerCase() as "low" | "mid" | "high";
+          const next = { ...(this.lastEqualizer.get(zone) ?? { low: 0, mid: 0, high: 0 }), [band]: Number(value) };
+          await this.deps.client.setEqualizer(next.low, next.mid, next.high, zone);
+          this.lastEqualizer.set(zone, next);
+          break;
+        }
         case "playNet":
           await this.deps.client.playNet();
           break;

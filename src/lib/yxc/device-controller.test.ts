@@ -101,6 +101,10 @@ class FakeClient implements YxcClientLike {
     this.calls.push({ method: "recallPreset", args: [num, zone] });
     return {};
   }
+  public async setEqualizer(low: number, mid: number, high: number, zone: string): Promise<unknown> {
+    this.calls.push({ method: "setEqualizer", args: [low, mid, high, zone] });
+    return {};
+  }
   public async setSubwooferVolumeTo(to: number, zone: string): Promise<unknown> {
     this.calls.push({ method: "setSubwooferVolumeTo", args: [to, zone] });
     return {};
@@ -282,6 +286,18 @@ describe("YxcDeviceController", () => {
     s.controller.handleStateChange("living.cd.play", false, true);
     await flush();
     expect(s.client.calls).toContainEqual({ method: "setCDPlayback", args: ["play"] });
+  });
+
+  test("an equalizer band write sends setEqualizer with the other two bands from the last status", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power", "equalizer"] }] };
+    const status = { power: "on", equalizer: { mode: "manual", low: 1, mid: 2, high: 3 } };
+    const s = setup(features, status);
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.equalizerLow", false, 7);
+    await flush();
+    // low from the write, mid/high from the cached status, on the main zone.
+    expect(s.client.calls).toContainEqual({ method: "setEqualizer", args: [7, 2, 3, "main"] });
   });
 
   test("a media push refreshes only the named player source, not every zone", async () => {

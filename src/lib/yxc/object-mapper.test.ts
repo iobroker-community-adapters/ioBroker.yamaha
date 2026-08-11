@@ -29,6 +29,16 @@ describe("mapYxcToObjects", () => {
     expect(w("tuner.frequency")).toBe(true);
   });
 
+  test("equalizer bands are writable when the device reports an equalizer", () => {
+    const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power", "equalizer"], inputs: [] }], media: [] });
+    const low = objs.find(o => o.id === "equalizerLow");
+    expect(low?.common.write).toBe(true);
+    // A writable number is `level`, not the read-only `value`.
+    expect(low?.common.role).toBe("level");
+    expect(objs.find(o => o.id === "equalizerMid")?.common.write).toBe(true);
+    expect(objs.find(o => o.id === "equalizerHigh")?.common.write).toBe(true);
+  });
+
   test("the network player exposes repeat, shuffle, elapsed/total time and album art (F2 parity)", () => {
     const ids = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: ["netusb"] }).map(
       o => o.id,

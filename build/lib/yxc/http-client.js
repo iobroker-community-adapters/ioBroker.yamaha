@@ -231,6 +231,19 @@ class YamahaYxcClient {
     return this.send(`/${zoneSeg(zone)}/setBalance?value=${value}`);
   }
   /**
+   * Set the manual graphic equalizer. The device takes all three bands in one call, so
+   * the caller supplies low/mid/high together (the controller fills the unchanged two).
+   *
+   * @param low the low-band value
+   * @param mid the mid-band value
+   * @param high the high-band value
+   * @param zone the target zone
+   * @returns the device response
+   */
+  setEqualizer(low, mid, high, zone) {
+    return this.send(`/${zoneSeg(zone)}/setEqualizer?mode=manual&low=${low}&mid=${mid}&high=${high}`);
+  }
+  /**
    * Start the network/USB player.
    *
    * @returns the command response
