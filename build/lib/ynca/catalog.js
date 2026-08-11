@@ -710,7 +710,7 @@ const DAB_FUNCS = [
     role: "level"
   }
 ];
-const PLAYBACK_STATES = selfMap(["Play", "Pause", "Stop"]);
+const PLAYBACK_STATES = selfMap(["Play", "Pause", "Stop", "Skip Fwd", "Skip Rev"]);
 const REPEAT_STATES = selfMap(["Off", "Single", "All"]);
 const PLAYER_SOURCES = [
   { subunit: "NETRADIO", channel: "netRadio" },

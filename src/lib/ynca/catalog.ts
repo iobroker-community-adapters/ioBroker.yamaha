@@ -774,7 +774,10 @@ const DAB_FUNCS: FuncDef[] = [
   },
 ];
 
-const PLAYBACK_STATES = selfMap(["Play", "Pause", "Stop"]);
+// Skip Fwd/Skip Rev are write-only actions (the device reports only Play/Pause/Stop via
+// PLAYBACKINFO); adding them to the writable playback dropdown gives track skip without a
+// second control model. The ynca lib's Playback enum lists exactly these five values.
+const PLAYBACK_STATES = selfMap(["Play", "Pause", "Stop", "Skip Fwd", "Skip Rev"]);
 const REPEAT_STATES = selfMap(["Off", "Single", "All"]);
 
 /**

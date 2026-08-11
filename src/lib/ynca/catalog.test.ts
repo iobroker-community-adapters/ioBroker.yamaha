@@ -125,6 +125,18 @@ describe("YNCA catalog", () => {
     expect(funcToEntry(cat).get("SPOTIFY:PLAYBACKINFO")?.id).toBe("spotify.playback");
   });
 
+  test("playback offers skip forward/back as writable values (the ynca lib Playback enum has them)", () => {
+    const cat = buildYncaCatalog();
+    const states = (cat.find(e => e.id === "spotify.playback")?.spec as EnumSpec).states;
+    expect(states).toHaveProperty("Skip Fwd");
+    expect(states).toHaveProperty("Skip Rev");
+    expect(yncaCommand("spotify.playback", "Skip Fwd", idToEntry(cat))).toEqual({
+      subunit: "SPOTIFY",
+      func: "PLAYBACK",
+      value: "Skip Fwd",
+    });
+  });
+
   test("player sources expose station, total/elapsed time, preset and channel metadata", () => {
     const cat = buildYncaCatalog();
     expect(cat.find(e => e.id === "netRadio.station")).toMatchObject({ subunit: "NETRADIO", func: "STATION" });
