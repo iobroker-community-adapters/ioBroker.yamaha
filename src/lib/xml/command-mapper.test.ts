@@ -49,6 +49,25 @@ describe("stateToXml", () => {
     expect(stateToXml("dialogueLevel", 2)).toBeUndefined();
   });
 
+  test("maps tone, subwoofer trim and extra-bass/YPAO writes (soef lib paths)", () => {
+    expect(stateToXml("bass", 3)).toEqual({
+      zone: "Main_Zone",
+      inner: "<Sound_Video><Tone><Bass><Val>3</Val><Exp>1</Exp><Unit>dB</Unit></Bass></Tone></Sound_Video>",
+    });
+    expect(stateToXml("subwooferTrim", -1)).toEqual({
+      zone: "Main_Zone",
+      inner: "<Volume><Subwoofer_Trim><Val>-1</Val><Exp>1</Exp><Unit>dB</Unit></Subwoofer_Trim></Volume>",
+    });
+    expect(stateToXml("extraBass", true)).toEqual({
+      zone: "Main_Zone",
+      inner: "<Sound_Video><Extra_Bass>Auto</Extra_Bass></Sound_Video>",
+    });
+    expect(stateToXml("ypaoVolume", false)).toEqual({
+      zone: "Main_Zone",
+      inner: "<Sound_Video><YPAO_Volume>Off</YPAO_Volume></Sound_Video>",
+    });
+  });
+
   test("returns undefined for an unmapped state or unknown zone", () => {
     expect(stateToXml("nonsense", 1)).toBeUndefined();
     expect(stateToXml("zone9.power", true)).toBeUndefined();

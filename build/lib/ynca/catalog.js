@@ -807,6 +807,18 @@ function buildYncaCatalog() {
       func: `SCENE${n}NAME`
     });
   }
+  entries.push({
+    id: "scene.recall",
+    name: "Recall scene",
+    spec: { kind: "number", min: 1, max: 12, step: 1 },
+    write: true,
+    role: "level",
+    subunit: "MAIN",
+    func: "SCENE",
+    readFunc: "SCENE1NAME",
+    writeOnly: true,
+    wireEncode: (value) => `Scene ${value}`
+  });
   for (const fn of GLOBAL_FUNCS) {
     entries.push(...fnEntries([fn], fn.subunit));
   }
@@ -854,7 +866,9 @@ function sweepGets(entries) {
   return gets;
 }
 function funcToEntry(entries) {
-  return new Map(entries.map((entry) => [`${entry.subunit}:${readFuncOf(entry)}`, entry]));
+  return new Map(
+    entries.filter((entry) => !entry.writeOnly).map((entry) => [`${entry.subunit}:${readFuncOf(entry)}`, entry])
+  );
 }
 function idToEntry(entries) {
   return new Map(entries.map((entry) => [entry.id, entry]));
@@ -884,7 +898,8 @@ function yncaCommand(stateId, value, map) {
   if (!(0, import_value_coerce.isWritableValue)(value, entry.spec.kind === "number")) {
     return void 0;
   }
-  return { subunit: entry.subunit, func: entry.func, value: (0, import_value_coerce.encode)(entry.spec, value) };
+  const wire = entry.wireEncode ? entry.wireEncode(value) : (0, import_value_coerce.encode)(entry.spec, value);
+  return { subunit: entry.subunit, func: entry.func, value: wire };
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {

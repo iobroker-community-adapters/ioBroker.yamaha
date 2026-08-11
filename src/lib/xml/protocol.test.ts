@@ -54,6 +54,20 @@ describe("parseBasicStatus", () => {
     expect(status.volume).toBeUndefined(); // Dialogue_Lvl's <Val> must not be read as the volume
   });
 
+  test("parses tone, subwoofer trim and extra-bass/YPAO toggles (soef paths the predecessor exposed)", () => {
+    const xml =
+      "<Sound_Video><Tone><Bass><Val>3</Val></Bass><Treble><Val>-2</Val></Treble></Tone>" +
+      "<Extra_Bass>Auto</Extra_Bass><YPAO_Volume>Off</YPAO_Volume></Sound_Video>" +
+      "<Volume><Subwoofer_Trim><Val>1</Val></Subwoofer_Trim></Volume>";
+    const s = parseBasicStatus(xml);
+    expect(s.bass).toBe(3);
+    expect(s.treble).toBe(-2);
+    expect(s.subwooferTrim).toBe(1);
+    expect(s.extraBass).toBe(true); // Auto -> on
+    expect(s.ypaoVolume).toBe(false); // Off -> off
+    expect(s.volume).toBeUndefined(); // Subwoofer_Trim's <Val> must not be read as the volume
+  });
+
   test("returns nothing for a malformed response", () => {
     expect(parseBasicStatus("not xml")).toEqual({});
   });

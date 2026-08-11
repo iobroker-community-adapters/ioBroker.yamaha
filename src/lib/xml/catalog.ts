@@ -101,4 +101,40 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     statusField: "sleep",
     toInner: value => `<Power_Control><Sleep>${String(value)}</Sleep></Power_Control>`,
   },
+  // Tone, subwoofer trim and the Extra-Bass/YPAO toggles — exposed by the predecessor
+  // adapter (yamaha-nodejs-soef) on real pre-2010 devices, and dropped in the rewrite.
+  // Values verified against that library's PUT paths (audit findings F3/F4).
+  {
+    state: "bass",
+    common: { name: "Bass", type: "number", role: "level", read: true, write: true, unit: "dB" },
+    statusField: "bass",
+    toInner: value =>
+      `<Sound_Video><Tone><Bass><Val>${Number(value)}</Val><Exp>1</Exp><Unit>dB</Unit></Bass></Tone></Sound_Video>`,
+  },
+  {
+    state: "treble",
+    common: { name: "Treble", type: "number", role: "level", read: true, write: true, unit: "dB" },
+    statusField: "treble",
+    toInner: value =>
+      `<Sound_Video><Tone><Treble><Val>${Number(value)}</Val><Exp>1</Exp><Unit>dB</Unit></Treble></Tone></Sound_Video>`,
+  },
+  {
+    state: "subwooferTrim",
+    common: { name: "Subwoofer trim", type: "number", role: "level", read: true, write: true, unit: "dB" },
+    statusField: "subwooferTrim",
+    toInner: value =>
+      `<Volume><Subwoofer_Trim><Val>${Number(value)}</Val><Exp>1</Exp><Unit>dB</Unit></Subwoofer_Trim></Volume>`,
+  },
+  {
+    state: "extraBass",
+    common: { name: "Extra Bass", type: "boolean", role: "switch", read: true, write: true },
+    statusField: "extraBass",
+    toInner: value => `<Sound_Video><Extra_Bass>${value ? "Auto" : "Off"}</Extra_Bass></Sound_Video>`,
+  },
+  {
+    state: "ypaoVolume",
+    common: { name: "YPAO Volume", type: "boolean", role: "switch", read: true, write: true },
+    statusField: "ypaoVolume",
+    toInner: value => `<Sound_Video><YPAO_Volume>${value ? "Auto" : "Off"}</YPAO_Volume></Sound_Video>`,
+  },
 ];

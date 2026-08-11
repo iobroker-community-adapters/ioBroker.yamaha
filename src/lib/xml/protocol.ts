@@ -44,6 +44,16 @@ export interface BasicStatus {
   dialogueLevel?: number;
   /** Sleep timer (e.g. "Off", "30 min"). */
   sleep?: string;
+  /** Bass tone control (dB). */
+  bass?: number;
+  /** Treble tone control (dB). */
+  treble?: number;
+  /** Subwoofer trim (dB). */
+  subwooferTrim?: number;
+  /** Extra Bass (device reports Auto/Off, mapped to a boolean). */
+  extraBass?: boolean;
+  /** YPAO Volume (device reports Auto/Off, mapped to a boolean). */
+  ypaoVolume?: boolean;
 }
 
 /**
@@ -102,6 +112,29 @@ export function parseBasicStatus(xml: string): BasicStatus {
   const sleepMatch = /<Sleep>([^<]+)<\/Sleep>/.exec(xml);
   if (sleepMatch) {
     status.sleep = sleepMatch[1];
+  }
+  // Tone/subwoofer/extra-bass/YPAO — the fields the predecessor adapter (via
+  // yamaha-nodejs-soef) read on real pre-2010 devices. Val is scoped to its own
+  // element, so Subwoofer_Trim's <Val> is never read as the volume.
+  const bass = /<Bass>\s*<Val>(-?\d+)<\/Val>/.exec(xml);
+  if (bass) {
+    status.bass = Number(bass[1]);
+  }
+  const treble = /<Treble>\s*<Val>(-?\d+)<\/Val>/.exec(xml);
+  if (treble) {
+    status.treble = Number(treble[1]);
+  }
+  const subwooferTrim = /<Subwoofer_Trim>\s*<Val>(-?\d+)<\/Val>/.exec(xml);
+  if (subwooferTrim) {
+    status.subwooferTrim = Number(subwooferTrim[1]);
+  }
+  const extraBass = /<Extra_Bass>([^<]+)<\/Extra_Bass>/.exec(xml);
+  if (extraBass) {
+    status.extraBass = extraBass[1] !== "Off";
+  }
+  const ypaoVolume = /<YPAO_Volume>([^<]+)<\/YPAO_Volume>/.exec(xml);
+  if (ypaoVolume) {
+    status.ypaoVolume = ypaoVolume[1] !== "Off";
   }
   return status;
 }
