@@ -68,6 +68,18 @@ describe("parseBasicStatus", () => {
     expect(s.volume).toBeUndefined(); // Subwoofer_Trim's <Val> must not be read as the volume
   });
 
+  test("parses HDMI outputs, party and dialogue lift (predecessor paths)", () => {
+    const xml =
+      "<Sound_Video><HDMI><Output><OUT_1>On</OUT_1><OUT_2>Off</OUT_2></Output></HDMI>" +
+      "<Dialogue_Adjust><Dialogue_Lift>3</Dialogue_Lift></Dialogue_Adjust></Sound_Video>" +
+      "<Party_Info>On</Party_Info>";
+    const s = parseBasicStatus(xml);
+    expect(s.hdmiOut1).toBe(true);
+    expect(s.hdmiOut2).toBe(false);
+    expect(s.dialogueLift).toBe(3);
+    expect(s.party).toBe(true);
+  });
+
   test("returns nothing for a malformed response", () => {
     expect(parseBasicStatus("not xml")).toEqual({});
   });

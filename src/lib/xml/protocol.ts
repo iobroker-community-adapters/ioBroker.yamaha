@@ -54,6 +54,14 @@ export interface BasicStatus {
   extraBass?: boolean;
   /** YPAO Volume (device reports Auto/Off, mapped to a boolean). */
   ypaoVolume?: boolean;
+  /** HDMI output OUT_1 on/off. */
+  hdmiOut1?: boolean;
+  /** HDMI output OUT_2 on/off. */
+  hdmiOut2?: boolean;
+  /** Party mode (device reports Party_Info On/Off). */
+  party?: boolean;
+  /** Dialogue lift. */
+  dialogueLift?: number;
 }
 
 /**
@@ -135,6 +143,24 @@ export function parseBasicStatus(xml: string): BasicStatus {
   const ypaoVolume = /<YPAO_Volume>([^<]+)<\/YPAO_Volume>/.exec(xml);
   if (ypaoVolume) {
     status.ypaoVolume = ypaoVolume[1] !== "Off";
+  }
+  // HDMI outputs, party and dialogue lift — read from the main zone's Basic_Status
+  // (Sound_Video/HDMI, Party_Info, Dialogue_Adjust), as the predecessor adapter did.
+  const hdmiOut1 = /<OUT_1>(On|Off)<\/OUT_1>/.exec(xml);
+  if (hdmiOut1) {
+    status.hdmiOut1 = hdmiOut1[1] === "On";
+  }
+  const hdmiOut2 = /<OUT_2>(On|Off)<\/OUT_2>/.exec(xml);
+  if (hdmiOut2) {
+    status.hdmiOut2 = hdmiOut2[1] === "On";
+  }
+  const party = /<Party_Info>([^<]+)<\/Party_Info>/.exec(xml);
+  if (party) {
+    status.party = party[1] === "On";
+  }
+  const dialogueLift = /<Dialogue_Lift>(-?\d+)<\/Dialogue_Lift>/.exec(xml);
+  if (dialogueLift) {
+    status.dialogueLift = Number(dialogueLift[1]);
   }
   return status;
 }

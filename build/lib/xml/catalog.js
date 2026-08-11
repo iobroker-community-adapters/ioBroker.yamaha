@@ -131,6 +131,44 @@ const XML_AMP_CATALOG = [
     common: { name: "YPAO Volume", type: "boolean", role: "switch", read: true, write: true },
     statusField: "ypaoVolume",
     toInner: (value) => `<Sound_Video><YPAO_Volume>${value ? "Auto" : "Off"}</YPAO_Volume></Sound_Video>`
+  },
+  {
+    state: "dialogueLift",
+    common: { name: "Dialogue lift", type: "number", role: "level", read: true, write: true },
+    statusField: "dialogueLift",
+    toInner: (value) => `<Sound_Video><Dialogue_Adjust><Dialogue_Lift>${Number(value)}</Dialogue_Lift></Dialogue_Adjust></Sound_Video>`
+  },
+  // Scene recall, HDMI outputs and party — the predecessor's Scene_Load / setHDMIOutput /
+  // partyMode. Main-zone-only; HDMI/party are written on the System element (writeZone).
+  {
+    state: "scene.recall",
+    common: { name: "Recall scene", type: "number", role: "level", read: true, write: true, min: 1, max: 12, step: 1 },
+    mainOnly: true,
+    toInner: (value) => `<Scene><Scene_Load>Scene ${Number(value)}</Scene_Load></Scene>`
+  },
+  {
+    state: "hdmiOut1",
+    common: { name: "HDMI OUT1", type: "boolean", role: "switch", read: true, write: true },
+    statusField: "hdmiOut1",
+    mainOnly: true,
+    writeZone: "System",
+    toInner: (value) => `<Sound_Video><HDMI><Output><OUT_1>${value ? "On" : "Off"}</OUT_1></Output></HDMI></Sound_Video>`
+  },
+  {
+    state: "hdmiOut2",
+    common: { name: "HDMI OUT2", type: "boolean", role: "switch", read: true, write: true },
+    statusField: "hdmiOut2",
+    mainOnly: true,
+    writeZone: "System",
+    toInner: (value) => `<Sound_Video><HDMI><Output><OUT_2>${value ? "On" : "Off"}</OUT_2></Output></HDMI></Sound_Video>`
+  },
+  {
+    state: "party",
+    common: { name: "Party mode", type: "boolean", role: "switch", read: true, write: true },
+    statusField: "party",
+    mainOnly: true,
+    writeZone: "System",
+    toInner: (value) => `<Party_Mode><Mode>${value ? "On" : "Off"}</Mode></Party_Mode>`
   }
 ];
 // Annotate the CommonJS export names for ESM import in node:

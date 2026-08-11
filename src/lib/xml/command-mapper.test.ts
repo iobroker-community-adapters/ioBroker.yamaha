@@ -68,6 +68,32 @@ describe("stateToXml", () => {
     });
   });
 
+  test("scene recall (write-only) maps to Scene_Load on the main zone only", () => {
+    expect(stateToXml("scene.recall", 2)).toEqual({
+      zone: "Main_Zone",
+      inner: "<Scene><Scene_Load>Scene 2</Scene_Load></Scene>",
+    });
+    expect(stateToXml("zone2.scene.recall", 2)).toBeUndefined(); // scenes are a main-zone feature
+  });
+
+  test("HDMI outputs and party are written on the System element, not the zone", () => {
+    expect(stateToXml("hdmiOut1", true)).toEqual({
+      zone: "System",
+      inner: "<Sound_Video><HDMI><Output><OUT_1>On</OUT_1></Output></HDMI></Sound_Video>",
+    });
+    expect(stateToXml("party", true)).toEqual({
+      zone: "System",
+      inner: "<Party_Mode><Mode>On</Mode></Party_Mode>",
+    });
+  });
+
+  test("dialogue lift maps to a Dialogue_Adjust command on its zone", () => {
+    expect(stateToXml("dialogueLift", 3)).toEqual({
+      zone: "Main_Zone",
+      inner: "<Sound_Video><Dialogue_Adjust><Dialogue_Lift>3</Dialogue_Lift></Dialogue_Adjust></Sound_Video>",
+    });
+  });
+
   test("returns undefined for an unmapped state or unknown zone", () => {
     expect(stateToXml("nonsense", 1)).toBeUndefined();
     expect(stateToXml("zone9.power", true)).toBeUndefined();

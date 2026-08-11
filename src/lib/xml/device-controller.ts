@@ -1,4 +1,4 @@
-import type { ObjectDef } from "../catalog/types";
+import { CHANNEL_NAMES, type ObjectDef } from "../catalog/types";
 import type { BasicStatus } from "./protocol";
 import { parseXmlStatus, stateToXml, type XmlCommand } from "./command-mapper";
 import { XML_AMP_CATALOG } from "./catalog";
@@ -98,8 +98,10 @@ export class XmlDeviceController implements ConnectionHandle {
       return false;
     }
     this.zones = answered.map(probe => probe.zone);
+    const createdChannels = new Set<string>();
     for (const zone of this.zones) {
       if (zone.channel) {
+        createdChannels.add(zone.channel);
         await this.deps.upsertObject(`${this.deviceId}.${zone.channel}`, {
           id: zone.channel,
           type: "channel",
@@ -107,8 +109,26 @@ export class XmlDeviceController implements ConnectionHandle {
         });
       }
       for (const entry of XML_AMP_CATALOG) {
-        await this.deps.upsertObject(`${this.deviceId}.${zone.prefix}${entry.state}`, {
-          id: `${zone.prefix}${entry.state}`,
+        // Main/system-wide features (scenes, HDMI outputs, party) exist only on the main zone.
+        if (entry.mainOnly && zone.key !== "main") {
+          continue;
+        }
+        const stateId = `${zone.prefix}${entry.state}`;
+        // A dotted state (e.g. scene.recall) needs its parent channel created first.
+        const segments = stateId.split(".");
+        for (let i = 1; i < segments.length; i++) {
+          const channelId = segments.slice(0, i).join(".");
+          if (!createdChannels.has(channelId)) {
+            createdChannels.add(channelId);
+            await this.deps.upsertObject(`${this.deviceId}.${channelId}`, {
+              id: channelId,
+              type: "channel",
+              common: { name: CHANNEL_NAMES[segments[i - 1]] ?? segments[i - 1] },
+            });
+          }
+        }
+        await this.deps.upsertObject(`${this.deviceId}.${stateId}`, {
+          id: stateId,
           type: "state",
           common: { ...entry.common },
         });

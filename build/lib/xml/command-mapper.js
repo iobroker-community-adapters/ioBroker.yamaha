@@ -27,16 +27,20 @@ var import_catalog = require("./catalog");
 const ZONE_ELEMENT = { main: "Main_Zone", zone2: "Zone_2", zone3: "Zone_3", zone4: "Zone_4" };
 const ZONE_PREFIX = { main: "", zone2: "zone2.", zone3: "zone3.", zone4: "zone4." };
 function stateToXml(stateId, value) {
+  var _a;
   let zoneKey = "main";
   let name = stateId;
   const dot = stateId.indexOf(".");
-  if (dot > 0) {
+  if (dot > 0 && ZONE_ELEMENT[stateId.slice(0, dot)]) {
     zoneKey = stateId.slice(0, dot);
     name = stateId.slice(dot + 1);
   }
-  const zone = ZONE_ELEMENT[zoneKey];
   const entry = import_catalog.XML_AMP_CATALOG.find((e) => e.state === name);
-  if (!zone || !(entry == null ? void 0 : entry.toInner) || !(0, import_value_coerce.isWritableValue)(value, entry.common.type === "number")) {
+  if (!(entry == null ? void 0 : entry.toInner) || entry.mainOnly && zoneKey !== "main" || !(0, import_value_coerce.isWritableValue)(value, entry.common.type === "number")) {
+    return void 0;
+  }
+  const zone = (_a = entry.writeZone) != null ? _a : ZONE_ELEMENT[zoneKey];
+  if (!zone) {
     return void 0;
   }
   return { zone, inner: entry.toInner(value) };
@@ -48,7 +52,7 @@ function parseXmlStatus(status, zone) {
   }
   const updates = [];
   for (const entry of import_catalog.XML_AMP_CATALOG) {
-    const value = status[entry.statusField];
+    const value = entry.statusField ? status[entry.statusField] : void 0;
     if (value !== void 0) {
       updates.push({ id: `${prefix}${entry.state}`, value });
     }

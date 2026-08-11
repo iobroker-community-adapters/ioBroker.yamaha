@@ -95,6 +95,22 @@ function parseBasicStatus(xml) {
   if (ypaoVolume) {
     status.ypaoVolume = ypaoVolume[1] !== "Off";
   }
+  const hdmiOut1 = /<OUT_1>(On|Off)<\/OUT_1>/.exec(xml);
+  if (hdmiOut1) {
+    status.hdmiOut1 = hdmiOut1[1] === "On";
+  }
+  const hdmiOut2 = /<OUT_2>(On|Off)<\/OUT_2>/.exec(xml);
+  if (hdmiOut2) {
+    status.hdmiOut2 = hdmiOut2[1] === "On";
+  }
+  const party = /<Party_Info>([^<]+)<\/Party_Info>/.exec(xml);
+  if (party) {
+    status.party = party[1] === "On";
+  }
+  const dialogueLift = /<Dialogue_Lift>(-?\d+)<\/Dialogue_Lift>/.exec(xml);
+  if (dialogueLift) {
+    status.dialogueLift = Number(dialogueLift[1]);
+  }
   return status;
 }
 // Annotate the CommonJS export names for ESM import in node:

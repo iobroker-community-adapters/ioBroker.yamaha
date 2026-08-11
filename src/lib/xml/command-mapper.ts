@@ -25,13 +25,23 @@ export function stateToXml(stateId: string, value: unknown): XmlCommand | undefi
   let zoneKey = "main";
   let name = stateId;
   const dot = stateId.indexOf(".");
-  if (dot > 0) {
+  // Only split on a known zone prefix — a dotted state like `scene.recall` is a
+  // main-zone state, not a state under a "scene" zone.
+  if (dot > 0 && ZONE_ELEMENT[stateId.slice(0, dot)]) {
     zoneKey = stateId.slice(0, dot);
     name = stateId.slice(dot + 1);
   }
-  const zone = ZONE_ELEMENT[zoneKey];
   const entry = XML_AMP_CATALOG.find(e => e.state === name);
-  if (!zone || !entry?.toInner || !isWritableValue(value, entry.common.type === "number")) {
+  if (
+    !entry?.toInner ||
+    (entry.mainOnly && zoneKey !== "main") ||
+    !isWritableValue(value, entry.common.type === "number")
+  ) {
+    return undefined;
+  }
+  // HDMI outputs and party are written on the System element, not the zone.
+  const zone = entry.writeZone ?? ZONE_ELEMENT[zoneKey];
+  if (!zone) {
     return undefined;
   }
   return { zone, inner: entry.toInner(value) };
@@ -52,7 +62,7 @@ export function parseXmlStatus(status: BasicStatus, zone: string): StateValue[] 
   }
   const updates: StateValue[] = [];
   for (const entry of XML_AMP_CATALOG) {
-    const value = status[entry.statusField];
+    const value = entry.statusField ? status[entry.statusField] : undefined;
     if (value !== undefined) {
       updates.push({ id: `${prefix}${entry.state}`, value });
     }

@@ -128,4 +128,13 @@ describe("XmlDeviceController", () => {
     s.controller.close();
     expect(s.cancelled()).toBe(true);
   });
+
+  test("creates the scene channel + a main-only recall, but nothing scene/HDMI under a further zone", async () => {
+    const s = setup({ Main_Zone: { power: true }, Zone_2: { power: false } });
+    await s.controller.start();
+    expect(s.objects).toContain("living.scene");
+    expect(s.objects).toContain("living.scene.recall");
+    expect(s.objects).not.toContain("living.zone2.scene.recall");
+    expect(s.objects).not.toContain("living.zone2.hdmiOut1");
+  });
 });

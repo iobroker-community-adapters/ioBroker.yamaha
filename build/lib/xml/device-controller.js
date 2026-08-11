@@ -21,6 +21,7 @@ __export(device_controller_exports, {
   XmlDeviceController: () => XmlDeviceController
 });
 module.exports = __toCommonJS(device_controller_exports);
+var import_types = require("../catalog/types");
 var import_command_mapper = require("./command-mapper");
 var import_catalog = require("./catalog");
 var import_util = require("../util");
@@ -55,7 +56,7 @@ class XmlDeviceController {
    * @returns true if the main zone answered and the tree was created
    */
   async start() {
-    var _a;
+    var _a, _b;
     const probes = await Promise.all(
       XML_ZONES.map(async (zone) => ({ zone, status: await this.tryGetStatus(zone.element) }))
     );
@@ -65,8 +66,10 @@ class XmlDeviceController {
       return false;
     }
     this.zones = answered.map((probe) => probe.zone);
+    const createdChannels = /* @__PURE__ */ new Set();
     for (const zone of this.zones) {
       if (zone.channel) {
+        createdChannels.add(zone.channel);
         await this.deps.upsertObject(`${this.deviceId}.${zone.channel}`, {
           id: zone.channel,
           type: "channel",
@@ -74,8 +77,24 @@ class XmlDeviceController {
         });
       }
       for (const entry of import_catalog.XML_AMP_CATALOG) {
-        await this.deps.upsertObject(`${this.deviceId}.${zone.prefix}${entry.state}`, {
-          id: `${zone.prefix}${entry.state}`,
+        if (entry.mainOnly && zone.key !== "main") {
+          continue;
+        }
+        const stateId = `${zone.prefix}${entry.state}`;
+        const segments = stateId.split(".");
+        for (let i = 1; i < segments.length; i++) {
+          const channelId = segments.slice(0, i).join(".");
+          if (!createdChannels.has(channelId)) {
+            createdChannels.add(channelId);
+            await this.deps.upsertObject(`${this.deviceId}.${channelId}`, {
+              id: channelId,
+              type: "channel",
+              common: { name: (_b = import_types.CHANNEL_NAMES[segments[i - 1]]) != null ? _b : segments[i - 1] }
+            });
+          }
+        }
+        await this.deps.upsertObject(`${this.deviceId}.${stateId}`, {
+          id: stateId,
           type: "state",
           common: { ...entry.common }
         });
