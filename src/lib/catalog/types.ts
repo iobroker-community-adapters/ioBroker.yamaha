@@ -55,6 +55,8 @@ export interface ObjectDef {
  * (verified against the built catalogs); do not add speculative entries.
  */
 export const CHANNEL_NAMES: Record<string, string> = {
+  // Device info (metadata beside the per-device connection indicator)
+  info: "Info",
   // Zones
   zone2: "Zone 2",
   zone3: "Zone 3",

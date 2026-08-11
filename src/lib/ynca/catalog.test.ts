@@ -90,8 +90,9 @@ describe("YNCA catalog", () => {
 
   test("system info and controls carry intelligent types", () => {
     const cat = buildYncaCatalog();
-    expect(cat.find(e => e.id === "system.model")).toMatchObject({ subunit: "SYS", func: "MODELNAME", write: false });
-    expect(cat.find(e => e.id === "system.model")?.spec).toEqual({ kind: "text" });
+    expect(cat.find(e => e.id === "info.model")).toMatchObject({ subunit: "SYS", func: "MODELNAME", write: false });
+    expect(cat.find(e => e.id === "info.model")?.spec).toEqual({ kind: "text" });
+    expect(cat.find(e => e.id === "info.firmware")).toMatchObject({ subunit: "SYS", func: "VERSION", write: false });
     expect(cat.find(e => e.id === "system.power")?.spec).toEqual({ kind: "onoff", on: "On", off: "Standby" });
     expect(cat.find(e => e.id === "system.hdmiOut1")?.spec).toEqual({ kind: "onoff", on: "On", off: "Off" });
     expect(cat.find(e => e.id === "system.speakerPattern")?.spec.kind).toBe("enum");

@@ -571,10 +571,12 @@ const SWFR_CNFG_STATES = selfMap(["None", "Use"]);
  * The 23 assignable input names are generated separately from {@link INPUT_NAME_KEYS}.
  */
 const SYS_FUNCS: FuncDef[] = [
-  { func: "MODELNAME", state: "system.model", name: "Model", spec: { kind: "text" }, write: false, role: "text" },
+  // Device metadata lives under the info channel (like govee's info.model/info.firmware),
+  // not in the system grab-bag. Renamed from system.model/system.version (audit F7).
+  { func: "MODELNAME", state: "info.model", name: "Model", spec: { kind: "text" }, write: false, role: "text" },
   {
     func: "VERSION",
-    state: "system.version",
+    state: "info.firmware",
     name: "Firmware version",
     spec: { kind: "text" },
     write: false,

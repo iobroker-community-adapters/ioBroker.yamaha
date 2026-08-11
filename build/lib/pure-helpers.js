@@ -18,9 +18,11 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var pure_helpers_exports = {};
 __export(pure_helpers_exports, {
+  RENAMED_STATE_IDS: () => RENAMED_STATE_IDS,
   legacyDeviceRow: () => legacyDeviceRow,
   mergeDiscovered: () => mergeDiscovered,
   parseDevices: () => parseDevices,
+  renamedObjectIds: () => renamedObjectIds,
   sanitizeId: () => sanitizeId,
   staleObjects: () => staleObjects,
   stripNamespace: () => stripNamespace
@@ -91,6 +93,20 @@ function staleObjects(existing, deviceIds, namespace) {
   };
   return existing.filter((id) => !isKept(id)).sort((a, b) => b.length - a.length);
 }
+const RENAMED_STATE_IDS = ["system.model", "system.version"];
+function renamedObjectIds(existing, deviceIds, namespace) {
+  const present = new Set(existing);
+  const stale = [];
+  for (const deviceId of deviceIds) {
+    for (const rel of RENAMED_STATE_IDS) {
+      const full = `${namespace}.${deviceId}.${rel}`;
+      if (present.has(full)) {
+        stale.push(full);
+      }
+    }
+  }
+  return stale;
+}
 function legacyDeviceRow(config) {
   if (Array.isArray(config.devices) && config.devices.length > 0) {
     return void 0;
@@ -100,9 +116,11 @@ function legacyDeviceRow(config) {
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  RENAMED_STATE_IDS,
   legacyDeviceRow,
   mergeDiscovered,
   parseDevices,
+  renamedObjectIds,
   sanitizeId,
   staleObjects,
   stripNamespace

@@ -127,7 +127,8 @@ class Yamaha extends utils.Adapter {
   async cleanupStaleObjects(deviceIds) {
     const existing = Object.keys(await this.getAdapterObjectsAsync());
     const stale = (0, import_pure_helpers.staleObjects)(existing, deviceIds, this.namespace);
-    for (const fullId of stale) {
+    const renamed = (0, import_pure_helpers.renamedObjectIds)(existing, deviceIds, this.namespace);
+    for (const fullId of [...stale, ...renamed]) {
       try {
         await this.delObjectAsync((0, import_pure_helpers.stripNamespace)(fullId, this.namespace));
       } catch {
@@ -135,6 +136,9 @@ class Yamaha extends utils.Adapter {
     }
     if (stale.length > 0) {
       this.log.info(`removed ${stale.length} object(s) from a previous configuration`);
+    }
+    if (renamed.length > 0) {
+      this.log.info(`removed ${renamed.length} renamed object(s) from an earlier version`);
     }
   }
   /**

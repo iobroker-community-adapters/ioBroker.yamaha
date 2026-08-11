@@ -4,7 +4,14 @@ import { get as httpGet } from "node:http";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { attemptDevice } from "./lib/attempt-device";
-import { legacyDeviceRow, mergeDiscovered, parseDevices, staleObjects, stripNamespace } from "./lib/pure-helpers";
+import {
+  legacyDeviceRow,
+  mergeDiscovered,
+  parseDevices,
+  renamedObjectIds,
+  staleObjects,
+  stripNamespace,
+} from "./lib/pure-helpers";
 import { errorMessage } from "./lib/util";
 import { discoverYamaha } from "./lib/discovery";
 import { readDiscovered, writeDiscovered, type DiscoveredStoreDeps } from "./lib/discovered-store";
@@ -119,7 +126,10 @@ export class Yamaha extends utils.Adapter {
   private async cleanupStaleObjects(deviceIds: Set<string>): Promise<void> {
     const existing = Object.keys(await this.getAdapterObjectsAsync());
     const stale = staleObjects(existing, deviceIds, this.namespace);
-    for (const fullId of stale) {
+    // Old states this version renamed/moved (e.g. system.model -> info.model): delete the
+    // old object so it does not linger orphaned beside the new one under a kept device.
+    const renamed = renamedObjectIds(existing, deviceIds, this.namespace);
+    for (const fullId of [...stale, ...renamed]) {
       try {
         await this.delObjectAsync(stripNamespace(fullId, this.namespace));
       } catch {
@@ -128,6 +138,9 @@ export class Yamaha extends utils.Adapter {
     }
     if (stale.length > 0) {
       this.log.info(`removed ${stale.length} object(s) from a previous configuration`);
+    }
+    if (renamed.length > 0) {
+      this.log.info(`removed ${renamed.length} renamed object(s) from an earlier version`);
     }
   }
 

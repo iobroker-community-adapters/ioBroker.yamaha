@@ -22,6 +22,8 @@ __export(types_exports, {
 });
 module.exports = __toCommonJS(types_exports);
 const CHANNEL_NAMES = {
+  // Device info (metadata beside the per-device connection indicator)
+  info: "Info",
   // Zones
   zone2: "Zone 2",
   zone3: "Zone 3",

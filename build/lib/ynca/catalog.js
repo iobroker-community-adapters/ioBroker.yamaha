@@ -517,10 +517,12 @@ const GLOBAL_FUNCS = [
 const SPPATTERN_STATES = selfMap(["Pattern 1", "Pattern 2"]);
 const SWFR_CNFG_STATES = selfMap(["None", "Use"]);
 const SYS_FUNCS = [
-  { func: "MODELNAME", state: "system.model", name: "Model", spec: { kind: "text" }, write: false, role: "text" },
+  // Device metadata lives under the info channel (like govee's info.model/info.firmware),
+  // not in the system grab-bag. Renamed from system.model/system.version (audit F7).
+  { func: "MODELNAME", state: "info.model", name: "Model", spec: { kind: "text" }, write: false, role: "text" },
   {
     func: "VERSION",
-    state: "system.version",
+    state: "info.firmware",
     name: "Firmware version",
     spec: { kind: "text" },
     write: false,

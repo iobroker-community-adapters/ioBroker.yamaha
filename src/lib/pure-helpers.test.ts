@@ -1,4 +1,12 @@
-import { legacyDeviceRow, mergeDiscovered, parseDevices, sanitizeId, staleObjects, stripNamespace } from "./pure-helpers";
+import {
+  legacyDeviceRow,
+  mergeDiscovered,
+  parseDevices,
+  renamedObjectIds,
+  sanitizeId,
+  staleObjects,
+  stripNamespace,
+} from "./pure-helpers";
 
 describe("legacyDeviceRow", () => {
   test("carries over the old single ip when the table is empty", () => {
@@ -132,5 +140,25 @@ describe("stripNamespace", () => {
 
   test("handles a nested state path", () => {
     expect(stripNamespace("yamaha.0.living.zone2.power", "yamaha.0")).toBe("living.zone2.power");
+  });
+});
+
+describe("renamedObjectIds", () => {
+  test("returns the old renamed states present under a configured device", () => {
+    const existing = [
+      "yamaha.0.living.system.model",
+      "yamaha.0.living.system.version",
+      "yamaha.0.living.power",
+      "yamaha.0.other.system.model",
+    ];
+    const result = renamedObjectIds(existing, new Set(["living"]), "yamaha.0");
+    expect(result).toContain("yamaha.0.living.system.model");
+    expect(result).toContain("yamaha.0.living.system.version");
+    expect(result).not.toContain("yamaha.0.living.power"); // not renamed
+    expect(result).not.toContain("yamaha.0.other.system.model"); // not a configured device
+  });
+
+  test("returns nothing when the old renamed state is absent", () => {
+    expect(renamedObjectIds(["yamaha.0.living.info.model"], new Set(["living"]), "yamaha.0")).toEqual([]);
   });
 });

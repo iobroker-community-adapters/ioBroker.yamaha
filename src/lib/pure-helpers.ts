@@ -142,6 +142,37 @@ export function staleObjects(existing: string[], deviceIds: Set<string>, namespa
 }
 
 /**
+ * Relative state ids an earlier version created under a different path and that this
+ * version has renamed or moved. On start-up the old object is deleted so it does not
+ * linger orphaned beside the new one — {@link staleObjects} only removes whole
+ * non-configured device trees, not renamed states inside a device that is kept.
+ */
+export const RENAMED_STATE_IDS = ["system.model", "system.version"];
+
+/**
+ * The full ids of renamed old states that still exist under a configured device, to
+ * be deleted on start-up so no orphan lingers beside the new object.
+ *
+ * @param existing all object ids currently under the instance
+ * @param deviceIds the ids of the currently configured devices
+ * @param namespace the adapter namespace (e.g. `yamaha.0`)
+ * @returns the full old ids to delete
+ */
+export function renamedObjectIds(existing: string[], deviceIds: Set<string>, namespace: string): string[] {
+  const present = new Set(existing);
+  const stale: string[] = [];
+  for (const deviceId of deviceIds) {
+    for (const rel of RENAMED_STATE_IDS) {
+      const full = `${namespace}.${deviceId}.${rel}`;
+      if (present.has(full)) {
+        stale.push(full);
+      }
+    }
+  }
+  return stale;
+}
+
+/**
  * The device row to carry over from the previous adapter's single-device config,
  * or undefined if nothing needs migrating. The old yamaha stored one receiver as
  * `config.ip` (older installs: `config.IP`); the new adapter uses a `devices`
