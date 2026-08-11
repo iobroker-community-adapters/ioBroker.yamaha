@@ -21,6 +21,17 @@ export interface YncaEntry extends CatalogEntry {
    * defaults to {@link func}.
    */
   readFunc?: string;
+  /**
+   * Write-only command (e.g. scene recall): the device never pushes it, so it is
+   * kept out of {@link funcToEntry} (no device→state mapping). Its {@link readFunc}
+   * is reused purely to gate object creation on a related reported function.
+   */
+  writeOnly?: boolean;
+  /**
+   * Optional wire-value encoder overriding the generic {@link encode} — for a
+   * command whose wire form is not the bare value (scene recall sends "Scene N").
+   */
+  wireEncode?: (value: boolean | number | string) => string;
 }
 
 /**
@@ -895,6 +906,22 @@ export function buildYncaCatalog(): YncaEntry[] {
       func: `SCENE${n}NAME`,
     });
   }
+  // Scene recall (write-only): a settable 1..12 that triggers a scene via @MAIN:SCENE=Scene N
+  // (ynca lib zone.py: `_put("SCENE", f"Scene {id}")`). Gated on SCENE1NAME so it appears only
+  // where the device reports scenes; kept out of the device→state map (writeOnly) so it never
+  // overwrites scene.name1's SCENE1NAME mapping.
+  entries.push({
+    id: "scene.recall",
+    name: "Recall scene",
+    spec: { kind: "number", min: 1, max: 12, step: 1 },
+    write: true,
+    role: "level",
+    subunit: "MAIN",
+    func: "SCENE",
+    readFunc: "SCENE1NAME",
+    writeOnly: true,
+    wireEncode: value => `Scene ${value}`,
+  });
   // Global functions each carry their own subunit.
   for (const fn of GLOBAL_FUNCS) {
     entries.push(...fnEntries([fn], fn.subunit));
@@ -957,7 +984,9 @@ export function sweepGets(entries: YncaEntry[]): Array<{ subunit: string; func: 
  * @returns the lookup map keyed `SUBUNIT:FUNC`
  */
 export function funcToEntry(entries: YncaEntry[]): Map<string, YncaEntry> {
-  return new Map(entries.map(entry => [`${entry.subunit}:${readFuncOf(entry)}`, entry]));
+  return new Map(
+    entries.filter(entry => !entry.writeOnly).map(entry => [`${entry.subunit}:${readFuncOf(entry)}`, entry]),
+  );
 }
 
 /**
@@ -1030,5 +1059,8 @@ export function yncaCommand(
   if (!isWritableValue(value, entry.spec.kind === "number")) {
     return undefined;
   }
-  return { subunit: entry.subunit, func: entry.func, value: encode(entry.spec, value as boolean | number | string) };
+  const wire = entry.wireEncode
+    ? entry.wireEncode(value as boolean | number | string)
+    : encode(entry.spec, value as boolean | number | string);
+  return { subunit: entry.subunit, func: entry.func, value: wire };
 }

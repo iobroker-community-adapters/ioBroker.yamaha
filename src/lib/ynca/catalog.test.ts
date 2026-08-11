@@ -72,6 +72,22 @@ describe("YNCA catalog", () => {
     expect(cat.find(e => e.id === "scene.name12")).toMatchObject({ func: "SCENE12NAME" });
   });
 
+  test("scene recall triggers a scene: writable 1..12, encodes to 'Scene N', write-only, gated on scene names", () => {
+    const cat = buildYncaCatalog();
+    const recall = cat.find(e => e.id === "scene.recall");
+    expect(recall).toMatchObject({ subunit: "MAIN", func: "SCENE", write: true });
+    expect(recall?.spec).toMatchObject({ kind: "number", min: 1, max: 12 });
+    // encodes the plain number to the YNCA wire value "Scene N" (ynca lib: _put("SCENE", f"Scene {id}"))
+    expect(yncaCommand("scene.recall", 3, idToEntry(cat))).toEqual({ subunit: "MAIN", func: "SCENE", value: "Scene 3" });
+    // write-only: a SCENE1NAME device push must still map to the name state, not the recall
+    expect(funcToEntry(cat).get("MAIN:SCENE1NAME")?.id).toBe("scene.name1");
+    // appears only when the device reports scenes (gated on scene-1 name presence)
+    const withScenes: YncaCapabilities = { model: "RX", subunits: { MAIN: { SCENE1NAME: "Movie" } } };
+    expect(yncaObjectsFor(withScenes).map(o => o.id)).toContain("scene.recall");
+    const noScenes: YncaCapabilities = { model: "RX", subunits: { MAIN: { PWR: "On" } } };
+    expect(yncaObjectsFor(noScenes).map(o => o.id)).not.toContain("scene.recall");
+  });
+
   test("system info and controls carry intelligent types", () => {
     const cat = buildYncaCatalog();
     expect(cat.find(e => e.id === "system.model")).toMatchObject({ subunit: "SYS", func: "MODELNAME", write: false });
