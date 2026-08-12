@@ -58,6 +58,22 @@ export function capabilityKeyOf(transport: Transport, stateId: string): string {
 }
 
 /**
+ * The drift-resolved, transport-neutral OBJECT id — like {@link capabilityKeyOf} but KEEPS the
+ * zone prefix. capabilityKeyOf drops the zone to decide ownership per template; canonicalIdOf
+ * keeps it to place the per-zone node in the unified tree. Two transports' zoned ids for the
+ * same capability therefore collapse to one node id.
+ *
+ * @param transport the transport the state id comes from
+ * @param stateId the transport's own state id
+ * @returns the canonical object id (zone prefix kept, drift resolved)
+ */
+export function canonicalIdOf(transport: Transport, stateId: string): string {
+  const zone = /^zone[234]\./.exec(stateId)?.[0] ?? "";
+  const template = stateId.slice(zone.length);
+  return zone + (ID_DRIFT[transport]?.[template] ?? template);
+}
+
+/**
  * Decide which transport owns a capability, given the transports that actually offer it on
  * this device. Default is the most modern; a census-driven override wins where the modern
  * transport would be lossy. An override that lists none of the present candidates falls back

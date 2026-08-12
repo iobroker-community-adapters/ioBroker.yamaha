@@ -18,6 +18,7 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var owner_policy_exports = {};
 __export(owner_policy_exports, {
+  canonicalIdOf: () => canonicalIdOf,
   capabilityKeyOf: () => capabilityKeyOf,
   pickOwner: () => pickOwner,
   resolveOwnership: () => resolveOwnership
@@ -51,6 +52,12 @@ function capabilityKeyOf(transport, stateId) {
   const template = stateId.replace(/^zone[234]\./, "");
   return (_b = (_a = ID_DRIFT[transport]) == null ? void 0 : _a[template]) != null ? _b : template;
 }
+function canonicalIdOf(transport, stateId) {
+  var _a, _b, _c, _d;
+  const zone = (_b = (_a = /^zone[234]\./.exec(stateId)) == null ? void 0 : _a[0]) != null ? _b : "";
+  const template = stateId.slice(zone.length);
+  return zone + ((_d = (_c = ID_DRIFT[transport]) == null ? void 0 : _c[template]) != null ? _d : template);
+}
 function pickOwner(key, candidates) {
   var _a, _b;
   const preference = (_a = OWNER_OVERRIDES[key]) != null ? _a : MODERNITY;
@@ -78,6 +85,7 @@ function resolveOwnership(offered) {
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  canonicalIdOf,
   capabilityKeyOf,
   pickOwner,
   resolveOwnership

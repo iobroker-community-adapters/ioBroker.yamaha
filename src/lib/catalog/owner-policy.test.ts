@@ -1,4 +1,4 @@
-import { capabilityKeyOf, pickOwner, resolveOwnership } from "./owner-policy";
+import { canonicalIdOf, capabilityKeyOf, pickOwner, resolveOwnership } from "./owner-policy";
 
 describe("pickOwner — which transport owns a shared capability", () => {
   test("a capability only one transport offers is owned by that transport", () => {
@@ -82,5 +82,19 @@ describe("capabilityKeyOf — the transport-neutral key from a transport's state
     expect(capabilityKeyOf("yxc", "power")).toBe("power");
     expect(capabilityKeyOf("yxc", "dist.role")).toBe("dist.role");
     expect(capabilityKeyOf("xml", "bass")).toBe("bass");
+  });
+});
+
+describe("canonicalIdOf — the drift-resolved object id, zone prefix kept", () => {
+  test("resolves the drift but keeps the zone prefix (the per-zone tree node)", () => {
+    expect(canonicalIdOf("ynca", "sound.bass")).toBe("bass");
+    expect(canonicalIdOf("ynca", "zone2.sound.bass")).toBe("zone2.bass");
+    expect(canonicalIdOf("yxc", "partyEnable")).toBe("party");
+    expect(canonicalIdOf("xml", "hdmiOut1")).toBe("hdmi.out1");
+  });
+
+  test("a canonical id (with or without a zone) is unchanged", () => {
+    expect(canonicalIdOf("yxc", "zone2.volume")).toBe("zone2.volume");
+    expect(canonicalIdOf("yxc", "power")).toBe("power");
   });
 });
