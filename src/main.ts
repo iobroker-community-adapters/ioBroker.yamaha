@@ -78,9 +78,9 @@ export class Yamaha extends utils.Adapter {
       await utils.I18n.init(join(this.adapterDir, "admin"), this);
       await this.setState("info.connection", { val: false, ack: true });
       await this.migrateLegacyDevice();
-      // The device table is the switch: filled → use exactly those (manual); empty
+      // The device list is the switch: filled → use exactly those (manual); empty
       // → discover on the network and run what is found (auto). XML/pre-2010 devices
-      // never answer SSDP, so they always go into the table manually.
+      // never answer SSDP, so they are always added manually.
       const configured = parseDevices(this.config.devices);
       const devices = configured.length > 0 ? configured : await this.autoDiscover();
       const knownDeviceIps = new Set(devices.map(device => device.ip));
@@ -371,7 +371,7 @@ export class Yamaha extends utils.Adapter {
     await writeDiscovered(store, merged);
     this.log.info(
       `auto-discovery: ${found.length} found, running ${merged.length} device(s); ` +
-        `add devices to the table to switch to manual mode`,
+        `add a device in the admin to switch to manual mode`,
     );
     return merged;
   }

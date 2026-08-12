@@ -336,7 +336,7 @@ class Yamaha extends utils.Adapter {
     const merged = (0, import_pure_helpers.mergeDiscovered)(known, found);
     await (0, import_discovered_store.writeDiscovered)(store, merged);
     this.log.info(
-      `auto-discovery: ${found.length} found, running ${merged.length} device(s); add devices to the table to switch to manual mode`
+      `auto-discovery: ${found.length} found, running ${merged.length} device(s); add a device in the admin to switch to manual mode`
     );
     return merged;
   }

@@ -46,7 +46,7 @@ export function parseYamahaDescription(xml: string): { name: string } | undefine
 }
 
 /**
- * Discover Yamaha devices on the local network: SSDP-search for MediaRenderers,
+ * Discover Yamaha devices on the local network: SSDP-search for UPnP root devices,
  * fetch each responder's description, and keep the ones made by Yamaha. Duplicate
  * addresses and unreachable descriptions are skipped.
  *
