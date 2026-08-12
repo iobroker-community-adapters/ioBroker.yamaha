@@ -145,6 +145,23 @@ describe("YncaClient", () => {
     expect(sockets).toHaveLength(1); // the client does not reopen on its own
   });
 
+  test("delivers a drop that happened before onDrop was registered", async () => {
+    const { factory, sockets } = fixtureFactory();
+    const client = new YncaClient("1.2.3.4", testTimers, factory);
+    const connected = client.connect();
+    sockets[0].emitConnect();
+    await connected;
+
+    // The socket drops in the window between connect and the supervisor wiring onDrop —
+    // widened by the multi-transport boot (YXC + XML connect and the whole tree upsert
+    // run before the handle's onDrop reaches this client). The drop must not be lost.
+    sockets[0].emitClose();
+    let dropped = 0;
+    client.onDrop(() => dropped++);
+
+    expect(dropped).toBe(1); // the latched drop fires as soon as onDrop registers
+  });
+
   test("does not fire onDrop after an explicit close", async () => {
     const { factory, sockets } = fixtureFactory();
     const client = new YncaClient("1.2.3.4", testTimers, factory);

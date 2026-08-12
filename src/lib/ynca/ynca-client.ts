@@ -114,6 +114,8 @@ export class YncaClient {
   private closed = false;
   private keepaliveTimer: ioBroker.Timeout | undefined;
   private lastError: Error | undefined;
+  /** A genuine drop that fired before onDrop was registered — delivered once it is. */
+  private pendingDrop = false;
 
   /**
    * @param host the receiver IP or hostname
@@ -185,9 +187,16 @@ export class YncaClient {
     this.socket?.destroy();
     this.socket = undefined;
     // Only a genuine drop (we were connected) fires onDrop; a socket that never
-    // connected already rejected connect() and must not also signal a drop.
+    // connected already rejected connect() and must not also signal a drop. If the
+    // supervisor has not wired onDrop yet (its multi-transport boot registers it only
+    // after every transport connected and the tree was built), latch the drop so it is
+    // delivered the moment onDrop registers — otherwise this transport dies unnoticed.
     if (this.everReachable) {
-      this.dropHandler?.(this.lastError);
+      if (this.dropHandler) {
+        this.dropHandler(this.lastError);
+      } else {
+        this.pendingDrop = true;
+      }
     }
   }
 
@@ -250,6 +259,10 @@ export class YncaClient {
    */
   public onDrop(handler: (reason?: Error) => void): void {
     this.dropHandler = handler;
+    if (this.pendingDrop) {
+      this.pendingDrop = false;
+      handler(this.lastError);
+    }
   }
 
   /**

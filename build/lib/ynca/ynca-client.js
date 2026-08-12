@@ -80,6 +80,8 @@ class YncaClient {
   closed = false;
   keepaliveTimer;
   lastError;
+  /** A genuine drop that fired before onDrop was registered — delivered once it is. */
+  pendingDrop = false;
   /**
    * Open the connection. Resolves on the first successful connect, rejects if the
    * first connection attempt errors before connecting.
@@ -120,7 +122,7 @@ class YncaClient {
     }
   }
   handleClose() {
-    var _a, _b;
+    var _a;
     this.reachable = false;
     this.stopKeepalive();
     if (this.closed) {
@@ -129,7 +131,11 @@ class YncaClient {
     (_a = this.socket) == null ? void 0 : _a.destroy();
     this.socket = void 0;
     if (this.everReachable) {
-      (_b = this.dropHandler) == null ? void 0 : _b.call(this, this.lastError);
+      if (this.dropHandler) {
+        this.dropHandler(this.lastError);
+      } else {
+        this.pendingDrop = true;
+      }
     }
   }
   /**
@@ -190,6 +196,10 @@ class YncaClient {
    */
   onDrop(handler) {
     this.dropHandler = handler;
+    if (this.pendingDrop) {
+      this.pendingDrop = false;
+      handler(this.lastError);
+    }
   }
   /**
    * Run an init sweep: send a GET for each requested function (paced by
