@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "0.13.0",
+    "version": "0.14.0",
     "news": {
+      "0.14.0": {
+        "en": "Receivers appear as cards with model, IP and connected protocols; discovery is steadier with a network-interface selector; and every receiver reports its model.",
+        "de": "Receiver erscheinen als Karten mit Modell, IP und verbundenen Protokollen; die Suche ist stabiler mit Netzwerk-Interface-Auswahl; jeder Receiver meldet sein Modell.",
+        "ru": "Ресиверы отображаются карточками с моделью, IP и протоколами; обнаружение стабильнее с выбором сетевого интерфейса; каждый ресивер сообщает свою модель.",
+        "pt": "Os recetores aparecem como cartões com modelo, IP e protocolos; a deteção é mais estável com um seletor de interface de rede; cada recetor indica o seu modelo.",
+        "nl": "Ontvangers verschijnen als kaarten met model, IP en protocollen; detectie is stabieler met een netwerkinterface-keuze; elke ontvanger meldt zijn model.",
+        "fr": "Les récepteurs apparaissent en cartes avec modèle, IP et protocoles ; la découverte est plus stable avec un sélecteur d'interface réseau ; chaque récepteur indique son modèle.",
+        "it": "I ricevitori appaiono come schede con modello, IP e protocolli; il rilevamento è più stabile con un selettore d'interfaccia di rete; ogni ricevitore indica il suo modello.",
+        "es": "Los receptores aparecen como tarjetas con modelo, IP y protocolos; el descubrimiento es más estable con un selector de interfaz de red; cada receptor indica su modelo.",
+        "pl": "Odbiorniki pojawiają się jako karty z modelem, IP i protokołami; wykrywanie jest stabilniejsze z wyborem interfejsu sieciowego; każdy odbiornik podaje swój model.",
+        "uk": "Ресивери відображаються картками з моделлю, IP та протоколами; виявлення стабільніше з вибором мережевого інтерфейсу; кожен ресивер повідомляє свою модель.",
+        "zh-cn": "接收机以卡片形式显示型号、IP 和协议；设备发现更稳定，可选择网络接口；每台接收机都会报告其型号。"
+      },
       "0.13.0": {
         "en": "A MusicCast receiver now shows its amplifier controls and its MusicCast features together, instead of only one of them being reachable.",
         "de": "Ein MusicCast-Receiver zeigt jetzt seine Verstärker-Steuerung und seine MusicCast-Funktionen gemeinsam, statt nur eine der beiden erreichbar zu machen.",
@@ -80,19 +93,6 @@
         "pl": "Znacznie więcej twojego Yamaha można teraz używać z ioBroker: wartości są przełącznikami, listami i liczbami do odczytu i ustawiania, nie surowym tekstem, a status odtwarzania jest wreszcie poprawny.",
         "uk": "З ioBroker доступно набагато більше можливостей Yamaha: значення надходять як перемикачі, списки та числа для читання й запису, а не сирий текст, і статус відтворення нарешті правильний.",
         "zh-cn": "现在可以从 ioBroker 使用你的 Yamaha 更多功能：数值以开关、列表和数字的形式呈现，可读取和设置，而非原始文本，播放状态终于正确。"
-      },
-      "0.5.4": {
-        "en": "updated packages",
-        "de": "aktualisierte pakete",
-        "ru": "обновления пакетов",
-        "pt": "pacotes atualizados",
-        "nl": "bijgewerkte pakketten",
-        "fr": "paquets mis à jour",
-        "it": "pacchetti aggiornati",
-        "es": "paquetes actualizados",
-        "pl": "zaktualizowane pakiety",
-        "uk": "оновлені пакети",
-        "zh-cn": "更新软件包"
       }
     },
     "titleLang": {
