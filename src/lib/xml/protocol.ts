@@ -20,6 +20,17 @@ export function encodeGet(zone: string, inner: string): string {
   return `<YAMAHA_AV cmd="GET"><${zone}>${inner}</${zone}></YAMAHA_AV>`;
 }
 
+/**
+ * Extract the model name from a `<System><Config>` response, if it carries one.
+ *
+ * @param xml the System>Config response body
+ * @returns the model name, or undefined
+ */
+export function parseModelName(xml: string): string | undefined {
+  const match = /<Model_Name>([^<]*)<\/Model_Name>/.exec(xml);
+  return match && match[1].length > 0 ? match[1] : undefined;
+}
+
 /** The amplifier fields a Basic_Status response can carry. */
 export interface BasicStatus {
   /** Power state (true = on). */

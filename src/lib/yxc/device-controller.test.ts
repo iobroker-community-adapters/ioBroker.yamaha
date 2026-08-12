@@ -23,6 +23,11 @@ class FakeClient implements YxcClientLike {
     }
     return this.status;
   }
+  public deviceInfo: unknown = {};
+  public async getDeviceInfo(): Promise<unknown> {
+    this.calls.push({ method: "getDeviceInfo", args: [] });
+    return this.deviceInfo;
+  }
   public async power(on: boolean, zone: string): Promise<unknown> {
     this.calls.push({ method: "power", args: [on, zone] });
     return {};
@@ -230,6 +235,20 @@ describe("YxcDeviceController", () => {
     const s = setup(wx10, ysp);
     expect(await s.controller.start()).toBe(true);
     expect(s.objects).toEqual(expect.arrayContaining(["living.power", "living.volume", "living.mute"]));
+  });
+
+  test("creates info.model from the getDeviceInfo model name", async () => {
+    const s = setup(wx10, ysp);
+    s.client.deviceInfo = { model_name: "WX-010" };
+    await s.controller.start();
+    expect(s.objects).toContain("living.info.model");
+    expect(s.acks).toContainEqual({ id: "living.info.model", value: "WX-010" });
+  });
+
+  test("skips info.model when getDeviceInfo reports no model name", async () => {
+    const s = setup(wx10, ysp);
+    await s.controller.start();
+    expect(s.objects).not.toContain("living.info.model");
   });
 
   test("sets initial state from getStatus for each zone", async () => {

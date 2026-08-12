@@ -188,6 +188,11 @@ class Yamaha extends utils.Adapter {
       common: { name: "Connected", type: "boolean", role: "indicator.reachable", read: true, write: false, def: false },
       native: {}
     });
+    await this.setObjectNotExistsAsync(`${deviceId}.info.model`, {
+      type: "state",
+      common: { name: "Model", type: "string", role: "text", read: true, write: false, def: "" },
+      native: {}
+    });
     await this.setObjectNotExistsAsync(`${deviceId}.info.transports`, {
       type: "channel",
       common: { name: "Transports" },

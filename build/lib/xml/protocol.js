@@ -20,7 +20,8 @@ var protocol_exports = {};
 __export(protocol_exports, {
   encodeGet: () => encodeGet,
   encodePut: () => encodePut,
-  parseBasicStatus: () => parseBasicStatus
+  parseBasicStatus: () => parseBasicStatus,
+  parseModelName: () => parseModelName
 });
 module.exports = __toCommonJS(protocol_exports);
 function encodePut(zone, inner) {
@@ -28,6 +29,10 @@ function encodePut(zone, inner) {
 }
 function encodeGet(zone, inner) {
   return `<YAMAHA_AV cmd="GET"><${zone}>${inner}</${zone}></YAMAHA_AV>`;
+}
+function parseModelName(xml) {
+  const match = /<Model_Name>([^<]*)<\/Model_Name>/.exec(xml);
+  return match && match[1].length > 0 ? match[1] : void 0;
 }
 function parseBasicStatus(xml) {
   const status = {};
@@ -117,6 +122,7 @@ function parseBasicStatus(xml) {
 0 && (module.exports = {
   encodeGet,
   encodePut,
-  parseBasicStatus
+  parseBasicStatus,
+  parseModelName
 });
 //# sourceMappingURL=protocol.js.map

@@ -1,5 +1,5 @@
 import { request } from "node:http";
-import { encodeGet, encodePut, parseBasicStatus, type BasicStatus } from "./protocol";
+import { encodeGet, encodePut, parseBasicStatus, parseModelName, type BasicStatus } from "./protocol";
 
 /** The receiver's XML control endpoint. */
 const CONTROL_PATH = "/YamahaRemoteControl/ctrl";
@@ -63,5 +63,15 @@ export class XmlClient {
   public async getStatus(zone: string): Promise<BasicStatus> {
     const response = await this.post(this.ip, encodeGet(zone, "<Basic_Status>GetParam</Basic_Status>"));
     return parseBasicStatus(response);
+  }
+
+  /**
+   * Read the device's model name (System > Config).
+   *
+   * @returns the model name, or undefined when the device does not report one
+   */
+  public async getModelName(): Promise<string | undefined> {
+    const response = await this.post(this.ip, encodeGet("System", "<Config>GetParam</Config>"));
+    return parseModelName(response);
   }
 }

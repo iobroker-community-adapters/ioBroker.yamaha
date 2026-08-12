@@ -205,6 +205,14 @@ export class Yamaha extends utils.Adapter {
       common: { name: "Connected", type: "boolean", role: "indicator.reachable", read: true, write: false, def: false },
       native: {},
     });
+    // Model name shown on the device-manager card. Filled by whichever transport reports it
+    // (YNCA MODELNAME, YXC/XML model); created here so the card's model line binds even for an
+    // offline device or a transport that does not report a model.
+    await this.setObjectNotExistsAsync(`${deviceId}.info.model`, {
+      type: "state",
+      common: { name: "Model", type: "string", role: "text", read: true, write: false, def: "" },
+      native: {},
+    });
     // Per-transport connection flags, fed by the live set from connectTransports and read live
     // by the device-manager card indicators. Created here so an offline device's card still
     // renders all three (false) instead of nothing.

@@ -105,6 +105,24 @@ class XmlDeviceController {
         this.seedZone(zone, status);
       }
     }
+    try {
+      const model = await this.deps.client.getModelName();
+      if (model) {
+        await this.deps.upsertObject(`${this.deviceId}.info`, {
+          id: "info",
+          type: "channel",
+          common: { name: "Info" }
+        });
+        await this.deps.upsertObject(`${this.deviceId}.info.model`, {
+          id: "info.model",
+          type: "state",
+          common: { name: "Model", type: "string", role: "text", read: true, write: false }
+        });
+        this.deps.setStateAck(`${this.deviceId}.info.model`, model);
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: getModelName failed (${(0, import_util.errorMessage)(e)})`);
+    }
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), this.pollIntervalMs);
     this.deps.log.info(`${this.deviceId}: Yamaha (XML) device ready`);
     return true;

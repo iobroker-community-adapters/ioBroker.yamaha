@@ -69,6 +69,15 @@ class XmlClient {
     const response = await this.post(this.ip, (0, import_protocol.encodeGet)(zone, "<Basic_Status>GetParam</Basic_Status>"));
     return (0, import_protocol.parseBasicStatus)(response);
   }
+  /**
+   * Read the device's model name (System > Config).
+   *
+   * @returns the model name, or undefined when the device does not report one
+   */
+  async getModelName() {
+    const response = await this.post(this.ip, (0, import_protocol.encodeGet)("System", "<Config>GetParam</Config>"));
+    return (0, import_protocol.parseModelName)(response);
+  }
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {

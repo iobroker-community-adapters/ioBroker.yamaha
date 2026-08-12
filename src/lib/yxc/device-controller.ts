@@ -25,12 +25,25 @@ const KEEPALIVE_MS = 5 * 60 * 1000;
  */
 const MAX_KEEPALIVE_FAILURES = 3;
 
+/**
+ * Extract the model name from a getDeviceInfo response, if it carries a non-empty one.
+ *
+ * @param deviceInfo the getDeviceInfo response
+ * @returns the model name, or undefined
+ */
+function modelNameFrom(deviceInfo: unknown): string | undefined {
+  const model = (deviceInfo as { model_name?: unknown } | null)?.model_name;
+  return typeof model === "string" && model.length > 0 ? model : undefined;
+}
+
 /** The subset of the YamahaYXC client the controller uses (so tests can inject a fake). */
 export interface YxcClientLike {
   /** Read the device's capabilities (zones, functions, inputs, ranges). */
   getFeatures(): Promise<unknown>;
   /** Read a zone's current status. */
   getStatus(zone: string): Promise<unknown>;
+  /** Read the device's system info (model name, firmware). */
+  getDeviceInfo(): Promise<unknown>;
   /**
    * Read a player source's play info. `undefined` reads the network/USB player,
    * `"cd"` the disc player, `"tuner"` the tuner (band/frequency/RDS).
@@ -182,6 +195,26 @@ export class YxcDeviceController implements ConnectionHandle {
     // Parents before children (channels before their states) — created in order.
     for (const object of objects) {
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
+    }
+    // The model name (getDeviceInfo) for the device-manager card. Best-effort: a device that
+    // does not answer getDeviceInfo still connects — the model line just stays empty.
+    try {
+      const model = modelNameFrom(await this.deps.client.getDeviceInfo());
+      if (model) {
+        await this.deps.upsertObject(`${this.deviceId}.info`, {
+          id: "info",
+          type: "channel",
+          common: { name: "Info" },
+        });
+        await this.deps.upsertObject(`${this.deviceId}.info.model`, {
+          id: "info.model",
+          type: "state",
+          common: { name: "Model", type: "string", role: "text", read: true, write: false },
+        });
+        this.deps.setStateAck(`${this.deviceId}.info.model`, model);
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: getDeviceInfo failed (${errorMessage(e)})`);
     }
     this.zones = capabilities.zones.map(zone => zone.id);
     for (const zone of this.zones) {

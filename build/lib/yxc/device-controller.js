@@ -29,6 +29,10 @@ var import_push = require("./push");
 var import_util = require("../util");
 const KEEPALIVE_MS = 5 * 60 * 1e3;
 const MAX_KEEPALIVE_FAILURES = 3;
+function modelNameFrom(deviceInfo) {
+  const model = deviceInfo == null ? void 0 : deviceInfo.model_name;
+  return typeof model === "string" && model.length > 0 ? model : void 0;
+}
 class YxcDeviceController {
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
@@ -69,6 +73,24 @@ class YxcDeviceController {
     }
     for (const object of objects) {
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
+    }
+    try {
+      const model = modelNameFrom(await this.deps.client.getDeviceInfo());
+      if (model) {
+        await this.deps.upsertObject(`${this.deviceId}.info`, {
+          id: "info",
+          type: "channel",
+          common: { name: "Info" }
+        });
+        await this.deps.upsertObject(`${this.deviceId}.info.model`, {
+          id: "info.model",
+          type: "state",
+          common: { name: "Model", type: "string", role: "text", read: true, write: false }
+        });
+        this.deps.setStateAck(`${this.deviceId}.info.model`, model);
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: getDeviceInfo failed (${(0, import_util.errorMessage)(e)})`);
     }
     this.zones = capabilities.zones.map((zone) => zone.id);
     for (const zone of this.zones) {

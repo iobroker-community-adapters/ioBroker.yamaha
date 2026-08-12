@@ -113,6 +113,15 @@ export class YamahaYxcClient {
   }
 
   /**
+   * Read the device's system info (model name, device id, firmware version).
+   *
+   * @returns the getDeviceInfo response
+   */
+  public getDeviceInfo(): Promise<unknown> {
+    return this.send("/system/getDeviceInfo");
+  }
+
+  /**
    * Read a player source's play info.
    *
    * @param source the player: undefined = network/USB, `cd`, or `tuner`

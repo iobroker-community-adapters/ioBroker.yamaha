@@ -76,6 +76,14 @@ class YamahaYxcClient {
     return this.send(`/${zoneSeg(zone)}/getStatus`);
   }
   /**
+   * Read the device's system info (model name, device id, firmware version).
+   *
+   * @returns the getDeviceInfo response
+   */
+  getDeviceInfo() {
+    return this.send("/system/getDeviceInfo");
+  }
+  /**
    * Read a player source's play info.
    *
    * @param source the player: undefined = network/USB, `cd`, or `tuner`

@@ -12,6 +12,11 @@ class FakeClient implements XmlClientLike {
     this.calls.push({ method: "getStatus", zone });
     return this.statuses[zone] ?? {};
   }
+  public modelName: string | undefined = undefined;
+  public async getModelName(): Promise<string | undefined> {
+    this.calls.push({ method: "getModelName", zone: "" });
+    return this.modelName;
+  }
   public async send(zone: string, inner: string): Promise<void> {
     this.calls.push({ method: "send", zone, inner });
   }
@@ -68,6 +73,14 @@ describe("XmlDeviceController", () => {
     const s = setup({ Main_Zone: { power: true } });
     await s.controller.start();
     expect(s.fire.keepaliveMs).toBe(60000);
+  });
+
+  test("creates info.model from the System/Config model name", async () => {
+    const s = setup({ Main_Zone: { power: true } });
+    s.client.modelName = "RX-V1900";
+    await s.controller.start();
+    expect(s.objects).toContain("living.info.model");
+    expect(s.acks).toContainEqual({ id: "living.info.model", value: "RX-V1900" });
   });
 
   test("builds the amp tree for the main zone and seeds its state", async () => {

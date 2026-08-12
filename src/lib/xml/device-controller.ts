@@ -39,6 +39,8 @@ const XML_ZONES: XmlZone[] = [
 export interface XmlClientLike {
   /** Read a zone's Basic_Status. */
   getStatus(zone: string): Promise<BasicStatus>;
+  /** Read the device's model name (System > Config). */
+  getModelName(): Promise<string | undefined>;
   /** Send an inner command to a zone. */
   send(zone: string, inner: string): Promise<void>;
 }
@@ -139,6 +141,26 @@ export class XmlDeviceController implements ConnectionHandle {
       if (status) {
         this.seedZone(zone, status);
       }
+    }
+    // The model name (System>Config) for the device-manager card. Best-effort — a device that
+    // does not report it still connects, the model line just stays empty.
+    try {
+      const model = await this.deps.client.getModelName();
+      if (model) {
+        await this.deps.upsertObject(`${this.deviceId}.info`, {
+          id: "info",
+          type: "channel",
+          common: { name: "Info" },
+        });
+        await this.deps.upsertObject(`${this.deviceId}.info.model`, {
+          id: "info.model",
+          type: "state",
+          common: { name: "Model", type: "string", role: "text", read: true, write: false },
+        });
+        this.deps.setStateAck(`${this.deviceId}.info.model`, model);
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: getModelName failed (${errorMessage(e)})`);
     }
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), this.pollIntervalMs);
     this.deps.log.info(`${this.deviceId}: Yamaha (XML) device ready`);
