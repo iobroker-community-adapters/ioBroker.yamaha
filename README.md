@@ -17,8 +17,8 @@ of the oldest pre-2010 models — behind one object tree.
 - **One adapter for three protocols** — classic Yamaha AV receivers over YNCA, MusicCast devices over Yamaha Extended Control, and pre-2010 receivers over the legacy XML protocol, replacing the separate yamaha and musiccast adapters.
 - **Self-healing connection** — a receiver that is off when the adapter starts joins on its own once it answers, and every connection recovers after a reboot or network drop, with a per-device connection indicator.
 - **Rich, intelligently typed datapoints** — amplifier, tone control, HDMI output, DSP and decoder modes, sound programs, party mode, tuner with RDS, and network/USB/server/Spotify players; on/off is a boolean, fixed choices are dropdowns, numbers carry their unit and range.
-- **Capability-driven object tree** — states are generated from what each device actually reports over its protocol, not from a hardcoded model list, and only for the functions it offers.
-- **One transport chosen per device** — YNCA where the receiver speaks it, MusicCast for speakers and soundbars, XML for the oldest models.
+- **Capability-driven object tree** — states are generated from what each device actually reports over its protocols, not from a hardcoded model list, and only for the functions it offers.
+- **Every protocol a device speaks runs together** — a MusicCast receiver keeps its YNCA amplifier control and adds its Yamaha Extended Control richness (multiroom, equalizer, media) on one object tree, instead of only one protocol being used per device.
 - **Automatic discovery** — leave the device table empty and MusicCast devices are found on the network and set up on their own at startup; fill the table to pin specific devices instead.
 
 ## Requirements
