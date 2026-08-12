@@ -1,4 +1,13 @@
 # Older changes
+## 0.8.0 (2026-08-04)
+
+- Every value now arrives in a form you can use directly: on/off states are switches, fixed choices are dropdowns, and measurements are numbers with their unit — not raw text to interpret.
+- Your receiver now shows and controls far more of what it can do — tone, DSP, HDMI and surround modes, AM/FM and DAB radio with RDS, and network, USB, server and CD playback with track details.
+- MusicCast devices now show and control their tuner, CD player and the full amplifier — bass, treble, balance, direct and sleep — not just power, volume and input.
+- Fixed the playback status never updating on network and USB sources, so play, pause and stop are now shown correctly, not just controllable.
+- Track title, station and playback state now update the moment they change on the device, instead of only every minute or so.
+- A receiver offline at adapter start joins on its own once it answers and reconnects after a drop, and each device shows its own connection state.
+
 ## 0.7.0 (2026-08-03)
 
 - An existing receiver from the previous adapter is now carried over into the device table on upgrade instead of being lost.

@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "0.12.0",
+    "version": "0.13.0",
     "news": {
+      "0.13.0": {
+        "en": "A MusicCast receiver now shows its amplifier controls and its MusicCast features together, instead of only one of them being reachable.",
+        "de": "Ein MusicCast-Receiver zeigt jetzt seine Verstärker-Steuerung und seine MusicCast-Funktionen gemeinsam, statt nur eine der beiden erreichbar zu machen.",
+        "ru": "Ресивер MusicCast теперь показывает и управление усилителем, и функции MusicCast вместе, а не только что-то одно из них.",
+        "pt": "Um recetor MusicCast mostra agora o controlo do amplificador e as funções MusicCast em conjunto, em vez de apenas um deles ficar acessível.",
+        "nl": "Een MusicCast-receiver toont nu zowel de versterkerbediening als de MusicCast-functies samen, in plaats van slechts één ervan bereikbaar te maken.",
+        "fr": "Un récepteur MusicCast affiche désormais les commandes de l'amplificateur et les fonctions MusicCast ensemble, au lieu de n'en rendre qu'une seule accessible.",
+        "it": "Un ricevitore MusicCast ora mostra insieme i controlli dell'amplificatore e le funzioni MusicCast, invece di renderne accessibile solo una.",
+        "es": "Un receptor MusicCast ahora muestra juntos los controles del amplificador y las funciones MusicCast, en lugar de que solo uno de ellos sea accesible.",
+        "pl": "Odbiornik MusicCast pokazuje teraz sterowanie wzmacniaczem i funkcje MusicCast razem, zamiast udostępniać tylko jedno z nich.",
+        "uk": "Ресивер MusicCast тепер показує і керування підсилювачем, і функції MusicCast разом, а не лише щось одне з них.",
+        "zh-cn": "MusicCast 接收机现在同时显示功放控制和 MusicCast 功能，而不再只有其中一项可用。"
+      },
       "0.12.0": {
         "en": "Much more of your MusicCast is controllable from ioBroker now — playback, tuner, presets, the equalizer and full multiroom — and streaming services show the current track.",
         "de": "Viel mehr am MusicCast-Gerät ist jetzt aus ioBroker steuerbar — Wiedergabe, Tuner, Presets, Equalizer und volles Multiroom — und Streaming-Dienste zeigen den laufenden Titel.",
@@ -67,19 +80,6 @@
         "pl": "Znacznie więcej twojego Yamaha można teraz używać z ioBroker: wartości są przełącznikami, listami i liczbami do odczytu i ustawiania, nie surowym tekstem, a status odtwarzania jest wreszcie poprawny.",
         "uk": "З ioBroker доступно набагато більше можливостей Yamaha: значення надходять як перемикачі, списки та числа для читання й запису, а не сирий текст, і статус відтворення нарешті правильний.",
         "zh-cn": "现在可以从 ioBroker 使用你的 Yamaha 更多功能：数值以开关、列表和数字的形式呈现，可读取和设置，而非原始文本，播放状态终于正确。"
-      },
-      "0.7.0": {
-        "en": "An existing receiver is now taken over on upgrade, and each receiver reports and fills more datapoints at startup, such as the sleep timer.",
-        "de": "Ein vorhandener Receiver wird beim Update jetzt übernommen, und jeder Receiver meldet und füllt beim Start mehr Datenpunkte, etwa den Sleep-Timer.",
-        "ru": "Существующий ресивер теперь переносится при обновлении, и каждый ресивер сообщает и заполняет больше точек данных при запуске, например таймер сна.",
-        "pt": "Um receptor existente passa a ser assumido na atualização, e cada receptor comunica e preenche mais pontos de dados no arranque, como o temporizador de suspensão.",
-        "nl": "Een bestaande receiver wordt bij het bijwerken nu overgenomen, en elke receiver meldt en vult bij het opstarten meer datapunten, zoals de slaaptimer.",
-        "fr": "Un récepteur existant est désormais repris lors de la mise à jour, et chaque récepteur signale et remplit plus de points de données au démarrage, comme la minuterie de veille.",
-        "it": "Un ricevitore esistente viene ora ripreso durante l'aggiornamento e ogni ricevitore segnala e riempie più punti dati all'avvio, come il timer di spegnimento.",
-        "es": "Un receptor existente ahora se adopta al actualizar, y cada receptor informa y rellena más puntos de datos al iniciar, como el temporizador de apagado.",
-        "pl": "Istniejący odbiornik jest teraz przejmowany podczas aktualizacji, a każdy odbiornik zgłasza i wypełnia więcej punktów danych przy starcie, np. wyłącznik czasowy.",
-        "uk": "Наявний ресивер тепер переноситься під час оновлення, і кожен ресивер повідомляє та заповнює більше точок даних під час запуску, наприклад таймер сну.",
-        "zh-cn": "现在升级时会接管现有接收机，每台接收机在启动时会报告并填充更多数据点，例如睡眠定时器。"
       },
       "0.5.4": {
         "en": "updated packages",

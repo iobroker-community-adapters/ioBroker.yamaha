@@ -43,6 +43,11 @@ Older Yamaha receivers (before ~2010, the XML protocol) do not announce themselv
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+### 0.13.0 (2026-08-12)
+
+- For a MusicCast receiver, amplifier control and the MusicCast features — multiroom grouping, graphic equalizer and media playback — now appear together, where before only one side showed up.
+- The amplifier connection now recovers on its own if it drops in the first moments after startup — previously such an early drop could leave it disconnected until the next restart.
+
 ### 0.12.0 (2026-08-11)
 
 - Much more of your MusicCast device answers to ioBroker now — repeat and shuffle, the CD tray, the tuner, party mode and your saved presets all switch straight from the object tree.
@@ -72,15 +77,6 @@ Older Yamaha receivers (before ~2010, the XML protocol) do not announce themselv
 - A multi-zone MusicCast receiver now keeps every zone up to date, not just the main one, so zones 2–4 no longer freeze when live updates pause.
 - Datapoints are more consistent however a device connects, channel names read properly instead of raw ids, and volume carries its dB range everywhere.
 - A stray empty or invalid write is no longer sent to the receiver as a bogus command, and the XML volume is read from the correct field instead of an unrelated value.
-
-### 0.8.0 (2026-08-04)
-
-- Every value now arrives in a form you can use directly: on/off states are switches, fixed choices are dropdowns, and measurements are numbers with their unit — not raw text to interpret.
-- Your receiver now shows and controls far more of what it can do — tone, DSP, HDMI and surround modes, AM/FM and DAB radio with RDS, and network, USB, server and CD playback with track details.
-- MusicCast devices now show and control their tuner, CD player and the full amplifier — bass, treble, balance, direct and sleep — not just power, volume and input.
-- Fixed the playback status never updating on network and USB sources, so play, pause and stop are now shown correctly, not just controllable.
-- Track title, station and playback state now update the moment they change on the device, instead of only every minute or so.
-- A receiver offline at adapter start joins on its own once it answers and reconnects after a drop, and each device shows its own connection state.
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 
