@@ -4,6 +4,8 @@ import { YxcDeviceController } from "./yxc/device-controller";
 import { YamahaYxcClient } from "./yxc/http-client";
 import { XmlDeviceController } from "./xml/device-controller";
 import { XmlClient } from "./xml/xml-client";
+import { MultiTransportHandle } from "./lifecycle/multi-transport-handle";
+import { TransportConnectionAdapter } from "./lifecycle/transport-connection-adapter";
 import { errorMessage } from "./util";
 import type { ConnectionHandle, ControllerLog } from "./controller";
 import type { ObjectDef } from "./catalog/types";
@@ -49,65 +51,94 @@ export interface AttemptDeps {
  */
 export async function attemptDevice(device: DeviceRecord, deps: AttemptDeps): Promise<ConnectionHandle | null> {
   const { log, upsertObject, setStateAck, timers } = deps;
+  const connections: TransportConnectionAdapter[] = [];
 
-  // 1) YNCA — amp control over a held TCP connection; a socket drop reconnects
-  //    through the supervisor.
-  const yncaClient = new YncaClient(device.ip, timers);
-  const ynca = new YncaDeviceController(device.id, { client: yncaClient, upsertObject, setStateAck, log });
-  try {
-    if (await ynca.start()) {
-      return ynca;
-    }
-    ynca.close();
-  } catch (e) {
-    ynca.close();
-    log.debug(`${device.id}: no YNCA (${errorMessage(e)})`);
-  }
+  // Every transport that answers runs in parallel on ONE object tree: each is built behind an
+  // adapter that collects its objects and filters its state writes to the ids the object-tree
+  // coordinator assigns it, so no state is written twice and each capability comes from the
+  // best-fitting transport (see owner-policy). The set is then held by one MultiTransportHandle.
 
-  // 2) YXC fallback — MusicCast; polled + push. No socket-drop event, so the
-  //    controller reports a drop after a run of failed keepalive polls.
-  const yxc = new YxcDeviceController(device.id, {
-    client: new YamahaYxcClient(device.ip),
-    // Resolve another configured device's client for a multiroom link — never this device itself.
-    clientFor: ip => (ip !== device.ip && deps.knownDeviceIps.has(ip) ? new YamahaYxcClient(ip) : undefined),
-    registerPush: onPush => deps.registerPush(device.ip, onPush),
-    scheduleKeepalive: deps.scheduleKeepalive,
-    upsertObject,
-    setStateAck,
-    log,
-  });
-  try {
-    if (await yxc.start()) {
-      return yxc;
-    }
-    yxc.close();
-  } catch (e) {
-    yxc.close();
-    log.debug(`${device.id}: no YXC (${errorMessage(e)})`);
-  }
-
-  // 3) XML/YNC fallback — pre-2010 receivers; polled. A drop is reported after a
-  //    run of failed polls.
-  const xml = new XmlDeviceController(
-    device.id,
-    {
-      client: new XmlClient(device.ip),
-      scheduleKeepalive: deps.scheduleKeepalive,
-      upsertObject,
-      setStateAck,
+  // 1) YNCA — amp control over a held TCP connection; a socket drop reconnects through the supervisor.
+  const ynca = new TransportConnectionAdapter("ynca", device.id, setStateAck);
+  ynca.bind(
+    new YncaDeviceController(device.id, {
+      client: new YncaClient(device.ip, timers),
+      upsertObject: ynca.interceptUpsert,
+      setStateAck: ynca.interceptSetStateAck,
       log,
-    },
-    deps.xmlPollIntervalMs,
+    }),
   );
-  try {
-    if (await xml.start()) {
-      deps.onXmlConnected();
-      return xml;
-    }
-    xml.close();
-  } catch (e) {
-    xml.close();
-    log.warn(`${device.id}: no reachable transport (YNCA/YXC/XML): ${errorMessage(e)}`);
+  await tryConnect(ynca, connections, log, `${device.id}: no YNCA`);
+
+  // 2) YXC — MusicCast; polled + push. Drop reported after a run of failed keepalive polls.
+  const yxc = new TransportConnectionAdapter("yxc", device.id, setStateAck);
+  yxc.bind(
+    new YxcDeviceController(device.id, {
+      client: new YamahaYxcClient(device.ip),
+      // Resolve another configured device's client for a multiroom link — never this device itself.
+      clientFor: ip => (ip !== device.ip && deps.knownDeviceIps.has(ip) ? new YamahaYxcClient(ip) : undefined),
+      registerPush: onPush => deps.registerPush(device.ip, onPush),
+      scheduleKeepalive: deps.scheduleKeepalive,
+      upsertObject: yxc.interceptUpsert,
+      setStateAck: yxc.interceptSetStateAck,
+      log,
+    }),
+  );
+  await tryConnect(yxc, connections, log, `${device.id}: no YXC`);
+
+  // 3) XML/YNC — pre-2010 receivers; polled. A drop is reported after a run of failed polls.
+  const xml = new TransportConnectionAdapter("xml", device.id, setStateAck);
+  xml.bind(
+    new XmlDeviceController(
+      device.id,
+      {
+        client: new XmlClient(device.ip),
+        scheduleKeepalive: deps.scheduleKeepalive,
+        upsertObject: xml.interceptUpsert,
+        setStateAck: xml.interceptSetStateAck,
+        log,
+      },
+      deps.xmlPollIntervalMs,
+    ),
+  );
+  if (await tryConnect(xml, connections, log, `${device.id}: no XML`)) {
+    deps.onXmlConnected();
   }
-  return null;
+
+  if (connections.length === 0) {
+    log.warn(`${device.id}: no reachable transport (YNCA/YXC/XML)`);
+    return null;
+  }
+  const handle = new MultiTransportHandle(device.id, connections, { upsertObject, log });
+  await handle.start();
+  return handle;
+}
+
+/**
+ * Connect one transport's adapter; on success add it to the set, else close it. A connect error
+ * is logged and swallowed so the other transports still get their chance.
+ *
+ * @param adapter the transport adapter to connect
+ * @param connections the set to add it to on success
+ * @param log the adapter log
+ * @param failMessage the debug message prefix if it does not connect
+ * @returns whether the transport connected
+ */
+async function tryConnect(
+  adapter: TransportConnectionAdapter,
+  connections: TransportConnectionAdapter[],
+  log: ControllerLog,
+  failMessage: string,
+): Promise<boolean> {
+  try {
+    if (await adapter.connect()) {
+      connections.push(adapter);
+      return true;
+    }
+    adapter.close();
+  } catch (e) {
+    adapter.close();
+    log.debug(`${failMessage} (${errorMessage(e)})`);
+  }
+  return false;
 }

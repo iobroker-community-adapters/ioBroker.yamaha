@@ -27,61 +27,73 @@ var import_device_controller2 = require("./yxc/device-controller");
 var import_http_client = require("./yxc/http-client");
 var import_device_controller3 = require("./xml/device-controller");
 var import_xml_client = require("./xml/xml-client");
+var import_multi_transport_handle = require("./lifecycle/multi-transport-handle");
+var import_transport_connection_adapter = require("./lifecycle/transport-connection-adapter");
 var import_util = require("./util");
 async function attemptDevice(device, deps) {
   const { log, upsertObject, setStateAck, timers } = deps;
-  const yncaClient = new import_ynca_client.YncaClient(device.ip, timers);
-  const ynca = new import_device_controller.YncaDeviceController(device.id, { client: yncaClient, upsertObject, setStateAck, log });
-  try {
-    if (await ynca.start()) {
-      return ynca;
-    }
-    ynca.close();
-  } catch (e) {
-    ynca.close();
-    log.debug(`${device.id}: no YNCA (${(0, import_util.errorMessage)(e)})`);
-  }
-  const yxc = new import_device_controller2.YxcDeviceController(device.id, {
-    client: new import_http_client.YamahaYxcClient(device.ip),
-    // Resolve another configured device's client for a multiroom link — never this device itself.
-    clientFor: (ip) => ip !== device.ip && deps.knownDeviceIps.has(ip) ? new import_http_client.YamahaYxcClient(ip) : void 0,
-    registerPush: (onPush) => deps.registerPush(device.ip, onPush),
-    scheduleKeepalive: deps.scheduleKeepalive,
-    upsertObject,
-    setStateAck,
-    log
-  });
-  try {
-    if (await yxc.start()) {
-      return yxc;
-    }
-    yxc.close();
-  } catch (e) {
-    yxc.close();
-    log.debug(`${device.id}: no YXC (${(0, import_util.errorMessage)(e)})`);
-  }
-  const xml = new import_device_controller3.XmlDeviceController(
-    device.id,
-    {
-      client: new import_xml_client.XmlClient(device.ip),
-      scheduleKeepalive: deps.scheduleKeepalive,
-      upsertObject,
-      setStateAck,
+  const connections = [];
+  const ynca = new import_transport_connection_adapter.TransportConnectionAdapter("ynca", device.id, setStateAck);
+  ynca.bind(
+    new import_device_controller.YncaDeviceController(device.id, {
+      client: new import_ynca_client.YncaClient(device.ip, timers),
+      upsertObject: ynca.interceptUpsert,
+      setStateAck: ynca.interceptSetStateAck,
       log
-    },
-    deps.xmlPollIntervalMs
+    })
   );
-  try {
-    if (await xml.start()) {
-      deps.onXmlConnected();
-      return xml;
-    }
-    xml.close();
-  } catch (e) {
-    xml.close();
-    log.warn(`${device.id}: no reachable transport (YNCA/YXC/XML): ${(0, import_util.errorMessage)(e)}`);
+  await tryConnect(ynca, connections, log, `${device.id}: no YNCA`);
+  const yxc = new import_transport_connection_adapter.TransportConnectionAdapter("yxc", device.id, setStateAck);
+  yxc.bind(
+    new import_device_controller2.YxcDeviceController(device.id, {
+      client: new import_http_client.YamahaYxcClient(device.ip),
+      // Resolve another configured device's client for a multiroom link — never this device itself.
+      clientFor: (ip) => ip !== device.ip && deps.knownDeviceIps.has(ip) ? new import_http_client.YamahaYxcClient(ip) : void 0,
+      registerPush: (onPush) => deps.registerPush(device.ip, onPush),
+      scheduleKeepalive: deps.scheduleKeepalive,
+      upsertObject: yxc.interceptUpsert,
+      setStateAck: yxc.interceptSetStateAck,
+      log
+    })
+  );
+  await tryConnect(yxc, connections, log, `${device.id}: no YXC`);
+  const xml = new import_transport_connection_adapter.TransportConnectionAdapter("xml", device.id, setStateAck);
+  xml.bind(
+    new import_device_controller3.XmlDeviceController(
+      device.id,
+      {
+        client: new import_xml_client.XmlClient(device.ip),
+        scheduleKeepalive: deps.scheduleKeepalive,
+        upsertObject: xml.interceptUpsert,
+        setStateAck: xml.interceptSetStateAck,
+        log
+      },
+      deps.xmlPollIntervalMs
+    )
+  );
+  if (await tryConnect(xml, connections, log, `${device.id}: no XML`)) {
+    deps.onXmlConnected();
   }
-  return null;
+  if (connections.length === 0) {
+    log.warn(`${device.id}: no reachable transport (YNCA/YXC/XML)`);
+    return null;
+  }
+  const handle = new import_multi_transport_handle.MultiTransportHandle(device.id, connections, { upsertObject, log });
+  await handle.start();
+  return handle;
+}
+async function tryConnect(adapter, connections, log, failMessage) {
+  try {
+    if (await adapter.connect()) {
+      connections.push(adapter);
+      return true;
+    }
+    adapter.close();
+  } catch (e) {
+    adapter.close();
+    log.debug(`${failMessage} (${(0, import_util.errorMessage)(e)})`);
+  }
+  return false;
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
