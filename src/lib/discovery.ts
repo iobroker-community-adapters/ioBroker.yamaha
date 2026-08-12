@@ -2,8 +2,14 @@ import { errorMessage } from "./util";
 
 const YAMAHA_MANUFACTURER = /<manufacturer>[^<]*yamaha[^<]*<\/manufacturer>/i;
 const FRIENDLY_NAME = /<friendlyName>([^<]*)<\/friendlyName>/;
-/** The UPnP device type networked Yamaha devices advertise. */
-const MEDIA_RENDERER = "urn:schemas-upnp-org:device:MediaRenderer:1";
+/**
+ * The SSDP search target. Every UPnP root device must answer `upnp:rootdevice`
+ * with exactly one response (UPnP Device Architecture spec), so no Yamaha model
+ * is missed for advertising a device type other than MediaRenderer, and there is
+ * no `ssdp:all` duplicate storm. Correctness is guaranteed by the manufacturer
+ * filter on the fetched description, not by the search target.
+ */
+const ROOT_DEVICE = "upnp:rootdevice";
 /** How long to collect SSDP responses. */
 const SEARCH_TIMEOUT_MS = 5000;
 
@@ -48,7 +54,7 @@ export function parseYamahaDescription(xml: string): { name: string } | undefine
  * @returns the discovered Yamaha devices
  */
 export async function discoverYamaha(deps: DiscoveryDeps): Promise<DiscoveredDevice[]> {
-  const found = await deps.search(MEDIA_RENDERER, SEARCH_TIMEOUT_MS);
+  const found = await deps.search(ROOT_DEVICE, SEARCH_TIMEOUT_MS);
   const devices: DiscoveredDevice[] = [];
   const seen = new Set<string>();
   for (const { location, address } of found) {

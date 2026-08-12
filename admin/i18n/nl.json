@@ -10,5 +10,7 @@
   "aboutInfo": "Als deze adapter nuttig voor je is, kun je de ontwikkeling steunen:",
   "donateKofi": "Ko-fi",
   "donatePaypal": "PayPal",
-  "invalidIp": "Ongeldig IP-adres"
+  "invalidIp": "Ongeldig IP-adres",
+  "networkInterfaceLabel": "Netwerkinterface",
+  "networkInterfaceTooltip": "Selecteer de netwerkinterface voor LAN-detectie en -besturing. Behoud de standaard (0.0.0.0 = alle interfaces), tenzij deze host meerdere netwerkinterfaces heeft."
 }

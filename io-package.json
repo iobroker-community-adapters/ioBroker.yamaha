@@ -164,6 +164,7 @@
     }
   },
   "native": {
+    "networkInterface": "",
     "devices": [],
     "xmlPollInterval": 60,
     "hasXmlDevice": false

@@ -47,6 +47,8 @@ var import_reconnect_strategy = require("./lib/lifecycle/reconnect-strategy");
 const RECONNECT_BASE_MS = 1e3;
 const RECONNECT_MAX_MS = 6e4;
 const FETCH_TIMEOUT_MS = 4e3;
+const SSDP_SEARCH_BURST = 3;
+const SSDP_SEARCH_INTERVAL_MS = 1e3;
 class Yamaha extends utils.Adapter {
   supervisors = [];
   deviceConnected = /* @__PURE__ */ new Map();
@@ -349,16 +351,38 @@ class Yamaha extends utils.Adapter {
    */
   ssdpSearch(target, timeoutMs) {
     return new Promise((resolve) => {
+      const configured = this.config.networkInterface;
+      const bindAddr = configured && configured !== "0.0.0.0" ? configured : void 0;
       const socket = (0, import_node_dgram.createSocket)("udp4");
       const responders = [];
+      let settled = false;
+      const finish = () => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        try {
+          socket.close();
+        } catch {
+        }
+        resolve(responders);
+      };
       socket.on("message", (msg, rinfo) => {
         const location = /LOCATION:\s*(\S+)/i.exec(msg.toString());
         if (location) {
           responders.push({ location: location[1], address: rinfo.address });
         }
       });
-      socket.on("error", () => socket.close());
-      socket.bind(() => {
+      socket.on("error", (err) => {
+        this.log.warn(
+          `discovery socket failed${bindAddr ? ` on interface ${bindAddr}` : ""}: ${(0, import_util.errorMessage)(err)}` + (bindAddr ? " \u2014 check the Network Interface setting" : "")
+        );
+        finish();
+      });
+      const sendSearch = () => {
+        if (settled) {
+          return;
+        }
         const msearch = `M-SEARCH * HTTP/1.1\r
 HOST: 239.255.255.250:1900\r
 MAN: "ssdp:discover"\r
@@ -367,11 +391,20 @@ ST: ${target}\r
 \r
 `;
         socket.send(msearch, 1900, "239.255.255.250");
+      };
+      socket.bind(0, bindAddr, () => {
+        if (bindAddr) {
+          try {
+            socket.setMulticastInterface(bindAddr);
+          } catch {
+            this.log.info(`discovery: could not pin multicast egress to ${bindAddr} \u2014 using the default interface`);
+          }
+        }
+        for (let i = 0; i < SSDP_SEARCH_BURST; i++) {
+          this.setTimeout(sendSearch, i * SSDP_SEARCH_INTERVAL_MS);
+        }
       });
-      this.setTimeout(() => {
-        socket.close();
-        resolve(responders);
-      }, timeoutMs);
+      this.setTimeout(finish, timeoutMs);
     });
   }
   /**

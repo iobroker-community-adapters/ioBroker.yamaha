@@ -10,5 +10,7 @@
   "aboutInfo": "Se questo adattatore ti è utile, puoi sostenere il suo sviluppo:",
   "donateKofi": "Ko-fi",
   "donatePaypal": "PayPal",
-  "invalidIp": "Indirizzo IP non valido"
+  "invalidIp": "Indirizzo IP non valido",
+  "networkInterfaceLabel": "Interfaccia di rete",
+  "networkInterfaceTooltip": "Seleziona l'interfaccia di rete per il rilevamento e il controllo LAN. Mantieni il valore predefinito (0.0.0.0 = tutte) a meno che questo host non abbia più interfacce."
 }

@@ -41,6 +41,20 @@
         }
       ]
     },
+    "networkInterface": {
+      "newLine": true,
+      "type": "ip",
+      "label": "networkInterfaceLabel",
+      "tooltip": "networkInterfaceTooltip",
+      "onlyIp4": true,
+      "noInternal": true,
+      "listenOnAllPorts": true,
+      "xs": 12,
+      "sm": 12,
+      "md": 6,
+      "lg": 6,
+      "xl": 6
+    },
     "xmlPollInterval": {
       "newLine": true,
       "type": "number",

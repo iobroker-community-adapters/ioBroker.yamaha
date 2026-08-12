@@ -10,5 +10,7 @@
   "aboutInfo": "Wenn dir dieser Adapter nützt, kannst du seine Entwicklung unterstützen:",
   "donateKofi": "Ko-fi",
   "donatePaypal": "PayPal",
-  "invalidIp": "Ungültige IP-Adresse"
+  "invalidIp": "Ungültige IP-Adresse",
+  "networkInterfaceLabel": "Netzwerk-Interface",
+  "networkInterfaceTooltip": "Netzwerk-Interface für LAN-Discovery und -Steuerung. Standard (0.0.0.0 = alle Interfaces) beibehalten, außer dieser Host hat mehrere Netzwerk-Interfaces."
 }

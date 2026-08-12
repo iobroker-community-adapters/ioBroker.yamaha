@@ -27,6 +27,11 @@ const RECONNECT_MAX_MS = 60000;
 /** Abort a discovery description fetch after this long, so a dead device cannot hang it. */
 const FETCH_TIMEOUT_MS = 4000;
 
+/** How often the discovery M-SEARCH is repeated — multicast is lossy, one dropped packet must not hide a receiver. */
+const SSDP_SEARCH_BURST = 3;
+/** Spacing between the repeated M-SEARCH sends, inside the collect window. */
+const SSDP_SEARCH_INTERVAL_MS = 1000;
+
 /**
  * ioBroker.yamaha — controls Yamaha AV receivers and MusicCast devices.
  *
@@ -373,23 +378,67 @@ export class Yamaha extends utils.Adapter {
    */
   private ssdpSearch(target: string, timeoutMs: number): Promise<Array<{ location: string; address: string }>> {
     return new Promise(resolve => {
+      const configured = this.config.networkInterface;
+      const bindAddr = configured && configured !== "0.0.0.0" ? configured : undefined;
       const socket = createSocket("udp4");
       const responders: Array<{ location: string; address: string }> = [];
+      let settled = false;
+      const finish = (): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        try {
+          socket.close();
+        } catch {
+          // already closed
+        }
+        resolve(responders);
+      };
       socket.on("message", (msg, rinfo) => {
         const location = /LOCATION:\s*(\S+)/i.exec(msg.toString());
         if (location) {
           responders.push({ location: location[1], address: rinfo.address });
         }
       });
-      socket.on("error", () => socket.close());
-      socket.bind(() => {
+      socket.on("error", err => {
+        // A bind/egress failure is typically a stale selected interface IP (DHCP
+        // change or a copied config) — surface it so the user fixes the setting
+        // instead of silently finding nothing.
+        this.log.warn(
+          `discovery socket failed${bindAddr ? ` on interface ${bindAddr}` : ""}: ${errorMessage(err)}${
+            bindAddr ? " — check the Network Interface setting" : ""
+          }`,
+        );
+        finish();
+      });
+      const sendSearch = (): void => {
+        if (settled) {
+          return;
+        }
         const msearch = `M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: "ssdp:discover"\r\nMX: 3\r\nST: ${target}\r\n\r\n`;
         socket.send(msearch, 1900, "239.255.255.250");
+      };
+      socket.bind(0, bindAddr, () => {
+        // Pin OUTGOING multicast to the chosen interface. bind() only sets the
+        // source address; the egress interface is IP_MULTICAST_IF — without it the
+        // OS uses its default route, so the search can leave the wrong NIC on a
+        // multi-homed host despite an explicit selection (Node dgram docs).
+        if (bindAddr) {
+          try {
+            socket.setMulticastInterface(bindAddr);
+          } catch {
+            this.log.info(`discovery: could not pin multicast egress to ${bindAddr} — using the default interface`);
+          }
+        }
+        // Multicast is lossy and a single request can be dropped — repeat the
+        // M-SEARCH a few times inside the collect window so one lost packet does
+        // not hide a receiver (or one of several).
+        for (let i = 0; i < SSDP_SEARCH_BURST; i++) {
+          this.setTimeout(sendSearch, i * SSDP_SEARCH_INTERVAL_MS);
+        }
       });
-      this.setTimeout(() => {
-        socket.close();
-        resolve(responders);
-      }, timeoutMs);
+      this.setTimeout(finish, timeoutMs);
     });
   }
 

@@ -10,5 +10,7 @@
   "aboutInfo": "如果此适配器对你有用，你可以支持它的开发：",
   "donateKofi": "Ko-fi",
   "donatePaypal": "PayPal",
-  "invalidIp": "无效的 IP 地址"
+  "invalidIp": "无效的 IP 地址",
+  "networkInterfaceLabel": "网络接口",
+  "networkInterfaceTooltip": "选择用于局域网发现和控制的网络接口。除非此主机有多个网络接口，否则请保留默认值（0.0.0.0 = 所有接口）。"
 }

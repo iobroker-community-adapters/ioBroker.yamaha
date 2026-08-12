@@ -25,7 +25,7 @@ module.exports = __toCommonJS(discovery_exports);
 var import_util = require("./util");
 const YAMAHA_MANUFACTURER = /<manufacturer>[^<]*yamaha[^<]*<\/manufacturer>/i;
 const FRIENDLY_NAME = /<friendlyName>([^<]*)<\/friendlyName>/;
-const MEDIA_RENDERER = "urn:schemas-upnp-org:device:MediaRenderer:1";
+const ROOT_DEVICE = "upnp:rootdevice";
 const SEARCH_TIMEOUT_MS = 5e3;
 function parseYamahaDescription(xml) {
   if (!YAMAHA_MANUFACTURER.test(xml)) {
@@ -35,7 +35,7 @@ function parseYamahaDescription(xml) {
   return { name: match ? match[1] : "" };
 }
 async function discoverYamaha(deps) {
-  const found = await deps.search(MEDIA_RENDERER, SEARCH_TIMEOUT_MS);
+  const found = await deps.search(ROOT_DEVICE, SEARCH_TIMEOUT_MS);
   const devices = [];
   const seen = /* @__PURE__ */ new Set();
   for (const { location, address } of found) {
