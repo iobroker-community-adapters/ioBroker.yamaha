@@ -18,7 +18,8 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var attempt_device_exports = {};
 __export(attempt_device_exports, {
-  attemptDevice: () => attemptDevice
+  attemptDevice: () => attemptDevice,
+  connectTransports: () => connectTransports
 });
 module.exports = __toCommonJS(attempt_device_exports);
 var import_ynca_client = require("./ynca/ynca-client");
@@ -30,9 +31,31 @@ var import_xml_client = require("./xml/xml-client");
 var import_multi_transport_handle = require("./lifecycle/multi-transport-handle");
 var import_transport_connection_adapter = require("./lifecycle/transport-connection-adapter");
 var import_util = require("./util");
-async function attemptDevice(device, deps) {
+async function connectTransports(deviceId, attempts, deps) {
+  const live = [];
+  for (const { conn, onConnected } of attempts) {
+    try {
+      if (await conn.connect()) {
+        live.push(conn);
+        onConnected == null ? void 0 : onConnected();
+      } else {
+        conn.close();
+      }
+    } catch (e) {
+      conn.close();
+      deps.log.debug(`${deviceId}/${conn.transport}: transport did not connect (${(0, import_util.errorMessage)(e)})`);
+    }
+  }
+  if (live.length === 0) {
+    deps.log.warn(`${deviceId}: no reachable transport (YNCA/YXC/XML)`);
+    return null;
+  }
+  const handle = new import_multi_transport_handle.MultiTransportHandle(deviceId, live, { upsertObject: deps.upsertObject, log: deps.log });
+  await handle.start();
+  return handle;
+}
+function attemptDevice(device, deps) {
   const { log, upsertObject, setStateAck, timers } = deps;
-  const connections = [];
   const ynca = new import_transport_connection_adapter.TransportConnectionAdapter("ynca", device.id, setStateAck);
   ynca.bind(
     new import_device_controller.YncaDeviceController(device.id, {
@@ -42,7 +65,6 @@ async function attemptDevice(device, deps) {
       log
     })
   );
-  await tryConnect(ynca, connections, log, `${device.id}: no YNCA`);
   const yxc = new import_transport_connection_adapter.TransportConnectionAdapter("yxc", device.id, setStateAck);
   yxc.bind(
     new import_device_controller2.YxcDeviceController(device.id, {
@@ -56,7 +78,6 @@ async function attemptDevice(device, deps) {
       log
     })
   );
-  await tryConnect(yxc, connections, log, `${device.id}: no YXC`);
   const xml = new import_transport_connection_adapter.TransportConnectionAdapter("xml", device.id, setStateAck);
   xml.bind(
     new import_device_controller3.XmlDeviceController(
@@ -71,32 +92,15 @@ async function attemptDevice(device, deps) {
       deps.xmlPollIntervalMs
     )
   );
-  if (await tryConnect(xml, connections, log, `${device.id}: no XML`)) {
-    deps.onXmlConnected();
-  }
-  if (connections.length === 0) {
-    log.warn(`${device.id}: no reachable transport (YNCA/YXC/XML)`);
-    return null;
-  }
-  const handle = new import_multi_transport_handle.MultiTransportHandle(device.id, connections, { upsertObject, log });
-  await handle.start();
-  return handle;
-}
-async function tryConnect(adapter, connections, log, failMessage) {
-  try {
-    if (await adapter.connect()) {
-      connections.push(adapter);
-      return true;
-    }
-    adapter.close();
-  } catch (e) {
-    adapter.close();
-    log.debug(`${failMessage} (${(0, import_util.errorMessage)(e)})`);
-  }
-  return false;
+  return connectTransports(
+    device.id,
+    [{ conn: ynca }, { conn: yxc }, { conn: xml, onConnected: () => deps.onXmlConnected() }],
+    { upsertObject, log }
+  );
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
-  attemptDevice
+  attemptDevice,
+  connectTransports
 });
 //# sourceMappingURL=attempt-device.js.map
