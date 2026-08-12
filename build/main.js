@@ -189,11 +189,12 @@ class Yamaha extends utils.Adapter {
     }
   }
   /**
-   * Bring one device online across its transports, tried in order: YNCA (amp
-   * control over a held TCP connection), then YXC (MusicCast), then XML/YNC
-   * (pre-2010). Returns a connection handle the supervisor keeps, or null when no
-   * transport answers this attempt. The transport that connects owns the device's
-   * object tree, so the mappers never collide on a shared id.
+   * Bring one device online across ALL its transports: every protocol that answers
+   * — YNCA (amp control over a held TCP connection), YXC (MusicCast), XML/YNC
+   * (pre-2010) — connects in parallel on one object tree. Returns a connection handle
+   * the supervisor keeps, or null when no transport answers this attempt. Each
+   * datapoint is owned by exactly one transport (owner-policy), so the mappers never
+   * collide on a shared id.
    *
    * @param device the configured device record
    * @param pushReceiver the shared YXC push receiver

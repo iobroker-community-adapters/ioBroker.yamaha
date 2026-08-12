@@ -30,11 +30,12 @@ const FETCH_TIMEOUT_MS = 4000;
 /**
  * ioBroker.yamaha — controls Yamaha AV receivers and MusicCast devices.
  *
- * Each configured device is driven by a supervisor that keeps one transport
- * controller online, tried in order: YNCA (amp control over a held TCP
- * connection, event-pushed), then YXC (MusicCast speakers and soundbars), then
- * XML/YNC (pre-2010 receivers, polled over HTTP). All YXC devices share one UDP
- * push receiver, keyed by source IP.
+ * Each configured device is driven by a supervisor that keeps a multi-transport
+ * handle online: every protocol the device answers — YNCA (amp control over a held
+ * TCP connection, event-pushed), YXC (MusicCast, push + poll), XML/YNC (pre-2010,
+ * polled over HTTP) — connects in parallel on one object tree, each datapoint owned
+ * by the best-fitting transport. All YXC devices share one UDP push receiver, keyed
+ * by source IP.
  */
 export class Yamaha extends utils.Adapter {
   private readonly supervisors: DeviceSupervisor[] = [];
@@ -77,8 +78,8 @@ export class Yamaha extends utils.Adapter {
       });
       pushReceiver.start();
       this.pushReceiver = pushReceiver;
-      // One supervisor per device: it keeps retrying until a transport connects and
-      // reconnects on a drop, so a device that is off at start joins on its own.
+      // One supervisor per device: it keeps retrying until the device answers on at
+      // least one transport and reconnects on a drop, so a device off at start joins on its own.
       for (const device of devices) {
         this.deviceConnected.set(device.id, false);
         await this.ensureDeviceHeader(device.id);
@@ -201,11 +202,12 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
-   * Bring one device online across its transports, tried in order: YNCA (amp
-   * control over a held TCP connection), then YXC (MusicCast), then XML/YNC
-   * (pre-2010). Returns a connection handle the supervisor keeps, or null when no
-   * transport answers this attempt. The transport that connects owns the device's
-   * object tree, so the mappers never collide on a shared id.
+   * Bring one device online across ALL its transports: every protocol that answers
+   * — YNCA (amp control over a held TCP connection), YXC (MusicCast), XML/YNC
+   * (pre-2010) — connects in parallel on one object tree. Returns a connection handle
+   * the supervisor keeps, or null when no transport answers this attempt. Each
+   * datapoint is owned by exactly one transport (owner-policy), so the mappers never
+   * collide on a shared id.
    *
    * @param device the configured device record
    * @param pushReceiver the shared YXC push receiver

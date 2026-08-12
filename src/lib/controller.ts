@@ -1,7 +1,8 @@
 /**
- * Shared contracts for the three transport controllers (YNCA/YXC/XML). Each one
- * implements {@link ConnectionHandle} directly, so the supervisor drives all three
- * through one shape and main.ts no longer wraps each in an ad-hoc object literal.
+ * Shared contracts for the device controllers. The multi-transport handle implements
+ * {@link ConnectionHandle}, so the supervisor holds one handle per device and drives it
+ * through this shape; each transport controller (YNCA/YXC/XML) sits behind a
+ * TransportConnectionAdapter and contributes its objects and writes to the unified tree.
  */
 
 /** Log surface every device controller needs — one definition, not one per transport. */
@@ -15,7 +16,7 @@ export interface ControllerLog {
 }
 
 /**
- * A live connection to a device, handed back by a successful controller start.
+ * A live connection to a device, handed back by a successful connection attempt.
  * The supervisor holds it, routes writes through it, reconnects on its drop and
  * closes it on teardown.
  */
