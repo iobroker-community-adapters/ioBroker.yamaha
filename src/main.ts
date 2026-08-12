@@ -1,8 +1,7 @@
 import * as utils from "@iobroker/adapter-core";
 import { createSocket } from "node:dgram";
 import { get as httpGet } from "node:http";
-import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { attemptDevice } from "./lib/attempt-device";
 import {
   legacyDeviceRow,
@@ -14,7 +13,8 @@ import {
 } from "./lib/pure-helpers";
 import { errorMessage } from "./lib/util";
 import { discoverYamaha } from "./lib/discovery";
-import { readDiscovered, writeDiscovered, type DiscoveredStoreDeps } from "./lib/discovered-store";
+import { readDiscovered, writeDiscovered } from "./lib/discovered-store";
+import { discoveredStoreDeps } from "./lib/discovered-store-deps";
 import { YxcPushReceiver } from "./lib/yxc/push-receiver";
 import { YamahaDeviceManagement } from "./device-management";
 import type { DeviceRecord } from "./lib/types";
@@ -72,10 +72,14 @@ export class Yamaha extends utils.Adapter {
 
   /** Start a supervisor for each configured device, then subscribe to state changes. */
   private async onReady(): Promise<void> {
+    // Load admin translations for the device-manager cards — a UI concern, in its own
+    // guarded block so an i18n failure never aborts core device startup below.
     try {
-      // Load admin translations so the device-manager cards, dialogs and confirmations
-      // render in the admin's language.
       await utils.I18n.init(join(this.adapterDir, "admin"), this);
+    } catch (e) {
+      this.log.warn(`could not load admin translations (${errorMessage(e)}); card labels may be untranslated`);
+    }
+    try {
       await this.setState("info.connection", { val: false, ack: true });
       await this.migrateLegacyDevice();
       // The device list is the switch: filled → use exactly those (manual); empty
@@ -355,7 +359,7 @@ export class Yamaha extends utils.Adapter {
    * @returns the device records to run this session
    */
   private async autoDiscover(): Promise<DeviceRecord[]> {
-    const store = this.discoveredStoreDeps();
+    const store = discoveredStoreDeps(this);
     const known = await readDiscovered(store);
     let found: Array<{ ip: string; name: string }> = [];
     try {
@@ -374,30 +378,6 @@ export class Yamaha extends utils.Adapter {
         `add a device in the admin to switch to manual mode`,
     );
     return merged;
-  }
-
-  /**
-   * File access for the discovered-devices store — a JSON file in the instance data
-   * directory (no `native` write, so no restart). A missing file reads as absent.
-   *
-   * @returns the store's read/write/log dependencies
-   */
-  private discoveredStoreDeps(): DiscoveredStoreDeps {
-    const path = join(utils.getAbsoluteInstanceDataDir(this), "discovered.json");
-    return {
-      read: async () => {
-        try {
-          return await readFile(path, "utf8");
-        } catch {
-          return undefined;
-        }
-      },
-      write: async content => {
-        await mkdir(dirname(path), { recursive: true });
-        await writeFile(path, content, "utf8");
-      },
-      log: { debug: message => this.log.debug(message) },
-    };
   }
 
   /**

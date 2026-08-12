@@ -5,11 +5,9 @@ import {
   type DeviceLoadContext,
   type InstanceDetails,
 } from "@iobroker/dm-utils";
-import * as utils from "@iobroker/adapter-core";
-import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { dirname, join } from "node:path";
 import { t } from "./lib/i18n";
-import { readDiscovered, type DiscoveredStoreDeps, writeDiscovered } from "./lib/discovered-store";
+import { readDiscovered, writeDiscovered } from "./lib/discovered-store";
+import { discoveredStoreDeps } from "./lib/discovered-store-deps";
 import type { DeviceRecord } from "./lib/types";
 import {
   TRANSPORTS,
@@ -31,25 +29,6 @@ export class YamahaDeviceManagement extends DeviceManagement {
   /** The instance object id whose `native` holds the manual device table. */
   private get objId(): string {
     return `system.adapter.${this.adapter.namespace}`;
-  }
-
-  /** File access for the auto-discovery store — the same file the adapter uses at runtime. */
-  private storeDeps(): DiscoveredStoreDeps {
-    const path = join(utils.getAbsoluteInstanceDataDir(this.adapter), "discovered.json");
-    return {
-      read: async () => {
-        try {
-          return await readFile(path, "utf8");
-        } catch {
-          return undefined;
-        }
-      },
-      write: async content => {
-        await mkdir(dirname(path), { recursive: true });
-        await writeFile(path, content, "utf8");
-      },
-      log: { debug: message => this.adapter.log.debug(message) },
-    };
   }
 
   /** Read the manual device table (`native.devices`) as raw rows, keeping the name. */
@@ -94,7 +73,7 @@ export class YamahaDeviceManagement extends DeviceManagement {
       }
       return cards;
     }
-    const discovered = await readDiscovered(this.storeDeps());
+    const discovered = await readDiscovered(discoveredStoreDeps(this.adapter));
     return discovered.map(d => ({ id: d.id, ip: d.ip, name: d.id, source: "discovered" as const }));
   }
 
@@ -242,7 +221,7 @@ export class YamahaDeviceManagement extends DeviceManagement {
       }
       return { refresh: "devices" };
     }
-    const store = this.storeDeps();
+    const store = discoveredStoreDeps(this.adapter);
     const discovered = await readDiscovered(store);
     const remaining = discovered.filter((d: DeviceRecord) => d.id !== cardId);
     if (remaining.length !== discovered.length) {

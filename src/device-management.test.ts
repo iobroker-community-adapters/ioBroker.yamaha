@@ -50,5 +50,9 @@ describe("buildDeviceForm", () => {
     expect(form.items.ip.type).toBe("text");
     // the already-used ip must be part of the "not in use" validator expression
     expect(form.items.ip.validator).toContain("192.168.1.10");
+    // the embedded IP regex must be the correct single-backslash form, not an over-escaped copy
+    // that would match a literal "\d" and permanently disable the OK button
+    expect(form.items.ip.validator).toContain("/^(\\d{1,3}\\.){3}\\d{1,3}$/");
+    expect(form.items.ip.validator).not.toContain("\\\\d");
   });
 });

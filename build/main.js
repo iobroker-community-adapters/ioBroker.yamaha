@@ -34,13 +34,13 @@ module.exports = __toCommonJS(main_exports);
 var utils = __toESM(require("@iobroker/adapter-core"));
 var import_node_dgram = require("node:dgram");
 var import_node_http = require("node:http");
-var import_promises = require("node:fs/promises");
 var import_node_path = require("node:path");
 var import_attempt_device = require("./lib/attempt-device");
 var import_pure_helpers = require("./lib/pure-helpers");
 var import_util = require("./lib/util");
 var import_discovery = require("./lib/discovery");
 var import_discovered_store = require("./lib/discovered-store");
+var import_discovered_store_deps = require("./lib/discovered-store-deps");
 var import_push_receiver = require("./lib/yxc/push-receiver");
 var import_device_management = require("./device-management");
 var import_device_supervisor = require("./lib/lifecycle/device-supervisor");
@@ -76,6 +76,10 @@ class Yamaha extends utils.Adapter {
   async onReady() {
     try {
       await utils.I18n.init((0, import_node_path.join)(this.adapterDir, "admin"), this);
+    } catch (e) {
+      this.log.warn(`could not load admin translations (${(0, import_util.errorMessage)(e)}); card labels may be untranslated`);
+    }
+    try {
       await this.setState("info.connection", { val: false, ack: true });
       await this.migrateLegacyDevice();
       const configured = (0, import_pure_helpers.parseDevices)(this.config.devices);
@@ -321,7 +325,7 @@ class Yamaha extends utils.Adapter {
    * @returns the device records to run this session
    */
   async autoDiscover() {
-    const store = this.discoveredStoreDeps();
+    const store = (0, import_discovered_store_deps.discoveredStoreDeps)(this);
     const known = await (0, import_discovered_store.readDiscovered)(store);
     let found = [];
     try {
@@ -339,29 +343,6 @@ class Yamaha extends utils.Adapter {
       `auto-discovery: ${found.length} found, running ${merged.length} device(s); add a device in the admin to switch to manual mode`
     );
     return merged;
-  }
-  /**
-   * File access for the discovered-devices store — a JSON file in the instance data
-   * directory (no `native` write, so no restart). A missing file reads as absent.
-   *
-   * @returns the store's read/write/log dependencies
-   */
-  discoveredStoreDeps() {
-    const path = (0, import_node_path.join)(utils.getAbsoluteInstanceDataDir(this), "discovered.json");
-    return {
-      read: async () => {
-        try {
-          return await (0, import_promises.readFile)(path, "utf8");
-        } catch {
-          return void 0;
-        }
-      },
-      write: async (content) => {
-        await (0, import_promises.mkdir)((0, import_node_path.dirname)(path), { recursive: true });
-        await (0, import_promises.writeFile)(path, content, "utf8");
-      },
-      log: { debug: (message) => this.log.debug(message) }
-    };
   }
   /**
    * The XML/YNC poll interval in milliseconds, from `config.xmlPollInterval`

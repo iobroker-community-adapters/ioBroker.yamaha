@@ -27,7 +27,7 @@ module.exports = __toCommonJS(device_management_helpers_exports);
 var import_i18n = require("./lib/i18n");
 var import_pure_helpers = require("./lib/pure-helpers");
 const RESERVED_IDS = /* @__PURE__ */ new Set(["info"]);
-const IP_REGEX = "/^(\\\\d{1,3}\\\\.){3}\\\\d{1,3}$/";
+const IP_RE = /^(\d{1,3}\.){3}\d{1,3}$/;
 const TRANSPORTS = [
   { id: "ynca", label: "YNCA" },
   { id: "yxc", label: "MusicCast" },
@@ -50,7 +50,7 @@ function buildDeviceForm(usedIps) {
       ip: {
         type: "text",
         label: (0, import_i18n.t)("columnIp"),
-        validator: `!!(data.ip && ${IP_REGEX}.test(data.ip)) && !${ipList}.includes(data.ip)`,
+        validator: `!!(data.ip && ${IP_RE.toString()}.test(data.ip)) && !${ipList}.includes(data.ip)`,
         validatorErrorText: (0, import_i18n.t)("invalidIp"),
         validatorNoSaveOnError: true,
         sm: 12,
@@ -61,7 +61,7 @@ function buildDeviceForm(usedIps) {
 }
 function findClash(rows, candidate, exceptIndex) {
   const id = rowId(candidate);
-  if (id === "" || RESERVED_IDS.has(id) || !/^(\d{1,3}\.){3}\d{1,3}$/.test(candidate.ip)) {
+  if (id === "" || RESERVED_IDS.has(id) || !IP_RE.test(candidate.ip)) {
     return (0, import_i18n.t)("invalidIp");
   }
   for (let i = 0; i < rows.length; i++) {

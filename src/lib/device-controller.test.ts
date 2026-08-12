@@ -91,6 +91,15 @@ describe("YncaDeviceController", () => {
     expect(acked).toContainEqual({ id: "living.mute", value: false });
   });
 
+  test("start seeds info.model from SYS:MODELNAME exactly once", async () => {
+    const client = new FakeClient();
+    client.capabilities = { model: "RX-V6A", subunits: { SYS: { MODELNAME: "RX-V6A" }, MAIN: { PWR: "On" } } };
+    const { created, acked, deps } = makeDeps(client);
+    await new YncaDeviceController("living", deps).start();
+    expect(created).toContain("living.info.model");
+    expect(acked.filter(a => a.id === "living.info.model").map(a => a.value)).toEqual(["RX-V6A"]);
+  });
+
   test("start creates nothing and returns false when no capabilities come back", async () => {
     const client = new FakeClient();
     const { created, deps } = makeDeps(client);

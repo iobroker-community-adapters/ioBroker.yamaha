@@ -4,8 +4,8 @@ import { sanitizeId } from "./lib/pure-helpers";
 
 /** Object-id segments the adapter reserves for its own tree — a device may not take them. */
 const RESERVED_IDS = new Set(["info"]);
-/** IPv4 dotted-quad, embedded into the add-form validator (frontend-evaluated). */
-const IP_REGEX = "/^(\\\\d{1,3}\\\\.){3}\\\\d{1,3}$/";
+/** IPv4 dotted-quad — the single source for both the frontend validator and the backend check. */
+const IP_RE = /^(\d{1,3}\.){3}\d{1,3}$/;
 
 /** The three transports shown as card indicators, in fixed order, with the label the user sees. */
 export const TRANSPORTS: ReadonlyArray<{ id: string; label: string }> = [
@@ -67,7 +67,7 @@ export function buildDeviceForm(usedIps: readonly string[]): JsonFormSchema {
       ip: {
         type: "text",
         label: t("columnIp"),
-        validator: `!!(data.ip && ${IP_REGEX}.test(data.ip)) && !${ipList}.includes(data.ip)`,
+        validator: `!!(data.ip && ${IP_RE.toString()}.test(data.ip)) && !${ipList}.includes(data.ip)`,
         validatorErrorText: t("invalidIp"),
         validatorNoSaveOnError: true,
         sm: 12,
@@ -93,7 +93,7 @@ export function findClash(
   exceptIndex: number,
 ): ioBroker.StringOrTranslated | null {
   const id = rowId(candidate);
-  if (id === "" || RESERVED_IDS.has(id) || !/^(\d{1,3}\.){3}\d{1,3}$/.test(candidate.ip)) {
+  if (id === "" || RESERVED_IDS.has(id) || !IP_RE.test(candidate.ip)) {
     return t("invalidIp");
   }
   for (let i = 0; i < rows.length; i++) {

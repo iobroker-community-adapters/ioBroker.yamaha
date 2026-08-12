@@ -1,9 +1,7 @@
 "use strict";
-var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
-var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
   for (var name in all)
@@ -17,14 +15,6 @@ var __copyProps = (to, from, except, desc) => {
   }
   return to;
 };
-var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
-  // If the importer is in node compatibility mode or this is not an ESM
-  // file that has been converted to a CommonJS file using a Babel-
-  // compatible transform (i.e. "__esModule" has not been set), then set
-  // "default" to the CommonJS "module.exports" for node compatibility.
-  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
-  mod
-));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var device_management_exports = {};
 __export(device_management_exports, {
@@ -32,34 +22,14 @@ __export(device_management_exports, {
 });
 module.exports = __toCommonJS(device_management_exports);
 var import_dm_utils = require("@iobroker/dm-utils");
-var utils = __toESM(require("@iobroker/adapter-core"));
-var import_promises = require("node:fs/promises");
-var import_node_path = require("node:path");
 var import_i18n = require("./lib/i18n");
 var import_discovered_store = require("./lib/discovered-store");
+var import_discovered_store_deps = require("./lib/discovered-store-deps");
 var import_device_management_helpers = require("./device-management-helpers");
 class YamahaDeviceManagement extends import_dm_utils.DeviceManagement {
   /** The instance object id whose `native` holds the manual device table. */
   get objId() {
     return `system.adapter.${this.adapter.namespace}`;
-  }
-  /** File access for the auto-discovery store — the same file the adapter uses at runtime. */
-  storeDeps() {
-    const path = (0, import_node_path.join)(utils.getAbsoluteInstanceDataDir(this.adapter), "discovered.json");
-    return {
-      read: async () => {
-        try {
-          return await (0, import_promises.readFile)(path, "utf8");
-        } catch {
-          return void 0;
-        }
-      },
-      write: async (content) => {
-        await (0, import_promises.mkdir)((0, import_node_path.dirname)(path), { recursive: true });
-        await (0, import_promises.writeFile)(path, content, "utf8");
-      },
-      log: { debug: (message) => this.adapter.log.debug(message) }
-    };
   }
   /** Read the manual device table (`native.devices`) as raw rows, keeping the name. */
   async readManual() {
@@ -102,7 +72,7 @@ class YamahaDeviceManagement extends import_dm_utils.DeviceManagement {
       }
       return cards;
     }
-    const discovered = await (0, import_discovered_store.readDiscovered)(this.storeDeps());
+    const discovered = await (0, import_discovered_store.readDiscovered)((0, import_discovered_store_deps.discoveredStoreDeps)(this.adapter));
     return discovered.map((d) => ({ id: d.id, ip: d.ip, name: d.id, source: "discovered" }));
   }
   /**
@@ -245,7 +215,7 @@ class YamahaDeviceManagement extends import_dm_utils.DeviceManagement {
       }
       return { refresh: "devices" };
     }
-    const store = this.storeDeps();
+    const store = (0, import_discovered_store_deps.discoveredStoreDeps)(this.adapter);
     const discovered = await (0, import_discovered_store.readDiscovered)(store);
     const remaining = discovered.filter((d) => d.id !== cardId);
     if (remaining.length !== discovered.length) {
