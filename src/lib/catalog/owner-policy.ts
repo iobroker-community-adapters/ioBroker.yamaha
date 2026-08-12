@@ -33,6 +33,31 @@ const OWNER_OVERRIDES: Record<string, readonly Transport[]> = {
 };
 
 /**
+ * Per-transport state-id → canonical capability key, for the ids that drift between transports
+ * (census §3f, verified against the catalogs). The canonical key is the census left column; the
+ * transports not listed already use the canonical id. Zone prefixes are stripped separately.
+ */
+const ID_DRIFT: Partial<Record<Transport, Readonly<Record<string, string>>>> = {
+  ynca: { "sound.bass": "bass", "sound.treble": "treble" },
+  yxc: { subwooferVolume: "subwooferTrim", partyEnable: "party" },
+  xml: { hdmiOut1: "hdmi.out1", hdmiOut2: "hdmi.out2" },
+};
+
+/**
+ * The transport-neutral capability key for a transport's state id: strip a `zone2/3/4.` prefix
+ * to the per-zone template, then resolve any id drift to the canonical key. Two transports that
+ * express the same capability under different ids therefore map to the same key.
+ *
+ * @param transport the transport the state id comes from
+ * @param stateId the transport's own state id (may carry a zone prefix)
+ * @returns the canonical capability key
+ */
+export function capabilityKeyOf(transport: Transport, stateId: string): string {
+  const template = stateId.replace(/^zone[234]\./, "");
+  return ID_DRIFT[transport]?.[template] ?? template;
+}
+
+/**
  * Decide which transport owns a capability, given the transports that actually offer it on
  * this device. Default is the most modern; a census-driven override wins where the modern
  * transport would be lossy. An override that lists none of the present candidates falls back

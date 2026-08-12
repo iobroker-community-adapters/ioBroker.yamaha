@@ -1,4 +1,4 @@
-import { pickOwner, resolveOwnership } from "./owner-policy";
+import { capabilityKeyOf, pickOwner, resolveOwnership } from "./owner-policy";
 
 describe("pickOwner — which transport owns a shared capability", () => {
   test("a capability only one transport offers is owned by that transport", () => {
@@ -59,5 +59,28 @@ describe("resolveOwnership — the owner map across all offered transports", () 
     expect(owner.get("power")).toBe("ynca");
     expect(owner.get("volume")).toBe("ynca");
     expect(owner.size).toBe(2);
+  });
+});
+
+describe("capabilityKeyOf — the transport-neutral key from a transport's state id", () => {
+  test("maps the known id drifts to the canonical key (census §3f, verified)", () => {
+    expect(capabilityKeyOf("ynca", "sound.bass")).toBe("bass");
+    expect(capabilityKeyOf("ynca", "sound.treble")).toBe("treble");
+    expect(capabilityKeyOf("yxc", "subwooferVolume")).toBe("subwooferTrim");
+    expect(capabilityKeyOf("yxc", "partyEnable")).toBe("party");
+    expect(capabilityKeyOf("xml", "hdmiOut1")).toBe("hdmi.out1");
+    expect(capabilityKeyOf("xml", "hdmiOut2")).toBe("hdmi.out2");
+  });
+
+  test("strips a zone prefix to the template key, then applies the drift", () => {
+    expect(capabilityKeyOf("ynca", "zone2.volume")).toBe("volume");
+    expect(capabilityKeyOf("yxc", "zone3.power")).toBe("power");
+    expect(capabilityKeyOf("ynca", "zone2.sound.bass")).toBe("bass");
+  });
+
+  test("an already-canonical id passes through unchanged", () => {
+    expect(capabilityKeyOf("yxc", "power")).toBe("power");
+    expect(capabilityKeyOf("yxc", "dist.role")).toBe("dist.role");
+    expect(capabilityKeyOf("xml", "bass")).toBe("bass");
   });
 });
