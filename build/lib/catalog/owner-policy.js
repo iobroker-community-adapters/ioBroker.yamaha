@@ -18,7 +18,8 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var owner_policy_exports = {};
 __export(owner_policy_exports, {
-  pickOwner: () => pickOwner
+  pickOwner: () => pickOwner,
+  resolveOwnership: () => resolveOwnership
 });
 module.exports = __toCommonJS(owner_policy_exports);
 const MODERNITY = ["yxc", "ynca", "xml"];
@@ -45,8 +46,28 @@ function pickOwner(key, candidates) {
   const owner = (_b = preference.find((t) => candidates.includes(t))) != null ? _b : MODERNITY.find((t) => candidates.includes(t));
   return owner != null ? owner : candidates[0];
 }
+function resolveOwnership(offered) {
+  var _a;
+  const candidates = /* @__PURE__ */ new Map();
+  for (const transport of MODERNITY) {
+    for (const key of (_a = offered[transport]) != null ? _a : []) {
+      const list = candidates.get(key);
+      if (list) {
+        list.push(transport);
+      } else {
+        candidates.set(key, [transport]);
+      }
+    }
+  }
+  const owners = /* @__PURE__ */ new Map();
+  for (const [key, cands] of candidates) {
+    owners.set(key, pickOwner(key, cands));
+  }
+  return owners;
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
-  pickOwner
+  pickOwner,
+  resolveOwnership
 });
 //# sourceMappingURL=owner-policy.js.map
