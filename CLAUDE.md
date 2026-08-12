@@ -23,15 +23,21 @@ Funktionalität (voller MusicCast-Reichtum). Vorbild-Adapter (Multi-Transport): 
   Transport** (Fallback, wenn weder YNCA noch YXC antworten).
 - YNCA + YXC laufen auf einem MusicCast-AVR **parallel** (kein Konflikt) — pro Gerät/Fähigkeit geroutet.
 
-## Architektur (Ist-Stand, govee-Pattern-first)
+## Architektur (Ist-Stand, Multi-Transport pro Gerät)
 
-Pro konfiguriertem Gerät ein `DeviceSupervisor` (`lib/lifecycle/`), der EINEN Transport-Controller online
-hält — Reihenfolge YNCA > YXC > XML, direkt in `main.ts` (`attemptDevice`) verdrahtet (kein Router/Registry).
-Die drei Controller (`lib/device-controller.ts` = YNCA, `lib/yxc/device-controller.ts`, `lib/xml/device-controller.ts`)
-implementieren die gemeinsame `ConnectionHandle`-Form (`lib/controller.ts`), sodass der Supervisor alle gleich
-behandelt: verbinden → Fähigkeiten → Objektbaum → seeden → bei Drop reconnecten → synchron schließen. Der
-Reconnect-Automat liegt im Supervisor (eine Ebene über den Clients); YXC/XML melden einen Drop nach mehreren
-erfolglosen Keepalive-Polls, YNCA über das echte Socket-Drop-Event.
+Pro konfiguriertem Gerät ein `DeviceSupervisor` (`lib/lifecycle/`), der EINEN `ConnectionHandle` online hält —
+nach dem Multi-Transport-Neubau ist das ein `MultiTransportHandle`, der ALLE antwortenden Transporte auf EINEM
+Objektbaum vereint (keine „erster gewinnt"-Kaskade mehr). `lib/attempt-device.ts` (`connectTransports`) baut
+jeden der drei Transporte hinter einem `lib/lifecycle/transport-connection-adapter.ts`, verbindet jeden, der
+antwortet, und übergibt die lebende Menge dem Handle. Die drei Controller (`lib/device-controller.ts` = YNCA,
+`lib/yxc/device-controller.ts`, `lib/xml/device-controller.ts`) bleiben UNVERÄNDERT hinter dem Adapter — er
+fängt ihre `upsertObject`/`setStateAck`-deps ab, kanonisiert die IDs und filtert jeden Transport auf die ihm
+zugeteilten Datenpunkte. Owner je Datenpunkt = das modernste ANWESENDE, aber verlustfreie Protokoll
+(`lib/catalog/owner-policy.ts`: Rang YXC > YNCA > XML, überstimmt vom reicheren/schreibbaren/korrekt-skalierten
+Transport laut Zensus); `lib/catalog/object-tree-coordinator.ts` berechnet daraus EINEN Baum, jeder State genau
+einmal, jeder Write an den Owner. Reconnect liegt im Supervisor (ein Drop meldet aktuell die ganze Menge,
+per-Transport ist die nächste Verfeinerung); YXC/XML melden Drop nach mehreren erfolglosen Keepalive-Polls,
+YNCA über das echte Socket-Drop-Event (bis `onDrop` registriert ist, wird ein Drop gelatcht).
 
 Datenpunkte: ein gemeinsamer Katalog je Transport (`ynca/catalog.ts`, `yxc/catalog.ts`, `xml/catalog.ts`) liefert
 Objekt-`common` UND Wert-Mapping aus EINER Liste; die `common` werden über `catalog/value-coerce.ts` intelligent
@@ -42,8 +48,9 @@ typisiert (onoff→boolean, enum→Dropdown, number→unit/range). YXC-HTTP übe
 
 ## Stand
 
-Alle sieben Aufbauphasen abgeschlossen; der Adapter ist funktional vollständig (3 Protokolle, Discovery,
-Migration, Härtung). Versionshistorie im README `## Changelog` (nicht hier dupliziert).
+Alle sieben Aufbauphasen abgeschlossen, danach der Multi-Transport-Neubau (alle antwortenden Protokolle
+parallel auf einem Objektbaum statt „erster Transport gewinnt"). Der Adapter ist funktional vollständig
+(3 Protokolle, Discovery, Migration, Härtung). Versionshistorie im README `## Changelog` (nicht hier dupliziert).
 
 ## Portierungs-Referenz (`../../Ressourcen/yamaha/legacy/`, NICHT im Adapter-Repo)
 
