@@ -12,5 +12,11 @@
   "donatePaypal": "PayPal",
   "invalidIp": "Ongeldig IP-adres",
   "networkInterfaceLabel": "Netwerkinterface",
-  "networkInterfaceTooltip": "Selecteer de netwerkinterface voor LAN-detectie en -besturing. Behoud de standaard (0.0.0.0 = alle interfaces), tenzij deze host meerdere netwerkinterfaces heeft."
+  "networkInterfaceTooltip": "Selecteer de netwerkinterface voor LAN-detectie en -besturing. Behoud de standaard (0.0.0.0 = alle interfaces), tenzij deze host meerdere netwerkinterfaces heeft.",
+  "dmAdd": "Yamaha-apparaat toevoegen",
+  "dmEdit": "Bewerken",
+  "dmDelete": "Verwijderen",
+  "dmEditTitle": "Yamaha-apparaat bewerken",
+  "dmDeleteConfirm": "Het Yamaha-apparaat „%s“ verwijderen?",
+  "ipLabel": "IP"
 }

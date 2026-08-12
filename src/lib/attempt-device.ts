@@ -34,6 +34,8 @@ export interface AttemptDeps {
   xmlPollIntervalMs: number;
   /** Called once a device connects over the XML/YNC transport (a pre-2010 receiver). */
   onXmlConnected(): void;
+  /** Report the transports that are live after a (re)connect — the id-safe names ("ynca"/"yxc"/"xml"). */
+  onTransports?(names: string[]): void;
   /** IPs of all configured devices, so a MusicCast group can resolve a client device by IP. */
   knownDeviceIps: Set<string>;
 }
@@ -58,6 +60,8 @@ export interface ConnectDeps {
   log: ControllerLog;
   /** Create or update an object in the device tree. */
   upsertObject(id: string, def: ObjectDef): Promise<void>;
+  /** Report the transports that connected — the id-safe names ("ynca"/"yxc"/"xml"). */
+  onTransports?(names: string[]): void;
 }
 
 /**
@@ -98,6 +102,7 @@ export async function connectTransports(
   }
   const handle = new MultiTransportHandle(deviceId, live, { upsertObject: deps.upsertObject, log: deps.log });
   await handle.start();
+  deps.onTransports?.(live.map(conn => conn.transport));
   return handle;
 }
 
@@ -161,6 +166,6 @@ export function attemptDevice(device: DeviceRecord, deps: AttemptDeps): Promise<
   return connectTransports(
     device.id,
     [{ conn: ynca }, { conn: yxc }, { conn: xml, onConnected: (): void => deps.onXmlConnected() }],
-    { upsertObject, log },
+    { upsertObject, log, onTransports: deps.onTransports },
   );
 }

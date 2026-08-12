@@ -161,6 +161,9 @@
     ],
     "adminUI": {
       "config": "json"
+    },
+    "supportedMessages": {
+      "deviceManager": true
     }
   },
   "native": {

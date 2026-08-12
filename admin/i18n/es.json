@@ -12,5 +12,11 @@
   "donatePaypal": "PayPal",
   "invalidIp": "Dirección IP no válida",
   "networkInterfaceLabel": "Interfaz de red",
-  "networkInterfaceTooltip": "Selecciona la interfaz de red para el descubrimiento y control LAN. Mantén el valor predeterminado (0.0.0.0 = todas) salvo que este host tenga varias interfaces."
+  "networkInterfaceTooltip": "Selecciona la interfaz de red para el descubrimiento y control LAN. Mantén el valor predeterminado (0.0.0.0 = todas) salvo que este host tenga varias interfaces.",
+  "dmAdd": "Añadir dispositivo Yamaha",
+  "dmEdit": "Editar",
+  "dmDelete": "Eliminar",
+  "dmEditTitle": "Editar dispositivo Yamaha",
+  "dmDeleteConfirm": "¿Eliminar el dispositivo Yamaha «%s»?",
+  "ipLabel": "IP"
 }

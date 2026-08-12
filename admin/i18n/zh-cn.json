@@ -12,5 +12,11 @@
   "donatePaypal": "PayPal",
   "invalidIp": "无效的 IP 地址",
   "networkInterfaceLabel": "网络接口",
-  "networkInterfaceTooltip": "选择用于局域网发现和控制的网络接口。除非此主机有多个网络接口，否则请保留默认值（0.0.0.0 = 所有接口）。"
+  "networkInterfaceTooltip": "选择用于局域网发现和控制的网络接口。除非此主机有多个网络接口，否则请保留默认值（0.0.0.0 = 所有接口）。",
+  "dmAdd": "添加 Yamaha 设备",
+  "dmEdit": "编辑",
+  "dmDelete": "删除",
+  "dmEditTitle": "编辑 Yamaha 设备",
+  "dmDeleteConfirm": "删除 Yamaha 设备“%s”？",
+  "ipLabel": "IP"
 }

@@ -12,5 +12,11 @@
   "donatePaypal": "PayPal",
   "invalidIp": "Nieprawidłowy adres IP",
   "networkInterfaceLabel": "Interfejs sieciowy",
-  "networkInterfaceTooltip": "Wybierz interfejs sieciowy do wykrywania i sterowania LAN. Pozostaw domyślny (0.0.0.0 = wszystkie), chyba że ten host ma wiele interfejsów."
+  "networkInterfaceTooltip": "Wybierz interfejs sieciowy do wykrywania i sterowania LAN. Pozostaw domyślny (0.0.0.0 = wszystkie), chyba że ten host ma wiele interfejsów.",
+  "dmAdd": "Dodaj urządzenie Yamaha",
+  "dmEdit": "Edytuj",
+  "dmDelete": "Usuń",
+  "dmEditTitle": "Edytuj urządzenie Yamaha",
+  "dmDeleteConfirm": "Usunąć urządzenie Yamaha „%s“?",
+  "ipLabel": "IP"
 }

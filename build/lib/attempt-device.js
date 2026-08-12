@@ -32,6 +32,7 @@ var import_multi_transport_handle = require("./lifecycle/multi-transport-handle"
 var import_transport_connection_adapter = require("./lifecycle/transport-connection-adapter");
 var import_util = require("./util");
 async function connectTransports(deviceId, attempts, deps) {
+  var _a;
   const live = [];
   for (const { conn, onConnected } of attempts) {
     try {
@@ -52,6 +53,7 @@ async function connectTransports(deviceId, attempts, deps) {
   }
   const handle = new import_multi_transport_handle.MultiTransportHandle(deviceId, live, { upsertObject: deps.upsertObject, log: deps.log });
   await handle.start();
+  (_a = deps.onTransports) == null ? void 0 : _a.call(deps, live.map((conn) => conn.transport));
   return handle;
 }
 function attemptDevice(device, deps) {
@@ -95,7 +97,7 @@ function attemptDevice(device, deps) {
   return connectTransports(
     device.id,
     [{ conn: ynca }, { conn: yxc }, { conn: xml, onConnected: () => deps.onXmlConnected() }],
-    { upsertObject, log }
+    { upsertObject, log, onTransports: deps.onTransports }
   );
 }
 // Annotate the CommonJS export names for ESM import in node:

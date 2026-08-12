@@ -42,6 +42,7 @@ var import_util = require("./lib/util");
 var import_discovery = require("./lib/discovery");
 var import_discovered_store = require("./lib/discovered-store");
 var import_push_receiver = require("./lib/yxc/push-receiver");
+var import_device_management = require("./device-management");
 var import_device_supervisor = require("./lib/lifecycle/device-supervisor");
 var import_reconnect_strategy = require("./lib/lifecycle/reconnect-strategy");
 const RECONNECT_BASE_MS = 1e3;
@@ -49,10 +50,13 @@ const RECONNECT_MAX_MS = 6e4;
 const FETCH_TIMEOUT_MS = 4e3;
 const SSDP_SEARCH_BURST = 3;
 const SSDP_SEARCH_INTERVAL_MS = 1e3;
+const TRANSPORT_IDS = ["ynca", "yxc", "xml"];
 class Yamaha extends utils.Adapter {
   supervisors = [];
   deviceConnected = /* @__PURE__ */ new Map();
   pushReceiver;
+  /** Device-manager backend: the receivers as cards with add/edit/delete. */
+  deviceManagement;
   /** Set once a device has connected over XML, so `native.hasXmlDevice` is written only once. */
   xmlMarked = false;
   /**
@@ -66,10 +70,12 @@ class Yamaha extends utils.Adapter {
     this.on("ready", this.onReady.bind(this));
     this.on("stateChange", this.onStateChange.bind(this));
     this.on("unload", this.onUnload.bind(this));
+    this.deviceManagement = new import_device_management.YamahaDeviceManagement(this);
   }
   /** Start a supervisor for each configured device, then subscribe to state changes. */
   async onReady() {
     try {
+      await utils.I18n.init((0, import_node_path.join)(this.adapterDir, "admin"), this);
       await this.setState("info.connection", { val: false, ack: true });
       await this.migrateLegacyDevice();
       const configured = (0, import_pure_helpers.parseDevices)(this.config.devices);
@@ -116,8 +122,24 @@ class Yamaha extends utils.Adapter {
   reportConnection(deviceId, connected) {
     this.deviceConnected.set(deviceId, connected);
     void this.setState(`${deviceId}.info.connection`, { val: connected, ack: true });
+    if (!connected) {
+      this.setTransports(deviceId, []);
+    }
     const anyConnected = [...this.deviceConnected.values()].some(Boolean);
     void this.setState("info.connection", { val: anyConnected, ack: true });
+  }
+  /**
+   * Reflect the live transport set into a device's `info.transports.*` flags so the
+   * device-manager card shows which protocols (YNCA/YXC/XML) are connected right now.
+   *
+   * @param deviceId the id-safe device id
+   * @param names the transports live now (empty on a drop)
+   */
+  setTransports(deviceId, names) {
+    const live = new Set(names);
+    for (const proto of TRANSPORT_IDS) {
+      void this.setState(`${deviceId}.info.transports.${proto}`, { val: live.has(proto), ack: true });
+    }
   }
   /**
    * One-shot startup cleanup: delete every object that does not belong to a
@@ -166,6 +188,25 @@ class Yamaha extends utils.Adapter {
       common: { name: "Connected", type: "boolean", role: "indicator.reachable", read: true, write: false, def: false },
       native: {}
     });
+    await this.setObjectNotExistsAsync(`${deviceId}.info.transports`, {
+      type: "channel",
+      common: { name: "Transports" },
+      native: {}
+    });
+    for (const proto of TRANSPORT_IDS) {
+      await this.setObjectNotExistsAsync(`${deviceId}.info.transports.${proto}`, {
+        type: "state",
+        common: {
+          name: `${proto.toUpperCase()} connected`,
+          type: "boolean",
+          role: "indicator.reachable",
+          read: true,
+          write: false,
+          def: false
+        },
+        native: {}
+      });
+    }
   }
   /**
    * Carry over the previous adapter's single-device config into the device table.
@@ -229,6 +270,7 @@ class Yamaha extends utils.Adapter {
       },
       xmlPollIntervalMs: this.xmlPollIntervalMs(),
       onXmlConnected: () => void this.markXmlDevice(),
+      onTransports: (names) => this.setTransports(device.id, names),
       knownDeviceIps
     });
   }
@@ -375,7 +417,7 @@ class Yamaha extends utils.Adapter {
       });
       socket.on("error", (err) => {
         this.log.warn(
-          `discovery socket failed${bindAddr ? ` on interface ${bindAddr}` : ""}: ${(0, import_util.errorMessage)(err)}` + (bindAddr ? " \u2014 check the Network Interface setting" : "")
+          `discovery socket failed${bindAddr ? ` on interface ${bindAddr}` : ""}: ${(0, import_util.errorMessage)(err)}${bindAddr ? " \u2014 check the Network Interface setting" : ""}`
         );
         finish();
       });

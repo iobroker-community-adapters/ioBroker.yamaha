@@ -16,6 +16,7 @@ import { errorMessage } from "./lib/util";
 import { discoverYamaha } from "./lib/discovery";
 import { readDiscovered, writeDiscovered, type DiscoveredStoreDeps } from "./lib/discovered-store";
 import { YxcPushReceiver } from "./lib/yxc/push-receiver";
+import { YamahaDeviceManagement } from "./device-management";
 import type { DeviceRecord } from "./lib/types";
 import { DeviceSupervisor, type ConnectionHandle } from "./lib/lifecycle/device-supervisor";
 import { ReconnectStrategy } from "./lib/lifecycle/reconnect-strategy";
@@ -32,6 +33,9 @@ const SSDP_SEARCH_BURST = 3;
 /** Spacing between the repeated M-SEARCH sends, inside the collect window. */
 const SSDP_SEARCH_INTERVAL_MS = 1000;
 
+/** The three transports in attempt order — also the per-transport `info.transports.*` state ids. */
+const TRANSPORT_IDS = ["ynca", "yxc", "xml"] as const;
+
 /**
  * ioBroker.yamaha — controls Yamaha AV receivers and MusicCast devices.
  *
@@ -46,6 +50,8 @@ export class Yamaha extends utils.Adapter {
   private readonly supervisors: DeviceSupervisor[] = [];
   private readonly deviceConnected = new Map<string, boolean>();
   private pushReceiver: YxcPushReceiver | undefined;
+  /** Device-manager backend: the receivers as cards with add/edit/delete. */
+  private readonly deviceManagement: YamahaDeviceManagement;
   /** Set once a device has connected over XML, so `native.hasXmlDevice` is written only once. */
   private xmlMarked = false;
 
@@ -61,11 +67,15 @@ export class Yamaha extends utils.Adapter {
     this.on("ready", this.onReady.bind(this));
     this.on("stateChange", this.onStateChange.bind(this));
     this.on("unload", this.onUnload.bind(this));
+    this.deviceManagement = new YamahaDeviceManagement(this);
   }
 
   /** Start a supervisor for each configured device, then subscribe to state changes. */
   private async onReady(): Promise<void> {
     try {
+      // Load admin translations so the device-manager cards, dialogs and confirmations
+      // render in the admin's language.
+      await utils.I18n.init(join(this.adapterDir, "admin"), this);
       await this.setState("info.connection", { val: false, ack: true });
       await this.migrateLegacyDevice();
       // The device table is the switch: filled → use exactly those (manual); empty
@@ -118,8 +128,26 @@ export class Yamaha extends utils.Adapter {
   private reportConnection(deviceId: string, connected: boolean): void {
     this.deviceConnected.set(deviceId, connected);
     void this.setState(`${deviceId}.info.connection`, { val: connected, ack: true });
+    // A drop clears the per-transport flags; a (re)connect sets them again via onTransports.
+    if (!connected) {
+      this.setTransports(deviceId, []);
+    }
     const anyConnected = [...this.deviceConnected.values()].some(Boolean);
     void this.setState("info.connection", { val: anyConnected, ack: true });
+  }
+
+  /**
+   * Reflect the live transport set into a device's `info.transports.*` flags so the
+   * device-manager card shows which protocols (YNCA/YXC/XML) are connected right now.
+   *
+   * @param deviceId the id-safe device id
+   * @param names the transports live now (empty on a drop)
+   */
+  private setTransports(deviceId: string, names: string[]): void {
+    const live = new Set(names);
+    for (const proto of TRANSPORT_IDS) {
+      void this.setState(`${deviceId}.info.transports.${proto}`, { val: live.has(proto), ack: true });
+    }
   }
 
   /**
@@ -177,6 +205,28 @@ export class Yamaha extends utils.Adapter {
       common: { name: "Connected", type: "boolean", role: "indicator.reachable", read: true, write: false, def: false },
       native: {},
     });
+    // Per-transport connection flags, fed by the live set from connectTransports and read live
+    // by the device-manager card indicators. Created here so an offline device's card still
+    // renders all three (false) instead of nothing.
+    await this.setObjectNotExistsAsync(`${deviceId}.info.transports`, {
+      type: "channel",
+      common: { name: "Transports" },
+      native: {},
+    });
+    for (const proto of TRANSPORT_IDS) {
+      await this.setObjectNotExistsAsync(`${deviceId}.info.transports.${proto}`, {
+        type: "state",
+        common: {
+          name: `${proto.toUpperCase()} connected`,
+          type: "boolean",
+          role: "indicator.reachable",
+          read: true,
+          write: false,
+          def: false,
+        },
+        native: {},
+      });
+    }
   }
 
   /**
@@ -249,6 +299,7 @@ export class Yamaha extends utils.Adapter {
       },
       xmlPollIntervalMs: this.xmlPollIntervalMs(),
       onXmlConnected: () => void this.markXmlDevice(),
+      onTransports: names => this.setTransports(device.id, names),
       knownDeviceIps,
     });
   }
