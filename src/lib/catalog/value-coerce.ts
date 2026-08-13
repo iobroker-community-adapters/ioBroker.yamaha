@@ -37,11 +37,37 @@ export interface TextSpec {
 }
 
 /**
+ * A coded value: a fixed set of wire tokens maps to numeric codes and back, so a player
+ * datum whose wire form is text ("Play"/"Pause"/"Stop") becomes a real `number` state
+ * carrying its labels — the form the type-detector's `media.state` / `media.mode.repeat`
+ * slots require. The code table lives on the spec (per state), so the write path stays
+ * value-based, not a fragile global name→wire guess.
+ */
+export interface CodeSpec {
+  /** Discriminant. */
+  kind: "code";
+  /** Wire token → numeric code; the reverse encodes a written code back to the wire. */
+  codes: Record<string, number>;
+  /** Numeric code → display label for the states dropdown. */
+  labels: Record<number, string>;
+}
+
+/**
+ * A write-only action button → a boolean state that, when written, sends one fixed wire
+ * value supplied by the entry's `wireEncode`. `read:false` so it never mirrors device state
+ * (e.g. a "next track" button that puts `Skip Fwd` on the wire).
+ */
+export interface ButtonSpec {
+  /** Discriminant. */
+  kind: "button";
+}
+
+/**
  * The value semantics of a device function, protocol-agnostic. A catalog entry
  * carries one of these so the adapter can turn a raw protocol value into a
  * properly typed, user-friendly ioBroker state instead of a bare string.
  */
-export type ValueSpec = OnOffSpec | EnumSpec | NumberSpec | TextSpec;
+export type ValueSpec = OnOffSpec | EnumSpec | NumberSpec | TextSpec | CodeSpec | ButtonSpec;
 
 /** The ioBroker `common` fields this layer derives from a {@link ValueSpec}. */
 export interface StateCommon {
@@ -102,6 +128,15 @@ export function specToCommon(spec: ValueSpec, opts: { write?: boolean; role?: st
     }
     case "text":
       return { type: "string", role: opts.role ?? "text", read: true, write };
+    case "code": {
+      const states: Record<string, string> = {};
+      for (const [code, label] of Object.entries(spec.labels)) {
+        states[code] = label;
+      }
+      return { type: "number", role: opts.role ?? "value", read: true, write, states };
+    }
+    case "button":
+      return { type: "boolean", role: opts.role ?? "button", read: false, write: true };
   }
 }
 
@@ -139,6 +174,14 @@ export function decode(spec: ValueSpec, wire: string): boolean | number | string
     case "enum":
     case "text":
       return wire;
+    case "code": {
+      // A wire token the device does not know maps to no code — report unknown (undefined)
+      // rather than a bogus 0, the same way onoff rejects a third wire value.
+      const code = spec.codes[wire];
+      return code === undefined ? undefined : code;
+    }
+    case "button":
+      return undefined; // write-only action — never read back into a state
   }
 }
 
@@ -175,5 +218,14 @@ export function encode(spec: ValueSpec, value: boolean | number | string): strin
     case "enum":
     case "text":
       return String(value);
+    case "code": {
+      // Reverse the code table: the written numeric code back to its wire token.
+      const token = Object.keys(spec.codes).find(w => spec.codes[w] === value);
+      return token ?? String(value);
+    }
+    case "button":
+      // Unreachable: a button entry always carries a wireEncode that supplies the fixed
+      // command, so yncaCommand never falls back to encode() here.
+      return "";
   }
 }

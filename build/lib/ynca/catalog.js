@@ -715,8 +715,6 @@ const DAB_FUNCS = [
     role: "level"
   }
 ];
-const PLAYBACK_STATES = selfMap(["Play", "Pause", "Stop", "Skip Fwd", "Skip Rev"]);
-const REPEAT_STATES = selfMap(["Off", "Single", "All"]);
 const PLAYER_SOURCES = [
   { subunit: "NETRADIO", channel: "netRadio" },
   { subunit: "SERVER", channel: "server" },
@@ -741,7 +739,9 @@ const PLAYER_FUNCS = [
     readFunc: "PLAYBACKINFO",
     state: "playback",
     name: "Playback",
-    spec: { kind: "enum", states: PLAYBACK_STATES },
+    // media.state must be a number for the type-detector media-player slot; PLAYBACKINFO
+    // reports Play/Pause/Stop (Skip Fwd/Rev are the separate next/prev buttons below).
+    spec: { kind: "code", codes: { Play: 0, Stop: 1, Pause: 2 }, labels: { 0: "Play", 1: "Stop", 2: "Pause" } },
     write: true,
     role: "media.state"
   },
@@ -781,9 +781,11 @@ const PLAYER_FUNCS = [
     func: "REPEAT",
     state: "repeat",
     name: "Repeat",
-    spec: { kind: "enum", states: REPEAT_STATES },
+    // media.mode.repeat is a number in the type-detector (off/one/all); code-mapped so it fills
+    // the REPEAT slot and still reads/writes as labels.
+    spec: { kind: "code", codes: { Off: 0, Single: 1, All: 2 }, labels: { 0: "Off", 1: "Single", 2: "All" } },
     write: true,
-    role: "state"
+    role: "media.mode.repeat"
   },
   {
     func: "SHUFFLE",
@@ -793,6 +795,29 @@ const PLAYER_FUNCS = [
     write: true,
     // Boolean on/off shuffle → the type-detector media-player role (fills the SHUFFLE slot).
     role: "media.mode.shuffle"
+  },
+  // Track skip: write-only buttons that put Skip Fwd/Rev on PLAYBACK. The device reports only
+  // Play/Pause/Stop, so these are actions, not states — button.next/prev fill the type-detector
+  // NEXT/PREV slots (previously they were extra values in the playback dropdown).
+  {
+    func: "PLAYBACK",
+    state: "next",
+    name: "Next",
+    spec: { kind: "button" },
+    write: true,
+    role: "button.next",
+    writeOnly: true,
+    wireEncode: () => "Skip Fwd"
+  },
+  {
+    func: "PLAYBACK",
+    state: "prev",
+    name: "Previous",
+    spec: { kind: "button" },
+    write: true,
+    role: "button.prev",
+    writeOnly: true,
+    wireEncode: () => "Skip Rev"
   }
 ];
 function fnEntries(fns, subunit, prefix = "") {
@@ -863,7 +888,9 @@ function buildYncaCatalog() {
         subunit: source.subunit,
         func: fn.func,
         readFunc: fn.readFunc,
-        readAliases: fn.readAliases
+        readAliases: fn.readAliases,
+        wireEncode: fn.wireEncode,
+        writeOnly: fn.writeOnly
       });
     }
   }

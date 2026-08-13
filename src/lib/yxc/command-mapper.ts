@@ -195,12 +195,17 @@ export function parseYxcPlayInfo(playInfo: unknown, prefix = "netPlayer"): State
   }
   const info = playInfo as Record<string, unknown>;
   const updates: StateValue[] = [];
-  // String metadata whose field name doubles as the state id.
-  for (const field of ["playback", "artist", "album", "track", "repeat", "shuffle"]) {
+  // String metadata whose field name doubles as the state id (playback is coded separately).
+  for (const field of ["artist", "album", "track", "repeat", "shuffle"]) {
     const value = info[field];
     if (typeof value === "string") {
       updates.push({ id: `${prefix}.${field}`, value });
     }
+  }
+  // Playback status → media.state code (the same 0/1/2 numbers as the YNCA player).
+  const playbackCode: Record<string, number> = { play: 0, stop: 1, pause: 2 };
+  if (typeof info.playback === "string" && info.playback in playbackCode) {
+    updates.push({ id: `${prefix}.playback`, value: playbackCode[info.playback] });
   }
   // Album art URL and the elapsed/total play time (renamed from the YXC field names).
   const albumArt = info.albumart_url;

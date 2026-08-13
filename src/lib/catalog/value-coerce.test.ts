@@ -46,6 +46,37 @@ describe("specToCommon", () => {
     expect(common.role).toBe("text");
   });
 
+  test("a coded value becomes a number with a labelled states dropdown", () => {
+    const common = specToCommon(
+      { kind: "code", codes: { Play: 0, Stop: 1, Pause: 2 }, labels: { 0: "Play", 1: "Stop", 2: "Pause" } },
+      { write: true, role: "media.state" },
+    );
+    expect(common.type).toBe("number");
+    expect(common.role).toBe("media.state");
+    expect(common.states).toEqual({ 0: "Play", 1: "Stop", 2: "Pause" });
+  });
+
+  test("a button becomes a write-only boolean", () => {
+    const common = specToCommon({ kind: "button" }, { role: "button.next" });
+    expect(common.type).toBe("boolean");
+    expect(common.role).toBe("button.next");
+    expect(common.read).toBe(false);
+    expect(common.write).toBe(true);
+  });
+
+  test("a coded value round-trips wire↔code and rejects an unknown wire token", () => {
+    const spec = {
+      kind: "code" as const,
+      codes: { Play: 0, Stop: 1, Pause: 2 },
+      labels: { 0: "Play", 1: "Stop", 2: "Pause" },
+    };
+    expect(decode(spec, "Play")).toBe(0);
+    expect(decode(spec, "Pause")).toBe(2);
+    expect(decode(spec, "Skip Fwd")).toBeUndefined();
+    expect(encode(spec, 0)).toBe("Play");
+    expect(encode(spec, 2)).toBe("Pause");
+  });
+
   test("an explicit role override wins", () => {
     const common = specToCommon({ kind: "onoff", on: "On", off: "Standby" }, { write: true, role: "switch.power" });
     expect(common.role).toBe("switch.power");

@@ -32,12 +32,13 @@ const PLAYER_STATES = [
   {
     state: "playback",
     common: {
+      // media.state is a number in the type-detector; the same 0/1/2 coding as the YNCA player.
       name: "Playback",
-      type: "string",
+      type: "number",
       role: "media.state",
       read: true,
       write: false,
-      states: { play: "play", pause: "pause", stop: "stop" }
+      states: { 0: "play", 1: "stop", 2: "pause" }
     }
   },
   { state: "artist", common: { name: "Artist", type: "string", role: "media.artist", read: true, write: false } },
@@ -55,11 +56,13 @@ const PLAYER_STATES = [
     common: { name: "Total time", type: "number", unit: "s", role: "media.duration", read: true, write: false }
   },
   { state: "albumArt", common: { name: "Album art", type: "string", role: "media.cover", read: true, write: false } },
-  { state: "play", common: { name: "Play", type: "boolean", role: "button", read: false, write: true } },
-  { state: "pause", common: { name: "Pause", type: "boolean", role: "button", read: false, write: true } },
-  { state: "stop", common: { name: "Stop", type: "boolean", role: "button", read: false, write: true } },
-  { state: "next", common: { name: "Next", type: "boolean", role: "button", read: false, write: true } },
-  { state: "prev", common: { name: "Previous", type: "boolean", role: "button", read: false, write: true } },
+  // Transport buttons carry the type-detector media-player roles so a MusicCast player's
+  // controls are recognised as play/pause/stop/next/prev, not generic buttons.
+  { state: "play", common: { name: "Play", type: "boolean", role: "button.play", read: false, write: true } },
+  { state: "pause", common: { name: "Pause", type: "boolean", role: "button.pause", read: false, write: true } },
+  { state: "stop", common: { name: "Stop", type: "boolean", role: "button.stop", read: false, write: true } },
+  { state: "next", common: { name: "Next", type: "boolean", role: "button.next", read: false, write: true } },
+  { state: "prev", common: { name: "Previous", type: "boolean", role: "button.prev", read: false, write: true } },
   {
     state: "repeatToggle",
     common: { name: "Toggle repeat", type: "boolean", role: "button", read: false, write: true }

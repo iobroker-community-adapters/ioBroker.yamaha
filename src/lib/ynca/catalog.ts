@@ -795,12 +795,6 @@ const DAB_FUNCS: FuncDef[] = [
   },
 ];
 
-// Skip Fwd/Skip Rev are write-only actions (the device reports only Play/Pause/Stop via
-// PLAYBACKINFO); adding them to the writable playback dropdown gives track skip without a
-// second control model. The ynca lib's Playback enum lists exactly these five values.
-const PLAYBACK_STATES = selfMap(["Play", "Pause", "Stop", "Skip Fwd", "Skip Rev"]);
-const REPEAT_STATES = selfMap(["Off", "Single", "All"]);
-
 /**
  * Network/media player sources — each a subunit, mapped under its own channel. Only
  * the entries a device reports are created, so listing every source is safe.
@@ -834,13 +828,19 @@ const PLAYER_FUNCS: Array<{
   spec: ValueSpec;
   write: boolean;
   role: string;
+  /** Fixed wire value for an action button (e.g. Skip Fwd), overriding the spec's encode. */
+  wireEncode?: (value: boolean | number | string) => string;
+  /** Keep out of the device→state map (a write-only action, never read back). */
+  writeOnly?: boolean;
 }> = [
   {
     func: "PLAYBACK",
     readFunc: "PLAYBACKINFO",
     state: "playback",
     name: "Playback",
-    spec: { kind: "enum", states: PLAYBACK_STATES },
+    // media.state must be a number for the type-detector media-player slot; PLAYBACKINFO
+    // reports Play/Pause/Stop (Skip Fwd/Rev are the separate next/prev buttons below).
+    spec: { kind: "code", codes: { Play: 0, Stop: 1, Pause: 2 }, labels: { 0: "Play", 1: "Stop", 2: "Pause" } },
     write: true,
     role: "media.state",
   },
@@ -880,9 +880,11 @@ const PLAYER_FUNCS: Array<{
     func: "REPEAT",
     state: "repeat",
     name: "Repeat",
-    spec: { kind: "enum", states: REPEAT_STATES },
+    // media.mode.repeat is a number in the type-detector (off/one/all); code-mapped so it fills
+    // the REPEAT slot and still reads/writes as labels.
+    spec: { kind: "code", codes: { Off: 0, Single: 1, All: 2 }, labels: { 0: "Off", 1: "Single", 2: "All" } },
     write: true,
-    role: "state",
+    role: "media.mode.repeat",
   },
   {
     func: "SHUFFLE",
@@ -892,6 +894,29 @@ const PLAYER_FUNCS: Array<{
     write: true,
     // Boolean on/off shuffle → the type-detector media-player role (fills the SHUFFLE slot).
     role: "media.mode.shuffle",
+  },
+  // Track skip: write-only buttons that put Skip Fwd/Rev on PLAYBACK. The device reports only
+  // Play/Pause/Stop, so these are actions, not states — button.next/prev fill the type-detector
+  // NEXT/PREV slots (previously they were extra values in the playback dropdown).
+  {
+    func: "PLAYBACK",
+    state: "next",
+    name: "Next",
+    spec: { kind: "button" },
+    write: true,
+    role: "button.next",
+    writeOnly: true,
+    wireEncode: () => "Skip Fwd",
+  },
+  {
+    func: "PLAYBACK",
+    state: "prev",
+    name: "Previous",
+    spec: { kind: "button" },
+    write: true,
+    role: "button.prev",
+    writeOnly: true,
+    wireEncode: () => "Skip Rev",
   },
 ];
 
@@ -988,6 +1013,8 @@ export function buildYncaCatalog(): YncaEntry[] {
         func: fn.func,
         readFunc: fn.readFunc,
         readAliases: fn.readAliases,
+        wireEncode: fn.wireEncode,
+        writeOnly: fn.writeOnly,
       });
     }
   }

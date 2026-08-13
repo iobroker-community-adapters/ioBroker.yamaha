@@ -25,7 +25,7 @@ __export(value_coerce_exports, {
 });
 module.exports = __toCommonJS(value_coerce_exports);
 function specToCommon(spec, opts = {}) {
-  var _a, _b, _c, _d, _e;
+  var _a, _b, _c, _d, _e, _f, _g;
   const write = (_a = opts.write) != null ? _a : false;
   switch (spec.kind) {
     case "onoff":
@@ -50,6 +50,15 @@ function specToCommon(spec, opts = {}) {
     }
     case "text":
       return { type: "string", role: (_e = opts.role) != null ? _e : "text", read: true, write };
+    case "code": {
+      const states = {};
+      for (const [code, label] of Object.entries(spec.labels)) {
+        states[code] = label;
+      }
+      return { type: "number", role: (_f = opts.role) != null ? _f : "value", read: true, write, states };
+    }
+    case "button":
+      return { type: "boolean", role: (_g = opts.role) != null ? _g : "button", read: false, write: true };
   }
 }
 const DECIMAL_RE = /^-?\d+(\.\d+)?$/;
@@ -70,6 +79,12 @@ function decode(spec, wire) {
     case "enum":
     case "text":
       return wire;
+    case "code": {
+      const code = spec.codes[wire];
+      return code === void 0 ? void 0 : code;
+    }
+    case "button":
+      return void 0;
   }
 }
 function isWritableValue(value, numeric) {
@@ -86,6 +101,12 @@ function encode(spec, value) {
     case "enum":
     case "text":
       return String(value);
+    case "code": {
+      const token = Object.keys(spec.codes).find((w) => spec.codes[w] === value);
+      return token != null ? token : String(value);
+    }
+    case "button":
+      return "";
   }
 }
 // Annotate the CommonJS export names for ESM import in node:

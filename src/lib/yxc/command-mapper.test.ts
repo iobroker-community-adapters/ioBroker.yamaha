@@ -143,19 +143,19 @@ describe("parseYxcDistribution", () => {
 describe("parseYxcPlayInfo", () => {
   test("maps play-info fields to read-only network player states", () => {
     expect(parseYxcPlayInfo({ playback: "play", artist: "A", album: "B", track: "T", extra: 1 })).toEqual([
-      { id: "netPlayer.playback", value: "play" },
       { id: "netPlayer.artist", value: "A" },
       { id: "netPlayer.album", value: "B" },
       { id: "netPlayer.track", value: "T" },
+      { id: "netPlayer.playback", value: 0 },
     ]);
   });
 
   test("maps play-info fields to a cd source when given the cd prefix", () => {
     expect(parseYxcPlayInfo({ playback: "play", artist: "A", album: "B", track: "T" }, "cd")).toEqual([
-      { id: "cd.playback", value: "play" },
       { id: "cd.artist", value: "A" },
       { id: "cd.album", value: "B" },
       { id: "cd.track", value: "T" },
+      { id: "cd.playback", value: 0 },
     ]);
   });
 
@@ -174,9 +174,9 @@ describe("parseYxcPlayInfo", () => {
         albumart_url: "/cover.jpg",
       }),
     ).toEqual([
-      { id: "netPlayer.playback", value: "play" },
       { id: "netPlayer.repeat", value: "one" },
       { id: "netPlayer.shuffle", value: "off" },
+      { id: "netPlayer.playback", value: 0 },
       { id: "netPlayer.albumArt", value: "/cover.jpg" },
       { id: "netPlayer.elapsedTime", value: 42 },
       { id: "netPlayer.totalTime", value: 215 },

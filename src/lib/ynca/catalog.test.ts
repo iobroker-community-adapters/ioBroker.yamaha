@@ -126,15 +126,33 @@ describe("YNCA catalog", () => {
     expect(funcToEntry(cat).get("SPOTIFY:PLAYBACKINFO")?.id).toBe("spotify.playback");
   });
 
-  test("playback offers skip forward/back as writable values (the ynca lib Playback enum has them)", () => {
+  test("playback is a numeric media.state coded from PLAYBACKINFO (Play=0)", () => {
     const cat = buildYncaCatalog();
-    const states = (cat.find(e => e.id === "spotify.playback")?.spec as EnumSpec).states;
-    expect(states).toHaveProperty("Skip Fwd");
-    expect(states).toHaveProperty("Skip Rev");
-    expect(yncaCommand("spotify.playback", "Skip Fwd", idToEntry(cat))).toEqual({
+    expect(cat.find(e => e.id === "spotify.playback")?.role).toBe("media.state");
+    expect(yncaStateUpdate({ subunit: "SPOTIFY", func: "PLAYBACKINFO", value: "Play" }, funcToEntry(cat))).toEqual({
+      id: "spotify.playback",
+      value: 0,
+    });
+    expect(yncaCommand("spotify.playback", 0, idToEntry(cat))).toEqual({
+      subunit: "SPOTIFY",
+      func: "PLAYBACK",
+      value: "Play",
+    });
+  });
+
+  test("track skip is exposed as next/prev buttons that put Skip Fwd/Rev on PLAYBACK", () => {
+    const cat = buildYncaCatalog();
+    expect(cat.find(e => e.id === "spotify.next")?.role).toBe("button.next");
+    expect(cat.find(e => e.id === "spotify.prev")?.role).toBe("button.prev");
+    expect(yncaCommand("spotify.next", true, idToEntry(cat))).toEqual({
       subunit: "SPOTIFY",
       func: "PLAYBACK",
       value: "Skip Fwd",
+    });
+    expect(yncaCommand("spotify.prev", true, idToEntry(cat))).toEqual({
+      subunit: "SPOTIFY",
+      func: "PLAYBACK",
+      value: "Skip Rev",
     });
   });
 

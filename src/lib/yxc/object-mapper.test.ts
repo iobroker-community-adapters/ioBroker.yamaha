@@ -117,7 +117,7 @@ describe("mapYxcToObjects", () => {
     const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: ["cd"] });
     const play = objs.find(o => o.id === "cd.play");
     expect(play?.common.type).toBe("boolean");
-    expect(play?.common.role).toBe("button");
+    expect(play?.common.role).toBe("button.play");
     expect(play?.common.write).toBe(true);
     expect(play?.common.read).toBe(false);
   });
