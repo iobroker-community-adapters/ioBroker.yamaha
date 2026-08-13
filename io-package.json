@@ -3,6 +3,19 @@
     "name": "yamaha",
     "version": "0.16.0",
     "news": {
+      "NEXT": {
+        "en": "Sound and Advanced datapoints now sit in a real folder like the other groups. Fixed: switching Zones off did not remove the zone2/3/4 folder.",
+        "de": "Klang- und Erweitert-Datenpunkte liegen jetzt in einem echten Ordner wie die anderen Gruppen. Behoben: Zonen ausschalten entfernte den zone2/3/4-Ordner nicht.",
+        "ru": "Точки данных Звук и Расширенные теперь в настоящей папке, как другие группы. Исправлено: отключение Зон не удаляло папку zone2/3/4.",
+        "pt": "Os pontos de dados Som e Avançado ficam numa pasta real como os outros grupos. Corrigido: desligar Zonas não removia a pasta zone2/3/4.",
+        "nl": "Geluid- en Geavanceerd-datapunten staan nu in een echte map zoals de andere groepen. Opgelost: Zones uitschakelen verwijderde de zone2/3/4-map niet.",
+        "fr": "Les points de données Son et Avancé sont désormais dans un dossier réel comme les autres groupes. Corrigé : désactiver Zones ne supprimait pas le dossier zone2/3/4.",
+        "it": "I punti dati Audio e Avanzate sono ora in una cartella reale come gli altri gruppi. Corretto: disattivare Zone non rimuoveva la cartella zone2/3/4.",
+        "es": "Los puntos de datos Sonido y Avanzado están ahora en una carpeta real como los demás grupos. Corregido: desactivar Zonas no eliminaba la carpeta zone2/3/4.",
+        "pl": "Punkty danych Dźwięk i Zaawansowane są teraz w prawdziwym folderze jak inne grupy. Naprawiono: wyłączenie Stref nie usuwało folderu zone2/3/4.",
+        "uk": "Точки даних Звук і Розширені тепер у справжній папці, як інші групи. Виправлено: вимкнення Зон не видаляло папку zone2/3/4.",
+        "zh-cn": "音效和高级数据点现在与其他分组一样位于真实文件夹中。修复：关闭区域开关不会移除 zone2/3/4 文件夹。"
+      },
       "0.16.0": {
         "en": "New Sound and Advanced datapoint groups for finer control, a few misplaced datapoints fixed, and no more repeated offline-retry warnings.",
         "de": "Neue Datenpunktgruppen Klang und Erweitert für feinere Kontrolle, einige falsch einsortierte Datenpunkte korrigiert, und keine wiederholten Offline-Warnungen mehr.",
@@ -80,32 +93,6 @@
         "pl": "Sceny można wyzwalać z ioBroker, sterujesz o wiele więcej, klasyczne amplitunery przeskakują utwory, a drzewo obiektów jest czytelniejsze z symbolem online przy urządzeniu.",
         "uk": "Сцени запускаються з ioBroker, доступно значно більше, класичні ресивери перемикають треки, а дерево об'єктів охайніше зі значком онлайн для пристроїв.",
         "zh-cn": "可从 ioBroker 触发情景，可控制的内容大幅增加，经典功放可切换曲目，对象树更整洁并为每台设备提供在线状态图标。"
-      },
-      "0.10.0": {
-        "en": "Devices no longer need adding by hand — leave the table empty and MusicCast receivers are found and set up on their own; the settings are clearer too.",
-        "de": "Geräte müssen nicht mehr von Hand angelegt werden — lass die Tabelle leer, dann werden MusicCast-Receiver von selbst gefunden und eingerichtet; die Einstellungen sind übersichtlicher.",
-        "ru": "Устройства больше не нужно добавлять вручную — оставьте таблицу пустой, и ресиверы MusicCast найдутся и настроятся сами; настройки стали понятнее.",
-        "pt": "Os dispositivos já não precisam de ser adicionados à mão — deixe a tabela vazia e os recetores MusicCast são encontrados e configurados sozinhos; as definições estão mais claras.",
-        "nl": "Apparaten hoeven niet meer met de hand te worden toegevoegd — laat de tabel leeg en MusicCast-receivers worden vanzelf gevonden en ingesteld; de instellingen zijn overzichtelijker.",
-        "fr": "Plus besoin d'ajouter les appareils à la main — laissez le tableau vide et les récepteurs MusicCast sont trouvés et configurés tout seuls ; les réglages sont plus clairs.",
-        "it": "Non serve più aggiungere i dispositivi a mano — lascia la tabella vuota e i ricevitori MusicCast vengono trovati e configurati da soli; le impostazioni sono più chiare.",
-        "es": "Ya no hay que añadir los dispositivos a mano — deja la tabla vacía y los receptores MusicCast se encuentran y configuran solos; los ajustes son más claros.",
-        "pl": "Urządzeń nie trzeba już dodawać ręcznie — zostaw tabelę pustą, a amplitunery MusicCast zostaną same znalezione i skonfigurowane; ustawienia są czytelniejsze.",
-        "uk": "Пристрої більше не потрібно додавати вручну — залиште таблицю порожньою, і ресивери MusicCast знайдуться та налаштуються самі; налаштування стали зрозумілішими.",
-        "zh-cn": "无需再手动添加设备——将表格留空，MusicCast 接收机会被自动找到并设置好；设置页面也更清晰了。"
-      },
-      "NEXT": {
-        "en": "Sound and Advanced datapoints now sit in a real folder like the other groups. Fixed: switching Zones off did not remove the zone2/3/4 folder.",
-        "de": "Klang- und Erweitert-Datenpunkte liegen jetzt in einem echten Ordner wie die anderen Gruppen. Behoben: Zonen ausschalten entfernte den zone2/3/4-Ordner nicht.",
-        "ru": "Точки данных Звук и Расширенные теперь в настоящей папке, как другие группы. Исправлено: отключение Зон не удаляло папку zone2/3/4.",
-        "pt": "Os pontos de dados Som e Avançado ficam numa pasta real como os outros grupos. Corrigido: desligar Zonas não removia a pasta zone2/3/4.",
-        "nl": "Geluid- en Geavanceerd-datapunten staan nu in een echte map zoals de andere groepen. Opgelost: Zones uitschakelen verwijderde de zone2/3/4-map niet.",
-        "fr": "Les points de données Son et Avancé sont désormais dans un dossier réel comme les autres groupes. Corrigé : désactiver Zones ne supprimait pas le dossier zone2/3/4.",
-        "it": "I punti dati Audio e Avanzate sono ora in una cartella reale come gli altri gruppi. Corretto: disattivare Zone non rimuoveva la cartella zone2/3/4.",
-        "es": "Los puntos de datos Sonido y Avanzado están ahora en una carpeta real como los demás grupos. Corregido: desactivar Zonas no eliminaba la carpeta zone2/3/4.",
-        "pl": "Punkty danych Dźwięk i Zaawansowane są teraz w prawdziwym folderze jak inne grupy. Naprawiono: wyłączenie Stref nie usuwało folderu zone2/3/4.",
-        "uk": "Точки даних Звук і Розширені тепер у справжній папці, як інші групи. Виправлено: вимкнення Зон не видаляло папку zone2/3/4.",
-        "zh-cn": "音效和高级数据点现在与其他分组一样位于真实文件夹中。修复：关闭区域开关不会移除 zone2/3/4 文件夹。"
       }
     },
     "titleLang": {
