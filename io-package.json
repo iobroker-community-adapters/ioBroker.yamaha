@@ -95,17 +95,17 @@
         "zh-cn": "无需再手动添加设备——将表格留空，MusicCast 接收机会被自动找到并设置好；设置页面也更清晰了。"
       },
       "NEXT": {
-        "en": "Sound and Advanced datapoints now sit in a real folder like the other groups, not the always-on core. Fixed: the Zones toggle missed a zone folder itself.",
-        "de": "Klang- und Erweitert-Datenpunkte liegen jetzt in einem echten Ordner wie die anderen Gruppen, nicht mehr im immer aktiven Kern. Behoben: der Zonen-Schalter erfasste den Zonen-Ordner selbst nicht.",
-        "ru": "Точки данных Звук и Расширенные теперь в настоящей папке, как другие группы, а не во всегда активном ядре. Исправлено: переключатель Зон не охватывал саму папку зоны.",
-        "pt": "Os pontos de dados Som e Avançado ficam numa pasta real como os outros grupos, não no núcleo sempre ativo. Corrigido: o interruptor de Zonas não cobria a própria pasta da zona.",
-        "nl": "Geluid- en Geavanceerd-datapunten staan nu in een echte map zoals de andere groepen, niet meer in de altijd actieve kern. Opgelost: de Zones-schakelaar miste de zonemap zelf.",
-        "fr": "Les points de données Son et Avancé sont désormais dans un dossier réel comme les autres groupes, plus dans le noyau toujours actif. Corrigé : l'interrupteur Zones ne couvrait pas le dossier de zone.",
-        "it": "I punti dati Audio e Avanzate sono ora in una cartella reale come gli altri gruppi, non più nel nucleo sempre attivo. Corretto: l'interruttore Zone non copriva la cartella della zona stessa.",
-        "es": "Los puntos de datos Sonido y Avanzado están ahora en una carpeta real como los demás grupos, no en el núcleo siempre activo. Corregido: el interruptor de Zonas no cubría la carpeta de la zona.",
-        "pl": "Punkty danych Dźwięk i Zaawansowane są teraz w prawdziwym folderze jak inne grupy, nie w zawsze aktywnym rdzeniu. Naprawiono: przełącznik Stref nie obejmował folderu strefy.",
-        "uk": "Точки даних Звук і Розширені тепер у справжній папці, як інші групи, а не в завжди активному ядрі. Виправлено: перемикач Зон не охоплював папку зони.",
-        "zh-cn": "音效和高级数据点现在与其他分组一样位于真实文件夹中，不再属于始终开启的核心。修复：区域开关未覆盖区域文件夹本身。"
+        "en": "Sound and Advanced datapoints now sit in a real folder like the other groups. Fixed: switching Zones off did not remove the zone2/3/4 folder.",
+        "de": "Klang- und Erweitert-Datenpunkte liegen jetzt in einem echten Ordner wie die anderen Gruppen. Behoben: Zonen ausschalten entfernte den zone2/3/4-Ordner nicht.",
+        "ru": "Точки данных Звук и Расширенные теперь в настоящей папке, как другие группы. Исправлено: отключение Зон не удаляло папку zone2/3/4.",
+        "pt": "Os pontos de dados Som e Avançado ficam numa pasta real como os outros grupos. Corrigido: desligar Zonas não removia a pasta zone2/3/4.",
+        "nl": "Geluid- en Geavanceerd-datapunten staan nu in een echte map zoals de andere groepen. Opgelost: Zones uitschakelen verwijderde de zone2/3/4-map niet.",
+        "fr": "Les points de données Son et Avancé sont désormais dans un dossier réel comme les autres groupes. Corrigé : désactiver Zones ne supprimait pas le dossier zone2/3/4.",
+        "it": "I punti dati Audio e Avanzate sono ora in una cartella reale come gli altri gruppi. Corretto: disattivare Zone non rimuoveva la cartella zone2/3/4.",
+        "es": "Los puntos de datos Sonido y Avanzado están ahora en una carpeta real como los demás grupos. Corregido: desactivar Zonas no eliminaba la carpeta zone2/3/4.",
+        "pl": "Punkty danych Dźwięk i Zaawansowane są teraz w prawdziwym folderze jak inne grupy. Naprawiono: wyłączenie Stref nie usuwało folderu zone2/3/4.",
+        "uk": "Точки даних Звук і Розширені тепер у справжній папці, як інші групи. Виправлено: вимкнення Зон не видаляло папку zone2/3/4.",
+        "zh-cn": "音效和高级数据点现在与其他分组一样位于真实文件夹中。修复：关闭区域开关不会移除 zone2/3/4 文件夹。"
       }
     },
     "titleLang": {

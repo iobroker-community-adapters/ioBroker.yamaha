@@ -45,7 +45,7 @@ The **Data points** section switches whole groups of datapoints on or off — pl
 ### **WORK IN PROGRESS**
 
 - Sound and Advanced datapoints now sit in a real folder matching their admin toggle, the same way playback, tuner, HDMI, multiroom and scenes already do — no longer visually stuck next to power/volume.
-- Fixed: turning off the Zones toggle left an empty `zone2`/`zone3`/`zone4` folder behind instead of removing it.
+- Fixed: switching the Zones toggle off did not remove the `zone2`/`zone3`/`zone4` folder.
 
 ### 0.16.0 (2026-08-13)
 
