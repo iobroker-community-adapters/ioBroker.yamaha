@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { groupOf, SWITCHABLE_GROUPS } from "./groups";
+import { groupOf, isGroupEnabled, SWITCHABLE_GROUPS } from "./groups";
 
 describe("groupOf", () => {
   it("maps player sources to the player group — flat and grouped ids", () => {
@@ -39,5 +39,24 @@ describe("groupOf", () => {
   it("does not offer the amp core as a switch (only zone2-4 are the zones group)", () => {
     expect(SWITCHABLE_GROUPS).not.toContain("amp");
     expect(SWITCHABLE_GROUPS).toContain("zones");
+  });
+});
+
+describe("isGroupEnabled", () => {
+  it("keeps the amp core on regardless of config", () => {
+    expect(isGroupEnabled("power", {})).toBe(true);
+    expect(isGroupEnabled("sound.bass", { group_amp: false })).toBe(true);
+  });
+
+  it("defaults every group to on when its flag is absent or true", () => {
+    expect(isGroupEnabled("player.spotify.playback", {})).toBe(true);
+    expect(isGroupEnabled("tuner.band", { group_tuner: true })).toBe(true);
+  });
+
+  it("turns a group off only when its own flag is explicitly false", () => {
+    expect(isGroupEnabled("player.spotify.playback", { group_player: false })).toBe(false);
+    expect(isGroupEnabled("multiroom.role", { group_multiroom: false })).toBe(false);
+    // an off flag for a different group leaves this one on
+    expect(isGroupEnabled("player.spotify.playback", { group_tuner: false })).toBe(true);
   });
 });

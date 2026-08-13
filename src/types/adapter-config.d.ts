@@ -9,6 +9,13 @@ declare global {
       devices: { name: string; ip: string }[];
       /** Poll interval in seconds for XML/pre-2010 devices. */
       xmlPollInterval: number;
+      /** Datapoint-group switches (default on); a false one skips that group's objects. */
+      group_player: boolean;
+      group_tuner: boolean;
+      group_zones: boolean;
+      group_multiroom: boolean;
+      group_hdmi: boolean;
+      group_scene: boolean;
     }
   }
 }

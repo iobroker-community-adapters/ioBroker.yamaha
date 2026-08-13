@@ -5,6 +5,7 @@ import { networkInterfaces } from "node:os";
 import { join } from "node:path";
 import { attemptDevice } from "./lib/attempt-device";
 import { searchInterfaces } from "./lib/network-interfaces";
+import { isGroupEnabled } from "./lib/catalog/groups";
 import {
   legacyDeviceRow,
   mergeDiscovered,
@@ -168,7 +169,19 @@ export class Yamaha extends utils.Adapter {
     // Old states this version renamed/moved (e.g. system.model -> info.model): delete the
     // old object so it does not linger orphaned beside the new one under a kept device.
     const renamed = renamedObjectIds(existing, deviceIds, this.namespace);
-    for (const fullId of [...stale, ...renamed]) {
+    // Objects whose datapoint group the user switched off — remove them so turning a group from
+    // on to off cleans up its whole subtree (a toggle change restarts the instance, so this runs).
+    const config = this.config as unknown as Record<string, unknown>;
+    const disabled = existing.filter(full => {
+      for (const deviceId of deviceIds) {
+        const base = `${this.namespace}.${deviceId}.`;
+        if (full.startsWith(base) && !isGroupEnabled(full.slice(base.length), config)) {
+          return true;
+        }
+      }
+      return false;
+    });
+    for (const fullId of [...stale, ...renamed, ...disabled]) {
       try {
         await this.delObjectAsync(stripNamespace(fullId, this.namespace));
       } catch {
@@ -180,6 +193,9 @@ export class Yamaha extends utils.Adapter {
     }
     if (renamed.length > 0) {
       this.log.info(`removed ${renamed.length} renamed object(s) from an earlier version`);
+    }
+    if (disabled.length > 0) {
+      this.log.info(`removed ${disabled.length} object(s) from switched-off datapoint groups`);
     }
   }
 
@@ -293,9 +309,20 @@ export class Yamaha extends utils.Adapter {
         warn: message => this.log.warn(message),
       },
       upsertObject: async (id, def) => {
+        // Gate on the datapoint group: a switched-off group's objects are not created. The id is
+        // "<deviceId>.<relativeId>"; groupOf reads the relative part.
+        if (!isGroupEnabled(id.slice(id.indexOf(".") + 1), this.config as unknown as Record<string, unknown>)) {
+          return;
+        }
         await this.extendObject(id, { type: def.type, common: def.common, native: {} });
       },
-      setStateAck: (id, value) => void this.setState(id, { val: value, ack: true }),
+      setStateAck: (id, value) => {
+        // Same group gate as upsertObject, so a switched-off group seeds no orphan value either.
+        if (!isGroupEnabled(id.slice(id.indexOf(".") + 1), this.config as unknown as Record<string, unknown>)) {
+          return;
+        }
+        void this.setState(id, { val: value, ack: true });
+      },
       timers: {
         schedule: (handler, ms) => this.setTimeout(handler, ms),
         cancel: handle => this.clearTimeout(handle),

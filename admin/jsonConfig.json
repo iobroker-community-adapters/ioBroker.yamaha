@@ -43,6 +43,83 @@
       "lg": 4,
       "xl": 4
     },
+    "_datapointsHeader": {
+      "newLine": true,
+      "type": "header",
+      "text": "datapointsHeader",
+      "size": 4
+    },
+    "_datapointsHint": {
+      "type": "staticText",
+      "text": "datapointsHint",
+      "xs": 12,
+      "sm": 12,
+      "md": 12,
+      "lg": 12,
+      "xl": 12,
+      "style": { "fontSize": 13, "marginBottom": 8 }
+    },
+    "group_player": {
+      "newLine": true,
+      "type": "checkbox",
+      "label": "group_player",
+      "help": "group_player_help",
+      "xs": 12,
+      "sm": 6,
+      "md": 4,
+      "lg": 4,
+      "xl": 3
+    },
+    "group_tuner": {
+      "type": "checkbox",
+      "label": "group_tuner",
+      "help": "group_tuner_help",
+      "xs": 12,
+      "sm": 6,
+      "md": 4,
+      "lg": 4,
+      "xl": 3
+    },
+    "group_zones": {
+      "type": "checkbox",
+      "label": "group_zones",
+      "help": "group_zones_help",
+      "xs": 12,
+      "sm": 6,
+      "md": 4,
+      "lg": 4,
+      "xl": 3
+    },
+    "group_multiroom": {
+      "type": "checkbox",
+      "label": "group_multiroom",
+      "help": "group_multiroom_help",
+      "xs": 12,
+      "sm": 6,
+      "md": 4,
+      "lg": 4,
+      "xl": 3
+    },
+    "group_hdmi": {
+      "type": "checkbox",
+      "label": "group_hdmi",
+      "help": "group_hdmi_help",
+      "xs": 12,
+      "sm": 6,
+      "md": 4,
+      "lg": 4,
+      "xl": 3
+    },
+    "group_scene": {
+      "type": "checkbox",
+      "label": "group_scene",
+      "help": "group_scene_help",
+      "xs": 12,
+      "sm": 6,
+      "md": 4,
+      "lg": 4,
+      "xl": 3
+    },
     "_supportHeader": {
       "newLine": true,
       "type": "header",

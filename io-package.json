@@ -169,7 +169,13 @@
   "native": {
     "networkInterface": "0.0.0.0",
     "devices": [],
-    "xmlPollInterval": 60
+    "xmlPollInterval": 60,
+    "group_player": true,
+    "group_tuner": true,
+    "group_zones": true,
+    "group_multiroom": true,
+    "group_hdmi": true,
+    "group_scene": true
   },
   "objects": [],
   "instanceObjects": [

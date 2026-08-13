@@ -70,3 +70,20 @@ export function groupOf(stateId: string): GroupId {
   }
   return "amp";
 }
+
+/**
+ * Whether a state's group is switched on. The amplifier core is always on; every other group is
+ * on unless its `group_<id>` flag is explicitly false — default-on, so a fresh install and every
+ * existing install keep all groups until the user turns one off.
+ *
+ * @param stateId the device-relative state id
+ * @param config the adapter native config (carries `group_player`, `group_tuner`, … booleans)
+ * @returns true if the state's group is enabled
+ */
+export function isGroupEnabled(stateId: string, config: Record<string, unknown>): boolean {
+  const group = groupOf(stateId);
+  if (group === "amp") {
+    return true;
+  }
+  return config[`group_${group}`] !== false;
+}

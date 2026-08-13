@@ -18,5 +18,19 @@
   "dmDelete": "删除",
   "dmEditTitle": "编辑 Yamaha 设备",
   "dmDeleteConfirm": "删除 Yamaha 设备“%s”？",
-  "ipLabel": "IP"
+  "ipLabel": "IP",
+  "datapointsHeader": "数据点",
+  "datapointsHint": "选择将哪些功能组创建为数据点。关闭的组不会创建，已有对象会被移除。",
+  "group_player": "播放",
+  "group_player_help": "Spotify、Net Radio、USB、蓝牙及其他音源",
+  "group_tuner": "调谐器",
+  "group_tuner_help": "FM/DAB、频率、RDS",
+  "group_zones": "区域",
+  "group_zones_help": "区域 2/3/4，各自作为独立功放",
+  "group_multiroom": "多房间",
+  "group_multiroom_help": "MusicCast 群组：加入、离开、角色",
+  "group_hdmi": "HDMI",
+  "group_hdmi_help": "切换 HDMI 输出",
+  "group_scene": "场景",
+  "group_scene_help": "调用已保存的场景"
 }

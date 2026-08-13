@@ -18,5 +18,19 @@
   "dmDelete": "Verwijderen",
   "dmEditTitle": "Yamaha-apparaat bewerken",
   "dmDeleteConfirm": "Het Yamaha-apparaat „%s“ verwijderen?",
-  "ipLabel": "IP"
+  "ipLabel": "IP",
+  "datapointsHeader": "Datapunten",
+  "datapointsHint": "Kies welke functiegroepen als datapunten worden aangemaakt. Een uitgeschakelde groep wordt niet aangemaakt en bestaande objecten worden verwijderd.",
+  "group_player": "Weergave",
+  "group_player_help": "Spotify, Net Radio, USB, Bluetooth en de andere bronnen",
+  "group_tuner": "Tuner",
+  "group_tuner_help": "FM/DAB, frequentie, RDS",
+  "group_zones": "Zones",
+  "group_zones_help": "Zone 2/3/4 elk als eigen versterker",
+  "group_multiroom": "Multiroom",
+  "group_multiroom_help": "MusicCast-groepen: koppelen, verlaten, rol",
+  "group_hdmi": "HDMI",
+  "group_hdmi_help": "HDMI-uitgangen schakelen",
+  "group_scene": "Scènes",
+  "group_scene_help": "Opgeslagen scènes oproepen"
 }

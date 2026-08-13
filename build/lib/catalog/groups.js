@@ -19,7 +19,8 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var groups_exports = {};
 __export(groups_exports, {
   SWITCHABLE_GROUPS: () => SWITCHABLE_GROUPS,
-  groupOf: () => groupOf
+  groupOf: () => groupOf,
+  isGroupEnabled: () => isGroupEnabled
 });
 module.exports = __toCommonJS(groups_exports);
 const SWITCHABLE_GROUPS = ["player", "tuner", "zones", "multiroom", "hdmi", "scene"];
@@ -65,9 +66,17 @@ function groupOf(stateId) {
   }
   return "amp";
 }
+function isGroupEnabled(stateId, config) {
+  const group = groupOf(stateId);
+  if (group === "amp") {
+    return true;
+  }
+  return config[`group_${group}`] !== false;
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   SWITCHABLE_GROUPS,
-  groupOf
+  groupOf,
+  isGroupEnabled
 });
 //# sourceMappingURL=groups.js.map

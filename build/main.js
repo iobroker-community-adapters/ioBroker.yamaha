@@ -38,6 +38,7 @@ var import_node_os = require("node:os");
 var import_node_path = require("node:path");
 var import_attempt_device = require("./lib/attempt-device");
 var import_network_interfaces = require("./lib/network-interfaces");
+var import_groups = require("./lib/catalog/groups");
 var import_pure_helpers = require("./lib/pure-helpers");
 var import_util = require("./lib/util");
 var import_discovery = require("./lib/discovery");
@@ -157,7 +158,17 @@ class Yamaha extends utils.Adapter {
     const existing = Object.keys(await this.getAdapterObjectsAsync());
     const stale = (0, import_pure_helpers.staleObjects)(existing, deviceIds, this.namespace);
     const renamed = (0, import_pure_helpers.renamedObjectIds)(existing, deviceIds, this.namespace);
-    for (const fullId of [...stale, ...renamed]) {
+    const config = this.config;
+    const disabled = existing.filter((full) => {
+      for (const deviceId of deviceIds) {
+        const base = `${this.namespace}.${deviceId}.`;
+        if (full.startsWith(base) && !(0, import_groups.isGroupEnabled)(full.slice(base.length), config)) {
+          return true;
+        }
+      }
+      return false;
+    });
+    for (const fullId of [...stale, ...renamed, ...disabled]) {
       try {
         await this.delObjectAsync((0, import_pure_helpers.stripNamespace)(fullId, this.namespace));
       } catch {
@@ -168,6 +179,9 @@ class Yamaha extends utils.Adapter {
     }
     if (renamed.length > 0) {
       this.log.info(`removed ${renamed.length} renamed object(s) from an earlier version`);
+    }
+    if (disabled.length > 0) {
+      this.log.info(`removed ${disabled.length} object(s) from switched-off datapoint groups`);
     }
   }
   /**
@@ -261,9 +275,17 @@ class Yamaha extends utils.Adapter {
         warn: (message) => this.log.warn(message)
       },
       upsertObject: async (id, def) => {
+        if (!(0, import_groups.isGroupEnabled)(id.slice(id.indexOf(".") + 1), this.config)) {
+          return;
+        }
         await this.extendObject(id, { type: def.type, common: def.common, native: {} });
       },
-      setStateAck: (id, value) => void this.setState(id, { val: value, ack: true }),
+      setStateAck: (id, value) => {
+        if (!(0, import_groups.isGroupEnabled)(id.slice(id.indexOf(".") + 1), this.config)) {
+          return;
+        }
+        void this.setState(id, { val: value, ack: true });
+      },
       timers: {
         schedule: (handler, ms) => this.setTimeout(handler, ms),
         cancel: (handle) => this.clearTimeout(handle)

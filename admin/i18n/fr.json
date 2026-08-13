@@ -18,5 +18,19 @@
   "dmDelete": "Supprimer",
   "dmEditTitle": "Modifier l'appareil Yamaha",
   "dmDeleteConfirm": "Supprimer l'appareil Yamaha « %s » ?",
-  "ipLabel": "IP"
+  "ipLabel": "IP",
+  "datapointsHeader": "Points de données",
+  "datapointsHint": "Choisissez les groupes de fonctions créés comme points de données. Un groupe désactivé n'est pas créé et les objets existants sont supprimés.",
+  "group_player": "Lecture",
+  "group_player_help": "Spotify, Net Radio, USB, Bluetooth et les autres sources",
+  "group_tuner": "Tuner",
+  "group_tuner_help": "FM/DAB, fréquence, RDS",
+  "group_zones": "Zones",
+  "group_zones_help": "Zone 2/3/4, chacune comme son propre amplificateur",
+  "group_multiroom": "Multiroom",
+  "group_multiroom_help": "Groupes MusicCast : rejoindre, quitter, rôle",
+  "group_hdmi": "HDMI",
+  "group_hdmi_help": "Commuter les sorties HDMI",
+  "group_scene": "Scènes",
+  "group_scene_help": "Rappeler les scènes enregistrées"
 }

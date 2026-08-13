@@ -18,5 +18,19 @@
   "dmDelete": "Удалить",
   "dmEditTitle": "Изменить устройство Yamaha",
   "dmDeleteConfirm": "Удалить устройство Yamaha «%s»?",
-  "ipLabel": "IP"
+  "ipLabel": "IP",
+  "datapointsHeader": "Точки данных",
+  "datapointsHint": "Выберите, какие группы функций создаются как точки данных. Отключённая группа не создаётся, существующие объекты удаляются.",
+  "group_player": "Воспроизведение",
+  "group_player_help": "Spotify, Net Radio, USB, Bluetooth и другие источники",
+  "group_tuner": "Тюнер",
+  "group_tuner_help": "FM/DAB, частота, RDS",
+  "group_zones": "Зоны",
+  "group_zones_help": "Зоны 2/3/4 как отдельные усилители",
+  "group_multiroom": "Multiroom",
+  "group_multiroom_help": "Группы MusicCast: подключение, отключение, роль",
+  "group_hdmi": "HDMI",
+  "group_hdmi_help": "Переключение выходов HDMI",
+  "group_scene": "Сцены",
+  "group_scene_help": "Вызов сохранённых сцен"
 }
