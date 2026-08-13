@@ -38,6 +38,8 @@ Devices are managed in the admin as cards. **Leave the list empty** and the adap
 
 Older Yamaha receivers (before ~2010, the XML protocol) do not announce themselves on the network and must always be added manually with their IP address. The **XML query interval** in the settings sets how often these older receivers are polled — they push no changes of their own, and the default of 60 seconds is plenty for an AV receiver.
 
+The **Data points** section switches whole groups of datapoints on or off — playback sources, tuner, extra zones, multiroom, HDMI and scenes. Turn off what your receiver doesn't have or you don't use, and those objects are removed from the tree; the amplifier core (power, volume, input, sound) always stays on.
+
 ## Changelog
 
 <!--

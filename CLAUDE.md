@@ -41,7 +41,13 @@ YNCA über das echte Socket-Drop-Event (bis `onDrop` registriert ist, wird ein D
 
 Datenpunkte: ein gemeinsamer Katalog je Transport (`ynca/catalog.ts`, `yxc/catalog.ts`, `xml/catalog.ts`) liefert
 Objekt-`common` UND Wert-Mapping aus EINER Liste; die `common` werden über `catalog/value-coerce.ts` intelligent
-typisiert (onoff→boolean, enum→Dropdown, number→unit/range). YXC-HTTP über den eigenen `yxc/http-client.ts`
+typisiert (onoff→boolean, enum→Dropdown, number→unit/range). Der Objektbaum ist thematisch gruppiert
+(`catalog/groups.ts`, `groupOf(id)` bucketet nach erstem Kanal-Segment): die Wiedergabe-Quellen unter `player.*`,
+DAB unter `tuner.dab`, Multiroom statt `dist`. Sechs Datenpunktgruppen (Wiedergabe/Tuner/Zonen/Multiroom/HDMI/
+Szenen) sind im Admin per `group_*`-Schalter abschaltbar — `isGroupEnabled` gated `upsertObject`+`setStateAck`,
+`cleanupStaleObjects` räumt eine abgeschaltete Gruppe weg (beszel-Muster); der Verstärker-Kern ist immer an. Alt-IDs
+aus der Vor-Gruppierung (`pure-helpers.ts` `RENAMED_CHANNELS`/`renamedObjectIds`) werden beim Update weggeräumt.
+YXC-HTTP über den eigenen `yxc/http-client.ts`
 (keine externe Lib; die Command-URLs sind unit-verifiziert). YXC-Push: ein geteilter UDP-Empfänger
 (`yxc/push-receiver.ts`) auf :41100, per Quell-IP geroutet. Discovery: SSDP-M-SEARCH + HTTP-`fetch` in `main.ts`
 (adapter-Timer, sonst S5005), reine Logik in `lib/discovery.ts`.
@@ -49,8 +55,10 @@ typisiert (onoff→boolean, enum→Dropdown, number→unit/range). YXC-HTTP übe
 ## Stand
 
 Alle sieben Aufbauphasen abgeschlossen, danach der Multi-Transport-Neubau (alle antwortenden Protokolle
-parallel auf einem Objektbaum statt „erster Transport gewinnt"). Der Adapter ist funktional vollständig
-(3 Protokolle, Discovery, Migration, Härtung). Versionshistorie im README `## Changelog` (nicht hier dupliziert).
+parallel auf einem Objektbaum statt „erster Transport gewinnt"), zuletzt (v0.15.0) der thematisch gruppierte
+Objektbaum mit abschaltbaren Datenpunktgruppen und die Wiedergabe als Media-Player (Alexa/Google/VIS). Der
+Adapter ist funktional vollständig (3 Protokolle, Discovery, Migration, Härtung). Versionshistorie im README
+`## Changelog` (nicht hier dupliziert).
 
 ## Portierungs-Referenz (`../../Ressourcen/yamaha/legacy/`, NICHT im Adapter-Repo)
 
