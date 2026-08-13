@@ -251,11 +251,11 @@ export class YxcDeviceController implements ConnectionHandle {
     }
     const stateId = fullStateId.slice(prefix.length);
     // Multiroom writes need controller state (the cached role), so they bypass the pure command map.
-    if (stateId === "dist.leaveGroup") {
+    if (stateId === "multiroom.leaveGroup") {
       void this.leaveGroup();
       return;
     }
-    if (stateId === "dist.linkClient") {
+    if (stateId === "multiroom.linkClient") {
       void this.linkClient(String(value));
       return;
     }
@@ -356,7 +356,9 @@ export class YxcDeviceController implements ConnectionHandle {
   private async refreshMediaSource(block: string): Promise<void> {
     const arg = block === "netusb" ? undefined : block;
     const parse = (info: unknown): StateValue[] =>
-      block === "tuner" ? parseYxcTunerInfo(info) : parseYxcPlayInfo(info, block === "cd" ? "cd" : "netPlayer");
+      block === "tuner"
+        ? parseYxcTunerInfo(info)
+        : parseYxcPlayInfo(info, block === "cd" ? "player.cd" : "player.netPlayer");
     try {
       const info = await this.deps.client.getPlayInfo(arg);
       for (const update of parse(info)) {
@@ -379,7 +381,7 @@ export class YxcDeviceController implements ConnectionHandle {
       const info = await this.deps.client.getDistributionInfo();
       for (const update of parseYxcDistribution(info)) {
         this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
-        if (update.id === "dist.role") {
+        if (update.id === "multiroom.role") {
           this.lastDistRole = String(update.value);
         }
       }

@@ -13,14 +13,7 @@
 export type GroupId = "amp" | "player" | "tuner" | "zones" | "multiroom" | "hdmi" | "scene";
 
 /** The groups a user can switch off, in display order (amp is always on and not listed here). */
-export const SWITCHABLE_GROUPS: readonly GroupId[] = [
-  "player",
-  "tuner",
-  "zones",
-  "multiroom",
-  "hdmi",
-  "scene",
-];
+export const SWITCHABLE_GROUPS: readonly GroupId[] = ["player", "tuner", "zones", "multiroom", "hdmi", "scene"];
 
 /**
  * The player-source channels (YNCA sources + YXC netusb/cd), collected under the "player" group.

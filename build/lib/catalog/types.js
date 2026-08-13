@@ -40,6 +40,9 @@ const CHANNEL_NAMES = {
   // Tuner
   tuner: "Tuner",
   dab: "DAB",
+  // Media player container + multiroom
+  player: "Media player",
+  multiroom: "Multiroom",
   // Media player sources
   netRadio: "Net radio",
   server: "Media server",

@@ -89,20 +89,20 @@ describe("parseYxcStatus", () => {
 
 describe("stateToYxc control methods (repeat/shuffle/tray, tuner, party, preset)", () => {
   test("toggle buttons map to their toggle method", () => {
-    expect(stateToYxc("netPlayer.repeatToggle", true)).toEqual({ method: "toggleNetRepeat", zone: "netusb", value: true });
-    expect(stateToYxc("netPlayer.shuffleToggle", true)).toEqual({
+    expect(stateToYxc("player.netPlayer.repeatToggle", true)).toEqual({ method: "toggleNetRepeat", zone: "netusb", value: true });
+    expect(stateToYxc("player.netPlayer.shuffleToggle", true)).toEqual({
       method: "toggleNetShuffle",
       zone: "netusb",
       value: true,
     });
-    expect(stateToYxc("cd.repeatToggle", true)).toEqual({ method: "toggleCDRepeat", zone: "netusb", value: true });
-    expect(stateToYxc("cd.tray", true)).toEqual({ method: "toggleTray", zone: "netusb", value: true });
+    expect(stateToYxc("player.cd.repeatToggle", true)).toEqual({ method: "toggleCDRepeat", zone: "netusb", value: true });
+    expect(stateToYxc("player.cd.tray", true)).toEqual({ method: "toggleTray", zone: "netusb", value: true });
   });
 
   test("tuner band/frequency, preset and party become their control commands", () => {
     expect(stateToYxc("tuner.band", "fm")).toEqual({ method: "setBand", zone: "tuner", value: "fm" });
     expect(stateToYxc("tuner.frequency", 100900)).toEqual({ method: "setFreq", zone: "tuner", value: 100900 });
-    expect(stateToYxc("netPlayer.preset", 3)).toEqual({ method: "recallPreset", zone: "netusb", value: 3 });
+    expect(stateToYxc("player.netPlayer.preset", 3)).toEqual({ method: "recallPreset", zone: "netusb", value: 3 });
     expect(stateToYxc("partyEnable", true)).toEqual({ method: "setPartyMode", zone: "main", value: true });
   });
 
@@ -127,11 +127,11 @@ describe("parseYxcDistribution", () => {
         client_list: ["1.2.3.5"],
       }),
     ).toEqual([
-      { id: "dist.role", value: "server" },
-      { id: "dist.groupId", value: "abc" },
-      { id: "dist.groupName", value: "Kitchen" },
-      { id: "dist.serverZone", value: "main" },
-      { id: "dist.clientList", value: '["1.2.3.5"]' },
+      { id: "multiroom.role", value: "server" },
+      { id: "multiroom.groupId", value: "abc" },
+      { id: "multiroom.groupName", value: "Kitchen" },
+      { id: "multiroom.serverZone", value: "main" },
+      { id: "multiroom.clientList", value: '["1.2.3.5"]' },
     ]);
   });
 
@@ -143,19 +143,19 @@ describe("parseYxcDistribution", () => {
 describe("parseYxcPlayInfo", () => {
   test("maps play-info fields to read-only network player states", () => {
     expect(parseYxcPlayInfo({ playback: "play", artist: "A", album: "B", track: "T", extra: 1 })).toEqual([
-      { id: "netPlayer.artist", value: "A" },
-      { id: "netPlayer.album", value: "B" },
-      { id: "netPlayer.track", value: "T" },
-      { id: "netPlayer.playback", value: 0 },
+      { id: "player.netPlayer.artist", value: "A" },
+      { id: "player.netPlayer.album", value: "B" },
+      { id: "player.netPlayer.track", value: "T" },
+      { id: "player.netPlayer.playback", value: 0 },
     ]);
   });
 
   test("maps play-info fields to a cd source when given the cd prefix", () => {
-    expect(parseYxcPlayInfo({ playback: "play", artist: "A", album: "B", track: "T" }, "cd")).toEqual([
-      { id: "cd.artist", value: "A" },
-      { id: "cd.album", value: "B" },
-      { id: "cd.track", value: "T" },
-      { id: "cd.playback", value: 0 },
+    expect(parseYxcPlayInfo({ playback: "play", artist: "A", album: "B", track: "T" }, "player.cd")).toEqual([
+      { id: "player.cd.artist", value: "A" },
+      { id: "player.cd.album", value: "B" },
+      { id: "player.cd.track", value: "T" },
+      { id: "player.cd.playback", value: 0 },
     ]);
   });
 
@@ -174,12 +174,12 @@ describe("parseYxcPlayInfo", () => {
         albumart_url: "/cover.jpg",
       }),
     ).toEqual([
-      { id: "netPlayer.repeat", value: "one" },
-      { id: "netPlayer.shuffle", value: "off" },
-      { id: "netPlayer.playback", value: 0 },
-      { id: "netPlayer.albumArt", value: "/cover.jpg" },
-      { id: "netPlayer.elapsedTime", value: 42 },
-      { id: "netPlayer.totalTime", value: 215 },
+      { id: "player.netPlayer.repeat", value: "one" },
+      { id: "player.netPlayer.shuffle", value: "off" },
+      { id: "player.netPlayer.playback", value: 0 },
+      { id: "player.netPlayer.albumArt", value: "/cover.jpg" },
+      { id: "player.netPlayer.elapsedTime", value: 42 },
+      { id: "player.netPlayer.totalTime", value: 215 },
     ]);
   });
 });
@@ -223,14 +223,14 @@ describe("parseYxcTunerInfo", () => {
 
 describe("stateToYxc", () => {
   test("maps network-player transport buttons to their YXC method", () => {
-    expect(stateToYxc("netPlayer.play", true)).toEqual({ method: "playNet", zone: "netusb", value: true });
-    expect(stateToYxc("netPlayer.next", true)).toEqual({ method: "nextNet", zone: "netusb", value: true });
+    expect(stateToYxc("player.netPlayer.play", true)).toEqual({ method: "playNet", zone: "netusb", value: true });
+    expect(stateToYxc("player.netPlayer.next", true)).toEqual({ method: "nextNet", zone: "netusb", value: true });
   });
 
   test("maps cd transport buttons to setCDPlayback with the YXC action word", () => {
-    expect(stateToYxc("cd.play", true)).toEqual({ method: "setCDPlayback", zone: "cd", value: "play" });
-    expect(stateToYxc("cd.prev", true)).toEqual({ method: "setCDPlayback", zone: "cd", value: "previous" });
-    expect(stateToYxc("cd.next", true)).toEqual({ method: "setCDPlayback", zone: "cd", value: "next" });
+    expect(stateToYxc("player.cd.play", true)).toEqual({ method: "setCDPlayback", zone: "cd", value: "play" });
+    expect(stateToYxc("player.cd.prev", true)).toEqual({ method: "setCDPlayback", zone: "cd", value: "previous" });
+    expect(stateToYxc("player.cd.next", true)).toEqual({ method: "setCDPlayback", zone: "cd", value: "next" });
   });
 
   test("maps subwoofer trim to setSubwooferVolumeTo", () => {

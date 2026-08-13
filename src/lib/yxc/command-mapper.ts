@@ -35,11 +35,11 @@ function readStatusField(status: Record<string, unknown>, read: { field: string 
 
 /** Network-player transport buttons → YamahaYXC method (no zone/value). */
 const NETUSB_TRANSPORT: Record<string, string> = {
-  "netPlayer.play": "playNet",
-  "netPlayer.pause": "pauseNet",
-  "netPlayer.stop": "stopNet",
-  "netPlayer.next": "nextNet",
-  "netPlayer.prev": "prevNet",
+  "player.netPlayer.play": "playNet",
+  "player.netPlayer.pause": "pauseNet",
+  "player.netPlayer.stop": "stopNet",
+  "player.netPlayer.next": "nextNet",
+  "player.netPlayer.prev": "prevNet",
 };
 
 /**
@@ -48,20 +48,20 @@ const NETUSB_TRANSPORT: Record<string, string> = {
  * one of which sends the wrong command in the library).
  */
 const CD_TRANSPORT: Record<string, string> = {
-  "cd.play": "play",
-  "cd.pause": "pause",
-  "cd.stop": "stop",
-  "cd.next": "next",
-  "cd.prev": "previous",
+  "player.cd.play": "play",
+  "player.cd.pause": "pause",
+  "player.cd.stop": "stop",
+  "player.cd.next": "next",
+  "player.cd.prev": "previous",
 };
 
 /** Repeat/shuffle/tray toggle buttons → the YamahaYXC method (no zone or value). */
 const TOGGLE_ACTIONS: Record<string, string> = {
-  "netPlayer.repeatToggle": "toggleNetRepeat",
-  "netPlayer.shuffleToggle": "toggleNetShuffle",
-  "cd.repeatToggle": "toggleCDRepeat",
-  "cd.shuffleToggle": "toggleCDShuffle",
-  "cd.tray": "toggleTray",
+  "player.netPlayer.repeatToggle": "toggleNetRepeat",
+  "player.netPlayer.shuffleToggle": "toggleNetShuffle",
+  "player.cd.repeatToggle": "toggleCDRepeat",
+  "player.cd.shuffleToggle": "toggleCDShuffle",
+  "player.cd.tray": "toggleTray",
 };
 
 /** Equalizer band state (without zone prefix) → the band suffix of its setEqualizer<Band> method. */
@@ -125,7 +125,7 @@ export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefi
     // The controller supplies the current band; the value carries only the frequency.
     return { method: "setFreq", zone: "tuner", value: Number(value) };
   }
-  if (stateId === "netPlayer.preset" && isWritableValue(value, true)) {
+  if (stateId === "player.netPlayer.preset" && isWritableValue(value, true)) {
     return { method: "recallPreset", zone: "netusb", value: Number(value) };
   }
   let zone = "main";
@@ -163,19 +163,19 @@ export function parseYxcDistribution(info: unknown): StateValue[] {
   const d = info as Record<string, unknown>;
   const updates: StateValue[] = [];
   if (typeof d.role === "string") {
-    updates.push({ id: "dist.role", value: d.role });
+    updates.push({ id: "multiroom.role", value: d.role });
   }
   if (typeof d.group_id === "string") {
-    updates.push({ id: "dist.groupId", value: d.group_id });
+    updates.push({ id: "multiroom.groupId", value: d.group_id });
   }
   if (typeof d.group_name === "string") {
-    updates.push({ id: "dist.groupName", value: d.group_name });
+    updates.push({ id: "multiroom.groupName", value: d.group_name });
   }
   if (typeof d.server_zone === "string") {
-    updates.push({ id: "dist.serverZone", value: d.server_zone });
+    updates.push({ id: "multiroom.serverZone", value: d.server_zone });
   }
   if (Array.isArray(d.client_list)) {
-    updates.push({ id: "dist.clientList", value: JSON.stringify(d.client_list) });
+    updates.push({ id: "multiroom.clientList", value: JSON.stringify(d.client_list) });
   }
   return updates;
 }
@@ -189,7 +189,7 @@ export function parseYxcDistribution(info: unknown): StateValue[] {
  * @param prefix the target player channel (`netPlayer` for netusb, `cd` for the disc player)
  * @returns the player state updates, empty if malformed
  */
-export function parseYxcPlayInfo(playInfo: unknown, prefix = "netPlayer"): StateValue[] {
+export function parseYxcPlayInfo(playInfo: unknown, prefix = "player.netPlayer"): StateValue[] {
   if (typeof playInfo !== "object" || playInfo === null) {
     return [];
   }

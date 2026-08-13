@@ -41,25 +41,25 @@ function readStatusField(status, read) {
   return status[read.field];
 }
 const NETUSB_TRANSPORT = {
-  "netPlayer.play": "playNet",
-  "netPlayer.pause": "pauseNet",
-  "netPlayer.stop": "stopNet",
-  "netPlayer.next": "nextNet",
-  "netPlayer.prev": "prevNet"
+  "player.netPlayer.play": "playNet",
+  "player.netPlayer.pause": "pauseNet",
+  "player.netPlayer.stop": "stopNet",
+  "player.netPlayer.next": "nextNet",
+  "player.netPlayer.prev": "prevNet"
 };
 const CD_TRANSPORT = {
-  "cd.play": "play",
-  "cd.pause": "pause",
-  "cd.stop": "stop",
-  "cd.next": "next",
-  "cd.prev": "previous"
+  "player.cd.play": "play",
+  "player.cd.pause": "pause",
+  "player.cd.stop": "stop",
+  "player.cd.next": "next",
+  "player.cd.prev": "previous"
 };
 const TOGGLE_ACTIONS = {
-  "netPlayer.repeatToggle": "toggleNetRepeat",
-  "netPlayer.shuffleToggle": "toggleNetShuffle",
-  "cd.repeatToggle": "toggleCDRepeat",
-  "cd.shuffleToggle": "toggleCDShuffle",
-  "cd.tray": "toggleTray"
+  "player.netPlayer.repeatToggle": "toggleNetRepeat",
+  "player.netPlayer.shuffleToggle": "toggleNetShuffle",
+  "player.cd.repeatToggle": "toggleCDRepeat",
+  "player.cd.shuffleToggle": "toggleCDShuffle",
+  "player.cd.tray": "toggleTray"
 };
 const EQ_CHANNELS = { equalizerLow: "Low", equalizerMid: "Mid", equalizerHigh: "High" };
 const ZONE_PREFIX = { main: "", zone2: "zone2.", zone3: "zone3.", zone4: "zone4." };
@@ -100,7 +100,7 @@ function stateToYxc(stateId, value) {
   if (stateId === "tuner.frequency" && (0, import_value_coerce.isWritableValue)(value, true)) {
     return { method: "setFreq", zone: "tuner", value: Number(value) };
   }
-  if (stateId === "netPlayer.preset" && (0, import_value_coerce.isWritableValue)(value, true)) {
+  if (stateId === "player.netPlayer.preset" && (0, import_value_coerce.isWritableValue)(value, true)) {
     return { method: "recallPreset", zone: "netusb", value: Number(value) };
   }
   let zone = "main";
@@ -130,23 +130,23 @@ function parseYxcDistribution(info) {
   const d = info;
   const updates = [];
   if (typeof d.role === "string") {
-    updates.push({ id: "dist.role", value: d.role });
+    updates.push({ id: "multiroom.role", value: d.role });
   }
   if (typeof d.group_id === "string") {
-    updates.push({ id: "dist.groupId", value: d.group_id });
+    updates.push({ id: "multiroom.groupId", value: d.group_id });
   }
   if (typeof d.group_name === "string") {
-    updates.push({ id: "dist.groupName", value: d.group_name });
+    updates.push({ id: "multiroom.groupName", value: d.group_name });
   }
   if (typeof d.server_zone === "string") {
-    updates.push({ id: "dist.serverZone", value: d.server_zone });
+    updates.push({ id: "multiroom.serverZone", value: d.server_zone });
   }
   if (Array.isArray(d.client_list)) {
-    updates.push({ id: "dist.clientList", value: JSON.stringify(d.client_list) });
+    updates.push({ id: "multiroom.clientList", value: JSON.stringify(d.client_list) });
   }
   return updates;
 }
-function parseYxcPlayInfo(playInfo, prefix = "netPlayer") {
+function parseYxcPlayInfo(playInfo, prefix = "player.netPlayer") {
   if (typeof playInfo !== "object" || playInfo === null) {
     return [];
   }

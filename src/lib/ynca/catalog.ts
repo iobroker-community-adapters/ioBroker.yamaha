@@ -1000,11 +1000,11 @@ export function buildYncaCatalog(): YncaEntry[] {
       func: `INPNAME${upper}`,
     });
   }
-  entries.push(...fnEntries(DAB_FUNCS, "DAB"));
+  entries.push(...fnEntries(DAB_FUNCS, "DAB", "tuner."));
   for (const source of PLAYER_SOURCES) {
     for (const fn of PLAYER_FUNCS) {
       entries.push({
-        id: `${source.channel}.${fn.state}`,
+        id: `player.${source.channel}.${fn.state}`,
         name: fn.name,
         spec: fn.spec,
         write: fn.write,

@@ -124,11 +124,11 @@ class YxcDeviceController {
       return;
     }
     const stateId = fullStateId.slice(prefix.length);
-    if (stateId === "dist.leaveGroup") {
+    if (stateId === "multiroom.leaveGroup") {
       void this.leaveGroup();
       return;
     }
-    if (stateId === "dist.linkClient") {
+    if (stateId === "multiroom.linkClient") {
       void this.linkClient(String(value));
       return;
     }
@@ -221,7 +221,7 @@ class YxcDeviceController {
    */
   async refreshMediaSource(block) {
     const arg = block === "netusb" ? void 0 : block;
-    const parse = (info) => block === "tuner" ? (0, import_command_mapper.parseYxcTunerInfo)(info) : (0, import_command_mapper.parseYxcPlayInfo)(info, block === "cd" ? "cd" : "netPlayer");
+    const parse = (info) => block === "tuner" ? (0, import_command_mapper.parseYxcTunerInfo)(info) : (0, import_command_mapper.parseYxcPlayInfo)(info, block === "cd" ? "player.cd" : "player.netPlayer");
     try {
       const info = await this.deps.client.getPlayInfo(arg);
       for (const update of parse(info)) {
@@ -243,7 +243,7 @@ class YxcDeviceController {
       const info = await this.deps.client.getDistributionInfo();
       for (const update of (0, import_command_mapper.parseYxcDistribution)(info)) {
         this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
-        if (update.id === "dist.role") {
+        if (update.id === "multiroom.role") {
           this.lastDistRole = String(update.value);
         }
       }

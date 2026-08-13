@@ -313,10 +313,10 @@ describe("YxcDeviceController", () => {
     const features = { zone: [{ id: "main", func_list: ["power"] }], cd: {}, tuner: {} };
     const s = setup(features, ysp);
     await s.controller.start();
-    expect(s.objects).toEqual(expect.arrayContaining(["living.cd.playback", "living.tuner.band"]));
+    expect(s.objects).toEqual(expect.arrayContaining(["living.player.cd.playback", "living.tuner.band"]));
     expect(s.client.calls).toContainEqual({ method: "getPlayInfo", args: ["cd"] });
     expect(s.client.calls).toContainEqual({ method: "getPlayInfo", args: ["tuner"] });
-    expect(s.acks).toContainEqual({ id: "living.cd.track", value: "Track 1" });
+    expect(s.acks).toContainEqual({ id: "living.player.cd.track", value: "Track 1" });
     expect(s.acks).toContainEqual({ id: "living.tuner.frequency", value: 100900 });
   });
 
@@ -325,7 +325,7 @@ describe("YxcDeviceController", () => {
     const s = setup(features, ysp);
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleStateChange("living.cd.play", false, true);
+    s.controller.handleStateChange("living.player.cd.play", false, true);
     await flush();
     expect(s.client.calls).toContainEqual({ method: "setCDPlayback", args: ["play"] });
   });
@@ -346,10 +346,10 @@ describe("YxcDeviceController", () => {
     const features = { zone: [{ id: "main", func_list: ["power"] }], distribution: { version: 2 } };
     const s = setup(features, ysp);
     await s.controller.start();
-    expect(s.objects).toContain("living.dist.role");
+    expect(s.objects).toContain("living.multiroom.role");
     expect(s.client.calls).toContainEqual({ method: "getDistributionInfo", args: [] });
-    expect(s.acks).toContainEqual({ id: "living.dist.role", value: "server" });
-    expect(s.acks).toContainEqual({ id: "living.dist.clientList", value: '["1.2.3.5"]' });
+    expect(s.acks).toContainEqual({ id: "living.multiroom.role", value: "server" });
+    expect(s.acks).toContainEqual({ id: "living.multiroom.clientList", value: '["1.2.3.5"]' });
   });
 
   test("leaving a group as the server stops distribution", async () => {
@@ -357,7 +357,7 @@ describe("YxcDeviceController", () => {
     const s = setup(features, ysp);
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleStateChange("living.dist.leaveGroup", false, true);
+    s.controller.handleStateChange("living.multiroom.leaveGroup", false, true);
     await flush();
     expect(s.client.calls).toContainEqual({ method: "stopDistribution", args: [] });
   });
@@ -368,7 +368,7 @@ describe("YxcDeviceController", () => {
     s.client.distRole = "client";
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleStateChange("living.dist.leaveGroup", false, true);
+    s.controller.handleStateChange("living.multiroom.leaveGroup", false, true);
     await flush();
     expect(s.client.calls).toContainEqual({ method: "setClientInfo", args: [{ group_id: "", zone: ["main"] }] });
   });
@@ -379,7 +379,7 @@ describe("YxcDeviceController", () => {
     const s = setup(features, ysp, { "1.2.3.9": clientDevice });
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleStateChange("living.dist.linkClient", false, "1.2.3.9");
+    s.controller.handleStateChange("living.multiroom.linkClient", false, "1.2.3.9");
     await flush();
     const join = clientDevice.calls.find(c => c.method === "setClientInfo");
     const add = s.client.calls.find(c => c.method === "setServerInfo");
@@ -396,7 +396,7 @@ describe("YxcDeviceController", () => {
     const s = setup(features, ysp);
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleStateChange("living.dist.linkClient", false, "9.9.9.9");
+    s.controller.handleStateChange("living.multiroom.linkClient", false, "9.9.9.9");
     await flush();
     expect(s.client.calls).toEqual([]);
   });

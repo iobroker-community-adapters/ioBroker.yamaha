@@ -117,23 +117,23 @@ describe("YNCA catalog", () => {
 
   test("playback reads from PLAYBACKINFO but writes to PLAYBACK", () => {
     const cat = buildYncaCatalog();
-    expect(cat.find(e => e.id === "spotify.playback")).toMatchObject({
+    expect(cat.find(e => e.id === "player.spotify.playback")).toMatchObject({
       subunit: "SPOTIFY",
       func: "PLAYBACK",
       write: true,
     });
     expect(sweepGets(cat)).toContainEqual({ subunit: "SPOTIFY", func: "PLAYBACKINFO" });
-    expect(funcToEntry(cat).get("SPOTIFY:PLAYBACKINFO")?.id).toBe("spotify.playback");
+    expect(funcToEntry(cat).get("SPOTIFY:PLAYBACKINFO")?.id).toBe("player.spotify.playback");
   });
 
   test("playback is a numeric media.state coded from PLAYBACKINFO (Play=0)", () => {
     const cat = buildYncaCatalog();
-    expect(cat.find(e => e.id === "spotify.playback")?.role).toBe("media.state");
+    expect(cat.find(e => e.id === "player.spotify.playback")?.role).toBe("media.state");
     expect(yncaStateUpdate({ subunit: "SPOTIFY", func: "PLAYBACKINFO", value: "Play" }, funcToEntry(cat))).toEqual({
-      id: "spotify.playback",
+      id: "player.spotify.playback",
       value: 0,
     });
-    expect(yncaCommand("spotify.playback", 0, idToEntry(cat))).toEqual({
+    expect(yncaCommand("player.spotify.playback", 0, idToEntry(cat))).toEqual({
       subunit: "SPOTIFY",
       func: "PLAYBACK",
       value: "Play",
@@ -142,14 +142,14 @@ describe("YNCA catalog", () => {
 
   test("track skip is exposed as next/prev buttons that put Skip Fwd/Rev on PLAYBACK", () => {
     const cat = buildYncaCatalog();
-    expect(cat.find(e => e.id === "spotify.next")?.role).toBe("button.next");
-    expect(cat.find(e => e.id === "spotify.prev")?.role).toBe("button.prev");
-    expect(yncaCommand("spotify.next", true, idToEntry(cat))).toEqual({
+    expect(cat.find(e => e.id === "player.spotify.next")?.role).toBe("button.next");
+    expect(cat.find(e => e.id === "player.spotify.prev")?.role).toBe("button.prev");
+    expect(yncaCommand("player.spotify.next", true, idToEntry(cat))).toEqual({
       subunit: "SPOTIFY",
       func: "PLAYBACK",
       value: "Skip Fwd",
     });
-    expect(yncaCommand("spotify.prev", true, idToEntry(cat))).toEqual({
+    expect(yncaCommand("player.spotify.prev", true, idToEntry(cat))).toEqual({
       subunit: "SPOTIFY",
       func: "PLAYBACK",
       value: "Skip Rev",
@@ -158,24 +158,24 @@ describe("YNCA catalog", () => {
 
   test("player sources expose station, total/elapsed time, preset and channel metadata", () => {
     const cat = buildYncaCatalog();
-    expect(cat.find(e => e.id === "netRadio.station")).toMatchObject({ subunit: "NETRADIO", func: "STATION" });
-    expect(cat.find(e => e.id === "server.totalTime")).toMatchObject({ subunit: "SERVER", func: "TOTALTIME" });
-    expect(cat.find(e => e.id === "usb.elapsedTime")).toMatchObject({ subunit: "USB", func: "ELAPSEDTIME" });
-    expect(cat.find(e => e.id === "netRadio.preset")?.spec).toEqual({ kind: "text" });
+    expect(cat.find(e => e.id === "player.netRadio.station")).toMatchObject({ subunit: "NETRADIO", func: "STATION" });
+    expect(cat.find(e => e.id === "player.server.totalTime")).toMatchObject({ subunit: "SERVER", func: "TOTALTIME" });
+    expect(cat.find(e => e.id === "player.usb.elapsedTime")).toMatchObject({ subunit: "USB", func: "ELAPSEDTIME" });
+    expect(cat.find(e => e.id === "player.netRadio.preset")?.spec).toEqual({ kind: "text" });
   });
 
   test("the DAB tuner is catalogued as its own DAB subunit under a dab channel", () => {
     const cat = buildYncaCatalog();
-    expect(cat.find(e => e.id === "dab.band")).toMatchObject({ subunit: "DAB", func: "BAND" });
-    expect(cat.find(e => e.id === "dab.band")?.spec.kind).toBe("enum");
-    expect(cat.find(e => e.id === "dab.serviceLabel")).toMatchObject({
+    expect(cat.find(e => e.id === "tuner.dab.band")).toMatchObject({ subunit: "DAB", func: "BAND" });
+    expect(cat.find(e => e.id === "tuner.dab.band")?.spec.kind).toBe("enum");
+    expect(cat.find(e => e.id === "tuner.dab.serviceLabel")).toMatchObject({
       subunit: "DAB",
       func: "DABSERVICELABEL",
       write: false,
     });
-    expect(cat.find(e => e.id === "dab.dls")?.spec).toEqual({ kind: "text" });
-    expect(cat.find(e => e.id === "dab.fmFrequency")?.spec).toMatchObject({ kind: "number", unit: "kHz" });
-    expect(cat.find(e => e.id === "dab.fmSearchMode")?.spec.kind).toBe("enum");
+    expect(cat.find(e => e.id === "tuner.dab.dls")?.spec).toEqual({ kind: "text" });
+    expect(cat.find(e => e.id === "tuner.dab.fmFrequency")?.spec).toMatchObject({ kind: "number", unit: "kHz" });
+    expect(cat.find(e => e.id === "tuner.dab.fmSearchMode")?.spec.kind).toBe("enum");
   });
 
   test("the init sweep asks each function once per subunit", () => {
@@ -209,20 +209,20 @@ describe("YNCA catalog", () => {
     // still be created, or the seed writes <source>.playback with no object behind it.
     const caps: YncaCapabilities = { model: "RX", subunits: { SPOTIFY: { PLAYBACKINFO: "Play" } } };
     const ids = yncaObjectsFor(caps).map(o => o.id);
-    expect(ids).toContain("spotify.playback");
+    expect(ids).toContain("player.spotify.playback");
   });
 
   test("a streaming source reporting TRACK (not SONG) still gets a track object (Spotify/Tidal/Deezer)", () => {
     // Spotify/Tidal/Deezer/Pandora answer the title under TRACK, the older sources under SONG;
     // both wire funcs must feed the one `track` state or the title stays empty on the streamers.
     const caps: YncaCapabilities = { model: "RX", subunits: { SPOTIFY: { TRACK: "Yellow" } } };
-    expect(yncaObjectsFor(caps).map(o => o.id)).toContain("spotify.track");
+    expect(yncaObjectsFor(caps).map(o => o.id)).toContain("player.spotify.track");
   });
 
   test("a device line under TRACK decodes to the track state", () => {
     const map = funcToEntry(buildYncaCatalog());
     expect(yncaStateUpdate({ subunit: "SPOTIFY", func: "TRACK", value: "Yellow" }, map)).toEqual({
-      id: "spotify.track",
+      id: "player.spotify.track",
       value: "Yellow",
     });
   });
@@ -260,8 +260,8 @@ describe("YNCA catalog", () => {
   test("player sources carry the shared playback functions under their channel", () => {
     const cat = buildYncaCatalog();
     const ids = cat.map(e => e.id);
-    expect(ids).toEqual(expect.arrayContaining(["netRadio.artist", "spotify.playback", "usb.track", "server.repeat"]));
-    expect(cat.find(e => e.id === "spotify.playback")).toMatchObject({ subunit: "SPOTIFY", func: "PLAYBACK" });
+    expect(ids).toEqual(expect.arrayContaining(["player.netRadio.artist", "player.spotify.playback", "player.usb.track", "player.server.repeat"]));
+    expect(cat.find(e => e.id === "player.spotify.playback")).toMatchObject({ subunit: "SPOTIFY", func: "PLAYBACK" });
   });
 
   test("every channel the catalog creates has a curated display name (no raw-id fallback)", () => {

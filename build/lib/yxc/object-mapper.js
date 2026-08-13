@@ -112,18 +112,21 @@ function mapYxcToObjects(capabilities) {
       objects.push({ id: `${zoneDef.prefix}${entry.state}`, type: "state", common });
     }
   }
+  if (capabilities.media.includes("netusb") || capabilities.media.includes("cd")) {
+    objects.push({ id: "player", type: "channel", common: { name: "Media player" } });
+  }
   if (capabilities.media.includes("netusb")) {
-    pushPlayerBlock(objects, "netPlayer", "Network player");
+    pushPlayerBlock(objects, "player.netPlayer", "Network player");
     objects.push({
-      id: "netPlayer.preset",
+      id: "player.netPlayer.preset",
       type: "state",
       common: { name: "Recall preset", type: "number", role: "level", read: true, write: true, min: 1 }
     });
   }
   if (capabilities.media.includes("cd")) {
-    pushPlayerBlock(objects, "cd", "CD");
+    pushPlayerBlock(objects, "player.cd", "CD");
     objects.push({
-      id: "cd.tray",
+      id: "player.cd.tray",
       type: "state",
       common: { name: "Toggle tray", type: "boolean", role: "button", read: false, write: true }
     });
@@ -147,10 +150,10 @@ function mapYxcToObjects(capabilities) {
     });
   }
   if (capabilities.hasDistribution) {
-    objects.push({ id: "dist", type: "channel", common: { name: "Multiroom" } });
+    objects.push({ id: "multiroom", type: "channel", common: { name: "Multiroom" } });
     const distState = (id, name, role) => {
       objects.push({
-        id: `dist.${id}`,
+        id: `multiroom.${id}`,
         type: "state",
         common: { name, type: "string", role, read: true, write: false }
       });
@@ -161,12 +164,12 @@ function mapYxcToObjects(capabilities) {
     distState("serverZone", "Server zone", "text");
     distState("clientList", "Client list", "json");
     objects.push({
-      id: "dist.leaveGroup",
+      id: "multiroom.leaveGroup",
       type: "state",
       common: { name: "Leave group", type: "boolean", role: "button", read: false, write: true }
     });
     objects.push({
-      id: "dist.linkClient",
+      id: "multiroom.linkClient",
       type: "state",
       common: { name: "Link a client (its IP)", type: "string", role: "text", read: false, write: true }
     });
