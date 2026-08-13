@@ -32,3 +32,4 @@ coverage/
 .claude/settings.local.json
 .claude/dev-history.md
 CLAUDE.local.md
+docs/superpowers/
