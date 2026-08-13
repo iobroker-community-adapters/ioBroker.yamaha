@@ -228,7 +228,8 @@ export class YxcDeviceController implements ConnectionHandle {
     }
     this.cancelPush = this.deps.registerPush(event => this.onPush(event));
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), KEEPALIVE_MS);
-    this.deps.log.info(`${this.deviceId}: MusicCast device ready`);
+    // The adapter logs one combined "ready" line across all transports; this stays at debug.
+    this.deps.log.debug(`${this.deviceId}: MusicCast device ready (YXC)`);
     return true;
   }
 

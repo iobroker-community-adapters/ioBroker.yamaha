@@ -124,7 +124,7 @@ class XmlDeviceController {
       this.deps.log.debug(`${this.deviceId}: getModelName failed (${(0, import_util.errorMessage)(e)})`);
     }
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), this.pollIntervalMs);
-    this.deps.log.info(`${this.deviceId}: Yamaha (XML) device ready`);
+    this.deps.log.debug(`${this.deviceId}: Yamaha (XML) device ready (XML)`);
     return true;
   }
   /**

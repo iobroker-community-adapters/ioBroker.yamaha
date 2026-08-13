@@ -107,7 +107,9 @@ export class YncaDeviceController implements ConnectionHandle {
     // Start the keepalive only now the sweep is done, so its 30 s poll never collides
     // with the paced init sweep.
     this.deps.client.startKeepalive();
-    this.deps.log.info(`${this.deviceId}: ${capabilities.model || "device"} ready`);
+    // The adapter logs one combined "ready" line across all transports; this per-transport line
+    // stays at debug for diagnostics.
+    this.deps.log.debug(`${this.deviceId}: ${capabilities.model || "device"} ready (YNCA)`);
     return true;
   }
 

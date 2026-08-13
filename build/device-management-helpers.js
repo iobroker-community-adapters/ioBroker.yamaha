@@ -26,13 +26,10 @@ __export(device_management_helpers_exports, {
 module.exports = __toCommonJS(device_management_helpers_exports);
 var import_i18n = require("./lib/i18n");
 var import_pure_helpers = require("./lib/pure-helpers");
+var import_ready_line = require("./lib/ready-line");
 const RESERVED_IDS = /* @__PURE__ */ new Set(["info"]);
 const IP_RE = /^(\d{1,3}\.){3}\d{1,3}$/;
-const TRANSPORTS = [
-  { id: "ynca", label: "YNCA" },
-  { id: "yxc", label: "MusicCast" },
-  { id: "xml", label: "XML" }
-];
+const TRANSPORTS = import_ready_line.TRANSPORT_LABELS;
 function rowId(row) {
   return (0, import_pure_helpers.sanitizeId)(row.name && row.name.length > 0 ? row.name : row.ip);
 }

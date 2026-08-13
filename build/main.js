@@ -34,8 +34,10 @@ module.exports = __toCommonJS(main_exports);
 var utils = __toESM(require("@iobroker/adapter-core"));
 var import_node_dgram = require("node:dgram");
 var import_node_http = require("node:http");
+var import_node_os = require("node:os");
 var import_node_path = require("node:path");
 var import_attempt_device = require("./lib/attempt-device");
+var import_network_interfaces = require("./lib/network-interfaces");
 var import_pure_helpers = require("./lib/pure-helpers");
 var import_util = require("./lib/util");
 var import_discovery = require("./lib/discovery");
@@ -57,8 +59,6 @@ class Yamaha extends utils.Adapter {
   pushReceiver;
   /** Device-manager backend: the receivers as cards with add/edit/delete. */
   deviceManagement;
-  /** Set once a device has connected over XML, so `native.hasXmlDevice` is written only once. */
-  xmlMarked = false;
   /**
    * @param options adapter options passed through by js-controller
    */
@@ -278,7 +278,6 @@ class Yamaha extends utils.Adapter {
         };
       },
       xmlPollIntervalMs: this.xmlPollIntervalMs(),
-      onXmlConnected: () => void this.markXmlDevice(),
       onTransports: (names) => this.setTransports(device.id, names),
       knownDeviceIps
     });
@@ -355,23 +354,14 @@ class Yamaha extends utils.Adapter {
     return (Number.isFinite(seconds) && seconds > 0 ? seconds : 60) * 1e3;
   }
   /**
-   * Remember, once, that a device connected over the XML transport, so the admin can
-   * reveal the XML poll-interval field (`hidden: "!data.hasXmlDevice"`). Writing to
-   * `native` restarts the instance a single time — the same one-off as the legacy
-   * migration; guarded so it never loops.
-   */
-  markXmlDevice() {
-    if (this.xmlMarked || this.config.hasXmlDevice === true) {
-      this.xmlMarked = true;
-      return;
-    }
-    this.xmlMarked = true;
-    void this.extendForeignObject(`system.adapter.${this.namespace}`, { native: { hasXmlDevice: true } }).catch(
-      (e) => this.log.warn(`could not persist hasXmlDevice: ${(0, import_util.errorMessage)(e)}`)
-    );
-  }
-  /**
    * Run an SSDP M-SEARCH and collect the responders' description URL and address.
+   *
+   * With a configured network interface the search leaves exactly that one; left empty it
+   * leaves EVERY non-internal IPv4 interface at once (one socket each), because multicast
+   * egress otherwise follows only the host's default route — on a multi-homed host whose
+   * default route is not the AV network that means the receiver is never reached and nothing
+   * is found. Responders from all interfaces are merged into one list; the caller
+   * de-duplicates by address.
    *
    * @param target the search target (device type)
    * @param timeoutMs how long to collect responses
@@ -379,59 +369,77 @@ class Yamaha extends utils.Adapter {
    */
   ssdpSearch(target, timeoutMs) {
     return new Promise((resolve) => {
-      const configured = this.config.networkInterface;
-      const bindAddr = configured && configured !== "0.0.0.0" ? configured : void 0;
-      const socket = (0, import_node_dgram.createSocket)("udp4");
+      const bindAddrs = (0, import_network_interfaces.searchInterfaces)(this.config.networkInterface, (0, import_node_os.networkInterfaces)());
       const responders = [];
+      const sockets = [];
       let settled = false;
       const finish = () => {
         if (settled) {
           return;
         }
         settled = true;
-        try {
-          socket.close();
-        } catch {
+        for (const socket of sockets) {
+          try {
+            socket.close();
+          } catch {
+          }
         }
         resolve(responders);
       };
-      socket.on("message", (msg, rinfo) => {
-        const location = /LOCATION:\s*(\S+)/i.exec(msg.toString());
-        if (location) {
-          responders.push({ location: location[1], address: rinfo.address });
-        }
-      });
-      socket.on("error", (err) => {
-        this.log.warn(
-          `discovery socket failed${bindAddr ? ` on interface ${bindAddr}` : ""}: ${(0, import_util.errorMessage)(err)}${bindAddr ? " \u2014 check the Network Interface setting" : ""}`
-        );
-        finish();
-      });
-      const sendSearch = () => {
-        if (settled) {
-          return;
-        }
-        const msearch = `M-SEARCH * HTTP/1.1\r
+      const searchFrom = (bindAddr) => {
+        const socket = (0, import_node_dgram.createSocket)("udp4");
+        sockets.push(socket);
+        socket.on("message", (msg, rinfo) => {
+          const location = /LOCATION:\s*(\S+)/i.exec(msg.toString());
+          if (location) {
+            responders.push({ location: location[1], address: rinfo.address });
+          }
+        });
+        socket.on("error", (err) => {
+          this.log.warn(
+            `discovery socket failed${bindAddr ? ` on interface ${bindAddr}` : ""}: ${(0, import_util.errorMessage)(err)}${bindAddr ? " \u2014 check the Network Interface setting" : ""}`
+          );
+          try {
+            socket.close();
+          } catch {
+          }
+        });
+        const sendSearch = () => {
+          if (settled) {
+            return;
+          }
+          const msearch = `M-SEARCH * HTTP/1.1\r
 HOST: 239.255.255.250:1900\r
 MAN: "ssdp:discover"\r
 MX: 3\r
 ST: ${target}\r
 \r
 `;
-        socket.send(msearch, 1900, "239.255.255.250");
-      };
-      socket.bind(0, bindAddr, () => {
-        if (bindAddr) {
           try {
-            socket.setMulticastInterface(bindAddr);
+            socket.send(msearch, 1900, "239.255.255.250");
           } catch {
-            this.log.info(`discovery: could not pin multicast egress to ${bindAddr} \u2014 using the default interface`);
           }
+        };
+        socket.bind(0, bindAddr, () => {
+          if (bindAddr) {
+            try {
+              socket.setMulticastInterface(bindAddr);
+            } catch {
+              this.log.info(`discovery: could not pin multicast egress to ${bindAddr} \u2014 using the default interface`);
+            }
+          }
+          for (let i = 0; i < SSDP_SEARCH_BURST; i++) {
+            this.setTimeout(sendSearch, i * SSDP_SEARCH_INTERVAL_MS);
+          }
+        });
+      };
+      if (bindAddrs.length === 0) {
+        searchFrom(void 0);
+      } else {
+        for (const bindAddr of bindAddrs) {
+          searchFrom(bindAddr);
         }
-        for (let i = 0; i < SSDP_SEARCH_BURST; i++) {
-          this.setTimeout(sendSearch, i * SSDP_SEARCH_INTERVAL_MS);
-        }
-      });
+      }
       this.setTimeout(finish, timeoutMs);
     });
   }

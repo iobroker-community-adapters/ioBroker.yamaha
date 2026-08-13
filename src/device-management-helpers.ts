@@ -1,18 +1,15 @@
 import type { JsonFormSchema } from "@iobroker/dm-utils";
 import { t } from "./lib/i18n";
 import { sanitizeId } from "./lib/pure-helpers";
+import { TRANSPORT_LABELS } from "./lib/ready-line";
 
 /** Object-id segments the adapter reserves for its own tree — a device may not take them. */
 const RESERVED_IDS = new Set(["info"]);
 /** IPv4 dotted-quad — the single source for both the frontend validator and the backend check. */
 const IP_RE = /^(\d{1,3}\.){3}\d{1,3}$/;
 
-/** The three transports shown as card indicators, in fixed order, with the label the user sees. */
-export const TRANSPORTS: ReadonlyArray<{ id: string; label: string }> = [
-  { id: "ynca", label: "YNCA" },
-  { id: "yxc", label: "MusicCast" },
-  { id: "xml", label: "XML" },
-];
+/** The transports shown as card indicators — the single source shared with the ready-log line. */
+export const TRANSPORTS = TRANSPORT_LABELS;
 
 /** One raw manual device row from `native.devices` (the name is optional). */
 export interface ManualRow {

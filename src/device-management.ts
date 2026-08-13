@@ -119,11 +119,14 @@ export class YamahaDeviceManagement extends DeviceManagement {
       status: {
         connection: { stateId: `${base}.info.connection`, mapping: { true: "connected", false: "disconnected" } },
       },
+      // No icon: the indicator icon accepts only a reserved/`fa-*`/`data:`/URL name, so a plain
+      // "wifi" rendered as a "?". The transport label as text plus a green "on" colour carries it;
+      // `hideIfEmpty` shows only the protocols this device is actually connected over.
       indicators: TRANSPORTS.map(tr => ({
         id: `transport-${tr.id}`,
         value: { stateId: `${base}.info.transports.${tr.id}` },
         text: tr.label,
-        icon: "wifi",
+        colorOn: "ok",
         hideIfEmpty: true,
       })),
       actions: card.source === "manual" ? [edit, del] : [del],

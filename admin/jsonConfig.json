@@ -37,7 +37,6 @@
       "min": 30,
       "max": 300,
       "default": 60,
-      "hidden": "!data.hasXmlDevice",
       "xs": 12,
       "sm": 12,
       "md": 6,

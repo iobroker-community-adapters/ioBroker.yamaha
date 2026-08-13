@@ -30,15 +30,15 @@ var import_device_controller3 = require("./xml/device-controller");
 var import_xml_client = require("./xml/xml-client");
 var import_multi_transport_handle = require("./lifecycle/multi-transport-handle");
 var import_transport_connection_adapter = require("./lifecycle/transport-connection-adapter");
+var import_ready_line = require("./ready-line");
 var import_util = require("./util");
 async function connectTransports(deviceId, attempts, deps) {
   var _a;
   const live = [];
-  for (const { conn, onConnected } of attempts) {
+  for (const { conn } of attempts) {
     try {
       if (await conn.connect()) {
         live.push(conn);
-        onConnected == null ? void 0 : onConnected();
       } else {
         conn.close();
       }
@@ -53,7 +53,9 @@ async function connectTransports(deviceId, attempts, deps) {
   }
   const handle = new import_multi_transport_handle.MultiTransportHandle(deviceId, live, { upsertObject: deps.upsertObject, log: deps.log });
   await handle.start();
-  (_a = deps.onTransports) == null ? void 0 : _a.call(deps, live.map((conn) => conn.transport));
+  const liveIds = live.map((conn) => conn.transport);
+  (_a = deps.onTransports) == null ? void 0 : _a.call(deps, liveIds);
+  deps.log.info((0, import_ready_line.readyLine)(deviceId, liveIds));
   return handle;
 }
 function attemptDevice(device, deps) {
@@ -94,11 +96,11 @@ function attemptDevice(device, deps) {
       deps.xmlPollIntervalMs
     )
   );
-  return connectTransports(
-    device.id,
-    [{ conn: ynca }, { conn: yxc }, { conn: xml, onConnected: () => deps.onXmlConnected() }],
-    { upsertObject, log, onTransports: deps.onTransports }
-  );
+  return connectTransports(device.id, [{ conn: ynca }, { conn: yxc }, { conn: xml }], {
+    upsertObject,
+    log,
+    onTransports: deps.onTransports
+  });
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {

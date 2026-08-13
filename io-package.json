@@ -169,8 +169,7 @@
   "native": {
     "networkInterface": "",
     "devices": [],
-    "xmlPollInterval": 60,
-    "hasXmlDevice": false
+    "xmlPollInterval": 60
   },
   "objects": [],
   "instanceObjects": [

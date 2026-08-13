@@ -81,17 +81,6 @@ describe("connectTransports", () => {
     expect(yxc.closed).toBe(true);
   });
 
-  test("onConnected fires only for a transport that connects", async () => {
-    const okXml = fakeConn("xml", [state("power", "Power")], true);
-    const failXml = fakeConn("xml", [state("power", "Power")], false);
-    let okFired = 0;
-    let failFired = 0;
-    await connectTransports("a", [{ conn: okXml, onConnected: (): number => (okFired += 1) }], deps());
-    await connectTransports("b", [{ conn: failXml, onConnected: (): number => (failFired += 1) }], deps());
-    expect(okFired).toBe(1);
-    expect(failFired).toBe(0);
-  });
-
   test("a connect that throws is swallowed so the other transports still connect", async () => {
     const ynca = fakeConn("ynca", [state("power", "Power")], () => Promise.reject(new Error("socket")));
     const yxc = fakeConn("yxc", [state("dist.role", "Role")], true);

@@ -19,7 +19,7 @@ of the oldest pre-2010 models — behind one object tree.
 - **Rich, intelligently typed datapoints** — amplifier, tone control, HDMI output, DSP and decoder modes, sound programs, party mode, tuner with RDS, and network/USB/server/Spotify players; on/off is a boolean, fixed choices are dropdowns, numbers carry their unit and range.
 - **Capability-driven object tree** — states are generated from what each device actually reports over its protocols, not from a hardcoded model list, and only for the functions it offers.
 - **Every protocol a device speaks runs together** — a MusicCast receiver keeps its YNCA amplifier control and adds its Yamaha Extended Control richness (multiroom, equalizer, media) on one object tree, instead of only one protocol being used per device.
-- **Automatic discovery** — leave the device list empty and MusicCast devices are found on the network and set up on their own at startup; add devices to run only those instead. On a host with several network interfaces, a selector confines the search to the right one.
+- **Automatic discovery** — leave the device list empty and MusicCast devices are found on the network and set up on their own at startup; add devices to run only those instead. The search covers every network interface, so a receiver is found even on a multi-homed host; an optional selector can confine it to one.
 - **Device manager** — every receiver appears as a card in the admin showing its model, IP address and the protocols it is currently connected over, with a dialog to add one by IP.
 
 ## Requirements
@@ -34,9 +34,9 @@ Install the adapter from the ioBroker admin.
 
 ## Configuration
 
-Devices are managed in the admin as cards. **Leave the list empty** and the adapter finds MusicCast devices on the network by itself at startup — nothing to enter. Use the **"+" dialog** to add a device by IP address to run only those instead; each card shows the device's model, IP and the protocols it is connected over. On a host with several network interfaces, the **network interface** selector confines the discovery search to the right one.
+Devices are managed in the admin as cards. **Leave the list empty** and the adapter finds MusicCast devices on the network by itself at startup — nothing to enter. Use the **"+" dialog** to add a device by IP address to run only those instead; each card shows the device's model, IP and the protocols it is connected over. Discovery searches on every network interface by default, so a receiver is found even on a host with several interfaces; the optional **network interface** selector confines the search to one if you prefer.
 
-Older Yamaha receivers (before ~2010, the XML protocol) do not announce themselves on the network and must always be added manually with their IP address. Once such a device is connected, an **XML query interval** field appears in the settings — these devices are polled rather than pushing their changes, and the default of 60 seconds is plenty for an AV receiver.
+Older Yamaha receivers (before ~2010, the XML protocol) do not announce themselves on the network and must always be added manually with their IP address. The **XML query interval** in the settings sets how often these older receivers are polled — they push no changes of their own, and the default of 60 seconds is plenty for an AV receiver.
 
 ## Changelog
 

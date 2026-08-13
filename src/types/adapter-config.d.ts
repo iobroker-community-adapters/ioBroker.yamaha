@@ -9,8 +9,6 @@ declare global {
       devices: { name: string; ip: string }[];
       /** Poll interval in seconds for XML/pre-2010 devices. */
       xmlPollInterval: number;
-      /** Set once a device has connected over XML — drives the conditional admin field. */
-      hasXmlDevice: boolean;
     }
   }
 }

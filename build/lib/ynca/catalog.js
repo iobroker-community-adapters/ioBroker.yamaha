@@ -791,7 +791,8 @@ const PLAYER_FUNCS = [
     name: "Shuffle",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
-    role: "switch"
+    // Boolean on/off shuffle → the type-detector media-player role (fills the SHUFFLE slot).
+    role: "media.mode.shuffle"
   }
 ];
 function fnEntries(fns, subunit, prefix = "") {

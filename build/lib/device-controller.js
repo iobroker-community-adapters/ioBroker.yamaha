@@ -68,7 +68,7 @@ class YncaDeviceController {
       }
     });
     this.deps.client.startKeepalive();
-    this.deps.log.info(`${this.deviceId}: ${capabilities.model || "device"} ready`);
+    this.deps.log.debug(`${this.deviceId}: ${capabilities.model || "device"} ready (YNCA)`);
     return true;
   }
   /**

@@ -6,6 +6,7 @@ import { XmlDeviceController } from "./xml/device-controller";
 import { XmlClient } from "./xml/xml-client";
 import { MultiTransportHandle, type TransportConnection } from "./lifecycle/multi-transport-handle";
 import { TransportConnectionAdapter } from "./lifecycle/transport-connection-adapter";
+import { readyLine } from "./ready-line";
 import { errorMessage } from "./util";
 import type { ConnectionHandle, ControllerLog } from "./controller";
 import type { ObjectDef } from "./catalog/types";
@@ -32,8 +33,6 @@ export interface AttemptDeps {
   scheduleKeepalive(handler: () => void, ms: number): () => void;
   /** How often to poll an XML/YNC device for state (ms). */
   xmlPollIntervalMs: number;
-  /** Called once a device connects over the XML/YNC transport (a pre-2010 receiver). */
-  onXmlConnected(): void;
   /** Report the transports that are live after a (re)connect — the id-safe names ("ynca"/"yxc"/"xml"). */
   onTransports?(names: string[]): void;
   /** IPs of all configured devices, so a MusicCast group can resolve a client device by IP. */
@@ -46,12 +45,10 @@ export interface ConnectableTransport extends TransportConnection {
   connect(): Promise<boolean>;
 }
 
-/** One transport to try, with an optional hook fired once if it connects. */
+/** One transport to try — a connectable transport (a controller behind its adapter). */
 export interface TransportAttempt {
   /** The connectable transport (a controller behind its adapter). */
   conn: ConnectableTransport;
-  /** Called once if this transport connects (XML uses it to flag a pre-2010 device). */
-  onConnected?: () => void;
 }
 
 /** The adapter callbacks {@link connectTransports} drives to build and hold the unified tree. */
@@ -83,11 +80,10 @@ export async function connectTransports(
   deps: ConnectDeps,
 ): Promise<ConnectionHandle | null> {
   const live: TransportConnection[] = [];
-  for (const { conn, onConnected } of attempts) {
+  for (const { conn } of attempts) {
     try {
       if (await conn.connect()) {
         live.push(conn);
-        onConnected?.();
       } else {
         conn.close();
       }
@@ -102,7 +98,11 @@ export async function connectTransports(
   }
   const handle = new MultiTransportHandle(deviceId, live, { upsertObject: deps.upsertObject, log: deps.log });
   await handle.start();
-  deps.onTransports?.(live.map(conn => conn.transport));
+  const liveIds = live.map(conn => conn.transport);
+  deps.onTransports?.(liveIds);
+  // One summary line instead of three per-transport "ready" lines; each controller now logs its
+  // own readiness at debug level for diagnostics.
+  deps.log.info(readyLine(deviceId, liveIds));
   return handle;
 }
 
@@ -163,9 +163,9 @@ export function attemptDevice(device: DeviceRecord, deps: AttemptDeps): Promise<
     ),
   );
 
-  return connectTransports(
-    device.id,
-    [{ conn: ynca }, { conn: yxc }, { conn: xml, onConnected: (): void => deps.onXmlConnected() }],
-    { upsertObject, log, onTransports: deps.onTransports },
-  );
+  return connectTransports(device.id, [{ conn: ynca }, { conn: yxc }, { conn: xml }], {
+    upsertObject,
+    log,
+    onTransports: deps.onTransports,
+  });
 }

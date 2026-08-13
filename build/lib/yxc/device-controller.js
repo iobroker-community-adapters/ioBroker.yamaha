@@ -104,7 +104,7 @@ class YxcDeviceController {
     }
     this.cancelPush = this.deps.registerPush((event) => this.onPush(event));
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), KEEPALIVE_MS);
-    this.deps.log.info(`${this.deviceId}: MusicCast device ready`);
+    this.deps.log.debug(`${this.deviceId}: MusicCast device ready (YXC)`);
     return true;
   }
   /**

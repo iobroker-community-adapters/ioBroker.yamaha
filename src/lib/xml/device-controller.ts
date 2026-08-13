@@ -163,7 +163,8 @@ export class XmlDeviceController implements ConnectionHandle {
       this.deps.log.debug(`${this.deviceId}: getModelName failed (${errorMessage(e)})`);
     }
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), this.pollIntervalMs);
-    this.deps.log.info(`${this.deviceId}: Yamaha (XML) device ready`);
+    // The adapter logs one combined "ready" line across all transports; this stays at debug.
+    this.deps.log.debug(`${this.deviceId}: Yamaha (XML) device ready (XML)`);
     return true;
   }
 

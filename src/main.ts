@@ -1,8 +1,10 @@
 import * as utils from "@iobroker/adapter-core";
 import { createSocket } from "node:dgram";
 import { get as httpGet } from "node:http";
+import { networkInterfaces } from "node:os";
 import { join } from "node:path";
 import { attemptDevice } from "./lib/attempt-device";
+import { searchInterfaces } from "./lib/network-interfaces";
 import {
   legacyDeviceRow,
   mergeDiscovered,
@@ -52,8 +54,6 @@ export class Yamaha extends utils.Adapter {
   private pushReceiver: YxcPushReceiver | undefined;
   /** Device-manager backend: the receivers as cards with add/edit/delete. */
   private readonly deviceManagement: YamahaDeviceManagement;
-  /** Set once a device has connected over XML, so `native.hasXmlDevice` is written only once. */
-  private xmlMarked = false;
 
   /**
    * @param options adapter options passed through by js-controller
@@ -310,7 +310,6 @@ export class Yamaha extends utils.Adapter {
         };
       },
       xmlPollIntervalMs: this.xmlPollIntervalMs(),
-      onXmlConnected: () => void this.markXmlDevice(),
       onTransports: names => this.setTransports(device.id, names),
       knownDeviceIps,
     });
@@ -392,24 +391,14 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
-   * Remember, once, that a device connected over the XML transport, so the admin can
-   * reveal the XML poll-interval field (`hidden: "!data.hasXmlDevice"`). Writing to
-   * `native` restarts the instance a single time — the same one-off as the legacy
-   * migration; guarded so it never loops.
-   */
-  private markXmlDevice(): void {
-    if (this.xmlMarked || (this.config as unknown as Record<string, unknown>).hasXmlDevice === true) {
-      this.xmlMarked = true;
-      return;
-    }
-    this.xmlMarked = true;
-    void this.extendForeignObject(`system.adapter.${this.namespace}`, { native: { hasXmlDevice: true } }).catch(e =>
-      this.log.warn(`could not persist hasXmlDevice: ${errorMessage(e)}`),
-    );
-  }
-
-  /**
    * Run an SSDP M-SEARCH and collect the responders' description URL and address.
+   *
+   * With a configured network interface the search leaves exactly that one; left empty it
+   * leaves EVERY non-internal IPv4 interface at once (one socket each), because multicast
+   * egress otherwise follows only the host's default route — on a multi-homed host whose
+   * default route is not the AV network that means the receiver is never reached and nothing
+   * is found. Responders from all interfaces are merged into one list; the caller
+   * de-duplicates by address.
    *
    * @param target the search target (device type)
    * @param timeoutMs how long to collect responses
@@ -417,66 +406,87 @@ export class Yamaha extends utils.Adapter {
    */
   private ssdpSearch(target: string, timeoutMs: number): Promise<Array<{ location: string; address: string }>> {
     return new Promise(resolve => {
-      const configured = this.config.networkInterface;
-      const bindAddr = configured && configured !== "0.0.0.0" ? configured : undefined;
-      const socket = createSocket("udp4");
+      const bindAddrs = searchInterfaces(this.config.networkInterface, networkInterfaces());
       const responders: Array<{ location: string; address: string }> = [];
+      const sockets: ReturnType<typeof createSocket>[] = [];
       let settled = false;
       const finish = (): void => {
         if (settled) {
           return;
         }
         settled = true;
-        try {
-          socket.close();
-        } catch {
-          // already closed
+        for (const socket of sockets) {
+          try {
+            socket.close();
+          } catch {
+            // already closed
+          }
         }
         resolve(responders);
       };
-      socket.on("message", (msg, rinfo) => {
-        const location = /LOCATION:\s*(\S+)/i.exec(msg.toString());
-        if (location) {
-          responders.push({ location: location[1], address: rinfo.address });
-        }
-      });
-      socket.on("error", err => {
-        // A bind/egress failure is typically a stale selected interface IP (DHCP
-        // change or a copied config) — surface it so the user fixes the setting
-        // instead of silently finding nothing.
-        this.log.warn(
-          `discovery socket failed${bindAddr ? ` on interface ${bindAddr}` : ""}: ${errorMessage(err)}${
-            bindAddr ? " — check the Network Interface setting" : ""
-          }`,
-        );
-        finish();
-      });
-      const sendSearch = (): void => {
-        if (settled) {
-          return;
-        }
-        const msearch = `M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: "ssdp:discover"\r\nMX: 3\r\nST: ${target}\r\n\r\n`;
-        socket.send(msearch, 1900, "239.255.255.250");
-      };
-      socket.bind(0, bindAddr, () => {
-        // Pin OUTGOING multicast to the chosen interface. bind() only sets the
-        // source address; the egress interface is IP_MULTICAST_IF — without it the
-        // OS uses its default route, so the search can leave the wrong NIC on a
-        // multi-homed host despite an explicit selection (Node dgram docs).
-        if (bindAddr) {
-          try {
-            socket.setMulticastInterface(bindAddr);
-          } catch {
-            this.log.info(`discovery: could not pin multicast egress to ${bindAddr} — using the default interface`);
+      // Open one search socket bound to a single interface (or the default route when bindAddr
+      // is undefined). Every socket shares the responders list and the one settle timeout.
+      const searchFrom = (bindAddr: string | undefined): void => {
+        const socket = createSocket("udp4");
+        sockets.push(socket);
+        socket.on("message", (msg, rinfo) => {
+          const location = /LOCATION:\s*(\S+)/i.exec(msg.toString());
+          if (location) {
+            responders.push({ location: location[1], address: rinfo.address });
           }
+        });
+        socket.on("error", err => {
+          // One interface failing (typically a stale selected IP after a DHCP change) must not
+          // kill the search on the others — warn and drop just this socket; the timeout still
+          // resolves whatever the rest found.
+          this.log.warn(
+            `discovery socket failed${bindAddr ? ` on interface ${bindAddr}` : ""}: ${errorMessage(err)}${
+              bindAddr ? " — check the Network Interface setting" : ""
+            }`,
+          );
+          try {
+            socket.close();
+          } catch {
+            // already closed
+          }
+        });
+        const sendSearch = (): void => {
+          if (settled) {
+            return;
+          }
+          const msearch = `M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: "ssdp:discover"\r\nMX: 3\r\nST: ${target}\r\n\r\n`;
+          try {
+            socket.send(msearch, 1900, "239.255.255.250");
+          } catch {
+            // socket already closed by an error above
+          }
+        };
+        socket.bind(0, bindAddr, () => {
+          // Pin OUTGOING multicast to this interface. bind() only sets the source address; the
+          // egress interface is IP_MULTICAST_IF — without it the OS uses its default route, so
+          // the search can leave the wrong NIC on a multi-homed host (Node dgram docs).
+          if (bindAddr) {
+            try {
+              socket.setMulticastInterface(bindAddr);
+            } catch {
+              this.log.info(`discovery: could not pin multicast egress to ${bindAddr} — using the default interface`);
+            }
+          }
+          // Multicast is lossy and a single request can be dropped — repeat the M-SEARCH a few
+          // times inside the collect window so one lost packet does not hide a receiver.
+          for (let i = 0; i < SSDP_SEARCH_BURST; i++) {
+            this.setTimeout(sendSearch, i * SSDP_SEARCH_INTERVAL_MS);
+          }
+        });
+      };
+      // Configured → that one interface; empty → every non-internal IPv4; none usable → default route.
+      if (bindAddrs.length === 0) {
+        searchFrom(undefined);
+      } else {
+        for (const bindAddr of bindAddrs) {
+          searchFrom(bindAddr);
         }
-        // Multicast is lossy and a single request can be dropped — repeat the
-        // M-SEARCH a few times inside the collect window so one lost packet does
-        // not hide a receiver (or one of several).
-        for (let i = 0; i < SSDP_SEARCH_BURST; i++) {
-          this.setTimeout(sendSearch, i * SSDP_SEARCH_INTERVAL_MS);
-        }
-      });
+      }
       this.setTimeout(finish, timeoutMs);
     });
   }
