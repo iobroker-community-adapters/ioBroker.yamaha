@@ -1,4 +1,10 @@
 # Older changes
+## 0.10.0 (2026-08-05)
+
+- You no longer have to add every device by hand — leave the device table empty and the adapter finds MusicCast receivers on its own at startup and sets them up.
+- The settings page is clearer and follows the standard layout; the manual search button is gone because discovery now runs by itself.
+- An older receiver from before 2010 can now have its update rate set, controlling how often it is checked for changes.
+
 ## 0.9.0 (2026-08-05)
 
 - MusicCast and older XML receivers now report their connection correctly and reconnect on their own after a drop — as YNCA already did — instead of staying stuck on "connected".

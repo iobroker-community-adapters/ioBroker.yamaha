@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "0.14.0",
+    "version": "0.15.0",
     "news": {
+      "0.15.0": {
+        "en": "The object tree is grouped by theme, datapoint groups can be switched off in the admin, and playback now works as a media player.",
+        "de": "Der Objektbaum ist thematisch gruppiert, Datenpunktgruppen lassen sich im Admin abschalten, und die Wiedergabe funktioniert jetzt als Media-Player.",
+        "ru": "Дерево объектов сгруппировано по темам, группы точек данных можно отключить в админке, а воспроизведение теперь работает как медиаплеер.",
+        "pt": "A árvore de objetos está agrupada por tema, grupos de pontos de dados podem ser desativados no admin, e a reprodução funciona agora como um leitor de média.",
+        "nl": "De objectboom is thematisch gegroepeerd, datapuntgroepen kunnen in de admin worden uitgeschakeld, en afspelen werkt nu als mediaspeler.",
+        "fr": "L'arborescence des objets est groupée par thème, des groupes de points de données peuvent être désactivés dans l'admin, et la lecture fonctionne désormais comme un lecteur multimédia.",
+        "it": "L'albero degli oggetti è raggruppato per tema, i gruppi di punti dati possono essere disattivati nell'admin, e la riproduzione ora funziona come un lettore multimediale.",
+        "es": "El árbol de objetos está agrupado por tema, los grupos de puntos de datos pueden desactivarse en el admin, y la reproducción ahora funciona como reproductor multimedia.",
+        "pl": "Drzewo obiektów jest pogrupowane tematycznie, grupy punktów danych można wyłączyć w adminie, a odtwarzanie działa teraz jako odtwarzacz multimedialny.",
+        "uk": "Дерево об'єктів згруповано за темами, групи точок даних можна вимкнути в адмінці, а відтворення тепер працює як медіаплеєр.",
+        "zh-cn": "对象树按主题分组，可在管理界面关闭整组数据点，播放现在可作为媒体播放器使用。"
+      },
       "0.14.0": {
         "en": "Receivers appear as cards with model, IP and connected protocols; discovery is steadier with a network-interface selector; and every receiver reports its model.",
         "de": "Receiver erscheinen als Karten mit Modell, IP und verbundenen Protokollen; die Suche ist stabiler mit Netzwerk-Interface-Auswahl; jeder Receiver meldet sein Modell.",
@@ -80,19 +93,6 @@
         "pl": "Urządzenia MusicCast i starsze amplitunery same przywracają połączenie po zerwaniu, jak YNCA, a ich punkty danych są bardziej spójne.",
         "uk": "Пристрої MusicCast і старіші ресивери тепер самі відновлюють з'єднання після обриву, як YNCA, а їхні дані узгодженіші.",
         "zh-cn": "MusicCast 设备和较旧的接收机现在会像 YNCA 一样在断开后自行恢复连接，数据点也更一致。"
-      },
-      "0.8.0": {
-        "en": "Far more of your Yamaha is usable from ioBroker now: values come through as switches, lists and numbers to read and set, not raw text, and the playback status is finally correct.",
-        "de": "Viel mehr von deinem Yamaha ist jetzt aus ioBroker nutzbar: Werte kommen als Schalter, Listen und Zahlen zum Lesen und Setzen statt als roher Text, und der Wiedergabe-Status stimmt endlich.",
-        "ru": "Теперь из ioBroker доступно гораздо больше возможностей Yamaha: значения приходят как переключатели, списки и числа для чтения и записи, а не сырой текст, и статус воспроизведения наконец верен.",
-        "pt": "Muito mais do seu Yamaha é utilizável no ioBroker: os valores chegam como interruptores, listas e números para ler e definir, não texto bruto, e o estado de reprodução está finalmente correto.",
-        "nl": "Veel meer van je Yamaha is nu bruikbaar vanuit ioBroker: waarden komen als schakelaars, lijsten en getallen om te lezen en in te stellen, geen ruwe tekst, en de afspeelstatus klopt eindelijk.",
-        "fr": "Une grande partie de votre Yamaha est utilisable depuis ioBroker : les valeurs arrivent en interrupteurs, listes et nombres à lire et régler, pas en texte brut, et l'état de lecture est enfin correct.",
-        "it": "Molto di più del tuo Yamaha è usabile da ioBroker: i valori arrivano come interruttori, elenchi e numeri da leggere e impostare, non testo grezzo, e lo stato di riproduzione è finalmente corretto.",
-        "es": "Mucho más de tu Yamaha ya es utilizable desde ioBroker: los valores llegan como interruptores, listas y números para leer y ajustar, no texto en bruto, y el estado de reproducción por fin es correcto.",
-        "pl": "Znacznie więcej twojego Yamaha można teraz używać z ioBroker: wartości są przełącznikami, listami i liczbami do odczytu i ustawiania, nie surowym tekstem, a status odtwarzania jest wreszcie poprawny.",
-        "uk": "З ioBroker доступно набагато більше можливостей Yamaha: значення надходять як перемикачі, списки та числа для читання й запису, а не сирий текст, і статус відтворення нарешті правильний.",
-        "zh-cn": "现在可以从 ioBroker 使用你的 Yamaha 更多功能：数值以开关、列表和数字的形式呈现，可读取和设置，而非原始文本，播放状态终于正确。"
       }
     },
     "titleLang": {

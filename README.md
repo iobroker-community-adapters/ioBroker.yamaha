@@ -44,6 +44,13 @@ Older Yamaha receivers (before ~2010, the XML protocol) do not announce themselv
 	Placeholder for the next version (at the beginning of the line):
 	### **WORK IN PROGRESS**
 -->
+### 0.15.0 (2026-08-13)
+
+- The object tree is organised by theme now: streaming and playback sources sit under one player branch, DAB stays with the tuner, and multiroom is named clearly — far less to scroll through.
+- You can switch whole datapoint groups off in the admin — the players, tuner, extra zones, multiroom, HDMI or scenes — so a receiver only carries the datapoints you actually use.
+- Playback now shows up as a proper media player, so voice assistants and visualizations can read what is playing and drive transport, repeat and shuffle straight from ioBroker.
+- Device discovery runs on every network interface now and uses all of them by default, so a receiver on a second network segment is found without picking an interface by hand.
+
 ### 0.14.0 (2026-08-12)
 
 - The admin now shows your receivers as cards, each with the device's model, IP address and the protocols it is connected over, and a dialog to add a receiver by its IP.
@@ -71,12 +78,6 @@ Older Yamaha receivers (before ~2010, the XML protocol) do not announce themselv
 - Older pre-2010 receivers can again control their tone, subwoofer, Extra Bass, YPAO and HDMI outputs.
 - The object tree is tidier: model and firmware now sit under the device's info, and the cluttered system folder is gone.
 - Every device shows a green or red online symbol in the admin now, and leaving a device's name blank no longer makes it vanish.
-
-### 0.10.0 (2026-08-05)
-
-- You no longer have to add every device by hand — leave the device table empty and the adapter finds MusicCast receivers on its own at startup and sets them up.
-- The settings page is clearer and follows the standard layout; the manual search button is gone because discovery now runs by itself.
-- An older receiver from before 2010 can now have its update rate set, controlling how often it is checked for changes.
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 
