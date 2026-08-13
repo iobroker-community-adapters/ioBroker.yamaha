@@ -250,7 +250,7 @@ const AMP_FUNCS: FuncDef[] = [
   },
   {
     func: "STRAIGHT",
-    state: "straight",
+    state: "sound.straight",
     name: "Straight",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
@@ -258,7 +258,7 @@ const AMP_FUNCS: FuncDef[] = [
   },
   {
     func: "ENHANCER",
-    state: "enhancer",
+    state: "sound.enhancer",
     name: "Enhancer",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
@@ -266,7 +266,7 @@ const AMP_FUNCS: FuncDef[] = [
   },
   {
     func: "PUREDIRMODE",
-    state: "pureDirect",
+    state: "sound.pureDirect",
     name: "Pure Direct",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
@@ -306,7 +306,7 @@ const AMP_FUNCS: FuncDef[] = [
   },
   {
     func: "ADAPTIVEDRC",
-    state: "adaptiveDrc",
+    state: "sound.adaptiveDrc",
     name: "Adaptive DRC",
     spec: { kind: "enum", states: ADAPTIVEDRC_STATES },
     write: true,
@@ -314,7 +314,7 @@ const AMP_FUNCS: FuncDef[] = [
   },
   {
     func: "SURROUNDAI",
-    state: "surroundAI",
+    state: "sound.surroundAI",
     name: "Surround AI",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
@@ -322,7 +322,7 @@ const AMP_FUNCS: FuncDef[] = [
   },
   {
     func: "DIRMODE",
-    state: "direct",
+    state: "sound.direct",
     name: "Direct",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
@@ -330,7 +330,7 @@ const AMP_FUNCS: FuncDef[] = [
   },
   {
     func: "2CHDECODER",
-    state: "surroundDecoder",
+    state: "sound.surroundDecoder",
     name: "Surround decoder",
     spec: { kind: "enum", states: DECODER_STATES },
     write: true,
@@ -354,7 +354,7 @@ const AMP_FUNCS: FuncDef[] = [
   },
   {
     func: "EXBASS",
-    state: "extraBass",
+    state: "sound.extraBass",
     name: "Extra Bass",
     spec: { kind: "onoff", on: "Auto", off: "Off" },
     write: true,
@@ -362,7 +362,7 @@ const AMP_FUNCS: FuncDef[] = [
   },
   {
     func: "3DCINEMA",
-    state: "cinemaDsp3d",
+    state: "sound.cinemaDsp3d",
     name: "CINEMA DSP 3D",
     spec: { kind: "onoff", on: "Auto", off: "Off" },
     write: true,
@@ -370,7 +370,7 @@ const AMP_FUNCS: FuncDef[] = [
   },
   {
     func: "INITVOLMODE",
-    state: "initialVolume.mode",
+    state: "advanced.initialVolume.mode",
     name: "Initial volume mode",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
@@ -378,7 +378,7 @@ const AMP_FUNCS: FuncDef[] = [
   },
   {
     func: "INITVOLLVL",
-    state: "initialVolume.level",
+    state: "advanced.initialVolume.level",
     name: "Initial volume level",
     spec: { kind: "number", unit: "dB", min: -80.5, max: 16.5, step: 0.5 },
     write: true,
@@ -386,7 +386,7 @@ const AMP_FUNCS: FuncDef[] = [
   },
   {
     func: "MAXVOL",
-    state: "maxVolume",
+    state: "advanced.maxVolume",
     name: "Maximum volume",
     spec: { kind: "number", unit: "dB", min: -30, max: 16.5, step: 5 },
     write: true,
@@ -428,7 +428,7 @@ const ZONEB_AVAIL_STATES = selfMap(["Not Connected", "Not Ready", "Ready"]);
 const MAIN_ONLY_FUNCS: FuncDef[] = [
   {
     func: "SPEAKERA",
-    state: "speakerA",
+    state: "advanced.speakerA",
     name: "Speaker A",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
@@ -436,7 +436,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
   },
   {
     func: "SPEAKERB",
-    state: "speakerB",
+    state: "advanced.speakerB",
     name: "Speaker B",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
@@ -643,7 +643,7 @@ const SYS_FUNCS: FuncDef[] = [
   },
   {
     func: "SPPATTERN",
-    state: "speakers.pattern",
+    state: "advanced.speakers.pattern",
     name: "Speaker pattern",
     spec: { kind: "enum", states: SPPATTERN_STATES },
     write: true,
@@ -651,7 +651,7 @@ const SYS_FUNCS: FuncDef[] = [
   },
   {
     func: "SPPATTERN1SWFR1CNFG",
-    state: "speakers.pattern1Swfr1",
+    state: "advanced.speakers.pattern1Swfr1",
     name: "Speaker pattern 1 subwoofer 1",
     spec: { kind: "enum", states: SWFR_CNFG_STATES },
     write: true,
@@ -659,7 +659,7 @@ const SYS_FUNCS: FuncDef[] = [
   },
   {
     func: "SPPATTERN1SWFR2CNFG",
-    state: "speakers.pattern1Swfr2",
+    state: "advanced.speakers.pattern1Swfr2",
     name: "Speaker pattern 1 subwoofer 2",
     spec: { kind: "enum", states: SWFR_CNFG_STATES },
     write: true,
@@ -667,7 +667,7 @@ const SYS_FUNCS: FuncDef[] = [
   },
   {
     func: "SPPATTERN2SWFR1CNFG",
-    state: "speakers.pattern2Swfr1",
+    state: "advanced.speakers.pattern2Swfr1",
     name: "Speaker pattern 2 subwoofer 1",
     spec: { kind: "enum", states: SWFR_CNFG_STATES },
     write: true,
@@ -675,7 +675,7 @@ const SYS_FUNCS: FuncDef[] = [
   },
   {
     func: "SPPATTERN2SWFR2CNFG",
-    state: "speakers.pattern2Swfr2",
+    state: "advanced.speakers.pattern2Swfr2",
     name: "Speaker pattern 2 subwoofer 2",
     spec: { kind: "enum", states: SWFR_CNFG_STATES },
     write: true,
@@ -991,7 +991,7 @@ export function buildYncaCatalog(): YncaEntry[] {
   for (const key of INPUT_NAME_KEYS) {
     const upper = key.toUpperCase();
     entries.push({
-      id: `inputNames.${key}`,
+      id: `advanced.inputNames.${key}`,
       name: `Input name ${upper}`,
       spec: { kind: "text" },
       write: false,

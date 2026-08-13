@@ -462,7 +462,7 @@ export class YxcDeviceController implements ConnectionHandle {
   private cacheEqualizer(zone: string, updates: StateValue[]): void {
     const prefix = zone === "main" ? "" : `${zone}.`;
     const band = (b: string): number | undefined => {
-      const u = updates.find(x => x.id === `${prefix}equalizer${b}`);
+      const u = updates.find(x => x.id === `${prefix}sound.equalizer${b}`);
       return typeof u?.value === "number" ? u.value : undefined;
     };
     if (band("Low") === undefined && band("Mid") === undefined && band("High") === undefined) {

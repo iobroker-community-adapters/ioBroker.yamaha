@@ -63,25 +63,25 @@ const XML_AMP_CATALOG = [
     toInner: (value) => `<Surround><Program_Sel><Current><Sound_Program>${String(value)}</Sound_Program></Current></Program_Sel></Surround>`
   },
   {
-    state: "pureDirect",
+    state: "sound.pureDirect",
     common: { name: "Pure Direct", type: "boolean", role: "switch", read: true, write: true },
     statusField: "pureDirect",
     toInner: (value) => `<Sound_Video><Pure_Direct><Mode>${value ? "On" : "Off"}</Mode></Pure_Direct></Sound_Video>`
   },
   {
-    state: "straight",
+    state: "sound.straight",
     common: { name: "Straight", type: "boolean", role: "switch", read: true, write: true },
     statusField: "straight",
     toInner: (value) => `<Surround><Program_Sel><Current><Straight>${value ? "On" : "Off"}</Straight></Current></Program_Sel></Surround>`
   },
   {
-    state: "direct",
+    state: "sound.direct",
     common: { name: "Direct", type: "boolean", role: "switch", read: true, write: true },
     statusField: "direct",
     toInner: (value) => `<Sound_Video><Direct><Mode>${value ? "On" : "Off"}</Mode></Direct></Sound_Video>`
   },
   {
-    state: "adaptiveDrc",
+    state: "sound.adaptiveDrc",
     common: { name: "Adaptive DRC", type: "string", role: "state", read: true, write: true },
     statusField: "adaptiveDrc",
     toInner: (value) => `<Sound_Video><Adaptive_DRC>${String(value)}</Adaptive_DRC></Sound_Video>`
@@ -89,7 +89,7 @@ const XML_AMP_CATALOG = [
   {
     // Read-only: openHAB reads the Dialogue_Lvl path, but the write value structure
     // (Val/Exp/Unit vs bare) is not confirmed by a reference, so no write is offered.
-    state: "dialogueLevel",
+    state: "sound.dialogueLevel",
     common: { name: "Dialogue level", type: "number", role: "value", read: true, write: false },
     statusField: "dialogueLevel"
   },
@@ -103,37 +103,37 @@ const XML_AMP_CATALOG = [
   // adapter (yamaha-nodejs-soef) on real pre-2010 devices, and dropped in the rewrite.
   // Values verified against that library's PUT paths (audit findings F3/F4).
   {
-    state: "bass",
+    state: "sound.bass",
     common: { name: "Bass", type: "number", role: "level", read: true, write: true, unit: "dB" },
     statusField: "bass",
     toInner: (value) => `<Sound_Video><Tone><Bass><Val>${Number(value)}</Val><Exp>1</Exp><Unit>dB</Unit></Bass></Tone></Sound_Video>`
   },
   {
-    state: "treble",
+    state: "sound.treble",
     common: { name: "Treble", type: "number", role: "level", read: true, write: true, unit: "dB" },
     statusField: "treble",
     toInner: (value) => `<Sound_Video><Tone><Treble><Val>${Number(value)}</Val><Exp>1</Exp><Unit>dB</Unit></Treble></Tone></Sound_Video>`
   },
   {
-    state: "subwooferTrim",
+    state: "sound.subwooferTrim",
     common: { name: "Subwoofer trim", type: "number", role: "level", read: true, write: true, unit: "dB" },
     statusField: "subwooferTrim",
     toInner: (value) => `<Volume><Subwoofer_Trim><Val>${Number(value)}</Val><Exp>1</Exp><Unit>dB</Unit></Subwoofer_Trim></Volume>`
   },
   {
-    state: "extraBass",
+    state: "sound.extraBass",
     common: { name: "Extra Bass", type: "boolean", role: "switch", read: true, write: true },
     statusField: "extraBass",
     toInner: (value) => `<Sound_Video><Extra_Bass>${value ? "Auto" : "Off"}</Extra_Bass></Sound_Video>`
   },
   {
-    state: "ypaoVolume",
+    state: "sound.ypaoVolume",
     common: { name: "YPAO Volume", type: "boolean", role: "switch", read: true, write: true },
     statusField: "ypaoVolume",
     toInner: (value) => `<Sound_Video><YPAO_Volume>${value ? "Auto" : "Off"}</YPAO_Volume></Sound_Video>`
   },
   {
-    state: "dialogueLift",
+    state: "sound.dialogueLift",
     common: { name: "Dialogue lift", type: "number", role: "level", read: true, write: true },
     statusField: "dialogueLift",
     toInner: (value) => `<Sound_Video><Dialogue_Adjust><Dialogue_Lift>${Number(value)}</Dialogue_Lift></Dialogue_Adjust></Sound_Video>`

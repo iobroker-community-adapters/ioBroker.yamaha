@@ -184,6 +184,46 @@ export const RENAMED_CHANNELS = [
   "cd",
   "dab",
   "dist",
+  // Sound/Advanced regroup: DSP/tone-tuning states moved under sound.*, setup-only states
+  // (+ the speakers/initialVolume/inputNames subtrees, already dotted before) under advanced.*.
+  // {@link renamedObjectIds} also checks these against a stripped zone2/3/4 prefix, so one
+  // entry here catches a MAIN state and its zoned copies (e.g. "straight" and "zone2.straight").
+  "straight",
+  "enhancer",
+  "pureDirect",
+  "direct",
+  "adaptiveDrc",
+  "surroundAI",
+  "surroundDecoder",
+  "cinemaDsp3d",
+  "extraBass",
+  "bass",
+  "treble",
+  "subwooferTrim",
+  "balance",
+  "dialogueLevel",
+  "dialogueLift",
+  "dtsDialogueControl",
+  "monaural",
+  "surround3d",
+  "adaptiveDspLevel",
+  "audioSelect",
+  "linkControl",
+  "linkAudioDelay",
+  "linkAudioQuality",
+  "contentsDisplay",
+  "equalizerLow",
+  "equalizerMid",
+  "equalizerHigh",
+  "clearVoice",
+  "bassExtension",
+  "ypaoVolume",
+  "maxVolume",
+  "speakerA",
+  "speakerB",
+  "speakers",
+  "initialVolume",
+  "inputNames",
 ];
 
 /**
@@ -205,8 +245,14 @@ export function renamedObjectIds(existing: string[], deviceIds: Set<string>, nam
         continue;
       }
       const rel = full.slice(base.length);
-      const renamedState = RENAMED_STATE_IDS.includes(rel);
-      const underRenamedChannel = RENAMED_CHANNELS.some(ch => rel === ch || rel.startsWith(`${ch}.`));
+      // Strip an optional zone2/3/4 prefix before matching too, so one RENAMED_CHANNELS entry
+      // (e.g. "straight") catches both the MAIN state and its zoned copies ("zone2.straight").
+      const zone = /^zone[234]\./.exec(rel)?.[0] ?? "";
+      const template = rel.slice(zone.length);
+      const renamedState = RENAMED_STATE_IDS.includes(rel) || RENAMED_STATE_IDS.includes(template);
+      const underRenamedChannel = RENAMED_CHANNELS.some(
+        ch => rel === ch || rel.startsWith(`${ch}.`) || template === ch || template.startsWith(`${ch}.`),
+      );
       if (renamedState || underRenamedChannel) {
         stale.push(full);
       }

@@ -196,4 +196,32 @@ describe("renamedObjectIds", () => {
   test("returns nothing when the old renamed state is absent", () => {
     expect(renamedObjectIds(["yamaha.0.living.info.model"], new Set(["living"]), "yamaha.0")).toEqual([]);
   });
+
+  test("prunes the old bare sound/advanced states, on MAIN and on a zoned copy alike", () => {
+    const existing = [
+      "yamaha.0.living.enhancer", // old bare MAIN state → gone (now sound.enhancer)
+      "yamaha.0.living.zone2.enhancer", // old bare zoned state → gone (now zone2.sound.enhancer)
+      "yamaha.0.living.maxVolume", // old bare state → gone (now advanced.maxVolume)
+      "yamaha.0.living.speakers.pattern", // old subtree → gone (now advanced.speakers.pattern)
+      "yamaha.0.living.sound.enhancer", // new grouped id → kept
+      "yamaha.0.living.zone2.sound.enhancer", // new grouped zoned id → kept
+      "yamaha.0.living.advanced.maxVolume", // new grouped id → kept
+      "yamaha.0.living.advanced.speakers.pattern", // new grouped id → kept
+      "yamaha.0.living.zone2.volume", // unaffected zoned amp core → kept
+    ];
+    const result = renamedObjectIds(existing, new Set(["living"]), "yamaha.0");
+    expect(result).toEqual(
+      expect.arrayContaining([
+        "yamaha.0.living.enhancer",
+        "yamaha.0.living.zone2.enhancer",
+        "yamaha.0.living.maxVolume",
+        "yamaha.0.living.speakers.pattern",
+      ]),
+    );
+    expect(result).not.toContain("yamaha.0.living.sound.enhancer");
+    expect(result).not.toContain("yamaha.0.living.zone2.sound.enhancer");
+    expect(result).not.toContain("yamaha.0.living.advanced.maxVolume");
+    expect(result).not.toContain("yamaha.0.living.advanced.speakers.pattern");
+    expect(result).not.toContain("yamaha.0.living.zone2.volume");
+  });
 });

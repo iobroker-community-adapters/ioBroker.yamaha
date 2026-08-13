@@ -31,12 +31,12 @@ describe("mapYxcToObjects", () => {
 
   test("equalizer bands are writable when the device reports an equalizer", () => {
     const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power", "equalizer"], inputs: [] }], media: [] });
-    const low = objs.find(o => o.id === "equalizerLow");
+    const low = objs.find(o => o.id === "sound.equalizerLow");
     expect(low?.common.write).toBe(true);
     // A writable number is `level`, not the read-only `value`.
     expect(low?.common.role).toBe("level");
-    expect(objs.find(o => o.id === "equalizerMid")?.common.write).toBe(true);
-    expect(objs.find(o => o.id === "equalizerHigh")?.common.write).toBe(true);
+    expect(objs.find(o => o.id === "sound.equalizerMid")?.common.write).toBe(true);
+    expect(objs.find(o => o.id === "sound.equalizerHigh")?.common.write).toBe(true);
   });
 
   test("a device reporting a distribution block gets the read-only multiroom channel", () => {
@@ -129,7 +129,7 @@ describe("mapYxcToObjects", () => {
   test("always-present amp fields (max volume, input text) are created for an active zone", () => {
     const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: [] });
     const ids = objs.map(o => o.id);
-    expect(ids).toContain("maxVolume");
+    expect(ids).toContain("advanced.maxVolume");
     expect(ids).toContain("inputText");
     expect(ids).toContain("distributionEnable");
   });

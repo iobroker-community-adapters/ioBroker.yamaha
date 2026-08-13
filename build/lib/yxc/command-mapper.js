@@ -61,7 +61,11 @@ const TOGGLE_ACTIONS = {
   "player.cd.shuffleToggle": "toggleCDShuffle",
   "player.cd.tray": "toggleTray"
 };
-const EQ_CHANNELS = { equalizerLow: "Low", equalizerMid: "Mid", equalizerHigh: "High" };
+const EQ_CHANNELS = {
+  "sound.equalizerLow": "Low",
+  "sound.equalizerMid": "Mid",
+  "sound.equalizerHigh": "High"
+};
 const ZONE_PREFIX = { main: "", zone2: "zone2.", zone3: "zone3.", zone4: "zone4." };
 function parseYxcStatus(zoneStatus, zone) {
   if (typeof zoneStatus !== "object" || zoneStatus === null) {
@@ -105,13 +109,10 @@ function stateToYxc(stateId, value) {
   }
   let zone = "main";
   let name = stateId;
-  const dot = stateId.indexOf(".");
-  if (dot > 0) {
-    zone = stateId.slice(0, dot);
-    name = stateId.slice(dot + 1);
-    if (ZONE_PREFIX[zone] === void 0 || zone === "main") {
-      return void 0;
-    }
+  const zoneMatch = /^(zone[234])\.(.+)$/.exec(stateId);
+  if (zoneMatch) {
+    zone = zoneMatch[1];
+    name = zoneMatch[2];
   }
   const eqBand = EQ_CHANNELS[name];
   if (eqBand && (0, import_value_coerce.isWritableValue)(value, true)) {

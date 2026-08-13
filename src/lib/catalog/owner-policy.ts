@@ -18,10 +18,10 @@ const OWNER_OVERRIDES: Record<string, readonly Transport[]> = {
   // §3a scale conflict — YXC volume is the raw 0..161 device scale, YNCA/XML are dB. Keep dB.
   volume: ["ynca", "xml", "yxc"],
   // §3c write loss — YXC is read-only for these, YNCA (and often XML) is writable.
-  maxVolume: ["ynca", "xml", "yxc"],
-  extraBass: ["ynca", "xml", "yxc"],
-  adaptiveDrc: ["ynca", "xml", "yxc"],
-  surroundDecoder: ["ynca", "yxc"],
+  "advanced.maxVolume": ["ynca", "xml", "yxc"],
+  "sound.extraBass": ["ynca", "xml", "yxc"],
+  "sound.adaptiveDrc": ["ynca", "xml", "yxc"],
+  "sound.surroundDecoder": ["ynca", "yxc"],
   "media.playback": ["ynca", "yxc"],
   "media.repeat": ["ynca", "yxc"],
   "media.shuffle": ["ynca", "yxc"],
@@ -38,8 +38,7 @@ const OWNER_OVERRIDES: Record<string, readonly Transport[]> = {
  * transports not listed already use the canonical id. Zone prefixes are stripped separately.
  */
 const ID_DRIFT: Partial<Record<Transport, Readonly<Record<string, string>>>> = {
-  ynca: { "sound.bass": "bass", "sound.treble": "treble" },
-  yxc: { subwooferVolume: "subwooferTrim", partyEnable: "party" },
+  yxc: { subwooferVolume: "sound.subwooferTrim", partyEnable: "party" },
   xml: { hdmiOut1: "hdmi.out1", hdmiOut2: "hdmi.out2" },
 };
 

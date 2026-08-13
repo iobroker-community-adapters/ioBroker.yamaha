@@ -322,7 +322,7 @@ class YxcDeviceController {
     var _a, _b, _c, _d;
     const prefix = zone === "main" ? "" : `${zone}.`;
     const band = (b) => {
-      const u = updates.find((x) => x.id === `${prefix}equalizer${b}`);
+      const u = updates.find((x) => x.id === `${prefix}sound.equalizer${b}`);
       return typeof (u == null ? void 0 : u.value) === "number" ? u.value : void 0;
     };
     if (band("Low") === void 0 && band("Mid") === void 0 && band("High") === void 0) {

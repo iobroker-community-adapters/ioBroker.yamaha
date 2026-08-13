@@ -9,14 +9,15 @@ describe("TransportConnectionAdapter", () => {
   test("collects the controller's objects canonicalized, seeds only owned, routes writes back", async () => {
     const acks: Array<{ id: string; value: unknown }> = [];
     const writes: Array<{ fullId: string; ack: boolean; value: unknown }> = [];
-    const adapter = new TransportConnectionAdapter("ynca", "living", (id, value) => acks.push({ id, value }));
+    const adapter = new TransportConnectionAdapter("yxc", "living", (id, value) => acks.push({ id, value }));
 
     // A fake controller built with the adapter's intercept deps — start() upserts + seeds through them.
+    // subwooferVolume is YXC's own id, drifted to the canonical "sound.subwooferTrim".
     const controller: AdaptedController = {
       start: async () => {
-        await adapter.interceptUpsert("living.sound.bass", st("sound.bass"));
+        await adapter.interceptUpsert("living.subwooferVolume", st("subwooferVolume"));
         await adapter.interceptUpsert("living.volume", st("volume"));
-        adapter.interceptSetStateAck("living.sound.bass", 3);
+        adapter.interceptSetStateAck("living.subwooferVolume", 3);
         adapter.interceptSetStateAck("living.volume", -30);
         return true;
       },
@@ -27,14 +28,14 @@ describe("TransportConnectionAdapter", () => {
     adapter.bind(controller);
 
     expect(await adapter.connect()).toBe(true);
-    // objects come back canonicalized: YNCA sound.bass → bass
-    expect(adapter.buildObjects().map(o => o.id)).toEqual(["bass", "volume"]);
+    // objects come back canonicalized: YXC subwooferVolume → sound.subwooferTrim
+    expect(adapter.buildObjects().map(o => o.id)).toEqual(["sound.subwooferTrim", "volume"]);
     // seedOwned writes only the owned ids, under the device path
     adapter.seedOwned(new Set(["volume"]));
     expect(acks).toEqual([{ id: "living.volume", value: -30 }]);
-    // handleWrite maps the canonical id back to the controller's own id (bass → sound.bass)
-    adapter.handleWrite("bass", false, 5);
-    expect(writes).toContainEqual({ fullId: "living.sound.bass", ack: false, value: 5 });
+    // handleWrite maps the canonical id back to the controller's own id (sound.subwooferTrim → subwooferVolume)
+    adapter.handleWrite("sound.subwooferTrim", false, 5);
+    expect(writes).toContainEqual({ fullId: "living.subwooferVolume", ack: false, value: 5 });
   });
 
   test("after seedOwned, later pushes are filtered live (only owned reach the adapter's setStateAck)", async () => {

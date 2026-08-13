@@ -21,6 +21,12 @@ describe("groupOf", () => {
     expect(groupOf("zone4.power")).toBe("zones");
   });
 
+  it("maps the bare zone2/3/4 channel object itself to zones (not just its dotted children)", () => {
+    expect(groupOf("zone2")).toBe("zones");
+    expect(groupOf("zone3")).toBe("zones");
+    expect(groupOf("zone4")).toBe("zones");
+  });
+
   it("maps dist/multiroom, hdmi and scene", () => {
     expect(groupOf("dist.groupName")).toBe("multiroom");
     expect(groupOf("multiroom.groupName")).toBe("multiroom");
@@ -38,31 +44,33 @@ describe("groupOf", () => {
     expect(groupOf("inputText")).toBe("amp");
   });
 
-  it("maps sound-processing and tone-tuning ids (bare and sound.*-prefixed) to the sound group", () => {
-    // bare canonical ids (ynca's own "sound.bass"/"sound.treble" drift to these via owner-policy)
-    expect(groupOf("bass")).toBe("sound");
-    expect(groupOf("treble")).toBe("sound");
-    expect(groupOf("straight")).toBe("sound");
-    expect(groupOf("enhancer")).toBe("sound");
-    expect(groupOf("pureDirect")).toBe("sound");
-    expect(groupOf("adaptiveDrc")).toBe("sound");
-    expect(groupOf("surroundDecoder")).toBe("sound");
-    expect(groupOf("extraBass")).toBe("sound");
-    expect(groupOf("subwooferTrim")).toBe("sound");
-    expect(groupOf("balance")).toBe("sound");
-    expect(groupOf("equalizerLow")).toBe("sound");
-    // sound.* prefix (headphone bass/treble keep their channel, unlike bass/treble)
+  it("maps every sound-processing and tone-tuning id — all now real sound.* ids, no bare exceptions", () => {
     expect(groupOf("sound.bass")).toBe("sound");
+    expect(groupOf("sound.treble")).toBe("sound");
+    expect(groupOf("sound.straight")).toBe("sound");
+    expect(groupOf("sound.enhancer")).toBe("sound");
+    expect(groupOf("sound.pureDirect")).toBe("sound");
+    expect(groupOf("sound.adaptiveDrc")).toBe("sound");
+    expect(groupOf("sound.surroundDecoder")).toBe("sound");
+    expect(groupOf("sound.extraBass")).toBe("sound");
+    expect(groupOf("sound.subwooferTrim")).toBe("sound");
+    expect(groupOf("sound.balance")).toBe("sound");
+    expect(groupOf("sound.equalizerLow")).toBe("sound");
+    expect(groupOf("sound.clearVoice")).toBe("sound");
+    expect(groupOf("sound.bassExtension")).toBe("sound");
+    expect(groupOf("sound.ypaoVolume")).toBe("sound");
     expect(groupOf("sound.headphoneBass")).toBe("sound");
+    // a zone's own sound items nest the same way — sound wins over zones, like hdmi does
+    expect(groupOf("zone2.sound.enhancer")).toBe("sound");
   });
 
-  it("maps setup/config ids to the advanced group", () => {
-    expect(groupOf("maxVolume")).toBe("advanced");
-    expect(groupOf("speakerA")).toBe("advanced");
-    expect(groupOf("speakerB")).toBe("advanced");
-    expect(groupOf("initialVolume.mode")).toBe("advanced");
-    expect(groupOf("speakers.pattern")).toBe("advanced");
-    expect(groupOf("inputNames.hdmi1")).toBe("advanced");
+  it("maps every setup/config id to the advanced group — all now real advanced.* ids", () => {
+    expect(groupOf("advanced.maxVolume")).toBe("advanced");
+    expect(groupOf("advanced.speakerA")).toBe("advanced");
+    expect(groupOf("advanced.speakerB")).toBe("advanced");
+    expect(groupOf("advanced.initialVolume.mode")).toBe("advanced");
+    expect(groupOf("advanced.speakers.pattern")).toBe("advanced");
+    expect(groupOf("advanced.inputNames.hdmi1")).toBe("advanced");
   });
 
   it("maps Zone B and the all-zones power switch to the zones group (not the always-on core)", () => {
@@ -100,7 +108,7 @@ describe("isGroupEnabled", () => {
 
   it("turns the sound and advanced groups off like any other switchable group", () => {
     expect(isGroupEnabled("sound.bass", { group_sound: false })).toBe(false);
-    expect(isGroupEnabled("maxVolume", { group_advanced: false })).toBe(false);
+    expect(isGroupEnabled("advanced.maxVolume", { group_advanced: false })).toBe(false);
     expect(isGroupEnabled("sound.bass", {})).toBe(true);
   });
 

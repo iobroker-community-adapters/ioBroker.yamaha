@@ -5,9 +5,11 @@
  * are pruned, the same way beszel gates its metric categories. `amp` is the always-on core — no
  * switch exists for it, exactly like beszel's unconditional `info.online`/`info.status`.
  *
- * `groupOf` recognises both today's flat channels (`spotify`, `dist`, `dab`) and the grouped
- * form the restructure introduces (`player.spotify`, `multiroom`, `tuner.dab`), so the switches
- * work before and after the tree is regrouped.
+ * Every group is a real channel prefix in the tree (`player.*`, `tuner.*`, `hdmi.*`,
+ * `multiroom.*`, `scene.*`, `sound.*`, `advanced.*`) — the toggle and the folder a datapoint
+ * visually sits in are the same thing, never decoupled. `groupOf` also recognises the handful of
+ * legacy flat player-source channel names (`spotify`, `netRadio`, …) kept for pre-v0.15.0
+ * upgraders whose objects have not been pruned/recreated yet.
  */
 
 /** The switchable groups. `amp` is the amplifier core and can never be turned off. */
@@ -27,7 +29,9 @@ export const SWITCHABLE_GROUPS: readonly GroupId[] = [
 
 /**
  * The player-source channels (YNCA sources + YXC netusb/cd), collected under the "player" group.
- * These are the ~18 near-identical media sources that make the flat tree hard to read.
+ * These are the ~18 near-identical media sources that made the flat tree hard to read before the
+ * v0.15.0 regroup; kept here only so an un-migrated pre-v0.15.0 object still resolves correctly
+ * until it is pruned.
  */
 const PLAYER_CHANNELS = new Set<string>([
   "netRadio",
@@ -51,54 +55,22 @@ const PLAYER_CHANNELS = new Set<string>([
 ]);
 
 /**
- * The sound-processing and tone-tuning ids that are bare (no shared prefix segment) in the
- * canonical tree — the ID_DRIFT-resolved `bass`/`treble` included, since owner-policy strips
- * their `sound.` prefix. `sound.headphoneBass`/`sound.headphoneTreble` keep their prefix and are
- * matched by the `sound` segment check instead.
- */
-const SOUND_IDS = new Set<string>([
-  "bass",
-  "treble",
-  "straight",
-  "enhancer",
-  "pureDirect",
-  "direct",
-  "adaptiveDrc",
-  "surroundAI",
-  "surroundDecoder",
-  "cinemaDsp3d",
-  "extraBass",
-  "subwooferTrim",
-  "balance",
-  "dialogueLevel",
-  "dialogueLift",
-  "dtsDialogueControl",
-  "monaural",
-  "surround3d",
-  "adaptiveDspLevel",
-  "audioSelect",
-  "linkControl",
-  "linkAudioDelay",
-  "linkAudioQuality",
-  "contentsDisplay",
-  "equalizerLow",
-  "equalizerMid",
-  "equalizerHigh",
-]);
-
-/** The bare setup/configuration ids — one-time-setup datapoints, not everyday zone controls. */
-const ADVANCED_IDS = new Set<string>(["maxVolume", "speakerA", "speakerB"]);
-
-/**
  * The datapoint group a state id belongs to, decided by its (zone-stripped) first path segment.
- * HDMI routing and lip-sync are an HDMI concern on every zone, so they are matched before the
- * zone check strips them into the `zones` group. Anything not matched — the amplifier core
- * (power, volume, input, sleep …), `info.*` — is the always-on `amp` group.
+ * HDMI routing and lip-sync, and the sound/advanced buckets, are topic concerns on every zone —
+ * every catalog gives them a `sound.`/`advanced.`/`hdmi.` id regardless of which zone they're on,
+ * so they are matched before the zone check would otherwise fold them into the `zones` group. A
+ * bare `zone2`/`zone3`/`zone4` (the zone's own channel object, no further segment) is matched
+ * directly — it never reaches the zone-prefix strip below, which only fires on a *dotted* child
+ * id. Anything not matched — the amplifier core (power, volume, input, sleep …), `info.*` — is
+ * the always-on `amp` group.
  *
  * @param stateId the device-relative state id (e.g. "spotify.playback", "player.spotify.playback")
  * @returns the group the state belongs to
  */
 export function groupOf(stateId: string): GroupId {
+  if (stateId === "zone2" || stateId === "zone3" || stateId === "zone4") {
+    return "zones";
+  }
   const zone = /^zone[234]\./.exec(stateId)?.[0] ?? "";
   const rest = stateId.slice(zone.length);
   const seg = rest.includes(".") ? rest.slice(0, rest.indexOf(".")) : rest;
@@ -112,6 +84,12 @@ export function groupOf(stateId: string): GroupId {
   if (seg === "tuner" || seg === "dab") {
     return "tuner";
   }
+  if (seg === "sound") {
+    return "sound";
+  }
+  if (seg === "advanced") {
+    return "advanced";
+  }
   if (zone || seg === "zoneB" || seg === "masterPower") {
     return "zones";
   }
@@ -120,12 +98,6 @@ export function groupOf(stateId: string): GroupId {
   }
   if (seg === "scene") {
     return "scene";
-  }
-  if (seg === "sound" || SOUND_IDS.has(seg)) {
-    return "sound";
-  }
-  if (seg === "initialVolume" || seg === "speakers" || seg === "inputNames" || ADVANCED_IDS.has(seg)) {
-    return "advanced";
   }
   return "amp";
 }

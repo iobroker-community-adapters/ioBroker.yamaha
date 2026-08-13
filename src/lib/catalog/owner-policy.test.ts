@@ -23,8 +23,8 @@ describe("pickOwner — which transport owns a shared capability", () => {
   });
 
   test("write-loss keys stay with YNCA where YXC is read-only (census §3c)", () => {
-    expect(pickOwner("maxVolume", ["yxc", "ynca"])).toBe("ynca");
-    expect(pickOwner("extraBass", ["yxc", "ynca"])).toBe("ynca");
+    expect(pickOwner("advanced.maxVolume", ["yxc", "ynca"])).toBe("ynca");
+    expect(pickOwner("sound.extraBass", ["yxc", "ynca"])).toBe("ynca");
     expect(pickOwner("media.playback", ["yxc", "ynca"])).toBe("ynca");
   });
 
@@ -64,9 +64,11 @@ describe("resolveOwnership — the owner map across all offered transports", () 
 
 describe("capabilityKeyOf — the transport-neutral key from a transport's state id", () => {
   test("maps the known id drifts to the canonical key (census §3f, verified)", () => {
-    expect(capabilityKeyOf("ynca", "sound.bass")).toBe("bass");
-    expect(capabilityKeyOf("ynca", "sound.treble")).toBe("treble");
-    expect(capabilityKeyOf("yxc", "subwooferVolume")).toBe("subwooferTrim");
+    // ynca's own "sound.bass"/"sound.treble" already match the canonical sound.* id — no
+    // drift needed since the catalog rename (XML/YXC now natively use "sound.bass" too).
+    expect(capabilityKeyOf("ynca", "sound.bass")).toBe("sound.bass");
+    expect(capabilityKeyOf("ynca", "sound.treble")).toBe("sound.treble");
+    expect(capabilityKeyOf("yxc", "subwooferVolume")).toBe("sound.subwooferTrim");
     expect(capabilityKeyOf("yxc", "partyEnable")).toBe("party");
     expect(capabilityKeyOf("xml", "hdmiOut1")).toBe("hdmi.out1");
     expect(capabilityKeyOf("xml", "hdmiOut2")).toBe("hdmi.out2");
@@ -75,20 +77,20 @@ describe("capabilityKeyOf — the transport-neutral key from a transport's state
   test("strips a zone prefix to the template key, then applies the drift", () => {
     expect(capabilityKeyOf("ynca", "zone2.volume")).toBe("volume");
     expect(capabilityKeyOf("yxc", "zone3.power")).toBe("power");
-    expect(capabilityKeyOf("ynca", "zone2.sound.bass")).toBe("bass");
+    expect(capabilityKeyOf("ynca", "zone2.sound.bass")).toBe("sound.bass");
   });
 
   test("an already-canonical id passes through unchanged", () => {
     expect(capabilityKeyOf("yxc", "power")).toBe("power");
     expect(capabilityKeyOf("yxc", "dist.role")).toBe("dist.role");
-    expect(capabilityKeyOf("xml", "bass")).toBe("bass");
+    expect(capabilityKeyOf("xml", "sound.bass")).toBe("sound.bass");
   });
 });
 
 describe("canonicalIdOf — the drift-resolved object id, zone prefix kept", () => {
   test("resolves the drift but keeps the zone prefix (the per-zone tree node)", () => {
-    expect(canonicalIdOf("ynca", "sound.bass")).toBe("bass");
-    expect(canonicalIdOf("ynca", "zone2.sound.bass")).toBe("zone2.bass");
+    expect(canonicalIdOf("ynca", "sound.bass")).toBe("sound.bass");
+    expect(canonicalIdOf("ynca", "zone2.sound.bass")).toBe("zone2.sound.bass");
     expect(canonicalIdOf("yxc", "partyEnable")).toBe("party");
     expect(canonicalIdOf("xml", "hdmiOut1")).toBe("hdmi.out1");
   });

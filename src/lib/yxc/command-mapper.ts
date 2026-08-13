@@ -65,7 +65,11 @@ const TOGGLE_ACTIONS: Record<string, string> = {
 };
 
 /** Equalizer band state (without zone prefix) → the band suffix of its setEqualizer<Band> method. */
-const EQ_CHANNELS: Record<string, string> = { equalizerLow: "Low", equalizerMid: "Mid", equalizerHigh: "High" };
+const EQ_CHANNELS: Record<string, string> = {
+  "sound.equalizerLow": "Low",
+  "sound.equalizerMid": "Mid",
+  "sound.equalizerHigh": "High",
+};
 
 const ZONE_PREFIX: Record<string, string> = { main: "", zone2: "zone2.", zone3: "zone3.", zone4: "zone4." };
 
@@ -128,15 +132,15 @@ export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefi
   if (stateId === "player.netPlayer.preset" && isWritableValue(value, true)) {
     return { method: "recallPreset", zone: "netusb", value: Number(value) };
   }
+  // Only zone2/3/4 are an actual zone prefix — "sound."/"advanced." (and any future topic
+  // prefix) are part of the state's own id, not a zone, so they must stay in `name` whole
+  // (e.g. "sound.bass" on main, "zone2.sound.equalizerLow" zoned).
   let zone = "main";
   let name = stateId;
-  const dot = stateId.indexOf(".");
-  if (dot > 0) {
-    zone = stateId.slice(0, dot);
-    name = stateId.slice(dot + 1);
-    if (ZONE_PREFIX[zone] === undefined || zone === "main") {
-      return undefined;
-    }
+  const zoneMatch = /^(zone[234])\.(.+)$/.exec(stateId);
+  if (zoneMatch) {
+    zone = zoneMatch[1];
+    name = zoneMatch[2];
   }
   const eqBand = EQ_CHANNELS[name];
   if (eqBand && isWritableValue(value, true)) {

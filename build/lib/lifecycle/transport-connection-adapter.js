@@ -23,8 +23,7 @@ __export(transport_connection_adapter_exports, {
 module.exports = __toCommonJS(transport_connection_adapter_exports);
 var import_owner_policy = require("../catalog/owner-policy");
 const INVERSE_DRIFT = {
-  ynca: { bass: "sound.bass", treble: "sound.treble" },
-  yxc: { subwooferTrim: "subwooferVolume", party: "partyEnable" },
+  yxc: { "sound.subwooferTrim": "subwooferVolume", party: "partyEnable" },
   xml: { "hdmi.out1": "hdmiOut1", "hdmi.out2": "hdmiOut2" }
 };
 class TransportConnectionAdapter {

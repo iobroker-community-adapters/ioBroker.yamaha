@@ -35,34 +35,34 @@ describe("stateToXml", () => {
   });
 
   test("maps straight and direct to their Surround/Sound_Video commands", () => {
-    expect(stateToXml("straight", true)).toEqual({
+    expect(stateToXml("sound.straight", true)).toEqual({
       zone: "Main_Zone",
       inner: "<Surround><Program_Sel><Current><Straight>On</Straight></Current></Program_Sel></Surround>",
     });
-    expect(stateToXml("direct", false)).toEqual({
+    expect(stateToXml("sound.direct", false)).toEqual({
       zone: "Main_Zone",
       inner: "<Sound_Video><Direct><Mode>Off</Mode></Direct></Sound_Video>",
     });
   });
 
   test("dialogue level is read-only — no write command", () => {
-    expect(stateToXml("dialogueLevel", 2)).toBeUndefined();
+    expect(stateToXml("sound.dialogueLevel", 2)).toBeUndefined();
   });
 
   test("maps tone, subwoofer trim and extra-bass/YPAO writes (soef lib paths)", () => {
-    expect(stateToXml("bass", 3)).toEqual({
+    expect(stateToXml("sound.bass", 3)).toEqual({
       zone: "Main_Zone",
       inner: "<Sound_Video><Tone><Bass><Val>3</Val><Exp>1</Exp><Unit>dB</Unit></Bass></Tone></Sound_Video>",
     });
-    expect(stateToXml("subwooferTrim", -1)).toEqual({
+    expect(stateToXml("sound.subwooferTrim", -1)).toEqual({
       zone: "Main_Zone",
       inner: "<Volume><Subwoofer_Trim><Val>-1</Val><Exp>1</Exp><Unit>dB</Unit></Subwoofer_Trim></Volume>",
     });
-    expect(stateToXml("extraBass", true)).toEqual({
+    expect(stateToXml("sound.extraBass", true)).toEqual({
       zone: "Main_Zone",
       inner: "<Sound_Video><Extra_Bass>Auto</Extra_Bass></Sound_Video>",
     });
-    expect(stateToXml("ypaoVolume", false)).toEqual({
+    expect(stateToXml("sound.ypaoVolume", false)).toEqual({
       zone: "Main_Zone",
       inner: "<Sound_Video><YPAO_Volume>Off</YPAO_Volume></Sound_Video>",
     });
@@ -96,7 +96,7 @@ describe("stateToXml", () => {
   });
 
   test("dialogue lift maps to a Dialogue_Adjust command on its zone", () => {
-    expect(stateToXml("dialogueLift", 3)).toEqual({
+    expect(stateToXml("sound.dialogueLift", 3)).toEqual({
       zone: "Main_Zone",
       inner: "<Sound_Video><Dialogue_Adjust><Dialogue_Lift>3</Dialogue_Lift></Dialogue_Adjust></Sound_Video>",
     });
@@ -126,9 +126,9 @@ describe("parseXmlStatus", () => {
   test("emits straight, direct, adaptive DRC and dialogue level when present", () => {
     const bs: BasicStatus = { straight: true, direct: false, adaptiveDrc: "Auto", dialogueLevel: 2 };
     const u = parseXmlStatus(bs, "main");
-    expect(u).toContainEqual({ id: "straight", value: true });
-    expect(u).toContainEqual({ id: "direct", value: false });
-    expect(u).toContainEqual({ id: "adaptiveDrc", value: "Auto" });
-    expect(u).toContainEqual({ id: "dialogueLevel", value: 2 });
+    expect(u).toContainEqual({ id: "sound.straight", value: true });
+    expect(u).toContainEqual({ id: "sound.direct", value: false });
+    expect(u).toContainEqual({ id: "sound.adaptiveDrc", value: "Auto" });
+    expect(u).toContainEqual({ id: "sound.dialogueLevel", value: 2 });
   });
 });

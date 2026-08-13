@@ -31,6 +31,7 @@ const CHANNEL_NAMES = {
   zoneB: "Zone B",
   // Amplifier groups
   sound: "Sound",
+  advanced: "Advanced",
   hdmi: "HDMI",
   speakers: "Speakers",
   scene: "Scenes",

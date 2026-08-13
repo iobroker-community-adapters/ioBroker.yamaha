@@ -4,8 +4,7 @@ import type { TransportConnection } from "./multi-transport-handle";
 
 /** Inverse of the id drifts: canonical template → the transport's own template (for routing writes back). */
 const INVERSE_DRIFT: Partial<Record<Transport, Readonly<Record<string, string>>>> = {
-  ynca: { bass: "sound.bass", treble: "sound.treble" },
-  yxc: { subwooferTrim: "subwooferVolume", party: "partyEnable" },
+  yxc: { "sound.subwooferTrim": "subwooferVolume", party: "partyEnable" },
   xml: { "hdmi.out1": "hdmiOut1", "hdmi.out2": "hdmiOut2" },
 };
 

@@ -15,13 +15,13 @@ describe("coordinateObjectTree — one unified tree from the transports' catalog
       { transport: "yxc", objects: [state("volume", "Volume raw"), state("dist.role", "Role", { type: "string" })] },
     ]);
     const ids = objects.map(o => o.id);
-    expect(ids).toEqual(expect.arrayContaining(["volume", "bass", "dist.role"]));
+    expect(ids).toEqual(expect.arrayContaining(["volume", "sound.bass", "dist.role"]));
     // volume shared → YNCA owner (dB, not YXC's raw scale)
     expect(objects.filter(o => o.id === "volume").length).toBe(1);
     expect(objects.find(o => o.id === "volume")?.common.name).toBe("Volume dB");
     expect(ownerByCanonicalId.get("volume")).toBe("ynca");
-    // bass drift (YNCA sound.bass) resolved to the canonical id
-    expect(objects.some(o => o.id === "sound.bass")).toBe(false);
+    // sound.bass is YNCA's own id already — no drift needed since the catalog rename
+    expect(objects.some(o => o.id === "bass")).toBe(false);
     // dist.role is YXC-exclusive
     expect(ownerByCanonicalId.get("dist.role")).toBe("yxc");
   });

@@ -53,38 +53,11 @@ const PLAYER_CHANNELS = /* @__PURE__ */ new Set([
   "netPlayer",
   "cd"
 ]);
-const SOUND_IDS = /* @__PURE__ */ new Set([
-  "bass",
-  "treble",
-  "straight",
-  "enhancer",
-  "pureDirect",
-  "direct",
-  "adaptiveDrc",
-  "surroundAI",
-  "surroundDecoder",
-  "cinemaDsp3d",
-  "extraBass",
-  "subwooferTrim",
-  "balance",
-  "dialogueLevel",
-  "dialogueLift",
-  "dtsDialogueControl",
-  "monaural",
-  "surround3d",
-  "adaptiveDspLevel",
-  "audioSelect",
-  "linkControl",
-  "linkAudioDelay",
-  "linkAudioQuality",
-  "contentsDisplay",
-  "equalizerLow",
-  "equalizerMid",
-  "equalizerHigh"
-]);
-const ADVANCED_IDS = /* @__PURE__ */ new Set(["maxVolume", "speakerA", "speakerB"]);
 function groupOf(stateId) {
   var _a, _b;
+  if (stateId === "zone2" || stateId === "zone3" || stateId === "zone4") {
+    return "zones";
+  }
   const zone = (_b = (_a = /^zone[234]\./.exec(stateId)) == null ? void 0 : _a[0]) != null ? _b : "";
   const rest = stateId.slice(zone.length);
   const seg = rest.includes(".") ? rest.slice(0, rest.indexOf(".")) : rest;
@@ -97,6 +70,12 @@ function groupOf(stateId) {
   if (seg === "tuner" || seg === "dab") {
     return "tuner";
   }
+  if (seg === "sound") {
+    return "sound";
+  }
+  if (seg === "advanced") {
+    return "advanced";
+  }
   if (zone || seg === "zoneB" || seg === "masterPower") {
     return "zones";
   }
@@ -105,12 +84,6 @@ function groupOf(stateId) {
   }
   if (seg === "scene") {
     return "scene";
-  }
-  if (seg === "sound" || SOUND_IDS.has(seg)) {
-    return "sound";
-  }
-  if (seg === "initialVolume" || seg === "speakers" || seg === "inputNames" || ADVANCED_IDS.has(seg)) {
-    return "advanced";
   }
   return "amp";
 }

@@ -336,7 +336,7 @@ describe("YxcDeviceController", () => {
     const s = setup(features, status);
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleStateChange("living.equalizerLow", false, 7);
+    s.controller.handleStateChange("living.sound.equalizerLow", false, 7);
     await flush();
     // low from the write, mid/high from the cached status, on the main zone.
     expect(s.client.calls).toContainEqual({ method: "setEqualizer", args: [7, 2, 3, "main"] });

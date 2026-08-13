@@ -33,16 +33,19 @@ describe("YNCA catalog", () => {
 
   test("extra bass is an on/off boolean (Auto/Off) on every zone", () => {
     const cat = buildYncaCatalog();
-    expect(cat.find(e => e.id === "extraBass")).toMatchObject({ subunit: "MAIN", func: "EXBASS" });
-    expect(cat.find(e => e.id === "extraBass")?.spec).toEqual({ kind: "onoff", on: "Auto", off: "Off" });
-    expect(cat.find(e => e.id === "zone2.extraBass")).toMatchObject({ subunit: "ZONE2", func: "EXBASS" });
+    expect(cat.find(e => e.id === "sound.extraBass")).toMatchObject({ subunit: "MAIN", func: "EXBASS" });
+    expect(cat.find(e => e.id === "sound.extraBass")?.spec).toEqual({ kind: "onoff", on: "Auto", off: "Off" });
+    expect(cat.find(e => e.id === "zone2.sound.extraBass")).toMatchObject({ subunit: "ZONE2", func: "EXBASS" });
   });
 
   test("max volume and initial volume level are numbers with a dB unit", () => {
     const cat = buildYncaCatalog();
-    expect(cat.find(e => e.id === "maxVolume")).toMatchObject({ subunit: "MAIN", func: "MAXVOL" });
-    expect(cat.find(e => e.id === "maxVolume")?.spec).toMatchObject({ kind: "number", unit: "dB" });
-    expect(cat.find(e => e.id === "initialVolume.level")?.spec).toMatchObject({ kind: "number", unit: "dB" });
+    expect(cat.find(e => e.id === "advanced.maxVolume")).toMatchObject({ subunit: "MAIN", func: "MAXVOL" });
+    expect(cat.find(e => e.id === "advanced.maxVolume")?.spec).toMatchObject({ kind: "number", unit: "dB" });
+    expect(cat.find(e => e.id === "advanced.initialVolume.level")?.spec).toMatchObject({
+      kind: "number",
+      unit: "dB",
+    });
   });
 
   test("lip-sync offsets are numbers in ms", () => {
@@ -53,14 +56,17 @@ describe("YNCA catalog", () => {
   });
 
   test("3D Cinema DSP keeps its wire function name 3DCINEMA", () => {
-    expect(buildYncaCatalog().find(e => e.id === "cinemaDsp3d")).toMatchObject({ func: "3DCINEMA", subunit: "MAIN" });
+    expect(buildYncaCatalog().find(e => e.id === "sound.cinemaDsp3d")).toMatchObject({
+      func: "3DCINEMA",
+      subunit: "MAIN",
+    });
   });
 
   test("Zone B and speaker A/B functions exist on MAIN only", () => {
     const cat = buildYncaCatalog();
     expect(cat.find(e => e.id === "zoneB.volume")).toMatchObject({ subunit: "MAIN", func: "ZONEBVOL" });
     expect(cat.find(e => e.id === "zone2.zoneB.volume")).toBeUndefined();
-    expect(cat.find(e => e.id === "speakerA")).toMatchObject({ subunit: "MAIN", func: "SPEAKERA" });
+    expect(cat.find(e => e.id === "advanced.speakerA")).toMatchObject({ subunit: "MAIN", func: "SPEAKERA" });
     expect(cat.find(e => e.id === "zoneB.power")?.spec).toEqual({ kind: "onoff", on: "On", off: "Standby" });
   });
 
@@ -95,17 +101,17 @@ describe("YNCA catalog", () => {
     expect(cat.find(e => e.id === "info.firmware")).toMatchObject({ subunit: "SYS", func: "VERSION", write: false });
     expect(cat.find(e => e.id === "masterPower")?.spec).toEqual({ kind: "onoff", on: "On", off: "Standby" });
     expect(cat.find(e => e.id === "hdmi.out1")?.spec).toEqual({ kind: "onoff", on: "On", off: "Off" });
-    expect(cat.find(e => e.id === "speakers.pattern")?.spec.kind).toBe("enum");
+    expect(cat.find(e => e.id === "advanced.speakers.pattern")?.spec.kind).toBe("enum");
   });
 
   test("all 23 input names are read-only text states on SYS", () => {
     const cat = buildYncaCatalog();
-    expect(cat.find(e => e.id === "inputNames.hdmi1")).toMatchObject({
+    expect(cat.find(e => e.id === "advanced.inputNames.hdmi1")).toMatchObject({
       subunit: "SYS",
       func: "INPNAMEHDMI1",
       write: false,
     });
-    expect(cat.filter(e => e.id.startsWith("inputNames.")).length).toBe(23);
+    expect(cat.filter(e => e.id.startsWith("advanced.inputNames.")).length).toBe(23);
   });
 
   test("the AM/FM tuner is complete: RDS text B, program type and search mode", () => {
@@ -250,7 +256,14 @@ describe("YNCA catalog", () => {
     const cat = buildYncaCatalog();
     const ids = cat.map(e => e.id);
     expect(ids).toEqual(
-      expect.arrayContaining(["sound.bass", "sound.treble", "hdmi.output", "surroundAI", "party", "tuner.band"]),
+      expect.arrayContaining([
+        "sound.bass",
+        "sound.treble",
+        "hdmi.output",
+        "sound.surroundAI",
+        "party",
+        "tuner.band",
+      ]),
     );
     expect(cat.find(e => e.id === "party")).toMatchObject({ subunit: "SYS", func: "PARTY" });
     expect(cat.find(e => e.id === "tuner.band")).toMatchObject({ subunit: "TUN", func: "BAND" });

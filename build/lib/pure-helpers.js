@@ -120,9 +120,50 @@ const RENAMED_CHANNELS = [
   "netPlayer",
   "cd",
   "dab",
-  "dist"
+  "dist",
+  // Sound/Advanced regroup: DSP/tone-tuning states moved under sound.*, setup-only states
+  // (+ the speakers/initialVolume/inputNames subtrees, already dotted before) under advanced.*.
+  // {@link renamedObjectIds} also checks these against a stripped zone2/3/4 prefix, so one
+  // entry here catches a MAIN state and its zoned copies (e.g. "straight" and "zone2.straight").
+  "straight",
+  "enhancer",
+  "pureDirect",
+  "direct",
+  "adaptiveDrc",
+  "surroundAI",
+  "surroundDecoder",
+  "cinemaDsp3d",
+  "extraBass",
+  "bass",
+  "treble",
+  "subwooferTrim",
+  "balance",
+  "dialogueLevel",
+  "dialogueLift",
+  "dtsDialogueControl",
+  "monaural",
+  "surround3d",
+  "adaptiveDspLevel",
+  "audioSelect",
+  "linkControl",
+  "linkAudioDelay",
+  "linkAudioQuality",
+  "contentsDisplay",
+  "equalizerLow",
+  "equalizerMid",
+  "equalizerHigh",
+  "clearVoice",
+  "bassExtension",
+  "ypaoVolume",
+  "maxVolume",
+  "speakerA",
+  "speakerB",
+  "speakers",
+  "initialVolume",
+  "inputNames"
 ];
 function renamedObjectIds(existing, deviceIds, namespace) {
+  var _a, _b;
   const stale = [];
   for (const deviceId of deviceIds) {
     const base = `${namespace}.${deviceId}.`;
@@ -131,8 +172,12 @@ function renamedObjectIds(existing, deviceIds, namespace) {
         continue;
       }
       const rel = full.slice(base.length);
-      const renamedState = RENAMED_STATE_IDS.includes(rel);
-      const underRenamedChannel = RENAMED_CHANNELS.some((ch) => rel === ch || rel.startsWith(`${ch}.`));
+      const zone = (_b = (_a = /^zone[234]\./.exec(rel)) == null ? void 0 : _a[0]) != null ? _b : "";
+      const template = rel.slice(zone.length);
+      const renamedState = RENAMED_STATE_IDS.includes(rel) || RENAMED_STATE_IDS.includes(template);
+      const underRenamedChannel = RENAMED_CHANNELS.some(
+        (ch) => rel === ch || rel.startsWith(`${ch}.`) || template === ch || template.startsWith(`${ch}.`)
+      );
       if (renamedState || underRenamedChannel) {
         stale.push(full);
       }
