@@ -45,6 +45,7 @@ The **Data points** section switches whole groups of datapoints on or off — pl
 
 - New Sound and Advanced datapoint groups, switchable like the others — tone/DSP controls and setup-only datapoints (initial/max volume, input labels) are no longer always on.
 - Zone B, the all-zones power switch, party mode and per-zone HDMI/lip-sync now follow their matching Zones/Multiroom/HDMI toggle instead of always staying on.
+- A receiver that stays offline no longer spams the log — the first drop still warns, repeated retries stay quiet until it reconnects.
 
 ### 0.15.0 (2026-08-13)
 

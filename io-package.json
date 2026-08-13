@@ -4,17 +4,17 @@
     "version": "0.16.0",
     "news": {
       "0.16.0": {
-        "en": "Two more datapoint groups (Sound, Advanced) give finer control; a few misplaced datapoints (e.g. Zone B, party mode) now follow the correct group toggle.",
-        "de": "Zwei weitere Datenpunktgruppen (Klang, Erweitert) für feinere Kontrolle; einige falsch einsortierte Datenpunkte (z. B. Zone B, Party-Modus) folgen jetzt dem richtigen Gruppenschalter.",
-        "ru": "Две новые группы точек данных (Звук, Расширенные) для более точной настройки; несколько неверно отнесённых точек данных (напр. Зона B, режим вечеринки) теперь следуют правильному переключателю группы.",
-        "pt": "Mais dois grupos de pontos de dados (Som, Avançado) para um controlo mais preciso; alguns pontos de dados mal classificados (p. ex. Zona B, modo festa) seguem agora o interruptor de grupo correto.",
-        "nl": "Twee extra datapuntgroepen (Geluid, Geavanceerd) voor fijnere controle; enkele verkeerd ingedeelde datapunten (bijv. Zone B, feestmodus) volgen nu de juiste groepsschakelaar.",
-        "fr": "Deux nouveaux groupes de points de données (Son, Avancé) pour un contrôle plus fin ; quelques points de données mal classés (p. ex. Zone B, mode fête) suivent désormais le bon interrupteur de groupe.",
-        "it": "Due nuovi gruppi di punti dati (Audio, Avanzate) per un controllo più preciso; alcuni punti dati mal classificati (es. Zona B, modalità festa) ora seguono il giusto interruttore di gruppo.",
-        "es": "Dos nuevos grupos de puntos de datos (Sonido, Avanzado) para un control más preciso; algunos puntos de datos mal clasificados (p.ej. Zona B, modo fiesta) ahora siguen el interruptor correcto.",
-        "pl": "Dwie nowe grupy punktów danych (Dźwięk, Zaawansowane) dla dokładniejszej kontroli; kilka źle przypisanych punktów danych (np. Strefa B, tryb imprezowy) podąża teraz za właściwym przełącznikiem grupy.",
-        "uk": "Дві нові групи точок даних (Звук, Розширені) для точнішого керування; кілька неправильно віднесених точок даних (напр. Зона B, режим вечірки) тепер керуються правильним перемикачем групи.",
-        "zh-cn": "新增两个数据点组（音效、高级）以实现更精细的控制；部分归类错误的数据点（如 B 区、聚会模式）现在遵循正确的分组开关。"
+        "en": "New Sound and Advanced datapoint groups for finer control, a few misplaced datapoints fixed, and no more repeated offline-retry warnings.",
+        "de": "Neue Datenpunktgruppen Klang und Erweitert für feinere Kontrolle, einige falsch einsortierte Datenpunkte korrigiert, und keine wiederholten Offline-Warnungen mehr.",
+        "ru": "Новые группы точек данных Звук и Расширенные для более точной настройки, исправлены несколько неверно отнесённых точек данных, и больше нет повторных offline-предупреждений.",
+        "pt": "Novos grupos de pontos de dados Som e Avançado para um controlo mais preciso, alguns pontos de dados mal classificados corrigidos, e sem mais avisos repetidos de offline.",
+        "nl": "Nieuwe datapuntgroepen Geluid en Geavanceerd voor fijnere controle, enkele verkeerd ingedeelde datapunten gecorrigeerd, en geen herhaalde offline-waarschuwingen meer.",
+        "fr": "Nouveaux groupes de points de données Son et Avancé pour un contrôle plus fin, quelques points de données mal classés corrigés, et plus d'avertissements répétés hors ligne.",
+        "it": "Nuovi gruppi di punti dati Audio e Avanzate per un controllo più preciso, corretti alcuni punti dati mal classificati, e niente più avvisi ripetuti offline.",
+        "es": "Nuevos grupos de puntos de datos Sonido y Avanzado para un control más preciso, corregidos algunos puntos de datos mal clasificados, y sin más avisos repetidos sin conexión.",
+        "pl": "Nowe grupy punktów danych Dźwięk i Zaawansowane dla dokładniejszej kontroli, poprawiono kilka źle przypisanych punktów danych, i koniec z powtarzającymi się ostrzeżeniami offline.",
+        "uk": "Нові групи точок даних Звук і Розширені для точнішого керування, виправлено кілька неправильно віднесених точок даних, і більше немає повторних offline-попереджень.",
+        "zh-cn": "新增音效和高级两个数据点组，实现更精细的控制；修正了部分归类错误的数据点；离线警告不再重复出现。"
       },
       "0.15.0": {
         "en": "The object tree is grouped by theme, datapoint groups can be switched off in the admin, and playback now works as a media player.",
