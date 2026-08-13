@@ -23,7 +23,16 @@ __export(groups_exports, {
   isGroupEnabled: () => isGroupEnabled
 });
 module.exports = __toCommonJS(groups_exports);
-const SWITCHABLE_GROUPS = ["player", "tuner", "zones", "multiroom", "hdmi", "scene"];
+const SWITCHABLE_GROUPS = [
+  "player",
+  "tuner",
+  "zones",
+  "multiroom",
+  "hdmi",
+  "scene",
+  "sound",
+  "advanced"
+];
 const PLAYER_CHANNELS = /* @__PURE__ */ new Set([
   "netRadio",
   "server",
@@ -44,25 +53,64 @@ const PLAYER_CHANNELS = /* @__PURE__ */ new Set([
   "netPlayer",
   "cd"
 ]);
+const SOUND_IDS = /* @__PURE__ */ new Set([
+  "bass",
+  "treble",
+  "straight",
+  "enhancer",
+  "pureDirect",
+  "direct",
+  "adaptiveDrc",
+  "surroundAI",
+  "surroundDecoder",
+  "cinemaDsp3d",
+  "extraBass",
+  "subwooferTrim",
+  "balance",
+  "dialogueLevel",
+  "dialogueLift",
+  "dtsDialogueControl",
+  "monaural",
+  "surround3d",
+  "adaptiveDspLevel",
+  "audioSelect",
+  "linkControl",
+  "linkAudioDelay",
+  "linkAudioQuality",
+  "contentsDisplay",
+  "equalizerLow",
+  "equalizerMid",
+  "equalizerHigh"
+]);
+const ADVANCED_IDS = /* @__PURE__ */ new Set(["maxVolume", "speakerA", "speakerB"]);
 function groupOf(stateId) {
-  const seg = stateId.includes(".") ? stateId.slice(0, stateId.indexOf(".")) : stateId;
+  var _a, _b;
+  const zone = (_b = (_a = /^zone[234]\./.exec(stateId)) == null ? void 0 : _a[0]) != null ? _b : "";
+  const rest = stateId.slice(zone.length);
+  const seg = rest.includes(".") ? rest.slice(0, rest.indexOf(".")) : rest;
+  if (seg === "hdmi" || seg === "lipSync") {
+    return "hdmi";
+  }
   if (seg === "player" || PLAYER_CHANNELS.has(seg)) {
     return "player";
   }
   if (seg === "tuner" || seg === "dab") {
     return "tuner";
   }
-  if (seg === "zone2" || seg === "zone3" || seg === "zone4") {
+  if (zone || seg === "zoneB" || seg === "masterPower") {
     return "zones";
   }
-  if (seg === "multiroom" || seg === "dist") {
+  if (seg === "multiroom" || seg === "dist" || seg === "distributionEnable" || seg === "party" || seg === "partyMute") {
     return "multiroom";
-  }
-  if (seg === "hdmi") {
-    return "hdmi";
   }
   if (seg === "scene") {
     return "scene";
+  }
+  if (seg === "sound" || SOUND_IDS.has(seg)) {
+    return "sound";
+  }
+  if (seg === "initialVolume" || seg === "speakers" || seg === "inputNames" || ADVANCED_IDS.has(seg)) {
+    return "advanced";
   }
   return "amp";
 }

@@ -26,11 +26,15 @@
   "group_tuner": "Tuner",
   "group_tuner_help": "FM/DAB, frequentie, RDS",
   "group_zones": "Zones",
-  "group_zones_help": "Zone 2/3/4 elk als eigen versterker",
+  "group_zones_help": "Zone 2/3/4, Zone B en de alle-zones-aan/uit-schakelaar",
   "group_multiroom": "Multiroom",
-  "group_multiroom_help": "MusicCast-groepen: koppelen, verlaten, rol",
+  "group_multiroom_help": "MusicCast-groepen (koppelen, verlaten, rol) en feestmodus",
   "group_hdmi": "HDMI",
-  "group_hdmi_help": "HDMI-uitgangen schakelen",
+  "group_hdmi_help": "HDMI-uitgangen en lip-sync-offset, voor elke zone",
   "group_scene": "Scènes",
-  "group_scene_help": "Opgeslagen scènes oproepen"
+  "group_scene_help": "Opgeslagen scènes oproepen",
+  "group_sound": "Geluid",
+  "group_sound_help": "Geluidsmodi, klankregeling, subwoofer, balans en equalizer",
+  "group_advanced": "Geavanceerd",
+  "group_advanced_help": "Beginvolume, maximumvolume, luidsprekerpatronen en de 23 ingangsnamen"
 }

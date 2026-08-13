@@ -26,11 +26,15 @@
   "group_tuner": "Тюнер",
   "group_tuner_help": "FM/DAB, частота, RDS",
   "group_zones": "Зони",
-  "group_zones_help": "Зони 2/3/4, кожна як власний підсилювач",
+  "group_zones_help": "Зони 2/3/4, Зона B та вимикач живлення всіх зон",
   "group_multiroom": "Multiroom",
-  "group_multiroom_help": "Групи MusicCast: приєднати, вийти, роль",
+  "group_multiroom_help": "Групи MusicCast (приєднати, вийти, роль) та режим вечірки",
   "group_hdmi": "HDMI",
-  "group_hdmi_help": "Перемикання виходів HDMI",
+  "group_hdmi_help": "Виходи HDMI та зсув синхронізації звуку й відео для кожної зони",
   "group_scene": "Сцени",
-  "group_scene_help": "Виклик збережених сцен"
+  "group_scene_help": "Виклик збережених сцен",
+  "group_sound": "Звук",
+  "group_sound_help": "Режими обробки звуку, тембр, сабвуфер, баланс і еквалайзер",
+  "group_advanced": "Розширені",
+  "group_advanced_help": "Початкова гучність, максимальна гучність, схеми динаміків і 23 назви входів"
 }

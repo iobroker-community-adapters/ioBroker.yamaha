@@ -120,6 +120,26 @@
       "lg": 4,
       "xl": 3
     },
+    "group_sound": {
+      "type": "checkbox",
+      "label": "group_sound",
+      "help": "group_sound_help",
+      "xs": 12,
+      "sm": 6,
+      "md": 4,
+      "lg": 4,
+      "xl": 3
+    },
+    "group_advanced": {
+      "type": "checkbox",
+      "label": "group_advanced",
+      "help": "group_advanced_help",
+      "xs": 12,
+      "sm": 6,
+      "md": 4,
+      "lg": 4,
+      "xl": 3
+    },
     "_supportHeader": {
       "newLine": true,
       "type": "header",

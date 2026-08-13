@@ -26,11 +26,15 @@
   "group_tuner": "Tuner",
   "group_tuner_help": "FM/DAB, fréquence, RDS",
   "group_zones": "Zones",
-  "group_zones_help": "Zone 2/3/4, chacune comme son propre amplificateur",
+  "group_zones_help": "Zone 2/3/4, Zone B et l'interrupteur d'alimentation de toutes les zones",
   "group_multiroom": "Multiroom",
-  "group_multiroom_help": "Groupes MusicCast : rejoindre, quitter, rôle",
+  "group_multiroom_help": "Groupes MusicCast (rejoindre, quitter, rôle) et mode fête",
   "group_hdmi": "HDMI",
-  "group_hdmi_help": "Commuter les sorties HDMI",
+  "group_hdmi_help": "Sorties HDMI et décalage de synchronisation labiale, pour chaque zone",
   "group_scene": "Scènes",
-  "group_scene_help": "Rappeler les scènes enregistrées"
+  "group_scene_help": "Rappeler les scènes enregistrées",
+  "group_sound": "Son",
+  "group_sound_help": "Modes de traitement du son, réglages de tonalité, caisson de basses, balance et égaliseur",
+  "group_advanced": "Avancé",
+  "group_advanced_help": "Volume initial, volume maximal, motifs d'enceintes et les 23 noms d'entrée"
 }
