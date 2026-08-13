@@ -1,4 +1,13 @@
 # Older changes
+## 0.11.0 (2026-08-11)
+
+- Scenes can now be triggered from ioBroker, not just shown by name — recall any scene on your receiver.
+- Far more of the receiver is controllable now, from tone and subwoofer to the HDMI outputs and party mode, and MusicCast devices add repeat, shuffle, play time and cover art.
+- Classic receivers can skip to the next or previous track on their network and USB players.
+- Older pre-2010 receivers can again control their tone, subwoofer, Extra Bass, YPAO and HDMI outputs.
+- The object tree is tidier: model and firmware now sit under the device's info, and the cluttered system folder is gone.
+- Every device shows a green or red online symbol in the admin now, and leaving a device's name blank no longer makes it vanish.
+
 ## 0.10.0 (2026-08-05)
 
 - You no longer have to add every device by hand — leave the device table empty and the adapter finds MusicCast receivers on its own at startup and sets them up.

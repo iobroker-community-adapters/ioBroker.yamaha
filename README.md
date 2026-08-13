@@ -41,8 +41,7 @@ Older Yamaha receivers (before ~2010, the XML protocol) do not announce themselv
 The **Data points** section switches whole groups of datapoints on or off — playback sources, tuner, extra zones, multiroom, HDMI, scenes, sound processing and advanced setup datapoints. Turn off what your receiver doesn't have or you don't use, and those objects are removed from the tree; the amplifier core (power, volume, mute, input, sound program, sleep) always stays on.
 
 ## Changelog
-
-### **WORK IN PROGRESS**
+### 0.16.0 (2026-08-13)
 
 - New Sound and Advanced datapoint groups, switchable like the others — tone/DSP controls and setup-only datapoints (initial/max volume, input labels) are no longer always on.
 - Zone B, the all-zones power switch, party mode and per-zone HDMI/lip-sync now follow their matching Zones/Multiroom/HDMI toggle instead of always staying on.
@@ -72,15 +71,6 @@ The **Data points** section switches whole groups of datapoints on or off — pl
 - Group your MusicCast speakers from ioBroker: see who is in a group, drop a device out of one, or pull another in so they play together.
 - Streaming services such as Spotify, Tidal and Deezer now show the track you are playing, the same as your other sources.
 - Older receivers can send a remote-control code again, so a scene can reach a button that has no datapoint of its own.
-
-### 0.11.0 (2026-08-11)
-
-- Scenes can now be triggered from ioBroker, not just shown by name — recall any scene on your receiver.
-- Far more of the receiver is controllable now, from tone and subwoofer to the HDMI outputs and party mode, and MusicCast devices add repeat, shuffle, play time and cover art.
-- Classic receivers can skip to the next or previous track on their network and USB players.
-- Older pre-2010 receivers can again control their tone, subwoofer, Extra Bass, YPAO and HDMI outputs.
-- The object tree is tidier: model and firmware now sit under the device's info, and the cluttered system folder is gone.
-- Every device shows a green or red online symbol in the admin now, and leaving a device's name blank no longer makes it vanish.
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 

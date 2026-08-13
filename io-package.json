@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "0.15.0",
+    "version": "0.16.0",
     "news": {
+      "0.16.0": {
+        "en": "Two more datapoint groups (Sound, Advanced) give finer control; a few misplaced datapoints (e.g. Zone B, party mode) now follow the correct group toggle.",
+        "de": "Zwei weitere Datenpunktgruppen (Klang, Erweitert) für feinere Kontrolle; einige falsch einsortierte Datenpunkte (z. B. Zone B, Party-Modus) folgen jetzt dem richtigen Gruppenschalter.",
+        "ru": "Две новые группы точек данных (Звук, Расширенные) для более точной настройки; несколько неверно отнесённых точек данных (напр. Зона B, режим вечеринки) теперь следуют правильному переключателю группы.",
+        "pt": "Mais dois grupos de pontos de dados (Som, Avançado) para um controlo mais preciso; alguns pontos de dados mal classificados (p. ex. Zona B, modo festa) seguem agora o interruptor de grupo correto.",
+        "nl": "Twee extra datapuntgroepen (Geluid, Geavanceerd) voor fijnere controle; enkele verkeerd ingedeelde datapunten (bijv. Zone B, feestmodus) volgen nu de juiste groepsschakelaar.",
+        "fr": "Deux nouveaux groupes de points de données (Son, Avancé) pour un contrôle plus fin ; quelques points de données mal classés (p. ex. Zone B, mode fête) suivent désormais le bon interrupteur de groupe.",
+        "it": "Due nuovi gruppi di punti dati (Audio, Avanzate) per un controllo più preciso; alcuni punti dati mal classificati (es. Zona B, modalità festa) ora seguono il giusto interruttore di gruppo.",
+        "es": "Dos nuevos grupos de puntos de datos (Sonido, Avanzado) para un control más preciso; algunos puntos de datos mal clasificados (p.ej. Zona B, modo fiesta) ahora siguen el interruptor correcto.",
+        "pl": "Dwie nowe grupy punktów danych (Dźwięk, Zaawansowane) dla dokładniejszej kontroli; kilka źle przypisanych punktów danych (np. Strefa B, tryb imprezowy) podąża teraz za właściwym przełącznikiem grupy.",
+        "uk": "Дві нові групи точок даних (Звук, Розширені) для точнішого керування; кілька неправильно віднесених точок даних (напр. Зона B, режим вечірки) тепер керуються правильним перемикачем групи.",
+        "zh-cn": "新增两个数据点组（音效、高级）以实现更精细的控制；部分归类错误的数据点（如 B 区、聚会模式）现在遵循正确的分组开关。"
+      },
       "0.15.0": {
         "en": "The object tree is grouped by theme, datapoint groups can be switched off in the admin, and playback now works as a media player.",
         "de": "Der Objektbaum ist thematisch gruppiert, Datenpunktgruppen lassen sich im Admin abschalten, und die Wiedergabe funktioniert jetzt als Media-Player.",
@@ -80,19 +93,6 @@
         "pl": "Urządzeń nie trzeba już dodawać ręcznie — zostaw tabelę pustą, a amplitunery MusicCast zostaną same znalezione i skonfigurowane; ustawienia są czytelniejsze.",
         "uk": "Пристрої більше не потрібно додавати вручну — залиште таблицю порожньою, і ресивери MusicCast знайдуться та налаштуються самі; налаштування стали зрозумілішими.",
         "zh-cn": "无需再手动添加设备——将表格留空，MusicCast 接收机会被自动找到并设置好；设置页面也更清晰了。"
-      },
-      "0.9.0": {
-        "en": "MusicCast and older receivers now recover their connection by themselves after a drop, like YNCA, and their datapoints are more consistent.",
-        "de": "MusicCast- und ältere Receiver stellen ihre Verbindung nach einem Abbruch jetzt selbst wieder her, wie YNCA, und ihre Datenpunkte sind konsistenter.",
-        "ru": "Устройства MusicCast и старые ресиверы теперь сами восстанавливают связь после обрыва, как YNCA, а их точки данных стали согласованнее.",
-        "pt": "Os dispositivos MusicCast e recetores antigos restauram agora a ligação sozinhos após uma queda, como o YNCA, e os seus dados são mais consistentes.",
-        "nl": "MusicCast- en oudere receivers herstellen hun verbinding nu zelf na een onderbreking, net als YNCA, en hun datapunten zijn consistenter.",
-        "fr": "Les appareils MusicCast et récepteurs anciens rétablissent seuls leur connexion après une coupure, comme YNCA, et leurs données sont plus cohérentes.",
-        "it": "I dispositivi MusicCast e i ricevitori più vecchi ripristinano da soli la connessione dopo un'interruzione, come YNCA, e i loro dati sono più coerenti.",
-        "es": "Los dispositivos MusicCast y receptores antiguos ahora restauran su conexión solos tras una caída, como YNCA, y sus datos son más coherentes.",
-        "pl": "Urządzenia MusicCast i starsze amplitunery same przywracają połączenie po zerwaniu, jak YNCA, a ich punkty danych są bardziej spójne.",
-        "uk": "Пристрої MusicCast і старіші ресивери тепер самі відновлюють з'єднання після обриву, як YNCA, а їхні дані узгодженіші.",
-        "zh-cn": "MusicCast 设备和较旧的接收机现在会像 YNCA 一样在断开后自行恢复连接，数据点也更一致。"
       }
     },
     "titleLang": {
