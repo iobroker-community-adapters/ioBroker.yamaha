@@ -158,7 +158,33 @@ export const RENAMED_STATE_IDS = ["hdmiOut", "directMode"];
  * speakers, input names → inputNames, master power → masterPower). The channel and
  * every state under it are removed.
  */
-export const RENAMED_CHANNELS = ["system"];
+export const RENAMED_CHANNELS = [
+  // pre-0.11 system folder
+  "system",
+  // Regrouping: media sources moved under player/, DAB under tuner/, dist → multiroom. The old
+  // flat channels (and their whole subtree) are deleted so the new grouped ones do not sit
+  // beside orphaned copies on an upgraded instance.
+  "netRadio",
+  "server",
+  "usb",
+  "spotify",
+  "deezer",
+  "tidal",
+  "napster",
+  "pandora",
+  "rhapsody",
+  "sirius",
+  "airplay",
+  "bluetooth",
+  "pc",
+  "musicCastLink",
+  "ipod",
+  "ipodUsb",
+  "netPlayer",
+  "cd",
+  "dab",
+  "dist",
+];
 
 /**
  * The full ids of renamed old states (and old channel subtrees) that still exist

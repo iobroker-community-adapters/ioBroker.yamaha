@@ -164,6 +164,35 @@ describe("renamedObjectIds", () => {
     expect(result.indexOf("yamaha.0.living.system.model")).toBeLessThan(result.indexOf("yamaha.0.living.system"));
   });
 
+  test("regroups old flat media/dab/dist channels away, keeping the new grouped ids", () => {
+    const existing = [
+      "yamaha.0.living.spotify.playback", // old flat source → gone
+      "yamaha.0.living.spotify",
+      "yamaha.0.living.dab.band", // old flat dab → gone
+      "yamaha.0.living.dist.role", // old dist → gone
+      "yamaha.0.living.cd.play", // old flat cd → gone
+      "yamaha.0.living.player.spotify.playback", // new grouped id → kept
+      "yamaha.0.living.tuner.dab.band", // new grouped dab → kept
+      "yamaha.0.living.tuner.band", // tuner core, unchanged → kept
+      "yamaha.0.living.multiroom.role", // new multiroom → kept
+      "yamaha.0.living.power", // amp core → kept
+    ];
+    const result = renamedObjectIds(existing, new Set(["living"]), "yamaha.0");
+    expect(result).toEqual(
+      expect.arrayContaining([
+        "yamaha.0.living.spotify.playback",
+        "yamaha.0.living.dab.band",
+        "yamaha.0.living.dist.role",
+        "yamaha.0.living.cd.play",
+      ]),
+    );
+    expect(result).not.toContain("yamaha.0.living.player.spotify.playback");
+    expect(result).not.toContain("yamaha.0.living.tuner.dab.band");
+    expect(result).not.toContain("yamaha.0.living.tuner.band");
+    expect(result).not.toContain("yamaha.0.living.multiroom.role");
+    expect(result).not.toContain("yamaha.0.living.power");
+  });
+
   test("returns nothing when the old renamed state is absent", () => {
     expect(renamedObjectIds(["yamaha.0.living.info.model"], new Set(["living"]), "yamaha.0")).toEqual([]);
   });

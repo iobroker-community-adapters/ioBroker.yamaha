@@ -95,7 +95,33 @@ function staleObjects(existing, deviceIds, namespace) {
   return existing.filter((id) => !isKept(id)).sort((a, b) => b.length - a.length);
 }
 const RENAMED_STATE_IDS = ["hdmiOut", "directMode"];
-const RENAMED_CHANNELS = ["system"];
+const RENAMED_CHANNELS = [
+  // pre-0.11 system folder
+  "system",
+  // Regrouping: media sources moved under player/, DAB under tuner/, dist → multiroom. The old
+  // flat channels (and their whole subtree) are deleted so the new grouped ones do not sit
+  // beside orphaned copies on an upgraded instance.
+  "netRadio",
+  "server",
+  "usb",
+  "spotify",
+  "deezer",
+  "tidal",
+  "napster",
+  "pandora",
+  "rhapsody",
+  "sirius",
+  "airplay",
+  "bluetooth",
+  "pc",
+  "musicCastLink",
+  "ipod",
+  "ipodUsb",
+  "netPlayer",
+  "cd",
+  "dab",
+  "dist"
+];
 function renamedObjectIds(existing, deviceIds, namespace) {
   const stale = [];
   for (const deviceId of deviceIds) {
