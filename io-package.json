@@ -1,9 +1,9 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "0.16.0",
+    "version": "0.17.0",
     "news": {
-      "NEXT": {
+      "0.17.0": {
         "en": "Sound and Advanced datapoints now sit in a real folder like the other groups. Fixed: switching Zones off did not remove the zone2/3/4 folder.",
         "de": "Klang- und Erweitert-Datenpunkte liegen jetzt in einem echten Ordner wie die anderen Gruppen. Behoben: Zonen ausschalten entfernte den zone2/3/4-Ordner nicht.",
         "ru": "Точки данных Звук и Расширенные теперь в настоящей папке, как другие группы. Исправлено: отключение Зон не удаляло папку zone2/3/4.",

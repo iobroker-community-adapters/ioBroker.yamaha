@@ -1,4 +1,12 @@
 # Older changes
+## 0.12.0 (2026-08-11)
+
+- Much more of your MusicCast device answers to ioBroker now — repeat and shuffle, the CD tray, the tuner, party mode and your saved presets all switch straight from the object tree.
+- The graphic equalizer is yours to set now, not just to read — dial in its low, mid and high from ioBroker.
+- Group your MusicCast speakers from ioBroker: see who is in a group, drop a device out of one, or pull another in so they play together.
+- Streaming services such as Spotify, Tidal and Deezer now show the track you are playing, the same as your other sources.
+- Older receivers can send a remote-control code again, so a scene can reach a button that has no datapoint of its own.
+
 ## 0.11.0 (2026-08-11)
 
 - Scenes can now be triggered from ioBroker, not just shown by name — recall any scene on your receiver.

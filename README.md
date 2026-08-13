@@ -41,8 +41,7 @@ Older Yamaha receivers (before ~2010, the XML protocol) do not announce themselv
 The **Data points** section switches whole groups of datapoints on or off — playback sources, tuner, extra zones, multiroom, HDMI, scenes, sound processing and advanced setup datapoints. Turn off what your receiver doesn't have or you don't use, and those objects are removed from the tree; the amplifier core (power, volume, mute, input, sound program, sleep) always stays on.
 
 ## Changelog
-
-### **WORK IN PROGRESS**
+### 0.17.0 (2026-08-13)
 
 - Sound and Advanced datapoints now sit in a real folder matching their admin toggle, the same way playback, tuner, HDMI, multiroom and scenes already do — no longer visually stuck next to power/volume.
 - Fixed: switching the Zones toggle off did not remove the `zone2`/`zone3`/`zone4` folder.
@@ -70,14 +69,6 @@ The **Data points** section switches whole groups of datapoints on or off — pl
 
 - For a MusicCast receiver, amplifier control and the MusicCast features — multiroom grouping, graphic equalizer and media playback — now appear together, where before only one side showed up.
 - The amplifier connection now recovers on its own if it drops in the first moments after startup — previously such an early drop could leave it disconnected until the next restart.
-
-### 0.12.0 (2026-08-11)
-
-- Much more of your MusicCast device answers to ioBroker now — repeat and shuffle, the CD tray, the tuner, party mode and your saved presets all switch straight from the object tree.
-- The graphic equalizer is yours to set now, not just to read — dial in its low, mid and high from ioBroker.
-- Group your MusicCast speakers from ioBroker: see who is in a group, drop a device out of one, or pull another in so they play together.
-- Streaming services such as Spotify, Tidal and Deezer now show the track you are playing, the same as your other sources.
-- Older receivers can send a remote-control code again, so a scene can reach a button that has no datapoint of its own.
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 
