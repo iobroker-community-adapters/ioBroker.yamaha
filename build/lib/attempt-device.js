@@ -33,7 +33,7 @@ var import_transport_connection_adapter = require("./lifecycle/transport-connect
 var import_ready_line = require("./ready-line");
 var import_util = require("./util");
 async function connectTransports(deviceId, attempts, deps) {
-  var _a;
+  var _a, _b, _c, _d;
   const live = [];
   for (const { conn } of attempts) {
     try {
@@ -48,13 +48,15 @@ async function connectTransports(deviceId, attempts, deps) {
     }
   }
   if (live.length === 0) {
-    deps.log.warn(`${deviceId}: no reachable transport (YNCA/YXC/XML)`);
+    const level = (_b = (_a = deps.reachability) == null ? void 0 : _a.reportUnreachable()) != null ? _b : "warn";
+    deps.log[level](`${deviceId}: no reachable transport (YNCA/YXC/XML)`);
     return null;
   }
+  (_c = deps.reachability) == null ? void 0 : _c.reportReachable();
   const handle = new import_multi_transport_handle.MultiTransportHandle(deviceId, live, { upsertObject: deps.upsertObject, log: deps.log });
   await handle.start();
   const liveIds = live.map((conn) => conn.transport);
-  (_a = deps.onTransports) == null ? void 0 : _a.call(deps, liveIds);
+  (_d = deps.onTransports) == null ? void 0 : _d.call(deps, liveIds);
   deps.log.info((0, import_ready_line.readyLine)(deviceId, liveIds));
   return handle;
 }
@@ -99,7 +101,8 @@ function attemptDevice(device, deps) {
   return connectTransports(device.id, [{ conn: ynca }, { conn: yxc }, { conn: xml }], {
     upsertObject,
     log,
-    onTransports: deps.onTransports
+    onTransports: deps.onTransports,
+    reachability: deps.reachability
   });
 }
 // Annotate the CommonJS export names for ESM import in node:

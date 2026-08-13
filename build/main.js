@@ -48,6 +48,7 @@ var import_push_receiver = require("./lib/yxc/push-receiver");
 var import_device_management = require("./device-management");
 var import_device_supervisor = require("./lib/lifecycle/device-supervisor");
 var import_reconnect_strategy = require("./lib/lifecycle/reconnect-strategy");
+var import_reachability_dedup = require("./lib/lifecycle/reachability-dedup");
 const RECONNECT_BASE_MS = 1e3;
 const RECONNECT_MAX_MS = 6e4;
 const FETCH_TIMEOUT_MS = 4e3;
@@ -98,8 +99,9 @@ class Yamaha extends utils.Adapter {
       for (const device of devices) {
         this.deviceConnected.set(device.id, false);
         await this.ensureDeviceHeader(device.id);
+        const reachability = new import_reachability_dedup.ReachabilityDedup();
         const supervisor = new import_device_supervisor.DeviceSupervisor({
-          attempt: () => this.attemptDevice(device, pushReceiver, knownDeviceIps),
+          attempt: () => this.attemptDevice(device, pushReceiver, knownDeviceIps, reachability),
           schedule: (cb, ms) => this.setTimeout(cb, ms),
           cancel: (handle) => this.clearTimeout(handle),
           onConnectionChange: (connected) => this.reportConnection(device.id, connected),
@@ -265,10 +267,13 @@ class Yamaha extends utils.Adapter {
    * @param device the configured device record
    * @param pushReceiver the shared YXC push receiver
    * @param knownDeviceIps IPs of all configured devices, for resolving a multiroom client
+   * @param reachability dedup for the "no reachable transport" warning (one instance per device,
+   *   held by the caller across retries — see {@link ReachabilityDedup})
    * @returns a connection handle, or null when no transport connected
    */
-  attemptDevice(device, pushReceiver, knownDeviceIps) {
+  attemptDevice(device, pushReceiver, knownDeviceIps, reachability) {
     return (0, import_attempt_device.attemptDevice)(device, {
+      reachability,
       log: {
         debug: (message) => this.log.debug(message),
         info: (message) => this.log.info(message),

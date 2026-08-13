@@ -6,6 +6,7 @@ import { XmlDeviceController } from "./xml/device-controller";
 import { XmlClient } from "./xml/xml-client";
 import { MultiTransportHandle, type TransportConnection } from "./lifecycle/multi-transport-handle";
 import { TransportConnectionAdapter } from "./lifecycle/transport-connection-adapter";
+import type { ReachabilityDedup } from "./lifecycle/reachability-dedup";
 import { readyLine } from "./ready-line";
 import { errorMessage } from "./util";
 import type { ConnectionHandle, ControllerLog } from "./controller";
@@ -37,6 +38,8 @@ export interface AttemptDeps {
   onTransports?(names: string[]): void;
   /** IPs of all configured devices, so a MusicCast group can resolve a client device by IP. */
   knownDeviceIps: Set<string>;
+  /** Dedup for the "no reachable transport" warning — see {@link ConnectDeps.reachability}. */
+  reachability?: ReachabilityDedup;
 }
 
 /** A transport connection that can be brought online — a {@link TransportConnection} plus connect(). */
@@ -59,6 +62,12 @@ export interface ConnectDeps {
   upsertObject(id: string, def: ObjectDef): Promise<void>;
   /** Report the transports that connected — the id-safe names ("ynca"/"yxc"/"xml"). */
   onTransports?(names: string[]): void;
+  /**
+   * Dedup for the "no reachable transport" warning: without it every retry warns
+   * again for as long as the device stays offline (nut2 `failedUps` pattern — first
+   * failure warns, repeats stay at debug until the device answers again).
+   */
+  reachability?: ReachabilityDedup;
 }
 
 /**
@@ -93,9 +102,11 @@ export async function connectTransports(
     }
   }
   if (live.length === 0) {
-    deps.log.warn(`${deviceId}: no reachable transport (YNCA/YXC/XML)`);
+    const level = deps.reachability?.reportUnreachable() ?? "warn";
+    deps.log[level](`${deviceId}: no reachable transport (YNCA/YXC/XML)`);
     return null;
   }
+  deps.reachability?.reportReachable();
   const handle = new MultiTransportHandle(deviceId, live, { upsertObject: deps.upsertObject, log: deps.log });
   await handle.start();
   const liveIds = live.map(conn => conn.transport);
@@ -167,5 +178,6 @@ export function attemptDevice(device: DeviceRecord, deps: AttemptDeps): Promise<
     upsertObject,
     log,
     onTransports: deps.onTransports,
+    reachability: deps.reachability,
   });
 }

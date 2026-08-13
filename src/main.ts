@@ -23,6 +23,7 @@ import { YamahaDeviceManagement } from "./device-management";
 import type { DeviceRecord } from "./lib/types";
 import { DeviceSupervisor, type ConnectionHandle } from "./lib/lifecycle/device-supervisor";
 import { ReconnectStrategy } from "./lib/lifecycle/reconnect-strategy";
+import { ReachabilityDedup } from "./lib/lifecycle/reachability-dedup";
 
 /** Supervisor reconnect backoff bounds (exponential: 1s, 2s … capped at 60s). */
 const RECONNECT_BASE_MS = 1000;
@@ -103,8 +104,9 @@ export class Yamaha extends utils.Adapter {
       for (const device of devices) {
         this.deviceConnected.set(device.id, false);
         await this.ensureDeviceHeader(device.id);
+        const reachability = new ReachabilityDedup();
         const supervisor = new DeviceSupervisor({
-          attempt: () => this.attemptDevice(device, pushReceiver, knownDeviceIps),
+          attempt: () => this.attemptDevice(device, pushReceiver, knownDeviceIps, reachability),
           schedule: (cb, ms) => this.setTimeout(cb, ms),
           cancel: handle => this.clearTimeout(handle as ioBroker.Timeout | undefined),
           onConnectionChange: connected => this.reportConnection(device.id, connected),
@@ -295,14 +297,18 @@ export class Yamaha extends utils.Adapter {
    * @param device the configured device record
    * @param pushReceiver the shared YXC push receiver
    * @param knownDeviceIps IPs of all configured devices, for resolving a multiroom client
+   * @param reachability dedup for the "no reachable transport" warning (one instance per device,
+   *   held by the caller across retries — see {@link ReachabilityDedup})
    * @returns a connection handle, or null when no transport connected
    */
   private attemptDevice(
     device: DeviceRecord,
     pushReceiver: YxcPushReceiver,
     knownDeviceIps: Set<string>,
+    reachability: ReachabilityDedup,
   ): Promise<ConnectionHandle | null> {
     return attemptDevice(device, {
+      reachability,
       log: {
         debug: message => this.log.debug(message),
         info: message => this.log.info(message),

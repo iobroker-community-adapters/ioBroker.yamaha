@@ -1,4 +1,5 @@
 import { connectTransports, type ConnectableTransport } from "./attempt-device";
+import { ReachabilityDedup } from "./lifecycle/reachability-dedup";
 import type { ObjectDef } from "./catalog/types";
 import type { Transport } from "./catalog/owner-policy";
 
@@ -89,5 +90,39 @@ describe("connectTransports", () => {
     expect(handle).not.toBeNull();
     expect(ynca.closed).toBe(true);
     expect(d.objects).toContain("living.dist.role"); // yxc still made it into the tree
+  });
+
+  test("without a reachability dep, every failed attempt still warns (unchanged default)", async () => {
+    const ynca = fakeConn("ynca", [], false);
+    const warn = vi.fn();
+    const d = { ...deps(), log: { ...silentLog, warn } };
+    await connectTransports("living", [{ conn: ynca }], d);
+    await connectTransports("living", [{ conn: ynca }], d);
+    expect(warn).toHaveBeenCalledTimes(2);
+  });
+
+  test("with a reachability dep, only the first attempt in a row warns — repeats drop to debug", async () => {
+    const ynca = fakeConn("ynca", [], false);
+    const warn = vi.fn();
+    const debug = vi.fn();
+    const d = { ...deps(), log: { ...silentLog, warn, debug }, reachability: new ReachabilityDedup() };
+    await connectTransports("living", [{ conn: ynca }], d);
+    await connectTransports("living", [{ conn: ynca }], d);
+    await connectTransports("living", [{ conn: ynca }], d);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith("living: no reachable transport (YNCA/YXC/XML)");
+    expect(debug).toHaveBeenCalledTimes(2);
+  });
+
+  test("a reconnect after failures re-arms the warn for the next drop", async () => {
+    const dead = fakeConn("ynca", [], false);
+    const alive = fakeConn("ynca", [state("power", "Power")], true);
+    const warn = vi.fn();
+    const d = { ...deps(), log: { ...silentLog, warn }, reachability: new ReachabilityDedup() };
+    await connectTransports("living", [{ conn: dead }], d); // 1st failure — warns
+    await connectTransports("living", [{ conn: dead }], d); // repeat — debug, no extra warn
+    await connectTransports("living", [{ conn: alive }], d); // reconnects — clears the dedup
+    await connectTransports("living", [{ conn: dead }], d); // dropped again — warns again
+    expect(warn).toHaveBeenCalledTimes(2);
   });
 });
