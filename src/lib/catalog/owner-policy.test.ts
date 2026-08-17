@@ -4,7 +4,7 @@ describe("pickOwner — which transport owns a shared capability", () => {
   test("a capability only one transport offers is owned by that transport", () => {
     expect(pickOwner("dist.role", ["yxc"])).toBe("yxc");
     expect(pickOwner("scene.recall", ["ynca"])).toBe("ynca");
-    expect(pickOwner("remoteCode", ["xml"])).toBe("xml");
+    expect(pickOwner("party", ["xml"])).toBe("xml");
   });
 
   test("with no conflict the most modern candidate wins: YXC > YNCA > XML", () => {
@@ -22,10 +22,10 @@ describe("pickOwner — which transport owns a shared capability", () => {
     expect(pickOwner("volume", ["yxc"])).toBe("yxc"); // only YXC present → its scale is all there is
   });
 
-  test("write-loss keys stay with YNCA where YXC is read-only (census §3c)", () => {
+  test("write-loss keys stay with YNCA/XML where YXC is read-only (census §3c)", () => {
     expect(pickOwner("advanced.maxVolume", ["yxc", "ynca"])).toBe("ynca");
     expect(pickOwner("sound.extraBass", ["yxc", "ynca"])).toBe("ynca");
-    expect(pickOwner("media.playback", ["yxc", "ynca"])).toBe("ynca");
+    expect(pickOwner("sound.dialogueLift", ["yxc", "xml"])).toBe("xml");
   });
 
   test("dropdown-rich keys stay with YNCA so the enum states survive (census §3d)", () => {

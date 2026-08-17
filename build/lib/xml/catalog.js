@@ -134,7 +134,7 @@ const XML_AMP_CATALOG = [
   },
   {
     state: "sound.dialogueLift",
-    common: { name: "Dialogue lift", type: "number", role: "level", read: true, write: true },
+    common: { name: "Dialogue lift", type: "number", role: "level", read: true, write: true, min: 0, max: 5, step: 1 },
     statusField: "dialogueLift",
     toInner: (value) => `<Sound_Video><Dialogue_Adjust><Dialogue_Lift>${Number(value)}</Dialogue_Lift></Dialogue_Adjust></Sound_Video>`
   },
@@ -169,16 +169,6 @@ const XML_AMP_CATALOG = [
     mainOnly: true,
     writeZone: "System",
     toInner: (value) => `<Party_Mode><Mode>${value ? "On" : "Off"}</Mode></Party_Mode>`
-  },
-  // Send a raw IR remote code (the predecessor's sendRcCode, legacy/main.js:100) — a write-only
-  // System command, no Basic_Status field to read back. Lets a scene/automation reach any button
-  // the device's remote has (power 7C80, etc.) when no dedicated datapoint exists.
-  {
-    state: "remoteCode",
-    common: { name: "Remote IR code", type: "string", role: "text", read: false, write: true },
-    mainOnly: true,
-    writeZone: "System",
-    toInner: (value) => `<Remote_Control><RC_Code>${String(value)}</RC_Code></Remote_Control>`
   }
 ];
 // Annotate the CommonJS export names for ESM import in node:

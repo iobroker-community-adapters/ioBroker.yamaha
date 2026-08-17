@@ -87,14 +87,6 @@ describe("stateToXml", () => {
     });
   });
 
-  test("a remote IR code is sent on the System element (predecessor RC_Code path)", () => {
-    expect(stateToXml("remoteCode", "7C80")).toEqual({
-      zone: "System",
-      inner: "<Remote_Control><RC_Code>7C80</RC_Code></Remote_Control>",
-    });
-    expect(stateToXml("zone2.remoteCode", "7C80")).toBeUndefined(); // a main/system-wide command
-  });
-
   test("dialogue lift maps to a Dialogue_Adjust command on its zone", () => {
     expect(stateToXml("sound.dialogueLift", 3)).toEqual({
       zone: "Main_Zone",

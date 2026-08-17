@@ -26,7 +26,6 @@ module.exports = __toCommonJS(groups_exports);
 const SWITCHABLE_GROUPS = [
   "player",
   "tuner",
-  "zones",
   "multiroom",
   "hdmi",
   "scene",
@@ -56,7 +55,7 @@ const PLAYER_CHANNELS = /* @__PURE__ */ new Set([
 function groupOf(stateId) {
   var _a, _b;
   if (stateId === "zone2" || stateId === "zone3" || stateId === "zone4") {
-    return "zones";
+    return "multiroom";
   }
   const zone = (_b = (_a = /^zone[234]\./.exec(stateId)) == null ? void 0 : _a[0]) != null ? _b : "";
   const rest = stateId.slice(zone.length);
@@ -77,7 +76,7 @@ function groupOf(stateId) {
     return "advanced";
   }
   if (zone || seg === "zoneB" || seg === "masterPower") {
-    return "zones";
+    return "multiroom";
   }
   if (seg === "multiroom" || seg === "dist" || seg === "distributionEnable" || seg === "party" || seg === "partyMute") {
     return "multiroom";

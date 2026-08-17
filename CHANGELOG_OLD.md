@@ -1,4 +1,9 @@
 # Older changes
+## 0.13.0 (2026-08-12)
+
+- For a MusicCast receiver, amplifier control and the MusicCast features — multiroom grouping, graphic equalizer and media playback — now appear together, where before only one side showed up.
+- The amplifier connection now recovers on its own if it drops in the first moments after startup — previously such an early drop could leave it disconnected until the next restart.
+
 ## 0.12.0 (2026-08-11)
 
 - Much more of your MusicCast device answers to ioBroker now — repeat and shuffle, the CD tray, the tuner, party mode and your saved presets all switch straight from the object tree.

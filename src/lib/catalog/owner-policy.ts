@@ -22,9 +22,7 @@ const OWNER_OVERRIDES: Record<string, readonly Transport[]> = {
   "sound.extraBass": ["ynca", "xml", "yxc"],
   "sound.adaptiveDrc": ["ynca", "xml", "yxc"],
   "sound.surroundDecoder": ["ynca", "yxc"],
-  "media.playback": ["ynca", "yxc"],
-  "media.repeat": ["ynca", "yxc"],
-  "media.shuffle": ["ynca", "yxc"],
+  "sound.dialogueLift": ["xml", "yxc"],
   // §3d richness loss — YNCA carries an enum dropdown that YXC/XML flatten to a free string.
   input: ["ynca", "yxc", "xml"],
   soundProgram: ["ynca", "yxc", "xml"],

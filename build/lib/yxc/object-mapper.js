@@ -21,6 +21,7 @@ __export(object_mapper_exports, {
   mapYxcToObjects: () => mapYxcToObjects
 });
 module.exports = __toCommonJS(object_mapper_exports);
+var import_types = require("../catalog/types");
 var import_catalog = require("./catalog");
 const ZONES = [
   { id: "main", prefix: "" },
@@ -38,7 +39,7 @@ const PLAYER_STATES = [
       role: "media.state",
       read: true,
       write: false,
-      states: { 0: "play", 1: "stop", 2: "pause" }
+      states: { 0: "Play", 1: "Stop", 2: "Pause" }
     }
   },
   { state: "artist", common: { name: "Artist", type: "string", role: "media.artist", read: true, write: false } },
@@ -79,8 +80,9 @@ function pushPlayerBlock(objects, prefix, channelName) {
   }
 }
 function mapYxcToObjects(capabilities) {
-  var _a;
+  var _a, _b;
   const objects = [];
+  const channels = /* @__PURE__ */ new Set();
   for (const zoneDef of ZONES) {
     const zone = capabilities.zones.find((z) => z.id === zoneDef.id);
     if (!zone) {
@@ -100,16 +102,31 @@ function mapYxcToObjects(capabilities) {
       continue;
     }
     if (zoneDef.channel) {
+      channels.add(zoneDef.channel);
       objects.push({ id: zoneDef.channel, type: "channel", common: { name: (_a = zoneDef.channelName) != null ? _a : zoneDef.channel } });
     }
     for (const entry of entries) {
+      const fullId = `${zoneDef.prefix}${entry.state}`;
+      const segments = fullId.split(".");
+      for (let i = 1; i < segments.length; i++) {
+        const channelId = segments.slice(0, i).join(".");
+        if (!channels.has(channelId)) {
+          channels.add(channelId);
+          const segment = segments[i - 1];
+          objects.push({
+            id: channelId,
+            type: "channel",
+            common: { name: (_b = import_types.CHANNEL_NAMES[segment]) != null ? _b : segment.charAt(0).toUpperCase() + segment.slice(1) }
+          });
+        }
+      }
       const common = { ...entry.common };
       if (entry.state === "volume" && zone.volumeRange) {
         common.min = zone.volumeRange.min;
         common.max = zone.volumeRange.max;
         common.step = zone.volumeRange.step;
       }
-      objects.push({ id: `${zoneDef.prefix}${entry.state}`, type: "state", common });
+      objects.push({ id: fullId, type: "state", common });
     }
   }
   if (capabilities.media.includes("netusb") || capabilities.media.includes("cd")) {

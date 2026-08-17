@@ -80,16 +80,6 @@
       "lg": 4,
       "xl": 3
     },
-    "group_zones": {
-      "type": "checkbox",
-      "label": "group_zones",
-      "help": "group_zones_help",
-      "xs": 12,
-      "sm": 6,
-      "md": 4,
-      "lg": 4,
-      "xl": 3
-    },
     "group_multiroom": {
       "type": "checkbox",
       "label": "group_multiroom",

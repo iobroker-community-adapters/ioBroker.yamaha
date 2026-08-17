@@ -134,6 +134,38 @@ describe("mapYxcToObjects", () => {
     expect(ids).toContain("distributionEnable");
   });
 
+  test("creates intermediate channel objects for dotted amp catalog state IDs", () => {
+    const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: [] });
+    const ids = objs.map(o => o.id);
+    expect(ids).toContain("advanced");
+    expect(objs.find(o => o.id === "advanced")?.type).toBe("channel");
+    expect(objs.find(o => o.id === "advanced")?.common.name).toBe("Advanced");
+    expect(ids.indexOf("advanced")).toBeLessThan(ids.indexOf("advanced.maxVolume"));
+  });
+
+  test("creates the sound channel when sound.* states exist", () => {
+    const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power", "equalizer"], inputs: [] }], media: [] });
+    const ids = objs.map(o => o.id);
+    expect(ids).toContain("sound");
+    expect(objs.find(o => o.id === "sound")?.type).toBe("channel");
+    expect(objs.find(o => o.id === "sound")?.common.name).toBe("Sound");
+    expect(ids.indexOf("sound")).toBeLessThan(ids.indexOf("sound.equalizerLow"));
+  });
+
+  test("creates zone-prefixed intermediate channels for additional zones", () => {
+    const objs = mapYxcToObjects({
+      zones: [
+        { id: "main", funcs: ["power"], inputs: [] },
+        { id: "zone2", funcs: ["power", "equalizer"], inputs: [] },
+      ],
+      media: [],
+    });
+    const ids = objs.map(o => o.id);
+    expect(ids).toContain("zone2.sound");
+    expect(objs.find(o => o.id === "zone2.sound")?.common.name).toBe("Sound");
+    expect(ids).toContain("zone2.advanced");
+  });
+
   test("maps an additional zone as a channel with its own states", () => {
     const list = ids(rxA2070);
     expect(list).toContain("zone2");

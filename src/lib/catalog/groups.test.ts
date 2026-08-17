@@ -16,15 +16,15 @@ describe("groupOf", () => {
     expect(groupOf("tuner.dab.channelLabel")).toBe("tuner");
   });
 
-  it("maps each extra zone to the zones group", () => {
-    expect(groupOf("zone2.volume")).toBe("zones");
-    expect(groupOf("zone4.power")).toBe("zones");
+  it("maps each extra zone to the multiroom group", () => {
+    expect(groupOf("zone2.volume")).toBe("multiroom");
+    expect(groupOf("zone4.power")).toBe("multiroom");
   });
 
-  it("maps the bare zone2/3/4 channel object itself to zones (not just its dotted children)", () => {
-    expect(groupOf("zone2")).toBe("zones");
-    expect(groupOf("zone3")).toBe("zones");
-    expect(groupOf("zone4")).toBe("zones");
+  it("maps the bare zone2/3/4 channel object itself to multiroom", () => {
+    expect(groupOf("zone2")).toBe("multiroom");
+    expect(groupOf("zone3")).toBe("multiroom");
+    expect(groupOf("zone4")).toBe("multiroom");
   });
 
   it("maps dist/multiroom, hdmi and scene", () => {
@@ -73,10 +73,10 @@ describe("groupOf", () => {
     expect(groupOf("advanced.inputNames.hdmi1")).toBe("advanced");
   });
 
-  it("maps Zone B and the all-zones power switch to the zones group (not the always-on core)", () => {
-    expect(groupOf("zoneB.power")).toBe("zones");
-    expect(groupOf("zoneB.volume")).toBe("zones");
-    expect(groupOf("masterPower")).toBe("zones");
+  it("maps Zone B and the all-zones power switch to the multiroom group", () => {
+    expect(groupOf("zoneB.power")).toBe("multiroom");
+    expect(groupOf("zoneB.volume")).toBe("multiroom");
+    expect(groupOf("masterPower")).toBe("multiroom");
   });
 
   it("maps distributionEnable and party mode to the multiroom group", () => {
@@ -92,9 +92,10 @@ describe("groupOf", () => {
     expect(groupOf("zone3.lipSync.hdmiOut2")).toBe("hdmi");
   });
 
-  it("does not offer the amp core as a switch (only zone2-4 are the zones group)", () => {
+  it("does not offer the amp core as a switch and has no zones group", () => {
     expect(SWITCHABLE_GROUPS).not.toContain("amp");
-    expect(SWITCHABLE_GROUPS).toContain("zones");
+    expect(SWITCHABLE_GROUPS).not.toContain("zones");
+    expect(SWITCHABLE_GROUPS).toContain("multiroom");
     expect(SWITCHABLE_GROUPS).toContain("sound");
     expect(SWITCHABLE_GROUPS).toContain("advanced");
   });
@@ -122,5 +123,12 @@ describe("isGroupEnabled", () => {
     expect(isGroupEnabled("multiroom.role", { group_multiroom: false })).toBe(false);
     // an off flag for a different group leaves this one on
     expect(isGroupEnabled("player.spotify.playback", { group_tuner: false })).toBe(true);
+  });
+
+  it("gates zones and zone B through the multiroom switch", () => {
+    expect(isGroupEnabled("zone2.volume", { group_multiroom: false })).toBe(false);
+    expect(isGroupEnabled("zoneB.power", { group_multiroom: false })).toBe(false);
+    expect(isGroupEnabled("masterPower", { group_multiroom: false })).toBe(false);
+    expect(isGroupEnabled("zone2.volume", {})).toBe(true);
   });
 });

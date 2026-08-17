@@ -87,8 +87,6 @@ describe("XmlDeviceController", () => {
     const s = setup({ Main_Zone: { power: true, volume: -30, mute: false, input: "HDMI1" } });
     expect(await s.controller.start()).toBe(true);
     expect(s.objects).toEqual(expect.arrayContaining(["living.power", "living.volume", "living.mute", "living.input"]));
-    // The write-only IR-code command exists as an object, or its write path is dead.
-    expect(s.objects).toContain("living.remoteCode");
     expect(s.acks).toContainEqual({ id: "living.power", value: true });
     expect(s.acks).toContainEqual({ id: "living.volume", value: -30 });
   });

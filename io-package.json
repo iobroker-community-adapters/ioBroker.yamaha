@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "0.17.0",
+    "version": "0.18.0",
     "news": {
+      "0.18.0": {
+        "en": "The Zones toggle is gone — zone 2/3/4, Zone B and the all-zones power switch now sit under Multiroom where they belong. Dialogue lift is adjustable again.",
+        "de": "Der Zonen-Schalter entfällt — Zone 2/3/4, Zone B und der Alle-Zonen-Schalter liegen jetzt unter Multiroom. Dialoganhebung ist wieder regelbar.",
+        "ru": "Переключатель Зон убран — зоны 2/3/4, Зона B и общий выключатель теперь под Multiroom. Подъём диалогов снова регулируется.",
+        "pt": "O interruptor Zonas desapareceu — zonas 2/3/4, Zona B e o interruptor geral estão agora sob Multiroom. O realce de diálogo voltou a ser ajustável.",
+        "nl": "De Zones-schakelaar is weg — zone 2/3/4, Zone B en de alles-aan-schakelaar vallen nu onder Multiroom. Dialoogversterking is weer regelbaar.",
+        "fr": "Le commutateur Zones disparaît — zones 2/3/4, Zone B et l'interrupteur général sont désormais sous Multiroom. Le rehaussement de dialogue est à nouveau réglable.",
+        "it": "L'interruttore Zone scompare — zone 2/3/4, Zona B e l'interruttore generale sono ora sotto Multiroom. Il rialzo dialoghi è di nuovo regolabile.",
+        "es": "El interruptor Zonas desaparece — zonas 2/3/4, Zona B y el interruptor general están ahora bajo Multiroom. El realce de diálogos vuelve a ser ajustable.",
+        "pl": "Przełącznik Stref znika — strefy 2/3/4, Strefa B i przełącznik wszystkich stref są teraz pod Multiroom. Podniesienie dialogów znów jest regulowane.",
+        "uk": "Перемикач Зон прибрано — зони 2/3/4, Зона B і загальний вимикач тепер під Multiroom. Підйом діалогів знову регулюється.",
+        "zh-cn": "区域开关已取消——区域 2/3/4、B 区和全区域电源开关现在归属多房间。对话提升功能恢复可调。"
+      },
       "0.17.0": {
         "en": "Sound and Advanced datapoints now sit in a real folder like the other groups. Fixed: switching Zones off did not remove the zone2/3/4 folder.",
         "de": "Klang- und Erweitert-Datenpunkte liegen jetzt in einem echten Ordner wie die anderen Gruppen. Behoben: Zonen ausschalten entfernte den zone2/3/4-Ordner nicht.",
@@ -80,19 +93,6 @@
         "pl": "Znacznie więcej w urządzeniu MusicCast można teraz sterować z ioBroker — odtwarzanie, tuner, presety, korektor i pełne multiroom — a streaming pokazuje bieżący utwór.",
         "uk": "Значно більше у пристрої MusicCast тепер керується з ioBroker — відтворення, тюнер, пресети, еквалайзер і повний мультирум — а стрімінг показує поточний трек.",
         "zh-cn": "MusicCast 设备现在有更多功能可从 ioBroker 控制——播放、调谐器、预设、均衡器和完整多房间——流媒体服务还会显示当前曲目。"
-      },
-      "0.11.0": {
-        "en": "Scenes can be triggered from ioBroker, far more is controllable, classic receivers can skip tracks, and the object tree is tidier with a per-device online symbol.",
-        "de": "Szenen lassen sich aus ioBroker auslösen, viel mehr ist steuerbar, klassische Receiver springen Titel, und die Datenpunkte sind aufgeräumter mit Online-Symbol je Gerät.",
-        "ru": "Сцены запускаются из ioBroker, доступно гораздо больше управления, классические ресиверы переключают треки, дерево объектов аккуратнее и есть значок онлайн у устройств.",
-        "pt": "As cenas podem ser acionadas no ioBroker, controla-se muito mais, os recetores clássicos saltam faixas e a árvore de objetos está mais limpa com um símbolo online por dispositivo.",
-        "nl": "Scènes zijn vanuit ioBroker te starten, veel meer is bedienbaar, klassieke receivers slaan nummers over, en de objectboom is opgeruimder met een online-symbool per apparaat.",
-        "fr": "Les scènes se déclenchent depuis ioBroker, bien plus est réglable, les amplis classiques sautent des pistes et l'arbre d'objets est plus net avec un symbole en ligne par appareil.",
-        "it": "Le scene si attivano da ioBroker, si controlla molto di più, i ricevitori classici saltano i brani e l'albero oggetti è più ordinato con un simbolo online per dispositivo.",
-        "es": "Las escenas se activan desde ioBroker, se controla mucho más, los receptores clásicos saltan pistas y el árbol de objetos es más ordenado con un símbolo en línea por dispositivo.",
-        "pl": "Sceny można wyzwalać z ioBroker, sterujesz o wiele więcej, klasyczne amplitunery przeskakują utwory, a drzewo obiektów jest czytelniejsze z symbolem online przy urządzeniu.",
-        "uk": "Сцени запускаються з ioBroker, доступно значно більше, класичні ресивери перемикають треки, а дерево об'єктів охайніше зі значком онлайн для пристроїв.",
-        "zh-cn": "可从 ioBroker 触发情景，可控制的内容大幅增加，经典功放可切换曲目，对象树更整洁并为每台设备提供在线状态图标。"
       }
     },
     "titleLang": {
@@ -172,10 +172,11 @@
     "xmlPollInterval": 60,
     "group_player": true,
     "group_tuner": true,
-    "group_zones": true,
     "group_multiroom": true,
     "group_hdmi": true,
-    "group_scene": true
+    "group_scene": true,
+    "group_sound": true,
+    "group_advanced": true
   },
   "objects": [],
   "instanceObjects": [

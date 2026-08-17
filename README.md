@@ -41,6 +41,13 @@ Older Yamaha receivers (before ~2010, the XML protocol) do not announce themselv
 The **Data points** section switches whole groups of datapoints on or off — playback sources, tuner, extra zones, multiroom, HDMI, scenes, sound processing and advanced setup datapoints. Turn off what your receiver doesn't have or you don't use, and those objects are removed from the tree; the amplifier core (power, volume, mute, input, sound program, sleep) always stays on.
 
 ## Changelog
+### 0.18.0 (2026-08-17)
+
+- Zone 2/3/4 and Zone B now sit under the Multiroom toggle — the separate Zones checkbox is gone, because zone switching was always part of multiroom.
+- Dialogue lift is adjustable again on receivers that report it — a routing issue had left it read-only.
+- MusicCast speakers without a classic amplifier connection now get the Sound and Advanced folders they were missing.
+- Subwoofer trim shows its dB unit, and playback labels are now consistently capitalized.
+
 ### 0.17.0 (2026-08-13)
 
 - Sound and Advanced datapoints now sit in a real folder matching their admin toggle, the same way playback, tuner, HDMI, multiroom and scenes already do — no longer visually stuck next to power/volume.
@@ -64,11 +71,6 @@ The **Data points** section switches whole groups of datapoints on or off — pl
 - The admin now shows your receivers as cards, each with the device's model, IP address and the protocols it is connected over, and a dialog to add a receiver by its IP.
 - Every receiver reports its model now — MusicCast over Yamaha Extended Control and older sets over the XML protocol, not only the YNCA models.
 - Discovery is steadier: the search repeats and can be confined to a chosen network interface, so a receiver on a multi-homed host or behind a dropped packet is still found.
-
-### 0.13.0 (2026-08-12)
-
-- For a MusicCast receiver, amplifier control and the MusicCast features — multiroom grouping, graphic equalizer and media playback — now appear together, where before only one side showed up.
-- The amplifier connection now recovers on its own if it drops in the first moments after startup — previously such an early drop could leave it disconnected until the next restart.
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 

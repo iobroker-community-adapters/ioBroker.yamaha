@@ -94,7 +94,7 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
   },
   {
     state: "subwooferVolume",
-    common: { name: "Subwoofer trim", type: "number", role: "level", read: true, write: true },
+    common: { name: "Subwoofer trim", type: "number", unit: "dB", role: "level", read: true, write: true },
     create: { kind: "func", func: "subwoofer_volume" },
     read: { field: "subwoofer_volume" },
     fromStatus: num,
@@ -249,7 +249,7 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
   },
   {
     state: "sound.dialogueLift",
-    common: { name: "Dialogue lift", type: "number", role: "value", read: true, write: false },
+    common: { name: "Dialogue lift", type: "number", role: "value", read: true, write: false, min: 0, max: 5, step: 1 },
     create: { kind: "func", func: "dialogue_lift" },
     read: { field: "dialogue_lift" },
     fromStatus: num,

@@ -7,19 +7,20 @@
  *
  * Every group is a real channel prefix in the tree (`player.*`, `tuner.*`, `hdmi.*`,
  * `multiroom.*`, `scene.*`, `sound.*`, `advanced.*`) — the toggle and the folder a datapoint
- * visually sits in are the same thing, never decoupled. `groupOf` also recognises the handful of
- * legacy flat player-source channel names (`spotify`, `netRadio`, …) kept for pre-v0.15.0
- * upgraders whose objects have not been pruned/recreated yet.
+ * visually sits in are the same thing, never decoupled. Zone 2/3/4, Zone B and masterPower belong
+ * to the `multiroom` group — their objects live in `zone2/`…`zone4/` folders but are switched as a
+ * unit with the rest of multiroom. `groupOf` also recognises the handful of legacy flat
+ * player-source channel names (`spotify`, `netRadio`, …) kept for pre-v0.15.0 upgraders whose
+ * objects have not been pruned/recreated yet.
  */
 
 /** The switchable groups. `amp` is the amplifier core and can never be turned off. */
-export type GroupId = "amp" | "player" | "tuner" | "zones" | "multiroom" | "hdmi" | "scene" | "sound" | "advanced";
+export type GroupId = "amp" | "player" | "tuner" | "multiroom" | "hdmi" | "scene" | "sound" | "advanced";
 
 /** The groups a user can switch off, in display order (amp is always on and not listed here). */
 export const SWITCHABLE_GROUPS: readonly GroupId[] = [
   "player",
   "tuner",
-  "zones",
   "multiroom",
   "hdmi",
   "scene",
@@ -69,7 +70,7 @@ const PLAYER_CHANNELS = new Set<string>([
  */
 export function groupOf(stateId: string): GroupId {
   if (stateId === "zone2" || stateId === "zone3" || stateId === "zone4") {
-    return "zones";
+    return "multiroom";
   }
   const zone = /^zone[234]\./.exec(stateId)?.[0] ?? "";
   const rest = stateId.slice(zone.length);
@@ -91,7 +92,7 @@ export function groupOf(stateId: string): GroupId {
     return "advanced";
   }
   if (zone || seg === "zoneB" || seg === "masterPower") {
-    return "zones";
+    return "multiroom";
   }
   if (seg === "multiroom" || seg === "dist" || seg === "distributionEnable" || seg === "party" || seg === "partyMute") {
     return "multiroom";
