@@ -44,8 +44,8 @@ Objekt-`common` UND Wert-Mapping aus EINER Liste; die `common` werden über `cat
 typisiert (onoff→boolean, enum→Dropdown, number→unit/range). Der Objektbaum ist thematisch gruppiert
 (`catalog/groups.ts`, `groupOf(id)` bucketet nach zonenbereinigtem erstem Kanal-Segment, HDMI-Routing/Lippensynchron
 gewinnt dabei explizit VOR dem Zonen-Präfix): die Wiedergabe-Quellen unter `player.*`, DAB unter `tuner.dab`,
-Multiroom statt `dist`. Acht Datenpunktgruppen (Wiedergabe/Tuner/Zonen/Multiroom/HDMI/Szenen/Klang/Erweitert) sind
-im Admin per `group_*`-Schalter abschaltbar — `isGroupEnabled` gated `upsertObject`+`setStateAck`,
+Multiroom statt `dist`. Sieben Datenpunktgruppen (Wiedergabe/Tuner/Multiroom/HDMI/Szenen/Klang/Erweitert) sind
+im Admin per `group_*`-Schalter abschaltbar — Zone 2/3/4, Zone B und masterPower gehören zur Multiroom-Gruppe — `isGroupEnabled` gated `upsertObject`+`setStateAck`,
 `cleanupStaleObjects` räumt eine abgeschaltete Gruppe weg (beszel-Muster); der Verstärker-Kern (Power/Volume/Mute/
 Input/Sound-Programm/Sleep/Info) ist immer an, ohne eigenen Schalter (wie beszels `info.online`/`.status`). Alt-IDs
 aus der Vor-Gruppierung (`pure-helpers.ts` `RENAMED_CHANNELS`/`renamedObjectIds`) werden beim Update weggeräumt.
@@ -57,9 +57,9 @@ YXC-HTTP über den eigenen `yxc/http-client.ts`
 ## Stand
 
 Alle sieben Aufbauphasen abgeschlossen, danach der Multi-Transport-Neubau (alle antwortenden Protokolle
-parallel auf einem Objektbaum statt „erster Transport gewinnt"), zuletzt (v0.15.0) der thematisch gruppierte
-Objektbaum mit abschaltbaren Datenpunktgruppen und die Wiedergabe als Media-Player (Alexa/Google/VIS). Der
-Adapter ist funktional vollständig (3 Protokolle, Discovery, Migration, Härtung). Versionshistorie im README
+parallel auf einem Objektbaum statt „erster Transport gewinnt"), der thematisch gruppierte Objektbaum mit
+abschaltbaren Datenpunktgruppen und die Wiedergabe als Media-Player (Alexa/Google/VIS). Der Adapter ist
+funktional vollständig (3 Protokolle, Discovery, Migration, Härtung). Versionshistorie im README
 `## Changelog` (nicht hier dupliziert).
 
 ## Portierungs-Referenz (`../../Ressourcen/yamaha/legacy/`, NICHT im Adapter-Repo)
