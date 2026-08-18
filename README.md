@@ -14,14 +14,14 @@ legacy XML protocol of the oldest pre-2010 models — behind one object tree.
 
 ## Features
 
-- **One adapter for three protocols** — classic Yamaha AV receivers over YNCA, MusicCast devices over Yamaha Extended Control, and pre-2010 receivers over the legacy XML protocol, replacing the separate yamaha and musiccast adapters.
-- **Every protocol a device speaks runs together** — a MusicCast receiver keeps its YNCA amplifier control and adds its Yamaha Extended Control richness (multiroom, equalizer, media) on one object tree, instead of only one protocol being used per device.
-- **Instant updates** — MusicCast devices push their changes, YNCA reports over its live connection; track, volume and multiroom changes arrive the moment they happen.
-- **Self-healing connection** — a receiver that is off when the adapter starts joins on its own once it answers, and every connection recovers after a reboot or network drop, with a per-device connection indicator. A hiccup on a single protocol reconnects just that protocol; the others keep running.
-- **Rich, intelligently typed datapoints** — amplifier, tone control, HDMI output, DSP and decoder modes, sound programs, party mode, tuner with RDS, and network/USB/server/Spotify players; on/off is a boolean, fixed choices are dropdowns, numbers carry their unit and range.
-- **Capability-driven object tree** — states are generated from what each device actually reports over its protocols, not from a hardcoded model list, and only for the functions it offers.
-- **Automatic discovery** — leave the device list empty and MusicCast devices are found on the network and set up on their own at startup; add devices to run only those instead. The search covers every network interface, so a receiver is found even on a multi-homed host; an optional selector can confine it to one.
-- **Device manager** — every receiver appears as a card in the admin showing its model, IP address and the protocols it is currently connected over, with a dialog to add one by IP.
+- **Three protocols, one adapter** — YNCA, MusicCast (Yamaha Extended Control) and the legacy XML protocol of the pre-2010 models
+- **Protocols run in parallel** — a MusicCast receiver combines YNCA amplifier control with MusicCast multiroom, equalizer and media on one object tree
+- **Instant updates** — MusicCast pushes its changes, YNCA reports over its live connection
+- **Self-healing connections** — an offline receiver joins once it answers; a single protocol reconnects on its own while the others keep running
+- **Typed datapoints** — booleans, dropdowns and numbers with unit and range instead of raw text
+- **Capability-driven** — states are generated from what each device reports, no hardcoded model list
+- **Automatic discovery** — an empty device list finds and sets up MusicCast devices at startup
+- **Device manager** — receivers as admin cards with model, address and live protocol indicators
 
 ## Requirements
 
@@ -38,18 +38,16 @@ legacy XML protocol of the oldest pre-2010 models — behind one object tree.
 
 ## Configuration
 
-Devices are managed in the admin as cards. **Leave the list empty** and the adapter finds MusicCast devices on the network by itself at startup — nothing to enter. Use the **"+" dialog** to add a device by IP address to run only those instead; each card shows the device's model, IP and the protocols it is connected over. Discovery searches on every network interface by default, so a receiver is found even on a host with several interfaces; the optional **network interface** selector confines the search to one if you prefer.
+Devices are managed in the admin as cards. **Leave the list empty** and the adapter finds MusicCast devices on the network by itself at startup, or add devices by IP via the **"+" dialog** to run only those. Discovery searches on every network interface by default; the optional **network interface** selector confines it to one.
 
-Older Yamaha receivers (before ~2010, the XML protocol) do not announce themselves on the network and must always be added manually with their IP address. The **XML query interval** in the settings sets how often these older receivers are polled — they push no changes of their own, and the default of 60 seconds is plenty for an AV receiver.
+Older Yamaha receivers (before ~2010, the XML protocol) do not announce themselves on the network and must be added manually. The **XML query interval** sets how often they are polled (default 60 seconds).
 
-The **Data points** section switches whole groups of datapoints on or off — **Playback**, **Tuner**, **Multiroom**, **HDMI**, **Scenes**, **Sound** and **Advanced**. Turn off what your receiver doesn't have or you don't use, and those objects are removed from the tree; the amplifier core (power, volume, mute, input, sound program, sleep) always stays on. Switched-off groups are also skipped when the receiver is queried, so fewer groups mean a faster startup.
+The **Data points** section switches whole groups of datapoints on or off — **Playback**, **Tuner**, **Multiroom**, **HDMI**, **Scenes**, **Sound** and **Advanced**. A switched-off group is removed from the tree and not even queried, which also speeds up the startup; the amplifier core (power, volume, mute, input, sound program, sleep) always stays on.
 
 ## State Tree
 
-Each receiver becomes one device node, its datapoints organised into themed groups —
-the same groups the **Data points** switches in the settings control. Which datapoints
-exist depends on what your device reports; a stereo receiver simply has fewer than a
-big AV receiver.
+Each receiver becomes one device node with themed groups — the same groups the
+**Data points** switches control. Only what your device reports is created.
 
 - **Amplifier core** (always on) — power, volume, mute, input, sound program, sleep, plus the device info with model, firmware and connection.
 - **`player`** — one channel per playback source (Spotify, USB, server, net radio, CD, …) with playback state, artist, album, track, cover art and the transport buttons.
@@ -64,25 +62,26 @@ big AV receiver.
 
 ### Upgrading from 0.5.x
 
-Version 1.0.0 is a complete rebuild. On the first start after the update the adapter removes the old datapoints (`volume`, `power`, `Commands.*`, `Realtime.*`, `SystemConfig.*`, …) and recreates your receiver as a device with typed datapoints. The receiver's IP address is carried over from the old configuration automatically — there is nothing to re-enter. Scripts and visualizations that used the old datapoint paths must be pointed at the new ones (for example `yamaha.0.<device>.power` instead of `yamaha.0.power`).
+Version 1.0.0 is a complete rebuild. On the first start after the update the old datapoints (`volume`, `power`, `Commands.*`, `Realtime.*`, …) are removed and your receiver is recreated as a device; its IP address is carried over automatically. Point scripts and visualizations at the new paths — for example `yamaha.0.<device>.power` instead of `yamaha.0.power`.
 
 ### Receiver is not found automatically
 
-Only MusicCast devices announce themselves on the network. Older receivers — everything before ~2016, including all XML-era models — must be added manually with their IP address via the **"+" dialog**. On a host with several network interfaces, check the **network interface** setting if discovery comes up empty.
+Only MusicCast devices announce themselves on the network — older receivers must be added manually via the **"+" dialog**. If discovery comes up empty on a host with several network interfaces, check the **network interface** setting.
 
 ### Datapoints are missing
 
-The tree only carries what your device reports. If a whole themed folder is missing, check its toggle in the **Data points** section of the settings — a switched-off group is removed from the tree and not queried. Zone datapoints appear under `multiroom`, not at the top level.
+Check the group's toggle in the **Data points** settings, and remember the tree only carries what your device reports. Zone datapoints sit under `multiroom`, not at the top level.
 
 ### Values update slowly
 
-MusicCast changes normally arrive instantly. If they only refresh every few minutes, another application on the ioBroker host is occupying UDP port 41100, so the adapter fell back to polling — the log shows a note about the push port at startup.
+If MusicCast changes only refresh every few minutes, another application is occupying UDP port 41100 and the adapter fell back to polling — the startup log notes this.
 
 ### First start takes a while
 
-On the first connect the adapter asks the receiver which functions it supports, which takes up to half a minute per YNCA device. The result is remembered, so later starts and reconnects are faster. The log announces each device when it is being set up and when it is ready.
+On the first connect the adapter asks the receiver which functions it supports — up to half a minute per YNCA device. The result is remembered, later starts are faster.
 
 ## Changelog
+
 ### 1.0.0 (2026-08-18)
 
 - (krobipd) Complete rebuild: one adapter now speaks YNCA, MusicCast and the legacy XML protocol — every protocol a device answers runs in parallel on one object tree.
