@@ -1,4 +1,12 @@
 # Older changes
+## 0.5.0 (2022-03-08)
+
+- IMPORTANT: js-controller 2.0 is needed at least
+- (Apollon77) Add Sentry for crash reporting
+
+## 0.4.1
+
+- (Sneak-L8) "toggleMute" now toggle mute state (instead of always muting)
 
 ## 0.20.0 (2026-08-18)
 

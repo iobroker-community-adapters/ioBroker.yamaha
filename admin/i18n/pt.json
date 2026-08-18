@@ -5,7 +5,7 @@
   "columnName": "Nome",
   "columnIp": "Endereço IP",
   "label_xmlPollInterval": "Intervalo de consulta XML (segundos)",
-  "tooltip_xmlPollInterval": "Este campo aparece porque um dispositivo está ligado pelo antigo protocolo XML (um recetor de antes de ~2010). Esses dispositivos não comunicam alterações sozinhos, são consultados. Predefinição: a cada 60 segundos — mais do que suficiente para um recetor AV.",
+  "tooltip_xmlPollInterval": "Com que frequência o adaptador consulta recetores com o antigo protocolo XML (modelos anteriores a ~2010). Estes aparelhos não comunicam alterações por si. Sem efeito em YNCA ou MusicCast.",
   "supportHeader": "Apoiar o desenvolvimento",
   "aboutInfo": "Se este adaptador lhe é útil, pode apoiar o seu desenvolvimento:",
   "donateKofi": "Ko-fi",

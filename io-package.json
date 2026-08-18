@@ -1,9 +1,9 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "0.20.0",
+    "version": "1.0.0",
     "news": {
-      "NEXT": {
+      "1.0.0": {
         "en": "Complete rebuild: YNCA, MusicCast and XML in one adapter — new typed object tree, instant updates, auto-discovery. Old datapoints are replaced automatically; scripts need the new paths",
         "de": "Komplett-Neubau: YNCA, MusicCast und XML in einem Adapter — neuer typisierter Objektbaum, sofortige Updates, Auto-Erkennung. Alte Datenpunkte werden automatisch ersetzt; Skripte brauchen neue Pfade",
         "ru": "Полная переработка: YNCA, MusicCast и XML в одном адаптере — новое типизированное дерево объектов, мгновенные обновления, автопоиск. Старые точки данных заменяются автоматически",
@@ -116,7 +116,12 @@
       "uk": "Керування AV-ресиверами та пристроями MusicCast Yamaha через мережу",
       "zh-cn": "通过网络控制 Yamaha AV 接收器和 MusicCast 设备"
     },
-    "keywords": ["yamaha", "avr", "receiver", "musiccast"],
+    "keywords": [
+      "yamaha",
+      "avr",
+      "receiver",
+      "musiccast"
+    ],
     "licenseInformation": {
       "license": "MIT",
       "type": "free"
@@ -159,7 +164,10 @@
       {
         "condition": {
           "operand": "and",
-          "rules": ["oldVersion<1.0.0", "newVersion>=1.0.0"]
+          "rules": [
+            "oldVersion<1.0.0",
+            "newVersion>=1.0.0"
+          ]
         },
         "title": {
           "en": "Complete rebuild — new object tree",
@@ -188,7 +196,10 @@
           "zh-cn": "适配器已完全重建，现在将 YNCA、MusicCast 和旧的 XML 协议合而为一。对象树是全新的：旧的数据点（volume、power、Commands、Realtime 等）会被自动删除，功放会作为带类型数据点的设备重新创建。已配置的 IP 地址会被保留。请将脚本和可视化更新到新的数据点路径。"
         },
         "level": "warn",
-        "buttons": ["agree", "cancel"]
+        "buttons": [
+          "agree",
+          "cancel"
+        ]
       }
     ]
   },

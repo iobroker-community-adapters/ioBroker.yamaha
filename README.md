@@ -6,19 +6,20 @@
 
 **Support:** [![Ko-fi](https://img.shields.io/badge/Ko--fi-Support-ff5e5b?logo=ko-fi)](https://ko-fi.com/krobipd) [![PayPal](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://paypal.me/krobipd)
 
-Controls Yamaha AV receivers and MusicCast devices from ioBroker over the local
-network. It unites the three protocols Yamaha speaks — YNCA (the text control
-protocol of the networked receivers), MusicCast / Yamaha Extended Control (the
-richer JSON protocol of the MusicCast generation), and the legacy XML protocol
-of the oldest pre-2010 models — behind one object tree.
+Controls [Yamaha](https://www.yamaha.com/) AV receivers and MusicCast devices from
+ioBroker over the local network. It unites the three protocols Yamaha speaks —
+YNCA (the text control protocol of the networked receivers), MusicCast / Yamaha
+Extended Control (the richer JSON protocol of the MusicCast generation), and the
+legacy XML protocol of the oldest pre-2010 models — behind one object tree.
 
 ## Features
 
 - **One adapter for three protocols** — classic Yamaha AV receivers over YNCA, MusicCast devices over Yamaha Extended Control, and pre-2010 receivers over the legacy XML protocol, replacing the separate yamaha and musiccast adapters.
+- **Every protocol a device speaks runs together** — a MusicCast receiver keeps its YNCA amplifier control and adds its Yamaha Extended Control richness (multiroom, equalizer, media) on one object tree, instead of only one protocol being used per device.
+- **Instant updates** — MusicCast devices push their changes, YNCA reports over its live connection; track, volume and multiroom changes arrive the moment they happen.
 - **Self-healing connection** — a receiver that is off when the adapter starts joins on its own once it answers, and every connection recovers after a reboot or network drop, with a per-device connection indicator. A hiccup on a single protocol reconnects just that protocol; the others keep running.
 - **Rich, intelligently typed datapoints** — amplifier, tone control, HDMI output, DSP and decoder modes, sound programs, party mode, tuner with RDS, and network/USB/server/Spotify players; on/off is a boolean, fixed choices are dropdowns, numbers carry their unit and range.
 - **Capability-driven object tree** — states are generated from what each device actually reports over its protocols, not from a hardcoded model list, and only for the functions it offers.
-- **Every protocol a device speaks runs together** — a MusicCast receiver keeps its YNCA amplifier control and adds its Yamaha Extended Control richness (multiroom, equalizer, media) on one object tree, instead of only one protocol being used per device.
 - **Automatic discovery** — leave the device list empty and MusicCast devices are found on the network and set up on their own at startup; add devices to run only those instead. The search covers every network interface, so a receiver is found even on a multi-homed host; an optional selector can confine it to one.
 - **Device manager** — every receiver appears as a card in the admin showing its model, IP address and the protocols it is currently connected over, with a dialog to add one by IP.
 
@@ -28,9 +29,12 @@ of the oldest pre-2010 models — behind one object tree.
 - js-controller >= 7.2.2
 - admin >= 7.8.23
 
-## Installation
+## Ports
 
-Install the adapter from the ioBroker admin.
+- **UDP 41100 (listening)** — MusicCast devices push their change events to this port on the ioBroker host. If another MusicCast application occupies it, the adapter still works and falls back to polling.
+- **UDP 1900 (multicast, outgoing)** — the SSDP discovery search at startup.
+- **TCP 50000 (outgoing)** — the YNCA control connection to each receiver.
+- **TCP 80 (outgoing)** — the MusicCast and XML protocol requests to each device.
 
 ## Configuration
 
@@ -38,21 +42,54 @@ Devices are managed in the admin as cards. **Leave the list empty** and the adap
 
 Older Yamaha receivers (before ~2010, the XML protocol) do not announce themselves on the network and must always be added manually with their IP address. The **XML query interval** in the settings sets how often these older receivers are polled — they push no changes of their own, and the default of 60 seconds is plenty for an AV receiver.
 
-The **Data points** section switches whole groups of datapoints on or off — playback sources, tuner, extra zones, multiroom, HDMI, scenes, sound processing and advanced setup datapoints. Turn off what your receiver doesn't have or you don't use, and those objects are removed from the tree; the amplifier core (power, volume, mute, input, sound program, sleep) always stays on. Switched-off groups are also skipped when the receiver is queried, so fewer groups mean a faster startup.
+The **Data points** section switches whole groups of datapoints on or off — **Playback**, **Tuner**, **Multiroom**, **HDMI**, **Scenes**, **Sound** and **Advanced**. Turn off what your receiver doesn't have or you don't use, and those objects are removed from the tree; the amplifier core (power, volume, mute, input, sound program, sleep) always stays on. Switched-off groups are also skipped when the receiver is queried, so fewer groups mean a faster startup.
 
-## Upgrading from 0.5.x
+## State Tree
 
-Version 1.0.0 is a complete rebuild. On the first start after the update the adapter removes the old datapoints (`volume`, `power`, `Commands.*`, `Realtime.*`, `SystemConfig.*`, …) and recreates your receiver as a device with typed datapoints, named after the configured address. The receiver's IP address is carried over from the old configuration automatically — there is nothing to re-enter. Scripts and visualizations that used the old datapoint paths must be pointed at the new ones (for example `yamaha.0.<device>.power` instead of `yamaha.0.power`).
+Each receiver becomes one device node, its datapoints organised into themed groups —
+the same groups the **Data points** switches in the settings control. Which datapoints
+exist depends on what your device reports; a stereo receiver simply has fewer than a
+big AV receiver.
+
+- **Amplifier core** (always on) — power, volume, mute, input, sound program, sleep, plus the device info with model, firmware and connection.
+- **`player`** — one channel per playback source (Spotify, USB, server, net radio, CD, …) with playback state, artist, album, track, cover art and the transport buttons.
+- **`tuner`** — AM/FM and DAB radio including RDS texts and frequency.
+- **`multiroom`** — zones 2–4, Zone B, master power, party mode and MusicCast group control.
+- **`hdmi`** — the HDMI outputs and lip sync.
+- **`scene`** — the receiver's scene names and a scene recall.
+- **`sound`** — tone and sound processing: bass/treble, DSP modes, enhancer, equalizer, ….
+- **`advanced`** — setup-level datapoints: maximum/initial volume, speaker configuration, input names.
+
+## Troubleshooting
+
+### Upgrading from 0.5.x
+
+Version 1.0.0 is a complete rebuild. On the first start after the update the adapter removes the old datapoints (`volume`, `power`, `Commands.*`, `Realtime.*`, `SystemConfig.*`, …) and recreates your receiver as a device with typed datapoints. The receiver's IP address is carried over from the old configuration automatically — there is nothing to re-enter. Scripts and visualizations that used the old datapoint paths must be pointed at the new ones (for example `yamaha.0.<device>.power` instead of `yamaha.0.power`).
+
+### Receiver is not found automatically
+
+Only MusicCast devices announce themselves on the network. Older receivers — everything before ~2016, including all XML-era models — must be added manually with their IP address via the **"+" dialog**. On a host with several network interfaces, check the **network interface** setting if discovery comes up empty.
+
+### Datapoints are missing
+
+The tree only carries what your device reports. If a whole themed folder is missing, check its toggle in the **Data points** section of the settings — a switched-off group is removed from the tree and not queried. Zone datapoints appear under `multiroom`, not at the top level.
+
+### Values update slowly
+
+MusicCast changes normally arrive instantly. If they only refresh every few minutes, another application on the ioBroker host is occupying UDP port 41100, so the adapter fell back to polling — the log shows a note about the push port at startup.
+
+### First start takes a while
+
+On the first connect the adapter asks the receiver which functions it supports, which takes up to half a minute per YNCA device. The result is remembered, so later starts and reconnects are faster. The log announces each device when it is being set up and when it is ready.
 
 ## Changelog
+### 1.0.0 (2026-08-18)
 
-### **WORK IN PROGRESS**
-
-- (krobipd) Complete rebuild in TypeScript: one adapter now speaks YNCA, MusicCast (Yamaha Extended Control) and the legacy XML protocol — every protocol a device answers runs in parallel on one object tree.
-- (krobipd) The object tree is new, with typed datapoints (booleans, dropdowns, numbers with unit and range) generated from what each device actually reports. Old 0.5.x datapoints are removed automatically and the receiver is recreated; the configured IP address is carried over. Scripts and visualizations must be updated to the new paths.
-- (krobipd) Instant updates: MusicCast push events and YNCA's live connection replace polling; connections heal themselves, and a hiccup on a single protocol reconnects just that protocol.
-- (krobipd) Auto-discovery sets up MusicCast devices by itself when the device list is empty, and the admin shows every receiver as a card with model, IP and live protocol indicators.
-- (krobipd) Whole datapoint groups (playback sources, tuner, multiroom, HDMI, scenes, sound, advanced) can be switched off in the admin — and are then not even queried from the device.
+- (krobipd) Complete rebuild: one adapter now speaks YNCA, MusicCast and the legacy XML protocol — every protocol a device answers runs in parallel on one object tree.
+- (krobipd) New object tree with typed datapoints built from what your device reports. Old datapoints are removed automatically, the address is carried over — point scripts at the new paths.
+- (krobipd) Instant updates: MusicCast push events and the live YNCA connection replace polling; connections heal themselves, and one protocol's hiccup reconnects just that protocol.
+- (krobipd) Auto-discovery sets up MusicCast devices by itself when the device list is empty, and the admin shows every receiver as a card with model, address and protocol indicators.
+- (krobipd) Whole datapoint groups such as playback sources, tuner, multiroom or scenes can be switched off in the admin — and are then not even queried from the device.
 - (krobipd) Upgrading from 0.5.x shows a one-time notice explaining the new object tree before the update installs.
 
 ### 0.5.4 (2024-06-14)
@@ -72,15 +109,6 @@ Version 1.0.0 is a complete rebuild. On the first start after the update the ada
 - (Apollon77) Fix crash cases reported by Sentry
 - (Apollon77) fix type of pureDirect
 
-### 0.5.0 (2022-03-08)
-
-- IMPORTANT: js-controller 2.0 is needed at least
-- (Apollon77) Add Sentry for crash reporting
-
-### 0.4.1
-
-- (Sneak-L8) "toggleMute" now toggle mute state (instead of always muting)
-
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 
 ## History
@@ -99,8 +127,19 @@ for existing users it is simply a new version of the same adapter:
   [mcm1957](https://github.com/mcm1957) — maintained the adapter from 2020 to 2026,
   releasing versions up to 0.5.4.
 - Since 2026, [krobi](https://github.com/krobipd) maintains the adapter in the community
-  organisation and rebuilt it from the ground up in TypeScript, uniting the YNCA,
-  MusicCast (YXC) and legacy XML protocols behind one object tree.
+  organisation and rebuilt it from the ground up, uniting the YNCA, MusicCast (YXC)
+  and legacy XML protocols behind one object tree.
+
+## Support
+
+- [ioBroker Forum](https://forum.iobroker.net/)
+- [GitHub Issues](https://github.com/iobroker-community-adapters/ioBroker.yamaha/issues)
+
+### Support Development
+
+This adapter is free and open source. If you find it useful, consider buying me a coffee:
+
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20me-ff5e5b?logo=ko-fi)](https://ko-fi.com/krobipd) [![PayPal](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://paypal.me/krobipd)
 
 ## License
 

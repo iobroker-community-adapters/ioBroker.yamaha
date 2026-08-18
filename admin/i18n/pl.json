@@ -5,7 +5,7 @@
   "columnName": "Nazwa",
   "columnIp": "Adres IP",
   "label_xmlPollInterval": "Interwał odpytywania XML (sekundy)",
-  "tooltip_xmlPollInterval": "To pole pojawia się, ponieważ urządzenie jest połączone przez stary protokół XML (amplituner sprzed ~2010). Takie urządzenia nie zgłaszają zmian samodzielnie, są odpytywane. Domyślnie: co 60 sekund — w zupełności wystarczy dla amplitunera AV.",
+  "tooltip_xmlPollInterval": "Jak często adapter odpytuje amplitunery ze starym protokołem XML (modele sprzed ~2010). Te urządzenia nie zgłaszają zmian samodzielnie. Bez wpływu na urządzenia YNCA i MusicCast.",
   "supportHeader": "Wesprzyj rozwój",
   "aboutInfo": "Jeśli ten adapter jest dla Ciebie przydatny, możesz wesprzeć jego rozwój:",
   "donateKofi": "Ko-fi",

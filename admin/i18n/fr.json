@@ -5,7 +5,7 @@
   "columnName": "Nom",
   "columnIp": "Adresse IP",
   "label_xmlPollInterval": "Intervalle d'interrogation XML (secondes)",
-  "tooltip_xmlPollInterval": "Ce champ apparaît car un appareil est connecté via l'ancien protocole XML (un récepteur d'avant ~2010). Ces appareils ne signalent pas les changements eux-mêmes, ils sont interrogés. Par défaut : toutes les 60 secondes — largement suffisant pour un ampli AV.",
+  "tooltip_xmlPollInterval": "Fréquence d'interrogation des amplis utilisant l'ancien protocole XML (modèles avant ~2010). Ces appareils ne signalent pas les changements d'eux-mêmes. Sans effet sur YNCA ou MusicCast.",
   "supportHeader": "Soutenir le développement",
   "aboutInfo": "Si cet adaptateur vous est utile, vous pouvez soutenir son développement :",
   "donateKofi": "Ko-fi",

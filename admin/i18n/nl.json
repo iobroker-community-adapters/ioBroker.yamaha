@@ -5,7 +5,7 @@
   "columnName": "Naam",
   "columnIp": "IP-adres",
   "label_xmlPollInterval": "XML-opvraaginterval (seconden)",
-  "tooltip_xmlPollInterval": "Dit veld verschijnt omdat een apparaat via het oude XML-protocol is verbonden (een receiver van vóór ~2010). Zulke apparaten melden wijzigingen niet zelf, ze worden opgevraagd. Standaard: elke 60 seconden — ruim voldoende voor een AV-receiver.",
+  "tooltip_xmlPollInterval": "Hoe vaak de adapter receivers met het oude XML-protocol opvraagt (modellen van vóór ~2010). Deze apparaten melden wijzigingen niet zelf. Geen effect op YNCA- of MusicCast-apparaten.",
   "supportHeader": "Ontwikkeling steunen",
   "aboutInfo": "Als deze adapter nuttig voor je is, kun je de ontwikkeling steunen:",
   "donateKofi": "Ko-fi",
