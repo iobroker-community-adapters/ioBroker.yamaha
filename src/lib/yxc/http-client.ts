@@ -6,6 +6,18 @@ const REQUEST_TIMEOUT_MS = 4000;
 /** Base path of the Yamaha Extended Control HTTP API. */
 const API_BASE = "/YamahaExtendedControl/v1";
 
+/**
+ * Event-subscription headers, sent with EVERY request (as `yamaha-yxc-nodejs` did —
+ * `yxc_api_cmd.js` SendReqToDevice). They are what makes the device push its UDP
+ * events to this host on :41100; without them no push ever arrives and every YXC
+ * state falls back to the 5-minute keepalive poll. The regular keepalive requests
+ * carrying these headers are also what renews the subscription before it expires.
+ */
+export const YXC_SUBSCRIPTION_HEADERS: Readonly<Record<string, string>> = {
+  "X-AppName": "MusicCast/1.0",
+  "X-AppPort": "41100",
+};
+
 /** Sends a command path and resolves the parsed JSON body — the injectable transport seam. */
 export type YxcSend = (command: string, body?: string) => Promise<unknown>;
 
@@ -54,8 +66,12 @@ function defaultSend(ip: string): YxcSend {
       };
       const req =
         body === undefined
-          ? httpGet(url, onResponse)
-          : httpRequest(url, { method: "POST", headers: { "Content-Type": "application/json" } }, onResponse);
+          ? httpGet(url, { headers: { ...YXC_SUBSCRIPTION_HEADERS } }, onResponse)
+          : httpRequest(
+              url,
+              { method: "POST", headers: { "Content-Type": "application/json", ...YXC_SUBSCRIPTION_HEADERS } },
+              onResponse,
+            );
       req.on("error", reject);
       req.setTimeout(REQUEST_TIMEOUT_MS, () => req.destroy(new Error(`YXC request timed out: ${command}`)));
       if (body !== undefined) {

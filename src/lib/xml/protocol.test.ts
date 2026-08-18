@@ -56,9 +56,9 @@ describe("parseBasicStatus", () => {
 
   test("parses tone, subwoofer trim and extra-bass/YPAO toggles (soef paths the predecessor exposed)", () => {
     const xml =
-      "<Sound_Video><Tone><Bass><Val>3</Val></Bass><Treble><Val>-2</Val></Treble></Tone>" +
+      "<Sound_Video><Tone><Bass><Val>30</Val></Bass><Treble><Val>-20</Val></Treble></Tone>" +
       "<Extra_Bass>Auto</Extra_Bass><YPAO_Volume>Off</YPAO_Volume></Sound_Video>" +
-      "<Volume><Subwoofer_Trim><Val>1</Val></Subwoofer_Trim></Volume>";
+      "<Volume><Subwoofer_Trim><Val>10</Val></Subwoofer_Trim></Volume>";
     const s = parseBasicStatus(xml);
     expect(s.bass).toBe(3);
     expect(s.treble).toBe(-2);

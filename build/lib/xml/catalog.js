@@ -102,23 +102,55 @@ const XML_AMP_CATALOG = [
   // Tone, subwoofer trim and the Extra-Bass/YPAO toggles — exposed by the predecessor
   // adapter (yamaha-nodejs-soef) on real pre-2010 devices, and dropped in the rewrite.
   // Values verified against that library's PUT paths (audit findings F3/F4).
+  // Tone/subwoofer values are real decibels on the state; the wire carries tenths with
+  // Exp=1 (the same Val/Exp/Unit envelope as the volume above): *10 out, /10 on read.
   {
     state: "sound.bass",
-    common: { name: "Bass", type: "number", role: "level", read: true, write: true, unit: "dB" },
+    common: {
+      name: "Bass",
+      type: "number",
+      role: "level",
+      read: true,
+      write: true,
+      unit: "dB",
+      min: -6,
+      max: 6,
+      step: 0.5
+    },
     statusField: "bass",
-    toInner: (value) => `<Sound_Video><Tone><Bass><Val>${Number(value)}</Val><Exp>1</Exp><Unit>dB</Unit></Bass></Tone></Sound_Video>`
+    toInner: (value) => `<Sound_Video><Tone><Bass><Val>${Math.round(Number(value) * 10)}</Val><Exp>1</Exp><Unit>dB</Unit></Bass></Tone></Sound_Video>`
   },
   {
     state: "sound.treble",
-    common: { name: "Treble", type: "number", role: "level", read: true, write: true, unit: "dB" },
+    common: {
+      name: "Treble",
+      type: "number",
+      role: "level",
+      read: true,
+      write: true,
+      unit: "dB",
+      min: -6,
+      max: 6,
+      step: 0.5
+    },
     statusField: "treble",
-    toInner: (value) => `<Sound_Video><Tone><Treble><Val>${Number(value)}</Val><Exp>1</Exp><Unit>dB</Unit></Treble></Tone></Sound_Video>`
+    toInner: (value) => `<Sound_Video><Tone><Treble><Val>${Math.round(Number(value) * 10)}</Val><Exp>1</Exp><Unit>dB</Unit></Treble></Tone></Sound_Video>`
   },
   {
     state: "sound.subwooferTrim",
-    common: { name: "Subwoofer trim", type: "number", role: "level", read: true, write: true, unit: "dB" },
+    common: {
+      name: "Subwoofer trim",
+      type: "number",
+      role: "level",
+      read: true,
+      write: true,
+      unit: "dB",
+      min: -6,
+      max: 6,
+      step: 0.5
+    },
     statusField: "subwooferTrim",
-    toInner: (value) => `<Volume><Subwoofer_Trim><Val>${Number(value)}</Val><Exp>1</Exp><Unit>dB</Unit></Subwoofer_Trim></Volume>`
+    toInner: (value) => `<Volume><Subwoofer_Trim><Val>${Math.round(Number(value) * 10)}</Val><Exp>1</Exp><Unit>dB</Unit></Subwoofer_Trim></Volume>`
   },
   {
     state: "sound.extraBass",

@@ -78,7 +78,10 @@ export class DeviceSupervisor {
     let handle: ConnectionHandle | null = null;
     try {
       handle = await this.deps.attempt();
-    } catch {
+    } catch (e) {
+      // Never let an attempt failure vanish silently — without this line a repeatable
+      // error (e.g. object creation failing) becomes an invisible endless retry loop.
+      this.deps.log.debug(`connection attempt failed, retrying: ${e instanceof Error ? e.message : String(e)}`);
       handle = null;
     }
     if (this.closed) {

@@ -1,4 +1,4 @@
-import { MultiTransportHandle, type TransportConnection } from "./multi-transport-handle";
+import { MultiTransportHandle, type ConnectableTransport, type TransportConnection } from "./multi-transport-handle";
 import type { ObjectDef } from "../catalog/types";
 import type { Transport } from "../catalog/owner-policy";
 
@@ -8,16 +8,23 @@ function state(id: string, name: string, extra: Record<string, unknown> = {}): O
   return { id, type: "state", common: { name, type: "number", role: "level", read: true, write: true, ...extra } };
 }
 
-/** A fake transport connection recording what the handle asks of it. */
+/** A fake transport connection recording what the handle asks of it; its drop is triggerable. */
 function fakeConn(
   transport: Transport,
   objects: readonly ObjectDef[],
-): TransportConnection & { seeded: string[]; writes: Array<{ id: string; value: unknown }>; closed: boolean } {
+): ConnectableTransport & {
+  seeded: string[];
+  writes: Array<{ id: string; value: unknown }>;
+  closed: boolean;
+  drop: (reason?: Error) => void;
+} {
+  let dropHandler: ((reason?: Error) => void) | undefined;
   const conn = {
     transport,
     seeded: [] as string[],
     writes: [] as Array<{ id: string; value: unknown }>,
     closed: false,
+    connect: (): Promise<boolean> => Promise.resolve(true),
     buildObjects: (): readonly ObjectDef[] => objects,
     seedOwned: (owned: ReadonlySet<string>): void => {
       conn.seeded.push(...owned);
@@ -25,9 +32,14 @@ function fakeConn(
     handleWrite: (id: string, _ack: boolean, value: unknown): void => {
       conn.writes.push({ id, value });
     },
-    onDrop: (): void => {},
+    onDrop: (cb: (reason?: Error) => void): void => {
+      dropHandler = cb;
+    },
     close: (): void => {
       conn.closed = true;
+    },
+    drop: (reason?: Error): void => {
+      dropHandler?.(reason);
     },
   };
   return conn;
@@ -47,7 +59,11 @@ function setup(connections: TransportConnection[]): { handle: MultiTransportHand
 describe("MultiTransportHandle", () => {
   test("builds one unified tree from all connections and seeds each its owned ids", async () => {
     const ynca = fakeConn("ynca", [state("volume", "Volume dB", { unit: "dB" }), state("power", "Power YNCA")]);
-    const yxc = fakeConn("yxc", [state("volume", "Volume raw"), state("power", "Power YXC"), state("dist.role", "Role")]);
+    const yxc = fakeConn("yxc", [
+      state("volume", "Volume raw"),
+      state("power", "Power YXC"),
+      state("dist.role", "Role"),
+    ]);
     const { handle, objects } = setup([ynca, yxc]);
     await handle.start();
     // one node per capability, under the device id
@@ -77,6 +93,136 @@ describe("MultiTransportHandle", () => {
     const { handle } = setup([ynca, yxc]);
     handle.close();
     expect(ynca.closed).toBe(true);
+    expect(yxc.closed).toBe(true);
+  });
+});
+
+/** Setup with per-transport reconnect wired: manual timers, instant backoff, a rebuild factory. */
+function reconnectSetup(
+  connections: ConnectableTransport[],
+  rebuilds: Partial<Record<Transport, () => ConnectableTransport>>,
+): {
+  handle: MultiTransportHandle;
+  objects: string[];
+  timers: Array<() => void>;
+  transportsReports: string[][];
+  fireTimers: () => Promise<void>;
+} {
+  const objects: string[] = [];
+  const timers: Array<() => void> = [];
+  const transportsReports: string[][] = [];
+  const handle = new MultiTransportHandle("living", connections, {
+    upsertObject: async id => {
+      objects.push(id);
+    },
+    log: silentLog,
+    onTransports: names => transportsReports.push([...names]),
+    rebuild: transport => rebuilds[transport]!(),
+    schedule: cb => {
+      timers.push(cb);
+      return timers.length;
+    },
+    cancel: () => {},
+    backoffFactory: () => ({ nextDelay: () => 1000, reset: () => {} }),
+  });
+  const fireTimers = async (): Promise<void> => {
+    const due = timers.splice(0);
+    for (const cb of due) {
+      cb();
+    }
+    // let the async attemptTransport chains settle
+    await new Promise(resolve => setTimeout(resolve, 0));
+  };
+  return { handle, objects, timers, transportsReports, fireTimers };
+}
+
+describe("MultiTransportHandle per-transport reconnect", () => {
+  test("a single transport's drop keeps the device alive and reconnects just that transport", async () => {
+    const ynca = fakeConn("ynca", [state("volume", "Volume dB", { unit: "dB" })]);
+    const yxc = fakeConn("yxc", [state("volume", "Volume raw"), state("dist.role", "Role")]);
+    const freshYnca = fakeConn("ynca", [state("volume", "Volume dB", { unit: "dB" })]);
+    const supervisorDrop = vi.fn();
+    const { handle, transportsReports, fireTimers } = reconnectSetup([ynca, yxc], { ynca: () => freshYnca });
+    await handle.start();
+    handle.onDrop(supervisorDrop);
+    expect(transportsReports.at(-1)).toEqual(["ynca", "yxc"]);
+
+    ynca.drop(new Error("socket reset"));
+    // the dropped transport is closed, the device stays up, the supervisor is NOT told
+    expect(ynca.closed).toBe(true);
+    expect(supervisorDrop).not.toHaveBeenCalled();
+    expect(transportsReports.at(-1)).toEqual(["yxc"]);
+
+    await fireTimers();
+    // the fresh YNCA is live again and owns volume again (re-coordinated)
+    expect(transportsReports.at(-1)).toEqual(["yxc", "ynca"]);
+    expect(freshYnca.seeded).toContain("volume");
+    handle.handleStateChange("living.volume", false, -30);
+    expect(freshYnca.writes).toContainEqual({ id: "volume", value: -30 });
+  });
+
+  test("while the owner is offline its write is dropped, not sent to the dead connection", async () => {
+    const ynca = fakeConn("ynca", [state("volume", "Volume dB", { unit: "dB" })]);
+    const yxc = fakeConn("yxc", [state("volume", "Volume raw"), state("dist.role", "Role")]);
+    const { handle } = reconnectSetup([ynca, yxc], { ynca: () => fakeConn("ynca", []) });
+    await handle.start();
+    ynca.drop();
+    handle.handleStateChange("living.volume", false, -30);
+    expect(ynca.writes).toEqual([]);
+    expect(yxc.writes).toEqual([]); // not re-routed either — ownership stands
+  });
+
+  test("a failed rebuild keeps the retry loop going", async () => {
+    const ynca = fakeConn("ynca", [state("power", "Power")]);
+    const yxc = fakeConn("yxc", [state("dist.role", "Role")]);
+    const deadYnca = fakeConn("ynca", []);
+    deadYnca.connect = (): Promise<boolean> => Promise.resolve(false);
+    const { handle, timers, fireTimers } = reconnectSetup([ynca, yxc], { ynca: () => deadYnca });
+    await handle.start();
+    ynca.drop();
+    expect(timers).toHaveLength(1);
+    await fireTimers();
+    // the failed attempt closed the fresh conn and scheduled the next try
+    expect(deadYnca.closed).toBe(true);
+    expect(timers).toHaveLength(1);
+  });
+
+  test("when the LAST live transport drops, the supervisor's drop fires once", async () => {
+    const ynca = fakeConn("ynca", [state("power", "Power")]);
+    const yxc = fakeConn("yxc", [state("dist.role", "Role")]);
+    const supervisorDrop = vi.fn();
+    const { handle } = reconnectSetup([ynca, yxc], {});
+    await handle.start();
+    handle.onDrop(supervisorDrop);
+    ynca.drop();
+    expect(supervisorDrop).not.toHaveBeenCalled();
+    yxc.drop(new Error("gone"));
+    expect(supervisorDrop).toHaveBeenCalledTimes(1);
+    yxc.drop();
+    expect(supervisorDrop).toHaveBeenCalledTimes(1);
+  });
+
+  test("an all-down before the supervisor registers is latched and delivered on registration", async () => {
+    const ynca = fakeConn("ynca", [state("power", "Power")]);
+    const { handle } = reconnectSetup([ynca], {});
+    await handle.start();
+    ynca.drop(new Error("early"));
+    const supervisorDrop = vi.fn();
+    handle.onDrop(supervisorDrop);
+    expect(supervisorDrop).toHaveBeenCalledTimes(1);
+  });
+
+  test("close stops a pending transport retry from reconnecting", async () => {
+    const ynca = fakeConn("ynca", [state("power", "Power")]);
+    const yxc = fakeConn("yxc", [state("dist.role", "Role")]);
+    const fresh = fakeConn("ynca", []);
+    const { handle, fireTimers, transportsReports } = reconnectSetup([ynca, yxc], { ynca: () => fresh });
+    await handle.start();
+    ynca.drop();
+    handle.close();
+    const before = transportsReports.length;
+    await fireTimers();
+    expect(transportsReports.length).toBe(before); // no live-set change after close
     expect(yxc.closed).toBe(true);
   });
 });

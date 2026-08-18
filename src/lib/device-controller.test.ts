@@ -1,6 +1,7 @@
 import { YncaDeviceController } from "./device-controller";
 import type { YncaClientLike } from "./device-controller";
 import type { YncaCapabilities } from "./ynca/capability";
+import { createSubunitCache } from "./ynca/subunit-cache";
 
 interface Msg {
   subunit: string;
@@ -13,10 +14,26 @@ class FakeClient implements YncaClientLike {
   public closed = false;
   public keepaliveStarted = false;
   public capabilities: YncaCapabilities = { model: "", subunits: {} };
+  /**
+   * When set, an AVAIL-only request list (the probe pass) is answered with exactly
+   * these subunits; unset, every readCapabilities call returns `capabilities`
+   * (adequate for the tests that predate the two-pass sweep).
+   */
+  public availableSubunits?: string[];
+  /** Every readCapabilities request list, for asserting what was actually swept. */
+  public requests: Array<Array<{ subunit: string; func: string }>> = [];
   private handler?: (message: Msg) => void;
 
   public async connect(): Promise<void> {}
-  public async readCapabilities(): Promise<YncaCapabilities> {
+  public async readCapabilities(gets: Array<{ subunit: string; func: string }>): Promise<YncaCapabilities> {
+    this.requests.push(gets);
+    if (this.availableSubunits && gets.length > 0 && gets.every(get => get.func === "AVAIL")) {
+      const subunits: Record<string, Record<string, string>> = {};
+      for (const subunit of this.availableSubunits) {
+        subunits[subunit] = { AVAIL: "Ready" };
+      }
+      return { model: "", subunits };
+    }
     return this.capabilities;
   }
   public send(subunit: string, func: string, value: string): void {
@@ -142,5 +159,91 @@ describe("YncaDeviceController", () => {
     const controller = new YncaDeviceController("living", makeDeps(client).deps);
     controller.close();
     expect(client.closed).toBe(true);
+  });
+});
+
+describe("YncaDeviceController two-pass sweep", () => {
+  test("probes AVAIL first, then sweeps only the answering subunits plus SYS", async () => {
+    const client = new FakeClient();
+    client.availableSubunits = ["MAIN", "TUN"];
+    client.capabilities = { model: "RX", subunits: { MAIN: { PWR: "On" }, TUN: { BAND: "FM" } } };
+    await new YncaDeviceController("living", makeDeps(client).deps).start();
+    expect(client.requests).toHaveLength(2);
+    expect(client.requests[0].every(get => get.func === "AVAIL")).toBe(true);
+    // SYS answers no AVAIL and must never be probed…
+    expect(client.requests[0].some(get => get.subunit === "SYS")).toBe(false);
+    // …but is always part of the sweep; absent subunits (ZONE2, player sources) are not.
+    const sweptSubunits = new Set(client.requests[1].map(get => get.subunit));
+    expect(sweptSubunits.has("SYS")).toBe(true);
+    expect(sweptSubunits.has("MAIN")).toBe(true);
+    expect(sweptSubunits.has("TUN")).toBe(true);
+    expect(sweptSubunits.has("ZONE2")).toBe(false);
+    expect(sweptSubunits.has("SPOTIFY")).toBe(false);
+  });
+
+  test("a device that ignores AVAIL falls back to the full blind sweep (no feature loss)", async () => {
+    const client = new FakeClient();
+    client.availableSubunits = [];
+    client.capabilities = { model: "RX", subunits: { MAIN: { PWR: "On" } } };
+    await new YncaDeviceController("living", makeDeps(client).deps).start();
+    const sweptSubunits = new Set(client.requests[1].map(get => get.subunit));
+    // The blind sweep covers everything the catalog knows.
+    expect(sweptSubunits.has("ZONE2")).toBe(true);
+    expect(sweptSubunits.has("SPOTIFY")).toBe(true);
+  });
+
+  test("a valid cached probe result skips the AVAIL phase entirely", async () => {
+    const client = new FakeClient();
+    client.availableSubunits = ["MAIN"];
+    client.capabilities = {
+      model: "RX-V6A",
+      subunits: { SYS: { MODELNAME: "RX-V6A", VERSION: "1.80" }, MAIN: { PWR: "On" } },
+    };
+    const persisted: unknown[] = [];
+    const cache = createSubunitCache({ subunits: ["MAIN"], model: "RX-V6A", firmware: "1.80" }, s => persisted.push(s));
+    const { deps } = makeDeps(client);
+    await new YncaDeviceController("living", { ...deps, subunitCache: cache }).start();
+    // One request only — the targeted sweep; no AVAIL probe, no cache rewrite.
+    expect(client.requests).toHaveLength(1);
+    expect(client.requests[0].every(get => get.func !== "AVAIL")).toBe(true);
+    expect(persisted).toEqual([]);
+  });
+
+  test("a stale cache (model/firmware changed) re-probes and stores the fresh result", async () => {
+    const client = new FakeClient();
+    client.availableSubunits = ["MAIN", "ZONE2"];
+    client.capabilities = {
+      model: "RX-A4A",
+      subunits: { SYS: { MODELNAME: "RX-A4A", VERSION: "2.10" }, MAIN: { PWR: "On" } },
+    };
+    const persisted: unknown[] = [];
+    const cache = createSubunitCache({ subunits: ["MAIN"], model: "RX-V6A", firmware: "1.80" }, s => persisted.push(s));
+    const { deps } = makeDeps(client);
+    await new YncaDeviceController("living", { ...deps, subunitCache: cache }).start();
+    // Stale targeted sweep, then probe, then fresh targeted sweep.
+    expect(client.requests).toHaveLength(3);
+    expect(client.requests[1].every(get => get.func === "AVAIL")).toBe(true);
+    // clear() persisted undefined, then set() persisted the fresh snapshot.
+    expect(persisted).toEqual([undefined, { subunits: ["MAIN", "ZONE2"], model: "RX-A4A", firmware: "2.10" }]);
+  });
+
+  test("a disabled datapoint group is excluded from the sweep AND the objects", async () => {
+    const client = new FakeClient();
+    client.availableSubunits = ["MAIN", "SPOTIFY"];
+    client.capabilities = {
+      model: "RX",
+      subunits: { MAIN: { PWR: "On" }, SPOTIFY: { PLAYBACKINFO: "Stop" } },
+    };
+    const { created, deps } = makeDeps(client);
+    await new YncaDeviceController("living", {
+      ...deps,
+      isEntryEnabled: id => !id.startsWith("player."),
+    }).start();
+    // SPOTIFY answered AVAIL, but with the player group off none of its functions are fetched…
+    const sweptSubunits = new Set(client.requests[1].map(get => get.subunit));
+    expect(sweptSubunits.has("SPOTIFY")).toBe(false);
+    // …and no player object is created.
+    expect(created.some(id => id.includes("player"))).toBe(false);
+    expect(created).toContain("living.power");
   });
 });

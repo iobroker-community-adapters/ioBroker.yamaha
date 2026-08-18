@@ -31,7 +31,7 @@ const YXC_AMP_CATALOG = [
     create: { kind: "func", func: "power" },
     read: { field: "power" },
     fromStatus: (value) => value === "on",
-    write: { method: "power", toYxc: bool }
+    write: { apply: (c, v, z) => c.power(Boolean(v), z) }
   },
   {
     state: "volume",
@@ -39,7 +39,7 @@ const YXC_AMP_CATALOG = [
     create: { kind: "func", func: "volume" },
     read: { field: "volume" },
     fromStatus: num,
-    write: { method: "setVolumeTo", toYxc: num }
+    write: { apply: (c, v, z) => c.setVolumeTo(Number(v), z) }
   },
   {
     state: "mute",
@@ -47,7 +47,7 @@ const YXC_AMP_CATALOG = [
     create: { kind: "func", func: "mute" },
     read: { field: "mute" },
     fromStatus: bool,
-    write: { method: "mute", toYxc: bool }
+    write: { apply: (c, v, z) => c.mute(Boolean(v), z) }
   },
   {
     state: "input",
@@ -55,7 +55,7 @@ const YXC_AMP_CATALOG = [
     create: { kind: "input" },
     read: { field: "input" },
     fromStatus: str,
-    write: { method: "setInput", toYxc: str }
+    write: { apply: (c, v, z) => c.setInput(String(v), z) }
   },
   {
     state: "soundProgram",
@@ -63,7 +63,7 @@ const YXC_AMP_CATALOG = [
     create: { kind: "func", func: "sound_program" },
     read: { field: "sound_program" },
     fromStatus: str,
-    write: { method: "setSound", toYxc: str }
+    write: { apply: (c, v, z) => c.setSound(String(v), z) }
   },
   {
     state: "sound.enhancer",
@@ -71,7 +71,7 @@ const YXC_AMP_CATALOG = [
     create: { kind: "func", func: "enhancer" },
     read: { field: "enhancer" },
     fromStatus: bool,
-    write: { method: "setEnhancer", toYxc: bool }
+    write: { apply: (c, v, z) => c.setEnhancer(Boolean(v), z) }
   },
   {
     state: "sound.pureDirect",
@@ -79,7 +79,7 @@ const YXC_AMP_CATALOG = [
     create: { kind: "func", func: "pure_direct" },
     read: { field: "pure_direct" },
     fromStatus: bool,
-    write: { method: "setPureDirect", toYxc: bool }
+    write: { apply: (c, v, z) => c.setPureDirect(Boolean(v), z) }
   },
   {
     state: "subwooferVolume",
@@ -87,7 +87,7 @@ const YXC_AMP_CATALOG = [
     create: { kind: "func", func: "subwoofer_volume" },
     read: { field: "subwoofer_volume" },
     fromStatus: num,
-    write: { method: "setSubwooferVolumeTo", toYxc: num }
+    write: { apply: (c, v, z) => c.setSubwooferVolumeTo(Number(v), z) }
   },
   {
     state: "sound.bass",
@@ -95,7 +95,7 @@ const YXC_AMP_CATALOG = [
     create: { kind: "func", func: "tone_control" },
     read: { path: ["tone_control", "bass"] },
     fromStatus: num,
-    write: { method: "setBassTo", toYxc: num }
+    write: { apply: (c, v, z) => c.setBassTo(Number(v), z) }
   },
   {
     state: "sound.treble",
@@ -103,7 +103,7 @@ const YXC_AMP_CATALOG = [
     create: { kind: "func", func: "tone_control" },
     read: { path: ["tone_control", "treble"] },
     fromStatus: num,
-    write: { method: "setTrebleTo", toYxc: num }
+    write: { apply: (c, v, z) => c.setTrebleTo(Number(v), z) }
   },
   {
     state: "sleep",
@@ -111,7 +111,7 @@ const YXC_AMP_CATALOG = [
     create: { kind: "func", func: "sleep" },
     read: { field: "sleep" },
     fromStatus: num,
-    write: { method: "sleep", toYxc: num }
+    write: { apply: (c, v, z) => c.sleep(Number(v), z) }
   },
   {
     state: "sound.dialogueLevel",
@@ -175,7 +175,7 @@ const YXC_AMP_CATALOG = [
     create: { kind: "func", func: "direct" },
     read: { field: "direct" },
     fromStatus: bool,
-    write: { method: "setDirect", toYxc: bool }
+    write: { apply: (c, v, z) => c.setDirect(Boolean(v), z) }
   },
   {
     state: "sound.clearVoice",
@@ -183,7 +183,7 @@ const YXC_AMP_CATALOG = [
     create: { kind: "func", func: "clear_voice" },
     read: { field: "clear_voice" },
     fromStatus: bool,
-    write: { method: "setClearVoice", toYxc: bool }
+    write: { apply: (c, v, z) => c.setClearVoice(Boolean(v), z) }
   },
   {
     state: "sound.bassExtension",
@@ -191,7 +191,7 @@ const YXC_AMP_CATALOG = [
     create: { kind: "func", func: "bass_extension" },
     read: { field: "bass_extension" },
     fromStatus: bool,
-    write: { method: "setBassExtension", toYxc: bool }
+    write: { apply: (c, v, z) => c.setBassExtension(Boolean(v), z) }
   },
   {
     state: "sound.balance",
@@ -199,7 +199,7 @@ const YXC_AMP_CATALOG = [
     create: { kind: "func", func: "balance" },
     read: { field: "balance" },
     fromStatus: num,
-    write: { method: "setBalance", toYxc: num }
+    write: { apply: (c, v, z) => c.setBalance(Number(v), z) }
   },
   {
     state: "sound.adaptiveDrc",
@@ -298,7 +298,7 @@ const YXC_AMP_CATALOG = [
     create: { kind: "always" },
     read: { field: "party_enable" },
     fromStatus: bool,
-    write: { method: "setPartyMode", toYxc: bool }
+    write: { apply: (c, v) => c.setPartyMode(Boolean(v)) }
   }
 ];
 // Annotate the CommonJS export names for ESM import in node:

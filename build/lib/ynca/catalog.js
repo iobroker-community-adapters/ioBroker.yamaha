@@ -18,6 +18,8 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var catalog_exports = {};
 __export(catalog_exports, {
+  YNCA_CATALOG: () => YNCA_CATALOG,
+  availGets: () => availGets,
   buildYncaCatalog: () => buildYncaCatalog,
   funcToEntry: () => funcToEntry,
   idToEntry: () => idToEntry,
@@ -799,8 +801,12 @@ const PLAYER_FUNCS = [
   // Track skip: write-only buttons that put Skip Fwd/Rev on PLAYBACK. The device reports only
   // Play/Pause/Stop, so these are actions, not states — button.next/prev fill the type-detector
   // NEXT/PREV slots (previously they were extra values in the playback dropdown).
+  // readFunc gates object creation on the REPORTED function: PLAYBACK itself is write-only and
+  // never answers a GET (all device fixtures carry only PLAYBACKINFO), so gating on PLAYBACK
+  // would create these buttons on no real device — the scene.recall pattern.
   {
     func: "PLAYBACK",
+    readFunc: "PLAYBACKINFO",
     state: "next",
     name: "Next",
     spec: { kind: "button" },
@@ -811,6 +817,7 @@ const PLAYER_FUNCS = [
   },
   {
     func: "PLAYBACK",
+    readFunc: "PLAYBACKINFO",
     state: "prev",
     name: "Previous",
     spec: { kind: "button" },
@@ -896,6 +903,18 @@ function buildYncaCatalog() {
   }
   return entries;
 }
+const YNCA_CATALOG = buildYncaCatalog();
+function availGets(entries) {
+  const seen = /* @__PURE__ */ new Set();
+  const gets = [];
+  for (const entry of entries) {
+    if (entry.subunit !== "SYS" && !seen.has(entry.subunit)) {
+      seen.add(entry.subunit);
+      gets.push({ subunit: entry.subunit, func: "AVAIL" });
+    }
+  }
+  return gets;
+}
 function sweepGets(entries) {
   const seen = /* @__PURE__ */ new Set();
   const gets = [];
@@ -918,8 +937,8 @@ function funcToEntry(entries) {
 function idToEntry(entries) {
   return new Map(entries.map((entry) => [entry.id, entry]));
 }
-function yncaObjectsFor(capabilities) {
-  const present = buildYncaCatalog().filter(
+function yncaObjectsFor(capabilities, catalog = YNCA_CATALOG) {
+  const present = catalog.filter(
     (entry) => readFuncsOf(entry).some((func) => {
       var _a;
       return ((_a = capabilities.subunits[entry.subunit]) == null ? void 0 : _a[func]) !== void 0;
@@ -948,6 +967,8 @@ function yncaCommand(stateId, value, map) {
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  YNCA_CATALOG,
+  availGets,
   buildYncaCatalog,
   funcToEntry,
   idToEntry,

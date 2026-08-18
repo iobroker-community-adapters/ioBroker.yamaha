@@ -15,7 +15,7 @@ of the oldest pre-2010 models — behind one object tree.
 ## Features
 
 - **One adapter for three protocols** — classic Yamaha AV receivers over YNCA, MusicCast devices over Yamaha Extended Control, and pre-2010 receivers over the legacy XML protocol, replacing the separate yamaha and musiccast adapters.
-- **Self-healing connection** — a receiver that is off when the adapter starts joins on its own once it answers, and every connection recovers after a reboot or network drop, with a per-device connection indicator.
+- **Self-healing connection** — a receiver that is off when the adapter starts joins on its own once it answers, and every connection recovers after a reboot or network drop, with a per-device connection indicator. A hiccup on a single protocol reconnects just that protocol; the others keep running.
 - **Rich, intelligently typed datapoints** — amplifier, tone control, HDMI output, DSP and decoder modes, sound programs, party mode, tuner with RDS, and network/USB/server/Spotify players; on/off is a boolean, fixed choices are dropdowns, numbers carry their unit and range.
 - **Capability-driven object tree** — states are generated from what each device actually reports over its protocols, not from a hardcoded model list, and only for the functions it offers.
 - **Every protocol a device speaks runs together** — a MusicCast receiver keeps its YNCA amplifier control and adds its Yamaha Extended Control richness (multiroom, equalizer, media) on one object tree, instead of only one protocol being used per device.
@@ -38,9 +38,19 @@ Devices are managed in the admin as cards. **Leave the list empty** and the adap
 
 Older Yamaha receivers (before ~2010, the XML protocol) do not announce themselves on the network and must always be added manually with their IP address. The **XML query interval** in the settings sets how often these older receivers are polled — they push no changes of their own, and the default of 60 seconds is plenty for an AV receiver.
 
-The **Data points** section switches whole groups of datapoints on or off — playback sources, tuner, extra zones, multiroom, HDMI, scenes, sound processing and advanced setup datapoints. Turn off what your receiver doesn't have or you don't use, and those objects are removed from the tree; the amplifier core (power, volume, mute, input, sound program, sleep) always stays on.
+The **Data points** section switches whole groups of datapoints on or off — playback sources, tuner, extra zones, multiroom, HDMI, scenes, sound processing and advanced setup datapoints. Turn off what your receiver doesn't have or you don't use, and those objects are removed from the tree; the amplifier core (power, volume, mute, input, sound program, sleep) always stays on. Switched-off groups are also skipped when the receiver is queried, so fewer groups mean a faster startup.
 
 ## Changelog
+
+### **WORK IN PROGRESS**
+
+- MusicCast changes now arrive instantly again: the adapter registers for the devices' push events — track, volume and multiroom updates no longer wait for the next 5-minute poll.
+- Much faster startup and reconnects: the adapter first asks the receiver which sections it has and queries only those; switched-off datapoint groups are skipped entirely.
+- A short outage of one protocol no longer tears down the whole device — the affected protocol reconnects on its own while the others keep running.
+- The Next/Previous buttons of the classic receivers' streaming sources (Spotify, USB, Net Radio, …) are now actually created — they were missing on real devices.
+- Pre-2010 (XML) receivers: bass, treble and subwoofer trim now read and write real decibels — values were off by a factor of 10 (untested on hardware, feedback welcome).
+- Clearer feedback: failed multiroom link/leave actions warn in the log, a skipped duplicate device is reported, and the add-device dialog tells a name clash apart from an invalid IP address.
+
 ### 0.19.0 (2026-08-18)
 
 - Zone 2/3/4, Zone B and party mode datapoints now sit in the Multiroom folder — scripts using old paths like zone2.power need updating to multiroom.zone2.power.

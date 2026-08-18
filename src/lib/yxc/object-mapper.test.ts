@@ -12,7 +12,9 @@ describe("mapYxcToObjects", () => {
     const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: ["netusb"] });
     const ids = objs.map(o => o.id);
     expect(ids).toContain("player.netPlayer");
-    expect(ids).toEqual(expect.arrayContaining(["player.netPlayer.playback", "player.netPlayer.artist", "player.netPlayer.track"]));
+    expect(ids).toEqual(
+      expect.arrayContaining(["player.netPlayer.playback", "player.netPlayer.artist", "player.netPlayer.track"]),
+    );
   });
 
   test("control datapoints are writable: toggles, tray, tuner band/frequency, preset", () => {
@@ -47,7 +49,14 @@ describe("mapYxcToObjects", () => {
     });
     const ids = objs.map(o => o.id);
     expect(ids).toEqual(
-      expect.arrayContaining(["multiroom", "multiroom.role", "multiroom.groupId", "multiroom.groupName", "multiroom.serverZone", "multiroom.clientList"]),
+      expect.arrayContaining([
+        "multiroom",
+        "multiroom.role",
+        "multiroom.groupId",
+        "multiroom.groupName",
+        "multiroom.serverZone",
+        "multiroom.clientList",
+      ]),
     );
     // Group name is read-only (the library's setGroupName payload is unverified).
     expect(objs.find(o => o.id === "multiroom.groupName")?.common.write).toBe(false);

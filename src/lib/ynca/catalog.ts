@@ -898,8 +898,12 @@ const PLAYER_FUNCS: Array<{
   // Track skip: write-only buttons that put Skip Fwd/Rev on PLAYBACK. The device reports only
   // Play/Pause/Stop, so these are actions, not states — button.next/prev fill the type-detector
   // NEXT/PREV slots (previously they were extra values in the playback dropdown).
+  // readFunc gates object creation on the REPORTED function: PLAYBACK itself is write-only and
+  // never answers a GET (all device fixtures carry only PLAYBACKINFO), so gating on PLAYBACK
+  // would create these buttons on no real device — the scene.recall pattern.
   {
     func: "PLAYBACK",
+    readFunc: "PLAYBACKINFO",
     state: "next",
     name: "Next",
     spec: { kind: "button" },
@@ -910,6 +914,7 @@ const PLAYER_FUNCS: Array<{
   },
   {
     func: "PLAYBACK",
+    readFunc: "PLAYBACKINFO",
     state: "prev",
     name: "Previous",
     spec: { kind: "button" },
@@ -1022,12 +1027,41 @@ export function buildYncaCatalog(): YncaEntry[] {
 }
 
 /**
+ * The built device-agnostic catalog — a module constant, since the catalog is static:
+ * built once for the process, shared by the controller's lookup maps and
+ * {@link yncaObjectsFor} (which previously rebuilt all ~450 entries per connect).
+ */
+export const YNCA_CATALOG: readonly YncaEntry[] = buildYncaCatalog();
+
+/**
+ * The AVAIL-probe GETs for the two-pass init sweep: one `@<SUBUNIT>:AVAIL=?` per
+ * catalogued subunit. SYS is excluded — it does not answer AVAIL (python-ynca:
+ * "It also does not respond to AVAIL=? so it will not end up in _available_subunits")
+ * and is always swept. Verified against all 10 device fixtures: every non-SYS subunit
+ * that reports functions also answers AVAIL, so probing first loses nothing.
+ *
+ * @param entries the catalog entries
+ * @returns the AVAIL probes, one per non-SYS subunit
+ */
+export function availGets(entries: readonly YncaEntry[]): Array<{ subunit: string; func: string }> {
+  const seen = new Set<string>();
+  const gets: Array<{ subunit: string; func: string }> = [];
+  for (const entry of entries) {
+    if (entry.subunit !== "SYS" && !seen.has(entry.subunit)) {
+      seen.add(entry.subunit);
+      gets.push({ subunit: entry.subunit, func: "AVAIL" });
+    }
+  }
+  return gets;
+}
+
+/**
  * The init-sweep GETs: each (subunit, func) once.
  *
  * @param entries the catalog entries
  * @returns the subunit/function pairs to query
  */
-export function sweepGets(entries: YncaEntry[]): Array<{ subunit: string; func: string }> {
+export function sweepGets(entries: readonly YncaEntry[]): Array<{ subunit: string; func: string }> {
   const seen = new Set<string>();
   const gets: Array<{ subunit: string; func: string }> = [];
   for (const entry of entries) {
@@ -1048,7 +1082,7 @@ export function sweepGets(entries: YncaEntry[]): Array<{ subunit: string; func: 
  * @param entries the catalog entries
  * @returns the lookup map keyed `SUBUNIT:FUNC`
  */
-export function funcToEntry(entries: YncaEntry[]): Map<string, YncaEntry> {
+export function funcToEntry(entries: readonly YncaEntry[]): Map<string, YncaEntry> {
   return new Map(
     entries
       .filter(entry => !entry.writeOnly)
@@ -1062,7 +1096,7 @@ export function funcToEntry(entries: YncaEntry[]): Map<string, YncaEntry> {
  * @param entries the catalog entries
  * @returns the lookup map keyed by state id
  */
-export function idToEntry(entries: YncaEntry[]): Map<string, YncaEntry> {
+export function idToEntry(entries: readonly YncaEntry[]): Map<string, YncaEntry> {
   return new Map(entries.map(entry => [entry.id, entry]));
 }
 
@@ -1071,10 +1105,14 @@ export function idToEntry(entries: YncaEntry[]): Map<string, YncaEntry> {
  * the catalog entries the device answered for, then turn them into objects.
  *
  * @param capabilities the device's YNCA capabilities from the init sweep
+ * @param catalog the (possibly group-filtered) catalog to build from
  * @returns the object definitions to create
  */
-export function yncaObjectsFor(capabilities: YncaCapabilities): ObjectDef[] {
-  const present = buildYncaCatalog().filter(entry =>
+export function yncaObjectsFor(
+  capabilities: YncaCapabilities,
+  catalog: readonly YncaEntry[] = YNCA_CATALOG,
+): ObjectDef[] {
+  const present = catalog.filter(entry =>
     readFuncsOf(entry).some(func => capabilities.subunits[entry.subunit]?.[func] !== undefined),
   );
   return catalogToObjects(present);

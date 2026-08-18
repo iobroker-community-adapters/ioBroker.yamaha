@@ -134,18 +134,21 @@ export function parseBasicStatus(xml: string): BasicStatus {
   }
   // Tone/subwoofer/extra-bass/YPAO — the fields the predecessor adapter (via
   // yamaha-nodejs-soef) read on real pre-2010 devices. Val is scoped to its own
-  // element, so Subwoofer_Trim's <Val> is never read as the volume.
+  // element, so Subwoofer_Trim's <Val> is never read as the volume. Like the volume,
+  // these carry the Val/Exp=1/Unit=dB structure (the soef library builds the identical
+  // envelope for setVolumeTo and setBassTo), so Val is tenths of a decibel: /10 here,
+  // *10 in the PUT builders.
   const bass = /<Bass>\s*<Val>(-?\d+)<\/Val>/.exec(xml);
   if (bass) {
-    status.bass = Number(bass[1]);
+    status.bass = Number(bass[1]) / 10;
   }
   const treble = /<Treble>\s*<Val>(-?\d+)<\/Val>/.exec(xml);
   if (treble) {
-    status.treble = Number(treble[1]);
+    status.treble = Number(treble[1]) / 10;
   }
   const subwooferTrim = /<Subwoofer_Trim>\s*<Val>(-?\d+)<\/Val>/.exec(xml);
   if (subwooferTrim) {
-    status.subwooferTrim = Number(subwooferTrim[1]);
+    status.subwooferTrim = Number(subwooferTrim[1]) / 10;
   }
   const extraBass = /<Extra_Bass>([^<]+)<\/Extra_Bass>/.exec(xml);
   if (extraBass) {

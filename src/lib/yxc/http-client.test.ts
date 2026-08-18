@@ -1,4 +1,7 @@
-import { YamahaYxcClient } from "./http-client";
+import { createServer, type IncomingHttpHeaders } from "node:http";
+import { once } from "node:events";
+import type { AddressInfo } from "node:net";
+import { YamahaYxcClient, YXC_SUBSCRIPTION_HEADERS } from "./http-client";
 
 /**
  * Capture the command path each method builds, to verify URL construction against the
@@ -109,5 +112,38 @@ describe("YamahaYxcClient URL construction", () => {
     await client.setServerInfo({ group_id: "g", zone: "main", type: "add", client_list: ["1.2.3.5"] });
     expect(cmd).toBe("/dist/setServerInfo");
     expect(body).toBe('{"group_id":"g","zone":"main","type":"add","client_list":["1.2.3.5"]}');
+  });
+});
+
+/**
+ * The real HTTP transport (no seam) against a local server — the reference test the
+ * URL-only capture above cannot provide. The replaced `yamaha-yxc-nodejs` sent the
+ * `X-AppName`/`X-AppPort` event-subscription headers with every request
+ * (`yxc_api_cmd.js` SendReqToDevice); without them a MusicCast device never pushes
+ * its UDP events, so this locks the headers onto both the GET and the POST path.
+ */
+describe("YamahaYxcClient real transport", () => {
+  test("sends the event-subscription headers on GET and POST, as the replaced library did", async () => {
+    const seen: Array<{ path: string; headers: IncomingHttpHeaders }> = [];
+    const server = createServer((req, res) => {
+      seen.push({ path: req.url ?? "", headers: req.headers });
+      res.setHeader("Content-Type", "application/json");
+      res.end("{}");
+    });
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const { port } = server.address() as AddressInfo;
+    try {
+      const client = new YamahaYxcClient(`127.0.0.1:${port}`);
+      await client.getStatus("main");
+      await client.setClientInfo({ group_id: "g", zone: ["main"] });
+    } finally {
+      server.close();
+    }
+    expect(seen).toHaveLength(2);
+    for (const request of seen) {
+      expect(request.headers["x-appname"]).toBe(YXC_SUBSCRIPTION_HEADERS["X-AppName"]);
+      expect(request.headers["x-appport"]).toBe(YXC_SUBSCRIPTION_HEADERS["X-AppPort"]);
+    }
   });
 });

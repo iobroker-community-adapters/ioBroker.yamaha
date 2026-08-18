@@ -28,16 +28,30 @@ Funktionalität (voller MusicCast-Reichtum). Vorbild-Adapter (Multi-Transport): 
 Pro konfiguriertem Gerät ein `DeviceSupervisor` (`lib/lifecycle/`), der EINEN `ConnectionHandle` online hält —
 nach dem Multi-Transport-Neubau ist das ein `MultiTransportHandle`, der ALLE antwortenden Transporte auf EINEM
 Objektbaum vereint (keine „erster gewinnt"-Kaskade mehr). `lib/attempt-device.ts` (`connectTransports`) baut
-jeden der drei Transporte hinter einem `lib/lifecycle/transport-connection-adapter.ts`, verbindet jeden, der
-antwortet, und übergibt die lebende Menge dem Handle. Die drei Controller (`lib/device-controller.ts` = YNCA,
+jeden der drei Transporte über eine **Factory** hinter einem `lib/lifecycle/transport-connection-adapter.ts`,
+verbindet alle drei **parallel** (`Promise.all` — ein YNCA-Timeout verzögert YXC/XML nicht mehr) und übergibt
+die lebende Menge + die Factories dem Handle. Die drei Controller (`lib/device-controller.ts` = YNCA,
 `lib/yxc/device-controller.ts`, `lib/xml/device-controller.ts`) bleiben UNVERÄNDERT hinter dem Adapter — er
 fängt ihre `upsertObject`/`setStateAck`-deps ab, kanonisiert die IDs und filtert jeden Transport auf die ihm
 zugeteilten Datenpunkte. Owner je Datenpunkt = das modernste ANWESENDE, aber verlustfreie Protokoll
 (`lib/catalog/owner-policy.ts`: Rang YXC > YNCA > XML, überstimmt vom reicheren/schreibbaren/korrekt-skalierten
 Transport laut Zensus); `lib/catalog/object-tree-coordinator.ts` berechnet daraus EINEN Baum, jeder State genau
-einmal, jeder Write an den Owner. Reconnect liegt im Supervisor (ein Drop meldet aktuell die ganze Menge,
-per-Transport ist die nächste Verfeinerung); YXC/XML melden Drop nach mehreren erfolglosen Keepalive-Polls,
-YNCA über das echte Socket-Drop-Event (bis `onDrop` registriert ist, wird ein Drop gelatcht).
+einmal, jeder Write an den Owner. **Reconnect ist zweistufig:** Der Ausfall EINES Transports schließt nur ihn —
+das Handle baut ihn über seine Factory mit eigenem Backoff neu auf und re-koordiniert danach den Baum
+(idempotente Upserts, Ownership neu), während die anderen Transporte durchlaufen. Erst wenn der LETZTE lebende
+Transport wegfällt, meldet das Handle den Drop an den Supervisor, der die ganze Menge neu verbindet. YXC/XML
+melden Drop nach mehreren erfolglosen Keepalive-Polls, YNCA über das echte Socket-Drop-Event (Drops vor der
+Handler-Registrierung werden gelatcht — im Client wie im Handle).
+
+**YNCA-Init ist ein 2-Pass-Sweep** (`device-controller.ts` `sweepDevice`): erst eine `AVAIL=?`-Probe je
+Katalog-Subunit (~2 s; SYS antwortet nie auf AVAIL und wird immer gesweept), dann der gezielte Sweep nur über
+die anwesenden Subunits — statt ~39 s Blind-Sweep. Antwortet KEIN Subunit auf AVAIL, fällt er auf den vollen
+Blind-Sweep zurück (kein Feature-Verlust bei unbekannter Firmware; an allen 10 Fixtures verifiziert: jedes
+Func-Subunit antwortet auch auf AVAIL). Das Probe-Ergebnis wird pro Gerät gecacht (`lib/ynca/subunit-cache.ts`,
+in-memory über Reconnects + persistiert im **Device-Objekt** `native.yncaAvail` — nicht im Instanz-Objekt, das
+würde restarten), Schlüssel = model+firmware; bei Abweichung wird neu geprobt. Die Admin-Gruppenschalter
+filtern die Katalog-Entries VOR dem Sweep (`isEntryEnabled` → `isGroupEnabled`): eine abgeschaltete Gruppe wird
+gar nicht mehr abgefragt.
 
 Datenpunkte: ein gemeinsamer Katalog je Transport (`ynca/catalog.ts`, `yxc/catalog.ts`, `xml/catalog.ts`) liefert
 Objekt-`common` UND Wert-Mapping aus EINER Liste; die `common` werden über `catalog/value-coerce.ts` intelligent
@@ -50,7 +64,12 @@ im Admin per `group_*`-Schalter abschaltbar — Zone 2/3/4, Zone B und masterPow
 Input/Sound-Programm/Sleep/Info) ist immer an, ohne eigenen Schalter (wie beszels `info.online`/`.status`). Alt-IDs
 aus der Vor-Gruppierung (`pure-helpers.ts` `RENAMED_CHANNELS`/`renamedObjectIds`) werden beim Update weggeräumt.
 YXC-HTTP über den eigenen `yxc/http-client.ts`
-(keine externe Lib; die Command-URLs sind unit-verifiziert). YXC-Push: ein geteilter UDP-Empfänger
+(keine externe Lib; die Command-URLs sind unit-verifiziert). **Jede YXC-Anfrage trägt die Kopfzeilen
+`X-AppName`/`X-AppPort` (`YXC_SUBSCRIPTION_HEADERS`) — DAS ist die UDP-Push-Anmeldung; ohne sie sendet kein
+Gerät je ein Event** (beim Lib-Ersatz v0.9.0 verloren gegangen, per Referenz-Test gegen einen echten
+HTTP-Server abgesichert). Der 5-Minuten-Keepalive-Poll erneuert die Anmeldung. YXC-Schreibbefehle laufen
+direkt über `write.apply`-Funktionen im Katalog (kein Methodennamen-Switch mehr; nur Equalizer/Tuner-Frequenz
+bleiben deklarativ, weil sie Controller-Zustand brauchen). YXC-Push: ein geteilter UDP-Empfänger
 (`yxc/push-receiver.ts`) auf :41100, per Quell-IP geroutet. Discovery: SSDP-M-SEARCH + HTTP-`fetch` in `main.ts`
 (adapter-Timer, sonst S5005), reine Logik in `lib/discovery.ts`.
 

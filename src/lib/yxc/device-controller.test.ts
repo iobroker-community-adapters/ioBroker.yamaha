@@ -113,9 +113,20 @@ class FakeClient implements YxcClientLike {
   public distRole = "server";
   public async getDistributionInfo(): Promise<unknown> {
     this.calls.push({ method: "getDistributionInfo", args: [] });
-    return { role: this.distRole, group_id: "g1", group_name: "Group 1", server_zone: "main", client_list: ["1.2.3.5"] };
+    return {
+      role: this.distRole,
+      group_id: "g1",
+      group_name: "Group 1",
+      server_zone: "main",
+      client_list: ["1.2.3.5"],
+    };
   }
-  public async setServerInfo(info: { group_id: string; zone: string; type: string; client_list: string[] }): Promise<unknown> {
+  public async setServerInfo(info: {
+    group_id: string;
+    zone: string;
+    type: string;
+    client_list: string[];
+  }): Promise<unknown> {
     this.calls.push({ method: "setServerInfo", args: [info] });
     return {};
   }

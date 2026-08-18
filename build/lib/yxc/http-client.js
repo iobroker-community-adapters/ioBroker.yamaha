@@ -18,12 +18,17 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var http_client_exports = {};
 __export(http_client_exports, {
+  YXC_SUBSCRIPTION_HEADERS: () => YXC_SUBSCRIPTION_HEADERS,
   YamahaYxcClient: () => YamahaYxcClient
 });
 module.exports = __toCommonJS(http_client_exports);
 var import_node_http = require("node:http");
 const REQUEST_TIMEOUT_MS = 4e3;
 const API_BASE = "/YamahaExtendedControl/v1";
+const YXC_SUBSCRIPTION_HEADERS = {
+  "X-AppName": "MusicCast/1.0",
+  "X-AppPort": "41100"
+};
 function defaultSend(ip) {
   return (command, body) => new Promise((resolve, reject) => {
     const url = `http://${ip}${API_BASE}${command}`;
@@ -38,7 +43,11 @@ function defaultSend(ip) {
         }
       });
     };
-    const req = body === void 0 ? (0, import_node_http.get)(url, onResponse) : (0, import_node_http.request)(url, { method: "POST", headers: { "Content-Type": "application/json" } }, onResponse);
+    const req = body === void 0 ? (0, import_node_http.get)(url, { headers: { ...YXC_SUBSCRIPTION_HEADERS } }, onResponse) : (0, import_node_http.request)(
+      url,
+      { method: "POST", headers: { "Content-Type": "application/json", ...YXC_SUBSCRIPTION_HEADERS } },
+      onResponse
+    );
     req.on("error", reject);
     req.setTimeout(REQUEST_TIMEOUT_MS, () => req.destroy(new Error(`YXC request timed out: ${command}`)));
     if (body !== void 0) {
@@ -429,6 +438,7 @@ class YamahaYxcClient {
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  YXC_SUBSCRIPTION_HEADERS,
   YamahaYxcClient
 });
 //# sourceMappingURL=http-client.js.map

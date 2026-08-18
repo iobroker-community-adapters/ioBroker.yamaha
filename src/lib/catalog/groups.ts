@@ -8,9 +8,8 @@
  * Every group is a real channel prefix in the tree (`player.*`, `tuner.*`, `hdmi.*`,
  * `multiroom.*`, `scene.*`, `sound.*`, `advanced.*`) — the toggle and the folder a datapoint
  * visually sits in are the same thing, never decoupled. Zone 2/3/4, Zone B, masterPower, party
- * and distribution all live under `multiroom.*`. `groupOf` also recognises the handful of legacy
- * flat player-source channel names (`spotify`, `netRadio`, …) kept for pre-v0.15.0 upgraders
- * whose objects have not been pruned/recreated yet.
+ * and distribution all live under `multiroom.*`. Legacy flat pre-v0.15.0 ids need no handling
+ * here: the start-up cleanup deletes them via `RENAMED_CHANNELS` before anything queries them.
  */
 
 /** The switchable groups. `amp` is the amplifier core and can never be turned off. */
@@ -26,33 +25,6 @@ export const SWITCHABLE_GROUPS: readonly GroupId[] = [
   "sound",
   "advanced",
 ];
-
-/**
- * The player-source channels (YNCA sources + YXC netusb/cd), collected under the "player" group.
- * These are the ~18 near-identical media sources that made the flat tree hard to read before the
- * v0.15.0 regroup; kept here only so an un-migrated pre-v0.15.0 object still resolves correctly
- * until it is pruned.
- */
-const PLAYER_CHANNELS = new Set<string>([
-  "netRadio",
-  "server",
-  "usb",
-  "spotify",
-  "deezer",
-  "tidal",
-  "napster",
-  "pandora",
-  "rhapsody",
-  "sirius",
-  "airplay",
-  "bluetooth",
-  "pc",
-  "musicCastLink",
-  "ipod",
-  "ipodUsb",
-  "netPlayer",
-  "cd",
-]);
 
 /**
  * The datapoint group a state id belongs to, decided by its first path segment. Every group is a
@@ -73,10 +45,10 @@ export function groupOf(stateId: string): GroupId {
   if (seg === "hdmi" || seg === "lipSync") {
     return "hdmi";
   }
-  if (seg === "player" || PLAYER_CHANNELS.has(seg)) {
+  if (seg === "player") {
     return "player";
   }
-  if (seg === "tuner" || seg === "dab") {
+  if (seg === "tuner") {
     return "tuner";
   }
   if (seg === "sound") {

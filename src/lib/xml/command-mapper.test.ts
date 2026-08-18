@@ -50,13 +50,18 @@ describe("stateToXml", () => {
   });
 
   test("maps tone, subwoofer trim and extra-bass/YPAO writes (soef lib paths)", () => {
+    // The state carries real dB; the wire carries tenths (Exp=1), like the volume.
     expect(stateToXml("sound.bass", 3)).toEqual({
       zone: "Main_Zone",
-      inner: "<Sound_Video><Tone><Bass><Val>3</Val><Exp>1</Exp><Unit>dB</Unit></Bass></Tone></Sound_Video>",
+      inner: "<Sound_Video><Tone><Bass><Val>30</Val><Exp>1</Exp><Unit>dB</Unit></Bass></Tone></Sound_Video>",
+    });
+    expect(stateToXml("sound.treble", -2.5)).toEqual({
+      zone: "Main_Zone",
+      inner: "<Sound_Video><Tone><Treble><Val>-25</Val><Exp>1</Exp><Unit>dB</Unit></Treble></Tone></Sound_Video>",
     });
     expect(stateToXml("sound.subwooferTrim", -1)).toEqual({
       zone: "Main_Zone",
-      inner: "<Volume><Subwoofer_Trim><Val>-1</Val><Exp>1</Exp><Unit>dB</Unit></Subwoofer_Trim></Volume>",
+      inner: "<Volume><Subwoofer_Trim><Val>-10</Val><Exp>1</Exp><Unit>dB</Unit></Subwoofer_Trim></Volume>",
     });
     expect(stateToXml("sound.extraBass", true)).toEqual({
       zone: "Main_Zone",

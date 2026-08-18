@@ -10,7 +10,7 @@ describe("findClash", () => {
   ];
 
   it("flags a duplicate ip", () => {
-    expect(findClash(rows, { name: "New", ip: "192.168.1.11" }, -1)).toBe("invalidIp");
+    expect(findClash(rows, { name: "New", ip: "192.168.1.11" }, -1)).toBe("duplicateDevice");
   });
 
   it("returns null when the ip is new and valid", () => {
@@ -25,13 +25,13 @@ describe("findClash", () => {
     expect(findClash(rows, { name: "New", ip: "not-an-ip" }, -1)).toBe("invalidIp");
   });
 
-  it("rejects a name that maps to the reserved 'info' object id", () => {
-    expect(findClash(rows, { name: "info", ip: "192.168.1.12" }, -1)).toBe("invalidIp");
+  it("rejects a name that maps to the reserved 'info' object id — as a NAME problem, not an IP one", () => {
+    expect(findClash(rows, { name: "info", ip: "192.168.1.12" }, -1)).toBe("invalidName");
   });
 
-  it("rejects a different name that sanitizes to the same id as another row", () => {
+  it("rejects a different name that sanitizes to the same id as another row — as a duplicate", () => {
     // "Living room" and "Living*room" both sanitize to "Living_room": distinct names, same tree.
-    expect(findClash(rows, { name: "Living*room", ip: "192.168.1.12" }, -1)).toBe("invalidIp");
+    expect(findClash(rows, { name: "Living*room", ip: "192.168.1.12" }, -1)).toBe("duplicateDevice");
   });
 
   it("falls back to the ip as the id when the name is blank", () => {

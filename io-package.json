@@ -3,6 +3,19 @@
     "name": "yamaha",
     "version": "0.19.0",
     "news": {
+      "NEXT": {
+        "en": "Instant MusicCast updates again (push events restored), much faster startup and reconnects, a single-protocol outage no longer drops the whole device, missing Next/Previous buttons for classic streaming sources fixed, XML tone values now in real dB",
+        "de": "MusicCast-Änderungen kommen wieder sofort an (Push-Ereignisse repariert), deutlich schnellerer Start und Reconnect, der Ausfall eines einzelnen Protokolls trennt nicht mehr das ganze Gerät, fehlende Weiter/Zurück-Tasten der klassischen Streaming-Quellen ergänzt, XML-Klangwerte jetzt in echten dB",
+        "ru": "Изменения MusicCast снова приходят мгновенно (восстановлены push-события), заметно более быстрый запуск и переподключение, сбой одного протокола больше не отключает всё устройство, добавлены отсутствовавшие кнопки Вперёд/Назад для классических источников, значения тембра XML теперь в настоящих дБ",
+        "pt": "As alterações MusicCast chegam novamente de imediato (eventos push restaurados), arranque e reconexão muito mais rápidos, a falha de um único protocolo já não desliga o dispositivo inteiro, botões Seguinte/Anterior em falta das fontes de streaming clássicas corrigidos, valores de tom XML agora em dB reais",
+        "nl": "MusicCast-wijzigingen komen weer direct binnen (push-events hersteld), veel snellere start en herverbinding, uitval van één protocol verbreekt niet meer het hele apparaat, ontbrekende Volgende/Vorige-knoppen van klassieke streamingbronnen toegevoegd, XML-toonwaarden nu in echte dB",
+        "fr": "Les changements MusicCast arrivent de nouveau instantanément (événements push rétablis), démarrage et reconnexion bien plus rapides, la panne d'un seul protocole ne coupe plus tout l'appareil, boutons Suivant/Précédent manquants des sources de streaming classiques ajoutés, valeurs de tonalité XML désormais en dB réels",
+        "it": "Le modifiche MusicCast arrivano di nuovo all'istante (eventi push ripristinati), avvio e riconnessione molto più rapidi, il guasto di un singolo protocollo non disconnette più l'intero dispositivo, aggiunti i pulsanti Avanti/Indietro mancanti delle sorgenti streaming classiche, valori di tono XML ora in dB reali",
+        "es": "Los cambios de MusicCast vuelven a llegar al instante (eventos push restaurados), arranque y reconexión mucho más rápidos, el fallo de un solo protocolo ya no desconecta todo el dispositivo, añadidos los botones Siguiente/Anterior que faltaban en las fuentes de streaming clásicas, los valores de tono XML ahora en dB reales",
+        "pl": "Zmiany MusicCast znów docierają natychmiast (przywrócone zdarzenia push), znacznie szybszy start i ponowne łączenie, awaria jednego protokołu nie rozłącza już całego urządzenia, dodano brakujące przyciski Dalej/Wstecz klasycznych źródeł streamingu, wartości tonów XML teraz w prawdziwych dB",
+        "uk": "Зміни MusicCast знову надходять миттєво (відновлено push-події), значно швидший запуск і повторне підключення, збій одного протоколу більше не від'єднує весь пристрій, додано відсутні кнопки Вперед/Назад класичних джерел стримінгу, значення тембру XML тепер у справжніх дБ",
+        "zh-cn": "MusicCast 的更改再次即时到达（已恢复推送事件），启动和重连速度大幅提升，单个协议故障不再断开整个设备，补上了经典流媒体源缺失的下一曲/上一曲按钮，XML 音调值现在为真实分贝"
+      },
       "0.19.0": {
         "en": "Zone 2/3/4, Zone B and party mode datapoints now sit in the Multiroom folder. Scripts using old paths like zone2.power need updating to multiroom.zone2.power.",
         "de": "Zone 2/3/4, Zone B und Party-Modus-Datenpunkte liegen jetzt im Multiroom-Ordner. Skripte mit alten Pfaden wie zone2.power müssen auf multiroom.zone2.power angepasst werden.",
@@ -80,19 +93,6 @@
         "pl": "Odbiorniki pojawiają się jako karty z modelem, IP i protokołami; wykrywanie jest stabilniejsze z wyborem interfejsu sieciowego; każdy odbiornik podaje swój model.",
         "uk": "Ресивери відображаються картками з моделлю, IP та протоколами; виявлення стабільніше з вибором мережевого інтерфейсу; кожен ресивер повідомляє свою модель.",
         "zh-cn": "接收机以卡片形式显示型号、IP 和协议；设备发现更稳定，可选择网络接口；每台接收机都会报告其型号。"
-      },
-      "0.13.0": {
-        "en": "A MusicCast receiver now shows its amplifier controls and its MusicCast features together, instead of only one of them being reachable.",
-        "de": "Ein MusicCast-Receiver zeigt jetzt seine Verstärker-Steuerung und seine MusicCast-Funktionen gemeinsam, statt nur eine der beiden erreichbar zu machen.",
-        "ru": "Ресивер MusicCast теперь показывает и управление усилителем, и функции MusicCast вместе, а не только что-то одно из них.",
-        "pt": "Um recetor MusicCast mostra agora o controlo do amplificador e as funções MusicCast em conjunto, em vez de apenas um deles ficar acessível.",
-        "nl": "Een MusicCast-receiver toont nu zowel de versterkerbediening als de MusicCast-functies samen, in plaats van slechts één ervan bereikbaar te maken.",
-        "fr": "Un récepteur MusicCast affiche désormais les commandes de l'amplificateur et les fonctions MusicCast ensemble, au lieu de n'en rendre qu'une seule accessible.",
-        "it": "Un ricevitore MusicCast ora mostra insieme i controlli dell'amplificatore e le funzioni MusicCast, invece di renderne accessibile solo una.",
-        "es": "Un receptor MusicCast ahora muestra juntos los controles del amplificador y las funciones MusicCast, en lugar de que solo uno de ellos sea accesible.",
-        "pl": "Odbiornik MusicCast pokazuje teraz sterowanie wzmacniaczem i funkcje MusicCast razem, zamiast udostępniać tylko jedno z nich.",
-        "uk": "Ресивер MusicCast тепер показує і керування підсилювачем, і функції MusicCast разом, а не лише щось одне з них.",
-        "zh-cn": "MusicCast 接收机现在同时显示功放控制和 MusicCast 功能，而不再只有其中一项可用。"
       }
     },
     "titleLang": {
@@ -121,12 +121,7 @@
       "uk": "Керування AV-ресиверами та пристроями MusicCast Yamaha через мережу",
       "zh-cn": "通过网络控制 Yamaha AV 接收器和 MusicCast 设备"
     },
-    "keywords": [
-      "yamaha",
-      "avr",
-      "receiver",
-      "musiccast"
-    ],
+    "keywords": ["yamaha", "avr", "receiver", "musiccast"],
     "licenseInformation": {
       "license": "MIT",
       "type": "free"

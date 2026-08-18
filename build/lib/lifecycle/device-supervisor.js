@@ -54,7 +54,8 @@ class DeviceSupervisor {
     let handle = null;
     try {
       handle = await this.deps.attempt();
-    } catch {
+    } catch (e) {
+      this.deps.log.debug(`connection attempt failed, retrying: ${e instanceof Error ? e.message : String(e)}`);
       handle = null;
     }
     if (this.closed) {

@@ -42,7 +42,7 @@ function sanitizeId(raw) {
 function stripNamespace(fullId, namespace) {
   return fullId.slice(namespace.length + 1);
 }
-function parseDevices(raw) {
+function parseDevices(raw, onCollision) {
   if (!Array.isArray(raw)) {
     return [];
   }
@@ -54,6 +54,7 @@ function parseDevices(raw) {
     }
     const id = sanitizeId(entry.name && entry.name.length > 0 ? entry.name : entry.ip);
     if (taken.has(id)) {
+      onCollision == null ? void 0 : onCollision(entry.name || entry.ip, id);
       continue;
     }
     taken.add(id);
@@ -61,7 +62,7 @@ function parseDevices(raw) {
   }
   return records;
 }
-function mergeDiscovered(known, found) {
+function mergeDiscovered(known, found, onCollision) {
   const byIp = /* @__PURE__ */ new Map();
   const takenIds = /* @__PURE__ */ new Set(["info"]);
   for (const device of known) {
@@ -77,6 +78,7 @@ function mergeDiscovered(known, found) {
     }
     const id = sanitizeId(device.name || device.ip);
     if (takenIds.has(id)) {
+      onCollision == null ? void 0 : onCollision(device.name || device.ip, id);
       continue;
     }
     takenIds.add(id);

@@ -2,17 +2,15 @@ import { describe, it, expect } from "vitest";
 import { groupOf, isGroupEnabled, SWITCHABLE_GROUPS } from "./groups";
 
 describe("groupOf", () => {
-  it("maps player sources to the player group — flat and grouped ids", () => {
-    expect(groupOf("spotify.playback")).toBe("player");
-    expect(groupOf("netRadio.station")).toBe("player");
-    expect(groupOf("netPlayer.play")).toBe("player");
-    expect(groupOf("cd.playback")).toBe("player");
+  it("maps player sources to the player group", () => {
     expect(groupOf("player.spotify.playback")).toBe("player");
+    expect(groupOf("player.netRadio.station")).toBe("player");
+    expect(groupOf("player.netPlayer.play")).toBe("player");
+    expect(groupOf("player.cd.playback")).toBe("player");
   });
 
   it("maps tuner and dab to the tuner group", () => {
     expect(groupOf("tuner.band")).toBe("tuner");
-    expect(groupOf("dab.channelLabel")).toBe("tuner");
     expect(groupOf("tuner.dab.channelLabel")).toBe("tuner");
   });
 

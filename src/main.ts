@@ -24,6 +24,7 @@ import type { DeviceRecord } from "./lib/types";
 import { DeviceSupervisor, type ConnectionHandle } from "./lib/lifecycle/device-supervisor";
 import { ReconnectStrategy } from "./lib/lifecycle/reconnect-strategy";
 import { ReachabilityDedup } from "./lib/lifecycle/reachability-dedup";
+import { createSubunitCache, isAvailSnapshot, type YncaSubunitCache } from "./lib/ynca/subunit-cache";
 
 /** Supervisor reconnect backoff bounds (exponential: 1s, 2s … capped at 60s). */
 const RECONNECT_BASE_MS = 1000;
@@ -89,7 +90,9 @@ export class Yamaha extends utils.Adapter {
       // The device list is the switch: filled → use exactly those (manual); empty
       // → discover on the network and run what is found (auto). XML/pre-2010 devices
       // never answer SSDP, so they are always added manually.
-      const configured = parseDevices(this.config.devices);
+      const configured = parseDevices(this.config.devices, (dropped, takenId) =>
+        this.log.warn(`device "${dropped}" skipped — its object id "${takenId}" is already used by another device`),
+      );
       const devices = configured.length > 0 ? configured : await this.autoDiscover();
       const knownDeviceIps = new Set(devices.map(device => device.ip));
       await this.cleanupStaleObjects(new Set(devices.map(device => device.id)));
@@ -108,8 +111,9 @@ export class Yamaha extends utils.Adapter {
         this.deviceConnected.set(device.id, false);
         await this.ensureDeviceHeader(device.id);
         const reachability = new ReachabilityDedup();
+        const subunitCache = await this.loadYncaSubunitCache(device.id);
         const supervisor = new DeviceSupervisor({
-          attempt: () => this.attemptDevice(device, pushReceiver, knownDeviceIps, reachability),
+          attempt: () => this.attemptDevice(device, pushReceiver, knownDeviceIps, reachability, subunitCache),
           schedule: (cb, ms) => this.setTimeout(cb, ms),
           cancel: handle => this.clearTimeout(handle as ioBroker.Timeout | undefined),
           onConnectionChange: connected => this.reportConnection(device.id, connected),
@@ -331,6 +335,7 @@ export class Yamaha extends utils.Adapter {
    * @param knownDeviceIps IPs of all configured devices, for resolving a multiroom client
    * @param reachability dedup for the "no reachable transport" warning (one instance per device,
    *   held by the caller across retries — see {@link ReachabilityDedup})
+   * @param yncaSubunitCache per-device cache of the YNCA AVAIL probe (skips the probe on reconnects)
    * @returns a connection handle, or null when no transport connected
    */
   private attemptDevice(
@@ -338,9 +343,13 @@ export class Yamaha extends utils.Adapter {
     pushReceiver: YxcPushReceiver,
     knownDeviceIps: Set<string>,
     reachability: ReachabilityDedup,
+    yncaSubunitCache: YncaSubunitCache,
   ): Promise<ConnectionHandle | null> {
     return attemptDevice(device, {
       reachability,
+      yncaSubunitCache,
+      // Group gate for the YNCA sweep: a disabled group's functions are never even fetched.
+      isEntryEnabled: id => isGroupEnabled(id, this.config as unknown as Record<string, unknown>),
       log: {
         debug: message => this.log.debug(message),
         info: message => this.log.info(message),
@@ -436,12 +445,35 @@ export class Yamaha extends utils.Adapter {
     } catch (e) {
       this.log.warn(`auto-discovery scan failed, using the remembered devices: ${errorMessage(e)}`);
     }
-    const merged = mergeDiscovered(known, found);
+    const merged = mergeDiscovered(known, found, (dropped, takenId) =>
+      this.log.warn(`discovered device "${dropped}" skipped — its object id "${takenId}" is already taken`),
+    );
     await writeDiscovered(store, merged);
     const remembered = merged.length - found.length;
     const suffix = remembered > 0 ? ` (${remembered} more remembered from a previous run)` : "";
     this.log.info(`setting up ${merged.length} discovered device(s)${suffix}...`);
     return merged;
+  }
+
+  /**
+   * Load a device's persisted YNCA subunit-cache (the AVAIL probe result) from its
+   * device object's native part, wrapped so updates persist back there. The device
+   * object is the right home: writing an instance object's native restarts the
+   * adapter, a device object's does not.
+   *
+   * @param deviceId the id-safe device id
+   * @returns the per-device cache
+   */
+  private async loadYncaSubunitCache(deviceId: string): Promise<YncaSubunitCache> {
+    let stored: unknown;
+    try {
+      stored = (await this.getObjectAsync(deviceId))?.native?.yncaAvail;
+    } catch {
+      stored = undefined;
+    }
+    return createSubunitCache(isAvailSnapshot(stored) ? stored : undefined, snapshot => {
+      void this.extendObject(deviceId, { native: { yncaAvail: snapshot ?? null } });
+    });
   }
 
   /**

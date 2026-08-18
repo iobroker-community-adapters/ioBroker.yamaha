@@ -32,26 +32,6 @@ const SWITCHABLE_GROUPS = [
   "sound",
   "advanced"
 ];
-const PLAYER_CHANNELS = /* @__PURE__ */ new Set([
-  "netRadio",
-  "server",
-  "usb",
-  "spotify",
-  "deezer",
-  "tidal",
-  "napster",
-  "pandora",
-  "rhapsody",
-  "sirius",
-  "airplay",
-  "bluetooth",
-  "pc",
-  "musicCastLink",
-  "ipod",
-  "ipodUsb",
-  "netPlayer",
-  "cd"
-]);
 function groupOf(stateId) {
   const seg = stateId.includes(".") ? stateId.slice(0, stateId.indexOf(".")) : stateId;
   if (seg === "multiroom") {
@@ -60,10 +40,10 @@ function groupOf(stateId) {
   if (seg === "hdmi" || seg === "lipSync") {
     return "hdmi";
   }
-  if (seg === "player" || PLAYER_CHANNELS.has(seg)) {
+  if (seg === "player") {
     return "player";
   }
-  if (seg === "tuner" || seg === "dab") {
+  if (seg === "tuner") {
     return "tuner";
   }
   if (seg === "sound") {

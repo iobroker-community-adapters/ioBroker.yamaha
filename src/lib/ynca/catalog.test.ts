@@ -9,7 +9,8 @@ import {
 } from "./catalog";
 import { CHANNEL_NAMES } from "../catalog/types";
 import type { EnumSpec } from "../catalog/value-coerce";
-import type { YncaCapabilities } from "./capability";
+import { parseCapabilities, type YncaCapabilities } from "./capability";
+import rxA810 from "./__fixtures__/RX-A810.json";
 
 describe("YNCA catalog", () => {
   test("a MAIN amplifier function becomes a top-level state carrying its YNCA function", () => {
@@ -19,7 +20,10 @@ describe("YNCA catalog", () => {
   });
 
   test("each additional zone gets its own prefixed states", () => {
-    expect(buildYncaCatalog().find(e => e.id === "multiroom.zone2.volume")).toMatchObject({ subunit: "ZONE2", func: "VOL" });
+    expect(buildYncaCatalog().find(e => e.id === "multiroom.zone2.volume")).toMatchObject({
+      subunit: "ZONE2",
+      func: "VOL",
+    });
   });
 
   test("input is an enum dropdown carrying the full device-agnostic input list", () => {
@@ -35,7 +39,10 @@ describe("YNCA catalog", () => {
     const cat = buildYncaCatalog();
     expect(cat.find(e => e.id === "sound.extraBass")).toMatchObject({ subunit: "MAIN", func: "EXBASS" });
     expect(cat.find(e => e.id === "sound.extraBass")?.spec).toEqual({ kind: "onoff", on: "Auto", off: "Off" });
-    expect(cat.find(e => e.id === "multiroom.zone2.sound.extraBass")).toMatchObject({ subunit: "ZONE2", func: "EXBASS" });
+    expect(cat.find(e => e.id === "multiroom.zone2.sound.extraBass")).toMatchObject({
+      subunit: "ZONE2",
+      func: "EXBASS",
+    });
   });
 
   test("max volume and initial volume level are numbers with a dB unit", () => {
@@ -84,7 +91,11 @@ describe("YNCA catalog", () => {
     expect(recall).toMatchObject({ subunit: "MAIN", func: "SCENE", write: true });
     expect(recall?.spec).toMatchObject({ kind: "number", min: 1, max: 12 });
     // encodes the plain number to the YNCA wire value "Scene N" (ynca lib: _put("SCENE", f"Scene {id}"))
-    expect(yncaCommand("scene.recall", 3, idToEntry(cat))).toEqual({ subunit: "MAIN", func: "SCENE", value: "Scene 3" });
+    expect(yncaCommand("scene.recall", 3, idToEntry(cat))).toEqual({
+      subunit: "MAIN",
+      func: "SCENE",
+      value: "Scene 3",
+    });
     // write-only: a SCENE1NAME device push must still map to the name state, not the recall
     expect(funcToEntry(cat).get("MAIN:SCENE1NAME")?.id).toBe("scene.name1");
     // appears only when the device reports scenes (gated on scene-1 name presence)
@@ -162,6 +173,20 @@ describe("YNCA catalog", () => {
     });
   });
 
+  test("next/prev buttons are CREATED for a real device (which reports only PLAYBACKINFO)", () => {
+    // Regression: gating the buttons on their write function PLAYBACK created them on no
+    // real device — every fixture answers only PLAYBACKINFO. Object creation, not just the
+    // catalog entry, must be verified against real device responses.
+    const capabilities = parseCapabilities(rxA810 as string[]);
+    const ids = yncaObjectsFor(capabilities).map(object => object.id);
+    expect(ids).toContain("player.usb.playback");
+    expect(ids).toContain("player.usb.next");
+    expect(ids).toContain("player.usb.prev");
+    // A source the device does not report gets none of the three.
+    expect(ids).not.toContain("player.spotify.playback");
+    expect(ids).not.toContain("player.spotify.next");
+  });
+
   test("player sources expose station, total/elapsed time, preset and channel metadata", () => {
     const cat = buildYncaCatalog();
     expect(cat.find(e => e.id === "player.netRadio.station")).toMatchObject({ subunit: "NETRADIO", func: "STATION" });
@@ -197,7 +222,10 @@ describe("YNCA catalog", () => {
   });
 
   test("idToEntry maps a state write back to its subunit and function", () => {
-    expect(idToEntry(buildYncaCatalog()).get("multiroom.zone2.volume")).toMatchObject({ subunit: "ZONE2", func: "VOL" });
+    expect(idToEntry(buildYncaCatalog()).get("multiroom.zone2.volume")).toMatchObject({
+      subunit: "ZONE2",
+      func: "VOL",
+    });
   });
 
   test("yncaObjectsFor builds only the objects a device reported", () => {
@@ -273,7 +301,14 @@ describe("YNCA catalog", () => {
   test("player sources carry the shared playback functions under their channel", () => {
     const cat = buildYncaCatalog();
     const ids = cat.map(e => e.id);
-    expect(ids).toEqual(expect.arrayContaining(["player.netRadio.artist", "player.spotify.playback", "player.usb.track", "player.server.repeat"]));
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        "player.netRadio.artist",
+        "player.spotify.playback",
+        "player.usb.track",
+        "player.server.repeat",
+      ]),
+    );
     expect(cat.find(e => e.id === "player.spotify.playback")).toMatchObject({ subunit: "SPOTIFY", func: "PLAYBACK" });
   });
 

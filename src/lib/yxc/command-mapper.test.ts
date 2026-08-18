@@ -1,6 +1,41 @@
-import { parseYxcDistribution, parseYxcPlayInfo, parseYxcStatus, parseYxcTunerInfo, stateToYxc } from "./command-mapper";
+import {
+  parseYxcDistribution,
+  parseYxcPlayInfo,
+  parseYxcStatus,
+  parseYxcTunerInfo,
+  stateToYxc,
+} from "./command-mapper";
+import type { YxcClientLike } from "./client-contract";
 import ysp from "./__fixtures__/status/YSP1600_main.json";
 import rx from "./__fixtures__/status/RX_A2070_main.json";
+
+/** A recording client: every method call is captured as [name, args] and resolves {}. */
+function recordingClient(): { client: YxcClientLike; calls: Array<[string, unknown[]]> } {
+  const calls: Array<[string, unknown[]]> = [];
+  const client = new Proxy({} as YxcClientLike, {
+    get:
+      (_target, prop: string) =>
+      (...args: unknown[]) => {
+        calls.push([prop, args]);
+        return Promise.resolve({});
+      },
+  });
+  return { client, calls };
+}
+
+/**
+ * Map a write and run its client call, returning the recorded [method, args] — the
+ * behavioural check replacing the former method-name-string comparison.
+ */
+async function ranCall(stateId: string, value: unknown): Promise<[string, unknown[]] | undefined> {
+  const command = stateToYxc(stateId, value);
+  if (!command || command.kind !== "run") {
+    return undefined;
+  }
+  const { client, calls } = recordingClient();
+  await command.run(client);
+  return calls[0];
+}
 
 describe("parseYxcStatus", () => {
   test("maps a main getStatus to unified amp states", () => {
@@ -88,33 +123,31 @@ describe("parseYxcStatus", () => {
 });
 
 describe("stateToYxc control methods (repeat/shuffle/tray, tuner, party, preset)", () => {
-  test("toggle buttons map to their toggle method", () => {
-    expect(stateToYxc("player.netPlayer.repeatToggle", true)).toEqual({ method: "toggleNetRepeat", zone: "netusb", value: true });
-    expect(stateToYxc("player.netPlayer.shuffleToggle", true)).toEqual({
-      method: "toggleNetShuffle",
-      zone: "netusb",
-      value: true,
-    });
-    expect(stateToYxc("player.cd.repeatToggle", true)).toEqual({ method: "toggleCDRepeat", zone: "netusb", value: true });
-    expect(stateToYxc("player.cd.tray", true)).toEqual({ method: "toggleTray", zone: "netusb", value: true });
+  test("toggle buttons run their toggle method", async () => {
+    expect(await ranCall("player.netPlayer.repeatToggle", true)).toEqual(["toggleNetRepeat", []]);
+    expect(await ranCall("player.netPlayer.shuffleToggle", true)).toEqual(["toggleNetShuffle", []]);
+    expect(await ranCall("player.cd.repeatToggle", true)).toEqual(["toggleCDRepeat", []]);
+    expect(await ranCall("player.cd.tray", true)).toEqual(["toggleTray", []]);
   });
 
-  test("tuner band/frequency, preset and party become their control commands", () => {
-    expect(stateToYxc("tuner.band", "fm")).toEqual({ method: "setBand", zone: "tuner", value: "fm" });
-    expect(stateToYxc("tuner.frequency", 100900)).toEqual({ method: "setFreq", zone: "tuner", value: 100900 });
-    expect(stateToYxc("player.netPlayer.preset", 3)).toEqual({ method: "recallPreset", zone: "netusb", value: 3 });
-    expect(stateToYxc("multiroom.partyEnable", true)).toEqual({ method: "setPartyMode", zone: "main", value: true });
+  test("tuner band/frequency, preset and party become their control commands", async () => {
+    expect(await ranCall("tuner.band", "fm")).toEqual(["setBand", ["fm"]]);
+    // Frequency needs the controller-cached band, so it stays declarative.
+    expect(stateToYxc("tuner.frequency", 100900)).toEqual({ kind: "tunerFreq", value: 100900 });
+    expect(await ranCall("player.netPlayer.preset", 3)).toEqual(["recallPreset", [3, "main"]]);
+    expect(await ranCall("multiroom.partyEnable", true)).toEqual(["setPartyMode", [true]]);
   });
 
-  test("equalizer bands route to their per-channel setEqualizer method (main and zoned)", () => {
+  test("equalizer bands stay declarative (main and zoned) — the controller supplies the other two", () => {
     // setEqualizer sets low/mid/high together; the controller supplies the other two from
     // the last status, so each state carries only its own band value.
-    expect(stateToYxc("sound.equalizerLow", 3)).toEqual({ method: "setEqualizerLow", zone: "main", value: 3 });
-    expect(stateToYxc("sound.equalizerMid", -2)).toEqual({ method: "setEqualizerMid", zone: "main", value: -2 });
-    expect(stateToYxc("sound.equalizerHigh", 5)).toEqual({ method: "setEqualizerHigh", zone: "main", value: 5 });
+    expect(stateToYxc("sound.equalizerLow", 3)).toEqual({ kind: "equalizer", zone: "main", band: "low", value: 3 });
+    expect(stateToYxc("sound.equalizerMid", -2)).toEqual({ kind: "equalizer", zone: "main", band: "mid", value: -2 });
+    expect(stateToYxc("sound.equalizerHigh", 5)).toEqual({ kind: "equalizer", zone: "main", band: "high", value: 5 });
     expect(stateToYxc("multiroom.zone2.sound.equalizerLow", 1)).toEqual({
-      method: "setEqualizerLow",
+      kind: "equalizer",
       zone: "zone2",
+      band: "low",
       value: 1,
     });
   });
@@ -178,8 +211,9 @@ describe("parseYxcPlayInfo", () => {
         albumart_url: "/cover.jpg",
       }),
     ).toEqual([
-      { id: "player.netPlayer.repeat", value: "one" },
-      { id: "player.netPlayer.shuffle", value: "off" },
+      // Typed like the YNCA sources: repeat as the media.mode.repeat code, shuffle boolean.
+      { id: "player.netPlayer.repeat", value: 1 },
+      { id: "player.netPlayer.shuffle", value: false },
       { id: "player.netPlayer.playback", value: 0 },
       { id: "player.netPlayer.albumArt", value: "/cover.jpg" },
       { id: "player.netPlayer.elapsedTime", value: 42 },
@@ -226,52 +260,48 @@ describe("parseYxcTunerInfo", () => {
 });
 
 describe("stateToYxc", () => {
-  test("maps network-player transport buttons to their YXC method", () => {
-    expect(stateToYxc("player.netPlayer.play", true)).toEqual({ method: "playNet", zone: "netusb", value: true });
-    expect(stateToYxc("player.netPlayer.next", true)).toEqual({ method: "nextNet", zone: "netusb", value: true });
+  test("runs network-player transport buttons through their YXC method", async () => {
+    expect(await ranCall("player.netPlayer.play", true)).toEqual(["playNet", []]);
+    expect(await ranCall("player.netPlayer.next", true)).toEqual(["nextNet", []]);
   });
 
-  test("maps cd transport buttons to setCDPlayback with the YXC action word", () => {
-    expect(stateToYxc("player.cd.play", true)).toEqual({ method: "setCDPlayback", zone: "cd", value: "play" });
-    expect(stateToYxc("player.cd.prev", true)).toEqual({ method: "setCDPlayback", zone: "cd", value: "previous" });
-    expect(stateToYxc("player.cd.next", true)).toEqual({ method: "setCDPlayback", zone: "cd", value: "next" });
+  test("runs cd transport buttons through setCDPlayback with the YXC action word", async () => {
+    expect(await ranCall("player.cd.play", true)).toEqual(["setCDPlayback", ["play"]]);
+    expect(await ranCall("player.cd.prev", true)).toEqual(["setCDPlayback", ["previous"]]);
+    expect(await ranCall("player.cd.next", true)).toEqual(["setCDPlayback", ["next"]]);
   });
 
-  test("maps subwoofer trim to setSubwooferVolumeTo", () => {
-    expect(stateToYxc("subwooferVolume", -3)).toEqual({ method: "setSubwooferVolumeTo", zone: "main", value: -3 });
+  test("runs subwoofer trim through setSubwooferVolumeTo", async () => {
+    expect(await ranCall("subwooferVolume", -3)).toEqual(["setSubwooferVolumeTo", [-3, "main"]]);
   });
 
-  test("maps tone bass/treble and sleep to their setters; read-only fields yield no command", () => {
-    expect(stateToYxc("sound.bass", 4)).toEqual({ method: "setBassTo", zone: "main", value: 4 });
-    expect(stateToYxc("sound.treble", -1)).toEqual({ method: "setTrebleTo", zone: "main", value: -1 });
-    expect(stateToYxc("sleep", 60)).toEqual({ method: "sleep", zone: "main", value: 60 });
+  test("runs tone bass/treble and sleep through their setters; read-only fields yield no command", async () => {
+    expect(await ranCall("sound.bass", 4)).toEqual(["setBassTo", [4, "main"]]);
+    expect(await ranCall("sound.treble", -1)).toEqual(["setTrebleTo", [-1, "main"]]);
+    expect(await ranCall("sleep", 60)).toEqual(["sleep", [60, "main"]]);
     expect(stateToYxc("sound.dialogueLevel", 2)).toBeUndefined();
     expect(stateToYxc("actualVolume", -40)).toBeUndefined();
   });
 
-  test("maps the writable amp fields to their YXC setter; read-only ones yield no command", () => {
-    expect(stateToYxc("sound.direct", true)).toEqual({ method: "setDirect", zone: "main", value: true });
-    expect(stateToYxc("sound.balance", 3)).toEqual({ method: "setBalance", zone: "main", value: 3 });
-    expect(stateToYxc("sound.bassExtension", true)).toEqual({
-      method: "setBassExtension",
-      zone: "main",
-      value: true,
-    });
-    expect(stateToYxc("sound.clearVoice", true)).toEqual({ method: "setClearVoice", zone: "main", value: true });
+  test("runs the writable amp fields through their YXC setter; read-only ones yield no command", async () => {
+    expect(await ranCall("sound.direct", true)).toEqual(["setDirect", [true, "main"]]);
+    expect(await ranCall("sound.balance", 3)).toEqual(["setBalance", [3, "main"]]);
+    expect(await ranCall("sound.bassExtension", true)).toEqual(["setBassExtension", [true, "main"]]);
+    expect(await ranCall("sound.clearVoice", true)).toEqual(["setClearVoice", [true, "main"]]);
     expect(stateToYxc("sound.extraBass", true)).toBeUndefined();
     expect(stateToYxc("sound.surround3d", true)).toBeUndefined();
   });
 
-  test("maps a power write to the power method on main", () => {
-    expect(stateToYxc("power", true)).toEqual({ method: "power", zone: "main", value: true });
+  test("runs a power write through the power method on main", async () => {
+    expect(await ranCall("power", true)).toEqual(["power", [true, "main"]]);
   });
 
-  test("maps a zoned volume write to setVolumeTo", () => {
-    expect(stateToYxc("multiroom.zone2.volume", 40)).toEqual({ method: "setVolumeTo", zone: "zone2", value: 40 });
+  test("runs a zoned volume write through setVolumeTo with the zone", async () => {
+    expect(await ranCall("multiroom.zone2.volume", 40)).toEqual(["setVolumeTo", [40, "zone2"]]);
   });
 
-  test("maps soundProgram to setSound (not setSoundProgram)", () => {
-    expect(stateToYxc("soundProgram", "stereo")).toEqual({ method: "setSound", zone: "main", value: "stereo" });
+  test("runs soundProgram through setSound (not setSoundProgram)", async () => {
+    expect(await ranCall("soundProgram", "stereo")).toEqual(["setSound", ["stereo", "main"]]);
   });
 
   test("returns undefined for an unmapped state or unknown zone", () => {

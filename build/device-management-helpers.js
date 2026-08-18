@@ -57,16 +57,19 @@ function buildDeviceForm(usedIps) {
   };
 }
 function findClash(rows, candidate, exceptIndex) {
-  const id = rowId(candidate);
-  if (id === "" || RESERVED_IDS.has(id) || !IP_RE.test(candidate.ip)) {
+  if (!IP_RE.test(candidate.ip)) {
     return (0, import_i18n.t)("invalidIp");
+  }
+  const id = rowId(candidate);
+  if (id === "" || RESERVED_IDS.has(id)) {
+    return (0, import_i18n.t)("invalidName");
   }
   for (let i = 0; i < rows.length; i++) {
     if (i === exceptIndex) {
       continue;
     }
     if (rows[i].ip === candidate.ip || rowId(rows[i]) === id) {
-      return (0, import_i18n.t)("invalidIp");
+      return (0, import_i18n.t)("duplicateDevice");
     }
   }
   return null;

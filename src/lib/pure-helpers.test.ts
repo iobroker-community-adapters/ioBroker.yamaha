@@ -52,10 +52,14 @@ describe("mergeDiscovered", () => {
     expect(mergeDiscovered([], [{ ip: "3.3.3.3", name: "" }])).toEqual([{ id: "3_3_3_3", ip: "3.3.3.3" }]);
   });
 
-  test("skips a discovery whose id would collide with a kept device", () => {
-    expect(mergeDiscovered([{ id: "Living", ip: "1.1.1.1" }], [{ ip: "9.9.9.9", name: "Living" }])).toEqual([
-      { id: "Living", ip: "1.1.1.1" },
-    ]);
+  test("skips a discovery whose id would collide with a kept device — and reports it", () => {
+    const collisions: Array<[string, string]> = [];
+    expect(
+      mergeDiscovered([{ id: "Living", ip: "1.1.1.1" }], [{ ip: "9.9.9.9", name: "Living" }], (dropped, takenId) =>
+        collisions.push([dropped, takenId]),
+      ),
+    ).toEqual([{ id: "Living", ip: "1.1.1.1" }]);
+    expect(collisions).toEqual([["Living", "Living"]]);
   });
 });
 
@@ -90,13 +94,21 @@ describe("parseDevices", () => {
     expect(parseDevices([{ name: "Living", ip: "1.2.3.4" }])).toEqual([{ id: "Living", ip: "1.2.3.4" }]);
   });
 
-  test("drops a duplicate id and the reserved 'info' name (would share one object tree)", () => {
-    const result = parseDevices([
-      { name: "Living Room", ip: "1.1.1.1" },
-      { name: "Living.Room", ip: "2.2.2.2" }, // sanitises to the same id → dropped
-      { name: "info", ip: "3.3.3.3" }, // reserved → dropped
-    ]);
+  test("drops a duplicate id and the reserved 'info' name (would share one object tree) — and reports them", () => {
+    const collisions: Array<[string, string]> = [];
+    const result = parseDevices(
+      [
+        { name: "Living Room", ip: "1.1.1.1" },
+        { name: "Living.Room", ip: "2.2.2.2" }, // sanitises to the same id → dropped
+        { name: "info", ip: "3.3.3.3" }, // reserved → dropped
+      ],
+      (dropped, takenId) => collisions.push([dropped, takenId]),
+    );
     expect(result).toEqual([{ id: "Living_Room", ip: "1.1.1.1" }]);
+    expect(collisions).toEqual([
+      ["Living.Room", "Living_Room"],
+      ["info", "info"],
+    ]);
   });
 
   test("falls back to the ip as id when the name is blank, drops rows without an ip", () => {

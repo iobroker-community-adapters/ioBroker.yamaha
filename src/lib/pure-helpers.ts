@@ -53,12 +53,14 @@ export function stripNamespace(fullId: string, namespace: string): string {
  * Invalid rows are dropped, as are rows whose id collides with the adapter's own
  * reserved `info` branch or with an id already taken — two names that sanitise to
  * the same id (e.g. "Living Room" and "Living.Room") would otherwise share one
- * object tree.
+ * object tree. A dropped collision is reported via `onCollision` so the device does
+ * not just silently "not exist" for the user.
  *
  * @param raw the raw `native.devices` value
+ * @param onCollision called with the dropped row's name/ip and the clashing id
  * @returns validated, de-duplicated device records
  */
-export function parseDevices(raw: unknown): DeviceRecord[] {
+export function parseDevices(raw: unknown, onCollision?: (dropped: string, takenId: string) => void): DeviceRecord[] {
   if (!Array.isArray(raw)) {
     return [];
   }
@@ -72,6 +74,7 @@ export function parseDevices(raw: unknown): DeviceRecord[] {
     // instead of vanishing silently.
     const id = sanitizeId(entry.name && entry.name.length > 0 ? entry.name : entry.ip);
     if (taken.has(id)) {
+      onCollision?.(entry.name || entry.ip, id);
       continue;
     }
     taken.add(id);
@@ -86,13 +89,19 @@ export function parseDevices(raw: unknown): DeviceRecord[] {
  * run's scan did not find it — a receiver in deep standby answers no SSDP, and its
  * object tree must survive. New addresses are added; a discovered device is turned
  * into a record via its friendly name (or its ip when it advertises none), and one
- * whose id would collide with an already-kept device is skipped. De-duplicated by ip.
+ * whose id would collide with an already-kept device is skipped (reported via
+ * `onCollision`, so the missing device is explainable). De-duplicated by ip.
  *
  * @param known the device records remembered from earlier runs
  * @param found the devices discovered this run
+ * @param onCollision called with the dropped device's name/ip and the clashing id
  * @returns the merged records, de-duplicated by ip
  */
-export function mergeDiscovered(known: DeviceRecord[], found: DiscoveredDevice[]): DeviceRecord[] {
+export function mergeDiscovered(
+  known: DeviceRecord[],
+  found: DiscoveredDevice[],
+  onCollision?: (dropped: string, takenId: string) => void,
+): DeviceRecord[] {
   const byIp = new Map<string, DeviceRecord>();
   const takenIds = new Set<string>(["info"]); // reserved: the adapter's own info channel
   for (const device of known) {
@@ -108,6 +117,7 @@ export function mergeDiscovered(known: DeviceRecord[], found: DiscoveredDevice[]
     }
     const id = sanitizeId(device.name || device.ip);
     if (takenIds.has(id)) {
+      onCollision?.(device.name || device.ip, id);
       continue;
     }
     takenIds.add(id);

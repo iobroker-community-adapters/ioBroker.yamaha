@@ -40,31 +40,27 @@ function readStatusField(status, read) {
   }
   return status[read.field];
 }
-const NETUSB_TRANSPORT = {
-  "player.netPlayer.play": "playNet",
-  "player.netPlayer.pause": "pauseNet",
-  "player.netPlayer.stop": "stopNet",
-  "player.netPlayer.next": "nextNet",
-  "player.netPlayer.prev": "prevNet"
-};
-const CD_TRANSPORT = {
-  "player.cd.play": "play",
-  "player.cd.pause": "pause",
-  "player.cd.stop": "stop",
-  "player.cd.next": "next",
-  "player.cd.prev": "previous"
-};
-const TOGGLE_ACTIONS = {
-  "player.netPlayer.repeatToggle": "toggleNetRepeat",
-  "player.netPlayer.shuffleToggle": "toggleNetShuffle",
-  "player.cd.repeatToggle": "toggleCDRepeat",
-  "player.cd.shuffleToggle": "toggleCDShuffle",
-  "player.cd.tray": "toggleTray"
+const BUTTON_ACTIONS = {
+  "player.netPlayer.play": (client) => client.playNet(),
+  "player.netPlayer.pause": (client) => client.pauseNet(),
+  "player.netPlayer.stop": (client) => client.stopNet(),
+  "player.netPlayer.next": (client) => client.nextNet(),
+  "player.netPlayer.prev": (client) => client.prevNet(),
+  "player.cd.play": (client) => client.setCDPlayback("play"),
+  "player.cd.pause": (client) => client.setCDPlayback("pause"),
+  "player.cd.stop": (client) => client.setCDPlayback("stop"),
+  "player.cd.next": (client) => client.setCDPlayback("next"),
+  "player.cd.prev": (client) => client.setCDPlayback("previous"),
+  "player.netPlayer.repeatToggle": (client) => client.toggleNetRepeat(),
+  "player.netPlayer.shuffleToggle": (client) => client.toggleNetShuffle(),
+  "player.cd.repeatToggle": (client) => client.toggleCDRepeat(),
+  "player.cd.shuffleToggle": (client) => client.toggleCDShuffle(),
+  "player.cd.tray": (client) => client.toggleTray()
 };
 const EQ_CHANNELS = {
-  "sound.equalizerLow": "Low",
-  "sound.equalizerMid": "Mid",
-  "sound.equalizerHigh": "High"
+  "sound.equalizerLow": "low",
+  "sound.equalizerMid": "mid",
+  "sound.equalizerHigh": "high"
 };
 const ZONE_PREFIX = {
   main: "",
@@ -91,26 +87,20 @@ function parseYxcStatus(zoneStatus, zone) {
   return updates;
 }
 function stateToYxc(stateId, value) {
-  const transport = NETUSB_TRANSPORT[stateId];
-  if (transport) {
-    return { method: transport, zone: "netusb", value: true };
-  }
-  const cdAction = CD_TRANSPORT[stateId];
-  if (cdAction) {
-    return { method: "setCDPlayback", zone: "cd", value: cdAction };
-  }
-  const toggle = TOGGLE_ACTIONS[stateId];
-  if (toggle) {
-    return { method: toggle, zone: "netusb", value: true };
+  const button = BUTTON_ACTIONS[stateId];
+  if (button) {
+    return { kind: "run", run: button };
   }
   if (stateId === "tuner.band" && (0, import_value_coerce.isWritableValue)(value, false)) {
-    return { method: "setBand", zone: "tuner", value: String(value) };
+    const band = String(value);
+    return { kind: "run", run: (client) => client.setBand(band) };
   }
   if (stateId === "tuner.frequency" && (0, import_value_coerce.isWritableValue)(value, true)) {
-    return { method: "setFreq", zone: "tuner", value: Number(value) };
+    return { kind: "tunerFreq", value: Number(value) };
   }
   if (stateId === "player.netPlayer.preset" && (0, import_value_coerce.isWritableValue)(value, true)) {
-    return { method: "recallPreset", zone: "netusb", value: Number(value) };
+    const preset = Number(value);
+    return { kind: "run", run: (client) => client.recallPreset(preset, "main") };
   }
   let zone = "main";
   let name = stateId;
@@ -121,13 +111,14 @@ function stateToYxc(stateId, value) {
   }
   const eqBand = EQ_CHANNELS[name];
   if (eqBand && (0, import_value_coerce.isWritableValue)(value, true)) {
-    return { method: `setEqualizer${eqBand}`, zone, value: Number(value) };
+    return { kind: "equalizer", zone, band: eqBand, value: Number(value) };
   }
   const entry = import_catalog.YXC_AMP_CATALOG.find((e) => e.state === name);
   if (!(entry == null ? void 0 : entry.write) || !(0, import_value_coerce.isWritableValue)(value, entry.common.type === "number")) {
     return void 0;
   }
-  return { method: entry.write.method, zone, value: entry.write.toYxc(value) };
+  const { apply } = entry.write;
+  return { kind: "run", run: (client) => apply(client, value, zone) };
 }
 function parseYxcDistribution(info) {
   if (typeof info !== "object" || info === null) {
@@ -158,11 +149,18 @@ function parseYxcPlayInfo(playInfo, prefix = "player.netPlayer") {
   }
   const info = playInfo;
   const updates = [];
-  for (const field of ["artist", "album", "track", "repeat", "shuffle"]) {
+  for (const field of ["artist", "album", "track"]) {
     const value = info[field];
     if (typeof value === "string") {
       updates.push({ id: `${prefix}.${field}`, value });
     }
+  }
+  const repeatCode = { off: 0, one: 1, all: 2 };
+  if (typeof info.repeat === "string" && info.repeat in repeatCode) {
+    updates.push({ id: `${prefix}.repeat`, value: repeatCode[info.repeat] });
+  }
+  if (info.shuffle === "on" || info.shuffle === "off") {
+    updates.push({ id: `${prefix}.shuffle`, value: info.shuffle === "on" });
   }
   const playbackCode = { play: 0, stop: 1, pause: 2 };
   if (typeof info.playback === "string" && info.playback in playbackCode) {

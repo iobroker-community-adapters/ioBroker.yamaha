@@ -134,7 +134,7 @@ class YxcDeviceController {
     }
     const command = (0, import_command_mapper.stateToYxc)(stateId, value);
     if (command) {
-      void this.applyCommand(command);
+      void this.applyCommand(stateId, command);
     }
   }
   /**
@@ -264,7 +264,7 @@ class YxcDeviceController {
       }
       await this.refreshDistribution();
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: leaveGroup failed: ${(0, import_util.errorMessage)(e)}`);
+      this.deps.log.warn(`${this.deviceId}: leaveGroup failed: ${(0, import_util.errorMessage)(e)}`);
     }
   }
   /**
@@ -288,7 +288,7 @@ class YxcDeviceController {
       await this.deps.client.startDistribution(0);
       await this.refreshDistribution();
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: linkClient(${clientIp}) failed: ${(0, import_util.errorMessage)(e)}`);
+      this.deps.log.warn(`${this.deviceId}: linkClient(${clientIp}) failed: ${(0, import_util.errorMessage)(e)}`);
     }
   }
   /**
@@ -336,119 +336,33 @@ class YxcDeviceController {
     });
   }
   /**
-   * Send a mapped command to the device through the matching client method.
+   * Apply a mapped command. A plain command runs its client call directly; the two
+   * commands that need controller-cached state (equalizer bands, tuner band) are
+   * completed here — the only place that state lives.
    *
+   * @param stateId the written state id, for the failure log line
    * @param command the YXC command to apply
    */
-  async applyCommand(command) {
+  async applyCommand(stateId, command) {
     var _a;
-    const { zone, value } = command;
     try {
-      switch (command.method) {
-        case "power":
-          await this.deps.client.power(Boolean(value), zone);
+      switch (command.kind) {
+        case "run":
+          await command.run(this.deps.client);
           break;
-        case "setVolumeTo":
-          await this.deps.client.setVolumeTo(Number(value), zone);
-          break;
-        case "mute":
-          await this.deps.client.mute(Boolean(value), zone);
-          break;
-        case "setInput":
-          await this.deps.client.setInput(String(value), zone);
-          break;
-        case "setSound":
-          await this.deps.client.setSound(String(value), zone);
-          break;
-        case "setEnhancer":
-          await this.deps.client.setEnhancer(Boolean(value), zone);
-          break;
-        case "setPureDirect":
-          await this.deps.client.setPureDirect(Boolean(value), zone);
-          break;
-        case "setSubwooferVolumeTo":
-          await this.deps.client.setSubwooferVolumeTo(Number(value), zone);
-          break;
-        case "setBassTo":
-          await this.deps.client.setBassTo(Number(value), zone);
-          break;
-        case "setTrebleTo":
-          await this.deps.client.setTrebleTo(Number(value), zone);
-          break;
-        case "sleep":
-          await this.deps.client.sleep(Number(value), zone);
-          break;
-        case "setDirect":
-          await this.deps.client.setDirect(Boolean(value), zone);
-          break;
-        case "setClearVoice":
-          await this.deps.client.setClearVoice(Boolean(value), zone);
-          break;
-        case "setBassExtension":
-          await this.deps.client.setBassExtension(Boolean(value), zone);
-          break;
-        case "setBalance":
-          await this.deps.client.setBalance(Number(value), zone);
-          break;
-        case "setEqualizerLow":
-        case "setEqualizerMid":
-        case "setEqualizerHigh": {
-          const band = command.method.slice("setEqualizer".length).toLowerCase();
-          const next = { ...(_a = this.lastEqualizer.get(zone)) != null ? _a : { low: 0, mid: 0, high: 0 }, [band]: Number(value) };
+        case "equalizer": {
+          const { zone, band, value } = command;
+          const next = { ...(_a = this.lastEqualizer.get(zone)) != null ? _a : { low: 0, mid: 0, high: 0 }, [band]: value };
           await this.deps.client.setEqualizer(next.low, next.mid, next.high, zone);
           this.lastEqualizer.set(zone, next);
           break;
         }
-        case "playNet":
-          await this.deps.client.playNet();
+        case "tunerFreq":
+          await this.deps.client.setFreq(this.lastTunerBand, command.value);
           break;
-        case "pauseNet":
-          await this.deps.client.pauseNet();
-          break;
-        case "stopNet":
-          await this.deps.client.stopNet();
-          break;
-        case "nextNet":
-          await this.deps.client.nextNet();
-          break;
-        case "prevNet":
-          await this.deps.client.prevNet();
-          break;
-        case "setCDPlayback":
-          await this.deps.client.setCDPlayback(String(value));
-          break;
-        case "toggleNetRepeat":
-          await this.deps.client.toggleNetRepeat();
-          break;
-        case "toggleNetShuffle":
-          await this.deps.client.toggleNetShuffle();
-          break;
-        case "toggleCDRepeat":
-          await this.deps.client.toggleCDRepeat();
-          break;
-        case "toggleCDShuffle":
-          await this.deps.client.toggleCDShuffle();
-          break;
-        case "toggleTray":
-          await this.deps.client.toggleTray();
-          break;
-        case "setPartyMode":
-          await this.deps.client.setPartyMode(Boolean(value));
-          break;
-        case "setBand":
-          await this.deps.client.setBand(String(value));
-          break;
-        case "setFreq":
-          await this.deps.client.setFreq(this.lastTunerBand, Number(value));
-          break;
-        case "recallPreset":
-          await this.deps.client.recallPreset(Number(value), zone);
-          break;
-        default:
-          this.deps.log.warn(`${this.deviceId}: unknown YXC command "${command.method}" \u2014 ignored`);
       }
     } catch (e) {
-      this.deps.log.warn(`${this.deviceId}: ${command.method} failed: ${(0, import_util.errorMessage)(e)}`);
+      this.deps.log.warn(`${this.deviceId}: write to ${stateId} failed: ${(0, import_util.errorMessage)(e)}`);
     }
   }
 }

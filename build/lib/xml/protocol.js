@@ -82,15 +82,15 @@ function parseBasicStatus(xml) {
   }
   const bass = /<Bass>\s*<Val>(-?\d+)<\/Val>/.exec(xml);
   if (bass) {
-    status.bass = Number(bass[1]);
+    status.bass = Number(bass[1]) / 10;
   }
   const treble = /<Treble>\s*<Val>(-?\d+)<\/Val>/.exec(xml);
   if (treble) {
-    status.treble = Number(treble[1]);
+    status.treble = Number(treble[1]) / 10;
   }
   const subwooferTrim = /<Subwoofer_Trim>\s*<Val>(-?\d+)<\/Val>/.exec(xml);
   if (subwooferTrim) {
-    status.subwooferTrim = Number(subwooferTrim[1]);
+    status.subwooferTrim = Number(subwooferTrim[1]) / 10;
   }
   const extraBass = /<Extra_Bass>([^<]+)<\/Extra_Bass>/.exec(xml);
   if (extraBass) {

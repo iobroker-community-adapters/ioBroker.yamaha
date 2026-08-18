@@ -51,7 +51,14 @@ describe("connectTransports", () => {
     const ynca = fakeConn("ynca", [state("volume", "Volume dB", { unit: "dB" }), state("power", "Power")]);
     const yxc = fakeConn("yxc", [state("volume", "Volume raw"), state("power", "Power"), state("dist.role", "Role")]);
     const d = deps();
-    const handle = await connectTransports("living", [{ conn: ynca }, { conn: yxc }], d);
+    const handle = await connectTransports(
+      "living",
+      [
+        { transport: ynca.transport, build: () => ynca },
+        { transport: yxc.transport, build: () => yxc },
+      ],
+      d,
+    );
     expect(handle).not.toBeNull();
     // one node per capability, under the device id — volume appears exactly once
     expect(d.objects).toEqual(expect.arrayContaining(["living.volume", "living.power", "living.dist.role"]));
@@ -66,7 +73,14 @@ describe("connectTransports", () => {
     const ynca = fakeConn("ynca", [state("power", "Power")]);
     const yxc = fakeConn("yxc", [state("dist.role", "Role")], false);
     const d = deps();
-    const handle = await connectTransports("living", [{ conn: ynca }, { conn: yxc }], d);
+    const handle = await connectTransports(
+      "living",
+      [
+        { transport: ynca.transport, build: () => ynca },
+        { transport: yxc.transport, build: () => yxc },
+      ],
+      d,
+    );
     expect(handle).not.toBeNull();
     expect(yxc.closed).toBe(true);
     expect(yxc.seeded).toEqual([]); // never seeded — not part of the tree
@@ -76,7 +90,14 @@ describe("connectTransports", () => {
   test("no transport answers → null, every attempt closed", async () => {
     const ynca = fakeConn("ynca", [state("power", "Power")], false);
     const yxc = fakeConn("yxc", [state("dist.role", "Role")], false);
-    const handle = await connectTransports("living", [{ conn: ynca }, { conn: yxc }], deps());
+    const handle = await connectTransports(
+      "living",
+      [
+        { transport: ynca.transport, build: () => ynca },
+        { transport: yxc.transport, build: () => yxc },
+      ],
+      deps(),
+    );
     expect(handle).toBeNull();
     expect(ynca.closed).toBe(true);
     expect(yxc.closed).toBe(true);
@@ -86,7 +107,14 @@ describe("connectTransports", () => {
     const ynca = fakeConn("ynca", [state("power", "Power")], () => Promise.reject(new Error("socket")));
     const yxc = fakeConn("yxc", [state("dist.role", "Role")], true);
     const d = deps();
-    const handle = await connectTransports("living", [{ conn: ynca }, { conn: yxc }], d);
+    const handle = await connectTransports(
+      "living",
+      [
+        { transport: ynca.transport, build: () => ynca },
+        { transport: yxc.transport, build: () => yxc },
+      ],
+      d,
+    );
     expect(handle).not.toBeNull();
     expect(ynca.closed).toBe(true);
     expect(d.objects).toContain("living.dist.role"); // yxc still made it into the tree
@@ -96,8 +124,8 @@ describe("connectTransports", () => {
     const ynca = fakeConn("ynca", [], false);
     const warn = vi.fn();
     const d = { ...deps(), log: { ...silentLog, warn } };
-    await connectTransports("living", [{ conn: ynca }], d);
-    await connectTransports("living", [{ conn: ynca }], d);
+    await connectTransports("living", [{ transport: ynca.transport, build: () => ynca }], d);
+    await connectTransports("living", [{ transport: ynca.transport, build: () => ynca }], d);
     expect(warn).toHaveBeenCalledTimes(2);
   });
 
@@ -106,9 +134,9 @@ describe("connectTransports", () => {
     const warn = vi.fn();
     const debug = vi.fn();
     const d = { ...deps(), log: { ...silentLog, warn, debug }, reachability: new ReachabilityDedup() };
-    await connectTransports("living", [{ conn: ynca }], d);
-    await connectTransports("living", [{ conn: ynca }], d);
-    await connectTransports("living", [{ conn: ynca }], d);
+    await connectTransports("living", [{ transport: ynca.transport, build: () => ynca }], d);
+    await connectTransports("living", [{ transport: ynca.transport, build: () => ynca }], d);
+    await connectTransports("living", [{ transport: ynca.transport, build: () => ynca }], d);
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalledWith("living: no reachable transport (YNCA/YXC/XML)");
     expect(debug).toHaveBeenCalledTimes(2);
@@ -119,10 +147,10 @@ describe("connectTransports", () => {
     const alive = fakeConn("ynca", [state("power", "Power")], true);
     const warn = vi.fn();
     const d = { ...deps(), log: { ...silentLog, warn }, reachability: new ReachabilityDedup() };
-    await connectTransports("living", [{ conn: dead }], d); // 1st failure — warns
-    await connectTransports("living", [{ conn: dead }], d); // repeat — debug, no extra warn
-    await connectTransports("living", [{ conn: alive }], d); // reconnects — clears the dedup
-    await connectTransports("living", [{ conn: dead }], d); // dropped again — warns again
+    await connectTransports("living", [{ transport: dead.transport, build: () => dead }], d); // 1st failure — warns
+    await connectTransports("living", [{ transport: dead.transport, build: () => dead }], d); // repeat — debug, no extra warn
+    await connectTransports("living", [{ transport: alive.transport, build: () => alive }], d); // reconnects — clears the dedup
+    await connectTransports("living", [{ transport: dead.transport, build: () => dead }], d); // dropped again — warns again
     expect(warn).toHaveBeenCalledTimes(2);
   });
 });

@@ -36,97 +36,10 @@ function modelNameFrom(deviceInfo: unknown): string | undefined {
   return typeof model === "string" && model.length > 0 ? model : undefined;
 }
 
-/** The subset of the YamahaYXC client the controller uses (so tests can inject a fake). */
-export interface YxcClientLike {
-  /** Read the device's capabilities (zones, functions, inputs, ranges). */
-  getFeatures(): Promise<unknown>;
-  /** Read a zone's current status. */
-  getStatus(zone: string): Promise<unknown>;
-  /** Read the device's system info (model name, firmware). */
-  getDeviceInfo(): Promise<unknown>;
-  /**
-   * Read a player source's play info. `undefined` reads the network/USB player,
-   * `"cd"` the disc player, `"tuner"` the tuner (band/frequency/RDS).
-   */
-  getPlayInfo(source?: string): Promise<unknown>;
-  /** Set a zone's power. */
-  power(on: boolean, zone: string): Promise<unknown>;
-  /** Set a zone's absolute volume (raw YXC scale). */
-  setVolumeTo(to: number, zone: string): Promise<unknown>;
-  /** Set a zone's mute. */
-  mute(on: boolean, zone: string): Promise<unknown>;
-  /** Select a zone's input. */
-  setInput(input: string, zone: string): Promise<unknown>;
-  /** Select a zone's sound program. */
-  setSound(program: string, zone: string): Promise<unknown>;
-  /** Turn a zone's enhancer on/off. */
-  setEnhancer(on: boolean, zone: string): Promise<unknown>;
-  /** Turn a zone's pure direct on/off. */
-  setPureDirect(on: boolean, zone: string): Promise<unknown>;
-  /** Set a zone's subwoofer trim. */
-  setSubwooferVolumeTo(to: number, zone: string): Promise<unknown>;
-  /** Set a zone's tone-control bass. */
-  setBassTo(to: number, zone: string): Promise<unknown>;
-  /** Set a zone's tone-control treble. */
-  setTrebleTo(to: number, zone: string): Promise<unknown>;
-  /** Set a zone's sleep timer in minutes. */
-  sleep(minutes: number, zone: string): Promise<unknown>;
-  /** Turn a zone's Direct mode on/off. */
-  setDirect(on: boolean, zone: string): Promise<unknown>;
-  /** Turn a zone's Clear Voice on/off. */
-  setClearVoice(on: boolean, zone: string): Promise<unknown>;
-  /** Turn a zone's bass extension on/off. */
-  setBassExtension(on: boolean, zone: string): Promise<unknown>;
-  /** Set a zone's balance. */
-  setBalance(value: number, zone: string): Promise<unknown>;
-  /** Set the manual equalizer's three bands (low/mid/high) in one call. */
-  setEqualizer(low: number, mid: number, high: number, zone: string): Promise<unknown>;
-  /** Start the network/USB player. */
-  playNet(): Promise<unknown>;
-  /** Pause the network/USB player. */
-  pauseNet(): Promise<unknown>;
-  /** Stop the network/USB player. */
-  stopNet(): Promise<unknown>;
-  /** Skip to the next track. */
-  nextNet(): Promise<unknown>;
-  /** Skip to the previous track. */
-  prevNet(): Promise<unknown>;
-  /** Drive the CD transport with a YXC action word (`play`, `pause`, `stop`, `next`, `previous`). */
-  setCDPlayback(action: string): Promise<unknown>;
-  /** Toggle network/USB repeat. */
-  toggleNetRepeat(): Promise<unknown>;
-  /** Toggle network/USB shuffle. */
-  toggleNetShuffle(): Promise<unknown>;
-  /** Toggle CD repeat. */
-  toggleCDRepeat(): Promise<unknown>;
-  /** Toggle CD shuffle. */
-  toggleCDShuffle(): Promise<unknown>;
-  /** Open/close the CD tray. */
-  toggleTray(): Promise<unknown>;
-  /** Set the tuner band. */
-  setBand(band: string): Promise<unknown>;
-  /** Set the tuner frequency for a band. */
-  setFreq(band: string, freq: number): Promise<unknown>;
-  /** Turn party mode on/off. */
-  setPartyMode(on: boolean): Promise<unknown>;
-  /** Recall a network/USB preset. */
-  recallPreset(num: number, zone: string): Promise<unknown>;
-  /** Read the MusicCast-Link distribution info (role, group, client list). */
-  getDistributionInfo(): Promise<unknown>;
-  /** Set the group master's client roster (link/unlink sequence). */
-  setServerInfo(info: {
-    group_id: string;
-    zone: string;
-    type: "add" | "remove";
-    client_list: string[];
-  }): Promise<unknown>;
-  /** Set a group member's membership (link/unlink sequence). */
-  setClientInfo(info: { group_id: string; zone: string[] }): Promise<unknown>;
-  /** Start distributing to the group's clients (called on the master). */
-  startDistribution(num: number): Promise<unknown>;
-  /** Stop distributing, breaking up the group (called on the master). */
-  stopDistribution(): Promise<unknown>;
-}
+import type { YxcClientLike } from "./client-contract";
+
+// Re-exported so existing importers (the tests' fakes) keep resolving it from here.
+export type { YxcClientLike };
 
 /** The adapter callbacks the controller drives — narrow, so no adapter mock is needed in tests. */
 export interface YxcControllerDeps {
@@ -261,7 +174,7 @@ export class YxcDeviceController implements ConnectionHandle {
     }
     const command = stateToYxc(stateId, value);
     if (command) {
-      void this.applyCommand(command);
+      void this.applyCommand(stateId, command);
     }
   }
 
@@ -403,7 +316,8 @@ export class YxcDeviceController implements ConnectionHandle {
       }
       await this.refreshDistribution();
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: leaveGroup failed: ${errorMessage(e)}`);
+      // A user action failing must be visible — warn, like every other write command.
+      this.deps.log.warn(`${this.deviceId}: leaveGroup failed: ${errorMessage(e)}`);
     }
   }
 
@@ -427,7 +341,8 @@ export class YxcDeviceController implements ConnectionHandle {
       await this.deps.client.startDistribution(0);
       await this.refreshDistribution();
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: linkClient(${clientIp}) failed: ${errorMessage(e)}`);
+      // A user action failing must be visible — warn, like every other write command.
+      this.deps.log.warn(`${this.deviceId}: linkClient(${clientIp}) failed: ${errorMessage(e)}`);
     }
   }
 
@@ -477,119 +392,33 @@ export class YxcDeviceController implements ConnectionHandle {
   }
 
   /**
-   * Send a mapped command to the device through the matching client method.
+   * Apply a mapped command. A plain command runs its client call directly; the two
+   * commands that need controller-cached state (equalizer bands, tuner band) are
+   * completed here — the only place that state lives.
    *
+   * @param stateId the written state id, for the failure log line
    * @param command the YXC command to apply
    */
-  private async applyCommand(command: YxcCommand): Promise<void> {
-    const { zone, value } = command;
+  private async applyCommand(stateId: string, command: YxcCommand): Promise<void> {
     try {
-      switch (command.method) {
-        case "power":
-          await this.deps.client.power(Boolean(value), zone);
+      switch (command.kind) {
+        case "run":
+          await command.run(this.deps.client);
           break;
-        case "setVolumeTo":
-          await this.deps.client.setVolumeTo(Number(value), zone);
-          break;
-        case "mute":
-          await this.deps.client.mute(Boolean(value), zone);
-          break;
-        case "setInput":
-          await this.deps.client.setInput(String(value), zone);
-          break;
-        case "setSound":
-          await this.deps.client.setSound(String(value), zone);
-          break;
-        case "setEnhancer":
-          await this.deps.client.setEnhancer(Boolean(value), zone);
-          break;
-        case "setPureDirect":
-          await this.deps.client.setPureDirect(Boolean(value), zone);
-          break;
-        case "setSubwooferVolumeTo":
-          await this.deps.client.setSubwooferVolumeTo(Number(value), zone);
-          break;
-        case "setBassTo":
-          await this.deps.client.setBassTo(Number(value), zone);
-          break;
-        case "setTrebleTo":
-          await this.deps.client.setTrebleTo(Number(value), zone);
-          break;
-        case "sleep":
-          await this.deps.client.sleep(Number(value), zone);
-          break;
-        case "setDirect":
-          await this.deps.client.setDirect(Boolean(value), zone);
-          break;
-        case "setClearVoice":
-          await this.deps.client.setClearVoice(Boolean(value), zone);
-          break;
-        case "setBassExtension":
-          await this.deps.client.setBassExtension(Boolean(value), zone);
-          break;
-        case "setBalance":
-          await this.deps.client.setBalance(Number(value), zone);
-          break;
-        case "setEqualizerLow":
-        case "setEqualizerMid":
-        case "setEqualizerHigh": {
-          // The method name carries the band; the other two come from the cached status.
-          const band = command.method.slice("setEqualizer".length).toLowerCase() as "low" | "mid" | "high";
-          const next = { ...(this.lastEqualizer.get(zone) ?? { low: 0, mid: 0, high: 0 }), [band]: Number(value) };
+        case "equalizer": {
+          // The device sets all three bands in one call; the other two come from the cache.
+          const { zone, band, value } = command;
+          const next = { ...(this.lastEqualizer.get(zone) ?? { low: 0, mid: 0, high: 0 }), [band]: value };
           await this.deps.client.setEqualizer(next.low, next.mid, next.high, zone);
           this.lastEqualizer.set(zone, next);
           break;
         }
-        case "playNet":
-          await this.deps.client.playNet();
+        case "tunerFreq":
+          await this.deps.client.setFreq(this.lastTunerBand, command.value);
           break;
-        case "pauseNet":
-          await this.deps.client.pauseNet();
-          break;
-        case "stopNet":
-          await this.deps.client.stopNet();
-          break;
-        case "nextNet":
-          await this.deps.client.nextNet();
-          break;
-        case "prevNet":
-          await this.deps.client.prevNet();
-          break;
-        case "setCDPlayback":
-          await this.deps.client.setCDPlayback(String(value));
-          break;
-        case "toggleNetRepeat":
-          await this.deps.client.toggleNetRepeat();
-          break;
-        case "toggleNetShuffle":
-          await this.deps.client.toggleNetShuffle();
-          break;
-        case "toggleCDRepeat":
-          await this.deps.client.toggleCDRepeat();
-          break;
-        case "toggleCDShuffle":
-          await this.deps.client.toggleCDShuffle();
-          break;
-        case "toggleTray":
-          await this.deps.client.toggleTray();
-          break;
-        case "setPartyMode":
-          await this.deps.client.setPartyMode(Boolean(value));
-          break;
-        case "setBand":
-          await this.deps.client.setBand(String(value));
-          break;
-        case "setFreq":
-          await this.deps.client.setFreq(this.lastTunerBand, Number(value));
-          break;
-        case "recallPreset":
-          await this.deps.client.recallPreset(Number(value), zone);
-          break;
-        default:
-          this.deps.log.warn(`${this.deviceId}: unknown YXC command "${command.method}" — ignored`);
       }
     } catch (e) {
-      this.deps.log.warn(`${this.deviceId}: ${command.method} failed: ${errorMessage(e)}`);
+      this.deps.log.warn(`${this.deviceId}: write to ${stateId} failed: ${errorMessage(e)}`);
     }
   }
 }

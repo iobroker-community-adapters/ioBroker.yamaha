@@ -1,16 +1,20 @@
 import type { StateValue } from "../types";
 import { isWritableValue } from "../catalog/value-coerce";
 import { YXC_AMP_CATALOG } from "./catalog";
+import type { YxcClientLike } from "./client-contract";
 
-/** A YXC amplifier command: a YamahaYXC method with its target zone and value. */
-export interface YxcCommand {
-  /** The YamahaYXC method to call (`power`, `setVolumeTo`, `mute`, `setInput`, `setSound`). */
-  method: string;
-  /** The target zone (`main`, `zone2`, …). */
-  zone: string;
-  /** The value to pass to the method. */
-  value: boolean | number | string;
-}
+/**
+ * A mapped YXC write. Almost every command is a ready-to-run client call (`run`) built
+ * from the catalog's `write.apply` or the transport/toggle tables — no method-name
+ * string, no dispatch switch, no "unknown command" runtime path. The two commands that
+ * need controller-cached state stay declarative: the equalizer (the device sets all
+ * three bands in one call, the other two come from the cached status) and the tuner
+ * frequency (setFreq needs the current band).
+ */
+export type YxcCommand =
+  | { kind: "run"; run: (client: YxcClientLike) => Promise<unknown> }
+  | { kind: "equalizer"; zone: string; band: "low" | "mid" | "high"; value: number }
+  | { kind: "tunerFreq"; value: number };
 
 /**
  * Read a catalog entry's raw getStatus value — a flat field or a nested path.
@@ -33,42 +37,34 @@ function readStatusField(status: Record<string, unknown>, read: { field: string 
   return status[read.field];
 }
 
-/** Network-player transport buttons → YamahaYXC method (no zone/value). */
-const NETUSB_TRANSPORT: Record<string, string> = {
-  "player.netPlayer.play": "playNet",
-  "player.netPlayer.pause": "pauseNet",
-  "player.netPlayer.stop": "stopNet",
-  "player.netPlayer.next": "nextNet",
-  "player.netPlayer.prev": "prevNet",
-};
-
 /**
- * CD transport buttons → the YXC action word for `setCDPlayback`. Routed through
- * the one `setCDPlayback(action)` method (not the per-action `pauseCD()` helpers,
- * one of which sends the wrong command in the library).
+ * Button states → their client call. The CD transport routes through the one
+ * `setCDPlayback(action)` method (not the per-action `pauseCD()` helpers, one of
+ * which sends the wrong command in the library).
  */
-const CD_TRANSPORT: Record<string, string> = {
-  "player.cd.play": "play",
-  "player.cd.pause": "pause",
-  "player.cd.stop": "stop",
-  "player.cd.next": "next",
-  "player.cd.prev": "previous",
+const BUTTON_ACTIONS: Record<string, (client: YxcClientLike) => Promise<unknown>> = {
+  "player.netPlayer.play": client => client.playNet(),
+  "player.netPlayer.pause": client => client.pauseNet(),
+  "player.netPlayer.stop": client => client.stopNet(),
+  "player.netPlayer.next": client => client.nextNet(),
+  "player.netPlayer.prev": client => client.prevNet(),
+  "player.cd.play": client => client.setCDPlayback("play"),
+  "player.cd.pause": client => client.setCDPlayback("pause"),
+  "player.cd.stop": client => client.setCDPlayback("stop"),
+  "player.cd.next": client => client.setCDPlayback("next"),
+  "player.cd.prev": client => client.setCDPlayback("previous"),
+  "player.netPlayer.repeatToggle": client => client.toggleNetRepeat(),
+  "player.netPlayer.shuffleToggle": client => client.toggleNetShuffle(),
+  "player.cd.repeatToggle": client => client.toggleCDRepeat(),
+  "player.cd.shuffleToggle": client => client.toggleCDShuffle(),
+  "player.cd.tray": client => client.toggleTray(),
 };
 
-/** Repeat/shuffle/tray toggle buttons → the YamahaYXC method (no zone or value). */
-const TOGGLE_ACTIONS: Record<string, string> = {
-  "player.netPlayer.repeatToggle": "toggleNetRepeat",
-  "player.netPlayer.shuffleToggle": "toggleNetShuffle",
-  "player.cd.repeatToggle": "toggleCDRepeat",
-  "player.cd.shuffleToggle": "toggleCDShuffle",
-  "player.cd.tray": "toggleTray",
-};
-
-/** Equalizer band state (without zone prefix) → the band suffix of its setEqualizer<Band> method. */
-const EQ_CHANNELS: Record<string, string> = {
-  "sound.equalizerLow": "Low",
-  "sound.equalizerMid": "Mid",
-  "sound.equalizerHigh": "High",
+/** Equalizer band state (without zone prefix) → the band of the declarative equalizer command. */
+const EQ_CHANNELS: Record<string, "low" | "mid" | "high"> = {
+  "sound.equalizerLow": "low",
+  "sound.equalizerMid": "mid",
+  "sound.equalizerHigh": "high",
 };
 
 const ZONE_PREFIX: Record<string, string> = {
@@ -115,27 +111,21 @@ export function parseYxcStatus(zoneStatus: unknown, zone: string): StateValue[] 
  * @returns the YXC command, or undefined if the state or its zone is not mapped
  */
 export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefined {
-  const transport = NETUSB_TRANSPORT[stateId];
-  if (transport) {
-    return { method: transport, zone: "netusb", value: true };
-  }
-  const cdAction = CD_TRANSPORT[stateId];
-  if (cdAction) {
-    return { method: "setCDPlayback", zone: "cd", value: cdAction };
-  }
-  const toggle = TOGGLE_ACTIONS[stateId];
-  if (toggle) {
-    return { method: toggle, zone: "netusb", value: true };
+  const button = BUTTON_ACTIONS[stateId];
+  if (button) {
+    return { kind: "run", run: button };
   }
   if (stateId === "tuner.band" && isWritableValue(value, false)) {
-    return { method: "setBand", zone: "tuner", value: String(value) };
+    const band = String(value);
+    return { kind: "run", run: client => client.setBand(band) };
   }
   if (stateId === "tuner.frequency" && isWritableValue(value, true)) {
     // The controller supplies the current band; the value carries only the frequency.
-    return { method: "setFreq", zone: "tuner", value: Number(value) };
+    return { kind: "tunerFreq", value: Number(value) };
   }
   if (stateId === "player.netPlayer.preset" && isWritableValue(value, true)) {
-    return { method: "recallPreset", zone: "netusb", value: Number(value) };
+    const preset = Number(value);
+    return { kind: "run", run: client => client.recallPreset(preset, "main") };
   }
   let zone = "main";
   let name = stateId;
@@ -147,13 +137,14 @@ export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefi
   const eqBand = EQ_CHANNELS[name];
   if (eqBand && isWritableValue(value, true)) {
     // The controller supplies the other two bands; the value carries only this band.
-    return { method: `setEqualizer${eqBand}`, zone, value: Number(value) };
+    return { kind: "equalizer", zone, band: eqBand, value: Number(value) };
   }
   const entry = YXC_AMP_CATALOG.find(e => e.state === name);
   if (!entry?.write || !isWritableValue(value, entry.common.type === "number")) {
     return undefined;
   }
-  return { method: entry.write.method, zone, value: entry.write.toYxc(value) };
+  const { apply } = entry.write;
+  return { kind: "run", run: client => apply(client, value, zone) };
 }
 
 /**
@@ -202,11 +193,21 @@ export function parseYxcPlayInfo(playInfo: unknown, prefix = "player.netPlayer")
   const info = playInfo as Record<string, unknown>;
   const updates: StateValue[] = [];
   // String metadata whose field name doubles as the state id (playback is coded separately).
-  for (const field of ["artist", "album", "track", "repeat", "shuffle"]) {
+  for (const field of ["artist", "album", "track"]) {
     const value = info[field];
     if (typeof value === "string") {
       updates.push({ id: `${prefix}.${field}`, value });
     }
+  }
+  // Repeat/shuffle carry the same typed form as the YNCA sources: repeat as the
+  // media.mode.repeat code (wire off/one/all — captures-verified), shuffle as a boolean
+  // (wire off/on). An unknown wire value is skipped, never coerced to a wrong state.
+  const repeatCode: Record<string, number> = { off: 0, one: 1, all: 2 };
+  if (typeof info.repeat === "string" && info.repeat in repeatCode) {
+    updates.push({ id: `${prefix}.repeat`, value: repeatCode[info.repeat] });
+  }
+  if (info.shuffle === "on" || info.shuffle === "off") {
+    updates.push({ id: `${prefix}.shuffle`, value: info.shuffle === "on" });
   }
   // Playback status → media.state code (the same 0/1/2 numbers as the YNCA player).
   const playbackCode: Record<string, number> = { play: 0, stop: 1, pause: 2 };

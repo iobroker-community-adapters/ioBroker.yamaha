@@ -199,7 +199,15 @@ export function isWritableValue(value: unknown, numeric: boolean): boolean {
   if (value === null || value === undefined) {
     return false;
   }
-  return numeric ? Number.isFinite(Number(value)) : true;
+  if (!numeric) {
+    return true;
+  }
+  // Reject an empty/whitespace string explicitly: Number("") is 0 (finite), so it
+  // would otherwise slip through and put an empty value on the wire.
+  if (typeof value === "string" && value.trim() === "") {
+    return false;
+  }
+  return Number.isFinite(Number(value));
 }
 
 /**

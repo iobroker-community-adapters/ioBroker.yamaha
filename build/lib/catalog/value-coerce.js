@@ -91,7 +91,13 @@ function isWritableValue(value, numeric) {
   if (value === null || value === void 0) {
     return false;
   }
-  return numeric ? Number.isFinite(Number(value)) : true;
+  if (!numeric) {
+    return true;
+  }
+  if (typeof value === "string" && value.trim() === "") {
+    return false;
+  }
+  return Number.isFinite(Number(value));
 }
 function encode(spec, value) {
   switch (spec.kind) {

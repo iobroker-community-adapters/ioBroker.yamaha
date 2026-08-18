@@ -75,9 +75,12 @@ export function buildDeviceForm(usedIps: readonly string[]): JsonFormSchema {
 }
 
 /**
- * A duplicate-IP or invalid-id clash against the other rows, as a ready-to-show message —
- * the backend safety net behind the form validator (the dialog validator may not fire in
- * every admin version; this never lets a bad row through).
+ * A duplicate-IP/name or invalid-value clash against the other rows, as a ready-to-show
+ * message — the backend safety net behind the form validator (the dialog validator may not
+ * fire in every admin version; this never lets a bad row through). Each failure mode gets
+ * its own message: a malformed IP is not the same problem as a name that is reserved or
+ * already taken — reporting "invalid IP" for a name clash sends the user hunting in the
+ * wrong field.
  *
  * @param rows the current manual rows
  * @param candidate the row being added/edited
@@ -89,16 +92,19 @@ export function findClash(
   candidate: ManualRow,
   exceptIndex: number,
 ): ioBroker.StringOrTranslated | null {
-  const id = rowId(candidate);
-  if (id === "" || RESERVED_IDS.has(id) || !IP_RE.test(candidate.ip)) {
+  if (!IP_RE.test(candidate.ip)) {
     return t("invalidIp");
+  }
+  const id = rowId(candidate);
+  if (id === "" || RESERVED_IDS.has(id)) {
+    return t("invalidName");
   }
   for (let i = 0; i < rows.length; i++) {
     if (i === exceptIndex) {
       continue;
     }
     if (rows[i].ip === candidate.ip || rowId(rows[i]) === id) {
-      return t("invalidIp");
+      return t("duplicateDevice");
     }
   }
   return null;

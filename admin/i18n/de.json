@@ -11,6 +11,8 @@
   "donateKofi": "Ko-fi",
   "donatePaypal": "PayPal",
   "invalidIp": "Ungültige IP-Adresse",
+  "duplicateDevice": "Ein Gerät mit dieser IP-Adresse oder diesem Namen existiert bereits",
+  "invalidName": "Dieser Name kann nicht verwendet werden",
   "networkInterfaceLabel": "Netzwerk-Interface",
   "networkInterfaceTooltip": "Netzwerk-Interface für LAN-Discovery und -Steuerung. Standard (0.0.0.0 = alle Interfaces) beibehalten, außer dieser Host hat mehrere Netzwerk-Interfaces.",
   "dmAdd": "Yamaha-Gerät hinzufügen",

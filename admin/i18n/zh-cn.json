@@ -11,6 +11,8 @@
   "donateKofi": "Ko-fi",
   "donatePaypal": "PayPal",
   "invalidIp": "无效的 IP 地址",
+  "duplicateDevice": "已存在具有此 IP 地址或名称的设备",
+  "invalidName": "此名称不可用",
   "networkInterfaceLabel": "网络接口",
   "networkInterfaceTooltip": "选择用于局域网发现和控制的网络接口。除非此主机有多个网络接口，否则请保留默认值（0.0.0.0 = 所有接口）。",
   "dmAdd": "添加 Yamaha 设备",

@@ -2,21 +2,25 @@ import type { YncaCapabilities } from "./ynca/capability";
 import type { ObjectDef } from "./catalog/types";
 import type { ConnectionHandle, ControllerLog } from "./controller";
 import {
-  buildYncaCatalog,
+  YNCA_CATALOG,
+  availGets,
   funcToEntry,
   idToEntry,
   sweepGets,
   yncaCommand,
   yncaObjectsFor,
   yncaStateUpdate,
+  type YncaEntry,
 } from "./ynca/catalog";
+import type { YncaSubunitCache } from "./ynca/subunit-cache";
 
 // The YNCA catalog and its lookup maps are static — built once for all devices.
-const CATALOG = buildYncaCatalog();
-const FUNC_MAP = funcToEntry(CATALOG);
-const ID_MAP = idToEntry(CATALOG);
-// The init sweep: the model name (for the ready log line) plus every catalogued function.
-const SWEEP = [{ subunit: "SYS", func: "MODELNAME" }, ...sweepGets(CATALOG)];
+// SYS:MODELNAME is part of the catalog (info.model), so the sweep already covers it.
+// The AVAIL probe always covers the FULL catalog (not the group-filtered one), so the
+// cached subunit set reflects the device, never the current group configuration.
+const FUNC_MAP = funcToEntry(YNCA_CATALOG);
+const ID_MAP = idToEntry(YNCA_CATALOG);
+const AVAIL_PROBE = availGets(YNCA_CATALOG);
 
 /** The subset of the YNCA client the controller uses (so tests can inject a fake). */
 export interface YncaClientLike {
@@ -52,6 +56,18 @@ export interface ControllerDeps {
   setStateAck(id: string, value: boolean | number | string): void;
   /** Adapter log. */
   log: ControllerLog;
+  /**
+   * Whether a catalog entry's datapoint group is enabled. A disabled group's entries
+   * are dropped BEFORE the sweep, so their GETs are never sent (previously only the
+   * object/state writes were gated and the answers thrown away). Absent = all enabled.
+   */
+  isEntryEnabled?(id: string): boolean;
+  /**
+   * Per-device cache of the AVAIL probe result, held across reconnects and restarts.
+   * With a valid cache the probe phase is skipped and the targeted sweep runs directly;
+   * a model/firmware mismatch after the sweep invalidates it and re-probes.
+   */
+  subunitCache?: YncaSubunitCache;
 }
 
 /**
@@ -78,8 +94,12 @@ export class YncaDeviceController implements ConnectionHandle {
    */
   public async start(): Promise<boolean> {
     await this.deps.client.connect();
-    const capabilities = await this.deps.client.readCapabilities(SWEEP);
-    const objects = yncaObjectsFor(capabilities);
+    // Group-filtered catalog: disabled groups are excluded from the sweep AND the objects.
+    const catalog = this.deps.isEntryEnabled
+      ? YNCA_CATALOG.filter(entry => this.deps.isEntryEnabled!(entry.id))
+      : YNCA_CATALOG;
+    const capabilities = await this.sweepDevice(catalog);
+    const objects = yncaObjectsFor(capabilities, catalog);
     if (objects.length === 0) {
       this.deps.log.warn(`${this.deviceId}: no capabilities reported — creating no objects`);
       return false;
@@ -111,6 +131,61 @@ export class YncaDeviceController implements ConnectionHandle {
     // stays at debug for diagnostics.
     this.deps.log.debug(`${this.deviceId}: ${capabilities.model || "device"} ready (YNCA)`);
     return true;
+  }
+
+  /**
+   * Read the device's capabilities with the two-pass sweep. Pass 1 probes each
+   * catalogued subunit with `AVAIL=?` (~2 s); pass 2 sweeps only the subunits that
+   * answered, plus SYS (which never answers AVAIL) — on a typical receiver that
+   * saves a third or more of the ~39 s blind sweep. A cached probe result (per
+   * device, surviving reconnects and restarts) skips pass 1 entirely; a device
+   * whose model or firmware no longer matches the cache re-probes. A device that
+   * answers no AVAIL at all falls back to the full blind sweep, so an unknown
+   * firmware loses speed, never features.
+   *
+   * @param catalog the (group-filtered) catalog whose functions to sweep
+   * @returns the assembled capabilities
+   */
+  private async sweepDevice(catalog: readonly YncaEntry[]): Promise<YncaCapabilities> {
+    const cached = this.deps.subunitCache?.get();
+    if (cached) {
+      const capabilities = await this.targetedSweep(catalog, new Set(cached.subunits));
+      const firmware = capabilities.subunits.SYS?.VERSION ?? "";
+      if (capabilities.model === cached.model && firmware === cached.firmware) {
+        return capabilities;
+      }
+      // The device behind this IP changed (swap or firmware update) — re-probe.
+      this.deps.log.debug(`${this.deviceId}: cached subunit set is stale (model/firmware changed), re-probing`);
+      this.deps.subunitCache?.clear();
+    }
+    const probe = await this.deps.client.readCapabilities(AVAIL_PROBE);
+    const present = new Set(Object.keys(probe.subunits));
+    if (present.size === 0) {
+      // Device ignores AVAIL — sweep blind so no function is lost.
+      return await this.deps.client.readCapabilities(sweepGets(catalog));
+    }
+    const capabilities = await this.targetedSweep(catalog, present);
+    if (capabilities.model) {
+      this.deps.subunitCache?.set({
+        subunits: [...present],
+        model: capabilities.model,
+        firmware: capabilities.subunits.SYS?.VERSION ?? "",
+      });
+    }
+    return capabilities;
+  }
+
+  /**
+   * Sweep only the present subunits' functions (SYS always included — it answers no
+   * AVAIL but carries model/firmware/master power).
+   *
+   * @param catalog the (group-filtered) catalog whose functions to sweep
+   * @param present the subunits that answered the AVAIL probe
+   * @returns the assembled capabilities
+   */
+  private targetedSweep(catalog: readonly YncaEntry[], present: ReadonlySet<string>): Promise<YncaCapabilities> {
+    const gets = sweepGets(catalog).filter(get => get.subunit === "SYS" || present.has(get.subunit));
+    return this.deps.client.readCapabilities(gets);
   }
 
   /**
