@@ -158,6 +158,7 @@ export const RENAMED_STATE_IDS = [
   "partyMute",
   "distributionEnable",
   "partyEnable",
+  "remoteCode",
 ];
 
 /**

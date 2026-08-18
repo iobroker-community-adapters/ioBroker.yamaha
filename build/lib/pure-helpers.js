@@ -101,7 +101,8 @@ const RENAMED_STATE_IDS = [
   "party",
   "partyMute",
   "distributionEnable",
-  "partyEnable"
+  "partyEnable",
+  "remoteCode"
 ];
 const RENAMED_CHANNELS = [
   // pre-0.11 system folder
