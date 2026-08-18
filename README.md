@@ -41,15 +41,14 @@ Older Yamaha receivers (before ~2010, the XML protocol) do not announce themselv
 The **Data points** section switches whole groups of datapoints on or off — playback sources, tuner, extra zones, multiroom, HDMI, scenes, sound processing and advanced setup datapoints. Turn off what your receiver doesn't have or you don't use, and those objects are removed from the tree; the amplifier core (power, volume, mute, input, sound program, sleep) always stays on. Switched-off groups are also skipped when the receiver is queried, so fewer groups mean a faster startup.
 
 ## Changelog
-
-### **WORK IN PROGRESS**
+### 0.20.0 (2026-08-18)
 
 - MusicCast changes now arrive instantly again: the adapter registers for the devices' push events — track, volume and multiroom updates no longer wait for the next 5-minute poll.
 - Much faster startup and reconnects: the adapter first asks the receiver which sections it has and queries only those; switched-off datapoint groups are skipped entirely.
 - A short outage of one protocol no longer tears down the whole device — the affected protocol reconnects on its own while the others keep running.
 - The Next/Previous buttons of the classic receivers' streaming sources (Spotify, USB, Net Radio, …) are now actually created — they were missing on real devices.
 - Pre-2010 (XML) receivers: bass, treble and subwoofer trim now read and write real decibels — values were off by a factor of 10 (untested on hardware, feedback welcome).
-- Clearer feedback: failed multiroom link/leave actions warn in the log, a skipped duplicate device is reported, and the add-device dialog tells a name clash apart from an invalid IP address.
+- A failed multiroom link/leave and a device skipped over a duplicate name no longer pass silently, and the add-device dialog tells a name clash apart from an invalid IP address.
 
 ### 0.19.0 (2026-08-18)
 
@@ -73,13 +72,6 @@ The **Data points** section switches whole groups of datapoints on or off — pl
 - New Sound and Advanced datapoint groups, switchable like the others — tone/DSP controls and setup-only datapoints (initial/max volume, input labels) are no longer always on.
 - Zone B, the all-zones power switch, party mode and per-zone HDMI/lip-sync now follow their matching Zones/Multiroom/HDMI toggle instead of always staying on.
 - A receiver that stays offline no longer spams the log — the first drop still warns, repeated retries stay quiet until it reconnects.
-
-### 0.15.0 (2026-08-13)
-
-- The object tree is organised by theme now: streaming and playback sources sit under one player branch, DAB stays with the tuner, and multiroom is named clearly — far less to scroll through.
-- You can switch whole datapoint groups off in the admin — the players, tuner, extra zones, multiroom, HDMI or scenes — so a receiver only carries the datapoints you actually use.
-- Playback now shows up as a proper media player, so voice assistants and visualizations can read what is playing and drive transport, repeat and shuffle straight from ioBroker.
-- Device discovery runs on every network interface now and uses all of them by default, so a receiver on a second network segment is found without picking an interface by hand.
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 

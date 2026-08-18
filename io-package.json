@@ -1,20 +1,20 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "0.19.0",
+    "version": "0.20.0",
     "news": {
-      "NEXT": {
-        "en": "Instant MusicCast updates again (push events restored), much faster startup and reconnects, a single-protocol outage no longer drops the whole device, missing Next/Previous buttons for classic streaming sources fixed, XML tone values now in real dB",
-        "de": "MusicCast-Änderungen kommen wieder sofort an (Push-Ereignisse repariert), deutlich schnellerer Start und Reconnect, der Ausfall eines einzelnen Protokolls trennt nicht mehr das ganze Gerät, fehlende Weiter/Zurück-Tasten der klassischen Streaming-Quellen ergänzt, XML-Klangwerte jetzt in echten dB",
-        "ru": "Изменения MusicCast снова приходят мгновенно (восстановлены push-события), заметно более быстрый запуск и переподключение, сбой одного протокола больше не отключает всё устройство, добавлены отсутствовавшие кнопки Вперёд/Назад для классических источников, значения тембра XML теперь в настоящих дБ",
-        "pt": "As alterações MusicCast chegam novamente de imediato (eventos push restaurados), arranque e reconexão muito mais rápidos, a falha de um único protocolo já não desliga o dispositivo inteiro, botões Seguinte/Anterior em falta das fontes de streaming clássicas corrigidos, valores de tom XML agora em dB reais",
-        "nl": "MusicCast-wijzigingen komen weer direct binnen (push-events hersteld), veel snellere start en herverbinding, uitval van één protocol verbreekt niet meer het hele apparaat, ontbrekende Volgende/Vorige-knoppen van klassieke streamingbronnen toegevoegd, XML-toonwaarden nu in echte dB",
-        "fr": "Les changements MusicCast arrivent de nouveau instantanément (événements push rétablis), démarrage et reconnexion bien plus rapides, la panne d'un seul protocole ne coupe plus tout l'appareil, boutons Suivant/Précédent manquants des sources de streaming classiques ajoutés, valeurs de tonalité XML désormais en dB réels",
-        "it": "Le modifiche MusicCast arrivano di nuovo all'istante (eventi push ripristinati), avvio e riconnessione molto più rapidi, il guasto di un singolo protocollo non disconnette più l'intero dispositivo, aggiunti i pulsanti Avanti/Indietro mancanti delle sorgenti streaming classiche, valori di tono XML ora in dB reali",
-        "es": "Los cambios de MusicCast vuelven a llegar al instante (eventos push restaurados), arranque y reconexión mucho más rápidos, el fallo de un solo protocolo ya no desconecta todo el dispositivo, añadidos los botones Siguiente/Anterior que faltaban en las fuentes de streaming clásicas, los valores de tono XML ahora en dB reales",
-        "pl": "Zmiany MusicCast znów docierają natychmiast (przywrócone zdarzenia push), znacznie szybszy start i ponowne łączenie, awaria jednego protokołu nie rozłącza już całego urządzenia, dodano brakujące przyciski Dalej/Wstecz klasycznych źródeł streamingu, wartości tonów XML teraz w prawdziwych dB",
-        "uk": "Зміни MusicCast знову надходять миттєво (відновлено push-події), значно швидший запуск і повторне підключення, збій одного протоколу більше не від'єднує весь пристрій, додано відсутні кнопки Вперед/Назад класичних джерел стримінгу, значення тембру XML тепер у справжніх дБ",
-        "zh-cn": "MusicCast 的更改再次即时到达（已恢复推送事件），启动和重连速度大幅提升，单个协议故障不再断开整个设备，补上了经典流媒体源缺失的下一曲/上一曲按钮，XML 音调值现在为真实分贝"
+      "0.20.0": {
+        "en": "Instant MusicCast updates again (push restored), much faster startup and reconnects, and a single-protocol hiccup no longer disconnects the whole device",
+        "de": "MusicCast-Änderungen kommen wieder sofort an (Push repariert), deutlich schnellerer Start und Reconnect, und ein einzelner Protokoll-Aussetzer trennt nicht mehr das ganze Gerät",
+        "ru": "Изменения MusicCast снова приходят мгновенно (восстановлен push), запуск и переподключение стали заметно быстрее, сбой одного протокола больше не отключает всё устройство",
+        "pt": "Alterações MusicCast chegam novamente de imediato (push restaurado), arranque e reconexão muito mais rápidos, e a falha de um único protocolo já não desliga o dispositivo inteiro",
+        "nl": "MusicCast-wijzigingen komen weer direct binnen (push hersteld), veel snellere start en herverbinding, en een storing van één protocol verbreekt niet meer het hele apparaat",
+        "fr": "Les changements MusicCast arrivent de nouveau instantanément (push rétabli), démarrage et reconnexion bien plus rapides, et la panne d'un seul protocole ne coupe plus tout l'appareil",
+        "it": "Le modifiche MusicCast arrivano di nuovo all'istante (push ripristinato), avvio e riconnessione molto più rapidi, e il guasto di un singolo protocollo non disconnette più l'intero dispositivo",
+        "es": "Los cambios de MusicCast vuelven a llegar al instante (push restaurado), arranque y reconexión mucho más rápidos, y el fallo de un solo protocolo ya no desconecta todo el dispositivo",
+        "pl": "Zmiany MusicCast znów docierają natychmiast (naprawiony push), znacznie szybszy start i ponowne łączenie, a awaria jednego protokołu nie rozłącza już całego urządzenia",
+        "uk": "Зміни MusicCast знову надходять миттєво (відновлено push), значно швидший запуск і повторне підключення, а збій одного протоколу більше не від'єднує весь пристрій",
+        "zh-cn": "MusicCast 的更改再次即时到达（推送已修复），启动和重连速度大幅提升，单个协议故障不再断开整个设备"
       },
       "0.19.0": {
         "en": "Zone 2/3/4, Zone B and party mode datapoints now sit in the Multiroom folder. Scripts using old paths like zone2.power need updating to multiroom.zone2.power.",
@@ -121,7 +121,12 @@
       "uk": "Керування AV-ресиверами та пристроями MusicCast Yamaha через мережу",
       "zh-cn": "通过网络控制 Yamaha AV 接收器和 MusicCast 设备"
     },
-    "keywords": ["yamaha", "avr", "receiver", "musiccast"],
+    "keywords": [
+      "yamaha",
+      "avr",
+      "receiver",
+      "musiccast"
+    ],
     "licenseInformation": {
       "license": "MIT",
       "type": "free"
