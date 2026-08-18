@@ -91,12 +91,27 @@ per git-Historie + dort weiter abrufbar:
 - `discover.js` — SSDP-Discovery (Quelle Phase 6).
 - `soef.js` / `tools.js` — Alt-Helfer.
 
+## Community-Status (seit 2026-08-18 — ÜBERNOMMEN)
+
+Der Adapter lebt im Community-Repo `iobroker-community-adapters/ioBroker.yamaha` (krobi = Maintainer,
+push/triage — Repo-Einstellungen/About nur via mcm/Org). **Community-Standard gilt:** Release-Branch
+**`master`**, Changelog-Bullets mit `(krobipd)`-Präfix, Community-CI (KEINE Fleet-Härtungen
+repochecker-version-gate/workflow-lint; Bots `automerge-iobroker-bot`/`auto-merge.yml`/dependabot in
+Community-Form), Asset-URLs auf `iobroker-community-adapters/…@master`. Das Fleet-Tooling erkennt das
+automatisch an `package.json repository.url` (`scripts/_community.py`). Der alte krobipd-Fork ist
+archiviert; Historie beider Linien steckt via ours-Merge im master.
+
+**v1.0.0 = Übernahme-Release** mit `common.messages`-Update-Warndialog (oldVersion<1.0.0, warn,
+agree/cancel): Komplett-Neubau, Objektbaum neu, Alt-Datenpunkte werden entfernt, IP wird übernommen.
+Der Upgrade-Pfad vom Ur-Adapter 0.5.4 ist test-bewiesen (`pure-helpers.test.ts` „upgrade path"):
+`migrateLegacyDevice` (config.ip/IP, Hostname ok, `:port`-Suffix wird gestrippt) + `cleanupStaleObjects`
+räumt den KOMPLETTEN Alt-Baum (47 Instanz-Objekte + dynamische `Realtime.*`/`SystemConfig.*`/`inputEnum`).
+
 ## Design-Entscheidungen (belegt, nicht wieder aufmachen)
 
 - **Objektbaum = sauberer Neuschnitt** (Greenfield), yamaha-Nutzer per one-shot-Migration; musiccast-Nutzer
   nicht migrierbar (fremder Namensraum) → freiwilliger Umstieg + Doku.
-- **Manifest bleibt auf npm-latest-Version** (aktuell 0.5.4) bis zum Release — den Bump macht `npm run release`.
-- **npm-Publish erst nach Übernahme-Freischaltung** durch die Community; Tag + GitHub-Release gehen davor.
+- **Manifest bleibt auf der released Version** — den Bump macht `npm run release`.
 - **Kein Sentry** bis eigenes Projekt (der geerbte community-DSN wurde entfernt).
 
 ## Tests

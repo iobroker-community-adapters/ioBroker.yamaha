@@ -24,6 +24,136 @@ describe("legacyDeviceRow", () => {
   test("does nothing without a legacy ip", () => {
     expect(legacyDeviceRow({ devices: [] })).toBeUndefined();
   });
+
+  test("strips a :port suffix (the old HTTP lib accepted host:port; our transports must not)", () => {
+    expect(legacyDeviceRow({ ip: "1.2.3.4:80" })).toEqual({ name: "1.2.3.4", ip: "1.2.3.4" });
+  });
+
+  test("carries a hostname over unchanged (the old adapter resolved names too)", () => {
+    expect(legacyDeviceRow({ ip: "receiver.fritz.box" })).toEqual({
+      name: "receiver.fritz.box",
+      ip: "receiver.fritz.box",
+    });
+    expect(legacyDeviceRow({ ip: " receiver.fritz.box:8080 " })).toEqual({
+      name: "receiver.fritz.box",
+      ip: "receiver.fritz.box",
+    });
+  });
+});
+
+describe("upgrade path from the original 0.5.4 adapter (the ~800 existing installs)", () => {
+  // The COMPLETE object tree the original adapter created: all 46 unique ids from its
+  // io-package.json instanceObjects (verified against the live community master), plus the
+  // ids its soef layer created dynamically at runtime (inputEnum, SystemConfig.features,
+  // Realtime.online/reconnect/raw and one Realtime.<SUBUNIT>.<FUNC> per received YNCA line).
+  const NS = "yamaha.0";
+  const legacyRelativeIds = [
+    // channels/devices
+    "Commands",
+    "Realtime",
+    "SystemConfig",
+    // instanceObjects states
+    "Realtime.MAIN.PWR",
+    "SystemConfig.name",
+    "SystemConfig.version",
+    "Commands.xmlCommand",
+    "Commands.command",
+    "Commands.webradio",
+    "Commands.volumeUp",
+    "Commands.volumeDown",
+    "Commands.adjustVolume",
+    "Commands.toggleMute",
+    "Commands.stop",
+    "Commands.pause",
+    "Commands.skip",
+    "Commands.rewind",
+    "Commands.partyModeVolumeUp",
+    "Commands.partyModeVolumeDown",
+    "Commands.InputTo",
+    "Commands.zone",
+    "volume",
+    "input",
+    "surround",
+    "mute",
+    "power",
+    "refresh",
+    "YPAOVolume",
+    "extraBass",
+    "adaptiveDRC",
+    "partyMode",
+    "hdmiOut1",
+    "hdmiOut2",
+    "pureDirect",
+    "bass",
+    "treble",
+    "subwooferLevel",
+    "dialogLift",
+    "dialogLevel",
+    "scene",
+    "zone1",
+    "zone2",
+    "zone3",
+    "zone4",
+    "powerAllZones",
+    "sleep",
+    // runtime-created by the old soef layer
+    "inputEnum",
+    "SystemConfig.features",
+    "Realtime.online",
+    "Realtime.reconnect",
+    "Realtime.raw",
+    "Realtime.MAIN",
+    "Realtime.MAIN.VOL",
+    "Realtime.ZONE2",
+    "Realtime.ZONE2.PWR",
+    "Realtime.SYS",
+    "Realtime.SYS.MODELNAME",
+  ];
+
+  test("migrating the old config and cleaning up removes EVERY legacy object and keeps info", () => {
+    // Step 1: the old native config carries one receiver ip — it becomes the device table row.
+    const row = legacyDeviceRow({ ip: "192.168.1.50", intervall: 120, useRealtime: true });
+    expect(row).toEqual({ name: "192.168.1.50", ip: "192.168.1.50" });
+    const devices = parseDevices([row]);
+    expect(devices).toEqual([{ id: "192_168_1_50", ip: "192.168.1.50" }]);
+
+    // Step 2: start-up cleanup sees the full legacy tree plus our own info objects.
+    const existing = [
+      `${NS}.info`,
+      `${NS}.info.connection`,
+      ...legacyRelativeIds.map(id => `${NS}.${id}`),
+    ];
+    const deviceIds = new Set(devices.map(d => d.id));
+    const stale = staleObjects(existing, deviceIds, NS);
+
+    // EVERY legacy object is removed — none survives, none is missed…
+    expect(new Set(stale)).toEqual(new Set(legacyRelativeIds.map(id => `${NS}.${id}`)));
+    // …the adapter's own info branch is untouched…
+    expect(stale).not.toContain(`${NS}.info`);
+    expect(stale).not.toContain(`${NS}.info.connection`);
+    // …and children are deleted before their parents (deepest first).
+    expect(stale.indexOf(`${NS}.Realtime.MAIN.PWR`)).toBeLessThan(stale.indexOf(`${NS}.Realtime.MAIN`));
+    expect(stale.indexOf(`${NS}.Realtime.MAIN`)).toBeLessThan(stale.indexOf(`${NS}.Realtime`));
+  });
+
+  test("the migrated device's new subtree is never touched by the cleanup", () => {
+    const existing = [
+      `${NS}.192_168_1_50`,
+      `${NS}.192_168_1_50.power`,
+      `${NS}.192_168_1_50.info.connection`,
+      `${NS}.power`, // legacy leftover
+    ];
+    const stale = staleObjects(existing, new Set(["192_168_1_50"]), NS);
+    expect(stale).toEqual([`${NS}.power`]);
+  });
+
+  test("an empty old ip migrates nothing and the cleanup deletes nothing (no-wipe guard)", () => {
+    // ip "" was the old default before its discovery filled it — no row, no devices, and
+    // the empty-table guard must keep the whole tree until discovery finds the receiver.
+    expect(legacyDeviceRow({ ip: "" })).toBeUndefined();
+    const existing = legacyRelativeIds.map(id => `${NS}.${id}`);
+    expect(staleObjects(existing, new Set(), NS)).toEqual([]);
+  });
 });
 
 describe("mergeDiscovered", () => {

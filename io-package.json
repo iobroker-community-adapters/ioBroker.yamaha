@@ -3,96 +3,91 @@
     "name": "yamaha",
     "version": "0.20.0",
     "news": {
-      "0.20.0": {
-        "en": "Instant MusicCast updates again (push restored), much faster startup and reconnects, and a single-protocol hiccup no longer disconnects the whole device",
-        "de": "MusicCast-Änderungen kommen wieder sofort an (Push repariert), deutlich schnellerer Start und Reconnect, und ein einzelner Protokoll-Aussetzer trennt nicht mehr das ganze Gerät",
-        "ru": "Изменения MusicCast снова приходят мгновенно (восстановлен push), запуск и переподключение стали заметно быстрее, сбой одного протокола больше не отключает всё устройство",
-        "pt": "Alterações MusicCast chegam novamente de imediato (push restaurado), arranque e reconexão muito mais rápidos, e a falha de um único protocolo já não desliga o dispositivo inteiro",
-        "nl": "MusicCast-wijzigingen komen weer direct binnen (push hersteld), veel snellere start en herverbinding, en een storing van één protocol verbreekt niet meer het hele apparaat",
-        "fr": "Les changements MusicCast arrivent de nouveau instantanément (push rétabli), démarrage et reconnexion bien plus rapides, et la panne d'un seul protocole ne coupe plus tout l'appareil",
-        "it": "Le modifiche MusicCast arrivano di nuovo all'istante (push ripristinato), avvio e riconnessione molto più rapidi, e il guasto di un singolo protocollo non disconnette più l'intero dispositivo",
-        "es": "Los cambios de MusicCast vuelven a llegar al instante (push restaurado), arranque y reconexión mucho más rápidos, y el fallo de un solo protocolo ya no desconecta todo el dispositivo",
-        "pl": "Zmiany MusicCast znów docierają natychmiast (naprawiony push), znacznie szybszy start i ponowne łączenie, a awaria jednego protokołu nie rozłącza już całego urządzenia",
-        "uk": "Зміни MusicCast знову надходять миттєво (відновлено push), значно швидший запуск і повторне підключення, а збій одного протоколу більше не від'єднує весь пристрій",
-        "zh-cn": "MusicCast 的更改再次即时到达（推送已修复），启动和重连速度大幅提升，单个协议故障不再断开整个设备"
+      "NEXT": {
+        "en": "Complete rebuild: YNCA, MusicCast and XML in one adapter — new typed object tree, instant updates, auto-discovery. Old datapoints are replaced automatically; scripts need the new paths",
+        "de": "Komplett-Neubau: YNCA, MusicCast und XML in einem Adapter — neuer typisierter Objektbaum, sofortige Updates, Auto-Erkennung. Alte Datenpunkte werden automatisch ersetzt; Skripte brauchen neue Pfade",
+        "ru": "Полная переработка: YNCA, MusicCast и XML в одном адаптере — новое типизированное дерево объектов, мгновенные обновления, автопоиск. Старые точки данных заменяются автоматически",
+        "pt": "Reconstrução completa: YNCA, MusicCast e XML num só adaptador — nova árvore de objetos tipada, atualizações instantâneas, deteção automática. Os dados antigos são substituídos automaticamente",
+        "nl": "Volledig opnieuw opgebouwd: YNCA, MusicCast en XML in één adapter — nieuwe getypeerde objectboom, directe updates, autodetectie. Oude datapunten worden automatisch vervangen",
+        "fr": "Reconstruction complète : YNCA, MusicCast et XML dans un seul adaptateur — arborescence typée, mises à jour instantanées, découverte auto. Les anciens points sont remplacés automatiquement",
+        "it": "Ricostruzione completa: YNCA, MusicCast e XML in un adattatore — albero oggetti tipizzato, aggiornamenti istantanei, rilevamento automatico. I vecchi datapoint vengono sostituiti automaticamente",
+        "es": "Reconstrucción completa: YNCA, MusicCast y XML en un adaptador — árbol de objetos tipado, actualizaciones instantáneas, detección automática. Los datos antiguos se sustituyen automáticamente",
+        "pl": "Całkowita przebudowa: YNCA, MusicCast i XML w jednym adapterze — nowe typowane drzewo obiektów, natychmiastowe aktualizacje, autowykrywanie. Stare punkty danych są zastępowane automatycznie",
+        "uk": "Повна перебудова: YNCA, MusicCast і XML в одному адаптері — нове типізоване дерево об'єктів, миттєві оновлення, автопошук. Старі точки даних замінюються автоматично",
+        "zh-cn": "完全重建：YNCA、MusicCast 和 XML 合并为一个适配器——全新的类型化对象树、即时更新、自动发现。旧数据点会被自动替换；脚本需使用新路径"
       },
-      "0.19.0": {
-        "en": "Zone 2/3/4, Zone B and party mode datapoints now sit in the Multiroom folder. Scripts using old paths like zone2.power need updating to multiroom.zone2.power.",
-        "de": "Zone 2/3/4, Zone B und Party-Modus-Datenpunkte liegen jetzt im Multiroom-Ordner. Skripte mit alten Pfaden wie zone2.power müssen auf multiroom.zone2.power angepasst werden.",
-        "ru": "Точки данных зон 2/3/4, зоны B и режима Party теперь в папке Multiroom. Скрипты со старыми путями вроде zone2.power нужно обновить на multiroom.zone2.power.",
-        "pt": "Os pontos de dados das zonas 2/3/4, zona B e modo Party estão agora na pasta Multiroom. Scripts com caminhos antigos como zone2.power devem ser atualizados para multiroom.zone2.power.",
-        "nl": "Datapunten van zone 2/3/4, Zone B en partymodus staan nu in de Multiroom-map. Scripts met oude paden zoals zone2.power moeten worden aangepast naar multiroom.zone2.power.",
-        "fr": "Les points de données des zones 2/3/4, Zone B et mode Party sont désormais dans le dossier Multiroom. Les scripts utilisant zone2.power doivent passer à multiroom.zone2.power.",
-        "it": "I punti dati delle zone 2/3/4, Zona B e modalità Party sono ora nella cartella Multiroom. Gli script con percorsi come zone2.power vanno aggiornati a multiroom.zone2.power.",
-        "es": "Los puntos de datos de las zonas 2/3/4, Zona B y modo Party están ahora en la carpeta Multiroom. Los scripts con rutas como zone2.power deben actualizarse a multiroom.zone2.power.",
-        "pl": "Punkty danych stref 2/3/4, Strefy B i trybu Party są teraz w folderze Multiroom. Skrypty ze starymi ścieżkami jak zone2.power trzeba zmienić na multiroom.zone2.power.",
-        "uk": "Точки даних зон 2/3/4, зони B та режиму Party тепер у папці Multiroom. Скрипти зі старими шляхами на кшталт zone2.power треба оновити на multiroom.zone2.power.",
-        "zh-cn": "区域 2/3/4、B 区和派对模式数据点现在位于多房间文件夹中。使用旧路径（如 zone2.power）的脚本需更新为 multiroom.zone2.power。"
+      "0.5.4": {
+        "en": "updated packages",
+        "de": "aktualisierte pakete",
+        "ru": "обновления пакетов",
+        "pt": "pacotes atualizados",
+        "nl": "bijgewerkte pakketten",
+        "fr": "paquets mis à jour",
+        "it": "pacchetti aggiornati",
+        "es": "paquetes actualizados",
+        "pl": "zaktualizowane pakiety",
+        "uk": "оновлені пакети",
+        "zh-cn": "更新软件包"
       },
-      "0.18.0": {
-        "en": "The Zones toggle is gone — zone 2/3/4, Zone B and the all-zones power switch now sit under Multiroom where they belong. Dialogue lift is adjustable again.",
-        "de": "Der Zonen-Schalter entfällt — Zone 2/3/4, Zone B und der Alle-Zonen-Schalter liegen jetzt unter Multiroom. Dialoganhebung ist wieder regelbar.",
-        "ru": "Переключатель Зон убран — зоны 2/3/4, Зона B и общий выключатель теперь под Multiroom. Подъём диалогов снова регулируется.",
-        "pt": "O interruptor Zonas desapareceu — zonas 2/3/4, Zona B e o interruptor geral estão agora sob Multiroom. O realce de diálogo voltou a ser ajustável.",
-        "nl": "De Zones-schakelaar is weg — zone 2/3/4, Zone B en de alles-aan-schakelaar vallen nu onder Multiroom. Dialoogversterking is weer regelbaar.",
-        "fr": "Le commutateur Zones disparaît — zones 2/3/4, Zone B et l'interrupteur général sont désormais sous Multiroom. Le rehaussement de dialogue est à nouveau réglable.",
-        "it": "L'interruttore Zone scompare — zone 2/3/4, Zona B e l'interruttore generale sono ora sotto Multiroom. Il rialzo dialoghi è di nuovo regolabile.",
-        "es": "El interruptor Zonas desaparece — zonas 2/3/4, Zona B y el interruptor general están ahora bajo Multiroom. El realce de diálogos vuelve a ser ajustable.",
-        "pl": "Przełącznik Stref znika — strefy 2/3/4, Strefa B i przełącznik wszystkich stref są teraz pod Multiroom. Podniesienie dialogów znów jest regulowane.",
-        "uk": "Перемикач Зон прибрано — зони 2/3/4, Зона B і загальний вимикач тепер під Multiroom. Підйом діалогів знову регулюється.",
-        "zh-cn": "区域开关已取消——区域 2/3/4、B 区和全区域电源开关现在归属多房间。对话提升功能恢复可调。"
+      "0.5.3": {
+        "en": "Fix crash cases reported by Sentry",
+        "de": "Reparieren Crashfälle gemeldet von Sentry",
+        "ru": "Исправление случаев аварии, описанных Sentry",
+        "pt": "Corrigir casos de acidente relatados por Sentry",
+        "nl": "Vertaling:",
+        "fr": "Troubles de crash signalés par Sentry",
+        "it": "Correzione dei casi di crash segnalati da Sentry",
+        "es": "Casos de accidente fijo reportados por Sentry",
+        "pl": "Sprawy katastrofy Fix podane przez Sentry’a",
+        "zh-cn": "Sentry所报告的六例事故"
       },
-      "0.17.0": {
-        "en": "Sound and Advanced datapoints now sit in a real folder like the other groups. Fixed: switching Zones off did not remove the zone2/3/4 folder.",
-        "de": "Klang- und Erweitert-Datenpunkte liegen jetzt in einem echten Ordner wie die anderen Gruppen. Behoben: Zonen ausschalten entfernte den zone2/3/4-Ordner nicht.",
-        "ru": "Точки данных Звук и Расширенные теперь в настоящей папке, как другие группы. Исправлено: отключение Зон не удаляло папку zone2/3/4.",
-        "pt": "Os pontos de dados Som e Avançado ficam numa pasta real como os outros grupos. Corrigido: desligar Zonas não removia a pasta zone2/3/4.",
-        "nl": "Geluid- en Geavanceerd-datapunten staan nu in een echte map zoals de andere groepen. Opgelost: Zones uitschakelen verwijderde de zone2/3/4-map niet.",
-        "fr": "Les points de données Son et Avancé sont désormais dans un dossier réel comme les autres groupes. Corrigé : désactiver Zones ne supprimait pas le dossier zone2/3/4.",
-        "it": "I punti dati Audio e Avanzate sono ora in una cartella reale come gli altri gruppi. Corretto: disattivare Zone non rimuoveva la cartella zone2/3/4.",
-        "es": "Los puntos de datos Sonido y Avanzado están ahora en una carpeta real como los demás grupos. Corregido: desactivar Zonas no eliminaba la carpeta zone2/3/4.",
-        "pl": "Punkty danych Dźwięk i Zaawansowane są teraz w prawdziwym folderze jak inne grupy. Naprawiono: wyłączenie Stref nie usuwało folderu zone2/3/4.",
-        "uk": "Точки даних Звук і Розширені тепер у справжній папці, як інші групи. Виправлено: вимкнення Зон не видаляло папку zone2/3/4.",
-        "zh-cn": "音效和高级数据点现在与其他分组一样位于真实文件夹中。修复：关闭区域开关不会移除 zone2/3/4 文件夹。"
+      "0.5.2": {
+        "en": "Fix crash cases reported by Sentry",
+        "de": "Von Sentry gemeldete Absturzfälle beheben",
+        "ru": "Исправить случаи сбоев, о которых сообщил Sentry",
+        "pt": "Corrigir casos de travamento relatados pelo Sentinela",
+        "nl": "Herstel crashgevallen gemeld door Sentry",
+        "fr": "Correction des cas de plantage signalés par Sentry",
+        "it": "Risolvi i casi di crash segnalati da Sentry",
+        "es": "Solucionar casos de fallas informados por Sentry",
+        "pl": "Napraw przypadki awarii zgłoszone przez Sentry",
+        "zh-cn": "修复 Sentry 报告的崩溃案例"
       },
-      "0.16.0": {
-        "en": "New Sound and Advanced datapoint groups for finer control, a few misplaced datapoints fixed, and no more repeated offline-retry warnings.",
-        "de": "Neue Datenpunktgruppen Klang und Erweitert für feinere Kontrolle, einige falsch einsortierte Datenpunkte korrigiert, und keine wiederholten Offline-Warnungen mehr.",
-        "ru": "Новые группы точек данных Звук и Расширенные для более точной настройки, исправлены несколько неверно отнесённых точек данных, и больше нет повторных offline-предупреждений.",
-        "pt": "Novos grupos de pontos de dados Som e Avançado para um controlo mais preciso, alguns pontos de dados mal classificados corrigidos, e sem mais avisos repetidos de offline.",
-        "nl": "Nieuwe datapuntgroepen Geluid en Geavanceerd voor fijnere controle, enkele verkeerd ingedeelde datapunten gecorrigeerd, en geen herhaalde offline-waarschuwingen meer.",
-        "fr": "Nouveaux groupes de points de données Son et Avancé pour un contrôle plus fin, quelques points de données mal classés corrigés, et plus d'avertissements répétés hors ligne.",
-        "it": "Nuovi gruppi di punti dati Audio e Avanzate per un controllo più preciso, corretti alcuni punti dati mal classificati, e niente più avvisi ripetuti offline.",
-        "es": "Nuevos grupos de puntos de datos Sonido y Avanzado para un control más preciso, corregidos algunos puntos de datos mal clasificados, y sin más avisos repetidos sin conexión.",
-        "pl": "Nowe grupy punktów danych Dźwięk i Zaawansowane dla dokładniejszej kontroli, poprawiono kilka źle przypisanych punktów danych, i koniec z powtarzającymi się ostrzeżeniami offline.",
-        "uk": "Нові групи точок даних Звук і Розширені для точнішого керування, виправлено кілька неправильно віднесених точок даних, і більше немає повторних offline-попереджень.",
-        "zh-cn": "新增音效和高级两个数据点组，实现更精细的控制；修正了部分归类错误的数据点；离线警告不再重复出现。"
+      "0.5.1": {
+        "en": "Fix crash cases reported by Sentry\nfix type of pureDirect",
+        "de": "Von Sentry gemeldete Absturzfälle beheben\nfixer Typ von pureDirect",
+        "ru": "Исправить случаи сбоев, о которых сообщил Sentry\nисправить тип pureDirect",
+        "pt": "Corrigir casos de travamento relatados pelo Sentinela\ncorrigir tipo de pureDirect",
+        "nl": "Herstel crashgevallen gemeld door Sentry\nfix type pureDirect",
+        "fr": "Correction des cas de plantage signalés par Sentry\ncorrection du type de pureDirect",
+        "it": "Risolvi i casi di crash segnalati da Sentry\ncorreggere il tipo di pureDirect",
+        "es": "Solucionar casos de fallas informados por Sentry\ncorregir el tipo de pureDirect",
+        "pl": "Napraw przypadki awarii zgłoszone przez Sentry\nnapraw typ pureDirect",
+        "zh-cn": "修复 Sentry 报告的崩溃案例\n修复 pureDirect 的类型"
       },
-      "0.15.0": {
-        "en": "The object tree is grouped by theme, datapoint groups can be switched off in the admin, and playback now works as a media player.",
-        "de": "Der Objektbaum ist thematisch gruppiert, Datenpunktgruppen lassen sich im Admin abschalten, und die Wiedergabe funktioniert jetzt als Media-Player.",
-        "ru": "Дерево объектов сгруппировано по темам, группы точек данных можно отключить в админке, а воспроизведение теперь работает как медиаплеер.",
-        "pt": "A árvore de objetos está agrupada por tema, grupos de pontos de dados podem ser desativados no admin, e a reprodução funciona agora como um leitor de média.",
-        "nl": "De objectboom is thematisch gegroepeerd, datapuntgroepen kunnen in de admin worden uitgeschakeld, en afspelen werkt nu als mediaspeler.",
-        "fr": "L'arborescence des objets est groupée par thème, des groupes de points de données peuvent être désactivés dans l'admin, et la lecture fonctionne désormais comme un lecteur multimédia.",
-        "it": "L'albero degli oggetti è raggruppato per tema, i gruppi di punti dati possono essere disattivati nell'admin, e la riproduzione ora funziona come un lettore multimediale.",
-        "es": "El árbol de objetos está agrupado por tema, los grupos de puntos de datos pueden desactivarse en el admin, y la reproducción ahora funciona como reproductor multimedia.",
-        "pl": "Drzewo obiektów jest pogrupowane tematycznie, grupy punktów danych można wyłączyć w adminie, a odtwarzanie działa teraz jako odtwarzacz multimedialny.",
-        "uk": "Дерево об'єктів згруповано за темами, групи точок даних можна вимкнути в адмінці, а відтворення тепер працює як медіаплеєр.",
-        "zh-cn": "对象树按主题分组，可在管理界面关闭整组数据点，播放现在可作为媒体播放器使用。"
+      "0.5.0": {
+        "en": "IMPORTANT: js-controller 2.0 is needed at least\nAdd Sentry for crash reporting",
+        "de": "WICHTIG: js-controller 2.0 wird mindestens benötigt\nFügen Sie Sentry für Absturzberichte hinzu",
+        "ru": "ВАЖНО: нужен js-контроллер 2.0 не ниже\nДобавьте Sentry для отчетов о сбоях",
+        "pt": "IMPORTANTE: o js-controller 2.0 é necessário pelo menos\nAdicionar Sentinela para relatórios de falhas",
+        "nl": "BELANGRIJK: js-controller 2.0 is minimaal nodig\nSentry toevoegen voor crashrapportage",
+        "fr": "IMPORTANT: js-controller 2.0 est nécessaire au moins\nAjouter Sentry pour les rapports de plantage",
+        "it": "IMPORTANTE: è necessario almeno js-controller 2.0\nAggiungi Sentinella per la segnalazione degli arresti anomali",
+        "es": "IMPORTANTE: se necesita js-controller 2.0 al menos\nAgregar Sentry para informes de fallas",
+        "pl": "WAŻNE: potrzebny jest przynajmniej js-controller 2.0\nDodaj Sentry do zgłaszania awarii",
+        "zh-cn": "重要提示：至少需要 js-controller 2.0\n添加 Sentry 以进行崩溃报告"
       },
-      "0.14.0": {
-        "en": "Receivers appear as cards with model, IP and connected protocols; discovery is steadier with a network-interface selector; and every receiver reports its model.",
-        "de": "Receiver erscheinen als Karten mit Modell, IP und verbundenen Protokollen; die Suche ist stabiler mit Netzwerk-Interface-Auswahl; jeder Receiver meldet sein Modell.",
-        "ru": "Ресиверы отображаются карточками с моделью, IP и протоколами; обнаружение стабильнее с выбором сетевого интерфейса; каждый ресивер сообщает свою модель.",
-        "pt": "Os recetores aparecem como cartões com modelo, IP e protocolos; a deteção é mais estável com um seletor de interface de rede; cada recetor indica o seu modelo.",
-        "nl": "Ontvangers verschijnen als kaarten met model, IP en protocollen; detectie is stabieler met een netwerkinterface-keuze; elke ontvanger meldt zijn model.",
-        "fr": "Les récepteurs apparaissent en cartes avec modèle, IP et protocoles ; la découverte est plus stable avec un sélecteur d'interface réseau ; chaque récepteur indique son modèle.",
-        "it": "I ricevitori appaiono come schede con modello, IP e protocolli; il rilevamento è più stabile con un selettore d'interfaccia di rete; ogni ricevitore indica il suo modello.",
-        "es": "Los receptores aparecen como tarjetas con modelo, IP y protocolos; el descubrimiento es más estable con un selector de interfaz de red; cada receptor indica su modelo.",
-        "pl": "Odbiorniki pojawiają się jako karty z modelem, IP i protokołami; wykrywanie jest stabilniejsze z wyborem interfejsu sieciowego; każdy odbiornik podaje swój model.",
-        "uk": "Ресивери відображаються картками з моделлю, IP та протоколами; виявлення стабільніше з вибором мережевого інтерфейсу; кожен ресивер повідомляє свою модель.",
-        "zh-cn": "接收机以卡片形式显示型号、IP 和协议；设备发现更稳定，可选择网络接口；每台接收机都会报告其型号。"
+      "0.4.1": {
+        "en": "\"toggleMute\" now toggle mute state (instead of always muting)",
+        "de": "\"toggleMute\" schaltet nun den Mute-Status um (anstatt immer stumm zu schalten)",
+        "ru": "«toggleMute» теперь переключает состояние отключения звука (вместо постоянного отключения звука)",
+        "pt": "\"toggleMute\" agora alterna o estado mudo (em vez de sempre silenciar)",
+        "nl": "\"toggleMute\" schakelt nu de mute-status in (in plaats van altijd te dempen)",
+        "fr": "\"toggleMute\" bascule maintenant l'état muet (au lieu de toujours muet)",
+        "it": "\"toggleMute\" ora attiva/disattiva lo stato muto (anziché sempre disattivato)",
+        "es": "\"toggleMute\" ahora alterna el estado de silencio (en lugar de silenciar siempre)",
+        "pl": "„toggleMute” przełącza teraz stan wyciszenia (zamiast ciągłego wyciszania)",
+        "zh-cn": "“toggleMute”现在切换静音状态（而不是总是静音）"
       }
     },
     "titleLang": {
@@ -121,12 +116,7 @@
       "uk": "Керування AV-ресиверами та пристроями MusicCast Yamaha через мережу",
       "zh-cn": "通过网络控制 Yamaha AV 接收器和 MusicCast 设备"
     },
-    "keywords": [
-      "yamaha",
-      "avr",
-      "receiver",
-      "musiccast"
-    ],
+    "keywords": ["yamaha", "avr", "receiver", "musiccast"],
     "licenseInformation": {
       "license": "MIT",
       "type": "free"
@@ -134,8 +124,8 @@
     "platform": "Javascript/Node.js",
     "mode": "daemon",
     "icon": "yamaha.png",
-    "extIcon": "https://raw.githubusercontent.com/krobipd/ioBroker.yamaha/main/admin/yamaha.png",
-    "readme": "https://github.com/krobipd/ioBroker.yamaha/blob/main/README.md",
+    "extIcon": "https://raw.githubusercontent.com/iobroker-community-adapters/ioBroker.yamaha/master/admin/yamaha.png",
+    "readme": "https://github.com/iobroker-community-adapters/ioBroker.yamaha/blob/master/README.md",
     "loglevel": "info",
     "tier": 2,
     "compact": true,
@@ -164,7 +154,43 @@
     },
     "supportedMessages": {
       "deviceManager": true
-    }
+    },
+    "messages": [
+      {
+        "condition": {
+          "operand": "and",
+          "rules": ["oldVersion<1.0.0", "newVersion>=1.0.0"]
+        },
+        "title": {
+          "en": "Complete rebuild — new object tree",
+          "de": "Komplett-Neubau — neuer Objektbaum",
+          "ru": "Полная переработка — новое дерево объектов",
+          "pt": "Reconstrução completa — nova árvore de objetos",
+          "nl": "Volledig opnieuw opgebouwd — nieuwe objectboom",
+          "fr": "Reconstruction complète — nouvelle arborescence",
+          "it": "Ricostruzione completa — nuovo albero oggetti",
+          "es": "Reconstrucción completa — nuevo árbol de objetos",
+          "pl": "Całkowita przebudowa — nowe drzewo obiektów",
+          "uk": "Повна перебудова — нове дерево об'єктів",
+          "zh-cn": "完全重建 — 全新对象树"
+        },
+        "text": {
+          "en": "The adapter has been completely rebuilt and now unites YNCA, MusicCast and the old XML protocol. The object tree is NEW: the old datapoints (volume, power, Commands, Realtime, …) are removed automatically and the receiver is recreated as a device with typed datapoints. The configured IP address is carried over. Please update scripts and visualizations to the new datapoint paths.",
+          "de": "Der Adapter wurde komplett neu gebaut und vereint jetzt YNCA, MusicCast und das alte XML-Protokoll. Der Objektbaum ist NEU: die alten Datenpunkte (volume, power, Commands, Realtime, …) werden automatisch entfernt, der Receiver wird als Gerät mit typisierten Datenpunkten neu angelegt. Die eingetragene IP-Adresse wird übernommen. Bitte Skripte und Visualisierungen auf die neuen Datenpunkt-Pfade umstellen.",
+          "ru": "Адаптер полностью переработан и теперь объединяет YNCA, MusicCast и старый XML-протокол. Дерево объектов НОВОЕ: старые точки данных (volume, power, Commands, Realtime, …) удаляются автоматически, ресивер создаётся заново как устройство с типизированными точками данных. Настроенный IP-адрес переносится. Обновите скрипты и визуализации на новые пути точек данных.",
+          "pt": "O adaptador foi completamente reconstruído e agora une YNCA, MusicCast e o antigo protocolo XML. A árvore de objetos é NOVA: os pontos de dados antigos (volume, power, Commands, Realtime, …) são removidos automaticamente e o recetor é recriado como dispositivo com pontos de dados tipados. O endereço IP configurado é mantido. Atualize scripts e visualizações para os novos caminhos.",
+          "nl": "De adapter is volledig opnieuw opgebouwd en verenigt nu YNCA, MusicCast en het oude XML-protocol. De objectboom is NIEUW: de oude datapunten (volume, power, Commands, Realtime, …) worden automatisch verwijderd en de receiver wordt opnieuw aangemaakt als apparaat met getypeerde datapunten. Het ingestelde IP-adres wordt overgenomen. Pas scripts en visualisaties aan op de nieuwe paden.",
+          "fr": "L'adaptateur a été entièrement reconstruit et réunit désormais YNCA, MusicCast et l'ancien protocole XML. L'arborescence d'objets est NOUVELLE : les anciens points de données (volume, power, Commands, Realtime, …) sont supprimés automatiquement et l'ampli est recréé comme appareil avec des points de données typés. L'adresse IP configurée est reprise. Adaptez vos scripts et visualisations aux nouveaux chemins.",
+          "it": "L'adattatore è stato completamente ricostruito e ora unisce YNCA, MusicCast e il vecchio protocollo XML. L'albero degli oggetti è NUOVO: i vecchi datapoint (volume, power, Commands, Realtime, …) vengono rimossi automaticamente e il ricevitore viene ricreato come dispositivo con datapoint tipizzati. L'indirizzo IP configurato viene mantenuto. Aggiornare script e visualizzazioni ai nuovi percorsi.",
+          "es": "El adaptador se ha reconstruido por completo y ahora une YNCA, MusicCast y el antiguo protocolo XML. El árbol de objetos es NUEVO: los puntos de datos antiguos (volume, power, Commands, Realtime, …) se eliminan automáticamente y el receptor se vuelve a crear como dispositivo con puntos de datos tipados. La dirección IP configurada se conserva. Actualice los scripts y visualizaciones a las nuevas rutas.",
+          "pl": "Adapter został całkowicie przebudowany i łączy teraz YNCA, MusicCast oraz stary protokół XML. Drzewo obiektów jest NOWE: stare punkty danych (volume, power, Commands, Realtime, …) są usuwane automatycznie, a amplituner jest tworzony na nowo jako urządzenie z typowanymi punktami danych. Skonfigurowany adres IP zostaje przejęty. Zaktualizuj skrypty i wizualizacje do nowych ścieżek.",
+          "uk": "Адаптер повністю перебудовано, тепер він об'єднує YNCA, MusicCast і старий XML-протокол. Дерево об'єктів НОВЕ: старі точки даних (volume, power, Commands, Realtime, …) видаляються автоматично, ресивер створюється заново як пристрій із типізованими точками даних. Налаштована IP-адреса переноситься. Оновіть скрипти та візуалізації на нові шляхи.",
+          "zh-cn": "适配器已完全重建，现在将 YNCA、MusicCast 和旧的 XML 协议合而为一。对象树是全新的：旧的数据点（volume、power、Commands、Realtime 等）会被自动删除，功放会作为带类型数据点的设备重新创建。已配置的 IP 地址会被保留。请将脚本和可视化更新到新的数据点路径。"
+        },
+        "level": "warn",
+        "buttons": ["agree", "cancel"]
+      }
+    ]
   },
   "native": {
     "networkInterface": "0.0.0.0",

@@ -1,8 +1,8 @@
-# <img src="https://cdn.jsdelivr.net/gh/krobipd/ioBroker.yamaha@main/admin/yamaha.svg" width="48" align="top" /> ioBroker.yamaha
+# <img src="https://cdn.jsdelivr.net/gh/iobroker-community-adapters/ioBroker.yamaha@master/admin/yamaha.svg" width="48" align="top" /> ioBroker.yamaha
 
 **Release:** [![npm version](https://img.shields.io/npm/v/iobroker.yamaha)](https://www.npmjs.com/package/iobroker.yamaha) ![stable](https://iobroker.live/badges/yamaha-stable.svg) ![Installations](https://iobroker.live/badges/yamaha-installed.svg) [![npm downloads](https://img.shields.io/npm/dt/iobroker.yamaha)](https://www.npmjs.com/package/iobroker.yamaha)
 
-**Build:** [![Test and Release](https://github.com/krobipd/ioBroker.yamaha/actions/workflows/test-and-release.yml/badge.svg)](https://github.com/krobipd/ioBroker.yamaha/actions/workflows/test-and-release.yml) ![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen) ![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue) [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+**Build:** [![Test and Release](https://github.com/iobroker-community-adapters/ioBroker.yamaha/actions/workflows/test-and-release.yml/badge.svg)](https://github.com/iobroker-community-adapters/ioBroker.yamaha/actions/workflows/test-and-release.yml) ![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen) ![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue) [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 **Support:** [![Ko-fi](https://img.shields.io/badge/Ko--fi-Support-ff5e5b?logo=ko-fi)](https://ko-fi.com/krobipd) [![PayPal](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://paypal.me/krobipd)
 
@@ -40,38 +40,46 @@ Older Yamaha receivers (before ~2010, the XML protocol) do not announce themselv
 
 The **Data points** section switches whole groups of datapoints on or off — playback sources, tuner, extra zones, multiroom, HDMI, scenes, sound processing and advanced setup datapoints. Turn off what your receiver doesn't have or you don't use, and those objects are removed from the tree; the amplifier core (power, volume, mute, input, sound program, sleep) always stays on. Switched-off groups are also skipped when the receiver is queried, so fewer groups mean a faster startup.
 
+## Upgrading from 0.5.x
+
+Version 1.0.0 is a complete rebuild. On the first start after the update the adapter removes the old datapoints (`volume`, `power`, `Commands.*`, `Realtime.*`, `SystemConfig.*`, …) and recreates your receiver as a device with typed datapoints, named after the configured address. The receiver's IP address is carried over from the old configuration automatically — there is nothing to re-enter. Scripts and visualizations that used the old datapoint paths must be pointed at the new ones (for example `yamaha.0.<device>.power` instead of `yamaha.0.power`).
+
 ## Changelog
-### 0.20.0 (2026-08-18)
 
-- MusicCast changes now arrive instantly again: the adapter registers for the devices' push events — track, volume and multiroom updates no longer wait for the next 5-minute poll.
-- Much faster startup and reconnects: the adapter first asks the receiver which sections it has and queries only those; switched-off datapoint groups are skipped entirely.
-- A short outage of one protocol no longer tears down the whole device — the affected protocol reconnects on its own while the others keep running.
-- The Next/Previous buttons of the classic receivers' streaming sources (Spotify, USB, Net Radio, …) are now actually created — they were missing on real devices.
-- Pre-2010 (XML) receivers: bass, treble and subwoofer trim now read and write real decibels — values were off by a factor of 10 (untested on hardware, feedback welcome).
-- A failed multiroom link/leave and a device skipped over a duplicate name no longer pass silently, and the add-device dialog tells a name clash apart from an invalid IP address.
+### **WORK IN PROGRESS**
 
-### 0.19.0 (2026-08-18)
+- (krobipd) Complete rebuild in TypeScript: one adapter now speaks YNCA, MusicCast (Yamaha Extended Control) and the legacy XML protocol — every protocol a device answers runs in parallel on one object tree.
+- (krobipd) The object tree is new, with typed datapoints (booleans, dropdowns, numbers with unit and range) generated from what each device actually reports. Old 0.5.x datapoints are removed automatically and the receiver is recreated; the configured IP address is carried over. Scripts and visualizations must be updated to the new paths.
+- (krobipd) Instant updates: MusicCast push events and YNCA's live connection replace polling; connections heal themselves, and a hiccup on a single protocol reconnects just that protocol.
+- (krobipd) Auto-discovery sets up MusicCast devices by itself when the device list is empty, and the admin shows every receiver as a card with model, IP and live protocol indicators.
+- (krobipd) Whole datapoint groups (playback sources, tuner, multiroom, HDMI, scenes, sound, advanced) can be switched off in the admin — and are then not even queried from the device.
+- (krobipd) Upgrading from 0.5.x shows a one-time notice explaining the new object tree before the update installs.
 
-- Zone 2/3/4, Zone B and party mode datapoints now sit in the Multiroom folder — scripts using old paths like zone2.power need updating to multiroom.zone2.power.
-- You now see at startup which devices are being set up and when each one is ready.
+### 0.5.4 (2024-06-14)
 
-### 0.18.0 (2026-08-17)
+- (foxriver76) updated packages
 
-- Zone 2/3/4 and Zone B now sit under the Multiroom toggle — the separate Zones checkbox is gone, because zone switching was always part of multiroom.
-- Dialogue lift is adjustable again on receivers that report it — a routing issue had left it read-only.
-- MusicCast speakers without a classic amplifier connection now get the Sound and Advanced folders they were missing.
-- Subwoofer trim shows its dB unit, and playback labels are now consistently capitalized.
+### 0.5.3 (2022-06-17)
 
-### 0.17.0 (2026-08-13)
+- (Apollon77) Fix crash cases reported by Sentry
 
-- Sound and Advanced datapoints now sit in a real folder matching their admin toggle, the same way playback, tuner, HDMI, multiroom and scenes already do — no longer visually stuck next to power/volume.
-- Fixed: switching the Zones toggle off did not remove the `zone2`/`zone3`/`zone4` folder.
+### 0.5.2 (2022-04-23)
 
-### 0.16.0 (2026-08-13)
+- (Apollon77) Fix crash cases reported by Sentry
 
-- New Sound and Advanced datapoint groups, switchable like the others — tone/DSP controls and setup-only datapoints (initial/max volume, input labels) are no longer always on.
-- Zone B, the all-zones power switch, party mode and per-zone HDMI/lip-sync now follow their matching Zones/Multiroom/HDMI toggle instead of always staying on.
-- A receiver that stays offline no longer spams the log — the first drop still warns, repeated retries stay quiet until it reconnects.
+### 0.5.1 (2022-03-29)
+
+- (Apollon77) Fix crash cases reported by Sentry
+- (Apollon77) fix type of pureDirect
+
+### 0.5.0 (2022-03-08)
+
+- IMPORTANT: js-controller 2.0 is needed at least
+- (Apollon77) Add Sentry for crash reporting
+
+### 0.4.1
+
+- (Sneak-L8) "toggleMute" now toggle mute state (instead of always muting)
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 
@@ -90,9 +98,9 @@ for existing users it is simply a new version of the same adapter:
   team — notably [foxriver76](https://github.com/foxriver76) and
   [mcm1957](https://github.com/mcm1957) — maintained the adapter from 2020 to 2026,
   releasing versions up to 0.5.4.
-- From this version on, [krobi](https://github.com/krobipd) rebuilds the adapter from
-  the ground up in TypeScript, uniting the YNCA, MusicCast (YXC) and legacy XML
-  protocols behind one object tree.
+- Since 2026, [krobi](https://github.com/krobipd) maintains the adapter in the community
+  organisation and rebuilt it from the ground up in TypeScript, uniting the YNCA,
+  MusicCast (YXC) and legacy XML protocols behind one object tree.
 
 ## License
 

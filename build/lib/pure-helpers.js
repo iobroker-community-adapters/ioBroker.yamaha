@@ -205,7 +205,11 @@ function legacyDeviceRow(config) {
   if (Array.isArray(config.devices) && config.devices.length > 0) {
     return void 0;
   }
-  const ip = typeof config.ip === "string" && config.ip ? config.ip : typeof config.IP === "string" && config.IP ? config.IP : void 0;
+  const raw = typeof config.ip === "string" && config.ip ? config.ip : typeof config.IP === "string" && config.IP ? config.IP : void 0;
+  if (!raw) {
+    return void 0;
+  }
+  const ip = raw.trim().replace(/:\d+$/, "");
   return ip ? { name: ip, ip } : void 0;
 }
 // Annotate the CommonJS export names for ESM import in node:

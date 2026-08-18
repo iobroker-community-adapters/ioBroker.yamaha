@@ -291,6 +291,11 @@ export function renamedObjectIds(existing: string[], deviceIds: Set<string>, nam
  * `config.ip` (older installs: `config.IP`); the new adapter uses a `devices`
  * table. Only migrates when the table is still empty, so it runs once.
  *
+ * The old value could be a hostname (its HTTP client resolved names) and could
+ * carry a `:port` suffix (its HTTP library split host:port). A port suffix would
+ * break every transport here — YNCA is TCP :50000, YXC/XML build `http://<ip>…`
+ * — so it is stripped; the host/IP itself is carried over as-is.
+ *
  * @param config the instance's native config
  * @returns the row to add to the devices table, or undefined
  */
@@ -298,11 +303,15 @@ export function legacyDeviceRow(config: Record<string, unknown>): { name: string
   if (Array.isArray(config.devices) && config.devices.length > 0) {
     return undefined;
   }
-  const ip =
+  const raw =
     typeof config.ip === "string" && config.ip
       ? config.ip
       : typeof config.IP === "string" && config.IP
         ? config.IP
         : undefined;
+  if (!raw) {
+    return undefined;
+  }
+  const ip = raw.trim().replace(/:\d+$/, "");
   return ip ? { name: ip, ip } : undefined;
 }

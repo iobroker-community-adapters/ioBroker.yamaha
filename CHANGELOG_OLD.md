@@ -1,4 +1,37 @@
 # Older changes
+
+## 0.20.0 (2026-08-18)
+
+- MusicCast changes now arrive instantly again: the adapter registers for the devices' push events — track, volume and multiroom updates no longer wait for the next 5-minute poll.
+- Much faster startup and reconnects: the adapter first asks the receiver which sections it has and queries only those; switched-off datapoint groups are skipped entirely.
+- A short outage of one protocol no longer tears down the whole device — the affected protocol reconnects on its own while the others keep running.
+- The Next/Previous buttons of the classic receivers' streaming sources (Spotify, USB, Net Radio, …) are now actually created — they were missing on real devices.
+- Pre-2010 (XML) receivers: bass, treble and subwoofer trim now read and write real decibels — values were off by a factor of 10 (untested on hardware, feedback welcome).
+- A failed multiroom link/leave and a device skipped over a duplicate name no longer pass silently, and the add-device dialog tells a name clash apart from an invalid IP address.
+
+## 0.19.0 (2026-08-18)
+
+- Zone 2/3/4, Zone B and party mode datapoints now sit in the Multiroom folder — scripts using old paths like zone2.power need updating to multiroom.zone2.power.
+- You now see at startup which devices are being set up and when each one is ready.
+
+## 0.18.0 (2026-08-17)
+
+- Zone 2/3/4 and Zone B now sit under the Multiroom toggle — the separate Zones checkbox is gone, because zone switching was always part of multiroom.
+- Dialogue lift is adjustable again on receivers that report it — a routing issue had left it read-only.
+- MusicCast speakers without a classic amplifier connection now get the Sound and Advanced folders they were missing.
+- Subwoofer trim shows its dB unit, and playback labels are now consistently capitalized.
+
+## 0.17.0 (2026-08-13)
+
+- Sound and Advanced datapoints now sit in a real folder matching their admin toggle, the same way playback, tuner, HDMI, multiroom and scenes already do — no longer visually stuck next to power/volume.
+- Fixed: switching the Zones toggle off did not remove the `zone2`/`zone3`/`zone4` folder.
+
+## 0.16.0 (2026-08-13)
+
+- New Sound and Advanced datapoint groups, switchable like the others — tone/DSP controls and setup-only datapoints (initial/max volume, input labels) are no longer always on.
+- Zone B, the all-zones power switch, party mode and per-zone HDMI/lip-sync now follow their matching Zones/Multiroom/HDMI toggle instead of always staying on.
+- A receiver that stays offline no longer spams the log — the first drop still warns, repeated retries stay quiet until it reconnects.
+
 ## 0.15.0 (2026-08-13)
 
 - The object tree is organised by theme now: streaming and playback sources sit under one player branch, DAB stays with the tuner, and multiroom is named clearly — far less to scroll through.
@@ -69,68 +102,60 @@
 - Finds Yamaha devices on the network by itself: a search button in the settings fills the device table over SSDP.
 - Now requires Node.js 22, js-controller 7 and admin 7.
 
-## 0.5.4 (2024-06-14)
-
-- (foxriver76) updated packages
-
-## 0.5.3 (2022-06-17)
-
-- (Apollon77) Fix crash cases reported by Sentry
-
-## 0.5.2 (2022-04-23)
-* (Apollon77) Fix crash cases reported by Sentry
-
-## 0.5.1 (2022-03-29)
-* (Apollon77) Fix crash cases reported by Sentry
-* (Sneak-L8) fix type of pureDirect
-
-## 0.5.0 (2022-03-08)
-* IMPORTANT: js-controller 2.0 is needed at least
-* (Apollon77) Add Sentry for crash reporting
-
-## 0.4.1
-* (Sneak-L8) "toggleMute" now toggle mute state (instead of always muting)
-
 ## 0.4.0
-* (Garfonso) added admin 3 compatibility and more meta-data stuff.
-* (Garfonso) added compact mode support.
+
+- (Garfonso) added admin 3 compatibility and more meta-data stuff.
+- (Garfonso) added compact mode support.
 
 ## 0.3.20
-* (Garfonso) adjusted local copy of soef.js to js-controller 3.0
-* (Garfonso) updated meta information (links etc) to iobroker-community-adapters
+
+- (Garfonso) adjusted local copy of soef.js to js-controller 3.0
+- (Garfonso) updated meta information (links etc) to iobroker-community-adapters
 
 ## 0.3.19
-* (soef) Changelog added to readme
+
+- (soef) Changelog added to readme
 
 ## 0.3.18
-* (Apollon77) Update utils.js and usage, CI Testing and deps
+
+- (Apollon77) Update utils.js and usage, CI Testing and deps
 
 ## 0.3.17
-* (Apollon77) update basic package-file testing
+
+- (Apollon77) update basic package-file testing
 
 ## 0.3.16
-* (soef) node 0.12 removed from testing
+
+- (soef) node 0.12 removed from testing
 
 ## 0.3.15
-* (soef) Enhance CI testing
+
+- (soef) Enhance CI testing
 
 ## 0.3.14
-* (soef) Possible exception in reconnect fixed
+
+- (soef) Possible exception in reconnect fixed
 
 ## 0.3.12
-* (soef) Version incr. for npm
+
+- (soef) Version incr. for npm
 
 ## 0.3.11
-* (soef) reconnect overworked
+
+- (soef) reconnect overworked
 
 ## 0.3.10
-* (soef) realtime Ping now configurable
+
+- (soef) realtime Ping now configurable
 
 ## 0.3.8
-* (soef) realtime states optimized
+
+- (soef) realtime states optimized
 
 ## 0.3.7
-* (soef) fix typo in creating realtime states
+
+- (soef) fix typo in creating realtime states
 
 ## 0.3.6
-* (soef) timeout to connect reduced
+
+- (soef) timeout to connect reduced
