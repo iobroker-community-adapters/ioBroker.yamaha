@@ -17,18 +17,17 @@ describe("groupOf", () => {
   });
 
   it("maps each extra zone to the multiroom group", () => {
-    expect(groupOf("zone2.volume")).toBe("multiroom");
-    expect(groupOf("zone4.power")).toBe("multiroom");
+    expect(groupOf("multiroom.zone2.volume")).toBe("multiroom");
+    expect(groupOf("multiroom.zone4.power")).toBe("multiroom");
   });
 
-  it("maps the bare zone2/3/4 channel object itself to multiroom", () => {
-    expect(groupOf("zone2")).toBe("multiroom");
-    expect(groupOf("zone3")).toBe("multiroom");
-    expect(groupOf("zone4")).toBe("multiroom");
+  it("maps the bare multiroom zone channel objects to multiroom", () => {
+    expect(groupOf("multiroom.zone2")).toBe("multiroom");
+    expect(groupOf("multiroom.zone3")).toBe("multiroom");
+    expect(groupOf("multiroom.zone4")).toBe("multiroom");
   });
 
-  it("maps dist/multiroom, hdmi and scene", () => {
-    expect(groupOf("dist.groupName")).toBe("multiroom");
+  it("maps multiroom, hdmi and scene", () => {
     expect(groupOf("multiroom.groupName")).toBe("multiroom");
     expect(groupOf("hdmi.out1")).toBe("hdmi");
     expect(groupOf("scene.recall")).toBe("scene");
@@ -60,8 +59,8 @@ describe("groupOf", () => {
     expect(groupOf("sound.bassExtension")).toBe("sound");
     expect(groupOf("sound.ypaoVolume")).toBe("sound");
     expect(groupOf("sound.headphoneBass")).toBe("sound");
-    // a zone's own sound items nest the same way — sound wins over zones, like hdmi does
-    expect(groupOf("zone2.sound.enhancer")).toBe("sound");
+    // a zone's sound items sit under multiroom — disabling multiroom removes ALL zone states
+    expect(groupOf("multiroom.zone2.sound.enhancer")).toBe("multiroom");
   });
 
   it("maps every setup/config id to the advanced group — all now real advanced.* ids", () => {
@@ -74,22 +73,23 @@ describe("groupOf", () => {
   });
 
   it("maps Zone B and the all-zones power switch to the multiroom group", () => {
-    expect(groupOf("zoneB.power")).toBe("multiroom");
-    expect(groupOf("zoneB.volume")).toBe("multiroom");
-    expect(groupOf("masterPower")).toBe("multiroom");
+    expect(groupOf("multiroom.zoneB.power")).toBe("multiroom");
+    expect(groupOf("multiroom.zoneB.volume")).toBe("multiroom");
+    expect(groupOf("multiroom.masterPower")).toBe("multiroom");
   });
 
   it("maps distributionEnable and party mode to the multiroom group", () => {
-    expect(groupOf("distributionEnable")).toBe("multiroom");
-    expect(groupOf("party")).toBe("multiroom");
-    expect(groupOf("partyMute")).toBe("multiroom");
+    expect(groupOf("multiroom.distributionEnable")).toBe("multiroom");
+    expect(groupOf("multiroom.party")).toBe("multiroom");
+    expect(groupOf("multiroom.partyMute")).toBe("multiroom");
   });
 
-  it("maps HDMI routing and lip-sync to the hdmi group on every zone, not the zones group", () => {
+  it("maps HDMI routing and lip-sync to the hdmi group on main; zoned HDMI follows multiroom", () => {
     expect(groupOf("hdmi.output")).toBe("hdmi");
     expect(groupOf("lipSync.hdmiOut1")).toBe("hdmi");
-    expect(groupOf("zone2.hdmi.output")).toBe("hdmi");
-    expect(groupOf("zone3.lipSync.hdmiOut2")).toBe("hdmi");
+    // zoned HDMI states live under multiroom — disabling multiroom removes all zone states
+    expect(groupOf("multiroom.zone2.hdmi.output")).toBe("multiroom");
+    expect(groupOf("multiroom.zone3.lipSync.hdmiOut2")).toBe("multiroom");
   });
 
   it("does not offer the amp core as a switch and has no zones group", () => {
@@ -126,9 +126,9 @@ describe("isGroupEnabled", () => {
   });
 
   it("gates zones and zone B through the multiroom switch", () => {
-    expect(isGroupEnabled("zone2.volume", { group_multiroom: false })).toBe(false);
-    expect(isGroupEnabled("zoneB.power", { group_multiroom: false })).toBe(false);
-    expect(isGroupEnabled("masterPower", { group_multiroom: false })).toBe(false);
-    expect(isGroupEnabled("zone2.volume", {})).toBe(true);
+    expect(isGroupEnabled("multiroom.zone2.volume", { group_multiroom: false })).toBe(false);
+    expect(isGroupEnabled("multiroom.zoneB.power", { group_multiroom: false })).toBe(false);
+    expect(isGroupEnabled("multiroom.masterPower", { group_multiroom: false })).toBe(false);
+    expect(isGroupEnabled("multiroom.zone2.volume", {})).toBe(true);
   });
 });

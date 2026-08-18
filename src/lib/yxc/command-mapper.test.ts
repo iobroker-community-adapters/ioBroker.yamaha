@@ -25,7 +25,7 @@ describe("parseYxcStatus", () => {
   });
 
   test("prefixes the state id for non-main zones", () => {
-    expect(parseYxcStatus(ysp, "zone2")).toContainEqual({ id: "zone2.power", value: false });
+    expect(parseYxcStatus(ysp, "zone2")).toContainEqual({ id: "multiroom.zone2.power", value: false });
   });
 
   test("returns no updates for malformed input or a status without amp fields", () => {
@@ -56,8 +56,8 @@ describe("parseYxcStatus", () => {
     const u = parseYxcStatus(status, "main");
     expect(u).toContainEqual({ id: "advanced.maxVolume", value: 161 });
     expect(u).toContainEqual({ id: "inputText", value: "HDMI-Laptop" });
-    expect(u).toContainEqual({ id: "distributionEnable", value: true });
-    expect(u).toContainEqual({ id: "partyEnable", value: false });
+    expect(u).toContainEqual({ id: "multiroom.distributionEnable", value: true });
+    expect(u).toContainEqual({ id: "multiroom.partyEnable", value: false });
   });
 
   test("reads the remaining amp fields including the nested equalizer", () => {
@@ -103,7 +103,7 @@ describe("stateToYxc control methods (repeat/shuffle/tray, tuner, party, preset)
     expect(stateToYxc("tuner.band", "fm")).toEqual({ method: "setBand", zone: "tuner", value: "fm" });
     expect(stateToYxc("tuner.frequency", 100900)).toEqual({ method: "setFreq", zone: "tuner", value: 100900 });
     expect(stateToYxc("player.netPlayer.preset", 3)).toEqual({ method: "recallPreset", zone: "netusb", value: 3 });
-    expect(stateToYxc("partyEnable", true)).toEqual({ method: "setPartyMode", zone: "main", value: true });
+    expect(stateToYxc("multiroom.partyEnable", true)).toEqual({ method: "setPartyMode", zone: "main", value: true });
   });
 
   test("equalizer bands route to their per-channel setEqualizer method (main and zoned)", () => {
@@ -112,7 +112,7 @@ describe("stateToYxc control methods (repeat/shuffle/tray, tuner, party, preset)
     expect(stateToYxc("sound.equalizerLow", 3)).toEqual({ method: "setEqualizerLow", zone: "main", value: 3 });
     expect(stateToYxc("sound.equalizerMid", -2)).toEqual({ method: "setEqualizerMid", zone: "main", value: -2 });
     expect(stateToYxc("sound.equalizerHigh", 5)).toEqual({ method: "setEqualizerHigh", zone: "main", value: 5 });
-    expect(stateToYxc("zone2.sound.equalizerLow", 1)).toEqual({
+    expect(stateToYxc("multiroom.zone2.sound.equalizerLow", 1)).toEqual({
       method: "setEqualizerLow",
       zone: "zone2",
       value: 1,
@@ -267,7 +267,7 @@ describe("stateToYxc", () => {
   });
 
   test("maps a zoned volume write to setVolumeTo", () => {
-    expect(stateToYxc("zone2.volume", 40)).toEqual({ method: "setVolumeTo", zone: "zone2", value: 40 });
+    expect(stateToYxc("multiroom.zone2.volume", 40)).toEqual({ method: "setVolumeTo", zone: "zone2", value: 40 });
   });
 
   test("maps soundProgram to setSound (not setSoundProgram)", () => {

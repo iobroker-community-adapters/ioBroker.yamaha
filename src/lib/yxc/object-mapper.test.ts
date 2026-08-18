@@ -67,9 +67,12 @@ describe("mapYxcToObjects", () => {
     expect(link?.common.read).toBe(false);
   });
 
-  test("a device without a distribution block gets no multiroom channel", () => {
+  test("a main-only device still gets the multiroom channel from the always-present dist/party states", () => {
     const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: [] });
-    expect(objs.map(o => o.id)).not.toContain("multiroom");
+    const ids = objs.map(o => o.id);
+    expect(ids).toContain("multiroom");
+    expect(ids).toContain("multiroom.distributionEnable");
+    expect(ids).toContain("multiroom.partyEnable");
   });
 
   test("the network player exposes repeat, shuffle, elapsed/total time and album art (F2 parity)", () => {
@@ -131,7 +134,7 @@ describe("mapYxcToObjects", () => {
     const ids = objs.map(o => o.id);
     expect(ids).toContain("advanced.maxVolume");
     expect(ids).toContain("inputText");
-    expect(ids).toContain("distributionEnable");
+    expect(ids).toContain("multiroom.distributionEnable");
   });
 
   test("creates intermediate channel objects for dotted amp catalog state IDs", () => {
@@ -161,21 +164,21 @@ describe("mapYxcToObjects", () => {
       media: [],
     });
     const ids = objs.map(o => o.id);
-    expect(ids).toContain("zone2.sound");
-    expect(objs.find(o => o.id === "zone2.sound")?.common.name).toBe("Sound");
-    expect(ids).toContain("zone2.advanced");
+    expect(ids).toContain("multiroom.zone2.sound");
+    expect(objs.find(o => o.id === "multiroom.zone2.sound")?.common.name).toBe("Sound");
+    expect(ids).toContain("multiroom.zone2.advanced");
   });
 
   test("maps an additional zone as a channel with its own states", () => {
     const list = ids(rxA2070);
-    expect(list).toContain("zone2");
-    expect(list).toContain("zone2.power");
+    expect(list).toContain("multiroom.zone2");
+    expect(list).toContain("multiroom.zone2.power");
   });
 
   test("a MusicCast speaker has main states but no second zone", () => {
     const list = ids(wx10);
     expect(list).toContain("power");
-    expect(list).not.toContain("zone2");
+    expect(list).not.toContain("multiroom.zone2");
   });
 
   test("adds an input state only when the zone actually has inputs", () => {

@@ -94,10 +94,23 @@ function staleObjects(existing, deviceIds, namespace) {
   };
   return existing.filter((id) => !isKept(id)).sort((a, b) => b.length - a.length);
 }
-const RENAMED_STATE_IDS = ["hdmiOut", "directMode"];
+const RENAMED_STATE_IDS = [
+  "hdmiOut",
+  "directMode",
+  "masterPower",
+  "party",
+  "partyMute",
+  "distributionEnable",
+  "partyEnable"
+];
 const RENAMED_CHANNELS = [
   // pre-0.11 system folder
   "system",
+  // v0.18.1 multiroom regroup: zone2/3/4, zoneB, flat multiroom states moved under multiroom/.
+  "zone2",
+  "zone3",
+  "zone4",
+  "zoneB",
   // Regrouping: media sources moved under player/, DAB under tuner/, dist → multiroom. The old
   // flat channels (and their whole subtree) are deleted so the new grouped ones do not sit
   // beside orphaned copies on an upgraded instance.

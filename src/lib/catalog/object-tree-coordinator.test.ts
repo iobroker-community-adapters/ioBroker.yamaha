@@ -37,11 +37,11 @@ describe("coordinateObjectTree — one unified tree from the transports' catalog
 
   test("a zoned shared capability collapses per-zone across transports", () => {
     const { objects } = coordinateObjectTree([
-      { transport: "ynca", objects: [state("zone2.volume", "Z2 dB")] },
-      { transport: "yxc", objects: [state("zone2.volume", "Z2 raw")] },
+      { transport: "ynca", objects: [state("multiroom.zone2.volume", "Z2 dB")] },
+      { transport: "yxc", objects: [state("multiroom.zone2.volume", "Z2 raw")] },
     ]);
-    expect(objects.filter(o => o.id === "zone2.volume").length).toBe(1);
-    expect(objects.find(o => o.id === "zone2.volume")?.common.name).toBe("Z2 dB");
+    expect(objects.filter(o => o.id === "multiroom.zone2.volume").length).toBe(1);
+    expect(objects.find(o => o.id === "multiroom.zone2.volume")?.common.name).toBe("Z2 dB");
   });
 
   test("parents come before children (channels before their states)", () => {

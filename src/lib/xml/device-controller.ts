@@ -30,9 +30,9 @@ interface XmlZone {
 
 const XML_ZONES: XmlZone[] = [
   { key: "main", element: "Main_Zone", prefix: "" },
-  { key: "zone2", element: "Zone_2", prefix: "zone2.", channel: "zone2", channelName: "Zone 2" },
-  { key: "zone3", element: "Zone_3", prefix: "zone3.", channel: "zone3", channelName: "Zone 3" },
-  { key: "zone4", element: "Zone_4", prefix: "zone4.", channel: "zone4", channelName: "Zone 4" },
+  { key: "zone2", element: "Zone_2", prefix: "multiroom.zone2.", channel: "multiroom.zone2", channelName: "Zone 2" },
+  { key: "zone3", element: "Zone_3", prefix: "multiroom.zone3.", channel: "multiroom.zone3", channelName: "Zone 3" },
+  { key: "zone4", element: "Zone_4", prefix: "multiroom.zone4.", channel: "multiroom.zone4", channelName: "Zone 4" },
 ];
 
 /** The subset of the XML client the controller uses (so tests can inject a fake). */
@@ -103,6 +103,19 @@ export class XmlDeviceController implements ConnectionHandle {
     const createdChannels = new Set<string>();
     for (const zone of this.zones) {
       if (zone.channel) {
+        const chSegments = zone.channel.split(".");
+        for (let i = 1; i < chSegments.length; i++) {
+          const parentId = chSegments.slice(0, i).join(".");
+          if (!createdChannels.has(parentId)) {
+            createdChannels.add(parentId);
+            const seg = chSegments[i - 1];
+            await this.deps.upsertObject(`${this.deviceId}.${parentId}`, {
+              id: parentId,
+              type: "channel",
+              common: { name: CHANNEL_NAMES[seg] ?? seg.charAt(0).toUpperCase() + seg.slice(1) },
+            });
+          }
+        }
         createdChannels.add(zone.channel);
         await this.deps.upsertObject(`${this.deviceId}.${zone.channel}`, {
           id: zone.channel,

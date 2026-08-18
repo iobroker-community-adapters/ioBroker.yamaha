@@ -113,7 +113,7 @@ describe("YncaDeviceController", () => {
     client.capabilities = { model: "X", subunits: { MAIN: { PWR: "On" }, ZONE2: { PWR: "On" } } };
     const { created, deps } = makeDeps(client);
     await new YncaDeviceController("living", deps).start();
-    expect(created.indexOf("living.zone2")).toBeLessThan(created.indexOf("living.zone2.power"));
+    expect(created.indexOf("living.multiroom.zone2")).toBeLessThan(created.indexOf("living.multiroom.zone2.power"));
   });
 
   test("a device push updates the matching state with an ack", async () => {

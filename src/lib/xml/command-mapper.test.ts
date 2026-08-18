@@ -28,7 +28,7 @@ describe("stateToXml", () => {
   });
 
   test("resolves a zoned state to the Zone_N element", () => {
-    expect(stateToXml("zone2.power", true)).toEqual({
+    expect(stateToXml("multiroom.zone2.power", true)).toEqual({
       zone: "Zone_2",
       inner: "<Power_Control><Power>On</Power></Power_Control>",
     });
@@ -73,7 +73,7 @@ describe("stateToXml", () => {
       zone: "Main_Zone",
       inner: "<Scene><Scene_Load>Scene 2</Scene_Load></Scene>",
     });
-    expect(stateToXml("zone2.scene.recall", 2)).toBeUndefined(); // scenes are a main-zone feature
+    expect(stateToXml("multiroom.zone2.scene.recall", 2)).toBeUndefined(); // scenes are a main-zone feature
   });
 
   test("HDMI outputs and party are written on the System element, not the zone", () => {
@@ -81,7 +81,7 @@ describe("stateToXml", () => {
       zone: "System",
       inner: "<Sound_Video><HDMI><Output><OUT_1>On</OUT_1></Output></HDMI></Sound_Video>",
     });
-    expect(stateToXml("party", true)).toEqual({
+    expect(stateToXml("multiroom.party", true)).toEqual({
       zone: "System",
       inner: "<Party_Mode><Mode>On</Mode></Party_Mode>",
     });
@@ -112,7 +112,7 @@ describe("parseXmlStatus", () => {
   });
 
   test("prefixes non-main zones and skips absent fields", () => {
-    expect(parseXmlStatus({ power: false }, "zone2")).toEqual([{ id: "zone2.power", value: false }]);
+    expect(parseXmlStatus({ power: false }, "zone2")).toEqual([{ id: "multiroom.zone2.power", value: false }]);
   });
 
   test("emits straight, direct, adaptive DRC and dialogue level when present", () => {

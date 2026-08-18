@@ -41,6 +41,11 @@ Older Yamaha receivers (before ~2010, the XML protocol) do not announce themselv
 The **Data points** section switches whole groups of datapoints on or off — playback sources, tuner, extra zones, multiroom, HDMI, scenes, sound processing and advanced setup datapoints. Turn off what your receiver doesn't have or you don't use, and those objects are removed from the tree; the amplifier core (power, volume, mute, input, sound program, sleep) always stays on.
 
 ## Changelog
+### **WORK IN PROGRESS**
+
+- Zone 2/3/4, Zone B and party mode datapoints now sit in the Multiroom folder — scripts using old paths like zone2.power need updating to multiroom.zone2.power.
+- You now see at startup which devices are being set up and when each one is ready.
+
 ### 0.18.0 (2026-08-17)
 
 - Zone 2/3/4 and Zone B now sit under the Multiroom toggle — the separate Zones checkbox is gone, because zone switching was always part of multiroom.

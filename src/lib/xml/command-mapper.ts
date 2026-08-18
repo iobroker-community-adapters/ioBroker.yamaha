@@ -12,7 +12,12 @@ export interface XmlCommand {
 }
 
 const ZONE_ELEMENT: Record<string, string> = { main: "Main_Zone", zone2: "Zone_2", zone3: "Zone_3", zone4: "Zone_4" };
-const ZONE_PREFIX: Record<string, string> = { main: "", zone2: "zone2.", zone3: "zone3.", zone4: "zone4." };
+const ZONE_PREFIX: Record<string, string> = {
+  main: "",
+  zone2: "multiroom.zone2.",
+  zone3: "multiroom.zone3.",
+  zone4: "multiroom.zone4.",
+};
 
 /**
  * Map a unified state write to a zone-scoped XML command, via {@link XML_AMP_CATALOG}.
@@ -24,12 +29,10 @@ const ZONE_PREFIX: Record<string, string> = { main: "", zone2: "zone2.", zone3: 
 export function stateToXml(stateId: string, value: unknown): XmlCommand | undefined {
   let zoneKey = "main";
   let name = stateId;
-  const dot = stateId.indexOf(".");
-  // Only split on a known zone prefix — a dotted state like `scene.recall` is a
-  // main-zone state, not a state under a "scene" zone.
-  if (dot > 0 && ZONE_ELEMENT[stateId.slice(0, dot)]) {
-    zoneKey = stateId.slice(0, dot);
-    name = stateId.slice(dot + 1);
+  const zoneMatch = /^multiroom\.(zone[234])\.(.+)$/.exec(stateId);
+  if (zoneMatch) {
+    zoneKey = zoneMatch[1];
+    name = zoneMatch[2];
   }
   const entry = XML_AMP_CATALOG.find(e => e.state === name);
   if (

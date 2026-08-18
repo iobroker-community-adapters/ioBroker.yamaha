@@ -3,6 +3,19 @@
     "name": "yamaha",
     "version": "0.18.0",
     "news": {
+      "NEXT": {
+        "en": "Zone 2/3/4, Zone B and party mode datapoints now sit in the Multiroom folder. Scripts using old paths like zone2.power need updating to multiroom.zone2.power.",
+        "de": "Zone 2/3/4, Zone B und Party-Modus-Datenpunkte liegen jetzt im Multiroom-Ordner. Skripte mit alten Pfaden wie zone2.power müssen auf multiroom.zone2.power angepasst werden.",
+        "ru": "Точки данных зон 2/3/4, зоны B и режима Party теперь в папке Multiroom. Скрипты со старыми путями вроде zone2.power нужно обновить на multiroom.zone2.power.",
+        "pt": "Os pontos de dados das zonas 2/3/4, zona B e modo Party estão agora na pasta Multiroom. Scripts com caminhos antigos como zone2.power devem ser atualizados para multiroom.zone2.power.",
+        "nl": "Datapunten van zone 2/3/4, Zone B en partymodus staan nu in de Multiroom-map. Scripts met oude paden zoals zone2.power moeten worden aangepast naar multiroom.zone2.power.",
+        "fr": "Les points de données des zones 2/3/4, Zone B et mode Party sont désormais dans le dossier Multiroom. Les scripts utilisant zone2.power doivent passer à multiroom.zone2.power.",
+        "it": "I punti dati delle zone 2/3/4, Zona B e modalità Party sono ora nella cartella Multiroom. Gli script con percorsi come zone2.power vanno aggiornati a multiroom.zone2.power.",
+        "es": "Los puntos de datos de las zonas 2/3/4, Zona B y modo Party están ahora en la carpeta Multiroom. Los scripts con rutas como zone2.power deben actualizarse a multiroom.zone2.power.",
+        "pl": "Punkty danych stref 2/3/4, Strefy B i trybu Party są teraz w folderze Multiroom. Skrypty ze starymi ścieżkami jak zone2.power trzeba zmienić na multiroom.zone2.power.",
+        "uk": "Точки даних зон 2/3/4, зони B та режиму Party тепер у папці Multiroom. Скрипти зі старими шляхами на кшталт zone2.power треба оновити на multiroom.zone2.power.",
+        "zh-cn": "区域 2/3/4、B 区和派对模式数据点现在位于多房间文件夹中。使用旧路径（如 zone2.power）的脚本需更新为 multiroom.zone2.power。"
+      },
       "0.18.0": {
         "en": "The Zones toggle is gone — zone 2/3/4, Zone B and the all-zones power switch now sit under Multiroom where they belong. Dialogue lift is adjustable again.",
         "de": "Der Zonen-Schalter entfällt — Zone 2/3/4, Zone B und der Alle-Zonen-Schalter liegen jetzt unter Multiroom. Dialoganhebung ist wieder regelbar.",
@@ -80,19 +93,6 @@
         "pl": "Odbiornik MusicCast pokazuje teraz sterowanie wzmacniaczem i funkcje MusicCast razem, zamiast udostępniać tylko jedno z nich.",
         "uk": "Ресивер MusicCast тепер показує і керування підсилювачем, і функції MusicCast разом, а не лише щось одне з них.",
         "zh-cn": "MusicCast 接收机现在同时显示功放控制和 MusicCast 功能，而不再只有其中一项可用。"
-      },
-      "0.12.0": {
-        "en": "Much more of your MusicCast is controllable from ioBroker now — playback, tuner, presets, the equalizer and full multiroom — and streaming services show the current track.",
-        "de": "Viel mehr am MusicCast-Gerät ist jetzt aus ioBroker steuerbar — Wiedergabe, Tuner, Presets, Equalizer und volles Multiroom — und Streaming-Dienste zeigen den laufenden Titel.",
-        "ru": "Гораздо больше в устройстве MusicCast теперь управляется из ioBroker — воспроизведение, тюнер, пресеты, эквалайзер и полный мультирум — а стриминг показывает текущий трек.",
-        "pt": "Muito mais do dispositivo MusicCast é controlável a partir do ioBroker — reprodução, sintonizador, predefinições, equalizador e multiroom completo — e o streaming mostra a faixa atual.",
-        "nl": "Veel meer van je MusicCast-apparaat is nu bedienbaar vanuit ioBroker — weergave, tuner, presets, equalizer en volledige multiroom — en streamingdiensten tonen de huidige track.",
-        "fr": "Bien plus de votre MusicCast est réglable depuis ioBroker — lecture, tuner, présélections, égaliseur et multiroom complet — et le streaming affiche la piste en cours.",
-        "it": "Molto di più del dispositivo MusicCast è controllabile da ioBroker — riproduzione, sintonizzatore, preset, equalizzatore e multiroom completo — e lo streaming mostra il brano attuale.",
-        "es": "Mucho más de tu dispositivo MusicCast se controla desde ioBroker — reproducción, sintonizador, presets, ecualizador y multiroom completo — y el streaming muestra la pista actual.",
-        "pl": "Znacznie więcej w urządzeniu MusicCast można teraz sterować z ioBroker — odtwarzanie, tuner, presety, korektor i pełne multiroom — a streaming pokazuje bieżący utwór.",
-        "uk": "Значно більше у пристрої MusicCast тепер керується з ioBroker — відтворення, тюнер, пресети, еквалайзер і повний мультирум — а стрімінг показує поточний трек.",
-        "zh-cn": "MusicCast 设备现在有更多功能可从 ioBroker 控制——播放、调谐器、预设、均衡器和完整多房间——流媒体服务还会显示当前曲目。"
       }
     },
     "titleLang": {

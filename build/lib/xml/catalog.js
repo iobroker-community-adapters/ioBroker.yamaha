@@ -163,7 +163,7 @@ const XML_AMP_CATALOG = [
     toInner: (value) => `<Sound_Video><HDMI><Output><OUT_2>${value ? "On" : "Off"}</OUT_2></Output></HDMI></Sound_Video>`
   },
   {
-    state: "party",
+    state: "multiroom.party",
     common: { name: "Party mode", type: "boolean", role: "switch", read: true, write: true },
     statusField: "party",
     mainOnly: true,

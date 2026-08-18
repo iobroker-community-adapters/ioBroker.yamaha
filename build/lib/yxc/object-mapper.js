@@ -25,9 +25,9 @@ var import_types = require("../catalog/types");
 var import_catalog = require("./catalog");
 const ZONES = [
   { id: "main", prefix: "" },
-  { id: "zone2", prefix: "zone2.", channel: "zone2", channelName: "Zone 2" },
-  { id: "zone3", prefix: "zone3.", channel: "zone3", channelName: "Zone 3" },
-  { id: "zone4", prefix: "zone4.", channel: "zone4", channelName: "Zone 4" }
+  { id: "zone2", prefix: "multiroom.zone2.", channel: "multiroom.zone2", channelName: "Zone 2" },
+  { id: "zone3", prefix: "multiroom.zone3.", channel: "multiroom.zone3", channelName: "Zone 3" },
+  { id: "zone4", prefix: "multiroom.zone4.", channel: "multiroom.zone4", channelName: "Zone 4" }
 ];
 const PLAYER_STATES = [
   {
@@ -80,7 +80,7 @@ function pushPlayerBlock(objects, prefix, channelName) {
   }
 }
 function mapYxcToObjects(capabilities) {
-  var _a, _b;
+  var _a, _b, _c;
   const objects = [];
   const channels = /* @__PURE__ */ new Set();
   for (const zoneDef of ZONES) {
@@ -102,8 +102,21 @@ function mapYxcToObjects(capabilities) {
       continue;
     }
     if (zoneDef.channel) {
+      const chSegments = zoneDef.channel.split(".");
+      for (let i = 1; i < chSegments.length; i++) {
+        const parentId = chSegments.slice(0, i).join(".");
+        if (!channels.has(parentId)) {
+          channels.add(parentId);
+          const seg = chSegments[i - 1];
+          objects.push({
+            id: parentId,
+            type: "channel",
+            common: { name: (_a = import_types.CHANNEL_NAMES[seg]) != null ? _a : seg.charAt(0).toUpperCase() + seg.slice(1) }
+          });
+        }
+      }
       channels.add(zoneDef.channel);
-      objects.push({ id: zoneDef.channel, type: "channel", common: { name: (_a = zoneDef.channelName) != null ? _a : zoneDef.channel } });
+      objects.push({ id: zoneDef.channel, type: "channel", common: { name: (_b = zoneDef.channelName) != null ? _b : zoneDef.channel } });
     }
     for (const entry of entries) {
       const fullId = `${zoneDef.prefix}${entry.state}`;
@@ -116,7 +129,7 @@ function mapYxcToObjects(capabilities) {
           objects.push({
             id: channelId,
             type: "channel",
-            common: { name: (_b = import_types.CHANNEL_NAMES[segment]) != null ? _b : segment.charAt(0).toUpperCase() + segment.slice(1) }
+            common: { name: (_c = import_types.CHANNEL_NAMES[segment]) != null ? _c : segment.charAt(0).toUpperCase() + segment.slice(1) }
           });
         }
       }
@@ -167,7 +180,10 @@ function mapYxcToObjects(capabilities) {
     });
   }
   if (capabilities.hasDistribution) {
-    objects.push({ id: "multiroom", type: "channel", common: { name: "Multiroom" } });
+    if (!channels.has("multiroom")) {
+      channels.add("multiroom");
+      objects.push({ id: "multiroom", type: "channel", common: { name: "Multiroom" } });
+    }
     const distState = (id, name, role) => {
       objects.push({
         id: `multiroom.${id}`,

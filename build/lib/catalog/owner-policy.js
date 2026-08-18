@@ -41,19 +41,23 @@ const OWNER_OVERRIDES = {
   "tuner.band": ["ynca", "yxc"]
 };
 const ID_DRIFT = {
-  yxc: { subwooferVolume: "sound.subwooferTrim", partyEnable: "party" },
+  yxc: { subwooferVolume: "sound.subwooferTrim", "multiroom.partyEnable": "multiroom.party" },
   xml: { hdmiOut1: "hdmi.out1", hdmiOut2: "hdmi.out2" }
 };
 function capabilityKeyOf(transport, stateId) {
   var _a, _b;
-  const template = stateId.replace(/^zone[234]\./, "");
+  const template = stateId.replace(/^(?:multiroom\.)?zone[234]\./, "");
   return (_b = (_a = ID_DRIFT[transport]) == null ? void 0 : _a[template]) != null ? _b : template;
 }
 function canonicalIdOf(transport, stateId) {
   var _a, _b, _c, _d;
-  const zone = (_b = (_a = /^zone[234]\./.exec(stateId)) == null ? void 0 : _a[0]) != null ? _b : "";
+  const zone = (_b = (_a = /^(?:multiroom\.)?zone[234]\./.exec(stateId)) == null ? void 0 : _a[0]) != null ? _b : "";
   const template = stateId.slice(zone.length);
-  return zone + ((_d = (_c = ID_DRIFT[transport]) == null ? void 0 : _c[template]) != null ? _d : template);
+  const resolved = (_d = (_c = ID_DRIFT[transport]) == null ? void 0 : _c[template]) != null ? _d : template;
+  if (zone && !zone.startsWith("multiroom.")) {
+    return `multiroom.${zone}${resolved}`;
+  }
+  return zone + resolved;
 }
 function pickOwner(key, candidates) {
   var _a, _b;

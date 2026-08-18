@@ -25,15 +25,20 @@ module.exports = __toCommonJS(command_mapper_exports);
 var import_value_coerce = require("../catalog/value-coerce");
 var import_catalog = require("./catalog");
 const ZONE_ELEMENT = { main: "Main_Zone", zone2: "Zone_2", zone3: "Zone_3", zone4: "Zone_4" };
-const ZONE_PREFIX = { main: "", zone2: "zone2.", zone3: "zone3.", zone4: "zone4." };
+const ZONE_PREFIX = {
+  main: "",
+  zone2: "multiroom.zone2.",
+  zone3: "multiroom.zone3.",
+  zone4: "multiroom.zone4."
+};
 function stateToXml(stateId, value) {
   var _a;
   let zoneKey = "main";
   let name = stateId;
-  const dot = stateId.indexOf(".");
-  if (dot > 0 && ZONE_ELEMENT[stateId.slice(0, dot)]) {
-    zoneKey = stateId.slice(0, dot);
-    name = stateId.slice(dot + 1);
+  const zoneMatch = /^multiroom\.(zone[234])\.(.+)$/.exec(stateId);
+  if (zoneMatch) {
+    zoneKey = zoneMatch[1];
+    name = zoneMatch[2];
   }
   const entry = import_catalog.XML_AMP_CATALOG.find((e) => e.state === name);
   if (!(entry == null ? void 0 : entry.toInner) || entry.mainOnly && zoneKey !== "main" || !(0, import_value_coerce.isWritableValue)(value, entry.common.type === "number")) {

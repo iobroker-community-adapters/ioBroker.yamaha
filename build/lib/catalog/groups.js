@@ -53,13 +53,10 @@ const PLAYER_CHANNELS = /* @__PURE__ */ new Set([
   "cd"
 ]);
 function groupOf(stateId) {
-  var _a, _b;
-  if (stateId === "zone2" || stateId === "zone3" || stateId === "zone4") {
+  const seg = stateId.includes(".") ? stateId.slice(0, stateId.indexOf(".")) : stateId;
+  if (seg === "multiroom") {
     return "multiroom";
   }
-  const zone = (_b = (_a = /^zone[234]\./.exec(stateId)) == null ? void 0 : _a[0]) != null ? _b : "";
-  const rest = stateId.slice(zone.length);
-  const seg = rest.includes(".") ? rest.slice(0, rest.indexOf(".")) : rest;
   if (seg === "hdmi" || seg === "lipSync") {
     return "hdmi";
   }
@@ -74,12 +71,6 @@ function groupOf(stateId) {
   }
   if (seg === "advanced") {
     return "advanced";
-  }
-  if (zone || seg === "zoneB" || seg === "masterPower") {
-    return "multiroom";
-  }
-  if (seg === "multiroom" || seg === "dist" || seg === "distributionEnable" || seg === "party" || seg === "partyMute") {
-    return "multiroom";
   }
   if (seg === "scene") {
     return "scene";

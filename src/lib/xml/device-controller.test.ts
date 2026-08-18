@@ -94,8 +94,8 @@ describe("XmlDeviceController", () => {
   test("adds a further zone as a channel when it responds", async () => {
     const s = setup({ Main_Zone: { power: true }, Zone_2: { power: false } });
     await s.controller.start();
-    expect(s.objects).toContain("living.zone2");
-    expect(s.objects).toContain("living.zone2.power");
+    expect(s.objects).toContain("living.multiroom.zone2");
+    expect(s.objects).toContain("living.multiroom.zone2.power");
   });
 
   test("returns false and builds nothing when the main zone does not answer", async () => {
@@ -147,7 +147,7 @@ describe("XmlDeviceController", () => {
     await s.controller.start();
     expect(s.objects).toContain("living.scene");
     expect(s.objects).toContain("living.scene.recall");
-    expect(s.objects).not.toContain("living.zone2.scene.recall");
-    expect(s.objects).not.toContain("living.zone2.hdmiOut1");
+    expect(s.objects).not.toContain("living.multiroom.zone2.scene.recall");
+    expect(s.objects).not.toContain("living.multiroom.zone2.hdmiOut1");
   });
 });

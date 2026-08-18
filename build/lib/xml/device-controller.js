@@ -29,9 +29,9 @@ const DEFAULT_POLL_INTERVAL_MS = 60 * 1e3;
 const MAX_KEEPALIVE_FAILURES = 3;
 const XML_ZONES = [
   { key: "main", element: "Main_Zone", prefix: "" },
-  { key: "zone2", element: "Zone_2", prefix: "zone2.", channel: "zone2", channelName: "Zone 2" },
-  { key: "zone3", element: "Zone_3", prefix: "zone3.", channel: "zone3", channelName: "Zone 3" },
-  { key: "zone4", element: "Zone_4", prefix: "zone4.", channel: "zone4", channelName: "Zone 4" }
+  { key: "zone2", element: "Zone_2", prefix: "multiroom.zone2.", channel: "multiroom.zone2", channelName: "Zone 2" },
+  { key: "zone3", element: "Zone_3", prefix: "multiroom.zone3.", channel: "multiroom.zone3", channelName: "Zone 3" },
+  { key: "zone4", element: "Zone_4", prefix: "multiroom.zone4.", channel: "multiroom.zone4", channelName: "Zone 4" }
 ];
 class XmlDeviceController {
   /**
@@ -56,7 +56,7 @@ class XmlDeviceController {
    * @returns true if the main zone answered and the tree was created
    */
   async start() {
-    var _a, _b;
+    var _a, _b, _c;
     const probes = await Promise.all(
       XML_ZONES.map(async (zone) => ({ zone, status: await this.tryGetStatus(zone.element) }))
     );
@@ -69,11 +69,24 @@ class XmlDeviceController {
     const createdChannels = /* @__PURE__ */ new Set();
     for (const zone of this.zones) {
       if (zone.channel) {
+        const chSegments = zone.channel.split(".");
+        for (let i = 1; i < chSegments.length; i++) {
+          const parentId = chSegments.slice(0, i).join(".");
+          if (!createdChannels.has(parentId)) {
+            createdChannels.add(parentId);
+            const seg = chSegments[i - 1];
+            await this.deps.upsertObject(`${this.deviceId}.${parentId}`, {
+              id: parentId,
+              type: "channel",
+              common: { name: (_a = import_types.CHANNEL_NAMES[seg]) != null ? _a : seg.charAt(0).toUpperCase() + seg.slice(1) }
+            });
+          }
+        }
         createdChannels.add(zone.channel);
         await this.deps.upsertObject(`${this.deviceId}.${zone.channel}`, {
           id: zone.channel,
           type: "channel",
-          common: { name: (_a = zone.channelName) != null ? _a : zone.channel }
+          common: { name: (_b = zone.channelName) != null ? _b : zone.channel }
         });
       }
       for (const entry of import_catalog.XML_AMP_CATALOG) {
@@ -89,7 +102,7 @@ class XmlDeviceController {
             await this.deps.upsertObject(`${this.deviceId}.${channelId}`, {
               id: channelId,
               type: "channel",
-              common: { name: (_b = import_types.CHANNEL_NAMES[segments[i - 1]]) != null ? _b : segments[i - 1] }
+              common: { name: (_c = import_types.CHANNEL_NAMES[segments[i - 1]]) != null ? _c : segments[i - 1] }
             });
           }
         }

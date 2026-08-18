@@ -444,7 +444,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
   },
   {
     func: "PWRB",
-    state: "zoneB.power",
+    state: "multiroom.zoneB.power",
     name: "Zone B power",
     spec: { kind: "onoff", on: "On", off: "Standby" },
     write: true,
@@ -452,7 +452,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
   },
   {
     func: "ZONEBAVAIL",
-    state: "zoneB.available",
+    state: "multiroom.zoneB.available",
     name: "Zone B availability",
     spec: { kind: "enum", states: ZONEB_AVAIL_STATES },
     write: false,
@@ -460,7 +460,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
   },
   {
     func: "ZONEBMUTE",
-    state: "zoneB.mute",
+    state: "multiroom.zoneB.mute",
     name: "Zone B mute",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
@@ -468,7 +468,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
   },
   {
     func: "ZONEBVOL",
-    state: "zoneB.volume",
+    state: "multiroom.zoneB.volume",
     name: "Zone B volume",
     spec: { kind: "number", unit: "dB", min: -80.5, max: 16.5, step: 0.5 },
     write: true,
@@ -476,7 +476,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
   },
   {
     func: "ZONEBNAME",
-    state: "zoneB.name",
+    state: "multiroom.zoneB.name",
     name: "Zone B name",
     spec: { kind: "text" },
     write: true,
@@ -491,9 +491,9 @@ const DAB_BAND_STATES = selfMap(["DAB", "FM"]);
 /** The zones the catalog maps: MAIN flat, ZONE2-4 each under their own prefix. */
 const ZONES: Array<{ subunit: string; prefix: string }> = [
   { subunit: "MAIN", prefix: "" },
-  { subunit: "ZONE2", prefix: "zone2." },
-  { subunit: "ZONE3", prefix: "zone3." },
-  { subunit: "ZONE4", prefix: "zone4." },
+  { subunit: "ZONE2", prefix: "multiroom.zone2." },
+  { subunit: "ZONE3", prefix: "multiroom.zone3." },
+  { subunit: "ZONE4", prefix: "multiroom.zone4." },
 ];
 
 /** Global (non-zone) functions: one subunit each. State id carries its own channel. */
@@ -501,7 +501,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
   {
     subunit: "SYS",
     func: "PARTY",
-    state: "party",
+    state: "multiroom.party",
     name: "Party mode",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
@@ -603,7 +603,7 @@ const SYS_FUNCS: FuncDef[] = [
   },
   {
     func: "PWR",
-    state: "masterPower",
+    state: "multiroom.masterPower",
     name: "Master power (all zones)",
     spec: { kind: "onoff", on: "On", off: "Standby" },
     write: true,
@@ -611,7 +611,7 @@ const SYS_FUNCS: FuncDef[] = [
   },
   {
     func: "PARTYMUTE",
-    state: "partyMute",
+    state: "multiroom.partyMute",
     name: "Party mute",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,

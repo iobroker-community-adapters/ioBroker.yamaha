@@ -4,7 +4,7 @@ import type { TransportConnection } from "./multi-transport-handle";
 
 /** Inverse of the id drifts: canonical template → the transport's own template (for routing writes back). */
 const INVERSE_DRIFT: Partial<Record<Transport, Readonly<Record<string, string>>>> = {
-  yxc: { "sound.subwooferTrim": "subwooferVolume", party: "partyEnable" },
+  yxc: { "sound.subwooferTrim": "subwooferVolume", "multiroom.party": "multiroom.partyEnable" },
   xml: { "hdmi.out1": "hdmiOut1", "hdmi.out2": "hdmiOut2" },
 };
 
@@ -115,7 +115,7 @@ export class TransportConnectionAdapter implements TransportConnection {
    * @param value the value written
    */
   public handleWrite(canonicalId: string, ack: boolean, value: unknown): void {
-    const zone = /^zone[234]\./.exec(canonicalId)?.[0] ?? "";
+    const zone = /^(?:multiroom\.)?zone[234]\./.exec(canonicalId)?.[0] ?? "";
     const template = canonicalId.slice(zone.length);
     const controllerId = zone + (INVERSE_DRIFT[this.transport]?.[template] ?? template);
     this.controller?.handleStateChange(`${this.deviceId}.${controllerId}`, ack, value);

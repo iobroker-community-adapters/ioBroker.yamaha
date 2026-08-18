@@ -82,8 +82,10 @@ class Yamaha extends utils.Adapter {
       this.log.warn(`could not load admin translations (${(0, import_util.errorMessage)(e)}); card labels may be untranslated`);
     }
     try {
+      this.log.info('starting \u2014 a "ready" message will follow for each device');
       await this.setState("info.connection", { val: false, ack: true });
       await this.migrateLegacyDevice();
+      await this.migrateGroupZones();
       const configured = (0, import_pure_helpers.parseDevices)(this.config.devices);
       const devices = configured.length > 0 ? configured : await this.autoDiscover();
       const knownDeviceIps = new Set(devices.map((device) => device.ip));
@@ -96,6 +98,9 @@ class Yamaha extends utils.Adapter {
       });
       pushReceiver.start();
       this.pushReceiver = pushReceiver;
+      if (configured.length > 0) {
+        this.log.info(`setting up ${devices.length} configured device(s)...`);
+      }
       for (const device of devices) {
         this.deviceConnected.set(device.id, false);
         await this.ensureDeviceHeader(device.id);
@@ -257,6 +262,34 @@ class Yamaha extends utils.Adapter {
     }
   }
   /**
+   * Fold the removed `group_zones` toggle into `group_multiroom` — zone 2/3/4 now
+   * belong to the multiroom group. Existing installs that had zones on but multiroom
+   * off would otherwise lose their zone datapoints after the update.
+   */
+  async migrateGroupZones() {
+    const config = this.config;
+    if (!("group_zones" in config)) {
+      return;
+    }
+    if (config.group_zones && !config.group_multiroom) {
+      config.group_multiroom = true;
+    }
+    delete config.group_zones;
+    try {
+      const obj = await this.getForeignObjectAsync(`system.adapter.${this.namespace}`);
+      if (obj == null ? void 0 : obj.native) {
+        if (obj.native.group_zones && !obj.native.group_multiroom) {
+          obj.native.group_multiroom = true;
+        }
+        delete obj.native.group_zones;
+        await this.setForeignObjectAsync(`system.adapter.${this.namespace}`, obj);
+        this.log.info("migrated group_zones setting into group_multiroom");
+      }
+    } catch (e) {
+      this.log.warn(`could not persist group_zones migration (${(0, import_util.errorMessage)(e)})`);
+    }
+  }
+  /**
    * Bring one device online across ALL its transports: every protocol that answers
    * — YNCA (amp control over a held TCP connection), YXC (MusicCast), XML/YNC
    * (pre-2010) — connects in parallel on one object tree. Returns a connection handle
@@ -353,6 +386,7 @@ class Yamaha extends utils.Adapter {
   async autoDiscover() {
     const store = (0, import_discovered_store_deps.discoveredStoreDeps)(this);
     const known = await (0, import_discovered_store.readDiscovered)(store);
+    this.log.info("auto-discovery via SSDP (older XML-only devices must be added manually)");
     let found = [];
     try {
       found = await (0, import_discovery.discoverYamaha)({
@@ -365,9 +399,9 @@ class Yamaha extends utils.Adapter {
     }
     const merged = (0, import_pure_helpers.mergeDiscovered)(known, found);
     await (0, import_discovered_store.writeDiscovered)(store, merged);
-    this.log.info(
-      `auto-discovery: ${found.length} found, running ${merged.length} device(s); add a device in the admin to switch to manual mode`
-    );
+    const remembered = merged.length - found.length;
+    const suffix = remembered > 0 ? ` (${remembered} more remembered from a previous run)` : "";
+    this.log.info(`setting up ${merged.length} discovered device(s)${suffix}...`);
     return merged;
   }
   /**

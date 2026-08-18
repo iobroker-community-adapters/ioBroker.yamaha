@@ -200,28 +200,32 @@ describe("renamedObjectIds", () => {
   test("prunes the old bare sound/advanced states, on MAIN and on a zoned copy alike", () => {
     const existing = [
       "yamaha.0.living.enhancer", // old bare MAIN state → gone (now sound.enhancer)
-      "yamaha.0.living.zone2.enhancer", // old bare zoned state → gone (now zone2.sound.enhancer)
+      "yamaha.0.living.zone2.enhancer", // old bare zoned state → gone (zone2 is renamed channel)
       "yamaha.0.living.maxVolume", // old bare state → gone (now advanced.maxVolume)
       "yamaha.0.living.speakers.pattern", // old subtree → gone (now advanced.speakers.pattern)
       "yamaha.0.living.sound.enhancer", // new grouped id → kept
-      "yamaha.0.living.zone2.sound.enhancer", // new grouped zoned id → kept
+      "yamaha.0.living.zone2.sound.enhancer", // old zone2 prefix → gone (zone2 renamed to multiroom.zone2)
+      "yamaha.0.living.zone2.volume", // old zone2 prefix → gone (zone2 renamed to multiroom.zone2)
       "yamaha.0.living.advanced.maxVolume", // new grouped id → kept
       "yamaha.0.living.advanced.speakers.pattern", // new grouped id → kept
-      "yamaha.0.living.zone2.volume", // unaffected zoned amp core → kept
+      "yamaha.0.living.multiroom.zone2.sound.enhancer", // new multiroom-prefixed zoned id → kept
+      "yamaha.0.living.multiroom.zone2.volume", // new multiroom-prefixed zoned amp core → kept
     ];
     const result = renamedObjectIds(existing, new Set(["living"]), "yamaha.0");
     expect(result).toEqual(
       expect.arrayContaining([
         "yamaha.0.living.enhancer",
         "yamaha.0.living.zone2.enhancer",
+        "yamaha.0.living.zone2.sound.enhancer",
+        "yamaha.0.living.zone2.volume",
         "yamaha.0.living.maxVolume",
         "yamaha.0.living.speakers.pattern",
       ]),
     );
     expect(result).not.toContain("yamaha.0.living.sound.enhancer");
-    expect(result).not.toContain("yamaha.0.living.zone2.sound.enhancer");
     expect(result).not.toContain("yamaha.0.living.advanced.maxVolume");
     expect(result).not.toContain("yamaha.0.living.advanced.speakers.pattern");
-    expect(result).not.toContain("yamaha.0.living.zone2.volume");
+    expect(result).not.toContain("yamaha.0.living.multiroom.zone2.sound.enhancer");
+    expect(result).not.toContain("yamaha.0.living.multiroom.zone2.volume");
   });
 });

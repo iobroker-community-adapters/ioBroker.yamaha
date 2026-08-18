@@ -150,17 +150,30 @@ export function staleObjects(existing: string[], deviceIds: Set<string>, namespa
  * linger orphaned beside the new one — {@link staleObjects} only removes whole
  * non-configured device trees, not renamed states inside a device that is kept.
  */
-export const RENAMED_STATE_IDS = ["hdmiOut", "directMode"];
+export const RENAMED_STATE_IDS = [
+  "hdmiOut",
+  "directMode",
+  "masterPower",
+  "party",
+  "partyMute",
+  "distributionEnable",
+  "partyEnable",
+];
 
 /**
  * Old channel prefixes whose whole subtree this version moved out — the `system`
  * grab-bag is gone (model/firmware → info, HDMI outputs → hdmi, speaker patterns →
- * speakers, input names → inputNames, master power → masterPower). The channel and
+ * speakers, input names → inputNames, master power → multiroom.masterPower). The channel and
  * every state under it are removed.
  */
 export const RENAMED_CHANNELS = [
   // pre-0.11 system folder
   "system",
+  // v0.18.1 multiroom regroup: zone2/3/4, zoneB, flat multiroom states moved under multiroom/.
+  "zone2",
+  "zone3",
+  "zone4",
+  "zoneB",
   // Regrouping: media sources moved under player/, DAB under tuner/, dist → multiroom. The old
   // flat channels (and their whole subtree) are deleted so the new grouped ones do not sit
   // beside orphaned copies on an upgraded instance.

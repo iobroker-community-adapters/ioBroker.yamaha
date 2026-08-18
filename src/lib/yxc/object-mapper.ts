@@ -2,12 +2,12 @@ import { CHANNEL_NAMES, type ObjectDef } from "../catalog/types";
 import type { YxcCapabilities } from "./capability";
 import { YXC_AMP_CATALOG } from "./catalog";
 
-/** The zones the adapter maps: main flat, zone2-4 each under their own channel. */
+/** The zones the adapter maps: main flat, zone2-4 each under multiroom. */
 const ZONES: Array<{ id: string; prefix: string; channel?: string; channelName?: string }> = [
   { id: "main", prefix: "" },
-  { id: "zone2", prefix: "zone2.", channel: "zone2", channelName: "Zone 2" },
-  { id: "zone3", prefix: "zone3.", channel: "zone3", channelName: "Zone 3" },
-  { id: "zone4", prefix: "zone4.", channel: "zone4", channelName: "Zone 4" },
+  { id: "zone2", prefix: "multiroom.zone2.", channel: "multiroom.zone2", channelName: "Zone 2" },
+  { id: "zone3", prefix: "multiroom.zone3.", channel: "multiroom.zone3", channelName: "Zone 3" },
+  { id: "zone4", prefix: "multiroom.zone4.", channel: "multiroom.zone4", channelName: "Zone 4" },
 ];
 
 /** Media-player states shared by every player source (netusb, cd): read metadata + transport buttons. */
@@ -105,6 +105,19 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
       continue;
     }
     if (zoneDef.channel) {
+      const chSegments = zoneDef.channel.split(".");
+      for (let i = 1; i < chSegments.length; i++) {
+        const parentId = chSegments.slice(0, i).join(".");
+        if (!channels.has(parentId)) {
+          channels.add(parentId);
+          const seg = chSegments[i - 1];
+          objects.push({
+            id: parentId,
+            type: "channel",
+            common: { name: CHANNEL_NAMES[seg] ?? seg.charAt(0).toUpperCase() + seg.slice(1) },
+          });
+        }
+      }
       channels.add(zoneDef.channel);
       objects.push({ id: zoneDef.channel, type: "channel", common: { name: zoneDef.channelName ?? zoneDef.channel } });
     }
@@ -172,9 +185,10 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
     });
   }
   if (capabilities.hasDistribution) {
-    // MusicCast-Link state read from getDistributionInfo. Group name stays read-only —
-    // the library's setGroupName is broken, so its payload shape is unverified.
-    objects.push({ id: "multiroom", type: "channel", common: { name: "Multiroom" } });
+    if (!channels.has("multiroom")) {
+      channels.add("multiroom");
+      objects.push({ id: "multiroom", type: "channel", common: { name: "Multiroom" } });
+    }
     const distState = (id: string, name: string, role: string): void => {
       objects.push({
         id: `multiroom.${id}`,

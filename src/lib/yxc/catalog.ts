@@ -297,14 +297,14 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     fromStatus: str,
   },
   {
-    state: "distributionEnable",
+    state: "multiroom.distributionEnable",
     common: { name: "Distribution active", type: "boolean", role: "indicator", read: true, write: false },
     create: { kind: "always" },
     read: { field: "distribution_enable" },
     fromStatus: bool,
   },
   {
-    state: "partyEnable",
+    state: "multiroom.partyEnable",
     common: { name: "Party", type: "boolean", role: "switch", read: true, write: true },
     create: { kind: "always" },
     read: { field: "party_enable" },

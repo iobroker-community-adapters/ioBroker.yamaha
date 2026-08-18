@@ -19,7 +19,7 @@ describe("YNCA catalog", () => {
   });
 
   test("each additional zone gets its own prefixed states", () => {
-    expect(buildYncaCatalog().find(e => e.id === "zone2.volume")).toMatchObject({ subunit: "ZONE2", func: "VOL" });
+    expect(buildYncaCatalog().find(e => e.id === "multiroom.zone2.volume")).toMatchObject({ subunit: "ZONE2", func: "VOL" });
   });
 
   test("input is an enum dropdown carrying the full device-agnostic input list", () => {
@@ -35,7 +35,7 @@ describe("YNCA catalog", () => {
     const cat = buildYncaCatalog();
     expect(cat.find(e => e.id === "sound.extraBass")).toMatchObject({ subunit: "MAIN", func: "EXBASS" });
     expect(cat.find(e => e.id === "sound.extraBass")?.spec).toEqual({ kind: "onoff", on: "Auto", off: "Off" });
-    expect(cat.find(e => e.id === "zone2.sound.extraBass")).toMatchObject({ subunit: "ZONE2", func: "EXBASS" });
+    expect(cat.find(e => e.id === "multiroom.zone2.sound.extraBass")).toMatchObject({ subunit: "ZONE2", func: "EXBASS" });
   });
 
   test("max volume and initial volume level are numbers with a dB unit", () => {
@@ -64,10 +64,10 @@ describe("YNCA catalog", () => {
 
   test("Zone B and speaker A/B functions exist on MAIN only", () => {
     const cat = buildYncaCatalog();
-    expect(cat.find(e => e.id === "zoneB.volume")).toMatchObject({ subunit: "MAIN", func: "ZONEBVOL" });
-    expect(cat.find(e => e.id === "zone2.zoneB.volume")).toBeUndefined();
+    expect(cat.find(e => e.id === "multiroom.zoneB.volume")).toMatchObject({ subunit: "MAIN", func: "ZONEBVOL" });
+    expect(cat.find(e => e.id === "multiroom.zone2.zoneB.volume")).toBeUndefined();
     expect(cat.find(e => e.id === "advanced.speakerA")).toMatchObject({ subunit: "MAIN", func: "SPEAKERA" });
-    expect(cat.find(e => e.id === "zoneB.power")?.spec).toEqual({ kind: "onoff", on: "On", off: "Standby" });
+    expect(cat.find(e => e.id === "multiroom.zoneB.power")?.spec).toEqual({ kind: "onoff", on: "On", off: "Standby" });
   });
 
   test("scene names are read-only text on MAIN (1..12)", () => {
@@ -99,7 +99,7 @@ describe("YNCA catalog", () => {
     expect(cat.find(e => e.id === "info.model")).toMatchObject({ subunit: "SYS", func: "MODELNAME", write: false });
     expect(cat.find(e => e.id === "info.model")?.spec).toEqual({ kind: "text" });
     expect(cat.find(e => e.id === "info.firmware")).toMatchObject({ subunit: "SYS", func: "VERSION", write: false });
-    expect(cat.find(e => e.id === "masterPower")?.spec).toEqual({ kind: "onoff", on: "On", off: "Standby" });
+    expect(cat.find(e => e.id === "multiroom.masterPower")?.spec).toEqual({ kind: "onoff", on: "On", off: "Standby" });
     expect(cat.find(e => e.id === "hdmi.out1")?.spec).toEqual({ kind: "onoff", on: "On", off: "Off" });
     expect(cat.find(e => e.id === "advanced.speakers.pattern")?.spec.kind).toBe("enum");
   });
@@ -187,17 +187,17 @@ describe("YNCA catalog", () => {
   test("the init sweep asks each function once per subunit", () => {
     const gets = sweepGets(buildYncaCatalog());
     expect(gets).toContainEqual({ subunit: "MAIN", func: "PWR" });
-    expect(gets).toContainEqual({ subunit: "ZONE2", func: "VOL" });
+    expect(gets).toContainEqual({ subunit: "ZONE2", func: "VOL" }); // zone prefix doesn't affect sweep
   });
 
   test("funcToEntry maps a device line (subunit:func) back to its state id", () => {
     const map = funcToEntry(buildYncaCatalog());
     expect(map.get("MAIN:PWR")?.id).toBe("power");
-    expect(map.get("ZONE2:VOL")?.id).toBe("zone2.volume");
+    expect(map.get("ZONE2:VOL")?.id).toBe("multiroom.zone2.volume");
   });
 
   test("idToEntry maps a state write back to its subunit and function", () => {
-    expect(idToEntry(buildYncaCatalog()).get("zone2.volume")).toMatchObject({ subunit: "ZONE2", func: "VOL" });
+    expect(idToEntry(buildYncaCatalog()).get("multiroom.zone2.volume")).toMatchObject({ subunit: "ZONE2", func: "VOL" });
   });
 
   test("yncaObjectsFor builds only the objects a device reported", () => {
@@ -246,7 +246,7 @@ describe("YNCA catalog", () => {
   test("yncaCommand encodes a state write to a subunit/func/value triple via the id map", () => {
     const map = idToEntry(buildYncaCatalog());
     expect(yncaCommand("power", true, map)).toEqual({ subunit: "MAIN", func: "PWR", value: "On" });
-    expect(yncaCommand("zone2.mute", false, map)).toEqual({ subunit: "ZONE2", func: "MUTE", value: "Off" });
+    expect(yncaCommand("multiroom.zone2.mute", false, map)).toEqual({ subunit: "ZONE2", func: "MUTE", value: "Off" });
     expect(yncaCommand("nope", 1, map)).toBeUndefined();
     expect(yncaCommand("volume", null, map)).toBeUndefined(); // null is not a valid write
     expect(yncaCommand("volume", "abc", map)).toBeUndefined(); // non-finite number is dropped
@@ -261,13 +261,13 @@ describe("YNCA catalog", () => {
         "sound.treble",
         "hdmi.output",
         "sound.surroundAI",
-        "party",
+        "multiroom.party",
         "tuner.band",
       ]),
     );
-    expect(cat.find(e => e.id === "party")).toMatchObject({ subunit: "SYS", func: "PARTY" });
+    expect(cat.find(e => e.id === "multiroom.party")).toMatchObject({ subunit: "SYS", func: "PARTY" });
     expect(cat.find(e => e.id === "tuner.band")).toMatchObject({ subunit: "TUN", func: "BAND" });
-    expect(cat.find(e => e.id === "zone2.sound.bass")).toMatchObject({ subunit: "ZONE2", func: "SPBASS" });
+    expect(cat.find(e => e.id === "multiroom.zone2.sound.bass")).toMatchObject({ subunit: "ZONE2", func: "SPBASS" });
   });
 
   test("player sources carry the shared playback functions under their channel", () => {

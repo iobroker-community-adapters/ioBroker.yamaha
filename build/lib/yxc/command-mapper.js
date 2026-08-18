@@ -66,7 +66,12 @@ const EQ_CHANNELS = {
   "sound.equalizerMid": "Mid",
   "sound.equalizerHigh": "High"
 };
-const ZONE_PREFIX = { main: "", zone2: "zone2.", zone3: "zone3.", zone4: "zone4." };
+const ZONE_PREFIX = {
+  main: "",
+  zone2: "multiroom.zone2.",
+  zone3: "multiroom.zone3.",
+  zone4: "multiroom.zone4."
+};
 function parseYxcStatus(zoneStatus, zone) {
   if (typeof zoneStatus !== "object" || zoneStatus === null) {
     return [];
@@ -109,7 +114,7 @@ function stateToYxc(stateId, value) {
   }
   let zone = "main";
   let name = stateId;
-  const zoneMatch = /^(zone[234])\.(.+)$/.exec(stateId);
+  const zoneMatch = /^multiroom\.(zone[234])\.(.+)$/.exec(stateId);
   if (zoneMatch) {
     zone = zoneMatch[1];
     name = zoneMatch[2];
