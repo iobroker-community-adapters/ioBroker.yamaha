@@ -16,6 +16,8 @@ declare global {
       group_multiroom: boolean;
       group_hdmi: boolean;
       group_scene: boolean;
+      group_sound: boolean;
+      group_advanced: boolean;
     }
   }
 }
