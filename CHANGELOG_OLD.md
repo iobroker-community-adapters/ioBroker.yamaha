@@ -1,4 +1,10 @@
 # Older changes
+## 0.14.0 (2026-08-12)
+
+- The admin now shows your receivers as cards, each with the device's model, IP address and the protocols it is connected over, and a dialog to add a receiver by its IP.
+- Every receiver reports its model now — MusicCast over Yamaha Extended Control and older sets over the XML protocol, not only the YNCA models.
+- Discovery is steadier: the search repeats and can be confined to a chosen network interface, so a receiver on a multi-homed host or behind a dropped packet is still found.
+
 ## 0.13.0 (2026-08-12)
 
 - For a MusicCast receiver, amplifier control and the MusicCast features — multiroom grouping, graphic equalizer and media playback — now appear together, where before only one side showed up.

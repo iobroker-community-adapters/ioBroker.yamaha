@@ -41,7 +41,7 @@ Older Yamaha receivers (before ~2010, the XML protocol) do not announce themselv
 The **Data points** section switches whole groups of datapoints on or off — playback sources, tuner, extra zones, multiroom, HDMI, scenes, sound processing and advanced setup datapoints. Turn off what your receiver doesn't have or you don't use, and those objects are removed from the tree; the amplifier core (power, volume, mute, input, sound program, sleep) always stays on.
 
 ## Changelog
-### **WORK IN PROGRESS**
+### 0.19.0 (2026-08-18)
 
 - Zone 2/3/4, Zone B and party mode datapoints now sit in the Multiroom folder — scripts using old paths like zone2.power need updating to multiroom.zone2.power.
 - You now see at startup which devices are being set up and when each one is ready.
@@ -70,12 +70,6 @@ The **Data points** section switches whole groups of datapoints on or off — pl
 - You can switch whole datapoint groups off in the admin — the players, tuner, extra zones, multiroom, HDMI or scenes — so a receiver only carries the datapoints you actually use.
 - Playback now shows up as a proper media player, so voice assistants and visualizations can read what is playing and drive transport, repeat and shuffle straight from ioBroker.
 - Device discovery runs on every network interface now and uses all of them by default, so a receiver on a second network segment is found without picking an interface by hand.
-
-### 0.14.0 (2026-08-12)
-
-- The admin now shows your receivers as cards, each with the device's model, IP address and the protocols it is connected over, and a dialog to add a receiver by its IP.
-- Every receiver reports its model now — MusicCast over Yamaha Extended Control and older sets over the XML protocol, not only the YNCA models.
-- Discovery is steadier: the search repeats and can be confined to a chosen network interface, so a receiver on a multi-homed host or behind a dropped packet is still found.
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 

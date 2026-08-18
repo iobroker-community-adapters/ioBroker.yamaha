@@ -1,9 +1,9 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "0.18.0",
+    "version": "0.19.0",
     "news": {
-      "NEXT": {
+      "0.19.0": {
         "en": "Zone 2/3/4, Zone B and party mode datapoints now sit in the Multiroom folder. Scripts using old paths like zone2.power need updating to multiroom.zone2.power.",
         "de": "Zone 2/3/4, Zone B und Party-Modus-Datenpunkte liegen jetzt im Multiroom-Ordner. Skripte mit alten Pfaden wie zone2.power müssen auf multiroom.zone2.power angepasst werden.",
         "ru": "Точки данных зон 2/3/4, зоны B и режима Party теперь в папке Multiroom. Скрипты со старыми путями вроде zone2.power нужно обновить на multiroom.zone2.power.",
