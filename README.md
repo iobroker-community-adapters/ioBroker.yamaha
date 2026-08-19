@@ -91,7 +91,7 @@ On the first connect the adapter asks the receiver which functions it supports �
 - (krobipd) Whole datapoint groups such as playback sources, tuner, multiroom or scenes can be switched off in the admin — and are then not even queried from the device.
 - (krobipd) Upgrading from 0.5.x shows a one-time notice explaining the new object tree before the update installs.
 
-### 0.5.4 (2024-06-14)
+### 0.5.4 (2024-06-14) — stable
 
 - (foxriver76) updated packages
 
