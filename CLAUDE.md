@@ -58,7 +58,14 @@ Objekt-`common` UND Wert-Mapping aus EINER Liste; die `common` werden über `cat
 typisiert (onoff→boolean, enum→Dropdown, number→unit/range). Der Objektbaum ist thematisch gruppiert
 (`catalog/groups.ts`, `groupOf(id)` bucketet nach zonenbereinigtem erstem Kanal-Segment, HDMI-Routing/Lippensynchron
 gewinnt dabei explizit VOR dem Zonen-Präfix): die Wiedergabe-Quellen unter `player.*`, DAB unter `tuner.dab`,
-Multiroom statt `dist`. Sieben Datenpunktgruppen (Wiedergabe/Tuner/Multiroom/HDMI/Szenen/Klang/Erweitert) sind
+Multiroom statt `dist`. **Der `multiroom`-Ordner trägt den Geltungsbereich selbst** (v1.0.0-Schnitt): direkt im
+Ordner nur Gerät-weites mit „(all zones)"-Namen (masterPower/party/partyMute), die MusicCast-Link-States im
+Unterordner `multiroom.group` (role/id/name/serverZone/linkedDevices/linkDevice/leave/streamingEnabled —
+`streamingEnabled` = „Zone DARF streamen", live belegt true ohne Gruppe), Zonen als `multiroom.zoneN`-Unterordner.
+Die zwei gerätweiten YXC-Katalog-Einträge (`multiroom.partyEnable`/`multiroom.group.streamingEnabled` aus dem
+Zonen-Status) werden von Objekt-Mapper UND Status-Parser NUR für die Main-Zone emittiert — sonst entstehen
+`multiroom.zoneN.multiroom.*`-Duplikate (der v1.0.0-Bugfund). Sieben Datenpunktgruppen
+(Wiedergabe/Tuner/Multiroom/HDMI/Szenen/Klang/Erweitert) sind
 im Admin per `group_*`-Schalter abschaltbar — Zone 2/3/4, Zone B und masterPower gehören zur Multiroom-Gruppe — `isGroupEnabled` gated `upsertObject`+`setStateAck`,
 `cleanupStaleObjects` räumt eine abgeschaltete Gruppe weg (beszel-Muster); der Verstärker-Kern (Power/Volume/Mute/
 Input/Sound-Programm/Sleep/Info) ist immer an, ohne eigenen Schalter (wie beszels `info.online`/`.status`). Alt-IDs
