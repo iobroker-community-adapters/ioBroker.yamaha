@@ -39,6 +39,7 @@
         "it": "Correzione dei casi di crash segnalati da Sentry",
         "es": "Casos de accidente fijo reportados por Sentry",
         "pl": "Sprawy katastrofy Fix podane przez Sentry’a",
+        "uk": "Виправлено випадки збоїв, про які повідомив Sentry",
         "zh-cn": "Sentry所报告的六例事故"
       },
       "0.5.2": {
@@ -51,6 +52,7 @@
         "it": "Risolvi i casi di crash segnalati da Sentry",
         "es": "Solucionar casos de fallas informados por Sentry",
         "pl": "Napraw przypadki awarii zgłoszone przez Sentry",
+        "uk": "Виправлено випадки збоїв, про які повідомив Sentry",
         "zh-cn": "修复 Sentry 报告的崩溃案例"
       },
       "0.5.1": {
@@ -63,6 +65,7 @@
         "it": "Risolvi i casi di crash segnalati da Sentry\ncorreggere il tipo di pureDirect",
         "es": "Solucionar casos de fallas informados por Sentry\ncorregir el tipo de pureDirect",
         "pl": "Napraw przypadki awarii zgłoszone przez Sentry\nnapraw typ pureDirect",
+        "uk": "Виправлено випадки збоїв, про які повідомив Sentry\nВиправлено тип pureDirect",
         "zh-cn": "修复 Sentry 报告的崩溃案例\n修复 pureDirect 的类型"
       },
       "0.5.0": {
@@ -75,19 +78,8 @@
         "it": "IMPORTANTE: è necessario almeno js-controller 2.0\nAggiungi Sentinella per la segnalazione degli arresti anomali",
         "es": "IMPORTANTE: se necesita js-controller 2.0 al menos\nAgregar Sentry para informes de fallas",
         "pl": "WAŻNE: potrzebny jest przynajmniej js-controller 2.0\nDodaj Sentry do zgłaszania awarii",
+        "uk": "ВАЖЛИВО: потрібен щонайменше js-controller 2.0\nДодано Sentry для звітів про збої",
         "zh-cn": "重要提示：至少需要 js-controller 2.0\n添加 Sentry 以进行崩溃报告"
-      },
-      "0.4.1": {
-        "en": "\"toggleMute\" now toggle mute state (instead of always muting)",
-        "de": "\"toggleMute\" schaltet nun den Mute-Status um (anstatt immer stumm zu schalten)",
-        "ru": "«toggleMute» теперь переключает состояние отключения звука (вместо постоянного отключения звука)",
-        "pt": "\"toggleMute\" agora alterna o estado mudo (em vez de sempre silenciar)",
-        "nl": "\"toggleMute\" schakelt nu de mute-status in (in plaats van altijd te dempen)",
-        "fr": "\"toggleMute\" bascule maintenant l'état muet (au lieu de toujours muet)",
-        "it": "\"toggleMute\" ora attiva/disattiva lo stato muto (anziché sempre disattivato)",
-        "es": "\"toggleMute\" ahora alterna el estado de silencio (en lugar de silenciar siempre)",
-        "pl": "„toggleMute” przełącza teraz stan wyciszenia (zamiast ciągłego wyciszania)",
-        "zh-cn": "“toggleMute”现在切换静音状态（而不是总是静音）"
       }
     },
     "titleLang": {
@@ -116,12 +108,7 @@
       "uk": "Керування AV-ресиверами та пристроями MusicCast Yamaha через мережу",
       "zh-cn": "通过网络控制 Yamaha AV 接收器和 MusicCast 设备"
     },
-    "keywords": [
-      "yamaha",
-      "avr",
-      "receiver",
-      "musiccast"
-    ],
+    "keywords": ["yamaha", "avr", "receiver", "musiccast"],
     "licenseInformation": {
       "license": "MIT",
       "type": "free"
@@ -164,10 +151,7 @@
       {
         "condition": {
           "operand": "and",
-          "rules": [
-            "oldVersion<1.0.0",
-            "newVersion>=1.0.0"
-          ]
+          "rules": ["oldVersion<1.0.0", "newVersion>=1.0.0"]
         },
         "title": {
           "en": "Complete rebuild — new object tree",
@@ -196,10 +180,7 @@
           "zh-cn": "适配器已完全重建，现在将 YNCA、MusicCast 和旧的 XML 协议合而为一。对象树是全新的：旧的数据点（volume、power、Commands、Realtime 等）会被自动删除，功放会作为带类型数据点的设备重新创建。已配置的 IP 地址会被保留。请将脚本和可视化更新到新的数据点路径。"
         },
         "level": "warn",
-        "buttons": [
-          "agree",
-          "cancel"
-        ]
+        "buttons": ["agree", "cancel"]
       }
     ]
   },
