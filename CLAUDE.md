@@ -70,6 +70,14 @@ im Admin per `group_*`-Schalter abschaltbar — Zone 2/3/4, Zone B und masterPow
 `cleanupStaleObjects` räumt eine abgeschaltete Gruppe weg (beszel-Muster); der Verstärker-Kern (Power/Volume/Mute/
 Input/Sound-Programm/Sleep/Info) ist immer an, ohne eigenen Schalter (wie beszels `info.online`/`.status`). Alt-IDs
 aus der Vor-Gruppierung (`pure-helpers.ts` `RENAMED_CHANNELS`/`renamedObjectIds`) werden beim Update weggeräumt.
+**Geräte-Typ-Icons:** `lib/device-type.ts` erkennt die Geräteklasse am gemeldeten Modellnamen
+(Präfix-Matrix AV-Receiver/Stereo/Speaker/Soundbar/CD, unbekannt→AV-Receiver) und liefert eigene
+Inline-SVG-Silhouetten (KEINE Yamaha-Marke); gesetzt am Device-Objekt über den zentralen
+`setStateAck`-Hook in `main.ts` (jeder `info.model`-Write, Änderungs-Cache) und auf der
+Geräte-Karte (`device-management.ts` liest das Modell in `loadDevices`). Das Adapter-Logo
+`admin/yamaha.svg` behält das etablierte Kreis-Stimmgabel-Motiv (krobi-Entscheidung — Ersatzmotiv
+abgelehnt) mit THEME-FESTEN Farben: dunkle Striche als Basis, helle via Medien-Abfrage im SVG —
+nie `currentColor` (rendert als `<img>` schwarz, unsichtbar im Dunkel-Modus; der Alt-Fehler).
 YXC-HTTP über den eigenen `yxc/http-client.ts`
 (keine externe Lib; die Command-URLs sind unit-verifiziert). **Jede YXC-Anfrage trägt die Kopfzeilen
 `X-AppName`/`X-AppPort` (`YXC_SUBSCRIPTION_HEADERS`) — DAS ist die UDP-Push-Anmeldung; ohne sie sendet kein

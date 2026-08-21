@@ -1,21 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none" stroke="#3b4046" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
   <title>ioBroker.yamaha</title>
-  <!-- Fixed gradient colours (no currentColor): readable on light and dark backgrounds alike. -->
-  <defs>
-    <linearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#7C4DFF"/>
-      <stop offset="100%" stop-color="#00B8D9"/>
-    </linearGradient>
-  </defs>
-  <g fill="none" stroke="url(#grad)" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
-    <!-- A single tuning fork: prongs, bow, stem in one stroke -->
-    <path d="M108,56 V114 a20,20 0 0 0 40,0 V56 M128,134 V196"/>
-    <!-- Sound waves, concentric around the fork -->
-    <path d="M88,104 A48,48 0 0 0 88,152"/>
-    <path d="M66,96 A70,70 0 0 0 66,160"/>
-    <path d="M168,104 A48,48 0 0 1 168,152"/>
-    <path d="M190,96 A70,70 0 0 1 190,160"/>
-  </g>
-  <!-- Fork foot -->
-  <circle cx="128" cy="206" r="10" fill="url(#grad)"/>
+  <!-- Fixed theme-aware colours — never currentColor: embedded as <img> that falls back to
+       black and disappears on dark backgrounds. Dark strokes on light, light strokes on dark. -->
+  <style>@media (prefers-color-scheme: dark) { svg { stroke: #d6dade; } }</style>
+  <circle cx="256" cy="256" r="234" />
+  <path d="M236,104 L236,212 L256,246 L276,212 L276,104" transform="rotate(0 256 256)" />
+  <path d="M236,104 L236,212 L256,246 L276,212 L276,104" transform="rotate(120 256 256)" />
+  <path d="M236,104 L236,212 L256,246 L276,212 L276,104" transform="rotate(240 256 256)" />
 </svg>
