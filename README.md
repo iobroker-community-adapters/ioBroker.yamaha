@@ -21,7 +21,7 @@ legacy XML protocol of the oldest pre-2010 models — behind one object tree.
 - **Typed datapoints** — booleans, dropdowns and numbers with unit and range instead of raw text
 - **Capability-driven** — states are generated from what each device reports, no hardcoded model list
 - **Automatic discovery** — an empty device list finds and sets up MusicCast devices at startup
-- **Device manager** — receivers as admin cards with model, address and live protocol indicators
+- **Device manager** — receivers as admin cards with model, address, live protocol indicators and a device-type icon (receiver, stereo, speaker, soundbar, CD)
 
 ## Requirements
 
@@ -82,6 +82,10 @@ On the first connect the adapter asks the receiver which functions it supports �
 
 ## Changelog
 
+<!--
+    Placeholder for the next version (at the beginning of the line):
+    ### **WORK IN PROGRESS**
+-->
 ### 1.0.0 (2026-08-18)
 
 - (krobipd) Complete rebuild: one adapter now speaks YNCA, MusicCast and the legacy XML protocol — every protocol a device answers runs in parallel on one object tree.
@@ -90,6 +94,7 @@ On the first connect the adapter asks the receiver which functions it supports �
 - (krobipd) Auto-discovery sets up MusicCast devices by itself when the device list is empty, and the admin shows every receiver as a card with model, address and protocol indicators.
 - (krobipd) Whole datapoint groups such as playback sources, tuner, multiroom or scenes can be switched off in the admin — and are then not even queried from the device.
 - (krobipd) The multiroom folder tells the scope at a glance: switches that affect all zones say so in their name, and the MusicCast device group has its own `multiroom.group` folder.
+- (krobipd) Every device shows a type icon — receiver, stereo receiver, speaker, soundbar or CD system, detected from the reported model — in the object tree and on its admin card; the adapter logo is redrawn to stay readable in light and dark mode.
 - (krobipd) Upgrading from 0.5.x shows a one-time notice explaining the new object tree before the update installs.
 
 ### 0.5.4 (2024-06-14) — stable

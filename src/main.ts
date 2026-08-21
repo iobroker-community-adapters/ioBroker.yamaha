@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { attemptDevice } from "./lib/attempt-device";
 import { searchInterfaces } from "./lib/network-interfaces";
 import { isGroupEnabled } from "./lib/catalog/groups";
+import { iconForModel } from "./lib/device-type";
 import {
   legacyDeviceRow,
   mergeDiscovered,
@@ -266,6 +267,29 @@ export class Yamaha extends utils.Adapter {
     }
   }
 
+  /** The icon last written per device, so repeated model reports do not re-write the object. */
+  private readonly deviceIcons = new Map<string, string>();
+
+  /**
+   * Paint the device-class silhouette on the device node once the model is known —
+   * detected from the reported model name, written only when it actually changes.
+   *
+   * @param deviceId the id-safe device id
+   * @param model the reported model name
+   */
+  private async updateDeviceIcon(deviceId: string, model: string): Promise<void> {
+    const icon = iconForModel(model);
+    if (this.deviceIcons.get(deviceId) === icon) {
+      return;
+    }
+    this.deviceIcons.set(deviceId, icon);
+    try {
+      await this.extendObject(deviceId, { common: { icon } });
+    } catch (e) {
+      this.log.debug(`${deviceId}: setting device icon failed (${errorMessage(e)})`);
+    }
+  }
+
   /**
    * Carry over the previous adapter's single-device config into the device table.
    * The old yamaha stored one receiver as `config.ip` (older installs: `config.IP`);
@@ -369,6 +393,10 @@ export class Yamaha extends utils.Adapter {
           return;
         }
         void this.setState(id, { val: value, ack: true });
+        // A model report also decides the device-class icon on the device node.
+        if (id.endsWith(".info.model") && typeof value === "string" && value.length > 0) {
+          void this.updateDeviceIcon(id.slice(0, id.indexOf(".")), value);
+        }
       },
       timers: {
         schedule: (handler, ms) => this.setTimeout(handler, ms),

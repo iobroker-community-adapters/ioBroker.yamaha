@@ -23,6 +23,7 @@ __export(device_management_exports, {
 module.exports = __toCommonJS(device_management_exports);
 var import_dm_utils = require("@iobroker/dm-utils");
 var import_i18n = require("./lib/i18n");
+var import_device_type = require("./lib/device-type");
 var import_discovered_store = require("./lib/discovered-store");
 var import_discovered_store_deps = require("./lib/discovered-store-deps");
 var import_device_management_helpers = require("./device-management-helpers");
@@ -82,7 +83,8 @@ class YamahaDeviceManagement extends import_dm_utils.DeviceManagement {
    */
   async loadDevices(context) {
     for (const card of await this.cards()) {
-      context.addDevice(this.toDeviceInfo(card));
+      const model = await this.adapter.getForeignStateAsync(`${this.adapter.namespace}.${card.id}.info.model`);
+      context.addDevice(this.toDeviceInfo(card, typeof (model == null ? void 0 : model.val) === "string" ? model.val : void 0));
     }
   }
   /**
@@ -92,9 +94,10 @@ class YamahaDeviceManagement extends import_dm_utils.DeviceManagement {
    * card has no edit action — it is auto-found and re-found; it can only be removed.
    *
    * @param card the running device
+   * @param model the device's reported model name, for the device-class icon
    * @returns the card descriptor
    */
-  toDeviceInfo(card) {
+  toDeviceInfo(card, model) {
     const base = `${this.adapter.namespace}.${card.id}`;
     const del = {
       id: "delete",
@@ -111,6 +114,7 @@ class YamahaDeviceManagement extends import_dm_utils.DeviceManagement {
     return {
       id: card.id,
       name: card.name,
+      icon: (0, import_device_type.iconForModel)(model),
       model: { stateId: `${base}.info.model` },
       identifier: card.ip,
       status: {

@@ -6,6 +6,7 @@ import {
   type InstanceDetails,
 } from "@iobroker/dm-utils";
 import { t } from "./lib/i18n";
+import { iconForModel } from "./lib/device-type";
 import { readDiscovered, writeDiscovered } from "./lib/discovered-store";
 import { discoveredStoreDeps } from "./lib/discovered-store-deps";
 import type { DeviceRecord } from "./lib/types";
@@ -84,7 +85,9 @@ export class YamahaDeviceManagement extends DeviceManagement {
    */
   protected async loadDevices(context: DeviceLoadContext<string>): Promise<void> {
     for (const card of await this.cards()) {
-      context.addDevice(this.toDeviceInfo(card));
+      // The reported model picks the device-class silhouette shown on the card.
+      const model = await this.adapter.getForeignStateAsync(`${this.adapter.namespace}.${card.id}.info.model`);
+      context.addDevice(this.toDeviceInfo(card, typeof model?.val === "string" ? model.val : undefined));
     }
   }
 
@@ -95,9 +98,10 @@ export class YamahaDeviceManagement extends DeviceManagement {
    * card has no edit action — it is auto-found and re-found; it can only be removed.
    *
    * @param card the running device
+   * @param model the device's reported model name, for the device-class icon
    * @returns the card descriptor
    */
-  private toDeviceInfo(card: CardDevice): DeviceInfo<string> {
+  private toDeviceInfo(card: CardDevice, model?: string): DeviceInfo<string> {
     const base = `${this.adapter.namespace}.${card.id}`;
     const del = {
       id: "delete",
@@ -114,6 +118,7 @@ export class YamahaDeviceManagement extends DeviceManagement {
     return {
       id: card.id,
       name: card.name,
+      icon: iconForModel(model),
       model: { stateId: `${base}.info.model` },
       identifier: card.ip,
       status: {
