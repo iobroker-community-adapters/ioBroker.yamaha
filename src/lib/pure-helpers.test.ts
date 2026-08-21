@@ -382,6 +382,8 @@ describe("renamedObjectIds", () => {
       "yamaha.0.living.multiroom.linkClient",
       "yamaha.0.living.multiroom.leaveGroup",
       "yamaha.0.living.multiroom.distributionEnable",
+      // short-lived pre-cut id (mislabeled "active") → gone
+      "yamaha.0.living.multiroom.group.streamingActive",
       // stray per-zone copies of device-global states → gone (channel + states)
       "yamaha.0.living.multiroom.zone2.multiroom",
       "yamaha.0.living.multiroom.zone2.multiroom.party",
@@ -404,6 +406,7 @@ describe("renamedObjectIds", () => {
         "yamaha.0.living.multiroom.linkClient",
         "yamaha.0.living.multiroom.leaveGroup",
         "yamaha.0.living.multiroom.distributionEnable",
+        "yamaha.0.living.multiroom.group.streamingActive",
         "yamaha.0.living.multiroom.zone2.multiroom",
         "yamaha.0.living.multiroom.zone2.multiroom.party",
         "yamaha.0.living.multiroom.zone2.multiroom.distributionEnable",

@@ -304,8 +304,10 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
   // The two device-global entries: their id starts with "multiroom." (no zone prefix ever
   // applies), so the mapper and the status parser emit them for the main zone only.
   {
-    state: "multiroom.group.streamingActive",
-    common: { name: "Streaming active", type: "boolean", role: "indicator", read: true, write: false },
+    // distribution_enable says the zone MAY be used for Link streaming — proven on a live
+    // device reporting true while in no group (role none) — not that it streams right now.
+    state: "multiroom.group.streamingEnabled",
+    common: { name: "Multiroom streaming enabled", type: "boolean", role: "indicator", read: true, write: false },
     create: { kind: "always" },
     read: { field: "distribution_enable" },
     fromStatus: bool,

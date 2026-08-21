@@ -85,7 +85,7 @@ describe("mapYxcToObjects", () => {
     const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: [] });
     const ids = objs.map(o => o.id);
     expect(ids).toContain("multiroom");
-    expect(ids).toContain("multiroom.group.streamingActive");
+    expect(ids).toContain("multiroom.group.streamingEnabled");
     expect(ids).toContain("multiroom.partyEnable");
   });
 
@@ -162,7 +162,7 @@ describe("mapYxcToObjects", () => {
     const ids = objs.map(o => o.id);
     expect(ids).toContain("advanced.maxVolume");
     expect(ids).toContain("inputText");
-    expect(ids).toContain("multiroom.group.streamingActive");
+    expect(ids).toContain("multiroom.group.streamingEnabled");
   });
 
   test("creates intermediate channel objects for dotted amp catalog state IDs", () => {

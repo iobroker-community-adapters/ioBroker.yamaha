@@ -172,6 +172,8 @@ export const RENAMED_STATE_IDS = [
   // v1.0.0 multiroom regroup: the MusicCast-Link states moved into their own
   // multiroom.group folder, so the tree itself tells device-group from all-zones scope.
   "multiroom.distributionEnable",
+  // Short-lived v1.0.0 pre-cut id — mislabeled "active", the field means "enabled for use".
+  "multiroom.group.streamingActive",
   "multiroom.role",
   "multiroom.groupId",
   "multiroom.groupName",

@@ -91,7 +91,7 @@ describe("parseYxcStatus", () => {
     const u = parseYxcStatus(status, "main");
     expect(u).toContainEqual({ id: "advanced.maxVolume", value: 161 });
     expect(u).toContainEqual({ id: "inputText", value: "HDMI-Laptop" });
-    expect(u).toContainEqual({ id: "multiroom.group.streamingActive", value: true });
+    expect(u).toContainEqual({ id: "multiroom.group.streamingEnabled", value: true });
     expect(u).toContainEqual({ id: "multiroom.partyEnable", value: false });
   });
 
