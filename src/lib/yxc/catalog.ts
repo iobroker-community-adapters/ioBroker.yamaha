@@ -301,16 +301,18 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     read: { field: "input_text" },
     fromStatus: str,
   },
+  // The two device-global entries: their id starts with "multiroom." (no zone prefix ever
+  // applies), so the mapper and the status parser emit them for the main zone only.
   {
-    state: "multiroom.distributionEnable",
-    common: { name: "Distribution active", type: "boolean", role: "indicator", read: true, write: false },
+    state: "multiroom.group.streamingActive",
+    common: { name: "Streaming active", type: "boolean", role: "indicator", read: true, write: false },
     create: { kind: "always" },
     read: { field: "distribution_enable" },
     fromStatus: bool,
   },
   {
     state: "multiroom.partyEnable",
-    common: { name: "Party", type: "boolean", role: "switch", read: true, write: true },
+    common: { name: "Party mode (all zones)", type: "boolean", role: "switch", read: true, write: true },
     create: { kind: "always" },
     read: { field: "party_enable" },
     fromStatus: bool,

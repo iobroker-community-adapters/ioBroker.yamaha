@@ -353,14 +353,31 @@ describe("YxcDeviceController", () => {
     expect(s.client.calls).toContainEqual({ method: "setEqualizer", args: [7, 2, 3, "main"] });
   });
 
+  test("a zoned equalizer band write finds the cached bands under the multiroom zone prefix", async () => {
+    const features = {
+      zone: [
+        { id: "main", func_list: ["power", "equalizer"] },
+        { id: "zone2", func_list: ["power", "equalizer"] },
+      ],
+    };
+    const status = { power: "on", equalizer: { mode: "manual", low: 1, mid: 2, high: 3 } };
+    const s = setup(features, status);
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.multiroom.zone2.sound.equalizerMid", false, -4);
+    await flush();
+    // mid from the write, low/high from the cached zone2 status — not the 0/0 fallback.
+    expect(s.client.calls).toContainEqual({ method: "setEqualizer", args: [1, -4, 3, "zone2"] });
+  });
+
   test("seeds the multiroom channel from getDistributionInfo when the device reports distribution", async () => {
     const features = { zone: [{ id: "main", func_list: ["power"] }], distribution: { version: 2 } };
     const s = setup(features, ysp);
     await s.controller.start();
-    expect(s.objects).toContain("living.multiroom.role");
+    expect(s.objects).toContain("living.multiroom.group.role");
     expect(s.client.calls).toContainEqual({ method: "getDistributionInfo", args: [] });
-    expect(s.acks).toContainEqual({ id: "living.multiroom.role", value: "server" });
-    expect(s.acks).toContainEqual({ id: "living.multiroom.clientList", value: '["1.2.3.5"]' });
+    expect(s.acks).toContainEqual({ id: "living.multiroom.group.role", value: "server" });
+    expect(s.acks).toContainEqual({ id: "living.multiroom.group.linkedDevices", value: '["1.2.3.5"]' });
   });
 
   test("leaving a group as the server stops distribution", async () => {
@@ -368,7 +385,7 @@ describe("YxcDeviceController", () => {
     const s = setup(features, ysp);
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleStateChange("living.multiroom.leaveGroup", false, true);
+    s.controller.handleStateChange("living.multiroom.group.leave", false, true);
     await flush();
     expect(s.client.calls).toContainEqual({ method: "stopDistribution", args: [] });
   });
@@ -379,7 +396,7 @@ describe("YxcDeviceController", () => {
     s.client.distRole = "client";
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleStateChange("living.multiroom.leaveGroup", false, true);
+    s.controller.handleStateChange("living.multiroom.group.leave", false, true);
     await flush();
     expect(s.client.calls).toContainEqual({ method: "setClientInfo", args: [{ group_id: "", zone: ["main"] }] });
   });
@@ -390,7 +407,7 @@ describe("YxcDeviceController", () => {
     const s = setup(features, ysp, { "1.2.3.9": clientDevice });
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleStateChange("living.multiroom.linkClient", false, "1.2.3.9");
+    s.controller.handleStateChange("living.multiroom.group.linkDevice", false, "1.2.3.9");
     await flush();
     const join = clientDevice.calls.find(c => c.method === "setClientInfo");
     const add = s.client.calls.find(c => c.method === "setServerInfo");
@@ -407,7 +424,7 @@ describe("YxcDeviceController", () => {
     const s = setup(features, ysp);
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleStateChange("living.multiroom.linkClient", false, "9.9.9.9");
+    s.controller.handleStateChange("living.multiroom.group.linkDevice", false, "9.9.9.9");
     await flush();
     expect(s.client.calls).toEqual([]);
   });

@@ -196,7 +196,7 @@ const XML_AMP_CATALOG = [
   },
   {
     state: "multiroom.party",
-    common: { name: "Party mode", type: "boolean", role: "switch", read: true, write: true },
+    common: { name: "Party mode (all zones)", type: "boolean", role: "switch", read: true, write: true },
     statusField: "party",
     mainOnly: true,
     writeZone: "System",

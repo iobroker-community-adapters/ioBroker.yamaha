@@ -95,6 +95,11 @@ export function parseYxcStatus(zoneStatus: unknown, zone: string): StateValue[] 
   const status = zoneStatus as Record<string, unknown>;
   const updates: StateValue[] = [];
   for (const entry of YXC_AMP_CATALOG) {
+    // Device-global entries (id under multiroom.) are emitted once, from the main status —
+    // a zone status carrying the same field must not produce a zone-prefixed copy.
+    if (zone !== "main" && entry.state.startsWith("multiroom.")) {
+      continue;
+    }
     const raw = readStatusField(status, entry.read);
     if (raw !== undefined) {
       updates.push({ id: `${prefix}${entry.state}`, value: entry.fromStatus(raw) });
@@ -160,19 +165,19 @@ export function parseYxcDistribution(info: unknown): StateValue[] {
   const d = info as Record<string, unknown>;
   const updates: StateValue[] = [];
   if (typeof d.role === "string") {
-    updates.push({ id: "multiroom.role", value: d.role });
+    updates.push({ id: "multiroom.group.role", value: d.role });
   }
   if (typeof d.group_id === "string") {
-    updates.push({ id: "multiroom.groupId", value: d.group_id });
+    updates.push({ id: "multiroom.group.id", value: d.group_id });
   }
   if (typeof d.group_name === "string") {
-    updates.push({ id: "multiroom.groupName", value: d.group_name });
+    updates.push({ id: "multiroom.group.name", value: d.group_name });
   }
   if (typeof d.server_zone === "string") {
-    updates.push({ id: "multiroom.serverZone", value: d.server_zone });
+    updates.push({ id: "multiroom.group.serverZone", value: d.server_zone });
   }
   if (Array.isArray(d.client_list)) {
-    updates.push({ id: "multiroom.clientList", value: JSON.stringify(d.client_list) });
+    updates.push({ id: "multiroom.group.linkedDevices", value: JSON.stringify(d.client_list) });
   }
   return updates;
 }

@@ -41,7 +41,7 @@ describe("mapYxcToObjects", () => {
     expect(objs.find(o => o.id === "sound.equalizerHigh")?.common.write).toBe(true);
   });
 
-  test("a device reporting a distribution block gets the read-only multiroom channel", () => {
+  test("a device reporting a distribution block gets the MusicCast group folder under multiroom", () => {
     const objs = mapYxcToObjects({
       zones: [{ id: "main", funcs: ["power"], inputs: [] }],
       media: [],
@@ -51,27 +51,32 @@ describe("mapYxcToObjects", () => {
     expect(ids).toEqual(
       expect.arrayContaining([
         "multiroom",
-        "multiroom.role",
-        "multiroom.groupId",
-        "multiroom.groupName",
-        "multiroom.serverZone",
-        "multiroom.clientList",
+        "multiroom.group",
+        "multiroom.group.role",
+        "multiroom.group.id",
+        "multiroom.group.name",
+        "multiroom.group.serverZone",
+        "multiroom.group.linkedDevices",
       ]),
     );
+    // The folder itself tells the scope: a group of linked devices, not zones.
+    const group = objs.find(o => o.id === "multiroom.group");
+    expect(group?.type).toBe("channel");
+    expect(group?.common.name).toBe("MusicCast group (linked devices)");
     // Group name is read-only (the library's setGroupName payload is unverified).
-    expect(objs.find(o => o.id === "multiroom.groupName")?.common.write).toBe(false);
+    expect(objs.find(o => o.id === "multiroom.group.name")?.common.write).toBe(false);
   });
 
-  test("a distribution device exposes the leave-group button and the link-client input", () => {
+  test("a distribution device exposes the leave button and the link-device input", () => {
     const objs = mapYxcToObjects({
       zones: [{ id: "main", funcs: ["power"], inputs: [] }],
       media: [],
       hasDistribution: true,
     });
-    const leave = objs.find(o => o.id === "multiroom.leaveGroup");
+    const leave = objs.find(o => o.id === "multiroom.group.leave");
     expect(leave?.common.role).toBe("button");
     expect(leave?.common.write).toBe(true);
-    const link = objs.find(o => o.id === "multiroom.linkClient");
+    const link = objs.find(o => o.id === "multiroom.group.linkDevice");
     expect(link?.common.write).toBe(true);
     expect(link?.common.read).toBe(false);
   });
@@ -80,8 +85,22 @@ describe("mapYxcToObjects", () => {
     const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: [] });
     const ids = objs.map(o => o.id);
     expect(ids).toContain("multiroom");
-    expect(ids).toContain("multiroom.distributionEnable");
+    expect(ids).toContain("multiroom.group.streamingActive");
     expect(ids).toContain("multiroom.partyEnable");
+  });
+
+  test("a zoned device never gets zone-prefixed copies of the device-global multiroom states", () => {
+    const objs = mapYxcToObjects({
+      zones: [
+        { id: "main", funcs: ["power"], inputs: [] },
+        { id: "zone2", funcs: ["power"], inputs: [] },
+      ],
+      media: [],
+      hasDistribution: true,
+    });
+    const ids = objs.map(o => o.id);
+    expect(ids).toContain("multiroom.zone2.power");
+    expect(ids.filter(id => /^multiroom\.zone\d\.multiroom/.test(id))).toEqual([]);
   });
 
   test("the network player exposes repeat, shuffle, elapsed/total time and album art (F2 parity)", () => {
@@ -143,7 +162,7 @@ describe("mapYxcToObjects", () => {
     const ids = objs.map(o => o.id);
     expect(ids).toContain("advanced.maxVolume");
     expect(ids).toContain("inputText");
-    expect(ids).toContain("multiroom.distributionEnable");
+    expect(ids).toContain("multiroom.group.streamingActive");
   });
 
   test("creates intermediate channel objects for dotted amp catalog state IDs", () => {

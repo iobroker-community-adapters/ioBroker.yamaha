@@ -502,7 +502,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     subunit: "SYS",
     func: "PARTY",
     state: "multiroom.party",
-    name: "Party mode",
+    name: "Party mode (all zones)",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
     role: "switch",
@@ -612,7 +612,7 @@ const SYS_FUNCS: FuncDef[] = [
   {
     func: "PARTYMUTE",
     state: "multiroom.partyMute",
-    name: "Party mute",
+    name: "Party mute (all zones)",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
     role: "media.mute",

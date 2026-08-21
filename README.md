@@ -52,7 +52,7 @@ Each receiver becomes one device node with themed groups — the same groups the
 - **Amplifier core** (always on) — power, volume, mute, input, sound program, sleep, plus the device info with model, firmware and connection.
 - **`player`** — one channel per playback source (Spotify, USB, server, net radio, CD, …) with playback state, artist, album, track, cover art and the transport buttons.
 - **`tuner`** — AM/FM and DAB radio including RDS texts and frequency.
-- **`multiroom`** — zones 2–4, Zone B, master power, party mode and MusicCast group control.
+- **`multiroom`** — zones 2–4, Zone B, the all-zones switches (master power, party mode) and the MusicCast device group in its own `multiroom.group` folder.
 - **`hdmi`** — the HDMI outputs and lip sync.
 - **`scene`** — the receiver's scene names and a scene recall.
 - **`sound`** — tone and sound processing: bass/treble, DSP modes, enhancer, equalizer, ….
@@ -89,6 +89,7 @@ On the first connect the adapter asks the receiver which functions it supports �
 - (krobipd) Instant updates: MusicCast push events and the live YNCA connection replace polling; connections heal themselves, and one protocol's hiccup reconnects just that protocol.
 - (krobipd) Auto-discovery sets up MusicCast devices by itself when the device list is empty, and the admin shows every receiver as a card with model, address and protocol indicators.
 - (krobipd) Whole datapoint groups such as playback sources, tuner, multiroom or scenes can be switched off in the admin — and are then not even queried from the device.
+- (krobipd) The multiroom folder tells the scope at a glance: switches that affect all zones say so in their name, and the MusicCast device group has its own `multiroom.group` folder.
 - (krobipd) Upgrading from 0.5.x shows a one-time notice explaining the new object tree before the update installs.
 
 ### 0.5.4 (2024-06-14) — stable

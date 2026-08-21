@@ -91,8 +91,15 @@ describe("parseYxcStatus", () => {
     const u = parseYxcStatus(status, "main");
     expect(u).toContainEqual({ id: "advanced.maxVolume", value: 161 });
     expect(u).toContainEqual({ id: "inputText", value: "HDMI-Laptop" });
-    expect(u).toContainEqual({ id: "multiroom.distributionEnable", value: true });
+    expect(u).toContainEqual({ id: "multiroom.group.streamingActive", value: true });
     expect(u).toContainEqual({ id: "multiroom.partyEnable", value: false });
+  });
+
+  test("a zone status never yields zone-prefixed copies of the device-global multiroom states", () => {
+    const status = { volume: 80, distribution_enable: true, party_enable: false };
+    const ids = parseYxcStatus(status, "zone2").map(u => u.id);
+    expect(ids).toContain("multiroom.zone2.volume");
+    expect(ids.filter(id => id.includes(".multiroom."))).toEqual([]);
   });
 
   test("reads the remaining amp fields including the nested equalizer", () => {
@@ -164,11 +171,11 @@ describe("parseYxcDistribution", () => {
         client_list: ["1.2.3.5"],
       }),
     ).toEqual([
-      { id: "multiroom.role", value: "server" },
-      { id: "multiroom.groupId", value: "abc" },
-      { id: "multiroom.groupName", value: "Kitchen" },
-      { id: "multiroom.serverZone", value: "main" },
-      { id: "multiroom.clientList", value: '["1.2.3.5"]' },
+      { id: "multiroom.group.role", value: "server" },
+      { id: "multiroom.group.id", value: "abc" },
+      { id: "multiroom.group.name", value: "Kitchen" },
+      { id: "multiroom.group.serverZone", value: "main" },
+      { id: "multiroom.group.linkedDevices", value: '["1.2.3.5"]' },
     ]);
   });
 

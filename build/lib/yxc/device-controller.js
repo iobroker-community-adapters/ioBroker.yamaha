@@ -124,11 +124,11 @@ class YxcDeviceController {
       return;
     }
     const stateId = fullStateId.slice(prefix.length);
-    if (stateId === "multiroom.leaveGroup") {
+    if (stateId === "multiroom.group.leave") {
       void this.leaveGroup();
       return;
     }
-    if (stateId === "multiroom.linkClient") {
+    if (stateId === "multiroom.group.linkDevice") {
       void this.linkClient(String(value));
       return;
     }
@@ -243,7 +243,7 @@ class YxcDeviceController {
       const info = await this.deps.client.getDistributionInfo();
       for (const update of (0, import_command_mapper.parseYxcDistribution)(info)) {
         this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
-        if (update.id === "multiroom.role") {
+        if (update.id === "multiroom.group.role") {
           this.lastDistRole = String(update.value);
         }
       }
@@ -320,7 +320,7 @@ class YxcDeviceController {
    */
   cacheEqualizer(zone, updates) {
     var _a, _b, _c, _d;
-    const prefix = zone === "main" ? "" : `${zone}.`;
+    const prefix = zone === "main" ? "" : `multiroom.${zone}.`;
     const band = (b) => {
       const u = updates.find((x) => x.id === `${prefix}sound.equalizer${b}`);
       return typeof (u == null ? void 0 : u.value) === "number" ? u.value : void 0;

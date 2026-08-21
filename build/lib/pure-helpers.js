@@ -104,7 +104,17 @@ const RENAMED_STATE_IDS = [
   "partyMute",
   "distributionEnable",
   "partyEnable",
-  "remoteCode"
+  "remoteCode",
+  // v1.0.0 multiroom regroup: the MusicCast-Link states moved into their own
+  // multiroom.group folder, so the tree itself tells device-group from all-zones scope.
+  "multiroom.distributionEnable",
+  "multiroom.role",
+  "multiroom.groupId",
+  "multiroom.groupName",
+  "multiroom.serverZone",
+  "multiroom.clientList",
+  "multiroom.linkClient",
+  "multiroom.leaveGroup"
 ];
 const RENAMED_CHANNELS = [
   // pre-0.11 system folder
@@ -114,6 +124,11 @@ const RENAMED_CHANNELS = [
   "zone3",
   "zone4",
   "zoneB",
+  // v1.0.0: stray per-zone copies of the device-global YXC states (the zone loop used to
+  // prefix them too, yielding multiroom.zoneN.multiroom.* junk) are swept away.
+  "multiroom.zone2.multiroom",
+  "multiroom.zone3.multiroom",
+  "multiroom.zone4.multiroom",
   // Regrouping: media sources moved under player/, DAB under tuner/, dist → multiroom. The old
   // flat channels (and their whole subtree) are deleted so the new grouped ones do not sit
   // beside orphaned copies on an upgraded instance.

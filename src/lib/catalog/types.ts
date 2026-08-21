@@ -77,6 +77,8 @@ export const CHANNEL_NAMES: Record<string, string> = {
   // Media player container + multiroom
   player: "Media player",
   multiroom: "Multiroom",
+  // The MusicCast-Link folder under multiroom — a group of linked DEVICES, not zones.
+  group: "MusicCast group (linked devices)",
   // Media player sources
   netRadio: "Net radio",
   server: "Media server",

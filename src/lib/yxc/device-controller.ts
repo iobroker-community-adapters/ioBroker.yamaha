@@ -164,11 +164,11 @@ export class YxcDeviceController implements ConnectionHandle {
     }
     const stateId = fullStateId.slice(prefix.length);
     // Multiroom writes need controller state (the cached role), so they bypass the pure command map.
-    if (stateId === "multiroom.leaveGroup") {
+    if (stateId === "multiroom.group.leave") {
       void this.leaveGroup();
       return;
     }
-    if (stateId === "multiroom.linkClient") {
+    if (stateId === "multiroom.group.linkDevice") {
       void this.linkClient(String(value));
       return;
     }
@@ -294,7 +294,7 @@ export class YxcDeviceController implements ConnectionHandle {
       const info = await this.deps.client.getDistributionInfo();
       for (const update of parseYxcDistribution(info)) {
         this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
-        if (update.id === "multiroom.role") {
+        if (update.id === "multiroom.group.role") {
           this.lastDistRole = String(update.value);
         }
       }
@@ -375,7 +375,9 @@ export class YxcDeviceController implements ConnectionHandle {
    * @param updates the parsed status updates for that zone
    */
   private cacheEqualizer(zone: string, updates: StateValue[]): void {
-    const prefix = zone === "main" ? "" : `${zone}.`;
+    // Must mirror the status parser's zone prefix (zones live under multiroom.) or the
+    // lookup misses every zoned band and the cache never fills for zone 2-4.
+    const prefix = zone === "main" ? "" : `multiroom.${zone}.`;
     const band = (b: string): number | undefined => {
       const u = updates.find(x => x.id === `${prefix}sound.equalizer${b}`);
       return typeof u?.value === "number" ? u.value : undefined;

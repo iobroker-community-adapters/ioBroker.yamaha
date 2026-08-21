@@ -107,6 +107,10 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
     }
     const hasInput = zone.inputs.length > 0;
     const entries = YXC_AMP_CATALOG.filter(entry => {
+      // Device-global entries (id under multiroom.) exist once — never as a per-zone copy.
+      if (zoneDef.id !== "main" && entry.state.startsWith("multiroom.")) {
+        return false;
+      }
       if (entry.create.kind === "always") {
         return true;
       }
@@ -205,27 +209,33 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
       channels.add("multiroom");
       objects.push({ id: "multiroom", type: "channel", common: { name: "Multiroom" } });
     }
+    // The MusicCast-Link states get their own folder so the tree itself tells the scope:
+    // directly under multiroom = all zones of this device, group = linked devices.
+    if (!channels.has("multiroom.group")) {
+      channels.add("multiroom.group");
+      objects.push({ id: "multiroom.group", type: "channel", common: { name: CHANNEL_NAMES.group } });
+    }
     const distState = (id: string, name: string, role: string): void => {
       objects.push({
-        id: `multiroom.${id}`,
+        id: `multiroom.group.${id}`,
         type: "state",
         common: { name, type: "string", role, read: true, write: false },
       });
     };
-    distState("role", "Role", "state");
-    distState("groupId", "Group ID", "text");
-    distState("groupName", "Group name", "text");
-    distState("serverZone", "Server zone", "text");
-    distState("clientList", "Client list", "json");
+    distState("role", "Role (server/client)", "state");
+    distState("id", "Group ID", "text");
+    distState("name", "Group name", "text");
+    distState("serverZone", "Server zone (feeds the group)", "text");
+    distState("linkedDevices", "Linked devices", "json");
     objects.push({
-      id: "multiroom.leaveGroup",
+      id: "multiroom.group.leave",
       type: "state",
       common: { name: "Leave group", type: "boolean", role: "button", read: false, write: true },
     });
     objects.push({
-      id: "multiroom.linkClient",
+      id: "multiroom.group.linkDevice",
       type: "state",
-      common: { name: "Link a client (its IP)", type: "string", role: "text", read: false, write: true },
+      common: { name: "Link a device (its IP)", type: "string", role: "text", read: false, write: true },
     });
   }
   return objects;

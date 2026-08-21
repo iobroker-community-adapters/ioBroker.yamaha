@@ -316,7 +316,7 @@ describe("renamedObjectIds", () => {
       "yamaha.0.living.player.spotify.playback", // new grouped id → kept
       "yamaha.0.living.tuner.dab.band", // new grouped dab → kept
       "yamaha.0.living.tuner.band", // tuner core, unchanged → kept
-      "yamaha.0.living.multiroom.role", // new multiroom → kept
+      "yamaha.0.living.multiroom.group.role", // new multiroom group folder → kept
       "yamaha.0.living.power", // amp core → kept
     ];
     const result = renamedObjectIds(existing, new Set(["living"]), "yamaha.0");
@@ -331,7 +331,7 @@ describe("renamedObjectIds", () => {
     expect(result).not.toContain("yamaha.0.living.player.spotify.playback");
     expect(result).not.toContain("yamaha.0.living.tuner.dab.band");
     expect(result).not.toContain("yamaha.0.living.tuner.band");
-    expect(result).not.toContain("yamaha.0.living.multiroom.role");
+    expect(result).not.toContain("yamaha.0.living.multiroom.group.role");
     expect(result).not.toContain("yamaha.0.living.power");
   });
 
@@ -369,5 +369,54 @@ describe("renamedObjectIds", () => {
     expect(result).not.toContain("yamaha.0.living.advanced.speakers.pattern");
     expect(result).not.toContain("yamaha.0.living.multiroom.zone2.sound.enhancer");
     expect(result).not.toContain("yamaha.0.living.multiroom.zone2.volume");
+  });
+
+  test("moves the MusicCast-Link states into multiroom.group and sweeps the zone-junk copies", () => {
+    const existing = [
+      // v1.0.0 pre-group ids → gone (moved into multiroom.group)
+      "yamaha.0.living.multiroom.role",
+      "yamaha.0.living.multiroom.groupId",
+      "yamaha.0.living.multiroom.groupName",
+      "yamaha.0.living.multiroom.serverZone",
+      "yamaha.0.living.multiroom.clientList",
+      "yamaha.0.living.multiroom.linkClient",
+      "yamaha.0.living.multiroom.leaveGroup",
+      "yamaha.0.living.multiroom.distributionEnable",
+      // stray per-zone copies of device-global states → gone (channel + states)
+      "yamaha.0.living.multiroom.zone2.multiroom",
+      "yamaha.0.living.multiroom.zone2.multiroom.party",
+      "yamaha.0.living.multiroom.zone2.multiroom.distributionEnable",
+      // the new ids and the untouched all-zones states → kept
+      "yamaha.0.living.multiroom.group.role",
+      "yamaha.0.living.multiroom.group.linkedDevices",
+      "yamaha.0.living.multiroom.party",
+      "yamaha.0.living.multiroom.masterPower",
+      "yamaha.0.living.multiroom.zone2.power",
+    ];
+    const result = renamedObjectIds(existing, new Set(["living"]), "yamaha.0");
+    expect(result).toEqual(
+      expect.arrayContaining([
+        "yamaha.0.living.multiroom.role",
+        "yamaha.0.living.multiroom.groupId",
+        "yamaha.0.living.multiroom.groupName",
+        "yamaha.0.living.multiroom.serverZone",
+        "yamaha.0.living.multiroom.clientList",
+        "yamaha.0.living.multiroom.linkClient",
+        "yamaha.0.living.multiroom.leaveGroup",
+        "yamaha.0.living.multiroom.distributionEnable",
+        "yamaha.0.living.multiroom.zone2.multiroom",
+        "yamaha.0.living.multiroom.zone2.multiroom.party",
+        "yamaha.0.living.multiroom.zone2.multiroom.distributionEnable",
+      ]),
+    );
+    expect(result).not.toContain("yamaha.0.living.multiroom.group.role");
+    expect(result).not.toContain("yamaha.0.living.multiroom.group.linkedDevices");
+    expect(result).not.toContain("yamaha.0.living.multiroom.party");
+    expect(result).not.toContain("yamaha.0.living.multiroom.masterPower");
+    expect(result).not.toContain("yamaha.0.living.multiroom.zone2.power");
+    // children before their channel, so the deletes cascade cleanly
+    expect(result.indexOf("yamaha.0.living.multiroom.zone2.multiroom.party")).toBeLessThan(
+      result.indexOf("yamaha.0.living.multiroom.zone2.multiroom"),
+    );
   });
 });

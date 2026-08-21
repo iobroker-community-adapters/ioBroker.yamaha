@@ -79,6 +79,9 @@ function parseYxcStatus(zoneStatus, zone) {
   const status = zoneStatus;
   const updates = [];
   for (const entry of import_catalog.YXC_AMP_CATALOG) {
+    if (zone !== "main" && entry.state.startsWith("multiroom.")) {
+      continue;
+    }
     const raw = readStatusField(status, entry.read);
     if (raw !== void 0) {
       updates.push({ id: `${prefix}${entry.state}`, value: entry.fromStatus(raw) });
@@ -127,19 +130,19 @@ function parseYxcDistribution(info) {
   const d = info;
   const updates = [];
   if (typeof d.role === "string") {
-    updates.push({ id: "multiroom.role", value: d.role });
+    updates.push({ id: "multiroom.group.role", value: d.role });
   }
   if (typeof d.group_id === "string") {
-    updates.push({ id: "multiroom.groupId", value: d.group_id });
+    updates.push({ id: "multiroom.group.id", value: d.group_id });
   }
   if (typeof d.group_name === "string") {
-    updates.push({ id: "multiroom.groupName", value: d.group_name });
+    updates.push({ id: "multiroom.group.name", value: d.group_name });
   }
   if (typeof d.server_zone === "string") {
-    updates.push({ id: "multiroom.serverZone", value: d.server_zone });
+    updates.push({ id: "multiroom.group.serverZone", value: d.server_zone });
   }
   if (Array.isArray(d.client_list)) {
-    updates.push({ id: "multiroom.clientList", value: JSON.stringify(d.client_list) });
+    updates.push({ id: "multiroom.group.linkedDevices", value: JSON.stringify(d.client_list) });
   }
   return updates;
 }

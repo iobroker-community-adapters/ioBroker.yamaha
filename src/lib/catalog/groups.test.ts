@@ -26,7 +26,7 @@ describe("groupOf", () => {
   });
 
   it("maps multiroom, hdmi and scene", () => {
-    expect(groupOf("multiroom.groupName")).toBe("multiroom");
+    expect(groupOf("multiroom.group.name")).toBe("multiroom");
     expect(groupOf("hdmi.out1")).toBe("hdmi");
     expect(groupOf("scene.recall")).toBe("scene");
   });
