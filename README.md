@@ -120,9 +120,6 @@ On the first connect the adapter asks the receiver which functions it supports â
 - (Apollon77) Fix crash cases reported by Sentry
 - (Apollon77) fix type of pureDirect
 
-
-
-
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 
 ## History
