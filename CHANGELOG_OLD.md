@@ -1,4 +1,9 @@
 # Older changes
+## 0.5.1 (2022-03-29)
+
+- (Apollon77) Fix crash cases reported by Sentry
+- (Apollon77) fix type of pureDirect
+
 ## 0.5.0 (2022-03-08)
 
 - IMPORTANT: js-controller 2.0 is needed at least

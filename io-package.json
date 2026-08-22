@@ -1,9 +1,9 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "news": {
-      "NEXT": {
+      "1.1.0": {
         "en": "A device carried over from the old adapter is no longer called by its IP — the object folder and the admin card now show the name the device reports, or its model.",
         "de": "Ein aus dem alten Adapter übernommenes Gerät heißt nicht mehr nach seiner IP — Objektordner und Admin-Karte zeigen jetzt den Namen, den das Gerät meldet, oder sein Modell.",
         "ru": "Устройство, перенесённое из старого адаптера, больше не называется по IP — папка объекта и карточка в админке показывают имя, которое сообщает устройство, или его модель.",

@@ -86,7 +86,7 @@ On the first connect the adapter asks the receiver which functions it supports â
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 1.1.0 (2026-08-22)
 
 - (krobipd) Fixed: a device carried over from the old adapter is no longer called by its IP â€” the object folder and the admin card now show the name the device reports, or its model.
 - (krobipd) Improved: a device that has not reported a model yet already carries its device-class symbol instead of none.
@@ -114,11 +114,6 @@ On the first connect the adapter asks the receiver which functions it supports â
 ### 0.5.2 (2022-04-23)
 
 - (Apollon77) Fix crash cases reported by Sentry
-
-### 0.5.1 (2022-03-29)
-
-- (Apollon77) Fix crash cases reported by Sentry
-- (Apollon77) fix type of pureDirect
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 
