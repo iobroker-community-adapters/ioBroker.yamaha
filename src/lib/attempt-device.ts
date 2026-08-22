@@ -46,6 +46,8 @@ export interface AttemptDeps {
   xmlPollIntervalMs: number;
   /** Report the transports that are live after every change — the id-safe names ("ynca"/"yxc"/"xml"). */
   onTransports?(names: string[]): void;
+  /** Report the name the device carries for itself (MusicCast), for the device object's label. */
+  onDeviceName?(name: string): void;
   /** IPs of all configured devices, so a MusicCast group can resolve a client device by IP. */
   knownDeviceIps: Set<string>;
   /** Dedup for the "no reachable transport" warning — see {@link ConnectDeps.reachability}. */
@@ -206,6 +208,7 @@ export function attemptDevice(device: DeviceRecord, deps: AttemptDeps): Promise<
         scheduleKeepalive: deps.scheduleKeepalive,
         upsertObject: yxc.interceptUpsert,
         setStateAck: yxc.interceptSetStateAck,
+        reportDeviceName: deps.onDeviceName,
         log,
       }),
     );

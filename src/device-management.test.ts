@@ -77,14 +77,18 @@ describe("buildDeviceForm", () => {
 // ---------------------------------------------------------------------------
 
 /** An in-memory `system.adapter.yamaha.0` config object plus the live info states. */
-function mockAdapter(devices: unknown = [], states: Record<string, unknown> = {}): any {
+function mockAdapter(
+  devices: unknown = [],
+  states: Record<string, unknown> = {},
+  objects: Record<string, unknown> = {},
+): any {
   let stored: unknown = devices;
   return {
     namespace: "yamaha.0",
     log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
     on: vi.fn(),
     getForeignObjectAsync: vi.fn(async (id: string) =>
-      id === "system.adapter.yamaha.0" ? { native: { devices: stored } } : null,
+      id === "system.adapter.yamaha.0" ? { native: { devices: stored } } : (objects[id] ?? null),
     ),
     extendForeignObjectAsync: vi.fn(async (_id: string, patch: { native: { devices: unknown } }) => {
       stored = patch.native.devices;
@@ -137,14 +141,22 @@ describe("YamahaDeviceManagement", () => {
   let adapter: ReturnType<typeof mockAdapter>;
   let dm: YamahaDeviceManagement;
 
-  function make(devices: unknown = [], states: Record<string, unknown> = {}): DmInternals {
-    adapter = mockAdapter(devices, states);
+  function make(
+    devices: unknown = [],
+    states: Record<string, unknown> = {},
+    objects: Record<string, unknown> = {},
+  ): DmInternals {
+    adapter = mockAdapter(devices, states, objects);
     dm = new YamahaDeviceManagement(adapter);
     return dm as unknown as DmInternals;
   }
 
-  async function cards(devices: unknown, states: Record<string, unknown> = {}): Promise<Card[]> {
-    const i = make(devices, states);
+  async function cards(
+    devices: unknown,
+    states: Record<string, unknown> = {},
+    objects: Record<string, unknown> = {},
+  ): Promise<Card[]> {
+    const i = make(devices, states, objects);
     const out: Card[] = [];
     await i.loadDevices({ addDevice: (c: unknown) => out.push(c as Card) });
     return out;
@@ -383,4 +395,23 @@ describe("YamahaDeviceManagement", () => {
       expect(writeDiscovered).not.toHaveBeenCalled();
     });
   });
+
+  it("titles the card with the device object's name, not the ip in the table", async () => {
+    // The upgrade from the previous adapter puts the receiver's ip in the table; the
+    // object carries the readable name the adapter learned from the device.
+    const [card] = await cards(
+      [{ name: "192.168.178.25", ip: "192.168.178.25" }],
+      {},
+      { "yamaha.0.192_168_178_25": { common: { name: "Wohnzimmer" } } },
+    );
+    expect(card.name).toBe("Wohnzimmer");
+    // The table entry itself stays put — the object id is derived from it.
+    expect(adapter._stored()).toEqual([{ name: "192.168.178.25", ip: "192.168.178.25" }]);
+  });
+
+  it("keeps the table name when the object carries nothing better", async () => {
+    const [card] = await cards([living]);
+    expect(card.name).toBe("Living room");
+  });
+
 });

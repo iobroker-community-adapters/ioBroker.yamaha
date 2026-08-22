@@ -1,6 +1,9 @@
 import {
+  isUsefulDeviceName,
+  LABEL_RANK,
   legacyDeviceRow,
   mergeDiscovered,
+  nextDeviceLabel,
   parseDevices,
   renamedObjectIds,
   sanitizeId,
@@ -437,5 +440,66 @@ describe("mergeDiscovered id collisions among the remembered devices", () => {
 
   it("never lets a remembered device take the adapter's own info branch", () => {
     expect(mergeDiscovered([{ id: "info", ip: "192.168.1.20" }], [])).toEqual([]);
+  });
+});
+
+describe("isUsefulDeviceName", () => {
+  it("accepts a name a user gave the device", () => {
+    expect(isUsefulDeviceName("Wohnzimmer")).toBe(true);
+  });
+
+  it("rejects the zone names a receiver ships with", () => {
+    for (const generic of ["Main", "Main Zone", "main zone", "Zone 1", "ZONE1"]) {
+      expect(isUsefulDeviceName(generic)).toBe(false);
+    }
+  });
+
+  it("rejects nothing at all", () => {
+    expect(isUsefulDeviceName("")).toBe(false);
+    expect(isUsefulDeviceName("   ")).toBe(false);
+    expect(isUsefulDeviceName(undefined)).toBe(false);
+  });
+});
+
+describe("nextDeviceLabel", () => {
+  const id = "192_168_178_25";
+
+  it("replaces the ip an upgraded instance carries as the device name", () => {
+    // The whole point: after the migration the device is called by its ip.
+    expect(nextDeviceLabel(id, id, "RX-V481", LABEL_RANK.model)).toBe("RX-V481");
+  });
+
+  it("names a device that has no name object yet", () => {
+    expect(nextDeviceLabel(undefined, id, "RX-V481", LABEL_RANK.model)).toBe("RX-V481");
+  });
+
+  it("leaves a name the user typed alone", () => {
+    expect(nextDeviceLabel("Wohnzimmer AVR", id, "RX-V481", LABEL_RANK.model)).toBeUndefined();
+  });
+
+  it("leaves the user's own ip spelling alone — it is not our placeholder", () => {
+    // Our placeholder is the id (underscores); "192.168.178.25" with dots was typed.
+    expect(nextDeviceLabel("192.168.178.25", id, "RX-V481", LABEL_RANK.model)).toBeUndefined();
+  });
+
+  it("upgrades its own model name to the name the device reports", () => {
+    expect(nextDeviceLabel("RX-V481", id, "Wohnzimmer", LABEL_RANK.deviceName, "RX-V481", LABEL_RANK.model)).toBe(
+      "Wohnzimmer",
+    );
+  });
+
+  it("does not fall back from the device name to the model", () => {
+    expect(
+      nextDeviceLabel("Wohnzimmer", id, "RX-V481", LABEL_RANK.model, "Wohnzimmer", LABEL_RANK.deviceName),
+    ).toBeUndefined();
+  });
+
+  it("writes nothing when the name is already what we would write", () => {
+    expect(nextDeviceLabel("RX-V481", id, "RX-V481", LABEL_RANK.model, "RX-V481", LABEL_RANK.model)).toBeUndefined();
+  });
+
+  it("ignores a useless candidate", () => {
+    expect(nextDeviceLabel(id, id, "Main Zone", LABEL_RANK.deviceName)).toBeUndefined();
+    expect(nextDeviceLabel(id, id, "", LABEL_RANK.deviceName)).toBeUndefined();
   });
 });

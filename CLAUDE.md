@@ -74,7 +74,18 @@ aus der Vor-Gruppierung (`pure-helpers.ts` `RENAMED_CHANNELS`/`renamedObjectIds`
 (Präfix-Matrix AV-Receiver/Stereo/Speaker/Soundbar/CD, unbekannt→AV-Receiver) und liefert eigene
 Inline-SVG-Silhouetten (KEINE Yamaha-Marke); gesetzt am Device-Objekt über den zentralen
 `setStateAck`-Hook in `main.ts` (jeder `info.model`-Write, Änderungs-Cache) und auf der
-Geräte-Karte (`device-management.ts` liest das Modell in `loadDevices`). Das Adapter-Logo
+Geräte-Karte (`device-management.ts` liest das Modell in `loadDevices`). `ensureDeviceHeader`
+sät die Standard-Silhouette schon beim Anlegen — aber nur wenn noch KEINE gesetzt ist, sonst
+fiele eine Soundbar bei jedem Start bis zum ersten Modell-Report auf den Receiver zurück.
+**Anzeigename am Device-Objekt** (`updateDeviceLabel` + `pure-helpers.nextDeviceLabel`): der
+Migrationspfad taufte das Gerät auf seine IP (der Alt-Adapter kannte nichts anderes), und aus
+dem Namen entsteht die Objekt-ID — die bleibt für immer, sonst löscht `staleObjects` den ganzen
+Baum samt Historie/VIS-Bindungen. Deshalb wird NUR `common.name` nachgezogen: MusicCast-Zonenname
+(`yxc/device-controller.zoneNameFrom` aus `system/getNameText`, generische Zonennamen gefiltert)
+schlägt Modell. Überschrieben wird ausschließlich der eigene Platzhalter (= die ID) oder der zuletzt
+selbst geschriebene Name — ein User-Name bleibt, deshalb dort bewusst OHNE `preserve`, die
+Vorbedingung prüft `nextDeviceLabel`. Die Geräte-Karte titelt nach dem Objektnamen, nicht nach dem
+Tabelleneintrag (der bleibt unangetastet, er bildet die ID). Das Adapter-Logo
 `admin/yamaha.svg` behält das etablierte Kreis-Stimmgabel-Motiv (krobi-Entscheidung — Ersatzmotiv
 abgelehnt) mit THEME-FESTEN Farben: dunkle Striche als Basis, helle via Medien-Abfrage im SVG —
 nie `currentColor` (rendert als `<img>` schwarz, unsichtbar im Dunkel-Modus; der Alt-Fehler).

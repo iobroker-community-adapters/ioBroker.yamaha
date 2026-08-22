@@ -87,7 +87,19 @@ export class YamahaDeviceManagement extends DeviceManagement {
     for (const card of await this.cards()) {
       // The reported model picks the device-class silhouette shown on the card.
       const model = await this.adapter.getForeignStateAsync(`${this.adapter.namespace}.${card.id}.info.model`);
-      context.addDevice(this.toDeviceInfo(card, typeof model?.val === "string" ? model.val : undefined));
+      // The card title follows the device object's name, not the table entry. On an
+      // instance upgraded from the previous adapter the table entry is the receiver's
+      // ip — the object carries the readable name the adapter learned from the device.
+      // The table entry itself must stay put: the object id is derived from it, and
+      // changing that would move the whole tree.
+      const node = await this.adapter.getForeignObjectAsync(`${this.adapter.namespace}.${card.id}`);
+      const label = typeof node?.common?.name === "string" ? node.common.name : undefined;
+      context.addDevice(
+        this.toDeviceInfo(
+          label && label !== card.id ? { ...card, name: label } : card,
+          typeof model?.val === "string" ? model.val : undefined,
+        ),
+      );
     }
   }
 

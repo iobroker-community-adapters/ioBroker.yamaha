@@ -36,6 +36,33 @@ function modelNameFrom(deviceInfo: unknown): string | undefined {
   return typeof model === "string" && model.length > 0 ? model : undefined;
 }
 
+/**
+ * Extract the name a user gave this device from a getNameText response.
+ *
+ * MusicCast keeps it as the main zone's text — that is the name shown in the app and
+ * the one people recognise ("Wohnzimmer"). A device whose zone was never renamed
+ * answers with a generic zone name; the caller filters those out.
+ *
+ * @param nameText the getNameText response
+ * @returns the main zone's text, or undefined
+ */
+export function zoneNameFrom(nameText: unknown): string | undefined {
+  const zones = (nameText as { zone_list?: unknown } | null)?.zone_list;
+  if (!Array.isArray(zones)) {
+    return undefined;
+  }
+  for (const zone of zones) {
+    if (typeof zone !== "object" || zone === null) {
+      continue;
+    }
+    const { id, text } = zone as { id?: unknown; text?: unknown };
+    if (id === "main" && typeof text === "string" && text.trim().length > 0) {
+      return text.trim();
+    }
+  }
+  return undefined;
+}
+
 import type { YxcClientLike } from "./client-contract";
 
 // Re-exported so existing importers (the tests' fakes) keep resolving it from here.
@@ -55,6 +82,8 @@ export interface YxcControllerDeps {
   upsertObject(id: string, def: ObjectDef): Promise<void>;
   /** Write a state value with ack (device-originated). */
   setStateAck(id: string, value: boolean | number | string): void;
+  /** Report the name the device carries for itself, for the device object's label. */
+  reportDeviceName?(name: string): void;
   /** Adapter log. */
   log: ControllerLog;
 }
@@ -128,6 +157,18 @@ export class YxcDeviceController implements ConnectionHandle {
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getDeviceInfo failed (${errorMessage(e)})`);
+    }
+    // The name the user gave the device in the MusicCast app. Best-effort like the model
+    // above: an older device that does not answer getNameText simply keeps its label.
+    if (this.deps.reportDeviceName) {
+      try {
+        const name = zoneNameFrom(await this.deps.client.getNameText());
+        if (name) {
+          this.deps.reportDeviceName(name);
+        }
+      } catch (e) {
+        this.deps.log.debug(`${this.deviceId}: getNameText failed (${errorMessage(e)})`);
+      }
     }
     this.zones = capabilities.zones.map(zone => zone.id);
     for (const zone of this.zones) {

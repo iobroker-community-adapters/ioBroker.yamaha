@@ -332,3 +332,74 @@ export function legacyDeviceRow(config: Record<string, unknown>): { name: string
   const ip = raw.trim().replace(/:\d+$/, "");
   return ip ? { name: ip, ip } : undefined;
 }
+
+/**
+ * How trustworthy a display-name candidate is. A name the device carries for itself
+ * (the MusicCast zone name a user typed in the app) beats its model designation.
+ */
+export const LABEL_RANK = { model: 1, deviceName: 2 } as const;
+
+/** Rank of a display-name candidate — see {@link LABEL_RANK}. */
+export type LabelRank = (typeof LABEL_RANK)[keyof typeof LABEL_RANK];
+
+/**
+ * Zone names that say nothing about the device — a receiver ships with these and a
+ * user who never renamed the zone would end up with "Main Zone" as the device name.
+ */
+const GENERIC_ZONE_NAMES = new Set(["main", "main zone", "mainzone", "zone", "zone 1", "zone1"]);
+
+/**
+ * Is this candidate worth showing as a device name?
+ *
+ * @param candidate the reported name
+ * @returns true when it carries information about this particular device
+ */
+export function isUsefulDeviceName(candidate: string | undefined): boolean {
+  const trimmed = (candidate ?? "").trim();
+  return trimmed.length > 0 && !GENERIC_ZONE_NAMES.has(trimmed.toLowerCase());
+}
+
+/**
+ * The display name to write onto a device object, or undefined to leave it alone.
+ *
+ * An upgraded instance carries the IP as its device name: the previous adapter knew
+ * only an IP, so the migration had nothing else to call the device, and the object id
+ * — which must not change, every history and visualisation binding hangs off it —
+ * became that IP. This decides when the adapter may replace that placeholder with
+ * something a user recognises.
+ *
+ * Two things must never be overwritten: a name the user typed, and a better name by a
+ * weaker source. The adapter therefore only writes over its own placeholder (the id
+ * itself) or over what it wrote last, and only when the new candidate ranks at least
+ * as high as the one behind the current name.
+ *
+ * @param current the device object's present `common.name`
+ * @param deviceId the object id, which is also the placeholder name
+ * @param candidate the newly reported name
+ * @param rank how trustworthy the candidate is
+ * @param ownName the name this adapter wrote last for the device, if any
+ * @param ownRank the rank behind {@link ownName}
+ * @returns the name to write, or undefined when the current name stays
+ */
+export function nextDeviceLabel(
+  current: string | undefined,
+  deviceId: string,
+  candidate: string | undefined,
+  rank: LabelRank,
+  ownName?: string,
+  ownRank?: LabelRank,
+): string | undefined {
+  const wanted = (candidate ?? "").trim();
+  if (!isUsefulDeviceName(wanted) || wanted === current) {
+    return undefined;
+  }
+  const isPlaceholder = current === undefined || current === deviceId;
+  const isOurs = ownName !== undefined && current === ownName;
+  if (!isPlaceholder && !isOurs) {
+    return undefined; // the user named this device — theirs wins
+  }
+  if (isOurs && ownRank !== undefined && rank < ownRank) {
+    return undefined; // do not fall back from a device name to its model
+  }
+  return wanted;
+}

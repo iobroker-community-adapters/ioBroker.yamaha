@@ -8,8 +8,11 @@ import { searchInterfaces } from "./lib/network-interfaces";
 import { isGroupEnabled } from "./lib/catalog/groups";
 import { iconForModel } from "./lib/device-type";
 import {
+  LABEL_RANK,
+  type LabelRank,
   legacyDeviceRow,
   mergeDiscovered,
+  nextDeviceLabel,
   parseDevices,
   renamedObjectIds,
   staleObjects,
@@ -220,11 +223,27 @@ export class Yamaha extends utils.Adapter {
     // device object itself (as govee does), fed by the per-device connection state.
     // extendObject with preserve:name so an upgrade adds the symbol without overwriting
     // a name the user changed.
+    // A device that has not reported its model yet would sit in the tree without any
+    // symbol — an upgraded instance shows that on every start before the first report,
+    // and a device that never answers shows it for good. Seed the default silhouette,
+    // but only when there is none: overwriting would flip a soundbar back to the
+    // receiver default for the seconds until its model arrives.
+    let icon: string | undefined;
+    try {
+      const existing = await this.getObjectAsync(deviceId);
+      icon = existing?.common?.icon ? undefined : iconForModel(undefined);
+    } catch {
+      icon = undefined;
+    }
     await this.extendObject(
       deviceId,
       {
         type: "device",
-        common: { name: deviceId, statusStates: { onlineId: `${this.namespace}.${deviceId}.info.connection` } },
+        common: {
+          name: deviceId,
+          ...(icon ? { icon } : {}),
+          statusStates: { onlineId: `${this.namespace}.${deviceId}.info.connection` },
+        },
         native: {},
       },
       { preserve: { common: ["name"] } },
@@ -269,6 +288,49 @@ export class Yamaha extends utils.Adapter {
 
   /** The icon last written per device, so repeated model reports do not re-write the object. */
   private readonly deviceIcons = new Map<string, string>();
+
+  /** The label this adapter wrote per device, with the rank of the source behind it. */
+  private readonly deviceLabels = new Map<string, { name: string; rank: LabelRank }>();
+
+  /**
+   * Give the device node a name a user recognises, once the device reports one.
+   *
+   * An instance upgraded from the previous adapter carries the receiver's ip as its
+   * device name — that adapter knew nothing but an ip, so the migration had nothing
+   * else to call it. The object id stays that ip for good (history and visualisation
+   * bindings hang off it), but the displayed name does not have to.
+   *
+   * A name the user typed is never touched, and the model never replaces a name the
+   * device reported for itself — see {@link nextDeviceLabel}.
+   *
+   * @param deviceId the id-safe device id
+   * @param candidate the reported name (a MusicCast zone name, or the model)
+   * @param rank how trustworthy the candidate is
+   */
+  private async updateDeviceLabel(deviceId: string, candidate: string, rank: LabelRank): Promise<void> {
+    const own = this.deviceLabels.get(deviceId);
+    try {
+      const current = (await this.getObjectAsync(deviceId))?.common?.name;
+      const label = nextDeviceLabel(
+        typeof current === "string" ? current : undefined,
+        deviceId,
+        candidate,
+        rank,
+        own?.name,
+        own?.rank,
+      );
+      if (label === undefined) {
+        return;
+      }
+      // Deliberately without `preserve: { common: ["name"] }`: nextDeviceLabel has just
+      // established that the present name is the adapter's own placeholder, not a user's.
+      await this.extendObject(deviceId, { common: { name: label } });
+      this.deviceLabels.set(deviceId, { name: label, rank });
+      this.log.debug(`${deviceId}: device name set to "${label}"`);
+    } catch (e) {
+      this.log.debug(`${deviceId}: setting the device name failed (${errorMessage(e)})`);
+    }
+  }
 
   /**
    * Paint the device-class silhouette on the device node once the model is known —
@@ -395,11 +457,15 @@ export class Yamaha extends utils.Adapter {
           return;
         }
         void this.setState(id, { val: value, ack: true });
-        // A model report also decides the device-class icon on the device node.
+        // A model report also decides the device-class icon on the device node — and, for a
+        // device still carrying the ip it was migrated with, its readable name.
         if (id.endsWith(".info.model") && typeof value === "string" && value.length > 0) {
-          void this.updateDeviceIcon(id.slice(0, id.indexOf(".")), value);
+          const reporting = id.slice(0, id.indexOf("."));
+          void this.updateDeviceIcon(reporting, value);
+          void this.updateDeviceLabel(reporting, value, LABEL_RANK.model);
         }
       },
+      onDeviceName: name => void this.updateDeviceLabel(device.id, name, LABEL_RANK.deviceName),
       timers: {
         schedule: (handler, ms) => this.setTimeout(handler, ms),
         cancel: handle => this.clearTimeout(handle),

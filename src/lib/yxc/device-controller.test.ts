@@ -1,4 +1,4 @@
-import { YxcDeviceController } from "./device-controller";
+import { YxcDeviceController, zoneNameFrom } from "./device-controller";
 import type { YxcClientLike } from "./device-controller";
 import wx10 from "./__fixtures__/WX10_216_208.json";
 import ysp from "./__fixtures__/status/YSP1600_main.json";
@@ -27,6 +27,15 @@ class FakeClient implements YxcClientLike {
   public async getDeviceInfo(): Promise<unknown> {
     this.calls.push({ method: "getDeviceInfo", args: [] });
     return this.deviceInfo;
+  }
+  public nameText: unknown = {};
+  public failNameText = false;
+  public async getNameText(): Promise<unknown> {
+    this.calls.push({ method: "getNameText", args: [] });
+    if (this.failNameText) {
+      throw new Error("not supported");
+    }
+    return this.nameText;
   }
   public async power(on: boolean, zone: string): Promise<unknown> {
     this.calls.push({ method: "power", args: [on, zone] });
@@ -206,12 +215,14 @@ function setup(
   objects: string[];
   acks: Array<{ id: string; value: unknown }>;
   fire: { push?: (event: unknown) => void; keepalive?: () => void };
+  names: string[];
   cancelled: () => boolean;
   unregistered: () => boolean;
 } {
   const client = new FakeClient(features, status);
   const objects: string[] = [];
   const acks: Array<{ id: string; value: unknown }> = [];
+  const names: string[] = [];
   const fire: { push?: (event: unknown) => void; keepalive?: () => void } = {};
   let cancelled = false;
   let unregistered = false;
@@ -236,9 +247,21 @@ function setup(
     setStateAck: (id, value) => {
       acks.push({ id, value });
     },
+    reportDeviceName: name => {
+      names.push(name);
+    },
     log: silentLog,
   });
-  return { controller, client, objects, acks, fire, cancelled: () => cancelled, unregistered: () => unregistered };
+  return {
+    controller,
+    client,
+    objects,
+    acks,
+    names,
+    fire,
+    cancelled: () => cancelled,
+    unregistered: () => unregistered,
+  };
 }
 
 describe("YxcDeviceController", () => {
@@ -562,5 +585,50 @@ describe("YxcDeviceController guards", () => {
     // Resetting the cache on every update would send 0 for every band the user did
     // not touch — the device would flatten its own tone settings.
     expect(s.client.calls).toContainEqual({ method: "setEqualizer", args: [7, 9, 3, "main"] });
+  });
+});
+
+describe("zoneNameFrom", () => {
+  it("reads the main zone's text — the name shown in the MusicCast app", () => {
+    expect(zoneNameFrom({ zone_list: [{ id: "main", text: "Wohnzimmer" }] })).toBe("Wohnzimmer");
+  });
+
+  it("ignores the other zones", () => {
+    expect(
+      zoneNameFrom({
+        zone_list: [
+          { id: "zone2", text: "Terrasse" },
+          { id: "main", text: "Wohnzimmer" },
+        ],
+      }),
+    ).toBe("Wohnzimmer");
+  });
+
+  it("returns nothing for an answer that carries no usable name", () => {
+    expect(zoneNameFrom({ zone_list: [{ id: "main", text: "  " }] })).toBeUndefined();
+    expect(zoneNameFrom({ zone_list: [{ id: "zone2", text: "Terrasse" }] })).toBeUndefined();
+    expect(zoneNameFrom({ zone_list: "nonsense" })).toBeUndefined();
+    expect(zoneNameFrom(null)).toBeUndefined();
+    expect(zoneNameFrom(undefined)).toBeUndefined();
+  });
+});
+
+describe("YxcDeviceController device name", () => {
+  test("reports the name the device carries for itself", async () => {
+    const s = setup(wx10, ysp);
+    s.client.nameText = { zone_list: [{ id: "main", text: "Wohnzimmer" }] };
+    await s.controller.start();
+    await flush();
+    expect(s.names).toEqual(["Wohnzimmer"]);
+  });
+
+  test("connects anyway when the device does not answer getNameText", async () => {
+    // Older MusicCast firmware may not know the call — the device still works, it just
+    // keeps whatever label it has.
+    const s = setup(wx10, ysp);
+    s.client.failNameText = true;
+    expect(await s.controller.start()).toBe(true);
+    await flush();
+    expect(s.names).toEqual([]);
   });
 });

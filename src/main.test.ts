@@ -230,6 +230,7 @@ vi.mock("./lib/yxc/push-receiver", () => ({
 }));
 
 import { Yamaha } from "./main";
+import { iconForModel } from "./lib/device-type";
 import { writeDiscovered } from "./lib/discovered-store";
 import type { ConnectionHandle } from "./lib/controller";
 
@@ -645,15 +646,77 @@ describe("Yamaha transport plumbing", () => {
     expect(extend.mock.calls.length).toBe(before);
   });
 
-  it("does not paint an icon from an empty model report", async () => {
+  it("does not read an empty or non-string model report as a model", async () => {
     const ctx = setup();
     await ctx.i.onReady();
     await flush();
     const setStateAck = ctx.calls[0].deps.setStateAck as (id: string, value: unknown) => void;
+    const extend = (ctx.i as unknown as { extendObject: ReturnType<typeof vi.fn> }).extendObject;
+    const before = extend.mock.calls.length;
     setStateAck("Living_room.info.model", "");
     setStateAck("Living_room.info.model", 42);
     await flush();
-    expect((ctx.i.objects.get("Living_room")?.common as { icon?: string }).icon).toBeUndefined();
+    // Neither report is a model, so neither the icon nor the name is touched — the node
+    // keeps the default silhouette it was seeded with when it was created.
+    expect(extend.mock.calls.length).toBe(before);
+    expect((ctx.i.objects.get("Living_room")?.common as { icon?: string }).icon).toBe(iconForModel(undefined));
+  });
+
+  it("replaces the ip an upgraded instance carries as the device name with the model", async () => {
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    const setStateAck = ctx.calls[0].deps.setStateAck as (id: string, value: unknown) => void;
+    // Fresh from the migration the node is called by its id — which is the receiver's ip.
+    expect((ctx.i.objects.get("Living_room")?.common as { name?: string }).name).toBe("Living_room");
+    setStateAck("Living_room.info.model", "RX-V481");
+    await flush();
+    expect((ctx.i.objects.get("Living_room")?.common as { name?: string }).name).toBe("RX-V481");
+  });
+
+  it("prefers the name the device reports over its model", async () => {
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    const deps = ctx.calls[0].deps as unknown as {
+      setStateAck: (id: string, value: unknown) => void;
+      onDeviceName?: (name: string) => void;
+    };
+    deps.setStateAck("Living_room.info.model", "RX-V481");
+    await flush();
+    deps.onDeviceName?.("Wohnzimmer");
+    await flush();
+    expect((ctx.i.objects.get("Living_room")?.common as { name?: string }).name).toBe("Wohnzimmer");
+
+    // And a later model report does not drag it back to the model designation.
+    deps.setStateAck("Living_room.info.model", "RX-V481");
+    await flush();
+    expect((ctx.i.objects.get("Living_room")?.common as { name?: string }).name).toBe("Wohnzimmer");
+  });
+
+  it("never overwrites a name the user typed", async () => {
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    const node = ctx.i.objects.get("Living_room") as { common: { name?: string } };
+    node.common.name = "AVR Küche";
+    const deps = ctx.calls[0].deps as unknown as {
+      setStateAck: (id: string, value: unknown) => void;
+      onDeviceName?: (name: string) => void;
+    };
+    deps.setStateAck("Living_room.info.model", "RX-V481");
+    deps.onDeviceName?.("Wohnzimmer");
+    await flush();
+    expect((ctx.i.objects.get("Living_room")?.common as { name?: string }).name).toBe("AVR Küche");
+  });
+
+  it("seeds a device node with the default silhouette before any model is known", async () => {
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    // Without this an upgraded instance shows a device with no symbol at all until the
+    // first model report, and a device that never answers keeps showing none.
+    expect((ctx.i.objects.get("Living_room")?.common as { icon?: string }).icon).toBe(iconForModel(undefined));
   });
 
   it("hands the attempt the shared push receiver and the other devices' IPs", async () => {

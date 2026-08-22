@@ -11,6 +11,8 @@ export interface YxcClientLike {
   getStatus(zone: string): Promise<unknown>;
   /** Read the device's system info (model name, firmware). */
   getDeviceInfo(): Promise<unknown>;
+  /** Read the zone and input names a user gave the device in the MusicCast app. */
+  getNameText(): Promise<unknown>;
   /**
    * Read a player source's play info. `undefined` reads the network/USB player,
    * `"cd"` the disc player, `"tuner"` the tuner (band/frequency/RDS).
