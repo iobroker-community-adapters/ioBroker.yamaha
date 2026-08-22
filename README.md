@@ -86,6 +86,10 @@ On the first connect the adapter asks the receiver which functions it supports â
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+### 1.1.1 (2026-08-22)
+
+- (krobipd) Changed: Internal cleanup. No user-facing changes.
+
 ### 1.1.0 (2026-08-22)
 
 - (krobipd) Fixed: a device carried over from the old adapter is no longer called by its IP â€” the object folder and the admin card now show the name the device reports, or its model.
@@ -108,10 +112,6 @@ On the first connect the adapter asks the receiver which functions it supports â
 - (foxriver76) updated packages
 
 ### 0.5.3 (2022-06-17)
-
-- (Apollon77) Fix crash cases reported by Sentry
-
-### 0.5.2 (2022-04-23)
 
 - (Apollon77) Fix crash cases reported by Sentry
 

@@ -33,7 +33,15 @@ vi.mock("@iobroker/adapter-core", () => ({
   getAbsoluteInstanceDataDir: (adapter: { namespace: string }) => `/opt/iobroker/iobroker-data/${adapter.namespace}`,
 }));
 
+import { join } from "node:path";
 import { discoveredStoreDeps } from "./discovered-store-deps";
+
+/**
+ * The data directory as the module under test builds it. Spelled with `join` because
+ * that is what the source uses: on Windows it produces backslashes, and a hard-coded
+ * slash path would fail there while the adapter itself is perfectly fine.
+ */
+const dataDir = join("/opt/iobroker/iobroker-data/yamaha.0");
 
 const adapter = { namespace: "yamaha.0", log: { debug: vi.fn() } } as unknown as ioBroker.Adapter;
 
@@ -49,9 +57,9 @@ describe("discoveredStoreDeps", () => {
     await deps.write('[{"id":"RX-V685","ip":"192.168.1.20"}]');
     // The write must create the directory: on a fresh instance it does not exist
     // yet, and an ENOENT here would lose every discovery result silently.
-    expect(fsMock.mkdirs).toEqual(["/opt/iobroker/iobroker-data/yamaha.0"]);
+    expect(fsMock.mkdirs).toEqual([dataDir]);
     await expect(deps.read()).resolves.toBe('[{"id":"RX-V685","ip":"192.168.1.20"}]');
-    expect([...fsMock.files.keys()]).toEqual(["/opt/iobroker/iobroker-data/yamaha.0/discovered.json"]);
+    expect([...fsMock.files.keys()]).toEqual([join(dataDir, "discovered.json")]);
   });
 
   it("reports no content instead of throwing when the file is not there yet", async () => {

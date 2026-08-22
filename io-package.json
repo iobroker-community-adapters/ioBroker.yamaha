@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "news": {
+      "1.1.1": {
+        "en": "Internal cleanup. No user-facing changes.",
+        "de": "Interne Aufräumarbeiten. Keine Änderungen für Anwender.",
+        "ru": "Внутренняя чистка. Для пользователей ничего не меняется.",
+        "pt": "Limpeza interna. Sem alterações para o utilizador.",
+        "nl": "Interne opschoning. Geen wijzigingen voor gebruikers.",
+        "fr": "Nettoyage interne. Aucun changement pour l'utilisateur.",
+        "it": "Pulizia interna. Nessuna modifica per l'utente.",
+        "es": "Limpieza interna. Sin cambios para el usuario.",
+        "pl": "Porządki wewnętrzne. Bez zmian dla użytkownika.",
+        "uk": "Внутрішнє прибирання. Для користувача нічого не змінюється.",
+        "zh-cn": "内部整理。用户侧没有变化。"
+      },
       "1.1.0": {
         "en": "A device carried over from the old adapter is no longer called by its IP — the object folder and the admin card now show the name the device reports, or its model.",
         "de": "Ein aus dem alten Adapter übernommenes Gerät heißt nicht mehr nach seiner IP — Objektordner und Admin-Karte zeigen jetzt den Namen, den das Gerät meldet, oder sein Modell.",
