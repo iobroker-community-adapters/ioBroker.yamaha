@@ -3,7 +3,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     globals: true,
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "test/standards/*.test.ts"],
     // Scaffold stage has no unit tests yet — the first arrive with the
     // command-router in the next build phase. Don't fail the run until then.
     passWithNoTests: true,
