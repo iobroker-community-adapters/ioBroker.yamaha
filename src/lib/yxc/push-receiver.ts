@@ -122,10 +122,9 @@ export class YxcPushReceiver {
       return;
     }
     if (!this.listening) {
-      // Bind-time failure: another MusicCast consumer holds the port — most often the
-      // old musiccast adapter, which listens on the same port. Expected.
+      // Bind-time failure: another MusicCast consumer holds the port. Expected.
       this.deps.log.warn(
-        `YXC push port :${YXC_PUSH_PORT} already in use — maybe the musiccast adapter? MusicCast devices are polled, not pushed`,
+        `YXC push port :${YXC_PUSH_PORT} unavailable — MusicCast devices are polled, not pushed: ${err.message}`,
       );
       return;
     }

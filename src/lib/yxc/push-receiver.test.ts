@@ -153,7 +153,7 @@ describe("YxcPushReceiver", () => {
     receiver.start(); // bind, but 'listening' never fires → bind failed
     fake.emitError(new Error("EADDRINUSE"));
     expect(d.warnings).toHaveLength(1);
-    expect(d.warnings[0]).toMatch(/already in use/);
+    expect(d.warnings[0]).toMatch(/unavailable/);
     expect(fake.closed).toBe(true); // closed, not orphaned
     expect(d.scheduledCount()).toBe(0); // a bind failure is not retried
   });
@@ -229,7 +229,7 @@ describe("YxcPushReceiver on a real dgram socket", () => {
     dgramMock.sockets[0].emit("error", new Error("EADDRINUSE"));
     // A second yamaha instance (or another MusicCast app) holds :41100. Pushes are
     // an optimisation; polling still works, so this must not be fatal.
-    expect(logs.some(l => l.includes("already in use"))).toBe(true);
+    expect(logs.some(l => l.includes("unavailable"))).toBe(true);
     expect(() => receiver.close()).not.toThrow();
   });
 });
