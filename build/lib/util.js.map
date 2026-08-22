@@ -1,7 +1,7 @@
 {
   "version": 3,
   "sources": ["../../src/lib/util.ts"],
-  "sourcesContent": ["/**\n * The message of an unknown thrown value \u2014 `Error.message` when it is an Error, else\n * its string form. One helper for the `e instanceof Error ? e.message : String(e)`\n * idiom the transports would otherwise repeat in every catch.\n *\n * @param e the caught value\n * @returns a human-readable message\n */\nexport function errorMessage(e: unknown): string {\n  return e instanceof Error ? e.message : String(e);\n}\n"],
+  "sourcesContent": ["/**\r\n * The message of an unknown thrown value \u2014 `Error.message` when it is an Error, else\r\n * its string form. One helper for the `e instanceof Error ? e.message : String(e)`\r\n * idiom the transports would otherwise repeat in every catch.\r\n *\r\n * @param e the caught value\r\n * @returns a human-readable message\r\n */\r\nexport function errorMessage(e: unknown): string {\r\n  return e instanceof Error ? e.message : String(e);\r\n}\r\n"],
   "mappings": ";;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAQO,SAAS,aAAa,GAAoB;AAC/C,SAAO,aAAa,QAAQ,EAAE,UAAU,OAAO,CAAC;AAClD;",
   "names": []
 }
