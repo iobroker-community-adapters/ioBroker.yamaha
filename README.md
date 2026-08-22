@@ -86,7 +86,7 @@ On the first connect the adapter asks the receiver which functions it supports â
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 1.0.1-alpha.1 (2026-08-22)
 
 - (krobipd) Complete rebuild: one adapter now speaks YNCA, MusicCast and the legacy XML protocol â€” every protocol a device answers runs in parallel on one object tree.
 - (krobipd) New object tree with typed datapoints built from what your device reports. Old datapoints are removed automatically, the address is carried over â€” point scripts at the new paths.
@@ -114,6 +114,7 @@ On the first connect the adapter asks the receiver which functions it supports â
 
 - (Apollon77) Fix crash cases reported by Sentry
 - (Apollon77) fix type of pureDirect
+
 
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
