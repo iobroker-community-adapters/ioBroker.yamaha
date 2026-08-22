@@ -93,6 +93,15 @@ class YamahaYxcClient {
     return this.send("/system/getDeviceInfo");
   }
   /**
+   * Read the names a user gave this device's zones and inputs in the MusicCast app.
+   * The main zone's text is what the device calls itself there.
+   *
+   * @returns the getNameText response
+   */
+  getNameText() {
+    return this.send("/system/getNameText");
+  }
+  /**
    * Read a player source's play info.
    *
    * @param source the player: undefined = network/USB, `cd`, or `tuner`

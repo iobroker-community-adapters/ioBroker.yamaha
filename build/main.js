@@ -204,11 +204,23 @@ class Yamaha extends utils.Adapter {
    * @param deviceId the id-safe device id
    */
   async ensureDeviceHeader(deviceId) {
+    var _a;
+    let icon;
+    try {
+      const existing = await this.getObjectAsync(deviceId);
+      icon = ((_a = existing == null ? void 0 : existing.common) == null ? void 0 : _a.icon) ? void 0 : (0, import_device_type.iconForModel)(void 0);
+    } catch {
+      icon = void 0;
+    }
     await this.extendObject(
       deviceId,
       {
         type: "device",
-        common: { name: deviceId, statusStates: { onlineId: `${this.namespace}.${deviceId}.info.connection` } },
+        common: {
+          name: deviceId,
+          ...icon ? { icon } : {},
+          statusStates: { onlineId: `${this.namespace}.${deviceId}.info.connection` }
+        },
         native: {}
       },
       { preserve: { common: ["name"] } }
@@ -246,6 +258,46 @@ class Yamaha extends utils.Adapter {
   }
   /** The icon last written per device, so repeated model reports do not re-write the object. */
   deviceIcons = /* @__PURE__ */ new Map();
+  /** The label this adapter wrote per device, with the rank of the source behind it. */
+  deviceLabels = /* @__PURE__ */ new Map();
+  /**
+   * Give the device node a name a user recognises, once the device reports one.
+   *
+   * An instance upgraded from the previous adapter carries the receiver's ip as its
+   * device name — that adapter knew nothing but an ip, so the migration had nothing
+   * else to call it. The object id stays that ip for good (history and visualisation
+   * bindings hang off it), but the displayed name does not have to.
+   *
+   * A name the user typed is never touched, and the model never replaces a name the
+   * device reported for itself — see {@link nextDeviceLabel}.
+   *
+   * @param deviceId the id-safe device id
+   * @param candidate the reported name (a MusicCast zone name, or the model)
+   * @param rank how trustworthy the candidate is
+   */
+  async updateDeviceLabel(deviceId, candidate, rank) {
+    var _a, _b;
+    const own = this.deviceLabels.get(deviceId);
+    try {
+      const current = (_b = (_a = await this.getObjectAsync(deviceId)) == null ? void 0 : _a.common) == null ? void 0 : _b.name;
+      const label = (0, import_pure_helpers.nextDeviceLabel)(
+        typeof current === "string" ? current : void 0,
+        deviceId,
+        candidate,
+        rank,
+        own == null ? void 0 : own.name,
+        own == null ? void 0 : own.rank
+      );
+      if (label === void 0) {
+        return;
+      }
+      await this.extendObject(deviceId, { common: { name: label } });
+      this.deviceLabels.set(deviceId, { name: label, rank });
+      this.log.debug(`${deviceId}: device name set to "${label}"`);
+    } catch (e) {
+      this.log.debug(`${deviceId}: setting the device name failed (${(0, import_util.errorMessage)(e)})`);
+    }
+  }
   /**
    * Paint the device-class silhouette on the device node once the model is known —
    * detected from the reported model name, written only when it actually changes.
@@ -355,9 +407,12 @@ class Yamaha extends utils.Adapter {
         }
         void this.setState(id, { val: value, ack: true });
         if (id.endsWith(".info.model") && typeof value === "string" && value.length > 0) {
-          void this.updateDeviceIcon(id.slice(0, id.indexOf(".")), value);
+          const reporting = id.slice(0, id.indexOf("."));
+          void this.updateDeviceIcon(reporting, value);
+          void this.updateDeviceLabel(reporting, value, import_pure_helpers.LABEL_RANK.model);
         }
       },
+      onDeviceName: (name) => void this.updateDeviceLabel(device.id, name, import_pure_helpers.LABEL_RANK.deviceName),
       timers: {
         schedule: (handler, ms) => this.setTimeout(handler, ms),
         cancel: (handle) => this.clearTimeout(handle)

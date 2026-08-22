@@ -18,7 +18,8 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var device_controller_exports = {};
 __export(device_controller_exports, {
-  YxcDeviceController: () => YxcDeviceController
+  YxcDeviceController: () => YxcDeviceController,
+  zoneNameFrom: () => zoneNameFrom
 });
 module.exports = __toCommonJS(device_controller_exports);
 var import_node_crypto = require("node:crypto");
@@ -32,6 +33,22 @@ const MAX_KEEPALIVE_FAILURES = 3;
 function modelNameFrom(deviceInfo) {
   const model = deviceInfo == null ? void 0 : deviceInfo.model_name;
   return typeof model === "string" && model.length > 0 ? model : void 0;
+}
+function zoneNameFrom(nameText) {
+  const zones = nameText == null ? void 0 : nameText.zone_list;
+  if (!Array.isArray(zones)) {
+    return void 0;
+  }
+  for (const zone of zones) {
+    if (typeof zone !== "object" || zone === null) {
+      continue;
+    }
+    const { id, text } = zone;
+    if (id === "main" && typeof text === "string" && text.trim().length > 0) {
+      return text.trim();
+    }
+  }
+  return void 0;
 }
 class YxcDeviceController {
   /**
@@ -91,6 +108,16 @@ class YxcDeviceController {
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getDeviceInfo failed (${(0, import_util.errorMessage)(e)})`);
+    }
+    if (this.deps.reportDeviceName) {
+      try {
+        const name = zoneNameFrom(await this.deps.client.getNameText());
+        if (name) {
+          this.deps.reportDeviceName(name);
+        }
+      } catch (e) {
+        this.deps.log.debug(`${this.deviceId}: getNameText failed (${(0, import_util.errorMessage)(e)})`);
+      }
     }
     this.zones = capabilities.zones.map((zone) => zone.id);
     for (const zone of this.zones) {
@@ -368,6 +395,7 @@ class YxcDeviceController {
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
-  YxcDeviceController
+  YxcDeviceController,
+  zoneNameFrom
 });
 //# sourceMappingURL=device-controller.js.map

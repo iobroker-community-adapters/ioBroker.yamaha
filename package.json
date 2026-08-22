@@ -98,5 +98,14 @@
   "bugs": {
     "url": "https://github.com/iobroker-community-adapters/ioBroker.yamaha/issues"
   },
-  "readmeFilename": "README.md"
+  "readmeFilename": "README.md",
+  "overrides": {
+    "mocha": {
+      "diff": "^8.0.3",
+      "serialize-javascript": "^7.0.5"
+    },
+    "@alcalzone/esbuild-register": {
+      "esbuild": "^0.25.0"
+    }
+  }
 }

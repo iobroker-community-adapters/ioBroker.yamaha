@@ -18,10 +18,13 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var pure_helpers_exports = {};
 __export(pure_helpers_exports, {
+  LABEL_RANK: () => LABEL_RANK,
   RENAMED_CHANNELS: () => RENAMED_CHANNELS,
   RENAMED_STATE_IDS: () => RENAMED_STATE_IDS,
+  isUsefulDeviceName: () => isUsefulDeviceName,
   legacyDeviceRow: () => legacyDeviceRow,
   mergeDiscovered: () => mergeDiscovered,
+  nextDeviceLabel: () => nextDeviceLabel,
   parseDevices: () => parseDevices,
   renamedObjectIds: () => renamedObjectIds,
   sanitizeId: () => sanitizeId,
@@ -229,12 +232,36 @@ function legacyDeviceRow(config) {
   const ip = raw.trim().replace(/:\d+$/, "");
   return ip ? { name: ip, ip } : void 0;
 }
+const LABEL_RANK = { model: 1, deviceName: 2 };
+const GENERIC_ZONE_NAMES = /* @__PURE__ */ new Set(["main", "main zone", "mainzone", "zone", "zone 1", "zone1"]);
+function isUsefulDeviceName(candidate) {
+  const trimmed = (candidate != null ? candidate : "").trim();
+  return trimmed.length > 0 && !GENERIC_ZONE_NAMES.has(trimmed.toLowerCase());
+}
+function nextDeviceLabel(current, deviceId, candidate, rank, ownName, ownRank) {
+  const wanted = (candidate != null ? candidate : "").trim();
+  if (!isUsefulDeviceName(wanted) || wanted === current) {
+    return void 0;
+  }
+  const isPlaceholder = current === void 0 || current === deviceId;
+  const isOurs = ownName !== void 0 && current === ownName;
+  if (!isPlaceholder && !isOurs) {
+    return void 0;
+  }
+  if (isOurs && ownRank !== void 0 && rank < ownRank) {
+    return void 0;
+  }
+  return wanted;
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  LABEL_RANK,
   RENAMED_CHANNELS,
   RENAMED_STATE_IDS,
+  isUsefulDeviceName,
   legacyDeviceRow,
   mergeDiscovered,
+  nextDeviceLabel,
   parseDevices,
   renamedObjectIds,
   sanitizeId,

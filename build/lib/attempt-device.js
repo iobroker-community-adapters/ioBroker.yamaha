@@ -109,6 +109,7 @@ function attemptDevice(device, deps) {
         scheduleKeepalive: deps.scheduleKeepalive,
         upsertObject: yxc.interceptUpsert,
         setStateAck: yxc.interceptSetStateAck,
+        reportDeviceName: deps.onDeviceName,
         log
       })
     );
