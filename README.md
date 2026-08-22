@@ -31,7 +31,7 @@ legacy XML protocol of the oldest pre-2010 models — behind one object tree.
 
 ## Ports
 
-- **UDP 41100 (listening)** — MusicCast devices push their change events to this port on the ioBroker host. If another MusicCast application occupies it, the adapter still works and falls back to polling.
+- **UDP 41100 (listening)** — MusicCast devices push their change events to this port on the ioBroker host.
 - **UDP 1900 (multicast, outgoing)** — the SSDP discovery search at startup.
 - **TCP 50000 (outgoing)** — the YNCA control connection to each receiver.
 - **TCP 80 (outgoing)** — the MusicCast and XML protocol requests to each device.
