@@ -144,3 +144,35 @@ describe("isWritableValue", () => {
     expect(isWritableValue(true, false)).toBe(true);
   });
 });
+
+describe("isWritableValue rejects what must not go on the wire", () => {
+  it("refuses an empty or whitespace string for a numeric datapoint", () => {
+    // Number("") is 0 and finite — an empty admin field would otherwise be sent
+    // as a real 0 (volume to minimum, sleep timer off).
+    expect(isWritableValue("", true)).toBe(false);
+    expect(isWritableValue("   ", true)).toBe(false);
+    expect(isWritableValue("0", true)).toBe(true);
+    expect(isWritableValue(0, true)).toBe(true);
+  });
+});
+
+describe("encode maps a written code back to its wire token", () => {
+  it("sends the token, not the number", () => {
+    const spec = { kind: "code", codes: { Straight: 0, "5ch Stereo": 1 } } as const;
+    // The device speaks the token; the numeric code exists only so the datapoint
+    // can carry a dropdown.
+    expect(encode(spec as never, 1)).toBe("5ch Stereo");
+    // A code that is not in the table still has to produce something sendable.
+    expect(encode(spec as never, 9)).toBe("9");
+  });
+});
+
+describe("decode never reads a button back into a state", () => {
+  it("returns nothing for a button spec, whatever the device sent", () => {
+    const spec = { kind: "button", command: "Play" } as const;
+    // A button is a momentary action. Any value coming back would land in the
+    // state and make the next press a no-op (the value did not change).
+    expect(decode(spec as never, "On")).toBeUndefined();
+    expect(decode(spec as never, "")).toBeUndefined();
+  });
+});

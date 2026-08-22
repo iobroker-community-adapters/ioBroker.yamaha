@@ -510,3 +510,57 @@ describe("YxcDeviceController", () => {
     expect(s.unregistered()).toBe(true);
   });
 });
+
+describe("YxcDeviceController guards", () => {
+  test("ignores a write meant for another device", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }] };
+    const s = setup(features, { power: "on" });
+    await s.controller.start();
+    s.client.calls.length = 0;
+    // "office." is exactly as long as "living." — a foreign id of a different
+    // length would be sliced into nonsense and dropped by the command map anyway.
+    s.controller.handleStateChange("office.power", false, false);
+    await flush();
+    expect(s.client.calls).toEqual([]);
+
+    s.controller.handleStateChange("living.power", false, false);
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "power", args: [false, "main"] });
+  });
+
+  test("reports the device gone exactly once", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }] };
+    const s = setup(features, { power: "on" });
+    await s.controller.start();
+    const drops: Array<Error | undefined> = [];
+    s.controller.onDrop(reason => drops.push(reason));
+    s.client.failStatus = true;
+
+    for (let i = 0; i < 12; i++) {
+      s.fire.keepalive?.();
+      await flush();
+    }
+    // A second report makes the supervisor reconnect a handle it already replaced —
+    // two live YXC connections to one device, only one of them reachable by close().
+    expect(drops).toHaveLength(1);
+  });
+
+  test("merges equalizer bands across status updates instead of zeroing the others", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power", "equalizer"] }] };
+    const status: Record<string, unknown> = { power: "on", equalizer: { mode: "manual", low: 1, mid: 2, high: 3 } };
+    const s = setup(features, status);
+    await s.controller.start();
+
+    // A later poll carrying only ONE band — the device omits unchanged fields.
+    status.equalizer = { mid: 9 };
+    s.fire.keepalive?.();
+    await flush();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.sound.equalizerLow", false, 7);
+    await flush();
+    // low from the write, mid from the partial push, high still from the full status.
+    // Resetting the cache on every update would send 0 for every band the user did
+    // not touch — the device would flatten its own tone settings.
+    expect(s.client.calls).toContainEqual({ method: "setEqualizer", args: [7, 9, 3, "main"] });
+  });
+});

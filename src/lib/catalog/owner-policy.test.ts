@@ -94,3 +94,18 @@ describe("canonicalIdOf — the drift-resolved object id, zone prefix kept", () 
     expect(canonicalIdOf("yxc", "power")).toBe("power");
   });
 });
+
+describe("pickOwner fallbacks", () => {
+  it("falls back to modernity when the override lists no present transport", () => {
+    // "sound.dialogueLift" prefers XML then YXC. On a device where only YNCA
+    // offers it, an override-only lookup would leave the datapoint ownerless and
+    // the whole tree coordination would throw.
+    expect(pickOwner("sound.dialogueLift", ["ynca"])).toBe("ynca");
+    expect(pickOwner("sound.surroundDecoder", ["xml"])).toBe("xml");
+  });
+
+  it("uses modernity for a key with no override at all", () => {
+    expect(pickOwner("power", ["xml", "ynca", "yxc"])).toBe("yxc");
+    expect(pickOwner("power", ["xml", "ynca"])).toBe("ynca");
+  });
+});

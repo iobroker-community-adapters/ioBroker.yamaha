@@ -86,6 +86,9 @@ export function canonicalIdOf(transport: Transport, stateId: string): string {
  */
 export function pickOwner(key: string, candidates: readonly Transport[]): Transport {
   const preference = OWNER_OVERRIDES[key] ?? MODERNITY;
+  // The MODERNITY fallback is defence for a FUTURE override: every entry in the
+  // current table lists at least two transports, so an override can never miss all
+  // present candidates while more than one is present — today it is unobservable.
   const owner = preference.find(t => candidates.includes(t)) ?? MODERNITY.find(t => candidates.includes(t));
   return owner ?? candidates[0];
 }

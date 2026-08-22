@@ -316,3 +316,61 @@ describe("stateToYxc", () => {
     expect(stateToYxc("zone9.power", true)).toBeUndefined();
   });
 });
+
+describe("stateToYxc button actions", () => {
+  /** A client that records the method it was asked for instead of talking HTTP. */
+  function recorder(): { calls: string[]; client: never } {
+    const calls: string[] = [];
+    const client = new Proxy(
+      {},
+      {
+        get: (_t, method: string) =>
+          method === "then"
+            ? undefined
+            : (...args: unknown[]) => {
+                calls.push(args.length ? `${method}(${args.join(",")})` : method);
+                return Promise.resolve({});
+              },
+      },
+    );
+    return { calls, client: client as never };
+  }
+
+  const BUTTONS: Array<[string, string]> = [
+    ["player.netPlayer.play", "playNet"],
+    ["player.netPlayer.pause", "pauseNet"],
+    ["player.netPlayer.stop", "stopNet"],
+    ["player.netPlayer.next", "nextNet"],
+    ["player.netPlayer.prev", "prevNet"],
+    ["player.netPlayer.repeatToggle", "toggleNetRepeat"],
+    ["player.netPlayer.shuffleToggle", "toggleNetShuffle"],
+    ["player.cd.play", "setCDPlayback(play)"],
+    ["player.cd.pause", "setCDPlayback(pause)"],
+    ["player.cd.stop", "setCDPlayback(stop)"],
+    ["player.cd.next", "setCDPlayback(next)"],
+    ["player.cd.prev", "setCDPlayback(previous)"],
+    ["player.cd.repeatToggle", "toggleCDRepeat"],
+    ["player.cd.shuffleToggle", "toggleCDShuffle"],
+    ["player.cd.tray", "toggleTray"],
+  ];
+
+  test.each(BUTTONS)("%s presses %s on the device", async (stateId, expected) => {
+    const command = stateToYxc(stateId, true);
+    expect(command, stateId).toBeDefined();
+    const { calls, client } = recorder();
+    await (command as { kind: "run"; run: (c: never) => Promise<unknown> }).run(client);
+    // Every one of these is a media button in the tree. A wrong or missing mapping
+    // is a button that does nothing — and "next" firing "previous" is worse.
+    expect(calls).toEqual([expected]);
+  });
+
+  test("a button fires on any UNACKED write — the ack filter upstream is the guard", () => {
+    // Documented as-is: the mapper does not look at the value. What keeps the
+    // momentary reset from re-firing the action is the controller's ack filter
+    // (device-controller.handleStateChange returns early for ack:true), because
+    // the reset is written with ack:true. Should that filter ever move, this
+    // test says where the second guard would have to go.
+    expect(stateToYxc("player.cd.play", false)).toMatchObject({ kind: "run" });
+    expect(stateToYxc("player.netPlayer.next", 0)).toMatchObject({ kind: "run" });
+  });
+});

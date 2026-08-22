@@ -39,6 +39,10 @@ export function coordinateObjectTree(contributions: readonly TransportObjects[])
   const ownerByCanonicalId = new Map<string, Transport>();
   const resolved: ObjectDef[] = order.map(canonicalId => {
     const entry = byId.get(canonicalId);
+    // Both throws below are internal invariants, not reachable states: `order` is
+    // built from `byId`'s own keys, and pickOwner always returns one of the
+    // candidates it was handed (= this entry's own defs). They exist so a future
+    // change to either side fails loudly instead of writing an empty object.
     if (!entry) {
       throw new Error(`coordinateObjectTree: missing entry for ${canonicalId}`);
     }

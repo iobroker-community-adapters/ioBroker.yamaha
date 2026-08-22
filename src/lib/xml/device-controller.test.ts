@@ -29,12 +29,14 @@ function setup(
   controller: XmlDeviceController;
   client: FakeClient;
   objects: string[];
+  defs: Map<string, { common?: { name?: unknown } }>;
   acks: Array<{ id: string; value: unknown }>;
   fire: { keepalive?: () => void; keepaliveMs?: number };
   cancelled: () => boolean;
 } {
   const client = new FakeClient(statuses);
   const objects: string[] = [];
+  const defs = new Map<string, { common?: { name?: unknown } }>();
   const acks: Array<{ id: string; value: unknown }> = [];
   const fire: { keepalive?: () => void; keepaliveMs?: number } = {};
   let cancelled = false;
@@ -49,8 +51,9 @@ function setup(
           cancelled = true;
         };
       },
-      upsertObject: async id => {
+      upsertObject: async (id, def) => {
         objects.push(id);
+        defs.set(id, def);
       },
       setStateAck: (id, value) => {
         acks.push({ id, value });
@@ -59,7 +62,7 @@ function setup(
     },
     pollIntervalMs,
   );
-  return { controller, client, objects, acks, fire, cancelled: () => cancelled };
+  return { controller, client, objects, defs, acks, fire, cancelled: () => cancelled };
 }
 
 describe("XmlDeviceController", () => {
@@ -149,5 +152,83 @@ describe("XmlDeviceController", () => {
     expect(s.objects).toContain("living.scene.recall");
     expect(s.objects).not.toContain("living.multiroom.zone2.scene.recall");
     expect(s.objects).not.toContain("living.multiroom.zone2.hdmiOut1");
+  });
+});
+
+describe("XmlDeviceController object tree and drop handling", () => {
+  test("creates the parent channels of a nested datapoint, each exactly once", async () => {
+    const s = setup({ Main_Zone: { power: true }, Zone_2: { power: false }, Zone_3: { power: false } });
+    await s.controller.start();
+    // A datapoint whose parent channel does not exist shows up unnamed in the admin
+    // tree (and js-controller warns per write).
+    expect(s.objects).toContain("living.multiroom");
+    expect(s.objects).toContain("living.multiroom.zone2");
+    expect(s.objects).toContain("living.multiroom.zone3");
+    // Rewriting the shared parent for every zone churns the object DB on each start.
+    expect(s.objects.filter(id => id === "living.multiroom")).toHaveLength(1);
+    // The zone channel must carry its own readable name — created only from the
+    // per-state parent loop it would be called "zone2" instead of "Zone 2".
+    expect(s.defs.get("living.multiroom.zone2")?.common?.name).toBe("Zone 2");
+  });
+
+  test("ignores a write meant for another device", async () => {
+    const s = setup({ Main_Zone: { power: true } });
+    await s.controller.start();
+    s.client.calls.length = 0;
+    // Every supervisor gets every state change; the prefix check is what keeps one
+    // receiver from executing the other's commands.
+    // "office." is exactly as long as "living." — a foreign id of a DIFFERENT
+    // length would be sliced into nonsense and dropped by the catalog anyway.
+    s.controller.handleStateChange("office.power", false, true);
+    await flush();
+    expect(s.client.calls).toEqual([]);
+
+    s.controller.handleStateChange("living.power", false, true);
+    await flush();
+    expect(s.client.calls.some(c => c.method === "send")).toBe(true);
+  });
+
+  test("reports the device gone only after a RUN of failed polls, and only once", async () => {
+    const s = setup({ Main_Zone: { power: true } });
+    await s.controller.start();
+    const drops: Array<Error | undefined> = [];
+    s.controller.onDrop(reason => drops.push(reason));
+
+    const fail = (): void => {
+      s.client.getStatus = (): Promise<BasicStatus> => Promise.reject(new Error("ECONNREFUSED"));
+    };
+    const ok = (): void => {
+      s.client.getStatus = (): Promise<BasicStatus> => Promise.resolve({ power: true });
+    };
+
+    fail();
+    s.fire.keepalive?.();
+    await flush();
+    // XML has no socket event — a single missed poll on a busy receiver is normal.
+    // Dropping on it would restart the whole transport set every few minutes.
+    expect(drops).toHaveLength(0);
+
+    ok();
+    s.fire.keepalive?.();
+    await flush();
+    fail();
+    // The counter must have been reset by the good poll, so this run starts over.
+    s.fire.keepalive?.();
+    await flush();
+    expect(drops).toHaveLength(0);
+
+    for (let i = 0; i < 5; i++) {
+      s.fire.keepalive?.();
+      await flush();
+    }
+    expect(drops).toHaveLength(1);
+    expect(drops[0]?.message).toMatch(/polls failed/);
+
+    // A second report would make the supervisor reconnect a handle it already replaced.
+    for (let i = 0; i < 3; i++) {
+      s.fire.keepalive?.();
+      await flush();
+    }
+    expect(drops).toHaveLength(1);
   });
 });

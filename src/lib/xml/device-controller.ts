@@ -102,6 +102,11 @@ export class XmlDeviceController implements ConnectionHandle {
     this.zones = answered.map(probe => probe.zone);
     const createdChannels = new Set<string>();
     for (const zone of this.zones) {
+      // Create the zone's own channel with its display name. (Redundant today: the
+      // per-state parent loop below creates the same id, and CHANNEL_NAMES carries
+      // the same "Zone 2"/"Zone 3"/"Zone 4" — so a mutation here is unobservable.
+      // Kept because the zone definition is what OWNS the name; the fallback in the
+      // generic loop is a derivation, not a declaration.)
       if (zone.channel) {
         const chSegments = zone.channel.split(".");
         for (let i = 1; i < chSegments.length; i++) {

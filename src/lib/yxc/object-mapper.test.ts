@@ -228,3 +228,53 @@ describe("mapYxcToObjects", () => {
     expect(vol?.common.step).toBe(1);
   });
 });
+
+describe("mapYxcToObjects tree hygiene", () => {
+  test("a zone that advertises no function and no input gets no tree at all", () => {
+    // Every entry set contains the "always" status fields, so without this check a
+    // zone the device merely lists (a disabled Zone 4) would get a full datapoint
+    // tree that never carries a value.
+    const objs = mapYxcToObjects({
+      zones: [
+        { id: "main", funcs: ["power"], inputs: [] },
+        { id: "zone4", funcs: [], inputs: [] },
+      ],
+      media: [],
+    });
+    const idList = objs.map(o => o.id);
+    expect(idList.some(id => id.startsWith("multiroom.zone4"))).toBe(false);
+    expect(idList).toContain("power");
+  });
+
+  test("a zone that offers only inputs still gets its tree", () => {
+    const objs = mapYxcToObjects({
+      zones: [
+        { id: "main", funcs: ["power"], inputs: [] },
+        { id: "zone2", funcs: [], inputs: ["hdmi1"] },
+      ],
+      media: [],
+    });
+    expect(objs.map(o => o.id)).toContain("multiroom.zone2.input");
+  });
+
+  test("creates every channel exactly once, however many zones or blocks need it", () => {
+    const objs = mapYxcToObjects({
+      zones: [
+        { id: "main", funcs: ["power", "equalizer"], inputs: [] },
+        { id: "zone2", funcs: ["power", "equalizer"], inputs: [] },
+        { id: "zone3", funcs: ["power", "equalizer"], inputs: [] },
+      ],
+      media: [],
+      hasDistribution: true,
+    });
+    const channels = objs.filter(o => o.type === "channel").map(o => o.id);
+    // A duplicate channel definition is a second write of the same object on every
+    // start — and the later one wins, so a name can silently change.
+    expect(new Set(channels).size).toBe(channels.length);
+    expect(channels).toContain("multiroom");
+    // The MusicCast-Link states live in their own folder so the tree itself says
+    // what the scope is: directly under multiroom = whole device, group = the link.
+    expect(channels).toContain("multiroom.group");
+    expect(objs.some(o => o.id === "multiroom.group.role")).toBe(true);
+  });
+});

@@ -211,6 +211,9 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
     }
     // The MusicCast-Link states get their own folder so the tree itself tells the scope:
     // directly under multiroom = all zones of this device, group = linked devices.
+    // (Unobservable today: the zone catalog carries multiroom.group.streamingEnabled,
+    // so the generic parent loop above already created this channel — with the same
+    // CHANNEL_NAMES.group name. Kept as the declaration; the loop is a derivation.)
     if (!channels.has("multiroom.group")) {
       channels.add("multiroom.group");
       objects.push({ id: "multiroom.group", type: "channel", common: { name: CHANNEL_NAMES.group } });
