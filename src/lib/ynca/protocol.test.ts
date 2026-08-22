@@ -41,3 +41,26 @@ describe("encode", () => {
     expect(encodeGet("SYS", "MODELNAME")).toBe("@SYS:MODELNAME=?");
   });
 });
+
+describe("decodeLine rejects what is not a YNCA response", () => {
+  it("ignores a line that does not start with @", () => {
+    // The socket also carries the echo of what we sent and the odd banner line.
+    // Reading one as a response would create a datapoint from our own command.
+    for (const line of ["MAIN:PWR=On", "", "  ", "OK"]) {
+      expect(decodeLine(line)).toEqual({ status: "unknown" });
+    }
+  });
+
+  it("ignores a response with an empty subunit, func or missing separator", () => {
+    // A truncated line (the receiver cuts one on a busy link) would otherwise
+    // produce a state id with an empty segment — an object that can never be read.
+    expect(decodeLine("@:PWR=On")).toEqual({ status: "unknown" });
+    expect(decodeLine("@MAIN:=On")).toEqual({ status: "unknown" });
+    expect(decodeLine("@MAIN:PWR")).toEqual({ status: "unknown" });
+    expect(decodeLine("@MAINPWR=On")).toEqual({ status: "unknown" });
+  });
+
+  it("keeps an empty VALUE, which the receiver does send", () => {
+    expect(decodeLine("@MAIN:INPNAME=")).toEqual({ status: "ok", subunit: "MAIN", func: "INPNAME", value: "" });
+  });
+});

@@ -1,3 +1,39 @@
+import { vi } from "vitest";
+
+/** node:dgram is mocked so the DEFAULT socket factory (the production path) is testable. */
+const dgramMock = vi.hoisted(() => ({
+  sockets: [] as Array<{
+    bound: number | undefined;
+    closed: number;
+    handlers: Record<string, Array<(...a: unknown[]) => void>>;
+    emit: (ev: string, ...a: unknown[]) => void;
+  }>,
+}));
+vi.mock("node:dgram", () => ({
+  createSocket: () => {
+    const s = {
+      bound: undefined as number | undefined,
+      closed: 0,
+      handlers: {} as Record<string, Array<(...a: unknown[]) => void>>,
+      on(ev: string, cb: (...a: unknown[]) => void) {
+        (s.handlers[ev] ??= []).push(cb);
+        return s;
+      },
+      bind(port: number) {
+        s.bound = port;
+      },
+      close() {
+        s.closed++;
+      },
+      emit(ev: string, ...a: unknown[]) {
+        (s.handlers[ev] ?? []).forEach(h => h(...a));
+      },
+    };
+    dgramMock.sockets.push(s);
+    return s;
+  },
+}));
+
 import { YxcPushReceiver } from "./push-receiver";
 import type { YxcPushSocket } from "./push-receiver";
 
@@ -147,5 +183,53 @@ describe("YxcPushReceiver", () => {
     receiver.start();
     receiver.close();
     expect(fake.closed).toBe(true);
+  });
+});
+
+describe("YxcPushReceiver on a real dgram socket", () => {
+  beforeEach(() => {
+    dgramMock.sockets.length = 0;
+  });
+
+  test("binds the MusicCast push port and routes a datagram by its source IP", () => {
+    const seen: Array<{ ip: string; payload: string }> = [];
+    const logs: string[] = [];
+    const receiver = new YxcPushReceiver({
+      log: { debug: m => logs.push(m), warn: m => logs.push(m) },
+      schedule: () => 1 as unknown as ioBroker.Timeout,
+      cancel: () => {},
+    });
+    receiver.register("192.168.1.10", payload => seen.push({ ip: "192.168.1.10", payload: JSON.stringify(payload) }));
+    receiver.start();
+    const socket = dgramMock.sockets[0];
+    // 41100 is the port the adapter announces in X-AppPort. Binding anything else
+    // means no device ever pushes and everything falls back to polling.
+    expect(socket.bound).toBe(41100);
+
+    socket.emit("listening");
+    socket.emit("message", Buffer.from(JSON.stringify({ main: { power: "on" } })), { address: "192.168.1.10" });
+    expect(seen).toHaveLength(1);
+    // A datagram from a device nobody registered belongs to another instance or
+    // another adapter on the same host — it must not reach this device's handler.
+    socket.emit("message", Buffer.from("{}"), { address: "10.0.0.1" });
+    expect(seen).toHaveLength(1);
+
+    receiver.close();
+    expect(socket.closed).toBe(1);
+  });
+
+  test("keeps the adapter running when the push port is already taken", () => {
+    const logs: string[] = [];
+    const receiver = new YxcPushReceiver({
+      log: { debug: m => logs.push(m), warn: m => logs.push(m) },
+      schedule: () => 1 as unknown as ioBroker.Timeout,
+      cancel: () => {},
+    });
+    receiver.start();
+    dgramMock.sockets[0].emit("error", new Error("EADDRINUSE"));
+    // A second yamaha instance (or another MusicCast app) holds :41100. Pushes are
+    // an optimisation; polling still works, so this must not be fatal.
+    expect(logs.some(l => l.includes("unavailable"))).toBe(true);
+    expect(() => receiver.close()).not.toThrow();
   });
 });

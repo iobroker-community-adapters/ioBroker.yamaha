@@ -32,6 +32,22 @@ describe("parseYxcFeatures", () => {
     expect(main?.volumeRange).toEqual({ min: 0, max: 161, step: 1 });
   });
 
+  test("ignores a volume range whose numbers are not numbers", () => {
+    // The range comes straight off the device. A string min would land in
+    // common.min and make the admin slider refuse every value the user picks.
+    const caps = parseYxcFeatures({
+      zone: [{ id: "main", range_step: [{ id: "volume", min: "0", max: 161, step: 1 }] }],
+    });
+    expect(caps.zones.find(z => z.id === "main")?.volumeRange).toBeUndefined();
+  });
+
+  test("ignores a range block for something other than the volume", () => {
+    const caps = parseYxcFeatures({
+      zone: [{ id: "main", range_step: ["nope", null, { id: "tone_control", min: -10, max: 10, step: 1 }] }],
+    });
+    expect(caps.zones.find(z => z.id === "main")?.volumeRange).toBeUndefined();
+  });
+
   test("returns empty capabilities for a malformed response", () => {
     expect(parseYxcFeatures(null)).toEqual({ zones: [], media: [], hasDistribution: false });
     expect(parseYxcFeatures({ zone: "nope" })).toEqual({ zones: [], media: [], hasDistribution: false });

@@ -327,6 +327,8 @@ export class Yamaha extends utils.Adapter {
     if (!("group_zones" in config)) {
       return;
     }
+    // (`!group_multiroom` only reads as a guard — the assignment sets it to true
+    // either way, so an already-on multiroom group is not changed by it.)
     if (config.group_zones && !config.group_multiroom) {
       config.group_multiroom = true;
     }

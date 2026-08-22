@@ -154,3 +154,101 @@ describe("connectTransports", () => {
     expect(warn).toHaveBeenCalledTimes(2);
   });
 });
+
+// ---------------------------------------------------------------------------
+// attemptDevice itself: the three transport builders. Everything above drives
+// connectTransports with fakes; these prove each builder targets the right
+// protocol on the right port — a mis-wired builder is a protocol that never
+// connects, and looks exactly like a device that does not speak it.
+// ---------------------------------------------------------------------------
+
+import { vi } from "vitest";
+import { attemptDevice } from "./attempt-device";
+
+const wire = vi.hoisted(() => ({
+  tcp: [] as Array<Record<string, unknown>>,
+  http: [] as Array<Record<string, unknown>>,
+  udp: 0,
+}));
+vi.mock("node:net", () => ({
+  connect: (options: Record<string, unknown>) => {
+    wire.tcp.push(options);
+    const handlers: Record<string, Array<(...a: unknown[]) => void>> = {};
+    const s = {
+      on: (ev: string, h: (...a: unknown[]) => void) => {
+        (handlers[ev] ??= []).push(h);
+        // Nothing is listening on 50000 in this test — answer like the OS does.
+        if (ev === "error") {
+          queueMicrotask(() => {
+            h(new Error("ECONNREFUSED"));
+            (handlers.close ?? []).forEach(c => c());
+          });
+        }
+        return s;
+      },
+      setTimeout: () => undefined,
+      write: () => undefined,
+      destroy: () => undefined,
+    };
+    return s;
+  },
+}));
+vi.mock("node:http", () => {
+  const make = (options: unknown) => {
+    wire.http.push((typeof options === "string" ? { url: options } : options) as Record<string, unknown>);
+    const handlers: Record<string, Array<(...a: unknown[]) => void>> = {};
+    const req = {
+      on: (ev: string, h: (...a: unknown[]) => void) => {
+        (handlers[ev] ??= []).push(h);
+        return req;
+      },
+      setTimeout: () => undefined,
+      write: () => undefined,
+      end: () => undefined,
+      destroy: () => undefined,
+    };
+    // `get` auto-ends, `request` needs .end() — answer like a refused connection
+    // either way so no attempt can hang the test.
+    queueMicrotask(() => (handlers.error ?? []).forEach(h => h(new Error("ECONNREFUSED"))));
+    return req;
+  };
+  return { request: make, get: make };
+});
+vi.mock("node:dgram", () => ({
+  createSocket: () => {
+    wire.udp++;
+    return { on: () => undefined, bind: () => undefined, close: () => undefined, send: () => undefined };
+  },
+}));
+
+describe("attemptDevice builders", () => {
+  test("tries all three protocols at their own endpoints and gives up cleanly", async () => {
+    wire.tcp.length = 0;
+    wire.http.length = 0;
+    const warns: string[] = [];
+    const result = await attemptDevice(
+      { id: "living", ip: "192.168.1.10" },
+      {
+        log: { debug: () => {}, info: () => {}, warn: m => warns.push(m) },
+        upsertObject: async () => {},
+        setStateAck: () => {},
+        timers: { schedule: () => 1 as unknown as ioBroker.Timeout, cancel: () => {} },
+        registerPush: () => () => {},
+        scheduleKeepalive: () => () => {},
+        xmlPollIntervalMs: 60_000,
+        onTransports: () => {},
+        knownDeviceIps: new Set(["192.168.1.10"]),
+        isEntryEnabled: () => true,
+      },
+    );
+
+    // Nothing answered — the device is simply not reachable this attempt.
+    expect(result).toBeNull();
+    expect(warns.some(w => w.includes("no reachable transport"))).toBe(true);
+    // YNCA is a held TCP connection on 50000 …
+    expect(wire.tcp).toContainEqual({ host: "192.168.1.10", port: 50000 });
+    // … while YXC and XML both speak HTTP on 80, XML on the control endpoint.
+    expect(wire.http.some(o => o.port === 80 && o.path === "/YamahaRemoteControl/ctrl")).toBe(true);
+    expect(wire.http.some(o => String(o.url ?? o.host ?? "").includes("192.168.1.10"))).toBe(true);
+  });
+});

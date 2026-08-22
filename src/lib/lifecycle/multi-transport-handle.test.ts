@@ -226,3 +226,63 @@ describe("MultiTransportHandle per-transport reconnect", () => {
     expect(yxc.closed).toBe(true);
   });
 });
+
+describe("MultiTransportHandle teardown guards", () => {
+  test("a drop from a connection that is no longer live removes nothing", async () => {
+    const ynca = fakeConn("ynca", [state("power", "Power")]);
+    const yxc = fakeConn("yxc", [state("dist.role", "Role")]);
+    const supervisorDrop = vi.fn();
+    const { handle, transportsReports } = reconnectSetup([ynca, yxc], {});
+    await handle.start();
+    handle.onDrop(supervisorDrop);
+
+    ynca.drop();
+    const after = transportsReports.at(-1);
+    // A transport can report its drop twice (the socket event AND the keepalive).
+    // Without the "is it still in the set" check the second report evicts whichever
+    // connection happens to sit last — a live one.
+    ynca.drop();
+    expect(transportsReports.at(-1)).toEqual(after);
+    expect(yxc.closed).toBe(false);
+    expect(supervisorDrop).not.toHaveBeenCalled();
+  });
+
+  test("a transport that connects after close is closed again, not taken into the set", async () => {
+    const ynca = fakeConn("ynca", [state("power", "Power")]);
+    const yxc = fakeConn("yxc", [state("dist.role", "Role")]);
+    const fresh = fakeConn("ynca", [state("power", "Power")]);
+    let release: (v: boolean) => void = () => undefined;
+    fresh.connect = (): Promise<boolean> => new Promise(resolve => (release = resolve));
+    const { handle, fireTimers, transportsReports } = reconnectSetup([ynca, yxc], { ynca: () => fresh });
+    await handle.start();
+    ynca.drop();
+    await fireTimers(); // starts the attempt; it is still awaiting connect()
+
+    handle.close();
+    const before = transportsReports.length;
+    release(true);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    // The connect resolves AFTER onUnload. Taking the socket into the live set then
+    // leaves it open for the rest of the process's life.
+    expect(fresh.closed).toBe(true);
+    expect(transportsReports.length).toBe(before);
+  });
+
+  test("a failed reconnect after close schedules no further attempt", async () => {
+    const ynca = fakeConn("ynca", [state("power", "Power")]);
+    const yxc = fakeConn("yxc", [state("dist.role", "Role")]);
+    const fresh = fakeConn("ynca", []);
+    let release: (v: boolean) => void = () => undefined;
+    fresh.connect = (): Promise<boolean> => new Promise(resolve => (release = resolve));
+    const { handle, timers, fireTimers } = reconnectSetup([ynca, yxc], { ynca: () => fresh });
+    await handle.start();
+    ynca.drop();
+    await fireTimers();
+
+    handle.close();
+    release(false);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    // A retry loop that survives the unload keeps the instance from ever stopping.
+    expect(timers).toHaveLength(0);
+  });
+});

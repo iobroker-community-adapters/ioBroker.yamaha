@@ -43,6 +43,8 @@ export function stateToXml(stateId: string, value: unknown): XmlCommand | undefi
     return undefined;
   }
   // HDMI outputs and party are written on the System element, not the zone.
+  // (`!zone` cannot fire today — the regex above only ever yields main/zone2..4,
+  // all of which ZONE_ELEMENT covers. It guards the map against a future zone.)
   const zone = entry.writeZone ?? ZONE_ELEMENT[zoneKey];
   if (!zone) {
     return undefined;

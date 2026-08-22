@@ -118,11 +118,7 @@ describe("upgrade path from the original 0.5.4 adapter (the ~800 existing instal
     expect(devices).toEqual([{ id: "192_168_1_50", ip: "192.168.1.50" }]);
 
     // Step 2: start-up cleanup sees the full legacy tree plus our own info objects.
-    const existing = [
-      `${NS}.info`,
-      `${NS}.info.connection`,
-      ...legacyRelativeIds.map(id => `${NS}.${id}`),
-    ];
+    const existing = [`${NS}.info`, `${NS}.info.connection`, ...legacyRelativeIds.map(id => `${NS}.${id}`)];
     const deviceIds = new Set(devices.map(d => d.id));
     const stale = staleObjects(existing, deviceIds, NS);
 
@@ -421,5 +417,25 @@ describe("renamedObjectIds", () => {
     expect(result.indexOf("yamaha.0.living.multiroom.zone2.multiroom.party")).toBeLessThan(
       result.indexOf("yamaha.0.living.multiroom.zone2.multiroom"),
     );
+  });
+});
+
+describe("mergeDiscovered id collisions among the remembered devices", () => {
+  it("drops a remembered device that would take another one's object id", () => {
+    const merged = mergeDiscovered(
+      [
+        { id: "RX-V685", ip: "192.168.1.20" },
+        { id: "RX-V685", ip: "192.168.1.21" },
+      ],
+      [],
+    );
+    // The store is written by earlier runs and can carry two entries that collapse
+    // onto one id (a renamed receiver, a re-used name). Keeping both would put two
+    // devices on one object tree, each overwriting the other's values.
+    expect(merged).toEqual([{ id: "RX-V685", ip: "192.168.1.20" }]);
+  });
+
+  it("never lets a remembered device take the adapter's own info branch", () => {
+    expect(mergeDiscovered([{ id: "info", ip: "192.168.1.20" }], [])).toEqual([]);
   });
 });

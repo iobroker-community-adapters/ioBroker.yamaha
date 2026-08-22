@@ -147,3 +147,33 @@ describe("YamahaYxcClient real transport", () => {
     }
   });
 });
+
+describe("YamahaYxcClient player and tuner commands", () => {
+  test("builds the remaining command paths exactly as the replaced library did", async () => {
+    const { client, last } = capture();
+    // Each of these is a button in the object tree. A wrong path is a silent
+    // no-op on the device — the state flips back and nothing happens.
+    await client.toggleNetRepeat();
+    expect(last()).toBe("/netusb/toggleRepeat");
+    await client.toggleNetShuffle();
+    expect(last()).toBe("/netusb/toggleShuffle");
+    await client.toggleCDRepeat();
+    expect(last()).toBe("/cd/toggleRepeat");
+    await client.toggleCDShuffle();
+    expect(last()).toBe("/cd/toggleShuffle");
+    await client.toggleTray();
+    expect(last()).toBe("/cd/toggleTray");
+    await client.setBand("fm");
+    expect(last()).toBe("/tuner/setBand?band=fm");
+    await client.setFreq("fm", 87500);
+    expect(last()).toBe("/tuner/setFreq?band=fm&num=87500");
+    await client.setPartyMode(true);
+    expect(last()).toBe("/system/setPartyMode?enable=true");
+    await client.setPartyMode(false);
+    expect(last()).toBe("/system/setPartyMode?enable=false");
+    await client.recallPreset(3, "zone2");
+    expect(last()).toBe("/netusb/recallPreset?zone=zone2&num=3");
+    await client.recallPreset(1, "main");
+    expect(last()).toBe("/netusb/recallPreset?zone=main&num=1");
+  });
+});

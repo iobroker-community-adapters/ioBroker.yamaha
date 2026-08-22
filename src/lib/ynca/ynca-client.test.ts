@@ -1,3 +1,46 @@
+import { vi } from "vitest";
+
+/** node:net is mocked so the DEFAULT socket factory (the production path) is testable. */
+const netMock = vi.hoisted(() => ({
+  sockets: [] as Array<{
+    options: Record<string, unknown>;
+    timeouts: number[];
+    written: string[];
+    destroyed: Error | undefined | true;
+    handlers: Record<string, Array<(...a: unknown[]) => void>>;
+    emit: (ev: string, ...a: unknown[]) => void;
+  }>,
+}));
+vi.mock("node:net", () => ({
+  connect: (options: Record<string, unknown>) => {
+    const s = {
+      options,
+      timeouts: [] as number[],
+      written: [] as string[],
+      destroyed: undefined as Error | undefined | true,
+      handlers: {} as Record<string, Array<(...a: unknown[]) => void>>,
+      on(ev: string, cb: (...a: unknown[]) => void) {
+        (s.handlers[ev] ??= []).push(cb);
+        return s;
+      },
+      setTimeout(ms: number) {
+        s.timeouts.push(ms);
+      },
+      write(data: string) {
+        s.written.push(data);
+      },
+      destroy(e?: Error) {
+        s.destroyed = e ?? true;
+      },
+      emit(ev: string, ...a: unknown[]) {
+        (s.handlers[ev] ?? []).forEach(h => h(...a));
+      },
+    };
+    netMock.sockets.push(s);
+    return s;
+  },
+}));
+
 import { YncaClient } from "./ynca-client";
 import type { YncaSocket } from "./ynca-client";
 
@@ -310,5 +353,58 @@ describe("YncaClient", () => {
     sockets[0].emitClose();
     await expect(connected).rejects.toThrow(/connect timeout/);
     expect(dropped).toBe(0);
+  });
+});
+
+describe("YncaClient on a real TCP socket", () => {
+  beforeEach(() => {
+    netMock.sockets.length = 0;
+  });
+
+  test("connects to the YNCA port and arms a connect deadline it clears on connect", async () => {
+    const client = new YncaClient("192.168.1.10", testTimers);
+    const connecting = client.connect();
+    const socket = netMock.sockets[0];
+    expect(socket.options).toEqual({ host: "192.168.1.10", port: 50000 });
+    // A MusicCast-only speaker has no YNCA port and never answers. Without the
+    // deadline the whole start-up hangs instead of falling back to YXC.
+    expect(socket.timeouts).toEqual([5000]);
+
+    socket.emit("connect");
+    // Cleared on connect, or a quiet receiver would be torn down mid-session.
+    expect(socket.timeouts).toEqual([5000, 0]);
+    await connecting;
+    client.close();
+    expect(socket.destroyed).toBeTruthy();
+  });
+
+  test("tears the socket down when the device never answers", async () => {
+    const client = new YncaClient("192.168.1.99", testTimers);
+    const connecting = client.connect();
+    const socket = netMock.sockets[0];
+    socket.emit("timeout");
+    expect((socket.destroyed as Error).message).toBe("connect timeout");
+    socket.emit("error", socket.destroyed as Error);
+    socket.emit("close");
+    await expect(connecting).rejects.toBeDefined();
+    client.close();
+  });
+
+  test("writes a command out and hands received bytes to the message handler", async () => {
+    const client = new YncaClient("192.168.1.10", testTimers);
+    const messages: unknown[] = [];
+    client.onMessage(m => messages.push(m));
+    const connecting = client.connect();
+    const socket = netMock.sockets[0];
+    socket.emit("connect");
+    await connecting;
+
+    socket.written.length = 0;
+    client.get("MAIN", "PWR");
+    expect(socket.written.join("")).toContain("@MAIN:PWR=?");
+
+    socket.emit("data", Buffer.from("@MAIN:PWR=On\r\n"));
+    expect(messages).toContainEqual(expect.objectContaining({ subunit: "MAIN", func: "PWR", value: "On" }));
+    client.close();
   });
 });

@@ -176,3 +176,52 @@ describe("DeviceSupervisor", () => {
     expect(calls).toEqual([["dev.power", false, true]]);
   });
 });
+
+describe("DeviceSupervisor teardown", () => {
+  test("a retry timer that fires after close attempts nothing", async () => {
+    const attempt = vi.fn(async () => null);
+    const timers: Array<() => void> = [];
+    const supervisor = new DeviceSupervisor({
+      attempt,
+      schedule: cb => {
+        timers.push(cb);
+        return timers.length;
+      },
+      cancel: () => {},
+      onConnectionChange: () => {},
+      backoff: { nextDelay: () => 1000, reset: () => {} },
+      log: { debug: () => {}, info: () => {}, warn: () => {} },
+    });
+    supervisor.start();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(attempt).toHaveBeenCalledTimes(1);
+
+    supervisor.close();
+    // onUnload is synchronous: a timer whose callback was already queued still
+    // arrives, and must not open a socket from a stopped instance.
+    timers.forEach(cb => cb());
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(attempt).toHaveBeenCalledTimes(1);
+  });
+
+  test("a connection that arrives after close is closed, not kept", async () => {
+    let release: (v: unknown) => void = () => undefined;
+    const handle = { onDrop: vi.fn(), handleStateChange: vi.fn(), close: vi.fn() };
+    const supervisor = new DeviceSupervisor({
+      attempt: () => new Promise<typeof handle | null>(resolve => (release = resolve as (v: unknown) => void)),
+      schedule: () => 1,
+      cancel: () => {},
+      onConnectionChange: () => {},
+      backoff: { nextDelay: () => 1000, reset: () => {} },
+      log: { debug: () => {}, info: () => {}, warn: () => {} },
+    });
+    supervisor.start();
+    supervisor.close();
+    release(handle);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    // The transports connect asynchronously; one that lands after the unload would
+    // otherwise hold its sockets and timers open for good.
+    expect(handle.close).toHaveBeenCalledTimes(1);
+    expect(handle.onDrop).not.toHaveBeenCalled();
+  });
+});

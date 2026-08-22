@@ -129,3 +129,29 @@ describe("parseXmlStatus", () => {
     expect(u).toContainEqual({ id: "sound.dialogueLevel", value: 2 });
   });
 });
+
+describe("XML mapper write target", () => {
+  it("writes HDMI output and party mode on the System element, not the zone", () => {
+    // These are device-global. Addressed to <Main_Zone> the receiver answers
+    // RC=3 (invalid command) and the switch silently does nothing.
+    expect(stateToXml("hdmiOut1", true)?.zone).toBe("System");
+    expect(stateToXml("multiroom.party", true)?.zone).toBe("System");
+    // A per-zone datapoint still goes to its own zone element.
+    expect(stateToXml("power", true)?.zone).toBe("Main_Zone");
+    expect(stateToXml("multiroom.zone2.power", true)?.zone).toBe("Zone_2");
+  });
+});
+
+describe("XML mapper zone guards", () => {
+  it("refuses a write for a zone the XML API has no element for", () => {
+    // A zone the device does not have (or an id shape the catalog never emits)
+    // must not produce `<undefined>` in the request body.
+    expect(stateToXml("multiroom.zone9.power", true)).toBeUndefined();
+  });
+
+  it("returns nothing for a status of an unknown zone", () => {
+    // Emitting the fields without the zone prefix would write zone 3's values
+    // straight into the main zone's datapoints.
+    expect(parseXmlStatus({ power: true }, "zone9")).toEqual([]);
+  });
+});

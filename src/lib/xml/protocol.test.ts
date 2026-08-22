@@ -1,4 +1,4 @@
-import { encodePut, encodeGet, parseBasicStatus } from "./protocol";
+import { encodePut, encodeGet, parseBasicStatus, parseModelName } from "./protocol";
 
 describe("encodePut / encodeGet", () => {
   test("wraps an inner command in the YAMAHA_AV PUT envelope for a zone", () => {
@@ -82,5 +82,15 @@ describe("parseBasicStatus", () => {
 
   test("returns nothing for a malformed response", () => {
     expect(parseBasicStatus("not xml")).toEqual({});
+  });
+});
+
+describe("parseModelName", () => {
+  it("treats an empty element as no model at all", () => {
+    // An empty <Model_Name/> would become an empty model string, which drives the
+    // device-class icon and the card's model line into a blank.
+    expect(parseModelName("<Model_Name></Model_Name>")).toBeUndefined();
+    expect(parseModelName("<YAMAHA_AV/>")).toBeUndefined();
+    expect(parseModelName("<Model_Name>RX-V771</Model_Name>")).toBe("RX-V771");
   });
 });
