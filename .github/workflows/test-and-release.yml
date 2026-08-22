@@ -5,7 +5,12 @@ name: Test and Release
 on:
   push:
     branches:
+      # `developing` is where the work happens and `master` is the release branch, so
+      # both have to be tested. Without developing, a change is first seen by a Windows
+      # runner when the release tag is already pushed — which is exactly how v1.1.0 was
+      # tagged with a test that only fails on Windows.
       - "master"
+      - "developing"
     tags:
       # normal versions
       - "v[0-9]+.[0-9]+.[0-9]+"
