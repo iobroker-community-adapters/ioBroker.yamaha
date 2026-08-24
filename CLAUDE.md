@@ -121,7 +121,9 @@ per git-Historie + dort weiter abrufbar:
 
 Der Adapter lebt im Community-Repo `iobroker-community-adapters/ioBroker.yamaha` (krobi = Maintainer,
 push/triage — Repo-Einstellungen/About nur via mcm/Org). **Community-Standard gilt:** Release-Branch
-**`master`**, Changelog-Bullets mit `(krobipd)`-Präfix, Community-CI (KEINE Fleet-Härtungen
+**`master`** (Arbeit auf `developing`, die CI prüft seit 2026-08-23 BEIDE Zweige — vorher fiel ein nur
+unter Windows roter Test erst am Release-Tag auf und verbrannte v1.1.0; `deploy` hängt am Tag, aus
+einem Push auf `developing` wird nie ein Release), Changelog-Bullets mit `(krobipd)`-Präfix, Community-CI (KEINE Fleet-Härtungen
 repochecker-version-gate/workflow-lint; Bots `automerge-iobroker-bot`/`auto-merge.yml`/dependabot in
 Community-Form), Asset-URLs auf `iobroker-community-adapters/…@master`. Das Fleet-Tooling erkennt das
 automatisch an `package.json repository.url` (`scripts/_community.py`). Der alte krobipd-Fork ist
