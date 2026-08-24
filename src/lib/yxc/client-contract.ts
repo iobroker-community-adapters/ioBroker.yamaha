@@ -80,6 +80,20 @@ export interface YxcClientLike {
   setPartyMode(on: boolean): Promise<unknown>;
   /** Recall a network/USB preset. */
   recallPreset(num: number, zone: string): Promise<unknown>;
+  /** Read the stored network/USB favourites (preset slots with names). */
+  getPresetInfo(): Promise<unknown>;
+  /** Read the recently played network/USB items. */
+  getRecentInfo(): Promise<unknown>;
+  /** Recall an entry from the recently-played list. */
+  recallRecentItem(num: number, zone: string): Promise<unknown>;
+  /** Read the tuner preset list for one band. */
+  getTunerPresetInfo(band: string): Promise<unknown>;
+  /** Recall a tuner preset on a band. */
+  recallTunerPreset(band: string, num: number, zone: string): Promise<unknown>;
+  /** Step to the next/previous stored tuner preset. */
+  switchTunerPreset(direction: "next" | "previous"): Promise<unknown>;
+  /** Read the clock/alarm settings block. */
+  getClockSettings(): Promise<unknown>;
   /** Read the MusicCast-Link distribution info (role, group, client list). */
   getDistributionInfo(): Promise<unknown>;
   /** Set the group master's client roster (link/unlink sequence). */

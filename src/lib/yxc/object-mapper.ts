@@ -1,6 +1,17 @@
 import { CHANNEL_NAMES, type ObjectDef } from "../catalog/types";
 import type { YxcCapabilities } from "./capability";
 import { YXC_AMP_CATALOG } from "./catalog";
+import { ALARM_DAYS, DAB_FIELDS } from "./command-mapper";
+
+/**
+ * Build a value → label dropdown map from a device-reported value list.
+ *
+ * @param values the allowed values
+ * @returns the states map
+ */
+function selfMap(values: readonly string[]): Record<string, string> {
+  return Object.fromEntries(values.map(value => [value, value]));
+}
 
 /** The zones the adapter maps: main flat, zone2-4 each under multiroom. */
 const ZONES: Array<{ id: string; prefix: string; channel?: string; channelName?: string }> = [
@@ -162,6 +173,17 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
         common.max = zone.volumeRange.max;
         common.step = zone.volumeRange.step;
       }
+      // The device's own allowed-value lists (getFeatures) become dropdowns: the zone's
+      // inputs on the input state, sound_program_list & co on their states. On a device
+      // that also speaks YNCA the YNCA-owned dropdown wins via the owner policy — these
+      // matter on MusicCast-only devices, where the raw string was the old poverty.
+      if (entry.state === "input" && zone.inputs.length > 0) {
+        common.states = selfMap(zone.inputs);
+      }
+      const valueList = zone.valueLists?.[entry.state];
+      if (valueList) {
+        common.states = selfMap(valueList);
+      }
       objects.push({ id: fullId, type: "state", common });
     }
   }
@@ -175,6 +197,35 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
       type: "state",
       common: { name: "Recall preset", type: "number", role: "level", read: true, write: true, min: 1 },
     });
+    // The favourites and recently-played lists (names included) plus the recall-by-number
+    // for recents — the musiccast adapter's selection surface, on our tree.
+    objects.push({
+      id: "player.netPlayer.presets",
+      type: "state",
+      common: { name: "Favourites (stored presets)", type: "string", role: "json", read: true, write: false },
+    });
+    objects.push({
+      id: "player.netPlayer.recent",
+      type: "state",
+      common: { name: "Recently played", type: "string", role: "json", read: true, write: false },
+    });
+    objects.push({
+      id: "player.netPlayer.recallRecent",
+      type: "state",
+      common: {
+        name: "Recall recently played (number)",
+        type: "number",
+        role: "level",
+        read: true,
+        write: true,
+        min: 1,
+      },
+    });
+    objects.push({
+      id: "player.netPlayer.source",
+      type: "state",
+      common: { name: "Active network source", type: "string", role: "text", read: true, write: false },
+    });
   }
   if (capabilities.media.includes("cd")) {
     pushPlayerBlock(objects, "player.cd", "CD");
@@ -183,14 +234,35 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
       type: "state",
       common: { name: "Toggle tray", type: "boolean", role: "button", read: false, write: true },
     });
+    objects.push({
+      id: "player.cd.trackNumber",
+      type: "state",
+      common: { name: "Track number", type: "number", role: "value", read: true, write: false },
+    });
+    objects.push({
+      id: "player.cd.totalTracks",
+      type: "state",
+      common: { name: "Total tracks", type: "number", role: "value", read: true, write: false },
+    });
+    objects.push({
+      id: "player.cd.discTime",
+      type: "state",
+      common: { name: "Disc time", type: "number", unit: "s", role: "value", read: true, write: false },
+    });
+    objects.push({
+      id: "player.cd.deviceStatus",
+      type: "state",
+      common: { name: "Drive status", type: "string", role: "state", read: true, write: false },
+    });
   }
   if (capabilities.media.includes("tuner")) {
     objects.push({ id: "tuner", type: "channel", common: { name: "Tuner" } });
-    objects.push({
-      id: "tuner.band",
-      type: "state",
-      common: { name: "Band", type: "string", role: "state", read: true, write: true },
-    });
+    const bandCommon: ObjectDef["common"] = { name: "Band", type: "string", role: "state", read: true, write: true };
+    const bands = capabilities.tuner?.bands ?? [];
+    if (bands.length > 0) {
+      bandCommon.states = selfMap(bands);
+    }
+    objects.push({ id: "tuner.band", type: "state", common: bandCommon });
     // Frequency in kHz — FM/AM/DAB all report kHz in getPlayInfo (FM 100900 =
     // 100.9 MHz, AM 1080, DAB 180064), verified against real device captures.
     objects.push({
@@ -203,6 +275,151 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
       type: "state",
       common: { name: "RDS text", type: "string", role: "text", read: true, write: false },
     });
+    objects.push({
+      id: "tuner.rdsTextB",
+      type: "state",
+      common: { name: "RDS text B", type: "string", role: "text", read: true, write: false },
+    });
+    objects.push({
+      id: "tuner.rdsService",
+      type: "state",
+      common: { name: "RDS station", type: "string", role: "text", read: true, write: false },
+    });
+    objects.push({
+      id: "tuner.rdsProgramType",
+      type: "state",
+      common: { name: "RDS programme type", type: "string", role: "text", read: true, write: false },
+    });
+    // The stored-station surface: recall by number (writable), the active slot read back
+    // from play info, up/down stepping, and the stored lists (with what the device knows
+    // about each slot) as JSON — the selection surface the musiccast adapter offered.
+    const presetCommon: ObjectDef["common"] = {
+      name: "Preset (recall by number)",
+      type: "number",
+      role: "level",
+      read: true,
+      write: true,
+      min: 0,
+    };
+    if (capabilities.tuner?.presetNum) {
+      presetCommon.max = capabilities.tuner.presetNum;
+    }
+    objects.push({ id: "tuner.preset", type: "state", common: presetCommon });
+    objects.push({
+      id: "tuner.presetUp",
+      type: "state",
+      common: { name: "Next preset", type: "boolean", role: "button", read: false, write: true },
+    });
+    objects.push({
+      id: "tuner.presetDown",
+      type: "state",
+      common: { name: "Previous preset", type: "boolean", role: "button", read: false, write: true },
+    });
+    objects.push({
+      id: "tuner.presets",
+      type: "state",
+      common: { name: "Stored presets", type: "string", role: "json", read: true, write: false },
+    });
+    objects.push({
+      id: "tuner.tuned",
+      type: "state",
+      common: { name: "Tuned", type: "boolean", role: "indicator", read: true, write: false },
+    });
+    objects.push({
+      id: "tuner.audioMode",
+      type: "state",
+      common: { name: "Audio mode", type: "string", role: "state", read: true, write: false },
+    });
+    if (bands.includes("dab")) {
+      objects.push({ id: "tuner.dab", type: "channel", common: { name: "DAB" } });
+      for (const field of DAB_FIELDS) {
+        objects.push({
+          id: field.id,
+          type: "state",
+          common: {
+            name: field.name,
+            type: field.type,
+            role: field.type === "boolean" ? "indicator" : field.type === "number" ? "value" : "text",
+            read: true,
+            write: false,
+          },
+        });
+      }
+    }
+  }
+  if (capabilities.clock) {
+    // The clock/alarm block, as the musiccast adapter showed it — read-only display
+    // (the predecessor's clock datapoints had no working write path either); the
+    // devices that report it are the desk-audio/clock models.
+    objects.push({ id: "clock", type: "channel", common: { name: "Clock & alarm" } });
+    objects.push({
+      id: "clock.autoSync",
+      type: "state",
+      common: { name: "Automatic time sync", type: "boolean", role: "indicator", read: true, write: false },
+    });
+    objects.push({
+      id: "clock.format",
+      type: "state",
+      common: { name: "Clock format", type: "string", role: "state", read: true, write: false },
+    });
+    objects.push({ id: "clock.alarm", type: "channel", common: { name: "Alarm" } });
+    objects.push({
+      id: "clock.alarm.on",
+      type: "state",
+      common: { name: "Alarm armed", type: "boolean", role: "indicator", read: true, write: false },
+    });
+    const volumeCommon: ObjectDef["common"] = {
+      name: "Alarm volume",
+      type: "number",
+      role: "value",
+      read: true,
+      write: false,
+    };
+    if (capabilities.clock.alarmVolumeRange) {
+      volumeCommon.min = capabilities.clock.alarmVolumeRange.min;
+      volumeCommon.max = capabilities.clock.alarmVolumeRange.max;
+    }
+    objects.push({ id: "clock.alarm.volume", type: "state", common: volumeCommon });
+    objects.push({
+      id: "clock.alarm.fadeInterval",
+      type: "state",
+      common: { name: "Fade-in time", type: "number", unit: "s", role: "value", read: true, write: false },
+    });
+    objects.push({
+      id: "clock.alarm.fadeType",
+      type: "state",
+      common: { name: "Fade type", type: "number", role: "value", read: true, write: false },
+    });
+    objects.push({
+      id: "clock.alarm.mode",
+      type: "state",
+      common: { name: "Alarm mode", type: "string", role: "state", read: true, write: false },
+    });
+    objects.push({
+      id: "clock.alarm.repeat",
+      type: "state",
+      common: { name: "Repeat (snooze)", type: "boolean", role: "indicator", read: true, write: false },
+    });
+    const detailChannels = ["oneday", ...(capabilities.clock.alarmModes.includes("weekly") ? ALARM_DAYS : [])];
+    for (const channel of detailChannels) {
+      const label = channel === "oneday" ? "One-day alarm" : channel.charAt(0).toUpperCase() + channel.slice(1);
+      objects.push({ id: `clock.alarm.${channel}`, type: "channel", common: { name: label } });
+      const detail = (id: string, name: string, type: "boolean" | "number" | "string", role: string): void => {
+        objects.push({
+          id: `clock.alarm.${channel}.${id}`,
+          type: "state",
+          common: { name, type, role, read: true, write: false },
+        });
+      };
+      detail("enable", "Enabled", "boolean", "indicator");
+      detail("time", "Alarm time", "string", "text");
+      detail("beep", "Beep", "boolean", "indicator");
+      detail("playbackType", "Playback type", "string", "state");
+      detail("resumeInput", "Resume input", "string", "state");
+      detail("presetType", "Preset type", "string", "state");
+      detail("presetNumber", "Preset number", "number", "value");
+      detail("presetInput", "Preset source", "string", "state");
+    }
   }
   if (capabilities.hasDistribution) {
     if (!channels.has("multiroom")) {

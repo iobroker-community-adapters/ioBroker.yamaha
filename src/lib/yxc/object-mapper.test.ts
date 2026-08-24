@@ -2,6 +2,7 @@ import { mapYxcToObjects } from "./object-mapper";
 import { parseYxcFeatures } from "./capability";
 import rxA2070 from "./__fixtures__/RX_A2070_v1.json";
 import wx10 from "./__fixtures__/WX10_216_208.json";
+import isx18d from "./__fixtures__/ISX_18D_216_208.json";
 
 function ids(fixture: unknown): string[] {
   return mapYxcToObjects(parseYxcFeatures(fixture)).map(o => o.id);
@@ -276,5 +277,77 @@ describe("mapYxcToObjects tree hygiene", () => {
     // what the scope is: directly under multiroom = whole device, group = the link.
     expect(channels).toContain("multiroom.group");
     expect(objs.some(o => o.id === "multiroom.group.role")).toBe(true);
+  });
+
+  test("device-reported value lists become dropdowns on their states", () => {
+    const objs = mapYxcToObjects(parseYxcFeatures(rxA2070));
+    const common = (id: string): Record<string, unknown> | undefined =>
+      objs.find(o => o.id === id)?.common as Record<string, unknown> | undefined;
+    expect(common("input")?.states).toMatchObject({ av1: "av1", airplay: "airplay" });
+    expect(common("soundProgram")?.states).toMatchObject({ munich: "munich" });
+    expect(common("sound.toneMode")?.states).toEqual({ manual: "manual" });
+  });
+
+  test("netusb gets the favourites/recently-played lists and the recall-by-number states", () => {
+    const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: ["netusb"] });
+    const byId = new Map(objs.map(o => [o.id, o]));
+    expect(byId.get("player.netPlayer.presets")?.common.write).toBe(false);
+    expect(byId.get("player.netPlayer.recent")?.common.write).toBe(false);
+    expect(byId.get("player.netPlayer.recallRecent")?.common.write).toBe(true);
+    expect(byId.get("player.netPlayer.source")?.common.write).toBe(false);
+  });
+
+  test("the cd player carries track number, totals, disc time and drive status", () => {
+    const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: ["cd"] });
+    const ids = objs.map(o => o.id);
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        "player.cd.trackNumber",
+        "player.cd.totalTracks",
+        "player.cd.discTime",
+        "player.cd.deviceStatus",
+      ]),
+    );
+  });
+
+  test("the tuner gets the preset surface: recall, up/down, stored lists, tuned/audio mode", () => {
+    const objs = mapYxcToObjects(parseYxcFeatures(isx18d));
+    const byId = new Map(objs.map(o => [o.id, o]));
+    expect(byId.get("tuner.preset")?.common.write).toBe(true);
+    expect(byId.get("tuner.preset")?.common.max).toBe(30); // the ISX-18D's slot count
+    expect(byId.get("tuner.presetUp")?.common.role).toBe("button");
+    expect(byId.get("tuner.presetDown")?.common.role).toBe("button");
+    expect(byId.get("tuner.presets")?.common.role).toBe("json");
+    expect(byId.get("tuner.tuned")?.common.write).toBe(false);
+    expect(byId.get("tuner.band")?.common.states).toEqual({ fm: "fm", dab: "dab" });
+  });
+
+  test("a DAB tuner gets the tuner.dab detail channel on the YNCA-shared ids", () => {
+    const ids = mapYxcToObjects(parseYxcFeatures(isx18d)).map(o => o.id);
+    expect(ids).toEqual(
+      expect.arrayContaining(["tuner.dab", "tuner.dab.serviceLabel", "tuner.dab.ensembleLabel", "tuner.dab.dls"]),
+    );
+  });
+
+  test("a clock device gets the read-only clock/alarm block; others get none", () => {
+    const withClock = mapYxcToObjects(parseYxcFeatures(isx18d));
+    const ids = withClock.map(o => o.id);
+    expect(ids).toEqual(
+      expect.arrayContaining(["clock", "clock.autoSync", "clock.alarm.on", "clock.alarm.oneday.time"]),
+    );
+    // Every clock state is display-only — the predecessor's clock writes were dead too.
+    for (const obj of withClock.filter(o => o.id.startsWith("clock") && o.type === "state")) {
+      expect(obj.common.write).toBe(false);
+    }
+    // The one-day-only ISX gets no weekly day channels.
+    expect(ids).not.toContain("clock.alarm.monday");
+    expect(mapYxcToObjects(parseYxcFeatures(rxA2070)).map(o => o.id)).not.toContain("clock");
+  });
+
+  test("the alarm volume carries the device's reported range", () => {
+    const objs = mapYxcToObjects(parseYxcFeatures(isx18d));
+    const volume = objs.find(o => o.id === "clock.alarm.volume");
+    expect(volume?.common.min).toBe(5);
+    expect(volume?.common.max).toBe(60);
   });
 });

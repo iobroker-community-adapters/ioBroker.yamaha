@@ -98,6 +98,13 @@ const YXC_AMP_CATALOG = [
     write: { apply: (c, v, z) => c.setBassTo(Number(v), z) }
   },
   {
+    state: "sound.toneMode",
+    common: { name: "Tone control mode", type: "string", role: "state", read: true, write: false },
+    create: { kind: "func", func: "tone_control" },
+    read: { path: ["tone_control", "mode"] },
+    fromStatus: str
+  },
+  {
     state: "sound.treble",
     common: { name: "Treble", type: "number", unit: "dB", role: "level", read: true, write: true },
     create: { kind: "func", func: "tone_control" },
@@ -126,6 +133,13 @@ const YXC_AMP_CATALOG = [
     create: { kind: "func", func: "actual_volume" },
     read: { path: ["actual_volume", "value"] },
     fromStatus: num
+  },
+  {
+    state: "actualVolumeMode",
+    common: { name: "Volume display mode", type: "string", role: "state", read: true, write: false },
+    create: { kind: "func", func: "actual_volume" },
+    read: { path: ["actual_volume", "mode"] },
+    fromStatus: str
   },
   {
     state: "sound.contentsDisplay",
@@ -249,6 +263,13 @@ const YXC_AMP_CATALOG = [
     create: { kind: "func", func: "dts_dialogue_control" },
     read: { field: "dts_dialogue_control" },
     fromStatus: num
+  },
+  {
+    state: "sound.equalizerMode",
+    common: { name: "Equalizer mode", type: "string", role: "state", read: true, write: false },
+    create: { kind: "func", func: "equalizer" },
+    read: { path: ["equalizer", "mode"] },
+    fromStatus: str
   },
   {
     state: "sound.equalizerLow",

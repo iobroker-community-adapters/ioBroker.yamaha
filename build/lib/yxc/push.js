@@ -19,6 +19,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var push_exports = {};
 __export(push_exports, {
   mediaToRefresh: () => mediaToRefresh,
+  netusbListsToRefresh: () => netusbListsToRefresh,
   zonesToRefresh: () => zonesToRefresh
 });
 module.exports = __toCommonJS(push_exports);
@@ -38,9 +39,18 @@ function mediaToRefresh(pushEvent) {
   const event = pushEvent;
   return MEDIA_KEYS.filter((block) => block in event);
 }
+function netusbListsToRefresh(pushEvent) {
+  const netusb = pushEvent == null ? void 0 : pushEvent.netusb;
+  if (typeof netusb !== "object" || netusb === null) {
+    return { presets: false, recent: false };
+  }
+  const flags = netusb;
+  return { presets: flags.preset_info_updated === true, recent: flags.recent_info_updated === true };
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   mediaToRefresh,
+  netusbListsToRefresh,
   zonesToRefresh
 });
 //# sourceMappingURL=push.js.map

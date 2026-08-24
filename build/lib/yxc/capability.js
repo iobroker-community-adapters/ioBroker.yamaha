@@ -25,7 +25,7 @@ const MEDIA_BLOCKS = ["netusb", "tuner", "cd"];
 function stringList(value) {
   return Array.isArray(value) ? value.filter((entry) => typeof entry === "string") : [];
 }
-function parseVolumeRange(rangeStep) {
+function parseRange(rangeStep, id) {
   if (!Array.isArray(rangeStep)) {
     return void 0;
   }
@@ -34,11 +34,56 @@ function parseVolumeRange(rangeStep) {
       continue;
     }
     const range = entry;
-    if (range.id === "volume" && typeof range.min === "number" && typeof range.max === "number" && typeof range.step === "number") {
+    if (range.id === id && typeof range.min === "number" && typeof range.max === "number" && typeof range.step === "number") {
       return { min: range.min, max: range.max, step: range.step };
     }
   }
   return void 0;
+}
+const ZONE_VALUE_LISTS = {
+  sound_program_list: "soundProgram",
+  surr_decoder_type_list: "sound.surroundDecoder",
+  tone_control_mode_list: "sound.toneMode",
+  equalizer_mode_list: "sound.equalizerMode",
+  audio_select_list: "sound.audioSelect",
+  actual_volume_mode_list: "actualVolumeMode",
+  link_control_list: "sound.linkControl",
+  link_audio_delay_list: "sound.linkAudioDelay",
+  link_audio_quality_list: "sound.linkAudioQuality"
+};
+function parseValueLists(zone) {
+  const lists = {};
+  for (const [field, stateId] of Object.entries(ZONE_VALUE_LISTS)) {
+    const values = stringList(zone[field]);
+    if (values.length > 0) {
+      lists[stateId] = values;
+    }
+  }
+  return Object.keys(lists).length > 0 ? lists : void 0;
+}
+const TUNER_BANDS = ["am", "fm", "dab"];
+function parseTunerFeatures(tuner) {
+  if (typeof tuner !== "object" || tuner === null) {
+    return void 0;
+  }
+  const obj = tuner;
+  const bands = stringList(obj.func_list).filter((func) => TUNER_BANDS.includes(func));
+  const preset = typeof obj.preset === "object" && obj.preset !== null ? obj.preset : {};
+  return {
+    bands,
+    presetType: preset.type === "common" ? "common" : "separate",
+    presetNum: typeof preset.num === "number" ? preset.num : void 0
+  };
+}
+function parseClockFeatures(clock) {
+  if (typeof clock !== "object" || clock === null) {
+    return void 0;
+  }
+  const obj = clock;
+  return {
+    alarmModes: stringList(obj.alarm_mode_list),
+    alarmVolumeRange: parseRange(obj.range_step, "alarm_volume")
+  };
 }
 function parseYxcFeatures(response) {
   if (typeof response !== "object" || response === null) {
@@ -57,13 +102,20 @@ function parseYxcFeatures(response) {
           id: zone.id,
           funcs: stringList(zone.func_list),
           inputs: stringList(zone.input_list),
-          volumeRange: parseVolumeRange(zone.range_step)
+          volumeRange: parseRange(zone.range_step, "volume"),
+          valueLists: parseValueLists(zone)
         });
       }
     }
   }
   const media = MEDIA_BLOCKS.filter((block) => block in obj);
-  return { zones, media, hasDistribution: "distribution" in obj };
+  return {
+    zones,
+    media,
+    hasDistribution: "distribution" in obj,
+    tuner: media.includes("tuner") ? parseTunerFeatures(obj.tuner) : void 0,
+    clock: "clock" in obj ? parseClockFeatures(obj.clock) : void 0
+  };
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {

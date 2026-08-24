@@ -444,6 +444,70 @@ class YamahaYxcClient {
   recallPreset(num, zone) {
     return this.send(`/netusb/recallPreset?zone=${zoneSeg(zone)}&num=${num}`);
   }
+  /**
+   * Read the stored network/USB favourites (preset slots with their names).
+   *
+   * @returns the preset_info response
+   */
+  getPresetInfo() {
+    return this.send("/netusb/getPresetInfo");
+  }
+  /**
+   * Read the recently played network/USB items.
+   *
+   * @returns the recent_info response
+   */
+  getRecentInfo() {
+    return this.send("/netusb/getRecentInfo");
+  }
+  /**
+   * Recall an entry from the recently-played list.
+   *
+   * @param num the recent-list position (1-based)
+   * @param zone the zone
+   * @returns the command response
+   */
+  recallRecentItem(num, zone) {
+    return this.send(`/netusb/recallRecentItem?zone=${zoneSeg(zone)}&num=${num}`);
+  }
+  /**
+   * Read the tuner preset list for one band (`common` on devices with a shared list).
+   *
+   * @param band the band (`common`, `am`, `fm`, `dab`)
+   * @returns the preset_info response
+   */
+  getTunerPresetInfo(band) {
+    return this.send(`/tuner/getPresetInfo?band=${band}`);
+  }
+  /**
+   * Recall a tuner preset. The URL is the official YXC form (verified against
+   * aiomusiccast, the Home-Assistant reference client).
+   *
+   * @param band the band the preset list belongs to (`common`, `am`, `fm`, `dab`)
+   * @param num the preset number
+   * @param zone the zone
+   * @returns the command response
+   */
+  recallTunerPreset(band, num, zone) {
+    return this.send(`/tuner/recallPreset?zone=${zoneSeg(zone)}&band=${band}&num=${num}`);
+  }
+  /**
+   * Step to the next/previous stored tuner preset.
+   *
+   * @param direction `next` or `previous`
+   * @returns the command response
+   */
+  switchTunerPreset(direction) {
+    return this.send(`/tuner/switchPreset?dir=${direction}`);
+  }
+  /**
+   * Read the clock/alarm settings block.
+   *
+   * @returns the getSettings response
+   */
+  getClockSettings() {
+    return this.send("/clock/getSettings");
+  }
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {

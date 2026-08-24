@@ -28,6 +28,14 @@ export interface NumberSpec {
   max?: number;
   /** Step size. */
   step?: number;
+  /**
+   * Fixed decimal count the WIRE value must carry (YNCA float/int functions). Without
+   * the mandatory decimal point the receiver reads the digits as tenths — "VOL=-38"
+   * arrived as -3.8 dB (#612). When set, {@link encode} snaps to {@link step} (if any)
+   * and formats with exactly this many decimals, mirroring ynca-python's
+   * number_to_string_with_stepsize. Unset keeps the plain String(value) form.
+   */
+  decimals?: number;
 }
 
 /** A free-text value → a string state. */
@@ -212,6 +220,23 @@ export function isWritableValue(value: unknown, numeric: boolean): boolean {
 }
 
 /**
+ * Format a number the way the YNCA wire demands it: snapped to the step grid (when a
+ * step is given) and with a FIXED decimal count — the reference behaviour of
+ * ynca-python's number_to_string_with_stepsize, including "never a signed zero".
+ *
+ * @param value the written number
+ * @param decimals the mandatory decimal count
+ * @param step optional step grid to snap to
+ * @returns the wire string (e.g. "-38.0")
+ */
+export function formatWireNumber(value: number, decimals: number, step?: number): string {
+  const snapped = step ? Math.round(value / step) * step : value;
+  const magnitude = Math.abs(snapped).toFixed(decimals);
+  const sign = snapped < 0 && Number(magnitude) !== 0 ? "-" : "";
+  return sign + magnitude;
+}
+
+/**
  * Turn a typed ioBroker state value back into the raw protocol value: a boolean
  * becomes the on/off wire token, everything else its string form.
  *
@@ -224,6 +249,10 @@ export function encode(spec: ValueSpec, value: boolean | number | string): strin
     case "onoff":
       return value ? spec.on : spec.off;
     case "number":
+      if (spec.decimals !== undefined) {
+        return formatWireNumber(Number(value), spec.decimals, spec.step);
+      }
+      return String(value);
     case "enum":
     case "text":
       return String(value);

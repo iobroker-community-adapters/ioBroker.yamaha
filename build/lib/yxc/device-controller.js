@@ -74,6 +74,10 @@ class YxcDeviceController {
   hasDistribution = false;
   /** The device's last-seen distribution role (none/server/client), for the leave-group path. */
   lastDistRole = "none";
+  /** The tuner features (bands + preset mode) — a preset recall needs the band. */
+  tunerFeatures;
+  /** Whether the device reports the clock/alarm block (gates the clock poll). */
+  hasClock = false;
   /**
    * Read capabilities, create the object tree, seed state, and wire up push +
    * keepalive.
@@ -124,7 +128,10 @@ class YxcDeviceController {
       await this.refreshZone(zone);
     }
     this.mediaBlocks = capabilities.media;
+    this.tunerFeatures = capabilities.tuner;
+    this.hasClock = capabilities.clock !== void 0;
     await this.refreshMedia();
+    await this.refreshLists();
     this.hasDistribution = (_a = capabilities.hasDistribution) != null ? _a : false;
     if (this.hasDistribution) {
       await this.refreshDistribution();
@@ -200,6 +207,13 @@ class YxcDeviceController {
         void this.refreshMediaSource(block);
       }
     }
+    const lists = (0, import_push.netusbListsToRefresh)(event);
+    if (lists.presets && this.mediaBlocks.includes("netusb")) {
+      void this.refreshNetusbPresets();
+    }
+    if (lists.recent && this.mediaBlocks.includes("netusb")) {
+      void this.refreshNetusbRecent();
+    }
   }
   /**
    * Poll every zone (which renews the push registration and refreshes state) and the
@@ -215,6 +229,7 @@ class YxcDeviceController {
       }
     }
     await this.refreshMedia();
+    await this.refreshLists();
     if (this.hasDistribution) {
       await this.refreshDistribution();
     }
@@ -222,6 +237,76 @@ class YxcDeviceController {
       this.failedKeepalives = 0;
     } else if (++this.failedKeepalives >= MAX_KEEPALIVE_FAILURES) {
       this.reportDrop();
+    }
+  }
+  /**
+   * Refresh the list-shaped surfaces: the netusb favourites and recently-played
+   * lists, the tuner preset lists, and the clock/alarm settings. Each is
+   * best-effort — a device without the feature answers with an error code and the
+   * state simply stays.
+   */
+  async refreshLists() {
+    if (this.mediaBlocks.includes("netusb")) {
+      await this.refreshNetusbPresets();
+      await this.refreshNetusbRecent();
+    }
+    if (this.mediaBlocks.includes("tuner")) {
+      await this.refreshTunerPresets();
+    }
+    if (this.hasClock) {
+      await this.refreshClock();
+    }
+  }
+  /** Fetch the stored netusb favourites and write the JSON list state. */
+  async refreshNetusbPresets() {
+    try {
+      const update = (0, import_command_mapper.parseYxcPresetList)(await this.deps.client.getPresetInfo());
+      if (update) {
+        this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: getPresetInfo failed: ${(0, import_util.errorMessage)(e)}`);
+    }
+  }
+  /** Fetch the recently-played list and write the JSON list state. */
+  async refreshNetusbRecent() {
+    try {
+      const update = (0, import_command_mapper.parseYxcRecentList)(await this.deps.client.getRecentInfo());
+      if (update) {
+        this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: getRecentInfo failed: ${(0, import_util.errorMessage)(e)}`);
+    }
+  }
+  /**
+   * Fetch the tuner preset lists — the shared `common` list, or one per band on
+   * devices with separate lists — and write the JSON state.
+   */
+  async refreshTunerPresets() {
+    var _a, _b, _c;
+    const bands = ((_a = this.tunerFeatures) == null ? void 0 : _a.presetType) === "common" ? ["common"] : (_c = (_b = this.tunerFeatures) == null ? void 0 : _b.bands) != null ? _c : ["fm"];
+    const byBand = {};
+    for (const band of bands) {
+      try {
+        byBand[band] = await this.deps.client.getTunerPresetInfo(band);
+      } catch (e) {
+        this.deps.log.debug(`${this.deviceId}: getTunerPresetInfo(${band}) failed: ${(0, import_util.errorMessage)(e)}`);
+      }
+    }
+    const update = (0, import_command_mapper.parseYxcTunerPresetLists)(byBand);
+    if (update) {
+      this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+    }
+  }
+  /** Fetch the clock/alarm settings and write the read-only clock states. */
+  async refreshClock() {
+    try {
+      for (const update of (0, import_command_mapper.parseYxcClock)(await this.deps.client.getClockSettings())) {
+        this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: getClockSettings failed: ${(0, import_util.errorMessage)(e)}`);
     }
   }
   /** Report a drop once — the supervisor then closes this controller and reconnects. */
@@ -371,7 +456,7 @@ class YxcDeviceController {
    * @param command the YXC command to apply
    */
   async applyCommand(stateId, command) {
-    var _a;
+    var _a, _b;
     try {
       switch (command.kind) {
         case "run":
@@ -387,6 +472,11 @@ class YxcDeviceController {
         case "tunerFreq":
           await this.deps.client.setFreq(this.lastTunerBand, command.value);
           break;
+        case "tunerPreset": {
+          const band = ((_b = this.tunerFeatures) == null ? void 0 : _b.presetType) === "common" ? "common" : this.lastTunerBand;
+          await this.deps.client.recallTunerPreset(band, command.value, "main");
+          break;
+        }
       }
     } catch (e) {
       this.deps.log.warn(`${this.deviceId}: write to ${stateId} failed: ${(0, import_util.errorMessage)(e)}`);

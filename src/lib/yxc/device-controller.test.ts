@@ -37,6 +37,38 @@ class FakeClient implements YxcClientLike {
     }
     return this.nameText;
   }
+  public presetInfo: unknown = { response_code: 0, preset_info: [] };
+  public async getPresetInfo(): Promise<unknown> {
+    this.calls.push({ method: "getPresetInfo", args: [] });
+    return this.presetInfo;
+  }
+  public recentInfo: unknown = { response_code: 0, recent_info: [] };
+  public async getRecentInfo(): Promise<unknown> {
+    this.calls.push({ method: "getRecentInfo", args: [] });
+    return this.recentInfo;
+  }
+  public async recallRecentItem(num: number, zone: string): Promise<unknown> {
+    this.calls.push({ method: "recallRecentItem", args: [num, zone] });
+    return {};
+  }
+  public tunerPresetInfo: unknown = { response_code: 0, preset_info: [] };
+  public async getTunerPresetInfo(band: string): Promise<unknown> {
+    this.calls.push({ method: "getTunerPresetInfo", args: [band] });
+    return this.tunerPresetInfo;
+  }
+  public async recallTunerPreset(band: string, num: number, zone: string): Promise<unknown> {
+    this.calls.push({ method: "recallTunerPreset", args: [band, num, zone] });
+    return {};
+  }
+  public async switchTunerPreset(direction: "next" | "previous"): Promise<unknown> {
+    this.calls.push({ method: "switchTunerPreset", args: [direction] });
+    return {};
+  }
+  public clockSettings: unknown = { response_code: 0 };
+  public async getClockSettings(): Promise<unknown> {
+    this.calls.push({ method: "getClockSettings", args: [] });
+    return this.clockSettings;
+  }
   public async power(on: boolean, zone: string): Promise<unknown> {
     this.calls.push({ method: "power", args: [on, zone] });
     return {};
@@ -630,5 +662,87 @@ describe("YxcDeviceController device name", () => {
     expect(await s.controller.start()).toBe(true);
     await flush();
     expect(s.names).toEqual([]);
+  });
+
+  test("start fetches the netusb favourites/recent lists and writes the JSON states", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], netusb: {} };
+    const s = setup(features, ysp);
+    s.client.presetInfo = { response_code: 0, preset_info: [{ input: "net_radio", text: "hr3" }] };
+    s.client.recentInfo = { response_code: 0, recent_info: [{ input: "spotify", text: "Mix" }] };
+    await s.controller.start();
+    expect(s.acks).toContainEqual({
+      id: "living.player.netPlayer.presets",
+      value: JSON.stringify([{ num: 1, input: "net_radio", name: "hr3" }]),
+    });
+    expect(s.acks).toContainEqual({
+      id: "living.player.netPlayer.recent",
+      value: JSON.stringify([{ num: 1, input: "spotify", name: "Mix" }]),
+    });
+  });
+
+  test("a separate-preset tuner is fetched per band; a preset recall uses the current band", async () => {
+    const features = {
+      zone: [{ id: "main", func_list: ["power"] }],
+      tuner: { func_list: ["fm", "dab"], preset: { type: "separate", num: 30 } },
+    };
+    const s = setup(features, ysp);
+    await s.controller.start();
+    expect(s.client.calls).toContainEqual({ method: "getTunerPresetInfo", args: ["fm"] });
+    expect(s.client.calls).toContainEqual({ method: "getTunerPresetInfo", args: ["dab"] });
+    s.client.calls.length = 0;
+    // The YSP status fixture leaves the cached band at its default "fm".
+    s.controller.handleStateChange("living.tuner.preset", false, 7);
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "recallTunerPreset", args: ["fm", 7, "main"] });
+  });
+
+  test("a common-preset tuner is fetched and recalled on the shared list", async () => {
+    const features = {
+      zone: [{ id: "main", func_list: ["power"] }],
+      tuner: { func_list: ["am", "fm"], preset: { type: "common", num: 40 } },
+    };
+    const s = setup(features, ysp);
+    await s.controller.start();
+    expect(s.client.calls).toContainEqual({ method: "getTunerPresetInfo", args: ["common"] });
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.tuner.preset", false, 12);
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "recallTunerPreset", args: ["common", 12, "main"] });
+  });
+
+  test("preset up/down and recall-recent writes reach the client", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], netusb: {}, tuner: {} };
+    const s = setup(features, ysp);
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.tuner.presetUp", false, true);
+    s.controller.handleStateChange("living.player.netPlayer.recallRecent", false, 2);
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "switchTunerPreset", args: ["next"] });
+    expect(s.client.calls).toContainEqual({ method: "recallRecentItem", args: [2, "main"] });
+  });
+
+  test("a push flagging changed favourites/recents refetches just those lists", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], netusb: {} };
+    const s = setup(features, ysp);
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.fire.push?.({ netusb: { preset_info_updated: true, recent_info_updated: true } });
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "getPresetInfo", args: [] });
+    expect(s.client.calls).toContainEqual({ method: "getRecentInfo", args: [] });
+  });
+
+  test("a clock device reads its alarm settings at start", async () => {
+    const features = {
+      zone: [{ id: "main", func_list: ["power"] }],
+      clock: { func_list: ["alarm"], alarm_mode_list: ["oneday"] },
+    };
+    const s = setup(features, ysp);
+    s.client.clockSettings = { response_code: 0, auto_sync: true, format: "24h" };
+    await s.controller.start();
+    expect(s.acks).toContainEqual({ id: "living.clock.autoSync", value: true });
+    expect(s.acks).toContainEqual({ id: "living.clock.format", value: "24h" });
+    expect(s.client.calls).toContainEqual({ method: "getClockSettings", args: [] });
   });
 });

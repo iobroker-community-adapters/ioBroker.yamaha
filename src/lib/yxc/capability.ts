@@ -8,6 +8,30 @@ export interface YxcZone {
   inputs: string[];
   /** The zone's raw volume range (min/max/step), if the device reports one. */
   volumeRange?: { min: number; max: number; step: number };
+  /**
+   * The zone's per-device value lists from getFeatures (`sound_program_list`,
+   * `surr_decoder_type_list`, …), keyed by the unified state id they belong to. They
+   * become dropdowns on the states — the device itself says which values it accepts.
+   */
+  valueLists?: Record<string, string[]>;
+}
+
+/** The tuner block of a YXC getFeatures response, as far as the adapter uses it. */
+export interface YxcTunerFeatures {
+  /** The bands the tuner offers (`am`, `fm`, `dab` from func_list). */
+  bands: string[];
+  /** Whether presets are one shared list (`common`) or one per band (`separate`). */
+  presetType: "common" | "separate";
+  /** How many preset slots the device has. */
+  presetNum?: number;
+}
+
+/** The clock/alarm block of a YXC getFeatures response, as far as the adapter uses it. */
+export interface YxcClockFeatures {
+  /** The alarm modes the device offers (`oneday`, `weekly`). */
+  alarmModes: string[];
+  /** The alarm volume range, if reported. */
+  alarmVolumeRange?: { min: number; max: number; step: number };
 }
 
 /** A MusicCast device's capabilities from getFeatures. */
@@ -18,6 +42,10 @@ export interface YxcCapabilities {
   media: string[];
   /** Whether the device reports a MusicCast-Link distribution block (getFeatures `distribution`). */
   hasDistribution?: boolean;
+  /** The tuner features (bands, preset mode), when the device has a tuner. */
+  tuner?: YxcTunerFeatures;
+  /** The clock/alarm features, when the device has the clock block. */
+  clock?: YxcClockFeatures;
 }
 
 // Only true media-player sources — subsystems that report play info and
@@ -36,12 +64,13 @@ function stringList(value: unknown): string[] {
 }
 
 /**
- * Extract a zone's raw volume range from its getFeatures `range_step` array.
+ * Extract one id's range from a getFeatures `range_step` array.
  *
- * @param rangeStep the zone's `range_step` array
- * @returns the volume range (min/max/step), or undefined if not reported
+ * @param rangeStep the `range_step` array
+ * @param id the range id to look for (`volume`, `alarm_volume`, …)
+ * @returns the range (min/max/step), or undefined if not reported
  */
-function parseVolumeRange(rangeStep: unknown): { min: number; max: number; step: number } | undefined {
+function parseRange(rangeStep: unknown, id: string): { min: number; max: number; step: number } | undefined {
   if (!Array.isArray(rangeStep)) {
     return undefined;
   }
@@ -51,7 +80,7 @@ function parseVolumeRange(rangeStep: unknown): { min: number; max: number; step:
     }
     const range = entry as Record<string, unknown>;
     if (
-      range.id === "volume" &&
+      range.id === id &&
       typeof range.min === "number" &&
       typeof range.max === "number" &&
       typeof range.step === "number"
@@ -60,6 +89,80 @@ function parseVolumeRange(rangeStep: unknown): { min: number; max: number; step:
     }
   }
   return undefined;
+}
+
+/**
+ * The getFeatures zone list fields that carry a zone's allowed values, mapped to the
+ * unified state id whose dropdown they feed (capture-verified field names).
+ */
+const ZONE_VALUE_LISTS: Readonly<Record<string, string>> = {
+  sound_program_list: "soundProgram",
+  surr_decoder_type_list: "sound.surroundDecoder",
+  tone_control_mode_list: "sound.toneMode",
+  equalizer_mode_list: "sound.equalizerMode",
+  audio_select_list: "sound.audioSelect",
+  actual_volume_mode_list: "actualVolumeMode",
+  link_control_list: "sound.linkControl",
+  link_audio_delay_list: "sound.linkAudioDelay",
+  link_audio_quality_list: "sound.linkAudioQuality",
+};
+
+/**
+ * Collect a zone's per-device value lists (sound programs, decoder types, …) from its
+ * getFeatures entry, keyed by the unified state id they belong to.
+ *
+ * @param zone the raw zone object from getFeatures
+ * @returns the value lists, or undefined when the zone carries none
+ */
+function parseValueLists(zone: Record<string, unknown>): Record<string, string[]> | undefined {
+  const lists: Record<string, string[]> = {};
+  for (const [field, stateId] of Object.entries(ZONE_VALUE_LISTS)) {
+    const values = stringList(zone[field]);
+    if (values.length > 0) {
+      lists[stateId] = values;
+    }
+  }
+  return Object.keys(lists).length > 0 ? lists : undefined;
+}
+
+/** The tuner bands the adapter knows; func_list mixes them with non-band flags. */
+const TUNER_BANDS = ["am", "fm", "dab"];
+
+/**
+ * Parse the getFeatures tuner block (bands + preset mode).
+ *
+ * @param tuner the raw tuner object
+ * @returns the tuner features, or undefined for a malformed block
+ */
+function parseTunerFeatures(tuner: unknown): YxcTunerFeatures | undefined {
+  if (typeof tuner !== "object" || tuner === null) {
+    return undefined;
+  }
+  const obj = tuner as Record<string, unknown>;
+  const bands = stringList(obj.func_list).filter(func => TUNER_BANDS.includes(func));
+  const preset = (typeof obj.preset === "object" && obj.preset !== null ? obj.preset : {}) as Record<string, unknown>;
+  return {
+    bands,
+    presetType: preset.type === "common" ? "common" : "separate",
+    presetNum: typeof preset.num === "number" ? preset.num : undefined,
+  };
+}
+
+/**
+ * Parse the getFeatures clock block (alarm modes + volume range).
+ *
+ * @param clock the raw clock object
+ * @returns the clock features, or undefined for a malformed block
+ */
+function parseClockFeatures(clock: unknown): YxcClockFeatures | undefined {
+  if (typeof clock !== "object" || clock === null) {
+    return undefined;
+  }
+  const obj = clock as Record<string, unknown>;
+  return {
+    alarmModes: stringList(obj.alarm_mode_list),
+    alarmVolumeRange: parseRange(obj.range_step, "alarm_volume"),
+  };
 }
 
 /**
@@ -86,11 +189,18 @@ export function parseYxcFeatures(response: unknown): YxcCapabilities {
           id: zone.id,
           funcs: stringList(zone.func_list),
           inputs: stringList(zone.input_list),
-          volumeRange: parseVolumeRange(zone.range_step),
+          volumeRange: parseRange(zone.range_step, "volume"),
+          valueLists: parseValueLists(zone),
         });
       }
     }
   }
   const media = MEDIA_BLOCKS.filter(block => block in obj);
-  return { zones, media, hasDistribution: "distribution" in obj };
+  return {
+    zones,
+    media,
+    hasDistribution: "distribution" in obj,
+    tuner: media.includes("tuner") ? parseTunerFeatures(obj.tuner) : undefined,
+    clock: "clock" in obj ? parseClockFeatures(obj.clock) : undefined,
+  };
 }

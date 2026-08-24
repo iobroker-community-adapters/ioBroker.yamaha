@@ -1,8 +1,12 @@
 import {
+  parseYxcClock,
   parseYxcDistribution,
   parseYxcPlayInfo,
+  parseYxcPresetList,
+  parseYxcRecentList,
   parseYxcStatus,
   parseYxcTunerInfo,
+  parseYxcTunerPresetLists,
   stateToYxc,
 } from "./command-mapper";
 import type { YxcClientLike } from "./client-contract";
@@ -230,7 +234,7 @@ describe("parseYxcPlayInfo", () => {
 });
 
 describe("parseYxcTunerInfo", () => {
-  test("maps band, the active band's frequency (kHz) and RDS radio text", () => {
+  test("maps band, the active band's frequency (kHz), preset/tuned and RDS", () => {
     // Real RX-V685 tuner getPlayInfo shape: band + nested per-band freq + rds.
     expect(
       parseYxcTunerInfo({
@@ -242,15 +246,20 @@ describe("parseYxcTunerInfo", () => {
     ).toEqual([
       { id: "tuner.band", value: "fm" },
       { id: "tuner.frequency", value: 100900 },
+      { id: "tuner.preset", value: 0 },
+      { id: "tuner.tuned", value: false },
       { id: "tuner.rdsText", value: "Hit" },
+      { id: "tuner.rdsTextB", value: "" },
     ]);
   });
 
-  test("reads the DAB frequency when the active band is dab", () => {
-    // RX-A2070 reports band "dab" with the frequency nested under dab.
+  test("reads the DAB frequency and DAB detail states when the active band is dab", () => {
+    // RX-A2070 reports band "dab" with the frequency nested under dab; the dab block's
+    // detail fields land on the tuner.dab.* ids shared with the YNCA DAB subunit.
     expect(parseYxcTunerInfo({ band: "dab", dab: { freq: 180064, service_label: "ENERGY" } })).toEqual([
       { id: "tuner.band", value: "dab" },
       { id: "tuner.frequency", value: 180064 },
+      { id: "tuner.dab.serviceLabel", value: "ENERGY" },
     ]);
   });
 
@@ -372,5 +381,135 @@ describe("stateToYxc button actions", () => {
     // test says where the second guard would have to go.
     expect(stateToYxc("player.cd.play", false)).toMatchObject({ kind: "run" });
     expect(stateToYxc("player.netPlayer.next", 0)).toMatchObject({ kind: "run" });
+  });
+});
+
+describe("preset/recent selection (musiccast-adapter parity)", () => {
+  test("parseYxcPresetList keeps stored slots with their number, skips empty ones", () => {
+    // Real ISX-18D getPresetInfo shape: empty slots report input "unknown" and no text.
+    const update = parseYxcPresetList({
+      response_code: 0,
+      preset_info: [
+        { input: "net_radio", text: "hr3 (Frankfurt am Main/German)", attribute: 0 },
+        { input: "server", text: "hr3 Stream", attribute: 30 },
+        { input: "unknown", text: "" },
+        { input: "net_radio", text: "80s80s DAB+ (Berlin/German)", attribute: 0 },
+      ],
+    });
+    expect(update?.id).toBe("player.netPlayer.presets");
+    expect(JSON.parse(String(update?.value))).toEqual([
+      { num: 1, input: "net_radio", name: "hr3 (Frankfurt am Main/German)" },
+      { num: 2, input: "server", name: "hr3 Stream" },
+      { num: 4, input: "net_radio", name: "80s80s DAB+ (Berlin/German)" },
+    ]);
+    expect(parseYxcPresetList({ response_code: 2 })).toBeUndefined();
+  });
+
+  test("parseYxcRecentList maps the recently-played items", () => {
+    const update = parseYxcRecentList({
+      response_code: 0,
+      recent_info: [
+        { input: "net_radio", text: "80s80s Deutsch", albumart_url: "http://a/b.png", play_count: 3, attribute: 0 },
+        { input: "spotify", text: "Playlist X" },
+      ],
+    });
+    expect(update?.id).toBe("player.netPlayer.recent");
+    expect(JSON.parse(String(update?.value))).toEqual([
+      { num: 1, input: "net_radio", name: "80s80s Deutsch", albumArt: "http://a/b.png", playCount: 3 },
+      { num: 2, input: "spotify", name: "Playlist X" },
+    ]);
+  });
+
+  test("parseYxcTunerPresetLists keys the slots by band, raw fields kept", () => {
+    const update = parseYxcTunerPresetLists({
+      fm: { response_code: 0, preset_info: [{ band: "fm", number: 100900 }] },
+      dab: { response_code: 4 },
+    });
+    expect(update?.id).toBe("tuner.presets");
+    expect(JSON.parse(String(update?.value))).toEqual({ fm: [{ num: 1, band: "fm", number: 100900 }] });
+    expect(parseYxcTunerPresetLists({ fm: { response_code: 4 } })).toBeUndefined();
+  });
+
+  test("recall/step writes map to their client calls; the tuner preset stays declarative", async () => {
+    expect(await ranCall("player.netPlayer.recallRecent", 2)).toEqual(["recallRecentItem", [2, "main"]]);
+    expect(await ranCall("tuner.presetUp", true)).toEqual(["switchTunerPreset", ["next"]]);
+    expect(await ranCall("tuner.presetDown", true)).toEqual(["switchTunerPreset", ["previous"]]);
+    // The band comes from controller state, so the command is declarative like tunerFreq.
+    expect(stateToYxc("tuner.preset", 5)).toEqual({ kind: "tunerPreset", value: 5 });
+    expect(stateToYxc("tuner.preset", null)).toBeUndefined();
+  });
+});
+
+describe("netusb source and CD detail parsing", () => {
+  test("the active network source lands on player.netPlayer.source", () => {
+    const updates = parseYxcPlayInfo({ input: "spotify", playback: "play" });
+    expect(updates).toContainEqual({ id: "player.netPlayer.source", value: "spotify" });
+  });
+
+  test("cd extras: track number, totals, disc time and drive status", () => {
+    const updates = parseYxcPlayInfo(
+      { track_number: 3, total_tracks: 12, disc_time: 3400, device_status: "ready" },
+      "player.cd",
+    );
+    expect(updates).toEqual(
+      expect.arrayContaining([
+        { id: "player.cd.trackNumber", value: 3 },
+        { id: "player.cd.totalTracks", value: 12 },
+        { id: "player.cd.discTime", value: 3400 },
+        { id: "player.cd.deviceStatus", value: "ready" },
+      ]),
+    );
+  });
+});
+
+describe("parseYxcClock", () => {
+  test("maps the capture-verified getSettings shape onto the clock states", () => {
+    // Real ISX-18D response.
+    const updates = parseYxcClock({
+      response_code: 0,
+      auto_sync: true,
+      format: "24h",
+      alarm: {
+        alarm_on: false,
+        volume: 25,
+        fade_interval: 180,
+        fade_type: 1,
+        mode: "oneday",
+        repeat: false,
+        oneday: { enable: false, time: "0800", beep: true, playback_type: "resume", resume: { input: "tuner" } },
+      },
+    });
+    expect(updates).toEqual(
+      expect.arrayContaining([
+        { id: "clock.autoSync", value: true },
+        { id: "clock.format", value: "24h" },
+        { id: "clock.alarm.on", value: false },
+        { id: "clock.alarm.volume", value: 25 },
+        { id: "clock.alarm.mode", value: "oneday" },
+        { id: "clock.alarm.oneday.enable", value: false },
+        { id: "clock.alarm.oneday.time", value: "08:00" },
+        { id: "clock.alarm.oneday.beep", value: true },
+        { id: "clock.alarm.oneday.playbackType", value: "resume" },
+        { id: "clock.alarm.oneday.resumeInput", value: "tuner" },
+      ]),
+    );
+  });
+
+  test("maps a weekly day block and a preset-type alarm", () => {
+    const updates = parseYxcClock({
+      alarm: {
+        monday: { enable: true, time: "0630", playback_type: "preset", preset: { type: "netusb", num: 2 } },
+      },
+    });
+    expect(updates).toEqual(
+      expect.arrayContaining([
+        { id: "clock.alarm.monday.enable", value: true },
+        { id: "clock.alarm.monday.time", value: "06:30" },
+        { id: "clock.alarm.monday.playbackType", value: "preset" },
+        { id: "clock.alarm.monday.presetType", value: "netusb" },
+        { id: "clock.alarm.monday.presetNumber", value: 2 },
+      ]),
+    );
+    expect(parseYxcClock(null)).toEqual([]);
   });
 });

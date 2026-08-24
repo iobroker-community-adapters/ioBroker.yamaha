@@ -23,6 +23,10 @@ __export(object_mapper_exports, {
 module.exports = __toCommonJS(object_mapper_exports);
 var import_types = require("../catalog/types");
 var import_catalog = require("./catalog");
+var import_command_mapper = require("./command-mapper");
+function selfMap(values) {
+  return Object.fromEntries(values.map((value) => [value, value]));
+}
 const ZONES = [
   { id: "main", prefix: "" },
   { id: "zone2", prefix: "multiroom.zone2.", channel: "multiroom.zone2", channelName: "Zone 2" },
@@ -96,7 +100,7 @@ function pushPlayerBlock(objects, prefix, channelName) {
   }
 }
 function mapYxcToObjects(capabilities) {
-  var _a, _b, _c;
+  var _a, _b, _c, _d, _e, _f, _g;
   const objects = [];
   const channels = /* @__PURE__ */ new Set();
   for (const zoneDef of ZONES) {
@@ -158,6 +162,13 @@ function mapYxcToObjects(capabilities) {
         common.max = zone.volumeRange.max;
         common.step = zone.volumeRange.step;
       }
+      if (entry.state === "input" && zone.inputs.length > 0) {
+        common.states = selfMap(zone.inputs);
+      }
+      const valueList = (_d = zone.valueLists) == null ? void 0 : _d[entry.state];
+      if (valueList) {
+        common.states = selfMap(valueList);
+      }
       objects.push({ id: fullId, type: "state", common });
     }
   }
@@ -171,6 +182,33 @@ function mapYxcToObjects(capabilities) {
       type: "state",
       common: { name: "Recall preset", type: "number", role: "level", read: true, write: true, min: 1 }
     });
+    objects.push({
+      id: "player.netPlayer.presets",
+      type: "state",
+      common: { name: "Favourites (stored presets)", type: "string", role: "json", read: true, write: false }
+    });
+    objects.push({
+      id: "player.netPlayer.recent",
+      type: "state",
+      common: { name: "Recently played", type: "string", role: "json", read: true, write: false }
+    });
+    objects.push({
+      id: "player.netPlayer.recallRecent",
+      type: "state",
+      common: {
+        name: "Recall recently played (number)",
+        type: "number",
+        role: "level",
+        read: true,
+        write: true,
+        min: 1
+      }
+    });
+    objects.push({
+      id: "player.netPlayer.source",
+      type: "state",
+      common: { name: "Active network source", type: "string", role: "text", read: true, write: false }
+    });
   }
   if (capabilities.media.includes("cd")) {
     pushPlayerBlock(objects, "player.cd", "CD");
@@ -179,14 +217,35 @@ function mapYxcToObjects(capabilities) {
       type: "state",
       common: { name: "Toggle tray", type: "boolean", role: "button", read: false, write: true }
     });
+    objects.push({
+      id: "player.cd.trackNumber",
+      type: "state",
+      common: { name: "Track number", type: "number", role: "value", read: true, write: false }
+    });
+    objects.push({
+      id: "player.cd.totalTracks",
+      type: "state",
+      common: { name: "Total tracks", type: "number", role: "value", read: true, write: false }
+    });
+    objects.push({
+      id: "player.cd.discTime",
+      type: "state",
+      common: { name: "Disc time", type: "number", unit: "s", role: "value", read: true, write: false }
+    });
+    objects.push({
+      id: "player.cd.deviceStatus",
+      type: "state",
+      common: { name: "Drive status", type: "string", role: "state", read: true, write: false }
+    });
   }
   if (capabilities.media.includes("tuner")) {
     objects.push({ id: "tuner", type: "channel", common: { name: "Tuner" } });
-    objects.push({
-      id: "tuner.band",
-      type: "state",
-      common: { name: "Band", type: "string", role: "state", read: true, write: true }
-    });
+    const bandCommon = { name: "Band", type: "string", role: "state", read: true, write: true };
+    const bands = (_f = (_e = capabilities.tuner) == null ? void 0 : _e.bands) != null ? _f : [];
+    if (bands.length > 0) {
+      bandCommon.states = selfMap(bands);
+    }
+    objects.push({ id: "tuner.band", type: "state", common: bandCommon });
     objects.push({
       id: "tuner.frequency",
       type: "state",
@@ -197,6 +256,145 @@ function mapYxcToObjects(capabilities) {
       type: "state",
       common: { name: "RDS text", type: "string", role: "text", read: true, write: false }
     });
+    objects.push({
+      id: "tuner.rdsTextB",
+      type: "state",
+      common: { name: "RDS text B", type: "string", role: "text", read: true, write: false }
+    });
+    objects.push({
+      id: "tuner.rdsService",
+      type: "state",
+      common: { name: "RDS station", type: "string", role: "text", read: true, write: false }
+    });
+    objects.push({
+      id: "tuner.rdsProgramType",
+      type: "state",
+      common: { name: "RDS programme type", type: "string", role: "text", read: true, write: false }
+    });
+    const presetCommon = {
+      name: "Preset (recall by number)",
+      type: "number",
+      role: "level",
+      read: true,
+      write: true,
+      min: 0
+    };
+    if ((_g = capabilities.tuner) == null ? void 0 : _g.presetNum) {
+      presetCommon.max = capabilities.tuner.presetNum;
+    }
+    objects.push({ id: "tuner.preset", type: "state", common: presetCommon });
+    objects.push({
+      id: "tuner.presetUp",
+      type: "state",
+      common: { name: "Next preset", type: "boolean", role: "button", read: false, write: true }
+    });
+    objects.push({
+      id: "tuner.presetDown",
+      type: "state",
+      common: { name: "Previous preset", type: "boolean", role: "button", read: false, write: true }
+    });
+    objects.push({
+      id: "tuner.presets",
+      type: "state",
+      common: { name: "Stored presets", type: "string", role: "json", read: true, write: false }
+    });
+    objects.push({
+      id: "tuner.tuned",
+      type: "state",
+      common: { name: "Tuned", type: "boolean", role: "indicator", read: true, write: false }
+    });
+    objects.push({
+      id: "tuner.audioMode",
+      type: "state",
+      common: { name: "Audio mode", type: "string", role: "state", read: true, write: false }
+    });
+    if (bands.includes("dab")) {
+      objects.push({ id: "tuner.dab", type: "channel", common: { name: "DAB" } });
+      for (const field of import_command_mapper.DAB_FIELDS) {
+        objects.push({
+          id: field.id,
+          type: "state",
+          common: {
+            name: field.name,
+            type: field.type,
+            role: field.type === "boolean" ? "indicator" : field.type === "number" ? "value" : "text",
+            read: true,
+            write: false
+          }
+        });
+      }
+    }
+  }
+  if (capabilities.clock) {
+    objects.push({ id: "clock", type: "channel", common: { name: "Clock & alarm" } });
+    objects.push({
+      id: "clock.autoSync",
+      type: "state",
+      common: { name: "Automatic time sync", type: "boolean", role: "indicator", read: true, write: false }
+    });
+    objects.push({
+      id: "clock.format",
+      type: "state",
+      common: { name: "Clock format", type: "string", role: "state", read: true, write: false }
+    });
+    objects.push({ id: "clock.alarm", type: "channel", common: { name: "Alarm" } });
+    objects.push({
+      id: "clock.alarm.on",
+      type: "state",
+      common: { name: "Alarm armed", type: "boolean", role: "indicator", read: true, write: false }
+    });
+    const volumeCommon = {
+      name: "Alarm volume",
+      type: "number",
+      role: "value",
+      read: true,
+      write: false
+    };
+    if (capabilities.clock.alarmVolumeRange) {
+      volumeCommon.min = capabilities.clock.alarmVolumeRange.min;
+      volumeCommon.max = capabilities.clock.alarmVolumeRange.max;
+    }
+    objects.push({ id: "clock.alarm.volume", type: "state", common: volumeCommon });
+    objects.push({
+      id: "clock.alarm.fadeInterval",
+      type: "state",
+      common: { name: "Fade-in time", type: "number", unit: "s", role: "value", read: true, write: false }
+    });
+    objects.push({
+      id: "clock.alarm.fadeType",
+      type: "state",
+      common: { name: "Fade type", type: "number", role: "value", read: true, write: false }
+    });
+    objects.push({
+      id: "clock.alarm.mode",
+      type: "state",
+      common: { name: "Alarm mode", type: "string", role: "state", read: true, write: false }
+    });
+    objects.push({
+      id: "clock.alarm.repeat",
+      type: "state",
+      common: { name: "Repeat (snooze)", type: "boolean", role: "indicator", read: true, write: false }
+    });
+    const detailChannels = ["oneday", ...capabilities.clock.alarmModes.includes("weekly") ? import_command_mapper.ALARM_DAYS : []];
+    for (const channel of detailChannels) {
+      const label = channel === "oneday" ? "One-day alarm" : channel.charAt(0).toUpperCase() + channel.slice(1);
+      objects.push({ id: `clock.alarm.${channel}`, type: "channel", common: { name: label } });
+      const detail = (id, name, type, role) => {
+        objects.push({
+          id: `clock.alarm.${channel}.${id}`,
+          type: "state",
+          common: { name, type, role, read: true, write: false }
+        });
+      };
+      detail("enable", "Enabled", "boolean", "indicator");
+      detail("time", "Alarm time", "string", "text");
+      detail("beep", "Beep", "boolean", "indicator");
+      detail("playbackType", "Playback type", "string", "state");
+      detail("resumeInput", "Resume input", "string", "state");
+      detail("presetType", "Preset type", "string", "state");
+      detail("presetNumber", "Preset number", "number", "value");
+      detail("presetInput", "Preset source", "string", "state");
+    }
   }
   if (capabilities.hasDistribution) {
     if (!channels.has("multiroom")) {

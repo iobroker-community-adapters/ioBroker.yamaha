@@ -1,15 +1,19 @@
 import { createHash } from "node:crypto";
-import { parseYxcFeatures } from "./capability";
+import { parseYxcFeatures, type YxcTunerFeatures } from "./capability";
 import { mapYxcToObjects } from "./object-mapper";
 import {
+  parseYxcClock,
   parseYxcDistribution,
   parseYxcPlayInfo,
+  parseYxcPresetList,
+  parseYxcRecentList,
   parseYxcStatus,
   parseYxcTunerInfo,
+  parseYxcTunerPresetLists,
   stateToYxc,
   type YxcCommand,
 } from "./command-mapper";
-import { mediaToRefresh, zonesToRefresh } from "./push";
+import { mediaToRefresh, netusbListsToRefresh, zonesToRefresh } from "./push";
 import type { ObjectDef } from "../catalog/types";
 import type { StateValue } from "../types";
 import type { ConnectionHandle, ControllerLog } from "../controller";
@@ -111,6 +115,10 @@ export class YxcDeviceController implements ConnectionHandle {
   private hasDistribution = false;
   /** The device's last-seen distribution role (none/server/client), for the leave-group path. */
   private lastDistRole = "none";
+  /** The tuner features (bands + preset mode) — a preset recall needs the band. */
+  private tunerFeatures: YxcTunerFeatures | undefined;
+  /** Whether the device reports the clock/alarm block (gates the clock poll). */
+  private hasClock = false;
 
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
@@ -175,7 +183,10 @@ export class YxcDeviceController implements ConnectionHandle {
       await this.refreshZone(zone);
     }
     this.mediaBlocks = capabilities.media;
+    this.tunerFeatures = capabilities.tuner;
+    this.hasClock = capabilities.clock !== undefined;
     await this.refreshMedia();
+    await this.refreshLists();
     this.hasDistribution = capabilities.hasDistribution ?? false;
     if (this.hasDistribution) {
       await this.refreshDistribution();
@@ -258,6 +269,14 @@ export class YxcDeviceController implements ConnectionHandle {
         void this.refreshMediaSource(block);
       }
     }
+    // The favourites/recently-played lists announce their changes as flags in the push.
+    const lists = netusbListsToRefresh(event);
+    if (lists.presets && this.mediaBlocks.includes("netusb")) {
+      void this.refreshNetusbPresets();
+    }
+    if (lists.recent && this.mediaBlocks.includes("netusb")) {
+      void this.refreshNetusbRecent();
+    }
   }
 
   /**
@@ -274,6 +293,7 @@ export class YxcDeviceController implements ConnectionHandle {
       }
     }
     await this.refreshMedia();
+    await this.refreshLists();
     if (this.hasDistribution) {
       await this.refreshDistribution();
     }
@@ -281,6 +301,80 @@ export class YxcDeviceController implements ConnectionHandle {
       this.failedKeepalives = 0;
     } else if (++this.failedKeepalives >= MAX_KEEPALIVE_FAILURES) {
       this.reportDrop();
+    }
+  }
+
+  /**
+   * Refresh the list-shaped surfaces: the netusb favourites and recently-played
+   * lists, the tuner preset lists, and the clock/alarm settings. Each is
+   * best-effort — a device without the feature answers with an error code and the
+   * state simply stays.
+   */
+  private async refreshLists(): Promise<void> {
+    if (this.mediaBlocks.includes("netusb")) {
+      await this.refreshNetusbPresets();
+      await this.refreshNetusbRecent();
+    }
+    if (this.mediaBlocks.includes("tuner")) {
+      await this.refreshTunerPresets();
+    }
+    if (this.hasClock) {
+      await this.refreshClock();
+    }
+  }
+
+  /** Fetch the stored netusb favourites and write the JSON list state. */
+  private async refreshNetusbPresets(): Promise<void> {
+    try {
+      const update = parseYxcPresetList(await this.deps.client.getPresetInfo());
+      if (update) {
+        this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: getPresetInfo failed: ${errorMessage(e)}`);
+    }
+  }
+
+  /** Fetch the recently-played list and write the JSON list state. */
+  private async refreshNetusbRecent(): Promise<void> {
+    try {
+      const update = parseYxcRecentList(await this.deps.client.getRecentInfo());
+      if (update) {
+        this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: getRecentInfo failed: ${errorMessage(e)}`);
+    }
+  }
+
+  /**
+   * Fetch the tuner preset lists — the shared `common` list, or one per band on
+   * devices with separate lists — and write the JSON state.
+   */
+  private async refreshTunerPresets(): Promise<void> {
+    const bands = this.tunerFeatures?.presetType === "common" ? ["common"] : (this.tunerFeatures?.bands ?? ["fm"]);
+    const byBand: Record<string, unknown> = {};
+    for (const band of bands) {
+      try {
+        byBand[band] = await this.deps.client.getTunerPresetInfo(band);
+      } catch (e) {
+        this.deps.log.debug(`${this.deviceId}: getTunerPresetInfo(${band}) failed: ${errorMessage(e)}`);
+      }
+    }
+    const update = parseYxcTunerPresetLists(byBand);
+    if (update) {
+      this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+    }
+  }
+
+  /** Fetch the clock/alarm settings and write the read-only clock states. */
+  private async refreshClock(): Promise<void> {
+    try {
+      for (const update of parseYxcClock(await this.deps.client.getClockSettings())) {
+        this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: getClockSettings failed: ${errorMessage(e)}`);
     }
   }
 
@@ -459,6 +553,12 @@ export class YxcDeviceController implements ConnectionHandle {
         case "tunerFreq":
           await this.deps.client.setFreq(this.lastTunerBand, command.value);
           break;
+        case "tunerPreset": {
+          // Shared-list devices recall on `common`; separate-list devices on the current band.
+          const band = this.tunerFeatures?.presetType === "common" ? "common" : this.lastTunerBand;
+          await this.deps.client.recallTunerPreset(band, command.value, "main");
+          break;
+        }
       }
     } catch (e) {
       this.deps.log.warn(`${this.deviceId}: write to ${stateId} failed: ${errorMessage(e)}`);

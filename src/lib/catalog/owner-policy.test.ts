@@ -24,6 +24,8 @@ describe("pickOwner — which transport owns a shared capability", () => {
     expect(pickOwner("advanced.maxVolume", ["yxc", "ynca"])).toBe("ynca");
     expect(pickOwner("sound.extraBass", ["yxc", "ynca"])).toBe("ynca");
     expect(pickOwner("sound.dialogueLift", ["yxc", "xml"])).toBe("xml");
+    // The DAB preset is a writable recall on YNCA, display-only in the YXC play info.
+    expect(pickOwner("tuner.dab.preset", ["yxc", "ynca"])).toBe("ynca");
   });
 
   test("dropdown-rich keys stay with YNCA so the enum states survive (census §3d)", () => {

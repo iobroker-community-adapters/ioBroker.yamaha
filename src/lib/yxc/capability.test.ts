@@ -1,7 +1,9 @@
 import { parseYxcFeatures } from "./capability";
 import rxA2070 from "./__fixtures__/RX_A2070_v1.json";
+import rxV481 from "./__fixtures__/RX_V481_285_208.json";
 import rxV685 from "./__fixtures__/RX_V685_196_211.json";
 import wx10 from "./__fixtures__/WX10_216_208.json";
+import isx18d from "./__fixtures__/ISX_18D_216_208.json";
 
 describe("parseYxcFeatures", () => {
   test("extracts all zones of a multi-zone AVR with their functions", () => {
@@ -56,5 +58,31 @@ describe("parseYxcFeatures", () => {
   test("flags a device that reports a distribution block for multiroom", () => {
     expect(parseYxcFeatures({ zone: [{ id: "main" }], distribution: { version: 2 } }).hasDistribution).toBe(true);
     expect(parseYxcFeatures({ zone: [{ id: "main" }] }).hasDistribution).toBe(false);
+  });
+
+  test("collects a zone's device-reported value lists, keyed by the unified state id", () => {
+    const main = parseYxcFeatures(rxA2070).zones.find(z => z.id === "main");
+    expect(main?.valueLists?.soundProgram).toEqual(expect.arrayContaining(["munich", "roxy_theatre"]));
+    expect(main?.valueLists?.["sound.surroundDecoder"]).toBeDefined();
+    expect(main?.valueLists?.["sound.toneMode"]).toBeDefined();
+  });
+
+  test("parses the tuner features: bands and a per-band (separate) preset list", () => {
+    // ISX-18D: func_list fm/dab plus non-band flags, preset {type separate, num 30}.
+    const tuner = parseYxcFeatures(isx18d).tuner;
+    expect(tuner).toEqual({ bands: ["fm", "dab"], presetType: "separate", presetNum: 30 });
+  });
+
+  test("parses a shared (common) tuner preset list", () => {
+    // RX-V481: am/fm with one common 40-slot list.
+    const tuner = parseYxcFeatures(rxV481).tuner;
+    expect(tuner).toEqual({ bands: ["am", "fm"], presetType: "common", presetNum: 40 });
+  });
+
+  test("parses the clock features: alarm modes and the alarm volume range", () => {
+    const clock = parseYxcFeatures(isx18d).clock;
+    expect(clock?.alarmModes).toEqual(["oneday"]);
+    expect(clock?.alarmVolumeRange).toEqual({ min: 5, max: 60, step: 1 });
+    expect(parseYxcFeatures(rxV481).clock).toBeUndefined();
   });
 });

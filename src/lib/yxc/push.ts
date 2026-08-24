@@ -38,3 +38,21 @@ export function mediaToRefresh(pushEvent: unknown): string[] {
   const event = pushEvent as Record<string, unknown>;
   return MEDIA_KEYS.filter(block => block in event);
 }
+
+/**
+ * Determine which netusb LISTS a YXC push asks to re-fetch: the stored favourites
+ * (`preset_info_updated`) and the recently-played list (`recent_info_updated`) are
+ * flags inside the push's netusb block — without them the lists would only refresh
+ * on the keepalive poll.
+ *
+ * @param pushEvent the parsed UDP push JSON
+ * @returns which of the two lists changed
+ */
+export function netusbListsToRefresh(pushEvent: unknown): { presets: boolean; recent: boolean } {
+  const netusb = (pushEvent as { netusb?: unknown } | null)?.netusb;
+  if (typeof netusb !== "object" || netusb === null) {
+    return { presets: false, recent: false };
+  }
+  const flags = netusb as Record<string, unknown>;
+  return { presets: flags.preset_info_updated === true, recent: flags.recent_info_updated === true };
+}

@@ -127,6 +127,43 @@ describe("encode", () => {
   });
 });
 
+describe("encode formats a decimals-carrying number for the YNCA wire", () => {
+  // YNCA float functions require a FIXED decimal count ("VOL=-38.0"): without the
+  // decimal point the receiver reads the digits as tenths (-38 became -3.8 dB — the
+  // live-confirmed #612 volume bug). The reference formatter is ynca-python's
+  // number_to_string_with_stepsize (1 decimal, 0.5 step for VOL).
+  const vol = { kind: "number", unit: "dB", min: -80.5, max: 16.5, step: 0.5, decimals: 1 } as const;
+
+  test("a whole-number volume gains its mandatory decimal", () => {
+    expect(encode(vol, -38)).toBe("-38.0");
+    expect(encode(vol, -40)).toBe("-40.0");
+  });
+
+  test("a half-step volume keeps its decimal", () => {
+    expect(encode(vol, -37.5)).toBe("-37.5");
+  });
+
+  test("an off-grid value snaps to the step grid", () => {
+    expect(encode(vol, -37.7)).toBe("-37.5");
+    expect(encode(vol, -37.8)).toBe("-38.0");
+  });
+
+  test("zero never carries a minus sign", () => {
+    expect(encode(vol, 0)).toBe("0.0");
+    expect(encode(vol, -0.2)).toBe("0.0");
+  });
+
+  test("two decimals for the FM frequency, no snapping without a step", () => {
+    expect(encode({ kind: "number", unit: "MHz", decimals: 2 }, 98.1)).toBe("98.10");
+    expect(encode({ kind: "number", unit: "MHz", decimals: 2 }, 100.9)).toBe("100.90");
+  });
+
+  test("zero decimals yields a rounded integer string", () => {
+    expect(encode({ kind: "number", unit: "ms", decimals: 0 }, 12.6)).toBe("13");
+    expect(encode({ kind: "number", unit: "ms", decimals: 0 }, -5)).toBe("-5");
+  });
+});
+
 describe("isWritableValue", () => {
   test("rejects null and undefined for any state", () => {
     expect(isWritableValue(null, false)).toBe(false);

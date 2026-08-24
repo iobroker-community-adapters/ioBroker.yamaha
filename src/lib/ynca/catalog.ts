@@ -1,6 +1,6 @@
 import { catalogToObjects } from "../catalog/build-objects";
 import type { CatalogEntry, ObjectDef } from "../catalog/types";
-import { decode, encode, isWritableValue, type ValueSpec } from "../catalog/value-coerce";
+import { decode, encode, formatWireNumber, isWritableValue, type ValueSpec } from "../catalog/value-coerce";
 import type { StateValue } from "../types";
 import type { YncaCapabilities } from "./capability";
 
@@ -39,6 +39,12 @@ export interface YncaEntry extends CatalogEntry {
    * command whose wire form is not the bare value (scene recall sends "Scene N").
    */
   wireEncode?: (value: boolean | number | string) => string;
+  /**
+   * Optional wire-value pre-transform applied before {@link decode} — for a reported
+   * value whose sentinel form does not fit the spec (PRESET answers "No Preset" for
+   * an empty slot, which becomes 0 on the number state).
+   */
+  wireDecode?: (wire: string) => string;
 }
 
 /**
@@ -205,6 +211,14 @@ interface FuncDef {
   spec: ValueSpec;
   write: boolean;
   role: string;
+  /** Optional wire-value encoder overriding the generic encode (see {@link YncaEntry.wireEncode}). */
+  wireEncode?: (value: boolean | number | string) => string;
+  /** Optional wire-value pre-transform before decode (see {@link YncaEntry.wireDecode}). */
+  wireDecode?: (wire: string) => string;
+  /** The function the device reports under, when it differs (see {@link YncaEntry.readFunc}). */
+  readFunc?: string;
+  /** Write-only command, kept out of the device→state map (see {@link YncaEntry.writeOnly}). */
+  writeOnly?: boolean;
 }
 
 const AMP_FUNCS: FuncDef[] = [
@@ -220,7 +234,7 @@ const AMP_FUNCS: FuncDef[] = [
     func: "VOL",
     state: "volume",
     name: "Volume",
-    spec: { kind: "number", unit: "dB", min: -80.5, max: 16.5, step: 0.5 },
+    spec: { kind: "number", unit: "dB", min: -80.5, max: 16.5, step: 0.5, decimals: 1 },
     write: true,
     role: "level.volume",
   },
@@ -284,7 +298,7 @@ const AMP_FUNCS: FuncDef[] = [
     func: "SPBASS",
     state: "sound.bass",
     name: "Bass",
-    spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5 },
+    spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5, decimals: 1 },
     write: true,
     role: "level",
   },
@@ -292,7 +306,7 @@ const AMP_FUNCS: FuncDef[] = [
     func: "SPTREBLE",
     state: "sound.treble",
     name: "Treble",
-    spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5 },
+    spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5, decimals: 1 },
     write: true,
     role: "level",
   },
@@ -340,7 +354,7 @@ const AMP_FUNCS: FuncDef[] = [
     func: "HPBASS",
     state: "sound.headphoneBass",
     name: "Headphone bass",
-    spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5 },
+    spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5, decimals: 1 },
     write: true,
     role: "level",
   },
@@ -348,7 +362,7 @@ const AMP_FUNCS: FuncDef[] = [
     func: "HPTREBLE",
     state: "sound.headphoneTreble",
     name: "Headphone treble",
-    spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5 },
+    spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5, decimals: 1 },
     write: true,
     role: "level",
   },
@@ -380,7 +394,7 @@ const AMP_FUNCS: FuncDef[] = [
     func: "INITVOLLVL",
     state: "advanced.initialVolume.level",
     name: "Initial volume level",
-    spec: { kind: "number", unit: "dB", min: -80.5, max: 16.5, step: 0.5 },
+    spec: { kind: "number", unit: "dB", min: -80.5, max: 16.5, step: 0.5, decimals: 1 },
     write: true,
     role: "level.volume",
   },
@@ -388,6 +402,9 @@ const AMP_FUNCS: FuncDef[] = [
     func: "MAXVOL",
     state: "advanced.maxVolume",
     name: "Maximum volume",
+    // 5 dB grid with one mandatory decimal — except the literal ceiling 16.5, which is
+    // valid despite being off-grid (the ynca-python MAXVOL special case).
+    wireEncode: value => (Number(value) === 16.5 ? "16.5" : formatWireNumber(Number(value), 1, 5)),
     spec: { kind: "number", unit: "dB", min: -30, max: 16.5, step: 5 },
     write: true,
     role: "level.volume",
@@ -396,7 +413,7 @@ const AMP_FUNCS: FuncDef[] = [
     func: "LIPSYNCHDMIOUT1OFFSET",
     state: "lipSync.hdmiOut1",
     name: "Lip sync HDMI OUT1 offset",
-    spec: { kind: "number", unit: "ms" },
+    spec: { kind: "number", unit: "ms", decimals: 0 },
     write: true,
     role: "level",
   },
@@ -404,7 +421,7 @@ const AMP_FUNCS: FuncDef[] = [
     func: "LIPSYNCHDMIOUT2OFFSET",
     state: "lipSync.hdmiOut2",
     name: "Lip sync HDMI OUT2 offset",
-    spec: { kind: "number", unit: "ms" },
+    spec: { kind: "number", unit: "ms", decimals: 0 },
     write: true,
     role: "level",
   },
@@ -470,7 +487,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     func: "ZONEBVOL",
     state: "multiroom.zoneB.volume",
     name: "Zone B volume",
-    spec: { kind: "number", unit: "dB", min: -80.5, max: 16.5, step: 0.5 },
+    spec: { kind: "number", unit: "dB", min: -80.5, max: 16.5, step: 0.5, decimals: 1 },
     write: true,
     role: "level.volume",
   },
@@ -516,6 +533,43 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     write: true,
     role: "state",
   },
+  // The stored-station surface (#613): PRESET is readable AND writable on TUN
+  // (fixtures answer "1" / "No Preset"; the ynca spec's EnumOrInt preset), so the
+  // active slot shows up and writing a number recalls it. 0 = no preset active.
+  {
+    subunit: "TUN",
+    func: "PRESET",
+    state: "tuner.preset",
+    name: "Preset (recall by number)",
+    spec: { kind: "number", min: 0, max: 40, step: 1, decimals: 0 },
+    write: true,
+    role: "level",
+    wireDecode: wire => (wire === "No Preset" ? "0" : wire),
+  },
+  {
+    subunit: "TUN",
+    func: "PRESET",
+    state: "tuner.presetUp",
+    name: "Next preset",
+    spec: { kind: "button" },
+    write: true,
+    role: "button",
+    readFunc: "PRESET",
+    writeOnly: true,
+    wireEncode: () => "Up",
+  },
+  {
+    subunit: "TUN",
+    func: "PRESET",
+    state: "tuner.presetDown",
+    name: "Previous preset",
+    spec: { kind: "button" },
+    write: true,
+    role: "button",
+    readFunc: "PRESET",
+    writeOnly: true,
+    wireEncode: () => "Down",
+  },
   {
     subunit: "TUN",
     func: "RDSTXTA",
@@ -539,7 +593,9 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     func: "AMFREQ",
     state: "tuner.amFrequency",
     name: "AM frequency",
-    spec: { kind: "number", unit: "kHz" },
+    // Whole kHz only; no step snap — the AM raster is 9 kHz in Europe, 10 kHz in the
+    // Americas, and the receiver aligns the value itself.
+    spec: { kind: "number", unit: "kHz", decimals: 0 },
     write: true,
     role: "level",
   },
@@ -548,7 +604,9 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     func: "FMFREQ",
     state: "tuner.fmFrequency",
     name: "FM frequency",
-    spec: { kind: "number", unit: "kHz" },
+    // The wire speaks MHz with two fixed decimals ("FMFREQ=98.10" in every device
+    // fixture) — the earlier kHz label was wrong. No step snap: rasters vary by region.
+    spec: { kind: "number", unit: "MHz", decimals: 2 },
     write: true,
     role: "level",
   },
@@ -750,7 +808,15 @@ const DAB_FUNCS: FuncDef[] = [
     write: false,
     role: "text",
   },
-  { func: "DABPRESET", state: "dab.preset", name: "DAB preset", spec: { kind: "text" }, write: false, role: "text" },
+  {
+    func: "DABPRESET",
+    state: "dab.preset",
+    name: "DAB preset (recall by number)",
+    spec: { kind: "number", min: 0, max: 40, step: 1, decimals: 0 },
+    write: true,
+    role: "level",
+    wireDecode: wire => (wire === "No Preset" ? "0" : wire),
+  },
   {
     func: "DABPRGTYPE",
     state: "dab.programType",
@@ -759,7 +825,15 @@ const DAB_FUNCS: FuncDef[] = [
     write: false,
     role: "text",
   },
-  { func: "FMPRESET", state: "dab.fmPreset", name: "FM preset", spec: { kind: "text" }, write: false, role: "text" },
+  {
+    func: "FMPRESET",
+    state: "dab.fmPreset",
+    name: "FM preset (recall by number)",
+    spec: { kind: "number", min: 0, max: 40, step: 1, decimals: 0 },
+    write: true,
+    role: "level",
+    wireDecode: wire => (wire === "No Preset" ? "0" : wire),
+  },
   {
     func: "FMRDSPRGSERVICE",
     state: "dab.fmRdsService",
@@ -789,7 +863,8 @@ const DAB_FUNCS: FuncDef[] = [
     func: "FMFREQ",
     state: "dab.fmFrequency",
     name: "FM frequency",
-    spec: { kind: "number", unit: "kHz" },
+    // Same wire form as the TUN FMFREQ above: MHz, two fixed decimals.
+    spec: { kind: "number", unit: "MHz", decimals: 2 },
     write: true,
     role: "level",
   },
@@ -817,6 +892,12 @@ const PLAYER_SOURCES: Array<{ subunit: string; channel: string }> = [
   { subunit: "IPOD", channel: "ipod" },
   { subunit: "IPODUSB", channel: "ipodUsb" },
 ];
+
+/**
+ * The player-source subunits whose spec class carries the preset mixin (verified in
+ * ynca-python `subunits/*.py`) — only these accept a PRESET recall write.
+ */
+const PRESET_SUBUNITS = ["NETRADIO", "NAPSTER", "PANDORA", "PC", "RHAP", "SIRIUS", "USB"];
 
 /** The playback functions shared by every player source (the __init__ mixin in the lib). */
 const PLAYER_FUNCS: Array<{
@@ -859,7 +940,6 @@ const PLAYER_FUNCS: Array<{
   },
   { func: "STATION", state: "station", name: "Station", spec: { kind: "text" }, write: false, role: "text" },
   { func: "CHNAME", state: "channelName", name: "Channel name", spec: { kind: "text" }, write: false, role: "text" },
-  { func: "PRESET", state: "preset", name: "Preset", spec: { kind: "text" }, write: false, role: "text" },
   {
     func: "TOTALTIME",
     state: "totalTime",
@@ -943,6 +1023,10 @@ function fnEntries(fns: readonly FuncDef[], subunit: string, prefix = ""): YncaE
     role: fn.role,
     subunit,
     func: fn.func,
+    wireEncode: fn.wireEncode,
+    wireDecode: fn.wireDecode,
+    readFunc: fn.readFunc,
+    writeOnly: fn.writeOnly,
   }));
 }
 
@@ -986,7 +1070,7 @@ export function buildYncaCatalog(): YncaEntry[] {
     func: "SCENE",
     readFunc: "SCENE1NAME",
     writeOnly: true,
-    wireEncode: value => `Scene ${value}`,
+    wireEncode: value => `Scene ${Math.round(Number(value))}`,
   });
   // Global functions each carry their own subunit.
   for (const fn of GLOBAL_FUNCS) {
@@ -1020,6 +1104,24 @@ export function buildYncaCatalog(): YncaEntry[] {
         readAliases: fn.readAliases,
         wireEncode: fn.wireEncode,
         writeOnly: fn.writeOnly,
+      });
+    }
+    // Favourite recall (#613): PRESET is writable on the sources whose spec subunit
+    // carries the preset mixin (ynca-python; NETRADIO/USB/PC/…, not Spotify & co).
+    // Write-only — these sources do not answer a PRESET read (spec: only TUN/SIRIUS
+    // do) — and gated on PLAYBACKINFO like the transport buttons, so the datapoint
+    // appears exactly where the source exists.
+    if (PRESET_SUBUNITS.includes(source.subunit)) {
+      entries.push({
+        id: `player.${source.channel}.preset`,
+        name: "Recall preset",
+        spec: { kind: "number", min: 0, max: 40, step: 1, decimals: 0 },
+        write: true,
+        role: "level",
+        subunit: source.subunit,
+        func: "PRESET",
+        readFunc: "PLAYBACKINFO",
+        writeOnly: true,
       });
     }
   }
@@ -1137,7 +1239,8 @@ export function yncaStateUpdate(
   if (!entry) {
     return undefined;
   }
-  const value = decode(entry.spec, message.value);
+  const wire = entry.wireDecode ? entry.wireDecode(message.value) : message.value;
+  const value = decode(entry.spec, wire);
   return value === undefined ? undefined : { id: entry.id, value };
 }
 

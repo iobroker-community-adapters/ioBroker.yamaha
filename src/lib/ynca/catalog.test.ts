@@ -192,7 +192,12 @@ describe("YNCA catalog", () => {
     expect(cat.find(e => e.id === "player.netRadio.station")).toMatchObject({ subunit: "NETRADIO", func: "STATION" });
     expect(cat.find(e => e.id === "player.server.totalTime")).toMatchObject({ subunit: "SERVER", func: "TOTALTIME" });
     expect(cat.find(e => e.id === "player.usb.elapsedTime")).toMatchObject({ subunit: "USB", func: "ELAPSEDTIME" });
-    expect(cat.find(e => e.id === "player.netRadio.preset")?.spec).toEqual({ kind: "text" });
+    // Since #613 the per-source preset is a writable recall (was a dead read-only text).
+    expect(cat.find(e => e.id === "player.netRadio.preset")).toMatchObject({
+      spec: { kind: "number" },
+      write: true,
+      writeOnly: true,
+    });
   });
 
   test("the DAB tuner is catalogued as its own DAB subunit under a dab channel", () => {
@@ -205,7 +210,12 @@ describe("YNCA catalog", () => {
       write: false,
     });
     expect(cat.find(e => e.id === "tuner.dab.dls")?.spec).toEqual({ kind: "text" });
-    expect(cat.find(e => e.id === "tuner.dab.fmFrequency")?.spec).toMatchObject({ kind: "number", unit: "kHz" });
+    // MHz, not kHz: every device fixture reports "FMFREQ=98.10"-style megahertz values.
+    expect(cat.find(e => e.id === "tuner.dab.fmFrequency")?.spec).toMatchObject({
+      kind: "number",
+      unit: "MHz",
+      decimals: 2,
+    });
     expect(cat.find(e => e.id === "tuner.dab.fmSearchMode")?.spec.kind).toBe("enum");
   });
 
@@ -278,6 +288,78 @@ describe("YNCA catalog", () => {
     expect(yncaCommand("nope", 1, map)).toBeUndefined();
     expect(yncaCommand("volume", null, map)).toBeUndefined(); // null is not a valid write
     expect(yncaCommand("volume", "abc", map)).toBeUndefined(); // non-finite number is dropped
+  });
+
+  test("every numeric write carries the wire format its YNCA function demands (#612)", () => {
+    const map = idToEntry(buildYncaCatalog());
+    // Volume needs one fixed decimal — "VOL=-38" is read as tenths by the receiver.
+    expect(yncaCommand("volume", -38, map)).toEqual({ subunit: "MAIN", func: "VOL", value: "-38.0" });
+    expect(yncaCommand("multiroom.zone2.volume", -21.5, map)).toEqual({
+      subunit: "ZONE2",
+      func: "VOL",
+      value: "-21.5",
+    });
+    expect(yncaCommand("multiroom.zoneB.volume", -30, map)).toEqual({
+      subunit: "MAIN",
+      func: "ZONEBVOL",
+      value: "-30.0",
+    });
+    expect(yncaCommand("sound.bass", 3, map)).toEqual({ subunit: "MAIN", func: "SPBASS", value: "3.0" });
+    expect(yncaCommand("sound.headphoneTreble", -2.5, map)).toEqual({
+      subunit: "MAIN",
+      func: "HPTREBLE",
+      value: "-2.5",
+    });
+    expect(yncaCommand("advanced.initialVolume.level", -45, map)).toEqual({
+      subunit: "MAIN",
+      func: "INITVOLLVL",
+      value: "-45.0",
+    });
+    // Max volume steps in 5 dB — except the literal ceiling 16.5, which is valid as-is.
+    expect(yncaCommand("advanced.maxVolume", -20, map)).toEqual({ subunit: "MAIN", func: "MAXVOL", value: "-20.0" });
+    expect(yncaCommand("advanced.maxVolume", 16.5, map)).toEqual({ subunit: "MAIN", func: "MAXVOL", value: "16.5" });
+    // FM frequency is MHz with two fixed decimals; AM stays a whole kHz count.
+    expect(yncaCommand("tuner.fmFrequency", 98.1, map)).toEqual({ subunit: "TUN", func: "FMFREQ", value: "98.10" });
+    expect(yncaCommand("tuner.amFrequency", 1440, map)).toEqual({ subunit: "TUN", func: "AMFREQ", value: "1440" });
+    // Lip-sync offsets are whole milliseconds.
+    expect(yncaCommand("lipSync.hdmiOut1", 12.6, map)).toEqual({
+      subunit: "MAIN",
+      func: "LIPSYNCHDMIOUT1OFFSET",
+      value: "13",
+    });
+    // Scene recall rounds a stray fraction instead of sending "Scene 2.7".
+    expect(yncaCommand("scene.recall", 2.7, map)).toEqual({ subunit: "MAIN", func: "SCENE", value: "Scene 3" });
+  });
+
+  test("the stored-station surface (#613): tuner preset read/write, up/down, source recall", () => {
+    const map = idToEntry(buildYncaCatalog());
+    // Recall by number goes out as a bare integer; up/down as the wire words.
+    expect(yncaCommand("tuner.preset", 7, map)).toEqual({ subunit: "TUN", func: "PRESET", value: "7" });
+    expect(yncaCommand("tuner.presetUp", true, map)).toEqual({ subunit: "TUN", func: "PRESET", value: "Up" });
+    expect(yncaCommand("tuner.presetDown", true, map)).toEqual({ subunit: "TUN", func: "PRESET", value: "Down" });
+    // Favourite recall exists on the preset-capable sources only (ynca spec mixins).
+    expect(yncaCommand("player.netRadio.preset", 3, map)).toEqual({ subunit: "NETRADIO", func: "PRESET", value: "3" });
+    expect(yncaCommand("player.usb.preset", 12, map)).toEqual({ subunit: "USB", func: "PRESET", value: "12" });
+    expect(yncaCommand("player.spotify.preset", 3, map)).toBeUndefined();
+    // DAB presets are writable recalls too.
+    expect(yncaCommand("tuner.dab.preset", 2, map)).toEqual({ subunit: "DAB", func: "DABPRESET", value: "2" });
+    expect(yncaCommand("tuner.dab.fmPreset", 4, map)).toEqual({ subunit: "DAB", func: "FMPRESET", value: "4" });
+  });
+
+  test("a reported preset lands as its number; the 'No Preset' sentinel becomes 0", () => {
+    const map = funcToEntry(buildYncaCatalog());
+    expect(yncaStateUpdate({ subunit: "TUN", func: "PRESET", value: "1" }, map)).toEqual({
+      id: "tuner.preset",
+      value: 1,
+    });
+    expect(yncaStateUpdate({ subunit: "TUN", func: "PRESET", value: "No Preset" }, map)).toEqual({
+      id: "tuner.preset",
+      value: 0,
+    });
+    expect(yncaStateUpdate({ subunit: "DAB", func: "DABPRESET", value: "No Preset" }, map)).toEqual({
+      id: "tuner.dab.preset",
+      value: 0,
+    });
   });
 
   test("the catalog covers sound, HDMI, DSP and global (SYS/TUN) functions", () => {

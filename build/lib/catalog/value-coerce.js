@@ -20,6 +20,7 @@ var value_coerce_exports = {};
 __export(value_coerce_exports, {
   decode: () => decode,
   encode: () => encode,
+  formatWireNumber: () => formatWireNumber,
   isWritableValue: () => isWritableValue,
   specToCommon: () => specToCommon
 });
@@ -99,11 +100,21 @@ function isWritableValue(value, numeric) {
   }
   return Number.isFinite(Number(value));
 }
+function formatWireNumber(value, decimals, step) {
+  const snapped = step ? Math.round(value / step) * step : value;
+  const magnitude = Math.abs(snapped).toFixed(decimals);
+  const sign = snapped < 0 && Number(magnitude) !== 0 ? "-" : "";
+  return sign + magnitude;
+}
 function encode(spec, value) {
   switch (spec.kind) {
     case "onoff":
       return value ? spec.on : spec.off;
     case "number":
+      if (spec.decimals !== void 0) {
+        return formatWireNumber(Number(value), spec.decimals, spec.step);
+      }
+      return String(value);
     case "enum":
     case "text":
       return String(value);
@@ -119,6 +130,7 @@ function encode(spec, value) {
 0 && (module.exports = {
   decode,
   encode,
+  formatWireNumber,
   isWritableValue,
   specToCommon
 });
