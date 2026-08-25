@@ -55,7 +55,19 @@ gar nicht mehr abgefragt.
 
 Datenpunkte: ein gemeinsamer Katalog je Transport (`ynca/catalog.ts`, `yxc/catalog.ts`, `xml/catalog.ts`) liefert
 Objekt-`common` UND Wert-Mapping aus EINER Liste; die `common` werden über `catalog/value-coerce.ts` intelligent
-typisiert (onoff→boolean, enum→Dropdown, number→unit/range). Der Objektbaum ist thematisch gruppiert
+typisiert (onoff→boolean, enum→Dropdown, number→unit/range). **Numerische YNCA-Schreibwerte tragen ein
+PFLICHT-Zahlenformat** (`NumberSpec.decimals` + Step-Raster in `encode`, Referenz ynca-python
+`number_to_string_with_stepsize`): ohne Dezimalpunkt liest die Receiver-Firmware die Ziffern als Zehntel —
+`VOL=-38` kam als −3,8 dB an (Issue #612; MAXVOL hat den 16.5-Sonderfall per `wireEncode`, FMFREQ ist MHz mit
+zwei Nachkommastellen). **Preset-/Favoriten-Oberfläche (#613, Parität zum alten musiccast-Adapter):** YNCA
+`TUN.PRESET` lesbar+schreibbar (Sentinel „No Preset"→0 via `wireDecode`) + Up/Down-Buttons, DAB-/FM-Presets
+schreibbar, Quellen-Abruf `player.<src>.preset` nur auf den Preset-fähigen Subunits (`PRESET_SUBUNITS`, Spec
+ynca-python-Mixins; write-only, PLAYBACKINFO-gegated). YXC: Favoriten-/Zuletzt-Listen als JSON-States +
+Abruf-Nummern, Tuner-Presets je Band (`getFeatures tuner.preset.type` common/separate steuert Abruf-Band),
+Geräte-eigene Wertelisten aus `getFeatures` werden Dropdowns (`YxcZone.valueLists`), Wecker-Block `clock.*`
+read-only (der Alt-Adapter hatte auch keinen funktionierenden Schreibweg) mit eigener Admin-Gruppe
+`group_clock`. Die YXC-DAB-Felder speisen die YNCA-DAB-IDs (`DAB_FIELDS`, eine Quelle für Anlage+Parse);
+Owner-Override `tuner.dab.preset`→YNCA (dort schreibbar, bei YXC nur Anzeige). Der Objektbaum ist thematisch gruppiert
 (`catalog/groups.ts`, `groupOf(id)` bucketet nach zonenbereinigtem erstem Kanal-Segment, HDMI-Routing/Lippensynchron
 gewinnt dabei explizit VOR dem Zonen-Präfix): die Wiedergabe-Quellen unter `player.*`, DAB unter `tuner.dab`,
 Multiroom statt `dist`. **Der `multiroom`-Ordner trägt den Geltungsbereich selbst** (v1.0.0-Schnitt): direkt im

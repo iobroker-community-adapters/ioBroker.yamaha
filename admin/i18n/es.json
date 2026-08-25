@@ -33,6 +33,8 @@
   "group_hdmi_help": "Salidas HDMI y desfase de sincronización labial, para cada zona",
   "group_scene": "Escenas",
   "group_scene_help": "Recuperar escenas guardadas",
+  "group_clock": "Reloj y alarma",
+  "group_clock_help": "Puntos de datos de reloj y alarma",
   "group_sound": "Sonido",
   "group_sound_help": "Modos de procesamiento de sonido, control de tono, subwoofer, balance y ecualizador",
   "group_advanced": "Avanzado",

@@ -13,7 +13,7 @@
  */
 
 /** The switchable groups. `amp` is the amplifier core and can never be turned off. */
-export type GroupId = "amp" | "player" | "tuner" | "multiroom" | "hdmi" | "scene" | "sound" | "advanced";
+export type GroupId = "amp" | "player" | "tuner" | "multiroom" | "hdmi" | "scene" | "sound" | "advanced" | "clock";
 
 /** The groups a user can switch off, in display order (amp is always on and not listed here). */
 export const SWITCHABLE_GROUPS: readonly GroupId[] = [
@@ -24,6 +24,7 @@ export const SWITCHABLE_GROUPS: readonly GroupId[] = [
   "scene",
   "sound",
   "advanced",
+  "clock",
 ];
 
 /**
@@ -59,6 +60,9 @@ export function groupOf(stateId: string): GroupId {
   }
   if (seg === "scene") {
     return "scene";
+  }
+  if (seg === "clock") {
+    return "clock";
   }
   return "amp";
 }

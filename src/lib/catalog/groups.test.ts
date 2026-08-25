@@ -129,4 +129,11 @@ describe("isGroupEnabled", () => {
     expect(isGroupEnabled("multiroom.masterPower", { group_multiroom: false })).toBe(false);
     expect(isGroupEnabled("multiroom.zone2.volume", {})).toBe(true);
   });
+
+  it("the clock/alarm block is its own switchable group", () => {
+    expect(groupOf("clock.alarm.oneday.time")).toBe("clock");
+    expect(groupOf("clock.autoSync")).toBe("clock");
+    expect(isGroupEnabled("clock.alarm.on", { group_clock: false })).toBe(false);
+    expect(isGroupEnabled("clock.alarm.on", {})).toBe(true);
+  });
 });

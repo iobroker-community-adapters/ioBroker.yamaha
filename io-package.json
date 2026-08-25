@@ -218,7 +218,8 @@
     "group_hdmi": true,
     "group_scene": true,
     "group_sound": true,
-    "group_advanced": true
+    "group_advanced": true,
+    "group_clock": true
   },
   "objects": [],
   "instanceObjects": [

@@ -30,7 +30,8 @@ const SWITCHABLE_GROUPS = [
   "hdmi",
   "scene",
   "sound",
-  "advanced"
+  "advanced",
+  "clock"
 ];
 function groupOf(stateId) {
   const seg = stateId.includes(".") ? stateId.slice(0, stateId.indexOf(".")) : stateId;
@@ -54,6 +55,9 @@ function groupOf(stateId) {
   }
   if (seg === "scene") {
     return "scene";
+  }
+  if (seg === "clock") {
+    return "clock";
   }
   return "amp";
 }

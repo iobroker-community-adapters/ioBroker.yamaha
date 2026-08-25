@@ -33,6 +33,8 @@
   "group_hdmi_help": "Sorties HDMI et décalage de synchronisation labiale, pour chaque zone",
   "group_scene": "Scènes",
   "group_scene_help": "Rappeler les scènes enregistrées",
+  "group_clock": "Horloge et réveil",
+  "group_clock_help": "Points de données horloge et réveil",
   "group_sound": "Son",
   "group_sound_help": "Modes de traitement du son, réglages de tonalité, caisson de basses, balance et égaliseur",
   "group_advanced": "Avancé",

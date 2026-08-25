@@ -110,6 +110,16 @@
       "lg": 4,
       "xl": 3
     },
+    "group_clock": {
+      "type": "checkbox",
+      "label": "group_clock",
+      "help": "group_clock_help",
+      "xs": 12,
+      "sm": 6,
+      "md": 4,
+      "lg": 4,
+      "xl": 3
+    },
     "group_sound": {
       "type": "checkbox",
       "label": "group_sound",

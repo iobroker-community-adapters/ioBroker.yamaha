@@ -33,6 +33,8 @@
   "group_hdmi_help": "HDMI outputs and lip-sync offset, for every zone",
   "group_scene": "Scenes",
   "group_scene_help": "Recall saved scenes",
+  "group_clock": "Clock & alarm",
+  "group_clock_help": "Clock and alarm datapoints",
   "group_sound": "Sound",
   "group_sound_help": "Sound-processing modes, tone controls, subwoofer, balance and equalizer",
   "group_advanced": "Advanced",

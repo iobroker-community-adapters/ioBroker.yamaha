@@ -33,6 +33,8 @@
   "group_hdmi_help": "HDMI-uitgangen en lip-sync-offset, voor elke zone",
   "group_scene": "Scènes",
   "group_scene_help": "Opgeslagen scènes oproepen",
+  "group_clock": "Klok & wekker",
+  "group_clock_help": "Klok- en wekkerdatapunten",
   "group_sound": "Geluid",
   "group_sound_help": "Geluidsmodi, klankregeling, subwoofer, balans en equalizer",
   "group_advanced": "Geavanceerd",

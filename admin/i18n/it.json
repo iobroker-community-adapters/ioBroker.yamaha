@@ -33,6 +33,8 @@
   "group_hdmi_help": "Uscite HDMI e sfasamento lip-sync, per ogni zona",
   "group_scene": "Scene",
   "group_scene_help": "Richiama le scene salvate",
+  "group_clock": "Orologio e sveglia",
+  "group_clock_help": "Punti dati di orologio e sveglia",
   "group_sound": "Audio",
   "group_sound_help": "Modalità di elaborazione audio, toni, subwoofer, bilanciamento ed equalizzatore",
   "group_advanced": "Avanzate",

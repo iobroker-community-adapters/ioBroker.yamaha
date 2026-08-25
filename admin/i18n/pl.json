@@ -33,6 +33,8 @@
   "group_hdmi_help": "Wyjścia HDMI i przesunięcie synchronizacji ust, dla każdej strefy",
   "group_scene": "Sceny",
   "group_scene_help": "Przywoływanie zapisanych scen",
+  "group_clock": "Zegar i budzik",
+  "group_clock_help": "Punkty danych zegara i budzika",
   "group_sound": "Dźwięk",
   "group_sound_help": "Tryby przetwarzania dźwięku, tony, subwoofer, balans i korektor",
   "group_advanced": "Zaawansowane",

@@ -19,6 +19,8 @@ legacy XML protocol of the oldest pre-2010 models — behind one object tree.
 - **Instant updates** — MusicCast pushes its changes, YNCA reports over its live connection
 - **Self-healing connections** — an offline receiver joins once it answers; a single protocol reconnects on its own while the others keep running
 - **Typed datapoints** — booleans, dropdowns and numbers with unit and range instead of raw text
+- **Presets and favourites** — recall tuner presets and stored network/USB favourites by number, step through presets, and read the stored lists with their names (MusicCast); recently-played recall on MusicCast devices
+- **Clock & alarm view** — MusicCast desk-audio devices show their clock and alarm settings
 - **Capability-driven** — states are generated from what each device reports, no hardcoded model list
 - **Automatic discovery** — an empty device list finds and sets up MusicCast devices at startup
 - **Device manager** — receivers as admin cards with model, address, live protocol indicators and a device-type icon (receiver, stereo, speaker, soundbar, CD)
@@ -86,6 +88,13 @@ On the first connect the adapter asks the receiver which functions it supports �
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+### **WORK IN PROGRESS**
+
+- (krobipd) Fixed: setting the volume now works — a written value like -38 dB was sent in a form the receiver read as -3.8 dB, so most writes were ignored and multiples of ten jumped the volume dangerously loud (#612). The same fix applies to every numeric control (bass/treble, initial/max volume, tuner frequencies, lip-sync).
+- (krobipd) Fixed: the FM frequency datapoint now shows MHz (it was mislabelled kHz).
+- (krobipd) Added: preset and favourites selection (#613) — recall tuner presets by number (with up/down), recall stored network/USB favourites per source, and on MusicCast devices read the stored preset lists with their names, the recently-played list with recall, and tuner presets per band.
+- (krobipd) Added: MusicCast devices now show their full selection lists as dropdowns (inputs, sound programs, decoder types and more come from the device itself), plus CD details (track number, disc time, drive status), DAB details, RDS station/programme, and a read-only clock & alarm view on desk-audio devices — with a new "Clock & alarm" datapoint group switch in the admin.
+
 ### 1.1.1 (2026-08-22)
 
 - (krobipd) Changed: Internal cleanup. No user-facing changes.

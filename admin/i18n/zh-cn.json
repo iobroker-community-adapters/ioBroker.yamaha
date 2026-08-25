@@ -33,6 +33,8 @@
   "group_hdmi_help": "每个区域的 HDMI 输出和唇音同步偏移",
   "group_scene": "场景",
   "group_scene_help": "调用已保存的场景",
+  "group_clock": "时钟与闹钟",
+  "group_clock_help": "时钟和闹钟数据点",
   "group_sound": "音效",
   "group_sound_help": "音效处理模式、音调、低音炮、平衡和均衡器",
   "group_advanced": "高级",

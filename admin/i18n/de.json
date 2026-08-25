@@ -33,6 +33,8 @@
   "group_hdmi_help": "HDMI-Ausgänge und Lippensynchron-Versatz, für jede Zone",
   "group_scene": "Szenen",
   "group_scene_help": "Gespeicherte Szenen abrufen",
+  "group_clock": "Uhr & Wecker",
+  "group_clock_help": "Uhr- und Wecker-Datenpunkte",
   "group_sound": "Klang",
   "group_sound_help": "Klangmodi, Klangregler, Subwoofer, Balance und Equalizer",
   "group_advanced": "Erweitert",
