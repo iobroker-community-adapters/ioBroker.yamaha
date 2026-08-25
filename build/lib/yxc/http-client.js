@@ -445,6 +445,32 @@ class YamahaYxcClient {
     return this.send(`/netusb/recallPreset?zone=${zoneSeg(zone)}&num=${num}`);
   }
   /**
+   * Read one window of a netusb source's browsable list (menu browsing, #613). The
+   * URL mirrors `yamaha-yxc-nodejs` getListInfo (list_id omitted = the main list).
+   *
+   * @param input the netusb input (net_radio, server, usb, …)
+   * @param index the 0-based index of the window's first entry
+   * @param size how many entries to fetch (the device caps at 8)
+   * @returns the list_info response
+   */
+  getListInfo(input, index, size = 8) {
+    return this.send(`/netusb/getListInfo?input=${input}&index=${index}&size=${size}`);
+  }
+  /**
+   * Drive the netusb list (`yamaha-yxc-nodejs` setListControl, list_id `main`):
+   * select a folder / play an item by absolute index, or go one level back.
+   *
+   * @param type the operation (select opens a folder, play starts an item, return goes back)
+   * @param index the absolute entry index (select/play only)
+   * @param zone the zone that receives a played item
+   * @returns the command response
+   */
+  setListControl(type, index, zone) {
+    const indexSeg = index === void 0 ? "" : `&index=${index}`;
+    const zoneSegment = zone === void 0 ? "" : `&zone=${zoneSeg(zone)}`;
+    return this.send(`/netusb/setListControl?list_id=main&type=${type}${indexSeg}${zoneSegment}`);
+  }
+  /**
    * Read the stored network/USB favourites (preset slots with their names).
    *
    * @returns the preset_info response

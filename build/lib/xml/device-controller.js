@@ -25,6 +25,9 @@ var import_types = require("../catalog/types");
 var import_command_mapper = require("./command-mapper");
 var import_catalog = require("./catalog");
 var import_util = require("../util");
+var import_browse_engine = require("../browse/browse-engine");
+var import_xml_browse_driver = require("../browse/xml-browse-driver");
+var import_objects = require("../browse/objects");
 const DEFAULT_POLL_INTERVAL_MS = 60 * 1e3;
 const MAX_KEEPALIVE_FAILURES = 3;
 const XML_ZONES = [
@@ -49,6 +52,7 @@ class XmlDeviceController {
   dropHandler;
   failedKeepalives = 0;
   dropped = false;
+  browseEngine;
   /**
    * Probe each zone, create the tree for the ones that answer, seed state, and
    * start the keepalive poll.
@@ -136,9 +140,47 @@ class XmlDeviceController {
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getModelName failed (${(0, import_util.errorMessage)(e)})`);
     }
+    await this.setupBrowse();
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), this.pollIntervalMs);
     this.deps.log.debug(`${this.deviceId}: Yamaha (XML) device ready (XML)`);
     return true;
+  }
+  /**
+   * Create the browsing surface (#613) when at least one source answers a List_Info
+   * probe (NET_RADIO/SERVER/USB — the menus the predecessor adapter's users drove
+   * via `Realtime.*.LINE1TXT` + `xmlCommand`). Skipped without a delay dep (older tests).
+   */
+  async setupBrowse() {
+    const delay = this.deps.delay;
+    if (!delay) {
+      return;
+    }
+    const probes = await Promise.all(
+      import_xml_browse_driver.XML_BROWSE_SOURCES.map(async (source) => {
+        try {
+          const body = await this.deps.client.getXml(source.element, "<List_Info>GetParam</List_Info>");
+          return body.includes("<Menu_Status>") ? source.key : void 0;
+        } catch {
+          return void 0;
+        }
+      })
+    );
+    const available = new Set(probes.filter((key) => key !== void 0));
+    if (available.size === 0) {
+      return;
+    }
+    const driver = new import_xml_browse_driver.XmlBrowseDriver(this.deps.client, available, delay);
+    const sources = driver.sources();
+    for (const def of (0, import_objects.browseObjectDefs)(sources)) {
+      await this.deps.upsertObject(`${this.deviceId}.${def.id}`, def);
+    }
+    this.browseEngine = new import_browse_engine.BrowseEngine(driver, {
+      emit: (id, value) => this.deps.setStateAck(`${this.deviceId}.${id}`, value),
+      log: this.deps.log,
+      delay
+    });
+    driver.attach(this.browseEngine);
+    this.browseEngine.seed();
   }
   /**
    * Handle a state change: a user write (ack false) becomes an XML command; an
@@ -149,6 +191,7 @@ class XmlDeviceController {
    * @param value the new value
    */
   handleStateChange(fullStateId, ack, value) {
+    var _a;
     if (ack) {
       return;
     }
@@ -156,7 +199,12 @@ class XmlDeviceController {
     if (!fullStateId.startsWith(prefix)) {
       return;
     }
-    const command = (0, import_command_mapper.stateToXml)(fullStateId.slice(prefix.length), value);
+    const stateId = fullStateId.slice(prefix.length);
+    if (stateId.startsWith("player.browse.")) {
+      (_a = this.browseEngine) == null ? void 0 : _a.handleWrite(stateId, value);
+      return;
+    }
+    const command = (0, import_command_mapper.stateToXml)(stateId, value);
     if (command) {
       void this.applyCommand(command);
     }
@@ -172,8 +220,9 @@ class XmlDeviceController {
   }
   /** Cancel the keepalive poll. Synchronous — safe to call from onUnload. */
   close() {
-    var _a;
-    (_a = this.cancelKeepalive) == null ? void 0 : _a.call(this);
+    var _a, _b;
+    (_a = this.browseEngine) == null ? void 0 : _a.close();
+    (_b = this.cancelKeepalive) == null ? void 0 : _b.call(this);
     this.cancelKeepalive = void 0;
   }
   /**

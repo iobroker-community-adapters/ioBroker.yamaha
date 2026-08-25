@@ -13,6 +13,9 @@ import {
   type YncaEntry,
 } from "./ynca/catalog";
 import type { YncaSubunitCache } from "./ynca/subunit-cache";
+import { BrowseEngine } from "./browse/browse-engine";
+import { YncaBrowseDriver } from "./browse/ynca-browse-driver";
+import { browseObjectDefs } from "./browse/objects";
 
 // The YNCA catalog and its lookup maps are static — built once for all devices.
 // SYS:MODELNAME is part of the catalog (info.model), so the sweep already covers it.
@@ -34,6 +37,8 @@ export interface YncaClientLike {
   ): Promise<YncaCapabilities>;
   /** Send a PUT command. */
   send(subunit: string, func: string, value: string): void;
+  /** Send a GET request (the browse driver reads LISTINFO with it). */
+  get(subunit: string, func: string): void;
   /** Register a handler for pushed messages. */
   onMessage(handler: (message: { subunit: string; func: string; value: string }) => void): void;
   /** Register the socket-drop handler the supervisor reconnects on. */
@@ -68,6 +73,8 @@ export interface ControllerDeps {
    * a model/firmware mismatch after the sweep invalidates it and re-probes.
    */
   subunitCache?: YncaSubunitCache;
+  /** Adapter-managed delay for the browse engine/driver pacing (absent in older tests → no browse). */
+  delay?(ms: number): Promise<void>;
 }
 
 /**
@@ -76,6 +83,9 @@ export interface ControllerDeps {
  * separate, gated steps.
  */
 export class YncaDeviceController implements ConnectionHandle {
+  private browseDriver: YncaBrowseDriver | undefined;
+  private browseEngine: BrowseEngine | undefined;
+
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
    * @param deps the client and adapter callbacks
@@ -118,7 +128,11 @@ export class YncaDeviceController implements ConnectionHandle {
         }
       }
     }
+    await this.setupBrowse(capabilities);
     this.deps.client.onMessage(message => {
+      // The browse driver sees every line first: list lines (LINE1TXT…, LISTINFO
+      // bursts, auto-feedback) are not catalogued and would otherwise be dropped.
+      this.browseDriver?.handleMessage(message);
       const update = yncaStateUpdate(message, FUNC_MAP);
       if (update) {
         this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
@@ -204,10 +218,46 @@ export class YncaDeviceController implements ConnectionHandle {
     if (!fullStateId.startsWith(prefix)) {
       return;
     }
-    const triple = yncaCommand(fullStateId.slice(prefix.length), value, ID_MAP);
+    const stateId = fullStateId.slice(prefix.length);
+    if (stateId.startsWith("player.browse.")) {
+      this.browseEngine?.handleWrite(stateId, value);
+      return;
+    }
+    const triple = yncaCommand(stateId, value, ID_MAP);
     if (triple) {
       this.deps.client.send(triple.subunit, triple.func, triple.value);
     }
+  }
+
+  /**
+   * Create the browsing surface (#613) when the device reports a browsable media
+   * subunit: the official YNCA list vocabulary (LISTINFO/LISTSEL/LISTPAGE/LISTCURSOR)
+   * drives an 8-line window under `player.browse.*`. Skipped without a delay dep
+   * (older tests) and when the playback group is switched off.
+   *
+   * @param capabilities the device's swept capabilities
+   */
+  private async setupBrowse(capabilities: YncaCapabilities): Promise<void> {
+    const delay = this.deps.delay;
+    if (!delay || this.deps.isEntryEnabled?.("player.browse.source") === false) {
+      return;
+    }
+    const driver = new YncaBrowseDriver(this.deps.client, new Set(Object.keys(capabilities.subunits)), delay);
+    const sources = driver.sources();
+    if (Object.keys(sources).length === 0) {
+      return;
+    }
+    for (const def of browseObjectDefs(sources)) {
+      await this.deps.upsertObject(`${this.deviceId}.${def.id}`, def);
+    }
+    this.browseEngine = new BrowseEngine(driver, {
+      emit: (id, value) => this.deps.setStateAck(`${this.deviceId}.${id}`, value),
+      log: this.deps.log,
+      delay,
+    });
+    driver.attach(this.browseEngine);
+    this.browseDriver = driver;
+    this.browseEngine.seed();
   }
 
   /**
@@ -222,6 +272,8 @@ export class YncaDeviceController implements ConnectionHandle {
 
   /** Close the client. Synchronous — safe to call from onUnload. */
   public close(): void {
+    this.browseEngine?.close();
+    this.browseDriver?.close();
     this.deps.client.close();
   }
 }

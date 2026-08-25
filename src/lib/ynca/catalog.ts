@@ -499,6 +499,16 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     write: true,
     role: "text",
   },
+  // Adaptive DSP (official RX-V671 command list) — the DSP-level companion of
+  // Adaptive DRC, same Off/Auto value set.
+  {
+    func: "ADAPTIVEDSP",
+    state: "sound.adaptiveDsp",
+    name: "Adaptive DSP",
+    spec: { kind: "enum", states: ADAPTIVEDRC_STATES },
+    write: true,
+    role: "state",
+  },
 ];
 
 const BAND_STATES = selfMap(["AM", "FM"]);
@@ -636,6 +646,50 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     spec: { kind: "enum", states: TUN_SEARCHMODE_STATES },
     write: true,
     role: "state",
+  },
+  // FM playback mode (official RX-V671 command list): Auto mutes without stereo
+  // reception, Mono forces monaural for weak stations.
+  {
+    subunit: "TUN",
+    func: "FMMODE",
+    state: "tuner.fmMode",
+    name: "FM mode",
+    spec: { kind: "enum", states: selfMap(["Auto", "Mono"]) },
+    write: true,
+    role: "state",
+  },
+  // Tuning/stereo indicators (official list; both push auto-feedback).
+  {
+    subunit: "TUN",
+    func: "TUNED",
+    state: "tuner.tuned",
+    name: "Tuned to a station",
+    spec: { kind: "onoff", on: "Assert", off: "Negate" },
+    write: false,
+    role: "indicator",
+  },
+  {
+    subunit: "TUN",
+    func: "SIGSTEREOMONO",
+    state: "tuner.stereo",
+    name: "Stereo reception",
+    spec: { kind: "onoff", on: "Assert", off: "Negate" },
+    write: false,
+    role: "indicator",
+  },
+  // Store the current station to a preset bank (@TUN:MEM, official list): a slot
+  // number stores there, 0 stores to the first free slot ("Auto").
+  {
+    subunit: "TUN",
+    func: "MEM",
+    state: "tuner.presetSave",
+    name: "Save to preset (0 = first free slot)",
+    spec: { kind: "number", min: 0, max: 40, step: 1 },
+    write: true,
+    role: "level",
+    readFunc: "PRESET",
+    writeOnly: true,
+    wireEncode: value => (Number(value) === 0 ? "Auto" : String(Math.round(Number(value)))),
   },
 ];
 
@@ -899,6 +953,14 @@ const PLAYER_SOURCES: Array<{ subunit: string; channel: string }> = [
  */
 const PRESET_SUBUNITS = ["NETRADIO", "NAPSTER", "PANDORA", "PC", "RHAP", "SIRIUS", "USB"];
 
+/**
+ * The player-source subunits with a preset STORE command (@<SUB>:MEM — official
+ * RX-V671 command list, NETRADIO/NAPSTER/PC/USB; attested in the all-commands
+ * corpus). A slot number stores the current station/item there, 0 stores to the
+ * first free slot ("Auto").
+ */
+const MEM_SUBUNITS = ["NETRADIO", "NAPSTER", "PC", "USB"];
+
 /** The playback functions shared by every player source (the __init__ mixin in the lib). */
 const PLAYER_FUNCS: Array<{
   func: string;
@@ -1124,7 +1186,86 @@ export function buildYncaCatalog(): YncaEntry[] {
         writeOnly: true,
       });
     }
+    // Favourite STORE (#613 companion): save the current station/item to a preset
+    // slot from ioBroker instead of at the device.
+    if (MEM_SUBUNITS.includes(source.subunit)) {
+      entries.push({
+        id: `player.${source.channel}.presetSave`,
+        name: "Save to preset (0 = first free slot)",
+        spec: { kind: "number", min: 0, max: 40, step: 1 },
+        write: true,
+        role: "level",
+        subunit: source.subunit,
+        func: "MEM",
+        readFunc: "PLAYBACKINFO",
+        writeOnly: true,
+        wireEncode: value => (Number(value) === 0 ? "Auto" : String(Math.round(Number(value)))),
+      });
+    }
   }
+  // Net-radio bookmark (@NETRADIO:BOOKMARK, official list + attested): true bookmarks
+  // the currently playing station, false removes the bookmark — the "save a favourite
+  // from ioBroker" path the #613 workflow asked for.
+  entries.push({
+    id: "player.netRadio.bookmark",
+    name: "Bookmark current station",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    write: true,
+    role: "switch",
+    subunit: "NETRADIO",
+    func: "BOOKMARK",
+    readFunc: "PLAYBACKINFO",
+    writeOnly: true,
+  });
+  // Bluetooth connection control (@BT:CONNECT/PAIRING/CONNECTINFO, official list):
+  // the connected indicator is readable; connect and pairing are write-only actions
+  // gated on the same CONNECTINFO report.
+  entries.push(
+    {
+      id: "player.bluetooth.connected",
+      name: "Connected",
+      spec: { kind: "onoff", on: "Connected", off: "Disconnected" },
+      write: false,
+      role: "indicator",
+      subunit: "BT",
+      func: "CONNECTINFO",
+    },
+    {
+      id: "player.bluetooth.connect",
+      name: "Connect",
+      spec: { kind: "onoff", on: "Connect", off: "Disconnect" },
+      write: true,
+      role: "switch",
+      subunit: "BT",
+      func: "CONNECT",
+      readFunc: "CONNECTINFO",
+      writeOnly: true,
+    },
+    {
+      id: "player.bluetooth.pairing",
+      name: "Start pairing",
+      spec: { kind: "button" },
+      write: true,
+      role: "button",
+      subunit: "BT",
+      func: "PAIRING",
+      readFunc: "CONNECTINFO",
+      writeOnly: true,
+      wireEncode: () => "Start",
+    },
+    {
+      id: "player.bluetooth.pairingCancel",
+      name: "Cancel pairing",
+      spec: { kind: "button" },
+      write: true,
+      role: "button",
+      subunit: "BT",
+      func: "PAIRING",
+      readFunc: "CONNECTINFO",
+      writeOnly: true,
+      wireEncode: () => "Cancel",
+    },
+  );
   return entries;
 }
 

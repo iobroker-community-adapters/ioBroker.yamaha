@@ -80,6 +80,10 @@ export interface YxcClientLike {
   setPartyMode(on: boolean): Promise<unknown>;
   /** Recall a network/USB preset. */
   recallPreset(num: number, zone: string): Promise<unknown>;
+  /** Read one window of a netusb source's browsable list (menu browsing, #613). */
+  getListInfo(input: string, index: number, size?: number): Promise<unknown>;
+  /** Drive the netusb list: select/play an absolute index, or go one level back. */
+  setListControl(type: "select" | "play" | "return", index?: number, zone?: string): Promise<unknown>;
   /** Read the stored network/USB favourites (preset slots with names). */
   getPresetInfo(): Promise<unknown>;
   /** Read the recently played network/USB items. */

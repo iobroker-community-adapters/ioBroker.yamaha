@@ -406,3 +406,80 @@ describe("YNCA catalog", () => {
     expect(uncurated).toEqual([]);
   });
 });
+
+describe("official-command-list additions (2026-08-25)", () => {
+  const cat = buildYncaCatalog();
+  const ids = idToEntry(cat);
+
+  test("tuner preset store: a slot number goes out verbatim, 0 becomes Auto", () => {
+    expect(yncaCommand("tuner.presetSave", 7, ids)).toEqual({ subunit: "TUN", func: "MEM", value: "7" });
+    expect(yncaCommand("tuner.presetSave", 0, ids)).toEqual({ subunit: "TUN", func: "MEM", value: "Auto" });
+  });
+
+  test("player preset store exists on the MEM-capable sources only", () => {
+    expect(yncaCommand("player.netRadio.presetSave", 3, ids)).toEqual({
+      subunit: "NETRADIO",
+      func: "MEM",
+      value: "3",
+    });
+    expect(ids.get("player.usb.presetSave")).toBeDefined();
+    expect(ids.get("player.spotify.presetSave")).toBeUndefined();
+  });
+
+  test("net-radio bookmark writes On/Off and never reads back", () => {
+    expect(yncaCommand("player.netRadio.bookmark", true, ids)).toEqual({
+      subunit: "NETRADIO",
+      func: "BOOKMARK",
+      value: "On",
+    });
+    const entry = ids.get("player.netRadio.bookmark");
+    expect(entry?.writeOnly).toBe(true);
+  });
+
+  test("bluetooth: connect switch, pairing buttons, connected indicator", () => {
+    expect(yncaCommand("player.bluetooth.connect", true, ids)).toEqual({
+      subunit: "BT",
+      func: "CONNECT",
+      value: "Connect",
+    });
+    expect(yncaCommand("player.bluetooth.pairing", true, ids)).toEqual({
+      subunit: "BT",
+      func: "PAIRING",
+      value: "Start",
+    });
+    expect(yncaCommand("player.bluetooth.pairingCancel", true, ids)).toEqual({
+      subunit: "BT",
+      func: "PAIRING",
+      value: "Cancel",
+    });
+    expect(
+      yncaStateUpdate({ subunit: "BT", func: "CONNECTINFO", value: "Connected" }, funcToEntry(cat)),
+    ).toEqual({ id: "player.bluetooth.connected", value: true });
+  });
+
+  test("tuner FM mode, tuned and stereo indicators decode from the wire", () => {
+    const funcs = funcToEntry(cat);
+    expect(yncaStateUpdate({ subunit: "TUN", func: "FMMODE", value: "Mono" }, funcs)).toEqual({
+      id: "tuner.fmMode",
+      value: "Mono",
+    });
+    expect(yncaStateUpdate({ subunit: "TUN", func: "TUNED", value: "Assert" }, funcs)).toEqual({
+      id: "tuner.tuned",
+      value: true,
+    });
+    expect(yncaStateUpdate({ subunit: "TUN", func: "SIGSTEREOMONO", value: "Negate" }, funcs)).toEqual({
+      id: "tuner.stereo",
+      value: false,
+    });
+  });
+
+  test("adaptive DSP is a MAIN-only sound state with the Off/Auto value set", () => {
+    const entry = ids.get("sound.adaptiveDsp");
+    expect(entry?.subunit).toBe("MAIN");
+    expect(yncaCommand("sound.adaptiveDsp", "Auto", ids)).toEqual({
+      subunit: "MAIN",
+      func: "ADAPTIVEDSP",
+      value: "Auto",
+    });
+  });
+});

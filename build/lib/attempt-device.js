@@ -84,6 +84,9 @@ async function connectTransports(deviceId, attempts, deps) {
 }
 function attemptDevice(device, deps) {
   const { log, upsertObject, setStateAck, timers } = deps;
+  const delay = (ms) => new Promise((resolve) => {
+    timers.schedule(resolve, ms);
+  });
   const buildYnca = () => {
     const ynca = new import_transport_connection_adapter.TransportConnectionAdapter("ynca", device.id, setStateAck);
     ynca.bind(
@@ -93,7 +96,8 @@ function attemptDevice(device, deps) {
         setStateAck: ynca.interceptSetStateAck,
         log,
         isEntryEnabled: deps.isEntryEnabled,
-        subunitCache: deps.yncaSubunitCache
+        subunitCache: deps.yncaSubunitCache,
+        delay
       })
     );
     return ynca;
@@ -110,7 +114,8 @@ function attemptDevice(device, deps) {
         upsertObject: yxc.interceptUpsert,
         setStateAck: yxc.interceptSetStateAck,
         reportDeviceName: deps.onDeviceName,
-        log
+        log,
+        delay
       })
     );
     return yxc;
@@ -125,7 +130,8 @@ function attemptDevice(device, deps) {
           scheduleKeepalive: deps.scheduleKeepalive,
           upsertObject: xml.interceptUpsert,
           setStateAck: xml.interceptSetStateAck,
-          log
+          log,
+          delay
         },
         deps.xmlPollIntervalMs
       )

@@ -78,6 +78,18 @@ class XmlClient {
     const response = await this.post(this.ip, (0, import_protocol.encodeGet)("System", "<Config>GetParam</Config>"));
     return (0, import_protocol.parseModelName)(response);
   }
+  /**
+   * Read an element's inner GET request and return the raw response body — the
+   * browse driver reads `<List_Info>` from source elements (NET_RADIO, SERVER, USB)
+   * with it.
+   *
+   * @param element the XML element (a zone or a source)
+   * @param inner the inner request XML
+   * @returns the raw response body
+   */
+  getXml(element, inner) {
+    return this.post(this.ip, (0, import_protocol.encodeGet)(element, inner));
+  }
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {

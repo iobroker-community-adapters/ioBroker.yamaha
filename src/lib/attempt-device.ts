@@ -179,6 +179,11 @@ export async function connectTransports(
  */
 export function attemptDevice(device: DeviceRecord, deps: AttemptDeps): Promise<ConnectionHandle | null> {
   const { log, upsertObject, setStateAck, timers } = deps;
+  // Adapter-managed delay for the browse engine/drivers (pacing, busy polls, path walk).
+  const delay = (ms: number): Promise<void> =>
+    new Promise(resolve => {
+      timers.schedule(resolve, ms);
+    });
 
   // 1) YNCA — amp control over a held TCP connection; a socket drop is the genuine gone-signal.
   const buildYnca = (): ConnectableTransport => {
@@ -191,6 +196,7 @@ export function attemptDevice(device: DeviceRecord, deps: AttemptDeps): Promise<
         log,
         isEntryEnabled: deps.isEntryEnabled,
         subunitCache: deps.yncaSubunitCache,
+        delay,
       }),
     );
     return ynca;
@@ -210,6 +216,7 @@ export function attemptDevice(device: DeviceRecord, deps: AttemptDeps): Promise<
         setStateAck: yxc.interceptSetStateAck,
         reportDeviceName: deps.onDeviceName,
         log,
+        delay,
       }),
     );
     return yxc;
@@ -227,6 +234,7 @@ export function attemptDevice(device: DeviceRecord, deps: AttemptDeps): Promise<
           upsertObject: xml.interceptUpsert,
           setStateAck: xml.interceptSetStateAck,
           log,
+          delay,
         },
         deps.xmlPollIntervalMs,
       ),

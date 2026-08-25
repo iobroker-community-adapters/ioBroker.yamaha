@@ -39,6 +39,10 @@ class FakeClient implements YncaClientLike {
   public send(subunit: string, func: string, value: string): void {
     this.sent.push({ subunit, func, value });
   }
+  public get(subunit: string, func: string): void {
+    this.gets.push({ subunit, func });
+  }
+  public gets: Array<{ subunit: string; func: string }> = [];
   public onMessage(handler: (message: Msg) => void): void {
     this.handler = handler;
   }
@@ -245,5 +249,53 @@ describe("YncaDeviceController two-pass sweep", () => {
     // …and no player object is created.
     expect(created.some(id => id.includes("player"))).toBe(false);
     expect(created).toContain("living.power");
+  });
+});
+
+describe("YncaDeviceController browse surface (#613)", () => {
+  const instantDelay = (): Promise<void> => Promise.resolve();
+  const flush = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
+
+  test("creates the browse tree when a browsable subunit answered and routes its writes", async () => {
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX",
+      subunits: { MAIN: { PWR: "On" }, NETRADIO: { PLAYBACKINFO: "Stop" } },
+    };
+    const { created, deps } = makeDeps(client);
+    deps.delay = instantDelay;
+    const controller = new YncaDeviceController("living", deps);
+    await controller.start();
+    expect(created).toContain("living.player.browse");
+    expect(created).toContain("living.player.browse.line1");
+    expect(created).toContain("living.player.browse.path");
+    // A browse write reaches the driver, not the catalog: opening the source
+    // switches the input and reads the list.
+    controller.handleStateChange("living.player.browse.source", false, "netRadio");
+    await flush();
+    expect(client.sent).toContainEqual({ subunit: "MAIN", func: "INP", value: "NET RADIO" });
+    expect(client.gets).toContainEqual({ subunit: "NETRADIO", func: "LISTINFO" });
+  });
+
+  test("creates no browse tree without a browsable subunit", async () => {
+    const client = new FakeClient();
+    client.capabilities = { model: "RX", subunits: { MAIN: { PWR: "On" } } };
+    const { created, deps } = makeDeps(client);
+    deps.delay = instantDelay;
+    await new YncaDeviceController("living", deps).start();
+    expect(created.some(id => id.includes("player.browse"))).toBe(false);
+  });
+
+  test("creates no browse tree when the playback group is switched off", async () => {
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX",
+      subunits: { MAIN: { PWR: "On" }, NETRADIO: { PLAYBACKINFO: "Stop" } },
+    };
+    const { created, deps } = makeDeps(client);
+    deps.delay = instantDelay;
+    deps.isEntryEnabled = (id: string): boolean => !id.startsWith("player.");
+    await new YncaDeviceController("living", deps).start();
+    expect(created.some(id => id.includes("player.browse"))).toBe(false);
   });
 });

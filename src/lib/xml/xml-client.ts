@@ -74,4 +74,17 @@ export class XmlClient {
     const response = await this.post(this.ip, encodeGet("System", "<Config>GetParam</Config>"));
     return parseModelName(response);
   }
+
+  /**
+   * Read an element's inner GET request and return the raw response body — the
+   * browse driver reads `<List_Info>` from source elements (NET_RADIO, SERVER, USB)
+   * with it.
+   *
+   * @param element the XML element (a zone or a source)
+   * @param inner the inner request XML
+   * @returns the raw response body
+   */
+  public getXml(element: string, inner: string): Promise<string> {
+    return this.post(this.ip, encodeGet(element, inner));
+  }
 }

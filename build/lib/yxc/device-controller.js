@@ -28,6 +28,9 @@ var import_object_mapper = require("./object-mapper");
 var import_command_mapper = require("./command-mapper");
 var import_push = require("./push");
 var import_util = require("../util");
+var import_browse_engine = require("../browse/browse-engine");
+var import_yxc_browse_driver = require("../browse/yxc-browse-driver");
+var import_objects = require("../browse/objects");
 const KEEPALIVE_MS = 5 * 60 * 1e3;
 const MAX_KEEPALIVE_FAILURES = 3;
 function modelNameFrom(deviceInfo) {
@@ -78,6 +81,7 @@ class YxcDeviceController {
   tunerFeatures;
   /** Whether the device reports the clock/alarm block (gates the clock poll). */
   hasClock = false;
+  browseEngine;
   /**
    * Read capabilities, create the object tree, seed state, and wire up push +
    * keepalive.
@@ -130,6 +134,7 @@ class YxcDeviceController {
     this.mediaBlocks = capabilities.media;
     this.tunerFeatures = capabilities.tuner;
     this.hasClock = capabilities.clock !== void 0;
+    await this.setupBrowse(capabilities);
     await this.refreshMedia();
     await this.refreshLists();
     this.hasDistribution = (_a = capabilities.hasDistribution) != null ? _a : false;
@@ -150,6 +155,7 @@ class YxcDeviceController {
    * @param value the new value
    */
   handleStateChange(fullStateId, ack, value) {
+    var _a;
     if (ack) {
       return;
     }
@@ -158,6 +164,10 @@ class YxcDeviceController {
       return;
     }
     const stateId = fullStateId.slice(prefix.length);
+    if (stateId.startsWith("player.browse.")) {
+      (_a = this.browseEngine) == null ? void 0 : _a.handleWrite(stateId, value);
+      return;
+    }
     if (stateId === "multiroom.group.leave") {
       void this.leaveGroup();
       return;
@@ -180,12 +190,43 @@ class YxcDeviceController {
   onDrop(cb) {
     this.dropHandler = cb;
   }
+  /**
+   * Create the browsing surface (#613) when the device has the netusb block: the
+   * `netusb/getListInfo` + `setListControl` API drives an 8-line window under
+   * `player.browse.*`. Skipped without a delay dep (older tests).
+   *
+   * @param capabilities the parsed getFeatures capabilities
+   */
+  async setupBrowse(capabilities) {
+    var _a, _b;
+    const delay = this.deps.delay;
+    if (!delay || !capabilities.media.includes("netusb")) {
+      return;
+    }
+    const inputs = (_b = (_a = capabilities.zones.find((zone) => zone.id === "main")) == null ? void 0 : _a.inputs) != null ? _b : [];
+    const driver = new import_yxc_browse_driver.YxcBrowseDriver(this.deps.client, inputs);
+    const sources = driver.sources();
+    if (Object.keys(sources).length === 0) {
+      return;
+    }
+    for (const def of (0, import_objects.browseObjectDefs)(sources)) {
+      await this.deps.upsertObject(`${this.deviceId}.${def.id}`, def);
+    }
+    this.browseEngine = new import_browse_engine.BrowseEngine(driver, {
+      emit: (id, value) => this.deps.setStateAck(`${this.deviceId}.${id}`, value),
+      log: this.deps.log,
+      delay
+    });
+    driver.attach(this.browseEngine);
+    this.browseEngine.seed();
+  }
   /** Cancel the keepalive and unregister the push handler. Synchronous — safe from onUnload. */
   close() {
-    var _a, _b;
-    (_a = this.cancelKeepalive) == null ? void 0 : _a.call(this);
+    var _a, _b, _c;
+    (_a = this.browseEngine) == null ? void 0 : _a.close();
+    (_b = this.cancelKeepalive) == null ? void 0 : _b.call(this);
     this.cancelKeepalive = void 0;
-    (_b = this.cancelPush) == null ? void 0 : _b.call(this);
+    (_c = this.cancelPush) == null ? void 0 : _c.call(this);
     this.cancelPush = void 0;
   }
   /**

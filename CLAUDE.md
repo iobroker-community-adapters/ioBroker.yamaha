@@ -67,7 +67,23 @@ Abruf-Nummern, Tuner-Presets je Band (`getFeatures tuner.preset.type` common/sep
 Geräte-eigene Wertelisten aus `getFeatures` werden Dropdowns (`YxcZone.valueLists`), Wecker-Block `clock.*`
 read-only (der Alt-Adapter hatte auch keinen funktionierenden Schreibweg) mit eigener Admin-Gruppe
 `group_clock`. Die YXC-DAB-Felder speisen die YNCA-DAB-IDs (`DAB_FIELDS`, eine Quelle für Anlage+Parse);
-Owner-Override `tuner.dab.preset`→YNCA (dort schreibbar, bei YXC nur Anzeige). Der Objektbaum ist thematisch gruppiert
+Owner-Override `tuner.dab.preset`→YNCA (dort schreibbar, bei YXC nur Anzeige).
+**Menü-Browsing (#613, `lib/browse/`):** transport-neutrale `BrowseEngine` (besitzt die
+`player.browse.*`-States: 8 Zeilen-Fenster mit 📁/♪-Präfix, selectLine=OK, page/back/home,
+`path`-Auto-Lauf mit Seiten-Suche + Timeout, `rows`-JSON, busy) + drei Treiber:
+YNCA `LISTINFO/LISTSEL/LISTPAGE/LISTCURSOR` (Quelle: offizielle Befehlsliste
+`Ressourcen/yamaha/ynca-command-list-rx-v671.txt` — ynca-python implementiert die
+List-Funktionen NICHT; Fenster kommt als Zeilen-Burst + Auto-Feedback über die stehende
+Verbindung, Burst-Debounce im Treiber; open() schaltet den MAIN-Eingang um wie die
+Fernbedienung), YXC `netusb/getListInfo+setListControl` (Pull, absoluter Index,
+Attribut-Bitmaske b1=Select/b2=Play, Thumbnails), XML `List_Info/List_Control`
+(Busy-Polling; Start-Probe NET_RADIO/SERVER/USB entscheidet die Quellen). Jeder fähige
+Transport steuert IDENTISCHE `player.browse.*`-Objekte bei → Koordinator dedupt, Modernität
+wählt den einen Owner, Schreibrouting läuft wie überall; Ordner-Präfix `player.` = der
+gebündelte Admin-Schalter „Wiedergabe & Browsen" (`group_player`, krobi-Entscheidung
+2026-08-25 — kein eigener Browse-Schalter). Engine/Treiber brauchen die `delay`-Dep der
+Controller (adapter-Timer via `attempt-device`); fehlt sie (alte Tests), entsteht kein
+Browse-Baum. Der Objektbaum ist thematisch gruppiert
 (`catalog/groups.ts`, `groupOf(id)` bucketet nach zonenbereinigtem erstem Kanal-Segment, HDMI-Routing/Lippensynchron
 gewinnt dabei explizit VOR dem Zonen-Präfix): die Wiedergabe-Quellen unter `player.*`, DAB unter `tuner.dab`,
 Multiroom statt `dist`. **Der `multiroom`-Ordner trägt den Geltungsbereich selbst** (v1.0.0-Schnitt): direkt im

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { parseYxcFeatures, type YxcTunerFeatures } from "./capability";
+import { parseYxcFeatures, type YxcCapabilities, type YxcTunerFeatures } from "./capability";
 import { mapYxcToObjects } from "./object-mapper";
 import {
   parseYxcClock,
@@ -18,6 +18,9 @@ import type { ObjectDef } from "../catalog/types";
 import type { StateValue } from "../types";
 import type { ConnectionHandle, ControllerLog } from "../controller";
 import { errorMessage } from "../util";
+import { BrowseEngine } from "../browse/browse-engine";
+import { YxcBrowseDriver } from "../browse/yxc-browse-driver";
+import { browseObjectDefs } from "../browse/objects";
 
 /** Renew interval for the push registration + state poll, well under the ~20 min expiry. */
 const KEEPALIVE_MS = 5 * 60 * 1000;
@@ -90,6 +93,8 @@ export interface YxcControllerDeps {
   reportDeviceName?(name: string): void;
   /** Adapter log. */
   log: ControllerLog;
+  /** Adapter-managed delay for the browse engine's path walk (absent in older tests → no browse). */
+  delay?(ms: number): Promise<void>;
 }
 
 /**
@@ -119,6 +124,7 @@ export class YxcDeviceController implements ConnectionHandle {
   private tunerFeatures: YxcTunerFeatures | undefined;
   /** Whether the device reports the clock/alarm block (gates the clock poll). */
   private hasClock = false;
+  private browseEngine: BrowseEngine | undefined;
 
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
@@ -185,6 +191,7 @@ export class YxcDeviceController implements ConnectionHandle {
     this.mediaBlocks = capabilities.media;
     this.tunerFeatures = capabilities.tuner;
     this.hasClock = capabilities.clock !== undefined;
+    await this.setupBrowse(capabilities);
     await this.refreshMedia();
     await this.refreshLists();
     this.hasDistribution = capabilities.hasDistribution ?? false;
@@ -215,6 +222,10 @@ export class YxcDeviceController implements ConnectionHandle {
       return;
     }
     const stateId = fullStateId.slice(prefix.length);
+    if (stateId.startsWith("player.browse.")) {
+      this.browseEngine?.handleWrite(stateId, value);
+      return;
+    }
     // Multiroom writes need controller state (the cached role), so they bypass the pure command map.
     if (stateId === "multiroom.group.leave") {
       void this.leaveGroup();
@@ -240,8 +251,39 @@ export class YxcDeviceController implements ConnectionHandle {
     this.dropHandler = cb;
   }
 
+  /**
+   * Create the browsing surface (#613) when the device has the netusb block: the
+   * `netusb/getListInfo` + `setListControl` API drives an 8-line window under
+   * `player.browse.*`. Skipped without a delay dep (older tests).
+   *
+   * @param capabilities the parsed getFeatures capabilities
+   */
+  private async setupBrowse(capabilities: YxcCapabilities): Promise<void> {
+    const delay = this.deps.delay;
+    if (!delay || !capabilities.media.includes("netusb")) {
+      return;
+    }
+    const inputs = capabilities.zones.find(zone => zone.id === "main")?.inputs ?? [];
+    const driver = new YxcBrowseDriver(this.deps.client, inputs);
+    const sources = driver.sources();
+    if (Object.keys(sources).length === 0) {
+      return;
+    }
+    for (const def of browseObjectDefs(sources)) {
+      await this.deps.upsertObject(`${this.deviceId}.${def.id}`, def);
+    }
+    this.browseEngine = new BrowseEngine(driver, {
+      emit: (id, value) => this.deps.setStateAck(`${this.deviceId}.${id}`, value),
+      log: this.deps.log,
+      delay,
+    });
+    driver.attach(this.browseEngine);
+    this.browseEngine.seed();
+  }
+
   /** Cancel the keepalive and unregister the push handler. Synchronous — safe from onUnload. */
   public close(): void {
+    this.browseEngine?.close();
     this.cancelKeepalive?.();
     this.cancelKeepalive = undefined;
     // Unregister from the shared push receiver — otherwise a push arriving after

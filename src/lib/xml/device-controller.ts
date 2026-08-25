@@ -4,6 +4,9 @@ import { parseXmlStatus, stateToXml, type XmlCommand } from "./command-mapper";
 import { XML_AMP_CATALOG } from "./catalog";
 import type { ConnectionHandle, ControllerLog } from "../controller";
 import { errorMessage } from "../util";
+import { BrowseEngine } from "../browse/browse-engine";
+import { XML_BROWSE_SOURCES, XmlBrowseDriver } from "../browse/xml-browse-driver";
+import { browseObjectDefs } from "../browse/objects";
 
 /** XML/YNC has no push channel, so the state is polled at this interval by default. */
 const DEFAULT_POLL_INTERVAL_MS = 60 * 1000;
@@ -43,6 +46,8 @@ export interface XmlClientLike {
   getModelName(): Promise<string | undefined>;
   /** Send an inner command to a zone. */
   send(zone: string, inner: string): Promise<void>;
+  /** Read an element's inner GET request and return the raw response body. */
+  getXml(element: string, inner: string): Promise<string>;
 }
 
 /** The adapter callbacks the controller drives — narrow, so no adapter mock is needed in tests. */
@@ -57,6 +62,8 @@ export interface XmlControllerDeps {
   setStateAck(id: string, value: boolean | number | string): void;
   /** Adapter log. */
   log: ControllerLog;
+  /** Adapter-managed delay for the browse driver's busy polling (absent in older tests → no browse). */
+  delay?(ms: number): Promise<void>;
 }
 
 /**
@@ -70,6 +77,7 @@ export class XmlDeviceController implements ConnectionHandle {
   private dropHandler: ((reason?: Error) => void) | undefined;
   private failedKeepalives = 0;
   private dropped = false;
+  private browseEngine: BrowseEngine | undefined;
 
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
@@ -180,10 +188,49 @@ export class XmlDeviceController implements ConnectionHandle {
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getModelName failed (${errorMessage(e)})`);
     }
+    await this.setupBrowse();
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), this.pollIntervalMs);
     // The adapter logs one combined "ready" line across all transports; this stays at debug.
     this.deps.log.debug(`${this.deviceId}: Yamaha (XML) device ready (XML)`);
     return true;
+  }
+
+  /**
+   * Create the browsing surface (#613) when at least one source answers a List_Info
+   * probe (NET_RADIO/SERVER/USB — the menus the predecessor adapter's users drove
+   * via `Realtime.*.LINE1TXT` + `xmlCommand`). Skipped without a delay dep (older tests).
+   */
+  private async setupBrowse(): Promise<void> {
+    const delay = this.deps.delay;
+    if (!delay) {
+      return;
+    }
+    const probes = await Promise.all(
+      XML_BROWSE_SOURCES.map(async source => {
+        try {
+          const body = await this.deps.client.getXml(source.element, "<List_Info>GetParam</List_Info>");
+          return body.includes("<Menu_Status>") ? source.key : undefined;
+        } catch {
+          return undefined;
+        }
+      }),
+    );
+    const available = new Set(probes.filter((key): key is string => key !== undefined));
+    if (available.size === 0) {
+      return;
+    }
+    const driver = new XmlBrowseDriver(this.deps.client, available, delay);
+    const sources = driver.sources();
+    for (const def of browseObjectDefs(sources)) {
+      await this.deps.upsertObject(`${this.deviceId}.${def.id}`, def);
+    }
+    this.browseEngine = new BrowseEngine(driver, {
+      emit: (id, value) => this.deps.setStateAck(`${this.deviceId}.${id}`, value),
+      log: this.deps.log,
+      delay,
+    });
+    driver.attach(this.browseEngine);
+    this.browseEngine.seed();
   }
 
   /**
@@ -202,7 +249,12 @@ export class XmlDeviceController implements ConnectionHandle {
     if (!fullStateId.startsWith(prefix)) {
       return;
     }
-    const command = stateToXml(fullStateId.slice(prefix.length), value);
+    const stateId = fullStateId.slice(prefix.length);
+    if (stateId.startsWith("player.browse.")) {
+      this.browseEngine?.handleWrite(stateId, value);
+      return;
+    }
+    const command = stateToXml(stateId, value);
     if (command) {
       void this.applyCommand(command);
     }
@@ -220,6 +272,7 @@ export class XmlDeviceController implements ConnectionHandle {
 
   /** Cancel the keepalive poll. Synchronous — safe to call from onUnload. */
   public close(): void {
+    this.browseEngine?.close();
     this.cancelKeepalive?.();
     this.cancelKeepalive = undefined;
   }

@@ -22,6 +22,9 @@ __export(device_controller_exports, {
 });
 module.exports = __toCommonJS(device_controller_exports);
 var import_catalog = require("./ynca/catalog");
+var import_browse_engine = require("./browse/browse-engine");
+var import_ynca_browse_driver = require("./browse/ynca-browse-driver");
+var import_objects = require("./browse/objects");
 const FUNC_MAP = (0, import_catalog.funcToEntry)(import_catalog.YNCA_CATALOG);
 const ID_MAP = (0, import_catalog.idToEntry)(import_catalog.YNCA_CATALOG);
 const AVAIL_PROBE = (0, import_catalog.availGets)(import_catalog.YNCA_CATALOG);
@@ -34,6 +37,8 @@ class YncaDeviceController {
     this.deviceId = deviceId;
     this.deps = deps;
   }
+  browseDriver;
+  browseEngine;
   /**
    * Connect, sweep the device from the catalog, and create its object tree; wire
    * up push updates. The catalog is the single source: it drives the sweep, the
@@ -61,7 +66,10 @@ class YncaDeviceController {
         }
       }
     }
+    await this.setupBrowse(capabilities);
     this.deps.client.onMessage((message) => {
+      var _a;
+      (_a = this.browseDriver) == null ? void 0 : _a.handleMessage(message);
       const update = (0, import_catalog.yncaStateUpdate)(message, FUNC_MAP);
       if (update) {
         this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
@@ -132,6 +140,7 @@ class YncaDeviceController {
    * @param value the new value
    */
   handleStateChange(fullStateId, ack, value) {
+    var _a;
     if (ack) {
       return;
     }
@@ -139,10 +148,46 @@ class YncaDeviceController {
     if (!fullStateId.startsWith(prefix)) {
       return;
     }
-    const triple = (0, import_catalog.yncaCommand)(fullStateId.slice(prefix.length), value, ID_MAP);
+    const stateId = fullStateId.slice(prefix.length);
+    if (stateId.startsWith("player.browse.")) {
+      (_a = this.browseEngine) == null ? void 0 : _a.handleWrite(stateId, value);
+      return;
+    }
+    const triple = (0, import_catalog.yncaCommand)(stateId, value, ID_MAP);
     if (triple) {
       this.deps.client.send(triple.subunit, triple.func, triple.value);
     }
+  }
+  /**
+   * Create the browsing surface (#613) when the device reports a browsable media
+   * subunit: the official YNCA list vocabulary (LISTINFO/LISTSEL/LISTPAGE/LISTCURSOR)
+   * drives an 8-line window under `player.browse.*`. Skipped without a delay dep
+   * (older tests) and when the playback group is switched off.
+   *
+   * @param capabilities the device's swept capabilities
+   */
+  async setupBrowse(capabilities) {
+    var _a, _b;
+    const delay = this.deps.delay;
+    if (!delay || ((_b = (_a = this.deps).isEntryEnabled) == null ? void 0 : _b.call(_a, "player.browse.source")) === false) {
+      return;
+    }
+    const driver = new import_ynca_browse_driver.YncaBrowseDriver(this.deps.client, new Set(Object.keys(capabilities.subunits)), delay);
+    const sources = driver.sources();
+    if (Object.keys(sources).length === 0) {
+      return;
+    }
+    for (const def of (0, import_objects.browseObjectDefs)(sources)) {
+      await this.deps.upsertObject(`${this.deviceId}.${def.id}`, def);
+    }
+    this.browseEngine = new import_browse_engine.BrowseEngine(driver, {
+      emit: (id, value) => this.deps.setStateAck(`${this.deviceId}.${id}`, value),
+      log: this.deps.log,
+      delay
+    });
+    driver.attach(this.browseEngine);
+    this.browseDriver = driver;
+    this.browseEngine.seed();
   }
   /**
    * Register the supervisor's drop handler — delegated to the client's socket drop,
@@ -155,6 +200,9 @@ class YncaDeviceController {
   }
   /** Close the client. Synchronous — safe to call from onUnload. */
   close() {
+    var _a, _b;
+    (_a = this.browseEngine) == null ? void 0 : _a.close();
+    (_b = this.browseDriver) == null ? void 0 : _b.close();
     this.deps.client.close();
   }
 }

@@ -37,6 +37,15 @@ class FakeClient implements YxcClientLike {
     }
     return this.nameText;
   }
+  public listInfo: unknown = { response_code: 0, menu_layer: 1, menu_name: "", max_line: 0, list_info: [] };
+  public async getListInfo(input: string, index: number, size?: number): Promise<unknown> {
+    this.calls.push({ method: "getListInfo", args: [input, index, size] });
+    return this.listInfo;
+  }
+  public async setListControl(type: "select" | "play" | "return", index?: number, zone?: string): Promise<unknown> {
+    this.calls.push({ method: "setListControl", args: [type, index, zone] });
+    return { response_code: 0 };
+  }
   public presetInfo: unknown = { response_code: 0, preset_info: [] };
   public async getPresetInfo(): Promise<unknown> {
     this.calls.push({ method: "getPresetInfo", args: [] });
@@ -744,5 +753,55 @@ describe("YxcDeviceController device name", () => {
     expect(s.acks).toContainEqual({ id: "living.clock.autoSync", value: true });
     expect(s.acks).toContainEqual({ id: "living.clock.format", value: "24h" });
     expect(s.client.calls).toContainEqual({ method: "getClockSettings", args: [] });
+  });
+});
+
+describe("YxcDeviceController browse surface (#613)", () => {
+  const instantDelay = (): Promise<void> => Promise.resolve();
+  const flush = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
+  const browsableFeatures = {
+    system: {},
+    zone: [{ id: "main", func_list: ["power"], input_list: ["net_radio", "server", "hdmi1"] }],
+    netusb: {},
+  };
+
+  function browseSetup(features: unknown): {
+    controller: YxcDeviceController;
+    client: FakeClient;
+    objects: string[];
+  } {
+    const client = new FakeClient(features, { response_code: 0 });
+    const objects: string[] = [];
+    const controller = new YxcDeviceController("living", {
+      client,
+      registerPush: () => () => {},
+      scheduleKeepalive: () => () => {},
+      upsertObject: async id => {
+        objects.push(id);
+      },
+      setStateAck: () => {},
+      log: silentLog,
+      delay: instantDelay,
+    });
+    return { controller, client, objects };
+  }
+
+  test("creates the browse tree for a netusb device and routes its writes", async () => {
+    const { controller, client, objects } = browseSetup(browsableFeatures);
+    await controller.start();
+    expect(objects).toContain("living.player.browse");
+    expect(objects).toContain("living.player.browse.selectLine");
+    controller.handleStateChange("living.player.browse.source", false, "netRadio");
+    await flush();
+    expect(client.calls).toContainEqual({ method: "getListInfo", args: ["net_radio", 0, undefined] });
+  });
+
+  test("creates no browse tree without the netusb block", async () => {
+    const { controller, objects } = browseSetup({
+      system: {},
+      zone: [{ id: "main", func_list: ["power"], input_list: ["hdmi1"] }],
+    });
+    await controller.start();
+    expect(objects.some(id => id.includes("player.browse"))).toBe(false);
   });
 });

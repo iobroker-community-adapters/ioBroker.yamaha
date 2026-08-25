@@ -20,6 +20,11 @@ class FakeClient implements XmlClientLike {
   public async send(zone: string, inner: string): Promise<void> {
     this.calls.push({ method: "send", zone, inner });
   }
+  /** Browse List_Info probe — an empty body means "no browsable source" here. */
+  public async getXml(zone: string, inner: string): Promise<string> {
+    this.calls.push({ method: "getXml", zone, inner });
+    return "";
+  }
 }
 
 function setup(
@@ -230,5 +235,68 @@ describe("XmlDeviceController object tree and drop handling", () => {
       await flush();
     }
     expect(drops).toHaveLength(1);
+  });
+});
+
+describe("XmlDeviceController browse surface (#613)", () => {
+  const instantDelay = (): Promise<void> => Promise.resolve();
+  const listBody =
+    "<YAMAHA_AV rsp=\"GET\" RC=\"0\"><NET_RADIO><List_Info><Menu_Status>Ready</Menu_Status>" +
+    "<Menu_Layer>1</Menu_Layer><Menu_Name>NET RADIO</Menu_Name><Current_List>" +
+    "<Line_1><Txt>Bookmarks</Txt><Attribute>Container</Attribute></Line_1></Current_List>" +
+    "<Cursor_Position><Current_Line>1</Current_Line><Max_Line>1</Max_Line></Cursor_Position>" +
+    "</List_Info></NET_RADIO></YAMAHA_AV>";
+
+  function browseSetup(answers: Record<string, string>): {
+    controller: XmlDeviceController;
+    client: FakeClient;
+    objects: string[];
+  } {
+    const client = new FakeClient({ Main_Zone: { power: true } });
+    client.getXml = async (element: string, inner: string): Promise<string> => {
+      client.calls.push({ method: "getXml", zone: element, inner });
+      if (element in answers) {
+        return answers[element];
+      }
+      throw new Error("no such menu");
+    };
+    const objects: string[] = [];
+    const controller = new XmlDeviceController("living", {
+      client,
+      scheduleKeepalive: () => () => {},
+      upsertObject: async id => {
+        objects.push(id);
+      },
+      setStateAck: () => {},
+      log: silentLog,
+      delay: instantDelay,
+    });
+    return { controller, client, objects };
+  }
+
+  it("creates the browse tree for the sources whose List_Info probe answered", async () => {
+    const { controller, objects } = browseSetup({ NET_RADIO: listBody });
+    await controller.start();
+    expect(objects).toContain("living.player.browse");
+    expect(objects).toContain("living.player.browse.home");
+  });
+
+  it("creates no browse tree when no source answers the probe", async () => {
+    const { controller, objects } = browseSetup({});
+    await controller.start();
+    expect(objects.some(id => id.includes("player.browse"))).toBe(false);
+  });
+
+  it("routes a browse write to the driver (input switch + List_Info read)", async () => {
+    const { controller, client } = browseSetup({ NET_RADIO: listBody });
+    await controller.start();
+    client.calls.length = 0;
+    controller.handleStateChange("living.player.browse.source", false, "netRadio");
+    await flush();
+    expect(client.calls).toContainEqual({
+      method: "send",
+      zone: "Main_Zone",
+      inner: "<Input><Input_Sel>NET RADIO</Input_Sel></Input>",
+    });
   });
 });
