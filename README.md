@@ -88,12 +88,13 @@ On the first connect the adapter asks the receiver which functions it supports �
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 1.2.0 (2026-08-25)
 
-- (krobipd) Fixed: setting the volume now works — a written value like -38 dB was sent in a form the receiver read as -3.8 dB, so most writes were ignored and multiples of ten jumped the volume dangerously loud (#612). The same fix applies to every numeric control (bass/treble, initial/max volume, tuner frequencies, lip-sync).
-- (krobipd) Fixed: the FM frequency datapoint now shows MHz (it was mislabelled kHz).
-- (krobipd) Added: preset and favourites selection (#613) — recall tuner presets by number (with up/down), recall stored network/USB favourites per source, and on MusicCast devices read the stored preset lists with their names, the recently-played list with recall, and tuner presets per band.
-- (krobipd) Added: MusicCast devices now show their full selection lists as dropdowns (inputs, sound programs, decoder types and more come from the device itself), plus CD details (track number, disc time, drive status), DAB details, RDS station/programme, and a read-only clock & alarm view on desk-audio devices — with a new "Clock & alarm" datapoint group switch in the admin.
+- (krobipd) Fixed: volume writes work again — a written -38 dB reached the receiver as -3.8 dB, so most values were ignored; all numeric controls now send the proper wire format (#612)
+- (krobipd) Fixed: the FM frequency datapoint now shows MHz (it was mislabelled kHz) and accepts direct frequency writes in the form the tuner expects.
+- (krobipd) New: preset selection — recall tuner presets by number with up/down stepping, and recall stored network or USB favourites per source on YNCA receivers (#613)
+- (krobipd) New: MusicCast selection lists — stored favourites and tuner presets with names, a recently-played list with recall by number, and the device's own allowed values as dropdowns.
+- (krobipd) New: more device detail — CD track and drive info, DAB and RDS station data, and a read-only clock and alarm view with its own datapoint group switch in the admin settings.
 
 ### 1.1.1 (2026-08-22)
 
@@ -119,10 +120,6 @@ On the first connect the adapter asks the receiver which functions it supports �
 ### 0.5.4 (2024-06-14) — stable
 
 - (foxriver76) updated packages
-
-### 0.5.3 (2022-06-17)
-
-- (Apollon77) Fix crash cases reported by Sentry
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 
