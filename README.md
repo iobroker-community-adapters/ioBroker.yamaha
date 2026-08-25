@@ -44,7 +44,7 @@ Devices are managed in the admin as cards. **Leave the list empty** and the adap
 
 Older Yamaha receivers (before ~2010, the XML protocol) do not announce themselves on the network and must be added manually. The **XML query interval** sets how often they are polled (default 60 seconds).
 
-The **Data points** section switches whole groups of datapoints on or off — **Playback**, **Tuner**, **Multiroom**, **HDMI**, **Scenes**, **Sound** and **Advanced**. A switched-off group is removed from the tree and not even queried, which also speeds up the startup; the amplifier core (power, volume, mute, input, sound program, sleep) always stays on.
+The **Data points** section switches whole groups of datapoints on or off — **Playback**, **Tuner**, **Multiroom**, **HDMI**, **Scenes**, **Sound**, **Advanced** and **Clock & alarm**. A switched-off group is removed from the tree and not even queried, which also speeds up the startup; the amplifier core (power, volume, mute, input, sound program, sleep) always stays on.
 
 ## State Tree
 
@@ -59,6 +59,7 @@ Each receiver becomes one device node with themed groups — the same groups the
 - **`scene`** — the receiver's scene names and a scene recall.
 - **`sound`** — tone and sound processing: bass/treble, DSP modes, enhancer, equalizer, ….
 - **`advanced`** — setup-level datapoints: maximum/initial volume, speaker configuration, input names.
+- **`clock`** — the clock and alarm settings of MusicCast desk-audio devices (read-only).
 
 ## Troubleshooting
 
