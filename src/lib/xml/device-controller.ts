@@ -4,19 +4,15 @@ import { parseXmlStatus, stateToXml, type XmlCommand } from "./command-mapper";
 import { XML_AMP_CATALOG } from "./catalog";
 import type { ConnectionHandle, ControllerLog } from "../controller";
 import { errorMessage } from "../util";
-import { BrowseEngine } from "../browse/browse-engine";
+import { PollDropDetector } from "../lifecycle/poll-drop-detector";
+import type { ProbeMemory } from "../lifecycle/probe-memory";
+import type { CommandGate } from "../lifecycle/command-gate";
+import type { BrowseEngine } from "../browse/browse-engine";
+import { createBrowseSurface } from "../browse/surface";
 import { XML_BROWSE_SOURCES, XmlBrowseDriver } from "../browse/xml-browse-driver";
-import { browseObjectDefs } from "../browse/objects";
 
 /** XML/YNC has no push channel, so the state is polled at this interval by default. */
 const DEFAULT_POLL_INTERVAL_MS = 60 * 1000;
-
-/**
- * Report a drop after this many consecutive polls in which every zone failed. XML
- * has neither push nor a socket-drop event, so a run of failed polls is the only
- * signal that the device is gone — letting the supervisor reconnect.
- */
-const MAX_KEEPALIVE_FAILURES = 3;
 
 interface XmlZone {
   /** Unified zone key (`main`, `zone2`, …). */
@@ -62,8 +58,14 @@ export interface XmlControllerDeps {
   setStateAck(id: string, value: boolean | number | string): void;
   /** Adapter log. */
   log: ControllerLog;
-  /** Adapter-managed delay for the browse driver's busy polling (absent in older tests → no browse). */
-  delay?(ms: number): Promise<void>;
+  /**
+   * The device's command gate: every request is paced through it, and its signal is the
+   * connection's shutdown flag — a closed gate ends pending waits and stops state writes
+   * from a poll that was already in flight. Absent in older tests → no browsing.
+   */
+  gate?: CommandGate;
+  /** Per-device memory for answers that do not change while the device runs (see ProbeMemory). */
+  probeMemory?: ProbeMemory;
 }
 
 /**
@@ -74,9 +76,7 @@ export interface XmlControllerDeps {
 export class XmlDeviceController implements ConnectionHandle {
   private zones: XmlZone[] = [];
   private cancelKeepalive: (() => void) | undefined;
-  private dropHandler: ((reason?: Error) => void) | undefined;
-  private failedKeepalives = 0;
-  private dropped = false;
+  private readonly dropDetector = new PollDropDetector();
   private browseEngine: BrowseEngine | undefined;
 
   /**
@@ -173,17 +173,9 @@ export class XmlDeviceController implements ConnectionHandle {
     try {
       const model = await this.deps.client.getModelName();
       if (model) {
-        await this.deps.upsertObject(`${this.deviceId}.info`, {
-          id: "info",
-          type: "channel",
-          common: { name: "Info" },
-        });
-        await this.deps.upsertObject(`${this.deviceId}.info.model`, {
-          id: "info.model",
-          type: "state",
-          common: { name: "Model", type: "string", role: "text", read: true, write: false },
-        });
-        this.deps.setStateAck(`${this.deviceId}.info.model`, model);
+        // The info channel and info.model already exist — the adapter creates them for
+        // every device up front, so the card renders even while the device is offline.
+        this.emit("info.model", model);
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getModelName failed (${errorMessage(e)})`);
@@ -201,36 +193,55 @@ export class XmlDeviceController implements ConnectionHandle {
    * via `Realtime.*.LINE1TXT` + `xmlCommand`). Skipped without a delay dep (older tests).
    */
   private async setupBrowse(): Promise<void> {
-    const delay = this.deps.delay;
-    if (!delay) {
+    const gate = this.deps.gate;
+    if (!gate) {
       return;
     }
-    const probes = await Promise.all(
-      XML_BROWSE_SOURCES.map(async source => {
-        try {
-          const body = await this.deps.client.getXml(source.element, "<List_Info>GetParam</List_Info>");
-          return body.includes("<Menu_Status>") ? source.key : undefined;
-        } catch {
-          return undefined;
-        }
-      }),
+    const delay = (ms: number): Promise<void> => gate.delay(ms);
+    // Which sources have a menu is a property of the MODEL, not of this connection — ask
+    // once per device instead of costing three extra requests (up to five seconds on a
+    // receiver that has no menus at all) on every single reconnect.
+    const probe = async (): Promise<string[]> => {
+      const probes = await Promise.all(
+        XML_BROWSE_SOURCES.map(async source => {
+          try {
+            const body = await this.deps.client.getXml(source.element, "<List_Info>GetParam</List_Info>");
+            return body.includes("<Menu_Status>") ? source.key : undefined;
+          } catch {
+            return undefined;
+          }
+        }),
+      );
+      return probes.filter((key): key is string => key !== undefined);
+    };
+    const available = new Set(
+      this.deps.probeMemory ? await this.deps.probeMemory.once("xmlBrowseSources", probe) : await probe(),
     );
-    const available = new Set(probes.filter((key): key is string => key !== undefined));
     if (available.size === 0) {
       return;
     }
     const driver = new XmlBrowseDriver(this.deps.client, available, delay);
-    const sources = driver.sources();
-    for (const def of browseObjectDefs(sources)) {
-      await this.deps.upsertObject(`${this.deviceId}.${def.id}`, def);
-    }
-    this.browseEngine = new BrowseEngine(driver, {
-      emit: (id, value) => this.deps.setStateAck(`${this.deviceId}.${id}`, value),
+    this.browseEngine = await createBrowseSurface(driver, this.deviceId, {
+      upsertObject: this.deps.upsertObject,
+      emit: (id, value) => this.emit(id, value),
       log: this.deps.log,
       delay,
     });
-    driver.attach(this.browseEngine);
-    this.browseEngine.seed();
+  }
+
+  /**
+   * Write a device-originated value — but never after the connection was closed. A poll
+   * that was already in flight when the adapter stopped would otherwise still write into
+   * a tree that is being torn down.
+   *
+   * @param relativeId the state id relative to the device
+   * @param value the value to write
+   */
+  private emit(relativeId: string, value: boolean | number | string): void {
+    if (this.deps.gate?.closed) {
+      return;
+    }
+    this.deps.setStateAck(`${this.deviceId}.${relativeId}`, value);
   }
 
   /**
@@ -267,18 +278,21 @@ export class XmlDeviceController implements ConnectionHandle {
    * @param cb invoked once when the device is judged gone
    */
   public onDrop(cb: (reason?: Error) => void): void {
-    this.dropHandler = cb;
+    this.dropDetector.onDrop(cb);
   }
 
   /** Cancel the keepalive poll. Synchronous — safe to call from onUnload. */
   public close(): void {
     this.browseEngine?.close();
+    // Closing the gate empties its queue and aborts its signal: queued requests are
+    // dropped and every pending wait ends, so nothing writes after the teardown.
+    this.deps.gate?.close();
     this.cancelKeepalive?.();
     this.cancelKeepalive = undefined;
   }
 
   /**
-   * Poll every live zone. If every zone fails for MAX_KEEPALIVE_FAILURES polls in a
+   * Poll every live zone. If every zone fails for three consecutive failed polls in a
    * row, the device is judged gone and a drop is reported so the supervisor reconnects.
    */
   private async keepalive(): Promise<void> {
@@ -288,20 +302,7 @@ export class XmlDeviceController implements ConnectionHandle {
         anyOk = true;
       }
     }
-    if (anyOk) {
-      this.failedKeepalives = 0;
-    } else if (++this.failedKeepalives >= MAX_KEEPALIVE_FAILURES) {
-      this.reportDrop();
-    }
-  }
-
-  /** Report a drop once — the supervisor then closes this controller and reconnects. */
-  private reportDrop(): void {
-    if (this.dropped) {
-      return;
-    }
-    this.dropped = true;
-    this.dropHandler?.(new Error(`${MAX_KEEPALIVE_FAILURES} polls failed`));
+    this.dropDetector.record(anyOk);
   }
 
   /**
@@ -328,7 +329,7 @@ export class XmlDeviceController implements ConnectionHandle {
    */
   private seedZone(zone: XmlZone, status: BasicStatus): void {
     for (const update of parseXmlStatus(status, zone.key)) {
-      this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+      this.emit(update.id, update.value);
     }
   }
 

@@ -2,6 +2,16 @@ import { YncaDeviceController } from "./device-controller";
 import type { YncaClientLike } from "./device-controller";
 import type { YncaCapabilities } from "./ynca/capability";
 import { createSubunitCache } from "./ynca/subunit-cache";
+import { CommandGate } from "./lifecycle/command-gate";
+import { ProbeMemory } from "./lifecycle/probe-memory";
+
+/** A real command gate for the controller under test (pacing has its own suite). */
+const testGate = (): CommandGate =>
+  new CommandGate({
+    minSpacingMs: 0,
+    timers: { schedule: (h, ms) => setTimeout(h, ms), cancel: t => clearTimeout(t as ReturnType<typeof setTimeout>) },
+  });
+
 
 interface Msg {
   subunit: string;
@@ -207,9 +217,12 @@ describe("YncaDeviceController two-pass sweep", () => {
     const cache = createSubunitCache({ subunits: ["MAIN"], model: "RX-V6A", firmware: "1.80" }, s => persisted.push(s));
     const { deps } = makeDeps(client);
     await new YncaDeviceController("living", { ...deps, subunitCache: cache }).start();
-    // One request only — the targeted sweep; no AVAIL probe, no cache rewrite.
-    expect(client.requests).toHaveLength(1);
-    expect(client.requests[0].every(get => get.func !== "AVAIL")).toBe(true);
+    // Two requests: the cheap identity check (model + firmware, ~0.2 s) and then the
+    // targeted sweep. No AVAIL probe, no cache rewrite. Checking identity FIRST is what
+    // keeps a stale cache from costing a wasted full sweep before the mismatch shows.
+    expect(client.requests).toHaveLength(2);
+    expect(client.requests[0].map(get => get.func)).toEqual(["MODELNAME", "VERSION"]);
+    expect(client.requests[1].every(get => get.func !== "AVAIL")).toBe(true);
     expect(persisted).toEqual([]);
   });
 
@@ -263,7 +276,7 @@ describe("YncaDeviceController browse surface (#613)", () => {
       subunits: { MAIN: { PWR: "On" }, NETRADIO: { PLAYBACKINFO: "Stop" } },
     };
     const { created, deps } = makeDeps(client);
-    deps.delay = instantDelay;
+    deps.gate = testGate();
     const controller = new YncaDeviceController("living", deps);
     await controller.start();
     expect(created).toContain("living.player.browse");
@@ -272,7 +285,10 @@ describe("YncaDeviceController browse surface (#613)", () => {
     // A browse write reaches the driver, not the catalog: opening the source
     // switches the input and reads the list.
     controller.handleStateChange("living.player.browse.source", false, "netRadio");
-    await flush();
+    // The driver paces itself through the gate now, so give the queue a few turns.
+    for (let i = 0; i < 6; i++) {
+      await flush();
+    }
     expect(client.sent).toContainEqual({ subunit: "MAIN", func: "INP", value: "NET RADIO" });
     expect(client.gets).toContainEqual({ subunit: "NETRADIO", func: "LISTINFO" });
   });
@@ -281,7 +297,7 @@ describe("YncaDeviceController browse surface (#613)", () => {
     const client = new FakeClient();
     client.capabilities = { model: "RX", subunits: { MAIN: { PWR: "On" } } };
     const { created, deps } = makeDeps(client);
-    deps.delay = instantDelay;
+    deps.gate = testGate();
     await new YncaDeviceController("living", deps).start();
     expect(created.some(id => id.includes("player.browse"))).toBe(false);
   });
@@ -293,9 +309,41 @@ describe("YncaDeviceController browse surface (#613)", () => {
       subunits: { MAIN: { PWR: "On" }, NETRADIO: { PLAYBACKINFO: "Stop" } },
     };
     const { created, deps } = makeDeps(client);
-    deps.delay = instantDelay;
+    deps.gate = testGate();
     deps.isEntryEnabled = (id: string): boolean => !id.startsWith("player.");
     await new YncaDeviceController("living", deps).start();
     expect(created.some(id => id.includes("player.browse"))).toBe(false);
+  });
+});
+
+describe("YncaDeviceController static-value memory", () => {
+  test("re-asks the constant names only on the first connect", async () => {
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX",
+      subunits: {
+        SYS: { MODELNAME: "RX", VERSION: "1.0", INPNAMEHDMI1: "Kodi" },
+        MAIN: { PWR: "On", SCENE1NAME: "Movie" },
+      },
+    };
+    const memory = new ProbeMemory();
+    const { deps } = makeDeps(client);
+    await new YncaDeviceController("living", { ...deps, probeMemory: memory }).start();
+    const firstSweep = client.requests[client.requests.length - 1];
+    expect(firstSweep.some(get => get.func === "INPNAMEHDMI1")).toBe(true);
+    expect(firstSweep.some(get => get.func === "SCENE1NAME")).toBe(true);
+
+    // Second connect (same device, memory kept by the caller): the names are not asked
+    // again — 35 of ~187 paced reads, i.e. ~3.5 s off every reconnect.
+    client.requests.length = 0;
+    const { created, acked, deps: deps2 } = makeDeps(client);
+    await new YncaDeviceController("living", { ...deps2, probeMemory: memory }).start();
+    const secondSweep = client.requests[client.requests.length - 1];
+    expect(secondSweep.some(get => get.func === "INPNAMEHDMI1")).toBe(false);
+    expect(secondSweep.some(get => get.func === "SCENE1NAME")).toBe(false);
+    // …but the objects and values are still there, exactly as if the device had answered.
+    expect(created).toContain("living.advanced.inputNames.hdmi1");
+    expect(acked).toContainEqual({ id: "living.advanced.inputNames.hdmi1", value: "Kodi" });
+    expect(acked).toContainEqual({ id: "living.scene.name1", value: "Movie" });
   });
 });

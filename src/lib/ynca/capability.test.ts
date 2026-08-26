@@ -1,4 +1,5 @@
-import { buildCapabilities, parseCapabilities } from "./capability";
+import { buildCapabilities } from "./capability";
+import { capabilitiesFromLines as parseCapabilities } from "./__fixtures__/capabilities-from-lines";
 import rxA810 from "./__fixtures__/RX-A810.json";
 import rN500 from "./__fixtures__/R-N500.json";
 

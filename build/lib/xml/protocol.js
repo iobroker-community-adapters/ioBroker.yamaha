@@ -24,6 +24,7 @@ __export(protocol_exports, {
   parseModelName: () => parseModelName
 });
 module.exports = __toCommonJS(protocol_exports);
+var import_entities = require("./entities");
 function encodePut(zone, inner) {
   return `<YAMAHA_AV cmd="PUT"><${zone}>${inner}</${zone}></YAMAHA_AV>`;
 }
@@ -32,7 +33,7 @@ function encodeGet(zone, inner) {
 }
 function parseModelName(xml) {
   const match = /<Model_Name>([^<]*)<\/Model_Name>/.exec(xml);
-  return match && match[1].length > 0 ? match[1] : void 0;
+  return match && match[1].length > 0 ? (0, import_entities.decodeXmlText)(match[1]) : void 0;
 }
 function parseBasicStatus(xml) {
   const status = {};
@@ -50,11 +51,11 @@ function parseBasicStatus(xml) {
   }
   const input = /<Input_Sel>([^<]+)<\/Input_Sel>/.exec(xml);
   if (input) {
-    status.input = input[1];
+    status.input = (0, import_entities.decodeXmlText)(input[1]);
   }
   const soundProgram = /<Sound_Program>([^<]+)<\/Sound_Program>/.exec(xml);
   if (soundProgram) {
-    status.soundProgram = soundProgram[1];
+    status.soundProgram = (0, import_entities.decodeXmlText)(soundProgram[1]);
   }
   const pureDirect = /<Pure_Direct>\s*<Mode>(On|Off)<\/Mode>/.exec(xml);
   if (pureDirect) {
@@ -70,7 +71,7 @@ function parseBasicStatus(xml) {
   }
   const adaptiveDrc = /<Adaptive_DRC>(Auto|Off)<\/Adaptive_DRC>/.exec(xml);
   if (adaptiveDrc) {
-    status.adaptiveDrc = adaptiveDrc[1];
+    status.adaptiveDrc = (0, import_entities.decodeXmlText)(adaptiveDrc[1]);
   }
   const dialogueLevel = /<Dialogue_Lvl>\s*<Val>(-?\d+)<\/Val>/.exec(xml);
   if (dialogueLevel) {
@@ -78,7 +79,7 @@ function parseBasicStatus(xml) {
   }
   const sleepMatch = /<Sleep>([^<]+)<\/Sleep>/.exec(xml);
   if (sleepMatch) {
-    status.sleep = sleepMatch[1];
+    status.sleep = (0, import_entities.decodeXmlText)(sleepMatch[1]);
   }
   const bass = /<Bass>\s*<Val>(-?\d+)<\/Val>/.exec(xml);
   if (bass) {

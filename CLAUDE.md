@@ -23,6 +23,22 @@ Funktionalität (voller MusicCast-Reichtum). Vorbild-Adapter (Multi-Transport): 
   Transport** (Fallback, wenn weder YNCA noch YXC antworten).
 - YNCA + YXC laufen auf einem MusicCast-AVR **parallel** (kein Konflikt) — pro Gerät/Fähigkeit geroutet.
 
+## Befehls-Schleuse (`lib/lifecycle/command-gate.ts`) — JEDER Gerätebefehl geht hier durch
+
+**Eine Schleuse pro Gerät UND Transport** (krobi 2026-08-26: „global im adapter verankert, wo jeder
+befehl durch muss" — pro Geräteverbindung, weil der Takt eine Eigenschaft DER VERBINDUNG ist; eine
+adapterweite Schleuse ließe den 19-s-Sweep von Receiver A den Tastendruck an Receiver B blockieren).
+Erzeugt in `attempt-device.ts` (`gateFor`), durchgereicht an Client UND Controller. Eigenschaften:
+**serialisiert** (ein Vorgang je Verbindung), **taktet** (`COMMAND_SPACING_MS`: YNCA 100 ms =
+Yamaha-Spezifikation via ynca-python `protocol.py`; YXC/XML 0 ms, aber serialisiert — Embedded-Geräte
+vertragen keine parallelen Anfragen), **Vorrang** (`"user"` überholt `"background"`, sonst wartet ein
+Tastendruck hinter dem Sweep; Nutzerbefehle behalten untereinander ihre Reihenfolge), **Abbruch**
+(`close()` leert die Warteschlange, bricht `signal` ab, `gate.delay()` löst sofort auf → EIN
+Abschalt-Kennzeichen statt drei Eigenbauten; `gate.closed` gated jeden `emit()` der Controller).
+YNCA schleust in `writeLine` (send=user, get=background), YXC/XML im Client-Konstruktor
+(Schreibbefehle am Endpunkt-Verb erkannt: `set|recall|toggle|start|stop|manage|prepare`). Deshalb
+brauchen die Browse-Treiber KEINE eigene Pause mehr. Vorbild: nut2 `nut-client.ts`-Warteschlange.
+
 ## Architektur (Ist-Stand, Multi-Transport pro Gerät)
 
 Pro konfiguriertem Gerät ein `DeviceSupervisor` (`lib/lifecycle/`), der EINEN `ConnectionHandle` online hält —
@@ -36,7 +52,16 @@ fängt ihre `upsertObject`/`setStateAck`-deps ab, kanonisiert die IDs und filter
 zugeteilten Datenpunkte. Owner je Datenpunkt = das modernste ANWESENDE, aber verlustfreie Protokoll
 (`lib/catalog/owner-policy.ts`: Rang YXC > YNCA > XML, überstimmt vom reicheren/schreibbaren/korrekt-skalierten
 Transport laut Zensus); `lib/catalog/object-tree-coordinator.ts` berechnet daraus EINEN Baum, jeder State genau
-einmal, jeder Write an den Owner. **Reconnect ist zweistufig:** Der Ausfall EINES Transports schließt nur ihn —
+einmal, jeder Write an den Owner. **Wiederkehrende Antworten werden pro Gerät gemerkt** (`lib/lifecycle/probe-memory.ts`, gehalten in
+`main.ts` neben Subunit-Cache und Reachability-Dedup, NICHT persistiert): YXC-`getFeatures`/Modell/Name
+und die XML-Browse-Quellen-Probe sind über die Gerätelaufzeit konstant — ein Reconnect fragt sie nicht
+erneut. Der YNCA-Subunit-Cache prüft die Identität jetzt ZUERST (2 Abrufe Modell+Firmware, ~0,2 s) und
+sweept erst danach; vorher kostete ein veralteter Cache Sweep→Probe→Sweep (~40 s, langsamer als ohne
+Cache). Die Ausfall-Erkennung der beiden Poll-Transporte liegt gemeinsam in
+`lib/lifecycle/poll-drop-detector.ts`, die YXC-Zonen-Präfixe in `lib/yxc/zones.ts` (die frühere
+Dreifach-Pflege hatte den Zonen-Equalizer-Cache gebrochen). `coordinate()` schreibt nur noch
+GEÄNDERTE Objekt-Definitionen (Fingerabdruck je Id) — ein flackerndes Gerät schrieb sonst alle paar
+Minuten ~250 unveränderte Objekte neu. **Reconnect ist zweistufig:** Der Ausfall EINES Transports schließt nur ihn —
 das Handle baut ihn über seine Factory mit eigenem Backoff neu auf und re-koordiniert danach den Baum
 (idempotente Upserts, Ownership neu), während die anderen Transporte durchlaufen. Erst wenn der LETZTE lebende
 Transport wegfällt, meldet das Handle den Drop an den Supervisor, der die ganze Menge neu verbindet. YXC/XML

@@ -100,6 +100,16 @@ class YxcPushReceiver {
     this.deps.log.warn(`YXC push socket error, rebinding in ${REBIND_DELAY_MS / 1e3}s: ${err.message}`);
     this.retryTimer = this.deps.schedule(() => this.start(), REBIND_DELAY_MS);
   }
+  /**
+   * Whether events are actually arriving — i.e. the socket is bound and devices can push.
+   * When the port is taken by another MusicCast application the adapter runs poll-only,
+   * and the controllers have to widen their polling to compensate.
+   *
+   * @returns true while the receiver is listening
+   */
+  isListening() {
+    return this.listening && !this.closed;
+  }
   /** Close the socket and cancel any pending rebind. Synchronous — safe from onUnload. */
   close() {
     var _a;

@@ -23,6 +23,8 @@ __export(xml_browse_driver_exports, {
   parseXmlListInfo: () => parseXmlListInfo
 });
 module.exports = __toCommonJS(xml_browse_driver_exports);
+var import_types = require("./types");
+var import_entities = require("../xml/entities");
 const BUSY_POLL_MS = 500;
 const MAX_BUSY_POLLS = 10;
 const XML_BROWSE_SOURCES = [
@@ -30,24 +32,22 @@ const XML_BROWSE_SOURCES = [
   { element: "SERVER", key: "server", label: "Media server", input: "SERVER" },
   { element: "USB", key: "usb", label: "USB", input: "USB" }
 ];
-const ATTRIBUTE_KINDS = {
-  Container: "folder",
-  Item: "item",
-  "Unplayable Item": "unplayable",
-  Unselectable: "unselectable"
-};
 function parseXmlListInfo(xml) {
   var _a, _b, _c, _d, _e, _f, _g, _h, _i;
   const rows = [];
   const linePattern = /<Line_([1-8])>\s*<Txt>([^<]*)<\/Txt>\s*<Attribute>([^<]*)<\/Attribute>/g;
   for (let match = linePattern.exec(xml); match; match = linePattern.exec(xml)) {
     if (match[2].length > 0) {
-      rows.push({ line: Number(match[1]), text: match[2], kind: (_a = ATTRIBUTE_KINDS[match[3]]) != null ? _a : "item" });
+      rows.push({
+        line: Number(match[1]),
+        text: (0, import_entities.decodeXmlText)(match[2]),
+        kind: (_a = import_types.ROW_KIND_BY_ATTRIBUTE[match[3]]) != null ? _a : "item"
+      });
     }
   }
   return {
     ready: !/<Menu_Status>Busy<\/Menu_Status>/.test(xml),
-    menuName: (_c = (_b = /<Menu_Name>([^<]*)<\/Menu_Name>/.exec(xml)) == null ? void 0 : _b[1]) != null ? _c : "",
+    menuName: (0, import_entities.decodeXmlText)((_c = (_b = /<Menu_Name>([^<]*)<\/Menu_Name>/.exec(xml)) == null ? void 0 : _b[1]) != null ? _c : ""),
     layer: Number((_e = (_d = /<Menu_Layer>(\d+)<\/Menu_Layer>/.exec(xml)) == null ? void 0 : _d[1]) != null ? _e : 0),
     currentLine: Number((_g = (_f = /<Current_Line>(\d+)<\/Current_Line>/.exec(xml)) == null ? void 0 : _f[1]) != null ? _g : 1),
     totalItems: Number((_i = (_h = /<Max_Line>(\d+)<\/Max_Line>/.exec(xml)) == null ? void 0 : _h[1]) != null ? _i : 0),

@@ -84,8 +84,10 @@ class YamahaDeviceManagement extends import_dm_utils.DeviceManagement {
   async loadDevices(context) {
     var _a;
     for (const card of await this.cards()) {
-      const model = await this.adapter.getForeignStateAsync(`${this.adapter.namespace}.${card.id}.info.model`);
-      const node = await this.adapter.getForeignObjectAsync(`${this.adapter.namespace}.${card.id}`);
+      const [model, node] = await Promise.all([
+        this.adapter.getForeignStateAsync(`${this.adapter.namespace}.${card.id}.info.model`),
+        this.adapter.getForeignObjectAsync(`${this.adapter.namespace}.${card.id}`)
+      ]);
       const label = typeof ((_a = node == null ? void 0 : node.common) == null ? void 0 : _a.name) === "string" ? node.common.name : void 0;
       context.addDevice(
         this.toDeviceInfo(

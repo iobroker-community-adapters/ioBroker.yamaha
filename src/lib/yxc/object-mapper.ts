@@ -1,4 +1,5 @@
 import { CHANNEL_NAMES, type ObjectDef } from "../catalog/types";
+import { YXC_ZONE_IDS, zoneChannel, zonePrefix } from "./zones";
 import type { YxcCapabilities } from "./capability";
 import { YXC_AMP_CATALOG } from "./catalog";
 import { ALARM_DAYS, DAB_FIELDS } from "./command-mapper";
@@ -14,12 +15,10 @@ function selfMap(values: readonly string[]): Record<string, string> {
 }
 
 /** The zones the adapter maps: main flat, zone2-4 each under multiroom. */
-const ZONES: Array<{ id: string; prefix: string; channel?: string; channelName?: string }> = [
-  { id: "main", prefix: "" },
-  { id: "zone2", prefix: "multiroom.zone2.", channel: "multiroom.zone2", channelName: "Zone 2" },
-  { id: "zone3", prefix: "multiroom.zone3.", channel: "multiroom.zone3", channelName: "Zone 3" },
-  { id: "zone4", prefix: "multiroom.zone4.", channel: "multiroom.zone4", channelName: "Zone 4" },
-];
+const ZONES: Array<{ id: string; prefix: string; channel?: string; channelName?: string }> = YXC_ZONE_IDS.map(id => {
+  const channel = zoneChannel(id);
+  return { id, prefix: zonePrefix(id), ...(channel ? { channel: channel.channel, channelName: channel.name } : {}) };
+});
 
 /** Media-player states shared by every player source (netusb, cd): read metadata + transport buttons. */
 const PLAYER_STATES: Array<{ state: string; common: ObjectDef["common"] }> = [

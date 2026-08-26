@@ -13,9 +13,11 @@ import {
   type YncaEntry,
 } from "./ynca/catalog";
 import type { YncaSubunitCache } from "./ynca/subunit-cache";
-import { BrowseEngine } from "./browse/browse-engine";
+import type { CommandGate } from "./lifecycle/command-gate";
+import type { ProbeMemory } from "./lifecycle/probe-memory";
+import type { BrowseEngine } from "./browse/browse-engine";
+import { createBrowseSurface } from "./browse/surface";
 import { YncaBrowseDriver } from "./browse/ynca-browse-driver";
-import { browseObjectDefs } from "./browse/objects";
 
 // The YNCA catalog and its lookup maps are static — built once for all devices.
 // SYS:MODELNAME is part of the catalog (info.model), so the sweep already covers it.
@@ -25,16 +27,25 @@ const FUNC_MAP = funcToEntry(YNCA_CATALOG);
 const ID_MAP = idToEntry(YNCA_CATALOG);
 const AVAIL_PROBE = availGets(YNCA_CATALOG);
 
+/**
+ * Functions whose VALUE cannot change while the device runs: the 23 assignable input names
+ * and the 12 scene names. They cost 35 of the ~187 paced reads of a targeted sweep (3.5 s
+ * at the specification's mandatory 100 ms spacing) and answer the same thing every time, so
+ * a reconnect reuses what the first connect learned. Deliberately per adapter RUN, not
+ * persisted: renaming an input at the receiver shows up after the next adapter restart
+ * rather than needing anyone to invalidate a stored file.
+ */
+const STATIC_FUNC = /^(INPNAME|SCENE\d+NAME$)/;
+
+/** Memory key for the remembered static values. */
+const STATIC_KEY = "yncaStaticValues";
+
 /** The subset of the YNCA client the controller uses (so tests can inject a fake). */
 export interface YncaClientLike {
   /** Open the connection. */
   connect(): Promise<void>;
   /** Run the init sweep and return the device's capabilities. */
-  readCapabilities(
-    gets: Array<{ subunit: string; func: string }>,
-    spacingMs?: number,
-    settleMs?: number,
-  ): Promise<YncaCapabilities>;
+  readCapabilities(gets: Array<{ subunit: string; func: string }>): Promise<YncaCapabilities>;
   /** Send a PUT command. */
   send(subunit: string, func: string, value: string): void;
   /** Send a GET request (the browse driver reads LISTINFO with it). */
@@ -73,8 +84,14 @@ export interface ControllerDeps {
    * a model/firmware mismatch after the sweep invalidates it and re-probes.
    */
   subunitCache?: YncaSubunitCache;
-  /** Adapter-managed delay for the browse engine/driver pacing (absent in older tests → no browse). */
-  delay?(ms: number): Promise<void>;
+  /**
+   * The device's command gate: every line this controller puts on the wire is already
+   * paced through it, and its signal is the connection's shutdown flag (a closed gate
+   * ends pending waits and stops state writes). Absent in older tests → no browsing.
+   */
+  gate?: CommandGate;
+  /** Per-device memory for answers that stay constant while the device runs (see ProbeMemory). */
+  probeMemory?: ProbeMemory;
 }
 
 /**
@@ -163,10 +180,17 @@ export class YncaDeviceController implements ConnectionHandle {
   private async sweepDevice(catalog: readonly YncaEntry[]): Promise<YncaCapabilities> {
     const cached = this.deps.subunitCache?.get();
     if (cached) {
-      const capabilities = await this.targetedSweep(catalog, new Set(cached.subunits));
-      const firmware = capabilities.subunits.SYS?.VERSION ?? "";
-      if (capabilities.model === cached.model && firmware === cached.firmware) {
-        return capabilities;
+      // Check the device's IDENTITY first (two reads, ~0.2 s) instead of sweeping and
+      // finding out afterwards: the old order cost a full targeted sweep, then the probe,
+      // then a second sweep (~40 s) whenever the cache was stale — slower than having no
+      // cache at all.
+      const identity = await this.deps.client.readCapabilities([
+        { subunit: "SYS", func: "MODELNAME" },
+        { subunit: "SYS", func: "VERSION" },
+      ]);
+      const firmware = identity.subunits.SYS?.VERSION ?? "";
+      if (identity.model === cached.model && firmware === cached.firmware) {
+        return await this.targetedSweep(catalog, new Set(cached.subunits));
       }
       // The device behind this IP changed (swap or firmware update) — re-probe.
       this.deps.log.debug(`${this.deviceId}: cached subunit set is stale (model/firmware changed), re-probing`);
@@ -197,9 +221,30 @@ export class YncaDeviceController implements ConnectionHandle {
    * @param present the subunits that answered the AVAIL probe
    * @returns the assembled capabilities
    */
-  private targetedSweep(catalog: readonly YncaEntry[], present: ReadonlySet<string>): Promise<YncaCapabilities> {
+  private async targetedSweep(catalog: readonly YncaEntry[], present: ReadonlySet<string>): Promise<YncaCapabilities> {
     const gets = sweepGets(catalog).filter(get => get.subunit === "SYS" || present.has(get.subunit));
-    return this.deps.client.readCapabilities(gets);
+    const remembered = this.deps.probeMemory?.remembered<Record<string, Record<string, string>>>(STATIC_KEY);
+    // Second connect onwards: skip those reads and put the remembered answers back in, so
+    // the objects are built exactly as if the device had answered them again.
+    const capabilities = await this.deps.client.readCapabilities(
+      remembered ? gets.filter(get => !STATIC_FUNC.test(get.func)) : gets,
+    );
+    if (remembered) {
+      for (const [subunit, funcs] of Object.entries(remembered)) {
+        capabilities.subunits[subunit] = { ...funcs, ...capabilities.subunits[subunit] };
+      }
+      return capabilities;
+    }
+    const statics: Record<string, Record<string, string>> = {};
+    for (const [subunit, funcs] of Object.entries(capabilities.subunits)) {
+      for (const [func, value] of Object.entries(funcs)) {
+        if (STATIC_FUNC.test(func)) {
+          (statics[subunit] ??= {})[func] = value;
+        }
+      }
+    }
+    this.deps.probeMemory?.set(STATIC_KEY, statics);
+    return capabilities;
   }
 
   /**
@@ -238,26 +283,21 @@ export class YncaDeviceController implements ConnectionHandle {
    * @param capabilities the device's swept capabilities
    */
   private async setupBrowse(capabilities: YncaCapabilities): Promise<void> {
-    const delay = this.deps.delay;
-    if (!delay || this.deps.isEntryEnabled?.("player.browse.source") === false) {
+    const gate = this.deps.gate;
+    if (!gate || this.deps.isEntryEnabled?.("player.browse.source") === false) {
       return;
     }
+    const delay = (ms: number): Promise<void> => gate.delay(ms);
     const driver = new YncaBrowseDriver(this.deps.client, new Set(Object.keys(capabilities.subunits)), delay);
-    const sources = driver.sources();
-    if (Object.keys(sources).length === 0) {
-      return;
-    }
-    for (const def of browseObjectDefs(sources)) {
-      await this.deps.upsertObject(`${this.deviceId}.${def.id}`, def);
-    }
-    this.browseEngine = new BrowseEngine(driver, {
+    this.browseEngine = await createBrowseSurface(driver, this.deviceId, {
+      upsertObject: this.deps.upsertObject,
       emit: (id, value) => this.deps.setStateAck(`${this.deviceId}.${id}`, value),
       log: this.deps.log,
       delay,
     });
-    driver.attach(this.browseEngine);
-    this.browseDriver = driver;
-    this.browseEngine.seed();
+    if (this.browseEngine) {
+      this.browseDriver = driver;
+    }
   }
 
   /**

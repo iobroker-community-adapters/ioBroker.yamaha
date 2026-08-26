@@ -45,11 +45,15 @@ class XmlClient {
   /**
    * @param ip the receiver IP
    * @param post the XML poster (defaults to a node:http POST)
+   * @param gate the device's command gate — when given, every request runs through it, so
+   *   these 1990s-era HTTP stacks never face parallel requests and a stopped adapter
+   *   cancels what is still queued
    */
-  constructor(ip, post = defaultPoster) {
+  constructor(ip, post = defaultPoster, gate) {
     this.ip = ip;
-    this.post = post;
+    this.request = gate ? (ip_, body) => gate.run(() => post(ip_, body), body.includes('cmd="PUT"') ? "user" : "background") : post;
   }
+  request;
   /**
    * Send a zone command (wrapped in a PUT envelope).
    *
@@ -57,7 +61,7 @@ class XmlClient {
    * @param inner the inner command XML
    */
   async send(zone, inner) {
-    await this.post(this.ip, (0, import_protocol.encodePut)(zone, inner));
+    await this.request(this.ip, (0, import_protocol.encodePut)(zone, inner));
   }
   /**
    * Read a zone's Basic_Status.
@@ -66,7 +70,7 @@ class XmlClient {
    * @returns the parsed amplifier fields
    */
   async getStatus(zone) {
-    const response = await this.post(this.ip, (0, import_protocol.encodeGet)(zone, "<Basic_Status>GetParam</Basic_Status>"));
+    const response = await this.request(this.ip, (0, import_protocol.encodeGet)(zone, "<Basic_Status>GetParam</Basic_Status>"));
     return (0, import_protocol.parseBasicStatus)(response);
   }
   /**
@@ -75,7 +79,7 @@ class XmlClient {
    * @returns the model name, or undefined when the device does not report one
    */
   async getModelName() {
-    const response = await this.post(this.ip, (0, import_protocol.encodeGet)("System", "<Config>GetParam</Config>"));
+    const response = await this.request(this.ip, (0, import_protocol.encodeGet)("System", "<Config>GetParam</Config>"));
     return (0, import_protocol.parseModelName)(response);
   }
   /**
@@ -88,7 +92,7 @@ class XmlClient {
    * @returns the raw response body
    */
   getXml(element, inner) {
-    return this.post(this.ip, (0, import_protocol.encodeGet)(element, inner));
+    return this.request(this.ip, (0, import_protocol.encodeGet)(element, inner));
   }
 }
 // Annotate the CommonJS export names for ESM import in node:

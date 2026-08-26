@@ -22,7 +22,7 @@ __export(ynca_browse_driver_exports, {
   YncaBrowseDriver: () => YncaBrowseDriver
 });
 module.exports = __toCommonJS(ynca_browse_driver_exports);
-const COMMAND_SPACING_MS = 150;
+var import_types = require("./types");
 const BURST_SETTLE_MS = 200;
 const YNCA_BROWSE_SOURCES = [
   { subunit: "NETRADIO", key: "netRadio", label: "Net Radio", input: "NET RADIO" },
@@ -36,12 +36,6 @@ const YNCA_BROWSE_SOURCES = [
   { subunit: "RHAP", key: "rhapsody", label: "Rhapsody", input: "Rhapsody" },
   { subunit: "SIRIUS", key: "sirius", label: "SiriusXM", input: "SIRIUS" }
 ];
-const ATRIB_KINDS = {
-  Container: "folder",
-  Item: "item",
-  "Unplayable Item": "unplayable",
-  Unselectable: "unselectable"
-};
 class YncaBrowseDriver {
   /**
    * @param client the YNCA client slice (send + get)
@@ -88,7 +82,7 @@ class YncaBrowseDriver {
    *
    * @param source the source key (from {@link sources})
    */
-  async open(source) {
+  open(source) {
     const entry = YNCA_BROWSE_SOURCES.find((s) => s.key === source && this.present.has(s.subunit));
     if (!entry) {
       return;
@@ -96,38 +90,36 @@ class YncaBrowseDriver {
     this.active = entry;
     this.resetAssembly();
     this.client.send("MAIN", "INP", entry.input);
-    await this.delay(COMMAND_SPACING_MS);
-    await this.refresh();
+    this.refresh();
   }
   /**
    * Select a visible line — `@<SUB>:LISTSEL=Line_n` acts like OK on that line.
    *
    * @param line the line number (1–8)
    */
-  async select(line) {
-    await this.command("LISTSEL", `Line_${line}`);
+  select(line) {
+    this.command("LISTSEL", `Line_${line}`);
   }
   /** Show the previous 8 lines. */
-  async pageUp() {
-    await this.command("LISTPAGE", "Up");
+  pageUp() {
+    this.command("LISTPAGE", "Up");
   }
   /** Show the next 8 lines. */
-  async pageDown() {
-    await this.command("LISTPAGE", "Down");
+  pageDown() {
+    this.command("LISTPAGE", "Down");
   }
   /** Go one menu level back. */
-  async back() {
-    await this.command("LISTCURSOR", "Back");
+  back() {
+    this.command("LISTCURSOR", "Back");
   }
   /** Return to the menu root. */
-  async home() {
-    await this.command("LISTCURSOR", "Back to Home");
+  home() {
+    this.command("LISTCURSOR", "Back to Home");
   }
   /** Re-read the current window (`LISTINFO=?` answers with the full field burst). */
-  async refresh() {
+  refresh() {
     if (this.active) {
       this.client.get(this.active.subunit, "LISTINFO");
-      await this.delay(COMMAND_SPACING_MS);
     }
   }
   /**
@@ -151,7 +143,7 @@ class YncaBrowseDriver {
       if (line[2] === "TXT") {
         this.texts.set(n, message.value);
       } else {
-        this.kinds.set(n, (_a = ATRIB_KINDS[message.value]) != null ? _a : "item");
+        this.kinds.set(n, (_a = import_types.ROW_KIND_BY_ATTRIBUTE[message.value]) != null ? _a : "item");
       }
     } else if (message.func === "LISTLAYERNAME") {
       this.menuName = message.value;
@@ -172,13 +164,12 @@ class YncaBrowseDriver {
    * @param func the list function (LISTSEL, LISTPAGE, LISTCURSOR)
    * @param value the wire value
    */
-  async command(func, value) {
+  command(func, value) {
     if (!this.active) {
       return;
     }
     this.client.send(this.active.subunit, func, value);
-    await this.delay(COMMAND_SPACING_MS);
-    await this.refresh();
+    this.refresh();
   }
   /** Clear the assembly when a new source's menu replaces the old one. */
   resetAssembly() {

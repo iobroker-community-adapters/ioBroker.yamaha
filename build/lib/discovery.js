@@ -36,24 +36,24 @@ function parseYamahaDescription(xml) {
 }
 async function discoverYamaha(deps) {
   const found = await deps.search(ROOT_DEVICE, SEARCH_TIMEOUT_MS);
-  const devices = [];
-  const seen = /* @__PURE__ */ new Set();
+  const byAddress = /* @__PURE__ */ new Map();
   for (const { location, address } of found) {
-    if (seen.has(address)) {
-      continue;
-    }
-    try {
-      const description = await deps.fetch(location);
-      const yamaha = parseYamahaDescription(description);
-      if (yamaha) {
-        devices.push({ ip: address, name: yamaha.name });
-        seen.add(address);
-      }
-    } catch (e) {
-      deps.log.debug(`discovery: ${address} description fetch failed: ${(0, import_util.errorMessage)(e)}`);
+    if (!byAddress.has(address)) {
+      byAddress.set(address, location);
     }
   }
-  return devices;
+  const probed = await Promise.all(
+    [...byAddress].map(async ([address, location]) => {
+      try {
+        const yamaha = parseYamahaDescription(await deps.fetch(location));
+        return yamaha ? { ip: address, name: yamaha.name } : void 0;
+      } catch (e) {
+        deps.log.debug(`discovery: ${address} description fetch failed: ${(0, import_util.errorMessage)(e)}`);
+        return void 0;
+      }
+    })
+  );
+  return probed.filter((device) => device !== void 0);
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {

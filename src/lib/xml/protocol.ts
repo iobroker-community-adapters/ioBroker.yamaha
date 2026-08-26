@@ -1,3 +1,5 @@
+import { decodeXmlText } from "./entities";
+
 /**
  * Wrap an inner command in the YAMAHA_AV PUT envelope for a zone.
  *
@@ -28,7 +30,7 @@ export function encodeGet(zone: string, inner: string): string {
  */
 export function parseModelName(xml: string): string | undefined {
   const match = /<Model_Name>([^<]*)<\/Model_Name>/.exec(xml);
-  return match && match[1].length > 0 ? match[1] : undefined;
+  return match && match[1].length > 0 ? decodeXmlText(match[1]) : undefined;
 }
 
 /** The amplifier fields a Basic_Status response can carry. */
@@ -102,11 +104,11 @@ export function parseBasicStatus(xml: string): BasicStatus {
   }
   const input = /<Input_Sel>([^<]+)<\/Input_Sel>/.exec(xml);
   if (input) {
-    status.input = input[1];
+    status.input = decodeXmlText(input[1]);
   }
   const soundProgram = /<Sound_Program>([^<]+)<\/Sound_Program>/.exec(xml);
   if (soundProgram) {
-    status.soundProgram = soundProgram[1];
+    status.soundProgram = decodeXmlText(soundProgram[1]);
   }
   const pureDirect = /<Pure_Direct>\s*<Mode>(On|Off)<\/Mode>/.exec(xml);
   if (pureDirect) {
@@ -122,7 +124,7 @@ export function parseBasicStatus(xml: string): BasicStatus {
   }
   const adaptiveDrc = /<Adaptive_DRC>(Auto|Off)<\/Adaptive_DRC>/.exec(xml);
   if (adaptiveDrc) {
-    status.adaptiveDrc = adaptiveDrc[1];
+    status.adaptiveDrc = decodeXmlText(adaptiveDrc[1]);
   }
   const dialogueLevel = /<Dialogue_Lvl>\s*<Val>(-?\d+)<\/Val>/.exec(xml);
   if (dialogueLevel) {
@@ -130,7 +132,7 @@ export function parseBasicStatus(xml: string): BasicStatus {
   }
   const sleepMatch = /<Sleep>([^<]+)<\/Sleep>/.exec(xml);
   if (sleepMatch) {
-    status.sleep = sleepMatch[1];
+    status.sleep = decodeXmlText(sleepMatch[1]);
   }
   // Tone/subwoofer/extra-bass/YPAO — the fields the predecessor adapter (via
   // yamaha-nodejs-soef) read on real pre-2010 devices. Val is scoped to its own

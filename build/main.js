@@ -51,6 +51,7 @@ var import_device_supervisor = require("./lib/lifecycle/device-supervisor");
 var import_reconnect_strategy = require("./lib/lifecycle/reconnect-strategy");
 var import_reachability_dedup = require("./lib/lifecycle/reachability-dedup");
 var import_subunit_cache = require("./lib/ynca/subunit-cache");
+var import_probe_memory = require("./lib/lifecycle/probe-memory");
 const RECONNECT_BASE_MS = 1e3;
 const RECONNECT_MAX_MS = 6e4;
 const FETCH_TIMEOUT_MS = 4e3;
@@ -59,6 +60,8 @@ const SSDP_SEARCH_INTERVAL_MS = 1e3;
 const TRANSPORT_IDS = ["ynca", "yxc", "xml"];
 class Yamaha extends utils.Adapter {
   supervisors = [];
+  /** deviceId → its supervisor, so a state change goes to ONE device, not to all of them. */
+  supervisorById = /* @__PURE__ */ new Map();
   deviceConnected = /* @__PURE__ */ new Map();
   pushReceiver;
   /** Device-manager backend: the receivers as cards with add/edit/delete. */
@@ -111,8 +114,9 @@ class Yamaha extends utils.Adapter {
         await this.ensureDeviceHeader(device.id);
         const reachability = new import_reachability_dedup.ReachabilityDedup();
         const subunitCache = await this.loadYncaSubunitCache(device.id);
+        const probeMemory = new import_probe_memory.ProbeMemory();
         const supervisor = new import_device_supervisor.DeviceSupervisor({
-          attempt: () => this.attemptDevice(device, pushReceiver, knownDeviceIps, reachability, subunitCache),
+          attempt: () => this.attemptDevice(device, pushReceiver, knownDeviceIps, reachability, subunitCache, probeMemory),
           schedule: (cb, ms) => this.setTimeout(cb, ms),
           cancel: (handle) => this.clearTimeout(handle),
           onConnectionChange: (connected) => this.reportConnection(device.id, connected),
@@ -124,6 +128,7 @@ class Yamaha extends utils.Adapter {
           }
         });
         this.supervisors.push(supervisor);
+        this.supervisorById.set(device.id, supervisor);
         supervisor.start();
       }
     } catch (e) {
@@ -382,12 +387,14 @@ class Yamaha extends utils.Adapter {
    * @param reachability dedup for the "no reachable transport" warning (one instance per device,
    *   held by the caller across retries — see {@link ReachabilityDedup})
    * @param yncaSubunitCache per-device cache of the YNCA AVAIL probe (skips the probe on reconnects)
+   * @param probeMemory per-device memory for constant device answers (skips re-asking on reconnects)
    * @returns a connection handle, or null when no transport connected
    */
-  attemptDevice(device, pushReceiver, knownDeviceIps, reachability, yncaSubunitCache) {
+  attemptDevice(device, pushReceiver, knownDeviceIps, reachability, yncaSubunitCache, probeMemory) {
     return (0, import_attempt_device.attemptDevice)(device, {
       reachability,
       yncaSubunitCache,
+      probeMemory,
       // Group gate for the YNCA sweep: a disabled group's functions are never even fetched.
       isEntryEnabled: (id) => (0, import_groups.isGroupEnabled)(id, this.config),
       log: {
@@ -418,6 +425,7 @@ class Yamaha extends utils.Adapter {
         cancel: (handle) => this.clearTimeout(handle)
       },
       registerPush: (ip, onPush) => pushReceiver.register(ip, onPush),
+      pushActive: () => pushReceiver.isListening(),
       scheduleKeepalive: (handler, ms) => {
         const timer = this.setInterval(handler, ms);
         return () => {
@@ -439,13 +447,13 @@ class Yamaha extends utils.Adapter {
    * @param state the new state (null when deleted)
    */
   onStateChange(id, state) {
+    var _a;
     if (!state) {
       return;
     }
     const relative = (0, import_pure_helpers.stripNamespace)(id, this.namespace);
-    for (const supervisor of this.supervisors) {
-      supervisor.handleStateChange(relative, state.ack, state.val);
-    }
+    const deviceId = relative.slice(0, relative.indexOf("."));
+    (_a = this.supervisorById.get(deviceId)) == null ? void 0 : _a.handleStateChange(relative, state.ack, state.val);
   }
   /**
    * Synchronous teardown — no await, call the callback immediately (SIGKILL otherwise).
@@ -629,6 +637,7 @@ ST: ${target}\r
       const req = (0, import_node_http.get)(url, (res) => {
         let data = "";
         res.on("data", (chunk) => data += String(chunk));
+        res.on("error", reject);
         res.on("end", () => resolve(data));
       });
       req.on("error", reject);

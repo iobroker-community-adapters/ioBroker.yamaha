@@ -90,6 +90,15 @@ On the first connect the adapter asks the receiver which functions it supports �
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+### **WORK IN PROGRESS**
+
+- (krobipd) Fixed: commands sent in quick succession all arrive — a scene switching power, input and volume in one go used to lose everything after the first command
+- (krobipd) Fixed: a command the device rejects is now reported instead of counting as success, so a MusicCast device that stops answering is reconnected rather than silently freezing
+- (krobipd) Fixed: names and menu entries containing "&" or other special characters now read and write correctly on the older XML protocol
+- (krobipd) Fixed: writing one equalizer band no longer resets the other two when the device has not reported its bands yet
+- (krobipd) Fixed: switching the tuner band and setting a frequency right after each other now applies the frequency to the new band
+- (krobipd) Improved: startup with automatic discovery is much faster on networks with many devices, and a reconnect no longer re-asks what the device already told us
+- (krobipd) Improved: stopping or restarting the adapter no longer leaves requests running that write to datapoints afterwards
 ### 1.3.0 (2026-08-26)
 
 - (krobipd) New: menu browsing — page through the Net Radio, server and USB menus like with the remote: visible lines as datapoints, select-by-line, and a path datapoint for one-write navigation (#613)

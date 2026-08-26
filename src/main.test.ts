@@ -815,7 +815,7 @@ describe("Yamaha transport plumbing", () => {
 });
 
 describe("Yamaha state changes", () => {
-  it("routes a write to every device's connection", async () => {
+  it("routes a write to the addressed device only", async () => {
     const ctx = setup({
       devices: [
         { name: "A", ip: "192.168.1.10" },
@@ -826,10 +826,12 @@ describe("Yamaha state changes", () => {
     await flush();
 
     ctx.i.onStateChange("yamaha.0.A.main.power", { val: true, ack: false });
-    // The controllers themselves ignore ids outside their own subtree — routing to
-    // all of them is what makes a write reach the right one without a lookup.
+    // The id's first segment IS the device, so the write goes straight to its supervisor.
+    // Offering every change to every device was wasted work on the hottest path: the
+    // adapter subscribes to its whole namespace, so it sees each of its own acked writes
+    // once per configured device.
     expect(ctx.handles[0].changes).toEqual([{ id: "A.main.power", ack: false, value: true }]);
-    expect(ctx.handles[1].changes).toEqual([{ id: "A.main.power", ack: false, value: true }]);
+    expect(ctx.handles[1].changes).toEqual([]);
   });
 
   it("ignores a deleted state", async () => {

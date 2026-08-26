@@ -31,6 +31,7 @@ __export(command_mapper_exports, {
   stateToYxc: () => stateToYxc
 });
 module.exports = __toCommonJS(command_mapper_exports);
+var import_zones = require("./zones");
 var import_value_coerce = require("../catalog/value-coerce");
 var import_catalog = require("./catalog");
 function readStatusField(status, read) {
@@ -68,17 +69,11 @@ const EQ_CHANNELS = {
   "sound.equalizerMid": "mid",
   "sound.equalizerHigh": "high"
 };
-const ZONE_PREFIX = {
-  main: "",
-  zone2: "multiroom.zone2.",
-  zone3: "multiroom.zone3.",
-  zone4: "multiroom.zone4."
-};
 function parseYxcStatus(zoneStatus, zone) {
   if (typeof zoneStatus !== "object" || zoneStatus === null) {
     return [];
   }
-  const prefix = ZONE_PREFIX[zone];
+  const prefix = import_zones.YXC_ZONE_IDS.includes(zone) ? (0, import_zones.zonePrefix)(zone) : void 0;
   if (prefix === void 0) {
     return [];
   }
@@ -101,8 +96,7 @@ function stateToYxc(stateId, value) {
     return { kind: "run", run: button };
   }
   if (stateId === "tuner.band" && (0, import_value_coerce.isWritableValue)(value, false)) {
-    const band = String(value);
-    return { kind: "run", run: (client) => client.setBand(band) };
+    return { kind: "tunerBand", band: String(value) };
   }
   if (stateId === "tuner.frequency" && (0, import_value_coerce.isWritableValue)(value, true)) {
     return { kind: "tunerFreq", value: Number(value) };

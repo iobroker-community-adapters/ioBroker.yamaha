@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../../src/lib/ynca/__fixtures__/capabilities-from-lines.ts"],
+  "sourcesContent": ["import { buildCapabilities, type YncaCapabilities } from \"../capability\";\nimport { decodeLine } from \"../protocol\";\nimport type { YncaMessage } from \"../protocol\";\n\n/**\n * Build a capability report straight from recorded device lines \u2014 a TEST helper.\n *\n * Production never takes this path: the client decodes lines as they arrive and hands the\n * collected messages to `buildCapabilities`. Keeping the shortcut in the production module\n * meant an exported function no running adapter ever called, so it lives with the fixtures\n * that need it.\n *\n * @param lines response lines as recorded from a receiver\n * @returns the assembled capabilities\n */\nexport function capabilitiesFromLines(lines: string[]): YncaCapabilities {\n  const messages: YncaMessage[] = [];\n  for (const line of lines) {\n    const response = decodeLine(line);\n    if (response.status === \"ok\") {\n      messages.push({ subunit: response.subunit, func: response.func, value: response.value });\n    }\n  }\n  return buildCapabilities(messages);\n}\n"],
+  "mappings": ";;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA,wBAAyD;AACzD,sBAA2B;AAcpB,SAAS,sBAAsB,OAAmC;AACvE,QAAM,WAA0B,CAAC;AACjC,aAAW,QAAQ,OAAO;AACxB,UAAM,eAAW,4BAAW,IAAI;AAChC,QAAI,SAAS,WAAW,MAAM;AAC5B,eAAS,KAAK,EAAE,SAAS,SAAS,SAAS,MAAM,SAAS,MAAM,OAAO,SAAS,MAAM,CAAC;AAAA,IACzF;AAAA,EACF;AACA,aAAO,qCAAkB,QAAQ;AACnC;",
+  "names": []
+}

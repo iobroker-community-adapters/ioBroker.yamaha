@@ -29,6 +29,7 @@ import { DeviceSupervisor, type ConnectionHandle } from "./lib/lifecycle/device-
 import { ReconnectStrategy } from "./lib/lifecycle/reconnect-strategy";
 import { ReachabilityDedup } from "./lib/lifecycle/reachability-dedup";
 import { createSubunitCache, isAvailSnapshot, type YncaSubunitCache } from "./lib/ynca/subunit-cache";
+import { ProbeMemory } from "./lib/lifecycle/probe-memory";
 
 /** Supervisor reconnect backoff bounds (exponential: 1s, 2s … capped at 60s). */
 const RECONNECT_BASE_MS = 1000;
@@ -57,6 +58,8 @@ const TRANSPORT_IDS = ["ynca", "yxc", "xml"] as const;
  */
 export class Yamaha extends utils.Adapter {
   private readonly supervisors: DeviceSupervisor[] = [];
+  /** deviceId → its supervisor, so a state change goes to ONE device, not to all of them. */
+  private readonly supervisorById = new Map<string, DeviceSupervisor>();
   private readonly deviceConnected = new Map<string, boolean>();
   private pushReceiver: YxcPushReceiver | undefined;
   /** Device-manager backend: the receivers as cards with add/edit/delete. */
@@ -116,8 +119,11 @@ export class Yamaha extends utils.Adapter {
         await this.ensureDeviceHeader(device.id);
         const reachability = new ReachabilityDedup();
         const subunitCache = await this.loadYncaSubunitCache(device.id);
+        // Held here, not in the controllers: those are rebuilt on every connection attempt.
+        const probeMemory = new ProbeMemory();
         const supervisor = new DeviceSupervisor({
-          attempt: () => this.attemptDevice(device, pushReceiver, knownDeviceIps, reachability, subunitCache),
+          attempt: () =>
+            this.attemptDevice(device, pushReceiver, knownDeviceIps, reachability, subunitCache, probeMemory),
           schedule: (cb, ms) => this.setTimeout(cb, ms),
           cancel: handle => this.clearTimeout(handle as ioBroker.Timeout | undefined),
           onConnectionChange: connected => this.reportConnection(device.id, connected),
@@ -129,6 +135,7 @@ export class Yamaha extends utils.Adapter {
           },
         });
         this.supervisors.push(supervisor);
+        this.supervisorById.set(device.id, supervisor);
         supervisor.start();
       }
     } catch (e) {
@@ -424,6 +431,7 @@ export class Yamaha extends utils.Adapter {
    * @param reachability dedup for the "no reachable transport" warning (one instance per device,
    *   held by the caller across retries — see {@link ReachabilityDedup})
    * @param yncaSubunitCache per-device cache of the YNCA AVAIL probe (skips the probe on reconnects)
+   * @param probeMemory per-device memory for constant device answers (skips re-asking on reconnects)
    * @returns a connection handle, or null when no transport connected
    */
   private attemptDevice(
@@ -432,10 +440,12 @@ export class Yamaha extends utils.Adapter {
     knownDeviceIps: Set<string>,
     reachability: ReachabilityDedup,
     yncaSubunitCache: YncaSubunitCache,
+    probeMemory: ProbeMemory,
   ): Promise<ConnectionHandle | null> {
     return attemptDevice(device, {
       reachability,
       yncaSubunitCache,
+      probeMemory,
       // Group gate for the YNCA sweep: a disabled group's functions are never even fetched.
       isEntryEnabled: id => isGroupEnabled(id, this.config as unknown as Record<string, unknown>),
       log: {
@@ -471,6 +481,7 @@ export class Yamaha extends utils.Adapter {
         cancel: handle => this.clearTimeout(handle),
       },
       registerPush: (ip, onPush) => pushReceiver.register(ip, onPush),
+      pushActive: () => pushReceiver.isListening(),
       scheduleKeepalive: (handler, ms) => {
         const timer = this.setInterval(handler, ms);
         return () => {
@@ -497,9 +508,11 @@ export class Yamaha extends utils.Adapter {
       return;
     }
     const relative = stripNamespace(id, this.namespace);
-    for (const supervisor of this.supervisors) {
-      supervisor.handleStateChange(relative, state.ack, state.val);
-    }
+    // The adapter subscribes to its whole namespace, so every one of its own acked writes
+    // comes back here too — during a sweep that is hundreds of events. Route by the id's
+    // first segment instead of offering each one to every device in turn.
+    const deviceId = relative.slice(0, relative.indexOf("."));
+    this.supervisorById.get(deviceId)?.handleStateChange(relative, state.ack, state.val);
   }
 
   /**
@@ -695,6 +708,9 @@ export class Yamaha extends utils.Adapter {
       const req = httpGet(url, res => {
         let data = "";
         res.on("data", chunk => (data += String(chunk)));
+        // A connection dropped mid-body emits on the RESPONSE stream, not the request —
+        // without this handler that is an unhandled error event instead of a rejection.
+        res.on("error", reject);
         res.on("end", () => resolve(data));
       });
       req.on("error", reject);

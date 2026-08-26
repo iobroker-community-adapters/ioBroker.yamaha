@@ -64,6 +64,8 @@ export interface MultiTransportDeps {
  */
 export class MultiTransportHandle implements ConnectionHandle {
   private ownerByCanonicalId = new Map<string, Transport>();
+  /** Object id → the definition last written, so an unchanged re-coordination writes nothing. */
+  private readonly writtenObjects = new Map<string, string>();
   private readonly live: TransportConnection[];
   private readonly retries = new Map<Transport, { timer: unknown; backoff: { nextDelay(): number } }>();
   private supervisorDrop: ((reason?: Error) => void) | undefined;
@@ -105,9 +107,18 @@ export class MultiTransportHandle implements ConnectionHandle {
     }));
     const { objects, ownerByCanonicalId } = coordinateObjectTree(contributions);
     this.ownerByCanonicalId = ownerByCanonicalId;
-    // Parents before children is guaranteed by the coordinator, so intermediate channels exist.
+    // Parents before children is guaranteed by the coordinator, so intermediate channels
+    // exist. Only definitions that actually CHANGED are written: coordinate() runs again
+    // on every reconnect and on every single transport's return, and a receiver on a
+    // flaky network would otherwise rewrite its whole tree (~250 objects) every few
+    // minutes, unchanged, into the object database.
     for (const object of objects) {
+      const fingerprint = JSON.stringify(object);
+      if (this.writtenObjects.get(object.id) === fingerprint) {
+        continue;
+      }
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
+      this.writtenObjects.set(object.id, fingerprint);
     }
     for (const connection of this.live) {
       await connection.seedOwned(this.ownedFor(connection.transport));

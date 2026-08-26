@@ -22,12 +22,13 @@ __export(device_controller_exports, {
 });
 module.exports = __toCommonJS(device_controller_exports);
 var import_catalog = require("./ynca/catalog");
-var import_browse_engine = require("./browse/browse-engine");
+var import_surface = require("./browse/surface");
 var import_ynca_browse_driver = require("./browse/ynca-browse-driver");
-var import_objects = require("./browse/objects");
 const FUNC_MAP = (0, import_catalog.funcToEntry)(import_catalog.YNCA_CATALOG);
 const ID_MAP = (0, import_catalog.idToEntry)(import_catalog.YNCA_CATALOG);
 const AVAIL_PROBE = (0, import_catalog.availGets)(import_catalog.YNCA_CATALOG);
+const STATIC_FUNC = /^(INPNAME|SCENE\d+NAME$)/;
+const STATIC_KEY = "yncaStaticValues";
 class YncaDeviceController {
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
@@ -96,10 +97,13 @@ class YncaDeviceController {
     var _a, _b, _c, _d, _e, _f, _g;
     const cached = (_a = this.deps.subunitCache) == null ? void 0 : _a.get();
     if (cached) {
-      const capabilities2 = await this.targetedSweep(catalog, new Set(cached.subunits));
-      const firmware = (_c = (_b = capabilities2.subunits.SYS) == null ? void 0 : _b.VERSION) != null ? _c : "";
-      if (capabilities2.model === cached.model && firmware === cached.firmware) {
-        return capabilities2;
+      const identity = await this.deps.client.readCapabilities([
+        { subunit: "SYS", func: "MODELNAME" },
+        { subunit: "SYS", func: "VERSION" }
+      ]);
+      const firmware = (_c = (_b = identity.subunits.SYS) == null ? void 0 : _b.VERSION) != null ? _c : "";
+      if (identity.model === cached.model && firmware === cached.firmware) {
+        return await this.targetedSweep(catalog, new Set(cached.subunits));
       }
       this.deps.log.debug(`${this.deviceId}: cached subunit set is stale (model/firmware changed), re-probing`);
       (_d = this.deps.subunitCache) == null ? void 0 : _d.clear();
@@ -127,9 +131,29 @@ class YncaDeviceController {
    * @param present the subunits that answered the AVAIL probe
    * @returns the assembled capabilities
    */
-  targetedSweep(catalog, present) {
+  async targetedSweep(catalog, present) {
+    var _a, _b, _c;
     const gets = (0, import_catalog.sweepGets)(catalog).filter((get) => get.subunit === "SYS" || present.has(get.subunit));
-    return this.deps.client.readCapabilities(gets);
+    const remembered = (_a = this.deps.probeMemory) == null ? void 0 : _a.remembered(STATIC_KEY);
+    const capabilities = await this.deps.client.readCapabilities(
+      remembered ? gets.filter((get) => !STATIC_FUNC.test(get.func)) : gets
+    );
+    if (remembered) {
+      for (const [subunit, funcs] of Object.entries(remembered)) {
+        capabilities.subunits[subunit] = { ...funcs, ...capabilities.subunits[subunit] };
+      }
+      return capabilities;
+    }
+    const statics = {};
+    for (const [subunit, funcs] of Object.entries(capabilities.subunits)) {
+      for (const [func, value] of Object.entries(funcs)) {
+        if (STATIC_FUNC.test(func)) {
+          ((_b = statics[subunit]) != null ? _b : statics[subunit] = {})[func] = value;
+        }
+      }
+    }
+    (_c = this.deps.probeMemory) == null ? void 0 : _c.set(STATIC_KEY, statics);
+    return capabilities;
   }
   /**
    * Handle a state change: a user write (ack false) becomes a YNCA command; an
@@ -168,26 +192,21 @@ class YncaDeviceController {
    */
   async setupBrowse(capabilities) {
     var _a, _b;
-    const delay = this.deps.delay;
-    if (!delay || ((_b = (_a = this.deps).isEntryEnabled) == null ? void 0 : _b.call(_a, "player.browse.source")) === false) {
+    const gate = this.deps.gate;
+    if (!gate || ((_b = (_a = this.deps).isEntryEnabled) == null ? void 0 : _b.call(_a, "player.browse.source")) === false) {
       return;
     }
+    const delay = (ms) => gate.delay(ms);
     const driver = new import_ynca_browse_driver.YncaBrowseDriver(this.deps.client, new Set(Object.keys(capabilities.subunits)), delay);
-    const sources = driver.sources();
-    if (Object.keys(sources).length === 0) {
-      return;
-    }
-    for (const def of (0, import_objects.browseObjectDefs)(sources)) {
-      await this.deps.upsertObject(`${this.deviceId}.${def.id}`, def);
-    }
-    this.browseEngine = new import_browse_engine.BrowseEngine(driver, {
+    this.browseEngine = await (0, import_surface.createBrowseSurface)(driver, this.deviceId, {
+      upsertObject: this.deps.upsertObject,
       emit: (id, value) => this.deps.setStateAck(`${this.deviceId}.${id}`, value),
       log: this.deps.log,
       delay
     });
-    driver.attach(this.browseEngine);
-    this.browseDriver = driver;
-    this.browseEngine.seed();
+    if (this.browseEngine) {
+      this.browseDriver = driver;
+    }
   }
   /**
    * Register the supervisor's drop handler — delegated to the client's socket drop,

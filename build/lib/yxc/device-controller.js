@@ -28,11 +28,12 @@ var import_object_mapper = require("./object-mapper");
 var import_command_mapper = require("./command-mapper");
 var import_push = require("./push");
 var import_util = require("../util");
-var import_browse_engine = require("../browse/browse-engine");
+var import_poll_drop_detector = require("../lifecycle/poll-drop-detector");
+var import_zones = require("./zones");
+var import_surface = require("../browse/surface");
 var import_yxc_browse_driver = require("../browse/yxc-browse-driver");
-var import_objects = require("../browse/objects");
 const KEEPALIVE_MS = 5 * 60 * 1e3;
-const MAX_KEEPALIVE_FAILURES = 3;
+const PUSH_MODE_FULL_SWEEP_EVERY = 6;
 function modelNameFrom(deviceInfo) {
   const model = deviceInfo == null ? void 0 : deviceInfo.model_name;
   return typeof model === "string" && model.length > 0 ? model : void 0;
@@ -66,9 +67,7 @@ class YxcDeviceController {
   mediaBlocks = [];
   cancelKeepalive;
   cancelPush;
-  dropHandler;
-  failedKeepalives = 0;
-  dropped = false;
+  dropDetector = new import_poll_drop_detector.PollDropDetector();
   /** The tuner's current band, cached so a frequency write can supply it (setFreq needs band + freq). */
   lastTunerBand = "fm";
   /** Each zone's last-seen equalizer bands, cached so one band write can supply the other two. */
@@ -81,6 +80,8 @@ class YxcDeviceController {
   tunerFeatures;
   /** Whether the device reports the clock/alarm block (gates the clock poll). */
   hasClock = false;
+  /** Counts keepalive runs, so the safety-net sweep can run every Nth one under push. */
+  keepaliveRuns = 0;
   browseEngine;
   /**
    * Read capabilities, create the object tree, seed state, and wire up push +
@@ -90,7 +91,10 @@ class YxcDeviceController {
    */
   async start() {
     var _a;
-    const capabilities = (0, import_capability.parseYxcFeatures)(await this.deps.client.getFeatures());
+    const capabilities = await this.remember(
+      "features",
+      async () => (0, import_capability.parseYxcFeatures)(await this.deps.client.getFeatures())
+    );
     const objects = (0, import_object_mapper.mapYxcToObjects)(capabilities);
     if (objects.length === 0) {
       this.deps.log.warn(`${this.deviceId}: no capabilities reported \u2014 creating no objects`);
@@ -100,26 +104,16 @@ class YxcDeviceController {
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
     }
     try {
-      const model = modelNameFrom(await this.deps.client.getDeviceInfo());
+      const model = await this.remember("model", async () => modelNameFrom(await this.deps.client.getDeviceInfo()));
       if (model) {
-        await this.deps.upsertObject(`${this.deviceId}.info`, {
-          id: "info",
-          type: "channel",
-          common: { name: "Info" }
-        });
-        await this.deps.upsertObject(`${this.deviceId}.info.model`, {
-          id: "info.model",
-          type: "state",
-          common: { name: "Model", type: "string", role: "text", read: true, write: false }
-        });
-        this.deps.setStateAck(`${this.deviceId}.info.model`, model);
+        this.emit("info.model", model);
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getDeviceInfo failed (${(0, import_util.errorMessage)(e)})`);
     }
     if (this.deps.reportDeviceName) {
       try {
-        const name = zoneNameFrom(await this.deps.client.getNameText());
+        const name = await this.remember("name", async () => zoneNameFrom(await this.deps.client.getNameText()));
         if (name) {
           this.deps.reportDeviceName(name);
         }
@@ -128,9 +122,7 @@ class YxcDeviceController {
       }
     }
     this.zones = capabilities.zones.map((zone) => zone.id);
-    for (const zone of this.zones) {
-      await this.refreshZone(zone);
-    }
+    await Promise.all(this.zones.map((zone) => this.refreshZone(zone)));
     this.mediaBlocks = capabilities.media;
     this.tunerFeatures = capabilities.tuner;
     this.hasClock = capabilities.clock !== void 0;
@@ -145,6 +137,31 @@ class YxcDeviceController {
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), KEEPALIVE_MS);
     this.deps.log.debug(`${this.deviceId}: MusicCast device ready (YXC)`);
     return true;
+  }
+  /**
+   * Ask the device once per adapter run and remember the answer for later reconnects.
+   *
+   * @param key what is being remembered
+   * @param probe the request to run when nothing is remembered yet
+   * @returns the remembered or freshly fetched value
+   */
+  remember(key, probe) {
+    return this.deps.probeMemory ? this.deps.probeMemory.once(key, probe) : probe();
+  }
+  /**
+   * Write a device-originated value — but never after the connection was closed. A poll
+   * or a browse fetch that was already in flight when the adapter stopped would otherwise
+   * still write into a tree that is being torn down.
+   *
+   * @param relativeId the state id relative to the device
+   * @param value the value to write
+   */
+  emit(relativeId, value) {
+    var _a;
+    if ((_a = this.deps.gate) == null ? void 0 : _a.closed) {
+      return;
+    }
+    this.deps.setStateAck(`${this.deviceId}.${relativeId}`, value);
   }
   /**
    * Handle a state change: a user write (ack false) becomes a YXC command; an
@@ -188,7 +205,7 @@ class YxcDeviceController {
    * @param cb invoked once when the device is judged gone
    */
   onDrop(cb) {
-    this.dropHandler = cb;
+    this.dropDetector.onDrop(cb);
   }
   /**
    * Create the browsing surface (#613) when the device has the netusb block: the
@@ -199,34 +216,27 @@ class YxcDeviceController {
    */
   async setupBrowse(capabilities) {
     var _a, _b;
-    const delay = this.deps.delay;
-    if (!delay || !capabilities.media.includes("netusb")) {
+    const gate = this.deps.gate;
+    if (!gate || !capabilities.media.includes("netusb")) {
       return;
     }
     const inputs = (_b = (_a = capabilities.zones.find((zone) => zone.id === "main")) == null ? void 0 : _a.inputs) != null ? _b : [];
     const driver = new import_yxc_browse_driver.YxcBrowseDriver(this.deps.client, inputs);
-    const sources = driver.sources();
-    if (Object.keys(sources).length === 0) {
-      return;
-    }
-    for (const def of (0, import_objects.browseObjectDefs)(sources)) {
-      await this.deps.upsertObject(`${this.deviceId}.${def.id}`, def);
-    }
-    this.browseEngine = new import_browse_engine.BrowseEngine(driver, {
-      emit: (id, value) => this.deps.setStateAck(`${this.deviceId}.${id}`, value),
+    this.browseEngine = await (0, import_surface.createBrowseSurface)(driver, this.deviceId, {
+      upsertObject: this.deps.upsertObject,
+      emit: (id, value) => this.emit(id, value),
       log: this.deps.log,
-      delay
+      delay: (ms) => gate.delay(ms)
     });
-    driver.attach(this.browseEngine);
-    this.browseEngine.seed();
   }
   /** Cancel the keepalive and unregister the push handler. Synchronous — safe from onUnload. */
   close() {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
     (_a = this.browseEngine) == null ? void 0 : _a.close();
-    (_b = this.cancelKeepalive) == null ? void 0 : _b.call(this);
+    (_b = this.deps.gate) == null ? void 0 : _b.close();
+    (_c = this.cancelKeepalive) == null ? void 0 : _c.call(this);
     this.cancelKeepalive = void 0;
-    (_c = this.cancelPush) == null ? void 0 : _c.call(this);
+    (_d = this.cancelPush) == null ? void 0 : _d.call(this);
     this.cancelPush = void 0;
   }
   /**
@@ -258,27 +268,24 @@ class YxcDeviceController {
   }
   /**
    * Poll every zone (which renews the push registration and refreshes state) and the
-   * media sources. If every zone poll fails for MAX_KEEPALIVE_FAILURES runs in a row,
+   * media sources. If every zone poll fails for three consecutive failed runs in a row,
    * the device is judged gone and a drop is reported so the supervisor can flip
    * info.connection and reconnect.
    */
   async keepalive() {
-    let anyOk = false;
-    for (const zone of this.zones.length > 0 ? this.zones : ["main"]) {
-      if (await this.refreshZone(zone)) {
-        anyOk = true;
+    var _a, _b;
+    const zones = this.zones.length > 0 ? this.zones : ["main"];
+    const anyOk = (await Promise.all(zones.map((zone) => this.refreshZone(zone)))).some(Boolean);
+    this.keepaliveRuns++;
+    const fullSweep = !((_b = (_a = this.deps).pushActive) == null ? void 0 : _b.call(_a)) || this.keepaliveRuns % PUSH_MODE_FULL_SWEEP_EVERY === 0;
+    if (fullSweep) {
+      await this.refreshMedia();
+      await this.refreshLists();
+      if (this.hasDistribution) {
+        await this.refreshDistribution();
       }
     }
-    await this.refreshMedia();
-    await this.refreshLists();
-    if (this.hasDistribution) {
-      await this.refreshDistribution();
-    }
-    if (anyOk) {
-      this.failedKeepalives = 0;
-    } else if (++this.failedKeepalives >= MAX_KEEPALIVE_FAILURES) {
-      this.reportDrop();
-    }
+    this.dropDetector.record(anyOk);
   }
   /**
    * Refresh the list-shaped surfaces: the netusb favourites and recently-played
@@ -303,7 +310,7 @@ class YxcDeviceController {
     try {
       const update = (0, import_command_mapper.parseYxcPresetList)(await this.deps.client.getPresetInfo());
       if (update) {
-        this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+        this.emit(update.id, update.value);
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getPresetInfo failed: ${(0, import_util.errorMessage)(e)}`);
@@ -314,7 +321,7 @@ class YxcDeviceController {
     try {
       const update = (0, import_command_mapper.parseYxcRecentList)(await this.deps.client.getRecentInfo());
       if (update) {
-        this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+        this.emit(update.id, update.value);
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getRecentInfo failed: ${(0, import_util.errorMessage)(e)}`);
@@ -337,33 +344,22 @@ class YxcDeviceController {
     }
     const update = (0, import_command_mapper.parseYxcTunerPresetLists)(byBand);
     if (update) {
-      this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+      this.emit(update.id, update.value);
     }
   }
   /** Fetch the clock/alarm settings and write the read-only clock states. */
   async refreshClock() {
     try {
       for (const update of (0, import_command_mapper.parseYxcClock)(await this.deps.client.getClockSettings())) {
-        this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+        this.emit(update.id, update.value);
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getClockSettings failed: ${(0, import_util.errorMessage)(e)}`);
     }
   }
-  /** Report a drop once — the supervisor then closes this controller and reconnects. */
-  reportDrop() {
-    var _a;
-    if (this.dropped) {
-      return;
-    }
-    this.dropped = true;
-    (_a = this.dropHandler) == null ? void 0 : _a.call(this, new Error(`${MAX_KEEPALIVE_FAILURES} keepalive polls failed`));
-  }
   /** Refresh every player source the device offers (network player, cd, tuner). */
   async refreshMedia() {
-    for (const block of this.mediaBlocks) {
-      await this.refreshMediaSource(block);
-    }
+    await Promise.all(this.mediaBlocks.map((block) => this.refreshMediaSource(block)));
   }
   /**
    * Fetch one media source's play info and write the parsed states with ack. The
@@ -378,7 +374,7 @@ class YxcDeviceController {
     try {
       const info = await this.deps.client.getPlayInfo(arg);
       for (const update of parse(info)) {
-        this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+        this.emit(update.id, update.value);
         if (update.id === "tuner.band") {
           this.lastTunerBand = String(update.value);
         }
@@ -395,7 +391,7 @@ class YxcDeviceController {
     try {
       const info = await this.deps.client.getDistributionInfo();
       for (const update of (0, import_command_mapper.parseYxcDistribution)(info)) {
-        this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+        this.emit(update.id, update.value);
         if (update.id === "multiroom.group.role") {
           this.lastDistRole = String(update.value);
         }
@@ -455,7 +451,7 @@ class YxcDeviceController {
       const status = await this.deps.client.getStatus(zone);
       const updates = (0, import_command_mapper.parseYxcStatus)(status, zone);
       for (const update of updates) {
-        this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+        this.emit(update.id, update.value);
       }
       this.cacheEqualizer(zone, updates);
       return true;
@@ -473,7 +469,7 @@ class YxcDeviceController {
    */
   cacheEqualizer(zone, updates) {
     var _a, _b, _c, _d;
-    const prefix = zone === "main" ? "" : `multiroom.${zone}.`;
+    const prefix = (0, import_zones.zonePrefix)(zone);
     const band = (b) => {
       const u = updates.find((x) => x.id === `${prefix}sound.equalizer${b}`);
       return typeof (u == null ? void 0 : u.value) === "number" ? u.value : void 0;
@@ -497,7 +493,7 @@ class YxcDeviceController {
    * @param command the YXC command to apply
    */
   async applyCommand(stateId, command) {
-    var _a, _b;
+    var _a;
     try {
       switch (command.kind) {
         case "run":
@@ -505,16 +501,31 @@ class YxcDeviceController {
           break;
         case "equalizer": {
           const { zone, band, value } = command;
-          const next = { ...(_a = this.lastEqualizer.get(zone)) != null ? _a : { low: 0, mid: 0, high: 0 }, [band]: value };
+          let current = this.lastEqualizer.get(zone);
+          if (!current) {
+            await this.refreshZone(zone);
+            current = this.lastEqualizer.get(zone);
+          }
+          if (!current) {
+            this.deps.log.warn(
+              `${this.deviceId}: not writing ${stateId} \u2014 the device has not reported its equalizer bands yet`
+            );
+            break;
+          }
+          const next = { ...current, [band]: value };
           await this.deps.client.setEqualizer(next.low, next.mid, next.high, zone);
           this.lastEqualizer.set(zone, next);
           break;
         }
+        case "tunerBand":
+          await this.deps.client.setBand(command.band);
+          this.lastTunerBand = command.band;
+          break;
         case "tunerFreq":
           await this.deps.client.setFreq(this.lastTunerBand, command.value);
           break;
         case "tunerPreset": {
-          const band = ((_b = this.tunerFeatures) == null ? void 0 : _b.presetType) === "common" ? "common" : this.lastTunerBand;
+          const band = ((_a = this.tunerFeatures) == null ? void 0 : _a.presetType) === "common" ? "common" : this.lastTunerBand;
           await this.deps.client.recallTunerPreset(band, command.value, "main");
           break;
         }

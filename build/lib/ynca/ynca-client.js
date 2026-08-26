@@ -26,14 +26,11 @@ var import_node_net = require("node:net");
 var import_line_buffer = require("./line-buffer");
 var import_protocol = require("./protocol");
 var import_capability = require("./capability");
+var import_command_gate = require("../lifecycle/command-gate");
 const YNCA_PORT = 5e4;
+const SWEEP_MARKER_TIMEOUT_MS = 5e3;
 const CONNECT_TIMEOUT_MS = 5e3;
 const KEEPALIVE_INTERVAL_MS = 3e4;
-function delay(timers, ms) {
-  return new Promise((resolve) => {
-    timers.schedule(resolve, ms);
-  });
-}
 function defaultFactory(host, port) {
   const socket = (0, import_node_net.connect)({ host, port });
   socket.setTimeout(CONNECT_TIMEOUT_MS);
@@ -64,11 +61,15 @@ class YncaClient {
   /**
    * @param host the receiver IP or hostname
    * @param timers adapter-managed timers, so no native timer outlives onUnload
+   * @param gate the device's command gate — EVERY line this client puts on the wire goes
+   *   through it, so the specification's 100 ms spacing holds across user writes, the init
+   *   sweep, the keepalive and browsing alike
    * @param factory socket factory (defaults to a node:net socket)
    */
-  constructor(host, timers, factory = defaultFactory) {
+  constructor(host, timers, gate, factory = defaultFactory) {
     this.host = host;
     this.timers = timers;
+    this.gate = gate;
     this.factory = factory;
   }
   socket;
@@ -157,27 +158,43 @@ class YncaClient {
     this.keepaliveTimer = void 0;
   }
   /**
-   * Send a PUT command.
+   * Send a PUT command. Queued as a USER command: a button press must not sit behind a
+   * ~190-line init sweep.
    *
    * @param subunit target subunit (e.g. `MAIN`)
    * @param func function name (e.g. `PWR`)
    * @param value value to set
    */
   send(subunit, func, value) {
-    var _a;
-    (_a = this.socket) == null ? void 0 : _a.write(`${(0, import_protocol.encodeCommand)(subunit, func, value)}\r
-`);
+    void this.writeLine((0, import_protocol.encodeCommand)(subunit, func, value), "user");
   }
   /**
-   * Send a GET request.
+   * Send a GET request (background priority — reads yield to user commands).
    *
    * @param subunit target subunit
    * @param func function name
    */
   get(subunit, func) {
-    var _a;
-    (_a = this.socket) == null ? void 0 : _a.write(`${(0, import_protocol.encodeGet)(subunit, func)}\r
+    void this.writeLine((0, import_protocol.encodeGet)(subunit, func), "background");
+  }
+  /**
+   * Put one line on the wire through the command gate — the single choke point that keeps
+   * the specification's spacing.
+   *
+   * @param line the encoded YNCA line (without the terminator)
+   * @param priority user command or background read
+   * @returns resolves once the line was written (or silently when the gate closed)
+   */
+  writeLine(line, priority) {
+    return this.gate.run(() => {
+      var _a;
+      (_a = this.socket) == null ? void 0 : _a.write(`${line}\r
 `);
+    }, priority).catch((e) => {
+      if (!(e instanceof import_command_gate.CommandGateClosedError)) {
+        throw e;
+      }
+    });
   }
   /**
    * Register a handler for decoded messages from the receiver.
@@ -202,19 +219,28 @@ class YncaClient {
     }
   }
   /**
-   * Run an init sweep: send a GET for each requested function (paced by
-   * `spacingMs`), collect the responses, and build a capability report once the
-   * device has settled.
+   * Run an init sweep: send a GET for each requested function and collect the responses.
+   *
+   * Pacing is the command gate's job — every GET goes through it, so the sweep is spaced
+   * against user writes and the keepalive instead of only against itself.
+   *
+   * The end of the sweep is CONFIRMED, not guessed: after the last GET the sweep sends
+   * `@SYS:VERSION=?` as a closing marker and waits for its answer (every receiver answers
+   * it — the reference implementation syncs on the same function). A fixed settle window
+   * would silently drop the functions of a busy receiver that answers a moment late, and
+   * those datapoints would then never be created.
    *
    * @param gets the subunit/function pairs to query
-   * @param spacingMs delay between GETs (YNCA needs ~100 ms between commands)
-   * @param settleMs how long to wait after the last GET before building the report
    * @returns the assembled capabilities
    */
-  async readCapabilities(gets, spacingMs = 100, settleMs = 500) {
+  async readCapabilities(gets) {
     const collected = [];
+    let markerSeen;
     const collector = (message) => {
       collected.push(message);
+      if (message.subunit === "SYS" && message.func === "VERSION") {
+        markerSeen == null ? void 0 : markerSeen();
+      }
     };
     this.messageHandlers.push(collector);
     try {
@@ -222,13 +248,12 @@ class YncaClient {
         if (!this.reachable) {
           throw new Error("connection lost during capability sweep");
         }
-        this.get(request.subunit, request.func);
-        await delay(this.timers, spacingMs);
+        await this.writeLine((0, import_protocol.encodeGet)(request.subunit, request.func), "background");
       }
       if (!this.reachable) {
         throw new Error("connection lost during capability sweep");
       }
-      await delay(this.timers, settleMs);
+      await this.awaitSweepMarker((handler) => markerSeen = handler);
       return (0, import_capability.buildCapabilities)(collected);
     } finally {
       const index = this.messageHandlers.indexOf(collector);
@@ -237,16 +262,46 @@ class YncaClient {
       }
     }
   }
+  /**
+   * Send the closing marker and wait for the device to answer it — or for the timeout,
+   * so an unusual firmware that stays silent costs a delay, never the whole connection.
+   *
+   * @param arm registers the resolve callback with the sweep's collector
+   * @returns resolves when the marker was answered or the wait timed out
+   */
+  async awaitSweepMarker(arm) {
+    let settled = false;
+    const answered = new Promise((resolve) => {
+      arm(() => {
+        if (!settled) {
+          settled = true;
+          resolve();
+        }
+      });
+    });
+    await this.writeLine((0, import_protocol.encodeGet)("SYS", "VERSION"), "background");
+    await Promise.race([
+      answered,
+      this.gate.delay(SWEEP_MARKER_TIMEOUT_MS).then(() => {
+        settled = true;
+      })
+    ]);
+  }
   /** Whether the connection is currently up. */
   isReachable() {
     return this.reachable;
   }
-  /** Close the connection permanently (no reconnect). Synchronous — safe to call from onUnload. */
+  /**
+   * Close the connection permanently (no reconnect). Synchronous — safe to call from
+   * onUnload. Closing the gate empties its queue and aborts its signal, so a sweep or a
+   * browse walk that is still awaiting ends instead of hanging on a cancelled timer.
+   */
   close() {
     var _a;
     this.closed = true;
     this.reachable = false;
     this.stopKeepalive();
+    this.gate.close();
     (_a = this.socket) == null ? void 0 : _a.destroy();
     this.socket = void 0;
   }

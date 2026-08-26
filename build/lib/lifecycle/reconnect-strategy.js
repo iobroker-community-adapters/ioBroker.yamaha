@@ -25,10 +25,13 @@ class ReconnectStrategy {
   /**
    * @param baseMs the first delay in milliseconds
    * @param maxMs the maximum delay in milliseconds
+   * @param jitter fraction of the delay to spread randomly (0 disables it — used by tests
+   *   that assert exact delays)
    */
-  constructor(baseMs, maxMs) {
+  constructor(baseMs, maxMs, jitter = 0.2) {
     this.baseMs = baseMs;
     this.maxMs = maxMs;
+    this.jitter = jitter;
   }
   attempt = 0;
   /**
@@ -39,7 +42,7 @@ class ReconnectStrategy {
   nextDelay() {
     const delay = Math.min(this.baseMs * 2 ** this.attempt, this.maxMs);
     this.attempt++;
-    return delay;
+    return Math.round(delay * (1 + this.jitter * Math.random()));
   }
   /** Reset the backoff to the base delay after a successful connection. */
   reset() {

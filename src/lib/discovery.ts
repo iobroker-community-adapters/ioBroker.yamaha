@@ -55,22 +55,29 @@ export function parseYamahaDescription(xml: string): { name: string } | undefine
  */
 export async function discoverYamaha(deps: DiscoveryDeps): Promise<DiscoveredDevice[]> {
   const found = await deps.search(ROOT_DEVICE, SEARCH_TIMEOUT_MS);
-  const devices: DiscoveredDevice[] = [];
-  const seen = new Set<string>();
+  // Deduplicate BEFORE fetching, not after. `upnp:rootdevice` is answered by EVERY UPnP
+  // device on the network, the search repeats its request (multicast is lossy) and it
+  // leaves every interface — so the same address arrives several times over. Deduplicating
+  // only the Yamaha hits, as this did before, meant every television, printer and speaker
+  // in the house had its description fetched once per answer.
+  const byAddress = new Map<string, string>();
   for (const { location, address } of found) {
-    if (seen.has(address)) {
-      continue;
-    }
-    try {
-      const description = await deps.fetch(location);
-      const yamaha = parseYamahaDescription(description);
-      if (yamaha) {
-        devices.push({ ip: address, name: yamaha.name });
-        seen.add(address);
-      }
-    } catch (e) {
-      deps.log.debug(`discovery: ${address} description fetch failed: ${errorMessage(e)}`);
+    if (!byAddress.has(address)) {
+      byAddress.set(address, location);
     }
   }
-  return devices;
+  // Fetch in parallel: an address that does not answer costs its timeout ONCE instead of
+  // delaying every address behind it — the whole adapter start waits on this.
+  const probed = await Promise.all(
+    [...byAddress].map(async ([address, location]): Promise<DiscoveredDevice | undefined> => {
+      try {
+        const yamaha = parseYamahaDescription(await deps.fetch(location));
+        return yamaha ? { ip: address, name: yamaha.name } : undefined;
+      } catch (e) {
+        deps.log.debug(`discovery: ${address} description fetch failed: ${errorMessage(e)}`);
+        return undefined;
+      }
+    }),
+  );
+  return probed.filter((device): device is DiscoveredDevice => device !== undefined);
 }

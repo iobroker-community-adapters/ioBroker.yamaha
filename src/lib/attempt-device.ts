@@ -7,8 +7,10 @@ import { XmlClient } from "./xml/xml-client";
 import { MultiTransportHandle, type ConnectableTransport } from "./lifecycle/multi-transport-handle";
 import { TransportConnectionAdapter } from "./lifecycle/transport-connection-adapter";
 import { ReconnectStrategy } from "./lifecycle/reconnect-strategy";
+import { CommandGate } from "./lifecycle/command-gate";
 import type { ReachabilityDedup } from "./lifecycle/reachability-dedup";
 import type { YncaSubunitCache } from "./ynca/subunit-cache";
+import type { ProbeMemory } from "./lifecycle/probe-memory";
 import type { Transport } from "./catalog/owner-policy";
 import { readyLine } from "./ready-line";
 import { errorMessage } from "./util";
@@ -22,6 +24,15 @@ export type { ConnectableTransport };
 /** Per-transport reconnect backoff bounds — same shape as the device supervisor's. */
 const TRANSPORT_RECONNECT_BASE_MS = 1000;
 const TRANSPORT_RECONNECT_MAX_MS = 60000;
+
+/**
+ * Minimum spacing between two commands, per transport. YNCA's 100 ms is Yamaha's
+ * specification (`ynca-python` protocol.py: "YNCA spec specifies that there should be at
+ * least 100 milliseconds between commands"). The HTTP transports have no documented
+ * spacing — 0 ms, but they still run through a gate, which serialises them so an embedded
+ * device never faces a burst of parallel requests.
+ */
+const COMMAND_SPACING_MS: Readonly<Record<Transport, number>> = { ynca: 100, yxc: 0, xml: 0 };
 
 /** The adapter-bound callbacks {@link attemptDevice} drives — injected so it needs no adapter. */
 export interface AttemptDeps {
@@ -40,6 +51,8 @@ export interface AttemptDeps {
   };
   /** Register a YXC push handler for a device IP; returns a function that unregisters it. */
   registerPush(ip: string, onPush: (event: unknown) => void): () => void;
+  /** Whether the shared push receiver is listening (decides how much the keepalive polls). */
+  pushActive?(): boolean;
   /** Schedule a repeating keepalive; returns a function that cancels it. */
   scheduleKeepalive(handler: () => void, ms: number): () => void;
   /** How often to poll an XML/YNC device for state (ms). */
@@ -56,6 +69,8 @@ export interface AttemptDeps {
   isEntryEnabled?(id: string): boolean;
   /** Per-device cache of the YNCA AVAIL probe, held by the caller across reconnects. */
   yncaSubunitCache?: YncaSubunitCache;
+  /** Per-device memory for device answers that stay constant while it runs (held by the caller). */
+  probeMemory?: ProbeMemory;
 }
 
 /** One transport to try: its name and a factory building a FRESH connectable (also for reconnects). */
@@ -179,24 +194,36 @@ export async function connectTransports(
  */
 export function attemptDevice(device: DeviceRecord, deps: AttemptDeps): Promise<ConnectionHandle | null> {
   const { log, upsertObject, setStateAck, timers } = deps;
-  // Adapter-managed delay for the browse engine/drivers (pacing, busy polls, path walk).
-  const delay = (ms: number): Promise<void> =>
-    new Promise(resolve => {
-      timers.schedule(resolve, ms);
-    });
+  /**
+   * A fresh command gate for one transport connection. EVERY command of that transport
+   * goes through it: user writes, the init sweep, the keepalive and browsing alike. It is
+   * also the connection's shutdown signal — closing it empties the queue and ends every
+   * pending wait, so a stopped adapter leaves nothing running.
+   *
+   * One gate per device AND transport, not one for the adapter: the spacing is a property
+   * of the device connection, so a shared gate would let one receiver's 19-second sweep
+   * block another receiver's button press.
+   *
+   * @param transport the transport the gate belongs to
+   * @returns the gate
+   */
+  const gateFor = (transport: Transport): CommandGate =>
+    new CommandGate({ minSpacingMs: COMMAND_SPACING_MS[transport], timers });
 
   // 1) YNCA — amp control over a held TCP connection; a socket drop is the genuine gone-signal.
   const buildYnca = (): ConnectableTransport => {
     const ynca = new TransportConnectionAdapter("ynca", device.id, setStateAck);
+    const gate = gateFor("ynca");
     ynca.bind(
       new YncaDeviceController(device.id, {
-        client: new YncaClient(device.ip, timers),
+        client: new YncaClient(device.ip, timers, gate),
+        gate,
         upsertObject: ynca.interceptUpsert,
         setStateAck: ynca.interceptSetStateAck,
         log,
         isEntryEnabled: deps.isEntryEnabled,
         subunitCache: deps.yncaSubunitCache,
-        delay,
+        probeMemory: deps.probeMemory,
       }),
     );
     return ynca;
@@ -205,18 +232,23 @@ export function attemptDevice(device: DeviceRecord, deps: AttemptDeps): Promise<
   // 2) YXC — MusicCast; polled + push. Drop reported after a run of failed keepalive polls.
   const buildYxc = (): ConnectableTransport => {
     const yxc = new TransportConnectionAdapter("yxc", device.id, setStateAck);
+    const gate = gateFor("yxc");
     yxc.bind(
       new YxcDeviceController(device.id, {
-        client: new YamahaYxcClient(device.ip),
-        // Resolve another configured device's client for a multiroom link — never this device itself.
+        client: new YamahaYxcClient(device.ip, undefined, gate),
+        // Resolve another configured device's client for a multiroom link — never this device
+        // itself. The partner's own gate belongs to its own connection, so this one-off client
+        // stays ungated (a single link call, not a stream of commands).
         clientFor: ip => (ip !== device.ip && deps.knownDeviceIps.has(ip) ? new YamahaYxcClient(ip) : undefined),
         registerPush: onPush => deps.registerPush(device.ip, onPush),
+        pushActive: deps.pushActive,
+        probeMemory: deps.probeMemory,
         scheduleKeepalive: deps.scheduleKeepalive,
         upsertObject: yxc.interceptUpsert,
         setStateAck: yxc.interceptSetStateAck,
         reportDeviceName: deps.onDeviceName,
         log,
-        delay,
+        gate,
       }),
     );
     return yxc;
@@ -225,16 +257,18 @@ export function attemptDevice(device: DeviceRecord, deps: AttemptDeps): Promise<
   // 3) XML/YNC — pre-2010 receivers; polled. A drop is reported after a run of failed polls.
   const buildXml = (): ConnectableTransport => {
     const xml = new TransportConnectionAdapter("xml", device.id, setStateAck);
+    const gate = gateFor("xml");
     xml.bind(
       new XmlDeviceController(
         device.id,
         {
-          client: new XmlClient(device.ip),
+          client: new XmlClient(device.ip, undefined, gate),
           scheduleKeepalive: deps.scheduleKeepalive,
           upsertObject: xml.interceptUpsert,
           setStateAck: xml.interceptSetStateAck,
           log,
-          delay,
+          gate,
+          probeMemory: deps.probeMemory,
         },
         deps.xmlPollIntervalMs,
       ),

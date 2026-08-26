@@ -66,6 +66,9 @@ class BrowseEngine {
    * @param window the window snapshot
    */
   onWindow(window) {
+    if (this.closed) {
+      return;
+    }
     this.window = window;
     this.windowVersion++;
     this.deps.emit("player.browse.menuName", window.menuName);

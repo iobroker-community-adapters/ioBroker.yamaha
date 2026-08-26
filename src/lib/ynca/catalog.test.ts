@@ -9,7 +9,8 @@ import {
 } from "./catalog";
 import { CHANNEL_NAMES } from "../catalog/types";
 import type { EnumSpec } from "../catalog/value-coerce";
-import { parseCapabilities, type YncaCapabilities } from "./capability";
+import type { YncaCapabilities } from "./capability";
+import { capabilitiesFromLines as parseCapabilities } from "./__fixtures__/capabilities-from-lines";
 import rxA810 from "./__fixtures__/RX-A810.json";
 
 describe("YNCA catalog", () => {

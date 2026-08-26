@@ -160,7 +160,7 @@ export class YxcBrowseDriver implements BrowseDriver {
   }
 
   /** Re-read the current window. */
-  public async refresh(): Promise<void> {
+  private async refresh(): Promise<void> {
     await this.fetch();
   }
 

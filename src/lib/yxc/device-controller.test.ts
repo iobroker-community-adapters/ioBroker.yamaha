@@ -2,6 +2,15 @@ import { YxcDeviceController, zoneNameFrom } from "./device-controller";
 import type { YxcClientLike } from "./device-controller";
 import wx10 from "./__fixtures__/WX10_216_208.json";
 import ysp from "./__fixtures__/status/YSP1600_main.json";
+import { CommandGate } from "../lifecycle/command-gate";
+
+/** A real command gate for the controller under test (pacing has its own suite). */
+const testGate = (): CommandGate =>
+  new CommandGate({
+    minSpacingMs: 0,
+    timers: { schedule: (h, ms) => setTimeout(h, ms), cancel: t => clearTimeout(t as ReturnType<typeof setTimeout>) },
+  });
+
 
 const flush = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
 const silentLog = { debug: (): void => {}, info: (): void => {}, warn: (): void => {} };
@@ -312,11 +321,12 @@ describe("YxcDeviceController", () => {
     expect(s.objects).toEqual(expect.arrayContaining(["living.power", "living.volume", "living.mute"]));
   });
 
-  test("creates info.model from the getDeviceInfo model name", async () => {
+  test("reports the model from getDeviceInfo into the adapter-created info.model", async () => {
     const s = setup(wx10, ysp);
     s.client.deviceInfo = { model_name: "WX-010" };
     await s.controller.start();
-    expect(s.objects).toContain("living.info.model");
+    // The object itself is created once by the adapter (ensureDeviceHeader) for every
+    // device, offline ones included — the transport only fills in the value.
     expect(s.acks).toContainEqual({ id: "living.info.model", value: "WX-010" });
   });
 
@@ -781,7 +791,7 @@ describe("YxcDeviceController browse surface (#613)", () => {
       },
       setStateAck: () => {},
       log: silentLog,
-      delay: instantDelay,
+      gate: testGate(),
     });
     return { controller, client, objects };
   }

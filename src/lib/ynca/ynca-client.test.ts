@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import { CommandGate } from "../lifecycle/command-gate";
 
 /** node:net is mocked so the DEFAULT socket factory (the production path) is testable. */
 const netMock = vi.hoisted(() => ({
@@ -52,6 +53,17 @@ const testTimers = {
   cancel: (handle: ioBroker.Timeout | undefined): void =>
     clearTimeout(handle as unknown as ReturnType<typeof setTimeout>),
 };
+
+/**
+ * A real command gate for the client under test. Spacing is 0 here so the tests assert
+ * the client's own behaviour; the gate's pacing has its own test suite.
+ *
+ * @returns a gate wired to the test timers
+ */
+const testGate = (): CommandGate => new CommandGate({ minSpacingMs: 0, timers: testTimers });
+
+/** Let the gate's queue drain — writes are queued, not written synchronously any more. */
+const drain = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
 
 class FakeSocket implements YncaSocket {
   public written: string[] = [];
@@ -109,7 +121,7 @@ function fixtureFactory(): { factory: (host: string, port: number) => YncaSocket
 describe("YncaClient", () => {
   test("resolves connect on the socket connect event and is reachable", async () => {
     const { factory, sockets } = fixtureFactory();
-    const client = new YncaClient("1.2.3.4", testTimers, factory);
+    const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
     const connected = client.connect();
     sockets[0].emitConnect();
     await expect(connected).resolves.toBeUndefined();
@@ -118,7 +130,7 @@ describe("YncaClient", () => {
 
   test("sends a command as a CRLF-terminated YNCA line", async () => {
     const { factory, sockets } = fixtureFactory();
-    const client = new YncaClient("1.2.3.4", testTimers, factory);
+    const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
     const connected = client.connect();
     sockets[0].emitConnect();
     await connected;
@@ -128,7 +140,7 @@ describe("YncaClient", () => {
 
   test("sends a GET as =? terminated line", async () => {
     const { factory, sockets } = fixtureFactory();
-    const client = new YncaClient("1.2.3.4", testTimers, factory);
+    const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
     const connected = client.connect();
     sockets[0].emitConnect();
     await connected;
@@ -138,7 +150,7 @@ describe("YncaClient", () => {
 
   test("decodes incoming ok lines into messages", async () => {
     const { factory, sockets } = fixtureFactory();
-    const client = new YncaClient("1.2.3.4", testTimers, factory);
+    const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
     const messages: unknown[] = [];
     client.onMessage(m => messages.push(m));
     const connected = client.connect();
@@ -150,7 +162,7 @@ describe("YncaClient", () => {
 
   test("ignores @UNDEFINED / @RESTRICTED lines", async () => {
     const { factory, sockets } = fixtureFactory();
-    const client = new YncaClient("1.2.3.4", testTimers, factory);
+    const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
     const messages: unknown[] = [];
     client.onMessage(m => messages.push(m));
     const connected = client.connect();
@@ -162,7 +174,7 @@ describe("YncaClient", () => {
 
   test("close destroys the socket and marks unreachable", async () => {
     const { factory, sockets } = fixtureFactory();
-    const client = new YncaClient("1.2.3.4", testTimers, factory);
+    const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
     const connected = client.connect();
     sockets[0].emitConnect();
     await connected;
@@ -173,7 +185,7 @@ describe("YncaClient", () => {
 
   test("fires onDrop after an unexpected close and destroys the old socket, without reopening itself", async () => {
     const { factory, sockets } = fixtureFactory();
-    const client = new YncaClient("1.2.3.4", testTimers, factory);
+    const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
     let dropped = 0;
     client.onDrop(() => dropped++);
     const connected = client.connect();
@@ -190,7 +202,7 @@ describe("YncaClient", () => {
 
   test("delivers a drop that happened before onDrop was registered", async () => {
     const { factory, sockets } = fixtureFactory();
-    const client = new YncaClient("1.2.3.4", testTimers, factory);
+    const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
     const connected = client.connect();
     sockets[0].emitConnect();
     await connected;
@@ -207,7 +219,7 @@ describe("YncaClient", () => {
 
   test("does not fire onDrop after an explicit close", async () => {
     const { factory, sockets } = fixtureFactory();
-    const client = new YncaClient("1.2.3.4", testTimers, factory);
+    const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
     let dropped = 0;
     client.onDrop(() => dropped++);
     const connected = client.connect();
@@ -225,24 +237,25 @@ describe("YncaClient", () => {
     vi.useFakeTimers();
     try {
       const { factory, sockets } = fixtureFactory();
-      const client = new YncaClient("1.2.3.4", testTimers, factory);
+      const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
       const connected = client.connect();
       sockets[0].emitConnect();
       await connected;
 
-      const capsPromise = client.readCapabilities(
-        [
-          { subunit: "SYS", func: "MODELNAME" },
-          { subunit: "MAIN", func: "PWR" },
-        ],
-        100,
-        300,
-      );
+      const capsPromise = client.readCapabilities([
+        { subunit: "SYS", func: "MODELNAME" },
+        { subunit: "MAIN", func: "PWR" },
+      ]);
       await vi.advanceTimersByTimeAsync(100);
       sockets[0].emitData("@SYS:MODELNAME=RX-A810\r\n");
       await vi.advanceTimersByTimeAsync(100);
       sockets[0].emitData("@MAIN:PWR=Standby\r\n");
-      await vi.advanceTimersByTimeAsync(300);
+      await vi.advanceTimersByTimeAsync(100);
+      // The sweep ends on a CONFIRMED marker, not a guessed settle window: it asks
+      // @SYS:VERSION=? last and finishes the moment the device answers it.
+      expect(sockets[0].written).toContain("@SYS:VERSION=?\r\n");
+      sockets[0].emitData("@SYS:VERSION=1.23\r\n");
+      await vi.advanceTimersByTimeAsync(10);
 
       const caps = await capsPromise;
       expect(caps.model).toBe("RX-A810");
@@ -255,23 +268,25 @@ describe("YncaClient", () => {
     }
   });
 
-  test("polls @SYS:MODELNAME=? as a keepalive every 30 s once started (after the sweep)", () => {
+  test("polls @SYS:MODELNAME=? as a keepalive every 30 s once started (after the sweep)", async () => {
     vi.useFakeTimers();
     try {
       const { factory, sockets } = fixtureFactory();
-      const client = new YncaClient("1.2.3.4", testTimers, factory);
+      const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
       void client.connect();
       sockets[0].emitConnect();
       sockets[0].written.length = 0;
 
       // Not armed by connect alone — the controller starts it after the sweep.
-      vi.advanceTimersByTime(30000);
+      await vi.advanceTimersByTimeAsync(30000);
       expect(sockets[0].written).toEqual([]);
 
       client.startKeepalive();
-      vi.advanceTimersByTime(30000);
+      // The keepalive is a command like any other: it goes through the gate, so it lands
+      // on the wire one queue turn later.
+      await vi.advanceTimersByTimeAsync(30000);
       expect(sockets[0].written).toEqual(["@SYS:MODELNAME=?\r\n"]); // first keepalive
-      vi.advanceTimersByTime(30000);
+      await vi.advanceTimersByTimeAsync(30000);
       expect(sockets[0].written).toHaveLength(2); // self-rescheduled, still polling
       client.close();
     } finally {
@@ -283,7 +298,7 @@ describe("YncaClient", () => {
     vi.useFakeTimers();
     try {
       const dropFx = fixtureFactory();
-      const dropClient = new YncaClient("1.2.3.4", testTimers, dropFx.factory);
+      const dropClient = new YncaClient("1.2.3.4", testTimers, testGate(), dropFx.factory);
       dropClient.onDrop(() => {});
       void dropClient.connect();
       dropFx.sockets[0].emitConnect();
@@ -293,7 +308,7 @@ describe("YncaClient", () => {
       expect(vi.getTimerCount()).toBe(0); // cancelled on drop
 
       const closeFx = fixtureFactory();
-      const closeClient = new YncaClient("1.2.3.4", testTimers, closeFx.factory);
+      const closeClient = new YncaClient("1.2.3.4", testTimers, testGate(), closeFx.factory);
       void closeClient.connect();
       closeFx.sockets[0].emitConnect();
       closeClient.startKeepalive();
@@ -309,18 +324,15 @@ describe("YncaClient", () => {
     vi.useFakeTimers();
     try {
       const { factory, sockets } = fixtureFactory();
-      const client = new YncaClient("1.2.3.4", testTimers, factory);
+      const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
       const connected = client.connect();
       sockets[0].emitConnect();
       await connected;
       const sweep = client.readCapabilities(
         [
-          { subunit: "SYS", func: "MODELNAME" },
-          { subunit: "MAIN", func: "PWR" },
-        ],
-        100,
-        300,
-      );
+        { subunit: "SYS", func: "MODELNAME" },
+        { subunit: "MAIN", func: "PWR" },
+      ]);
       const assertion = expect(sweep).rejects.toThrow(/connection lost/); // attach handler now
       sockets[0].emitClose(); // drops while suspended at the first delay
       await vi.advanceTimersByTimeAsync(100);
@@ -332,7 +344,7 @@ describe("YncaClient", () => {
 
   test("onDrop receives the last socket error as the reason", async () => {
     const { factory, sockets } = fixtureFactory();
-    const client = new YncaClient("1.2.3.4", testTimers, factory);
+    const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
     let reason: Error | undefined;
     client.onDrop(r => (reason = r));
     const connected = client.connect();
@@ -345,7 +357,7 @@ describe("YncaClient", () => {
 
   test("does not fire onDrop for a socket that never connected (connect timeout)", async () => {
     const { factory, sockets } = fixtureFactory();
-    const client = new YncaClient("1.2.3.4", testTimers, factory);
+    const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
     let dropped = 0;
     client.onDrop(() => dropped++);
     const connected = client.connect();
@@ -362,7 +374,7 @@ describe("YncaClient on a real TCP socket", () => {
   });
 
   test("connects to the YNCA port and arms a connect deadline it clears on connect", async () => {
-    const client = new YncaClient("192.168.1.10", testTimers);
+    const client = new YncaClient("192.168.1.10", testTimers, testGate());
     const connecting = client.connect();
     const socket = netMock.sockets[0];
     expect(socket.options).toEqual({ host: "192.168.1.10", port: 50000 });
@@ -379,7 +391,7 @@ describe("YncaClient on a real TCP socket", () => {
   });
 
   test("tears the socket down when the device never answers", async () => {
-    const client = new YncaClient("192.168.1.99", testTimers);
+    const client = new YncaClient("192.168.1.99", testTimers, testGate());
     const connecting = client.connect();
     const socket = netMock.sockets[0];
     socket.emit("timeout");
@@ -391,7 +403,7 @@ describe("YncaClient on a real TCP socket", () => {
   });
 
   test("writes a command out and hands received bytes to the message handler", async () => {
-    const client = new YncaClient("192.168.1.10", testTimers);
+    const client = new YncaClient("192.168.1.10", testTimers, testGate());
     const messages: unknown[] = [];
     client.onMessage(m => messages.push(m));
     const connecting = client.connect();

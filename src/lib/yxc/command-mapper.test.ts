@@ -142,7 +142,9 @@ describe("stateToYxc control methods (repeat/shuffle/tray, tuner, party, preset)
   });
 
   test("tuner band/frequency, preset and party become their control commands", async () => {
-    expect(await ranCall("tuner.band", "fm")).toEqual(["setBand", ["fm"]]);
+    // The band is declarative too: the controller must record it right away, because a
+    // frequency written straight afterwards is sent against the remembered band.
+    expect(stateToYxc("tuner.band", "fm")).toEqual({ kind: "tunerBand", band: "fm" });
     // Frequency needs the controller-cached band, so it stays declarative.
     expect(stateToYxc("tuner.frequency", 100900)).toEqual({ kind: "tunerFreq", value: 100900 });
     expect(await ranCall("player.netPlayer.preset", 3)).toEqual(["recallPreset", [3, "main"]]);

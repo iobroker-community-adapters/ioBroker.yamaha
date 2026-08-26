@@ -25,11 +25,10 @@ var import_types = require("../catalog/types");
 var import_command_mapper = require("./command-mapper");
 var import_catalog = require("./catalog");
 var import_util = require("../util");
-var import_browse_engine = require("../browse/browse-engine");
+var import_poll_drop_detector = require("../lifecycle/poll-drop-detector");
+var import_surface = require("../browse/surface");
 var import_xml_browse_driver = require("../browse/xml-browse-driver");
-var import_objects = require("../browse/objects");
 const DEFAULT_POLL_INTERVAL_MS = 60 * 1e3;
-const MAX_KEEPALIVE_FAILURES = 3;
 const XML_ZONES = [
   { key: "main", element: "Main_Zone", prefix: "" },
   { key: "zone2", element: "Zone_2", prefix: "multiroom.zone2.", channel: "multiroom.zone2", channelName: "Zone 2" },
@@ -49,9 +48,7 @@ class XmlDeviceController {
   }
   zones = [];
   cancelKeepalive;
-  dropHandler;
-  failedKeepalives = 0;
-  dropped = false;
+  dropDetector = new import_poll_drop_detector.PollDropDetector();
   browseEngine;
   /**
    * Probe each zone, create the tree for the ones that answer, seed state, and
@@ -125,17 +122,7 @@ class XmlDeviceController {
     try {
       const model = await this.deps.client.getModelName();
       if (model) {
-        await this.deps.upsertObject(`${this.deviceId}.info`, {
-          id: "info",
-          type: "channel",
-          common: { name: "Info" }
-        });
-        await this.deps.upsertObject(`${this.deviceId}.info.model`, {
-          id: "info.model",
-          type: "state",
-          common: { name: "Model", type: "string", role: "text", read: true, write: false }
-        });
-        this.deps.setStateAck(`${this.deviceId}.info.model`, model);
+        this.emit("info.model", model);
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getModelName failed (${(0, import_util.errorMessage)(e)})`);
@@ -151,36 +138,52 @@ class XmlDeviceController {
    * via `Realtime.*.LINE1TXT` + `xmlCommand`). Skipped without a delay dep (older tests).
    */
   async setupBrowse() {
-    const delay = this.deps.delay;
-    if (!delay) {
+    const gate = this.deps.gate;
+    if (!gate) {
       return;
     }
-    const probes = await Promise.all(
-      import_xml_browse_driver.XML_BROWSE_SOURCES.map(async (source) => {
-        try {
-          const body = await this.deps.client.getXml(source.element, "<List_Info>GetParam</List_Info>");
-          return body.includes("<Menu_Status>") ? source.key : void 0;
-        } catch {
-          return void 0;
-        }
-      })
+    const delay = (ms) => gate.delay(ms);
+    const probe = async () => {
+      const probes = await Promise.all(
+        import_xml_browse_driver.XML_BROWSE_SOURCES.map(async (source) => {
+          try {
+            const body = await this.deps.client.getXml(source.element, "<List_Info>GetParam</List_Info>");
+            return body.includes("<Menu_Status>") ? source.key : void 0;
+          } catch {
+            return void 0;
+          }
+        })
+      );
+      return probes.filter((key) => key !== void 0);
+    };
+    const available = new Set(
+      this.deps.probeMemory ? await this.deps.probeMemory.once("xmlBrowseSources", probe) : await probe()
     );
-    const available = new Set(probes.filter((key) => key !== void 0));
     if (available.size === 0) {
       return;
     }
     const driver = new import_xml_browse_driver.XmlBrowseDriver(this.deps.client, available, delay);
-    const sources = driver.sources();
-    for (const def of (0, import_objects.browseObjectDefs)(sources)) {
-      await this.deps.upsertObject(`${this.deviceId}.${def.id}`, def);
-    }
-    this.browseEngine = new import_browse_engine.BrowseEngine(driver, {
-      emit: (id, value) => this.deps.setStateAck(`${this.deviceId}.${id}`, value),
+    this.browseEngine = await (0, import_surface.createBrowseSurface)(driver, this.deviceId, {
+      upsertObject: this.deps.upsertObject,
+      emit: (id, value) => this.emit(id, value),
       log: this.deps.log,
       delay
     });
-    driver.attach(this.browseEngine);
-    this.browseEngine.seed();
+  }
+  /**
+   * Write a device-originated value — but never after the connection was closed. A poll
+   * that was already in flight when the adapter stopped would otherwise still write into
+   * a tree that is being torn down.
+   *
+   * @param relativeId the state id relative to the device
+   * @param value the value to write
+   */
+  emit(relativeId, value) {
+    var _a;
+    if ((_a = this.deps.gate) == null ? void 0 : _a.closed) {
+      return;
+    }
+    this.deps.setStateAck(`${this.deviceId}.${relativeId}`, value);
   }
   /**
    * Handle a state change: a user write (ack false) becomes an XML command; an
@@ -216,17 +219,18 @@ class XmlDeviceController {
    * @param cb invoked once when the device is judged gone
    */
   onDrop(cb) {
-    this.dropHandler = cb;
+    this.dropDetector.onDrop(cb);
   }
   /** Cancel the keepalive poll. Synchronous — safe to call from onUnload. */
   close() {
-    var _a, _b;
+    var _a, _b, _c;
     (_a = this.browseEngine) == null ? void 0 : _a.close();
-    (_b = this.cancelKeepalive) == null ? void 0 : _b.call(this);
+    (_b = this.deps.gate) == null ? void 0 : _b.close();
+    (_c = this.cancelKeepalive) == null ? void 0 : _c.call(this);
     this.cancelKeepalive = void 0;
   }
   /**
-   * Poll every live zone. If every zone fails for MAX_KEEPALIVE_FAILURES polls in a
+   * Poll every live zone. If every zone fails for three consecutive failed polls in a
    * row, the device is judged gone and a drop is reported so the supervisor reconnects.
    */
   async keepalive() {
@@ -236,20 +240,7 @@ class XmlDeviceController {
         anyOk = true;
       }
     }
-    if (anyOk) {
-      this.failedKeepalives = 0;
-    } else if (++this.failedKeepalives >= MAX_KEEPALIVE_FAILURES) {
-      this.reportDrop();
-    }
-  }
-  /** Report a drop once — the supervisor then closes this controller and reconnects. */
-  reportDrop() {
-    var _a;
-    if (this.dropped) {
-      return;
-    }
-    this.dropped = true;
-    (_a = this.dropHandler) == null ? void 0 : _a.call(this, new Error(`${MAX_KEEPALIVE_FAILURES} polls failed`));
+    this.dropDetector.record(anyOk);
   }
   /**
    * Fetch a zone's status and write its amp states with ack.
@@ -274,7 +265,7 @@ class XmlDeviceController {
    */
   seedZone(zone, status) {
     for (const update of (0, import_command_mapper.parseXmlStatus)(status, zone.key)) {
-      this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+      this.emit(update.id, update.value);
     }
   }
   /**

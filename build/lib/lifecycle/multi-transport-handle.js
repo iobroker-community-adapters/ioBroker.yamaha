@@ -34,6 +34,8 @@ class MultiTransportHandle {
     this.live = [...connections];
   }
   ownerByCanonicalId = /* @__PURE__ */ new Map();
+  /** Object id → the definition last written, so an unchanged re-coordination writes nothing. */
+  writtenObjects = /* @__PURE__ */ new Map();
   live;
   retries = /* @__PURE__ */ new Map();
   supervisorDrop;
@@ -61,7 +63,12 @@ class MultiTransportHandle {
     const { objects, ownerByCanonicalId } = (0, import_object_tree_coordinator.coordinateObjectTree)(contributions);
     this.ownerByCanonicalId = ownerByCanonicalId;
     for (const object of objects) {
+      const fingerprint = JSON.stringify(object);
+      if (this.writtenObjects.get(object.id) === fingerprint) {
+        continue;
+      }
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
+      this.writtenObjects.set(object.id, fingerprint);
     }
     for (const connection of this.live) {
       await connection.seedOwned(this.ownedFor(connection.transport));

@@ -18,11 +18,9 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var capability_exports = {};
 __export(capability_exports, {
-  buildCapabilities: () => buildCapabilities,
-  parseCapabilities: () => parseCapabilities
+  buildCapabilities: () => buildCapabilities
 });
 module.exports = __toCommonJS(capability_exports);
-var import_protocol = require("./protocol");
 function buildCapabilities(messages) {
   var _a, _b, _c, _d;
   const subunits = {};
@@ -31,19 +29,8 @@ function buildCapabilities(messages) {
   }
   return { model: (_d = (_c = subunits.SYS) == null ? void 0 : _c.MODELNAME) != null ? _d : "", subunits };
 }
-function parseCapabilities(lines) {
-  const messages = [];
-  for (const line of lines) {
-    const response = (0, import_protocol.decodeLine)(line);
-    if (response.status === "ok") {
-      messages.push({ subunit: response.subunit, func: response.func, value: response.value });
-    }
-  }
-  return buildCapabilities(messages);
-}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
-  buildCapabilities,
-  parseCapabilities
+  buildCapabilities
 });
 //# sourceMappingURL=capability.js.map

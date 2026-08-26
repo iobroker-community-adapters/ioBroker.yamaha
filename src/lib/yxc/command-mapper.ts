@@ -1,4 +1,5 @@
 import type { StateValue } from "../types";
+import { YXC_ZONE_IDS, zonePrefix } from "./zones";
 import { isWritableValue } from "../catalog/value-coerce";
 import { YXC_AMP_CATALOG } from "./catalog";
 import type { YxcClientLike } from "./client-contract";
@@ -15,7 +16,8 @@ export type YxcCommand =
   | { kind: "run"; run: (client: YxcClientLike) => Promise<unknown> }
   | { kind: "equalizer"; zone: string; band: "low" | "mid" | "high"; value: number }
   | { kind: "tunerFreq"; value: number }
-  | { kind: "tunerPreset"; value: number };
+  | { kind: "tunerPreset"; value: number }
+  | { kind: "tunerBand"; band: string };
 
 /**
  * Read a catalog entry's raw getStatus value — a flat field or a nested path.
@@ -68,13 +70,6 @@ const EQ_CHANNELS: Record<string, "low" | "mid" | "high"> = {
   "sound.equalizerHigh": "high",
 };
 
-const ZONE_PREFIX: Record<string, string> = {
-  main: "",
-  zone2: "multiroom.zone2.",
-  zone3: "multiroom.zone3.",
-  zone4: "multiroom.zone4.",
-};
-
 /**
  * Parse a YXC getStatus response into unified amp state updates for a zone. Only
  * fields the response actually carries are emitted (presence-checked, so a
@@ -89,7 +84,7 @@ export function parseYxcStatus(zoneStatus: unknown, zone: string): StateValue[] 
   if (typeof zoneStatus !== "object" || zoneStatus === null) {
     return [];
   }
-  const prefix = ZONE_PREFIX[zone];
+  const prefix = YXC_ZONE_IDS.includes(zone as (typeof YXC_ZONE_IDS)[number]) ? zonePrefix(zone) : undefined;
   if (prefix === undefined) {
     return [];
   }
@@ -122,8 +117,11 @@ export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefi
     return { kind: "run", run: button };
   }
   if (stateId === "tuner.band" && isWritableValue(value, false)) {
-    const band = String(value);
-    return { kind: "run", run: client => client.setBand(band) };
+    // Its own kind, not a plain run: the controller has to remember the band, because a
+    // frequency or preset write right afterwards needs it. Reading it back from the poll
+    // is too late — a script that switches band and sets a frequency in one go would send
+    // the frequency to the OLD band.
+    return { kind: "tunerBand", band: String(value) };
   }
   if (stateId === "tuner.frequency" && isWritableValue(value, true)) {
     // The controller supplies the current band; the value carries only the frequency.

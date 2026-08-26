@@ -1,4 +1,4 @@
-import { decodeLine, type YncaMessage } from "./protocol";
+import type { YncaMessage } from "./protocol";
 
 /** A device's YNCA capabilities: model plus each subunit's functions and their init-sweep values. */
 export interface YncaCapabilities {
@@ -21,23 +21,4 @@ export function buildCapabilities(messages: YncaMessage[]): YncaCapabilities {
     (subunits[message.subunit] ??= {})[message.func] = message.value;
   }
   return { model: subunits.SYS?.MODELNAME ?? "", subunits };
-}
-
-/**
- * Build a capability report from the lines received during the init sweep. Only
- * `@SUBUNIT:FUNC=VALUE` responses count; `@UNDEFINED`/`@RESTRICTED` (absent
- * subunits/functions) are ignored.
- *
- * @param lines response lines received from the receiver
- * @returns the assembled capabilities
- */
-export function parseCapabilities(lines: string[]): YncaCapabilities {
-  const messages: YncaMessage[] = [];
-  for (const line of lines) {
-    const response = decodeLine(line);
-    if (response.status === "ok") {
-      messages.push({ subunit: response.subunit, func: response.func, value: response.value });
-    }
-  }
-  return buildCapabilities(messages);
 }

@@ -18,19 +18,22 @@ import type { ObjectDef } from "../catalog/types";
 import type { StateValue } from "../types";
 import type { ConnectionHandle, ControllerLog } from "../controller";
 import { errorMessage } from "../util";
-import { BrowseEngine } from "../browse/browse-engine";
+import { PollDropDetector } from "../lifecycle/poll-drop-detector";
+import type { ProbeMemory } from "../lifecycle/probe-memory";
+import { zonePrefix } from "./zones";
+import type { CommandGate } from "../lifecycle/command-gate";
+import type { BrowseEngine } from "../browse/browse-engine";
+import { createBrowseSurface } from "../browse/surface";
 import { YxcBrowseDriver } from "../browse/yxc-browse-driver";
-import { browseObjectDefs } from "../browse/objects";
 
 /** Renew interval for the push registration + state poll, well under the ~20 min expiry. */
 const KEEPALIVE_MS = 5 * 60 * 1000;
 
 /**
- * Report a drop after this many consecutive keepalive polls in which every zone
- * failed. MusicCast has no socket-drop event, so a run of failed polls is how a
- * gone device is noticed — letting the supervisor flip info.connection and reconnect.
+ * With push working, run the full media/list/group sweep only every Nth keepalive (6 × 5 min
+ * = every 30 minutes) — a safety net against a dropped UDP packet, not the primary path.
  */
-const MAX_KEEPALIVE_FAILURES = 3;
+const PUSH_MODE_FULL_SWEEP_EVERY = 6;
 
 /**
  * Extract the model name from a getDeviceInfo response, if it carries a non-empty one.
@@ -83,6 +86,15 @@ export interface YxcControllerDeps {
   clientFor?: (ip: string) => YxcClientLike | undefined;
   /** Register a push handler for this device (by IP); returns a function that unregisters it. */
   registerPush(onPush: (event: unknown) => void): () => void;
+  /**
+   * Whether the shared push receiver is actually listening. With push the device reports
+   * its own changes, so the keepalive only has to renew the subscription and refresh the
+   * zone status; without it (the port is taken — see issue #611) the poll is the ONLY
+   * source of change and has to cover everything. Absent = assume no push.
+   */
+  pushActive?(): boolean;
+  /** Per-device memory for answers that do not change while the device runs (see ProbeMemory). */
+  probeMemory?: ProbeMemory;
   /** Schedule the keepalive handler; returns a function that cancels it. */
   scheduleKeepalive(handler: () => void, ms: number): () => void;
   /** Create or update an object in the device tree. */
@@ -93,8 +105,12 @@ export interface YxcControllerDeps {
   reportDeviceName?(name: string): void;
   /** Adapter log. */
   log: ControllerLog;
-  /** Adapter-managed delay for the browse engine's path walk (absent in older tests → no browse). */
-  delay?(ms: number): Promise<void>;
+  /**
+   * The device's command gate: every request is paced through it, and its signal is the
+   * connection's shutdown flag — a closed gate ends pending waits and stops state writes
+   * from a poll that was already in flight. Absent in older tests → no browsing.
+   */
+  gate?: CommandGate;
 }
 
 /**
@@ -109,9 +125,7 @@ export class YxcDeviceController implements ConnectionHandle {
   private mediaBlocks: string[] = [];
   private cancelKeepalive: (() => void) | undefined;
   private cancelPush: (() => void) | undefined;
-  private dropHandler: ((reason?: Error) => void) | undefined;
-  private failedKeepalives = 0;
-  private dropped = false;
+  private readonly dropDetector = new PollDropDetector();
   /** The tuner's current band, cached so a frequency write can supply it (setFreq needs band + freq). */
   private lastTunerBand = "fm";
   /** Each zone's last-seen equalizer bands, cached so one band write can supply the other two. */
@@ -124,6 +138,8 @@ export class YxcDeviceController implements ConnectionHandle {
   private tunerFeatures: YxcTunerFeatures | undefined;
   /** Whether the device reports the clock/alarm block (gates the clock poll). */
   private hasClock = false;
+  /** Counts keepalive runs, so the safety-net sweep can run every Nth one under push. */
+  private keepaliveRuns = 0;
   private browseEngine: BrowseEngine | undefined;
 
   /**
@@ -142,7 +158,12 @@ export class YxcDeviceController implements ConnectionHandle {
    * @returns true if the device reported capabilities and its tree was created
    */
   public async start(): Promise<boolean> {
-    const capabilities = parseYxcFeatures(await this.deps.client.getFeatures());
+    // Capabilities, model and name are constant while the device runs, so on a reconnect
+    // they come from the per-device memory instead of costing three more round-trips on a
+    // connection that is being re-established anyway.
+    const capabilities = await this.remember("features", async () =>
+      parseYxcFeatures(await this.deps.client.getFeatures()),
+    );
     const objects = mapYxcToObjects(capabilities);
     if (objects.length === 0) {
       this.deps.log.warn(`${this.deviceId}: no capabilities reported — creating no objects`);
@@ -155,19 +176,11 @@ export class YxcDeviceController implements ConnectionHandle {
     // The model name (getDeviceInfo) for the device-manager card. Best-effort: a device that
     // does not answer getDeviceInfo still connects — the model line just stays empty.
     try {
-      const model = modelNameFrom(await this.deps.client.getDeviceInfo());
+      const model = await this.remember("model", async () => modelNameFrom(await this.deps.client.getDeviceInfo()));
       if (model) {
-        await this.deps.upsertObject(`${this.deviceId}.info`, {
-          id: "info",
-          type: "channel",
-          common: { name: "Info" },
-        });
-        await this.deps.upsertObject(`${this.deviceId}.info.model`, {
-          id: "info.model",
-          type: "state",
-          common: { name: "Model", type: "string", role: "text", read: true, write: false },
-        });
-        this.deps.setStateAck(`${this.deviceId}.info.model`, model);
+        // The info channel and info.model already exist — the adapter creates them for
+        // every device up front, so the card renders even while the device is offline.
+        this.emit("info.model", model);
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getDeviceInfo failed (${errorMessage(e)})`);
@@ -176,7 +189,7 @@ export class YxcDeviceController implements ConnectionHandle {
     // above: an older device that does not answer getNameText simply keeps its label.
     if (this.deps.reportDeviceName) {
       try {
-        const name = zoneNameFrom(await this.deps.client.getNameText());
+        const name = await this.remember("name", async () => zoneNameFrom(await this.deps.client.getNameText()));
         if (name) {
           this.deps.reportDeviceName(name);
         }
@@ -185,9 +198,9 @@ export class YxcDeviceController implements ConnectionHandle {
       }
     }
     this.zones = capabilities.zones.map(zone => zone.id);
-    for (const zone of this.zones) {
-      await this.refreshZone(zone);
-    }
+    // Zones in parallel — disjoint writes, and a zone stuck in its timeout must not hold
+    // up the device's readiness.
+    await Promise.all(this.zones.map(zone => this.refreshZone(zone)));
     this.mediaBlocks = capabilities.media;
     this.tunerFeatures = capabilities.tuner;
     this.hasClock = capabilities.clock !== undefined;
@@ -203,6 +216,32 @@ export class YxcDeviceController implements ConnectionHandle {
     // The adapter logs one combined "ready" line across all transports; this stays at debug.
     this.deps.log.debug(`${this.deviceId}: MusicCast device ready (YXC)`);
     return true;
+  }
+
+  /**
+   * Ask the device once per adapter run and remember the answer for later reconnects.
+   *
+   * @param key what is being remembered
+   * @param probe the request to run when nothing is remembered yet
+   * @returns the remembered or freshly fetched value
+   */
+  private remember<T>(key: string, probe: () => Promise<T>): Promise<T> {
+    return this.deps.probeMemory ? this.deps.probeMemory.once(key, probe) : probe();
+  }
+
+  /**
+   * Write a device-originated value — but never after the connection was closed. A poll
+   * or a browse fetch that was already in flight when the adapter stopped would otherwise
+   * still write into a tree that is being torn down.
+   *
+   * @param relativeId the state id relative to the device
+   * @param value the value to write
+   */
+  private emit(relativeId: string, value: boolean | number | string): void {
+    if (this.deps.gate?.closed) {
+      return;
+    }
+    this.deps.setStateAck(`${this.deviceId}.${relativeId}`, value);
   }
 
   /**
@@ -248,7 +287,7 @@ export class YxcDeviceController implements ConnectionHandle {
    * @param cb invoked once when the device is judged gone
    */
   public onDrop(cb: (reason?: Error) => void): void {
-    this.dropHandler = cb;
+    this.dropDetector.onDrop(cb);
   }
 
   /**
@@ -259,31 +298,26 @@ export class YxcDeviceController implements ConnectionHandle {
    * @param capabilities the parsed getFeatures capabilities
    */
   private async setupBrowse(capabilities: YxcCapabilities): Promise<void> {
-    const delay = this.deps.delay;
-    if (!delay || !capabilities.media.includes("netusb")) {
+    const gate = this.deps.gate;
+    if (!gate || !capabilities.media.includes("netusb")) {
       return;
     }
     const inputs = capabilities.zones.find(zone => zone.id === "main")?.inputs ?? [];
     const driver = new YxcBrowseDriver(this.deps.client, inputs);
-    const sources = driver.sources();
-    if (Object.keys(sources).length === 0) {
-      return;
-    }
-    for (const def of browseObjectDefs(sources)) {
-      await this.deps.upsertObject(`${this.deviceId}.${def.id}`, def);
-    }
-    this.browseEngine = new BrowseEngine(driver, {
-      emit: (id, value) => this.deps.setStateAck(`${this.deviceId}.${id}`, value),
+    this.browseEngine = await createBrowseSurface(driver, this.deviceId, {
+      upsertObject: this.deps.upsertObject,
+      emit: (id, value) => this.emit(id, value),
       log: this.deps.log,
-      delay,
+      delay: ms => gate.delay(ms),
     });
-    driver.attach(this.browseEngine);
-    this.browseEngine.seed();
   }
 
   /** Cancel the keepalive and unregister the push handler. Synchronous — safe from onUnload. */
   public close(): void {
     this.browseEngine?.close();
+    // Closing the gate empties its queue and aborts its signal: queued requests are
+    // dropped and every pending wait ends, so nothing writes after the teardown.
+    this.deps.gate?.close();
     this.cancelKeepalive?.();
     this.cancelKeepalive = undefined;
     // Unregister from the shared push receiver — otherwise a push arriving after
@@ -323,27 +357,30 @@ export class YxcDeviceController implements ConnectionHandle {
 
   /**
    * Poll every zone (which renews the push registration and refreshes state) and the
-   * media sources. If every zone poll fails for MAX_KEEPALIVE_FAILURES runs in a row,
+   * media sources. If every zone poll fails for three consecutive failed runs in a row,
    * the device is judged gone and a drop is reported so the supervisor can flip
    * info.connection and reconnect.
    */
   private async keepalive(): Promise<void> {
-    let anyOk = false;
-    for (const zone of this.zones.length > 0 ? this.zones : ["main"]) {
-      if (await this.refreshZone(zone)) {
-        anyOk = true;
+    // Zones in parallel: their writes are disjoint and one zone stuck in its timeout must
+    // not delay the others (a four-zone receiver used to poll them strictly in series).
+    const zones = this.zones.length > 0 ? this.zones : ["main"];
+    const anyOk = (await Promise.all(zones.map(zone => this.refreshZone(zone)))).some(Boolean);
+    // Every request above already carried the subscription headers, so the push
+    // registration is renewed either way. What still has to be polled depends on whether
+    // push works: with push the device announces media, list and group changes itself, so
+    // the full sweep only runs occasionally as a safety net (UDP can drop a packet);
+    // without push it is the only way anything ever updates.
+    this.keepaliveRuns++;
+    const fullSweep = !this.deps.pushActive?.() || this.keepaliveRuns % PUSH_MODE_FULL_SWEEP_EVERY === 0;
+    if (fullSweep) {
+      await this.refreshMedia();
+      await this.refreshLists();
+      if (this.hasDistribution) {
+        await this.refreshDistribution();
       }
     }
-    await this.refreshMedia();
-    await this.refreshLists();
-    if (this.hasDistribution) {
-      await this.refreshDistribution();
-    }
-    if (anyOk) {
-      this.failedKeepalives = 0;
-    } else if (++this.failedKeepalives >= MAX_KEEPALIVE_FAILURES) {
-      this.reportDrop();
-    }
+    this.dropDetector.record(anyOk);
   }
 
   /**
@@ -370,7 +407,7 @@ export class YxcDeviceController implements ConnectionHandle {
     try {
       const update = parseYxcPresetList(await this.deps.client.getPresetInfo());
       if (update) {
-        this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+        this.emit(update.id, update.value);
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getPresetInfo failed: ${errorMessage(e)}`);
@@ -382,7 +419,7 @@ export class YxcDeviceController implements ConnectionHandle {
     try {
       const update = parseYxcRecentList(await this.deps.client.getRecentInfo());
       if (update) {
-        this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+        this.emit(update.id, update.value);
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getRecentInfo failed: ${errorMessage(e)}`);
@@ -405,7 +442,7 @@ export class YxcDeviceController implements ConnectionHandle {
     }
     const update = parseYxcTunerPresetLists(byBand);
     if (update) {
-      this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+      this.emit(update.id, update.value);
     }
   }
 
@@ -413,27 +450,17 @@ export class YxcDeviceController implements ConnectionHandle {
   private async refreshClock(): Promise<void> {
     try {
       for (const update of parseYxcClock(await this.deps.client.getClockSettings())) {
-        this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+        this.emit(update.id, update.value);
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getClockSettings failed: ${errorMessage(e)}`);
     }
   }
 
-  /** Report a drop once — the supervisor then closes this controller and reconnects. */
-  private reportDrop(): void {
-    if (this.dropped) {
-      return;
-    }
-    this.dropped = true;
-    this.dropHandler?.(new Error(`${MAX_KEEPALIVE_FAILURES} keepalive polls failed`));
-  }
-
   /** Refresh every player source the device offers (network player, cd, tuner). */
   private async refreshMedia(): Promise<void> {
-    for (const block of this.mediaBlocks) {
-      await this.refreshMediaSource(block);
-    }
+    // The three sources (netusb/cd/tuner) write disjoint states — fetch them together.
+    await Promise.all(this.mediaBlocks.map(block => this.refreshMediaSource(block)));
   }
 
   /**
@@ -452,7 +479,7 @@ export class YxcDeviceController implements ConnectionHandle {
     try {
       const info = await this.deps.client.getPlayInfo(arg);
       for (const update of parse(info)) {
-        this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+        this.emit(update.id, update.value);
         if (update.id === "tuner.band") {
           this.lastTunerBand = String(update.value);
         }
@@ -470,7 +497,7 @@ export class YxcDeviceController implements ConnectionHandle {
     try {
       const info = await this.deps.client.getDistributionInfo();
       for (const update of parseYxcDistribution(info)) {
-        this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+        this.emit(update.id, update.value);
         if (update.id === "multiroom.group.role") {
           this.lastDistRole = String(update.value);
         }
@@ -534,7 +561,7 @@ export class YxcDeviceController implements ConnectionHandle {
       const status = await this.deps.client.getStatus(zone);
       const updates = parseYxcStatus(status, zone);
       for (const update of updates) {
-        this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+        this.emit(update.id, update.value);
       }
       this.cacheEqualizer(zone, updates);
       return true;
@@ -552,9 +579,9 @@ export class YxcDeviceController implements ConnectionHandle {
    * @param updates the parsed status updates for that zone
    */
   private cacheEqualizer(zone: string, updates: StateValue[]): void {
-    // Must mirror the status parser's zone prefix (zones live under multiroom.) or the
-    // lookup misses every zoned band and the cache never fills for zone 2-4.
-    const prefix = zone === "main" ? "" : `multiroom.${zone}.`;
+    // Same definition the status parser uses — see lib/yxc/zones.ts on why this must not
+    // be spelled out a second time.
+    const prefix = zonePrefix(zone);
     const band = (b: string): number | undefined => {
       const u = updates.find(x => x.id === `${prefix}sound.equalizer${b}`);
       return typeof u?.value === "number" ? u.value : undefined;
@@ -585,13 +612,32 @@ export class YxcDeviceController implements ConnectionHandle {
           await command.run(this.deps.client);
           break;
         case "equalizer": {
-          // The device sets all three bands in one call; the other two come from the cache.
+          // The device sets all three bands in one call, so the other two come from the
+          // cache. Without a cached set we must NOT invent 0/0/0 — that would silently
+          // flatten the user's other two bands. The cache fills from a zone status, so
+          // fetch one first; only if even that fails is the write refused (with a warning).
           const { zone, band, value } = command;
-          const next = { ...(this.lastEqualizer.get(zone) ?? { low: 0, mid: 0, high: 0 }), [band]: value };
+          let current = this.lastEqualizer.get(zone);
+          if (!current) {
+            await this.refreshZone(zone);
+            current = this.lastEqualizer.get(zone);
+          }
+          if (!current) {
+            this.deps.log.warn(
+              `${this.deviceId}: not writing ${stateId} — the device has not reported its equalizer bands yet`,
+            );
+            break;
+          }
+          const next = { ...current, [band]: value };
           await this.deps.client.setEqualizer(next.low, next.mid, next.high, zone);
           this.lastEqualizer.set(zone, next);
           break;
         }
+        case "tunerBand":
+          await this.deps.client.setBand(command.band);
+          // Remember it immediately: the poll that would report it back runs minutes later.
+          this.lastTunerBand = command.band;
+          break;
         case "tunerFreq":
           await this.deps.client.setFreq(this.lastTunerBand, command.value);
           break;

@@ -23,6 +23,11 @@ __export(http_client_exports, {
 });
 module.exports = __toCommonJS(http_client_exports);
 var import_node_http = require("node:http");
+function isWriteCommand(command) {
+  var _a;
+  const last = (_a = command.split("?")[0].split("/").pop()) != null ? _a : "";
+  return /^(set|recall|toggle|start|stop|manage|prepare)/.test(last);
+}
 const REQUEST_TIMEOUT_MS = 4e3;
 const API_BASE = "/YamahaExtendedControl/v1";
 const YXC_SUBSCRIPTION_HEADERS = {
@@ -35,9 +40,10 @@ function defaultSend(ip) {
     const onResponse = (res) => {
       let data = "";
       res.on("data", (chunk) => data += String(chunk));
+      res.on("error", reject);
       res.on("end", () => {
         try {
-          resolve(JSON.parse(data));
+          resolve(assertOk(JSON.parse(data), command));
         } catch (e) {
           reject(e instanceof Error ? e : new Error(String(e)));
         }
@@ -55,17 +61,32 @@ function defaultSend(ip) {
     }
   });
 }
+function assertOk(payload, command) {
+  const code = payload == null ? void 0 : payload.response_code;
+  if (typeof code === "number" && code !== 0) {
+    throw new Error(`device refused ${command} (response_code ${code})`);
+  }
+  return payload;
+}
 function zoneSeg(zone) {
-  return zone || "main";
+  return encodeURIComponent(zone || "main");
+}
+function q(value) {
+  return encodeURIComponent(String(value));
 }
 class YamahaYxcClient {
   send;
   /**
    * @param ip the device IP or hostname
    * @param send transport seam (defaults to a node:http GET); injected in tests
+   * @param gate the device's command gate — when given, every request runs through it, so
+   *   an embedded device never sees a burst of parallel requests and a stopped adapter
+   *   cancels what is still queued. Commands that CHANGE something (`set…`, `recall…`,
+   *   `toggle…`, `start/stop…`, `manage…` — the API names them consistently) are queued
+   *   with user priority so a button press overtakes background polling.
    */
-  constructor(ip, send = defaultSend(ip)) {
-    this.send = send;
+  constructor(ip, send = defaultSend(ip), gate) {
+    this.send = gate ? (command, body) => gate.run(() => send(command, body), isWriteCommand(command) ? "user" : "background") : send;
   }
   /**
    * Read the device's capabilities (zones, functions, inputs, ranges).
@@ -129,7 +150,7 @@ class YamahaYxcClient {
    * @returns the command response
    */
   setVolumeTo(to, zone) {
-    return this.send(`/${zoneSeg(zone)}/setVolume?volume=${to}`);
+    return this.send(`/${zoneSeg(zone)}/setVolume?volume=${q(to)}`);
   }
   /**
    * Set a zone's mute.
@@ -149,7 +170,7 @@ class YamahaYxcClient {
    * @returns the command response
    */
   setInput(input, zone) {
-    return this.send(`/${zoneSeg(zone)}/setInput?input=${input}`);
+    return this.send(`/${zoneSeg(zone)}/setInput?input=${q(input)}`);
   }
   /**
    * Select a zone's sound program.
@@ -159,7 +180,7 @@ class YamahaYxcClient {
    * @returns the command response
    */
   setSound(program, zone) {
-    return this.send(`/${zoneSeg(zone)}/setSoundProgram?program=${program}`);
+    return this.send(`/${zoneSeg(zone)}/setSoundProgram?program=${q(program)}`);
   }
   /**
    * Turn a zone's enhancer on/off.
@@ -189,7 +210,7 @@ class YamahaYxcClient {
    * @returns the command response
    */
   setSubwooferVolumeTo(to, zone) {
-    return this.send(`/${zoneSeg(zone)}/setSubwooferVolume?volume=${to}`);
+    return this.send(`/${zoneSeg(zone)}/setSubwooferVolume?volume=${q(to)}`);
   }
   /**
    * Set a zone's tone-control bass.
@@ -199,7 +220,7 @@ class YamahaYxcClient {
    * @returns the command response
    */
   setBassTo(to, zone) {
-    return this.send(`/${zoneSeg(zone)}/setToneControl?mode=manual&bass=${to}`);
+    return this.send(`/${zoneSeg(zone)}/setToneControl?mode=manual&bass=${q(to)}`);
   }
   /**
    * Set a zone's tone-control treble.
@@ -209,7 +230,7 @@ class YamahaYxcClient {
    * @returns the command response
    */
   setTrebleTo(to, zone) {
-    return this.send(`/${zoneSeg(zone)}/setToneControl?mode=manual&treble=${to}`);
+    return this.send(`/${zoneSeg(zone)}/setToneControl?mode=manual&treble=${q(to)}`);
   }
   /**
    * Set a zone's sleep timer in minutes.
@@ -219,7 +240,7 @@ class YamahaYxcClient {
    * @returns the command response
    */
   sleep(minutes, zone) {
-    return this.send(`/${zoneSeg(zone)}/setSleep?sleep=${minutes}`);
+    return this.send(`/${zoneSeg(zone)}/setSleep?sleep=${q(minutes)}`);
   }
   /**
    * Turn a zone's Direct mode on/off.
@@ -259,7 +280,7 @@ class YamahaYxcClient {
    * @returns the command response
    */
   setBalance(value, zone) {
-    return this.send(`/${zoneSeg(zone)}/setBalance?value=${value}`);
+    return this.send(`/${zoneSeg(zone)}/setBalance?value=${q(value)}`);
   }
   /**
    * Set the manual graphic equalizer. The device takes all three bands in one call, so
@@ -272,7 +293,7 @@ class YamahaYxcClient {
    * @returns the device response
    */
   setEqualizer(low, mid, high, zone) {
-    return this.send(`/${zoneSeg(zone)}/setEqualizer?mode=manual&low=${low}&mid=${mid}&high=${high}`);
+    return this.send(`/${zoneSeg(zone)}/setEqualizer?mode=manual&low=${q(low)}&mid=${q(mid)}&high=${q(high)}`);
   }
   /**
    * Read the device's MusicCast-Link distribution state (role, group, client list).
@@ -307,7 +328,7 @@ class YamahaYxcClient {
    * @returns the device response
    */
   startDistribution(num) {
-    return this.send(`/dist/startDistribution?num=${num}`);
+    return this.send(`/dist/startDistribution?num=${q(num)}`);
   }
   /**
    * Stop distributing — called on the master to break up the group.
@@ -364,7 +385,7 @@ class YamahaYxcClient {
    * @returns the command response
    */
   setCDPlayback(action) {
-    return this.send(`/cd/setPlayback?playback=${action}`);
+    return this.send(`/cd/setPlayback?playback=${q(action)}`);
   }
   /**
    * Toggle the network/USB player's repeat mode.
@@ -413,7 +434,7 @@ class YamahaYxcClient {
    * @returns the command response
    */
   setBand(band) {
-    return this.send(`/tuner/setBand?band=${band}`);
+    return this.send(`/tuner/setBand?band=${q(band)}`);
   }
   /**
    * Set the tuner frequency for a band (the device needs both band and value).
@@ -423,7 +444,7 @@ class YamahaYxcClient {
    * @returns the command response
    */
   setFreq(band, freq) {
-    return this.send(`/tuner/setFreq?band=${band}&num=${freq}`);
+    return this.send(`/tuner/setFreq?band=${q(band)}&num=${q(freq)}`);
   }
   /**
    * Turn party mode on/off (system-wide).
@@ -442,7 +463,7 @@ class YamahaYxcClient {
    * @returns the command response
    */
   recallPreset(num, zone) {
-    return this.send(`/netusb/recallPreset?zone=${zoneSeg(zone)}&num=${num}`);
+    return this.send(`/netusb/recallPreset?zone=${zoneSeg(zone)}&num=${q(num)}`);
   }
   /**
    * Read one window of a netusb source's browsable list (menu browsing, #613). The
@@ -454,7 +475,7 @@ class YamahaYxcClient {
    * @returns the list_info response
    */
   getListInfo(input, index, size = 8) {
-    return this.send(`/netusb/getListInfo?input=${input}&index=${index}&size=${size}`);
+    return this.send(`/netusb/getListInfo?input=${q(input)}&index=${q(index)}&size=${q(size)}`);
   }
   /**
    * Drive the netusb list (`yamaha-yxc-nodejs` setListControl, list_id `main`):
@@ -466,9 +487,9 @@ class YamahaYxcClient {
    * @returns the command response
    */
   setListControl(type, index, zone) {
-    const indexSeg = index === void 0 ? "" : `&index=${index}`;
+    const indexSeg = index === void 0 ? "" : `&index=${q(index)}`;
     const zoneSegment = zone === void 0 ? "" : `&zone=${zoneSeg(zone)}`;
-    return this.send(`/netusb/setListControl?list_id=main&type=${type}${indexSeg}${zoneSegment}`);
+    return this.send(`/netusb/setListControl?list_id=main&type=${q(type)}${indexSeg}${zoneSegment}`);
   }
   /**
    * Read the stored network/USB favourites (preset slots with their names).
@@ -494,7 +515,7 @@ class YamahaYxcClient {
    * @returns the command response
    */
   recallRecentItem(num, zone) {
-    return this.send(`/netusb/recallRecentItem?zone=${zoneSeg(zone)}&num=${num}`);
+    return this.send(`/netusb/recallRecentItem?zone=${zoneSeg(zone)}&num=${q(num)}`);
   }
   /**
    * Read the tuner preset list for one band (`common` on devices with a shared list).
@@ -503,7 +524,7 @@ class YamahaYxcClient {
    * @returns the preset_info response
    */
   getTunerPresetInfo(band) {
-    return this.send(`/tuner/getPresetInfo?band=${band}`);
+    return this.send(`/tuner/getPresetInfo?band=${q(band)}`);
   }
   /**
    * Recall a tuner preset. The URL is the official YXC form (verified against
@@ -515,7 +536,7 @@ class YamahaYxcClient {
    * @returns the command response
    */
   recallTunerPreset(band, num, zone) {
-    return this.send(`/tuner/recallPreset?zone=${zoneSeg(zone)}&band=${band}&num=${num}`);
+    return this.send(`/tuner/recallPreset?zone=${zoneSeg(zone)}&band=${q(band)}&num=${q(num)}`);
   }
   /**
    * Step to the next/previous stored tuner preset.
@@ -524,7 +545,7 @@ class YamahaYxcClient {
    * @returns the command response
    */
   switchTunerPreset(direction) {
-    return this.send(`/tuner/switchPreset?dir=${direction}`);
+    return this.send(`/tuner/switchPreset?dir=${q(direction)}`);
   }
   /**
    * Read the clock/alarm settings block.

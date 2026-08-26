@@ -30,7 +30,13 @@ export interface BrowseWindow {
   layer: number;
   /** Total entries in the current menu. */
   totalItems: number;
-  /** The absolute number of the window's first line (1-based). */
+  /**
+   * The device's cursor position within the whole list (1-based) — that is what the
+   * official YNCA command list defines CURRLINE as ("absolute position number of current
+   * cursor position"), and the XML `Current_Line` matches it. It is NOT necessarily the
+   * window's first line: after stepping back out of a submenu the cursor sits on the row
+   * that was entered. The YXC driver has a real window index and reports that.
+   */
   currentLine: number;
   /** The visible rows (up to 8). */
   rows: BrowseRow[];
@@ -56,6 +62,16 @@ export interface BrowseDriver {
   back(): Promise<void> | void;
   /** Return to the menu root. */
   home(): Promise<void> | void;
-  /** Re-read the current window. */
-  refresh(): Promise<void> | void;
 }
+
+/**
+ * How the two text protocols name a row's kind. YNCA (`LINE1ATRIB`) and XML
+ * (`Current_List` attribute) use the SAME four words — one table for both, so a new
+ * attribute value is added once instead of in two drivers that then drift apart.
+ */
+export const ROW_KIND_BY_ATTRIBUTE: Readonly<Record<string, BrowseRowKind>> = {
+  Container: "folder",
+  Item: "item",
+  "Unplayable Item": "unplayable",
+  Unselectable: "unselectable",
+};

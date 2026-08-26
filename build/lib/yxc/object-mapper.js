@@ -22,17 +22,16 @@ __export(object_mapper_exports, {
 });
 module.exports = __toCommonJS(object_mapper_exports);
 var import_types = require("../catalog/types");
+var import_zones = require("./zones");
 var import_catalog = require("./catalog");
 var import_command_mapper = require("./command-mapper");
 function selfMap(values) {
   return Object.fromEntries(values.map((value) => [value, value]));
 }
-const ZONES = [
-  { id: "main", prefix: "" },
-  { id: "zone2", prefix: "multiroom.zone2.", channel: "multiroom.zone2", channelName: "Zone 2" },
-  { id: "zone3", prefix: "multiroom.zone3.", channel: "multiroom.zone3", channelName: "Zone 3" },
-  { id: "zone4", prefix: "multiroom.zone4.", channel: "multiroom.zone4", channelName: "Zone 4" }
-];
+const ZONES = import_zones.YXC_ZONE_IDS.map((id) => {
+  const channel = (0, import_zones.zoneChannel)(id);
+  return { id, prefix: (0, import_zones.zonePrefix)(id), ...channel ? { channel: channel.channel, channelName: channel.name } : {} };
+});
 const PLAYER_STATES = [
   {
     state: "playback",

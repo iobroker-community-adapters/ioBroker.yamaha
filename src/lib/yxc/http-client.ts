@@ -1,4 +1,18 @@
 import { get as httpGet, request as httpRequest, type IncomingMessage } from "node:http";
+import type { CommandGate } from "../lifecycle/command-gate";
+
+/**
+ * Whether a command path changes something on the device (as opposed to reading). The
+ * MusicCast API names its endpoints consistently, so the verb at the start of the last
+ * path segment decides — that is enough to give user actions priority in the gate.
+ *
+ * @param command the API command path
+ * @returns true for a write/action command
+ */
+function isWriteCommand(command: string): boolean {
+  const last = command.split("?")[0].split("/").pop() ?? "";
+  return /^(set|recall|toggle|start|stop|manage|prepare)/.test(last);
+}
 
 /** Timeout for a single YXC HTTP request, so an unresponsive device cannot hang the keepalive. */
 const REQUEST_TIMEOUT_MS = 4000;
@@ -56,9 +70,12 @@ function defaultSend(ip: string): YxcSend {
       const onResponse = (res: IncomingMessage): void => {
         let data = "";
         res.on("data", chunk => (data += String(chunk)));
+        // A connection dropped mid-body emits on the RESPONSE stream, not the request —
+        // without this handler that is an unhandled error event, not a rejected promise.
+        res.on("error", reject);
         res.on("end", () => {
           try {
-            resolve(JSON.parse(data));
+            resolve(assertOk(JSON.parse(data), command));
           } catch (e) {
             reject(e instanceof Error ? e : new Error(String(e)));
           }
@@ -81,6 +98,27 @@ function defaultSend(ip: string): YxcSend {
 }
 
 /**
+ * The device's own verdict on a request. Every MusicCast answer carries `response_code`
+ * (0 = success); anything else means the device REFUSED the request — a wrong input for
+ * this zone, a feature the model lacks, a source that is not selected. Without this check
+ * a refusal looked exactly like a success: the keepalive counted a refusing device as
+ * healthy (so its states froze silently instead of the device being reconnected), and a
+ * rejected write produced no warning at all. Turning it into an error lets the existing
+ * try/catch paths and the drop detection do their job.
+ *
+ * @param payload the parsed response body
+ * @param command the command path, for the message
+ * @returns the payload when the device accepted the request
+ */
+function assertOk(payload: unknown, command: string): unknown {
+  const code = (payload as { response_code?: unknown } | null)?.response_code;
+  if (typeof code === "number" && code !== 0) {
+    throw new Error(`device refused ${command} (response_code ${code})`);
+  }
+  return payload;
+}
+
+/**
  * Map a zone name to its API path segment (the library's getZone for the names we
  * use: main/zone2/zone3/zone4, defaulting an empty zone to main).
  *
@@ -88,7 +126,19 @@ function defaultSend(ip: string): YxcSend {
  * @returns the path segment
  */
 function zoneSeg(zone?: string): string {
-  return zone || "main";
+  return encodeURIComponent(zone || "main");
+}
+
+/**
+ * Percent-encode a value going into a query parameter. The states are dropdowns, but
+ * ioBroker lets any script write any string — an unencoded space or `&` would either make
+ * the request throw or silently smuggle a second parameter into the device call.
+ *
+ * @param value the raw value
+ * @returns the encoded value
+ */
+function q(value: string | number): string {
+  return encodeURIComponent(String(value));
 }
 
 /**
@@ -104,9 +154,16 @@ export class YamahaYxcClient {
   /**
    * @param ip the device IP or hostname
    * @param send transport seam (defaults to a node:http GET); injected in tests
+   * @param gate the device's command gate — when given, every request runs through it, so
+   *   an embedded device never sees a burst of parallel requests and a stopped adapter
+   *   cancels what is still queued. Commands that CHANGE something (`set…`, `recall…`,
+   *   `toggle…`, `start/stop…`, `manage…` — the API names them consistently) are queued
+   *   with user priority so a button press overtakes background polling.
    */
-  public constructor(ip: string, send: YxcSend = defaultSend(ip)) {
-    this.send = send;
+  public constructor(ip: string, send: YxcSend = defaultSend(ip), gate?: CommandGate) {
+    this.send = gate
+      ? (command, body) => gate.run(() => send(command, body), isWriteCommand(command) ? "user" : "background")
+      : send;
   }
 
   /**
@@ -177,7 +234,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public setVolumeTo(to: number, zone: string): Promise<unknown> {
-    return this.send(`/${zoneSeg(zone)}/setVolume?volume=${to}`);
+    return this.send(`/${zoneSeg(zone)}/setVolume?volume=${q(to)}`);
   }
 
   /**
@@ -199,7 +256,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public setInput(input: string, zone: string): Promise<unknown> {
-    return this.send(`/${zoneSeg(zone)}/setInput?input=${input}`);
+    return this.send(`/${zoneSeg(zone)}/setInput?input=${q(input)}`);
   }
 
   /**
@@ -210,7 +267,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public setSound(program: string, zone: string): Promise<unknown> {
-    return this.send(`/${zoneSeg(zone)}/setSoundProgram?program=${program}`);
+    return this.send(`/${zoneSeg(zone)}/setSoundProgram?program=${q(program)}`);
   }
 
   /**
@@ -243,7 +300,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public setSubwooferVolumeTo(to: number, zone: string): Promise<unknown> {
-    return this.send(`/${zoneSeg(zone)}/setSubwooferVolume?volume=${to}`);
+    return this.send(`/${zoneSeg(zone)}/setSubwooferVolume?volume=${q(to)}`);
   }
 
   /**
@@ -254,7 +311,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public setBassTo(to: number, zone: string): Promise<unknown> {
-    return this.send(`/${zoneSeg(zone)}/setToneControl?mode=manual&bass=${to}`);
+    return this.send(`/${zoneSeg(zone)}/setToneControl?mode=manual&bass=${q(to)}`);
   }
 
   /**
@@ -265,7 +322,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public setTrebleTo(to: number, zone: string): Promise<unknown> {
-    return this.send(`/${zoneSeg(zone)}/setToneControl?mode=manual&treble=${to}`);
+    return this.send(`/${zoneSeg(zone)}/setToneControl?mode=manual&treble=${q(to)}`);
   }
 
   /**
@@ -276,7 +333,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public sleep(minutes: number, zone: string): Promise<unknown> {
-    return this.send(`/${zoneSeg(zone)}/setSleep?sleep=${minutes}`);
+    return this.send(`/${zoneSeg(zone)}/setSleep?sleep=${q(minutes)}`);
   }
 
   /**
@@ -320,7 +377,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public setBalance(value: number, zone: string): Promise<unknown> {
-    return this.send(`/${zoneSeg(zone)}/setBalance?value=${value}`);
+    return this.send(`/${zoneSeg(zone)}/setBalance?value=${q(value)}`);
   }
 
   /**
@@ -334,7 +391,7 @@ export class YamahaYxcClient {
    * @returns the device response
    */
   public setEqualizer(low: number, mid: number, high: number, zone: string): Promise<unknown> {
-    return this.send(`/${zoneSeg(zone)}/setEqualizer?mode=manual&low=${low}&mid=${mid}&high=${high}`);
+    return this.send(`/${zoneSeg(zone)}/setEqualizer?mode=manual&low=${q(low)}&mid=${q(mid)}&high=${q(high)}`);
   }
 
   /**
@@ -373,7 +430,7 @@ export class YamahaYxcClient {
    * @returns the device response
    */
   public startDistribution(num: number): Promise<unknown> {
-    return this.send(`/dist/startDistribution?num=${num}`);
+    return this.send(`/dist/startDistribution?num=${q(num)}`);
   }
 
   /**
@@ -437,7 +494,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public setCDPlayback(action: string): Promise<unknown> {
-    return this.send(`/cd/setPlayback?playback=${action}`);
+    return this.send(`/cd/setPlayback?playback=${q(action)}`);
   }
 
   /**
@@ -492,7 +549,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public setBand(band: string): Promise<unknown> {
-    return this.send(`/tuner/setBand?band=${band}`);
+    return this.send(`/tuner/setBand?band=${q(band)}`);
   }
 
   /**
@@ -503,7 +560,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public setFreq(band: string, freq: number): Promise<unknown> {
-    return this.send(`/tuner/setFreq?band=${band}&num=${freq}`);
+    return this.send(`/tuner/setFreq?band=${q(band)}&num=${q(freq)}`);
   }
 
   /**
@@ -524,7 +581,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public recallPreset(num: number, zone: string): Promise<unknown> {
-    return this.send(`/netusb/recallPreset?zone=${zoneSeg(zone)}&num=${num}`);
+    return this.send(`/netusb/recallPreset?zone=${zoneSeg(zone)}&num=${q(num)}`);
   }
 
   /**
@@ -537,7 +594,7 @@ export class YamahaYxcClient {
    * @returns the list_info response
    */
   public getListInfo(input: string, index: number, size = 8): Promise<unknown> {
-    return this.send(`/netusb/getListInfo?input=${input}&index=${index}&size=${size}`);
+    return this.send(`/netusb/getListInfo?input=${q(input)}&index=${q(index)}&size=${q(size)}`);
   }
 
   /**
@@ -550,9 +607,9 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public setListControl(type: "select" | "play" | "return", index?: number, zone?: string): Promise<unknown> {
-    const indexSeg = index === undefined ? "" : `&index=${index}`;
+    const indexSeg = index === undefined ? "" : `&index=${q(index)}`;
     const zoneSegment = zone === undefined ? "" : `&zone=${zoneSeg(zone)}`;
-    return this.send(`/netusb/setListControl?list_id=main&type=${type}${indexSeg}${zoneSegment}`);
+    return this.send(`/netusb/setListControl?list_id=main&type=${q(type)}${indexSeg}${zoneSegment}`);
   }
 
   /**
@@ -581,7 +638,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public recallRecentItem(num: number, zone: string): Promise<unknown> {
-    return this.send(`/netusb/recallRecentItem?zone=${zoneSeg(zone)}&num=${num}`);
+    return this.send(`/netusb/recallRecentItem?zone=${zoneSeg(zone)}&num=${q(num)}`);
   }
 
   /**
@@ -591,7 +648,7 @@ export class YamahaYxcClient {
    * @returns the preset_info response
    */
   public getTunerPresetInfo(band: string): Promise<unknown> {
-    return this.send(`/tuner/getPresetInfo?band=${band}`);
+    return this.send(`/tuner/getPresetInfo?band=${q(band)}`);
   }
 
   /**
@@ -604,7 +661,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public recallTunerPreset(band: string, num: number, zone: string): Promise<unknown> {
-    return this.send(`/tuner/recallPreset?zone=${zoneSeg(zone)}&band=${band}&num=${num}`);
+    return this.send(`/tuner/recallPreset?zone=${zoneSeg(zone)}&band=${q(band)}&num=${q(num)}`);
   }
 
   /**
@@ -614,7 +671,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public switchTunerPreset(direction: "next" | "previous"): Promise<unknown> {
-    return this.send(`/tuner/switchPreset?dir=${direction}`);
+    return this.send(`/tuner/switchPreset?dir=${q(direction)}`);
   }
 
   /**

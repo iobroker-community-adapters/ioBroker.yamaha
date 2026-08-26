@@ -190,4 +190,60 @@ describe("YamahaYxcClient player and tuner commands", () => {
     await client.getClockSettings();
     expect(last()).toBe("/clock/getSettings");
   });
+
+  test("a device refusal (response_code != 0) becomes an error, not a silent success", async () => {
+    // Without this the keepalive counted a refusing device as healthy — its states froze
+    // instead of the device being reconnected — and a rejected write warned nobody.
+    const server = createServer((_req, res) => {
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ response_code: 5 }));
+    });
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const { port } = server.address() as AddressInfo;
+    try {
+      const client = new YamahaYxcClient(`127.0.0.1:${port}`);
+      await expect(client.getStatus("main")).rejects.toThrow(/response_code 5/);
+    } finally {
+      server.close();
+    }
+  });
+
+  test("a successful answer (response_code 0) passes through untouched", async () => {
+    const server = createServer((_req, res) => {
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ response_code: 0, power: "on" }));
+    });
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const { port } = server.address() as AddressInfo;
+    try {
+      const client = new YamahaYxcClient(`127.0.0.1:${port}`);
+      await expect(client.getStatus("main")).resolves.toEqual({ response_code: 0, power: "on" });
+    } finally {
+      server.close();
+    }
+  });
+
+  test("percent-encodes values so a name with a space or & cannot break the request", async () => {
+    const seen: string[] = [];
+    const server = createServer((req, res) => {
+      seen.push(req.url ?? "");
+      res.setHeader("Content-Type", "application/json");
+      res.end("{}");
+    });
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const { port } = server.address() as AddressInfo;
+    try {
+      const client = new YamahaYxcClient(`127.0.0.1:${port}`);
+      await client.setSound("Hall in Munich", "main");
+      await client.setInput("AV & Audio", "main");
+    } finally {
+      server.close();
+    }
+    expect(seen[0]).toContain("program=Hall%20in%20Munich");
+    // The `&` must be encoded, or it would smuggle a second query parameter in.
+    expect(seen[1]).toContain("input=AV%20%26%20Audio");
+  });
 });

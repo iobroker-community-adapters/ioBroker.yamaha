@@ -1,6 +1,15 @@
 import { XmlDeviceController } from "./device-controller";
 import type { XmlClientLike } from "./device-controller";
 import type { BasicStatus } from "./protocol";
+import { CommandGate } from "../lifecycle/command-gate";
+
+/** A real command gate for the controller under test (pacing has its own suite). */
+const testGate = (): CommandGate =>
+  new CommandGate({
+    minSpacingMs: 0,
+    timers: { schedule: (h, ms) => setTimeout(h, ms), cancel: t => clearTimeout(t as ReturnType<typeof setTimeout>) },
+  });
+
 
 const flush = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
 const silentLog = { debug: (): void => {}, info: (): void => {}, warn: (): void => {} };
@@ -83,11 +92,12 @@ describe("XmlDeviceController", () => {
     expect(s.fire.keepaliveMs).toBe(60000);
   });
 
-  test("creates info.model from the System/Config model name", async () => {
+  test("reports the model from System/Config into the adapter-created info.model", async () => {
     const s = setup({ Main_Zone: { power: true } });
     s.client.modelName = "RX-V1900";
     await s.controller.start();
-    expect(s.objects).toContain("living.info.model");
+    // The object itself is created once by the adapter (ensureDeviceHeader) for every
+    // device, offline ones included — the transport only fills in the value.
     expect(s.acks).toContainEqual({ id: "living.info.model", value: "RX-V1900" });
   });
 
@@ -269,7 +279,7 @@ describe("XmlDeviceController browse surface (#613)", () => {
       },
       setStateAck: () => {},
       log: silentLog,
-      delay: instantDelay,
+      gate: testGate(),
     });
     return { controller, client, objects };
   }

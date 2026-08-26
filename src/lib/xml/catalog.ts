@@ -1,4 +1,5 @@
 import type { ObjectDef } from "../catalog/types";
+import { escapeXmlText } from "./entities";
 import type { BasicStatus } from "./protocol";
 
 /**
@@ -58,14 +59,14 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     state: "input",
     common: { name: "Input", type: "string", role: "media.input", read: true, write: true },
     statusField: "input",
-    toInner: value => `<Input><Input_Sel>${String(value)}</Input_Sel></Input>`,
+    toInner: value => `<Input><Input_Sel>${escapeXmlText(value)}</Input_Sel></Input>`,
   },
   {
     state: "soundProgram",
     common: { name: "Sound program", type: "string", role: "state", read: true, write: true },
     statusField: "soundProgram",
     toInner: value =>
-      `<Surround><Program_Sel><Current><Sound_Program>${String(value)}</Sound_Program></Current></Program_Sel></Surround>`,
+      `<Surround><Program_Sel><Current><Sound_Program>${escapeXmlText(value)}</Sound_Program></Current></Program_Sel></Surround>`,
   },
   {
     state: "sound.pureDirect",
@@ -90,7 +91,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     state: "sound.adaptiveDrc",
     common: { name: "Adaptive DRC", type: "string", role: "state", read: true, write: true },
     statusField: "adaptiveDrc",
-    toInner: value => `<Sound_Video><Adaptive_DRC>${String(value)}</Adaptive_DRC></Sound_Video>`,
+    toInner: value => `<Sound_Video><Adaptive_DRC>${escapeXmlText(value)}</Adaptive_DRC></Sound_Video>`,
   },
   {
     // Read-only: openHAB reads the Dialogue_Lvl path, but the write value structure
@@ -103,7 +104,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     state: "sleep",
     common: { name: "Sleep timer", type: "string", role: "state", read: true, write: true },
     statusField: "sleep",
-    toInner: value => `<Power_Control><Sleep>${String(value)}</Sleep></Power_Control>`,
+    toInner: value => `<Power_Control><Sleep>${escapeXmlText(value)}</Sleep></Power_Control>`,
   },
   // Tone, subwoofer trim and the Extra-Bass/YPAO toggles — exposed by the predecessor
   // adapter (yamaha-nodejs-soef) on real pre-2010 devices, and dropped in the rewrite.

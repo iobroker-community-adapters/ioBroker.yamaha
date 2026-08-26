@@ -31,10 +31,12 @@ var import_xml_client = require("./xml/xml-client");
 var import_multi_transport_handle = require("./lifecycle/multi-transport-handle");
 var import_transport_connection_adapter = require("./lifecycle/transport-connection-adapter");
 var import_reconnect_strategy = require("./lifecycle/reconnect-strategy");
+var import_command_gate = require("./lifecycle/command-gate");
 var import_ready_line = require("./ready-line");
 var import_util = require("./util");
 const TRANSPORT_RECONNECT_BASE_MS = 1e3;
 const TRANSPORT_RECONNECT_MAX_MS = 6e4;
+const COMMAND_SPACING_MS = { ynca: 100, yxc: 0, xml: 0 };
 async function connectTransports(deviceId, attempts, deps) {
   var _a, _b, _c;
   const results = await Promise.all(
@@ -84,54 +86,61 @@ async function connectTransports(deviceId, attempts, deps) {
 }
 function attemptDevice(device, deps) {
   const { log, upsertObject, setStateAck, timers } = deps;
-  const delay = (ms) => new Promise((resolve) => {
-    timers.schedule(resolve, ms);
-  });
+  const gateFor = (transport) => new import_command_gate.CommandGate({ minSpacingMs: COMMAND_SPACING_MS[transport], timers });
   const buildYnca = () => {
     const ynca = new import_transport_connection_adapter.TransportConnectionAdapter("ynca", device.id, setStateAck);
+    const gate = gateFor("ynca");
     ynca.bind(
       new import_device_controller.YncaDeviceController(device.id, {
-        client: new import_ynca_client.YncaClient(device.ip, timers),
+        client: new import_ynca_client.YncaClient(device.ip, timers, gate),
+        gate,
         upsertObject: ynca.interceptUpsert,
         setStateAck: ynca.interceptSetStateAck,
         log,
         isEntryEnabled: deps.isEntryEnabled,
         subunitCache: deps.yncaSubunitCache,
-        delay
+        probeMemory: deps.probeMemory
       })
     );
     return ynca;
   };
   const buildYxc = () => {
     const yxc = new import_transport_connection_adapter.TransportConnectionAdapter("yxc", device.id, setStateAck);
+    const gate = gateFor("yxc");
     yxc.bind(
       new import_device_controller2.YxcDeviceController(device.id, {
-        client: new import_http_client.YamahaYxcClient(device.ip),
-        // Resolve another configured device's client for a multiroom link — never this device itself.
+        client: new import_http_client.YamahaYxcClient(device.ip, void 0, gate),
+        // Resolve another configured device's client for a multiroom link — never this device
+        // itself. The partner's own gate belongs to its own connection, so this one-off client
+        // stays ungated (a single link call, not a stream of commands).
         clientFor: (ip) => ip !== device.ip && deps.knownDeviceIps.has(ip) ? new import_http_client.YamahaYxcClient(ip) : void 0,
         registerPush: (onPush) => deps.registerPush(device.ip, onPush),
+        pushActive: deps.pushActive,
+        probeMemory: deps.probeMemory,
         scheduleKeepalive: deps.scheduleKeepalive,
         upsertObject: yxc.interceptUpsert,
         setStateAck: yxc.interceptSetStateAck,
         reportDeviceName: deps.onDeviceName,
         log,
-        delay
+        gate
       })
     );
     return yxc;
   };
   const buildXml = () => {
     const xml = new import_transport_connection_adapter.TransportConnectionAdapter("xml", device.id, setStateAck);
+    const gate = gateFor("xml");
     xml.bind(
       new import_device_controller3.XmlDeviceController(
         device.id,
         {
-          client: new import_xml_client.XmlClient(device.ip),
+          client: new import_xml_client.XmlClient(device.ip, void 0, gate),
           scheduleKeepalive: deps.scheduleKeepalive,
           upsertObject: xml.interceptUpsert,
           setStateAck: xml.interceptSetStateAck,
           log,
-          delay
+          gate,
+          probeMemory: deps.probeMemory
         },
         deps.xmlPollIntervalMs
       )

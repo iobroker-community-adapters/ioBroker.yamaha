@@ -1,5 +1,6 @@
-import type { BrowseDriver, BrowseRow, BrowseRowKind } from "./types";
+import { ROW_KIND_BY_ATTRIBUTE, type BrowseDriver, type BrowseRow } from "./types";
 import type { BrowseEngine } from "./browse-engine";
+import { decodeXmlText } from "../xml/entities";
 
 /** How often to re-read while the device reports Menu_Status Busy. */
 const BUSY_POLL_MS = 500;
@@ -41,14 +42,6 @@ export interface XmlListInfo {
   rows: BrowseRow[];
 }
 
-/** The wire attribute values of a Current_List line, mapped to the neutral row kind. */
-const ATTRIBUTE_KINDS: Readonly<Record<string, BrowseRowKind>> = {
-  Container: "folder",
-  Item: "item",
-  "Unplayable Item": "unplayable",
-  Unselectable: "unselectable",
-};
-
 /**
  * Parse a `<List_Info>` response (menu status, layer, name, cursor, and the eight
  * `Current_List` lines with text + attribute — the shape rxv reads).
@@ -61,12 +54,16 @@ export function parseXmlListInfo(xml: string): XmlListInfo {
   const linePattern = /<Line_([1-8])>\s*<Txt>([^<]*)<\/Txt>\s*<Attribute>([^<]*)<\/Attribute>/g;
   for (let match = linePattern.exec(xml); match; match = linePattern.exec(xml)) {
     if (match[2].length > 0) {
-      rows.push({ line: Number(match[1]), text: match[2], kind: ATTRIBUTE_KINDS[match[3]] ?? "item" });
+      rows.push({
+        line: Number(match[1]),
+        text: decodeXmlText(match[2]),
+        kind: ROW_KIND_BY_ATTRIBUTE[match[3]] ?? "item",
+      });
     }
   }
   return {
     ready: !/<Menu_Status>Busy<\/Menu_Status>/.test(xml),
-    menuName: /<Menu_Name>([^<]*)<\/Menu_Name>/.exec(xml)?.[1] ?? "",
+    menuName: decodeXmlText(/<Menu_Name>([^<]*)<\/Menu_Name>/.exec(xml)?.[1] ?? ""),
     layer: Number(/<Menu_Layer>(\d+)<\/Menu_Layer>/.exec(xml)?.[1] ?? 0),
     currentLine: Number(/<Current_Line>(\d+)<\/Current_Line>/.exec(xml)?.[1] ?? 1),
     totalItems: Number(/<Max_Line>(\d+)<\/Max_Line>/.exec(xml)?.[1] ?? 0),
@@ -156,7 +153,7 @@ export class XmlBrowseDriver implements BrowseDriver {
   }
 
   /** Re-read the current window. */
-  public async refresh(): Promise<void> {
+  private async refresh(): Promise<void> {
     await this.fetch();
   }
 

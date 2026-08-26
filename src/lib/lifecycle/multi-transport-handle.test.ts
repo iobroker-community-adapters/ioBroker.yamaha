@@ -360,3 +360,40 @@ describe("MultiTransportHandle per-transport backoff", () => {
     expect(h.cancelled).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe("MultiTransportHandle object write economy", () => {
+  test("re-coordination writes only what actually changed", async () => {
+    const written: string[] = [];
+    const objects = [
+      { id: "power", type: "state" as const, common: { name: "Power" } },
+      { id: "volume", type: "state" as const, common: { name: "Volume" } },
+    ];
+    const connection = {
+      transport: "ynca" as const,
+      buildObjects: () => objects,
+      seedOwned: () => {},
+      handleWrite: () => {},
+      onDrop: () => {},
+      close: () => {},
+    };
+    const handle = new MultiTransportHandle("living", [connection], {
+      upsertObject: async id => {
+        written.push(id);
+      },
+      log: { debug: () => {}, info: () => {}, warn: () => {} },
+    });
+    await handle.start();
+    expect(written).toEqual(["living.power", "living.volume"]);
+
+    // A transport returning re-coordinates the tree. Nothing changed, so nothing is
+    // rewritten — a flaky device must not churn the object database every few minutes.
+    written.length = 0;
+    await (handle as unknown as { coordinate(): Promise<void> }).coordinate();
+    expect(written).toEqual([]);
+
+    // A genuinely changed definition IS written again.
+    objects[1] = { id: "volume", type: "state" as const, common: { name: "Volume (dB)" } };
+    await (handle as unknown as { coordinate(): Promise<void> }).coordinate();
+    expect(written).toEqual(["living.volume"]);
+  });
+});

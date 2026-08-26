@@ -78,6 +78,12 @@ export class BrowseEngine {
    * @param window the window snapshot
    */
   public onWindow(window: BrowseWindow): void {
+    // A fetch that was already in flight when the connection closed must not paint stale
+    // rows into a tree that is being torn down (the XML driver polls a busy menu for up
+    // to five seconds).
+    if (this.closed) {
+      return;
+    }
     this.window = window;
     this.windowVersion++;
     this.deps.emit("player.browse.menuName", window.menuName);

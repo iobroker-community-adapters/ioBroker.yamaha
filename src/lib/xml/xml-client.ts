@@ -1,5 +1,6 @@
 import { request } from "node:http";
 import { encodeGet, encodePut, parseBasicStatus, parseModelName, type BasicStatus } from "./protocol";
+import type { CommandGate } from "../lifecycle/command-gate";
 
 /** The receiver's XML control endpoint. */
 const CONTROL_PATH = "/YamahaRemoteControl/ctrl";
@@ -35,14 +36,24 @@ function defaultPoster(ip: string, body: string): Promise<string> {
 
 /** An XML/YNC transport client for one receiver over HTTP (port 80). */
 export class XmlClient {
+  private readonly request: XmlPoster;
+
   /**
    * @param ip the receiver IP
    * @param post the XML poster (defaults to a node:http POST)
+   * @param gate the device's command gate — when given, every request runs through it, so
+   *   these 1990s-era HTTP stacks never face parallel requests and a stopped adapter
+   *   cancels what is still queued
    */
   public constructor(
     private readonly ip: string,
-    private readonly post: XmlPoster = defaultPoster,
-  ) {}
+    post: XmlPoster = defaultPoster,
+    gate?: CommandGate,
+  ) {
+    this.request = gate
+      ? (ip_, body) => gate.run(() => post(ip_, body), body.includes('cmd="PUT"') ? "user" : "background")
+      : post;
+  }
 
   /**
    * Send a zone command (wrapped in a PUT envelope).
@@ -51,7 +62,7 @@ export class XmlClient {
    * @param inner the inner command XML
    */
   public async send(zone: string, inner: string): Promise<void> {
-    await this.post(this.ip, encodePut(zone, inner));
+    await this.request(this.ip, encodePut(zone, inner));
   }
 
   /**
@@ -61,7 +72,7 @@ export class XmlClient {
    * @returns the parsed amplifier fields
    */
   public async getStatus(zone: string): Promise<BasicStatus> {
-    const response = await this.post(this.ip, encodeGet(zone, "<Basic_Status>GetParam</Basic_Status>"));
+    const response = await this.request(this.ip, encodeGet(zone, "<Basic_Status>GetParam</Basic_Status>"));
     return parseBasicStatus(response);
   }
 
@@ -71,7 +82,7 @@ export class XmlClient {
    * @returns the model name, or undefined when the device does not report one
    */
   public async getModelName(): Promise<string | undefined> {
-    const response = await this.post(this.ip, encodeGet("System", "<Config>GetParam</Config>"));
+    const response = await this.request(this.ip, encodeGet("System", "<Config>GetParam</Config>"));
     return parseModelName(response);
   }
 
@@ -85,6 +96,6 @@ export class XmlClient {
    * @returns the raw response body
    */
   public getXml(element: string, inner: string): Promise<string> {
-    return this.post(this.ip, encodeGet(element, inner));
+    return this.request(this.ip, encodeGet(element, inner));
   }
 }

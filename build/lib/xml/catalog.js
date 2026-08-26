@@ -21,6 +21,7 @@ __export(catalog_exports, {
   XML_AMP_CATALOG: () => XML_AMP_CATALOG
 });
 module.exports = __toCommonJS(catalog_exports);
+var import_entities = require("./entities");
 const XML_AMP_CATALOG = [
   {
     state: "power",
@@ -54,13 +55,13 @@ const XML_AMP_CATALOG = [
     state: "input",
     common: { name: "Input", type: "string", role: "media.input", read: true, write: true },
     statusField: "input",
-    toInner: (value) => `<Input><Input_Sel>${String(value)}</Input_Sel></Input>`
+    toInner: (value) => `<Input><Input_Sel>${(0, import_entities.escapeXmlText)(value)}</Input_Sel></Input>`
   },
   {
     state: "soundProgram",
     common: { name: "Sound program", type: "string", role: "state", read: true, write: true },
     statusField: "soundProgram",
-    toInner: (value) => `<Surround><Program_Sel><Current><Sound_Program>${String(value)}</Sound_Program></Current></Program_Sel></Surround>`
+    toInner: (value) => `<Surround><Program_Sel><Current><Sound_Program>${(0, import_entities.escapeXmlText)(value)}</Sound_Program></Current></Program_Sel></Surround>`
   },
   {
     state: "sound.pureDirect",
@@ -84,7 +85,7 @@ const XML_AMP_CATALOG = [
     state: "sound.adaptiveDrc",
     common: { name: "Adaptive DRC", type: "string", role: "state", read: true, write: true },
     statusField: "adaptiveDrc",
-    toInner: (value) => `<Sound_Video><Adaptive_DRC>${String(value)}</Adaptive_DRC></Sound_Video>`
+    toInner: (value) => `<Sound_Video><Adaptive_DRC>${(0, import_entities.escapeXmlText)(value)}</Adaptive_DRC></Sound_Video>`
   },
   {
     // Read-only: openHAB reads the Dialogue_Lvl path, but the write value structure
@@ -97,7 +98,7 @@ const XML_AMP_CATALOG = [
     state: "sleep",
     common: { name: "Sleep timer", type: "string", role: "state", read: true, write: true },
     statusField: "sleep",
-    toInner: (value) => `<Power_Control><Sleep>${String(value)}</Sleep></Power_Control>`
+    toInner: (value) => `<Power_Control><Sleep>${(0, import_entities.escapeXmlText)(value)}</Sleep></Power_Control>`
   },
   // Tone, subwoofer trim and the Extra-Bass/YPAO toggles — exposed by the predecessor
   // adapter (yamaha-nodejs-soef) on real pre-2010 devices, and dropped in the rewrite.

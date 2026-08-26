@@ -1,8 +1,6 @@
-import type { BrowseDriver, BrowseRow, BrowseRowKind } from "./types";
+import { ROW_KIND_BY_ATTRIBUTE, type BrowseDriver, type BrowseRow, type BrowseRowKind } from "./types";
 import type { BrowseEngine } from "./browse-engine";
 
-/** YNCA needs ~100 ms between commands; ops pace their follow-up read with this. */
-const COMMAND_SPACING_MS = 150;
 /** Collect a burst of list lines for this long before rendering the window. */
 const BURST_SETTLE_MS = 200;
 
@@ -32,14 +30,6 @@ export interface YncaBrowseClient {
   /** Send a GET request. */
   get(subunit: string, func: string): void;
 }
-
-/** The wire attribute values of LINE1ATRIB…LINE8ATRIB, mapped to the neutral row kind. */
-const ATRIB_KINDS: Readonly<Record<string, BrowseRowKind>> = {
-  Container: "folder",
-  Item: "item",
-  "Unplayable Item": "unplayable",
-  Unselectable: "unselectable",
-};
 
 /**
  * The YNCA list driver: navigation writes go out as LISTSEL/LISTPAGE/LISTCURSOR
@@ -101,7 +91,7 @@ export class YncaBrowseDriver implements BrowseDriver {
    *
    * @param source the source key (from {@link sources})
    */
-  public async open(source: string): Promise<void> {
+  public open(source: string): void {
     const entry = YNCA_BROWSE_SOURCES.find(s => s.key === source && this.present.has(s.subunit));
     if (!entry) {
       return;
@@ -109,8 +99,7 @@ export class YncaBrowseDriver implements BrowseDriver {
     this.active = entry;
     this.resetAssembly();
     this.client.send("MAIN", "INP", entry.input);
-    await this.delay(COMMAND_SPACING_MS);
-    await this.refresh();
+    this.refresh();
   }
 
   /**
@@ -118,35 +107,34 @@ export class YncaBrowseDriver implements BrowseDriver {
    *
    * @param line the line number (1–8)
    */
-  public async select(line: number): Promise<void> {
-    await this.command("LISTSEL", `Line_${line}`);
+  public select(line: number): void {
+    this.command("LISTSEL", `Line_${line}`);
   }
 
   /** Show the previous 8 lines. */
-  public async pageUp(): Promise<void> {
-    await this.command("LISTPAGE", "Up");
+  public pageUp(): void {
+    this.command("LISTPAGE", "Up");
   }
 
   /** Show the next 8 lines. */
-  public async pageDown(): Promise<void> {
-    await this.command("LISTPAGE", "Down");
+  public pageDown(): void {
+    this.command("LISTPAGE", "Down");
   }
 
   /** Go one menu level back. */
-  public async back(): Promise<void> {
-    await this.command("LISTCURSOR", "Back");
+  public back(): void {
+    this.command("LISTCURSOR", "Back");
   }
 
   /** Return to the menu root. */
-  public async home(): Promise<void> {
-    await this.command("LISTCURSOR", "Back to Home");
+  public home(): void {
+    this.command("LISTCURSOR", "Back to Home");
   }
 
   /** Re-read the current window (`LISTINFO=?` answers with the full field burst). */
-  public async refresh(): Promise<void> {
+  private refresh(): void {
     if (this.active) {
       this.client.get(this.active.subunit, "LISTINFO");
-      await this.delay(COMMAND_SPACING_MS);
     }
   }
 
@@ -170,7 +158,7 @@ export class YncaBrowseDriver implements BrowseDriver {
       if (line[2] === "TXT") {
         this.texts.set(n, message.value);
       } else {
-        this.kinds.set(n, ATRIB_KINDS[message.value] ?? "item");
+        this.kinds.set(n, ROW_KIND_BY_ATTRIBUTE[message.value] ?? "item");
       }
     } else if (message.func === "LISTLAYERNAME") {
       this.menuName = message.value;
@@ -192,13 +180,12 @@ export class YncaBrowseDriver implements BrowseDriver {
    * @param func the list function (LISTSEL, LISTPAGE, LISTCURSOR)
    * @param value the wire value
    */
-  private async command(func: string, value: string): Promise<void> {
+  private command(func: string, value: string): void {
     if (!this.active) {
       return;
     }
     this.client.send(this.active.subunit, func, value);
-    await this.delay(COMMAND_SPACING_MS);
-    await this.refresh();
+    this.refresh();
   }
 
   /** Clear the assembly when a new source's menu replaces the old one. */
