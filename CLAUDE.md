@@ -100,6 +100,11 @@ Rückfall main (= jedes Einzonen-Gerät). Der Client-Vertrag `yxc/client-contrac
 Tag KEINE Hand-Kopie mehr, sondern aus der Klasse abgeleitet (`{ [K in keyof YamahaYxcClient]: … }` —
 öffentliche Oberfläche, strukturell, damit Test-Doppelgänger sie ohne Vererbung erfüllen); der
 Controller-Test nutzt einen aufzeichnenden Stellvertreter statt 51 handgeschriebener Methoden.
+Die gemeinsame Browse-Verdrahtung (Objekte + Maschine + Treiber verbinden) liegt in
+`browse/surface.ts` — vorher dreimal fast gleich in den Controllern. XML-Sonderzeichen laufen
+über `xml/entities.ts` (dekodieren beim Lesen, escapen beim Schreiben — der Vorgänger bekam das
+von seiner XML-Bibliothek geschenkt, unser Regex-Weg braucht es explizit; sonst erscheint ein
+Ordner „Rock & Pop" verstümmelt und der Pfad-Datenpunkt findet ihn nie).
 Die YXC-DAB-Felder speisen die YNCA-DAB-IDs (`DAB_FIELDS`, eine Quelle für Anlage+Parse);
 Owner-Override `tuner.dab.preset`→YNCA (dort schreibbar, bei YXC nur Anzeige).
 **Menü-Browsing (#613, `lib/browse/`):** transport-neutrale `BrowseEngine` (besitzt die
