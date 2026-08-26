@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "news": {
+      "1.3.0": {
+        "en": "Menu browsing for Net Radio, server and USB like with the remote, preset saving and station bookmarks from ioBroker, and Bluetooth pairing controls.",
+        "de": "Menü-Browsing für Net Radio, Server und USB wie mit der Fernbedienung, Senderspeicher und Favoriten direkt aus ioBroker sowie Bluetooth-Kopplung.",
+        "ru": "Просмотр меню Net Radio, сервера и USB как с пульта, сохранение пресетов и закладок станций из ioBroker, а также управление сопряжением Bluetooth.",
+        "pt": "Navegação nos menus de Net Radio, servidor e USB como com o controle remoto, gravação de presets e favoritos a partir do ioBroker e emparelhamento Bluetooth.",
+        "nl": "Menubladeren voor Net Radio, server en USB zoals met de afstandsbediening, presets en favorieten opslaan vanuit ioBroker en Bluetooth-koppeling.",
+        "fr": "Navigation dans les menus Net Radio, serveur et USB comme avec la télécommande, enregistrement de présélections et favoris depuis ioBroker et appairage Bluetooth.",
+        "it": "Navigazione nei menu di Net Radio, server e USB come con il telecomando, salvataggio di preset e preferiti da ioBroker e abbinamento Bluetooth.",
+        "es": "Navegación por los menús de Net Radio, servidor y USB como con el mando, guardado de presintonías y favoritos desde ioBroker y emparejamiento Bluetooth.",
+        "pl": "Przeglądanie menu Net Radio, serwera i USB jak pilotem, zapisywanie presetów i ulubionych z ioBroker oraz parowanie Bluetooth.",
+        "uk": "Перегляд меню Net Radio, сервера та USB як із пульта, збереження пресетів і закладок станцій з ioBroker, а також керування спарюванням Bluetooth.",
+        "zh-cn": "像使用遥控器一样浏览 Net Radio、服务器和 USB 菜单，可从 ioBroker 保存预设和收藏电台，并支持蓝牙配对控制。"
+      },
       "1.2.0": {
         "en": "Fixes volume writes (values arrived tenfold too low) and adds preset and favourites selection, MusicCast lists with names, CD/DAB/RDS details and a clock and alarm view.",
         "de": "Behebt das Lautstärke-Schreiben (Werte kamen zehnfach zu leise an) und ergänzt Preset-/Favoriten-Auswahl, MusicCast-Listen mit Namen, CD-/DAB-/RDS-Details und eine Uhr-/Wecker-Anzeige.",
@@ -80,19 +93,6 @@
         "pl": "Napraw przypadki awarii zgłoszone przez Sentry",
         "uk": "Виправлено випадки збоїв, про які повідомив Sentry",
         "zh-cn": "修复 Sentry 报告的崩溃案例"
-      },
-      "0.5.1": {
-        "en": "Fix crash cases reported by Sentry\nfix type of pureDirect",
-        "de": "Von Sentry gemeldete Absturzfälle beheben\nfixer Typ von pureDirect",
-        "ru": "Исправить случаи сбоев, о которых сообщил Sentry\nисправить тип pureDirect",
-        "pt": "Corrigir casos de travamento relatados pelo Sentinela\ncorrigir tipo de pureDirect",
-        "nl": "Herstel crashgevallen gemeld door Sentry\nfix type pureDirect",
-        "fr": "Correction des cas de plantage signalés par Sentry\ncorrection du type de pureDirect",
-        "it": "Risolvi i casi di crash segnalati da Sentry\ncorreggere il tipo di pureDirect",
-        "es": "Solucionar casos de fallas informados por Sentry\ncorregir el tipo de pureDirect",
-        "pl": "Napraw przypadki awarii zgłoszone przez Sentry\nnapraw typ pureDirect",
-        "uk": "Виправлено випадки збоїв, про які повідомив Sentry\nВиправлено тип pureDirect",
-        "zh-cn": "修复 Sentry 报告的崩溃案例\n修复 pureDirect 的类型"
       }
     },
     "titleLang": {

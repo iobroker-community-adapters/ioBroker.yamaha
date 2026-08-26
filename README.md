@@ -90,9 +90,9 @@ On the first connect the adapter asks the receiver which functions it supports �
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 1.3.0 (2026-08-26)
 
-- (krobipd) New: menu browsing — page through the Net Radio, media-server and USB menus in the `player.browse` folder like with the remote, with select-by-line and a path datapoint that navigates to a favourite in one write (#613)
+- (krobipd) New: menu browsing — page through the Net Radio, server and USB menus like with the remote: visible lines as datapoints, select-by-line, and a path datapoint for one-write navigation (#613)
 - (krobipd) New: save presets from ioBroker — store the current tuner or network station to a preset slot and bookmark the playing Net Radio station on YNCA receivers.
 - (krobipd) New: Bluetooth pairing and connect controls, FM mono mode and tuning indicators on YNCA receivers.
 
@@ -124,10 +124,6 @@ On the first connect the adapter asks the receiver which functions it supports �
 - (krobipd) Every device shows a type icon — receiver, stereo receiver, speaker, soundbar or CD system, detected from the reported model — in the object tree and on its admin card; the adapter logo now stays readable in light and dark mode.
 - (krobipd) Upgrading from 0.5.x shows a one-time notice explaining the new object tree before the update installs.
 - (mcm1957) version has been rebuilt due to deploy problems
-
-### 0.5.4 (2024-06-14) — stable
-
-- (foxriver76) updated packages
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 

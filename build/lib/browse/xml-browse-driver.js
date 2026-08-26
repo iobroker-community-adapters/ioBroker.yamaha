@@ -123,7 +123,11 @@ class XmlBrowseDriver {
   async refresh() {
     await this.fetch();
   }
-  /** Send a List_Control command to the active source and read the window back. */
+  /**
+   * Send a List_Control command to the active source and read the window back.
+   *
+   * @param inner the List_Control payload (Direct_Sel, Cursor, Jump_Line)
+   */
   async control(inner) {
     if (!this.active) {
       return;

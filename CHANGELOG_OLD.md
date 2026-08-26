@@ -1,4 +1,8 @@
 # Older changes
+## 0.5.4 (2024-06-14) — stable
+
+- (foxriver76) updated packages
+
 ## 0.5.3 (2022-06-17)
 
 - (Apollon77) Fix crash cases reported by Sentry
