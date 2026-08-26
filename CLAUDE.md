@@ -91,7 +91,16 @@ ynca-python-Mixins; write-only, PLAYBACKINFO-gegated). YXC: Favoriten-/Zuletzt-L
 Abruf-Nummern, Tuner-Presets je Band (`getFeatures tuner.preset.type` common/separate steuert Abruf-Band),
 Geräte-eigene Wertelisten aus `getFeatures` werden Dropdowns (`YxcZone.valueLists`), Wecker-Block `clock.*`
 read-only (der Alt-Adapter hatte auch keinen funktionierenden Schreibweg) mit eigener Admin-Gruppe
-`group_clock`. Die YXC-DAB-Felder speisen die YNCA-DAB-IDs (`DAB_FIELDS`, eine Quelle für Anlage+Parse);
+`group_clock`. **Abruf-Zone (2026-08-26):** `recallPreset`/`recallRecentItem`/`recallTunerPreset` schalten die
+ZIELZONE auf die Quelle — deshalb ging ein Favorit früher immer in die Hauptzone und riss sie von
+ihrem Programm weg. Die Kommandos sind jetzt deklarativ (`netusbPreset`/`netusbRecent`/`tunerPreset`),
+der Controller setzt die Zone über `zoneListeningTo(source)`: er merkt je Zone den Eingang (aus dem
+Status) und die aktive Netzwerk-Quelle (`player.netPlayer.source`), Hauptzone gewinnt bei Gleichstand,
+Rückfall main (= jedes Einzonen-Gerät). Der Client-Vertrag `yxc/client-contract.ts` ist seit demselben
+Tag KEINE Hand-Kopie mehr, sondern aus der Klasse abgeleitet (`{ [K in keyof YamahaYxcClient]: … }` —
+öffentliche Oberfläche, strukturell, damit Test-Doppelgänger sie ohne Vererbung erfüllen); der
+Controller-Test nutzt einen aufzeichnenden Stellvertreter statt 51 handgeschriebener Methoden.
+Die YXC-DAB-Felder speisen die YNCA-DAB-IDs (`DAB_FIELDS`, eine Quelle für Anlage+Parse);
 Owner-Override `tuner.dab.preset`→YNCA (dort schreibbar, bei YXC nur Anzeige).
 **Menü-Browsing (#613, `lib/browse/`):** transport-neutrale `BrowseEngine` (besitzt die
 `player.browse.*`-States: 8 Zeilen-Fenster mit 📁/♪-Präfix, selectLine=OK, page/back/home,

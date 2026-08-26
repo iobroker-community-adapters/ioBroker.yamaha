@@ -98,6 +98,7 @@ On the first connect the adapter asks the receiver which functions it supports â
 - (krobipd) Fixed: writing one equalizer band no longer resets the other two when the device has not reported its bands yet
 - (krobipd) Fixed: switching the tuner band and setting a frequency right after each other now applies the frequency to the new band
 - (krobipd) Improved: startup with automatic discovery is much faster on networks with many devices, and a reconnect no longer re-asks what the device already told us
+- (krobipd) Fixed: recalling a favourite, a recently played item or a tuner preset now goes to the zone that is actually listening instead of always switching the main zone
 - (krobipd) Improved: stopping or restarting the adapter no longer leaves requests running that write to datapoints afterwards
 ### 1.3.0 (2026-08-26)
 

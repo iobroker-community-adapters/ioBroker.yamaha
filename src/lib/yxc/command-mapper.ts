@@ -17,7 +17,9 @@ export type YxcCommand =
   | { kind: "equalizer"; zone: string; band: "low" | "mid" | "high"; value: number }
   | { kind: "tunerFreq"; value: number }
   | { kind: "tunerPreset"; value: number }
-  | { kind: "tunerBand"; band: string };
+  | { kind: "tunerBand"; band: string }
+  | { kind: "netusbPreset"; value: number }
+  | { kind: "netusbRecent"; value: number };
 
 /**
  * Read a catalog entry's raw getStatus value — a flat field or a nested path.
@@ -129,11 +131,14 @@ export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefi
   }
   if (stateId === "player.netPlayer.preset" && isWritableValue(value, true)) {
     const preset = Number(value);
-    return { kind: "run", run: client => client.recallPreset(preset, "main") };
+    // Declarative, because the ZONE is not knowable here: recalling a favourite also
+    // routes it to a zone, and the right one is whichever zone is listening to the network
+    // player. Only the controller tracks that.
+    return { kind: "netusbPreset", value: preset };
   }
   if (stateId === "player.netPlayer.recallRecent" && isWritableValue(value, true)) {
     const num = Number(value);
-    return { kind: "run", run: client => client.recallRecentItem(num, "main") };
+    return { kind: "netusbRecent", value: num };
   }
   if (stateId === "tuner.preset" && isWritableValue(value, true)) {
     // The controller supplies the band (or `common` on shared-list devices).

@@ -147,7 +147,9 @@ describe("stateToYxc control methods (repeat/shuffle/tray, tuner, party, preset)
     expect(stateToYxc("tuner.band", "fm")).toEqual({ kind: "tunerBand", band: "fm" });
     // Frequency needs the controller-cached band, so it stays declarative.
     expect(stateToYxc("tuner.frequency", 100900)).toEqual({ kind: "tunerFreq", value: 100900 });
-    expect(await ranCall("player.netPlayer.preset", 3)).toEqual(["recallPreset", [3, "main"]]);
+    // Declarative: a recall also switches its target zone to the source, so the controller
+    // picks the zone that is actually listening — the mapper cannot know it.
+    expect(stateToYxc("player.netPlayer.preset", 3)).toEqual({ kind: "netusbPreset", value: 3 });
     expect(await ranCall("multiroom.partyEnable", true)).toEqual(["setPartyMode", [true]]);
   });
 
@@ -433,7 +435,7 @@ describe("preset/recent selection (musiccast-adapter parity)", () => {
   });
 
   test("recall/step writes map to their client calls; the tuner preset stays declarative", async () => {
-    expect(await ranCall("player.netPlayer.recallRecent", 2)).toEqual(["recallRecentItem", [2, "main"]]);
+    expect(stateToYxc("player.netPlayer.recallRecent", 2)).toEqual({ kind: "netusbRecent", value: 2 });
     expect(await ranCall("tuner.presetUp", true)).toEqual(["switchTunerPreset", ["next"]]);
     expect(await ranCall("tuner.presetDown", true)).toEqual(["switchTunerPreset", ["previous"]]);
     // The band comes from controller state, so the command is declarative like tunerFreq.

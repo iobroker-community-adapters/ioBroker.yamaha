@@ -15,244 +15,120 @@ const testGate = (): CommandGate =>
 const flush = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
 const silentLog = { debug: (): void => {}, info: (): void => {}, warn: (): void => {} };
 
-class FakeClient implements YxcClientLike {
-  public calls: Array<{ method: string; args: unknown[] }> = [];
-  public failStatus = false;
-  public constructor(
-    private readonly features: unknown,
-    private readonly status: unknown,
-  ) {}
-  public async getFeatures(): Promise<unknown> {
-    return this.features;
-  }
-  public async getStatus(zone: string): Promise<unknown> {
-    this.calls.push({ method: "getStatus", args: [zone] });
-    if (this.failStatus) {
-      throw new Error("device offline");
-    }
-    return this.status;
-  }
-  public deviceInfo: unknown = {};
-  public async getDeviceInfo(): Promise<unknown> {
-    this.calls.push({ method: "getDeviceInfo", args: [] });
-    return this.deviceInfo;
-  }
-  public nameText: unknown = {};
-  public failNameText = false;
-  public async getNameText(): Promise<unknown> {
-    this.calls.push({ method: "getNameText", args: [] });
-    if (this.failNameText) {
-      throw new Error("not supported");
-    }
-    return this.nameText;
-  }
-  public listInfo: unknown = { response_code: 0, menu_layer: 1, menu_name: "", max_line: 0, list_info: [] };
-  public async getListInfo(input: string, index: number, size?: number): Promise<unknown> {
-    this.calls.push({ method: "getListInfo", args: [input, index, size] });
-    return this.listInfo;
-  }
-  public async setListControl(type: "select" | "play" | "return", index?: number, zone?: string): Promise<unknown> {
-    this.calls.push({ method: "setListControl", args: [type, index, zone] });
-    return { response_code: 0 };
-  }
-  public presetInfo: unknown = { response_code: 0, preset_info: [] };
-  public async getPresetInfo(): Promise<unknown> {
-    this.calls.push({ method: "getPresetInfo", args: [] });
-    return this.presetInfo;
-  }
-  public recentInfo: unknown = { response_code: 0, recent_info: [] };
-  public async getRecentInfo(): Promise<unknown> {
-    this.calls.push({ method: "getRecentInfo", args: [] });
-    return this.recentInfo;
-  }
-  public async recallRecentItem(num: number, zone: string): Promise<unknown> {
-    this.calls.push({ method: "recallRecentItem", args: [num, zone] });
-    return {};
-  }
-  public tunerPresetInfo: unknown = { response_code: 0, preset_info: [] };
-  public async getTunerPresetInfo(band: string): Promise<unknown> {
-    this.calls.push({ method: "getTunerPresetInfo", args: [band] });
-    return this.tunerPresetInfo;
-  }
-  public async recallTunerPreset(band: string, num: number, zone: string): Promise<unknown> {
-    this.calls.push({ method: "recallTunerPreset", args: [band, num, zone] });
-    return {};
-  }
-  public async switchTunerPreset(direction: "next" | "previous"): Promise<unknown> {
-    this.calls.push({ method: "switchTunerPreset", args: [direction] });
-    return {};
-  }
-  public clockSettings: unknown = { response_code: 0 };
-  public async getClockSettings(): Promise<unknown> {
-    this.calls.push({ method: "getClockSettings", args: [] });
-    return this.clockSettings;
-  }
-  public async power(on: boolean, zone: string): Promise<unknown> {
-    this.calls.push({ method: "power", args: [on, zone] });
-    return {};
-  }
-  public async setVolumeTo(to: number, zone: string): Promise<unknown> {
-    this.calls.push({ method: "setVolumeTo", args: [to, zone] });
-    return {};
-  }
-  public async mute(on: boolean, zone: string): Promise<unknown> {
-    this.calls.push({ method: "mute", args: [on, zone] });
-    return {};
-  }
-  public async setInput(input: string, zone: string): Promise<unknown> {
-    this.calls.push({ method: "setInput", args: [input, zone] });
-    return {};
-  }
-  public async setSound(program: string, zone: string): Promise<unknown> {
-    this.calls.push({ method: "setSound", args: [program, zone] });
-    return {};
-  }
-  public async setEnhancer(on: boolean, zone: string): Promise<unknown> {
-    this.calls.push({ method: "setEnhancer", args: [on, zone] });
-    return {};
-  }
-  public async setPureDirect(on: boolean, zone: string): Promise<unknown> {
-    this.calls.push({ method: "setPureDirect", args: [on, zone] });
-    return {};
-  }
-  public async getPlayInfo(source?: string): Promise<unknown> {
-    this.calls.push({ method: "getPlayInfo", args: source === undefined ? [] : [source] });
-    if (source === "tuner") {
-      return { band: "fm", fm: { freq: 100900 }, rds: { radio_text_a: "Hit" } };
-    }
-    if (source === "cd") {
-      return { playback: "play", track: "Track 1" };
-    }
-    return {};
-  }
-  public async setCDPlayback(action: string): Promise<unknown> {
-    this.calls.push({ method: "setCDPlayback", args: [action] });
-    return {};
-  }
-  public async toggleNetRepeat(): Promise<unknown> {
-    this.calls.push({ method: "toggleNetRepeat", args: [] });
-    return {};
-  }
-  public async toggleNetShuffle(): Promise<unknown> {
-    this.calls.push({ method: "toggleNetShuffle", args: [] });
-    return {};
-  }
-  public async toggleCDRepeat(): Promise<unknown> {
-    this.calls.push({ method: "toggleCDRepeat", args: [] });
-    return {};
-  }
-  public async toggleCDShuffle(): Promise<unknown> {
-    this.calls.push({ method: "toggleCDShuffle", args: [] });
-    return {};
-  }
-  public async toggleTray(): Promise<unknown> {
-    this.calls.push({ method: "toggleTray", args: [] });
-    return {};
-  }
-  public async setBand(band: string): Promise<unknown> {
-    this.calls.push({ method: "setBand", args: [band] });
-    return {};
-  }
-  public async setFreq(band: string, freq: number): Promise<unknown> {
-    this.calls.push({ method: "setFreq", args: [band, freq] });
-    return {};
-  }
-  public async setPartyMode(on: boolean): Promise<unknown> {
-    this.calls.push({ method: "setPartyMode", args: [on] });
-    return {};
-  }
-  public async recallPreset(num: number, zone: string): Promise<unknown> {
-    this.calls.push({ method: "recallPreset", args: [num, zone] });
-    return {};
-  }
-  public async setEqualizer(low: number, mid: number, high: number, zone: string): Promise<unknown> {
-    this.calls.push({ method: "setEqualizer", args: [low, mid, high, zone] });
-    return {};
-  }
-  public distRole = "server";
-  public async getDistributionInfo(): Promise<unknown> {
-    this.calls.push({ method: "getDistributionInfo", args: [] });
-    return {
-      role: this.distRole,
+/**
+ * A recording MusicCast client for the controller tests.
+ *
+ * Every method records its call and answers from `replies`; anything not listed answers an
+ * empty success. Spelling all fifty methods out by hand (which is what the former
+ * hand-written client interface forced) added 239 lines that had to be extended with every
+ * new client method — the same generic approach the command-mapper tests already use.
+ */
+interface FakeClient extends YxcClientLike {
+  /** Every call the controller made, in order. */
+  calls: Array<{ method: string; args: unknown[] }>;
+  /** Canned answers, settable per test. */
+  features: unknown;
+  status: unknown;
+  deviceInfo: unknown;
+  nameText: unknown;
+  listInfo: unknown;
+  presetInfo: unknown;
+  recentInfo: unknown;
+  tunerPresetInfo: unknown;
+  clockSettings: unknown;
+  distRole: string;
+  /** Make the zone status / name lookup fail, as an unreachable device would. */
+  failStatus: boolean;
+  failNameText: boolean;
+}
+
+/**
+ * Build the recording client.
+ *
+ * @param features the getFeatures answer
+ * @param status the getStatus answer
+ * @returns the fake client
+ */
+function makeFakeClient(features: unknown, status: unknown): FakeClient {
+  const state: Record<string, unknown> = {
+    calls: [] as Array<{ method: string; args: unknown[] }>,
+    features,
+    status,
+    deviceInfo: {},
+    nameText: {},
+    listInfo: { response_code: 0, menu_layer: 1, menu_name: "", max_line: 0, list_info: [] },
+    presetInfo: { response_code: 0, preset_info: [] },
+    recentInfo: { response_code: 0, recent_info: [] },
+    tunerPresetInfo: { response_code: 0, preset_info: [] },
+    clockSettings: { response_code: 0 },
+    distRole: "server",
+    failStatus: false,
+    failNameText: false,
+  };
+  // The answers that are more than "an empty success".
+  const replies: Record<string, (args: unknown[]) => unknown> = {
+    getFeatures: () => state.features,
+    getStatus: () => {
+      if (state.failStatus) {
+        throw new Error("device offline");
+      }
+      return state.status;
+    },
+    getDeviceInfo: () => state.deviceInfo,
+    getNameText: () => {
+      if (state.failNameText) {
+        throw new Error("not supported");
+      }
+      return state.nameText;
+    },
+    getListInfo: () => state.listInfo,
+    setListControl: () => ({ response_code: 0 }),
+    getPresetInfo: () => state.presetInfo,
+    getRecentInfo: () => state.recentInfo,
+    getTunerPresetInfo: () => state.tunerPresetInfo,
+    getClockSettings: () => state.clockSettings,
+    getPlayInfo: ([source]) => {
+      if (source === "tuner") {
+        return { band: "fm", fm: { freq: 100900 }, rds: { radio_text_a: "Hit" } };
+      }
+      if (source === "cd") {
+        return { playback: "play", track: "Track 1" };
+      }
+      return {};
+    },
+    getDistributionInfo: () => ({
+      role: state.distRole,
       group_id: "g1",
       group_name: "Group 1",
       server_zone: "main",
       client_list: ["1.2.3.5"],
-    };
-  }
-  public async setServerInfo(info: {
-    group_id: string;
-    zone: string;
-    type: string;
-    client_list: string[];
-  }): Promise<unknown> {
-    this.calls.push({ method: "setServerInfo", args: [info] });
-    return {};
-  }
-  public async setClientInfo(info: { group_id: string; zone: string[] }): Promise<unknown> {
-    this.calls.push({ method: "setClientInfo", args: [info] });
-    return {};
-  }
-  public async startDistribution(num: number): Promise<unknown> {
-    this.calls.push({ method: "startDistribution", args: [num] });
-    return {};
-  }
-  public async stopDistribution(): Promise<unknown> {
-    this.calls.push({ method: "stopDistribution", args: [] });
-    return {};
-  }
-  public async setSubwooferVolumeTo(to: number, zone: string): Promise<unknown> {
-    this.calls.push({ method: "setSubwooferVolumeTo", args: [to, zone] });
-    return {};
-  }
-  public async setBassTo(to: number, zone: string): Promise<unknown> {
-    this.calls.push({ method: "setBassTo", args: [to, zone] });
-    return {};
-  }
-  public async setTrebleTo(to: number, zone: string): Promise<unknown> {
-    this.calls.push({ method: "setTrebleTo", args: [to, zone] });
-    return {};
-  }
-  public async sleep(minutes: number, zone: string): Promise<unknown> {
-    this.calls.push({ method: "sleep", args: [minutes, zone] });
-    return {};
-  }
-  public async setDirect(on: boolean, zone: string): Promise<unknown> {
-    this.calls.push({ method: "setDirect", args: [on, zone] });
-    return {};
-  }
-  public async setClearVoice(on: boolean, zone: string): Promise<unknown> {
-    this.calls.push({ method: "setClearVoice", args: [on, zone] });
-    return {};
-  }
-  public async setBassExtension(on: boolean, zone: string): Promise<unknown> {
-    this.calls.push({ method: "setBassExtension", args: [on, zone] });
-    return {};
-  }
-  public async setBalance(value: number, zone: string): Promise<unknown> {
-    this.calls.push({ method: "setBalance", args: [value, zone] });
-    return {};
-  }
-  public async playNet(): Promise<unknown> {
-    this.calls.push({ method: "playNet", args: [] });
-    return {};
-  }
-  public async pauseNet(): Promise<unknown> {
-    this.calls.push({ method: "pauseNet", args: [] });
-    return {};
-  }
-  public async stopNet(): Promise<unknown> {
-    this.calls.push({ method: "stopNet", args: [] });
-    return {};
-  }
-  public async nextNet(): Promise<unknown> {
-    this.calls.push({ method: "nextNet", args: [] });
-    return {};
-  }
-  public async prevNet(): Promise<unknown> {
-    this.calls.push({ method: "prevNet", args: [] });
-    return {};
-  }
+    }),
+  };
+  return new Proxy(state, {
+    get: (target, prop: string) => {
+      if (prop in target) {
+        return target[prop];
+      }
+      return (...args: unknown[]) => {
+        // Trailing optional arguments the caller left out are not recorded — otherwise
+        // getPlayInfo() would show up as [undefined] instead of [].
+        const recorded = [...args];
+        while (recorded.length > 0 && recorded[recorded.length - 1] === undefined) {
+          recorded.pop();
+        }
+        (target.calls as Array<{ method: string; args: unknown[] }>).push({ method: prop, args: recorded });
+        try {
+          return Promise.resolve(replies[prop]?.(args) ?? {});
+        } catch (e) {
+          return Promise.reject(e instanceof Error ? e : new Error(String(e)));
+        }
+      };
+    },
+    set: (target, prop: string, value) => {
+      target[prop] = value;
+      return true;
+    },
+  }) as unknown as FakeClient;
 }
 
 function setup(
@@ -269,7 +145,7 @@ function setup(
   cancelled: () => boolean;
   unregistered: () => boolean;
 } {
-  const client = new FakeClient(features, status);
+  const client = makeFakeClient(features, status);
   const objects: string[] = [];
   const acks: Array<{ id: string; value: unknown }> = [];
   const names: string[] = [];
@@ -477,7 +353,7 @@ describe("YxcDeviceController", () => {
 
   test("linking a client sends it the group, adds it on the server, and starts distribution", async () => {
     const features = { zone: [{ id: "main", func_list: ["power"] }], distribution: { version: 2 } };
-    const clientDevice = new FakeClient({}, {});
+    const clientDevice = makeFakeClient({}, {});
     const s = setup(features, ysp, { "1.2.3.9": clientDevice });
     await s.controller.start();
     s.client.calls.length = 0;
@@ -780,7 +656,7 @@ describe("YxcDeviceController browse surface (#613)", () => {
     client: FakeClient;
     objects: string[];
   } {
-    const client = new FakeClient(features, { response_code: 0 });
+    const client = makeFakeClient(features, { response_code: 0 });
     const objects: string[] = [];
     const controller = new YxcDeviceController("living", {
       client,
@@ -803,7 +679,7 @@ describe("YxcDeviceController browse surface (#613)", () => {
     expect(objects).toContain("living.player.browse.selectLine");
     controller.handleStateChange("living.player.browse.source", false, "netRadio");
     await flush();
-    expect(client.calls).toContainEqual({ method: "getListInfo", args: ["net_radio", 0, undefined] });
+    expect(client.calls).toContainEqual({ method: "getListInfo", args: ["net_radio", 0] });
   });
 
   test("creates no browse tree without the netusb block", async () => {
@@ -813,5 +689,87 @@ describe("YxcDeviceController browse surface (#613)", () => {
     });
     await controller.start();
     expect(objects.some(id => id.includes("player.browse"))).toBe(false);
+  });
+});
+
+describe("YxcDeviceController recall routing (which zone gets the favourite)", () => {
+  const twoZones = {
+    system: {},
+    zone: [
+      { id: "main", func_list: ["power"], input_list: ["hdmi1", "net_radio"] },
+      { id: "zone2", func_list: ["power"], input_list: ["net_radio"] },
+    ],
+    netusb: {},
+  };
+
+  /** Set up a two-zone device where main plays HDMI and zone 2 plays net radio. */
+  async function twoZoneSetup(): Promise<{ controller: YxcDeviceController; client: FakeClient }> {
+    const client = makeFakeClient(twoZones, { response_code: 0 });
+    // getStatus answers per zone via the recorded call; the controller stores each zone's input.
+    const controller = new YxcDeviceController("living", {
+      client,
+      registerPush: () => () => {},
+      scheduleKeepalive: () => () => {},
+      upsertObject: async () => {},
+      setStateAck: () => {},
+      log: silentLog,
+    });
+    return { controller, client };
+  }
+
+  test("a favourite goes to the zone that is listening to the network player, not always to main", async () => {
+    const { controller, client } = await twoZoneSetup();
+    // Main is on HDMI, zone 2 on net radio — and the network player plays net radio.
+    const inner = controller as unknown as {
+      lastZoneInput: Map<string, string>;
+      lastNetusbInput: string;
+      applyCommand(stateId: string, command: unknown): Promise<void>;
+    };
+    inner.lastZoneInput.set("main", "hdmi1");
+    inner.lastZoneInput.set("zone2", "net_radio");
+    inner.lastNetusbInput = "net_radio";
+    await inner.applyCommand("player.netPlayer.preset", { kind: "netusbPreset", value: 3 });
+    expect(client.calls).toContainEqual({ method: "recallPreset", args: [3, "zone2"] });
+  });
+
+  test("main wins when it is listening to the same source", async () => {
+    const { controller, client } = await twoZoneSetup();
+    const inner = controller as unknown as {
+      lastZoneInput: Map<string, string>;
+      lastNetusbInput: string;
+      applyCommand(stateId: string, command: unknown): Promise<void>;
+    };
+    inner.lastZoneInput.set("main", "net_radio");
+    inner.lastZoneInput.set("zone2", "net_radio");
+    inner.lastNetusbInput = "net_radio";
+    await inner.applyCommand("player.netPlayer.preset", { kind: "netusbPreset", value: 1 });
+    expect(client.calls).toContainEqual({ method: "recallPreset", args: [1, "main"] });
+  });
+
+  test("falls back to main when nothing is listening to that source (every single-zone device)", async () => {
+    const { controller, client } = await twoZoneSetup();
+    const inner = controller as unknown as {
+      lastZoneInput: Map<string, string>;
+      lastNetusbInput: string;
+      applyCommand(stateId: string, command: unknown): Promise<void>;
+    };
+    inner.lastZoneInput.set("main", "hdmi1");
+    inner.lastNetusbInput = "";
+    await inner.applyCommand("player.netPlayer.recallRecent", { kind: "netusbRecent", value: 2 });
+    expect(client.calls).toContainEqual({ method: "recallRecentItem", args: [2, "main"] });
+  });
+
+  test("a tuner preset goes to the zone listening to the tuner", async () => {
+    const { controller, client } = await twoZoneSetup();
+    const inner = controller as unknown as {
+      lastZoneInput: Map<string, string>;
+      tunerFeatures: { presetType: string; bands: string[] };
+      applyCommand(stateId: string, command: unknown): Promise<void>;
+    };
+    inner.lastZoneInput.set("main", "hdmi1");
+    inner.lastZoneInput.set("zone2", "tuner");
+    inner.tunerFeatures = { presetType: "common", bands: ["fm"] };
+    await inner.applyCommand("tuner.preset", { kind: "tunerPreset", value: 4 });
+    expect(client.calls).toContainEqual({ method: "recallTunerPreset", args: ["common", 4, "zone2"] });
   });
 });

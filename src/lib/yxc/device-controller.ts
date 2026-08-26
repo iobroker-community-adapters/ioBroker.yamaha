@@ -128,6 +128,10 @@ export class YxcDeviceController implements ConnectionHandle {
   private readonly dropDetector = new PollDropDetector();
   /** The tuner's current band, cached so a frequency write can supply it (setFreq needs band + freq). */
   private lastTunerBand = "fm";
+  /** Each zone's currently selected input, from its status — see {@link zoneListeningTo}. */
+  private readonly lastZoneInput = new Map<string, string>();
+  /** The source the network player is currently on (netusb `input`, e.g. "net_radio"). */
+  private lastNetusbInput = "";
   /** Each zone's last-seen equalizer bands, cached so one band write can supply the other two. */
   private readonly lastEqualizer = new Map<string, { low: number; mid: number; high: number }>();
   /** Whether the device reports MusicCast-Link distribution (gates the dist poll and objects). */
@@ -227,6 +231,34 @@ export class YxcDeviceController implements ConnectionHandle {
    */
   private remember<T>(key: string, probe: () => Promise<T>): Promise<T> {
     return this.deps.probeMemory ? this.deps.probeMemory.once(key, probe) : probe();
+  }
+
+  /**
+   * The zone a recall should be routed to: recalling a favourite does not just start it, it
+   * also switches THAT zone to the source. Sending everything to the main zone (as this did
+   * before) means someone listening in zone 2 gets their favourite in the living room
+   * instead — and the main zone switched away from whatever it was playing.
+   *
+   * The zone actually listening to the source is the right target; the main zone is the
+   * fallback when nothing matches, which is also every single-zone device.
+   *
+   * @param source the input the recall belongs to (a network source, or "tuner")
+   * @returns the zone to route the recall to
+   */
+  private zoneListeningTo(source: string): string {
+    if (!source) {
+      return "main";
+    }
+    // Main first: on a device where several zones share the source, it is the natural target.
+    if (this.lastZoneInput.get("main") === source) {
+      return "main";
+    }
+    for (const [zone, input] of this.lastZoneInput) {
+      if (input === source) {
+        return zone;
+      }
+    }
+    return "main";
   }
 
   /**
@@ -483,6 +515,9 @@ export class YxcDeviceController implements ConnectionHandle {
         if (update.id === "tuner.band") {
           this.lastTunerBand = String(update.value);
         }
+        if (update.id === "player.netPlayer.source" && typeof update.value === "string") {
+          this.lastNetusbInput = update.value;
+        }
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getPlayInfo(${arg ?? ""}) failed: ${errorMessage(e)}`);
@@ -562,6 +597,9 @@ export class YxcDeviceController implements ConnectionHandle {
       const updates = parseYxcStatus(status, zone);
       for (const update of updates) {
         this.emit(update.id, update.value);
+        if (update.id.endsWith("input") && typeof update.value === "string") {
+          this.lastZoneInput.set(zone, update.value);
+        }
       }
       this.cacheEqualizer(zone, updates);
       return true;
@@ -644,9 +682,15 @@ export class YxcDeviceController implements ConnectionHandle {
         case "tunerPreset": {
           // Shared-list devices recall on `common`; separate-list devices on the current band.
           const band = this.tunerFeatures?.presetType === "common" ? "common" : this.lastTunerBand;
-          await this.deps.client.recallTunerPreset(band, command.value, "main");
+          await this.deps.client.recallTunerPreset(band, command.value, this.zoneListeningTo("tuner"));
           break;
         }
+        case "netusbPreset":
+          await this.deps.client.recallPreset(command.value, this.zoneListeningTo(this.lastNetusbInput));
+          break;
+        case "netusbRecent":
+          await this.deps.client.recallRecentItem(command.value, this.zoneListeningTo(this.lastNetusbInput));
+          break;
       }
     } catch (e) {
       this.deps.log.warn(`${this.deviceId}: write to ${stateId} failed: ${errorMessage(e)}`);

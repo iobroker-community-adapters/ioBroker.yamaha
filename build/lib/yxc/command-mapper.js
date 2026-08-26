@@ -103,11 +103,11 @@ function stateToYxc(stateId, value) {
   }
   if (stateId === "player.netPlayer.preset" && (0, import_value_coerce.isWritableValue)(value, true)) {
     const preset = Number(value);
-    return { kind: "run", run: (client) => client.recallPreset(preset, "main") };
+    return { kind: "netusbPreset", value: preset };
   }
   if (stateId === "player.netPlayer.recallRecent" && (0, import_value_coerce.isWritableValue)(value, true)) {
     const num = Number(value);
-    return { kind: "run", run: (client) => client.recallRecentItem(num, "main") };
+    return { kind: "netusbRecent", value: num };
   }
   if (stateId === "tuner.preset" && (0, import_value_coerce.isWritableValue)(value, true)) {
     return { kind: "tunerPreset", value: Number(value) };

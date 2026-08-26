@@ -70,6 +70,10 @@ class YxcDeviceController {
   dropDetector = new import_poll_drop_detector.PollDropDetector();
   /** The tuner's current band, cached so a frequency write can supply it (setFreq needs band + freq). */
   lastTunerBand = "fm";
+  /** Each zone's currently selected input, from its status — see {@link zoneListeningTo}. */
+  lastZoneInput = /* @__PURE__ */ new Map();
+  /** The source the network player is currently on (netusb `input`, e.g. "net_radio"). */
+  lastNetusbInput = "";
   /** Each zone's last-seen equalizer bands, cached so one band write can supply the other two. */
   lastEqualizer = /* @__PURE__ */ new Map();
   /** Whether the device reports MusicCast-Link distribution (gates the dist poll and objects). */
@@ -147,6 +151,32 @@ class YxcDeviceController {
    */
   remember(key, probe) {
     return this.deps.probeMemory ? this.deps.probeMemory.once(key, probe) : probe();
+  }
+  /**
+   * The zone a recall should be routed to: recalling a favourite does not just start it, it
+   * also switches THAT zone to the source. Sending everything to the main zone (as this did
+   * before) means someone listening in zone 2 gets their favourite in the living room
+   * instead — and the main zone switched away from whatever it was playing.
+   *
+   * The zone actually listening to the source is the right target; the main zone is the
+   * fallback when nothing matches, which is also every single-zone device.
+   *
+   * @param source the input the recall belongs to (a network source, or "tuner")
+   * @returns the zone to route the recall to
+   */
+  zoneListeningTo(source) {
+    if (!source) {
+      return "main";
+    }
+    if (this.lastZoneInput.get("main") === source) {
+      return "main";
+    }
+    for (const [zone, input] of this.lastZoneInput) {
+      if (input === source) {
+        return zone;
+      }
+    }
+    return "main";
   }
   /**
    * Write a device-originated value — but never after the connection was closed. A poll
@@ -378,6 +408,9 @@ class YxcDeviceController {
         if (update.id === "tuner.band") {
           this.lastTunerBand = String(update.value);
         }
+        if (update.id === "player.netPlayer.source" && typeof update.value === "string") {
+          this.lastNetusbInput = update.value;
+        }
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getPlayInfo(${arg != null ? arg : ""}) failed: ${(0, import_util.errorMessage)(e)}`);
@@ -452,6 +485,9 @@ class YxcDeviceController {
       const updates = (0, import_command_mapper.parseYxcStatus)(status, zone);
       for (const update of updates) {
         this.emit(update.id, update.value);
+        if (update.id.endsWith("input") && typeof update.value === "string") {
+          this.lastZoneInput.set(zone, update.value);
+        }
       }
       this.cacheEqualizer(zone, updates);
       return true;
@@ -526,9 +562,15 @@ class YxcDeviceController {
           break;
         case "tunerPreset": {
           const band = ((_a = this.tunerFeatures) == null ? void 0 : _a.presetType) === "common" ? "common" : this.lastTunerBand;
-          await this.deps.client.recallTunerPreset(band, command.value, "main");
+          await this.deps.client.recallTunerPreset(band, command.value, this.zoneListeningTo("tuner"));
           break;
         }
+        case "netusbPreset":
+          await this.deps.client.recallPreset(command.value, this.zoneListeningTo(this.lastNetusbInput));
+          break;
+        case "netusbRecent":
+          await this.deps.client.recallRecentItem(command.value, this.zoneListeningTo(this.lastNetusbInput));
+          break;
       }
     } catch (e) {
       this.deps.log.warn(`${this.deviceId}: write to ${stateId} failed: ${(0, import_util.errorMessage)(e)}`);
