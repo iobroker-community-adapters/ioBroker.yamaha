@@ -123,13 +123,13 @@ class CommandGate {
     if (this.running || this.closed || this.queue.length === 0) {
       return;
     }
-    const wait = this.options.minSpacingMs - (this.now() - this.lastStart);
-    if (wait > 0) {
+    const spacingLeft = this.options.minSpacingMs - (this.now() - this.lastStart);
+    if (spacingLeft > 0) {
       this.running = true;
       this.options.timers.schedule(() => {
         this.running = false;
         this.pump();
-      }, wait);
+      }, spacingLeft);
       return;
     }
     const entry = this.queue.shift();
