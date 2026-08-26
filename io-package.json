@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "news": {
+      "1.4.0": {
+        "en": "Commands sent in one go all arrive, favourites land in the zone that is listening, special characters work again, and startup and reconnects are noticeably faster.",
+        "de": "Mehrere Befehle auf einmal kommen alle an, Favoriten landen in der hörenden Zone, Sonderzeichen funktionieren wieder, und Start und Neuverbindung sind spürbar schneller.",
+        "ru": "Команды, отправленные подряд, доходят все; избранное попадает в слушающую зону; спецсимволы снова работают; запуск и переподключение заметно быстрее.",
+        "pt": "Comandos enviados de uma vez chegam todos, os favoritos vão para a zona que está a ouvir, os caracteres especiais voltam a funcionar e o arranque e a reconexão são bem mais rápidos.",
+        "nl": "Meerdere commando's tegelijk komen allemaal aan, favorieten belanden in de luisterende zone, speciale tekens werken weer, en opstarten en opnieuw verbinden gaan merkbaar sneller.",
+        "fr": "Les commandes envoyées d'un coup arrivent toutes, les favoris vont dans la zone qui écoute, les caractères spéciaux fonctionnent de nouveau, et le démarrage est nettement plus rapide.",
+        "it": "I comandi inviati insieme arrivano tutti, i preferiti finiscono nella zona in ascolto, i caratteri speciali funzionano di nuovo e avvio e riconnessione sono molto più rapidi.",
+        "es": "Los comandos enviados a la vez llegan todos, los favoritos van a la zona que está escuchando, los caracteres especiales vuelven a funcionar y el arranque y la reconexión son mucho más rápidos.",
+        "pl": "Komendy wysłane naraz docierają wszystkie, ulubione trafiają do słuchającej strefy, znaki specjalne znów działają, a start i ponowne łączenie są wyraźnie szybsze.",
+        "uk": "Команди, надіслані разом, доходять усі, обране потрапляє в зону, що слухає, спецсимволи знову працюють, а запуск і перепідключення помітно швидші.",
+        "zh-cn": "一次发送的多条指令全部送达，收藏会进入正在收听的分区，特殊字符恢复正常，启动与重连明显更快。"
+      },
       "1.3.0": {
         "en": "Menu browsing for Net Radio, server and USB like with the remote, preset saving and station bookmarks from ioBroker, and Bluetooth pairing controls.",
         "de": "Menü-Browsing für Net Radio, Server und USB wie mit der Fernbedienung, Senderspeicher und Favoriten direkt aus ioBroker sowie Bluetooth-Kopplung.",
@@ -80,19 +93,6 @@
         "pl": "Sprawy katastrofy Fix podane przez Sentry’a",
         "uk": "Виправлено випадки збоїв, про які повідомив Sentry",
         "zh-cn": "Sentry所报告的六例事故"
-      },
-      "0.5.2": {
-        "en": "Fix crash cases reported by Sentry",
-        "de": "Von Sentry gemeldete Absturzfälle beheben",
-        "ru": "Исправить случаи сбоев, о которых сообщил Sentry",
-        "pt": "Corrigir casos de travamento relatados pelo Sentinela",
-        "nl": "Herstel crashgevallen gemeld door Sentry",
-        "fr": "Correction des cas de plantage signalés par Sentry",
-        "it": "Risolvi i casi di crash segnalati da Sentry",
-        "es": "Solucionar casos de fallas informados por Sentry",
-        "pl": "Napraw przypadki awarii zgłoszone przez Sentry",
-        "uk": "Виправлено випадки збоїв, про які повідомив Sentry",
-        "zh-cn": "修复 Sentry 报告的崩溃案例"
       }
     },
     "titleLang": {
