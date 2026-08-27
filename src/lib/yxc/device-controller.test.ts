@@ -3,6 +3,7 @@ import type { YxcClientLike } from "./device-controller";
 import wx10 from "./__fixtures__/WX10_216_208.json";
 import ysp from "./__fixtures__/status/YSP1600_main.json";
 import { CommandGate } from "../lifecycle/command-gate";
+import { ProbeMemory } from "../lifecycle/probe-memory";
 
 /** A real command gate for the controller under test (pacing has its own suite). */
 const testGate = (): CommandGate =>
@@ -515,6 +516,43 @@ describe("YxcDeviceController guards", () => {
   });
 });
 
+describe("YxcDeviceController reachability (a remembered device must still answer)", () => {
+  const oneZone = { system: {}, zone: [{ id: "main", func_list: ["power"], input_list: ["hdmi1"] }] };
+
+  test("a device whose zones all fail to answer does not count as connected", async () => {
+    const s = setup(oneZone, { power: "on" });
+    s.client.failStatus = true;
+    expect(await s.controller.start()).toBe(false);
+  });
+
+  test("a reconnect to a device that lost power fails even though its capabilities are remembered", async () => {
+    const memory = new ProbeMemory();
+    const build = (client: FakeClient): YxcDeviceController =>
+      new YxcDeviceController("living", {
+        client,
+        registerPush: () => () => {},
+        scheduleKeepalive: () => () => {},
+        upsertObject: async () => {},
+        setStateAck: () => {},
+        log: silentLog,
+        gate: testGate(),
+        probeMemory: memory,
+      });
+
+    expect(await build(makeFakeClient(oneZone, { power: "on" })).start()).toBe(true);
+
+    // Same adapter run, device now unplugged. getFeatures is never asked again (it is
+    // remembered for the device's lifetime), and model/name are best-effort — so the zone
+    // status is the ONLY thing left that can notice the device is gone. Reporting "ready"
+    // here is what made the adapter claim a live MusicCast connection to a receiver that
+    // had lost power, while YNCA and XML failed honestly.
+    const second = makeFakeClient(oneZone, { power: "on" });
+    second.failStatus = true;
+    expect(await build(second).start()).toBe(false);
+    expect(second.calls.some(call => call.method === "getFeatures")).toBe(false);
+  });
+});
+
 describe("zoneNameFrom", () => {
   it("reads the main zone's text — the name shown in the MusicCast app", () => {
     expect(zoneNameFrom({ zone_list: [{ id: "main", text: "Wohnzimmer" }] })).toBe("Wohnzimmer");
@@ -643,7 +681,6 @@ describe("YxcDeviceController device name", () => {
 });
 
 describe("YxcDeviceController browse surface (#613)", () => {
-  const instantDelay = (): Promise<void> => Promise.resolve();
   const flush = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
   const browsableFeatures = {
     system: {},

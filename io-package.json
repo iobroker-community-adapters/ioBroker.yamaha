@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "1.4.0",
+    "version": "1.5.0",
     "news": {
+      "1.5.0": {
+        "en": "Fixed: menu browsing on receivers that serve their menus over the old XML protocol (#613)\nFixed: a MusicCast device that loses power is reported as offline instead of still showing a connection\nSwitching a datapoint group on or off now shows how many datapoints appeared or disappeared\nNew: optional error reporting via Sentry, without any personal data",
+        "de": "Behoben: Menü-Browsing bei Receivern, die ihr Menü über das alte XML-Protokoll liefern (#613)\nBehoben: Ein stromlos gewordenes MusicCast-Gerät wird als offline gemeldet statt weiter als verbunden\nBeim Umschalten einer Datenpunktgruppe siehst du jetzt, wie viele Datenpunkte dazugekommen oder weggefallen sind\nNeu: Optionale Fehlerberichte über Sentry, ohne persönliche Daten",
+        "ru": "Исправлено: навигация по меню на ресиверах, которые отдают меню по старому протоколу XML (#613)\nИсправлено: обесточенное устройство MusicCast сообщается как отключённое, а не как подключённое\nПри переключении группы точек данных теперь видно, сколько точек добавилось или исчезло\nНовое: необязательная отправка отчётов об ошибках через Sentry, без персональных данных",
+        "pt": "Corrigido: navegação de menus em recetores que servem o menu pelo antigo protocolo XML (#613)\nCorrigido: um dispositivo MusicCast sem energia é indicado como offline em vez de continuar ligado\nAo ativar ou desativar um grupo de pontos de dados vê agora quantos pontos surgiram ou desapareceram\nNovo: relatório de erros opcional via Sentry, sem dados pessoais",
+        "nl": "Opgelost: menunavigatie op ontvangers die hun menu via het oude XML-protocol aanbieden (#613)\nOpgelost: een MusicCast-apparaat zonder stroom wordt als offline gemeld in plaats van nog verbonden\nBij het in- of uitschakelen van een datapuntgroep zie je nu hoeveel datapunten erbij kwamen of verdwenen\nNieuw: optionele foutrapportage via Sentry, zonder persoonsgegevens",
+        "fr": "Corrigé : navigation dans les menus des amplis qui servent leur menu via l'ancien protocole XML (#613)\nCorrigé : un appareil MusicCast hors tension est signalé hors ligne au lieu de rester connecté\nEn activant ou désactivant un groupe de points de données, vous voyez désormais combien de points sont apparus ou ont disparu\nNouveau : rapport d'erreurs optionnel via Sentry, sans données personnelles",
+        "it": "Corretto: navigazione dei menu sui ricevitori che li offrono tramite il vecchio protocollo XML (#613)\nCorretto: un dispositivo MusicCast senza corrente viene segnalato offline invece che ancora connesso\nAttivando o disattivando un gruppo di datapoint ora vedi quanti datapoint sono comparsi o spariti\nNovità: segnalazione errori opzionale tramite Sentry, senza dati personali",
+        "es": "Corregido: navegación por menús en receptores que los sirven por el antiguo protocolo XML (#613)\nCorregido: un dispositivo MusicCast sin corriente se informa como desconectado en lugar de conectado\nAl activar o desactivar un grupo de puntos de datos ahora ves cuántos puntos aparecieron o desaparecieron\nNuevo: informe de errores opcional mediante Sentry, sin datos personales",
+        "pl": "Poprawiono: przeglądanie menu w amplitunerach udostępniających je starym protokołem XML (#613)\nPoprawiono: pozbawione zasilania urządzenie MusicCast jest zgłaszane jako offline, a nie nadal połączone\nPo włączeniu lub wyłączeniu grupy punktów danych widzisz teraz, ile punktów przybyło lub zniknęło\nNowość: opcjonalne raportowanie błędów przez Sentry, bez danych osobowych",
+        "uk": "Виправлено: навігація меню на ресиверах, які надають меню старим протоколом XML (#613)\nВиправлено: знеструмлений пристрій MusicCast повідомляється як офлайн, а не як підключений\nПісля вмикання чи вимикання групи точок даних тепер видно, скільки точок з'явилося або зникло\nНове: необов'язкові звіти про помилки через Sentry, без персональних даних",
+        "zh-cn": "修复：可通过旧版 XML 协议提供菜单的功放现在可以浏览菜单 (#613)\n修复：断电的 MusicCast 设备会报告为离线，而不再显示为已连接\n开启或关闭数据点分组后，现在可以看到新增或消失了多少数据点\n新增：可选的 Sentry 错误报告，不传输个人数据"
+      },
       "1.4.0": {
         "en": "Commands sent in one go all arrive, favourites land in the zone that is listening, special characters work again, and startup and reconnects are noticeably faster.",
         "de": "Mehrere Befehle auf einmal kommen alle an, Favoriten landen in der hörenden Zone, Sonderzeichen funktionieren wieder, und Start und Neuverbindung sind spürbar schneller.",
@@ -80,19 +93,6 @@
         "pl": "zaktualizowane pakiety",
         "uk": "оновлені пакети",
         "zh-cn": "更新软件包"
-      },
-      "0.5.3": {
-        "en": "Fix crash cases reported by Sentry",
-        "de": "Reparieren Crashfälle gemeldet von Sentry",
-        "ru": "Исправление случаев аварии, описанных Sentry",
-        "pt": "Corrigir casos de acidente relatados por Sentry",
-        "nl": "Vertaling:",
-        "fr": "Troubles de crash signalés par Sentry",
-        "it": "Correzione dei casi di crash segnalati da Sentry",
-        "es": "Casos de accidente fijo reportados por Sentry",
-        "pl": "Sprawy katastrofy Fix podane przez Sentry’a",
-        "uk": "Виправлено випадки збоїв, про які повідомив Sentry",
-        "zh-cn": "Sentry所报告的六例事故"
       }
     },
     "titleLang": {
@@ -127,6 +127,11 @@
       "receiver",
       "musiccast"
     ],
+    "plugins": {
+      "sentry": {
+        "dsn": "https://66f27ceff38c1ce1e6cdcc3095ba06d3@o4511524771266560.ingest.de.sentry.io/4511524773560400"
+      }
+    },
     "licenseInformation": {
       "license": "MIT",
       "type": "free"

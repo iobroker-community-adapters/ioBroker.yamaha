@@ -126,7 +126,11 @@ class YxcDeviceController {
       }
     }
     this.zones = capabilities.zones.map((zone) => zone.id);
-    await Promise.all(this.zones.map((zone) => this.refreshZone(zone)));
+    const zonesAnswered = await Promise.all(this.zones.map((zone) => this.refreshZone(zone)));
+    if (this.zones.length > 0 && !zonesAnswered.some(Boolean)) {
+      this.deps.log.debug(`${this.deviceId}: no zone answered getStatus \u2014 device unreachable (YXC)`);
+      return false;
+    }
     this.mediaBlocks = capabilities.media;
     this.tunerFeatures = capabilities.tuner;
     this.hasClock = capabilities.clock !== void 0;

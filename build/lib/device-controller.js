@@ -29,6 +29,7 @@ const ID_MAP = (0, import_catalog.idToEntry)(import_catalog.YNCA_CATALOG);
 const AVAIL_PROBE = (0, import_catalog.availGets)(import_catalog.YNCA_CATALOG);
 const STATIC_FUNC = /^(INPNAME|SCENE\d+NAME$)/;
 const STATIC_KEY = "yncaStaticValues";
+const LIST_PROOF = /^(LISTLAYER|LISTLAYERNAME|CURRLINE|MAXLINE|LINE[1-8](TXT|ATRIB))$/;
 class YncaDeviceController {
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
@@ -197,7 +198,12 @@ class YncaDeviceController {
       return;
     }
     const delay = (ms) => gate.delay(ms);
-    const driver = new import_ynca_browse_driver.YncaBrowseDriver(this.deps.client, new Set(Object.keys(capabilities.subunits)), delay);
+    const present = await this.probeBrowseSubunits(capabilities);
+    if (present.size === 0) {
+      this.deps.log.debug(`${this.deviceId}: no YNCA source answers LISTINFO \u2014 leaving menus to another transport`);
+      return;
+    }
+    const driver = new import_ynca_browse_driver.YncaBrowseDriver(this.deps.client, present, delay);
     this.browseEngine = await (0, import_surface.createBrowseSurface)(driver, this.deviceId, {
       upsertObject: this.deps.upsertObject,
       emit: (id, value) => this.deps.setStateAck(`${this.deviceId}.${id}`, value),
@@ -207,6 +213,36 @@ class YncaDeviceController {
     if (this.browseEngine) {
       this.browseDriver = driver;
     }
+  }
+  /**
+   * Which browsable subunits actually SERVE menus, proven by asking them.
+   *
+   * Carrying the subunit is NOT proof: the RX-A810 reference log answers `@SERVER:LISTINFO=?`
+   * with `@UNDEFINED` while NETRADIO/PC/USB on the very same device return a full window. The
+   * XML driver has always probed (`List_Info` → `<Menu_Status>`); YNCA claimed the states on
+   * presence alone and, ranking higher, silently displaced the transport that could deliver.
+   *
+   * @param capabilities the device's swept capabilities
+   * @returns the subunits that answered with list data
+   */
+  async probeBrowseSubunits(capabilities) {
+    var _a;
+    const candidates = import_ynca_browse_driver.YNCA_BROWSE_SOURCES.filter((source) => source.subunit in capabilities.subunits);
+    if (candidates.length === 0) {
+      return /* @__PURE__ */ new Set();
+    }
+    if (((_a = capabilities.subunits.MAIN) == null ? void 0 : _a.PWR) !== "On") {
+      return new Set(candidates.map((source) => source.subunit));
+    }
+    const answer = await this.deps.client.readCapabilities(
+      candidates.map((source) => ({ subunit: source.subunit, func: "LISTINFO" }))
+    );
+    return new Set(
+      candidates.map((source) => source.subunit).filter((subunit) => {
+        var _a2;
+        return Object.keys((_a2 = answer.subunits[subunit]) != null ? _a2 : {}).some((func) => LIST_PROOF.test(func));
+      })
+    );
   }
   /**
    * Register the supervisor's drop handler — delegated to the client's socket drop,

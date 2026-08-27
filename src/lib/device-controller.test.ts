@@ -1,6 +1,7 @@
 import { YncaDeviceController } from "./device-controller";
 import type { YncaClientLike } from "./device-controller";
 import type { YncaCapabilities } from "./ynca/capability";
+import type { ObjectDef } from "./catalog/types";
 import { createSubunitCache } from "./ynca/subunit-cache";
 import { CommandGate } from "./lifecycle/command-gate";
 import { ProbeMemory } from "./lifecycle/probe-memory";
@@ -30,6 +31,12 @@ class FakeClient implements YncaClientLike {
    * (adequate for the tests that predate the two-pass sweep).
    */
   public availableSubunits?: string[];
+  /**
+   * When set, a LISTINFO-only request list (the browse probe, #613) is answered with list
+   * fields for exactly these subunits — every other one stays silent, as a real receiver
+   * does with `@UNDEFINED`. Unset, the probe falls through to `capabilities`.
+   */
+  public listSubunits?: string[];
   /** Every readCapabilities request list, for asserting what was actually swept. */
   public requests: Array<Array<{ subunit: string; func: string }>> = [];
   private handler?: (message: Msg) => void;
@@ -41,6 +48,13 @@ class FakeClient implements YncaClientLike {
       const subunits: Record<string, Record<string, string>> = {};
       for (const subunit of this.availableSubunits) {
         subunits[subunit] = { AVAIL: "Ready" };
+      }
+      return { model: "", subunits };
+    }
+    if (this.listSubunits && gets.length > 0 && gets.every(get => get.func === "LISTINFO")) {
+      const subunits: Record<string, Record<string, string>> = {};
+      for (const subunit of this.listSubunits) {
+        subunits[subunit] = { LISTLAYER: "1", LISTLAYERNAME: "Root", CURRLINE: "1", MAXLINE: "2" };
       }
       return { model: "", subunits };
     }
@@ -70,18 +84,22 @@ class FakeClient implements YncaClientLike {
 
 function makeDeps(client: FakeClient): {
   created: string[];
+  objects: Array<{ id: string; def: ObjectDef }>;
   acked: Array<{ id: string; value: unknown }>;
   deps: ConstructorParameters<typeof YncaDeviceController>[1];
 } {
   const created: string[] = [];
+  const objects: Array<{ id: string; def: ObjectDef }> = [];
   const acked: Array<{ id: string; value: unknown }> = [];
   return {
     created,
+    objects,
     acked,
     deps: {
       client,
-      upsertObject: async (id: string) => {
+      upsertObject: async (id: string, def: ObjectDef) => {
         created.push(id);
+        objects.push({ id, def });
       },
       setStateAck: (id: string, value: boolean | number | string) => {
         acked.push({ id, value });
@@ -266,7 +284,6 @@ describe("YncaDeviceController two-pass sweep", () => {
 });
 
 describe("YncaDeviceController browse surface (#613)", () => {
-  const instantDelay = (): Promise<void> => Promise.resolve();
   const flush = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
 
   test("creates the browse tree when a browsable subunit answered and routes its writes", async () => {
@@ -275,6 +292,7 @@ describe("YncaDeviceController browse surface (#613)", () => {
       model: "RX",
       subunits: { MAIN: { PWR: "On" }, NETRADIO: { PLAYBACKINFO: "Stop" } },
     };
+    client.listSubunits = ["NETRADIO"];
     const { created, deps } = makeDeps(client);
     deps.gate = testGate();
     const controller = new YncaDeviceController("living", deps);
@@ -308,11 +326,60 @@ describe("YncaDeviceController browse surface (#613)", () => {
       model: "RX",
       subunits: { MAIN: { PWR: "On" }, NETRADIO: { PLAYBACKINFO: "Stop" } },
     };
+    client.listSubunits = ["NETRADIO"];
     const { created, deps } = makeDeps(client);
     deps.gate = testGate();
     deps.isEntryEnabled = (id: string): boolean => !id.startsWith("player.");
     await new YncaDeviceController("living", deps).start();
     expect(created.some(id => id.includes("player.browse"))).toBe(false);
+  });
+
+  test("claims no menus when the sources carry no lists — the RX-V473 case (#613)", async () => {
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX-V473",
+      subunits: { MAIN: { PWR: "On" }, NETRADIO: { PLAYBACKINFO: "Stop" }, SERVER: { PLAYBACKINFO: "Stop" } },
+    };
+    client.listSubunits = []; // the device answers @UNDEFINED to every LISTINFO
+    const { created, deps } = makeDeps(client);
+    deps.gate = testGate();
+    await new YncaDeviceController("living", deps).start();
+    // No states at all — that is what lets the XML transport, which PROVED it can browse,
+    // own the menus instead of being displaced by a higher-ranked but empty YNCA claim.
+    expect(created.some(id => id.includes("player.browse"))).toBe(false);
+    expect(client.requests.some(gets => gets.every(get => get.func === "LISTINFO"))).toBe(true);
+  });
+
+  test("offers only the sources that answered, not every source the device carries", async () => {
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX-A810",
+      subunits: { MAIN: { PWR: "On" }, NETRADIO: { PLAYBACKINFO: "Stop" }, SERVER: { PLAYBACKINFO: "Stop" } },
+    };
+    // Exactly what the RX-A810 reference log shows: NETRADIO serves menus, SERVER does not.
+    client.listSubunits = ["NETRADIO"];
+    const { created, objects, deps } = makeDeps(client);
+    deps.gate = testGate();
+    await new YncaDeviceController("living", deps).start();
+    expect(created).toContain("living.player.browse.source");
+    const source = objects.find(o => o.id === "living.player.browse.source");
+    expect(Object.keys(source?.def.common?.states ?? {})).toEqual(["netRadio"]);
+  });
+
+  test("keeps the menus while the receiver sleeps instead of probing a standby device", async () => {
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX",
+      subunits: { MAIN: { PWR: "Standby" }, NETRADIO: { PLAYBACKINFO: "Stop" } },
+    };
+    client.listSubunits = []; // a sleeping receiver answers @RESTRICTED, not list data
+    const { created, deps } = makeDeps(client);
+    deps.gate = testGate();
+    await new YncaDeviceController("living", deps).start();
+    // Probing a standby device would read "cannot browse" into a refusal that only means
+    // "not right now", and strip the menus off a device that serves them once it is on.
+    expect(created).toContain("living.player.browse.source");
+    expect(client.requests.some(gets => gets.every(get => get.func === "LISTINFO"))).toBe(false);
   });
 });
 

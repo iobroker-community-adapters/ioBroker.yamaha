@@ -58,6 +58,7 @@ const FETCH_TIMEOUT_MS = 4e3;
 const SSDP_SEARCH_BURST = 3;
 const SSDP_SEARCH_INTERVAL_MS = 1e3;
 const TRANSPORT_IDS = ["ynca", "yxc", "xml"];
+const DATAPOINT_BALANCE_SETTLE_MS = 5e3;
 class Yamaha extends utils.Adapter {
   supervisors = [];
   /** deviceId → its supervisor, so a state change goes to ONE device, not to all of them. */
@@ -66,6 +67,20 @@ class Yamaha extends utils.Adapter {
   pushReceiver;
   /** Device-manager backend: the receivers as cards with add/edit/delete. */
   deviceManagement;
+  /**
+   * Every datapoint that existed when this run started, filled ONCE before the cleanup and
+   * before any device connects. Without it the balance below would report the whole tree as
+   * new on every restart: `upsertObject` runs `extendObject` on every state it touches (the
+   * role/unit retrofit), so "did the create path run?" is not the same question as "is this
+   * datapoint new?".
+   */
+  knownDatapoints = /* @__PURE__ */ new Set();
+  createdDatapoints = 0;
+  removedDatapoints = 0;
+  /** Debounce for the balance line, so one config change produces ONE line, not one per device. */
+  balanceTimer;
+  /** Set when the start-up snapshot failed — a balance without it would be wrong, so none is written. */
+  balanceDisabled = false;
   /**
    * @param options adapter options passed through by js-controller
    */
@@ -97,6 +112,7 @@ class Yamaha extends utils.Adapter {
       );
       const devices = configured.length > 0 ? configured : await this.autoDiscover();
       const knownDeviceIps = new Set(devices.map((device) => device.ip));
+      await this.snapshotExistingDatapoints();
       await this.cleanupStaleObjects(new Set(devices.map((device) => device.id)));
       this.subscribeStates("*");
       const pushReceiver = new import_push_receiver.YxcPushReceiver({
@@ -173,7 +189,8 @@ class Yamaha extends utils.Adapter {
    * @param deviceIds the ids of the currently configured devices
    */
   async cleanupStaleObjects(deviceIds) {
-    const existing = Object.keys(await this.getAdapterObjectsAsync());
+    const allObjects = await this.getAdapterObjectsAsync();
+    const existing = Object.keys(allObjects);
     const stale = (0, import_pure_helpers.staleObjects)(existing, deviceIds, this.namespace);
     const renamed = (0, import_pure_helpers.renamedObjectIds)(existing, deviceIds, this.namespace);
     const config = this.config;
@@ -193,14 +210,90 @@ class Yamaha extends utils.Adapter {
       }
     }
     if (stale.length > 0) {
-      this.log.info(`removed ${stale.length} object(s) from a previous configuration`);
+      this.log.debug(`removed ${stale.length} object(s) from a previous configuration`);
     }
     if (renamed.length > 0) {
-      this.log.info(`removed ${renamed.length} renamed object(s) from an earlier version`);
+      this.log.debug(`removed ${renamed.length} renamed object(s) from an earlier version`);
     }
     if (disabled.length > 0) {
-      this.log.info(`removed ${disabled.length} object(s) from switched-off datapoint groups`);
+      this.log.debug(`removed ${disabled.length} object(s) from switched-off datapoint groups`);
     }
+    this.noteDatapointsRemoved(
+      [...stale, ...renamed, ...disabled].filter((fullId) => {
+        var _a;
+        return ((_a = allObjects[fullId]) == null ? void 0 : _a.type) === "state";
+      })
+    );
+  }
+  /**
+   * Remember every datapoint that already exists, ONCE per adapter run.
+   *
+   * @see knownDatapoints for why the create path alone cannot answer "is this new?"
+   */
+  async snapshotExistingDatapoints() {
+    try {
+      for (const [fullId, object] of Object.entries(await this.getAdapterObjectsAsync())) {
+        if ((object == null ? void 0 : object.type) === "state") {
+          this.knownDatapoints.add((0, import_pure_helpers.stripNamespace)(fullId, this.namespace));
+        }
+      }
+    } catch (e) {
+      this.log.debug(`could not read the existing datapoints (${(0, import_util.errorMessage)(e)}); balance line disabled`);
+      this.balanceDisabled = true;
+    }
+  }
+  /**
+   * Count a datapoint the device tree just created — new ones only.
+   *
+   * @param id the state id relative to the namespace
+   */
+  noteDatapointCreated(id) {
+    if (this.knownDatapoints.has(id)) {
+      return;
+    }
+    this.knownDatapoints.add(id);
+    this.createdDatapoints++;
+    this.scheduleDatapointBalance();
+  }
+  /**
+   * Count removed datapoints, and let them count again should they ever come back.
+   *
+   * @param fullIds the removed ids, namespace included
+   */
+  noteDatapointsRemoved(fullIds) {
+    for (const fullId of fullIds) {
+      this.knownDatapoints.delete((0, import_pure_helpers.stripNamespace)(fullId, this.namespace));
+      this.removedDatapoints++;
+    }
+    if (fullIds.length > 0) {
+      this.scheduleDatapointBalance();
+    }
+  }
+  /**
+   * Log the balance once the tree has settled. A device connects asynchronously and several
+   * devices connect at once, so the line waits for quiet instead of firing per device — the
+   * user made ONE change and reads ONE result.
+   */
+  scheduleDatapointBalance() {
+    if (this.balanceDisabled) {
+      return;
+    }
+    this.clearTimeout(this.balanceTimer);
+    this.balanceTimer = this.setTimeout(() => {
+      this.balanceTimer = void 0;
+      const parts = [];
+      if (this.createdDatapoints > 0) {
+        parts.push(`created ${this.createdDatapoints} datapoint(s)`);
+      }
+      if (this.removedDatapoints > 0) {
+        parts.push(`removed ${this.removedDatapoints} datapoint(s)`);
+      }
+      this.createdDatapoints = 0;
+      this.removedDatapoints = 0;
+      if (parts.length > 0) {
+        this.log.info(`Object tree updated: ${parts.join(", ")}`);
+      }
+    }, DATAPOINT_BALANCE_SETTLE_MS);
   }
   /**
    * Create a device's header objects (the device node, its info channel and a
@@ -407,6 +500,9 @@ class Yamaha extends utils.Adapter {
           return;
         }
         await this.extendObject(id, { type: def.type, common: def.common, native: {} });
+        if (def.type === "state") {
+          this.noteDatapointCreated(id);
+        }
       },
       setStateAck: (id, value) => {
         if (!(0, import_groups.isGroupEnabled)(id.slice(id.indexOf(".") + 1), this.config)) {
@@ -463,6 +559,7 @@ class Yamaha extends utils.Adapter {
   onUnload(callback) {
     var _a;
     try {
+      this.clearTimeout(this.balanceTimer);
       (_a = this.pushReceiver) == null ? void 0 : _a.close();
       for (const supervisor of this.supervisors) {
         supervisor.close();

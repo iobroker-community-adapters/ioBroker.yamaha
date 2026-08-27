@@ -555,7 +555,7 @@ describe("Yamaha stale-object cleanup", () => {
     await flush();
     expect(ctx.i.objects.has("Old_device")).toBe(false);
     expect(ctx.i.objects.has("Old_device.info.connection")).toBe(false);
-    expect(ctx.i.log.info).toHaveBeenCalledWith(expect.stringContaining("from a previous configuration"));
+    expect(ctx.i.log.debug).toHaveBeenCalledWith(expect.stringContaining("from a previous configuration"));
   });
 
   it("keeps a configured device's tree even before it connects", async () => {
@@ -574,7 +574,7 @@ describe("Yamaha stale-object cleanup", () => {
     // Turning a group off has to clean up its whole subtree — leftovers would keep
     // showing values that stopped updating.
     expect(ctx.i.objects.has("Living_room.multiroom.group.name")).toBe(false);
-    expect(ctx.i.log.info).toHaveBeenCalledWith(expect.stringContaining("switched-off datapoint groups"));
+    expect(ctx.i.log.debug).toHaveBeenCalledWith(expect.stringContaining("switched-off datapoint groups"));
   });
 
   it("says nothing when there was nothing to remove", async () => {
@@ -582,7 +582,7 @@ describe("Yamaha stale-object cleanup", () => {
     await ctx.i.onReady();
     await flush();
     for (const phrase of ["previous configuration", "renamed object", "switched-off datapoint groups"]) {
-      expect(ctx.i.log.info).not.toHaveBeenCalledWith(expect.stringContaining(phrase));
+      expect(ctx.i.log.debug).not.toHaveBeenCalledWith(expect.stringContaining(phrase));
     }
   });
 
@@ -602,6 +602,88 @@ describe("Yamaha stale-object cleanup", () => {
     await flush();
     expect(ctx.i.objects.has("Old_b")).toBe(false);
     expect(ctx.calls).toHaveLength(1);
+  });
+});
+
+describe("Yamaha datapoint balance in the log", () => {
+  /**
+   * Fire the settle timer the balance line waits on.
+   *
+   * @param ctx the test context
+   */
+  const settle = (ctx: { i: { setTimeout: ReturnType<typeof vi.fn> } }): void => {
+    const call = ctx.i.setTimeout.mock.calls.filter(c => c[1] === 5000).at(-1);
+    (call?.[0] as (() => void) | undefined)?.();
+  };
+
+  /**
+   * The adapter's real object-creation path, as a connected transport uses it.
+   *
+   * @param ctx the test context
+   * @returns the upsert callback
+   */
+  const upsertOf = (ctx: { calls: Array<{ deps: Record<string, unknown> }> }) =>
+    ctx.calls[0].deps.upsertObject as (id: string, def: unknown) => Promise<void>;
+
+  it("reports the datapoints a device brought into the tree", async () => {
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    const upsert = upsertOf(ctx);
+    await upsert("Living_room.main.power", { type: "state", common: { name: "p" } });
+    await upsert("Living_room.volume", { type: "state", common: { name: "v" } });
+    settle(ctx);
+    expect(ctx.i.log.info).toHaveBeenCalledWith("Object tree updated: created 2 datapoint(s)");
+  });
+
+  it("stays silent on a restart that changed nothing", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room.main.power", { type: "state", common: {}, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    await upsertOf(ctx)("Living_room.main.power", { type: "state", common: { name: "p" } });
+    settle(ctx);
+    // The datapoint already existed, so touching it again is not a change. Without the
+    // start-up snapshot this would report the whole tree as new on every restart.
+    expect(ctx.i.log.info).not.toHaveBeenCalledWith(expect.stringContaining("Object tree updated"));
+  });
+
+  it("counts a datapoint once, however often the tree touches it again", async () => {
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    const upsert = upsertOf(ctx);
+    await upsert("Living_room.main.power", { type: "state", common: { name: "p" } });
+    // Every state runs through extendObject again on a reconnect (the role/unit retrofit).
+    await upsert("Living_room.main.power", { type: "state", common: { name: "p" } });
+    settle(ctx);
+    expect(ctx.i.log.info).toHaveBeenCalledWith("Object tree updated: created 1 datapoint(s)");
+  });
+
+  it("puts removals and additions into one line", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Old_device", { type: "device", common: {}, native: {} });
+    ctx.i.objects.set("Old_device.volume", { type: "state", common: {}, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    await upsertOf(ctx)("Living_room.main.power", { type: "state", common: { name: "p" } });
+    settle(ctx);
+    // The user made ONE change, so they read ONE result — not a removal line now and an
+    // addition line later.
+    expect(ctx.i.log.info).toHaveBeenCalledWith("Object tree updated: created 1 datapoint(s), removed 1 datapoint(s)");
+  });
+
+  it("counts only datapoints, not the channels and device nodes around them", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Old_device", { type: "device", common: {}, native: {} });
+    ctx.i.objects.set("Old_device.player", { type: "channel", common: {}, native: {} });
+    ctx.i.objects.set("Old_device.player.volume", { type: "state", common: {}, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    await upsertOf(ctx)("Living_room.player", { type: "channel", common: { name: "c" } });
+    settle(ctx);
+    // Three objects go and one arrives, but the user only ever counts datapoints.
+    expect(ctx.i.log.info).toHaveBeenCalledWith("Object tree updated: removed 1 datapoint(s)");
   });
 });
 

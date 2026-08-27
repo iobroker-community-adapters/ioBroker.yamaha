@@ -47,6 +47,12 @@ const SSDP_SEARCH_INTERVAL_MS = 1000;
 const TRANSPORT_IDS = ["ynca", "yxc", "xml"] as const;
 
 /**
+ * How long the datapoint balance waits for quiet before it logs. Devices connect
+ * asynchronously and in parallel, so the line has to outlast the slowest of them.
+ */
+const DATAPOINT_BALANCE_SETTLE_MS = 5000;
+
+/**
  * ioBroker.yamaha — controls Yamaha AV receivers and MusicCast devices.
  *
  * Each configured device is driven by a supervisor that keeps a multi-transport
@@ -64,6 +70,20 @@ export class Yamaha extends utils.Adapter {
   private pushReceiver: YxcPushReceiver | undefined;
   /** Device-manager backend: the receivers as cards with add/edit/delete. */
   private readonly deviceManagement: YamahaDeviceManagement;
+  /**
+   * Every datapoint that existed when this run started, filled ONCE before the cleanup and
+   * before any device connects. Without it the balance below would report the whole tree as
+   * new on every restart: `upsertObject` runs `extendObject` on every state it touches (the
+   * role/unit retrofit), so "did the create path run?" is not the same question as "is this
+   * datapoint new?".
+   */
+  private readonly knownDatapoints = new Set<string>();
+  private createdDatapoints = 0;
+  private removedDatapoints = 0;
+  /** Debounce for the balance line, so one config change produces ONE line, not one per device. */
+  private balanceTimer: ioBroker.Timeout | undefined;
+  /** Set when the start-up snapshot failed — a balance without it would be wrong, so none is written. */
+  private balanceDisabled = false;
 
   /**
    * @param options adapter options passed through by js-controller
@@ -102,6 +122,8 @@ export class Yamaha extends utils.Adapter {
       );
       const devices = configured.length > 0 ? configured : await this.autoDiscover();
       const knownDeviceIps = new Set(devices.map(device => device.ip));
+      // Before the cleanup and before any device connects — see knownDatapoints.
+      await this.snapshotExistingDatapoints();
       await this.cleanupStaleObjects(new Set(devices.map(device => device.id)));
       this.subscribeStates("*");
       const pushReceiver = new YxcPushReceiver({
@@ -184,7 +206,8 @@ export class Yamaha extends utils.Adapter {
    * @param deviceIds the ids of the currently configured devices
    */
   private async cleanupStaleObjects(deviceIds: Set<string>): Promise<void> {
-    const existing = Object.keys(await this.getAdapterObjectsAsync());
+    const allObjects = await this.getAdapterObjectsAsync();
+    const existing = Object.keys(allObjects);
     const stale = staleObjects(existing, deviceIds, this.namespace);
     // Old states this version renamed/moved (e.g. system.model -> info.model): delete the
     // old object so it does not linger orphaned beside the new one under a kept device.
@@ -208,15 +231,99 @@ export class Yamaha extends utils.Adapter {
         // already removed together with its parent
       }
     }
+    // The reasons stay available for diagnosis; the user sees ONE balance line instead of
+    // three counts they have to add up themselves.
     if (stale.length > 0) {
-      this.log.info(`removed ${stale.length} object(s) from a previous configuration`);
+      this.log.debug(`removed ${stale.length} object(s) from a previous configuration`);
     }
     if (renamed.length > 0) {
-      this.log.info(`removed ${renamed.length} renamed object(s) from an earlier version`);
+      this.log.debug(`removed ${renamed.length} renamed object(s) from an earlier version`);
     }
     if (disabled.length > 0) {
-      this.log.info(`removed ${disabled.length} object(s) from switched-off datapoint groups`);
+      this.log.debug(`removed ${disabled.length} object(s) from switched-off datapoint groups`);
     }
+    // Channels and device nodes go with them, but only datapoints are counted — that is what
+    // the user switched on or off, and what they look for in the object tree.
+    this.noteDatapointsRemoved(
+      [...stale, ...renamed, ...disabled].filter(fullId => allObjects[fullId]?.type === "state"),
+    );
+  }
+
+  /**
+   * Remember every datapoint that already exists, ONCE per adapter run.
+   *
+   * @see knownDatapoints for why the create path alone cannot answer "is this new?"
+   */
+  private async snapshotExistingDatapoints(): Promise<void> {
+    try {
+      for (const [fullId, object] of Object.entries(await this.getAdapterObjectsAsync())) {
+        if (object?.type === "state") {
+          this.knownDatapoints.add(stripNamespace(fullId, this.namespace));
+        }
+      }
+    } catch (e) {
+      // Without the snapshot the balance would call every datapoint new; better to stay
+      // silent about it than to log a wrong number.
+      this.log.debug(`could not read the existing datapoints (${errorMessage(e)}); balance line disabled`);
+      this.balanceDisabled = true;
+    }
+  }
+
+  /**
+   * Count a datapoint the device tree just created — new ones only.
+   *
+   * @param id the state id relative to the namespace
+   */
+  private noteDatapointCreated(id: string): void {
+    if (this.knownDatapoints.has(id)) {
+      return;
+    }
+    this.knownDatapoints.add(id);
+    this.createdDatapoints++;
+    this.scheduleDatapointBalance();
+  }
+
+  /**
+   * Count removed datapoints, and let them count again should they ever come back.
+   *
+   * @param fullIds the removed ids, namespace included
+   */
+  private noteDatapointsRemoved(fullIds: readonly string[]): void {
+    for (const fullId of fullIds) {
+      this.knownDatapoints.delete(stripNamespace(fullId, this.namespace));
+      this.removedDatapoints++;
+    }
+    if (fullIds.length > 0) {
+      this.scheduleDatapointBalance();
+    }
+  }
+
+  /**
+   * Log the balance once the tree has settled. A device connects asynchronously and several
+   * devices connect at once, so the line waits for quiet instead of firing per device — the
+   * user made ONE change and reads ONE result.
+   */
+  private scheduleDatapointBalance(): void {
+    if (this.balanceDisabled) {
+      return;
+    }
+    this.clearTimeout(this.balanceTimer);
+    this.balanceTimer = this.setTimeout(() => {
+      this.balanceTimer = undefined;
+      const parts: string[] = [];
+      if (this.createdDatapoints > 0) {
+        parts.push(`created ${this.createdDatapoints} datapoint(s)`);
+      }
+      if (this.removedDatapoints > 0) {
+        parts.push(`removed ${this.removedDatapoints} datapoint(s)`);
+      }
+      this.createdDatapoints = 0;
+      this.removedDatapoints = 0;
+      // Silent when nothing changed: a plain restart must not write a line.
+      if (parts.length > 0) {
+        this.log.info(`Object tree updated: ${parts.join(", ")}`);
+      }
+    }, DATAPOINT_BALANCE_SETTLE_MS);
   }
 
   /**
@@ -460,6 +567,9 @@ export class Yamaha extends utils.Adapter {
           return;
         }
         await this.extendObject(id, { type: def.type, common: def.common, native: {} });
+        if (def.type === "state") {
+          this.noteDatapointCreated(id);
+        }
       },
       setStateAck: (id, value) => {
         // Same group gate as upsertObject, so a switched-off group seeds no orphan value either.
@@ -522,6 +632,7 @@ export class Yamaha extends utils.Adapter {
    */
   private onUnload(callback: () => void): void {
     try {
+      this.clearTimeout(this.balanceTimer);
       this.pushReceiver?.close();
       for (const supervisor of this.supervisors) {
         supervisor.close();

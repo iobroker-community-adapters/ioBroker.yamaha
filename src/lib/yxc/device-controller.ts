@@ -204,7 +204,18 @@ export class YxcDeviceController implements ConnectionHandle {
     this.zones = capabilities.zones.map(zone => zone.id);
     // Zones in parallel — disjoint writes, and a zone stuck in its timeout must not hold
     // up the device's readiness.
-    await Promise.all(this.zones.map(zone => this.refreshZone(zone)));
+    const zonesAnswered = await Promise.all(this.zones.map(zone => this.refreshZone(zone)));
+    // The zone status is the one request of this start that ALWAYS goes to the device: the
+    // capabilities above come from the probe memory on every reconnect, and model/name are
+    // best-effort, so nothing before this point can tell a live device from a dead one. Without
+    // the check a reconnect to a receiver that had lost power still reported "ready —
+    // MusicCast ✓" out of memory while YNCA and XML failed honestly, and info.connection stayed
+    // true for a device that was not there (krobi's RX-V6A, 2026-08-26). A device that answers
+    // no zone at all is gone — a standby device still answers, it just reports power=standby.
+    if (this.zones.length > 0 && !zonesAnswered.some(Boolean)) {
+      this.deps.log.debug(`${this.deviceId}: no zone answered getStatus — device unreachable (YXC)`);
+      return false;
+    }
     this.mediaBlocks = capabilities.media;
     this.tunerFeatures = capabilities.tuner;
     this.hasClock = capabilities.clock !== undefined;

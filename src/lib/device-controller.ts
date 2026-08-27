@@ -17,7 +17,7 @@ import type { CommandGate } from "./lifecycle/command-gate";
 import type { ProbeMemory } from "./lifecycle/probe-memory";
 import type { BrowseEngine } from "./browse/browse-engine";
 import { createBrowseSurface } from "./browse/surface";
-import { YncaBrowseDriver } from "./browse/ynca-browse-driver";
+import { YNCA_BROWSE_SOURCES, YncaBrowseDriver } from "./browse/ynca-browse-driver";
 
 // The YNCA catalog and its lookup maps are static — built once for all devices.
 // SYS:MODELNAME is part of the catalog (info.model), so the sweep already covers it.
@@ -39,6 +39,12 @@ const STATIC_FUNC = /^(INPNAME|SCENE\d+NAME$)/;
 
 /** Memory key for the remembered static values. */
 const STATIC_KEY = "yncaStaticValues";
+
+/**
+ * The functions whose presence proves a subunit really serves menus — the fields a real
+ * `LISTINFO=?` answer is made of (RX-A810 reference log). See {@link YncaDeviceController.probeBrowseSubunits}.
+ */
+const LIST_PROOF = /^(LISTLAYER|LISTLAYERNAME|CURRLINE|MAXLINE|LINE[1-8](TXT|ATRIB))$/;
 
 /** The subset of the YNCA client the controller uses (so tests can inject a fake). */
 export interface YncaClientLike {
@@ -288,7 +294,16 @@ export class YncaDeviceController implements ConnectionHandle {
       return;
     }
     const delay = (ms: number): Promise<void> => gate.delay(ms);
-    const driver = new YncaBrowseDriver(this.deps.client, new Set(Object.keys(capabilities.subunits)), delay);
+    const present = await this.probeBrowseSubunits(capabilities);
+    if (present.size === 0) {
+      // Leaving the states uncreated is what hands browsing to another transport: the owner
+      // policy ranks by modernity (yxc > ynca > xml), so an unproven YNCA claim would beat a
+      // PROVEN xml one and the user would get an empty menu on a device that can browse over
+      // XML — exactly issue #613's RX-V473.
+      this.deps.log.debug(`${this.deviceId}: no YNCA source answers LISTINFO — leaving menus to another transport`);
+      return;
+    }
+    const driver = new YncaBrowseDriver(this.deps.client, present, delay);
     this.browseEngine = await createBrowseSurface(driver, this.deviceId, {
       upsertObject: this.deps.upsertObject,
       emit: (id, value) => this.deps.setStateAck(`${this.deviceId}.${id}`, value),
@@ -298,6 +313,42 @@ export class YncaDeviceController implements ConnectionHandle {
     if (this.browseEngine) {
       this.browseDriver = driver;
     }
+  }
+
+  /**
+   * Which browsable subunits actually SERVE menus, proven by asking them.
+   *
+   * Carrying the subunit is NOT proof: the RX-A810 reference log answers `@SERVER:LISTINFO=?`
+   * with `@UNDEFINED` while NETRADIO/PC/USB on the very same device return a full window. The
+   * XML driver has always probed (`List_Info` → `<Menu_Status>`); YNCA claimed the states on
+   * presence alone and, ranking higher, silently displaced the transport that could deliver.
+   *
+   * @param capabilities the device's swept capabilities
+   * @returns the subunits that answered with list data
+   */
+  private async probeBrowseSubunits(capabilities: YncaCapabilities): Promise<ReadonlySet<string>> {
+    const candidates = YNCA_BROWSE_SOURCES.filter(source => source.subunit in capabilities.subunits);
+    if (candidates.length === 0) {
+      return new Set();
+    }
+    // A receiver in standby answers @RESTRICTED for its media subunits, which is
+    // indistinguishable from "cannot browse" and would strip the menus off a device that
+    // serves them perfectly once it is on. Nobody browses a sleeping receiver, so keep the
+    // claim and let the next connect — with the device awake — do the real probe.
+    if (capabilities.subunits.MAIN?.PWR !== "On") {
+      return new Set(candidates.map(source => source.subunit));
+    }
+    const answer = await this.deps.client.readCapabilities(
+      candidates.map(source => ({ subunit: source.subunit, func: "LISTINFO" })),
+    );
+    // Only a real list answer counts. Both refusals — `@UNDEFINED` (function unknown) and
+    // `@RESTRICTED` (source not usable right now) — carry no subunit, so they cannot be
+    // attributed to one request; it is the ABSENCE of an answer that excludes a subunit.
+    return new Set(
+      candidates
+        .map(source => source.subunit)
+        .filter(subunit => Object.keys(answer.subunits[subunit] ?? {}).some(func => LIST_PROOF.test(func))),
+    );
   }
 
   /**

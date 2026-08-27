@@ -1,4 +1,9 @@
 # Older changes
+## 1.1.0 (2026-08-22)
+
+- (krobipd) Fixed: a device carried over from the old adapter is no longer called by its IP — the object folder and the admin card now show the name the device reports, or its model.
+- (krobipd) Improved: a device that has not reported a model yet already carries its device-class symbol instead of none.
+
 ## 1.0.1 (2026-08-22)
 
 - (krobipd) Complete rebuild: one adapter now speaks YNCA, MusicCast and the legacy XML protocol — every protocol a device answers runs in parallel on one object tree.

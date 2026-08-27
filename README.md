@@ -2,7 +2,7 @@
 
 **Release:** [![npm version](https://img.shields.io/npm/v/iobroker.yamaha)](https://www.npmjs.com/package/iobroker.yamaha) ![stable](https://iobroker.live/badges/yamaha-stable.svg) ![Installations](https://iobroker.live/badges/yamaha-installed.svg) [![npm downloads](https://img.shields.io/npm/dt/iobroker.yamaha)](https://www.npmjs.com/package/iobroker.yamaha)
 
-**Build:** [![Test and Release](https://github.com/iobroker-community-adapters/ioBroker.yamaha/actions/workflows/test-and-release.yml/badge.svg)](https://github.com/iobroker-community-adapters/ioBroker.yamaha/actions/workflows/test-and-release.yml) ![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen) ![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue) [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+**Build:** [![Test and Release](https://github.com/iobroker-community-adapters/ioBroker.yamaha/actions/workflows/test-and-release.yml/badge.svg)](https://github.com/iobroker-community-adapters/ioBroker.yamaha/actions/workflows/test-and-release.yml) ![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen) ![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue) [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE) [![Sentry](https://img.shields.io/badge/error%20reporting-Sentry-362d59?logo=sentry&logoColor=white)](https://github.com/ioBroker/plugin-sentry#plugin-sentry)
 
 **Support:** [![Ko-fi](https://img.shields.io/badge/Ko--fi-Support-ff5e5b?logo=ko-fi)](https://ko-fi.com/krobipd) [![PayPal](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://paypal.me/krobipd)
 
@@ -25,6 +25,12 @@ legacy XML protocol of the oldest pre-2010 models — behind one object tree.
 - **Capability-driven** — states are generated from what each device reports, no hardcoded model list
 - **Automatic discovery** — an empty device list finds and sets up MusicCast devices at startup
 - **Device manager** — receivers as admin cards with model, address, live protocol indicators and a device-type icon (receiver, stereo, speaker, soundbar, CD)
+
+## Sentry / Error reporting
+
+**This adapter uses Sentry libraries to automatically report exceptions and code errors to the developers.** Reporting only happens if you have enabled error reporting in the ioBroker diagnostics (**System settings → Diagnostics and error reporting**). Only an anonymous installation ID is transmitted — no name, e-mail address or IP address.
+
+For details and how to disable it, see the [Sentry plugin documentation](https://github.com/ioBroker/plugin-sentry#plugin-sentry). Error reporting requires js-controller 3.0 or newer.
 
 ## Requirements
 
@@ -90,6 +96,13 @@ On the first connect the adapter asks the receiver which functions it supports �
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+### 1.5.0 (2026-08-27)
+
+- (krobipd) Fixed: menu browsing now works on receivers that serve their menus over the old XML protocol — the adapter no longer claims the menu datapoints on devices that cannot deliver them (#613)
+- (krobipd) Fixed: a MusicCast device that loses power is now reported as offline instead of still showing a connection, so the ready message and the connection indicator tell the truth
+- (krobipd) New: switching a datapoint group on or off in the settings now shows how many datapoints appeared or disappeared, so you no longer have to click through the object tree to check
+- (krobipd) New: optional error reporting via Sentry — only active if you enabled diagnostics in ioBroker, and it transmits no personal data
+
 ### 1.4.0 (2026-08-26)
 
 - (krobipd) Fixed: commands sent in quick succession all arrive — a scene switching power, input and volume in one go used to lose everything after the first command
@@ -118,11 +131,6 @@ On the first connect the adapter asks the receiver which functions it supports �
 ### 1.1.1 (2026-08-22)
 
 - (krobipd) Changed: Internal cleanup. No user-facing changes.
-
-### 1.1.0 (2026-08-22)
-
-- (krobipd) Fixed: a device carried over from the old adapter is no longer called by its IP — the object folder and the admin card now show the name the device reports, or its model.
-- (krobipd) Improved: a device that has not reported a model yet already carries its device-class symbol instead of none.
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 
