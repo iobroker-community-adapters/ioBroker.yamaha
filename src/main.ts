@@ -139,6 +139,10 @@ export class Yamaha extends utils.Adapter {
       for (const device of devices) {
         this.deviceConnected.set(device.id, false);
         await this.ensureDeviceHeader(device.id);
+        // Stamp it disconnected BEFORE the first attempt: ioBroker keeps a state's last value
+        // forever, so a crash or a power cut would otherwise leave the device green until it
+        // reports again — and a device that never answers would stay green for good.
+        await this.setState(`${device.id}.info.connection`, { val: false, ack: true });
         const reachability = new ReachabilityDedup();
         const subunitCache = await this.loadYncaSubunitCache(device.id);
         // Held here, not in the controllers: those are rebuilt on every connection attempt.
@@ -160,6 +164,7 @@ export class Yamaha extends utils.Adapter {
         this.supervisorById.set(device.id, supervisor);
         supervisor.start();
       }
+      this.writeDeviceOverview();
     } catch (e) {
       this.log.error(`onReady failed: ${errorMessage(e)}`);
     }
@@ -181,6 +186,23 @@ export class Yamaha extends utils.Adapter {
     }
     const anyConnected = [...this.deviceConnected.values()].some(Boolean);
     void this.setState("info.connection", { val: anyConnected, ack: true });
+    this.writeDeviceOverview();
+  }
+
+  /**
+   * The three overview datapoints: how many devices this instance runs, how many are
+   * connected right now, and whether that is all of them. Derived from the SAME map that
+   * feeds the per-device markers and written in the same round — computed separately they
+   * would drift away from what the single devices say.
+   *
+   * `devicesAllOnline` needs at least one device: zero of zero is not "everything is fine".
+   */
+  private writeDeviceOverview(): void {
+    const total = this.deviceConnected.size;
+    const online = [...this.deviceConnected.values()].filter(Boolean).length;
+    void this.setState("info.devicesTotal", { val: total, ack: true });
+    void this.setState("info.devicesOnline", { val: online, ack: true });
+    void this.setState("info.devicesAllOnline", { val: total > 0 && online === total, ack: true });
   }
 
   /**
@@ -637,11 +659,30 @@ export class Yamaha extends utils.Adapter {
       for (const supervisor of this.supervisors) {
         supervisor.close();
       }
-      void this.setState("info.connection", { val: false, ack: true });
-      callback();
+      // A stopped adapter talks to nothing, so no device may keep claiming to be connected —
+      // that state paints the symbol on the device object (statusStates.onlineId), and the
+      // instance-wide info.connection alone would leave every device green. The overview goes
+      // with them; devicesTotal stays, how many devices there are did not change.
+      //
+      // The callback goes LAST, after the writes: reporting "done" straight away loses them,
+      // the host tears the process down as soon as it is told.
+      const writes: Promise<unknown>[] = [this.setState("info.connection", { val: false, ack: true })];
+      for (const deviceId of this.deviceConnected.keys()) {
+        this.deviceConnected.set(deviceId, false);
+        writes.push(this.setState(`${deviceId}.info.connection`, { val: false, ack: true }));
+      }
+      writes.push(this.setState("info.devicesOnline", { val: 0, ack: true }));
+      writes.push(this.setState("info.devicesAllOnline", { val: false, ack: true }));
+      void Promise.all(writes)
+        .catch(() => {
+          /* states DB already going down — nothing left to report to */
+        })
+        .finally(callback);
+      return;
     } catch {
-      callback();
+      // fall through
     }
+    callback();
   }
 
   /**

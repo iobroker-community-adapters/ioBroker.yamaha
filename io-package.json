@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "1.5.0",
+    "version": "1.6.0",
     "news": {
+      "1.6.0": {
+        "en": "Three new states show how many receivers are set up, how many are connected and whether that is all of them; a stopped adapter no longer shows a receiver as connected.",
+        "de": "Drei neue Datenpunkte zeigen, wie viele Receiver eingerichtet sind, wie viele verbunden sind und ob das alle sind; eine gestoppte Instanz zeigt keinen Receiver mehr als verbunden.",
+        "ru": "Три новых состояния показывают, сколько ресиверов настроено, сколько подключено и все ли это; остановленный адаптер больше не показывает ресивер подключённым.",
+        "pt": "Três novos estados mostram quantos receptores estão configurados, quantos estão ligados e se são todos; um adaptador parado deixa de mostrar um receptor como ligado.",
+        "nl": "Drie nieuwe datapunten tonen hoeveel receivers zijn ingesteld, hoeveel verbonden zijn en of dat alle zijn; een gestopte adapter toont geen receiver meer als verbonden.",
+        "fr": "Trois nouveaux états indiquent combien d'amplis sont configurés, combien sont connectés et si ce sont tous ; un adaptateur arrêté n'en affiche plus aucun comme connecté.",
+        "it": "Tre nuovi stati mostrano quanti sintoamplificatori sono configurati, quanti sono connessi e se sono tutti; un adapter fermo non ne mostra più nessuno come connesso.",
+        "es": "Tres nuevos estados muestran cuántos receptores están configurados, cuántos están conectados y si son todos; un adaptador detenido ya no muestra ninguno como conectado.",
+        "pl": "Trzy nowe stany pokazują, ile amplitunerów skonfigurowano, ile jest połączonych i czy to wszystkie; zatrzymany adapter nie pokazuje już żadnego jako połączonego.",
+        "uk": "Три нові стани показують, скільки ресиверів налаштовано, скільки під'єднано і чи це всі; зупинений адаптер більше не показує ресивер під'єднаним.",
+        "zh-cn": "三个新数据点显示已配置多少台功放、当前有多少台已连接以及是否全部连接；已停止的适配器不再把功放显示为已连接。"
+      },
       "1.5.0": {
         "en": "Fixed: menu browsing on receivers that serve their menus over the old XML protocol (#613)\nFixed: a MusicCast device that loses power is reported as offline instead of still showing a connection\nSwitching a datapoint group on or off now shows how many datapoints appeared or disappeared\nNew: optional error reporting via Sentry, without any personal data",
         "de": "Behoben: Menü-Browsing bei Receivern, die ihr Menü über das alte XML-Protokoll liefern (#613)\nBehoben: Ein stromlos gewordenes MusicCast-Gerät wird als offline gemeldet statt weiter als verbunden\nBeim Umschalten einer Datenpunktgruppe siehst du jetzt, wie viele Datenpunkte dazugekommen oder weggefallen sind\nNeu: Optionale Fehlerberichte über Sentry, ohne persönliche Daten",
@@ -80,19 +93,6 @@
         "pl": "Całkowita przebudowa: jeden adapter obsługuje teraz protokoły YNCA, MusicCast i starszy protokół XML — każdy protokół, na który odpowiada urządzenie, działa równolegle na jednym drzewie obiektów.\nNowe drzewo obiektów z typizowanymi punktami danych zbudowanymi na podstawie danych raportowanych przez urządzenie. Stare punkty danych są automatycznie usuwane, a adres jest przenoszony — skrypty punktów znajdują się na nowych ścieżkach.\nNatychmiastowe aktualizacje: zdarzenia push MusicCast i połączenie YNCA na żywo zastępują sondowanie; połączenia naprawiają się same, a awaria jednego protokołu powoduje ponowne nawiązanie połączenia tylko dla tego protokołu.\nFunkcja automatycznego wykrywania konfiguruje urządzenia MusicCast automatycznie, gdy lista urządzeń jest pusta, a administrator wyświetla każdy odbiornik jako kartę ze wskaźnikami modelu, adresu i protokołu.\nCałe grupy punktów danych, takie jak źródła odtwarzania, tuner, funkcje multiroom czy sceny, można wyłączyć w panelu administracyjnym — wówczas nie będą one nawet wysyłane do urządzenia.\nFolder multiroom zawiera wszystkie informacje o zakresie funkcji: przełączniki, które mają wpływ na wszystkie strefy, mają taką informację w swojej nazwie, a grupa urządzeń MusicCast ma własny folder `multiroom.group`.\nKażde urządzenie wyświetla ikonę typu — odbiornik, odbiornik stereo, głośnik, soundbar lub system CD wykryty na podstawie zgłoszonego modelu — w drzewie obiektów i na karcie administratora; logo adaptera jest teraz czytelne w trybie jasnym i ciemnym.\nPodczas aktualizacji z wersji 0.5.x przed zainstalowaniem aktualizacji wyświetlany jest jednorazowy komunikat objaśniający nowe drzewo obiektów.\nwersja została przebudowana z powodu problemów z wdrożeniem",
         "uk": "Повна перебудова: один адаптер тепер підтримує YNCA, MusicCast та застарілий протокол XML — кожен протокол, якому відповідає пристрій, працює паралельно в одному дереві об'єктів.\nНове дерево об'єктів з типізованими точками даних, побудоване на основі даних вашого пристрою. Старі точки даних видаляються автоматично, адреса переноситься — скрипти вказують на нові шляхи.\nМиттєві оновлення: push-події MusicCast та пряме з’єднання YNCA замінюють опитування; з’єднання відновлюються самостійно, а збій одного протоколу повторно підключається саме до цього протоколу.\nАвтоматичне виявлення налаштовує пристрої MusicCast самостійно, коли список пристроїв порожній, а адміністратор показує кожен ресивер у вигляді картки з індикаторами моделі, адреси та протоколу.\nЦілі групи точок даних, такі як джерела відтворення, тюнер, мультирум або сцени, можна вимкнути в адміністративній панелі — і тоді вони навіть не запитуватимуться з пристрою.\nПапка multiroom одразу показує область застосування: перемикачі, які впливають на всі зони, вказують на це у своїй назві, а група пристроїв MusicCast має власну папку `multiroom.group`.\nКожен пристрій відображає значок типу — ресивер, стереоресивер, динамік, саундбар або CD-система, виявлена за даними моделі — у дереві об’єктів та на картці адміністратора; логотип адаптера тепер залишається читабельним у світлому та темному режимі.\nОновлення з версії 0.5.x показує одноразове повідомлення з поясненням нового дерева об'єктів перед встановленням оновлення.\nВерсію було перебудовано через проблеми з розгортанням",
         "zh-cn": "完全重建：现在一个适配器可以支持 YNCA、MusicCast 和传统的 XML 协议——设备响应的每个协议都在同一个对象树上并行运行。\n根据设备报告的数据，构建包含类型化数据点的新对象树。旧数据点会自动移除，地址会被保留——将脚本指向新路径即可。\n即时更新：MusicCast 推送事件和 YNCA 实时连接取代了轮询；连接会自动修复，一个协议出现故障时，只会重新连接该协议。\n当设备列表为空时，自动发现功能会自动设置 MusicCast 设备，管理员会将每个接收器显示为一张卡片，卡片上会显示型号、地址和协议指示符。\n可以在管理后台关闭整个数据点组，例如播放源、调谐器、多房间或场景——这样设备甚至都不会查询这些数据点组。\n多房间文件夹可以一目了然地显示其范围：影响所有区域的开关在其名称中会注明这一点，而 MusicCast 设备组有自己的 `multiroom.group` 文件夹。\n每个设备在对象树及其管理卡上都会显示一个类型图标——接收器、立体声接收器、扬声器、条形音箱或 CD 系统（根据报告的型号检测）；适配器徽标现在在浅色和深色模式下都清晰可见。\n从 0.5.x 升级时，会在更新安装之前显示一次性通知，解释新的对象树。\n由于部署问题，版本已重新构建。"
-      },
-      "0.5.4": {
-        "en": "updated packages",
-        "de": "aktualisierte pakete",
-        "ru": "обновления пакетов",
-        "pt": "pacotes atualizados",
-        "nl": "bijgewerkte pakketten",
-        "fr": "paquets mis à jour",
-        "it": "pacchetti aggiornati",
-        "es": "paquetes actualizados",
-        "pl": "zaktualizowane pakiety",
-        "uk": "оновлені пакети",
-        "zh-cn": "更新软件包"
       }
     },
     "titleLang": {
@@ -243,6 +243,45 @@
         "role": "indicator.connected",
         "name": "Device or service connected",
         "type": "boolean",
+        "read": true,
+        "write": false,
+        "def": false
+      },
+      "native": {}
+    },
+    {
+      "_id": "info.devicesTotal",
+      "type": "state",
+      "common": {
+        "name": "Devices total",
+        "type": "number",
+        "role": "value",
+        "read": true,
+        "write": false,
+        "def": 0
+      },
+      "native": {}
+    },
+    {
+      "_id": "info.devicesOnline",
+      "type": "state",
+      "common": {
+        "name": "Devices online",
+        "type": "number",
+        "role": "value",
+        "read": true,
+        "write": false,
+        "def": 0
+      },
+      "native": {}
+    },
+    {
+      "_id": "info.devicesAllOnline",
+      "type": "state",
+      "common": {
+        "name": "All devices online",
+        "type": "boolean",
+        "role": "indicator",
         "read": true,
         "write": false,
         "def": false

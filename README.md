@@ -96,6 +96,11 @@ On the first connect the adapter asks the receiver which functions it supports �
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+### 1.6.0 (2026-08-27)
+
+- (krobipd) New: three states show how many receivers are set up, how many are connected right now and whether that is all of them — one line to watch instead of every device
+- (krobipd) Fixed: a receiver kept showing as connected while the adapter was stopped, and after a crash it stayed that way until it answered again — both now show the truth
+
 ### 1.5.0 (2026-08-27)
 
 - (krobipd) Fixed: menu browsing now works on receivers that serve their menus over the old XML protocol — the adapter no longer claims the menu datapoints on devices that cannot deliver them (#613)
@@ -127,10 +132,6 @@ On the first connect the adapter asks the receiver which functions it supports �
 - (krobipd) New: preset selection — recall tuner presets by number with up/down stepping, and recall stored network or USB favourites per source on YNCA receivers (#613)
 - (krobipd) New: MusicCast selection lists — stored favourites and tuner presets with names, a recently-played list with recall by number, and the device's own allowed values as dropdowns.
 - (krobipd) New: more device detail — CD track and drive info, DAB and RDS station data, and a read-only clock and alarm view with its own datapoint group switch in the admin settings.
-
-### 1.1.1 (2026-08-22)
-
-- (krobipd) Changed: Internal cleanup. No user-facing changes.
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 

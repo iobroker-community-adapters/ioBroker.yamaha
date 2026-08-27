@@ -944,10 +944,35 @@ describe("Yamaha onUnload", () => {
     const cb = vi.fn();
 
     ctx.i.onUnload(cb);
+    await flush();
     expect(mocks.pushReceivers[0].close).toHaveBeenCalledTimes(1);
     expect(ctx.handles.map(h => h.closed)).toEqual([1, 1]);
     expect(ctx.i.states.get("info.connection")).toEqual({ val: false, ack: true });
     expect(cb).toHaveBeenCalledTimes(1);
+  });
+
+  it("takes every device marker and the overview down, callback last", async () => {
+    const ctx = setup({
+      devices: [
+        { name: "A", ip: "192.168.1.10" },
+        { name: "B", ip: "192.168.1.11" },
+      ],
+    });
+    await ctx.i.onReady();
+    await flush();
+    const cb = vi.fn();
+
+    ctx.i.onUnload(cb);
+    await flush();
+
+    // The per-device marker is what paints the symbol in the object tree — the
+    // instance-wide info.connection alone leaves every device green.
+    expect(ctx.i.states.get("A.info.connection")).toEqual({ val: false, ack: true });
+    expect(ctx.i.states.get("B.info.connection")).toEqual({ val: false, ack: true });
+    expect(ctx.i.states.get("info.devicesOnline")).toEqual({ val: 0, ack: true });
+    expect(ctx.i.states.get("info.devicesAllOnline")).toEqual({ val: false, ack: true });
+    // How many devices there are did not change because the adapter is off.
+    expect(ctx.i.states.get("info.devicesTotal")).toEqual({ val: 2, ack: true });
   });
 
   it("still calls back when a teardown step throws", async () => {
@@ -963,11 +988,49 @@ describe("Yamaha onUnload", () => {
     expect(cb).toHaveBeenCalledTimes(1);
   });
 
-  it("unloads cleanly before anything was started", () => {
+  it("unloads cleanly before anything was started", async () => {
     const ctx = setup();
     const cb = vi.fn();
     expect(() => ctx.i.onUnload(cb)).not.toThrow();
+    await flush();
     expect(cb).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Yamaha device overview", () => {
+  it("counts the devices and how many are connected, in the same round as the single markers", async () => {
+    const ctx = setup(
+      {
+        devices: [
+          { name: "A", ip: "192.168.1.10" },
+          { name: "B", ip: "192.168.1.11" },
+        ],
+      },
+      { failIds: ["B"] },
+    );
+    await ctx.i.onReady();
+    await flush();
+
+    expect(ctx.i.states.get("info.devicesTotal")).toEqual({ val: 2, ack: true });
+    expect(ctx.i.states.get("info.devicesOnline")).toEqual({ val: 1, ack: true });
+    expect(ctx.i.states.get("info.devicesAllOnline")).toEqual({ val: false, ack: true });
+
+    ctx.i.reportConnection("B", true);
+    expect(ctx.i.states.get("info.devicesOnline")).toEqual({ val: 2, ack: true });
+    expect(ctx.i.states.get("info.devicesAllOnline")).toEqual({ val: true, ack: true });
+  });
+
+  it("marks a device that never answers as disconnected at startup", async () => {
+    // ioBroker keeps the last value forever: without the startup stamp a device that was
+    // connected before a crash stays green for good while it never answers again.
+    const ctx = setup({ devices: [{ name: "A", ip: "192.168.1.10" }] }, { failIds: ["A"] });
+    ctx.i.states.set("A.info.connection", { val: true, ack: true });
+
+    await ctx.i.onReady();
+    await flush();
+
+    expect(ctx.i.states.get("A.info.connection")).toEqual({ val: false, ack: true });
+    expect(ctx.i.states.get("info.devicesOnline")).toEqual({ val: 0, ack: true });
   });
 });
 
