@@ -166,6 +166,45 @@ bleiben deklarativ, weil sie Controller-Zustand brauchen). YXC-Push: ein geteilt
 (`yxc/push-receiver.ts`) auf :41100, per Quell-IP geroutet. Discovery: SSDP-M-SEARCH + HTTP-`fetch` in `main.ts`
 (adapter-Timer, sonst S5005), reine Logik in `lib/discovery.ts`.
 
+## Erreichbarkeit + Anspruch: zwei Regeln, die v1.5.0 eingezogen hat
+
+**1) Kein Anspruch ohne Nachweis (#613).** Der YNCA-Browse-Treiber beanspruchte `player.browse.*`,
+sobald das Gerät die Quellen-Subunits führte — ohne je zu prüfen, ob es die Listen-Befehle kann. Da
+`owner-policy.ts` nach Modernität vergibt (yxc > ynca > xml), verdrängte dieser ungeprüfte Anspruch
+den XML-Treiber, der seit jeher probt (`List_Info` → `<Menu_Status>`). Folge: Auf einem RX-V473
+(2012, kein MusicCast) blieb das Menü leer, obwohl der alte Adapter es über XML konnte.
+`probeBrowseSubunits` fragt jetzt je Kandidat `LISTINFO=?` und meldet nur die Subunits, die mit
+Listen-Feldern antworten (`LIST_PROOF`). **Zwei Fallen, die im Code stehen müssen:** (a) Die beiden
+Absagen `@UNDEFINED` und `@RESTRICTED` tragen KEINEN Subunit, sind also keiner Anfrage zuzuordnen —
+es zählt allein das AUSBLEIBEN einer Antwort. (b) Im Bereitschaftszustand antworten Medien-Subunits
+`@RESTRICTED`, was von „kann keine Listen" nicht zu unterscheiden ist → bei `MAIN:PWR != On` wird
+NICHT geprobt, sonst verlöre ein schlafendes Gerät seine Menüs. Beleg für die Notwendigkeit:
+Das RX-A810-Referenzprotokoll beantwortet `@SERVER:LISTINFO=?` mit `@UNDEFINED`, während NETRADIO/PC/USB
+desselben Geräts ein volles Fenster liefern.
+
+**2) Gemerktes darf keine Verbindung vortäuschen.** `yxc/device-controller.start()` holte die
+Fähigkeiten über `ProbeMemory` (kein Netzabruf beim Neuverbinden), Modell/Name sind „best-effort",
+`refreshZone` verschluckte jeden Fehler — am Ende `return true` ohne Bedingung. Ein Receiver, der im
+laufenden Betrieb vom Strom ging, wurde deshalb weiter als `ready — MusicCast ✓` gemeldet, während
+YNCA/XML ehrlich scheiterten (krobis RX-V6A, 2026-08-26, am Log mit gleicher Prozess-ID belegt).
+Jetzt wird das Ergebnis von `refreshZone` ausgewertet: antwortet KEINE Zone, ist der Transport tot.
+Der Zonen-Status ist die einzige Anfrage des Starts, die immer wirklich ans Gerät geht.
+
+**Prüfstand dafür:** `Ressourcen/yamaha/test-harness/` fährt den echten YNCA-Treiber hardwarefrei
+gegen einen Simulator, der aus den 16 aufgezeichneten Geräteprotokollen antwortet (drei Varianten:
+wie aufgezeichnet / Gerät ein / Listen-Antworten eingepflanzt).
+
+## Datenpunkt-Bilanz im Log (v1.5.0, beszel-Form)
+
+EINE `info`-Zeile `Object tree updated: created N datapoint(s), removed M datapoint(s)`, still bei
+0/0 — die drei früheren Lösch-Zeilen (vorherige Konfiguration / umbenannt / abgeschaltete Gruppe)
+stehen jetzt auf `debug`. Zwei Eigenheiten gegenüber beszel: (a) Es wird ein Startschnappschuss
+gebraucht (`snapshotExistingDatapoints`, VOR Aufräumen und Verbinden), weil `upsertObject` bei jedem
+Anfassen `extendObject` fährt — sonst meldete jeder Neustart den ganzen Baum als neu. (b) Geräte
+verbinden asynchron und parallel, deshalb ein 5-Sekunden-Nachlauf (`DATAPOINT_BALANCE_SETTLE_MS`)
+statt einer Zeile je Gerät: EINE Umschaltung, EIN Ergebnis. Gezählt werden NUR `state`-Objekte,
+nicht die Kanäle/Geräteknoten drumherum. Regel-Herkunft: Memory `feedback_datenpunkt_bilanz_im_log`.
+
 ## Stand
 
 Alle sieben Aufbauphasen abgeschlossen, danach der Multi-Transport-Neubau (alle antwortenden Protokolle
@@ -207,7 +246,7 @@ räumt den KOMPLETTEN Alt-Baum (47 Instanz-Objekte + dynamische `Realtime.*`/`Sy
 - **Objektbaum = sauberer Neuschnitt** (Greenfield), yamaha-Nutzer per one-shot-Migration; musiccast-Nutzer
   nicht migrierbar (fremder Namensraum) → freiwilliger Umstieg + Doku.
 - **Manifest bleibt auf der released Version** — den Bump macht `npm run release`.
-- **Kein Sentry** bis eigenes Projekt (der geerbte community-DSN wurde entfernt).
+- **Sentry seit v1.5.0** auf krobis eigenem power-dreams-Projekt (de.sentry.io, EU) — dieselbe DSN wie die übrigen Adapter, NICHT der geerbte community-DSN (der wurde bei der Übernahme entfernt). Details: Memory `reference_sentry_integration`.
 
 ## Tests
 
