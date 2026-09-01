@@ -26,7 +26,7 @@ export function buildCapabilities(messages: YncaMessage[]): YncaCapabilities {
 /**
  * Union-merge two capability maps of the SAME device identity: every function either
  * side ever reported, fresh values winning. A standby sweep answers many functions
- * with the unattributable @RESTRICTED, so REPLACING the stored shape with it would
+ * with the unattributable `@RESTRICTED`, so REPLACING the stored shape with it would
  * strip abilities the device proved while awake — and a first capture in standby
  * would stay lean forever, because the identity-matched cache never re-sweeps.
  * Only call this for a matching identity; an identity change drops the memory instead.
