@@ -19,9 +19,10 @@ legacy XML protocol of the oldest pre-2010 models — behind one object tree.
 - **Instant updates** — MusicCast pushes its changes, YNCA reports over its live connection
 - **Self-healing connections** — an offline receiver joins once it answers; a single protocol reconnects on its own while the others keep running
 - **Typed datapoints** — booleans, dropdowns and numbers with unit and range instead of raw text
+- **Now playing, per zone** — one player block per zone shows source, playback state, title, artist, cover art and the transport buttons for whatever that zone is playing; zones 2–4 carry their own block
 - **Presets and favourites** — recall tuner presets and stored network/USB favourites by number, step through presets, save the current station to a preset slot or bookmark it, and read the stored lists with their names (MusicCast); recently-played recall on MusicCast devices
 - **Menu browsing** — page through the Net Radio, media-server and USB menus like with the remote: the visible menu lines as datapoints, select-by-line, and a path datapoint that navigates to a favourite in one write
-- **Scenes with their names** — recall a scene by number or from a dropdown that shows the titles the receiver reports, per zone
+- **Scenes with their names** — recall a scene by number or by its title from a dropdown that shows the names the receiver reports, per zone — plus a scene list for visualizations
 - **On-screen remote** — cursor pad and menu keys as datapoints on MusicCast devices, for driving the receiver's own on-screen menus
 - **Clock & alarm view** — MusicCast desk-audio devices show their clock and alarm settings
 - **Capability-driven** — states are generated from what each device reports, no hardcoded model list
