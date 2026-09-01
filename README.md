@@ -110,6 +110,7 @@ On the very first contact the adapter asks the receiver which functions it suppo
 - (krobipd) Breaking: the equalizer and the audio-signal info moved into their own folders under sound, the lip-sync offsets into hdmi, the speaker A/B switches to the speaker settings
 - (krobipd) New: zones can show different programs — zones 2 to 4 get their own player block, and play/pause/skip always act on whatever that zone is playing
 - (krobipd) New: the adapter removes the old datapoints itself on the first start, and an update dialog explains the change before installing — scripts need the new paths
+- (krobipd) Fixed: the on-screen remote keys and the tuner preset stepping on MusicCast devices count as button presses again — they no longer wait behind a running background refresh
 - (krobipd) Fixed: restarting or updating the adapter while a receiver was still connecting no longer produces shutdown warnings about timers in the log
 
 ### 1.7.0 (2026-09-01)
