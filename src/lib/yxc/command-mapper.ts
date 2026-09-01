@@ -60,9 +60,9 @@ export type PlayerTransport = (typeof PLAYER_TRANSPORTS)[number];
 
 /** Equalizer band state (without zone prefix) → the band of the declarative equalizer command. */
 const EQ_CHANNELS: Record<string, "low" | "mid" | "high"> = {
-  "sound.equalizerLow": "low",
-  "sound.equalizerMid": "mid",
-  "sound.equalizerHigh": "high",
+  "sound.equalizer.low": "low",
+  "sound.equalizer.mid": "mid",
+  "sound.equalizer.high": "high",
 };
 
 /**
@@ -508,16 +508,16 @@ export function parseYxcSignalInfo(info: unknown, zone: string): StateValue[] {
   const a = audio as Record<string, unknown>;
   const updates: StateValue[] = [];
   if (typeof a.format === "string") {
-    updates.push({ id: `${prefix}sound.signalFormat`, value: a.format });
+    updates.push({ id: `${prefix}sound.signal.format`, value: a.format });
   }
   if (typeof a.fs === "string") {
-    updates.push({ id: `${prefix}sound.signalSampling`, value: a.fs });
+    updates.push({ id: `${prefix}sound.signal.sampling`, value: a.fs });
   }
   if (typeof a.bit === "string") {
-    updates.push({ id: `${prefix}sound.signalBits`, value: a.bit });
+    updates.push({ id: `${prefix}sound.signal.bits`, value: a.bit });
   }
   if (typeof a.bitrate === "number") {
-    updates.push({ id: `${prefix}sound.signalBitrate`, value: a.bitrate });
+    updates.push({ id: `${prefix}sound.signal.bitrate`, value: a.bitrate });
   }
   return updates;
 }

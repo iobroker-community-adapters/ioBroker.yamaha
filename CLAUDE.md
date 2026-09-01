@@ -83,8 +83,8 @@ Objekt-`common` UND Wert-Mapping aus EINER Liste; die `common` werden über `cat
 typisiert (onoff→boolean, enum→Dropdown, number→unit/range). **Numerische YNCA-Schreibwerte tragen ein
 PFLICHT-Zahlenformat** (`NumberSpec.decimals` + Step-Raster in `encode`, Referenz ynca-python
 `number_to_string_with_stepsize`): ohne Dezimalpunkt liest die Receiver-Firmware die Ziffern als Zehntel —
-`VOL=-38` kam als −3,8 dB an (Issue #612; MAXVOL hat den 16.5-Sonderfall per `wireEncode`, FMFREQ ist MHz mit
-zwei Nachkommastellen). **Preset-/Favoriten-Oberfläche (#613, Parität zum alten musiccast-Adapter):** YNCA
+`VOL=-38` kam als −3,8 dB an (Issue #612; MAXVOL hat den 16.5-Sonderfall per `wireEncode`, FMFREQ ist auf dem DRAHT MHz mit
+zwei Nachkommastellen — der Datenpunkt `tuner.frequency` ist seit v2.0.0 einheitlich kHz). **Preset-/Favoriten-Oberfläche (#613, Parität zum alten musiccast-Adapter):** YNCA
 `TUN.PRESET` lesbar+schreibbar (Sentinel „No Preset"→0 via `wireDecode`) + Up/Down-Buttons, DAB-/FM-Presets
 schreibbar, Quellen-Abruf `player.<src>.preset` nur auf den Preset-fähigen Subunits (`PRESET_SUBUNITS`, Spec
 ynca-python-Mixins; write-only, PLAYBACKINFO-gegated). YXC: Favoriten-/Zuletzt-Listen als JSON-States +
@@ -105,8 +105,9 @@ Die gemeinsame Browse-Verdrahtung (Objekte + Maschine + Treiber verbinden) liegt
 über `xml/entities.ts` (dekodieren beim Lesen, escapen beim Schreiben — der Vorgänger bekam das
 von seiner XML-Bibliothek geschenkt, unser Regex-Weg braucht es explizit; sonst erscheint ein
 Ordner „Rock & Pop" verstümmelt und der Pfad-Datenpunkt findet ihn nie).
-Die YXC-DAB-Felder speisen die YNCA-DAB-IDs (`DAB_FIELDS`, eine Quelle für Anlage+Parse);
-Owner-Override `tuner.dab.preset`→YNCA (dort schreibbar, bei YXC nur Anzeige).
+Die YXC-DAB-Felder speisen die geteilten `tuner.dab.*`-Detail-IDs (`DAB_FIELDS`, eine Quelle für
+Anlage+Parse); preset/audioMode liegen seit v2.0.0 FLACH (Band-Parse), der frühere
+Owner-Override `tuner.dab.preset` ist weg — `tuner.preset` ist auf beiden Transporten schreibbar.
 **Menü-Browsing (#613, `lib/browse/`):** transport-neutrale `BrowseEngine` (besitzt die
 `player.browse.*`-States: 8 Zeilen-Fenster mit 📁/♪-Präfix, selectLine=OK, page/back/home,
 `path`-Auto-Lauf mit Seiten-Suche + Timeout, `rows`-JSON, busy) + drei Treiber:
@@ -188,7 +189,12 @@ Antwort des Geräts wird gelesen. Belege: `Ressourcen/yamaha/device-captures/rx-
   getFeatures = max). YNCA bleibt letzter Weg (`@MAIN:SCENE=Scene N`, auf der
   2012er-Generation `@RESTRICTED` — ynca-python PRACTICALITIES).
   Owner-Override `scene.recall: yxc > xml > ynca` (Schreib-Beweis schlägt Modernität).
-  Titel als `scene.name<n>`; Zonen-Szenen unter `multiroom.zoneN.scene.*`.
+  Titel seit v2.0.0 NICHT mehr als eigene Datenpunkte: sie stehen als Beschriftung im
+  recall-Dropdown (Koordinator-„dropdown borrowing": der Owner erbt `common.states`
+  eines nicht-besitzenden Anspruchs) und gesammelt in EINEM `scene.list`-JSON;
+  recall nimmt Nummer ODER Titel (Auflösung via `catalog/scene-titles.ts` aus dem
+  ProbeMemory — XML `Scene_Sel_Item` je Zone, YNCA SCENExNAME für main).
+  Zonen-Szenen unter `multiroom.zoneN.scene.*`.
 - **Per-Gerät-Schreibkarte YNCA** (`presentYncaEntries` + `writeMap` im Controller):
   geschrieben wird nur mit einer Funktion, die DIESES Gerät im Sweep beantwortet hat.
   Damit koexistieren Generationen-Dialekte unter einer Id: `sound.bass` = SPBASS
@@ -232,6 +238,36 @@ Antwort des Geräts wird gelesen. Belege: `Ressourcen/yamaha/device-captures/rx-
 - **Netzsuche blockiert Bekannte nicht mehr:** `autoDiscover` gibt gemerkte Geräte
   sofort zurück; `discoverAdditionalDevices` sucht im Hintergrund und startet NUR
   Neuzugänge (`startDevice` aus der onReady-Schleife ausgelagert).
+
+## Objektbaum 2.0.0 — „Läuft gerade" statt 16 Kopien (2026-09-01)
+
+Beschlossene Vorlage: Artefakt-Seite „Yamaha-Objektbaum 2.0" (Gesamtvorschlag, krobis Go).
+Migration: `pure-helpers.ts` (`RENAMED_STATE_IDS`/`RENAMED_CHANNELS`, v2.0.0-Block) räumt beim
+ersten Start ALLE Alt-Pfade selbst weg; `common.messages`-Warndialog (oldVersion<2.0.0) kündigt es an.
+Der Zonen-Präfix-Strip in `renamedObjectIds` kennt seit v2.0.0 auch `multiroom.zoneN.`.
+
+- **Player = EIN Block je Zone** (`player.*`, Zonen als `multiroom.zoneN.player.*`): source ·
+  playback · artist/album/track/albumArt · elapsed/totalTime · repeat/shuffle · Transport-Buttons.
+  Gefüttert von der Quelle, auf die die ZONE hört: YXC routet netusb/cd-PlayInfo über den
+  Zonen-Eingang (`routePlayerBlock`, Clear-on-Switch einmalig beim Verlassen, `player.cd.*`-
+  Laufwerks-Eigenes bleibt geräteweit), YNCA mappt je Zone `INP`→Quellen-Subunit
+  (`INPUT_SUBUNITS`, normalisiert) und filtert Sweep-Seed UND Live-Pushes darüber
+  (`routePlayerUpdate`); Eingangswechsel = Block leeren + Quelle anzeigen + gezielte GETs.
+  Schreibwege: YXC `playerTransport` (deklarativ, Controller kennt die Quelle der Zone),
+  YNCA `handlePlayerWrite` (Entry des GEHÖRTEN Subunits aus `presentEntries` — claim-with-proof).
+  Owner-Overrides `player.playback/repeat/shuffle → ynca` (YXC liest nur; seine Toggle-Buttons
+  bleiben YXC). Quell-Ordner behalten NUR Eigenes: netRadio/server/usb-Presets(+bookmark),
+  `player.netPlayer`-Listen (preset/presets/recent/recallRecent/playlists/queue), cd-Laufwerk,
+  bluetooth-Kopplung, airplay.volumeInterlock; spotify/deezer/tidal/ipod/ipodUsb/musicCastLink
+  sind als Ordner WEG (ihr Playback läuft im flachen Block).
+- **Tuner vereinheitlicht:** EIN `tuner.band`/`tuner.frequency` (kHz auf jeder Generation:
+  YNCA-FMFREQ `wireDecode` ×1000, XML `frequencyUnit`-Normalisierung, YXC nativ kHz)/
+  `tuner.preset`. Band-abhängige Schreibwege routet der YNCA-Controller VOR dem generischen
+  Pfad (`handleTunerWrite`: TUN AM/FM → AMFREQ/FMFREQ; DAB-Gerät FM → DAB:FMFREQ, DAB-Band-
+  Frequenz wird verworfen — DAB stimmt auf Dienste; Preset → DABPRESET/FMPRESET nach Band).
+  Die DAB-FM-Hälfte liegt auf den flachen tuner.*-Ids, nur echt DAB-Eigenes unter `tuner.dab`.
+- **Feinschliff:** `sound.equalizer.{mode,low,mid,high}` · `sound.signal.{format,sampling,bits,bitrate}`
+  · `hdmi.lipSyncOut1/2` (lipSync-Ordner weg) · `advanced.speakers.speakerA/B`.
 
 ## Erreichbarkeit + Anspruch: zwei Regeln, die v1.5.0 eingezogen hat
 

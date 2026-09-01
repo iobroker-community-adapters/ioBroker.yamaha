@@ -105,7 +105,7 @@ function pushPlayerBlock(objects, prefix, channelName) {
   }
 }
 function mapYxcToObjects(capabilities) {
-  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m;
   const objects = [];
   const channels = /* @__PURE__ */ new Set();
   for (const zoneDef of ZONES) {
@@ -232,17 +232,18 @@ function mapYxcToObjects(capabilities) {
     }
     if (zone.funcs.includes("signal_info")) {
       zoneChannelHelper(`${zoneDef.prefix}sound`, (_g = import_types.CHANNEL_NAMES.sound) != null ? _g : "Sound");
+      zoneChannelHelper(`${zoneDef.prefix}sound.signal`, (_h = import_types.CHANNEL_NAMES.signal) != null ? _h : "Audio signal");
       const signal = (id, name, type, role) => {
         objects.push({
-          id: `${zoneDef.prefix}sound.${id}`,
+          id: `${zoneDef.prefix}sound.signal.${id}`,
           type: "state",
           common: { name, type, role, read: true, write: false }
         });
       };
-      signal("signalFormat", "Audio signal format", "string", "text");
-      signal("signalSampling", "Audio sampling rate", "string", "text");
-      signal("signalBits", "Audio bit depth", "string", "text");
-      signal("signalBitrate", "Audio bitrate", "number", "value");
+      signal("format", "Audio signal format", "string", "text");
+      signal("sampling", "Audio sampling rate", "string", "text");
+      signal("bits", "Audio bit depth", "string", "text");
+      signal("bitrate", "Audio bitrate", "number", "value");
     }
   }
   if (capabilities.media.includes("netusb") || capabilities.media.includes("cd")) {
@@ -282,14 +283,14 @@ function mapYxcToObjects(capabilities) {
         min: 1
       }
     });
-    if ((_h = capabilities.netusbFuncs) == null ? void 0 : _h.includes("mc_playlist")) {
+    if ((_i = capabilities.netusbFuncs) == null ? void 0 : _i.includes("mc_playlist")) {
       objects.push({
         id: "player.netPlayer.playlists",
         type: "state",
         common: { name: "MusicCast playlists", type: "string", role: "json", read: true, write: false }
       });
     }
-    if ((_i = capabilities.netusbFuncs) == null ? void 0 : _i.includes("play_queue")) {
+    if ((_j = capabilities.netusbFuncs) == null ? void 0 : _j.includes("play_queue")) {
       objects.push({
         id: "player.netPlayer.queue",
         type: "state",
@@ -328,7 +329,7 @@ function mapYxcToObjects(capabilities) {
   if (capabilities.media.includes("tuner")) {
     objects.push({ id: "tuner", type: "channel", common: { name: "Tuner" } });
     const bandCommon = { name: "Band", type: "string", role: "state", read: true, write: true };
-    const bands = (_k = (_j = capabilities.tuner) == null ? void 0 : _j.bands) != null ? _k : [];
+    const bands = (_l = (_k = capabilities.tuner) == null ? void 0 : _k.bands) != null ? _l : [];
     if (bands.length > 0) {
       bandCommon.states = selfMap(bands);
     }
@@ -366,7 +367,7 @@ function mapYxcToObjects(capabilities) {
       write: true,
       min: 0
     };
-    if ((_l = capabilities.tuner) == null ? void 0 : _l.presetNum) {
+    if ((_m = capabilities.tuner) == null ? void 0 : _m.presetNum) {
       presetCommon.max = capabilities.tuner.presetNum;
     }
     objects.push({ id: "tuner.preset", type: "state", common: presetCommon });

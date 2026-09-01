@@ -50,12 +50,12 @@ describe("mapYxcToObjects", () => {
 
   test("equalizer bands are writable when the device reports an equalizer", () => {
     const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power", "equalizer"], inputs: [] }], media: [] });
-    const low = objs.find(o => o.id === "sound.equalizerLow");
+    const low = objs.find(o => o.id === "sound.equalizer.low");
     expect(low?.common.write).toBe(true);
     // A writable number is `level`, not the read-only `value`.
     expect(low?.common.role).toBe("level");
-    expect(objs.find(o => o.id === "sound.equalizerMid")?.common.write).toBe(true);
-    expect(objs.find(o => o.id === "sound.equalizerHigh")?.common.write).toBe(true);
+    expect(objs.find(o => o.id === "sound.equalizer.mid")?.common.write).toBe(true);
+    expect(objs.find(o => o.id === "sound.equalizer.high")?.common.write).toBe(true);
   });
 
   test("a device reporting a distribution block gets the MusicCast group folder under multiroom", () => {
@@ -184,7 +184,7 @@ describe("mapYxcToObjects", () => {
     expect(ids).toContain("sound");
     expect(objs.find(o => o.id === "sound")?.type).toBe("channel");
     expect(objs.find(o => o.id === "sound")?.common.name).toBe("Sound");
-    expect(ids.indexOf("sound")).toBeLessThan(ids.indexOf("sound.equalizerLow"));
+    expect(ids.indexOf("sound")).toBeLessThan(ids.indexOf("sound.equalizer.low"));
   });
 
   test("creates zone-prefixed intermediate channels for additional zones", () => {
@@ -399,8 +399,8 @@ describe("scene / remote / signal / netusb-list objects (RX-V6A getFeatures shap
 
   test("signal-info states exist only for declaring zones; playlists/queue only when declared", () => {
     const objs = mapYxcToObjects(caps).map(o => o.id);
-    expect(objs).toContain("sound.signalFormat");
-    expect(objs).not.toContain("multiroom.zone2.sound.signalFormat");
+    expect(objs).toContain("sound.signal.format");
+    expect(objs).not.toContain("multiroom.zone2.sound.signal.format");
     expect(objs).toContain("player.netPlayer.playlists");
     expect(objs).toContain("player.netPlayer.queue");
     const bare = mapYxcToObjects({

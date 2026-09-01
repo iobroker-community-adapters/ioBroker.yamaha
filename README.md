@@ -61,16 +61,20 @@ Each receiver becomes one device node with themed groups — the same groups the
 **Data points** switches control. Only what your device reports is created.
 
 - **Amplifier core** (always on) — power, volume, mute, input, sound program, sleep, plus the device info with model, firmware, IP address and connection; MusicCast devices add an on-screen `remote` (cursor pad, menu keys).
-- **`player`** — one channel per playback source (Spotify, USB, server, net radio, CD, …) with playback state, artist, album, track, cover art and the transport buttons. The `player.browse` folder mirrors the device's media menu: the eight visible lines (folders and titles marked by symbol), `selectLine` acts like OK on the remote, page/back/root buttons, a `rows` JSON for widgets and a `path` datapoint that walks e.g. `Bookmarks>Radio Paradise` on one write. MusicCast devices add their playlists and the current play queue as JSON states.
-- **`tuner`** — AM/FM and DAB radio including RDS texts and frequency.
-- **`multiroom`** — zones 2–4, Zone B, the all-zones switches (master power, party mode) and the MusicCast device group in its own `multiroom.group` folder.
-- **`hdmi`** — the HDMI outputs and lip sync.
-- **`scene`** — the receiver's scenes with their titles and a recall dropdown; zones with their own scenes carry theirs under `multiroom.zoneN.scene`.
-- **`sound`** — tone and sound processing: bass/treble, DSP modes, enhancer, equalizer, plus the current audio signal (format, sampling rate, bitrate) on MusicCast devices.
-- **`advanced`** — setup-level datapoints: maximum/initial volume, speaker configuration, input names.
+- **`player`** — ONE "now playing" block per zone: `player.source` says what the zone is listening to, and playback state, artist, album, track, cover art, times and the transport buttons always describe exactly that — whatever source is playing. Zones 2–4 get their own block under `multiroom.zoneN.player`. The source folders keep only what is genuinely their own: preset recall & save for net radio/server/USB, the MusicCast favourite/recent/playlist/queue lists under `player.netPlayer`, the CD drive states, Bluetooth pairing and the AirPlay volume interlock. The `player.browse` folder mirrors the device's media menu: the eight visible lines (folders and titles marked by symbol), `selectLine` acts like OK on the remote, page/back/root buttons, a `rows` JSON for widgets and a `path` datapoint that walks e.g. `Bookmarks>Radio Paradise` on one write.
+- **`tuner`** — one band, one frequency (kHz on every generation) and one preset for AM, FM and DAB, plus RDS texts and reception flags; only genuinely DAB-specific detail (service, ensemble, DLS, …) sits under `tuner.dab`.
+- **`multiroom`** — zones 2–4 (each with its own player and scene block), Zone B, the all-zones switches (master power, party mode) and the MusicCast device group in its own `multiroom.group` folder.
+- **`hdmi`** — the HDMI outputs and the two lip-sync offsets.
+- **`scene`** — a recall dropdown carrying the titles the receiver reports (writable by number or title) and a `scene.list` JSON with every scene; zones with their own scenes carry theirs under `multiroom.zoneN.scene`.
+- **`sound`** — tone and sound processing: bass/treble, DSP modes, enhancer, the equalizer in its own `sound.equalizer` folder and the current audio signal under `sound.signal` on MusicCast devices.
+- **`advanced`** — setup-level datapoints: maximum/initial volume, the speaker configuration (A/B switches included) under `advanced.speakers`, input names.
 - **`clock`** — the clock and alarm settings of MusicCast desk-audio devices (read-only).
 
 ## Troubleshooting
+
+### Upgrading from 1.x
+
+Version 2.0.0 reworks the object tree. On the first start the adapter removes the old datapoints itself and creates the new ones: the per-source player copies become one `player` block per zone, the scene name datapoints become the recall dropdown plus `scene.list`, the two tuner frequencies become one `tuner.frequency` in kHz, the equalizer and signal info move under `sound.equalizer`/`sound.signal`, the lip-sync offsets under `hdmi`, and the speaker A/B switches under `advanced.speakers`. Point scripts and visualizations at the new paths.
 
 ### Upgrading from 0.5.x
 
@@ -100,6 +104,12 @@ On the very first contact the adapter asks the receiver which functions it suppo
 -->
 ### **WORK IN PROGRESS**
 
+- (krobipd) Breaking: one player block per zone now shows what is playing — source, title, artist, cover art and the transport buttons — instead of an identical, mostly empty block under every source
+- (krobipd) Breaking: the scene name datapoints are gone — the recall dropdown carries the receiver's own titles, and scene.list offers every scene with number and title for visualizations
+- (krobipd) Breaking: the tuner has one band, one frequency (kHz on every generation) and one preset for AM, FM and DAB; only genuinely DAB-specific detail stays under tuner.dab
+- (krobipd) Breaking: the equalizer and the audio-signal info moved into their own folders under sound, the lip-sync offsets into hdmi, the speaker A/B switches to the speaker settings
+- (krobipd) New: zones can show different programs — zones 2 to 4 get their own player block, and play/pause/skip always act on whatever that zone is playing
+- (krobipd) New: the adapter removes the old datapoints itself on the first start, and an update dialog explains the change before installing — scripts need the new paths
 - (krobipd) Fixed: restarting or updating the adapter while a receiver was still connecting no longer produces shutdown warnings about timers in the log
 
 ### 1.7.0 (2026-09-01)

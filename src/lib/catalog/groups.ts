@@ -43,7 +43,7 @@ export function groupOf(stateId: string): GroupId {
   if (seg === "multiroom") {
     return "multiroom";
   }
-  if (seg === "hdmi" || seg === "lipSync") {
+  if (seg === "hdmi") {
     return "hdmi";
   }
   if (seg === "player") {

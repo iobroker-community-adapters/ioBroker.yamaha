@@ -253,17 +253,18 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
     // currently decodes — format, sampling rate, bit depth, bitrate.
     if (zone.funcs.includes("signal_info")) {
       zoneChannelHelper(`${zoneDef.prefix}sound`, CHANNEL_NAMES.sound ?? "Sound");
+      zoneChannelHelper(`${zoneDef.prefix}sound.signal`, CHANNEL_NAMES.signal ?? "Audio signal");
       const signal = (id: string, name: string, type: "string" | "number", role: "text" | "value"): void => {
         objects.push({
-          id: `${zoneDef.prefix}sound.${id}`,
+          id: `${zoneDef.prefix}sound.signal.${id}`,
           type: "state",
           common: { name, type, role, read: true, write: false },
         });
       };
-      signal("signalFormat", "Audio signal format", "string", "text");
-      signal("signalSampling", "Audio sampling rate", "string", "text");
-      signal("signalBits", "Audio bit depth", "string", "text");
-      signal("signalBitrate", "Audio bitrate", "number", "value");
+      signal("format", "Audio signal format", "string", "text");
+      signal("sampling", "Audio sampling rate", "string", "text");
+      signal("bits", "Audio bit depth", "string", "text");
+      signal("bitrate", "Audio bitrate", "number", "value");
     }
   }
   if (capabilities.media.includes("netusb") || capabilities.media.includes("cd")) {

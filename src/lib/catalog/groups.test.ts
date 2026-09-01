@@ -52,7 +52,7 @@ describe("groupOf", () => {
     expect(groupOf("sound.extraBass")).toBe("sound");
     expect(groupOf("sound.subwooferTrim")).toBe("sound");
     expect(groupOf("sound.balance")).toBe("sound");
-    expect(groupOf("sound.equalizerLow")).toBe("sound");
+    expect(groupOf("sound.equalizer.low")).toBe("sound");
     expect(groupOf("sound.clearVoice")).toBe("sound");
     expect(groupOf("sound.bassExtension")).toBe("sound");
     expect(groupOf("sound.ypaoVolume")).toBe("sound");
@@ -63,8 +63,8 @@ describe("groupOf", () => {
 
   it("maps every setup/config id to the advanced group — all now real advanced.* ids", () => {
     expect(groupOf("advanced.maxVolume")).toBe("advanced");
-    expect(groupOf("advanced.speakerA")).toBe("advanced");
-    expect(groupOf("advanced.speakerB")).toBe("advanced");
+    expect(groupOf("advanced.speakers.speakerA")).toBe("advanced");
+    expect(groupOf("advanced.speakers.speakerB")).toBe("advanced");
     expect(groupOf("advanced.initialVolume.mode")).toBe("advanced");
     expect(groupOf("advanced.speakers.pattern")).toBe("advanced");
     expect(groupOf("advanced.inputNames.hdmi1")).toBe("advanced");
@@ -84,10 +84,10 @@ describe("groupOf", () => {
 
   it("maps HDMI routing and lip-sync to the hdmi group on main; zoned HDMI follows multiroom", () => {
     expect(groupOf("hdmi.output")).toBe("hdmi");
-    expect(groupOf("lipSync.hdmiOut1")).toBe("hdmi");
+    expect(groupOf("hdmi.lipSyncOut1")).toBe("hdmi");
     // zoned HDMI states live under multiroom — disabling multiroom removes all zone states
     expect(groupOf("multiroom.zone2.hdmi.output")).toBe("multiroom");
-    expect(groupOf("multiroom.zone3.lipSync.hdmiOut2")).toBe("multiroom");
+    expect(groupOf("multiroom.zone3.hdmi.lipSyncOut2")).toBe("multiroom");
   });
 
   it("does not offer the amp core as a switch and has no zones group", () => {

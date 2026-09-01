@@ -210,6 +210,46 @@
           "agree",
           "cancel"
         ]
+      },
+      {
+        "condition": {
+          "operand": "and",
+          "rules": [
+            "oldVersion<2.0.0",
+            "newVersion>=2.0.0"
+          ]
+        },
+        "title": {
+          "en": "Reworked object tree — one player per zone",
+          "de": "Überarbeiteter Objektbaum — ein Player je Zone",
+          "ru": "Переработанное дерево объектов — один плеер на зону",
+          "pt": "Árvore de objetos reformulada — um leitor por zona",
+          "nl": "Herwerkte objectboom — één speler per zone",
+          "fr": "Arborescence remaniée — un lecteur par zone",
+          "it": "Albero oggetti rinnovato — un lettore per zona",
+          "es": "Árbol de objetos renovado — un reproductor por zona",
+          "pl": "Przebudowane drzewo obiektów — jeden odtwarzacz na strefę",
+          "uk": "Перероблене дерево об'єктів — один плеєр на зону",
+          "zh-cn": "重构的对象树 — 每个区域一个播放器"
+        },
+        "text": {
+          "en": "Version 2.0.0 reworks the object tree: ONE player block per zone shows what is playing (instead of an identical block under every source), scenes become a dropdown with the device's own titles plus a scene.list state, the tuner gets one band/frequency/preset for all bands, equalizer and signal info move under sound, lip sync moves under hdmi. The adapter removes the old datapoints itself on first start and creates the new ones. Please update scripts and visualizations to the new paths.",
+          "de": "Version 2.0.0 überarbeitet den Objektbaum: EIN Player-Block je Zone zeigt, was gerade läuft (statt eines identischen Blocks unter jeder Quelle), die Szenen werden ein Auswahlmenü mit den Titeln des Geräts plus einem scene.list-Datenpunkt, der Tuner bekommt ein Band/eine Frequenz/ein Preset für alle Bänder, Equalizer und Signal-Info ziehen unter sound, die Lippensynchronisation unter hdmi. Der Adapter entfernt die alten Datenpunkte beim ersten Start selbst und legt die neuen an. Bitte Skripte und Visualisierungen auf die neuen Pfade umstellen.",
+          "ru": "Версия 2.0.0 перерабатывает дерево объектов: ОДИН блок плеера на зону показывает, что играет (вместо одинакового блока под каждым источником), сцены становятся выпадающим списком с названиями с устройства плюс точка scene.list, тюнер получает один диапазон/частоту/пресет для всех диапазонов, эквалайзер и информация о сигнале переезжают под sound, синхронизация губ — под hdmi. Адаптер сам удаляет старые точки данных при первом запуске и создаёт новые. Обновите скрипты и визуализации на новые пути.",
+          "pt": "A versão 2.0.0 reformula a árvore de objetos: UM bloco de leitor por zona mostra o que está a tocar (em vez de um bloco idêntico sob cada fonte), as cenas tornam-se um menu com os títulos do próprio aparelho mais um ponto scene.list, o sintonizador recebe uma banda/frequência/pré-seleção para todas as bandas, o equalizador e a informação de sinal passam para sound, a sincronização labial para hdmi. O adaptador remove os pontos antigos no primeiro arranque e cria os novos. Atualize scripts e visualizações para os novos caminhos.",
+          "nl": "Versie 2.0.0 herwerkt de objectboom: ÉÉN spelerblok per zone toont wat er speelt (in plaats van een identiek blok onder elke bron), scènes worden een keuzemenu met de titels van het apparaat plus een scene.list-datapunt, de tuner krijgt één band/frequentie/preset voor alle banden, equalizer en signaalinfo verhuizen naar sound, lipsynchronisatie naar hdmi. De adapter verwijdert de oude datapunten zelf bij de eerste start en maakt de nieuwe aan. Werk scripts en visualisaties bij naar de nieuwe paden.",
+          "fr": "La version 2.0.0 remanie l'arborescence : UN bloc lecteur par zone montre ce qui joue (au lieu d'un bloc identique sous chaque source), les scènes deviennent un menu déroulant avec les titres de l'appareil plus un point scene.list, le tuner reçoit une bande/fréquence/présélection pour toutes les bandes, l'égaliseur et les infos signal passent sous sound, la synchronisation labiale sous hdmi. L'adaptateur supprime lui-même les anciens points de données au premier démarrage et crée les nouveaux. Adaptez vos scripts et visualisations aux nouveaux chemins.",
+          "it": "La versione 2.0.0 rinnova l'albero degli oggetti: UN blocco lettore per zona mostra cosa è in riproduzione (invece di un blocco identico sotto ogni sorgente), le scene diventano un menu a tendina con i titoli del dispositivo più un punto scene.list, il sintonizzatore riceve una banda/frequenza/preset per tutte le bande, equalizzatore e info segnale passano sotto sound, la sincronizzazione labiale sotto hdmi. L'adattatore rimuove da sé i vecchi punti dati al primo avvio e crea i nuovi. Aggiornare script e visualizzazioni ai nuovi percorsi.",
+          "es": "La versión 2.0.0 renueva el árbol de objetos: UN bloque de reproductor por zona muestra lo que suena (en lugar de un bloque idéntico bajo cada fuente), las escenas pasan a ser un menú desplegable con los títulos del propio equipo más un punto scene.list, el sintonizador recibe una banda/frecuencia/preajuste para todas las bandas, el ecualizador y la información de señal se mueven bajo sound, la sincronización labial bajo hdmi. El adaptador elimina los puntos antiguos en el primer arranque y crea los nuevos. Actualice scripts y visualizaciones a las nuevas rutas.",
+          "pl": "Wersja 2.0.0 przebudowuje drzewo obiektów: JEDEN blok odtwarzacza na strefę pokazuje, co gra (zamiast identycznego bloku pod każdym źródłem), sceny stają się listą rozwijaną z tytułami z urządzenia plus punktem scene.list, tuner dostaje jedno pasmo/częstotliwość/preset dla wszystkich pasm, korektor i informacje o sygnale przenoszą się pod sound, synchronizacja ust pod hdmi. Adapter sam usuwa stare punkty danych przy pierwszym starcie i tworzy nowe. Zaktualizuj skrypty i wizualizacje do nowych ścieżek.",
+          "uk": "Версія 2.0.0 переробляє дерево об'єктів: ОДИН блок плеєра на зону показує, що грає (замість однакового блока під кожним джерелом), сцени стають випадним списком із назвами з пристрою плюс точка scene.list, тюнер отримує один діапазон/частоту/пресет для всіх діапазонів, еквалайзер та інформація про сигнал переїжджають під sound, синхронізація губ — під hdmi. Адаптер сам видаляє старі точки даних під час першого запуску і створює нові. Оновіть скрипти та візуалізації на нові шляхи.",
+          "zh-cn": "2.0.0 版重构了对象树：每个区域一个播放器块显示当前播放内容（不再在每个音源下重复相同的块），场景变为带设备自带标题的下拉菜单外加 scene.list 数据点，调谐器对所有波段统一为一个波段/频率/预设，均衡器和信号信息移至 sound 下，唇音同步移至 hdmi 下。适配器首次启动时会自动删除旧数据点并创建新数据点。请将脚本和可视化更新到新路径。"
+        },
+        "level": "warn",
+        "buttons": [
+          "agree",
+          "cancel"
+        ]
       }
     ]
   },

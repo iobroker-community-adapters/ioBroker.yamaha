@@ -36,7 +36,7 @@ describe("YXC_AMP_CATALOG", () => {
    * object tree but carries no `write.apply` is a datapoint the user can change and
    * that never reaches the device.
    */
-  const CONTROLLER_OWNED = ["sound.equalizerLow", "sound.equalizerMid", "sound.equalizerHigh"];
+  const CONTROLLER_OWNED = ["sound.equalizer.low", "sound.equalizer.mid", "sound.equalizer.high"];
 
   it("offers a write mapping for every writable entry the controller does not own", () => {
     for (const entry of YXC_AMP_CATALOG) {

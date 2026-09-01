@@ -160,6 +160,50 @@ export function staleObjects(existing: string[], deviceIds: Set<string>, namespa
  * linger orphaned beside the new one — {@link staleObjects} only removes whole
  * non-configured device trees, not renamed states inside a device that is kept.
  */
+/**
+ * The per-source playback-block states of the pre-2.0.0 tree — the same 19 states
+ * used to sit under every player source folder, almost all permanently empty. In
+ * 2.0.0 ONE flat block per zone replaces them; these copies are removed on the
+ * first start (the sources that keep genuinely own states keep those untouched).
+ */
+const V2_PLAYER_BLOCK_STATES = [
+  "playback",
+  "artist",
+  "album",
+  "track",
+  "station",
+  "channelName",
+  "totalTime",
+  "elapsedTime",
+  "repeat",
+  "shuffle",
+  "albumArt",
+  "source",
+  "play",
+  "pause",
+  "stop",
+  "next",
+  "prev",
+  "repeatToggle",
+  "shuffleToggle",
+];
+
+/** The source folders that stay in 2.0.0 (own states remain) but lose their block copy. */
+const V2_SLIMMED_SOURCES = [
+  "netPlayer",
+  "cd",
+  "netRadio",
+  "server",
+  "usb",
+  "napster",
+  "pandora",
+  "rhapsody",
+  "sirius",
+  "pc",
+  "airplay",
+  "bluetooth",
+];
+
 export const RENAMED_STATE_IDS = [
   "hdmiOut",
   "directMode",
@@ -181,6 +225,41 @@ export const RENAMED_STATE_IDS = [
   "multiroom.clientList",
   "multiroom.linkClient",
   "multiroom.leaveGroup",
+  // ---- v2.0.0 tree rework ------------------------------------------------------
+  // Player unification: the per-source copies of the playback block are gone (the
+  // slimmed folders keep only their own preset/pairing/drive states).
+  ...V2_SLIMMED_SOURCES.flatMap(source => V2_PLAYER_BLOCK_STATES.map(state => `player.${source}.${state}`)),
+  // Scenes: the twelve per-name datapoints became the recall dropdown + scene.list.
+  ...Array.from({ length: 12 }, (_unused, i) => `scene.name${i + 1}`),
+  // Tuner unification: ONE band/frequency/preset; the DAB subunit's FM half moved
+  // onto the flat tuner ids, the two per-band frequencies became tuner.frequency.
+  "tuner.amFrequency",
+  "tuner.fmFrequency",
+  "tuner.dab.band",
+  "tuner.dab.preset",
+  "tuner.dab.fmPreset",
+  "tuner.dab.fmFrequency",
+  "tuner.dab.fmSearchMode",
+  "tuner.dab.fmRdsService",
+  "tuner.dab.fmRdsProgramType",
+  "tuner.dab.fmRdsText",
+  "tuner.dab.fmRdsClock",
+  "tuner.dab.fmStereo",
+  "tuner.dab.fmTuned",
+  "tuner.dab.audioMode",
+  // Sound polish: equalizer and signal info each moved into their own subfolder.
+  "sound.equalizerMode",
+  "sound.equalizerLow",
+  "sound.equalizerMid",
+  "sound.equalizerHigh",
+  "sound.signalFormat",
+  "sound.signalSampling",
+  "sound.signalBits",
+  "sound.signalBitrate",
+  // HDMI polish: the lip-sync offsets moved into the hdmi folder (the lipSync
+  // channel itself is in RENAMED_CHANNELS); the A/B toggles joined the speakers.
+  "advanced.speakerA",
+  "advanced.speakerB",
 ];
 
 /**
@@ -265,6 +344,15 @@ export const RENAMED_CHANNELS = [
   "speakers",
   "initialVolume",
   "inputNames",
+  // ---- v2.0.0 tree rework: the always-empty source channels are gone entirely
+  // (their playback lives in the flat per-zone block), lip sync moved into hdmi.
+  "player.spotify",
+  "player.deezer",
+  "player.tidal",
+  "player.ipod",
+  "player.ipodUsb",
+  "player.musicCastLink",
+  "lipSync",
 ];
 
 /**
@@ -286,9 +374,11 @@ export function renamedObjectIds(existing: string[], deviceIds: Set<string>, nam
         continue;
       }
       const rel = full.slice(base.length);
-      // Strip an optional zone2/3/4 prefix before matching too, so one RENAMED_CHANNELS entry
-      // (e.g. "straight") catches both the MAIN state and its zoned copies ("zone2.straight").
-      const zone = /^zone[234]\./.exec(rel)?.[0] ?? "";
+      // Strip an optional zone prefix before matching too, so one RENAMED_CHANNELS entry
+      // (e.g. "straight") catches both the MAIN state and its zoned copies — the old flat
+      // "zone2." form and today's "multiroom.zone2." form alike (v2.0.0 renames live in
+      // zoned folders, e.g. multiroom.zone2.scene.name1).
+      const zone = /^(?:multiroom\.)?zone[234]\./.exec(rel)?.[0] ?? "";
       const template = rel.slice(zone.length);
       const renamedState = RENAMED_STATE_IDS.includes(rel) || RENAMED_STATE_IDS.includes(template);
       const underRenamedChannel = RENAMED_CHANNELS.some(

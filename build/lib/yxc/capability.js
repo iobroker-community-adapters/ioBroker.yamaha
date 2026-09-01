@@ -44,7 +44,7 @@ const ZONE_VALUE_LISTS = {
   sound_program_list: "soundProgram",
   surr_decoder_type_list: "sound.surroundDecoder",
   tone_control_mode_list: "sound.toneMode",
-  equalizer_mode_list: "sound.equalizerMode",
+  equalizer_mode_list: "sound.equalizer.mode",
   audio_select_list: "sound.audioSelect",
   actual_volume_mode_list: "actualVolumeMode",
   link_control_list: "sound.linkControl",

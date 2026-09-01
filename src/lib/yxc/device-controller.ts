@@ -791,17 +791,17 @@ export class YxcDeviceController implements ConnectionHandle {
     // be spelled out a second time.
     const prefix = zonePrefix(zone);
     const band = (b: string): number | undefined => {
-      const u = updates.find(x => x.id === `${prefix}sound.equalizer${b}`);
+      const u = updates.find(x => x.id === `${prefix}sound.equalizer.${b}`);
       return typeof u?.value === "number" ? u.value : undefined;
     };
-    if (band("Low") === undefined && band("Mid") === undefined && band("High") === undefined) {
+    if (band("low") === undefined && band("mid") === undefined && band("high") === undefined) {
       return;
     }
     const cur = this.lastEqualizer.get(zone) ?? { low: 0, mid: 0, high: 0 };
     this.lastEqualizer.set(zone, {
-      low: band("Low") ?? cur.low,
-      mid: band("Mid") ?? cur.mid,
-      high: band("High") ?? cur.high,
+      low: band("low") ?? cur.low,
+      mid: band("mid") ?? cur.mid,
+      high: band("high") ?? cur.high,
     });
   }
 

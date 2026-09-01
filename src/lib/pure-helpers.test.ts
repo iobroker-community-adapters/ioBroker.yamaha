@@ -312,8 +312,8 @@ describe("renamedObjectIds", () => {
       "yamaha.0.living.dab.band", // old flat dab → gone
       "yamaha.0.living.dist.role", // old dist → gone
       "yamaha.0.living.cd.play", // old flat cd → gone
-      "yamaha.0.living.player.spotify.playback", // new grouped id → kept
-      "yamaha.0.living.tuner.dab.band", // new grouped dab → kept
+      "yamaha.0.living.player.spotify.playback", // 1.x per-source copy → gone in v2.0.0 too
+      "yamaha.0.living.tuner.dab.band", // 1.x dab band → gone (unified onto tuner.band)
       "yamaha.0.living.tuner.band", // tuner core, unchanged → kept
       "yamaha.0.living.multiroom.group.role", // new multiroom group folder → kept
       "yamaha.0.living.power", // amp core → kept
@@ -325,13 +325,89 @@ describe("renamedObjectIds", () => {
         "yamaha.0.living.dab.band",
         "yamaha.0.living.dist.role",
         "yamaha.0.living.cd.play",
+        "yamaha.0.living.player.spotify.playback",
+        "yamaha.0.living.tuner.dab.band",
       ]),
     );
-    expect(result).not.toContain("yamaha.0.living.player.spotify.playback");
-    expect(result).not.toContain("yamaha.0.living.tuner.dab.band");
     expect(result).not.toContain("yamaha.0.living.tuner.band");
     expect(result).not.toContain("yamaha.0.living.multiroom.group.role");
     expect(result).not.toContain("yamaha.0.living.power");
+  });
+
+  test("v2.0.0 cleanup: block copies, scene names, tuner doubles, equalizer/signal/lipSync moves", () => {
+    const existing = [
+      // Per-source block copies go; the folders' own states stay.
+      "yamaha.0.living.player.netPlayer.playback",
+      "yamaha.0.living.player.netPlayer.source",
+      "yamaha.0.living.player.netRadio.artist",
+      "yamaha.0.living.player.netRadio.preset",
+      "yamaha.0.living.player.netRadio.bookmark",
+      "yamaha.0.living.player.cd.tray",
+      "yamaha.0.living.player.bluetooth.deviceName",
+      // Fully-empty source channels vanish entirely.
+      "yamaha.0.living.player.tidal",
+      "yamaha.0.living.player.tidal.shuffleToggle",
+      // Scene names (main and zoned) became the dropdown + scene.list.
+      "yamaha.0.living.scene.name3",
+      "yamaha.0.living.multiroom.zone2.scene.name1",
+      "yamaha.0.living.scene.recall",
+      // Tuner doubles and the DAB FM half.
+      "yamaha.0.living.tuner.amFrequency",
+      "yamaha.0.living.tuner.dab.fmFrequency",
+      "yamaha.0.living.tuner.dab.serviceLabel",
+      // Equalizer/signal moved into subfolders; lipSync moved into hdmi.
+      "yamaha.0.living.sound.equalizerLow",
+      "yamaha.0.living.multiroom.zone2.sound.equalizerLow",
+      "yamaha.0.living.sound.signalFormat",
+      "yamaha.0.living.lipSync.hdmiOut1",
+      "yamaha.0.living.lipSync",
+      "yamaha.0.living.advanced.speakerA",
+      // The new v2 ids must survive.
+      "yamaha.0.living.player.playback",
+      "yamaha.0.living.multiroom.zone2.player.playback",
+      "yamaha.0.living.tuner.frequency",
+      "yamaha.0.living.sound.equalizer.low",
+      "yamaha.0.living.sound.signal.format",
+      "yamaha.0.living.hdmi.lipSyncOut1",
+      "yamaha.0.living.advanced.speakers.speakerA",
+    ];
+    const result = renamedObjectIds(existing, new Set(["living"]), "yamaha.0");
+    expect(result).toEqual(
+      expect.arrayContaining([
+        "yamaha.0.living.player.netPlayer.playback",
+        "yamaha.0.living.player.netPlayer.source",
+        "yamaha.0.living.player.netRadio.artist",
+        "yamaha.0.living.player.tidal",
+        "yamaha.0.living.player.tidal.shuffleToggle",
+        "yamaha.0.living.scene.name3",
+        "yamaha.0.living.multiroom.zone2.scene.name1",
+        "yamaha.0.living.tuner.amFrequency",
+        "yamaha.0.living.tuner.dab.fmFrequency",
+        "yamaha.0.living.sound.equalizerLow",
+        "yamaha.0.living.multiroom.zone2.sound.equalizerLow",
+        "yamaha.0.living.sound.signalFormat",
+        "yamaha.0.living.lipSync.hdmiOut1",
+        "yamaha.0.living.lipSync",
+        "yamaha.0.living.advanced.speakerA",
+      ]),
+    );
+    for (const kept of [
+      "yamaha.0.living.player.netRadio.preset",
+      "yamaha.0.living.player.netRadio.bookmark",
+      "yamaha.0.living.player.cd.tray",
+      "yamaha.0.living.player.bluetooth.deviceName",
+      "yamaha.0.living.scene.recall",
+      "yamaha.0.living.tuner.dab.serviceLabel",
+      "yamaha.0.living.player.playback",
+      "yamaha.0.living.multiroom.zone2.player.playback",
+      "yamaha.0.living.tuner.frequency",
+      "yamaha.0.living.sound.equalizer.low",
+      "yamaha.0.living.sound.signal.format",
+      "yamaha.0.living.hdmi.lipSyncOut1",
+      "yamaha.0.living.advanced.speakers.speakerA",
+    ]) {
+      expect(result).not.toContain(kept);
+    }
   });
 
   test("returns nothing when the old renamed state is absent", () => {

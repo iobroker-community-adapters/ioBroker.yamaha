@@ -58,7 +58,7 @@ describe("YNCA catalog", () => {
   });
 
   test("lip-sync offsets are numbers in ms", () => {
-    expect(buildYncaCatalog().find(e => e.id === "lipSync.hdmiOut1")?.spec).toMatchObject({
+    expect(buildYncaCatalog().find(e => e.id === "hdmi.lipSyncOut1")?.spec).toMatchObject({
       kind: "number",
       unit: "ms",
     });
@@ -75,7 +75,7 @@ describe("YNCA catalog", () => {
     const cat = buildYncaCatalog();
     expect(cat.find(e => e.id === "multiroom.zoneB.volume")).toMatchObject({ subunit: "MAIN", func: "ZONEBVOL" });
     expect(cat.find(e => e.id === "multiroom.zone2.zoneB.volume")).toBeUndefined();
-    expect(cat.find(e => e.id === "advanced.speakerA")).toMatchObject({ subunit: "MAIN", func: "SPEAKERA" });
+    expect(cat.find(e => e.id === "advanced.speakers.speakerA")).toMatchObject({ subunit: "MAIN", func: "SPEAKERA" });
     expect(cat.find(e => e.id === "multiroom.zoneB.power")?.spec).toEqual({ kind: "onoff", on: "On", off: "Standby" });
   });
 
@@ -345,7 +345,7 @@ describe("YNCA catalog", () => {
       value: 1440,
     });
     // Lip-sync offsets are whole milliseconds.
-    expect(yncaCommand("lipSync.hdmiOut1", 12.6, map)).toEqual({
+    expect(yncaCommand("hdmi.lipSyncOut1", 12.6, map)).toEqual({
       subunit: "MAIN",
       func: "LIPSYNCHDMIOUT1OFFSET",
       value: "13",

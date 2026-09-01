@@ -656,17 +656,17 @@ class YxcDeviceController {
     var _a, _b, _c, _d;
     const prefix = (0, import_zones.zonePrefix)(zone);
     const band = (b) => {
-      const u = updates.find((x) => x.id === `${prefix}sound.equalizer${b}`);
+      const u = updates.find((x) => x.id === `${prefix}sound.equalizer.${b}`);
       return typeof (u == null ? void 0 : u.value) === "number" ? u.value : void 0;
     };
-    if (band("Low") === void 0 && band("Mid") === void 0 && band("High") === void 0) {
+    if (band("low") === void 0 && band("mid") === void 0 && band("high") === void 0) {
       return;
     }
     const cur = (_a = this.lastEqualizer.get(zone)) != null ? _a : { low: 0, mid: 0, high: 0 };
     this.lastEqualizer.set(zone, {
-      low: (_b = band("Low")) != null ? _b : cur.low,
-      mid: (_c = band("Mid")) != null ? _c : cur.mid,
-      high: (_d = band("High")) != null ? _d : cur.high
+      low: (_b = band("low")) != null ? _b : cur.low,
+      mid: (_c = band("mid")) != null ? _c : cur.mid,
+      high: (_d = band("high")) != null ? _d : cur.high
     });
   }
   /**

@@ -38,7 +38,8 @@ const CHANNEL_NAMES = {
   remote: "Remote control",
   inputNames: "Input names",
   initialVolume: "Initial volume",
-  lipSync: "Lip sync",
+  equalizer: "Equalizer",
+  signal: "Audio signal",
   // Tuner
   tuner: "Tuner",
   dab: "DAB",

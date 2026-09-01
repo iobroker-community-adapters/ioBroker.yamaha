@@ -333,7 +333,7 @@ describe("YxcDeviceController", () => {
     const s = setup(features, status);
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleStateChange("living.sound.equalizerLow", false, 7);
+    s.controller.handleStateChange("living.sound.equalizer.low", false, 7);
     await flush();
     // low from the write, mid/high from the cached status, on the main zone.
     expect(s.client.calls).toContainEqual({ method: "setEqualizer", args: [7, 2, 3, "main"] });
@@ -350,7 +350,7 @@ describe("YxcDeviceController", () => {
     const s = setup(features, status);
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleStateChange("living.multiroom.zone2.sound.equalizerMid", false, -4);
+    s.controller.handleStateChange("living.multiroom.zone2.sound.equalizer.mid", false, -4);
     await flush();
     // mid from the write, low/high from the cached zone2 status — not the 0/0 fallback.
     expect(s.client.calls).toContainEqual({ method: "setEqualizer", args: [1, -4, 3, "zone2"] });
@@ -542,7 +542,7 @@ describe("YxcDeviceController guards", () => {
     s.fire.keepalive?.();
     await flush();
     s.client.calls.length = 0;
-    s.controller.handleStateChange("living.sound.equalizerLow", false, 7);
+    s.controller.handleStateChange("living.sound.equalizer.low", false, 7);
     await flush();
     // low from the write, mid from the partial push, high still from the full status.
     // Resetting the cache on every update would send 0 for every band the user did

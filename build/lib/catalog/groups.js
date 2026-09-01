@@ -38,7 +38,7 @@ function groupOf(stateId) {
   if (seg === "multiroom") {
     return "multiroom";
   }
-  if (seg === "hdmi" || seg === "lipSync") {
+  if (seg === "hdmi") {
     return "hdmi";
   }
   if (seg === "player") {

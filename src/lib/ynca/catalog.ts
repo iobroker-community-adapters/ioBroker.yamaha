@@ -467,9 +467,11 @@ const AMP_FUNCS: FuncDef[] = [
     write: true,
     role: "level.volume",
   },
+  // Lip sync is an HDMI property (v2.0.0): both offsets live in the hdmi folder,
+  // the former lipSync folder is gone.
   {
     func: "LIPSYNCHDMIOUT1OFFSET",
-    state: "lipSync.hdmiOut1",
+    state: "hdmi.lipSyncOut1",
     name: "Lip sync HDMI OUT1 offset",
     spec: { kind: "number", unit: "ms", decimals: 0 },
     write: true,
@@ -477,7 +479,7 @@ const AMP_FUNCS: FuncDef[] = [
   },
   {
     func: "LIPSYNCHDMIOUT2OFFSET",
-    state: "lipSync.hdmiOut2",
+    state: "hdmi.lipSyncOut2",
     name: "Lip sync HDMI OUT2 offset",
     spec: { kind: "number", unit: "ms", decimals: 0 },
     write: true,
@@ -501,9 +503,10 @@ const ZONEB_AVAIL_STATES = selfMap(["Not Connected", "Not Ready", "Ready"]);
  * Kept out of AMP_FUNCS so they are not created for ZONE2-4.
  */
 const MAIN_ONLY_FUNCS: FuncDef[] = [
+  // The A/B toggles belong with the other speaker settings (v2.0.0).
   {
     func: "SPEAKERA",
-    state: "advanced.speakerA",
+    state: "advanced.speakers.speakerA",
     name: "Speaker A",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
@@ -511,7 +514,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
   },
   {
     func: "SPEAKERB",
-    state: "advanced.speakerB",
+    state: "advanced.speakers.speakerB",
     name: "Speaker B",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,

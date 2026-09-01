@@ -130,9 +130,9 @@ describe("parseYxcStatus", () => {
     expect(u).toContainEqual({ id: "sound.balance", value: 3 });
     expect(u).toContainEqual({ id: "sound.extraBass", value: true });
     expect(u).toContainEqual({ id: "sound.surround3d", value: true });
-    expect(u).toContainEqual({ id: "sound.equalizerLow", value: 10 });
-    expect(u).toContainEqual({ id: "sound.equalizerMid", value: 7 });
-    expect(u).toContainEqual({ id: "sound.equalizerHigh", value: 8 });
+    expect(u).toContainEqual({ id: "sound.equalizer.low", value: 10 });
+    expect(u).toContainEqual({ id: "sound.equalizer.mid", value: 7 });
+    expect(u).toContainEqual({ id: "sound.equalizer.high", value: 8 });
   });
 });
 
@@ -166,10 +166,10 @@ describe("stateToYxc control methods (repeat/shuffle/tray, tuner, party, preset)
   test("equalizer bands stay declarative (main and zoned) — the controller supplies the other two", () => {
     // setEqualizer sets low/mid/high together; the controller supplies the other two from
     // the last status, so each state carries only its own band value.
-    expect(stateToYxc("sound.equalizerLow", 3)).toEqual({ kind: "equalizer", zone: "main", band: "low", value: 3 });
-    expect(stateToYxc("sound.equalizerMid", -2)).toEqual({ kind: "equalizer", zone: "main", band: "mid", value: -2 });
-    expect(stateToYxc("sound.equalizerHigh", 5)).toEqual({ kind: "equalizer", zone: "main", band: "high", value: 5 });
-    expect(stateToYxc("multiroom.zone2.sound.equalizerLow", 1)).toEqual({
+    expect(stateToYxc("sound.equalizer.low", 3)).toEqual({ kind: "equalizer", zone: "main", band: "low", value: 3 });
+    expect(stateToYxc("sound.equalizer.mid", -2)).toEqual({ kind: "equalizer", zone: "main", band: "mid", value: -2 });
+    expect(stateToYxc("sound.equalizer.high", 5)).toEqual({ kind: "equalizer", zone: "main", band: "high", value: 5 });
+    expect(stateToYxc("multiroom.zone2.sound.equalizer.low", 1)).toEqual({
       kind: "equalizer",
       zone: "zone2",
       band: "low",
@@ -563,15 +563,15 @@ describe("signal info / playlists / play queue parsers (capture-verified shapes)
       "main",
     );
     expect(updates).toEqual([
-      { id: "sound.signalFormat", value: "PCM" },
-      { id: "sound.signalSampling", value: "48 kHz" },
-      { id: "sound.signalBits", value: "24" },
-      { id: "sound.signalBitrate", value: 0 },
+      { id: "sound.signal.format", value: "PCM" },
+      { id: "sound.signal.sampling", value: "48 kHz" },
+      { id: "sound.signal.bits", value: "24" },
+      { id: "sound.signal.bitrate", value: 0 },
     ]);
     expect(parseYxcSignalInfo({ response_code: 0 }, "main")).toEqual([]);
     // A zone-2 response lands under the zone prefix.
     expect(parseYxcSignalInfo({ audio: { format: "---" } }, "zone2")).toEqual([
-      { id: "multiroom.zone2.sound.signalFormat", value: "---" },
+      { id: "multiroom.zone2.sound.signal.format", value: "---" },
     ]);
   });
 
