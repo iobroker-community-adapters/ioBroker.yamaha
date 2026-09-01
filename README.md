@@ -103,7 +103,7 @@ On the very first contact the adapter asks the receiver which functions it suppo
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 2.0.2 (2026-09-01)
 
 - (krobipd) Fixed: a restart while the receiver stands by no longer forgets abilities the device proved while awake — the remembered capability map only ever grows for the same device and firmware
 
@@ -141,13 +141,6 @@ On the very first contact the adapter asks the receiver which functions it suppo
 
 - (krobipd) New: three states show how many receivers are set up, how many are connected right now and whether that is all of them — one line to watch instead of every device
 - (krobipd) Fixed: a receiver kept showing as connected while the adapter was stopped, and after a crash it stayed that way until it answered again — both now show the truth
-
-### 1.5.0 (2026-08-27)
-
-- (krobipd) Fixed: menu browsing now works on receivers that serve their menus over the old XML protocol — the adapter no longer claims the menu datapoints on devices that cannot deliver them (#613)
-- (krobipd) Fixed: a MusicCast device that loses power is now reported as offline instead of still showing a connection, so the ready message and the connection indicator tell the truth
-- (krobipd) New: switching a datapoint group on or off in the settings now shows how many datapoints appeared or disappeared, so you no longer have to click through the object tree to check
-- (krobipd) New: optional error reporting via Sentry — only active if you enabled diagnostics in ioBroker, and it transmits no personal data
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 

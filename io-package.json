@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "2.0.1",
+    "version": "2.0.2",
     "news": {
+      "2.0.2": {
+        "en": "Bug fix: a restart while the receiver stands by no longer forgets abilities the device proved while awake — the remembered capability map only ever grows for the same device and firmware",
+        "de": "Fehlerbereinigung: Ein Neustart bei Receiver im Bereitschaftszustand vergisst keine wach nachgewiesenen Fähigkeiten mehr — der gemerkte Fähigkeits-Stand wächst je Gerät und Firmware nur noch",
+        "ru": "Исправление: перезапуск при ресивере в режиме ожидания больше не забывает подтверждённые возможности — сохранённая карта возможностей для того же устройства и прошивки только растёт",
+        "pt": "Correção: um reinício com o recetor em espera já não esquece capacidades comprovadas — o mapa de capacidades memorizado só cresce para o mesmo aparelho e firmware",
+        "nl": "Foutcorrectie: een herstart terwijl de receiver stand-by staat vergeet geen bewezen mogelijkheden meer — de onthouden mogelijkhedenkaart groeit per apparaat en firmware alleen nog",
+        "fr": "Correction : un redémarrage avec l'ampli en veille n'oublie plus les capacités prouvées — la carte des capacités mémorisée ne fait que croître pour le même appareil et firmware",
+        "it": "Correzione: un riavvio con il ricevitore in standby non dimentica più le capacità dimostrate — la mappa delle capacità memorizzata cresce soltanto per lo stesso apparecchio e firmware",
+        "es": "Corrección: un reinicio con el receptor en espera ya no olvida capacidades demostradas — el mapa de capacidades memorizado solo crece para el mismo equipo y firmware",
+        "pl": "Poprawka: restart przy amplitunerze w trybie czuwania nie zapomina już potwierdzonych możliwości — zapamiętana mapa możliwości dla tego samego urządzenia i firmware tylko rośnie",
+        "uk": "Виправлення: перезапуск, коли ресивер у режимі очікування, більше не забуває підтверджені можливості — збережена карта можливостей для того ж пристрою і прошивки лише росте",
+        "zh-cn": "问题修复：接收机待机时重启不再遗忘已被证实的能力——同一设备和固件的能力记录只会增长"
+      },
       "2.0.1": {
         "en": "Bug fixes: datapoints the device can never fill are no longer created, a one-time sweep clears never-filled leftovers, and idle player blocks start with cleared values",
         "de": "Fehlerbereinigung: Datenpunkte, die das Gerät nie füllen kann, entstehen nicht mehr, ein Einmal-Durchlauf entfernt nie befüllte Altlasten, ruhende Player-Blöcke starten mit Leerwerten",
@@ -80,19 +93,6 @@
         "pl": "Komendy wysłane naraz docierają wszystkie, ulubione trafiają do słuchającej strefy, znaki specjalne znów działają, a start i ponowne łączenie są wyraźnie szybsze.",
         "uk": "Команди, надіслані разом, доходять усі, обране потрапляє в зону, що слухає, спецсимволи знову працюють, а запуск і перепідключення помітно швидші.",
         "zh-cn": "一次发送的多条指令全部送达，收藏会进入正在收听的分区，特殊字符恢复正常，启动与重连明显更快。"
-      },
-      "1.3.0": {
-        "en": "Menu browsing for Net Radio, server and USB like with the remote, preset saving and station bookmarks from ioBroker, and Bluetooth pairing controls.",
-        "de": "Menü-Browsing für Net Radio, Server und USB wie mit der Fernbedienung, Senderspeicher und Favoriten direkt aus ioBroker sowie Bluetooth-Kopplung.",
-        "ru": "Просмотр меню Net Radio, сервера и USB как с пульта, сохранение пресетов и закладок станций из ioBroker, а также управление сопряжением Bluetooth.",
-        "pt": "Navegação nos menus de Net Radio, servidor e USB como com o controle remoto, gravação de presets e favoritos a partir do ioBroker e emparelhamento Bluetooth.",
-        "nl": "Menubladeren voor Net Radio, server en USB zoals met de afstandsbediening, presets en favorieten opslaan vanuit ioBroker en Bluetooth-koppeling.",
-        "fr": "Navigation dans les menus Net Radio, serveur et USB comme avec la télécommande, enregistrement de présélections et favoris depuis ioBroker et appairage Bluetooth.",
-        "it": "Navigazione nei menu di Net Radio, server e USB come con il telecomando, salvataggio di preset e preferiti da ioBroker e abbinamento Bluetooth.",
-        "es": "Navegación por los menús de Net Radio, servidor y USB como con el mando, guardado de presintonías y favoritos desde ioBroker y emparejamiento Bluetooth.",
-        "pl": "Przeglądanie menu Net Radio, serwera i USB jak pilotem, zapisywanie presetów i ulubionych z ioBroker oraz parowanie Bluetooth.",
-        "uk": "Перегляд меню Net Radio, сервера та USB як із пульта, збереження пресетів і закладок станцій з ioBroker, а також керування спарюванням Bluetooth.",
-        "zh-cn": "像使用遥控器一样浏览 Net Radio、服务器和 USB 菜单，可从 ioBroker 保存预设和收藏电台，并支持蓝牙配对控制。"
       }
     },
     "titleLang": {

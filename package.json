@@ -1,6 +1,6 @@
 {
   "name": "iobroker.yamaha",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "ioBroker adapter for Yamaha AV receivers and MusicCast devices",
   "author": {
     "name": "krobi",
