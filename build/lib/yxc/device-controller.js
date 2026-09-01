@@ -158,6 +158,13 @@ class YxcDeviceController {
     this.hasPlayQueue = (_d = (_c = capabilities.netusbFuncs) == null ? void 0 : _c.includes("play_queue")) != null ? _d : false;
     await this.setupBrowse(capabilities);
     await this.refreshMedia();
+    if (this.mediaBlocks.includes("netusb") || this.mediaBlocks.includes("cd")) {
+      for (const zone of this.zones.length > 0 ? this.zones : ["main"]) {
+        if (!this.zonePlayerBlock.has(zone)) {
+          this.emit(`${(0, import_zones.zonePrefix)(zone)}player.source`, "");
+        }
+      }
+    }
     await this.refreshLists();
     this.hasDistribution = (_e = capabilities.hasDistribution) != null ? _e : false;
     if (this.hasDistribution) {

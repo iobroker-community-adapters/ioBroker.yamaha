@@ -251,6 +251,17 @@ export class YxcDeviceController implements ConnectionHandle {
     this.hasPlayQueue = capabilities.netusbFuncs?.includes("play_queue") ?? false;
     await this.setupBrowse(capabilities);
     await this.refreshMedia();
+    // Seed the source display for the zones NOT playing a media source: the routing
+    // above only writes player.source for listening zones, so on a device that starts
+    // on HDMI the state would sit valueless until the first media playback (the same
+    // gap the 2.0.0 pre-release audit found on the YNCA side).
+    if (this.mediaBlocks.includes("netusb") || this.mediaBlocks.includes("cd")) {
+      for (const zone of this.zones.length > 0 ? this.zones : ["main"]) {
+        if (!this.zonePlayerBlock.has(zone)) {
+          this.emit(`${zonePrefix(zone)}player.source`, "");
+        }
+      }
+    }
     await this.refreshLists();
     this.hasDistribution = capabilities.hasDistribution ?? false;
     if (this.hasDistribution) {
