@@ -34,7 +34,7 @@ export const SWITCHABLE_GROUPS: readonly GroupId[] = [
  * `advanced.*`, `scene.*`. Anything not matched — the amplifier core (power, volume, input,
  * sleep …), `info.*` — is the always-on `amp` group.
  *
- * @param stateId the device-relative state id (e.g. "multiroom.zone2.power", "player.spotify.playback")
+ * @param stateId the device-relative state id (e.g. "multiroom.zone2.power", "player.playback")
  * @returns the group the state belongs to
  */
 export function groupOf(stateId: string): GroupId {

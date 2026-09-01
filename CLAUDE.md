@@ -269,6 +269,23 @@ Der Zonen-Präfix-Strip in `renamedObjectIds` kennt seit v2.0.0 auch `multiroom.
 - **Feinschliff:** `sound.equalizer.{mode,low,mid,high}` · `sound.signal.{format,sampling,bits,bitrate}`
   · `hdmi.lipSyncOut1/2` (lipSync-Ordner weg) · `advanced.speakers.speakerA/B`.
 
+**v2.0.1 — „kein wertloses Lese-Feld" (Live-Feld-Audit, drei Mechanismen):**
+- **XML claim-with-proof** (der letzte Transport ohne Beweis-Pflicht): AMP-Katalog-Objekte
+  entstehen nur für Basic_Status-Felder, die DIESES Gerät liefert; gelieferte Feldmenge je Zone
+  als persistierte UNION im ProbeMemory (`xmlStatusFields:<zone>` — Standby-Start schrumpft den
+  Baum nicht); taucht ein Feld erstmals im Poll auf, wird es GEMERKT statt objektlos geschrieben
+  (`createdStates`-Gate; Live-Nachanlage bewusst nicht — späte Upserts materialisiert der
+  Koordinator nicht), der nächste Start legt es an.
+- **Verwaisten-Sweep einmal pro Adapter-Version, NACH dem Verbinden** (`purgeNeverFilled` im
+  Bilanz-Settle, `pure-helpers.neverWrittenStateIds`): löscht Lese-States ohne je-Wert (kein val,
+  kein lc) unter verbundenen Geräten, minus im Lauf beanspruchte (`touchedThisRun`), minus
+  `common.custom` (Nutzer-Verlaufs-Verknüpfung — bei krobi flächig InfluxDB!), minus info-Header;
+  Marker `native.purgeVersion` am GERÄTE-Objekt. Offline-Gerät bleibt samt altem Marker unberührt.
+- **Ruheform-Seeds**: Player-Block einer Zone ohne Medienquelle startet mit Leerwerten (beide
+  Seiten — der jeweilige Besitzer schreibt durch den Filter); DAB-Suchlauf-Zähler starten mit 0.
+- **Tuner-Router mit Beweis** (`sendProven`): band-geroutete Schreibwege senden nur Funktionen,
+  die dieses Gerät im Sweep beantwortet hat — ein Gerät ohne Tuner bekommt keinen blinden PUT.
+
 ## Erreichbarkeit + Anspruch: zwei Regeln, die v1.5.0 eingezogen hat
 
 **1) Kein Anspruch ohne Nachweis (#613).** Der YNCA-Browse-Treiber beanspruchte `player.browse.*`,
