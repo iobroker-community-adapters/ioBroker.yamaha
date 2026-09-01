@@ -279,7 +279,9 @@ Der Zonen-Präfix-Strip in `renamedObjectIds` kennt seit v2.0.0 auch `multiroom.
 - **Verwaisten-Sweep einmal pro Adapter-Version, NACH dem Verbinden** (`purgeNeverFilled` im
   Bilanz-Settle, `pure-helpers.neverWrittenStateIds`): löscht Lese-States ohne je-Wert (kein val,
   kein lc) unter verbundenen Geräten, minus im Lauf beanspruchte (`touchedThisRun`), minus
-  `common.custom` (Nutzer-Verlaufs-Verknüpfung — bei krobi flächig InfluxDB!), minus info-Header;
+  info-Header. **`common.custom` ist seit v2.0.3 bewusst KEIN Faktor** (krobi: Aufzeichnung ist
+  User-Sache und sagt nichts darüber, ob der Datenpunkt in den Baum gehört — das verantwortet
+  allein der Adapter; die frühere Ausnahme war eine nie besprochene Eigenmächtigkeit);
   Marker `native.purgeVersion` am GERÄTE-Objekt. Offline-Gerät bleibt samt altem Marker unberührt.
 - **Ruheform-Seeds**: Player-Block einer Zone ohne Medienquelle startet mit Leerwerten (beide
   Seiten — der jeweilige Besitzer schreibt durch den Filter); DAB-Suchlauf-Zähler starten mit 0.

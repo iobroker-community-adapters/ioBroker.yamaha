@@ -103,6 +103,10 @@ On the very first contact the adapter asks the receiver which functions it suppo
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+### **WORK IN PROGRESS**
+
+- (krobipd) Fixed: the update cleanup now removes every never-filled leftover datapoint — a history recording setting no longer shields it, because nothing was ever recorded there and nothing is lost
+
 ### 2.0.2 (2026-09-01)
 
 - (krobipd) Fixed: a restart while the receiver stands by no longer forgets abilities the device proved while awake — the remembered capability map only ever grows for the same device and firmware

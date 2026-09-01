@@ -363,10 +363,12 @@ export const RENAMED_CHANNELS = [
  * legitimately claims is recreated right after, when the device connects. Runs once
  * per adapter version (the caller keeps a marker), so a freshly created state that is
  * merely waiting for its first value does not flap on every start. Excluded: buttons
- * and other write-only states (naturally valueless), states carrying per-state user
- * settings (`common.custom`, e.g. a history binding — a deliberate user link is never
- * deleted behind their back), and the `info.` header the adapter itself maintains for
- * every device, connected or not.
+ * and other write-only states (naturally valueless) and the `info.` header the adapter
+ * itself maintains for every device, connected or not. A recording setting
+ * (`common.custom`) is deliberately NO factor: whether anyone records a datapoint is
+ * the user's business and says nothing about whether the datapoint belongs in the
+ * tree — that is solely the adapter's responsibility (krobi, 2.0.3). On a never-filled
+ * state there is nothing recorded to lose anyway.
  *
  * @param objects all objects under the instance, keyed by full id
  * @param states all states under the instance, keyed by full id
@@ -382,11 +384,8 @@ export function neverWrittenStateIds(
 ): string[] {
   const ids: string[] = [];
   for (const [fullId, object] of Object.entries(objects)) {
-    const common = object?.common as { read?: boolean; custom?: Record<string, unknown> } | undefined;
+    const common = object?.common as { read?: boolean } | undefined;
     if (object?.type !== "state" || common?.read === false) {
-      continue;
-    }
-    if (common?.custom && Object.keys(common.custom).length > 0) {
       continue;
     }
     const relative = stripNamespace(fullId, namespace);

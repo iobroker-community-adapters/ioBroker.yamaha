@@ -594,6 +594,12 @@ describe("neverWrittenStateIds (one-time orphan purge per version)", () => {
       [`${ns}.living.tuner.rdsText`]: stateObj(true), // filled with empty text (still a value)
       [`${ns}.living.player`]: { type: "channel", common: {} }, // not a state
       [`${ns}.other.sound.direct`]: stateObj(true), // not a swept device
+      // A bulk-enabled history binding does NOT save a never-filled state — there is
+      // nothing recorded to lose, junk with a checkbox is still junk (2.0.3).
+      [`${ns}.living.multiroom.zone2.sound.ypaoVolume`]: {
+        type: "state",
+        common: { read: true, custom: { "influxdb.0": { enabled: true } } },
+      },
     };
     const states = {
       [`${ns}.living.multiroom.zone2.soundProgram`]: { val: null },
@@ -603,6 +609,7 @@ describe("neverWrittenStateIds (one-time orphan purge per version)", () => {
       [`${ns}.living.tuner.rdsText`]: { val: "", lc: 456 },
     };
     expect(neverWrittenStateIds(objects, states, new Set(["living"]), ns).sort()).toEqual([
+      `${ns}.living.multiroom.zone2.sound.ypaoVolume`,
       `${ns}.living.multiroom.zone2.soundProgram`,
       `${ns}.living.sound.direct`,
     ]);

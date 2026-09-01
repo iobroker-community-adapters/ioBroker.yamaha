@@ -285,9 +285,6 @@ function neverWrittenStateIds(objects, states, deviceIds, namespace) {
     if ((object == null ? void 0 : object.type) !== "state" || (common == null ? void 0 : common.read) === false) {
       continue;
     }
-    if ((common == null ? void 0 : common.custom) && Object.keys(common.custom).length > 0) {
-      continue;
-    }
     const relative = stripNamespace(fullId, namespace);
     const top = relative.split(".")[0];
     if (!deviceIds.has(top) || relative.slice(top.length + 1).startsWith("info.")) {

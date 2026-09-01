@@ -1282,13 +1282,13 @@ describe("Yamaha never-filled purge (once per adapter version, after connect)", 
     });
     await ctx.i.onReady();
     await flush();
-    await settle(ctx);
+    settle(ctx);
     await flush();
     expect(ctx.i.objects.has("Living_room.sound.direct")).toBe(false);
     expect(ctx.i.objects.has("Living_room.volume")).toBe(true);
     expect(ctx.i.objects.has("Living_room.player.play")).toBe(true);
-    // A deliberate user link (history binding) is never deleted behind their back.
-    expect(ctx.i.objects.has("Living_room.multiroom.zone2.soundProgram")).toBe(true);
+    // A recording setting is user business — never a factor in whether the adapter keeps a datapoint.
+    expect(ctx.i.objects.has("Living_room.multiroom.zone2.soundProgram")).toBe(false);
     expect((ctx.i.objects.get("Living_room")?.native as { purgeVersion?: string }).purgeVersion).toBe("0.0.0-test");
     expect(ctx.i.log.debug).toHaveBeenCalledWith(expect.stringContaining("never-filled"));
   });
@@ -1301,7 +1301,7 @@ describe("Yamaha never-filled purge (once per adapter version, after connect)", 
     ctx.i.objects.set("Living_room.tuner.rdsText", { type: "state", common: { read: true }, native: {} });
     await ctx.i.onReady();
     await flush();
-    await settle(ctx);
+    settle(ctx);
     await flush();
     expect(ctx.i.objects.has("Living_room.tuner.rdsText")).toBe(true);
     expect(ctx.i.log.debug).not.toHaveBeenCalledWith(expect.stringContaining("never-filled"));
@@ -1315,7 +1315,7 @@ describe("Yamaha never-filled purge (once per adapter version, after connect)", 
     ctx.i.objects.set("Attic.sound.direct", { type: "state", common: { read: true }, native: {} });
     await ctx.i.onReady();
     await flush();
-    await settle(ctx);
+    settle(ctx);
     await flush();
     expect(ctx.i.objects.has("Living_room.hdmi.out2")).toBe(false);
     expect((ctx.i.objects.get("Living_room")?.native as { purgeVersion?: string }).purgeVersion).toBe("0.0.0-test");
