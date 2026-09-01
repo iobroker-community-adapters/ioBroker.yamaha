@@ -9,13 +9,29 @@ function ids(fixture: unknown): string[] {
 }
 
 describe("mapYxcToObjects", () => {
-  test("creates the network player channel and states when the device offers netusb", () => {
+  test("creates the ONE flat player block when the device offers netusb (v2.0.0)", () => {
     const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: ["netusb"] });
     const ids = objs.map(o => o.id);
+    expect(ids).toContain("player");
     expect(ids).toContain("player.netPlayer");
+    expect(ids).toEqual(expect.arrayContaining(["player.playback", "player.artist", "player.track", "player.source"]));
+    // The per-source copies of the block are gone.
+    expect(ids).not.toContain("player.netPlayer.playback");
+    expect(ids).not.toContain("player.netPlayer.source");
+  });
+
+  test("each non-main zone gets its own player block — zones can play different sources", () => {
+    const ids = mapYxcToObjects({
+      zones: [
+        { id: "main", funcs: ["power"], inputs: [] },
+        { id: "zone2", funcs: ["power"], inputs: [] },
+      ],
+      media: ["netusb"],
+    }).map(o => o.id);
     expect(ids).toEqual(
-      expect.arrayContaining(["player.netPlayer.playback", "player.netPlayer.artist", "player.netPlayer.track"]),
+      expect.arrayContaining(["multiroom.zone2.player", "multiroom.zone2.player.playback", "multiroom.zone2.player.source"]),
     );
+    expect(ids).not.toContain("multiroom.zone3.player");
   });
 
   test("control datapoints are writable: toggles, tray, tuner band/frequency, preset", () => {
@@ -24,8 +40,8 @@ describe("mapYxcToObjects", () => {
       media: ["netusb", "cd", "tuner"],
     });
     const w = (id: string): boolean | undefined => withPlayers.find(o => o.id === id)?.common.write;
-    expect(w("player.netPlayer.repeatToggle")).toBe(true);
-    expect(w("player.netPlayer.shuffleToggle")).toBe(true);
+    expect(w("player.repeatToggle")).toBe(true);
+    expect(w("player.shuffleToggle")).toBe(true);
     expect(w("player.netPlayer.preset")).toBe(true);
     expect(w("player.cd.tray")).toBe(true);
     expect(w("tuner.band")).toBe(true);
@@ -104,18 +120,12 @@ describe("mapYxcToObjects", () => {
     expect(ids.filter(id => /^multiroom\.zone\d\.multiroom/.test(id))).toEqual([]);
   });
 
-  test("the network player exposes repeat, shuffle, elapsed/total time and album art (F2 parity)", () => {
+  test("the player block exposes repeat, shuffle, elapsed/total time and album art (F2 parity)", () => {
     const ids = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: ["netusb"] }).map(
       o => o.id,
     );
     expect(ids).toEqual(
-      expect.arrayContaining([
-        "player.netPlayer.repeat",
-        "player.netPlayer.shuffle",
-        "player.netPlayer.elapsedTime",
-        "player.netPlayer.totalTime",
-        "player.netPlayer.albumArt",
-      ]),
+      expect.arrayContaining(["player.repeat", "player.shuffle", "player.elapsedTime", "player.totalTime", "player.albumArt"]),
     );
   });
 
@@ -126,28 +136,21 @@ describe("mapYxcToObjects", () => {
     expect(ids).toEqual(expect.arrayContaining(["tuner.band", "tuner.frequency", "tuner.rdsText"]));
   });
 
-  test("creates the cd channel with read states and transport buttons when the device offers a cd", () => {
+  test("a cd device gets the flat player block plus a slim drive-own cd folder (v2.0.0)", () => {
     const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: ["cd"] });
     const ids = objs.map(o => o.id);
     expect(ids).toContain("player.cd");
     expect(ids).toEqual(
-      expect.arrayContaining([
-        "player.cd.playback",
-        "player.cd.artist",
-        "player.cd.album",
-        "player.cd.track",
-        "player.cd.play",
-        "player.cd.pause",
-        "player.cd.stop",
-        "player.cd.next",
-        "player.cd.prev",
-      ]),
+      expect.arrayContaining(["player.playback", "player.artist", "player.album", "player.track", "player.play", "player.stop"]),
     );
+    // What the disc PLAYS lives in the flat block — no per-source copy remains.
+    expect(ids).not.toContain("player.cd.playback");
+    expect(ids).not.toContain("player.cd.play");
   });
 
-  test("a cd transport button is a write-only boolean button", () => {
+  test("a transport button is a write-only boolean button", () => {
     const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: ["cd"] });
-    const play = objs.find(o => o.id === "player.cd.play");
+    const play = objs.find(o => o.id === "player.play");
     expect(play?.common.type).toBe("boolean");
     expect(play?.common.role).toBe("button.play");
     expect(play?.common.write).toBe(true);
@@ -294,7 +297,9 @@ describe("mapYxcToObjects tree hygiene", () => {
     expect(byId.get("player.netPlayer.presets")?.common.write).toBe(false);
     expect(byId.get("player.netPlayer.recent")?.common.write).toBe(false);
     expect(byId.get("player.netPlayer.recallRecent")?.common.write).toBe(true);
-    expect(byId.get("player.netPlayer.source")?.common.write).toBe(false);
+    // The playing source is shown on the flat block (read-only); netPlayer.source is gone.
+    expect(byId.get("player.source")?.common.write).toBe(false);
+    expect(byId.has("player.netPlayer.source")).toBe(false);
   });
 
   test("the cd player carries track number, totals, disc time and drive status", () => {

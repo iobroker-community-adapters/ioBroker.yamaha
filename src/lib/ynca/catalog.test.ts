@@ -138,41 +138,41 @@ describe("YNCA catalog", () => {
     expect(cat.find(e => e.id === "tuner.searchMode")?.spec.kind).toBe("enum");
   });
 
-  test("playback reads from PLAYBACKINFO but writes to PLAYBACK", () => {
+  test("playback reads from PLAYBACKINFO but writes to PLAYBACK (flat block, per subunit)", () => {
     const cat = buildYncaCatalog();
-    expect(cat.find(e => e.id === "player.spotify.playback")).toMatchObject({
-      subunit: "SPOTIFY",
+    expect(cat.find(e => e.id === "player.playback" && e.subunit === "SPOTIFY")).toMatchObject({
       func: "PLAYBACK",
       write: true,
     });
     expect(sweepGets(cat)).toContainEqual({ subunit: "SPOTIFY", func: "PLAYBACKINFO" });
-    expect(funcToEntry(cat).get("SPOTIFY:PLAYBACKINFO")?.id).toBe("player.spotify.playback");
+    expect(funcToEntry(cat).get("SPOTIFY:PLAYBACKINFO")?.id).toBe("player.playback");
   });
 
   test("playback is a numeric media.state coded from PLAYBACKINFO (Play=0)", () => {
     const cat = buildYncaCatalog();
-    expect(cat.find(e => e.id === "player.spotify.playback")?.role).toBe("media.state");
+    expect(cat.find(e => e.id === "player.playback")?.role).toBe("media.state");
+    // Every source subunit reports into the ONE flat state (v2.0.0) — the controller
+    // routes it to the zones listening to that source.
     expect(yncaStateUpdate({ subunit: "SPOTIFY", func: "PLAYBACKINFO", value: "Play" }, funcToEntry(cat))).toEqual({
-      id: "player.spotify.playback",
+      id: "player.playback",
       value: 0,
-    });
-    expect(yncaCommand("player.spotify.playback", 0, idToEntry(cat))).toEqual({
-      subunit: "SPOTIFY",
-      func: "PLAYBACK",
-      value: "Play",
     });
   });
 
   test("track skip is exposed as next/prev buttons that put Skip Fwd/Rev on PLAYBACK", () => {
     const cat = buildYncaCatalog();
-    expect(cat.find(e => e.id === "player.spotify.next")?.role).toBe("button.next");
-    expect(cat.find(e => e.id === "player.spotify.prev")?.role).toBe("button.prev");
-    expect(yncaCommand("player.spotify.next", true, idToEntry(cat))).toEqual({
+    const next = cat.find(e => e.id === "player.next" && e.subunit === "SPOTIFY");
+    const prev = cat.find(e => e.id === "player.prev" && e.subunit === "SPOTIFY");
+    expect(next?.role).toBe("button.next");
+    expect(prev?.role).toBe("button.prev");
+    // The wire value is fixed per direction; the SUBUNIT is picked by the controller
+    // from the zone's input — asserted via a one-entry map, like the controller writes.
+    expect(yncaCommand("player.next", true, new Map([["player.next", next!]]))).toEqual({
       subunit: "SPOTIFY",
       func: "PLAYBACK",
       value: "Skip Fwd",
     });
-    expect(yncaCommand("player.spotify.prev", true, idToEntry(cat))).toEqual({
+    expect(yncaCommand("player.prev", true, new Map([["player.prev", prev!]]))).toEqual({
       subunit: "SPOTIFY",
       func: "PLAYBACK",
       value: "Skip Rev",
@@ -185,20 +185,22 @@ describe("YNCA catalog", () => {
     // catalog entry, must be verified against real device responses.
     const capabilities = parseCapabilities(rxA810 as string[]);
     const ids = yncaObjectsFor(capabilities).map(object => object.id);
-    expect(ids).toContain("player.usb.playback");
-    expect(ids).toContain("player.usb.next");
-    expect(ids).toContain("player.usb.prev");
-    // A source the device does not report gets none of the three.
-    expect(ids).not.toContain("player.spotify.playback");
-    expect(ids).not.toContain("player.spotify.next");
+    expect(ids).toContain("player.playback");
+    expect(ids).toContain("player.next");
+    expect(ids).toContain("player.prev");
+    // The per-source copies of the block are gone (v2.0.0) — only the genuinely
+    // source-own recall/store states keep their per-source paths.
+    const sourceOwn = ids.filter(id => /^player\.(usb|spotify)\./.test(id));
+    expect(sourceOwn.every(id => /\.(preset|presetSave|bookmark)$/.test(id))).toBe(true);
   });
 
   test("player sources expose station, total/elapsed time, preset and channel metadata", () => {
     const cat = buildYncaCatalog();
-    expect(cat.find(e => e.id === "player.netRadio.station")).toMatchObject({ subunit: "NETRADIO", func: "STATION" });
-    expect(cat.find(e => e.id === "player.server.totalTime")).toMatchObject({ subunit: "SERVER", func: "TOTALTIME" });
-    expect(cat.find(e => e.id === "player.usb.elapsedTime")).toMatchObject({ subunit: "USB", func: "ELAPSEDTIME" });
-    // Since #613 the per-source preset is a writable recall (was a dead read-only text).
+    expect(cat.find(e => e.id === "player.station" && e.subunit === "NETRADIO")).toMatchObject({ func: "STATION" });
+    expect(cat.find(e => e.id === "player.totalTime" && e.subunit === "SERVER")).toMatchObject({ func: "TOTALTIME" });
+    expect(cat.find(e => e.id === "player.elapsedTime" && e.subunit === "USB")).toMatchObject({ func: "ELAPSEDTIME" });
+    // Since #613 the per-source preset is a writable recall — genuinely source-own, so
+    // it KEEPS its per-source path (v2.0.0).
     expect(cat.find(e => e.id === "player.netRadio.preset")).toMatchObject({
       spec: { kind: "number" },
       write: true,
@@ -262,20 +264,20 @@ describe("YNCA catalog", () => {
     // still be created, or the seed writes <source>.playback with no object behind it.
     const caps: YncaCapabilities = { model: "RX", subunits: { SPOTIFY: { PLAYBACKINFO: "Play" } } };
     const ids = yncaObjectsFor(caps).map(o => o.id);
-    expect(ids).toContain("player.spotify.playback");
+    expect(ids).toContain("player.playback");
   });
 
   test("a streaming source reporting TRACK (not SONG) still gets a track object (Spotify/Tidal/Deezer)", () => {
     // Spotify/Tidal/Deezer/Pandora answer the title under TRACK, the older sources under SONG;
     // both wire funcs must feed the one `track` state or the title stays empty on the streamers.
     const caps: YncaCapabilities = { model: "RX", subunits: { SPOTIFY: { TRACK: "Yellow" } } };
-    expect(yncaObjectsFor(caps).map(o => o.id)).toContain("player.spotify.track");
+    expect(yncaObjectsFor(caps).map(o => o.id)).toContain("player.track");
   });
 
   test("a device line under TRACK decodes to the track state", () => {
     const map = funcToEntry(buildYncaCatalog());
     expect(yncaStateUpdate({ subunit: "SPOTIFY", func: "TRACK", value: "Yellow" }, map)).toEqual({
-      id: "player.spotify.track",
+      id: "player.track",
       value: "Yellow",
     });
   });
@@ -420,18 +422,16 @@ describe("YNCA catalog", () => {
     expect(cat.find(e => e.id === "multiroom.zone2.sound.bass")).toMatchObject({ subunit: "ZONE2", func: "SPBASS" });
   });
 
-  test("player sources carry the shared playback functions under their channel", () => {
+  test("every player source reports into the ONE flat block; only source-own states keep their path", () => {
     const cat = buildYncaCatalog();
-    const ids = cat.map(e => e.id);
-    expect(ids).toEqual(
-      expect.arrayContaining([
-        "player.netRadio.artist",
-        "player.spotify.playback",
-        "player.usb.track",
-        "player.server.repeat",
-      ]),
-    );
-    expect(cat.find(e => e.id === "player.spotify.playback")).toMatchObject({ subunit: "SPOTIFY", func: "PLAYBACK" });
+    // One entry per (source, function) — all on the flat id.
+    expect(cat.filter(e => e.id === "player.artist").map(e => e.subunit)).toContain("NETRADIO");
+    expect(cat.filter(e => e.id === "player.playback").map(e => e.subunit)).toContain("SPOTIFY");
+    expect(cat.filter(e => e.id === "player.track").map(e => e.subunit)).toContain("USB");
+    expect(cat.filter(e => e.id === "player.repeat").map(e => e.subunit)).toContain("SERVER");
+    // Source-own states stay per source; the old per-source playback copies are gone.
+    expect(cat.some(e => e.id === "player.netRadio.preset")).toBe(true);
+    expect(cat.some(e => e.id === "player.spotify.playback")).toBe(false);
   });
 
   test("every channel the catalog creates has a curated display name (no raw-id fallback)", () => {

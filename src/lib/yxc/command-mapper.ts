@@ -19,7 +19,8 @@ export type YxcCommand =
   | { kind: "tunerPreset"; value: number }
   | { kind: "tunerBand"; band: string }
   | { kind: "netusbPreset"; value: number }
-  | { kind: "netusbRecent"; value: number };
+  | { kind: "netusbRecent"; value: number }
+  | { kind: "playerTransport"; zone: string; action: PlayerTransport };
 
 /**
  * Read a catalog entry's raw getStatus value — a flat field or a nested path.
@@ -48,22 +49,14 @@ function readStatusField(status: Record<string, unknown>, read: { field: string 
  * which sends the wrong command in the library).
  */
 const BUTTON_ACTIONS: Record<string, (client: YxcClientLike) => Promise<unknown>> = {
-  "player.netPlayer.play": client => client.playNet(),
-  "player.netPlayer.pause": client => client.pauseNet(),
-  "player.netPlayer.stop": client => client.stopNet(),
-  "player.netPlayer.next": client => client.nextNet(),
-  "player.netPlayer.prev": client => client.prevNet(),
-  "player.cd.play": client => client.setCDPlayback("play"),
-  "player.cd.pause": client => client.setCDPlayback("pause"),
-  "player.cd.stop": client => client.setCDPlayback("stop"),
-  "player.cd.next": client => client.setCDPlayback("next"),
-  "player.cd.prev": client => client.setCDPlayback("previous"),
-  "player.netPlayer.repeatToggle": client => client.toggleNetRepeat(),
-  "player.netPlayer.shuffleToggle": client => client.toggleNetShuffle(),
-  "player.cd.repeatToggle": client => client.toggleCDRepeat(),
-  "player.cd.shuffleToggle": client => client.toggleCDShuffle(),
   "player.cd.tray": client => client.toggleTray(),
 };
+
+/** The unified player block's transport buttons (v2.0.0) — routed by the controller to the zone's playing source. */
+const PLAYER_TRANSPORTS = ["play", "pause", "stop", "next", "prev", "repeatToggle", "shuffleToggle"] as const;
+
+/** A transport action of the unified player block. */
+export type PlayerTransport = (typeof PLAYER_TRANSPORTS)[number];
 
 /** Equalizer band state (without zone prefix) → the band of the declarative equalizer command. */
 const EQ_CHANNELS: Record<string, "low" | "mid" | "high"> = {
@@ -171,6 +164,14 @@ export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefi
     const menuZone = zone;
     return { kind: "run", run: client => client.controlMenu(String(value), menuZone) };
   }
+  // The unified player block's transport buttons (v2.0.0): declarative, because only
+  // the controller knows which source (netusb or cd) the zone is playing.
+  if (name.startsWith("player.")) {
+    const action = name.slice("player.".length);
+    if ((PLAYER_TRANSPORTS as readonly string[]).includes(action)) {
+      return { kind: "playerTransport", zone, action: action as PlayerTransport };
+    }
+  }
   const eqBand = EQ_CHANNELS[name];
   if (eqBand && isWritableValue(value, true)) {
     // The controller supplies the other two bands; the value carries only this band.
@@ -217,13 +218,15 @@ export function parseYxcDistribution(info: unknown): StateValue[] {
 /**
  * Parse a YXC getPlayInfo response into a player's read-only state updates
  * (playback status plus artist/album/track metadata). The same response shape is
- * used by every player source, so the target channel is chosen via `prefix`.
+ * used by every player source; the updates target the unified flat `player.*` block
+ * (v2.0.0) — the CONTROLLER routes them to the zones listening to the source and
+ * keeps the drive-own `player.cd.*` extras device-global.
  *
  * @param playInfo the getPlayInfo response object
- * @param prefix the target player channel (`netPlayer` for netusb, `cd` for the disc player)
+ * @param block the source the info came from (`netusb` or `cd`)
  * @returns the player state updates, empty if malformed
  */
-export function parseYxcPlayInfo(playInfo: unknown, prefix = "player.netPlayer"): StateValue[] {
+export function parseYxcPlayInfo(playInfo: unknown, block: "netusb" | "cd" = "netusb"): StateValue[] {
   if (typeof playInfo !== "object" || playInfo === null) {
     return [];
   }
@@ -233,7 +236,7 @@ export function parseYxcPlayInfo(playInfo: unknown, prefix = "player.netPlayer")
   for (const field of ["artist", "album", "track"]) {
     const value = info[field];
     if (typeof value === "string") {
-      updates.push({ id: `${prefix}.${field}`, value });
+      updates.push({ id: `player.${field}`, value });
     }
   }
   // Repeat/shuffle carry the same typed form as the YNCA sources: repeat as the
@@ -241,48 +244,68 @@ export function parseYxcPlayInfo(playInfo: unknown, prefix = "player.netPlayer")
   // (wire off/on). An unknown wire value is skipped, never coerced to a wrong state.
   const repeatCode: Record<string, number> = { off: 0, one: 1, all: 2 };
   if (typeof info.repeat === "string" && info.repeat in repeatCode) {
-    updates.push({ id: `${prefix}.repeat`, value: repeatCode[info.repeat] });
+    updates.push({ id: "player.repeat", value: repeatCode[info.repeat] });
   }
   if (info.shuffle === "on" || info.shuffle === "off") {
-    updates.push({ id: `${prefix}.shuffle`, value: info.shuffle === "on" });
+    updates.push({ id: "player.shuffle", value: info.shuffle === "on" });
   }
   // Playback status → media.state code (the same 0/1/2 numbers as the YNCA player).
   const playbackCode: Record<string, number> = { play: 0, stop: 1, pause: 2 };
   if (typeof info.playback === "string" && info.playback in playbackCode) {
-    updates.push({ id: `${prefix}.playback`, value: playbackCode[info.playback] });
+    updates.push({ id: "player.playback", value: playbackCode[info.playback] });
   }
   // Album art URL and the elapsed/total play time (renamed from the YXC field names).
   const albumArt = info.albumart_url;
   if (typeof albumArt === "string") {
-    updates.push({ id: `${prefix}.albumArt`, value: albumArt });
+    updates.push({ id: "player.albumArt", value: albumArt });
   }
   const elapsed = info.play_time;
   if (typeof elapsed === "number") {
-    updates.push({ id: `${prefix}.elapsedTime`, value: elapsed });
+    updates.push({ id: "player.elapsedTime", value: elapsed });
   }
   const total = info.total_time;
   if (typeof total === "number") {
-    updates.push({ id: `${prefix}.totalTime`, value: total });
+    updates.push({ id: "player.totalTime", value: total });
   }
-  // The active network source (netusb `input`, e.g. "spotify") — only netusb carries it.
-  if (typeof info.input === "string") {
-    updates.push({ id: `${prefix}.source`, value: info.input });
+  // The playing source: netusb reports its active input ("spotify", "net_radio", …);
+  // the CD block IS its source.
+  if (block === "cd") {
+    updates.push({ id: "player.source", value: "cd" });
+  } else if (typeof info.input === "string") {
+    updates.push({ id: "player.source", value: info.input });
   }
-  // CD-only extras (presence-checked, netusb responses carry none of these fields).
+  // CD drive-own extras (presence-checked, netusb responses carry none of these fields).
   if (typeof info.track_number === "number") {
-    updates.push({ id: `${prefix}.trackNumber`, value: info.track_number });
+    updates.push({ id: "player.cd.trackNumber", value: info.track_number });
   }
   if (typeof info.total_tracks === "number") {
-    updates.push({ id: `${prefix}.totalTracks`, value: info.total_tracks });
+    updates.push({ id: "player.cd.totalTracks", value: info.total_tracks });
   }
   if (typeof info.disc_time === "number") {
-    updates.push({ id: `${prefix}.discTime`, value: info.disc_time });
+    updates.push({ id: "player.cd.discTime", value: info.disc_time });
   }
   if (typeof info.device_status === "string") {
-    updates.push({ id: `${prefix}.deviceStatus`, value: info.device_status });
+    updates.push({ id: "player.cd.deviceStatus", value: info.device_status });
   }
   return updates;
 }
+
+/**
+ * The values a zone's player block is reset to when the zone leaves its playing
+ * source (v2.0.0 clear-on-switch): metadata empty, times zero, playback Stop.
+ */
+export const PLAYER_CLEAR: StateValue[] = [
+  { id: "player.source", value: "" },
+  { id: "player.playback", value: 1 },
+  { id: "player.artist", value: "" },
+  { id: "player.album", value: "" },
+  { id: "player.track", value: "" },
+  { id: "player.albumArt", value: "" },
+  { id: "player.elapsedTime", value: 0 },
+  { id: "player.totalTime", value: 0 },
+  { id: "player.repeat", value: 0 },
+  { id: "player.shuffle", value: false },
+];
 
 /**
  * The DAB block's fields → their unified state ids (aligned with the YNCA DAB ids so

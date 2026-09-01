@@ -137,11 +137,18 @@ describe("parseYxcStatus", () => {
 });
 
 describe("stateToYxc control methods (repeat/shuffle/tray, tuner, party, preset)", () => {
-  test("toggle buttons run their toggle method", async () => {
-    expect(await ranCall("player.netPlayer.repeatToggle", true)).toEqual(["toggleNetRepeat", []]);
-    expect(await ranCall("player.netPlayer.shuffleToggle", true)).toEqual(["toggleNetShuffle", []]);
-    expect(await ranCall("player.cd.repeatToggle", true)).toEqual(["toggleCDRepeat", []]);
+  test("toggle buttons: the tray stays a direct run; repeat/shuffle toggles are zone-routed transports", async () => {
     expect(await ranCall("player.cd.tray", true)).toEqual(["toggleTray", []]);
+    expect(stateToYxc("player.repeatToggle", true)).toEqual({
+      kind: "playerTransport",
+      zone: "main",
+      action: "repeatToggle",
+    });
+    expect(stateToYxc("player.shuffleToggle", true)).toEqual({
+      kind: "playerTransport",
+      zone: "main",
+      action: "shuffleToggle",
+    });
   });
 
   test("tuner band/frequency, preset and party become their control commands", async () => {
@@ -196,21 +203,22 @@ describe("parseYxcDistribution", () => {
 });
 
 describe("parseYxcPlayInfo", () => {
-  test("maps play-info fields to read-only network player states", () => {
+  test("maps play-info fields to the unified flat player block (v2.0.0)", () => {
     expect(parseYxcPlayInfo({ playback: "play", artist: "A", album: "B", track: "T", extra: 1 })).toEqual([
-      { id: "player.netPlayer.artist", value: "A" },
-      { id: "player.netPlayer.album", value: "B" },
-      { id: "player.netPlayer.track", value: "T" },
-      { id: "player.netPlayer.playback", value: 0 },
+      { id: "player.artist", value: "A" },
+      { id: "player.album", value: "B" },
+      { id: "player.track", value: "T" },
+      { id: "player.playback", value: 0 },
     ]);
   });
 
-  test("maps play-info fields to a cd source when given the cd prefix", () => {
-    expect(parseYxcPlayInfo({ playback: "play", artist: "A", album: "B", track: "T" }, "player.cd")).toEqual([
-      { id: "player.cd.artist", value: "A" },
-      { id: "player.cd.album", value: "B" },
-      { id: "player.cd.track", value: "T" },
-      { id: "player.cd.playback", value: 0 },
+  test("cd play info lands on the SAME flat block, with cd as the playing source", () => {
+    expect(parseYxcPlayInfo({ playback: "play", artist: "A", album: "B", track: "T" }, "cd")).toEqual([
+      { id: "player.artist", value: "A" },
+      { id: "player.album", value: "B" },
+      { id: "player.track", value: "T" },
+      { id: "player.playback", value: 0 },
+      { id: "player.source", value: "cd" },
     ]);
   });
 
@@ -230,12 +238,12 @@ describe("parseYxcPlayInfo", () => {
       }),
     ).toEqual([
       // Typed like the YNCA sources: repeat as the media.mode.repeat code, shuffle boolean.
-      { id: "player.netPlayer.repeat", value: 1 },
-      { id: "player.netPlayer.shuffle", value: false },
-      { id: "player.netPlayer.playback", value: 0 },
-      { id: "player.netPlayer.albumArt", value: "/cover.jpg" },
-      { id: "player.netPlayer.elapsedTime", value: 42 },
-      { id: "player.netPlayer.totalTime", value: 215 },
+      { id: "player.repeat", value: 1 },
+      { id: "player.shuffle", value: false },
+      { id: "player.playback", value: 0 },
+      { id: "player.albumArt", value: "/cover.jpg" },
+      { id: "player.elapsedTime", value: 42 },
+      { id: "player.totalTime", value: 215 },
     ]);
   });
 });
@@ -283,15 +291,13 @@ describe("parseYxcTunerInfo", () => {
 });
 
 describe("stateToYxc", () => {
-  test("runs network-player transport buttons through their YXC method", async () => {
-    expect(await ranCall("player.netPlayer.play", true)).toEqual(["playNet", []]);
-    expect(await ranCall("player.netPlayer.next", true)).toEqual(["nextNet", []]);
-  });
-
-  test("runs cd transport buttons through setCDPlayback with the YXC action word", async () => {
-    expect(await ranCall("player.cd.play", true)).toEqual(["setCDPlayback", ["play"]]);
-    expect(await ranCall("player.cd.prev", true)).toEqual(["setCDPlayback", ["previous"]]);
-    expect(await ranCall("player.cd.next", true)).toEqual(["setCDPlayback", ["next"]]);
+  test("the unified transport buttons are declarative — the controller routes them to the zone's source", () => {
+    expect(stateToYxc("player.play", true)).toEqual({ kind: "playerTransport", zone: "main", action: "play" });
+    expect(stateToYxc("multiroom.zone2.player.next", true)).toEqual({
+      kind: "playerTransport",
+      zone: "zone2",
+      action: "next",
+    });
   });
 
   test("runs subwoofer trim through setSubwooferVolumeTo", async () => {
@@ -352,32 +358,27 @@ describe("stateToYxc button actions", () => {
     return { calls, client: client as never };
   }
 
-  const BUTTONS: Array<[string, string]> = [
-    ["player.netPlayer.play", "playNet"],
-    ["player.netPlayer.pause", "pauseNet"],
-    ["player.netPlayer.stop", "stopNet"],
-    ["player.netPlayer.next", "nextNet"],
-    ["player.netPlayer.prev", "prevNet"],
-    ["player.netPlayer.repeatToggle", "toggleNetRepeat"],
-    ["player.netPlayer.shuffleToggle", "toggleNetShuffle"],
-    ["player.cd.play", "setCDPlayback(play)"],
-    ["player.cd.pause", "setCDPlayback(pause)"],
-    ["player.cd.stop", "setCDPlayback(stop)"],
-    ["player.cd.next", "setCDPlayback(next)"],
-    ["player.cd.prev", "setCDPlayback(previous)"],
-    ["player.cd.repeatToggle", "toggleCDRepeat"],
-    ["player.cd.shuffleToggle", "toggleCDShuffle"],
-    ["player.cd.tray", "toggleTray"],
-  ];
+  const BUTTONS: Array<[string, string]> = [["player.cd.tray", "toggleTray"]];
 
   test.each(BUTTONS)("%s presses %s on the device", async (stateId, expected) => {
     const command = stateToYxc(stateId, true);
     expect(command, stateId).toBeDefined();
     const { calls, client } = recorder();
     await (command as { kind: "run"; run: (c: never) => Promise<unknown> }).run(client);
-    // Every one of these is a media button in the tree. A wrong or missing mapping
-    // is a button that does nothing — and "next" firing "previous" is worse.
     expect(calls).toEqual([expected]);
+  });
+
+  const TRANSPORTS = ["play", "pause", "stop", "next", "prev", "repeatToggle", "shuffleToggle"] as const;
+
+  test.each(TRANSPORTS)("player.%s maps to its zone-routed transport (v2.0.0)", action => {
+    // The controller runs the action on whatever source the zone is playing —
+    // a wrong or missing mapping is a button that does nothing.
+    expect(stateToYxc(`player.${action}`, true)).toEqual({ kind: "playerTransport", zone: "main", action });
+    expect(stateToYxc(`multiroom.zone3.player.${action}`, true)).toEqual({
+      kind: "playerTransport",
+      zone: "zone3",
+      action,
+    });
   });
 
   test("a button fires on any UNACKED write — the ack filter upstream is the guard", () => {
@@ -386,8 +387,8 @@ describe("stateToYxc button actions", () => {
     // (device-controller.handleStateChange returns early for ack:true), because
     // the reset is written with ack:true. Should that filter ever move, this
     // test says where the second guard would have to go.
-    expect(stateToYxc("player.cd.play", false)).toMatchObject({ kind: "run" });
-    expect(stateToYxc("player.netPlayer.next", 0)).toMatchObject({ kind: "run" });
+    expect(stateToYxc("player.cd.tray", false)).toMatchObject({ kind: "run" });
+    expect(stateToYxc("player.next", 0)).toMatchObject({ kind: "playerTransport" });
   });
 });
 
@@ -448,15 +449,15 @@ describe("preset/recent selection (musiccast-adapter parity)", () => {
 });
 
 describe("netusb source and CD detail parsing", () => {
-  test("the active network source lands on player.netPlayer.source", () => {
+  test("the active network source lands on player.source", () => {
     const updates = parseYxcPlayInfo({ input: "spotify", playback: "play" });
-    expect(updates).toContainEqual({ id: "player.netPlayer.source", value: "spotify" });
+    expect(updates).toContainEqual({ id: "player.source", value: "spotify" });
   });
 
-  test("cd extras: track number, totals, disc time and drive status", () => {
+  test("cd extras: track number, totals, disc time and drive status stay drive-own", () => {
     const updates = parseYxcPlayInfo(
       { track_number: 3, total_tracks: 12, disc_time: 3400, device_status: "ready" },
-      "player.cd",
+      "cd",
     );
     expect(updates).toEqual(
       expect.arrayContaining([

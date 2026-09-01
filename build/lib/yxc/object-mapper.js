@@ -34,6 +34,12 @@ const ZONES = import_zones.YXC_ZONE_IDS.map((id) => {
 });
 const PLAYER_STATES = [
   {
+    // What the zone is playing (the netusb source name, or `cd`) — read-only display;
+    // switching happens over the zone's `input` state.
+    state: "source",
+    common: { name: "Playing source", type: "string", role: "text", read: true, write: false }
+  },
+  {
     state: "playback",
     common: {
       // media.state is a number in the type-detector; the same 0/1/2 coding as the YNCA player.
@@ -240,10 +246,15 @@ function mapYxcToObjects(capabilities) {
     }
   }
   if (capabilities.media.includes("netusb") || capabilities.media.includes("cd")) {
-    objects.push({ id: "player", type: "channel", common: { name: "Media player" } });
+    pushPlayerBlock(objects, "player", "Media player");
+    for (const zone of capabilities.zones) {
+      if (zone.id !== "main") {
+        pushPlayerBlock(objects, `${(0, import_zones.zonePrefix)(zone.id)}player`, "Media player");
+      }
+    }
   }
   if (capabilities.media.includes("netusb")) {
-    pushPlayerBlock(objects, "player.netPlayer", "Network player");
+    objects.push({ id: "player.netPlayer", type: "channel", common: { name: "Network player" } });
     objects.push({
       id: "player.netPlayer.preset",
       type: "state",
@@ -271,11 +282,6 @@ function mapYxcToObjects(capabilities) {
         min: 1
       }
     });
-    objects.push({
-      id: "player.netPlayer.source",
-      type: "state",
-      common: { name: "Active network source", type: "string", role: "text", read: true, write: false }
-    });
     if ((_h = capabilities.netusbFuncs) == null ? void 0 : _h.includes("mc_playlist")) {
       objects.push({
         id: "player.netPlayer.playlists",
@@ -292,7 +298,7 @@ function mapYxcToObjects(capabilities) {
     }
   }
   if (capabilities.media.includes("cd")) {
-    pushPlayerBlock(objects, "player.cd", "CD");
+    objects.push({ id: "player.cd", type: "channel", common: { name: "CD" } });
     objects.push({
       id: "player.cd.tray",
       type: "state",

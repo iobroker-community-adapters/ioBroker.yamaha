@@ -37,6 +37,8 @@ interface FakeClient extends YxcClientLike {
   recentInfo: unknown;
   tunerPresetInfo: unknown;
   clockSettings: unknown;
+  /** The netusb getPlayInfo answer (tuner/cd have fixed canned answers). */
+  playInfo: unknown;
   distRole: string;
   /** Make the zone status / name lookup fail, as an unreachable device would. */
   failStatus: boolean;
@@ -62,6 +64,7 @@ function makeFakeClient(features: unknown, status: unknown): FakeClient {
     recentInfo: { response_code: 0, recent_info: [] },
     tunerPresetInfo: { response_code: 0, preset_info: [] },
     clockSettings: { response_code: 0 },
+    playInfo: {},
     distRole: "server",
     failStatus: false,
     failNameText: false,
@@ -95,7 +98,7 @@ function makeFakeClient(features: unknown, status: unknown): FakeClient {
       if (source === "cd") {
         return { playback: "play", track: "Track 1" };
       }
-      return {};
+      return state.playInfo;
     },
     getDistributionInfo: () => ({
       role: state.distRole,
@@ -271,25 +274,57 @@ describe("YxcDeviceController", () => {
     expect(s.cancelled()).toBe(true);
   });
 
-  test("creates cd and tuner blocks and seeds them from their play info", async () => {
+  test("creates the flat player + tuner blocks; cd play info feeds the zone LISTENING to the disc (v2.0.0)", async () => {
     const features = { zone: [{ id: "main", func_list: ["power"] }], cd: {}, tuner: {} };
-    const s = setup(features, ysp);
+    const s = setup(features, { power: "on", input: "cd" });
     await s.controller.start();
-    expect(s.objects).toEqual(expect.arrayContaining(["living.player.cd.playback", "living.tuner.band"]));
+    expect(s.objects).toEqual(expect.arrayContaining(["living.player.playback", "living.tuner.band"]));
     expect(s.client.calls).toContainEqual({ method: "getPlayInfo", args: ["cd"] });
     expect(s.client.calls).toContainEqual({ method: "getPlayInfo", args: ["tuner"] });
-    expect(s.acks).toContainEqual({ id: "living.player.cd.track", value: "Track 1" });
+    expect(s.acks).toContainEqual({ id: "living.player.track", value: "Track 1" });
+    expect(s.acks).toContainEqual({ id: "living.player.source", value: "cd" });
     expect(s.acks).toContainEqual({ id: "living.tuner.frequency", value: 100900 });
   });
 
-  test("a cd transport write becomes a setCDPlayback call", async () => {
+  test("cd play info does NOT touch the block of a zone on another input", async () => {
     const features = { zone: [{ id: "main", func_list: ["power"] }], cd: {} };
-    const s = setup(features, ysp);
+    const s = setup(features, ysp); // the fixture's input is hdmi
+    await s.controller.start();
+    expect(s.acks).not.toContainEqual({ id: "living.player.track", value: "Track 1" });
+  });
+
+  test("netusb feeds the listening zone; leaving the source clears the block once", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], netusb: {} };
+    const s = setup(features, { power: "on", input: "net_radio" });
+    s.client.playInfo = { input: "net_radio", playback: "play", artist: "BBC" };
+    await s.controller.start();
+    expect(s.acks).toContainEqual({ id: "living.player.artist", value: "BBC" });
+    expect(s.acks).toContainEqual({ id: "living.player.source", value: "net_radio" });
+    // The zone switches to HDMI — the next refresh clears the stale metadata.
+    s.client.status = { power: "on", input: "hdmi1" };
+    s.acks.length = 0;
+    s.fire.keepalive?.();
+    await flush();
+    expect(s.acks).toContainEqual({ id: "living.player.artist", value: "" });
+    expect(s.acks).toContainEqual({ id: "living.player.source", value: "" });
+    expect(s.acks).not.toContainEqual({ id: "living.player.artist", value: "BBC" });
+  });
+
+  test("a transport button acts on the source the zone is playing — nothing when it plays none", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], netusb: {}, cd: {} };
+    const s = setup(features, { power: "on", input: "cd" });
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleStateChange("living.player.cd.play", false, true);
+    s.controller.handleStateChange("living.player.play", false, true);
     await flush();
     expect(s.client.calls).toContainEqual({ method: "setCDPlayback", args: ["play"] });
+    // Same button while the zone plays no media source: no transport call goes out.
+    const idle = setup(features, { power: "on", input: "hdmi1" });
+    await idle.controller.start();
+    idle.client.calls.length = 0;
+    idle.controller.handleStateChange("living.player.play", false, true);
+    await flush();
+    expect(idle.client.calls).toEqual([]);
   });
 
   test("an equalizer band write sends setEqualizer with the other two bands from the last status", async () => {

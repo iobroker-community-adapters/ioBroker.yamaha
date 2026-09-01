@@ -1302,9 +1302,13 @@ export function buildYncaCatalog(): YncaEntry[] {
   }
   entries.push(...fnEntries(DAB_FUNCS, "DAB", "tuner."));
   for (const source of PLAYER_SOURCES) {
+    // v2.0.0 player unification: every source's playback functions land on the ONE
+    // flat player block — the controller routes reads and writes by which source
+    // each zone is listening to (INPUT → subunit). Only genuinely source-own states
+    // below (preset, presetSave, bookmark) keep their per-source paths.
     for (const fn of PLAYER_FUNCS) {
       entries.push({
-        id: `player.${source.channel}.${fn.state}`,
+        id: `player.${fn.state}`,
         name: fn.name,
         spec: fn.spec,
         write: fn.write,

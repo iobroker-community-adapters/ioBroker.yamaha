@@ -20,6 +20,7 @@ var command_mapper_exports = {};
 __export(command_mapper_exports, {
   ALARM_DAYS: () => ALARM_DAYS,
   DAB_FIELDS: () => DAB_FIELDS,
+  PLAYER_CLEAR: () => PLAYER_CLEAR,
   parseYxcClock: () => parseYxcClock,
   parseYxcDistribution: () => parseYxcDistribution,
   parseYxcPlayInfo: () => parseYxcPlayInfo,
@@ -51,22 +52,9 @@ function readStatusField(status, read) {
   return status[read.field];
 }
 const BUTTON_ACTIONS = {
-  "player.netPlayer.play": (client) => client.playNet(),
-  "player.netPlayer.pause": (client) => client.pauseNet(),
-  "player.netPlayer.stop": (client) => client.stopNet(),
-  "player.netPlayer.next": (client) => client.nextNet(),
-  "player.netPlayer.prev": (client) => client.prevNet(),
-  "player.cd.play": (client) => client.setCDPlayback("play"),
-  "player.cd.pause": (client) => client.setCDPlayback("pause"),
-  "player.cd.stop": (client) => client.setCDPlayback("stop"),
-  "player.cd.next": (client) => client.setCDPlayback("next"),
-  "player.cd.prev": (client) => client.setCDPlayback("previous"),
-  "player.netPlayer.repeatToggle": (client) => client.toggleNetRepeat(),
-  "player.netPlayer.shuffleToggle": (client) => client.toggleNetShuffle(),
-  "player.cd.repeatToggle": (client) => client.toggleCDRepeat(),
-  "player.cd.shuffleToggle": (client) => client.toggleCDShuffle(),
   "player.cd.tray": (client) => client.toggleTray()
 };
+const PLAYER_TRANSPORTS = ["play", "pause", "stop", "next", "prev", "repeatToggle", "shuffleToggle"];
 const EQ_CHANNELS = {
   "sound.equalizerLow": "low",
   "sound.equalizerMid": "mid",
@@ -141,6 +129,12 @@ function stateToYxc(stateId, value) {
     const menuZone = zone;
     return { kind: "run", run: (client) => client.controlMenu(String(value), menuZone) };
   }
+  if (name.startsWith("player.")) {
+    const action = name.slice("player.".length);
+    if (PLAYER_TRANSPORTS.includes(action)) {
+      return { kind: "playerTransport", zone, action };
+    }
+  }
   const eqBand = EQ_CHANNELS[name];
   if (eqBand && (0, import_value_coerce.isWritableValue)(value, true)) {
     return { kind: "equalizer", zone, band: eqBand, value: Number(value) };
@@ -175,7 +169,7 @@ function parseYxcDistribution(info) {
   }
   return updates;
 }
-function parseYxcPlayInfo(playInfo, prefix = "player.netPlayer") {
+function parseYxcPlayInfo(playInfo, block = "netusb") {
   if (typeof playInfo !== "object" || playInfo === null) {
     return [];
   }
@@ -184,49 +178,63 @@ function parseYxcPlayInfo(playInfo, prefix = "player.netPlayer") {
   for (const field of ["artist", "album", "track"]) {
     const value = info[field];
     if (typeof value === "string") {
-      updates.push({ id: `${prefix}.${field}`, value });
+      updates.push({ id: `player.${field}`, value });
     }
   }
   const repeatCode = { off: 0, one: 1, all: 2 };
   if (typeof info.repeat === "string" && info.repeat in repeatCode) {
-    updates.push({ id: `${prefix}.repeat`, value: repeatCode[info.repeat] });
+    updates.push({ id: "player.repeat", value: repeatCode[info.repeat] });
   }
   if (info.shuffle === "on" || info.shuffle === "off") {
-    updates.push({ id: `${prefix}.shuffle`, value: info.shuffle === "on" });
+    updates.push({ id: "player.shuffle", value: info.shuffle === "on" });
   }
   const playbackCode = { play: 0, stop: 1, pause: 2 };
   if (typeof info.playback === "string" && info.playback in playbackCode) {
-    updates.push({ id: `${prefix}.playback`, value: playbackCode[info.playback] });
+    updates.push({ id: "player.playback", value: playbackCode[info.playback] });
   }
   const albumArt = info.albumart_url;
   if (typeof albumArt === "string") {
-    updates.push({ id: `${prefix}.albumArt`, value: albumArt });
+    updates.push({ id: "player.albumArt", value: albumArt });
   }
   const elapsed = info.play_time;
   if (typeof elapsed === "number") {
-    updates.push({ id: `${prefix}.elapsedTime`, value: elapsed });
+    updates.push({ id: "player.elapsedTime", value: elapsed });
   }
   const total = info.total_time;
   if (typeof total === "number") {
-    updates.push({ id: `${prefix}.totalTime`, value: total });
+    updates.push({ id: "player.totalTime", value: total });
   }
-  if (typeof info.input === "string") {
-    updates.push({ id: `${prefix}.source`, value: info.input });
+  if (block === "cd") {
+    updates.push({ id: "player.source", value: "cd" });
+  } else if (typeof info.input === "string") {
+    updates.push({ id: "player.source", value: info.input });
   }
   if (typeof info.track_number === "number") {
-    updates.push({ id: `${prefix}.trackNumber`, value: info.track_number });
+    updates.push({ id: "player.cd.trackNumber", value: info.track_number });
   }
   if (typeof info.total_tracks === "number") {
-    updates.push({ id: `${prefix}.totalTracks`, value: info.total_tracks });
+    updates.push({ id: "player.cd.totalTracks", value: info.total_tracks });
   }
   if (typeof info.disc_time === "number") {
-    updates.push({ id: `${prefix}.discTime`, value: info.disc_time });
+    updates.push({ id: "player.cd.discTime", value: info.disc_time });
   }
   if (typeof info.device_status === "string") {
-    updates.push({ id: `${prefix}.deviceStatus`, value: info.device_status });
+    updates.push({ id: "player.cd.deviceStatus", value: info.device_status });
   }
   return updates;
 }
+const PLAYER_CLEAR = [
+  { id: "player.source", value: "" },
+  { id: "player.playback", value: 1 },
+  { id: "player.artist", value: "" },
+  { id: "player.album", value: "" },
+  { id: "player.track", value: "" },
+  { id: "player.albumArt", value: "" },
+  { id: "player.elapsedTime", value: 0 },
+  { id: "player.totalTime", value: 0 },
+  { id: "player.repeat", value: 0 },
+  { id: "player.shuffle", value: false }
+];
 const DAB_FIELDS = [
   { field: "service_label", id: "tuner.dab.serviceLabel", type: "string", name: "Service label" },
   { field: "ensemble_label", id: "tuner.dab.ensembleLabel", type: "string", name: "Ensemble label" },
@@ -500,6 +508,7 @@ function parseYxcClock(settings) {
 0 && (module.exports = {
   ALARM_DAYS,
   DAB_FIELDS,
+  PLAYER_CLEAR,
   parseYxcClock,
   parseYxcDistribution,
   parseYxcPlayInfo,

@@ -1156,7 +1156,7 @@ function buildYncaCatalog() {
   for (const source of PLAYER_SOURCES) {
     for (const fn of PLAYER_FUNCS) {
       entries.push({
-        id: `player.${source.channel}.${fn.state}`,
+        id: `player.${fn.state}`,
         name: fn.name,
         spec: fn.spec,
         write: fn.write,

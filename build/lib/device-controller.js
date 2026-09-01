@@ -29,6 +29,50 @@ const FUNC_MAP = (0, import_catalog.funcToEntry)(import_catalog.YNCA_CATALOG);
 const ID_MAP = (0, import_catalog.idToEntry)(import_catalog.YNCA_CATALOG);
 const AVAIL_PROBE = (0, import_catalog.availGets)(import_catalog.YNCA_CATALOG);
 const STATIC_FUNC = /^(INPNAME|SCENE\d+NAME$)/;
+const YNCA_ZONES = [
+  { key: "main", subunit: "MAIN", prefix: "" },
+  { key: "zone2", subunit: "ZONE2", prefix: "multiroom.zone2." },
+  { key: "zone3", subunit: "ZONE3", prefix: "multiroom.zone3." },
+  { key: "zone4", subunit: "ZONE4", prefix: "multiroom.zone4." }
+];
+const INPUT_SUBUNITS = {
+  NETRADIO: "NETRADIO",
+  SERVER: "SERVER",
+  USB: "USB",
+  SPOTIFY: "SPOTIFY",
+  DEEZER: "DEEZER",
+  TIDAL: "TIDAL",
+  NAPSTER: "NAPSTER",
+  PANDORA: "PANDORA",
+  RHAPSODY: "RHAP",
+  SIRIUS: "SIRIUS",
+  SIRIUSXM: "SIRIUS",
+  SIRIUSIR: "SIRIUS",
+  AIRPLAY: "AIRPLAY",
+  BLUETOOTH: "BT",
+  PC: "PC",
+  MUSICCASTLINK: "MCLINK",
+  IPOD: "IPOD",
+  IPODUSB: "IPODUSB"
+};
+function playerSubunitForInput(input) {
+  if (typeof input !== "string" || input.length === 0) {
+    return void 0;
+  }
+  return INPUT_SUBUNITS[input.toUpperCase().replace(/[^A-Z0-9]/g, "")];
+}
+const YNCA_PLAYER_CLEAR = [
+  { id: "player.playback", value: 1 },
+  { id: "player.artist", value: "" },
+  { id: "player.album", value: "" },
+  { id: "player.track", value: "" },
+  { id: "player.station", value: "" },
+  { id: "player.channelName", value: "" },
+  { id: "player.elapsedTime", value: "" },
+  { id: "player.totalTime", value: "" },
+  { id: "player.repeat", value: 0 },
+  { id: "player.shuffle", value: false }
+];
 const STATIC_KEY = "yncaStaticValues";
 const CAPS_KEY = "yncaCapabilities";
 function isCachedCapabilities(value) {
@@ -59,6 +103,12 @@ class YncaDeviceController {
   tunerBand = "";
   /** Whether the device carries the DAB subunit (its FM half shares the flat tuner ids). */
   hasDab = false;
+  /** The entries THIS device reported — the per-subunit lookup behind the player routing. */
+  presentEntries = [];
+  /** Each zone's currently selected input (INP), for the player routing (v2.0.0). */
+  zoneInputs = /* @__PURE__ */ new Map();
+  /** The zones that got a player block (main plus every present ZONEn, when sources exist). */
+  playerZones = [];
   /**
    * Connect, sweep the device from the catalog, and create its object tree; wire
    * up push updates. The catalog is the single source: it drives the sweep, the
@@ -67,23 +117,30 @@ class YncaDeviceController {
    * @returns true if the device reported capabilities and its tree was created
    */
   async start() {
-    var _a, _b, _c, _d, _e, _f, _g;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     await this.deps.client.connect();
     const catalog = this.deps.isEntryEnabled ? import_catalog.YNCA_CATALOG.filter((entry) => this.deps.isEntryEnabled(entry.id)) : import_catalog.YNCA_CATALOG;
     const resolved = await this.resolveCapabilities(catalog);
     const { capabilities, fromCache } = resolved;
     const present = (0, import_catalog.presentYncaEntries)(capabilities, catalog);
     this.writeMap = (0, import_catalog.idToEntry)(present);
+    this.presentEntries = present;
+    for (const zone of YNCA_ZONES) {
+      const input = (_a = capabilities.subunits[zone.subunit]) == null ? void 0 : _a.INP;
+      if (typeof input === "string") {
+        this.zoneInputs.set(zone.key, input);
+      }
+    }
     const objects = (0, import_catalog.yncaObjectsFor)(capabilities, catalog);
     if (objects.length === 0) {
       this.deps.log.warn(`${this.deviceId}: no capabilities reported \u2014 creating no objects`);
       return false;
     }
-    (_b = (_a = this.deps.client).onRefusal) == null ? void 0 : _b.call(
-      _a,
+    (_c = (_b = this.deps.client).onRefusal) == null ? void 0 : _c.call(
+      _b,
       (command, verdict) => this.deps.log.warn(`${this.deviceId}: device refused "${command}" (@${verdict.toUpperCase()})`)
     );
-    const main = (_c = capabilities.subunits.MAIN) != null ? _c : {};
+    const main = (_d = capabilities.subunits.MAIN) != null ? _d : {};
     this.sceneTitles = [];
     for (let n = 1; n <= 12; n++) {
       const title = main[`SCENE${n}NAME`];
@@ -105,18 +162,23 @@ class YncaDeviceController {
       });
       this.deps.setStateAck(`${this.deviceId}.scene.list`, JSON.stringify(this.sceneTitles));
     }
+    await this.setupZonePlayers(capabilities, objects);
     if (!fromCache) {
       for (const [subunit, funcs] of Object.entries(capabilities.subunits)) {
         for (const [func, value] of Object.entries(funcs)) {
           const update = (0, import_catalog.yncaStateUpdate)({ subunit, func, value }, FUNC_MAP);
           if (update) {
-            this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+            if (update.id.startsWith("player.")) {
+              this.routePlayerUpdate(subunit, update.id, update.value);
+            } else {
+              this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+            }
           }
         }
       }
     }
     this.hasDab = capabilities.subunits.DAB !== void 0;
-    this.tunerBand = ((_g = (_f = (_d = capabilities.subunits.DAB) == null ? void 0 : _d.BAND) != null ? _f : (_e = capabilities.subunits.TUN) == null ? void 0 : _e.BAND) != null ? _g : "").toUpperCase();
+    this.tunerBand = ((_h = (_g = (_e = capabilities.subunits.DAB) == null ? void 0 : _e.BAND) != null ? _g : (_f = capabilities.subunits.TUN) == null ? void 0 : _f.BAND) != null ? _h : "").toUpperCase();
     await this.setupBrowse(capabilities);
     this.deps.client.onMessage((message) => {
       var _a2;
@@ -124,9 +186,19 @@ class YncaDeviceController {
       if (message.func === "BAND" && (message.subunit === "TUN" || message.subunit === "DAB")) {
         this.tunerBand = message.value.toUpperCase();
       }
+      if (message.func === "INP") {
+        const zone = YNCA_ZONES.find((z) => z.subunit === message.subunit);
+        if (zone) {
+          this.handleInputSwitch(zone.key, message.value);
+        }
+      }
       const update = (0, import_catalog.yncaStateUpdate)(message, FUNC_MAP);
       if (update) {
-        this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+        if (update.id.startsWith("player.")) {
+          this.routePlayerUpdate(message.subunit, update.id, update.value);
+        } else {
+          this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+        }
       }
     });
     this.deps.client.startKeepalive();
@@ -207,7 +279,8 @@ class YncaDeviceController {
         firmware: (_e = (_d = fresh.subunits.SYS) == null ? void 0 : _d.VERSION) != null ? _e : "",
         subunits: fresh.subunits
       });
-      this.writeMap = (0, import_catalog.idToEntry)((0, import_catalog.presentYncaEntries)(fresh, catalog));
+      this.presentEntries = (0, import_catalog.presentYncaEntries)(fresh, catalog);
+      this.writeMap = (0, import_catalog.idToEntry)(this.presentEntries);
       this.deps.log.debug(`${this.deviceId}: background value refresh done (YNCA)`);
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: background value refresh failed: ${String(e)}`);
@@ -294,7 +367,7 @@ class YncaDeviceController {
    * @param value the new value
    */
   handleStateChange(fullStateId, ack, value) {
-    var _a, _b;
+    var _a, _b, _c;
     if (ack) {
       return;
     }
@@ -315,10 +388,141 @@ class YncaDeviceController {
       }
       value = match.num;
     }
+    const playerWrite = /^(?:multiroom\.(zone[234])\.)?player\.(playback|repeat|shuffle|next|prev)$/.exec(stateId);
+    if (playerWrite) {
+      this.handlePlayerWrite((_b = playerWrite[1]) != null ? _b : "main", `player.${playerWrite[2]}`, value);
+      return;
+    }
     if (this.handleTunerWrite(stateId, value)) {
       return;
     }
-    const triple = (0, import_catalog.yncaCommand)(stateId, value, (_b = this.writeMap) != null ? _b : ID_MAP);
+    const triple = (0, import_catalog.yncaCommand)(stateId, value, (_c = this.writeMap) != null ? _c : ID_MAP);
+    if (triple) {
+      this.deps.client.send(triple.subunit, triple.func, triple.value);
+    }
+  }
+  /**
+   * Create the per-zone player mirrors (v2.0.0): every present ZONEn gets its own
+   * "now playing" block under its multiroom folder — zones can play different
+   * sources, one shared block could not show that. The defs are clones of the flat
+   * block the catalog built for the main zone, plus the `source` display each zone
+   * (main included) gets.
+   *
+   * @param capabilities the device's swept capabilities
+   * @param objects the main tree's object definitions (source of the block's shape)
+   */
+  async setupZonePlayers(capabilities, objects) {
+    const playerObjects = objects.filter(
+      (object) => object.id === "player" || object.type === "state" && /^player\.[^.]+$/.test(object.id)
+    );
+    if (!playerObjects.some((object) => object.type === "state")) {
+      this.playerZones = [];
+      return;
+    }
+    const sourceDef = (id) => ({
+      id,
+      type: "state",
+      common: { name: "Playing source", type: "string", role: "text", read: true, write: false }
+    });
+    await this.deps.upsertObject(`${this.deviceId}.player.source`, sourceDef("player.source"));
+    this.playerZones = ["main"];
+    for (const zone of YNCA_ZONES) {
+      if (zone.key === "main" || capabilities.subunits[zone.subunit] === void 0) {
+        continue;
+      }
+      this.playerZones.push(zone.key);
+      for (const object of playerObjects) {
+        const id = `${zone.prefix}${object.id}`;
+        await this.deps.upsertObject(`${this.deviceId}.${id}`, { ...object, id });
+      }
+      await this.deps.upsertObject(
+        `${this.deviceId}.${zone.prefix}player.source`,
+        sourceDef(`${zone.prefix}player.source`)
+      );
+    }
+  }
+  /**
+   * Feed one player-subunit value into the block of every zone listening to that
+   * source — and only those: an idle source's answer (the sweep reads them all)
+   * must not overwrite what the active source shows.
+   *
+   * @param subunit the source subunit the value came from
+   * @param id the flat player state id
+   * @param value the decoded value
+   */
+  routePlayerUpdate(subunit, id, value) {
+    for (const zone of YNCA_ZONES) {
+      if (!this.playerZones.includes(zone.key)) {
+        continue;
+      }
+      if (playerSubunitForInput(this.zoneInputs.get(zone.key)) === subunit) {
+        this.deps.setStateAck(`${this.deviceId}.${zone.prefix}${id}`, value);
+      }
+    }
+  }
+  /**
+   * Track a zone's input switch: remember the input, and when the zone changed its
+   * player source, clear the block (stale metadata must not linger) and ask the new
+   * source for its current state — YNCA pushes changes, but a source that was already
+   * playing has nothing new to push.
+   *
+   * @param zoneKey the zone (`main`, `zone2`, …)
+   * @param input the new INP value
+   */
+  handleInputSwitch(zoneKey, input) {
+    var _a;
+    const before = playerSubunitForInput(this.zoneInputs.get(zoneKey));
+    this.zoneInputs.set(zoneKey, input);
+    const after = playerSubunitForInput(input);
+    if (before === after || !this.playerZones.includes(zoneKey)) {
+      return;
+    }
+    const zone = YNCA_ZONES.find((z) => z.key === zoneKey);
+    if (!zone) {
+      return;
+    }
+    const presentFlat = new Set(
+      this.presentEntries.filter((entry) => /^player\.[^.]+$/.test(entry.id)).map((entry) => entry.id)
+    );
+    for (const clear of YNCA_PLAYER_CLEAR) {
+      if (presentFlat.has(clear.id)) {
+        this.deps.setStateAck(`${this.deviceId}.${zone.prefix}${clear.id}`, clear.value);
+      }
+    }
+    this.deps.setStateAck(`${this.deviceId}.${zone.prefix}player.source`, after === void 0 ? "" : input);
+    if (after !== void 0) {
+      const funcs = /* @__PURE__ */ new Set();
+      for (const entry of this.presentEntries) {
+        if (entry.subunit === after && /^player\.[^.]+$/.test(entry.id) && !entry.writeOnly) {
+          funcs.add((_a = entry.readFunc) != null ? _a : entry.func);
+        }
+      }
+      for (const func of funcs) {
+        this.deps.client.get(after, func);
+      }
+    }
+  }
+  /**
+   * Route a unified player write (playback/repeat/shuffle/next/prev) to the source
+   * subunit the ZONE is listening to — with the entry that subunit itself reported
+   * (claim-with-proof, like every other write).
+   *
+   * @param zoneKey the zone the write belongs to
+   * @param flatId the flat player state id
+   * @param value the written value
+   */
+  handlePlayerWrite(zoneKey, flatId, value) {
+    const subunit = playerSubunitForInput(this.zoneInputs.get(zoneKey));
+    if (subunit === void 0) {
+      this.deps.log.debug(`${this.deviceId}: ${flatId} ignored \u2014 ${zoneKey} is not playing a media source`);
+      return;
+    }
+    const entry = this.presentEntries.find((e) => e.id === flatId && e.subunit === subunit);
+    if (entry === void 0) {
+      this.deps.log.debug(`${this.deviceId}: ${flatId} ignored \u2014 ${subunit} did not report it`);
+      return;
+    }
+    const triple = (0, import_catalog.yncaCommand)(flatId, value, /* @__PURE__ */ new Map([[flatId, entry]]));
     if (triple) {
       this.deps.client.send(triple.subunit, triple.func, triple.value);
     }

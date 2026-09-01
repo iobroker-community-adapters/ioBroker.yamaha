@@ -20,8 +20,14 @@ const ZONES: Array<{ id: string; prefix: string; channel?: string; channelName?:
   return { id, prefix: zonePrefix(id), ...(channel ? { channel: channel.channel, channelName: channel.name } : {}) };
 });
 
-/** Media-player states shared by every player source (netusb, cd): read metadata + transport buttons. */
+/** The "now playing" block's states (v2.0.0, one per zone): read metadata + transport buttons. */
 const PLAYER_STATES: Array<{ state: string; common: ObjectDef["common"] }> = [
+  {
+    // What the zone is playing (the netusb source name, or `cd`) — read-only display;
+    // switching happens over the zone's `input` state.
+    state: "source",
+    common: { name: "Playing source", type: "string", role: "text", read: true, write: false },
+  },
   {
     state: "playback",
     common: {
@@ -261,10 +267,18 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
     }
   }
   if (capabilities.media.includes("netusb") || capabilities.media.includes("cd")) {
-    objects.push({ id: "player", type: "channel", common: { name: "Media player" } });
+    // ONE "now playing" block per zone (v2.0.0): the controller feeds it from
+    // whichever source the zone is listening to (netusb or cd) and clears it on a
+    // source switch. The source folders below keep only their genuinely own states.
+    pushPlayerBlock(objects, "player", "Media player");
+    for (const zone of capabilities.zones) {
+      if (zone.id !== "main") {
+        pushPlayerBlock(objects, `${zonePrefix(zone.id)}player`, "Media player");
+      }
+    }
   }
   if (capabilities.media.includes("netusb")) {
-    pushPlayerBlock(objects, "player.netPlayer", "Network player");
+    objects.push({ id: "player.netPlayer", type: "channel", common: { name: "Network player" } });
     objects.push({
       id: "player.netPlayer.preset",
       type: "state",
@@ -294,11 +308,6 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
         min: 1,
       },
     });
-    objects.push({
-      id: "player.netPlayer.source",
-      type: "state",
-      common: { name: "Active network source", type: "string", role: "text", read: true, write: false },
-    });
     // MusicCast playlists and the play queue — declared in the netusb func_list.
     // Read-only surfaces: no write path for them is documented anywhere, and blind
     // writes are exactly what this adapter no longer does.
@@ -318,7 +327,8 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
     }
   }
   if (capabilities.media.includes("cd")) {
-    pushPlayerBlock(objects, "player.cd", "CD");
+    // Drive-own states only — what the disc is PLAYING shows in the flat block above.
+    objects.push({ id: "player.cd", type: "channel", common: { name: "CD" } });
     objects.push({
       id: "player.cd.tray",
       type: "state",

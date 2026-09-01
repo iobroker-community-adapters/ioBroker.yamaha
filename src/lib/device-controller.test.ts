@@ -568,3 +568,90 @@ describe("YncaDeviceController unified tuner v2.0.0 (band-routed writes)", () =>
     expect(s.client.sent).toEqual([{ subunit: "DAB", func: "FMPRESET", value: "4" }]);
   });
 });
+
+describe("YncaDeviceController unified player v2.0.0 (input-routed block)", () => {
+  async function playerSetup(subunits: YncaCapabilities["subunits"]): Promise<{
+    controller: YncaDeviceController;
+    client: FakeClient;
+    objects: Array<{ id: string; def: ObjectDef }>;
+    acked: Array<{ id: string; value: unknown }>;
+  }> {
+    const client = new FakeClient();
+    client.capabilities = { model: "RX-A810", subunits };
+    const { objects, acked, deps } = makeDeps(client);
+    const controller = new YncaDeviceController("living", deps);
+    await controller.start();
+    return { controller, client, objects, acked };
+  }
+
+  test("a source's values land in the block of the zone LISTENING to it — and only there", async () => {
+    const s = await playerSetup({
+      MAIN: { PWR: "On", INP: "NET RADIO" },
+      NETRADIO: { PLAYBACKINFO: "Play", STATION: "Radio X" },
+      USB: { PLAYBACKINFO: "Stop", SONG: "Old Song" },
+    });
+    // The seed routed only the LISTENING source's values into the flat block.
+    expect(s.acked).toContainEqual({ id: "living.player.station", value: "Radio X" });
+    expect(s.acked).not.toContainEqual({ id: "living.player.track", value: "Old Song" });
+    // A live push from the idle source is dropped; from the active one it lands.
+    s.acked.length = 0;
+    s.client.emit({ subunit: "USB", func: "SONG", value: "Other" });
+    s.client.emit({ subunit: "NETRADIO", func: "STATION", value: "Radio Y" });
+    expect(s.acked).toEqual([{ id: "living.player.station", value: "Radio Y" }]);
+  });
+
+  test("an input switch clears the block, shows the source and asks the new source for its state", async () => {
+    const s = await playerSetup({
+      MAIN: { PWR: "On", INP: "NET RADIO" },
+      NETRADIO: { PLAYBACKINFO: "Play", STATION: "Radio X" },
+      USB: { PLAYBACKINFO: "Stop", SONG: "Old Song" },
+    });
+    s.acked.length = 0;
+    s.client.gets.length = 0;
+    s.client.emit({ subunit: "MAIN", func: "INP", value: "USB" });
+    expect(s.acked).toContainEqual({ id: "living.player.station", value: "" });
+    expect(s.acked).toContainEqual({ id: "living.player.source", value: "USB" });
+    expect(s.client.gets).toContainEqual({ subunit: "USB", func: "PLAYBACKINFO" });
+    // Switching to a non-player input clears again and empties the source display.
+    s.acked.length = 0;
+    s.client.emit({ subunit: "MAIN", func: "INP", value: "HDMI1" });
+    expect(s.acked).toContainEqual({ id: "living.player.playback", value: 1 });
+    expect(s.acked).toContainEqual({ id: "living.player.source", value: "" });
+  });
+
+  test("a transport write goes to the subunit the zone is listening to — claim with proof", async () => {
+    const s = await playerSetup({
+      MAIN: { PWR: "On", INP: "USB" },
+      USB: { PLAYBACKINFO: "Play" },
+    });
+    s.client.sent.length = 0;
+    s.controller.handleStateChange("living.player.playback", false, 2);
+    s.controller.handleStateChange("living.player.next", false, true);
+    expect(s.client.sent).toEqual([
+      { subunit: "USB", func: "PLAYBACK", value: "Pause" },
+      { subunit: "USB", func: "PLAYBACK", value: "Skip Fwd" },
+    ]);
+    // Not listening to a player source → the write is dropped, nothing goes on the wire.
+    s.client.emit({ subunit: "MAIN", func: "INP", value: "HDMI1" });
+    s.client.sent.length = 0;
+    s.controller.handleStateChange("living.player.playback", false, 0);
+    expect(s.client.sent).toEqual([]);
+  });
+
+  test("a present zone gets its own player mirror and its own input routing", async () => {
+    const s = await playerSetup({
+      MAIN: { PWR: "On", INP: "HDMI1" },
+      ZONE2: { PWR: "On", INP: "NET RADIO" },
+      NETRADIO: { PLAYBACKINFO: "Play", STATION: "Radio X" },
+    });
+    // The zone mirror exists; a zone-less device would not get one.
+    expect(s.objects.some(o => o.id === "living.multiroom.zone2.player.playback")).toBe(true);
+    // The value went to zone2's block, NOT to main (main listens to HDMI).
+    expect(s.acked).toContainEqual({ id: "living.multiroom.zone2.player.station", value: "Radio X" });
+    expect(s.acked).not.toContainEqual({ id: "living.player.station", value: "Radio X" });
+    // A zone-prefixed transport write routes over zone2's source.
+    s.client.sent.length = 0;
+    s.controller.handleStateChange("living.multiroom.zone2.player.playback", false, 1);
+    expect(s.client.sent).toEqual([{ subunit: "NETRADIO", func: "PLAYBACK", value: "Stop" }]);
+  });
+});

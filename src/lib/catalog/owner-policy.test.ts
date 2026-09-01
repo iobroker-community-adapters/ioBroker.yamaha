@@ -26,6 +26,13 @@ describe("pickOwner — which transport owns a shared capability", () => {
     expect(pickOwner("sound.dialogueLift", ["yxc", "xml"])).toBe("xml");
     // The unified tuner.preset (v2.0.0) is writable on BOTH — no override, modernity wins.
     expect(pickOwner("tuner.preset", ["yxc", "ynca"])).toBe("yxc");
+    // The unified player block's settable states (v2.0.0): YXC is read-only there
+    // (toggles/buttons only), YNCA writes them directly — write-proof beats modernity.
+    expect(pickOwner("player.playback", ["yxc", "ynca"])).toBe("ynca");
+    expect(pickOwner("player.repeat", ["yxc", "ynca"])).toBe("ynca");
+    expect(pickOwner("player.shuffle", ["yxc", "ynca"])).toBe("ynca");
+    // Alone, YXC still owns them — a MusicCast speaker keeps its read-only display.
+    expect(pickOwner("player.playback", ["yxc"])).toBe("yxc");
   });
 
   test("dropdown-rich keys stay with YNCA so the enum states survive (census §3d)", () => {

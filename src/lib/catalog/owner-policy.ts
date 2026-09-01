@@ -19,6 +19,13 @@ const OWNER_OVERRIDES: Record<string, readonly Transport[]> = {
   volume: ["ynca", "xml", "yxc"],
   // §3c write loss — YXC is read-only for these, YNCA (and often XML) is writable.
   "advanced.maxVolume": ["ynca", "xml", "yxc"],
+  // §3c write loss on the unified player block (v2.0.0): YXC reads playback/repeat/
+  // shuffle but cannot WRITE them (its API has only toggle/transport endpoints, which
+  // stay YXC-owned buttons); YNCA sets all three directly. Zone mirrors collapse to
+  // the same template, so this covers multiroom.zoneN.player.* too.
+  "player.playback": ["ynca", "yxc"],
+  "player.repeat": ["ynca", "yxc"],
+  "player.shuffle": ["ynca", "yxc"],
   "sound.extraBass": ["ynca", "xml", "yxc"],
   "sound.adaptiveDrc": ["ynca", "xml", "yxc"],
   "sound.surroundDecoder": ["ynca", "yxc"],
