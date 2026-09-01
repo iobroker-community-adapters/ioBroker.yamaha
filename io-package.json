@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "1.7.0",
+    "version": "2.0.0",
     "news": {
+      "2.0.0": {
+        "en": "Reworked object tree: one player block per zone shows what is playing, the scene dropdown carries the receiver's own titles plus a scene list, and one tuner serves all bands",
+        "de": "Überarbeiteter Objektbaum: ein Player-Block je Zone zeigt, was gerade läuft, das Szenen-Menü trägt die Titel des Geräts plus eine Szenen-Liste, und ein Tuner bedient alle Bänder",
+        "ru": "Переработанное дерево объектов: один блок плеера на зону показывает, что играет, меню сцен несёт названия с устройства плюс список сцен, один тюнер обслуживает все диапазоны",
+        "pt": "Árvore de objetos reformulada: um bloco de leitor por zona mostra o que toca, o menu de cenas traz os títulos do aparelho mais uma lista de cenas, e um sintonizador serve todas as bandas",
+        "nl": "Herwerkte objectboom: één spelerblok per zone toont wat er speelt, het scènemenu draagt de titels van het apparaat plus een scènelijst, en één tuner bedient alle banden",
+        "fr": "Arborescence remaniée : un bloc lecteur par zone montre ce qui joue, le menu de scènes porte les titres de l'appareil plus une liste de scènes, et un tuner sert toutes les bandes",
+        "it": "Albero oggetti rinnovato: un blocco lettore per zona mostra cosa suona, il menu scene porta i titoli del dispositivo più un elenco scene, e un sintonizzatore serve tutte le bande",
+        "es": "Árbol de objetos renovado: un bloque de reproductor por zona muestra lo que suena, el menú de escenas lleva los títulos del equipo más una lista de escenas, y un sintonizador sirve todas las bandas",
+        "pl": "Przebudowane drzewo obiektów: jeden blok odtwarzacza na strefę pokazuje, co gra, menu scen niesie tytuły z urządzenia plus listę scen, a jeden tuner obsługuje wszystkie pasma",
+        "uk": "Перероблене дерево об'єктів: один блок плеєра на зону показує, що грає, меню сцен несе назви з пристрою плюс список сцен, один тюнер обслуговує всі діапазони",
+        "zh-cn": "重构的对象树：每个区域一个播放器块显示当前播放内容，场景菜单带设备自带的标题外加场景列表，所有波段共用一个调谐器"
+      },
       "1.7.0": {
         "en": "Scene recall works on every generation and shows titles, refused commands are reported, restarts finish in seconds, plus on-screen remote and many new datapoints.",
         "de": "Szenen-Aufruf klappt auf jeder Generation und zeigt Titel, abgelehnte Befehle werden gemeldet, Neustarts dauern Sekunden, dazu Bildschirm-Fernbedienung und viele neue Datenpunkte.",
@@ -80,19 +93,6 @@
         "pl": "Naprawia zapis głośności (wartości docierały dziesięciokrotnie za nisko) i dodaje wybór presetów i ulubionych, listy MusicCast z nazwami, szczegóły CD/DAB/RDS oraz widok zegara i budzika.",
         "uk": "Виправляє запис гучності (значення надходили вдесятеро нижчі) і додає вибір пресетів та улюбленого, списки MusicCast з назвами, деталі CD/DAB/RDS і перегляд годинника та будильника.",
         "zh-cn": "修复音量写入（数值到达时低了十倍），并新增预设和收藏选择、含名称的 MusicCast 列表、CD/DAB/RDS 详情以及时钟和闹钟视图。"
-      },
-      "1.1.1": {
-        "en": "Internal cleanup. No user-facing changes.",
-        "de": "Interne Aufräumarbeiten. Keine Änderungen für Anwender.",
-        "ru": "Внутренняя чистка. Для пользователей ничего не меняется.",
-        "pt": "Limpeza interna. Sem alterações para o utilizador.",
-        "nl": "Interne opschoning. Geen wijzigingen voor gebruikers.",
-        "fr": "Nettoyage interne. Aucun changement pour l'utilisateur.",
-        "it": "Pulizia interna. Nessuna modifica per l'utente.",
-        "es": "Limpieza interna. Sin cambios para el usuario.",
-        "pl": "Porządki wewnętrzne. Bez zmian dla użytkownika.",
-        "uk": "Внутрішнє прибирання. Для користувача нічого не змінюється.",
-        "zh-cn": "内部整理。用户侧没有变化。"
       }
     },
     "titleLang": {
