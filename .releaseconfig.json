@@ -3,7 +3,8 @@
   "exec": {
     "before_commit": [
       "npm test",
-      "npm run build"
+      "npm run build",
+      "npm run --if-present build:admin"
     ]
   }
 }

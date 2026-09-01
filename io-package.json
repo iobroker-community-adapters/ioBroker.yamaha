@@ -161,7 +161,7 @@
     ],
     "globalDependencies": [
       {
-        "admin": ">=7.8.23"
+        "admin": ">=8.0.11"
       }
     ],
     "adminUI": {
