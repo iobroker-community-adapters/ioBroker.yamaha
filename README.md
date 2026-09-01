@@ -98,18 +98,19 @@ On the very first contact the adapter asks the receiver which functions it suppo
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 1.7.0 (2026-09-01)
 
-- (krobipd) Fixed: scene recall now uses the command each device declares itself and the protocol that can actually deliver it — on 2012-generation receivers writing a scene number did nothing at all (#615)
+- (krobipd) Fixed: scene recall now uses the command each device declares itself and the protocol that can deliver it — on 2012-generation receivers a scene write did nothing at all (#615)
 - (krobipd) New: scenes show their titles ("Movie Viewing", …) as datapoints and in the recall dropdown, and zones with their own scenes get their own scene recall
-- (krobipd) Fixed: the menu "back" button now falls back to the older generation's cursor command when the device refuses the standard one, so leaving a folder works on 2012-generation receivers too (#613)
-- (krobipd) New: a command the device refuses is now logged as a warning with the device's own answer — refused commands used to vanish without a trace, leaving dead buttons unexplained
+- (krobipd) Fixed: the menu back button falls back to the older cursor command when a device refuses the standard one, so leaving a folder works on 2012-generation receivers too (#613)
+- (krobipd) New: the adapter now reports when the receiver refuses a command, including the device's own answer — a dead button no longer fails without a trace
 - (krobipd) New: bass and treble on MusicCast-generation receivers over YNCA, dialogue level, DAB signal details, the paired Bluetooth device name and more — the device is asked in its own dialect
 - (krobipd) New: on-screen remote control datapoints (cursor pad and menu keys), the current audio signal info, MusicCast playlists and the play queue on MusicCast devices
-- (krobipd) New: pre-2010 receivers get their tuner back (preset recall, frequency, RDS) and every device's input dropdown now lists exactly the inputs it really has
+- (krobipd) New: receivers from before 2010 get their tuner back — preset recall, frequency and radio text — and every input dropdown lists exactly the inputs the device really has
 - (krobipd) New: the receiver's IP address is shown as a datapoint, so diagnosis and the device's own web pages are one click away
-- (krobipd) Improved: restarts are fast now — the adapter remembers what each device can do, brings it online in seconds and refreshes the values in the background; only the very first contact still asks everything
+- (krobipd) Improved: restarts are fast — the adapter remembers what each device can do, brings it online in seconds and refreshes values in the background; only the first contact asks everything
 - (krobipd) Improved: known devices no longer wait for the network search at startup — it runs in the background and only adds newcomers
+
 ### 1.6.0 (2026-08-27)
 
 - (krobipd) New: three states show how many receivers are set up, how many are connected right now and whether that is all of them — one line to watch instead of every device
@@ -138,14 +139,6 @@ On the very first contact the adapter asks the receiver which functions it suppo
 - (krobipd) New: menu browsing — page through the Net Radio, server and USB menus like with the remote: visible lines as datapoints, select-by-line, and a path datapoint for one-write navigation (#613)
 - (krobipd) New: save presets from ioBroker — store the current tuner or network station to a preset slot and bookmark the playing Net Radio station on YNCA receivers.
 - (krobipd) New: Bluetooth pairing and connect controls, FM mono mode and tuning indicators on YNCA receivers.
-
-### 1.2.0 (2026-08-25)
-
-- (krobipd) Fixed: volume writes work again — a written -38 dB reached the receiver as -3.8 dB, so most values were ignored; all numeric controls now send the proper wire format (#612)
-- (krobipd) Fixed: the FM frequency datapoint now shows MHz (it was mislabelled kHz) and accepts direct frequency writes in the form the tuner expects.
-- (krobipd) New: preset selection — recall tuner presets by number with up/down stepping, and recall stored network or USB favourites per source on YNCA receivers (#613)
-- (krobipd) New: MusicCast selection lists — stored favourites and tuner presets with names, a recently-played list with recall by number, and the device's own allowed values as dropdowns.
-- (krobipd) New: more device detail — CD track and drive info, DAB and RDS station data, and a read-only clock and alarm view with its own datapoint group switch in the admin settings.
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 

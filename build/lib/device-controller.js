@@ -193,6 +193,8 @@ class YncaDeviceController {
    * firmware loses speed, never features.
    *
    * @param catalog the (group-filtered) catalog whose functions to sweep
+   * @param model the live-read SYS model name (from resolveCapabilities)
+   * @param firmware the live-read SYS firmware version
    * @returns the assembled capabilities
    */
   async sweepDevice(catalog, model, firmware) {
