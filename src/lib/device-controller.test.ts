@@ -742,3 +742,36 @@ describe("YncaDeviceController test-audit hardening (2.0.1)", () => {
     expect(acked).toContainEqual({ id: "living.player.playback", value: 0 });
   });
 });
+
+describe("YncaDeviceController capability persistence (standby must not shrink it)", () => {
+  test("a background refresh while the device stands by keeps every proven ability in the memory", async () => {
+    const richSubunits = {
+      SYS: { MODELNAME: "RX", VERSION: "1.0" },
+      MAIN: { PWR: "On", VOL: "-30.0" },
+      NETRADIO: { PLAYBACKINFO: "Play", STATION: "Radio X" },
+    };
+    let stored: Record<string, unknown> = {};
+    const memory = new ProbeMemory(
+      { yncaCapabilities: { model: "RX", firmware: "1.0", subunits: richSubunits } },
+      entries => {
+        stored = entries;
+      },
+    );
+    const client = new FakeClient();
+    // The live identity matches the memory (fast path) — but the refresh runs while
+    // the device stands by: the media subunit answers nothing at all.
+    client.capabilities = {
+      model: "RX",
+      subunits: { SYS: { MODELNAME: "RX", VERSION: "1.0" }, MAIN: { PWR: "Standby", VOL: "-50.5" } },
+    };
+    const { deps } = makeDeps(client);
+    (deps as { probeMemory?: ProbeMemory }).probeMemory = memory;
+    const controller = new YncaDeviceController("living", deps);
+    await controller.start();
+    await new Promise(resolve => setImmediate(resolve));
+    const caps = stored.yncaCapabilities as { subunits: Record<string, Record<string, string>> };
+    // The proven media ability survives the standby refresh; fresh values win.
+    expect(caps.subunits.NETRADIO).toEqual({ PLAYBACKINFO: "Play", STATION: "Radio X" });
+    expect(caps.subunits.MAIN.PWR).toBe("Standby");
+  });
+});

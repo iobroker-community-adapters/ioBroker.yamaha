@@ -18,7 +18,8 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var capability_exports = {};
 __export(capability_exports, {
-  buildCapabilities: () => buildCapabilities
+  buildCapabilities: () => buildCapabilities,
+  mergeYncaSubunits: () => mergeYncaSubunits
 });
 module.exports = __toCommonJS(capability_exports);
 function buildCapabilities(messages) {
@@ -29,8 +30,19 @@ function buildCapabilities(messages) {
   }
   return { model: (_d = (_c = subunits.SYS) == null ? void 0 : _c.MODELNAME) != null ? _d : "", subunits };
 }
+function mergeYncaSubunits(remembered, fresh) {
+  const merged = {};
+  for (const [subunit, funcs] of Object.entries(remembered)) {
+    merged[subunit] = { ...funcs };
+  }
+  for (const [subunit, funcs] of Object.entries(fresh)) {
+    merged[subunit] = { ...merged[subunit], ...funcs };
+  }
+  return merged;
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
-  buildCapabilities
+  buildCapabilities,
+  mergeYncaSubunits
 });
 //# sourceMappingURL=capability.js.map

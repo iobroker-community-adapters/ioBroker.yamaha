@@ -1,4 +1,4 @@
-import type { YncaCapabilities } from "./ynca/capability";
+import { mergeYncaSubunits, type YncaCapabilities } from "./ynca/capability";
 import { formatWireNumber } from "./catalog/value-coerce";
 import type { ObjectDef } from "./catalog/types";
 import type { ConnectionHandle, ControllerLog } from "./controller";
@@ -443,12 +443,23 @@ export class YncaDeviceController implements ConnectionHandle {
         }
       }
       this.deps.probeMemory?.set(STATIC_KEY, statics);
+      // UNION with the remembered shape (same identity — the fast path proved it):
+      // a refresh while the device stands by answers many functions @RESTRICTED and
+      // must not strip abilities it proved while awake; a lean standby FIRST capture
+      // heals on the next awake refresh instead of staying lean forever (datapoint
+      // review finding, 2.0.2).
+      const remembered = this.deps.probeMemory?.remembered(CAPS_KEY);
+      const subunits = isCachedCapabilities(remembered)
+        ? mergeYncaSubunits(remembered.subunits, fresh.subunits)
+        : fresh.subunits;
       this.deps.probeMemory?.set(CAPS_KEY, {
         model: fresh.model,
         firmware: fresh.subunits.SYS?.VERSION ?? "",
-        subunits: fresh.subunits,
+        subunits,
       } satisfies CachedCapabilities);
-      this.presentEntries = presentYncaEntries(fresh, catalog);
+      // The write map follows the union too — a standby refresh must not shrink the
+      // proven write surface until the next restart either.
+      this.presentEntries = presentYncaEntries({ model: fresh.model, subunits }, catalog);
       this.writeMap = idToEntry(this.presentEntries);
       this.deps.log.debug(`${this.deviceId}: background value refresh done (YNCA)`);
     } catch (e) {

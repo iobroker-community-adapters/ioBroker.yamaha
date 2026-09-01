@@ -103,6 +103,10 @@ On the very first contact the adapter asks the receiver which functions it suppo
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+### **WORK IN PROGRESS**
+
+- (krobipd) Fixed: a restart while the receiver stands by no longer forgets abilities the device proved while awake — the remembered capability map only ever grows for the same device and firmware
+
 ### 2.0.1 (2026-09-01)
 
 - (krobipd) Fixed: devices on the oldest protocol no longer get datapoints their status never delivers — states are only created for what the device really answers, like on the other two protocols

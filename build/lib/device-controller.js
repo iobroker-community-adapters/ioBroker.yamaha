@@ -21,6 +21,7 @@ __export(device_controller_exports, {
   YncaDeviceController: () => YncaDeviceController
 });
 module.exports = __toCommonJS(device_controller_exports);
+var import_capability = require("./ynca/capability");
 var import_value_coerce = require("./catalog/value-coerce");
 var import_catalog = require("./ynca/catalog");
 var import_surface = require("./browse/surface");
@@ -256,7 +257,7 @@ class YncaDeviceController {
    * @param catalog the (group-filtered) catalog
    */
   async refreshInBackground(catalog) {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d, _e, _f, _g;
     try {
       const cached = (_a = this.deps.subunitCache) == null ? void 0 : _a.get();
       const gets = (0, import_catalog.sweepGets)(catalog).filter(
@@ -275,12 +276,14 @@ class YncaDeviceController {
         }
       }
       (_c = this.deps.probeMemory) == null ? void 0 : _c.set(STATIC_KEY, statics);
-      (_f = this.deps.probeMemory) == null ? void 0 : _f.set(CAPS_KEY, {
+      const remembered = (_d = this.deps.probeMemory) == null ? void 0 : _d.remembered(CAPS_KEY);
+      const subunits = isCachedCapabilities(remembered) ? (0, import_capability.mergeYncaSubunits)(remembered.subunits, fresh.subunits) : fresh.subunits;
+      (_g = this.deps.probeMemory) == null ? void 0 : _g.set(CAPS_KEY, {
         model: fresh.model,
-        firmware: (_e = (_d = fresh.subunits.SYS) == null ? void 0 : _d.VERSION) != null ? _e : "",
-        subunits: fresh.subunits
+        firmware: (_f = (_e = fresh.subunits.SYS) == null ? void 0 : _e.VERSION) != null ? _f : "",
+        subunits
       });
-      this.presentEntries = (0, import_catalog.presentYncaEntries)(fresh, catalog);
+      this.presentEntries = (0, import_catalog.presentYncaEntries)({ model: fresh.model, subunits }, catalog);
       this.writeMap = (0, import_catalog.idToEntry)(this.presentEntries);
       this.deps.log.debug(`${this.deviceId}: background value refresh done (YNCA)`);
     } catch (e) {

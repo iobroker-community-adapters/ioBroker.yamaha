@@ -1,4 +1,4 @@
-import { buildCapabilities } from "./capability";
+import { buildCapabilities, mergeYncaSubunits } from "./capability";
 import { capabilitiesFromLines as parseCapabilities } from "./__fixtures__/capabilities-from-lines";
 import rxA810 from "./__fixtures__/RX-A810.json";
 import rN500 from "./__fixtures__/R-N500.json";
@@ -44,5 +44,28 @@ describe("buildCapabilities", () => {
     ]);
     expect(caps.model).toBe("RX-A810");
     expect(caps.subunits.MAIN).toEqual({ PWR: "On", VOL: "-30.0" });
+  });
+});
+
+describe("mergeYncaSubunits (standby must not shrink the proven shape)", () => {
+  test("keeps every remembered function, lets fresh values win, adds new ones", () => {
+    const remembered = {
+      MAIN: { PWR: "On", VOL: "-30.0" },
+      NETRADIO: { PLAYBACKINFO: "Play", STATION: "Radio X" },
+    };
+    // A standby sweep: NETRADIO answers nothing, MAIN reports new values + a new function.
+    const fresh = { MAIN: { PWR: "Standby", VOL: "-50.5", SLEEP: "Off" } };
+    expect(mergeYncaSubunits(remembered, fresh)).toEqual({
+      MAIN: { PWR: "Standby", VOL: "-50.5", SLEEP: "Off" },
+      NETRADIO: { PLAYBACKINFO: "Play", STATION: "Radio X" },
+    });
+  });
+
+  test("does not mutate either input", () => {
+    const remembered = { MAIN: { PWR: "On" } };
+    const fresh = { MAIN: { PWR: "Standby" }, DAB: { BAND: "FM" } };
+    mergeYncaSubunits(remembered, fresh);
+    expect(remembered).toEqual({ MAIN: { PWR: "On" } });
+    expect(fresh).toEqual({ MAIN: { PWR: "Standby" }, DAB: { BAND: "FM" } });
   });
 });
