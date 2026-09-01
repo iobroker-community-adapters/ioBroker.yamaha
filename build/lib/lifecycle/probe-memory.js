@@ -22,6 +22,16 @@ __export(probe_memory_exports, {
 });
 module.exports = __toCommonJS(probe_memory_exports);
 class ProbeMemory {
+  /**
+   * @param initial the persisted entries to start from (an adapter restart), if any
+   * @param persist called with a plain-object snapshot after every change, if persistence is wired
+   */
+  constructor(initial, persist) {
+    this.persist = persist;
+    for (const [key, value] of Object.entries(initial != null ? initial : {})) {
+      this.values.set(key, value);
+    }
+  }
   values = /* @__PURE__ */ new Map();
   /**
    * Return the remembered answer, or run the probe once and remember it.
@@ -36,6 +46,7 @@ class ProbeMemory {
     }
     const value = await probe();
     this.values.set(key, value);
+    this.persistNow();
     return value;
   }
   /**
@@ -56,10 +67,37 @@ class ProbeMemory {
    */
   set(key, value) {
     this.values.set(key, value);
+    this.persistNow();
+  }
+  /**
+   * Forget the keys a predicate marks — a transport's freshness guard drops ITS portion
+   * when the device behind the address turns out to be a different (or updated) one,
+   * without touching what the other transports validated.
+   *
+   * @param match marks the keys to drop
+   */
+  drop(match) {
+    let dropped = false;
+    for (const key of [...this.values.keys()]) {
+      if (match(key)) {
+        this.values.delete(key);
+        dropped = true;
+      }
+    }
+    if (dropped) {
+      this.persistNow();
+    }
   }
   /** Forget everything — used when a device turns out to be a different one. */
   clear() {
     this.values.clear();
+    this.persistNow();
+  }
+  persistNow() {
+    if (!this.persist) {
+      return;
+    }
+    this.persist(Object.fromEntries(this.values));
   }
 }
 // Annotate the CommonJS export names for ESM import in node:

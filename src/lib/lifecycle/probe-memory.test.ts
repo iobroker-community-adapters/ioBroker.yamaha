@@ -42,3 +42,31 @@ describe("ProbeMemory", () => {
     expect(await memory.once("k", async () => "later")).toBe("later");
   });
 });
+
+describe("ProbeMemory persistence (the fast-restart layer)", () => {
+  test("starts from the persisted entries and persists every change as a snapshot", async () => {
+    const snapshots: Array<Record<string, unknown>> = [];
+    const memory = new ProbeMemory({ a: 1 }, entries => snapshots.push(entries));
+    expect(memory.remembered("a")).toBe(1);
+    memory.set("b", "x");
+    expect(snapshots).toEqual([{ a: 1, b: "x" }]);
+    // once() with a remembered key does not persist again…
+    await memory.once("b", () => Promise.resolve("ignored"));
+    expect(snapshots).toHaveLength(1);
+    // …a fresh probe does.
+    await memory.once("c", () => Promise.resolve(true));
+    expect(snapshots[1]).toEqual({ a: 1, b: "x", c: true });
+  });
+
+  test("drop removes matching keys and persists the reduced snapshot once", () => {
+    const snapshots: Array<Record<string, unknown>> = [];
+    const memory = new ProbeMemory({ xmlModel: "RX", xmlTuner: "<x/>", features: {} }, e => snapshots.push(e));
+    memory.drop(key => key.startsWith("xml"));
+    expect(memory.remembered("xmlModel")).toBeUndefined();
+    expect(memory.remembered("features")).toEqual({});
+    expect(snapshots).toEqual([{ features: {} }]);
+    // Dropping nothing persists nothing.
+    memory.drop(key => key.startsWith("xml"));
+    expect(snapshots).toHaveLength(1);
+  });
+});

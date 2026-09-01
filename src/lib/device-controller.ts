@@ -41,6 +41,38 @@ const STATIC_FUNC = /^(INPNAME|SCENE\d+NAME$)/;
 /** Memory key for the remembered static values. */
 const STATIC_KEY = "yncaStaticValues";
 
+/** Memory key for the persisted capability shape (the fast-restart layer). */
+const CAPS_KEY = "yncaCapabilities";
+
+/** The persisted capability shape, keyed by the device identity that validated it. */
+interface CachedCapabilities {
+  /** SYS MODELNAME at capture time — freshness key half 1. */
+  model: string;
+  /** SYS VERSION at capture time — freshness key half 2. */
+  firmware: string;
+  /** The captured subunit→function map (values are last-known, used for SHAPE only). */
+  subunits: Record<string, Record<string, string>>;
+}
+
+/**
+ * Whether a remembered value carries the cached-capabilities shape (API boundary —
+ * the persisted probe memory is untrusted storage).
+ *
+ * @param value the remembered value
+ * @returns true when usable
+ */
+function isCachedCapabilities(value: unknown): value is CachedCapabilities {
+  const candidate = value as Partial<CachedCapabilities> | null;
+  return (
+    typeof candidate === "object" &&
+    candidate !== null &&
+    typeof candidate.model === "string" &&
+    typeof candidate.firmware === "string" &&
+    typeof candidate.subunits === "object" &&
+    candidate.subunits !== null
+  );
+}
+
 /**
  * The functions whose presence proves a subunit really serves menus — the fields a real
  * `LISTINFO=?` answer is made of (RX-A810 reference log). See {@link YncaDeviceController.probeBrowseSubunits}.
@@ -140,7 +172,8 @@ export class YncaDeviceController implements ConnectionHandle {
     const catalog = this.deps.isEntryEnabled
       ? YNCA_CATALOG.filter(entry => this.deps.isEntryEnabled!(entry.id))
       : YNCA_CATALOG;
-    const capabilities = await this.sweepDevice(catalog);
+    const resolved = await this.resolveCapabilities(catalog);
+    const { capabilities, fromCache } = resolved;
     const present = presentYncaEntries(capabilities, catalog);
     this.writeMap = idToEntry(present);
     const objects = yncaObjectsFor(capabilities, catalog);
@@ -158,13 +191,16 @@ export class YncaDeviceController implements ConnectionHandle {
     for (const object of objects) {
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
     }
-    // Seed the states with the values read during the init sweep — otherwise they
-    // stay empty until the device pushes a change of its own.
-    for (const [subunit, funcs] of Object.entries(capabilities.subunits)) {
-      for (const [func, value] of Object.entries(funcs)) {
-        const update = yncaStateUpdate({ subunit, func, value }, FUNC_MAP);
-        if (update) {
-          this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+    // Seed the states with the values read during the init sweep. On the fast path the
+    // cached values are last-run leftovers — the states already hold exactly those, and
+    // the background refresh streams the fresh ones in — so nothing is seeded there.
+    if (!fromCache) {
+      for (const [subunit, funcs] of Object.entries(capabilities.subunits)) {
+        for (const [func, value] of Object.entries(funcs)) {
+          const update = yncaStateUpdate({ subunit, func, value }, FUNC_MAP);
+          if (update) {
+            this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+          }
         }
       }
     }
@@ -178,13 +214,103 @@ export class YncaDeviceController implements ConnectionHandle {
         this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
       }
     });
-    // Start the keepalive only now the sweep is done, so its 30 s poll never collides
-    // with the paced init sweep.
+    // Start the keepalive only now the (fast-path) init is done; on the slow path the
+    // sweep already ran, on the fast path the background refresh paces itself through
+    // the same gate, so the 30 s poll cannot break the spacing either way.
     this.deps.client.startKeepalive();
+    if (fromCache) {
+      // The whole point of the persisted capability layer: the tree stood in ~1 s from
+      // the remembered shape (validated by the LIVE identity answer above), and the
+      // 15–20 s question round now runs behind the ready line as a pure value refresh —
+      // its answers stream into the states through the live handler just registered.
+      void this.refreshInBackground(catalog);
+    }
     // The adapter logs one combined "ready" line across all transports; this per-transport line
     // stays at debug for diagnostics.
     this.deps.log.debug(`${this.deviceId}: ${capabilities.model || "device"} ready (YNCA)`);
     return true;
+  }
+
+  /**
+   * The device's capabilities — from the persisted fast-restart layer when the LIVE
+   * identity (model + firmware, two paced reads, ~0.2 s) matches what the layer was
+   * captured from, else from the full two-pass sweep. The identity read doubles as the
+   * liveness proof the ready line rests on: a cached shape alone must never present a
+   * dead device as connected (the v1.5.0 honesty rule).
+   *
+   * @param catalog the (group-filtered) catalog
+   * @returns the capabilities and whether they came from the persisted layer
+   */
+  private async resolveCapabilities(
+    catalog: readonly YncaEntry[],
+  ): Promise<{ capabilities: YncaCapabilities; fromCache: boolean }> {
+    const identity = await this.deps.client.readCapabilities([
+      { subunit: "SYS", func: "MODELNAME" },
+      { subunit: "SYS", func: "VERSION" },
+    ]);
+    const model = identity.model;
+    const firmware = identity.subunits.SYS?.VERSION ?? "";
+    const remembered = this.deps.probeMemory?.remembered(CAPS_KEY);
+    if (model && isCachedCapabilities(remembered) && remembered.model === model && remembered.firmware === firmware) {
+      return { capabilities: { model, subunits: remembered.subunits }, fromCache: true };
+    }
+    if (remembered !== undefined) {
+      // A different (or updated) device behind this address: its remembered YNCA
+      // answers are void. The other transports guard their own portions.
+      this.deps.probeMemory?.drop(key => key === CAPS_KEY || key === STATIC_KEY);
+    }
+    const capabilities = await this.sweepDevice(catalog, model, firmware);
+    if (capabilities.model) {
+      this.deps.probeMemory?.set(CAPS_KEY, {
+        model: capabilities.model,
+        firmware: capabilities.subunits.SYS?.VERSION ?? firmware,
+        subunits: capabilities.subunits,
+      } satisfies CachedCapabilities);
+    }
+    return { capabilities, fromCache: false };
+  }
+
+  /**
+   * The fast path's second half: re-ask every catalogued function of the present
+   * subunits — the answers stream into the states through the live message handler,
+   * so current values arrive within the usual sweep time WITHOUT having gated the
+   * ready line. Completion refreshes the persisted layers (capabilities, statics)
+   * and the write map; a SHAPE change (a function newly answered) is only persisted —
+   * its object appears on the next start, because the unified tree is coordinated
+   * once per connect and a late upsert would not materialize.
+   *
+   * @param catalog the (group-filtered) catalog
+   */
+  private async refreshInBackground(catalog: readonly YncaEntry[]): Promise<void> {
+    try {
+      const cached = this.deps.subunitCache?.get();
+      const gets = sweepGets(catalog).filter(
+        get => get.subunit === "SYS" || !cached || cached.subunits.includes(get.subunit),
+      );
+      const fresh = await this.deps.client.readCapabilities(gets);
+      if (!fresh.model) {
+        // The refresh ran into a drop — the supervisor handles the reconnect.
+        return;
+      }
+      const statics: Record<string, Record<string, string>> = {};
+      for (const [subunit, funcs] of Object.entries(fresh.subunits)) {
+        for (const [func, value] of Object.entries(funcs)) {
+          if (STATIC_FUNC.test(func)) {
+            (statics[subunit] ??= {})[func] = value;
+          }
+        }
+      }
+      this.deps.probeMemory?.set(STATIC_KEY, statics);
+      this.deps.probeMemory?.set(CAPS_KEY, {
+        model: fresh.model,
+        firmware: fresh.subunits.SYS?.VERSION ?? "",
+        subunits: fresh.subunits,
+      } satisfies CachedCapabilities);
+      this.writeMap = idToEntry(presentYncaEntries(fresh, catalog));
+      this.deps.log.debug(`${this.deviceId}: background value refresh done (YNCA)`);
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: background value refresh failed: ${String(e)}`);
+    }
   }
 
   /**
@@ -200,19 +326,13 @@ export class YncaDeviceController implements ConnectionHandle {
    * @param catalog the (group-filtered) catalog whose functions to sweep
    * @returns the assembled capabilities
    */
-  private async sweepDevice(catalog: readonly YncaEntry[]): Promise<YncaCapabilities> {
+  private async sweepDevice(catalog: readonly YncaEntry[], model: string, firmware: string): Promise<YncaCapabilities> {
     const cached = this.deps.subunitCache?.get();
     if (cached) {
-      // Check the device's IDENTITY first (two reads, ~0.2 s) instead of sweeping and
-      // finding out afterwards: the old order cost a full targeted sweep, then the probe,
-      // then a second sweep (~40 s) whenever the cache was stale — slower than having no
-      // cache at all.
-      const identity = await this.deps.client.readCapabilities([
-        { subunit: "SYS", func: "MODELNAME" },
-        { subunit: "SYS", func: "VERSION" },
-      ]);
-      const firmware = identity.subunits.SYS?.VERSION ?? "";
-      if (identity.model === cached.model && firmware === cached.firmware) {
+      // The device's IDENTITY was already read by resolveCapabilities (two reads,
+      // ~0.2 s) — checking it BEFORE sweeping is what keeps a stale cache from costing
+      // a full targeted sweep, then the probe, then a second sweep (~40 s).
+      if (model === cached.model && firmware === cached.firmware) {
         return await this.targetedSweep(catalog, new Set(cached.subunits));
       }
       // The device behind this IP changed (swap or firmware update) — re-probe.

@@ -214,6 +214,25 @@ Antwort des Geräts wird gelesen. Belege: `Ressourcen/yamaha/device-captures/rx-
 - **`info.ip` je Gerät** (`ensureDeviceHeader`): die Adresse stand nirgends —
   Diagnose brauchte eine Netzsuche; jetzt Datenpunkt, je Start aufgefrischt.
 
+**Schnellstart (krobi 2026-09-01: „warum arbeiten wir hier nicht mit caches"):**
+- **ProbeMemory ist PERSISTENT** (Geräteobjekt `native.probeCache`, als JSON-STRING —
+  extendObject MERGED verschachtelte Objekte, gelöschte Schlüssel stünden sonst wieder
+  auf; `loadProbeMemory` in main.ts). Frische-Wächter je Transport, jeder validiert
+  SEINE Schlüssel mit einer LIVE-Identitäts-Lesung und droppt bei Abweichung: YNCA
+  Modell+Firmware (2 Reads, sowieso da), YXC `getDeviceInfo` model+system_version
+  (Schlüssel features/name/model/yxcIdentity), XML `getModelName` (alle `xml*`-Schlüssel).
+- **YNCA-Schnellpfad** (`resolveCapabilities` + `refreshInBackground`): Identität IMMER
+  zuerst (Lebend-Beweis der ready-Zeile — Ehrlichkeits-Regel v1.5.0 bleibt); passt der
+  persistierte `yncaCapabilities`-Layer (Modell+Firmware), steht der Baum aus der Form
+  SOFORT, es wird NICHT mit alten Werten geseedet (die States tragen sie ohnehin), und
+  die volle Fragerunde läuft als Hintergrund-Werte-Auffrischung durch den Live-Handler —
+  inkl. Statics (Umbenennungen heilen in Sekunden statt beim Neustart). FORM-Änderungen
+  werden nur persistiert (Objekte erscheinen beim nächsten Start): der Baum wird EINMAL
+  pro Verbindung koordiniert, ein später `interceptUpsert` würde nie materialisiert.
+- **Netzsuche blockiert Bekannte nicht mehr:** `autoDiscover` gibt gemerkte Geräte
+  sofort zurück; `discoverAdditionalDevices` sucht im Hintergrund und startet NUR
+  Neuzugänge (`startDevice` aus der onReady-Schleife ausgelagert).
+
 ## Erreichbarkeit + Anspruch: zwei Regeln, die v1.5.0 eingezogen hat
 
 **1) Kein Anspruch ohne Nachweis (#613).** Der YNCA-Browse-Treiber beanspruchte `player.browse.*`,

@@ -90,7 +90,7 @@ If MusicCast changes only refresh every few minutes, another application is occu
 
 ### First start takes a while
 
-On the first connect the adapter asks the receiver which functions it supports — up to half a minute per YNCA device. The result is remembered, later starts are faster.
+On the very first contact the adapter asks the receiver which functions it supports — up to half a minute per YNCA device. The answers are remembered per device (and survive restarts), so every later start brings the device online in seconds and refreshes the current values in the background. A firmware update or a different device behind the same address is detected and re-asked automatically.
 
 ## Changelog
 
@@ -108,6 +108,8 @@ On the first connect the adapter asks the receiver which functions it supports �
 - (krobipd) New: on-screen remote control datapoints (cursor pad and menu keys), the current audio signal info, MusicCast playlists and the play queue on MusicCast devices
 - (krobipd) New: pre-2010 receivers get their tuner back (preset recall, frequency, RDS) and every device's input dropdown now lists exactly the inputs it really has
 - (krobipd) New: the receiver's IP address is shown as a datapoint, so diagnosis and the device's own web pages are one click away
+- (krobipd) Improved: restarts are fast now — the adapter remembers what each device can do, brings it online in seconds and refreshes the values in the background; only the very first contact still asks everything
+- (krobipd) Improved: known devices no longer wait for the network search at startup — it runs in the background and only adds newcomers
 ### 1.6.0 (2026-08-27)
 
 - (krobipd) New: three states show how many receivers are set up, how many are connected right now and whether that is all of them — one line to watch instead of every device

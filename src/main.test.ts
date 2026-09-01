@@ -471,13 +471,19 @@ describe("Yamaha auto-discovery", () => {
     expect(mocks.discoverYamaha).not.toHaveBeenCalled();
   });
 
-  it("says how many of the devices are only remembered", async () => {
+  it("starts remembered devices without waiting for the search, and adds what it finds", async () => {
     mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
     mocks.discoverYamaha.mockResolvedValue([{ ip: "192.168.1.21", name: "WX-021" }]);
     const ctx = setup({ devices: [] });
     await ctx.i.onReady();
+    // The remembered device is already under supervision before the search settles —
+    // its collect window used to gate every restart although the device was known.
+    expect(ctx.calls.map(c => c.device.ip)).toContain("192.168.1.20");
+    expect(ctx.i.log.info).toHaveBeenCalledWith(expect.stringContaining("network search runs in the background"));
     await flush();
-    expect(ctx.i.log.info).toHaveBeenCalledWith(expect.stringContaining("more remembered from a previous run"));
+    // The background search then brings the newcomer online in the running instance.
+    expect(ctx.calls.map(c => c.device.ip)).toContain("192.168.1.21");
+    expect(mocks.discoverYamaha).toHaveBeenCalled();
   });
 });
 

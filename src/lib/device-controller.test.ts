@@ -202,12 +202,15 @@ describe("YncaDeviceController two-pass sweep", () => {
     client.availableSubunits = ["MAIN", "TUN"];
     client.capabilities = { model: "RX", subunits: { MAIN: { PWR: "On" }, TUN: { BAND: "FM" } } };
     await new YncaDeviceController("living", makeDeps(client).deps).start();
-    expect(client.requests).toHaveLength(2);
-    expect(client.requests[0].every(get => get.func === "AVAIL")).toBe(true);
+    // Request 0 is the identity read (model + firmware) that keys every cached layer
+    // and doubles as the fast path's liveness proof; then the probe, then the sweep.
+    expect(client.requests).toHaveLength(3);
+    expect(client.requests[0].map(get => get.func)).toEqual(["MODELNAME", "VERSION"]);
+    expect(client.requests[1].every(get => get.func === "AVAIL")).toBe(true);
     // SYS answers no AVAIL and must never be probed…
-    expect(client.requests[0].some(get => get.subunit === "SYS")).toBe(false);
+    expect(client.requests[1].some(get => get.subunit === "SYS")).toBe(false);
     // …but is always part of the sweep; absent subunits (ZONE2, player sources) are not.
-    const sweptSubunits = new Set(client.requests[1].map(get => get.subunit));
+    const sweptSubunits = new Set(client.requests[2].map(get => get.subunit));
     expect(sweptSubunits.has("SYS")).toBe(true);
     expect(sweptSubunits.has("MAIN")).toBe(true);
     expect(sweptSubunits.has("TUN")).toBe(true);
@@ -277,7 +280,8 @@ describe("YncaDeviceController two-pass sweep", () => {
       isEntryEnabled: id => !id.startsWith("player."),
     }).start();
     // SPOTIFY answered AVAIL, but with the player group off none of its functions are fetched…
-    const sweptSubunits = new Set(client.requests[1].map(get => get.subunit));
+    // (request 0 = identity, 1 = AVAIL probe, 2 = the sweep)
+    const sweptSubunits = new Set(client.requests[2].map(get => get.subunit));
     expect(sweptSubunits.has("SPOTIFY")).toBe(false);
     // …and no player object is created.
     expect(created.some(id => id.includes("player"))).toBe(false);
@@ -385,8 +389,10 @@ describe("YncaDeviceController browse surface (#613)", () => {
   });
 });
 
-describe("YncaDeviceController static-value memory", () => {
-  test("re-asks the constant names only on the first connect", async () => {
+describe("YncaDeviceController fast restart (persisted capability layer)", () => {
+  const flushAsync = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
+
+  test("the second connect builds the tree from the memory and refreshes values behind the ready line", async () => {
     const client = new FakeClient();
     client.capabilities = {
       model: "RX",
@@ -400,20 +406,47 @@ describe("YncaDeviceController static-value memory", () => {
     await new YncaDeviceController("living", { ...deps, probeMemory: memory }).start();
     const firstSweep = client.requests[client.requests.length - 1];
     expect(firstSweep.some(get => get.func === "INPNAMEHDMI1")).toBe(true);
-    expect(firstSweep.some(get => get.func === "SCENE1NAME")).toBe(true);
 
-    // Second connect (same device, memory kept by the caller): the names are not asked
-    // again — 35 of ~187 paced reads, i.e. ~3.5 s off every reconnect.
+    // Second connect (same device, memory kept — a reconnect or, persisted, a restart):
+    // start() itself asks ONLY the identity (the liveness proof). The tree stands from
+    // the remembered shape; stale values are NOT seeded — the states hold them anyway.
     client.requests.length = 0;
     const { created, acked, deps: deps2 } = makeDeps(client);
     await new YncaDeviceController("living", { ...deps2, probeMemory: memory }).start();
-    const secondSweep = client.requests[client.requests.length - 1];
-    expect(secondSweep.some(get => get.func === "INPNAMEHDMI1")).toBe(false);
-    expect(secondSweep.some(get => get.func === "SCENE1NAME")).toBe(false);
-    // …but the objects and values are still there, exactly as if the device had answered.
+    // The only request the READY LINE waited for is the identity read; no AVAIL probe,
+    // no blocking sweep.
+    expect(client.requests[0].map(get => get.func)).toEqual(["MODELNAME", "VERSION"]);
+    expect(client.requests.some(gets => gets.every(get => get.func === "AVAIL"))).toBe(false);
     expect(created).toContain("living.advanced.inputNames.hdmi1");
-    expect(acked).toContainEqual({ id: "living.advanced.inputNames.hdmi1", value: "Kodi" });
-    expect(acked).toContainEqual({ id: "living.scene.name1", value: "Movie" });
+    expect(created).toContain("living.power");
+    // Stale values are not seeded — the states hold last-known values anyway.
+    expect(acked).toEqual([]);
+    // The full question round then runs BEHIND the ready line as a value refresh —
+    // statics included, so a rename at the device heals in seconds, not on a restart.
+    await flushAsync();
+    expect(client.requests).toHaveLength(2);
+    const background = client.requests[1];
+    expect(background.some(get => get.func === "PWR")).toBe(true);
+    expect(background.some(get => get.func === "INPNAMEHDMI1")).toBe(true);
+  });
+
+  test("a different device behind the address voids the memory and sweeps fresh", async () => {
+    const client = new FakeClient();
+    client.capabilities = { model: "RX-A", subunits: { SYS: { MODELNAME: "RX-A", VERSION: "1.0" }, MAIN: { PWR: "On" } } };
+    const memory = new ProbeMemory();
+    const { deps } = makeDeps(client);
+    await new YncaDeviceController("living", { ...deps, probeMemory: memory }).start();
+
+    // The device at this IP is swapped (different model): the cached layer must not build
+    // the OLD device's tree — the identity mismatch forces the full sweep.
+    client.capabilities = { model: "RX-B", subunits: { SYS: { MODELNAME: "RX-B", VERSION: "2.0" }, MAIN: { PWR: "On" } } };
+    client.requests.length = 0;
+    const { deps: deps2 } = makeDeps(client);
+    await new YncaDeviceController("living", { ...deps2, probeMemory: memory }).start();
+    // More than the identity request ran: the sweep went to the device again.
+    expect(client.requests.length).toBeGreaterThan(1);
+    const stored = memory.remembered<{ model: string }>("yncaCapabilities");
+    expect(stored?.model).toBe("RX-B");
   });
 });
 

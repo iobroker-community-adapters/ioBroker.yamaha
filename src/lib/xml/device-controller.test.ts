@@ -2,6 +2,7 @@ import { XmlDeviceController } from "./device-controller";
 import type { XmlClientLike } from "./device-controller";
 import type { BasicStatus } from "./protocol";
 import { CommandGate } from "../lifecycle/command-gate";
+import { ProbeMemory } from "../lifecycle/probe-memory";
 
 /** A real command gate for the controller under test (pacing has its own suite). */
 const testGate = (): CommandGate =>
@@ -397,5 +398,35 @@ describe("XmlDeviceController browse surface (#613)", () => {
       zone: "Main_Zone",
       inner: "<Input><Input_Sel>NET RADIO</Input_Sel></Input>",
     });
+  });
+});
+
+describe("XmlDeviceController freshness guard (persisted memory)", () => {
+  const sceneRequest = "Main_Zone|<Scene><Scene_Sel_Item>GetParam</Scene_Sel_Item></Scene>";
+
+  test("a matching model keeps the remembered declarations; a different one re-probes", async () => {
+    const memory = new ProbeMemory();
+    const first = setup({ Main_Zone: { power: true } });
+    (first.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
+    first.client.modelName = "RX-V773";
+    first.client.xmlAnswers[sceneRequest] = sceneDeclaration([{ num: 1, title: "Movie" }]);
+    await first.controller.start();
+
+    // Same model again: the scene declaration comes from the memory, not the wire.
+    const second = setup({ Main_Zone: { power: true } });
+    (second.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
+    second.client.modelName = "RX-V773";
+    await second.controller.start();
+    expect(second.client.calls.some(c => c.inner?.includes("Scene_Sel_Item"))).toBe(false);
+    expect(second.objects).toContain("living.scene.recall");
+
+    // A different model behind the address: the old declarations are void — re-asked.
+    const third = setup({ Main_Zone: { power: true } });
+    (third.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
+    third.client.modelName = "RX-V575";
+    await third.controller.start();
+    expect(third.client.calls.some(c => c.inner?.includes("Scene_Sel_Item"))).toBe(true);
+    // The new device declared no scenes — none appear.
+    expect(third.objects).not.toContain("living.scene.recall");
   });
 });

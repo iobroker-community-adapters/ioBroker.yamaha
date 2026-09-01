@@ -170,9 +170,29 @@ export class YxcDeviceController implements ConnectionHandle {
    * @returns true if the device reported capabilities and its tree was created
    */
   public async start(): Promise<boolean> {
-    // Capabilities, model and name are constant while the device runs, so on a reconnect
-    // they come from the per-device memory instead of costing three more round-trips on a
-    // connection that is being re-established anyway.
+    // Freshness guard for the (persisted) probe memory: ONE LIVE getDeviceInfo proves
+    // the device behind this address is still the one the memory was learned from. A
+    // swapped or factory-reset device answers a different identity — its remembered
+    // YXC answers are dropped and re-probed; a transient failure keeps the memory and
+    // leaves the liveness verdict to the zone check below. Also feeds the model line.
+    let model: string | undefined;
+    try {
+      const info = await this.deps.client.getDeviceInfo();
+      model = modelNameFrom(info);
+      const version = (info as { system_version?: unknown } | null)?.system_version;
+      const identity = `${model ?? ""}|${typeof version === "number" || typeof version === "string" ? version : ""}`;
+      if (this.deps.probeMemory && this.deps.probeMemory.remembered("yxcIdentity") !== identity) {
+        this.deps.probeMemory.drop(
+          key => key === "features" || key === "name" || key === "model" || key === "yxcIdentity",
+        );
+        this.deps.probeMemory.set("yxcIdentity", identity);
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: getDeviceInfo failed (${errorMessage(e)})`);
+    }
+    // Capabilities and name are constant while the device runs, so on a reconnect —
+    // and, persisted, on a restart — they come from the per-device memory instead of
+    // costing more round-trips on a connection that is being (re-)established anyway.
     const capabilities = await this.remember("features", async () =>
       parseYxcFeatures(await this.deps.client.getFeatures()),
     );
@@ -185,17 +205,10 @@ export class YxcDeviceController implements ConnectionHandle {
     for (const object of objects) {
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
     }
-    // The model name (getDeviceInfo) for the device-manager card. Best-effort: a device that
-    // does not answer getDeviceInfo still connects — the model line just stays empty.
-    try {
-      const model = await this.remember("model", async () => modelNameFrom(await this.deps.client.getDeviceInfo()));
-      if (model) {
-        // The info channel and info.model already exist — the adapter creates them for
-        // every device up front, so the card renders even while the device is offline.
-        this.emit("info.model", model);
-      }
-    } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: getDeviceInfo failed (${errorMessage(e)})`);
+    if (model) {
+      // The info channel and info.model already exist — the adapter creates them for
+      // every device up front, so the card renders even while the device is offline.
+      this.emit("info.model", model);
     }
     // The name the user gave the device in the MusicCast app. Best-effort like the model
     // above: an older device that does not answer getNameText simply keeps its label.

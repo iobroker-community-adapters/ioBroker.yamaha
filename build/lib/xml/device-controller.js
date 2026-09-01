@@ -72,6 +72,18 @@ class XmlDeviceController {
       return false;
     }
     this.zones = answered.map((probe) => probe.zone);
+    let model;
+    try {
+      model = await this.deps.client.getModelName();
+      if (model !== void 0 && this.deps.probeMemory) {
+        if (this.deps.probeMemory.remembered("xmlModel") !== model) {
+          this.deps.probeMemory.drop((key) => key.startsWith("xml"));
+          this.deps.probeMemory.set("xmlModel", model);
+        }
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: getModelName failed (${(0, import_util.errorMessage)(e)})`);
+    }
     const inputsByZone = /* @__PURE__ */ new Map();
     for (const zone of this.zones) {
       const body = await this.probeXml(
@@ -140,13 +152,8 @@ class XmlDeviceController {
         this.seedZone(zone, status);
       }
     }
-    try {
-      const model = await this.deps.client.getModelName();
-      if (model) {
-        this.emit("info.model", model);
-      }
-    } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: getModelName failed (${(0, import_util.errorMessage)(e)})`);
+    if (model) {
+      this.emit("info.model", model);
     }
     await this.setupBrowse();
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), this.pollIntervalMs);

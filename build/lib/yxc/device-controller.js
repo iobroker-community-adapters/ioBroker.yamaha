@@ -100,6 +100,21 @@ class YxcDeviceController {
    */
   async start() {
     var _a, _b, _c, _d, _e;
+    let model;
+    try {
+      const info = await this.deps.client.getDeviceInfo();
+      model = modelNameFrom(info);
+      const version = info == null ? void 0 : info.system_version;
+      const identity = `${model != null ? model : ""}|${typeof version === "number" || typeof version === "string" ? version : ""}`;
+      if (this.deps.probeMemory && this.deps.probeMemory.remembered("yxcIdentity") !== identity) {
+        this.deps.probeMemory.drop(
+          (key) => key === "features" || key === "name" || key === "model" || key === "yxcIdentity"
+        );
+        this.deps.probeMemory.set("yxcIdentity", identity);
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: getDeviceInfo failed (${(0, import_util.errorMessage)(e)})`);
+    }
     const capabilities = await this.remember(
       "features",
       async () => (0, import_capability.parseYxcFeatures)(await this.deps.client.getFeatures())
@@ -112,13 +127,8 @@ class YxcDeviceController {
     for (const object of objects) {
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
     }
-    try {
-      const model = await this.remember("model", async () => modelNameFrom(await this.deps.client.getDeviceInfo()));
-      if (model) {
-        this.emit("info.model", model);
-      }
-    } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: getDeviceInfo failed (${(0, import_util.errorMessage)(e)})`);
+    if (model) {
+      this.emit("info.model", model);
     }
     if (this.deps.reportDeviceName) {
       try {

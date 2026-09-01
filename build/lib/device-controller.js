@@ -29,6 +29,11 @@ const ID_MAP = (0, import_catalog.idToEntry)(import_catalog.YNCA_CATALOG);
 const AVAIL_PROBE = (0, import_catalog.availGets)(import_catalog.YNCA_CATALOG);
 const STATIC_FUNC = /^(INPNAME|SCENE\d+NAME$)/;
 const STATIC_KEY = "yncaStaticValues";
+const CAPS_KEY = "yncaCapabilities";
+function isCachedCapabilities(value) {
+  const candidate = value;
+  return typeof candidate === "object" && candidate !== null && typeof candidate.model === "string" && typeof candidate.firmware === "string" && typeof candidate.subunits === "object" && candidate.subunits !== null;
+}
 const LIST_PROOF = /^(LISTLAYER|LISTLAYERNAME|CURRLINE|MAXLINE|LINE[1-8](TXT|ATRIB))$/;
 class YncaDeviceController {
   /**
@@ -58,7 +63,8 @@ class YncaDeviceController {
     var _a, _b;
     await this.deps.client.connect();
     const catalog = this.deps.isEntryEnabled ? import_catalog.YNCA_CATALOG.filter((entry) => this.deps.isEntryEnabled(entry.id)) : import_catalog.YNCA_CATALOG;
-    const capabilities = await this.sweepDevice(catalog);
+    const resolved = await this.resolveCapabilities(catalog);
+    const { capabilities, fromCache } = resolved;
     const present = (0, import_catalog.presentYncaEntries)(capabilities, catalog);
     this.writeMap = (0, import_catalog.idToEntry)(present);
     const objects = (0, import_catalog.yncaObjectsFor)(capabilities, catalog);
@@ -73,11 +79,13 @@ class YncaDeviceController {
     for (const object of objects) {
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
     }
-    for (const [subunit, funcs] of Object.entries(capabilities.subunits)) {
-      for (const [func, value] of Object.entries(funcs)) {
-        const update = (0, import_catalog.yncaStateUpdate)({ subunit, func, value }, FUNC_MAP);
-        if (update) {
-          this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+    if (!fromCache) {
+      for (const [subunit, funcs] of Object.entries(capabilities.subunits)) {
+        for (const [func, value] of Object.entries(funcs)) {
+          const update = (0, import_catalog.yncaStateUpdate)({ subunit, func, value }, FUNC_MAP);
+          if (update) {
+            this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+          }
         }
       }
     }
@@ -91,8 +99,88 @@ class YncaDeviceController {
       }
     });
     this.deps.client.startKeepalive();
+    if (fromCache) {
+      void this.refreshInBackground(catalog);
+    }
     this.deps.log.debug(`${this.deviceId}: ${capabilities.model || "device"} ready (YNCA)`);
     return true;
+  }
+  /**
+   * The device's capabilities — from the persisted fast-restart layer when the LIVE
+   * identity (model + firmware, two paced reads, ~0.2 s) matches what the layer was
+   * captured from, else from the full two-pass sweep. The identity read doubles as the
+   * liveness proof the ready line rests on: a cached shape alone must never present a
+   * dead device as connected (the v1.5.0 honesty rule).
+   *
+   * @param catalog the (group-filtered) catalog
+   * @returns the capabilities and whether they came from the persisted layer
+   */
+  async resolveCapabilities(catalog) {
+    var _a, _b, _c, _d, _e, _f, _g;
+    const identity = await this.deps.client.readCapabilities([
+      { subunit: "SYS", func: "MODELNAME" },
+      { subunit: "SYS", func: "VERSION" }
+    ]);
+    const model = identity.model;
+    const firmware = (_b = (_a = identity.subunits.SYS) == null ? void 0 : _a.VERSION) != null ? _b : "";
+    const remembered = (_c = this.deps.probeMemory) == null ? void 0 : _c.remembered(CAPS_KEY);
+    if (model && isCachedCapabilities(remembered) && remembered.model === model && remembered.firmware === firmware) {
+      return { capabilities: { model, subunits: remembered.subunits }, fromCache: true };
+    }
+    if (remembered !== void 0) {
+      (_d = this.deps.probeMemory) == null ? void 0 : _d.drop((key) => key === CAPS_KEY || key === STATIC_KEY);
+    }
+    const capabilities = await this.sweepDevice(catalog, model, firmware);
+    if (capabilities.model) {
+      (_g = this.deps.probeMemory) == null ? void 0 : _g.set(CAPS_KEY, {
+        model: capabilities.model,
+        firmware: (_f = (_e = capabilities.subunits.SYS) == null ? void 0 : _e.VERSION) != null ? _f : firmware,
+        subunits: capabilities.subunits
+      });
+    }
+    return { capabilities, fromCache: false };
+  }
+  /**
+   * The fast path's second half: re-ask every catalogued function of the present
+   * subunits — the answers stream into the states through the live message handler,
+   * so current values arrive within the usual sweep time WITHOUT having gated the
+   * ready line. Completion refreshes the persisted layers (capabilities, statics)
+   * and the write map; a SHAPE change (a function newly answered) is only persisted —
+   * its object appears on the next start, because the unified tree is coordinated
+   * once per connect and a late upsert would not materialize.
+   *
+   * @param catalog the (group-filtered) catalog
+   */
+  async refreshInBackground(catalog) {
+    var _a, _b, _c, _d, _e, _f;
+    try {
+      const cached = (_a = this.deps.subunitCache) == null ? void 0 : _a.get();
+      const gets = (0, import_catalog.sweepGets)(catalog).filter(
+        (get) => get.subunit === "SYS" || !cached || cached.subunits.includes(get.subunit)
+      );
+      const fresh = await this.deps.client.readCapabilities(gets);
+      if (!fresh.model) {
+        return;
+      }
+      const statics = {};
+      for (const [subunit, funcs] of Object.entries(fresh.subunits)) {
+        for (const [func, value] of Object.entries(funcs)) {
+          if (STATIC_FUNC.test(func)) {
+            ((_b = statics[subunit]) != null ? _b : statics[subunit] = {})[func] = value;
+          }
+        }
+      }
+      (_c = this.deps.probeMemory) == null ? void 0 : _c.set(STATIC_KEY, statics);
+      (_f = this.deps.probeMemory) == null ? void 0 : _f.set(CAPS_KEY, {
+        model: fresh.model,
+        firmware: (_e = (_d = fresh.subunits.SYS) == null ? void 0 : _d.VERSION) != null ? _e : "",
+        subunits: fresh.subunits
+      });
+      this.writeMap = (0, import_catalog.idToEntry)((0, import_catalog.presentYncaEntries)(fresh, catalog));
+      this.deps.log.debug(`${this.deviceId}: background value refresh done (YNCA)`);
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: background value refresh failed: ${String(e)}`);
+    }
   }
   /**
    * Read the device's capabilities with the two-pass sweep. Pass 1 probes each
@@ -107,20 +195,15 @@ class YncaDeviceController {
    * @param catalog the (group-filtered) catalog whose functions to sweep
    * @returns the assembled capabilities
    */
-  async sweepDevice(catalog) {
-    var _a, _b, _c, _d, _e, _f, _g;
+  async sweepDevice(catalog, model, firmware) {
+    var _a, _b, _c, _d, _e;
     const cached = (_a = this.deps.subunitCache) == null ? void 0 : _a.get();
     if (cached) {
-      const identity = await this.deps.client.readCapabilities([
-        { subunit: "SYS", func: "MODELNAME" },
-        { subunit: "SYS", func: "VERSION" }
-      ]);
-      const firmware = (_c = (_b = identity.subunits.SYS) == null ? void 0 : _b.VERSION) != null ? _c : "";
-      if (identity.model === cached.model && firmware === cached.firmware) {
+      if (model === cached.model && firmware === cached.firmware) {
         return await this.targetedSweep(catalog, new Set(cached.subunits));
       }
       this.deps.log.debug(`${this.deviceId}: cached subunit set is stale (model/firmware changed), re-probing`);
-      (_d = this.deps.subunitCache) == null ? void 0 : _d.clear();
+      (_b = this.deps.subunitCache) == null ? void 0 : _b.clear();
     }
     const probe = await this.deps.client.readCapabilities(AVAIL_PROBE);
     const present = new Set(Object.keys(probe.subunits));
@@ -129,10 +212,10 @@ class YncaDeviceController {
     }
     const capabilities = await this.targetedSweep(catalog, present);
     if (capabilities.model) {
-      (_g = this.deps.subunitCache) == null ? void 0 : _g.set({
+      (_e = this.deps.subunitCache) == null ? void 0 : _e.set({
         subunits: [...present],
         model: capabilities.model,
-        firmware: (_f = (_e = capabilities.subunits.SYS) == null ? void 0 : _e.VERSION) != null ? _f : ""
+        firmware: (_d = (_c = capabilities.subunits.SYS) == null ? void 0 : _c.VERSION) != null ? _d : ""
       });
     }
     return capabilities;

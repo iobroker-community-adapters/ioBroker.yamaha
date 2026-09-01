@@ -112,6 +112,24 @@ export class XmlDeviceController implements ConnectionHandle {
       return false;
     }
     this.zones = answered.map(probe => probe.zone);
+    // Freshness guard for the (persisted) probe memory: the model name is the identity
+    // this transport can read. A different device behind the address drops the
+    // remembered XML declarations (scenes, inputs, tuner, browse sources); a device
+    // that reports no model keeps them — the YNCA/YXC guards catch a swap there.
+    let model: string | undefined;
+    try {
+      model = await this.deps.client.getModelName();
+      if (model !== undefined && this.deps.probeMemory) {
+        if (this.deps.probeMemory.remembered("xmlModel") !== model) {
+          // Every XML-owned memory key carries the xml prefix (xmlBrowseSources,
+          // xmlScenes:*, xmlInputs:*, xmlTuner, xmlModel).
+          this.deps.probeMemory.drop(key => key.startsWith("xml"));
+          this.deps.probeMemory.set("xmlModel", model);
+        }
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: getModelName failed (${errorMessage(e)})`);
+    }
     // The zone's own input list (`Input_Sel_Item`, per zone — Main and Zone 2 differ on
     // real hardware): the device says which inputs it accepts, so the input state gets a
     // dropdown instead of a free string. Constant per model — remembered per device.
@@ -193,17 +211,12 @@ export class XmlDeviceController implements ConnectionHandle {
         this.seedZone(zone, status);
       }
     }
-    // The model name (System>Config) for the device-manager card. Best-effort — a device that
-    // does not report it still connects, the model line just stays empty.
-    try {
-      const model = await this.deps.client.getModelName();
-      if (model) {
-        // The info channel and info.model already exist — the adapter creates them for
-        // every device up front, so the card renders even while the device is offline.
-        this.emit("info.model", model);
-      }
-    } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: getModelName failed (${errorMessage(e)})`);
+    // The model name (already read by the freshness guard) for the device-manager card.
+    // Best-effort — a device that does not report it still connects, the line stays empty.
+    if (model) {
+      // The info channel and info.model already exist — the adapter creates them for
+      // every device up front, so the card renders even while the device is offline.
+      this.emit("info.model", model);
     }
     await this.setupBrowse();
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), this.pollIntervalMs);

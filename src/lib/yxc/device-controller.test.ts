@@ -839,3 +839,38 @@ describe("YxcDeviceController signal/playlist/queue polling (declared surfaces o
     expect(methods).not.toContain("getPlayQueue");
   });
 });
+
+describe("YxcDeviceController freshness guard (persisted memory)", () => {
+  const features = {
+    response_code: 0,
+    zone: [{ id: "main", func_list: ["power"], input_list: ["hdmi1"] }],
+  };
+
+  test("a matching identity keeps the remembered capabilities — no second getFeatures", async () => {
+    const memory = new ProbeMemory();
+    const first = setup(features, { response_code: 0, power: "on" });
+    (first.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
+    await first.controller.start();
+    const second = setup(features, { response_code: 0, power: "on" });
+    (second.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
+    await second.controller.start();
+    const methods = (second.client.calls as Array<{ method: string }>).map(c => c.method);
+    expect(methods).toContain("getDeviceInfo"); // the live identity proof
+    expect(methods).not.toContain("getFeatures"); // capabilities come from the memory
+  });
+
+  test("a different identity voids the remembered capabilities and re-probes", async () => {
+    const memory = new ProbeMemory();
+    const first = setup(features, { response_code: 0, power: "on" });
+    (first.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
+    (first.client as unknown as { deviceInfo: unknown }).deviceInfo = { model_name: "RX-A", system_version: 1.0 };
+    await first.controller.start();
+    const second = setup(features, { response_code: 0, power: "on" });
+    (second.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
+    (second.client as unknown as { deviceInfo: unknown }).deviceInfo = { model_name: "RX-B", system_version: 2.0 };
+    await second.controller.start();
+    const methods = (second.client.calls as Array<{ method: string }>).map(c => c.method);
+    // The swapped device must not inherit the old device's declared surface.
+    expect(methods).toContain("getFeatures");
+  });
+});

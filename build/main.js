@@ -126,31 +126,73 @@ class Yamaha extends utils.Adapter {
         this.log.info(`setting up ${devices.length} configured device(s)...`);
       }
       for (const device of devices) {
-        this.deviceConnected.set(device.id, false);
-        await this.ensureDeviceHeader(device.id, device.ip);
-        await this.setState(`${device.id}.info.connection`, { val: false, ack: true });
-        const reachability = new import_reachability_dedup.ReachabilityDedup();
-        const subunitCache = await this.loadYncaSubunitCache(device.id);
-        const probeMemory = new import_probe_memory.ProbeMemory();
-        const supervisor = new import_device_supervisor.DeviceSupervisor({
-          attempt: () => this.attemptDevice(device, pushReceiver, knownDeviceIps, reachability, subunitCache, probeMemory),
-          schedule: (cb, ms) => this.setTimeout(cb, ms),
-          cancel: (handle) => this.clearTimeout(handle),
-          onConnectionChange: (connected) => this.reportConnection(device.id, connected),
-          backoff: new import_reconnect_strategy.ReconnectStrategy(RECONNECT_BASE_MS, RECONNECT_MAX_MS),
-          log: {
-            debug: (message) => this.log.debug(message),
-            info: (message) => this.log.info(message),
-            warn: (message) => this.log.warn(message)
-          }
-        });
-        this.supervisors.push(supervisor);
-        this.supervisorById.set(device.id, supervisor);
-        supervisor.start();
+        await this.startDevice(device, pushReceiver, knownDeviceIps);
+      }
+      this.writeDeviceOverview();
+      if (configured.length === 0 && devices.length > 0) {
+        void this.discoverAdditionalDevices(pushReceiver, knownDeviceIps, new Set(devices.map((device) => device.id)));
+      }
+    } catch (e) {
+      this.log.error(`onReady failed: ${(0, import_util.errorMessage)(e)}`);
+    }
+  }
+  /**
+   * Bring one device under supervision: header objects, disconnected stamp, the
+   * per-device caches, and the supervisor that keeps it connected. Factored out of
+   * onReady so the background discovery can start a late-found device the same way.
+   *
+   * @param device the device record
+   * @param pushReceiver the shared YXC push receiver
+   * @param knownDeviceIps the IPs of all supervised devices (multiroom link targets)
+   */
+  async startDevice(device, pushReceiver, knownDeviceIps) {
+    this.deviceConnected.set(device.id, false);
+    await this.ensureDeviceHeader(device.id, device.ip);
+    await this.setState(`${device.id}.info.connection`, { val: false, ack: true });
+    const reachability = new import_reachability_dedup.ReachabilityDedup();
+    const subunitCache = await this.loadYncaSubunitCache(device.id);
+    const probeMemory = await this.loadProbeMemory(device.id);
+    const supervisor = new import_device_supervisor.DeviceSupervisor({
+      attempt: () => this.attemptDevice(device, pushReceiver, knownDeviceIps, reachability, subunitCache, probeMemory),
+      schedule: (cb, ms) => this.setTimeout(cb, ms),
+      cancel: (handle) => this.clearTimeout(handle),
+      onConnectionChange: (connected) => this.reportConnection(device.id, connected),
+      backoff: new import_reconnect_strategy.ReconnectStrategy(RECONNECT_BASE_MS, RECONNECT_MAX_MS),
+      log: {
+        debug: (message) => this.log.debug(message),
+        info: (message) => this.log.info(message),
+        warn: (message) => this.log.warn(message)
+      }
+    });
+    this.supervisors.push(supervisor);
+    this.supervisorById.set(device.id, supervisor);
+    supervisor.start();
+  }
+  /**
+   * The background half of auto-discovery: search the network, remember what was
+   * found, and bring devices online that are not supervised yet. The remembered
+   * devices did not wait for this — the search window (seconds) used to gate every
+   * restart although the devices were already known.
+   *
+   * @param pushReceiver the shared YXC push receiver
+   * @param knownDeviceIps the IPs of all supervised devices (extended for newcomers)
+   * @param started the device ids already under supervision
+   */
+  async discoverAdditionalDevices(pushReceiver, knownDeviceIps, started) {
+    try {
+      const merged = await this.runDiscovery();
+      const fresh = merged.filter((device) => !started.has(device.id));
+      if (fresh.length === 0) {
+        return;
+      }
+      this.log.info(`discovery found ${fresh.length} new device(s) \u2014 setting up`);
+      for (const device of fresh) {
+        knownDeviceIps.add(device.ip);
+        await this.startDevice(device, pushReceiver, knownDeviceIps);
       }
       this.writeDeviceOverview();
     } catch (e) {
-      this.log.error(`onReady failed: ${(0, import_util.errorMessage)(e)}`);
+      this.log.warn(`background discovery failed: ${(0, import_util.errorMessage)(e)}`);
     }
   }
   /**
@@ -613,7 +655,24 @@ class Yamaha extends utils.Adapter {
   async autoDiscover() {
     const store = (0, import_discovered_store_deps.discoveredStoreDeps)(this);
     const known = await (0, import_discovered_store.readDiscovered)(store);
+    if (known.length > 0) {
+      this.log.info(`setting up ${known.length} remembered device(s); the network search runs in the background`);
+      return known;
+    }
     this.log.info("auto-discovery via SSDP (older XML-only devices must be added manually)");
+    const merged = await this.runDiscovery();
+    this.log.info(`setting up ${merged.length} discovered device(s)...`);
+    return merged;
+  }
+  /**
+   * Search the network, merge with the remembered devices, and persist the result.
+   * Shared by the blocking first-setup path and the background search.
+   *
+   * @returns the merged device records
+   */
+  async runDiscovery() {
+    const store = (0, import_discovered_store_deps.discoveredStoreDeps)(this);
+    const known = await (0, import_discovered_store.readDiscovered)(store);
     let found = [];
     try {
       found = await (0, import_discovery.discoverYamaha)({
@@ -630,9 +689,6 @@ class Yamaha extends utils.Adapter {
       (dropped, takenId) => this.log.warn(`discovered device "${dropped}" skipped \u2014 its object id "${takenId}" is already taken`)
     );
     await (0, import_discovered_store.writeDiscovered)(store, merged);
-    const remembered = merged.length - found.length;
-    const suffix = remembered > 0 ? ` (${remembered} more remembered from a previous run)` : "";
-    this.log.info(`setting up ${merged.length} discovered device(s)${suffix}...`);
     return merged;
   }
   /**
@@ -654,6 +710,34 @@ class Yamaha extends utils.Adapter {
     }
     return (0, import_subunit_cache.createSubunitCache)((0, import_subunit_cache.isAvailSnapshot)(stored) ? stored : void 0, (snapshot) => {
       void this.extendObject(deviceId, { native: { yncaAvail: snapshot != null ? snapshot : null } });
+    });
+  }
+  /**
+   * Load a device's persisted probe memory (constant device answers: capabilities,
+   * declared scenes/inputs, names) from its device object's native part, wrapped so
+   * every change persists back there — the same home as the subunit cache. This is
+   * what makes a restart fast: the object tree is rebuilt from the remembered
+   * answers while only the live proofs and the value refresh still go to the device.
+   *
+   * @param deviceId the id-safe device id
+   * @returns the per-device memory
+   */
+  async loadProbeMemory(deviceId) {
+    var _a, _b;
+    let initial;
+    try {
+      const stored = (_b = (_a = await this.getObjectAsync(deviceId)) == null ? void 0 : _a.native) == null ? void 0 : _b.probeCache;
+      if (typeof stored === "string") {
+        const parsed = JSON.parse(stored);
+        if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+          initial = parsed;
+        }
+      }
+    } catch {
+      initial = void 0;
+    }
+    return new import_probe_memory.ProbeMemory(initial, (entries) => {
+      void this.extendObject(deviceId, { native: { probeCache: JSON.stringify(entries) } });
     });
   }
   /**
