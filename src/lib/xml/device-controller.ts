@@ -294,15 +294,15 @@ export class XmlDeviceController implements ConnectionHandle {
           states: Object.fromEntries(scenes.map(scene => [scene.num, scene.title])),
         },
       });
-      for (const scene of scenes) {
-        const stateId = `${channelId}.name${scene.num}`;
-        await this.deps.upsertObject(`${this.deviceId}.${stateId}`, {
-          id: stateId,
-          type: "state",
-          common: { name: `Scene ${scene.num} name`, type: "string", role: "text", read: true, write: false },
-        });
-        this.emit(stateId, scene.title);
-      }
+      // ONE list state instead of a name datapoint per scene (v2.0.0): visualizations
+      // read titles as VALUES (button captions — the #613 reporter's setup), and a
+      // dropdown's labels are not readable, so the list carries them.
+      await this.deps.upsertObject(`${this.deviceId}.${channelId}.list`, {
+        id: `${channelId}.list`,
+        type: "state",
+        common: { name: "Scenes (number + title)", type: "string", role: "json", read: true, write: false },
+      });
+      this.emit(`${channelId}.list`, JSON.stringify(scenes));
     }
   }
 
@@ -427,7 +427,12 @@ export class XmlDeviceController implements ConnectionHandle {
     const zoneKey = match[1] ?? "main";
     const zone = this.zones.find(z => z.key === zoneKey);
     const scenes = this.scenesByZone.get(zoneKey);
-    const num = Math.round(Number(value));
+    // A TITLE is as valid a write as a number ("Movie Viewing" → Scene 1).
+    const byTitle =
+      typeof value === "string" && !/^\d+$/.test(value.trim())
+        ? scenes?.find(scene => scene.title.toLowerCase() === value.trim().toLowerCase())?.num
+        : undefined;
+    const num = byTitle ?? Math.round(Number(value));
     if (!zone || !scenes || !scenes.some(scene => scene.num === num)) {
       return true;
     }

@@ -874,3 +874,31 @@ describe("YxcDeviceController freshness guard (persisted memory)", () => {
     expect(methods).toContain("getFeatures");
   });
 });
+
+describe("YxcDeviceController scene title writes (shared memory)", () => {
+  test("a title write resolves to recallScene with the number from the device memory", async () => {
+    const declaration =
+      '<YAMAHA_AV rsp="GET" RC="0"><Main_Zone><Scene><Scene_Sel_Item>' +
+      "<Item_4><Param>Scene 4</Param><RW>W</RW><Title>NET Audio</Title></Item_4>" +
+      "</Scene_Sel_Item></Scene></Main_Zone></YAMAHA_AV>";
+    const memory = new ProbeMemory({ "xmlScenes:main": declaration });
+    const s = setup(
+      { response_code: 0, zone: [{ id: "main", func_list: ["power", "scene"], input_list: ["hdmi1"], scene_num: 8 }] },
+      { response_code: 0, power: "on" },
+    );
+    (s.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
+    await s.controller.start();
+    (s.client.calls as Array<{ method: string }>).length = 0;
+    s.controller.handleStateChange("living.scene.recall", false, "net audio");
+    await new Promise(resolve => setImmediate(resolve));
+    expect(s.client.calls as Array<{ method: string; args: unknown[] }>).toContainEqual({
+      method: "recallScene",
+      args: [4, "main"],
+    });
+    // An unknown title sends nothing.
+    (s.client.calls as Array<{ method: string }>).length = 0;
+    s.controller.handleStateChange("living.scene.recall", false, "Party");
+    await new Promise(resolve => setImmediate(resolve));
+    expect((s.client.calls as Array<{ method: string }>).some(c => c.method === "recallScene")).toBe(false);
+  });
+});

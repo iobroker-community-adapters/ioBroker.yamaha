@@ -229,15 +229,12 @@ class XmlDeviceController {
           states: Object.fromEntries(scenes.map((scene) => [scene.num, scene.title]))
         }
       });
-      for (const scene of scenes) {
-        const stateId = `${channelId}.name${scene.num}`;
-        await this.deps.upsertObject(`${this.deviceId}.${stateId}`, {
-          id: stateId,
-          type: "state",
-          common: { name: `Scene ${scene.num} name`, type: "string", role: "text", read: true, write: false }
-        });
-        this.emit(stateId, scene.title);
-      }
+      await this.deps.upsertObject(`${this.deviceId}.${channelId}.list`, {
+        id: `${channelId}.list`,
+        type: "state",
+        common: { name: "Scenes (number + title)", type: "string", role: "json", read: true, write: false }
+      });
+      this.emit(`${channelId}.list`, JSON.stringify(scenes));
     }
   }
   /**
@@ -351,7 +348,7 @@ class XmlDeviceController {
    * @returns true when the id was a scene recall (handled here)
    */
   handleSceneWrite(stateId, value) {
-    var _a;
+    var _a, _b;
     const match = /^(?:multiroom\.(zone[234])\.)?scene\.recall$/.exec(stateId);
     if (!match) {
       return false;
@@ -359,7 +356,8 @@ class XmlDeviceController {
     const zoneKey = (_a = match[1]) != null ? _a : "main";
     const zone = this.zones.find((z) => z.key === zoneKey);
     const scenes = this.scenesByZone.get(zoneKey);
-    const num = Math.round(Number(value));
+    const byTitle = typeof value === "string" && !/^\d+$/.test(value.trim()) ? (_b = scenes == null ? void 0 : scenes.find((scene) => scene.title.toLowerCase() === value.trim().toLowerCase())) == null ? void 0 : _b.num : void 0;
+    const num = byTitle != null ? byTitle : Math.round(Number(value));
     if (!zone || !scenes || !scenes.some((scene) => scene.num === num)) {
       return true;
     }

@@ -54,3 +54,62 @@ describe("coordinateObjectTree — one unified tree from the transports' catalog
     expect(distIdx).toBeLessThan(roleIdx);
   });
 });
+
+describe("dropdown borrowing (v2.0.0 — labels from a non-owning transport)", () => {
+  test("the owner's def borrows a states map another claimant carries", () => {
+    const { objects, ownerByCanonicalId } = coordinateObjectTree([
+      {
+        transport: "yxc",
+        objects: [
+          {
+            id: "scene.recall",
+            type: "state",
+            common: { name: "Recall scene", type: "number", role: "level", read: true, write: true },
+          },
+        ],
+      },
+      {
+        transport: "xml",
+        objects: [
+          {
+            id: "scene.recall",
+            type: "state",
+            common: {
+              name: "Recall scene",
+              type: "number",
+              role: "level",
+              read: true,
+              write: true,
+              states: { 1: "Movie Viewing", 2: "Radio Listening" },
+            },
+          },
+        ],
+      },
+    ]);
+    // MusicCast wins the write path (the proven-writer override)…
+    expect(ownerByCanonicalId.get("scene.recall")).toBe("yxc");
+    // …but the picker still shows the titles only XML could deliver.
+    expect(objects.find(o => o.id === "scene.recall")?.common.states).toEqual({
+      1: "Movie Viewing",
+      2: "Radio Listening",
+    });
+  });
+
+  test("an owner with its own states map keeps it", () => {
+    const { objects } = coordinateObjectTree([
+      {
+        transport: "ynca",
+        objects: [
+          { id: "input", type: "state", common: { name: "Input", type: "string", role: "media.input", read: true, write: true, states: { HDMI1: "HDMI1" } } },
+        ],
+      },
+      {
+        transport: "xml",
+        objects: [
+          { id: "input", type: "state", common: { name: "Input", type: "string", role: "media.input", read: true, write: true, states: { AV1: "AV1" } } },
+        ],
+      },
+    ]);
+    expect(objects.find(o => o.id === "input")?.common.states).toEqual({ HDMI1: "HDMI1" });
+  });
+});

@@ -24,6 +24,7 @@ import { errorMessage } from "../util";
 import { PollDropDetector } from "../lifecycle/poll-drop-detector";
 import type { ProbeMemory } from "../lifecycle/probe-memory";
 import { zonePrefix } from "./zones";
+import { resolveSceneNumber } from "../catalog/scene-titles";
 import type { CommandGate } from "../lifecycle/command-gate";
 import type { BrowseEngine } from "../browse/browse-engine";
 import { createBrowseSurface } from "../browse/surface";
@@ -331,6 +332,16 @@ export class YxcDeviceController implements ConnectionHandle {
     if (stateId.startsWith("player.browse.")) {
       this.browseEngine?.handleWrite(stateId, value);
       return;
+    }
+    // A scene TITLE resolves to its number via the shared device memory — the titles may
+    // have come over XML or YNCA while MusicCast owns the recall.
+    const sceneMatch = /^(?:multiroom\.(zone[234])\.)?scene\.recall$/.exec(stateId);
+    if (sceneMatch && typeof value === "string" && !/^\d+$/.test(value.trim())) {
+      const resolved = resolveSceneNumber(value, this.deps.probeMemory, sceneMatch[1] ?? "main");
+      if (resolved === undefined) {
+        return;
+      }
+      value = resolved;
     }
     // Multiroom writes need controller state (the cached role), so they bypass the pure command map.
     if (stateId === "multiroom.group.leave") {

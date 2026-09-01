@@ -419,8 +419,10 @@ describe("YncaDeviceController fast restart (persisted capability layer)", () =>
     expect(client.requests.some(gets => gets.every(get => get.func === "AVAIL"))).toBe(false);
     expect(created).toContain("living.advanced.inputNames.hdmi1");
     expect(created).toContain("living.power");
-    // Stale values are not seeded — the states hold last-known values anyway.
-    expect(acked).toEqual([]);
+    // Stale values are not seeded — the states hold last-known values anyway. The
+    // scene list is the one deliberate exception: it is derived presentation, not a
+    // stale device value.
+    expect(acked.filter(a => a.id !== "living.scene.list")).toEqual([]);
     // The full question round then runs BEHIND the ready line as a value refresh —
     // statics included, so a rename at the device heals in seconds, not on a restart.
     await flushAsync();
@@ -480,5 +482,43 @@ describe("YncaDeviceController write gating + refusal logging (#615 class)", () 
     await new YncaDeviceController("living", deps).start();
     refuse?.("@MAIN:SCENE=Scene 1", "restricted");
     expect(warnings).toEqual(['living: device refused "@MAIN:SCENE=Scene 1" (@RESTRICTED)']);
+  });
+});
+
+describe("YncaDeviceController scenes v2.0.0 (titles in the dropdown, one list, title writes)", () => {
+  function sceneSetup(): { controller: YncaDeviceController; client: FakeClient; objects: Array<{ id: string; def: ObjectDef }>; acked: Array<{ id: string; value: unknown }> } {
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX-V473",
+      subunits: { MAIN: { PWR: "On", SCENE1NAME: "BD/DVD", SCENE2NAME: "TV" } },
+    };
+    const { objects, acked, deps } = makeDeps(client);
+    const controller = new YncaDeviceController("living", deps);
+    return { controller, client, objects, acked };
+  }
+
+  test("the recall dropdown carries the device's scene names; scene.list holds them as JSON", async () => {
+    const s = sceneSetup();
+    await s.controller.start();
+    const recall = s.objects.find(o => o.id === "living.scene.recall");
+    expect(recall?.def.common.states).toEqual({ 1: "BD/DVD", 2: "TV" });
+    const list = s.acked.find(a => a.id === "living.scene.list");
+    expect(JSON.parse(String(list?.value))).toEqual([
+      { num: 1, title: "BD/DVD" },
+      { num: 2, title: "TV" },
+    ]);
+    // The per-name datapoints are gone.
+    expect(s.objects.some(o => o.id.startsWith("living.scene.name"))).toBe(false);
+  });
+
+  test("writing a scene TITLE recalls its number; an unknown title sends nothing", async () => {
+    const s = sceneSetup();
+    await s.controller.start();
+    s.client.sent.length = 0;
+    s.controller.handleStateChange("living.scene.recall", false, "tv");
+    expect(s.client.sent).toEqual([{ subunit: "MAIN", func: "SCENE", value: "Scene 2" }]);
+    s.client.sent.length = 0;
+    s.controller.handleStateChange("living.scene.recall", false, "Gaming");
+    expect(s.client.sent).toEqual([]);
   });
 });

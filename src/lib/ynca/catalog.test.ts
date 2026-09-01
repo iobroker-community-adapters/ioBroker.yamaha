@@ -79,12 +79,15 @@ describe("YNCA catalog", () => {
     expect(cat.find(e => e.id === "multiroom.zoneB.power")?.spec).toEqual({ kind: "onoff", on: "On", off: "Standby" });
   });
 
-  test("scene names are read-only text on MAIN (1..12)", () => {
+  test("scene names are no longer own datapoints — the recall entry sweeps them as aliases (v2.0.0)", () => {
     const cat = buildYncaCatalog();
-    const s1 = cat.find(e => e.id === "scene.name1");
-    expect(s1).toMatchObject({ subunit: "MAIN", func: "SCENE1NAME", write: false });
-    expect(s1?.spec).toEqual({ kind: "text" });
-    expect(cat.find(e => e.id === "scene.name12")).toMatchObject({ func: "SCENE12NAME" });
+    expect(cat.find(e => e.id === "scene.name1")).toBeUndefined();
+    // All twelve name functions still ride the sweep (they feed the dropdown labels
+    // and the scene.list state), attached to the recall entry as read aliases.
+    const recall = cat.find(e => e.id === "scene.recall");
+    expect(recall?.readFunc).toBe("SCENE1NAME");
+    expect(recall?.readAliases).toContain("SCENE12NAME");
+    expect(sweepGets(cat).some(get => get.subunit === "MAIN" && get.func === "SCENE7NAME")).toBe(true);
   });
 
   test("scene recall triggers a scene: writable 1..12, encodes to 'Scene N', write-only, gated on scene names", () => {
@@ -98,8 +101,9 @@ describe("YNCA catalog", () => {
       func: "SCENE",
       value: "Scene 3",
     });
-    // write-only: a SCENE1NAME device push must still map to the name state, not the recall
-    expect(funcToEntry(cat).get("MAIN:SCENE1NAME")?.id).toBe("scene.name1");
+    // write-only: a SCENE1NAME device push maps to NO state (the names feed the
+    // dropdown labels and scene.list, not a datapoint).
+    expect(funcToEntry(cat).get("MAIN:SCENE1NAME")).toBeUndefined();
     // appears only when the device reports scenes (gated on scene-1 name presence)
     const withScenes: YncaCapabilities = { model: "RX", subunits: { MAIN: { SCENE1NAME: "Movie" } } };
     expect(yncaObjectsFor(withScenes).map(o => o.id)).toContain("scene.recall");

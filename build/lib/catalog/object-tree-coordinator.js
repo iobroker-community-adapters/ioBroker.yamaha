@@ -49,7 +49,16 @@ function coordinateObjectTree(contributions) {
     if (!ownerDef) {
       throw new Error(`coordinateObjectTree: owner ${owner} has no def for ${canonicalId}`);
     }
-    return { ...ownerDef, id: canonicalId };
+    const resolvedDef = { ...ownerDef, id: canonicalId };
+    if (!resolvedDef.common.states) {
+      for (const def of entry.defs.values()) {
+        if (def.common.states) {
+          resolvedDef.common = { ...resolvedDef.common, states: def.common.states };
+          break;
+        }
+      }
+    }
+    return resolvedDef;
   });
   resolved.sort((a, b) => a.id.split(".").length - b.id.split(".").length);
   return { objects: resolved, ownerByCanonicalId };

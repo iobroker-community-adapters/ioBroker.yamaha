@@ -1112,17 +1112,6 @@ function buildYncaCatalog() {
     entries.push(...fnEntries(AMP_FUNCS, zone.subunit, zone.prefix));
   }
   entries.push(...fnEntries(MAIN_ONLY_FUNCS, "MAIN"));
-  for (let n = 1; n <= 12; n++) {
-    entries.push({
-      id: `scene.name${n}`,
-      name: `Scene ${n} name`,
-      spec: { kind: "text" },
-      write: false,
-      role: "text",
-      subunit: "MAIN",
-      func: `SCENE${n}NAME`
-    });
-  }
   entries.push({
     id: "scene.recall",
     name: "Recall scene",
@@ -1132,6 +1121,7 @@ function buildYncaCatalog() {
     subunit: "MAIN",
     func: "SCENE",
     readFunc: "SCENE1NAME",
+    readAliases: Array.from({ length: 11 }, (_, i) => `SCENE${i + 2}NAME`),
     writeOnly: true,
     wireEncode: (value) => `Scene ${Math.round(Number(value))}`
   });

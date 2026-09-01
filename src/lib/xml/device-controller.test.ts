@@ -184,8 +184,14 @@ describe("XmlDeviceController", () => {
     await s.controller.start();
     expect(s.objects).toContain("living.scene");
     expect(s.objects).toContain("living.scene.recall");
-    expect(s.objects).toContain("living.scene.name1");
-    expect(s.acks).toContainEqual({ id: "living.scene.name1", value: "Movie Viewing" });
+    // v2.0.0: ONE list state instead of a name datapoint per scene.
+    expect(s.objects).toContain("living.scene.list");
+    expect(s.objects).not.toContain("living.scene.name1");
+    const list = s.acks.find(a => a.id === "living.scene.list");
+    expect(JSON.parse(String(list?.value))).toEqual([
+      { num: 1, title: "Movie Viewing" },
+      { num: 2, title: "Radio Listening" },
+    ]);
     // Zone 2 scenes are first-class — the device declares them (RX-V6A capture).
     expect(s.objects).toContain("living.multiroom.zone2.scene.recall");
     expect(s.objects).not.toContain("living.multiroom.zone2.hdmiOut1");

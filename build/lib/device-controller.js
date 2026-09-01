@@ -52,6 +52,8 @@ class YncaDeviceController {
    * sweep. Until the sweep ran, the unfiltered static map answers.
    */
   writeMap;
+  /** The device's scene titles (SCENExNAME), for the recall dropdown, the list state and title writes. */
+  sceneTitles = [];
   /**
    * Connect, sweep the device from the catalog, and create its object tree; wire
    * up push updates. The catalog is the single source: it drives the sweep, the
@@ -60,7 +62,7 @@ class YncaDeviceController {
    * @returns true if the device reported capabilities and its tree was created
    */
   async start() {
-    var _a, _b;
+    var _a, _b, _c;
     await this.deps.client.connect();
     const catalog = this.deps.isEntryEnabled ? import_catalog.YNCA_CATALOG.filter((entry) => this.deps.isEntryEnabled(entry.id)) : import_catalog.YNCA_CATALOG;
     const resolved = await this.resolveCapabilities(catalog);
@@ -76,8 +78,27 @@ class YncaDeviceController {
       _a,
       (command, verdict) => this.deps.log.warn(`${this.deviceId}: device refused "${command}" (@${verdict.toUpperCase()})`)
     );
+    const main = (_c = capabilities.subunits.MAIN) != null ? _c : {};
+    this.sceneTitles = [];
+    for (let n = 1; n <= 12; n++) {
+      const title = main[`SCENE${n}NAME`];
+      if (typeof title === "string" && title.length > 0) {
+        this.sceneTitles.push({ num: n, title });
+      }
+    }
     for (const object of objects) {
+      if (object.id === "scene.recall" && this.sceneTitles.length > 0) {
+        object.common.states = Object.fromEntries(this.sceneTitles.map((scene) => [scene.num, scene.title]));
+      }
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
+    }
+    if (this.sceneTitles.length > 0) {
+      await this.deps.upsertObject(`${this.deviceId}.scene.list`, {
+        id: "scene.list",
+        type: "state",
+        common: { name: "Scenes (number + title)", type: "string", role: "json", read: true, write: false }
+      });
+      this.deps.setStateAck(`${this.deviceId}.scene.list`, JSON.stringify(this.sceneTitles));
     }
     if (!fromCache) {
       for (const [subunit, funcs] of Object.entries(capabilities.subunits)) {
@@ -275,6 +296,14 @@ class YncaDeviceController {
     if (stateId.startsWith("player.browse.")) {
       (_a = this.browseEngine) == null ? void 0 : _a.handleWrite(stateId, value);
       return;
+    }
+    if (stateId === "scene.recall" && typeof value === "string" && !/^\d+$/.test(value.trim())) {
+      const needle = value.trim().toLowerCase();
+      const match = this.sceneTitles.find((scene) => scene.title.toLowerCase() === needle);
+      if (match === void 0) {
+        return;
+      }
+      value = match.num;
     }
     const triple = (0, import_catalog.yncaCommand)(stateId, value, (_b = this.writeMap) != null ? _b : ID_MAP);
     if (triple) {

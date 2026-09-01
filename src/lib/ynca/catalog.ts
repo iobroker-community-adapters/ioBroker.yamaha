@@ -1253,22 +1253,12 @@ export function buildYncaCatalog(): YncaEntry[] {
   }
   // MAIN-only functions (Zone B sub-zone, speaker toggles).
   entries.push(...fnEntries(MAIN_ONLY_FUNCS, "MAIN"));
-  // The 12 scene names (read-only) live on MAIN.
-  for (let n = 1; n <= 12; n++) {
-    entries.push({
-      id: `scene.name${n}`,
-      name: `Scene ${n} name`,
-      spec: { kind: "text" },
-      write: false,
-      role: "text",
-      subunit: "MAIN",
-      func: `SCENE${n}NAME`,
-    });
-  }
   // Scene recall (write-only): a settable 1..12 that triggers a scene via @MAIN:SCENE=Scene N
-  // (ynca lib zone.py: `_put("SCENE", f"Scene {id}")`). Gated on SCENE1NAME so it appears only
-  // where the device reports scenes; kept out of the device→state map (writeOnly) so it never
-  // overwrites scene.name1's SCENE1NAME mapping.
+  // (ynca lib zone.py: `_put("SCENE", f"Scene {id}")`). Gated on the scene NAMES so it appears
+  // only where the device reports scenes; ALL twelve name functions ride along as read aliases,
+  // so the sweep still asks them — the controller turns the answers into the recall dropdown's
+  // title labels and the one `scene.list` state (v2.0.0: no per-name datapoints any more).
+  // Kept out of the device→state map (writeOnly), so a name answer never writes the state.
   entries.push({
     id: "scene.recall",
     name: "Recall scene",
@@ -1278,6 +1268,7 @@ export function buildYncaCatalog(): YncaEntry[] {
     subunit: "MAIN",
     func: "SCENE",
     readFunc: "SCENE1NAME",
+    readAliases: Array.from({ length: 11 }, (_, i) => `SCENE${i + 2}NAME`),
     writeOnly: true,
     wireEncode: value => `Scene ${Math.round(Number(value))}`,
   });

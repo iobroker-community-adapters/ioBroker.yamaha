@@ -149,6 +149,8 @@ export class YncaDeviceController implements ConnectionHandle {
    * sweep. Until the sweep ran, the unfiltered static map answers.
    */
   private writeMap: Map<string, YncaEntry> | undefined;
+  /** The device's scene titles (SCENExNAME), for the recall dropdown, the list state and title writes. */
+  private sceneTitles: Array<{ num: number; title: string }> = [];
 
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
@@ -187,9 +189,30 @@ export class YncaDeviceController implements ConnectionHandle {
     this.deps.client.onRefusal?.((command, verdict) =>
       this.deps.log.warn(`${this.deviceId}: device refused "${command}" (@${verdict.toUpperCase()})`),
     );
+    // The scene titles ride the sweep as SCENExNAME answers; they become the recall
+    // dropdown's labels and the one scene.list state (v2.0.0 — no per-name datapoints).
+    const main = capabilities.subunits.MAIN ?? {};
+    this.sceneTitles = [];
+    for (let n = 1; n <= 12; n++) {
+      const title = main[`SCENE${n}NAME`];
+      if (typeof title === "string" && title.length > 0) {
+        this.sceneTitles.push({ num: n, title });
+      }
+    }
     // Parents before children (channels before their states) — created in order.
     for (const object of objects) {
+      if (object.id === "scene.recall" && this.sceneTitles.length > 0) {
+        object.common.states = Object.fromEntries(this.sceneTitles.map(scene => [scene.num, scene.title]));
+      }
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
+    }
+    if (this.sceneTitles.length > 0) {
+      await this.deps.upsertObject(`${this.deviceId}.scene.list`, {
+        id: "scene.list",
+        type: "state",
+        common: { name: "Scenes (number + title)", type: "string", role: "json", read: true, write: false },
+      });
+      this.deps.setStateAck(`${this.deviceId}.scene.list`, JSON.stringify(this.sceneTitles));
     }
     // Seed the states with the values read during the init sweep. On the fast path the
     // cached values are last-run leftovers — the states already hold exactly those, and
@@ -412,6 +435,15 @@ export class YncaDeviceController implements ConnectionHandle {
     if (stateId.startsWith("player.browse.")) {
       this.browseEngine?.handleWrite(stateId, value);
       return;
+    }
+    // A scene TITLE is as valid a recall write as its number ("Movie Viewing" → 1).
+    if (stateId === "scene.recall" && typeof value === "string" && !/^\d+$/.test(value.trim())) {
+      const needle = value.trim().toLowerCase();
+      const match = this.sceneTitles.find(scene => scene.title.toLowerCase() === needle);
+      if (match === undefined) {
+        return;
+      }
+      value = match.num;
     }
     const triple = yncaCommand(stateId, value, this.writeMap ?? ID_MAP);
     if (triple) {

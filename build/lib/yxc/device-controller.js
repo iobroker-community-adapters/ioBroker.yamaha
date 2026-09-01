@@ -30,6 +30,7 @@ var import_push = require("./push");
 var import_util = require("../util");
 var import_poll_drop_detector = require("../lifecycle/poll-drop-detector");
 var import_zones = require("./zones");
+var import_scene_titles = require("../catalog/scene-titles");
 var import_surface = require("../browse/surface");
 var import_yxc_browse_driver = require("../browse/yxc-browse-driver");
 const KEEPALIVE_MS = 5 * 60 * 1e3;
@@ -224,7 +225,7 @@ class YxcDeviceController {
    * @param value the new value
    */
   handleStateChange(fullStateId, ack, value) {
-    var _a;
+    var _a, _b;
     if (ack) {
       return;
     }
@@ -236,6 +237,14 @@ class YxcDeviceController {
     if (stateId.startsWith("player.browse.")) {
       (_a = this.browseEngine) == null ? void 0 : _a.handleWrite(stateId, value);
       return;
+    }
+    const sceneMatch = /^(?:multiroom\.(zone[234])\.)?scene\.recall$/.exec(stateId);
+    if (sceneMatch && typeof value === "string" && !/^\d+$/.test(value.trim())) {
+      const resolved = (0, import_scene_titles.resolveSceneNumber)(value, this.deps.probeMemory, (_b = sceneMatch[1]) != null ? _b : "main");
+      if (resolved === void 0) {
+        return;
+      }
+      value = resolved;
     }
     if (stateId === "multiroom.group.leave") {
       void this.leaveGroup();
