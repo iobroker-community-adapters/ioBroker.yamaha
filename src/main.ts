@@ -68,6 +68,13 @@ export class Yamaha extends utils.Adapter {
   private readonly supervisorById = new Map<string, DeviceSupervisor>();
   private readonly deviceConnected = new Map<string, boolean>();
   private pushReceiver: YxcPushReceiver | undefined;
+  /**
+   * Set the moment teardown begins: a connect attempt still in flight then resolves into
+   * a closing adapter and must not arm keepalives/timers any more — the framework would
+   * refuse them anyway, but with a warn line per attempt ("setInterval called, but
+   * adapter is shutting down", seen live on the 1.7.0 upgrade restart).
+   */
+  private unloading = false;
   /** Device-manager backend: the receivers as cards with add/edit/delete. */
   private readonly deviceManagement: YamahaDeviceManagement;
   /**
@@ -673,12 +680,15 @@ export class Yamaha extends utils.Adapter {
       },
       onDeviceName: name => void this.updateDeviceLabel(device.id, name, LABEL_RANK.deviceName),
       timers: {
-        schedule: (handler, ms) => this.setTimeout(handler, ms),
+        schedule: (handler, ms) => (this.unloading ? undefined : this.setTimeout(handler, ms)),
         cancel: handle => this.clearTimeout(handle),
       },
       registerPush: (ip, onPush) => pushReceiver.register(ip, onPush),
       pushActive: () => pushReceiver.isListening(),
       scheduleKeepalive: (handler, ms) => {
+        if (this.unloading) {
+          return () => {};
+        }
         const timer = this.setInterval(handler, ms);
         return () => {
           if (timer) {
@@ -718,6 +728,7 @@ export class Yamaha extends utils.Adapter {
    */
   private onUnload(callback: () => void): void {
     try {
+      this.unloading = true;
       this.clearTimeout(this.balanceTimer);
       this.pushReceiver?.close();
       for (const supervisor of this.supervisors) {

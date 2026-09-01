@@ -65,6 +65,13 @@ class Yamaha extends utils.Adapter {
   supervisorById = /* @__PURE__ */ new Map();
   deviceConnected = /* @__PURE__ */ new Map();
   pushReceiver;
+  /**
+   * Set the moment teardown begins: a connect attempt still in flight then resolves into
+   * a closing adapter and must not arm keepalives/timers any more — the framework would
+   * refuse them anyway, but with a warn line per attempt ("setInterval called, but
+   * adapter is shutting down", seen live on the 1.7.0 upgrade restart).
+   */
+  unloading = false;
   /** Device-manager backend: the receivers as cards with add/edit/delete. */
   deviceManagement;
   /**
@@ -584,12 +591,16 @@ class Yamaha extends utils.Adapter {
       },
       onDeviceName: (name) => void this.updateDeviceLabel(device.id, name, import_pure_helpers.LABEL_RANK.deviceName),
       timers: {
-        schedule: (handler, ms) => this.setTimeout(handler, ms),
+        schedule: (handler, ms) => this.unloading ? void 0 : this.setTimeout(handler, ms),
         cancel: (handle) => this.clearTimeout(handle)
       },
       registerPush: (ip, onPush) => pushReceiver.register(ip, onPush),
       pushActive: () => pushReceiver.isListening(),
       scheduleKeepalive: (handler, ms) => {
+        if (this.unloading) {
+          return () => {
+          };
+        }
         const timer = this.setInterval(handler, ms);
         return () => {
           if (timer) {
@@ -626,6 +637,7 @@ class Yamaha extends utils.Adapter {
   onUnload(callback) {
     var _a;
     try {
+      this.unloading = true;
       this.clearTimeout(this.balanceTimer);
       (_a = this.pushReceiver) == null ? void 0 : _a.close();
       for (const supervisor of this.supervisors) {
