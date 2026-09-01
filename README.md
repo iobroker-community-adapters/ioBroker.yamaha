@@ -103,7 +103,7 @@ On the very first contact the adapter asks the receiver which functions it suppo
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 2.0.3 (2026-09-01)
 
 - (krobipd) Fixed: the update cleanup now removes every never-filled leftover datapoint — a history recording setting no longer shields it, because nothing was ever recorded there and nothing is lost
 
@@ -140,11 +140,6 @@ On the very first contact the adapter asks the receiver which functions it suppo
 - (krobipd) New: the receiver's IP address is shown as a datapoint, so diagnosis and the device's own web pages are one click away
 - (krobipd) Improved: restarts are fast — the adapter remembers what each device can do, brings it online in seconds and refreshes values in the background; only the first contact asks everything
 - (krobipd) Improved: known devices no longer wait for the network search at startup — it runs in the background and only adds newcomers
-
-### 1.6.0 (2026-08-27)
-
-- (krobipd) New: three states show how many receivers are set up, how many are connected right now and whether that is all of them — one line to watch instead of every device
-- (krobipd) Fixed: a receiver kept showing as connected while the adapter was stopped, and after a crash it stayed that way until it answered again — both now show the truth
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 

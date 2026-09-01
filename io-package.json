@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "2.0.2",
+    "version": "2.0.3",
     "news": {
+      "2.0.3": {
+        "en": "The update cleanup now removes every never-filled leftover datapoint — a history recording setting no longer shields it, because nothing was ever recorded there and nothing is lost",
+        "de": "Das Update-Aufräumen entfernt jetzt jeden nie befüllten Alt-Datenpunkt — eine Verlaufs-Aufzeichnungseinstellung schützt ihn nicht mehr, denn dort wurde nie etwas aufgezeichnet",
+        "ru": "Очистка при обновлении теперь удаляет каждую незаполненную устаревшую точку данных — настройка записи истории больше не защищает её, ведь туда никогда ничего не записывалось",
+        "pt": "A limpeza de atualização agora remove todos os pontos de dados antigos nunca preenchidos — uma configuração de gravação de histórico não os protege mais, pois nada foi gravado lá",
+        "nl": "De update-opschoning verwijdert nu elk nooit gevuld achtergebleven datapunt — een instelling voor historie-opname beschermt het niet meer, want er is daar nooit iets opgenomen",
+        "fr": "Le nettoyage de mise à jour supprime désormais chaque point de données jamais rempli — un réglage d'enregistrement d'historique ne le protège plus, car rien n'y a jamais été enregistré",
+        "it": "La pulizia dell'aggiornamento ora rimuove ogni datapoint residuo mai riempito — un'impostazione di registrazione della cronologia non lo protegge più, lì non è mai stato registrato nulla",
+        "es": "La limpieza de actualización ahora elimina cada punto de datos antiguo nunca llenado — un ajuste de grabación de historial ya no lo protege, pues allí nunca se grabó nada",
+        "pl": "Czyszczenie przy aktualizacji usuwa teraz każdy nigdy niewypełniony stary punkt danych — ustawienie zapisu historii już go nie chroni, bo nic tam nigdy nie zapisano",
+        "uk": "Очищення під час оновлення тепер видаляє кожну ніколи не заповнену застарілу точку даних — налаштування запису історії більше не захищає її, адже туди ніколи нічого не записувалось",
+        "zh-cn": "更新清理现在会删除每个从未填充过的遗留数据点——历史记录设置不再保护它，因为那里从未记录过任何数据，不会有任何损失"
+      },
       "2.0.2": {
         "en": "Bug fix: a restart while the receiver stands by no longer forgets abilities the device proved while awake — the remembered capability map only ever grows for the same device and firmware",
         "de": "Fehlerbereinigung: Ein Neustart bei Receiver im Bereitschaftszustand vergisst keine wach nachgewiesenen Fähigkeiten mehr — der gemerkte Fähigkeits-Stand wächst je Gerät und Firmware nur noch",
@@ -80,19 +93,6 @@
         "pl": "Poprawiono: przeglądanie menu w amplitunerach udostępniających je starym protokołem XML (#613)\nPoprawiono: pozbawione zasilania urządzenie MusicCast jest zgłaszane jako offline, a nie nadal połączone\nPo włączeniu lub wyłączeniu grupy punktów danych widzisz teraz, ile punktów przybyło lub zniknęło\nNowość: opcjonalne raportowanie błędów przez Sentry, bez danych osobowych",
         "uk": "Виправлено: навігація меню на ресиверах, які надають меню старим протоколом XML (#613)\nВиправлено: знеструмлений пристрій MusicCast повідомляється як офлайн, а не як підключений\nПісля вмикання чи вимикання групи точок даних тепер видно, скільки точок з'явилося або зникло\nНове: необов'язкові звіти про помилки через Sentry, без персональних даних",
         "zh-cn": "修复：可通过旧版 XML 协议提供菜单的功放现在可以浏览菜单 (#613)\n修复：断电的 MusicCast 设备会报告为离线，而不再显示为已连接\n开启或关闭数据点分组后，现在可以看到新增或消失了多少数据点\n新增：可选的 Sentry 错误报告，不传输个人数据"
-      },
-      "1.4.0": {
-        "en": "Commands sent in one go all arrive, favourites land in the zone that is listening, special characters work again, and startup and reconnects are noticeably faster.",
-        "de": "Mehrere Befehle auf einmal kommen alle an, Favoriten landen in der hörenden Zone, Sonderzeichen funktionieren wieder, und Start und Neuverbindung sind spürbar schneller.",
-        "ru": "Команды, отправленные подряд, доходят все; избранное попадает в слушающую зону; спецсимволы снова работают; запуск и переподключение заметно быстрее.",
-        "pt": "Comandos enviados de uma vez chegam todos, os favoritos vão para a zona que está a ouvir, os caracteres especiais voltam a funcionar e o arranque e a reconexão são bem mais rápidos.",
-        "nl": "Meerdere commando's tegelijk komen allemaal aan, favorieten belanden in de luisterende zone, speciale tekens werken weer, en opstarten en opnieuw verbinden gaan merkbaar sneller.",
-        "fr": "Les commandes envoyées d'un coup arrivent toutes, les favoris vont dans la zone qui écoute, les caractères spéciaux fonctionnent de nouveau, et le démarrage est nettement plus rapide.",
-        "it": "I comandi inviati insieme arrivano tutti, i preferiti finiscono nella zona in ascolto, i caratteri speciali funzionano di nuovo e avvio e riconnessione sono molto più rapidi.",
-        "es": "Los comandos enviados a la vez llegan todos, los favoritos van a la zona que está escuchando, los caracteres especiales vuelven a funcionar y el arranque y la reconexión son mucho más rápidos.",
-        "pl": "Komendy wysłane naraz docierają wszystkie, ulubione trafiają do słuchającej strefy, znaki specjalne znów działają, a start i ponowne łączenie są wyraźnie szybsze.",
-        "uk": "Команди, надіслані разом, доходять усі, обране потрапляє в зону, що слухає, спецсимволи знову працюють, а запуск і перепідключення помітно швидші.",
-        "zh-cn": "一次发送的多条指令全部送达，收藏会进入正在收听的分区，特殊字符恢复正常，启动与重连明显更快。"
       }
     },
     "titleLang": {
