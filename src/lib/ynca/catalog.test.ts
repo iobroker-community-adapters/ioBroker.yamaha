@@ -206,23 +206,26 @@ describe("YNCA catalog", () => {
     });
   });
 
-  test("the DAB tuner is catalogued as its own DAB subunit under a dab channel", () => {
+  test("the DAB subunit's FM half lands on the flat tuner ids; only DAB detail keeps tuner.dab (v2.0.0)", () => {
     const cat = buildYncaCatalog();
-    expect(cat.find(e => e.id === "tuner.dab.band")).toMatchObject({ subunit: "DAB", func: "BAND" });
-    expect(cat.find(e => e.id === "tuner.dab.band")?.spec.kind).toBe("enum");
+    // The band state says which band the flat values describe — same id as TUN's band.
+    expect(cat.find(e => e.id === "tuner.band" && e.subunit === "DAB")).toMatchObject({ func: "BAND" });
+    expect(cat.find(e => e.id === "tuner.band" && e.subunit === "DAB")?.spec.kind).toBe("enum");
+    // Genuinely DAB-specific detail stays under tuner.dab.
     expect(cat.find(e => e.id === "tuner.dab.serviceLabel")).toMatchObject({
       subunit: "DAB",
       func: "DABSERVICELABEL",
       write: false,
     });
     expect(cat.find(e => e.id === "tuner.dab.dls")?.spec).toEqual({ kind: "text" });
-    // MHz, not kHz: every device fixture reports "FMFREQ=98.10"-style megahertz values.
-    expect(cat.find(e => e.id === "tuner.dab.fmFrequency")?.spec).toMatchObject({
-      kind: "number",
-      unit: "MHz",
-      decimals: 2,
-    });
-    expect(cat.find(e => e.id === "tuner.dab.fmSearchMode")?.spec.kind).toBe("enum");
+    // The FM frequency reads into the ONE unified kHz state — the MHz wire value is
+    // converted on decode, the band-dependent write is controller-routed.
+    const dabFreq = cat.find(e => e.id === "tuner.frequency" && e.subunit === "DAB");
+    expect(dabFreq).toMatchObject({ func: "FMFREQ", write: true });
+    expect(dabFreq?.spec).toMatchObject({ kind: "number", unit: "kHz", decimals: 0 });
+    expect(cat.find(e => e.id === "tuner.searchMode" && e.subunit === "DAB")?.spec.kind).toBe("enum");
+    // The pre-2.0.0 dab.* FM aliases are gone.
+    expect(cat.some(e => e.id.startsWith("tuner.dab.fm"))).toBe(false);
   });
 
   test("the init sweep asks each function once per subunit", () => {
@@ -326,9 +329,19 @@ describe("YNCA catalog", () => {
     // Max volume steps in 5 dB — except the literal ceiling 16.5, which is valid as-is.
     expect(yncaCommand("advanced.maxVolume", -20, map)).toEqual({ subunit: "MAIN", func: "MAXVOL", value: "-20.0" });
     expect(yncaCommand("advanced.maxVolume", 16.5, map)).toEqual({ subunit: "MAIN", func: "MAXVOL", value: "16.5" });
-    // FM frequency is MHz with two fixed decimals; AM stays a whole kHz count.
-    expect(yncaCommand("tuner.fmFrequency", 98.1, map)).toEqual({ subunit: "TUN", func: "FMFREQ", value: "98.10" });
-    expect(yncaCommand("tuner.amFrequency", 1440, map)).toEqual({ subunit: "TUN", func: "AMFREQ", value: "1440" });
+    // The unified tuner.frequency write (v2.0.0) is band-routed by the controller
+    // (AMFREQ whole kHz / FMFREQ MHz with two decimals) BEFORE this generic path —
+    // its wire formats are asserted in the device-controller tests. Reads convert
+    // both wire forms into the ONE kHz state:
+    const funcs = funcToEntry(buildYncaCatalog());
+    expect(yncaStateUpdate({ subunit: "TUN", func: "FMFREQ", value: "98.10" }, funcs)).toEqual({
+      id: "tuner.frequency",
+      value: 98100,
+    });
+    expect(yncaStateUpdate({ subunit: "TUN", func: "AMFREQ", value: "1440" }, funcs)).toEqual({
+      id: "tuner.frequency",
+      value: 1440,
+    });
     // Lip-sync offsets are whole milliseconds.
     expect(yncaCommand("lipSync.hdmiOut1", 12.6, map)).toEqual({
       subunit: "MAIN",
@@ -341,17 +354,31 @@ describe("YNCA catalog", () => {
 
   test("the stored-station surface (#613): tuner preset read/write, up/down, source recall", () => {
     const map = idToEntry(buildYncaCatalog());
-    // Recall by number goes out as a bare integer; up/down as the wire words.
-    expect(yncaCommand("tuner.preset", 7, map)).toEqual({ subunit: "TUN", func: "PRESET", value: "7" });
+    // Recall by number goes out as a bare integer on the device's own tuner subunit —
+    // the per-device write map picks TUN here (a DAB device is controller-routed).
+    const tunOnly: YncaCapabilities = { model: "RX-V473", subunits: { TUN: { PRESET: "1" } } };
+    expect(yncaCommand("tuner.preset", 7, idToEntry(presentYncaEntries(tunOnly)))).toEqual({
+      subunit: "TUN",
+      func: "PRESET",
+      value: "7",
+    });
     expect(yncaCommand("tuner.presetUp", true, map)).toEqual({ subunit: "TUN", func: "PRESET", value: "Up" });
     expect(yncaCommand("tuner.presetDown", true, map)).toEqual({ subunit: "TUN", func: "PRESET", value: "Down" });
     // Favourite recall exists on the preset-capable sources only (ynca spec mixins).
     expect(yncaCommand("player.netRadio.preset", 3, map)).toEqual({ subunit: "NETRADIO", func: "PRESET", value: "3" });
     expect(yncaCommand("player.usb.preset", 12, map)).toEqual({ subunit: "USB", func: "PRESET", value: "12" });
     expect(yncaCommand("player.spotify.preset", 3, map)).toBeUndefined();
-    // DAB presets are writable recalls too.
-    expect(yncaCommand("tuner.dab.preset", 2, map)).toEqual({ subunit: "DAB", func: "DABPRESET", value: "2" });
-    expect(yncaCommand("tuner.dab.fmPreset", 4, map)).toEqual({ subunit: "DAB", func: "FMPRESET", value: "4" });
+    // DAB recalls live on the SAME unified tuner.preset id (v2.0.0) — DABPRESET and
+    // FMPRESET are both writable; the band-dependent pick is controller-routed.
+    const cat = buildYncaCatalog();
+    expect(cat.find(e => e.subunit === "DAB" && e.func === "DABPRESET")).toMatchObject({
+      id: "tuner.preset",
+      write: true,
+    });
+    expect(cat.find(e => e.subunit === "DAB" && e.func === "FMPRESET")).toMatchObject({
+      id: "tuner.preset",
+      write: true,
+    });
   });
 
   test("a reported preset lands as its number; the 'No Preset' sentinel becomes 0", () => {
@@ -364,9 +391,14 @@ describe("YNCA catalog", () => {
       id: "tuner.preset",
       value: 0,
     });
+    // The DAB subunit's presets report into the SAME unified id (v2.0.0).
     expect(yncaStateUpdate({ subunit: "DAB", func: "DABPRESET", value: "No Preset" }, map)).toEqual({
-      id: "tuner.dab.preset",
+      id: "tuner.preset",
       value: 0,
+    });
+    expect(yncaStateUpdate({ subunit: "DAB", func: "FMPRESET", value: "4" }, map)).toEqual({
+      id: "tuner.preset",
+      value: 4,
     });
   });
 

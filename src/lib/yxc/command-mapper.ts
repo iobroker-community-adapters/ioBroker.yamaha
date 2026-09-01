@@ -295,9 +295,9 @@ export const DAB_FIELDS: Array<{ field: string; id: string; type: "string" | "nu
   { field: "ch_label", id: "tuner.dab.channelLabel", type: "string", name: "Channel label" },
   { field: "dls", id: "tuner.dab.dls", type: "string", name: "DLS text" },
   { field: "program_type", id: "tuner.dab.programType", type: "string", name: "Programme type" },
-  { field: "preset", id: "tuner.dab.preset", type: "number", name: "DAB preset" },
+  // preset and audio_mode are NOT listed here: the active-band parse feeds the
+  // unified flat tuner.preset / tuner.audioMode states (v2.0.0).
   { field: "status", id: "tuner.dab.status", type: "string", name: "DAB status" },
-  { field: "audio_mode", id: "tuner.dab.audioMode", type: "string", name: "Audio mode" },
   { field: "bit_rate", id: "tuner.dab.bitRate", type: "number", name: "Bit rate" },
   { field: "quality", id: "tuner.dab.quality", type: "number", name: "Signal quality" },
   { field: "off_air", id: "tuner.dab.offAir", type: "boolean", name: "Off air" },

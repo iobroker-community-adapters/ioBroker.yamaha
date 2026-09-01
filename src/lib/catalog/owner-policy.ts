@@ -19,8 +19,6 @@ const OWNER_OVERRIDES: Record<string, readonly Transport[]> = {
   volume: ["ynca", "xml", "yxc"],
   // §3c write loss — YXC is read-only for these, YNCA (and often XML) is writable.
   "advanced.maxVolume": ["ynca", "xml", "yxc"],
-  // The DAB preset is a writable recall on YNCA but display-only in the YXC play info.
-  "tuner.dab.preset": ["ynca", "yxc"],
   "sound.extraBass": ["ynca", "xml", "yxc"],
   "sound.adaptiveDrc": ["ynca", "xml", "yxc"],
   "sound.surroundDecoder": ["ynca", "yxc"],

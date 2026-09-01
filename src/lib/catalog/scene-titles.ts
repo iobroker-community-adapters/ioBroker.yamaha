@@ -67,7 +67,11 @@ export function knownScenes(memory: ProbeMemory | undefined, zoneKey: string): S
  * @param zoneKey the zone (`main`, `zone2`, …)
  * @returns the scene number, or undefined when unresolvable
  */
-export function resolveSceneNumber(value: unknown, memory: ProbeMemory | undefined, zoneKey: string): number | undefined {
+export function resolveSceneNumber(
+  value: unknown,
+  memory: ProbeMemory | undefined,
+  zoneKey: string,
+): number | undefined {
   if (typeof value === "number" && Number.isFinite(value)) {
     return Math.round(value);
   }
@@ -91,10 +95,7 @@ export function resolveSceneNumber(value: unknown, memory: ProbeMemory | undefin
  * @param zoneKey the zone
  * @returns the states map, or undefined
  */
-export function sceneStatesMap(
-  memory: ProbeMemory | undefined,
-  zoneKey: string,
-): Record<string, string> | undefined {
+export function sceneStatesMap(memory: ProbeMemory | undefined, zoneKey: string): Record<string, string> | undefined {
   const scenes = knownScenes(memory, zoneKey);
   if (scenes.length === 0) {
     return undefined;

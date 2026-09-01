@@ -21,6 +21,7 @@ __export(device_controller_exports, {
   YncaDeviceController: () => YncaDeviceController
 });
 module.exports = __toCommonJS(device_controller_exports);
+var import_value_coerce = require("./catalog/value-coerce");
 var import_catalog = require("./ynca/catalog");
 var import_surface = require("./browse/surface");
 var import_ynca_browse_driver = require("./browse/ynca-browse-driver");
@@ -54,6 +55,10 @@ class YncaDeviceController {
   writeMap;
   /** The device's scene titles (SCENExNAME), for the recall dropdown, the list state and title writes. */
   sceneTitles = [];
+  /** The tuner's current band (AM/FM/DAB), for the band-dependent frequency/preset writes. */
+  tunerBand = "";
+  /** Whether the device carries the DAB subunit (its FM half shares the flat tuner ids). */
+  hasDab = false;
   /**
    * Connect, sweep the device from the catalog, and create its object tree; wire
    * up push updates. The catalog is the single source: it drives the sweep, the
@@ -62,7 +67,7 @@ class YncaDeviceController {
    * @returns true if the device reported capabilities and its tree was created
    */
   async start() {
-    var _a, _b, _c;
+    var _a, _b, _c, _d, _e, _f, _g;
     await this.deps.client.connect();
     const catalog = this.deps.isEntryEnabled ? import_catalog.YNCA_CATALOG.filter((entry) => this.deps.isEntryEnabled(entry.id)) : import_catalog.YNCA_CATALOG;
     const resolved = await this.resolveCapabilities(catalog);
@@ -110,10 +115,15 @@ class YncaDeviceController {
         }
       }
     }
+    this.hasDab = capabilities.subunits.DAB !== void 0;
+    this.tunerBand = ((_g = (_f = (_d = capabilities.subunits.DAB) == null ? void 0 : _d.BAND) != null ? _f : (_e = capabilities.subunits.TUN) == null ? void 0 : _e.BAND) != null ? _g : "").toUpperCase();
     await this.setupBrowse(capabilities);
     this.deps.client.onMessage((message) => {
       var _a2;
       (_a2 = this.browseDriver) == null ? void 0 : _a2.handleMessage(message);
+      if (message.func === "BAND" && (message.subunit === "TUN" || message.subunit === "DAB")) {
+        this.tunerBand = message.value.toUpperCase();
+      }
       const update = (0, import_catalog.yncaStateUpdate)(message, FUNC_MAP);
       if (update) {
         this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
@@ -305,10 +315,54 @@ class YncaDeviceController {
       }
       value = match.num;
     }
+    if (this.handleTunerWrite(stateId, value)) {
+      return;
+    }
     const triple = (0, import_catalog.yncaCommand)(stateId, value, (_b = this.writeMap) != null ? _b : ID_MAP);
     if (triple) {
       this.deps.client.send(triple.subunit, triple.func, triple.value);
     }
+  }
+  /**
+   * Route the band-dependent tuner writes (v2.0.0 unification): ONE frequency state
+   * in kHz and ONE preset state, sent to the wire function of the ACTIVE band —
+   * AM/FM on the classic TUN subunit, FM/DAB on the DAB subunit (whose FM half
+   * shares the flat ids). A DAB frequency write is dropped: DAB tunes by service,
+   * the device has no frequency command there.
+   *
+   * @param stateId the state id relative to the device
+   * @param value the written value
+   * @returns true when the id was a band-routed tuner write (handled here)
+   */
+  handleTunerWrite(stateId, value) {
+    if (stateId === "tuner.frequency") {
+      const khz = Number(value);
+      if (!Number.isFinite(khz)) {
+        return true;
+      }
+      if (this.hasDab) {
+        if (this.tunerBand === "FM") {
+          this.deps.client.send("DAB", "FMFREQ", (0, import_value_coerce.formatWireNumber)(khz / 1e3, 2));
+        } else {
+          this.deps.log.debug(`${this.deviceId}: DAB tunes by service \u2014 frequency write ignored`);
+        }
+        return true;
+      }
+      if (this.tunerBand === "AM") {
+        this.deps.client.send("TUN", "AMFREQ", String(Math.round(khz)));
+      } else {
+        this.deps.client.send("TUN", "FMFREQ", (0, import_value_coerce.formatWireNumber)(khz / 1e3, 2));
+      }
+      return true;
+    }
+    if (stateId === "tuner.preset" && this.hasDab) {
+      const slot = Math.round(Number(value));
+      if (Number.isFinite(slot) && slot >= 1) {
+        this.deps.client.send("DAB", this.tunerBand === "DAB" ? "DABPRESET" : "FMPRESET", String(slot));
+      }
+      return true;
+    }
+    return false;
   }
   /**
    * Create the browsing surface (#613) when the device reports a browsable media

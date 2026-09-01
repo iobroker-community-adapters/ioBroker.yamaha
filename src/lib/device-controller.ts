@@ -1,4 +1,5 @@
 import type { YncaCapabilities } from "./ynca/capability";
+import { formatWireNumber } from "./catalog/value-coerce";
 import type { ObjectDef } from "./catalog/types";
 import type { ConnectionHandle, ControllerLog } from "./controller";
 import {
@@ -151,6 +152,10 @@ export class YncaDeviceController implements ConnectionHandle {
   private writeMap: Map<string, YncaEntry> | undefined;
   /** The device's scene titles (SCENExNAME), for the recall dropdown, the list state and title writes. */
   private sceneTitles: Array<{ num: number; title: string }> = [];
+  /** The tuner's current band (AM/FM/DAB), for the band-dependent frequency/preset writes. */
+  private tunerBand = "";
+  /** Whether the device carries the DAB subunit (its FM half shares the flat tuner ids). */
+  private hasDab = false;
 
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
@@ -227,11 +232,18 @@ export class YncaDeviceController implements ConnectionHandle {
         }
       }
     }
+    // The band decides which wire function a tuner.frequency/preset write goes to
+    // (v2.0.0 unification) — seeded from the sweep, kept fresh from the live pushes.
+    this.hasDab = capabilities.subunits.DAB !== undefined;
+    this.tunerBand = (capabilities.subunits.DAB?.BAND ?? capabilities.subunits.TUN?.BAND ?? "").toUpperCase();
     await this.setupBrowse(capabilities);
     this.deps.client.onMessage(message => {
       // The browse driver sees every line first: list lines (LINE1TXT…, LISTINFO
       // bursts, auto-feedback) are not catalogued and would otherwise be dropped.
       this.browseDriver?.handleMessage(message);
+      if (message.func === "BAND" && (message.subunit === "TUN" || message.subunit === "DAB")) {
+        this.tunerBand = message.value.toUpperCase();
+      }
       const update = yncaStateUpdate(message, FUNC_MAP);
       if (update) {
         this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
@@ -445,10 +457,57 @@ export class YncaDeviceController implements ConnectionHandle {
       }
       value = match.num;
     }
+    // The unified tuner writes are band-dependent (v2.0.0) and routed here, BEFORE the
+    // generic path — one state, the right wire function for the active band.
+    if (this.handleTunerWrite(stateId, value)) {
+      return;
+    }
     const triple = yncaCommand(stateId, value, this.writeMap ?? ID_MAP);
     if (triple) {
       this.deps.client.send(triple.subunit, triple.func, triple.value);
     }
+  }
+
+  /**
+   * Route the band-dependent tuner writes (v2.0.0 unification): ONE frequency state
+   * in kHz and ONE preset state, sent to the wire function of the ACTIVE band —
+   * AM/FM on the classic TUN subunit, FM/DAB on the DAB subunit (whose FM half
+   * shares the flat ids). A DAB frequency write is dropped: DAB tunes by service,
+   * the device has no frequency command there.
+   *
+   * @param stateId the state id relative to the device
+   * @param value the written value
+   * @returns true when the id was a band-routed tuner write (handled here)
+   */
+  private handleTunerWrite(stateId: string, value: unknown): boolean {
+    if (stateId === "tuner.frequency") {
+      const khz = Number(value);
+      if (!Number.isFinite(khz)) {
+        return true;
+      }
+      if (this.hasDab) {
+        if (this.tunerBand === "FM") {
+          this.deps.client.send("DAB", "FMFREQ", formatWireNumber(khz / 1000, 2));
+        } else {
+          this.deps.log.debug(`${this.deviceId}: DAB tunes by service — frequency write ignored`);
+        }
+        return true;
+      }
+      if (this.tunerBand === "AM") {
+        this.deps.client.send("TUN", "AMFREQ", String(Math.round(khz)));
+      } else {
+        this.deps.client.send("TUN", "FMFREQ", formatWireNumber(khz / 1000, 2));
+      }
+      return true;
+    }
+    if (stateId === "tuner.preset" && this.hasDab) {
+      const slot = Math.round(Number(value));
+      if (Number.isFinite(slot) && slot >= 1) {
+        this.deps.client.send("DAB", this.tunerBand === "DAB" ? "DABPRESET" : "FMPRESET", String(slot));
+      }
+      return true;
+    }
+    return false;
   }
 
   /**

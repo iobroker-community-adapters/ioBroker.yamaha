@@ -582,13 +582,17 @@ const GLOBAL_FUNCS = [
     write: false,
     role: "text"
   },
+  // ONE tuner frequency (v2.0.0), unified to kHz — the MusicCast convention, so the
+  // same state means the same thing on every generation. Both wire functions read
+  // into it (AM answers whole kHz, FM answers MHz with two decimals → ×1000). The
+  // WRITE is band-dependent (AMFREQ vs FMFREQ vs the DAB subunit's FMFREQ) and is
+  // routed by the controller BEFORE the generic write path — handleStateChange
+  // intercepts tuner.frequency, so these entries' write flag only shapes the object.
   {
     subunit: "TUN",
     func: "AMFREQ",
-    state: "tuner.amFrequency",
-    name: "AM frequency",
-    // Whole kHz only; no step snap — the AM raster is 9 kHz in Europe, 10 kHz in the
-    // Americas, and the receiver aligns the value itself.
+    state: "tuner.frequency",
+    name: "Frequency",
     spec: { kind: "number", unit: "kHz", decimals: 0 },
     write: true,
     role: "level"
@@ -596,13 +600,12 @@ const GLOBAL_FUNCS = [
   {
     subunit: "TUN",
     func: "FMFREQ",
-    state: "tuner.fmFrequency",
-    name: "FM frequency",
-    // The wire speaks MHz with two fixed decimals ("FMFREQ=98.10" in every device
-    // fixture) — the earlier kHz label was wrong. No step snap: rasters vary by region.
-    spec: { kind: "number", unit: "MHz", decimals: 2 },
+    state: "tuner.frequency",
+    name: "Frequency",
+    spec: { kind: "number", unit: "kHz", decimals: 0 },
     write: true,
-    role: "level"
+    role: "level",
+    wireDecode: (wire) => String(Math.round(Number.parseFloat(wire) * 1e3))
   },
   {
     subunit: "TUN",
@@ -827,10 +830,16 @@ const INPUT_NAME_KEYS = [
   "vaux"
 ];
 const DAB_FUNCS = [
+  // v2.0.0 tuner unification: the DAB subunit's FM half IS the same tuner every
+  // non-DAB device carries flat under tuner.* — so band, preset, frequency, search
+  // mode, RDS and the signal flags map onto the SAME flat ids (tuner.band says
+  // which band the values describe). Only genuinely DAB-specific detail stays
+  // under tuner.dab. Band-dependent writes (frequency, preset) are routed by the
+  // controller before the generic write path.
   {
     func: "BAND",
-    state: "dab.band",
-    name: "DAB band",
+    state: "band",
+    name: "Band",
     spec: { kind: "enum", states: DAB_BAND_STATES },
     write: true,
     role: "state"
@@ -862,8 +871,8 @@ const DAB_FUNCS = [
   },
   {
     func: "DABPRESET",
-    state: "dab.preset",
-    name: "DAB preset (recall by number)",
+    state: "preset",
+    name: "Preset (recall by number)",
     spec: { kind: "number", min: 0, max: 40, step: 1, decimals: 0 },
     write: true,
     role: "level",
@@ -879,8 +888,8 @@ const DAB_FUNCS = [
   },
   {
     func: "FMPRESET",
-    state: "dab.fmPreset",
-    name: "FM preset (recall by number)",
+    state: "preset",
+    name: "Preset (recall by number)",
     spec: { kind: "number", min: 0, max: 40, step: 1, decimals: 0 },
     write: true,
     role: "level",
@@ -888,44 +897,46 @@ const DAB_FUNCS = [
   },
   {
     func: "FMRDSPRGSERVICE",
-    state: "dab.fmRdsService",
-    name: "FM RDS station",
+    state: "rdsService",
+    name: "RDS station",
     spec: { kind: "text" },
     write: false,
     role: "text"
   },
   {
     func: "FMRDSPRGTYPE",
-    state: "dab.fmRdsProgramType",
-    name: "FM RDS program type",
+    state: "rdsProgramType",
+    name: "RDS program type",
     spec: { kind: "text" },
     write: false,
     role: "text"
   },
-  { func: "FMRDSTXT", state: "dab.fmRdsText", name: "FM RDS text", spec: { kind: "text" }, write: false, role: "text" },
+  { func: "FMRDSTXT", state: "rdsText", name: "RDS text", spec: { kind: "text" }, write: false, role: "text" },
   {
     func: "FMSEARCHMODE",
-    state: "dab.fmSearchMode",
-    name: "FM search mode",
+    state: "searchMode",
+    name: "Search mode",
     spec: { kind: "enum", states: TUN_SEARCHMODE_STATES },
     write: true,
     role: "state"
   },
   {
     func: "FMFREQ",
-    state: "dab.fmFrequency",
-    name: "FM frequency",
-    // Same wire form as the TUN FMFREQ above: MHz, two fixed decimals.
-    spec: { kind: "number", unit: "MHz", decimals: 2 },
+    state: "frequency",
+    name: "Frequency",
+    // Same wire form as the TUN FMFREQ above (MHz, two decimals) — read into the
+    // unified kHz state; the controller routes the band-dependent write.
+    spec: { kind: "number", unit: "kHz", decimals: 0 },
     write: true,
-    role: "level"
+    role: "level",
+    wireDecode: (wire) => String(Math.round(Number.parseFloat(wire) * 1e3))
   },
   // DAB/FM detail answered by the RX-V6A full sweep (2026-09-01) — read-only status.
-  // The dab.audioMode/bitRate/offAir ids are shared with the YXC DAB block, so both
-  // transports feed one node.
+  // audioMode goes to the flat tuner state (band-scoped like frequency); bitRate and
+  // offAir share their tuner.dab ids with the YXC DAB block, so both feed one node.
   {
     func: "DABAUDIOMODE",
-    state: "dab.audioMode",
+    state: "audioMode",
     name: "Audio mode",
     spec: { kind: "text" },
     write: false,
@@ -957,24 +968,24 @@ const DAB_FUNCS = [
   },
   {
     func: "FMRDSCLOCK",
-    state: "dab.fmRdsClock",
-    name: "FM RDS clock",
+    state: "rdsClock",
+    name: "RDS clock",
     spec: { kind: "text" },
     write: false,
     role: "text"
   },
   {
     func: "FMSIGSTEREOMONO",
-    state: "dab.fmStereo",
-    name: "FM stereo reception",
+    state: "stereo",
+    name: "Stereo reception",
     spec: { kind: "onoff", on: "Assert", off: "Negate" },
     write: false,
     role: "indicator"
   },
   {
     func: "FMTUNED",
-    state: "dab.fmTuned",
-    name: "FM tuned to a station",
+    state: "tuned",
+    name: "Tuned to a station",
     spec: { kind: "onoff", on: "Assert", off: "Negate" },
     write: false,
     role: "indicator"

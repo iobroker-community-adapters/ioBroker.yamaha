@@ -274,7 +274,14 @@ class XmlDeviceController {
       max: 40,
       step: 1
     });
-    await state("frequency", { name: "Frequency", type: "number", role: "value", read: true, write: false });
+    await state("frequency", {
+      name: "Frequency",
+      type: "number",
+      role: "value",
+      unit: "kHz",
+      read: true,
+      write: false
+    });
     await state("rdsService", { name: "RDS station", type: "string", role: "text", read: true, write: false });
     await state("rdsText", { name: "RDS text", type: "string", role: "text", read: true, write: false });
     await state("tuned", { name: "Tuned to a station", type: "boolean", role: "indicator", read: true, write: false });
@@ -292,7 +299,7 @@ class XmlDeviceController {
       this.emit("tuner.preset", info.preset);
     }
     if (info.frequency !== void 0) {
-      this.emit("tuner.frequency", info.frequency);
+      this.emit("tuner.frequency", Math.round(info.frequencyUnit === "MHz" ? info.frequency * 1e3 : info.frequency));
     }
     if (info.rdsService !== void 0) {
       this.emit("tuner.rdsService", info.rdsService);

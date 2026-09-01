@@ -522,3 +522,49 @@ describe("YncaDeviceController scenes v2.0.0 (titles in the dropdown, one list, 
     expect(s.client.sent).toEqual([]);
   });
 });
+
+describe("YncaDeviceController unified tuner v2.0.0 (band-routed writes)", () => {
+  async function tunerSetup(subunits: YncaCapabilities["subunits"]): Promise<{ controller: YncaDeviceController; client: FakeClient }> {
+    const client = new FakeClient();
+    client.capabilities = { model: "RX-V473", subunits };
+    const { deps } = makeDeps(client);
+    const controller = new YncaDeviceController("living", deps);
+    await controller.start();
+    client.sent.length = 0;
+    return { controller, client };
+  }
+
+  test("a frequency write goes to the active band's wire function on a classic TUN device", async () => {
+    const s = await tunerSetup({ MAIN: { PWR: "On" }, TUN: { BAND: "AM", AMFREQ: "1440" } });
+    // AM: whole kHz on AMFREQ.
+    s.controller.handleStateChange("living.tuner.frequency", false, 1440);
+    expect(s.client.sent).toEqual([{ subunit: "TUN", func: "AMFREQ", value: "1440" }]);
+    // The device switches to FM (pushed BAND update) — the SAME state now writes
+    // FMFREQ in the MHz wire form with two decimals (#612 format rule).
+    s.client.emit({ subunit: "TUN", func: "BAND", value: "FM" });
+    s.client.sent.length = 0;
+    s.controller.handleStateChange("living.tuner.frequency", false, 98100);
+    expect(s.client.sent).toEqual([{ subunit: "TUN", func: "FMFREQ", value: "98.10" }]);
+  });
+
+  test("on a DAB device the FM frequency writes DAB:FMFREQ; in DAB band the write is dropped", async () => {
+    const s = await tunerSetup({ MAIN: { PWR: "On" }, DAB: { BAND: "FM", FMFREQ: "98.10" } });
+    s.controller.handleStateChange("living.tuner.frequency", false, 98100);
+    expect(s.client.sent).toEqual([{ subunit: "DAB", func: "FMFREQ", value: "98.10" }]);
+    // DAB tunes by service — there is no frequency command to send.
+    s.client.emit({ subunit: "DAB", func: "BAND", value: "DAB" });
+    s.client.sent.length = 0;
+    s.controller.handleStateChange("living.tuner.frequency", false, 227360);
+    expect(s.client.sent).toEqual([]);
+  });
+
+  test("on a DAB device the preset recall picks DABPRESET or FMPRESET by the active band", async () => {
+    const s = await tunerSetup({ MAIN: { PWR: "On" }, DAB: { BAND: "DAB", DABPRESET: "No Preset" } });
+    s.controller.handleStateChange("living.tuner.preset", false, 5);
+    expect(s.client.sent).toEqual([{ subunit: "DAB", func: "DABPRESET", value: "5" }]);
+    s.client.emit({ subunit: "DAB", func: "BAND", value: "FM" });
+    s.client.sent.length = 0;
+    s.controller.handleStateChange("living.tuner.preset", false, 4);
+    expect(s.client.sent).toEqual([{ subunit: "DAB", func: "FMPRESET", value: "4" }]);
+  });
+});

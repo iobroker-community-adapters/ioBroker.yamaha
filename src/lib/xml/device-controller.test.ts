@@ -236,7 +236,8 @@ describe("XmlDeviceController", () => {
     await s.controller.start();
     expect(s.objects).toContain("living.tuner.preset");
     expect(s.acks).toContainEqual({ id: "living.tuner.preset", value: 3 });
-    expect(s.acks).toContainEqual({ id: "living.tuner.frequency", value: 98.1 });
+    // The wire reports FM in MHz; the unified state is kHz (v2.0.0).
+    expect(s.acks).toContainEqual({ id: "living.tuner.frequency", value: 98100 });
     expect(s.acks).toContainEqual({ id: "living.tuner.tuned", value: true });
     expect(s.acks).toContainEqual({ id: "living.tuner.rdsService", value: "Radio X" });
     s.client.calls.length = 0;
