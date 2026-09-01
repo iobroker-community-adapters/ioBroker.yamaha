@@ -130,6 +130,7 @@ class YxcDeviceController {
     for (const object of objects) {
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
     }
+    await this.setupSceneLists(capabilities);
     if (model) {
       this.emit("info.model", model);
     }
@@ -551,6 +552,59 @@ class YxcDeviceController {
     }
   }
   /**
+   * One scene.list JSON per scene-capable zone (v2.0.0): every recall slot the zone
+   * declares (getFeatures scene_num), titled from the shared per-device memory where
+   * another transport reported titles (XML Scene_Sel_Item / YNCA SCENExNAME). A
+   * MusicCast-only device has no title source and lists its slots with empty titles —
+   * the COUNT is what its getFeatures declares (review finding: the promised list was
+   * missing entirely on devices whose only transport is MusicCast).
+   *
+   * @param capabilities the device's parsed getFeatures capabilities
+   */
+  async setupSceneLists(capabilities) {
+    for (const zone of capabilities.zones) {
+      if (!zone.funcs.includes("scene") || zone.sceneNum === void 0 || zone.sceneNum <= 0) {
+        continue;
+      }
+      const titles = new Map((0, import_scene_titles.knownScenes)(this.deps.probeMemory, zone.id).map((scene) => [scene.num, scene.title]));
+      const list = Array.from({ length: zone.sceneNum }, (_unused, i) => {
+        var _a;
+        return {
+          num: i + 1,
+          title: (_a = titles.get(i + 1)) != null ? _a : ""
+        };
+      });
+      const id = `${(0, import_zones.zonePrefix)(zone.id)}scene.list`;
+      await this.deps.upsertObject(`${this.deviceId}.${id}`, {
+        id,
+        type: "state",
+        common: { name: "Scenes (number + title)", type: "string", role: "json", read: true, write: false }
+      });
+      this.emit(id, JSON.stringify(list));
+    }
+  }
+  /**
+   * Re-evaluate which source feeds a zone's player block after ITS input changed:
+   * clear the block when the zone left a media source, and fetch the joined source's
+   * play info right away so the block fills now, not at the next sweep.
+   *
+   * @param zone the zone whose input just changed
+   */
+  retargetZonePlayer(zone) {
+    const expected = this.playerBlockFor(this.lastZoneInput.get(zone));
+    const previous = this.zonePlayerBlock.get(zone);
+    if (previous === expected) {
+      return;
+    }
+    if (previous !== void 0) {
+      this.zonePlayerBlock.delete(zone);
+      this.emitPlayerUpdates(zone, import_command_mapper.PLAYER_CLEAR);
+    }
+    if (expected !== void 0) {
+      void this.refreshMediaSource(expected);
+    }
+  }
+  /**
    * Emit flat player updates into one zone's block (main flat, zones prefixed),
    * skipping the device-global drive extras.
    *
@@ -635,7 +689,11 @@ class YxcDeviceController {
       for (const update of updates) {
         this.emit(update.id, update.value);
         if (update.id.endsWith("input") && typeof update.value === "string") {
+          const previous = this.lastZoneInput.get(zone);
           this.lastZoneInput.set(zone, update.value);
+          if (previous !== update.value) {
+            this.retargetZonePlayer(zone);
+          }
         }
       }
       this.cacheEqualizer(zone, updates);
@@ -678,7 +736,7 @@ class YxcDeviceController {
    * @param command the YXC command to apply
    */
   async applyCommand(stateId, command) {
-    var _a, _b;
+    var _a;
     try {
       switch (command.kind) {
         case "run":
@@ -698,13 +756,13 @@ class YxcDeviceController {
             break;
           }
           const next = { ...current, [band]: value };
-          await this.deps.client.setEqualizer(next.low, next.mid, next.high, zone);
           this.lastEqualizer.set(zone, next);
+          await this.deps.client.setEqualizer(next.low, next.mid, next.high, zone);
           break;
         }
         case "tunerBand":
-          await this.deps.client.setBand(command.band);
           this.lastTunerBand = command.band;
+          await this.deps.client.setBand(command.band);
           break;
         case "tunerFreq":
           await this.deps.client.setFreq(this.lastTunerBand, command.value);
@@ -721,7 +779,7 @@ class YxcDeviceController {
           await this.deps.client.recallRecentItem(command.value, this.zoneListeningTo(this.lastNetusbInput));
           break;
         case "playerTransport": {
-          const block = (_b = this.zonePlayerBlock.get(command.zone)) != null ? _b : this.playerBlockFor(this.lastZoneInput.get(command.zone));
+          const block = this.playerBlockFor(this.lastZoneInput.get(command.zone));
           if (block === void 0) {
             this.deps.log.debug(`${this.deviceId}: ${stateId} ignored \u2014 ${command.zone} is not playing a media source`);
             break;

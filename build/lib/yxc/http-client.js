@@ -19,14 +19,15 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var http_client_exports = {};
 __export(http_client_exports, {
   YXC_SUBSCRIPTION_HEADERS: () => YXC_SUBSCRIPTION_HEADERS,
-  YamahaYxcClient: () => YamahaYxcClient
+  YamahaYxcClient: () => YamahaYxcClient,
+  isWriteCommand: () => isWriteCommand
 });
 module.exports = __toCommonJS(http_client_exports);
 var import_node_http = require("node:http");
 function isWriteCommand(command) {
   var _a;
   const last = (_a = command.split("?")[0].split("/").pop()) != null ? _a : "";
-  return /^(set|recall|toggle|start|stop|manage|prepare)/.test(last);
+  return /^(set|recall|toggle|start|stop|manage|prepare|control|switch)/.test(last);
 }
 const REQUEST_TIMEOUT_MS = 4e3;
 const API_BASE = "/YamahaExtendedControl/v1";
@@ -619,6 +620,7 @@ class YamahaYxcClient {
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   YXC_SUBSCRIPTION_HEADERS,
-  YamahaYxcClient
+  YamahaYxcClient,
+  isWriteCommand
 });
 //# sourceMappingURL=http-client.js.map

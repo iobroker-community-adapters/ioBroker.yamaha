@@ -655,3 +655,42 @@ describe("YncaDeviceController unified player v2.0.0 (input-routed block)", () =
     expect(s.client.sent).toEqual([{ subunit: "NETRADIO", func: "PLAYBACK", value: "Stop" }]);
   });
 });
+
+describe("YncaDeviceController player review fixes (2.0.0 pre-release audit)", () => {
+  async function auditSetup(subunits: YncaCapabilities["subunits"]): Promise<{
+    controller: YncaDeviceController;
+    client: FakeClient;
+    acked: Array<{ id: string; value: unknown }>;
+  }> {
+    const client = new FakeClient();
+    client.capabilities = { model: "RX-A810", subunits };
+    const { acked, deps } = makeDeps(client);
+    const controller = new YncaDeviceController("living", deps);
+    await controller.start();
+    return { controller, client, acked };
+  }
+
+  test("bluetooth STATUS states are device-global — they land even while no zone plays that source", async () => {
+    const s = await auditSetup({
+      MAIN: { PWR: "On", INP: "HDMI1" },
+      BT: { PLAYBACKINFO: "Stop", CONNECTINFO: "Disconnected", DEVICENAME: "" },
+    });
+    s.acked.length = 0;
+    // A phone pairs in the background while the receiver plays HDMI — the pairing
+    // status must not be dropped by the zone routing (it is not a block value).
+    s.client.emit({ subunit: "BT", func: "CONNECTINFO", value: "Connected" });
+    s.client.emit({ subunit: "BT", func: "DEVICENAME", value: "Pixel" });
+    expect(s.acked).toContainEqual({ id: "living.player.bluetooth.connected", value: true });
+    expect(s.acked).toContainEqual({ id: "living.player.bluetooth.deviceName", value: "Pixel" });
+  });
+
+  test("the source display is seeded at start — a device already playing must not show it empty", async () => {
+    const s = await auditSetup({
+      MAIN: { PWR: "On", INP: "NET RADIO" },
+      ZONE2: { PWR: "On", INP: "HDMI1" },
+      NETRADIO: { PLAYBACKINFO: "Play" },
+    });
+    expect(s.acked).toContainEqual({ id: "living.player.source", value: "NET RADIO" });
+    expect(s.acked).toContainEqual({ id: "living.multiroom.zone2.player.source", value: "" });
+  });
+});

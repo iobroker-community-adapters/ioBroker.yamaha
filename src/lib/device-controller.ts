@@ -88,6 +88,15 @@ function playerSubunitForInput(input: string | undefined): string | undefined {
 }
 
 /**
+ * A state of the flat per-zone player block: exactly one segment below `player.`.
+ * ONLY these are zone-routed — multi-segment `player.*` ids (bluetooth pairing
+ * status, airplay volume interlock, per-source presets) are device-global and go
+ * straight to their state (2.0.0 review finding: the broad `player.` prefix check
+ * silently dropped BT/AirPlay status while no zone listened to that source).
+ */
+const FLAT_PLAYER_ID = /^player\.[^.]+$/;
+
+/**
  * What a zone's player block is reset to when the zone leaves its playing source
  * (clear-on-switch): metadata empty, playback Stop. Filtered to the states the
  * device actually has before emitting.
@@ -309,9 +318,9 @@ export class YncaDeviceController implements ConnectionHandle {
         for (const [func, value] of Object.entries(funcs)) {
           const update = yncaStateUpdate({ subunit, func, value }, FUNC_MAP);
           if (update) {
-            if (update.id.startsWith("player.")) {
-              // Player values feed only the zones LISTENING to their source (v2.0.0) —
-              // an idle source's leftover metadata must not seed the shared block.
+            if (FLAT_PLAYER_ID.test(update.id)) {
+              // Player-block values feed only the zones LISTENING to their source
+              // (v2.0.0) — an idle source's leftover metadata must not seed the block.
               this.routePlayerUpdate(subunit, update.id, update.value);
             } else {
               this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
@@ -340,7 +349,7 @@ export class YncaDeviceController implements ConnectionHandle {
       }
       const update = yncaStateUpdate(message, FUNC_MAP);
       if (update) {
-        if (update.id.startsWith("player.")) {
+        if (FLAT_PLAYER_ID.test(update.id)) {
           this.routePlayerUpdate(message.subunit, update.id, update.value);
         } else {
           this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
@@ -586,7 +595,7 @@ export class YncaDeviceController implements ConnectionHandle {
    */
   private async setupZonePlayers(capabilities: YncaCapabilities, objects: ObjectDef[]): Promise<void> {
     const playerObjects = objects.filter(
-      object => object.id === "player" || (object.type === "state" && /^player\.[^.]+$/.test(object.id)),
+      object => object.id === "player" || (object.type === "state" && FLAT_PLAYER_ID.test(object.id)),
     );
     if (!playerObjects.some(object => object.type === "state")) {
       this.playerZones = [];
@@ -612,6 +621,19 @@ export class YncaDeviceController implements ConnectionHandle {
         `${this.deviceId}.${zone.prefix}player.source`,
         sourceDef(`${zone.prefix}player.source`),
       );
+    }
+    // Seed the source display: a device already playing at adapter start must not
+    // show an empty source until its first input switch (2.0.0 review finding — the
+    // sweep seeds the metadata, but `player.source` is controller-derived).
+    for (const zone of YNCA_ZONES) {
+      if (this.playerZones.includes(zone.key)) {
+        const input = this.zoneInputs.get(zone.key);
+        const playing = playerSubunitForInput(input) !== undefined;
+        this.deps.setStateAck(
+          `${this.deviceId}.${zone.prefix}player.source`,
+          playing && input !== undefined ? input : "",
+        );
+      }
     }
   }
 
@@ -656,7 +678,7 @@ export class YncaDeviceController implements ConnectionHandle {
       return;
     }
     const presentFlat = new Set(
-      this.presentEntries.filter(entry => /^player\.[^.]+$/.test(entry.id)).map(entry => entry.id),
+      this.presentEntries.filter(entry => FLAT_PLAYER_ID.test(entry.id)).map(entry => entry.id),
     );
     for (const clear of YNCA_PLAYER_CLEAR) {
       if (presentFlat.has(clear.id)) {
@@ -668,7 +690,7 @@ export class YncaDeviceController implements ConnectionHandle {
       // Fresh reads for the newly selected source, streamed back through the live handler.
       const funcs = new Set<string>();
       for (const entry of this.presentEntries) {
-        if (entry.subunit === after && /^player\.[^.]+$/.test(entry.id) && !entry.writeOnly) {
+        if (entry.subunit === after && FLAT_PLAYER_ID.test(entry.id) && !entry.writeOnly) {
           funcs.add(entry.readFunc ?? entry.func);
         }
       }

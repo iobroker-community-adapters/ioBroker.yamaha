@@ -1,7 +1,7 @@
 import { createServer, type IncomingHttpHeaders } from "node:http";
 import { once } from "node:events";
 import type { AddressInfo } from "node:net";
-import { YamahaYxcClient, YXC_SUBSCRIPTION_HEADERS } from "./http-client";
+import { isWriteCommand, YamahaYxcClient, YXC_SUBSCRIPTION_HEADERS } from "./http-client";
 
 /**
  * Capture the command path each method builds, to verify URL construction against the
@@ -245,5 +245,31 @@ describe("YamahaYxcClient player and tuner commands", () => {
     expect(seen[0]).toContain("program=Hall%20in%20Munich");
     // The `&` must be encoded, or it would smuggle a second query parameter in.
     expect(seen[1]).toContain("input=AV%20%26%20Audio");
+  });
+});
+
+describe("gate priority classification", () => {
+  test("every action verb the endpoints use counts as a WRITE (user priority at the gate)", () => {
+    // A verb missing here demotes its button press to background priority — the
+    // press then waits behind a running sweep instead of overtaking it (the 2.0.0
+    // pre-release audit caught control/switch missing).
+    for (const path of [
+      "/main/setPower?power=on",
+      "/main/recallScene?num=1",
+      "/netusb/toggleRepeat",
+      "/netusb/startAutoPlay",
+      "/netusb/stopAutoPlay",
+      "/netusb/managePlay?type=add_track",
+      "/netusb/setListControl?type=play",
+      "/dist/prepareDistribution",
+      "/main/controlCursor?cursor=up",
+      "/main/controlMenu?menu=home",
+      "/tuner/switchPreset?dir=next",
+    ]) {
+      expect(isWriteCommand(path), path).toBe(true);
+    }
+    for (const path of ["/system/getFeatures", "/main/getStatus", "/netusb/getPlayInfo"]) {
+      expect(isWriteCommand(path), path).toBe(false);
+    }
   });
 });

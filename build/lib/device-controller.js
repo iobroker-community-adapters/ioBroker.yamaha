@@ -61,6 +61,7 @@ function playerSubunitForInput(input) {
   }
   return INPUT_SUBUNITS[input.toUpperCase().replace(/[^A-Z0-9]/g, "")];
 }
+const FLAT_PLAYER_ID = /^player\.[^.]+$/;
 const YNCA_PLAYER_CLEAR = [
   { id: "player.playback", value: 1 },
   { id: "player.artist", value: "" },
@@ -168,7 +169,7 @@ class YncaDeviceController {
         for (const [func, value] of Object.entries(funcs)) {
           const update = (0, import_catalog.yncaStateUpdate)({ subunit, func, value }, FUNC_MAP);
           if (update) {
-            if (update.id.startsWith("player.")) {
+            if (FLAT_PLAYER_ID.test(update.id)) {
               this.routePlayerUpdate(subunit, update.id, update.value);
             } else {
               this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
@@ -194,7 +195,7 @@ class YncaDeviceController {
       }
       const update = (0, import_catalog.yncaStateUpdate)(message, FUNC_MAP);
       if (update) {
-        if (update.id.startsWith("player.")) {
+        if (FLAT_PLAYER_ID.test(update.id)) {
           this.routePlayerUpdate(message.subunit, update.id, update.value);
         } else {
           this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
@@ -413,7 +414,7 @@ class YncaDeviceController {
    */
   async setupZonePlayers(capabilities, objects) {
     const playerObjects = objects.filter(
-      (object) => object.id === "player" || object.type === "state" && /^player\.[^.]+$/.test(object.id)
+      (object) => object.id === "player" || object.type === "state" && FLAT_PLAYER_ID.test(object.id)
     );
     if (!playerObjects.some((object) => object.type === "state")) {
       this.playerZones = [];
@@ -439,6 +440,16 @@ class YncaDeviceController {
         `${this.deviceId}.${zone.prefix}player.source`,
         sourceDef(`${zone.prefix}player.source`)
       );
+    }
+    for (const zone of YNCA_ZONES) {
+      if (this.playerZones.includes(zone.key)) {
+        const input = this.zoneInputs.get(zone.key);
+        const playing = playerSubunitForInput(input) !== void 0;
+        this.deps.setStateAck(
+          `${this.deviceId}.${zone.prefix}player.source`,
+          playing && input !== void 0 ? input : ""
+        );
+      }
     }
   }
   /**
@@ -482,7 +493,7 @@ class YncaDeviceController {
       return;
     }
     const presentFlat = new Set(
-      this.presentEntries.filter((entry) => /^player\.[^.]+$/.test(entry.id)).map((entry) => entry.id)
+      this.presentEntries.filter((entry) => FLAT_PLAYER_ID.test(entry.id)).map((entry) => entry.id)
     );
     for (const clear of YNCA_PLAYER_CLEAR) {
       if (presentFlat.has(clear.id)) {
@@ -493,7 +504,7 @@ class YncaDeviceController {
     if (after !== void 0) {
       const funcs = /* @__PURE__ */ new Set();
       for (const entry of this.presentEntries) {
-        if (entry.subunit === after && /^player\.[^.]+$/.test(entry.id) && !entry.writeOnly) {
+        if (entry.subunit === after && FLAT_PLAYER_ID.test(entry.id) && !entry.writeOnly) {
           funcs.add((_a = entry.readFunc) != null ? _a : entry.func);
         }
       }

@@ -26,7 +26,7 @@ import { errorMessage } from "../util";
 import { PollDropDetector } from "../lifecycle/poll-drop-detector";
 import type { ProbeMemory } from "../lifecycle/probe-memory";
 import { zonePrefix } from "./zones";
-import { resolveSceneNumber } from "../catalog/scene-titles";
+import { knownScenes, resolveSceneNumber } from "../catalog/scene-titles";
 import type { CommandGate } from "../lifecycle/command-gate";
 import type { BrowseEngine } from "../browse/browse-engine";
 import { createBrowseSurface } from "../browse/surface";
@@ -210,6 +210,7 @@ export class YxcDeviceController implements ConnectionHandle {
     for (const object of objects) {
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
     }
+    await this.setupSceneLists(capabilities);
     if (model) {
       // The info channel and info.model already exist — the adapter creates them for
       // every device up front, so the card renders even while the device is offline.
@@ -679,6 +680,59 @@ export class YxcDeviceController implements ConnectionHandle {
   }
 
   /**
+   * One scene.list JSON per scene-capable zone (v2.0.0): every recall slot the zone
+   * declares (getFeatures scene_num), titled from the shared per-device memory where
+   * another transport reported titles (XML Scene_Sel_Item / YNCA SCENExNAME). A
+   * MusicCast-only device has no title source and lists its slots with empty titles —
+   * the COUNT is what its getFeatures declares (review finding: the promised list was
+   * missing entirely on devices whose only transport is MusicCast).
+   *
+   * @param capabilities the device's parsed getFeatures capabilities
+   */
+  private async setupSceneLists(capabilities: YxcCapabilities): Promise<void> {
+    for (const zone of capabilities.zones) {
+      if (!zone.funcs.includes("scene") || zone.sceneNum === undefined || zone.sceneNum <= 0) {
+        continue;
+      }
+      const titles = new Map(knownScenes(this.deps.probeMemory, zone.id).map(scene => [scene.num, scene.title]));
+      const list = Array.from({ length: zone.sceneNum }, (_unused, i) => ({
+        num: i + 1,
+        title: titles.get(i + 1) ?? "",
+      }));
+      const id = `${zonePrefix(zone.id)}scene.list`;
+      await this.deps.upsertObject(`${this.deviceId}.${id}`, {
+        id,
+        type: "state",
+        common: { name: "Scenes (number + title)", type: "string", role: "json", read: true, write: false },
+      });
+      this.emit(id, JSON.stringify(list));
+    }
+  }
+
+  /**
+   * Re-evaluate which source feeds a zone's player block after ITS input changed:
+   * clear the block when the zone left a media source, and fetch the joined source's
+   * play info right away so the block fills now, not at the next sweep.
+   *
+   * @param zone the zone whose input just changed
+   */
+  private retargetZonePlayer(zone: string): void {
+    const expected = this.playerBlockFor(this.lastZoneInput.get(zone));
+    const previous = this.zonePlayerBlock.get(zone);
+    if (previous === expected) {
+      return;
+    }
+    if (previous !== undefined) {
+      this.zonePlayerBlock.delete(zone);
+      this.emitPlayerUpdates(zone, PLAYER_CLEAR);
+    }
+    if (expected !== undefined) {
+      // routePlayerBlock (inside this refresh) records the zone's new source.
+      void this.refreshMediaSource(expected);
+    }
+  }
+
+  /**
    * Emit flat player updates into one zone's block (main flat, zones prefixed),
    * skipping the device-global drive extras.
    *
@@ -768,7 +822,15 @@ export class YxcDeviceController implements ConnectionHandle {
       for (const update of updates) {
         this.emit(update.id, update.value);
         if (update.id.endsWith("input") && typeof update.value === "string") {
+          const previous = this.lastZoneInput.get(zone);
           this.lastZoneInput.set(zone, update.value);
+          if (previous !== update.value) {
+            // The zone changed its input — re-target its player block NOW. Media
+            // pushes alone cannot cover this: a zone leaving a still-playing source
+            // (or joining one another zone already plays) changes nothing about the
+            // source itself, so no netusb/cd push ever arrives (2.0.0 review finding).
+            this.retargetZonePlayer(zone);
+          }
         }
       }
       this.cacheEqualizer(zone, updates);
@@ -837,14 +899,19 @@ export class YxcDeviceController implements ConnectionHandle {
             break;
           }
           const next = { ...current, [band]: value };
-          await this.deps.client.setEqualizer(next.low, next.mid, next.high, zone);
+          // Cache BEFORE the round-trip: a second band written straight afterwards
+          // reads this cache at dispatch — caching after the await would make it
+          // compute from the pre-write triple and undo this band on the device.
           this.lastEqualizer.set(zone, next);
+          await this.deps.client.setEqualizer(next.low, next.mid, next.high, zone);
           break;
         }
         case "tunerBand":
-          await this.deps.client.setBand(command.band);
-          // Remember it immediately: the poll that would report it back runs minutes later.
+          // Remember it BEFORE the round-trip: a frequency written straight afterwards
+          // reads this cache synchronously at dispatch, while the band call may still
+          // be in flight — and the poll that would report it back runs minutes later.
           this.lastTunerBand = command.band;
+          await this.deps.client.setBand(command.band);
           break;
         case "tunerFreq":
           await this.deps.client.setFreq(this.lastTunerBand, command.value);
@@ -862,9 +929,10 @@ export class YxcDeviceController implements ConnectionHandle {
           await this.deps.client.recallRecentItem(command.value, this.zoneListeningTo(this.lastNetusbInput));
           break;
         case "playerTransport": {
-          // The unified block's buttons act on whatever the ZONE is playing (v2.0.0).
-          const block =
-            this.zonePlayerBlock.get(command.zone) ?? this.playerBlockFor(this.lastZoneInput.get(command.zone));
+          // The unified block's buttons act on whatever the ZONE is playing (v2.0.0) —
+          // derived FRESH from the zone's input, never from the routing map: a stale
+          // map entry would send the command to the source the zone just left.
+          const block = this.playerBlockFor(this.lastZoneInput.get(command.zone));
           if (block === undefined) {
             this.deps.log.debug(`${this.deviceId}: ${stateId} ignored — ${command.zone} is not playing a media source`);
             break;

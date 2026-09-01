@@ -124,8 +124,8 @@ gebündelte Admin-Schalter „Wiedergabe & Browsen" (`group_player`, krobi-Entsc
 2026-08-25 — kein eigener Browse-Schalter). Engine/Treiber brauchen die `delay`-Dep der
 Controller (adapter-Timer via `attempt-device`); fehlt sie (alte Tests), entsteht kein
 Browse-Baum. Der Objektbaum ist thematisch gruppiert
-(`catalog/groups.ts`, `groupOf(id)` bucketet nach zonenbereinigtem erstem Kanal-Segment, HDMI-Routing/Lippensynchron
-gewinnt dabei explizit VOR dem Zonen-Präfix): die Wiedergabe-Quellen unter `player.*`, DAB unter `tuner.dab`,
+(`catalog/groups.ts`, `groupOf(id)` bucketet nach dem ERSTEN Kanal-Segment — Zonen-States fallen damit
+in die multiroom-Gruppe, test-verankert in groups.test.ts): die Wiedergabe-Quellen unter `player.*`, DAB unter `tuner.dab`,
 Multiroom statt `dist`. **Der `multiroom`-Ordner trägt den Geltungsbereich selbst** (v1.0.0-Schnitt): direkt im
 Ordner nur Gerät-weites mit „(all zones)"-Namen (masterPower/party/partyMute), die MusicCast-Link-States im
 Unterordner `multiroom.group` (role/id/name/serverZone/linkedDevices/linkDevice/leave/streamingEnabled —

@@ -9,9 +9,12 @@ import type { CommandGate } from "../lifecycle/command-gate";
  * @param command the API command path
  * @returns true for a write/action command
  */
-function isWriteCommand(command: string): boolean {
+export function isWriteCommand(command: string): boolean {
   const last = command.split("?")[0].split("/").pop() ?? "";
-  return /^(set|recall|toggle|start|stop|manage|prepare)/.test(last);
+  // Every write/action verb the endpoint methods below actually use — control
+  // (cursor/menu remote) and switch (tuner preset step) included, so these button
+  // presses queue with USER priority and overtake a running background sweep.
+  return /^(set|recall|toggle|start|stop|manage|prepare|control|switch)/.test(last);
 }
 
 /** Timeout for a single YXC HTTP request, so an unresponsive device cannot hang the keepalive. */

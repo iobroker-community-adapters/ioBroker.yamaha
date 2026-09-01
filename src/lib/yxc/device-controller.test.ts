@@ -139,6 +139,7 @@ function setup(
   features: unknown,
   status: unknown,
   linkTargets: Record<string, YxcClientLike> = {},
+  pushActive?: () => boolean,
 ): {
   controller: YxcDeviceController;
   client: FakeClient;
@@ -159,6 +160,7 @@ function setup(
   const controller = new YxcDeviceController("living", {
     client,
     clientFor: ip => linkTargets[ip],
+    pushActive,
     registerPush: onPush => {
       fire.push = onPush;
       return () => {
@@ -935,5 +937,53 @@ describe("YxcDeviceController scene title writes (shared memory)", () => {
     s.controller.handleStateChange("living.scene.recall", false, "Party");
     await new Promise(resolve => setImmediate(resolve));
     expect((s.client.calls as Array<{ method: string }>).some(c => c.method === "recallScene")).toBe(false);
+  });
+});
+
+describe("YxcDeviceController player review fixes (2.0.0 pre-release audit)", () => {
+  const netusbFeatures = { zone: [{ id: "main", func_list: ["power"] }], netusb: {} };
+
+  test("in push mode a zone leaving its source is cleared by the ZONE status alone — no media sweep needed", async () => {
+    const s = setup(netusbFeatures, { power: "on", input: "net_radio" }, {}, () => true);
+    s.client.playInfo = { input: "net_radio", playback: "play", artist: "BBC" };
+    await s.controller.start();
+    expect(s.acks).toContainEqual({ id: "living.player.artist", value: "BBC" });
+    // The zone switches to HDMI; netusb itself does not change, so no media push
+    // would ever arrive — the zone status alone must clear the stale block.
+    s.client.status = { power: "on", input: "hdmi1" };
+    s.acks.length = 0;
+    s.client.calls.length = 0;
+    s.fire.keepalive?.(); // push active, first run → zone poll only, NO media sweep
+    await flush();
+    expect(s.client.calls.map(call => call.method)).not.toContain("getPlayInfo");
+    expect(s.acks).toContainEqual({ id: "living.player.artist", value: "" });
+    expect(s.acks).toContainEqual({ id: "living.player.source", value: "" });
+  });
+
+  test("a zone joining a running source gets its block filled right away (targeted refetch)", async () => {
+    const s = setup(netusbFeatures, { power: "on", input: "hdmi1" }, {}, () => true);
+    s.client.playInfo = { input: "net_radio", playback: "play", artist: "BBC" };
+    await s.controller.start();
+    expect(s.acks).not.toContainEqual({ id: "living.player.artist", value: "BBC" });
+    s.client.status = { power: "on", input: "net_radio" };
+    s.acks.length = 0;
+    s.fire.keepalive?.();
+    await flush();
+    expect(s.acks).toContainEqual({ id: "living.player.artist", value: "BBC" });
+    expect(s.acks).toContainEqual({ id: "living.player.source", value: "net_radio" });
+  });
+
+  test("scene.list exists on a MusicCast-only device: every declared slot, titles empty without a title source", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power", "scene"], scene_num: 4 }], netusb: {} };
+    const s = setup(features, { power: "on", input: "hdmi1" });
+    await s.controller.start();
+    expect(s.objects).toContain("living.scene.list");
+    const list = s.acks.find(ack => ack.id === "living.scene.list");
+    expect(JSON.parse(String(list?.value))).toEqual([
+      { num: 1, title: "" },
+      { num: 2, title: "" },
+      { num: 3, title: "" },
+      { num: 4, title: "" },
+    ]);
   });
 });

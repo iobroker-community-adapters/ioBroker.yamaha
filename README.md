@@ -38,7 +38,7 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
 
 - Node.js >= 22
 - js-controller >= 7.2.2
-- admin >= 7.8.23
+- admin >= 8.0.11
 
 ## Ports
 
@@ -65,7 +65,7 @@ Each receiver becomes one device node with themed groups — the same groups the
 - **`tuner`** — one band, one frequency (kHz on every generation) and one preset for AM, FM and DAB, plus RDS texts and reception flags; only genuinely DAB-specific detail (service, ensemble, DLS, …) sits under `tuner.dab`.
 - **`multiroom`** — zones 2–4 (each with its own player and scene block), Zone B, the all-zones switches (master power, party mode) and the MusicCast device group in its own `multiroom.group` folder.
 - **`hdmi`** — the HDMI outputs and the two lip-sync offsets.
-- **`scene`** — a recall dropdown carrying the titles the receiver reports (writable by number or title) and a `scene.list` JSON with every scene; zones with their own scenes carry theirs under `multiroom.zoneN.scene`.
+- **`scene`** — a recall dropdown carrying the titles the receiver reports (writable by number or title) and a `scene.list` JSON with every scene slot — titled where the device reports titles; zones with their own scenes carry theirs under `multiroom.zoneN.scene`.
 - **`sound`** — tone and sound processing: bass/treble, DSP modes, enhancer, the equalizer in its own `sound.equalizer` folder and the current audio signal under `sound.signal` on MusicCast devices.
 - **`advanced`** — setup-level datapoints: maximum/initial volume, the speaker configuration (A/B switches included) under `advanced.speakers`, input names.
 - **`clock`** — the clock and alarm settings of MusicCast desk-audio devices (read-only).
