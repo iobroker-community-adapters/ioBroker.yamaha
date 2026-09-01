@@ -5,8 +5,11 @@ import {
   parseYxcClock,
   parseYxcDistribution,
   parseYxcPlayInfo,
+  parseYxcPlaylistNames,
+  parseYxcPlayQueue,
   parseYxcPresetList,
   parseYxcRecentList,
+  parseYxcSignalInfo,
   parseYxcStatus,
   parseYxcTunerInfo,
   parseYxcTunerPresetLists,
@@ -142,6 +145,11 @@ export class YxcDeviceController implements ConnectionHandle {
   private tunerFeatures: YxcTunerFeatures | undefined;
   /** Whether the device reports the clock/alarm block (gates the clock poll). */
   private hasClock = false;
+  /** The zones declaring `signal_info` (gates the audio-signal poll). */
+  private signalZones: string[] = [];
+  /** Whether netusb declares the MusicCast playlists / the play queue (gates their polls). */
+  private hasMcPlaylist = false;
+  private hasPlayQueue = false;
   /** Counts keepalive runs, so the safety-net sweep can run every Nth one under push. */
   private keepaliveRuns = 0;
   private browseEngine: BrowseEngine | undefined;
@@ -219,6 +227,9 @@ export class YxcDeviceController implements ConnectionHandle {
     this.mediaBlocks = capabilities.media;
     this.tunerFeatures = capabilities.tuner;
     this.hasClock = capabilities.clock !== undefined;
+    this.signalZones = capabilities.zones.filter(zone => zone.funcs.includes("signal_info")).map(zone => zone.id);
+    this.hasMcPlaylist = capabilities.netusbFuncs?.includes("mc_playlist") ?? false;
+    this.hasPlayQueue = capabilities.netusbFuncs?.includes("play_queue") ?? false;
     await this.setupBrowse(capabilities);
     await this.refreshMedia();
     await this.refreshLists();
@@ -436,12 +447,56 @@ export class YxcDeviceController implements ConnectionHandle {
     if (this.mediaBlocks.includes("netusb")) {
       await this.refreshNetusbPresets();
       await this.refreshNetusbRecent();
+      if (this.hasMcPlaylist) {
+        await this.refreshPlaylists();
+      }
+      if (this.hasPlayQueue) {
+        await this.refreshPlayQueue();
+      }
     }
     if (this.mediaBlocks.includes("tuner")) {
       await this.refreshTunerPresets();
     }
     if (this.hasClock) {
       await this.refreshClock();
+    }
+    await this.refreshSignalInfo();
+  }
+
+  /** Fetch the MusicCast playlist names and write the JSON list state. */
+  private async refreshPlaylists(): Promise<void> {
+    try {
+      const update = parseYxcPlaylistNames(await this.deps.client.getMcPlaylistName());
+      if (update) {
+        this.emit(update.id, update.value);
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: getMcPlaylistName failed: ${errorMessage(e)}`);
+    }
+  }
+
+  /** Fetch the network player's play queue and write the JSON state. */
+  private async refreshPlayQueue(): Promise<void> {
+    try {
+      const update = parseYxcPlayQueue(await this.deps.client.getPlayQueue());
+      if (update) {
+        this.emit(update.id, update.value);
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: getPlayQueue failed: ${errorMessage(e)}`);
+    }
+  }
+
+  /** Fetch each declaring zone's audio-signal info and write the signal states. */
+  private async refreshSignalInfo(): Promise<void> {
+    for (const zone of this.signalZones) {
+      try {
+        for (const update of parseYxcSignalInfo(await this.deps.client.getSignalInfo(zone), zone)) {
+          this.emit(update.id, update.value);
+        }
+      } catch (e) {
+        this.deps.log.debug(`${this.deviceId}: getSignalInfo(${zone}) failed: ${errorMessage(e)}`);
+      }
     }
   }
 

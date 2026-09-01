@@ -42,6 +42,12 @@ class YncaDeviceController {
   browseDriver;
   browseEngine;
   /**
+   * Write map filtered to the entries THIS device reported — claim-with-proof for
+   * writes: a command is only sent with a wire function the device answered in the
+   * sweep. Until the sweep ran, the unfiltered static map answers.
+   */
+  writeMap;
+  /**
    * Connect, sweep the device from the catalog, and create its object tree; wire
    * up push updates. The catalog is the single source: it drives the sweep, the
    * device→state read-back and (in handleStateChange) the state→wire encode.
@@ -49,14 +55,21 @@ class YncaDeviceController {
    * @returns true if the device reported capabilities and its tree was created
    */
   async start() {
+    var _a, _b;
     await this.deps.client.connect();
     const catalog = this.deps.isEntryEnabled ? import_catalog.YNCA_CATALOG.filter((entry) => this.deps.isEntryEnabled(entry.id)) : import_catalog.YNCA_CATALOG;
     const capabilities = await this.sweepDevice(catalog);
+    const present = (0, import_catalog.presentYncaEntries)(capabilities, catalog);
+    this.writeMap = (0, import_catalog.idToEntry)(present);
     const objects = (0, import_catalog.yncaObjectsFor)(capabilities, catalog);
     if (objects.length === 0) {
       this.deps.log.warn(`${this.deviceId}: no capabilities reported \u2014 creating no objects`);
       return false;
     }
+    (_b = (_a = this.deps.client).onRefusal) == null ? void 0 : _b.call(
+      _a,
+      (command, verdict) => this.deps.log.warn(`${this.deviceId}: device refused "${command}" (@${verdict.toUpperCase()})`)
+    );
     for (const object of objects) {
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
     }
@@ -70,8 +83,8 @@ class YncaDeviceController {
     }
     await this.setupBrowse(capabilities);
     this.deps.client.onMessage((message) => {
-      var _a;
-      (_a = this.browseDriver) == null ? void 0 : _a.handleMessage(message);
+      var _a2;
+      (_a2 = this.browseDriver) == null ? void 0 : _a2.handleMessage(message);
       const update = (0, import_catalog.yncaStateUpdate)(message, FUNC_MAP);
       if (update) {
         this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
@@ -165,7 +178,7 @@ class YncaDeviceController {
    * @param value the new value
    */
   handleStateChange(fullStateId, ack, value) {
-    var _a;
+    var _a, _b;
     if (ack) {
       return;
     }
@@ -178,7 +191,7 @@ class YncaDeviceController {
       (_a = this.browseEngine) == null ? void 0 : _a.handleWrite(stateId, value);
       return;
     }
-    const triple = (0, import_catalog.yncaCommand)(stateId, value, ID_MAP);
+    const triple = (0, import_catalog.yncaCommand)(stateId, value, (_b = this.writeMap) != null ? _b : ID_MAP);
     if (triple) {
       this.deps.client.send(triple.subunit, triple.func, triple.value);
     }

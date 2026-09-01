@@ -6,6 +6,7 @@ import {
   availGets,
   funcToEntry,
   idToEntry,
+  presentYncaEntries,
   sweepGets,
   yncaCommand,
   yncaObjectsFor,
@@ -60,6 +61,8 @@ export interface YncaClientLike {
   onMessage(handler: (message: { subunit: string; func: string; value: string }) => void): void;
   /** Register the socket-drop handler the supervisor reconnects on. */
   onDrop(handler: (reason?: Error) => void): void;
+  /** Register the refusal handler for user commands the device rejects (optional in older tests). */
+  onRefusal?(handler: (command: string, verdict: "restricted" | "undefined") => void): void;
   /** Start the keepalive poll — called after the init sweep, not on connect. */
   startKeepalive(): void;
   /** Close the connection synchronously. */
@@ -108,6 +111,12 @@ export interface ControllerDeps {
 export class YncaDeviceController implements ConnectionHandle {
   private browseDriver: YncaBrowseDriver | undefined;
   private browseEngine: BrowseEngine | undefined;
+  /**
+   * Write map filtered to the entries THIS device reported — claim-with-proof for
+   * writes: a command is only sent with a wire function the device answered in the
+   * sweep. Until the sweep ran, the unfiltered static map answers.
+   */
+  private writeMap: Map<string, YncaEntry> | undefined;
 
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
@@ -132,11 +141,19 @@ export class YncaDeviceController implements ConnectionHandle {
       ? YNCA_CATALOG.filter(entry => this.deps.isEntryEnabled!(entry.id))
       : YNCA_CATALOG;
     const capabilities = await this.sweepDevice(catalog);
+    const present = presentYncaEntries(capabilities, catalog);
+    this.writeMap = idToEntry(present);
     const objects = yncaObjectsFor(capabilities, catalog);
     if (objects.length === 0) {
       this.deps.log.warn(`${this.deviceId}: no capabilities reported — creating no objects`);
       return false;
     }
+    // A user command the device rejects must leave a trace: @RESTRICTED (not allowed /
+    // not possible right now) and @UNDEFINED (unknown on this model) were silently
+    // dropped before — the class of invisible failures behind #615.
+    this.deps.client.onRefusal?.((command, verdict) =>
+      this.deps.log.warn(`${this.deviceId}: device refused "${command}" (@${verdict.toUpperCase()})`),
+    );
     // Parents before children (channels before their states) — created in order.
     for (const object of objects) {
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
@@ -274,7 +291,7 @@ export class YncaDeviceController implements ConnectionHandle {
       this.browseEngine?.handleWrite(stateId, value);
       return;
     }
-    const triple = yncaCommand(stateId, value, ID_MAP);
+    const triple = yncaCommand(stateId, value, this.writeMap ?? ID_MAP);
     if (triple) {
       this.deps.client.send(triple.subunit, triple.func, triple.value);
     }

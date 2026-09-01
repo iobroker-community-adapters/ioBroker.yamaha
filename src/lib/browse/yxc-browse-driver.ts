@@ -159,11 +159,6 @@ export class YxcBrowseDriver implements BrowseDriver {
     }
   }
 
-  /** Re-read the current window. */
-  private async refresh(): Promise<void> {
-    await this.fetch();
-  }
-
   /**
    * Fetch the current window, render it to the engine, and report the menu layer.
    *

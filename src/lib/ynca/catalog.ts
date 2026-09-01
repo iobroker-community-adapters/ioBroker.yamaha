@@ -310,6 +310,64 @@ const AMP_FUNCS: FuncDef[] = [
     write: true,
     role: "level",
   },
+  // The MusicCast generation's tone dialect: it does not know SPBASS/SPTREBLE and
+  // answers TONEBASS/TONETREBLE instead ("0.0" — RX-V6A full sweep, 2026-09-01), on
+  // MAIN and ZONE2 alike. Same id as the SP dialect: the per-device write map picks
+  // whichever function THIS device reported, so each generation is written in its own
+  // dialect. Listed AFTER the SP variant — on a device reporting both, the newer wins.
+  {
+    func: "TONEBASS",
+    state: "sound.bass",
+    name: "Bass",
+    spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5, decimals: 1 },
+    write: true,
+    role: "level",
+  },
+  {
+    func: "TONETREBLE",
+    state: "sound.treble",
+    name: "Treble",
+    spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5, decimals: 1 },
+    write: true,
+    role: "level",
+  },
+  // Read-only: only "Auto" is attested (RX-V6A ZONE2), the write vocabulary is
+  // documented nowhere — no blind write offer (the Scene_Load lesson).
+  {
+    func: "TONEMODE",
+    state: "sound.toneMode",
+    name: "Tone control mode",
+    spec: { kind: "text" },
+    write: false,
+    role: "text",
+  },
+  // Dialogue level / DTS dialogue control / contents display / the AirPlay volume
+  // interlock: reported by the MusicCast generation (RX-V6A sweep), write structure
+  // unconfirmed → read-only, like the XML dialogue level.
+  {
+    func: "DIALOGUELVL",
+    state: "sound.dialogueLevel",
+    name: "Dialogue level",
+    spec: { kind: "number", decimals: 0 },
+    write: false,
+    role: "value",
+  },
+  {
+    func: "DTSDIALOGUECONTROL",
+    state: "sound.dtsDialogueControl",
+    name: "DTS dialogue control",
+    spec: { kind: "number", decimals: 0 },
+    write: false,
+    role: "value",
+  },
+  {
+    func: "CONTENTSDISP",
+    state: "sound.contentsDisplay",
+    name: "Contents display",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    write: false,
+    role: "indicator",
+  },
   {
     func: "HDMIOUT",
     state: "hdmi.output",
@@ -793,6 +851,36 @@ const SYS_FUNCS: FuncDef[] = [
     write: true,
     role: "state",
   },
+  // Amp-assign for speaker pattern 1 (official RX-V671 list: PUT+GET with the three
+  // documented values; the RX-V6A answers "Basic").
+  {
+    func: "SPPATTERN1AMP",
+    state: "advanced.speakers.pattern1Amp",
+    name: "Speaker pattern 1 amp assign",
+    spec: { kind: "enum", states: selfMap(["Basic", "7ch +1ZONE", "5ch BI-AMP"]) },
+    write: true,
+    role: "state",
+  },
+  // Trigger-out 1 manual level (official list: PUT+GET, Lo/Hi).
+  {
+    func: "TRIG1MANUAL",
+    state: "advanced.trigger1Manual",
+    name: "Trigger out 1 manual level",
+    spec: { kind: "enum", states: selfMap(["Lo", "Hi"]) },
+    write: true,
+    role: "state",
+  },
+  // The control port itself (official list: PUT 50000-65535). Deliberately READ-ONLY:
+  // writing it from ioBroker would cut this very connection and strand the adapter on
+  // the old port until a rediscovery — a foot-gun, not a feature.
+  {
+    func: "YNCAPORT",
+    state: "advanced.yncaPort",
+    name: "YNCA control port",
+    spec: { kind: "number", decimals: 0 },
+    write: false,
+    role: "value",
+  },
 ];
 
 // The 23 assignable input names (SYS INPNAME<KEY>, read-only text). The wire
@@ -921,6 +1009,65 @@ const DAB_FUNCS: FuncDef[] = [
     spec: { kind: "number", unit: "MHz", decimals: 2 },
     write: true,
     role: "level",
+  },
+  // DAB/FM detail answered by the RX-V6A full sweep (2026-09-01) — read-only status.
+  // The dab.audioMode/bitRate/offAir ids are shared with the YXC DAB block, so both
+  // transports feed one node.
+  {
+    func: "DABAUDIOMODE",
+    state: "dab.audioMode",
+    name: "Audio mode",
+    spec: { kind: "text" },
+    write: false,
+    role: "text",
+  },
+  {
+    func: "DABBITRATE",
+    state: "dab.bitRate",
+    name: "Bit rate",
+    spec: { kind: "number", decimals: 0 },
+    write: false,
+    role: "value",
+  },
+  {
+    func: "DABDATETIME",
+    state: "dab.dateTime",
+    name: "DAB date/time",
+    spec: { kind: "text" },
+    write: false,
+    role: "text",
+  },
+  {
+    func: "DABOFFAIR",
+    state: "dab.offAir",
+    name: "Off air",
+    spec: { kind: "onoff", on: "Assert", off: "Negate" },
+    write: false,
+    role: "indicator",
+  },
+  {
+    func: "FMRDSCLOCK",
+    state: "dab.fmRdsClock",
+    name: "FM RDS clock",
+    spec: { kind: "text" },
+    write: false,
+    role: "text",
+  },
+  {
+    func: "FMSIGSTEREOMONO",
+    state: "dab.fmStereo",
+    name: "FM stereo reception",
+    spec: { kind: "onoff", on: "Assert", off: "Negate" },
+    write: false,
+    role: "indicator",
+  },
+  {
+    func: "FMTUNED",
+    state: "dab.fmTuned",
+    name: "FM tuned to a station",
+    spec: { kind: "onoff", on: "Assert", off: "Negate" },
+    write: false,
+    role: "indicator",
   },
 ];
 
@@ -1265,6 +1412,26 @@ export function buildYncaCatalog(): YncaEntry[] {
       writeOnly: true,
       wireEncode: () => "Cancel",
     },
+    // Answered by the RX-V6A full sweep (2026-09-01): the paired device's name and
+    // the AirPlay volume-interlock mode — read-only status, subunit-specific.
+    {
+      id: "player.bluetooth.deviceName",
+      name: "Paired device",
+      spec: { kind: "text" },
+      write: false,
+      role: "text",
+      subunit: "BT",
+      func: "DEVICENAME",
+    },
+    {
+      id: "player.airplay.volumeInterlock",
+      name: "Volume interlock",
+      spec: { kind: "text" },
+      write: false,
+      role: "text",
+      subunit: "AIRPLAY",
+      func: "VOLINTERLOCK",
+    },
   );
   return entries;
 }
@@ -1355,10 +1522,28 @@ export function yncaObjectsFor(
   capabilities: YncaCapabilities,
   catalog: readonly YncaEntry[] = YNCA_CATALOG,
 ): ObjectDef[] {
-  const present = catalog.filter(entry =>
+  return catalogToObjects(presentYncaEntries(capabilities, catalog));
+}
+
+/**
+ * The catalog entries this DEVICE actually reported (via their read functions) — the
+ * claim-with-proof filter behind both the object tree and the per-device write map.
+ * Writes route through the same filter so a state is only ever written with the wire
+ * function the device itself answered: where one capability has two generation
+ * dialects (SPBASS vs TONEBASS for the bass), the device's own answer picks the
+ * dialect, instead of a fixed table sending the wrong generation's command.
+ *
+ * @param capabilities the device's YNCA capabilities from the init sweep
+ * @param catalog the (possibly group-filtered) catalog to filter
+ * @returns the entries the device reported
+ */
+export function presentYncaEntries(
+  capabilities: YncaCapabilities,
+  catalog: readonly YncaEntry[] = YNCA_CATALOG,
+): YncaEntry[] {
+  return catalog.filter(entry =>
     readFuncsOf(entry).some(func => capabilities.subunits[entry.subunit]?.[func] !== undefined),
   );
-  return catalogToObjects(present);
 }
 
 /**
@@ -1400,7 +1585,9 @@ export function yncaCommand(
   map: Map<string, YncaEntry>,
 ): { subunit: string; func: string; value: string } | undefined {
   const entry = map.get(stateId);
-  if (!entry) {
+  // A read-only entry maps no write: without this check a script writing e.g. the
+  // (deliberately read-only) YNCA port state would still put a PUT on the wire.
+  if (!entry?.write) {
     return undefined;
   }
   // Guard the write value: a null/undefined or non-finite-number write must not be

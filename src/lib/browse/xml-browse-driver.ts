@@ -81,6 +81,13 @@ export class XmlBrowseDriver implements BrowseDriver {
   private engine: BrowseEngine | undefined;
   private active: { element: string; key: string; input: string } | undefined;
   private lastTotal = 0;
+  /**
+   * The cursor value this device accepts for "one level back". The spec vocabulary is
+   * `Return`, but the 2012 generation (RX-V473 class) refuses it and accepts `Left`
+   * instead (user-measured on the predecessor adapter, #613). First refusal switches
+   * permanently for this device.
+   */
+  private backCursor: "Return" | "Left" = "Return";
 
   /**
    * @param client the XML client slice (send + getXml)
@@ -142,19 +149,24 @@ export class XmlBrowseDriver implements BrowseDriver {
     await this.jumpBy(8);
   }
 
-  /** Go one menu level back. */
+  /** Go one menu level back — falling back to `Left` when the device refuses `Return`. */
   public async back(): Promise<void> {
-    await this.control("<Cursor>Return</Cursor>");
+    try {
+      await this.control(`<Cursor>${this.backCursor}</Cursor>`);
+    } catch (e) {
+      // Only a refusal of the DEFAULT vocabulary triggers the generation fallback;
+      // a device that also refuses Left (or a transport error) surfaces normally.
+      if (this.backCursor !== "Return") {
+        throw e;
+      }
+      this.backCursor = "Left";
+      await this.control("<Cursor>Left</Cursor>");
+    }
   }
 
   /** Return to the menu root. */
   public async home(): Promise<void> {
     await this.control("<Cursor>Return to Home</Cursor>");
-  }
-
-  /** Re-read the current window. */
-  private async refresh(): Promise<void> {
-    await this.fetch();
   }
 
   /**

@@ -138,7 +138,7 @@ export class Yamaha extends utils.Adapter {
       }
       for (const device of devices) {
         this.deviceConnected.set(device.id, false);
-        await this.ensureDeviceHeader(device.id);
+        await this.ensureDeviceHeader(device.id, device.ip);
         // Stamp it disconnected BEFORE the first attempt: ioBroker keeps a state's last value
         // forever, so a crash or a power cut would otherwise leave the device green until it
         // reports again — and a device that never answers would stay green for good.
@@ -353,8 +353,9 @@ export class Yamaha extends utils.Adapter {
    * per-device connection indicator) so its state is visible even while offline.
    *
    * @param deviceId the id-safe device id
+   * @param ip the device's current address (from config or discovery)
    */
-  private async ensureDeviceHeader(deviceId: string): Promise<void> {
+  private async ensureDeviceHeader(deviceId: string, ip: string): Promise<void> {
     // statusStates.onlineId lets the admin paint a green/red reachability symbol on the
     // device object itself (as govee does), fed by the per-device connection state.
     // extendObject with preserve:name so an upgrade adds the symbol without overwriting
@@ -398,6 +399,15 @@ export class Yamaha extends utils.Adapter {
       common: { name: "Model", type: "string", role: "text", read: true, write: false, def: "" },
       native: {},
     });
+    // The device's address — for a discovered device it lived only in the adapter's
+    // internals, so no diagnosis (log capture, browser access to the device's own pages)
+    // could name it without a network search. Refreshed every start: DHCP may move it.
+    await this.setObjectNotExistsAsync(`${deviceId}.info.ip`, {
+      type: "state",
+      common: { name: "IP address", type: "string", role: "info.ip", read: true, write: false, def: "" },
+      native: {},
+    });
+    await this.setState(`${deviceId}.info.ip`, { val: ip, ack: true });
     // Per-transport connection flags, fed by the live set from connectTransports and read live
     // by the device-manager card indicators. Created here so an offline device's card still
     // renders all three (false) instead of nothing.

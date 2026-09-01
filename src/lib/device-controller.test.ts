@@ -71,6 +71,8 @@ class FakeClient implements YncaClientLike {
     this.handler = handler;
   }
   public onDrop(): void {}
+  /** Optional like the contract — replaced per test to capture the registered handler. */
+  public onRefusal?: (handler: (command: string, verdict: "restricted" | "undefined") => void) => void;
   public startKeepalive(): void {
     this.keepaliveStarted = true;
   }
@@ -412,5 +414,38 @@ describe("YncaDeviceController static-value memory", () => {
     expect(created).toContain("living.advanced.inputNames.hdmi1");
     expect(acked).toContainEqual({ id: "living.advanced.inputNames.hdmi1", value: "Kodi" });
     expect(acked).toContainEqual({ id: "living.scene.name1", value: "Movie" });
+  });
+});
+
+describe("YncaDeviceController write gating + refusal logging (#615 class)", () => {
+  test("a write only goes out with a function THIS device reported (dialect choice)", async () => {
+    const client = new FakeClient();
+    // A classic receiver: bass reported under SPBASS.
+    client.capabilities = { model: "RX-V473", subunits: { MAIN: { PWR: "On", SPBASS: "3.0" } } };
+    const { deps } = makeDeps(client);
+    const controller = new YncaDeviceController("living", deps);
+    await controller.start();
+    client.sent.length = 0;
+    controller.handleStateChange("living.sound.bass", false, 2);
+    expect(client.sent).toEqual([{ subunit: "MAIN", func: "SPBASS", value: "2.0" }]);
+    // A state whose function the device never reported is not written at all.
+    client.sent.length = 0;
+    controller.handleStateChange("living.sound.treble", false, 1);
+    expect(client.sent).toEqual([]);
+  });
+
+  test("a device refusal is logged as a warning with the refused command", async () => {
+    const client = new FakeClient();
+    client.capabilities = { model: "RX-V473", subunits: { MAIN: { PWR: "On" } } };
+    const { deps } = makeDeps(client);
+    const warnings: string[] = [];
+    deps.log = { debug() {}, info() {}, warn: (m: string) => warnings.push(m) };
+    let refuse: ((command: string, verdict: "restricted" | "undefined") => void) | undefined;
+    client.onRefusal = (handler): void => {
+      refuse = handler;
+    };
+    await new YncaDeviceController("living", deps).start();
+    refuse?.("@MAIN:SCENE=Scene 1", "restricted");
+    expect(warnings).toEqual(['living: device refused "@MAIN:SCENE=Scene 1" (@RESTRICTED)']);
   });
 });

@@ -420,3 +420,49 @@ describe("YncaClient on a real TCP socket", () => {
     client.close();
   });
 });
+
+describe("YncaClient refusal attribution (#615)", () => {
+  it("attributes a @RESTRICTED right after a user PUT to that command", async () => {
+    const { factory, sockets } = fixtureFactory();
+    const client = new YncaClient("10.0.0.2", testTimers, testGate(), factory);
+    const connect = client.connect();
+    sockets[0].emitConnect();
+    await connect;
+    const refusals: Array<{ command: string; verdict: string }> = [];
+    client.onRefusal((command, verdict) => refusals.push({ command, verdict }));
+    client.send("MAIN", "SCENE", "Scene 1");
+    await drain();
+    // The 2012 generation's answer to a scene recall (ynca-python PRACTICALITIES).
+    sockets[0].emitData("@RESTRICTED\r\n");
+    expect(refusals).toEqual([{ command: "@MAIN:SCENE=Scene 1", verdict: "restricted" }]);
+  });
+
+  it("does not blame a user write for a sweep's @UNDEFINED noise", async () => {
+    const { factory, sockets } = fixtureFactory();
+    const client = new YncaClient("10.0.0.2", testTimers, testGate(), factory);
+    const connect = client.connect();
+    sockets[0].emitConnect();
+    await connect;
+    const refusals: string[] = [];
+    client.onRefusal(command => refusals.push(command));
+    // A background GET answered with @UNDEFINED — no user write pending, no refusal report.
+    client.get("MAIN", "SCENE1NAME");
+    await drain();
+    sockets[0].emitData("@UNDEFINED\r\n");
+    expect(refusals).toEqual([]);
+  });
+
+  it("reports one refusal once — a second @RESTRICTED is not re-attributed", async () => {
+    const { factory, sockets } = fixtureFactory();
+    const client = new YncaClient("10.0.0.2", testTimers, testGate(), factory);
+    const connect = client.connect();
+    sockets[0].emitConnect();
+    await connect;
+    const refusals: string[] = [];
+    client.onRefusal(command => refusals.push(command));
+    client.send("MAIN", "SCENE", "Scene 2");
+    await drain();
+    sockets[0].emitData("@RESTRICTED\r\n@RESTRICTED\r\n");
+    expect(refusals).toEqual(["@MAIN:SCENE=Scene 2"]);
+  });
+});

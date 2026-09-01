@@ -35,6 +35,7 @@ const CHANNEL_NAMES = {
   hdmi: "HDMI",
   speakers: "Speakers",
   scene: "Scenes",
+  remote: "Remote control",
   inputNames: "Input names",
   initialVolume: "Initial volume",
   lipSync: "Lip sync",

@@ -84,6 +84,11 @@ class YxcDeviceController {
   tunerFeatures;
   /** Whether the device reports the clock/alarm block (gates the clock poll). */
   hasClock = false;
+  /** The zones declaring `signal_info` (gates the audio-signal poll). */
+  signalZones = [];
+  /** Whether netusb declares the MusicCast playlists / the play queue (gates their polls). */
+  hasMcPlaylist = false;
+  hasPlayQueue = false;
   /** Counts keepalive runs, so the safety-net sweep can run every Nth one under push. */
   keepaliveRuns = 0;
   browseEngine;
@@ -94,7 +99,7 @@ class YxcDeviceController {
    * @returns true if the device reported capabilities and its tree was created
    */
   async start() {
-    var _a;
+    var _a, _b, _c, _d, _e;
     const capabilities = await this.remember(
       "features",
       async () => (0, import_capability.parseYxcFeatures)(await this.deps.client.getFeatures())
@@ -134,10 +139,13 @@ class YxcDeviceController {
     this.mediaBlocks = capabilities.media;
     this.tunerFeatures = capabilities.tuner;
     this.hasClock = capabilities.clock !== void 0;
+    this.signalZones = capabilities.zones.filter((zone) => zone.funcs.includes("signal_info")).map((zone) => zone.id);
+    this.hasMcPlaylist = (_b = (_a = capabilities.netusbFuncs) == null ? void 0 : _a.includes("mc_playlist")) != null ? _b : false;
+    this.hasPlayQueue = (_d = (_c = capabilities.netusbFuncs) == null ? void 0 : _c.includes("play_queue")) != null ? _d : false;
     await this.setupBrowse(capabilities);
     await this.refreshMedia();
     await this.refreshLists();
-    this.hasDistribution = (_a = capabilities.hasDistribution) != null ? _a : false;
+    this.hasDistribution = (_e = capabilities.hasDistribution) != null ? _e : false;
     if (this.hasDistribution) {
       await this.refreshDistribution();
     }
@@ -331,12 +339,53 @@ class YxcDeviceController {
     if (this.mediaBlocks.includes("netusb")) {
       await this.refreshNetusbPresets();
       await this.refreshNetusbRecent();
+      if (this.hasMcPlaylist) {
+        await this.refreshPlaylists();
+      }
+      if (this.hasPlayQueue) {
+        await this.refreshPlayQueue();
+      }
     }
     if (this.mediaBlocks.includes("tuner")) {
       await this.refreshTunerPresets();
     }
     if (this.hasClock) {
       await this.refreshClock();
+    }
+    await this.refreshSignalInfo();
+  }
+  /** Fetch the MusicCast playlist names and write the JSON list state. */
+  async refreshPlaylists() {
+    try {
+      const update = (0, import_command_mapper.parseYxcPlaylistNames)(await this.deps.client.getMcPlaylistName());
+      if (update) {
+        this.emit(update.id, update.value);
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: getMcPlaylistName failed: ${(0, import_util.errorMessage)(e)}`);
+    }
+  }
+  /** Fetch the network player's play queue and write the JSON state. */
+  async refreshPlayQueue() {
+    try {
+      const update = (0, import_command_mapper.parseYxcPlayQueue)(await this.deps.client.getPlayQueue());
+      if (update) {
+        this.emit(update.id, update.value);
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: getPlayQueue failed: ${(0, import_util.errorMessage)(e)}`);
+    }
+  }
+  /** Fetch each declaring zone's audio-signal info and write the signal states. */
+  async refreshSignalInfo() {
+    for (const zone of this.signalZones) {
+      try {
+        for (const update of (0, import_command_mapper.parseYxcSignalInfo)(await this.deps.client.getSignalInfo(zone), zone)) {
+          this.emit(update.id, update.value);
+        }
+      } catch (e) {
+        this.deps.log.debug(`${this.deviceId}: getSignalInfo(${zone}) failed: ${(0, import_util.errorMessage)(e)}`);
+      }
     }
   }
   /** Fetch the stored netusb favourites and write the JSON list state. */

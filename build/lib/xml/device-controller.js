@@ -22,6 +22,7 @@ __export(device_controller_exports, {
 });
 module.exports = __toCommonJS(device_controller_exports);
 var import_types = require("../catalog/types");
+var import_protocol = require("./protocol");
 var import_command_mapper = require("./command-mapper");
 var import_catalog = require("./catalog");
 var import_util = require("../util");
@@ -50,6 +51,10 @@ class XmlDeviceController {
   cancelKeepalive;
   dropDetector = new import_poll_drop_detector.PollDropDetector();
   browseEngine;
+  /** The scenes each zone DECLARES (`Scene_Sel_Item`), for the recall write path. */
+  scenesByZone = /* @__PURE__ */ new Map();
+  /** Whether the device answers `<Tuner><Play_Info>` (the classic pre-2010 tuner). */
+  hasTuner = false;
   /**
    * Probe each zone, create the tree for the ones that answer, seed state, and
    * start the keepalive poll.
@@ -67,6 +72,15 @@ class XmlDeviceController {
       return false;
     }
     this.zones = answered.map((probe) => probe.zone);
+    const inputsByZone = /* @__PURE__ */ new Map();
+    for (const zone of this.zones) {
+      const body = await this.probeXml(
+        `xmlInputs:${zone.key}`,
+        zone.element,
+        "<Input><Input_Sel_Item>GetParam</Input_Sel_Item></Input>"
+      );
+      inputsByZone.set(zone.key, (0, import_protocol.parseInputList)(body));
+    }
     const createdChannels = /* @__PURE__ */ new Set();
     for (const zone of this.zones) {
       if (zone.channel) {
@@ -107,13 +121,20 @@ class XmlDeviceController {
             });
           }
         }
+        const common = { ...entry.common };
+        const inputs = entry.state === "input" ? inputsByZone.get(zone.key) : void 0;
+        if (inputs && inputs.length > 0) {
+          common.states = Object.fromEntries(inputs.map((input) => [input, input]));
+        }
         await this.deps.upsertObject(`${this.deviceId}.${stateId}`, {
           id: stateId,
           type: "state",
-          common: { ...entry.common }
+          common
         });
       }
     }
+    await this.setupScenes(createdChannels);
+    await this.setupTuner(createdChannels);
     for (const { zone, status } of answered) {
       if (status) {
         this.seedZone(zone, status);
@@ -130,6 +151,212 @@ class XmlDeviceController {
     await this.setupBrowse();
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), this.pollIntervalMs);
     this.deps.log.debug(`${this.deviceId}: Yamaha (XML) device ready (XML)`);
+    return true;
+  }
+  /**
+   * Read one element's list once per device: the answer is a property of the MODEL
+   * (input lists, scene declarations), so reconnects reuse it via the probe memory.
+   * A refusal (RC/HTTP) or transport error yields an empty body — "declares none".
+   *
+   * @param key the probe-memory key
+   * @param element the XML element to ask
+   * @param inner the inner GET request
+   * @returns the raw response body, or "" when the device refused
+   */
+  probeXml(key, element, inner) {
+    const probe = async () => {
+      try {
+        return await this.deps.client.getXml(element, inner);
+      } catch {
+        return "";
+      }
+    };
+    return this.deps.probeMemory ? this.deps.probeMemory.once(key, probe) : probe();
+  }
+  /**
+   * Build the scene surface from the device's OWN declaration (#615): each zone's
+   * `<Scene_Sel_Item>` names the scenes that exist, their titles and the write value
+   * (`Scene N` via `<Scene_Sel>`). The predecessor blindly sent `Scene_Load` to a
+   * fixed 1..12 main-zone state; the capture shows the device declaring `Scene_Sel`
+   * instead — and declaring scenes for Zone 2 too.
+   *
+   * @param createdChannels the channel ids already created (extended here)
+   */
+  async setupScenes(createdChannels) {
+    var _a;
+    for (const zone of this.zones) {
+      const body = await this.probeXml(
+        `xmlScenes:${zone.key}`,
+        zone.element,
+        "<Scene><Scene_Sel_Item>GetParam</Scene_Sel_Item></Scene>"
+      );
+      const scenes = (0, import_protocol.parseSceneList)(body);
+      if (scenes.length === 0) {
+        continue;
+      }
+      this.scenesByZone.set(zone.key, scenes);
+      const channelId = `${zone.prefix}scene`;
+      if (!createdChannels.has(channelId)) {
+        createdChannels.add(channelId);
+        await this.deps.upsertObject(`${this.deviceId}.${channelId}`, {
+          id: channelId,
+          type: "channel",
+          common: { name: (_a = import_types.CHANNEL_NAMES.scene) != null ? _a : "Scenes" }
+        });
+      }
+      const max = Math.max(...scenes.map((scene) => scene.num));
+      await this.deps.upsertObject(`${this.deviceId}.${channelId}.recall`, {
+        id: `${channelId}.recall`,
+        type: "state",
+        common: {
+          name: "Recall scene",
+          type: "number",
+          role: "level",
+          read: true,
+          write: true,
+          min: 1,
+          max,
+          step: 1,
+          // The declared titles as the dropdown, so the picker shows "Movie Viewing",
+          // not a bare number.
+          states: Object.fromEntries(scenes.map((scene) => [scene.num, scene.title]))
+        }
+      });
+      for (const scene of scenes) {
+        const stateId = `${channelId}.name${scene.num}`;
+        await this.deps.upsertObject(`${this.deviceId}.${stateId}`, {
+          id: stateId,
+          type: "state",
+          common: { name: `Scene ${scene.num} name`, type: "string", role: "text", read: true, write: false }
+        });
+        this.emit(stateId, scene.title);
+      }
+    }
+  }
+  /**
+   * Build the classic tuner surface (pre-2010 devices, where XML is the ONLY
+   * transport — the predecessor served their tuner, the rewrite had dropped it).
+   * Existence is probed once per device; the preset write is the openHAB-verified
+   * `<Play_Control><Preset><Preset_Sel>`; frequency/RDS/tuned are read-only from
+   * Play_Info. On newer devices YNCA/YXC own these ids via the owner policy.
+   *
+   * @param createdChannels the channel ids already created (extended here)
+   */
+  async setupTuner(createdChannels) {
+    var _a;
+    const probe = await this.probeXml("xmlTuner", "Tuner", "<Play_Info>GetParam</Play_Info>");
+    if (probe.length === 0) {
+      return;
+    }
+    this.hasTuner = true;
+    if (!createdChannels.has("tuner")) {
+      createdChannels.add("tuner");
+      await this.deps.upsertObject(`${this.deviceId}.tuner`, {
+        id: "tuner",
+        type: "channel",
+        common: { name: (_a = import_types.CHANNEL_NAMES.tuner) != null ? _a : "Tuner" }
+      });
+    }
+    const state = async (id, common) => {
+      await this.deps.upsertObject(`${this.deviceId}.tuner.${id}`, { id: `tuner.${id}`, type: "state", common });
+    };
+    await state("preset", {
+      name: "Preset (recall by number)",
+      type: "number",
+      role: "level",
+      read: true,
+      write: true,
+      min: 0,
+      max: 40,
+      step: 1
+    });
+    await state("frequency", { name: "Frequency", type: "number", role: "value", read: true, write: false });
+    await state("rdsService", { name: "RDS station", type: "string", role: "text", read: true, write: false });
+    await state("rdsText", { name: "RDS text", type: "string", role: "text", read: true, write: false });
+    await state("tuned", { name: "Tuned to a station", type: "boolean", role: "indicator", read: true, write: false });
+    await state("stereo", { name: "Stereo reception", type: "boolean", role: "indicator", read: true, write: false });
+    this.emitTunerInfo(probe);
+  }
+  /**
+   * Write the tuner states from a Play_Info response.
+   *
+   * @param xml the Play_Info response body
+   */
+  emitTunerInfo(xml) {
+    const info = (0, import_protocol.parseTunerInfo)(xml);
+    if (info.preset !== void 0) {
+      this.emit("tuner.preset", info.preset);
+    }
+    if (info.frequency !== void 0) {
+      this.emit("tuner.frequency", info.frequency);
+    }
+    if (info.rdsService !== void 0) {
+      this.emit("tuner.rdsService", info.rdsService);
+    }
+    if (info.rdsText !== void 0) {
+      this.emit("tuner.rdsText", info.rdsText);
+    }
+    if (info.tuned !== void 0) {
+      this.emit("tuner.tuned", info.tuned);
+    }
+    if (info.stereo !== void 0) {
+      this.emit("tuner.stereo", info.stereo);
+    }
+  }
+  /**
+   * Poll the tuner's Play_Info (keepalive) and write the states.
+   */
+  async refreshTuner() {
+    try {
+      this.emitTunerInfo(await this.deps.client.getXml("Tuner", "<Play_Info>GetParam</Play_Info>"));
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: tuner Play_Info failed: ${(0, import_util.errorMessage)(e)}`);
+    }
+  }
+  /**
+   * A user write to `tuner.preset` → the openHAB-verified preset recall.
+   *
+   * @param stateId the state id relative to the device
+   * @param value the written value
+   * @returns true when the id was the tuner preset (handled here)
+   */
+  handleTunerWrite(stateId, value) {
+    if (stateId !== "tuner.preset" || !this.hasTuner) {
+      return stateId === "tuner.preset";
+    }
+    const num = Math.round(Number(value));
+    if (!Number.isFinite(num) || num < 1) {
+      return true;
+    }
+    void this.applyCommand({
+      zone: "Tuner",
+      inner: `<Play_Control><Preset><Preset_Sel>${num}</Preset_Sel></Preset></Play_Control>`
+    });
+    return true;
+  }
+  /**
+   * A user write to a zone's `scene.recall` → the DECLARED write element
+   * (`<Scene><Scene_Sel>Scene N</Scene_Sel></Scene>`). Only zones that declared
+   * scenes accept the write; a refusal lands in the log via applyCommand.
+   *
+   * @param stateId the state id relative to the device
+   * @param value the written value
+   * @returns true when the id was a scene recall (handled here)
+   */
+  handleSceneWrite(stateId, value) {
+    var _a;
+    const match = /^(?:multiroom\.(zone[234])\.)?scene\.recall$/.exec(stateId);
+    if (!match) {
+      return false;
+    }
+    const zoneKey = (_a = match[1]) != null ? _a : "main";
+    const zone = this.zones.find((z) => z.key === zoneKey);
+    const scenes = this.scenesByZone.get(zoneKey);
+    const num = Math.round(Number(value));
+    if (!zone || !scenes || !scenes.some((scene) => scene.num === num)) {
+      return true;
+    }
+    void this.applyCommand({ zone: zone.element, inner: `<Scene><Scene_Sel>Scene ${num}</Scene_Sel></Scene>` });
     return true;
   }
   /**
@@ -207,6 +434,12 @@ class XmlDeviceController {
       (_a = this.browseEngine) == null ? void 0 : _a.handleWrite(stateId, value);
       return;
     }
+    if (this.handleSceneWrite(stateId, value)) {
+      return;
+    }
+    if (this.handleTunerWrite(stateId, value)) {
+      return;
+    }
     const command = (0, import_command_mapper.stateToXml)(stateId, value);
     if (command) {
       void this.applyCommand(command);
@@ -239,6 +472,9 @@ class XmlDeviceController {
       if (await this.refreshZone(zone)) {
         anyOk = true;
       }
+    }
+    if (this.hasTuner) {
+      await this.refreshTuner();
     }
     this.dropDetector.record(anyOk);
   }

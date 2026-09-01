@@ -36,6 +36,12 @@ const OWNER_OVERRIDES = {
   "sound.adaptiveDrc": ["ynca", "xml", "yxc"],
   "sound.surroundDecoder": ["ynca", "yxc"],
   "sound.dialogueLift": ["xml", "yxc"],
+  // Write-proof beats modernity rank for the scene TRIGGER (#615): YXC declares the
+  // recall endpoint per zone (device-verified), XML declares the write value in its
+  // Scene_Sel_Item list — but YNCA's claim rests on the scene NAMES being readable,
+  // and the 2012 generation (RX-V473/V475) answers the YNCA scene put with
+  // @RESTRICTED (ynca-python PRACTICALITIES). The proven writers go first.
+  "scene.recall": ["yxc", "xml", "ynca"],
   // §3d richness loss — YNCA carries an enum dropdown that YXC/XML flatten to a free string.
   input: ["ynca", "yxc", "xml"],
   soundProgram: ["ynca", "yxc", "xml"],

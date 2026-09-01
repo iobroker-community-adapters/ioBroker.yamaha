@@ -68,6 +68,7 @@ export const CHANNEL_NAMES: Record<string, string> = {
   hdmi: "HDMI",
   speakers: "Speakers",
   scene: "Scenes",
+  remote: "Remote control",
   inputNames: "Input names",
   initialVolume: "Initial volume",
   lipSync: "Lip sync",

@@ -32,7 +32,14 @@ function defaultPoster(ip, body) {
       (res) => {
         let data = "";
         res.on("data", (chunk) => data += String(chunk));
-        res.on("end", () => resolve(data));
+        res.on("error", reject);
+        res.on("end", () => {
+          if (res.statusCode !== void 0 && (res.statusCode < 200 || res.statusCode >= 300)) {
+            reject(new Error(`device refused the request (HTTP ${res.statusCode})`));
+            return;
+          }
+          resolve(data);
+        });
       }
     );
     req.on("error", reject);
@@ -55,23 +62,26 @@ class XmlClient {
   }
   request;
   /**
-   * Send a zone command (wrapped in a PUT envelope).
+   * Send a zone command (wrapped in a PUT envelope). Throws when the device refuses
+   * it — the response's return code IS the device saying "I did not do that", and
+   * swallowing it left every refused write invisible (#613/#615).
    *
    * @param zone the zone element (e.g. `Main_Zone`)
    * @param inner the inner command XML
    */
   async send(zone, inner) {
-    await this.request(this.ip, (0, import_protocol.encodePut)(zone, inner));
+    (0, import_protocol.assertXmlOk)(await this.request(this.ip, (0, import_protocol.encodePut)(zone, inner)), `<${zone}>${inner}`);
   }
   /**
-   * Read a zone's Basic_Status.
+   * Read a zone's Basic_Status. A refusal throws — an absent zone must not look
+   * like a present zone with an empty status.
    *
    * @param zone the zone element (e.g. `Main_Zone`)
    * @returns the parsed amplifier fields
    */
   async getStatus(zone) {
     const response = await this.request(this.ip, (0, import_protocol.encodeGet)(zone, "<Basic_Status>GetParam</Basic_Status>"));
-    return (0, import_protocol.parseBasicStatus)(response);
+    return (0, import_protocol.parseBasicStatus)((0, import_protocol.assertXmlOk)(response, `<${zone}> Basic_Status`));
   }
   /**
    * Read the device's model name (System > Config).

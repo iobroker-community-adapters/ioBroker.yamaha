@@ -14,6 +14,8 @@ export interface YxcZone {
    * become dropdowns on the states — the device itself says which values it accepts.
    */
   valueLists?: Record<string, string[]>;
+  /** How many scenes the zone offers (`scene_num`, with `scene` in func_list). */
+  sceneNum?: number;
 }
 
 /** The tuner block of a YXC getFeatures response, as far as the adapter uses it. */
@@ -40,6 +42,8 @@ export interface YxcCapabilities {
   zones: YxcZone[];
   /** Media-player sources the device offers (netusb, tuner, cd). */
   media: string[];
+  /** The netusb block's declared functions (`mc_playlist`, `play_queue`, …). */
+  netusbFuncs?: string[];
   /** Whether the device reports a MusicCast-Link distribution block (getFeatures `distribution`). */
   hasDistribution?: boolean;
   /** The tuner features (bands, preset mode), when the device has a tuner. */
@@ -191,14 +195,20 @@ export function parseYxcFeatures(response: unknown): YxcCapabilities {
           inputs: stringList(zone.input_list),
           volumeRange: parseRange(zone.range_step, "volume"),
           valueLists: parseValueLists(zone),
+          sceneNum: typeof zone.scene_num === "number" ? zone.scene_num : undefined,
         });
       }
     }
   }
   const media = MEDIA_BLOCKS.filter(block => block in obj);
+  const netusb = obj.netusb;
   return {
     zones,
     media,
+    netusbFuncs:
+      typeof netusb === "object" && netusb !== null
+        ? stringList((netusb as Record<string, unknown>).func_list)
+        : undefined,
     hasDistribution: "distribution" in obj,
     tuner: media.includes("tuner") ? parseTunerFeatures(obj.tuner) : undefined,
     clock: "clock" in obj ? parseClockFeatures(obj.clock) : undefined,

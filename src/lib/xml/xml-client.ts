@@ -1,5 +1,5 @@
 import { request } from "node:http";
-import { encodeGet, encodePut, parseBasicStatus, parseModelName, type BasicStatus } from "./protocol";
+import { assertXmlOk, encodeGet, encodePut, parseBasicStatus, parseModelName, type BasicStatus } from "./protocol";
 import type { CommandGate } from "../lifecycle/command-gate";
 
 /** The receiver's XML control endpoint. */
@@ -24,7 +24,17 @@ function defaultPoster(ip: string, body: string): Promise<string> {
       res => {
         let data = "";
         res.on("data", chunk => (data += String(chunk)));
-        res.on("end", () => resolve(data));
+        res.on("error", reject);
+        res.on("end", () => {
+          // The firmware answers a request for an unknown node with a BODYLESS HTTP 400
+          // (captured RX-V6A behaviour) — that is a device verdict, not transport noise,
+          // and must reach the caller instead of masquerading as an empty success.
+          if (res.statusCode !== undefined && (res.statusCode < 200 || res.statusCode >= 300)) {
+            reject(new Error(`device refused the request (HTTP ${res.statusCode})`));
+            return;
+          }
+          resolve(data);
+        });
       },
     );
     req.on("error", reject);
@@ -56,24 +66,27 @@ export class XmlClient {
   }
 
   /**
-   * Send a zone command (wrapped in a PUT envelope).
+   * Send a zone command (wrapped in a PUT envelope). Throws when the device refuses
+   * it — the response's return code IS the device saying "I did not do that", and
+   * swallowing it left every refused write invisible (#613/#615).
    *
    * @param zone the zone element (e.g. `Main_Zone`)
    * @param inner the inner command XML
    */
   public async send(zone: string, inner: string): Promise<void> {
-    await this.request(this.ip, encodePut(zone, inner));
+    assertXmlOk(await this.request(this.ip, encodePut(zone, inner)), `<${zone}>${inner}`);
   }
 
   /**
-   * Read a zone's Basic_Status.
+   * Read a zone's Basic_Status. A refusal throws — an absent zone must not look
+   * like a present zone with an empty status.
    *
    * @param zone the zone element (e.g. `Main_Zone`)
    * @returns the parsed amplifier fields
    */
   public async getStatus(zone: string): Promise<BasicStatus> {
     const response = await this.request(this.ip, encodeGet(zone, "<Basic_Status>GetParam</Basic_Status>"));
-    return parseBasicStatus(response);
+    return parseBasicStatus(assertXmlOk(response, `<${zone}> Basic_Status`));
   }
 
   /**

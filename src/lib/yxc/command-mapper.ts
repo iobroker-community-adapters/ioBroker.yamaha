@@ -157,6 +157,20 @@ export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefi
     zone = zoneMatch[1];
     name = zoneMatch[2];
   }
+  // Scene recall (#615) and the on-screen remote — zone-scoped, device-verified endpoints.
+  if (name === "scene.recall" && isWritableValue(value, true)) {
+    const num = Math.round(Number(value));
+    const sceneZone = zone;
+    return { kind: "run", run: client => client.recallScene(num, sceneZone) };
+  }
+  if (name === "remote.cursor" && isWritableValue(value, false)) {
+    const cursorZone = zone;
+    return { kind: "run", run: client => client.controlCursor(String(value), cursorZone) };
+  }
+  if (name === "remote.menu" && isWritableValue(value, false)) {
+    const menuZone = zone;
+    return { kind: "run", run: client => client.controlMenu(String(value), menuZone) };
+  }
   const eqBand = EQ_CHANNELS[name];
   if (eqBand && isWritableValue(value, true)) {
     // The controller supplies the other two bands; the value carries only this band.
@@ -449,6 +463,81 @@ export function parseYxcTunerPresetLists(byBand: Record<string, unknown>): State
     return undefined;
   }
   return { id: "tuner.presets", value: JSON.stringify(result) };
+}
+
+/**
+ * Parse a `/<zone>/getSignalInfo` response into the read-only audio-signal states
+ * (capture-verified shape: `audio` with format/fs/bit/bitrate).
+ *
+ * @param info the getSignalInfo response object
+ * @param zone the zone the info belongs to
+ * @returns the signal state updates, empty if malformed
+ */
+export function parseYxcSignalInfo(info: unknown, zone: string): StateValue[] {
+  const audio = (info as { audio?: unknown } | null)?.audio;
+  if (typeof audio !== "object" || audio === null) {
+    return [];
+  }
+  const prefix = YXC_ZONE_IDS.includes(zone as (typeof YXC_ZONE_IDS)[number]) ? zonePrefix(zone) : undefined;
+  if (prefix === undefined) {
+    return [];
+  }
+  const a = audio as Record<string, unknown>;
+  const updates: StateValue[] = [];
+  if (typeof a.format === "string") {
+    updates.push({ id: `${prefix}sound.signalFormat`, value: a.format });
+  }
+  if (typeof a.fs === "string") {
+    updates.push({ id: `${prefix}sound.signalSampling`, value: a.fs });
+  }
+  if (typeof a.bit === "string") {
+    updates.push({ id: `${prefix}sound.signalBits`, value: a.bit });
+  }
+  if (typeof a.bitrate === "number") {
+    updates.push({ id: `${prefix}sound.signalBitrate`, value: a.bitrate });
+  }
+  return updates;
+}
+
+/**
+ * Parse a `/netusb/getMcPlaylistName` response into the playlists JSON state
+ * (capture-verified shape: `name_list` of strings).
+ *
+ * @param info the getMcPlaylistName response object
+ * @returns the state update, or undefined if the response is malformed
+ */
+export function parseYxcPlaylistNames(info: unknown): StateValue | undefined {
+  const names = (info as { name_list?: unknown } | null)?.name_list;
+  if (!Array.isArray(names)) {
+    return undefined;
+  }
+  const list = names
+    .map((name, index) => ({ num: index + 1, name }))
+    .filter((entry): entry is { num: number; name: string } => typeof entry.name === "string");
+  return { id: "player.netPlayer.playlists", value: JSON.stringify(list) };
+}
+
+/**
+ * Parse a `/netusb/getPlayQueue` response into the play-queue JSON state
+ * (capture-verified shape: `track_info` plus `playing_index`).
+ *
+ * @param info the getPlayQueue response object
+ * @returns the state update, or undefined if the response is malformed
+ */
+export function parseYxcPlayQueue(info: unknown): StateValue | undefined {
+  if (typeof info !== "object" || info === null) {
+    return undefined;
+  }
+  const q = info as { track_info?: unknown; playing_index?: unknown; max_line?: unknown };
+  if (!Array.isArray(q.track_info)) {
+    return undefined;
+  }
+  const value = {
+    playingIndex: typeof q.playing_index === "number" ? q.playing_index : -1,
+    totalTracks: typeof q.max_line === "number" ? q.max_line : q.track_info.length,
+    tracks: q.track_info,
+  };
+  return { id: "player.netPlayer.queue", value: JSON.stringify(value) };
 }
 
 /**

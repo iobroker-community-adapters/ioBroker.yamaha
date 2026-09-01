@@ -2,6 +2,7 @@ import {
   buildYncaCatalog,
   funcToEntry,
   idToEntry,
+  presentYncaEntries,
   sweepGets,
   yncaCommand,
   yncaObjectsFor,
@@ -305,7 +306,9 @@ describe("YNCA catalog", () => {
       func: "ZONEBVOL",
       value: "-30.0",
     });
-    expect(yncaCommand("sound.bass", 3, map)).toEqual({ subunit: "MAIN", func: "SPBASS", value: "3.0" });
+    // In the STATIC map the newer tone dialect wins (TONEBASS is listed after SPBASS);
+    // the per-device dialect choice has its own test below.
+    expect(yncaCommand("sound.bass", 3, map)).toEqual({ subunit: "MAIN", func: "TONEBASS", value: "3.0" });
     expect(yncaCommand("sound.headphoneTreble", -2.5, map)).toEqual({
       subunit: "MAIN",
       func: "HPTREBLE",
@@ -481,6 +484,67 @@ describe("official-command-list additions (2026-08-25)", () => {
       subunit: "MAIN",
       func: "ADAPTIVEDSP",
       value: "Auto",
+    });
+  });
+
+  test("the per-device write map speaks each generation's tone dialect (SPBASS vs TONEBASS)", () => {
+    // A classic receiver reports SPBASS; the MusicCast generation reports TONEBASS
+    // (RX-V6A full sweep, 2026-09-01). The write must use the function THIS device
+    // answered — a fixed table would send the wrong generation's command.
+    const classic: YncaCapabilities = { model: "RX-V473", subunits: { MAIN: { SPBASS: "3.0" } } };
+    const classicMap = idToEntry(presentYncaEntries(classic));
+    expect(yncaCommand("sound.bass", 3, classicMap)).toEqual({ subunit: "MAIN", func: "SPBASS", value: "3.0" });
+
+    const musiccast: YncaCapabilities = { model: "RX-V6A", subunits: { MAIN: { TONEBASS: "0.0" } } };
+    const musiccastMap = idToEntry(presentYncaEntries(musiccast));
+    expect(yncaCommand("sound.bass", 3, musiccastMap)).toEqual({ subunit: "MAIN", func: "TONEBASS", value: "3.0" });
+
+    // A function the device never reported is not writable at all (claim with proof).
+    expect(yncaCommand("sound.treble", 1, classicMap)).toBeUndefined();
+  });
+
+  test("the RX-V6A sweep's newly mapped functions decode to their states", () => {
+    const funcs = funcToEntry(buildYncaCatalog());
+    expect(yncaStateUpdate({ subunit: "MAIN", func: "TONEBASS", value: "0.0" }, funcs)).toEqual({
+      id: "sound.bass",
+      value: 0,
+    });
+    expect(yncaStateUpdate({ subunit: "ZONE2", func: "TONETREBLE", value: "-1.5" }, funcs)).toEqual({
+      id: "multiroom.zone2.sound.treble",
+      value: -1.5,
+    });
+    expect(yncaStateUpdate({ subunit: "MAIN", func: "DIALOGUELVL", value: "2" }, funcs)).toEqual({
+      id: "sound.dialogueLevel",
+      value: 2,
+    });
+    expect(yncaStateUpdate({ subunit: "AIRPLAY", func: "VOLINTERLOCK", value: "Limited" }, funcs)).toEqual({
+      id: "player.airplay.volumeInterlock",
+      value: "Limited",
+    });
+    expect(yncaStateUpdate({ subunit: "BT", func: "DEVICENAME", value: "Pixel" }, funcs)).toEqual({
+      id: "player.bluetooth.deviceName",
+      value: "Pixel",
+    });
+    expect(yncaStateUpdate({ subunit: "DAB", func: "DABOFFAIR", value: "Negate" }, funcs)).toEqual({
+      id: "tuner.dab.offAir",
+      value: false,
+    });
+    expect(yncaStateUpdate({ subunit: "SYS", func: "YNCAPORT", value: "50000" }, funcs)).toEqual({
+      id: "advanced.yncaPort",
+      value: 50000,
+    });
+    // The port is deliberately read-only — writing it would cut this very connection.
+    expect(yncaCommand("advanced.yncaPort", 50001, idToEntry(buildYncaCatalog()))).toBeUndefined();
+    // Speaker-pattern amp assign and the trigger level write with their documented enums.
+    expect(yncaCommand("advanced.speakers.pattern1Amp", "5ch BI-AMP", idToEntry(buildYncaCatalog()))).toEqual({
+      subunit: "SYS",
+      func: "SPPATTERN1AMP",
+      value: "5ch BI-AMP",
+    });
+    expect(yncaCommand("advanced.trigger1Manual", "Lo", idToEntry(buildYncaCatalog()))).toEqual({
+      subunit: "SYS",
+      func: "TRIG1MANUAL",
+      value: "Lo",
     });
   });
 });

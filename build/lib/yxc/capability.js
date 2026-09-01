@@ -103,15 +103,18 @@ function parseYxcFeatures(response) {
           funcs: stringList(zone.func_list),
           inputs: stringList(zone.input_list),
           volumeRange: parseRange(zone.range_step, "volume"),
-          valueLists: parseValueLists(zone)
+          valueLists: parseValueLists(zone),
+          sceneNum: typeof zone.scene_num === "number" ? zone.scene_num : void 0
         });
       }
     }
   }
   const media = MEDIA_BLOCKS.filter((block) => block in obj);
+  const netusb = obj.netusb;
   return {
     zones,
     media,
+    netusbFuncs: typeof netusb === "object" && netusb !== null ? stringList(netusb.func_list) : void 0,
     hasDistribution: "distribution" in obj,
     tuner: media.includes("tuner") ? parseTunerFeatures(obj.tuner) : void 0,
     clock: "clock" in obj ? parseClockFeatures(obj.clock) : void 0

@@ -30,6 +30,7 @@ var import_command_gate = require("../lifecycle/command-gate");
 const YNCA_PORT = 5e4;
 const SWEEP_MARKER_TIMEOUT_MS = 5e3;
 const CONNECT_TIMEOUT_MS = 5e3;
+const REFUSAL_ATTRIBUTION_MS = 2e3;
 const KEEPALIVE_INTERVAL_MS = 3e4;
 function defaultFactory(host, port) {
   const socket = (0, import_node_net.connect)({ host, port });
@@ -76,6 +77,9 @@ class YncaClient {
   lineBuffer = new import_line_buffer.LineBuffer();
   messageHandlers = [];
   dropHandler;
+  refusalHandler;
+  /** The last user PUT actually written, so a refusal right after it can be attributed. */
+  lastUserWrite;
   reachable = false;
   everReachable = false;
   closed = false;
@@ -112,12 +116,19 @@ class YncaClient {
     });
   }
   handleData(chunk) {
+    var _a;
     for (const line of this.lineBuffer.push(chunk)) {
       const response = (0, import_protocol.decodeLine)(line);
       if (response.status === "ok") {
         const message = { subunit: response.subunit, func: response.func, value: response.value };
         for (const handler of this.messageHandlers) {
           handler(message);
+        }
+      } else if (response.status === "restricted" || response.status === "undefined") {
+        const write = this.lastUserWrite;
+        if (write && Date.now() - write.at <= REFUSAL_ATTRIBUTION_MS) {
+          this.lastUserWrite = void 0;
+          (_a = this.refusalHandler) == null ? void 0 : _a.call(this, write.line, response.status);
         }
       }
     }
@@ -166,7 +177,21 @@ class YncaClient {
    * @param value value to set
    */
   send(subunit, func, value) {
-    void this.writeLine((0, import_protocol.encodeCommand)(subunit, func, value), "user");
+    const line = (0, import_protocol.encodeCommand)(subunit, func, value);
+    void this.writeLine(line, "user").then(() => {
+      this.lastUserWrite = { line, at: Date.now() };
+    });
+  }
+  /**
+   * Register the handler called when the device REFUSES a user command
+   * (`@RESTRICTED`: not possible right now / not allowed; `@UNDEFINED`: this model
+   * does not know the function). The controller logs it — a dead button must leave
+   * a trace.
+   *
+   * @param handler called with the refused command line and the device's verdict
+   */
+  onRefusal(handler) {
+    this.refusalHandler = handler;
   }
   /**
    * Send a GET request (background priority — reads yield to user commands).

@@ -73,12 +73,11 @@ describe("stateToXml", () => {
     });
   });
 
-  test("scene recall (write-only) maps to Scene_Load on the main zone only", () => {
-    expect(stateToXml("scene.recall", 2)).toEqual({
-      zone: "Main_Zone",
-      inner: "<Scene><Scene_Load>Scene 2</Scene_Load></Scene>",
-    });
-    expect(stateToXml("multiroom.zone2.scene.recall", 2)).toBeUndefined(); // scenes are a main-zone feature
+  test("scene recall left the static catalog — the device's own declaration drives it now (#615)", () => {
+    // The predecessor's blind Scene_Load is gone; the controller routes scene writes
+    // through the per-zone declaration (Scene_Sel_Item → Scene_Sel).
+    expect(stateToXml("scene.recall", 2)).toBeUndefined();
+    expect(stateToXml("multiroom.zone2.scene.recall", 2)).toBeUndefined();
   });
 
   test("HDMI outputs and party are written on the System element, not the zone", () => {

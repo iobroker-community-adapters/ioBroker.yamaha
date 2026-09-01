@@ -60,7 +60,7 @@ describe("XmlClient", () => {
     const posts: Array<{ ip: string; body: string }> = [];
     const client = new XmlClient("1.2.3.4", async (ip, body) => {
       posts.push({ ip, body });
-      return "";
+      return '<YAMAHA_AV rsp="PUT" RC="0"></YAMAHA_AV>';
     });
     await client.send("Main_Zone", "<Power_Control><Power>On</Power></Power_Control>");
     expect(posts).toEqual([
@@ -71,6 +71,20 @@ describe("XmlClient", () => {
     ]);
   });
 
+  test("a refused command throws with the device's return code — no more silent refusals", async () => {
+    // RC="2" is the RX-V6A's real answer to a command its model does not carry;
+    // before this, the refusal was discarded and a dead button left no trace (#615).
+    const client = new XmlClient("1.2.3.4", async () => '<YAMAHA_AV rsp="PUT" RC="2"></YAMAHA_AV>');
+    await expect(client.send("Main_Zone", "<Scene><Scene_Sel>Scene 1</Scene_Sel></Scene>")).rejects.toThrow("RC=2");
+  });
+
+  test("an empty response body counts as a refusal too", async () => {
+    // Unknown nodes answer a BODYLESS HTTP 400 on real firmware; a fake transport
+    // handing back "" must not look like success either.
+    const client = new XmlClient("1.2.3.4", async () => "");
+    await expect(client.send("Main_Zone", "<X/>")).rejects.toThrow("empty response");
+  });
+
   test("getStatus posts a Basic_Status GET and parses the response", async () => {
     const client = new XmlClient(
       "1.2.3.4",
@@ -78,6 +92,11 @@ describe("XmlClient", () => {
         "<YAMAHA_AV><Main_Zone><Basic_Status><Power_Control><Power>On</Power></Power_Control></Basic_Status></Main_Zone></YAMAHA_AV>",
     );
     expect(await client.getStatus("Main_Zone")).toEqual({ power: true });
+  });
+
+  test("getStatus on a refusing zone throws instead of answering an empty status", async () => {
+    const client = new XmlClient("1.2.3.4", async () => '<YAMAHA_AV rsp="GET" RC="4"></YAMAHA_AV>');
+    await expect(client.getStatus("Zone_2")).rejects.toThrow("RC=4");
   });
 });
 

@@ -1,6 +1,148 @@
 import { decodeXmlText } from "./entities";
 
 /**
+ * The device's own verdict on a request: every `<YAMAHA_AV rsp=…>` answer carries an
+ * `RC` attribute (0 = executed, 2 = the node does not exist on this model, 3/4 =
+ * value refused / not executable right now). The predecessor code threw this away —
+ * which is why a refused scene recall or menu command looked exactly like success
+ * and user reports stayed undiagnosable (#613/#615).
+ *
+ * @param xml the response body
+ * @returns the return code, or undefined when the body carries none
+ */
+export function parseReturnCode(xml: string): number | undefined {
+  const match = /<YAMAHA_AV[^>]*\bRC="(\d+)"/.exec(xml);
+  return match ? Number(match[1]) : undefined;
+}
+
+/**
+ * Throw when a response reports a non-zero return code — the device REFUSED the
+ * request. An empty body counts as a refusal too: the firmware answers unknown
+ * nodes with a bodyless HTTP 400 (captured RX-V6A behaviour).
+ *
+ * @param xml the response body
+ * @param what the request, for the error message
+ * @returns the body, for chaining
+ */
+export function assertXmlOk(xml: string, what: string): string {
+  if (xml.length === 0) {
+    throw new Error(`device refused ${what} (empty response)`);
+  }
+  const code = parseReturnCode(xml);
+  if (code !== undefined && code !== 0) {
+    throw new Error(`device refused ${what} (RC=${code})`);
+  }
+  return xml;
+}
+
+/** One scene as the device declares it in `<Scene_Sel_Item>`. */
+export interface XmlScene {
+  /** The 1-based scene number (from the `<Param>Scene N</Param>` write value). */
+  num: number;
+  /** The scene's title (e.g. "Movie Viewing"), possibly renamed by the user. */
+  title: string;
+}
+
+/**
+ * Parse a `<Scene_Sel_Item>` response into the scenes the device DECLARES for the
+ * zone: each `<Item_N>` carries the write value (`<Param>Scene N</Param>`), whether
+ * it is writable (`<RW>W</RW>`) and its title. This is the device's own contract —
+ * the RX-V6A capture shows `Scene_Sel` as the declared write element, not the
+ * predecessor's `Scene_Load` (#615).
+ *
+ * @param xml the Scene_Sel_Item response body
+ * @returns the declared writable scenes, empty when the zone has none
+ */
+export function parseSceneList(xml: string): XmlScene[] {
+  const scenes: XmlScene[] = [];
+  const pattern = /<Item_\d+>\s*<Param>Scene (\d+)<\/Param>\s*<RW>([^<]*)<\/RW>\s*<Title>([^<]*)<\/Title>/g;
+  for (let match = pattern.exec(xml); match; match = pattern.exec(xml)) {
+    if (match[2].includes("W")) {
+      scenes.push({ num: Number(match[1]), title: decodeXmlText(match[3]) });
+    }
+  }
+  return scenes;
+}
+
+/**
+ * Parse an `<Input_Sel_Item>` response into the zone's selectable input values (the
+ * `<Param>` of every item). The device's own list — per zone, it differs between
+ * Main and Zone 2 on real hardware (RX-V6A capture: 4.4 KB vs 3.3 KB) — becomes the
+ * input dropdown, replacing a free-text state on XML-owned devices.
+ *
+ * @param xml the Input_Sel_Item response body
+ * @returns the selectable input values, empty when the zone reports none
+ */
+export function parseInputList(xml: string): string[] {
+  const inputs: string[] = [];
+  const pattern = /<Item_\d+>\s*<Param>([^<]+)<\/Param>/g;
+  for (let match = pattern.exec(xml); match; match = pattern.exec(xml)) {
+    inputs.push(decodeXmlText(match[1]));
+  }
+  return inputs;
+}
+
+/** The tuner fields a classic `<Tuner><Play_Info>` response can carry. */
+export interface XmlTunerInfo {
+  /** The active preset slot (0 = none). */
+  preset?: number;
+  /** The tuned frequency, scaled by the response's own exponent. */
+  frequency?: number;
+  /** The frequency's unit as the device reports it (MHz/kHz). */
+  frequencyUnit?: string;
+  /** RDS station name. */
+  rdsService?: string;
+  /** RDS radio text. */
+  rdsText?: string;
+  /** Whether the tuner is locked onto a station. */
+  tuned?: boolean;
+  /** Whether reception is stereo. */
+  stereo?: boolean;
+}
+
+/**
+ * Parse a classic `<Tuner><Play_Info>` response, presence-checked across the
+ * generation dialects (flat vs band-wrapped — the shared field shapes are verified
+ * against the captured `<DAB>` sibling: Preset/Preset_Sel, Tuning/Freq Val+Exp+Unit,
+ * Signal_Info Tuned/Stereo as Assert/Negate, Meta_Info Program_Service/Radio_Text).
+ * Only the XML-only generation (pre-2010, the third transport as the only one) ever
+ * OWNS these states — newer devices carry the tuner via YNCA/YXC.
+ *
+ * @param xml the Play_Info response body
+ * @returns the fields the response carries
+ */
+export function parseTunerInfo(xml: string): XmlTunerInfo {
+  const info: XmlTunerInfo = {};
+  const preset = /<Preset>\s*<Preset_Sel>([^<]+)<\/Preset_Sel>/.exec(xml);
+  if (preset) {
+    const slot = Number(preset[1]);
+    info.preset = Number.isFinite(slot) ? slot : 0;
+  }
+  const freq = /<Freq>\s*(?:<Current>\s*)?<Val>(-?\d+)<\/Val>\s*<Exp>(\d+)<\/Exp>\s*<Unit>([^<]*)<\/Unit>/.exec(xml);
+  if (freq) {
+    info.frequency = Number(freq[1]) / 10 ** Number(freq[2]);
+    info.frequencyUnit = freq[3];
+  }
+  const service = /<Program_Service>([^<]*)<\/Program_Service>/.exec(xml);
+  if (service) {
+    info.rdsService = decodeXmlText(service[1]);
+  }
+  const text = /<Radio_Text>([^<]*)<\/Radio_Text>/.exec(xml);
+  if (text) {
+    info.rdsText = decodeXmlText(text[1]);
+  }
+  const tuned = /<Tuned>(Assert|Negate)<\/Tuned>/.exec(xml);
+  if (tuned) {
+    info.tuned = tuned[1] === "Assert";
+  }
+  const stereo = /<Stereo>(Assert|Negate)<\/Stereo>/.exec(xml);
+  if (stereo) {
+    info.stereo = stereo[1] === "Assert";
+  }
+  return info;
+}
+
+/**
  * Wrap an inner command in the YAMAHA_AV PUT envelope for a zone.
  *
  * @param zone the zone element (e.g. `Main_Zone`)

@@ -115,3 +115,61 @@ describe("XmlBrowseDriver", () => {
     ]);
   });
 });
+
+describe("XmlBrowseDriver back fallback (#613)", () => {
+  function refusalSetup(refuse: Set<string>): {
+    driver: XmlBrowseDriver;
+    sent: string[];
+  } {
+    const sent: string[] = [];
+    const driver = new XmlBrowseDriver(
+      {
+        send: (_element, inner) => {
+          sent.push(inner);
+          if ([...refuse].some(fragment => inner.includes(fragment))) {
+            // What XmlClient.send now throws when the device answers RC!=0 / HTTP 400.
+            return Promise.reject(new Error("device refused (RC=2)"));
+          }
+          return Promise.resolve();
+        },
+        getXml: () => Promise.resolve(listBody({})),
+      },
+      new Set(["netRadio"]),
+      instantDelay,
+    );
+    driver.attach({ onWindow: (): void => {} } as unknown as BrowseEngine);
+    return { driver, sent };
+  }
+
+  it("falls back to Cursor=Left when the device refuses Return, and remembers the choice", async () => {
+    // The 2012 generation (RX-V473 class) refuses "Return" but accepts "Left" —
+    // the user-measured behaviour of the predecessor's working setup.
+    const { driver, sent } = refusalSetup(new Set(["<Cursor>Return</Cursor>"]));
+    await driver.open("netRadio");
+    sent.length = 0;
+    await driver.back();
+    expect(sent).toEqual([
+      "<List_Control><Cursor>Return</Cursor></List_Control>",
+      "<List_Control><Cursor>Left</Cursor></List_Control>",
+    ]);
+    // The next back skips the refused vocabulary entirely.
+    sent.length = 0;
+    await driver.back();
+    expect(sent).toEqual(["<List_Control><Cursor>Left</Cursor></List_Control>"]);
+  });
+
+  it("a device refusing both vocabularies surfaces the refusal (the engine logs it)", async () => {
+    const { driver, sent } = refusalSetup(new Set(["<Cursor>Return</Cursor>", "<Cursor>Left</Cursor>"]));
+    await driver.open("netRadio");
+    sent.length = 0;
+    await expect(driver.back()).rejects.toThrow("device refused");
+  });
+
+  it("a modern device keeps using Return", async () => {
+    const { driver, sent } = refusalSetup(new Set());
+    await driver.open("netRadio");
+    sent.length = 0;
+    await driver.back();
+    expect(sent).toEqual(["<List_Control><Cursor>Return</Cursor></List_Control>"]);
+  });
+});

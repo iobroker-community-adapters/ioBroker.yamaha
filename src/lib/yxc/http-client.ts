@@ -682,4 +682,70 @@ export class YamahaYxcClient {
   public getClockSettings(): Promise<unknown> {
     return this.send("/clock/getSettings");
   }
+
+  /**
+   * Recall a zone's scene (#615). Endpoint and parameter verified against a live
+   * RX-V6A (main and zone2 answer the parameter probe; `setScene` does not exist).
+   *
+   * @param num the scene number (1-based)
+   * @param zone the zone
+   * @returns the command response
+   */
+  public recallScene(num: number, zone: string): Promise<unknown> {
+    return this.send(`/${zoneSeg(zone)}/recallScene?num=${q(num)}`);
+  }
+
+  /**
+   * Drive the on-screen cursor (the remote's arrow pad). Vocabulary verified against
+   * a live RX-V6A (invalid values answer code 4): up/down/left/right/select/return.
+   *
+   * @param cursor the cursor action
+   * @param zone the zone
+   * @returns the command response
+   */
+  public controlCursor(cursor: string, zone: string): Promise<unknown> {
+    return this.send(`/${zoneSeg(zone)}/controlCursor?cursor=${q(cursor)}`);
+  }
+
+  /**
+   * Drive the on-screen menus (the remote's menu keys). Vocabulary verified against
+   * a live RX-V6A: on_screen/top_menu/menu/option/display/home.
+   *
+   * @param menu the menu action
+   * @param zone the zone
+   * @returns the command response
+   */
+  public controlMenu(menu: string, zone: string): Promise<unknown> {
+    return this.send(`/${zoneSeg(zone)}/controlMenu?menu=${q(menu)}`);
+  }
+
+  /**
+   * Read a zone's audio signal info (format, sampling rate, bit depth, bitrate).
+   *
+   * @param zone the zone
+   * @returns the getSignalInfo response
+   */
+  public getSignalInfo(zone: string): Promise<unknown> {
+    return this.send(`/${zoneSeg(zone)}/getSignalInfo`);
+  }
+
+  /**
+   * Read the names of the MusicCast playlists (the app-managed lists).
+   *
+   * @returns the getMcPlaylistName response
+   */
+  public getMcPlaylistName(): Promise<unknown> {
+    return this.send("/netusb/getMcPlaylistName");
+  }
+
+  /**
+   * Read one window of the network player's play queue.
+   *
+   * @param index the 0-based index of the window's first entry
+   * @param size how many entries to fetch (the device caps at 8)
+   * @returns the getPlayQueue response
+   */
+  public getPlayQueue(index = 0, size = 8): Promise<unknown> {
+    return this.send(`/netusb/getPlayQueue?index=${q(index)}&size=${q(size)}`);
+  }
 }

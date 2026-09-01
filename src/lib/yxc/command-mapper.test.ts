@@ -2,8 +2,11 @@ import {
   parseYxcClock,
   parseYxcDistribution,
   parseYxcPlayInfo,
+  parseYxcPlaylistNames,
+  parseYxcPlayQueue,
   parseYxcPresetList,
   parseYxcRecentList,
+  parseYxcSignalInfo,
   parseYxcStatus,
   parseYxcTunerInfo,
   parseYxcTunerPresetLists,
@@ -515,5 +518,87 @@ describe("parseYxcClock", () => {
       ]),
     );
     expect(parseYxcClock(null)).toEqual([]);
+  });
+});
+
+describe("scene recall and the on-screen remote (#615, device-verified endpoints)", () => {
+  test("scene.recall runs recallScene on the written zone", async () => {
+    const { client, calls } = recordingClient();
+    const main = stateToYxc("scene.recall", 4);
+    expect(main).toMatchObject({ kind: "run" });
+    await (main as { kind: "run"; run: (c: YxcClientLike) => Promise<unknown> }).run(client);
+    expect(calls).toEqual([["recallScene", [4, "main"]]]);
+
+    calls.length = 0;
+    const zone2 = stateToYxc("multiroom.zone2.scene.recall", 2);
+    await (zone2 as { kind: "run"; run: (c: YxcClientLike) => Promise<unknown> }).run(client);
+    expect(calls).toEqual([["recallScene", [2, "zone2"]]]);
+  });
+
+  test("remote.cursor and remote.menu run the verified control endpoints", async () => {
+    const { client, calls } = recordingClient();
+    const cursor = stateToYxc("remote.cursor", "return");
+    await (cursor as { kind: "run"; run: (c: YxcClientLike) => Promise<unknown> }).run(client);
+    const menu = stateToYxc("remote.menu", "top_menu");
+    await (menu as { kind: "run"; run: (c: YxcClientLike) => Promise<unknown> }).run(client);
+    expect(calls).toEqual([
+      ["controlCursor", ["return", "main"]],
+      ["controlMenu", ["top_menu", "main"]],
+    ]);
+  });
+
+  test("invalid values map to no command at all", () => {
+    expect(stateToYxc("scene.recall", null)).toBeUndefined();
+    expect(stateToYxc("scene.recall", "abc")).toBeUndefined();
+    expect(stateToYxc("remote.cursor", null)).toBeUndefined();
+  });
+});
+
+describe("signal info / playlists / play queue parsers (capture-verified shapes)", () => {
+  test("parseYxcSignalInfo maps the audio block onto the zone's sound states", () => {
+    // The captured RX-V6A getSignalInfo shape.
+    const updates = parseYxcSignalInfo(
+      { response_code: 0, audio: { error: 0, format: "PCM", fs: "48 kHz", bit: "24", bitrate: 0 } },
+      "main",
+    );
+    expect(updates).toEqual([
+      { id: "sound.signalFormat", value: "PCM" },
+      { id: "sound.signalSampling", value: "48 kHz" },
+      { id: "sound.signalBits", value: "24" },
+      { id: "sound.signalBitrate", value: 0 },
+    ]);
+    expect(parseYxcSignalInfo({ response_code: 0 }, "main")).toEqual([]);
+    // A zone-2 response lands under the zone prefix.
+    expect(parseYxcSignalInfo({ audio: { format: "---" } }, "zone2")).toEqual([
+      { id: "multiroom.zone2.sound.signalFormat", value: "---" },
+    ]);
+  });
+
+  test("parseYxcPlaylistNames turns the name list into the numbered JSON state", () => {
+    const update = parseYxcPlaylistNames({ response_code: 0, name_list: ["Playlist 1", "Playlist 2"] });
+    expect(update?.id).toBe("player.netPlayer.playlists");
+    expect(JSON.parse(String(update?.value))).toEqual([
+      { num: 1, name: "Playlist 1" },
+      { num: 2, name: "Playlist 2" },
+    ]);
+    expect(parseYxcPlaylistNames({ response_code: 0 })).toBeUndefined();
+  });
+
+  test("parseYxcPlayQueue keeps the playing index and the tracks", () => {
+    const update = parseYxcPlayQueue({
+      response_code: 0,
+      type: "system",
+      max_line: 2,
+      playing_index: 1,
+      index: 0,
+      track_info: [{ text: "A" }, { text: "B" }],
+    });
+    expect(update?.id).toBe("player.netPlayer.queue");
+    expect(JSON.parse(String(update?.value))).toEqual({
+      playingIndex: 1,
+      totalTracks: 2,
+      tracks: [{ text: "A" }, { text: "B" }],
+    });
+    expect(parseYxcPlayQueue({ response_code: 0 })).toBeUndefined();
   });
 });

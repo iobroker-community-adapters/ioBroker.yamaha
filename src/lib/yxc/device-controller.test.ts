@@ -810,3 +810,32 @@ describe("YxcDeviceController recall routing (which zone gets the favourite)", (
     expect(client.calls).toContainEqual({ method: "recallTunerPreset", args: ["common", 4, "zone2"] });
   });
 });
+
+describe("YxcDeviceController signal/playlist/queue polling (declared surfaces only)", () => {
+  const declaringFeatures = {
+    response_code: 0,
+    zone: [{ id: "main", func_list: ["power", "signal_info"], input_list: ["hdmi1"] }],
+    netusb: { func_list: ["mc_playlist", "play_queue", "recent_info"] },
+  };
+
+  test("start fetches signal info, playlists and the queue when the device declares them", async () => {
+    const s = setup(declaringFeatures, { response_code: 0, power: "on" });
+    await s.controller.start();
+    const methods = (s.client.calls as Array<{ method: string }>).map(c => c.method);
+    expect(methods).toContain("getSignalInfo");
+    expect(methods).toContain("getMcPlaylistName");
+    expect(methods).toContain("getPlayQueue");
+  });
+
+  test("a device declaring none of them is never asked", async () => {
+    const s = setup(
+      { response_code: 0, zone: [{ id: "main", func_list: ["power"], input_list: ["hdmi1"] }], netusb: {} },
+      { response_code: 0, power: "on" },
+    );
+    await s.controller.start();
+    const methods = (s.client.calls as Array<{ method: string }>).map(c => c.method);
+    expect(methods).not.toContain("getSignalInfo");
+    expect(methods).not.toContain("getMcPlaylistName");
+    expect(methods).not.toContain("getPlayQueue");
+  });
+});

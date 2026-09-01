@@ -185,6 +185,80 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
       }
       objects.push({ id: fullId, type: "state", common });
     }
+    const zoneChannelHelper = (id: string, name: string): void => {
+      if (!channels.has(id)) {
+        channels.add(id);
+        objects.push({ id, type: "channel", common: { name } });
+      }
+    };
+    // Scene recall (#615): the zone declares `scene` + scene_num — per zone, so a
+    // Zone-2 scene is first-class (the RX-V6A declares 8 for main AND zone2).
+    if (zone.funcs.includes("scene") && zone.sceneNum && zone.sceneNum > 0) {
+      zoneChannelHelper(`${zoneDef.prefix}scene`, CHANNEL_NAMES.scene ?? "Scenes");
+      objects.push({
+        id: `${zoneDef.prefix}scene.recall`,
+        type: "state",
+        common: {
+          name: "Recall scene",
+          type: "number",
+          role: "level",
+          read: true,
+          write: true,
+          min: 1,
+          max: zone.sceneNum,
+          step: 1,
+        },
+      });
+    }
+    // The on-screen remote (cursor pad + menu keys) — declared as zone functions
+    // `cursor`/`menu`; the endpoints and their vocabulary are device-verified.
+    if (zone.funcs.includes("cursor") || zone.funcs.includes("menu")) {
+      zoneChannelHelper(`${zoneDef.prefix}remote`, CHANNEL_NAMES.remote ?? "Remote control");
+      if (zone.funcs.includes("cursor")) {
+        objects.push({
+          id: `${zoneDef.prefix}remote.cursor`,
+          type: "state",
+          common: {
+            name: "Cursor pad",
+            type: "string",
+            role: "state",
+            read: false,
+            write: true,
+            states: selfMap(["up", "down", "left", "right", "select", "return"]),
+          },
+        });
+      }
+      if (zone.funcs.includes("menu")) {
+        objects.push({
+          id: `${zoneDef.prefix}remote.menu`,
+          type: "state",
+          common: {
+            name: "Menu key",
+            type: "string",
+            role: "state",
+            read: false,
+            write: true,
+            states: selfMap(["on_screen", "top_menu", "menu", "option", "display", "home"]),
+          },
+        });
+      }
+    }
+    // The audio-signal info (own endpoint, declared as `signal_info`): what the zone
+    // currently decodes — format, sampling rate, bit depth, bitrate.
+    if (zone.funcs.includes("signal_info")) {
+      zoneChannelHelper(`${zoneDef.prefix}sound`, CHANNEL_NAMES.sound ?? "Sound");
+      const signal = (id: string, name: string, type: "string" | "number", role: "text" | "value"): void => {
+        objects.push({
+          id: `${zoneDef.prefix}sound.${id}`,
+          type: "state",
+          common: { name, type, role, read: true, write: false },
+        });
+      };
+      signal("signalFormat", "Audio signal format", "string", "text");
+      signal("signalSampling", "Audio sampling rate", "string", "text");
+      signal("signalBits", "Audio bit depth", "string", "text");
+      signal("signalBitrate", "Audio bitrate", "number", "value");
+    }
   }
   if (capabilities.media.includes("netusb") || capabilities.media.includes("cd")) {
     objects.push({ id: "player", type: "channel", common: { name: "Media player" } });
@@ -225,6 +299,23 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
       type: "state",
       common: { name: "Active network source", type: "string", role: "text", read: true, write: false },
     });
+    // MusicCast playlists and the play queue — declared in the netusb func_list.
+    // Read-only surfaces: no write path for them is documented anywhere, and blind
+    // writes are exactly what this adapter no longer does.
+    if (capabilities.netusbFuncs?.includes("mc_playlist")) {
+      objects.push({
+        id: "player.netPlayer.playlists",
+        type: "state",
+        common: { name: "MusicCast playlists", type: "string", role: "json", read: true, write: false },
+      });
+    }
+    if (capabilities.netusbFuncs?.includes("play_queue")) {
+      objects.push({
+        id: "player.netPlayer.queue",
+        type: "state",
+        common: { name: "Play queue", type: "string", role: "json", read: true, write: false },
+      });
+    }
   }
   if (capabilities.media.includes("cd")) {
     pushPlayerBlock(objects, "player.cd", "CD");

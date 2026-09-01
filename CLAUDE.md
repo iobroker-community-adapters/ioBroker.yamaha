@@ -166,6 +166,54 @@ bleiben deklarativ, weil sie Controller-Zustand brauchen). YXC-Push: ein geteilt
 (`yxc/push-receiver.ts`) auf :41100, per Quell-IP geroutet. Discovery: SSDP-M-SEARCH + HTTP-`fetch` in `main.ts`
 (adapter-Timer, sonst S5005), reine Logik in `lib/discovery.ts`.
 
+## Geräte-Wahrheit statt Alt-Adapter-Erbe (Umbau nach der RX-V6A-Komplett-Ernte 2026-09-01)
+
+Auslöser #615 (scene.recall tot auf RX-V473) + krobis Ansage „der Adapter ist eine
+Neuentwicklung": Die blind vom Alt-Adapter portierten XML-Wege sind ersetzt, jede
+Antwort des Geräts wird gelesen. Belege: `Ressourcen/yamaha/device-captures/rx-v6a-2026-09-01/`
+(README + AUSWERTUNG), Memory `reference_yamaha_rx_v6a_ernte_funde`.
+
+- **XML liest jetzt jede Antwort** (`xml-client.ts`): HTTP-Status ≠2xx und `RC≠0`
+  werfen (`assertXmlOk`) — eine Geräte-Ablehnung landet als Warnung im Log statt im
+  Nichts. `getXml` bleibt roh (die Treiber parsen selbst), `send`/`getStatus` prüfen.
+- **YNCA-Schreib-Ablehnungen werden geloggt** (`ynca-client.ts` `onRefusal`):
+  `@RESTRICTED`/`@UNDEFINED` ≤2 s nach einem User-PUT (Gate serialisiert) wird dem
+  Befehl zugeordnet → `device refused "@MAIN:SCENE=Scene 1" (@RESTRICTED)`. Sweep-GETs
+  werden nie beschuldigt. (YXC hatte den Ablehnungs-Check schon: `assertOk`.)
+- **Szenen sind geräte-deklariert, drei Wege** (#615): XML fragt je Zone
+  `Scene_Sel_Item` (deklariert Existenz+Titel+Schreibwert) und schreibt das dort
+  deklarierte **`Scene_Sel`** — `Scene_Load` (Alt-Adapter-Erbe, nie belegt) ist weg;
+  openHAB nutzt auf der klassischen Generation ebenfalls Scene_Sel. YXC:
+  `recallScene` je Zone (Endpunkt+Parameter am RX-V6A verifiziert; scene_num aus
+  getFeatures = max). YNCA bleibt letzter Weg (`@MAIN:SCENE=Scene N`, auf der
+  2012er-Generation `@RESTRICTED` — ynca-python PRACTICALITIES).
+  Owner-Override `scene.recall: yxc > xml > ynca` (Schreib-Beweis schlägt Modernität).
+  Titel als `scene.name<n>`; Zonen-Szenen unter `multiroom.zoneN.scene.*`.
+- **Per-Gerät-Schreibkarte YNCA** (`presentYncaEntries` + `writeMap` im Controller):
+  geschrieben wird nur mit einer Funktion, die DIESES Gerät im Sweep beantwortet hat.
+  Damit koexistieren Generationen-Dialekte unter einer Id: `sound.bass` = SPBASS
+  (klassisch) ODER TONEBASS (MusicCast-Gen; Katalog-Reihenfolge: TONE nach SP, damit
+  im statischen Fallback die neuere gewinnt). `yncaCommand` verweigert zudem
+  Nur-Lese-Einträge (vorher ging jeder Katalog-Id-Write auf den Draht).
+- **Menü-zurück-Rückfall** (#613, `xml-browse-driver.ts`): `Cursor=Return`, bei
+  Ablehnung einmalig auf `Cursor=Left` (Melder-Messwert der 2012er-Generation)
+  und für die Verbindung gemerkt; `home`-Ablehnung wird sichtbar (Engine-warn).
+- **Klassik-Tuner über XML** (nur Geräte, deren einziger Transport XML ist):
+  Existenz-Probe `<Tuner><Play_Info>`, Preset-Schreibweg openHAB-verifiziert
+  (`Play_Control>Preset>Preset_Sel`), Frequenz/RDS/Tuned lesend; Eingangs-Dropdown je
+  Zone aus `Input_Sel_Item` (Geräte-eigene Liste). Beide über `probeXml`+ProbeMemory.
+- **YXC-Ausbau:** `remote.cursor`/`remote.menu` (Endpunkte `controlCursor`/`controlMenu`
+  am Gerät verifiziert — fehlen in BEIDEN öffentlichen Spezifikationen; Vokabular per
+  Parameter-Validierung: cursor up/down/left/right/select/return, menu
+  on_screen/top_menu/menu/option/display/home), `getSignalInfo` je Zone
+  (sound.signal*), MusicCast-Wiedergabelisten (`getMcPlaylistName`, Namen als JSON,
+  bewusst ohne Abspiel-Schreibweg — nirgends dokumentiert) und `getPlayQueue`
+  (JSON). YNCA-Katalog +18 Funktionen (Tone-Dialekt, DIALOGUELVL, DAB-Details,
+  BT:DEVICENAME, AIRPLAY:VOLINTERLOCK, SPPATTERN1AMP, TRIG1MANUAL; `YNCAPORT`
+  bewusst NUR lesend — ein Schreib-Unfall würde die eigene Verbindung kappen).
+- **`info.ip` je Gerät** (`ensureDeviceHeader`): die Adresse stand nirgends —
+  Diagnose brauchte eine Netzsuche; jetzt Datenpunkt, je Start aufgefrischt.
+
 ## Erreichbarkeit + Anspruch: zwei Regeln, die v1.5.0 eingezogen hat
 
 **1) Kein Anspruch ohne Nachweis (#613).** Der YNCA-Browse-Treiber beanspruchte `player.browse.*`,

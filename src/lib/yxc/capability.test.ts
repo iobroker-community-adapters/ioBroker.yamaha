@@ -86,3 +86,25 @@ describe("parseYxcFeatures", () => {
     expect(parseYxcFeatures(rxV481).clock).toBeUndefined();
   });
 });
+
+describe("scene count and netusb functions (RX-V6A getFeatures, 2026-09-01)", () => {
+  test("parses scene_num per zone and the netusb func_list", () => {
+    const caps = parseYxcFeatures({
+      response_code: 0,
+      zone: [
+        { id: "main", func_list: ["power", "scene"], input_list: ["hdmi1"], scene_num: 8 },
+        { id: "zone2", func_list: ["power", "scene"], input_list: ["hdmi1"], scene_num: 8 },
+      ],
+      netusb: { func_list: ["mc_playlist", "play_queue", "recent_info"] },
+    });
+    expect(caps.zones[0].sceneNum).toBe(8);
+    expect(caps.zones[1].sceneNum).toBe(8);
+    expect(caps.netusbFuncs).toEqual(["mc_playlist", "play_queue", "recent_info"]);
+  });
+
+  test("a device without scenes or a netusb block reports neither", () => {
+    const caps = parseYxcFeatures({ response_code: 0, zone: [{ id: "main", func_list: ["power"] }] });
+    expect(caps.zones[0].sceneNum).toBeUndefined();
+    expect(caps.netusbFuncs).toBeUndefined();
+  });
+});

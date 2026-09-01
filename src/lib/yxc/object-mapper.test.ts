@@ -351,3 +351,60 @@ describe("mapYxcToObjects tree hygiene", () => {
     expect(volume?.common.max).toBe(60);
   });
 });
+
+describe("scene / remote / signal / netusb-list objects (RX-V6A getFeatures shape)", () => {
+  const caps = {
+    zones: [
+      {
+        id: "main",
+        funcs: ["power", "scene", "cursor", "menu", "signal_info"],
+        inputs: ["hdmi1"],
+        sceneNum: 8,
+      },
+      { id: "zone2", funcs: ["power", "scene"], inputs: ["hdmi1"], sceneNum: 8 },
+    ],
+    media: ["netusb"],
+    netusbFuncs: ["mc_playlist", "play_queue", "recent_info"],
+  };
+
+  test("scene.recall exists per declaring zone with the device's scene count as max", () => {
+    const objs = mapYxcToObjects(caps);
+    const main = objs.find(o => o.id === "scene.recall");
+    expect(main?.common.write).toBe(true);
+    expect(main?.common.max).toBe(8);
+    expect(objs.map(o => o.id)).toContain("multiroom.zone2.scene.recall");
+  });
+
+  test("the on-screen remote carries the device-verified vocabularies as dropdowns", () => {
+    const objs = mapYxcToObjects(caps);
+    const cursor = objs.find(o => o.id === "remote.cursor");
+    expect(Object.keys(cursor?.common.states ?? {})).toEqual(["up", "down", "left", "right", "select", "return"]);
+    const menu = objs.find(o => o.id === "remote.menu");
+    expect(Object.keys(menu?.common.states ?? {})).toEqual([
+      "on_screen",
+      "top_menu",
+      "menu",
+      "option",
+      "display",
+      "home",
+    ]);
+    // Zone 2 declared neither — no remote states there.
+    expect(objs.map(o => o.id)).not.toContain("multiroom.zone2.remote.cursor");
+  });
+
+  test("signal-info states exist only for declaring zones; playlists/queue only when declared", () => {
+    const objs = mapYxcToObjects(caps).map(o => o.id);
+    expect(objs).toContain("sound.signalFormat");
+    expect(objs).not.toContain("multiroom.zone2.sound.signalFormat");
+    expect(objs).toContain("player.netPlayer.playlists");
+    expect(objs).toContain("player.netPlayer.queue");
+    const bare = mapYxcToObjects({
+      zones: [{ id: "main", funcs: ["power"], inputs: ["hdmi1"] }],
+      media: ["netusb"],
+    }).map(o => o.id);
+    expect(bare).not.toContain("scene.recall");
+    expect(bare).not.toContain("remote.cursor");
+    expect(bare).not.toContain("player.netPlayer.playlists");
+    expect(bare).not.toContain("player.netPlayer.queue");
+  });
+});

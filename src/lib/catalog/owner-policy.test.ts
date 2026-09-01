@@ -111,3 +111,16 @@ describe("pickOwner fallbacks", () => {
     expect(pickOwner("power", ["xml", "ynca"])).toBe("ynca");
   });
 });
+
+describe("scene.recall ownership (#615 — write-proof beats modernity)", () => {
+  test("the proven writers outrank YNCA's name-based claim", () => {
+    // RX-V473 class: YNCA (names readable) + XML (write value declared) — XML wins,
+    // because the 2012 generation refuses the YNCA scene put with @RESTRICTED.
+    expect(pickOwner("scene.recall", ["ynca", "xml"])).toBe("xml");
+    // MusicCast class: YXC declares the recall endpoint per zone — it wins outright.
+    expect(pickOwner("scene.recall", ["yxc", "xml"])).toBe("yxc");
+    expect(pickOwner("scene.recall", ["yxc", "ynca", "xml"])).toBe("yxc");
+    // A device where only YNCA exists keeps the last-resort YNCA path.
+    expect(pickOwner("scene.recall", ["ynca"])).toBe("ynca");
+  });
+});

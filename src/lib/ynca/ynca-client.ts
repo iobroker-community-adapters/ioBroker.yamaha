@@ -20,6 +20,13 @@ const SWEEP_MARKER_TIMEOUT_MS = 5000;
 const CONNECT_TIMEOUT_MS = 5000;
 
 /**
+ * How long after a user PUT a `@RESTRICTED`/`@UNDEFINED` line is still attributed to
+ * it. Generous against a busy receiver, short enough that a sweep's refusals (which
+ * follow their own GETs within the 100 ms spacing) never blame an old user write.
+ */
+const REFUSAL_ATTRIBUTION_MS = 2000;
+
+/**
  * Poll a keepalive this often while connected. The receiver closes an idle YNCA
  * socket after roughly a minute, so — with no keepalive — the connection drops and
  * the supervisor reconnects on a loop. The ynca protocol keeps it open by polling
@@ -106,6 +113,9 @@ export class YncaClient {
   private readonly lineBuffer = new LineBuffer();
   private readonly messageHandlers: Array<(message: YncaMessage) => void> = [];
   private dropHandler: ((reason?: Error) => void) | undefined;
+  private refusalHandler: ((command: string, verdict: "restricted" | "undefined") => void) | undefined;
+  /** The last user PUT actually written, so a refusal right after it can be attributed. */
+  private lastUserWrite: { line: string; at: number } | undefined;
   private reachable = false;
   private everReachable = false;
   private closed = false;
@@ -171,6 +181,18 @@ export class YncaClient {
         for (const handler of this.messageHandlers) {
           handler(message);
         }
+      } else if (response.status === "restricted" || response.status === "undefined") {
+        // A refusal carries no subunit, so it cannot be matched to a request by content.
+        // But user PUTs are serialized through the gate, and the refusal arrives on their
+        // heels — a refusal shortly after a user write is that write's verdict. Before
+        // this, the device saying "I will not do that" was silently discarded and a dead
+        // button (#615's scene recall) produced no trace at all. Background GETs are not
+        // tracked: an init sweep legitimately collects hundreds of @UNDEFINED answers.
+        const write = this.lastUserWrite;
+        if (write && Date.now() - write.at <= REFUSAL_ATTRIBUTION_MS) {
+          this.lastUserWrite = undefined;
+          this.refusalHandler?.(write.line, response.status);
+        }
       }
     }
   }
@@ -230,7 +252,24 @@ export class YncaClient {
    * @param value value to set
    */
   public send(subunit: string, func: string, value: string): void {
-    void this.writeLine(encodeCommand(subunit, func, value), "user");
+    const line = encodeCommand(subunit, func, value);
+    void this.writeLine(line, "user").then(() => {
+      // Recorded AFTER the gate actually wrote it — the refusal window starts on the wire,
+      // not in the queue (a queued write behind a sweep would otherwise expire unseen).
+      this.lastUserWrite = { line, at: Date.now() };
+    });
+  }
+
+  /**
+   * Register the handler called when the device REFUSES a user command
+   * (`@RESTRICTED`: not possible right now / not allowed; `@UNDEFINED`: this model
+   * does not know the function). The controller logs it — a dead button must leave
+   * a trace.
+   *
+   * @param handler called with the refused command line and the device's verdict
+   */
+  public onRefusal(handler: (command: string, verdict: "restricted" | "undefined") => void): void {
+    this.refusalHandler = handler;
   }
 
   /**

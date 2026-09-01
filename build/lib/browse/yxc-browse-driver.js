@@ -137,10 +137,6 @@ class YxcBrowseDriver {
       this.index = 0;
     }
   }
-  /** Re-read the current window. */
-  async refresh() {
-    await this.fetch();
-  }
   /**
    * Fetch the current window, render it to the engine, and report the menu layer.
    *

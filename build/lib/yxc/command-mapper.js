@@ -23,8 +23,11 @@ __export(command_mapper_exports, {
   parseYxcClock: () => parseYxcClock,
   parseYxcDistribution: () => parseYxcDistribution,
   parseYxcPlayInfo: () => parseYxcPlayInfo,
+  parseYxcPlayQueue: () => parseYxcPlayQueue,
+  parseYxcPlaylistNames: () => parseYxcPlaylistNames,
   parseYxcPresetList: () => parseYxcPresetList,
   parseYxcRecentList: () => parseYxcRecentList,
+  parseYxcSignalInfo: () => parseYxcSignalInfo,
   parseYxcStatus: () => parseYxcStatus,
   parseYxcTunerInfo: () => parseYxcTunerInfo,
   parseYxcTunerPresetLists: () => parseYxcTunerPresetLists,
@@ -124,6 +127,19 @@ function stateToYxc(stateId, value) {
   if (zoneMatch) {
     zone = zoneMatch[1];
     name = zoneMatch[2];
+  }
+  if (name === "scene.recall" && (0, import_value_coerce.isWritableValue)(value, true)) {
+    const num = Math.round(Number(value));
+    const sceneZone = zone;
+    return { kind: "run", run: (client) => client.recallScene(num, sceneZone) };
+  }
+  if (name === "remote.cursor" && (0, import_value_coerce.isWritableValue)(value, false)) {
+    const cursorZone = zone;
+    return { kind: "run", run: (client) => client.controlCursor(String(value), cursorZone) };
+  }
+  if (name === "remote.menu" && (0, import_value_coerce.isWritableValue)(value, false)) {
+    const menuZone = zone;
+    return { kind: "run", run: (client) => client.controlMenu(String(value), menuZone) };
   }
   const eqBand = EQ_CHANNELS[name];
   if (eqBand && (0, import_value_coerce.isWritableValue)(value, true)) {
@@ -349,6 +365,54 @@ function parseYxcTunerPresetLists(byBand) {
   }
   return { id: "tuner.presets", value: JSON.stringify(result) };
 }
+function parseYxcSignalInfo(info, zone) {
+  const audio = info == null ? void 0 : info.audio;
+  if (typeof audio !== "object" || audio === null) {
+    return [];
+  }
+  const prefix = import_zones.YXC_ZONE_IDS.includes(zone) ? (0, import_zones.zonePrefix)(zone) : void 0;
+  if (prefix === void 0) {
+    return [];
+  }
+  const a = audio;
+  const updates = [];
+  if (typeof a.format === "string") {
+    updates.push({ id: `${prefix}sound.signalFormat`, value: a.format });
+  }
+  if (typeof a.fs === "string") {
+    updates.push({ id: `${prefix}sound.signalSampling`, value: a.fs });
+  }
+  if (typeof a.bit === "string") {
+    updates.push({ id: `${prefix}sound.signalBits`, value: a.bit });
+  }
+  if (typeof a.bitrate === "number") {
+    updates.push({ id: `${prefix}sound.signalBitrate`, value: a.bitrate });
+  }
+  return updates;
+}
+function parseYxcPlaylistNames(info) {
+  const names = info == null ? void 0 : info.name_list;
+  if (!Array.isArray(names)) {
+    return void 0;
+  }
+  const list = names.map((name, index) => ({ num: index + 1, name })).filter((entry) => typeof entry.name === "string");
+  return { id: "player.netPlayer.playlists", value: JSON.stringify(list) };
+}
+function parseYxcPlayQueue(info) {
+  if (typeof info !== "object" || info === null) {
+    return void 0;
+  }
+  const q = info;
+  if (!Array.isArray(q.track_info)) {
+    return void 0;
+  }
+  const value = {
+    playingIndex: typeof q.playing_index === "number" ? q.playing_index : -1,
+    totalTracks: typeof q.max_line === "number" ? q.max_line : q.track_info.length,
+    tracks: q.track_info
+  };
+  return { id: "player.netPlayer.queue", value: JSON.stringify(value) };
+}
 function formatAlarmTime(time) {
   return /^\d{4}$/.test(time) ? `${time.slice(0, 2)}:${time.slice(2)}` : time;
 }
@@ -439,8 +503,11 @@ function parseYxcClock(settings) {
   parseYxcClock,
   parseYxcDistribution,
   parseYxcPlayInfo,
+  parseYxcPlayQueue,
+  parseYxcPlaylistNames,
   parseYxcPresetList,
   parseYxcRecentList,
+  parseYxcSignalInfo,
   parseYxcStatus,
   parseYxcTunerInfo,
   parseYxcTunerPresetLists,

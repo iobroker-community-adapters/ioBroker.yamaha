@@ -16,6 +16,8 @@ const silentLog = { debug: (): void => {}, info: (): void => {}, warn: (): void 
 
 class FakeClient implements XmlClientLike {
   public calls: Array<{ method: string; zone: string; inner?: string }> = [];
+  /** Canned GET answers keyed `<element>|<inner>`; unmatched requests answer "" (declares none). */
+  public xmlAnswers: Record<string, string> = {};
   public constructor(private readonly statuses: Record<string, BasicStatus>) {}
   public async getStatus(zone: string): Promise<BasicStatus> {
     this.calls.push({ method: "getStatus", zone });
@@ -29,12 +31,21 @@ class FakeClient implements XmlClientLike {
   public async send(zone: string, inner: string): Promise<void> {
     this.calls.push({ method: "send", zone, inner });
   }
-  /** Browse List_Info probe — an empty body means "no browsable source" here. */
+  /** Probes (browse List_Info, scenes, inputs, tuner) — an empty body means "declares none". */
   public async getXml(zone: string, inner: string): Promise<string> {
     this.calls.push({ method: "getXml", zone, inner });
-    return "";
+    return this.xmlAnswers[`${zone}|${inner}`] ?? "";
   }
 }
+
+/** A device-style Scene_Sel_Item declaration (the RX-V6A capture shape). */
+const sceneDeclaration = (scenes: Array<{ num: number; title: string }>): string =>
+  `<YAMAHA_AV rsp="GET" RC="0"><Scene><Scene_Sel_Item>${scenes
+    .map(
+      s =>
+        `<Item_${s.num}><Param>Scene ${s.num}</Param><RW>W</RW><Title>${s.title}</Title><Icon><On>${s.num}</On></Icon></Item_${s.num}>`,
+    )
+    .join("")}</Scene_Sel_Item></Scene></YAMAHA_AV>`;
 
 function setup(
   statuses: Record<string, BasicStatus>,
@@ -160,13 +171,92 @@ describe("XmlDeviceController", () => {
     expect(s.cancelled()).toBe(true);
   });
 
-  test("creates the scene channel + a main-only recall, but nothing scene/HDMI under a further zone", async () => {
+  test("scenes come from the device's OWN declaration — per zone, with titles (#615)", async () => {
     const s = setup({ Main_Zone: { power: true }, Zone_2: { power: false } });
+    s.client.xmlAnswers["Main_Zone|<Scene><Scene_Sel_Item>GetParam</Scene_Sel_Item></Scene>"] = sceneDeclaration([
+      { num: 1, title: "Movie Viewing" },
+      { num: 2, title: "Radio Listening" },
+    ]);
+    s.client.xmlAnswers["Zone_2|<Scene><Scene_Sel_Item>GetParam</Scene_Sel_Item></Scene>"] = sceneDeclaration([
+      { num: 1, title: "Zone Scene" },
+    ]);
     await s.controller.start();
     expect(s.objects).toContain("living.scene");
     expect(s.objects).toContain("living.scene.recall");
-    expect(s.objects).not.toContain("living.multiroom.zone2.scene.recall");
+    expect(s.objects).toContain("living.scene.name1");
+    expect(s.acks).toContainEqual({ id: "living.scene.name1", value: "Movie Viewing" });
+    // Zone 2 scenes are first-class — the device declares them (RX-V6A capture).
+    expect(s.objects).toContain("living.multiroom.zone2.scene.recall");
     expect(s.objects).not.toContain("living.multiroom.zone2.hdmiOut1");
+  });
+
+  test("a device declaring no scenes gets no scene states at all", async () => {
+    const s = setup({ Main_Zone: { power: true } });
+    await s.controller.start();
+    expect(s.objects).not.toContain("living.scene");
+    expect(s.objects).not.toContain("living.scene.recall");
+  });
+
+  test("a scene write sends the DECLARED Scene_Sel element, never the predecessor's Scene_Load (#615)", async () => {
+    const s = setup({ Main_Zone: { power: true } });
+    s.client.xmlAnswers["Main_Zone|<Scene><Scene_Sel_Item>GetParam</Scene_Sel_Item></Scene>"] = sceneDeclaration([
+      { num: 1, title: "Movie Viewing" },
+      { num: 4, title: "NET Audio" },
+    ]);
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.scene.recall", false, 4);
+    await flush();
+    expect(s.client.calls).toContainEqual({
+      method: "send",
+      zone: "Main_Zone",
+      inner: "<Scene><Scene_Sel>Scene 4</Scene_Sel></Scene>",
+    });
+    // A number the device did not declare is not sent at all.
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.scene.recall", false, 7);
+    await flush();
+    expect(s.client.calls).toEqual([]);
+  });
+
+  test("the classic tuner surface appears only when <Tuner> answers, with the openHAB-verified preset write", async () => {
+    const s = setup({ Main_Zone: { power: true } });
+    s.client.xmlAnswers["Tuner|<Play_Info>GetParam</Play_Info>"] =
+      `<YAMAHA_AV rsp="GET" RC="0"><Tuner><Play_Info><Preset><Preset_Sel>3</Preset_Sel></Preset>` +
+      `<Tuning><Freq><Val>9810</Val><Exp>2</Exp><Unit>MHz</Unit></Freq></Tuning>` +
+      `<Signal_Info><Tuned>Assert</Tuned><Stereo>Negate</Stereo></Signal_Info>` +
+      `<Meta_Info><Program_Service>Radio X</Program_Service></Meta_Info></Play_Info></Tuner></YAMAHA_AV>`;
+    await s.controller.start();
+    expect(s.objects).toContain("living.tuner.preset");
+    expect(s.acks).toContainEqual({ id: "living.tuner.preset", value: 3 });
+    expect(s.acks).toContainEqual({ id: "living.tuner.frequency", value: 98.1 });
+    expect(s.acks).toContainEqual({ id: "living.tuner.tuned", value: true });
+    expect(s.acks).toContainEqual({ id: "living.tuner.rdsService", value: "Radio X" });
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.tuner.preset", false, 5);
+    await flush();
+    expect(s.client.calls).toContainEqual({
+      method: "send",
+      zone: "Tuner",
+      inner: "<Play_Control><Preset><Preset_Sel>5</Preset_Sel></Preset></Play_Control>",
+    });
+  });
+
+  test("a device without <Tuner> gets no tuner states", async () => {
+    const s = setup({ Main_Zone: { power: true } });
+    await s.controller.start();
+    expect(s.objects).not.toContain("living.tuner.preset");
+  });
+
+  test("the input state carries the device's own input list as its dropdown", async () => {
+    const s = setup({ Main_Zone: { power: true } });
+    s.client.xmlAnswers["Main_Zone|<Input><Input_Sel_Item>GetParam</Input_Sel_Item></Input>"] =
+      `<YAMAHA_AV rsp="GET" RC="0"><Main_Zone><Input><Input_Sel_Item>` +
+      `<Item_1><Param>HDMI1</Param><RW>RW</RW></Item_1><Item_2><Param>NET RADIO</Param><RW>RW</RW></Item_2>` +
+      `</Input_Sel_Item></Input></Main_Zone></YAMAHA_AV>`;
+    await s.controller.start();
+    const input = s.defs.get("living.input") as { common?: { states?: Record<string, string> } } | undefined;
+    expect(input?.common?.states).toEqual({ HDMI1: "HDMI1", "NET RADIO": "NET RADIO" });
   });
 });
 
@@ -249,7 +339,6 @@ describe("XmlDeviceController object tree and drop handling", () => {
 });
 
 describe("XmlDeviceController browse surface (#613)", () => {
-  const instantDelay = (): Promise<void> => Promise.resolve();
   const listBody =
     "<YAMAHA_AV rsp=\"GET\" RC=\"0\"><NET_RADIO><List_Info><Menu_Status>Ready</Menu_Status>" +
     "<Menu_Layer>1</Menu_Layer><Menu_Name>NET RADIO</Menu_Name><Current_List>" +

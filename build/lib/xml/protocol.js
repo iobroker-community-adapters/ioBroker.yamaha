@@ -18,13 +18,80 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var protocol_exports = {};
 __export(protocol_exports, {
+  assertXmlOk: () => assertXmlOk,
   encodeGet: () => encodeGet,
   encodePut: () => encodePut,
   parseBasicStatus: () => parseBasicStatus,
-  parseModelName: () => parseModelName
+  parseInputList: () => parseInputList,
+  parseModelName: () => parseModelName,
+  parseReturnCode: () => parseReturnCode,
+  parseSceneList: () => parseSceneList,
+  parseTunerInfo: () => parseTunerInfo
 });
 module.exports = __toCommonJS(protocol_exports);
 var import_entities = require("./entities");
+function parseReturnCode(xml) {
+  const match = /<YAMAHA_AV[^>]*\bRC="(\d+)"/.exec(xml);
+  return match ? Number(match[1]) : void 0;
+}
+function assertXmlOk(xml, what) {
+  if (xml.length === 0) {
+    throw new Error(`device refused ${what} (empty response)`);
+  }
+  const code = parseReturnCode(xml);
+  if (code !== void 0 && code !== 0) {
+    throw new Error(`device refused ${what} (RC=${code})`);
+  }
+  return xml;
+}
+function parseSceneList(xml) {
+  const scenes = [];
+  const pattern = /<Item_\d+>\s*<Param>Scene (\d+)<\/Param>\s*<RW>([^<]*)<\/RW>\s*<Title>([^<]*)<\/Title>/g;
+  for (let match = pattern.exec(xml); match; match = pattern.exec(xml)) {
+    if (match[2].includes("W")) {
+      scenes.push({ num: Number(match[1]), title: (0, import_entities.decodeXmlText)(match[3]) });
+    }
+  }
+  return scenes;
+}
+function parseInputList(xml) {
+  const inputs = [];
+  const pattern = /<Item_\d+>\s*<Param>([^<]+)<\/Param>/g;
+  for (let match = pattern.exec(xml); match; match = pattern.exec(xml)) {
+    inputs.push((0, import_entities.decodeXmlText)(match[1]));
+  }
+  return inputs;
+}
+function parseTunerInfo(xml) {
+  const info = {};
+  const preset = /<Preset>\s*<Preset_Sel>([^<]+)<\/Preset_Sel>/.exec(xml);
+  if (preset) {
+    const slot = Number(preset[1]);
+    info.preset = Number.isFinite(slot) ? slot : 0;
+  }
+  const freq = /<Freq>\s*(?:<Current>\s*)?<Val>(-?\d+)<\/Val>\s*<Exp>(\d+)<\/Exp>\s*<Unit>([^<]*)<\/Unit>/.exec(xml);
+  if (freq) {
+    info.frequency = Number(freq[1]) / 10 ** Number(freq[2]);
+    info.frequencyUnit = freq[3];
+  }
+  const service = /<Program_Service>([^<]*)<\/Program_Service>/.exec(xml);
+  if (service) {
+    info.rdsService = (0, import_entities.decodeXmlText)(service[1]);
+  }
+  const text = /<Radio_Text>([^<]*)<\/Radio_Text>/.exec(xml);
+  if (text) {
+    info.rdsText = (0, import_entities.decodeXmlText)(text[1]);
+  }
+  const tuned = /<Tuned>(Assert|Negate)<\/Tuned>/.exec(xml);
+  if (tuned) {
+    info.tuned = tuned[1] === "Assert";
+  }
+  const stereo = /<Stereo>(Assert|Negate)<\/Stereo>/.exec(xml);
+  if (stereo) {
+    info.stereo = stereo[1] === "Assert";
+  }
+  return info;
+}
 function encodePut(zone, inner) {
   return `<YAMAHA_AV cmd="PUT"><${zone}>${inner}</${zone}></YAMAHA_AV>`;
 }
@@ -121,9 +188,14 @@ function parseBasicStatus(xml) {
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  assertXmlOk,
   encodeGet,
   encodePut,
   parseBasicStatus,
-  parseModelName
+  parseInputList,
+  parseModelName,
+  parseReturnCode,
+  parseSceneList,
+  parseTunerInfo
 });
 //# sourceMappingURL=protocol.js.map

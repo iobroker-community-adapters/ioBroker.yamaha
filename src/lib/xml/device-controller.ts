@@ -1,5 +1,5 @@
 import { CHANNEL_NAMES, type ObjectDef } from "../catalog/types";
-import type { BasicStatus } from "./protocol";
+import { parseInputList, parseSceneList, parseTunerInfo, type BasicStatus, type XmlScene } from "./protocol";
 import { parseXmlStatus, stateToXml, type XmlCommand } from "./command-mapper";
 import { XML_AMP_CATALOG } from "./catalog";
 import type { ConnectionHandle, ControllerLog } from "../controller";
@@ -78,6 +78,10 @@ export class XmlDeviceController implements ConnectionHandle {
   private cancelKeepalive: (() => void) | undefined;
   private readonly dropDetector = new PollDropDetector();
   private browseEngine: BrowseEngine | undefined;
+  /** The scenes each zone DECLARES (`Scene_Sel_Item`), for the recall write path. */
+  private readonly scenesByZone = new Map<string, XmlScene[]>();
+  /** Whether the device answers `<Tuner><Play_Info>` (the classic pre-2010 tuner). */
+  private hasTuner = false;
 
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
@@ -108,6 +112,18 @@ export class XmlDeviceController implements ConnectionHandle {
       return false;
     }
     this.zones = answered.map(probe => probe.zone);
+    // The zone's own input list (`Input_Sel_Item`, per zone — Main and Zone 2 differ on
+    // real hardware): the device says which inputs it accepts, so the input state gets a
+    // dropdown instead of a free string. Constant per model — remembered per device.
+    const inputsByZone = new Map<string, string[]>();
+    for (const zone of this.zones) {
+      const body = await this.probeXml(
+        `xmlInputs:${zone.key}`,
+        zone.element,
+        "<Input><Input_Sel_Item>GetParam</Input_Sel_Item></Input>",
+      );
+      inputsByZone.set(zone.key, parseInputList(body));
+    }
     const createdChannels = new Set<string>();
     for (const zone of this.zones) {
       // Create the zone's own channel with its display name. (Redundant today: the
@@ -155,13 +171,22 @@ export class XmlDeviceController implements ConnectionHandle {
             });
           }
         }
+        const common = { ...entry.common };
+        // The device's own input list becomes the dropdown (XML-owned devices only —
+        // where YNCA is present its dropdown wins via the owner policy).
+        const inputs = entry.state === "input" ? inputsByZone.get(zone.key) : undefined;
+        if (inputs && inputs.length > 0) {
+          common.states = Object.fromEntries(inputs.map(input => [input, input]));
+        }
         await this.deps.upsertObject(`${this.deviceId}.${stateId}`, {
           id: stateId,
           type: "state",
-          common: { ...entry.common },
+          common,
         });
       }
     }
+    await this.setupScenes(createdChannels);
+    await this.setupTuner(createdChannels);
     // Seed from the statuses already fetched during the probe — no second round-trip.
     for (const { zone, status } of answered) {
       if (status) {
@@ -184,6 +209,216 @@ export class XmlDeviceController implements ConnectionHandle {
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), this.pollIntervalMs);
     // The adapter logs one combined "ready" line across all transports; this stays at debug.
     this.deps.log.debug(`${this.deviceId}: Yamaha (XML) device ready (XML)`);
+    return true;
+  }
+
+  /**
+   * Read one element's list once per device: the answer is a property of the MODEL
+   * (input lists, scene declarations), so reconnects reuse it via the probe memory.
+   * A refusal (RC/HTTP) or transport error yields an empty body — "declares none".
+   *
+   * @param key the probe-memory key
+   * @param element the XML element to ask
+   * @param inner the inner GET request
+   * @returns the raw response body, or "" when the device refused
+   */
+  private probeXml(key: string, element: string, inner: string): Promise<string> {
+    const probe = async (): Promise<string> => {
+      try {
+        return await this.deps.client.getXml(element, inner);
+      } catch {
+        return "";
+      }
+    };
+    return this.deps.probeMemory ? this.deps.probeMemory.once(key, probe) : probe();
+  }
+
+  /**
+   * Build the scene surface from the device's OWN declaration (#615): each zone's
+   * `<Scene_Sel_Item>` names the scenes that exist, their titles and the write value
+   * (`Scene N` via `<Scene_Sel>`). The predecessor blindly sent `Scene_Load` to a
+   * fixed 1..12 main-zone state; the capture shows the device declaring `Scene_Sel`
+   * instead — and declaring scenes for Zone 2 too.
+   *
+   * @param createdChannels the channel ids already created (extended here)
+   */
+  private async setupScenes(createdChannels: Set<string>): Promise<void> {
+    for (const zone of this.zones) {
+      const body = await this.probeXml(
+        `xmlScenes:${zone.key}`,
+        zone.element,
+        "<Scene><Scene_Sel_Item>GetParam</Scene_Sel_Item></Scene>",
+      );
+      const scenes = parseSceneList(body);
+      if (scenes.length === 0) {
+        continue;
+      }
+      this.scenesByZone.set(zone.key, scenes);
+      const channelId = `${zone.prefix}scene`;
+      if (!createdChannels.has(channelId)) {
+        createdChannels.add(channelId);
+        await this.deps.upsertObject(`${this.deviceId}.${channelId}`, {
+          id: channelId,
+          type: "channel",
+          common: { name: CHANNEL_NAMES.scene ?? "Scenes" },
+        });
+      }
+      const max = Math.max(...scenes.map(scene => scene.num));
+      await this.deps.upsertObject(`${this.deviceId}.${channelId}.recall`, {
+        id: `${channelId}.recall`,
+        type: "state",
+        common: {
+          name: "Recall scene",
+          type: "number",
+          role: "level",
+          read: true,
+          write: true,
+          min: 1,
+          max,
+          step: 1,
+          // The declared titles as the dropdown, so the picker shows "Movie Viewing",
+          // not a bare number.
+          states: Object.fromEntries(scenes.map(scene => [scene.num, scene.title])),
+        },
+      });
+      for (const scene of scenes) {
+        const stateId = `${channelId}.name${scene.num}`;
+        await this.deps.upsertObject(`${this.deviceId}.${stateId}`, {
+          id: stateId,
+          type: "state",
+          common: { name: `Scene ${scene.num} name`, type: "string", role: "text", read: true, write: false },
+        });
+        this.emit(stateId, scene.title);
+      }
+    }
+  }
+
+  /**
+   * Build the classic tuner surface (pre-2010 devices, where XML is the ONLY
+   * transport — the predecessor served their tuner, the rewrite had dropped it).
+   * Existence is probed once per device; the preset write is the openHAB-verified
+   * `<Play_Control><Preset><Preset_Sel>`; frequency/RDS/tuned are read-only from
+   * Play_Info. On newer devices YNCA/YXC own these ids via the owner policy.
+   *
+   * @param createdChannels the channel ids already created (extended here)
+   */
+  private async setupTuner(createdChannels: Set<string>): Promise<void> {
+    const probe = await this.probeXml("xmlTuner", "Tuner", "<Play_Info>GetParam</Play_Info>");
+    if (probe.length === 0) {
+      return;
+    }
+    this.hasTuner = true;
+    if (!createdChannels.has("tuner")) {
+      createdChannels.add("tuner");
+      await this.deps.upsertObject(`${this.deviceId}.tuner`, {
+        id: "tuner",
+        type: "channel",
+        common: { name: CHANNEL_NAMES.tuner ?? "Tuner" },
+      });
+    }
+    const state = async (id: string, common: ObjectDef["common"]): Promise<void> => {
+      await this.deps.upsertObject(`${this.deviceId}.tuner.${id}`, { id: `tuner.${id}`, type: "state", common });
+    };
+    await state("preset", {
+      name: "Preset (recall by number)",
+      type: "number",
+      role: "level",
+      read: true,
+      write: true,
+      min: 0,
+      max: 40,
+      step: 1,
+    });
+    await state("frequency", { name: "Frequency", type: "number", role: "value", read: true, write: false });
+    await state("rdsService", { name: "RDS station", type: "string", role: "text", read: true, write: false });
+    await state("rdsText", { name: "RDS text", type: "string", role: "text", read: true, write: false });
+    await state("tuned", { name: "Tuned to a station", type: "boolean", role: "indicator", read: true, write: false });
+    await state("stereo", { name: "Stereo reception", type: "boolean", role: "indicator", read: true, write: false });
+    this.emitTunerInfo(probe);
+  }
+
+  /**
+   * Write the tuner states from a Play_Info response.
+   *
+   * @param xml the Play_Info response body
+   */
+  private emitTunerInfo(xml: string): void {
+    const info = parseTunerInfo(xml);
+    if (info.preset !== undefined) {
+      this.emit("tuner.preset", info.preset);
+    }
+    if (info.frequency !== undefined) {
+      this.emit("tuner.frequency", info.frequency);
+    }
+    if (info.rdsService !== undefined) {
+      this.emit("tuner.rdsService", info.rdsService);
+    }
+    if (info.rdsText !== undefined) {
+      this.emit("tuner.rdsText", info.rdsText);
+    }
+    if (info.tuned !== undefined) {
+      this.emit("tuner.tuned", info.tuned);
+    }
+    if (info.stereo !== undefined) {
+      this.emit("tuner.stereo", info.stereo);
+    }
+  }
+
+  /**
+   * Poll the tuner's Play_Info (keepalive) and write the states.
+   */
+  private async refreshTuner(): Promise<void> {
+    try {
+      this.emitTunerInfo(await this.deps.client.getXml("Tuner", "<Play_Info>GetParam</Play_Info>"));
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: tuner Play_Info failed: ${errorMessage(e)}`);
+    }
+  }
+
+  /**
+   * A user write to `tuner.preset` → the openHAB-verified preset recall.
+   *
+   * @param stateId the state id relative to the device
+   * @param value the written value
+   * @returns true when the id was the tuner preset (handled here)
+   */
+  private handleTunerWrite(stateId: string, value: unknown): boolean {
+    if (stateId !== "tuner.preset" || !this.hasTuner) {
+      return stateId === "tuner.preset";
+    }
+    const num = Math.round(Number(value));
+    if (!Number.isFinite(num) || num < 1) {
+      return true;
+    }
+    void this.applyCommand({
+      zone: "Tuner",
+      inner: `<Play_Control><Preset><Preset_Sel>${num}</Preset_Sel></Preset></Play_Control>`,
+    });
+    return true;
+  }
+
+  /**
+   * A user write to a zone's `scene.recall` → the DECLARED write element
+   * (`<Scene><Scene_Sel>Scene N</Scene_Sel></Scene>`). Only zones that declared
+   * scenes accept the write; a refusal lands in the log via applyCommand.
+   *
+   * @param stateId the state id relative to the device
+   * @param value the written value
+   * @returns true when the id was a scene recall (handled here)
+   */
+  private handleSceneWrite(stateId: string, value: unknown): boolean {
+    const match = /^(?:multiroom\.(zone[234])\.)?scene\.recall$/.exec(stateId);
+    if (!match) {
+      return false;
+    }
+    const zoneKey = match[1] ?? "main";
+    const zone = this.zones.find(z => z.key === zoneKey);
+    const scenes = this.scenesByZone.get(zoneKey);
+    const num = Math.round(Number(value));
+    if (!zone || !scenes || !scenes.some(scene => scene.num === num)) {
+      return true;
+    }
+    void this.applyCommand({ zone: zone.element, inner: `<Scene><Scene_Sel>Scene ${num}</Scene_Sel></Scene>` });
     return true;
   }
 
@@ -265,6 +500,13 @@ export class XmlDeviceController implements ConnectionHandle {
       this.browseEngine?.handleWrite(stateId, value);
       return;
     }
+    // Scenes and the classic tuner are device-declared (not in the static catalog).
+    if (this.handleSceneWrite(stateId, value)) {
+      return;
+    }
+    if (this.handleTunerWrite(stateId, value)) {
+      return;
+    }
     const command = stateToXml(stateId, value);
     if (command) {
       void this.applyCommand(command);
@@ -301,6 +543,9 @@ export class XmlDeviceController implements ConnectionHandle {
       if (await this.refreshZone(zone)) {
         anyOk = true;
       }
+    }
+    if (this.hasTuner) {
+      await this.refreshTuner();
     }
     this.dropDetector.record(anyOk);
   }

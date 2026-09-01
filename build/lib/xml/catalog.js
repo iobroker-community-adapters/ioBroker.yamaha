@@ -171,14 +171,12 @@ const XML_AMP_CATALOG = [
     statusField: "dialogueLift",
     toInner: (value) => `<Sound_Video><Dialogue_Adjust><Dialogue_Lift>${Number(value)}</Dialogue_Lift></Dialogue_Adjust></Sound_Video>`
   },
-  // Scene recall, HDMI outputs and party — the predecessor's Scene_Load / setHDMIOutput /
-  // partyMode. Main-zone-only; HDMI/party are written on the System element (writeZone).
-  {
-    state: "scene.recall",
-    common: { name: "Recall scene", type: "number", role: "level", read: true, write: true, min: 1, max: 12, step: 1 },
-    mainOnly: true,
-    toInner: (value) => `<Scene><Scene_Load>Scene ${Number(value)}</Scene_Load></Scene>`
-  },
+  // HDMI outputs and party — the predecessor's setHDMIOutput / partyMode.
+  // Main-zone-only; both are written on the System element (writeZone).
+  // Scenes are NOT in this static list: the device declares its scenes itself
+  // (`<Scene_Sel_Item>`: which exist, their titles, the `Scene_Sel` write value —
+  // per zone), so the controller builds them from that declaration. The
+  // predecessor's blind `Scene_Load` is gone; nothing ever proved it worked (#615).
   {
     state: "hdmiOut1",
     common: { name: "HDMI OUT1", type: "boolean", role: "switch", read: true, write: true },

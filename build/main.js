@@ -127,7 +127,7 @@ class Yamaha extends utils.Adapter {
       }
       for (const device of devices) {
         this.deviceConnected.set(device.id, false);
-        await this.ensureDeviceHeader(device.id);
+        await this.ensureDeviceHeader(device.id, device.ip);
         await this.setState(`${device.id}.info.connection`, { val: false, ack: true });
         const reachability = new import_reachability_dedup.ReachabilityDedup();
         const subunitCache = await this.loadYncaSubunitCache(device.id);
@@ -318,8 +318,9 @@ class Yamaha extends utils.Adapter {
    * per-device connection indicator) so its state is visible even while offline.
    *
    * @param deviceId the id-safe device id
+   * @param ip the device's current address (from config or discovery)
    */
-  async ensureDeviceHeader(deviceId) {
+  async ensureDeviceHeader(deviceId, ip) {
     var _a;
     let icon;
     try {
@@ -352,6 +353,12 @@ class Yamaha extends utils.Adapter {
       common: { name: "Model", type: "string", role: "text", read: true, write: false, def: "" },
       native: {}
     });
+    await this.setObjectNotExistsAsync(`${deviceId}.info.ip`, {
+      type: "state",
+      common: { name: "IP address", type: "string", role: "info.ip", read: true, write: false, def: "" },
+      native: {}
+    });
+    await this.setState(`${deviceId}.info.ip`, { val: ip, ack: true });
     await this.setObjectNotExistsAsync(`${deviceId}.info.transports`, {
       type: "channel",
       common: { name: "Transports" },

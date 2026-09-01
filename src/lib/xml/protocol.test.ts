@@ -1,4 +1,14 @@
-import { encodePut, encodeGet, parseBasicStatus, parseModelName } from "./protocol";
+import {
+  assertXmlOk,
+  encodeGet,
+  encodePut,
+  parseBasicStatus,
+  parseInputList,
+  parseModelName,
+  parseReturnCode,
+  parseSceneList,
+  parseTunerInfo,
+} from "./protocol";
 
 describe("encodePut / encodeGet", () => {
   test("wraps an inner command in the YAMAHA_AV PUT envelope for a zone", () => {
@@ -92,5 +102,80 @@ describe("parseModelName", () => {
     expect(parseModelName("<Model_Name></Model_Name>")).toBeUndefined();
     expect(parseModelName("<YAMAHA_AV/>")).toBeUndefined();
     expect(parseModelName("<Model_Name>RX-V771</Model_Name>")).toBe("RX-V771");
+  });
+});
+
+describe("return codes (the device's own verdict)", () => {
+  test("parses the RC attribute from a response envelope", () => {
+    expect(parseReturnCode('<YAMAHA_AV rsp="PUT" RC="0"></YAMAHA_AV>')).toBe(0);
+    expect(parseReturnCode('<YAMAHA_AV rsp="GET" RC="2"><Tuner><Play_Info></Play_Info></Tuner></YAMAHA_AV>')).toBe(2);
+    expect(parseReturnCode("<no-envelope/>")).toBeUndefined();
+  });
+
+  test("assertXmlOk passes RC=0 through and throws on a refusal or an empty body", () => {
+    const ok = '<YAMAHA_AV rsp="PUT" RC="0"></YAMAHA_AV>';
+    expect(assertXmlOk(ok, "x")).toBe(ok);
+    // Captured RX-V6A behaviour: RC="2" for a node the model does not carry.
+    expect(() => assertXmlOk('<YAMAHA_AV rsp="GET" RC="2"></YAMAHA_AV>', "<Tuner> Play_Info")).toThrow("RC=2");
+    // Unknown nodes answer a bodyless HTTP 400 — an empty body is a refusal too.
+    expect(() => assertXmlOk("", "<X/>")).toThrow("empty response");
+    // A body without an RC attribute (some GET answers) is not a refusal.
+    expect(assertXmlOk("<Model_Name>RX-V771</Model_Name>", "x")).toBe("<Model_Name>RX-V771</Model_Name>");
+  });
+});
+
+describe("parseSceneList (the device's own scene declaration, #615)", () => {
+  // The captured RX-V6A shape, shortened to three items.
+  const declaration =
+    '<YAMAHA_AV rsp="GET" RC="0"><Main_Zone><Scene><Scene_Sel_Item>' +
+    "<Item_1><Param>Scene 1</Param><RW>W</RW><Title>Movie Viewing</Title><Icon><On>1</On></Icon></Item_1>" +
+    "<Item_2><Param>Scene 2</Param><RW>W</RW><Title>Radio &amp; News</Title><Icon><On>2</On></Icon></Item_2>" +
+    "<Item_3><Param>Scene 3</Param><RW></RW><Title>Locked</Title><Icon><On>3</On></Icon></Item_3>" +
+    "</Scene_Sel_Item></Scene></Main_Zone></YAMAHA_AV>";
+
+  test("returns the writable scenes with their numbers and decoded titles", () => {
+    expect(parseSceneList(declaration)).toEqual([
+      { num: 1, title: "Movie Viewing" },
+      { num: 2, title: "Radio & News" },
+    ]);
+  });
+
+  test("a refusal or unrelated body declares no scenes", () => {
+    expect(parseSceneList("")).toEqual([]);
+    expect(parseSceneList("<YAMAHA_AV RC=\"2\"></YAMAHA_AV>")).toEqual([]);
+  });
+});
+
+describe("parseInputList (the zone's own input vocabulary)", () => {
+  test("returns the Param of every item, entities decoded", () => {
+    const body =
+      "<Input_Sel_Item><Item_1><Param>HDMI1</Param></Item_1><Item_2><Param>NET RADIO</Param></Item_2></Input_Sel_Item>";
+    expect(parseInputList(body)).toEqual(["HDMI1", "NET RADIO"]);
+    expect(parseInputList("")).toEqual([]);
+  });
+});
+
+describe("parseTunerInfo (classic <Tuner> Play_Info)", () => {
+  test("reads preset, scaled frequency, RDS and the signal flags, presence-checked", () => {
+    const body =
+      "<Tuner><Play_Info><Preset><Preset_Sel>3</Preset_Sel></Preset>" +
+      "<Tuning><Freq><Val>9810</Val><Exp>2</Exp><Unit>MHz</Unit></Freq></Tuning>" +
+      "<Signal_Info><Tuned>Assert</Tuned><Stereo>Negate</Stereo></Signal_Info>" +
+      "<Meta_Info><Program_Service>Radio X</Program_Service><Radio_Text>Now playing</Radio_Text></Meta_Info>" +
+      "</Play_Info></Tuner>";
+    expect(parseTunerInfo(body)).toEqual({
+      preset: 3,
+      frequency: 98.1,
+      frequencyUnit: "MHz",
+      rdsService: "Radio X",
+      rdsText: "Now playing",
+      tuned: true,
+      stereo: false,
+    });
+  });
+
+  test("an empty preset slot ('No Preset') reads as 0; absent fields stay absent", () => {
+    expect(parseTunerInfo("<Preset><Preset_Sel>No Preset</Preset_Sel></Preset>")).toEqual({ preset: 0 });
+    expect(parseTunerInfo("")).toEqual({});
   });
 });

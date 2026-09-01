@@ -69,6 +69,13 @@ class XmlBrowseDriver {
   active;
   lastTotal = 0;
   /**
+   * The cursor value this device accepts for "one level back". The spec vocabulary is
+   * `Return`, but the 2012 generation (RX-V473 class) refuses it and accepts `Left`
+   * instead (user-measured on the predecessor adapter, #613). First refusal switches
+   * permanently for this device.
+   */
+  backCursor = "Return";
+  /**
    * Attach the engine that renders the windows (set after both are constructed).
    *
    * @param engine the browse engine
@@ -111,17 +118,21 @@ class XmlBrowseDriver {
   async pageDown() {
     await this.jumpBy(8);
   }
-  /** Go one menu level back. */
+  /** Go one menu level back — falling back to `Left` when the device refuses `Return`. */
   async back() {
-    await this.control("<Cursor>Return</Cursor>");
+    try {
+      await this.control(`<Cursor>${this.backCursor}</Cursor>`);
+    } catch (e) {
+      if (this.backCursor !== "Return") {
+        throw e;
+      }
+      this.backCursor = "Left";
+      await this.control("<Cursor>Left</Cursor>");
+    }
   }
   /** Return to the menu root. */
   async home() {
     await this.control("<Cursor>Return to Home</Cursor>");
-  }
-  /** Re-read the current window. */
-  async refresh() {
-    await this.fetch();
   }
   /**
    * Send a List_Control command to the active source and read the window back.

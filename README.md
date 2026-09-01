@@ -21,6 +21,8 @@ legacy XML protocol of the oldest pre-2010 models — behind one object tree.
 - **Typed datapoints** — booleans, dropdowns and numbers with unit and range instead of raw text
 - **Presets and favourites** — recall tuner presets and stored network/USB favourites by number, step through presets, save the current station to a preset slot or bookmark it, and read the stored lists with their names (MusicCast); recently-played recall on MusicCast devices
 - **Menu browsing** — page through the Net Radio, media-server and USB menus like with the remote: the visible menu lines as datapoints, select-by-line, and a path datapoint that navigates to a favourite in one write
+- **Scenes with their names** — recall a scene by number or from a dropdown that shows the titles the receiver reports, per zone
+- **On-screen remote** — cursor pad and menu keys as datapoints on MusicCast devices, for driving the receiver's own on-screen menus
 - **Clock & alarm view** — MusicCast desk-audio devices show their clock and alarm settings
 - **Capability-driven** — states are generated from what each device reports, no hardcoded model list
 - **Automatic discovery** — an empty device list finds and sets up MusicCast devices at startup
@@ -58,13 +60,13 @@ The **Data points** section switches whole groups of datapoints on or off — **
 Each receiver becomes one device node with themed groups — the same groups the
 **Data points** switches control. Only what your device reports is created.
 
-- **Amplifier core** (always on) — power, volume, mute, input, sound program, sleep, plus the device info with model, firmware and connection.
-- **`player`** — one channel per playback source (Spotify, USB, server, net radio, CD, …) with playback state, artist, album, track, cover art and the transport buttons. The `player.browse` folder mirrors the device's media menu: the eight visible lines (folders and titles marked by symbol), `selectLine` acts like OK on the remote, page/back/root buttons, a `rows` JSON for widgets and a `path` datapoint that walks e.g. `Bookmarks>Radio Paradise` on one write.
+- **Amplifier core** (always on) — power, volume, mute, input, sound program, sleep, plus the device info with model, firmware, IP address and connection; MusicCast devices add an on-screen `remote` (cursor pad, menu keys).
+- **`player`** — one channel per playback source (Spotify, USB, server, net radio, CD, …) with playback state, artist, album, track, cover art and the transport buttons. The `player.browse` folder mirrors the device's media menu: the eight visible lines (folders and titles marked by symbol), `selectLine` acts like OK on the remote, page/back/root buttons, a `rows` JSON for widgets and a `path` datapoint that walks e.g. `Bookmarks>Radio Paradise` on one write. MusicCast devices add their playlists and the current play queue as JSON states.
 - **`tuner`** — AM/FM and DAB radio including RDS texts and frequency.
 - **`multiroom`** — zones 2–4, Zone B, the all-zones switches (master power, party mode) and the MusicCast device group in its own `multiroom.group` folder.
 - **`hdmi`** — the HDMI outputs and lip sync.
-- **`scene`** — the receiver's scene names and a scene recall.
-- **`sound`** — tone and sound processing: bass/treble, DSP modes, enhancer, equalizer, ….
+- **`scene`** — the receiver's scenes with their titles and a recall dropdown; zones with their own scenes carry theirs under `multiroom.zoneN.scene`.
+- **`sound`** — tone and sound processing: bass/treble, DSP modes, enhancer, equalizer, plus the current audio signal (format, sampling rate, bitrate) on MusicCast devices.
 - **`advanced`** — setup-level datapoints: maximum/initial volume, speaker configuration, input names.
 - **`clock`** — the clock and alarm settings of MusicCast desk-audio devices (read-only).
 
@@ -96,6 +98,16 @@ On the first connect the adapter asks the receiver which functions it supports �
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+### **WORK IN PROGRESS**
+
+- (krobipd) Fixed: scene recall now uses the command each device declares itself and the protocol that can actually deliver it — on 2012-generation receivers writing a scene number did nothing at all (#615)
+- (krobipd) New: scenes show their titles ("Movie Viewing", …) as datapoints and in the recall dropdown, and zones with their own scenes get their own scene recall
+- (krobipd) Fixed: the menu "back" button now falls back to the older generation's cursor command when the device refuses the standard one, so leaving a folder works on 2012-generation receivers too (#613)
+- (krobipd) New: a command the device refuses is now logged as a warning with the device's own answer — refused commands used to vanish without a trace, leaving dead buttons unexplained
+- (krobipd) New: bass and treble on MusicCast-generation receivers over YNCA, dialogue level, DAB signal details, the paired Bluetooth device name and more — the device is asked in its own dialect
+- (krobipd) New: on-screen remote control datapoints (cursor pad and menu keys), the current audio signal info, MusicCast playlists and the play queue on MusicCast devices
+- (krobipd) New: pre-2010 receivers get their tuner back (preset recall, frequency, RDS) and every device's input dropdown now lists exactly the inputs it really has
+- (krobipd) New: the receiver's IP address is shown as a datapoint, so diagnosis and the device's own web pages are one click away
 ### 1.6.0 (2026-08-27)
 
 - (krobipd) New: three states show how many receivers are set up, how many are connected right now and whether that is all of them — one line to watch instead of every device
