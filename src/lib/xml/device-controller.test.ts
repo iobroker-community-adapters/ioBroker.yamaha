@@ -19,7 +19,7 @@ class FakeClient implements XmlClientLike {
   public calls: Array<{ method: string; zone: string; inner?: string }> = [];
   /** Canned GET answers keyed `<element>|<inner>`; unmatched requests answer "" (declares none). */
   public xmlAnswers: Record<string, string> = {};
-  public constructor(private readonly statuses: Record<string, BasicStatus>) {}
+  public constructor(public statuses: Record<string, BasicStatus>) {}
   public async getStatus(zone: string): Promise<BasicStatus> {
     this.calls.push({ method: "getStatus", zone });
     return this.statuses[zone] ?? {};
@@ -257,7 +257,7 @@ describe("XmlDeviceController", () => {
   });
 
   test("the input state carries the device's own input list as its dropdown", async () => {
-    const s = setup({ Main_Zone: { power: true } });
+    const s = setup({ Main_Zone: { power: true, input: "HDMI1" } });
     s.client.xmlAnswers["Main_Zone|<Input><Input_Sel_Item>GetParam</Input_Sel_Item></Input>"] =
       `<YAMAHA_AV rsp="GET" RC="0"><Main_Zone><Input><Input_Sel_Item>` +
       `<Item_1><Param>HDMI1</Param><RW>RW</RW></Item_1><Item_2><Param>NET RADIO</Param><RW>RW</RW></Item_2>` +
@@ -405,6 +405,11 @@ describe("XmlDeviceController browse surface (#613)", () => {
       zone: "Main_Zone",
       inner: "<Input><Input_Sel>NET RADIO</Input_Sel></Input>",
     });
+    // Switching the input without fetching the menu is exactly the #613 symptom class
+    // (empty menu) — the List_Info read must go out too.
+    expect(
+      client.calls.some(call => call.method === "getXml" && call.zone === "NET_RADIO" && call.inner?.includes("List_Info")),
+    ).toBe(true);
   });
 });
 
@@ -435,5 +440,66 @@ describe("XmlDeviceController freshness guard (persisted memory)", () => {
     expect(third.client.calls.some(c => c.inner?.includes("Scene_Sel_Item"))).toBe(true);
     // The new device declared no scenes — none appear.
     expect(third.objects).not.toContain("living.scene.recall");
+  });
+});
+
+describe("XmlDeviceController claim-with-proof creation (2.0.1)", () => {
+  test("only states whose Basic_Status field the device delivers are created", async () => {
+    // A MusicCast-era status: pureDirect/straight delivered, direct/hdmiOut2 never —
+    // a blind full-catalog rollout left those standing as valueless objects.
+    const s = setup({
+      Main_Zone: { power: true, volume: -40, mute: false, input: "HDMI1", pureDirect: false, straight: true, hdmiOut1: true },
+    });
+    await s.controller.start();
+    expect(s.objects).toContain("living.sound.pureDirect");
+    expect(s.objects).toContain("living.sound.straight");
+    expect(s.objects).toContain("living.hdmiOut1");
+    expect(s.objects).not.toContain("living.sound.direct");
+    expect(s.objects).not.toContain("living.hdmiOut2");
+  });
+
+  test("a field remembered from an earlier run keeps its state on a leaner (standby) start", async () => {
+    const memory = new ProbeMemory();
+    memory.set("xmlStatusFields:main", ["power", "volume", "soundProgram"]);
+    const s = setup({ Main_Zone: { power: false } });
+    (s.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
+    await s.controller.start();
+    expect(s.objects).toContain("living.soundProgram");
+    // What the device never delivered anywhere stays absent even so.
+    expect(s.objects).not.toContain("living.sound.direct");
+  });
+});
+
+describe("XmlDeviceController proof edge cases (2.0.1 hardening)", () => {
+  test("each zone proves its OWN fields — main's straight does not leak a zone2 state", async () => {
+    const s = setup({
+      Main_Zone: { power: true, input: "HDMI1", straight: true },
+      Zone_2: { power: false, input: "AUDIO1" },
+    });
+    await s.controller.start();
+    expect(s.objects).toContain("living.sound.straight");
+    expect(s.objects).not.toContain("living.multiroom.zone2.sound.straight");
+    expect(s.objects).toContain("living.multiroom.zone2.input");
+  });
+
+  test("a field first delivered mid-run is remembered for the next start, never written without an object", async () => {
+    const memory = new ProbeMemory();
+    const s = setup({ Main_Zone: { power: true } });
+    (s.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
+    await s.controller.start();
+    expect(s.objects).not.toContain("living.soundProgram");
+    // The device (now powered on) starts delivering soundProgram in the poll.
+    s.client.statuses = { Main_Zone: { power: true, soundProgram: "Standard" } };
+    s.fire.keepalive?.();
+    await flush();
+    // No write lands without an object — but the field is remembered…
+    expect(s.acks).not.toContainEqual({ id: "living.soundProgram", value: "Standard" });
+    expect(memory.remembered<string[]>("xmlStatusFields:main")).toContain("soundProgram");
+    // …so the NEXT start (same device memory) creates and fills it.
+    const second = setup({ Main_Zone: { power: true, soundProgram: "Standard" } });
+    (second.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
+    await second.controller.start();
+    expect(second.objects).toContain("living.soundProgram");
+    expect(second.acks).toContainEqual({ id: "living.soundProgram", value: "Standard" });
   });
 });

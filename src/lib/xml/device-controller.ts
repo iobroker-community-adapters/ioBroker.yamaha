@@ -82,6 +82,10 @@ export class XmlDeviceController implements ConnectionHandle {
   private readonly scenesByZone = new Map<string, XmlScene[]>();
   /** Whether the device answers `<Tuner><Play_Info>` (the classic pre-2010 tuner). */
   private hasTuner = false;
+  /** The amp state ids this controller actually created (claim-with-proof gate for writes). */
+  private readonly createdStates = new Set<string>();
+  /** Per zone: the Basic_Status fields this device is known to deliver (persisted union). */
+  private readonly zoneFields = new Map<string, Set<string>>();
 
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
@@ -142,6 +146,21 @@ export class XmlDeviceController implements ConnectionHandle {
       );
       inputsByZone.set(zone.key, parseInputList(body));
     }
+    // Claim with proof, XML edition (2.0.1): only the states whose Basic_Status field
+    // this device DELIVERS are created — a blind full-catalog rollout left valueless
+    // objects (hdmi.out2, sound.direct, …) standing on devices without the feature.
+    // The delivered field set is a model property, remembered per zone (union, so a
+    // later standby start — which may report fewer fields — cannot shrink the tree).
+    for (const { zone, status } of answered) {
+      const key = `xmlStatusFields:${zone.key}`;
+      const remembered = this.deps.probeMemory?.remembered<string[]>(key);
+      const fields = new Set<string>(Array.isArray(remembered) ? remembered : []);
+      for (const field of Object.keys(status ?? {})) {
+        fields.add(field);
+      }
+      this.deps.probeMemory?.set(key, [...fields]);
+      this.zoneFields.set(zone.key, fields);
+    }
     const createdChannels = new Set<string>();
     for (const zone of this.zones) {
       // Create the zone's own channel with its display name. (Redundant today: the
@@ -175,6 +194,10 @@ export class XmlDeviceController implements ConnectionHandle {
         if (entry.mainOnly && zone.key !== "main") {
           continue;
         }
+        // Claim with proof: skip what this device's status never delivered.
+        if (entry.statusField !== undefined && !this.zoneFields.get(zone.key)?.has(entry.statusField)) {
+          continue;
+        }
         const stateId = `${zone.prefix}${entry.state}`;
         // A dotted state (e.g. scene.recall) needs its parent channel created first.
         const segments = stateId.split(".");
@@ -201,6 +224,7 @@ export class XmlDeviceController implements ConnectionHandle {
           type: "state",
           common,
         });
+        this.createdStates.add(stateId);
       }
     }
     await this.setupScenes(createdChannels);
@@ -599,8 +623,26 @@ export class XmlDeviceController implements ConnectionHandle {
    * @param status the parsed Basic_Status
    */
   private seedZone(zone: XmlZone, status: BasicStatus): void {
+    // A field the device delivers for the FIRST time mid-run has no object yet
+    // (claim-with-proof creates only proven fields at start): remember it — the next
+    // start creates it — and skip the write, so no state lands without an object.
+    const known = this.zoneFields.get(zone.key);
+    if (known) {
+      let grew = false;
+      for (const field of Object.keys(status)) {
+        if (!known.has(field)) {
+          known.add(field);
+          grew = true;
+        }
+      }
+      if (grew) {
+        this.deps.probeMemory?.set(`xmlStatusFields:${zone.key}`, [...known]);
+      }
+    }
     for (const update of parseXmlStatus(status, zone.key)) {
-      this.emit(update.id, update.value);
+      if (this.createdStates.has(update.id)) {
+        this.emit(update.id, update.value);
+      }
     }
   }
 

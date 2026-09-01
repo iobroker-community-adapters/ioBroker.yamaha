@@ -12,6 +12,7 @@ import {
   type LabelRank,
   legacyDeviceRow,
   mergeDiscovered,
+  neverWrittenStateIds,
   nextDeviceLabel,
   parseDevices,
   renamedObjectIds,
@@ -85,6 +86,10 @@ export class Yamaha extends utils.Adapter {
    * datapoint new?".
    */
   private readonly knownDatapoints = new Set<string>();
+  /** State ids (namespace-relative) some transport upserted in THIS run — live claims. */
+  private readonly touchedThisRun = new Set<string>();
+  /** Devices that reported connected at least once in this run (gates the orphan purge). */
+  private readonly readyDevices = new Set<string>();
   private createdDatapoints = 0;
   private removedDatapoints = 0;
   /** Debounce for the balance line, so one config change produces ONE line, not one per device. */
@@ -239,6 +244,12 @@ export class Yamaha extends utils.Adapter {
    * @param connected whether that device is currently connected
    */
   private reportConnection(deviceId: string, connected: boolean): void {
+    if (connected && !this.readyDevices.has(deviceId)) {
+      this.readyDevices.add(deviceId);
+      // Arm the settle pass even when the connect created nothing new — the once-per-
+      // version orphan purge rides the same settled moment as the balance line.
+      this.scheduleDatapointBalance();
+    }
     this.deviceConnected.set(deviceId, connected);
     void this.setState(`${deviceId}.info.connection`, { val: connected, ack: true });
     // A drop clears the per-transport flags; a (re)connect sets them again via onTransports.
@@ -333,6 +344,47 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
+   * Once per adapter version and device (marker `native.purgeVersion` on the DEVICE
+   * object): remove read-capable states under a CONNECTED device that never carried a
+   * value and were not (re)created by this run's transports — over-declarations of an
+   * earlier adapter version that today's claim-with-proof creation no longer makes.
+   * Deleting them is lossless (no value, no history). Runs after the tree settled, so
+   * a device that has not connected in this run keeps its tree untouched — its sweep
+   * happens on the first start that reaches it.
+   */
+  private async purgeNeverFilled(): Promise<void> {
+    const candidates: string[] = [];
+    for (const deviceId of this.readyDevices) {
+      const device = await this.getObjectAsync(deviceId);
+      if ((device?.native as Record<string, unknown> | undefined)?.purgeVersion !== this.version) {
+        candidates.push(deviceId);
+      }
+    }
+    if (candidates.length === 0) {
+      return;
+    }
+    const allObjects = await this.getAdapterObjectsAsync();
+    const states = await this.getStatesAsync("*");
+    const purged = neverWrittenStateIds(allObjects, states, new Set(candidates), this.namespace).filter(
+      fullId => !this.touchedThisRun.has(stripNamespace(fullId, this.namespace)),
+    );
+    for (const fullId of purged) {
+      try {
+        await this.delObjectAsync(stripNamespace(fullId, this.namespace));
+      } catch {
+        // already gone
+      }
+    }
+    for (const deviceId of candidates) {
+      await this.extendObject(deviceId, { native: { purgeVersion: this.version } });
+    }
+    if (purged.length > 0) {
+      this.log.debug(`removed ${purged.length} never-filled object(s) from an earlier version`);
+      this.noteDatapointsRemoved(purged);
+    }
+  }
+
+  /**
    * Remember every datapoint that already exists, ONCE per adapter run.
    *
    * @see knownDatapoints for why the create path alone cannot answer "is this new?"
@@ -393,19 +445,28 @@ export class Yamaha extends utils.Adapter {
     this.clearTimeout(this.balanceTimer);
     this.balanceTimer = this.setTimeout(() => {
       this.balanceTimer = undefined;
-      const parts: string[] = [];
-      if (this.createdDatapoints > 0) {
-        parts.push(`created ${this.createdDatapoints} datapoint(s)`);
-      }
-      if (this.removedDatapoints > 0) {
-        parts.push(`removed ${this.removedDatapoints} datapoint(s)`);
-      }
-      this.createdDatapoints = 0;
-      this.removedDatapoints = 0;
-      // Silent when nothing changed: a plain restart must not write a line.
-      if (parts.length > 0) {
-        this.log.info(`Object tree updated: ${parts.join(", ")}`);
-      }
+      void (async () => {
+        // The tree has settled: sweep the never-filled orphans FIRST, so their
+        // removals land in the same balance line the user is about to read.
+        try {
+          await this.purgeNeverFilled();
+        } catch (e) {
+          this.log.debug(`orphan purge failed (${errorMessage(e)}); skipped for this run`);
+        }
+        const parts: string[] = [];
+        if (this.createdDatapoints > 0) {
+          parts.push(`created ${this.createdDatapoints} datapoint(s)`);
+        }
+        if (this.removedDatapoints > 0) {
+          parts.push(`removed ${this.removedDatapoints} datapoint(s)`);
+        }
+        this.createdDatapoints = 0;
+        this.removedDatapoints = 0;
+        // Silent when nothing changed: a plain restart must not write a line.
+        if (parts.length > 0) {
+          this.log.info(`Object tree updated: ${parts.join(", ")}`);
+        }
+      })();
     }, DATAPOINT_BALANCE_SETTLE_MS);
   }
 
@@ -662,6 +723,7 @@ export class Yamaha extends utils.Adapter {
         await this.extendObject(id, { type: def.type, common: def.common, native: {} });
         if (def.type === "state") {
           this.noteDatapointCreated(id);
+          this.touchedThisRun.add(id);
         }
       },
       setStateAck: (id, value) => {

@@ -55,6 +55,10 @@ class XmlDeviceController {
   scenesByZone = /* @__PURE__ */ new Map();
   /** Whether the device answers `<Tuner><Play_Info>` (the classic pre-2010 tuner). */
   hasTuner = false;
+  /** The amp state ids this controller actually created (claim-with-proof gate for writes). */
+  createdStates = /* @__PURE__ */ new Set();
+  /** Per zone: the Basic_Status fields this device is known to deliver (persisted union). */
+  zoneFields = /* @__PURE__ */ new Map();
   /**
    * Probe each zone, create the tree for the ones that answer, seed state, and
    * start the keepalive poll.
@@ -62,7 +66,7 @@ class XmlDeviceController {
    * @returns true if the main zone answered and the tree was created
    */
   async start() {
-    var _a, _b, _c;
+    var _a, _b, _c, _d, _e, _f;
     const probes = await Promise.all(
       XML_ZONES.map(async (zone) => ({ zone, status: await this.tryGetStatus(zone.element) }))
     );
@@ -93,6 +97,16 @@ class XmlDeviceController {
       );
       inputsByZone.set(zone.key, (0, import_protocol.parseInputList)(body));
     }
+    for (const { zone, status } of answered) {
+      const key = `xmlStatusFields:${zone.key}`;
+      const remembered = (_a = this.deps.probeMemory) == null ? void 0 : _a.remembered(key);
+      const fields = new Set(Array.isArray(remembered) ? remembered : []);
+      for (const field of Object.keys(status != null ? status : {})) {
+        fields.add(field);
+      }
+      (_b = this.deps.probeMemory) == null ? void 0 : _b.set(key, [...fields]);
+      this.zoneFields.set(zone.key, fields);
+    }
     const createdChannels = /* @__PURE__ */ new Set();
     for (const zone of this.zones) {
       if (zone.channel) {
@@ -105,7 +119,7 @@ class XmlDeviceController {
             await this.deps.upsertObject(`${this.deviceId}.${parentId}`, {
               id: parentId,
               type: "channel",
-              common: { name: (_a = import_types.CHANNEL_NAMES[seg]) != null ? _a : seg.charAt(0).toUpperCase() + seg.slice(1) }
+              common: { name: (_c = import_types.CHANNEL_NAMES[seg]) != null ? _c : seg.charAt(0).toUpperCase() + seg.slice(1) }
             });
           }
         }
@@ -113,11 +127,14 @@ class XmlDeviceController {
         await this.deps.upsertObject(`${this.deviceId}.${zone.channel}`, {
           id: zone.channel,
           type: "channel",
-          common: { name: (_b = zone.channelName) != null ? _b : zone.channel }
+          common: { name: (_d = zone.channelName) != null ? _d : zone.channel }
         });
       }
       for (const entry of import_catalog.XML_AMP_CATALOG) {
         if (entry.mainOnly && zone.key !== "main") {
+          continue;
+        }
+        if (entry.statusField !== void 0 && !((_e = this.zoneFields.get(zone.key)) == null ? void 0 : _e.has(entry.statusField))) {
           continue;
         }
         const stateId = `${zone.prefix}${entry.state}`;
@@ -129,7 +146,7 @@ class XmlDeviceController {
             await this.deps.upsertObject(`${this.deviceId}.${channelId}`, {
               id: channelId,
               type: "channel",
-              common: { name: (_c = import_types.CHANNEL_NAMES[segments[i - 1]]) != null ? _c : segments[i - 1] }
+              common: { name: (_f = import_types.CHANNEL_NAMES[segments[i - 1]]) != null ? _f : segments[i - 1] }
             });
           }
         }
@@ -143,6 +160,7 @@ class XmlDeviceController {
           type: "state",
           common
         });
+        this.createdStates.add(stateId);
       }
     }
     await this.setupScenes(createdChannels);
@@ -512,8 +530,24 @@ class XmlDeviceController {
    * @param status the parsed Basic_Status
    */
   seedZone(zone, status) {
+    var _a;
+    const known = this.zoneFields.get(zone.key);
+    if (known) {
+      let grew = false;
+      for (const field of Object.keys(status)) {
+        if (!known.has(field)) {
+          known.add(field);
+          grew = true;
+        }
+      }
+      if (grew) {
+        (_a = this.deps.probeMemory) == null ? void 0 : _a.set(`xmlStatusFields:${zone.key}`, [...known]);
+      }
+    }
     for (const update of (0, import_command_mapper.parseXmlStatus)(status, zone.key)) {
-      this.emit(update.id, update.value);
+      if (this.createdStates.has(update.id)) {
+        this.emit(update.id, update.value);
+      }
     }
   }
   /**

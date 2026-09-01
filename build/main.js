@@ -82,6 +82,10 @@ class Yamaha extends utils.Adapter {
    * datapoint new?".
    */
   knownDatapoints = /* @__PURE__ */ new Set();
+  /** State ids (namespace-relative) some transport upserted in THIS run — live claims. */
+  touchedThisRun = /* @__PURE__ */ new Set();
+  /** Devices that reported connected at least once in this run (gates the orphan purge). */
+  readyDevices = /* @__PURE__ */ new Set();
   createdDatapoints = 0;
   removedDatapoints = 0;
   /** Debounce for the balance line, so one config change produces ONE line, not one per device. */
@@ -210,6 +214,10 @@ class Yamaha extends utils.Adapter {
    * @param connected whether that device is currently connected
    */
   reportConnection(deviceId, connected) {
+    if (connected && !this.readyDevices.has(deviceId)) {
+      this.readyDevices.add(deviceId);
+      this.scheduleDatapointBalance();
+    }
     this.deviceConnected.set(deviceId, connected);
     void this.setState(`${deviceId}.info.connection`, { val: connected, ack: true });
     if (!connected) {
@@ -293,6 +301,46 @@ class Yamaha extends utils.Adapter {
     );
   }
   /**
+   * Once per adapter version and device (marker `native.purgeVersion` on the DEVICE
+   * object): remove read-capable states under a CONNECTED device that never carried a
+   * value and were not (re)created by this run's transports — over-declarations of an
+   * earlier adapter version that today's claim-with-proof creation no longer makes.
+   * Deleting them is lossless (no value, no history). Runs after the tree settled, so
+   * a device that has not connected in this run keeps its tree untouched — its sweep
+   * happens on the first start that reaches it.
+   */
+  async purgeNeverFilled() {
+    var _a;
+    const candidates = [];
+    for (const deviceId of this.readyDevices) {
+      const device = await this.getObjectAsync(deviceId);
+      if (((_a = device == null ? void 0 : device.native) == null ? void 0 : _a.purgeVersion) !== this.version) {
+        candidates.push(deviceId);
+      }
+    }
+    if (candidates.length === 0) {
+      return;
+    }
+    const allObjects = await this.getAdapterObjectsAsync();
+    const states = await this.getStatesAsync("*");
+    const purged = (0, import_pure_helpers.neverWrittenStateIds)(allObjects, states, new Set(candidates), this.namespace).filter(
+      (fullId) => !this.touchedThisRun.has((0, import_pure_helpers.stripNamespace)(fullId, this.namespace))
+    );
+    for (const fullId of purged) {
+      try {
+        await this.delObjectAsync((0, import_pure_helpers.stripNamespace)(fullId, this.namespace));
+      } catch {
+      }
+    }
+    for (const deviceId of candidates) {
+      await this.extendObject(deviceId, { native: { purgeVersion: this.version } });
+    }
+    if (purged.length > 0) {
+      this.log.debug(`removed ${purged.length} never-filled object(s) from an earlier version`);
+      this.noteDatapointsRemoved(purged);
+    }
+  }
+  /**
    * Remember every datapoint that already exists, ONCE per adapter run.
    *
    * @see knownDatapoints for why the create path alone cannot answer "is this new?"
@@ -348,18 +396,25 @@ class Yamaha extends utils.Adapter {
     this.clearTimeout(this.balanceTimer);
     this.balanceTimer = this.setTimeout(() => {
       this.balanceTimer = void 0;
-      const parts = [];
-      if (this.createdDatapoints > 0) {
-        parts.push(`created ${this.createdDatapoints} datapoint(s)`);
-      }
-      if (this.removedDatapoints > 0) {
-        parts.push(`removed ${this.removedDatapoints} datapoint(s)`);
-      }
-      this.createdDatapoints = 0;
-      this.removedDatapoints = 0;
-      if (parts.length > 0) {
-        this.log.info(`Object tree updated: ${parts.join(", ")}`);
-      }
+      void (async () => {
+        try {
+          await this.purgeNeverFilled();
+        } catch (e) {
+          this.log.debug(`orphan purge failed (${(0, import_util.errorMessage)(e)}); skipped for this run`);
+        }
+        const parts = [];
+        if (this.createdDatapoints > 0) {
+          parts.push(`created ${this.createdDatapoints} datapoint(s)`);
+        }
+        if (this.removedDatapoints > 0) {
+          parts.push(`removed ${this.removedDatapoints} datapoint(s)`);
+        }
+        this.createdDatapoints = 0;
+        this.removedDatapoints = 0;
+        if (parts.length > 0) {
+          this.log.info(`Object tree updated: ${parts.join(", ")}`);
+        }
+      })();
     }, DATAPOINT_BALANCE_SETTLE_MS);
   }
   /**
@@ -576,6 +631,7 @@ class Yamaha extends utils.Adapter {
         await this.extendObject(id, { type: def.type, common: def.common, native: {} });
         if (def.type === "state") {
           this.noteDatapointCreated(id);
+          this.touchedThisRun.add(id);
         }
       },
       setStateAck: (id, value) => {

@@ -211,6 +211,14 @@ export class YxcDeviceController implements ConnectionHandle {
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
     }
     await this.setupSceneLists(capabilities);
+    // The DAB scan counters are the one DAB detail the device reports only after a
+    // station scan (status stays not_ready before) — seed the documented start state
+    // (nothing scanned) so they are not left as valueless read states; a real scan
+    // result overwrites them via the tuner play info.
+    if (capabilities.media.includes("tuner") && (capabilities.tuner?.bands ?? []).includes("dab")) {
+      this.emit("tuner.dab.totalStations", 0);
+      this.emit("tuner.dab.scanProgress", 0);
+    }
     if (model) {
       // The info channel and info.model already exist — the adapter creates them for
       // every device up front, so the card renders even while the device is offline.

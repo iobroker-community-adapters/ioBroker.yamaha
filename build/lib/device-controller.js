@@ -568,27 +568,44 @@ class YncaDeviceController {
       }
       if (this.hasDab) {
         if (this.tunerBand === "FM") {
-          this.deps.client.send("DAB", "FMFREQ", (0, import_value_coerce.formatWireNumber)(khz / 1e3, 2));
+          this.sendProven("DAB", "FMFREQ", (0, import_value_coerce.formatWireNumber)(khz / 1e3, 2));
         } else {
           this.deps.log.debug(`${this.deviceId}: DAB tunes by service \u2014 frequency write ignored`);
         }
         return true;
       }
       if (this.tunerBand === "AM") {
-        this.deps.client.send("TUN", "AMFREQ", String(Math.round(khz)));
+        this.sendProven("TUN", "AMFREQ", String(Math.round(khz)));
       } else {
-        this.deps.client.send("TUN", "FMFREQ", (0, import_value_coerce.formatWireNumber)(khz / 1e3, 2));
+        this.sendProven("TUN", "FMFREQ", (0, import_value_coerce.formatWireNumber)(khz / 1e3, 2));
       }
       return true;
     }
     if (stateId === "tuner.preset" && this.hasDab) {
       const slot = Math.round(Number(value));
       if (Number.isFinite(slot) && slot >= 1) {
-        this.deps.client.send("DAB", this.tunerBand === "DAB" ? "DABPRESET" : "FMPRESET", String(slot));
+        this.sendProven("DAB", this.tunerBand === "DAB" ? "DABPRESET" : "FMPRESET", String(slot));
       }
       return true;
     }
     return false;
+  }
+  /**
+   * Send a band-routed write ONLY with a function THIS device reported in its sweep —
+   * the same claim-with-proof rule every generic write obeys (#615 class). Without it
+   * the router put a blind TUN:FMFREQ on the wire for any device, tuner or not, and
+   * each write surfaced as a "device refused" warning (test-audit finding).
+   *
+   * @param subunit the target subunit
+   * @param func the wire function
+   * @param wire the encoded wire value
+   */
+  sendProven(subunit, func, wire) {
+    if (!this.presentEntries.some((entry) => entry.subunit === subunit && entry.func === func)) {
+      this.deps.log.debug(`${this.deviceId}: ${subunit}:${func} not reported by this device \u2014 write dropped`);
+      return;
+    }
+    this.deps.client.send(subunit, func, wire);
   }
   /**
    * Create the browsing surface (#613) when the device reports a browsable media

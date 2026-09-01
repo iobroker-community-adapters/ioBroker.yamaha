@@ -356,6 +356,53 @@ export const RENAMED_CHANNELS = [
 ];
 
 /**
+ * Read-capable state objects under a configured device whose state NEVER carried a
+ * value (no value, no last-change). They are over-declarations of an earlier adapter
+ * version — today's claim-with-proof creation would not make them — and deleting them
+ * is lossless: there is no value and no history to lose, and anything a transport
+ * legitimately claims is recreated right after, when the device connects. Runs once
+ * per adapter version (the caller keeps a marker), so a freshly created state that is
+ * merely waiting for its first value does not flap on every start. Excluded: buttons
+ * and other write-only states (naturally valueless), states carrying per-state user
+ * settings (`common.custom`, e.g. a history binding — a deliberate user link is never
+ * deleted behind their back), and the `info.` header the adapter itself maintains for
+ * every device, connected or not.
+ *
+ * @param objects all objects under the instance, keyed by full id
+ * @param states all states under the instance, keyed by full id
+ * @param deviceIds the ids of the devices to sweep
+ * @param namespace the adapter namespace (e.g. `yamaha.0`)
+ * @returns the full ids of never-filled read-capable states
+ */
+export function neverWrittenStateIds(
+  objects: Record<string, { type?: string; common?: unknown } | undefined>,
+  states: Record<string, { val?: unknown; lc?: number } | null | undefined>,
+  deviceIds: Set<string>,
+  namespace: string,
+): string[] {
+  const ids: string[] = [];
+  for (const [fullId, object] of Object.entries(objects)) {
+    const common = object?.common as { read?: boolean; custom?: Record<string, unknown> } | undefined;
+    if (object?.type !== "state" || common?.read === false) {
+      continue;
+    }
+    if (common?.custom && Object.keys(common.custom).length > 0) {
+      continue;
+    }
+    const relative = stripNamespace(fullId, namespace);
+    const top = relative.split(".")[0];
+    if (!deviceIds.has(top) || relative.slice(top.length + 1).startsWith("info.")) {
+      continue;
+    }
+    const state = states[fullId];
+    if (!state || ((state.val === null || state.val === undefined) && !state.lc)) {
+      ids.push(fullId);
+    }
+  }
+  return ids;
+}
+
+/**
  * The full ids of renamed old states (and old channel subtrees) that still exist
  * under a configured device, to be deleted on start-up so no orphan lingers beside
  * the new object. Deepest first, so children go before their parents.

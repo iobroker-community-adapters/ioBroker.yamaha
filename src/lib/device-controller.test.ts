@@ -535,7 +535,7 @@ describe("YncaDeviceController unified tuner v2.0.0 (band-routed writes)", () =>
   }
 
   test("a frequency write goes to the active band's wire function on a classic TUN device", async () => {
-    const s = await tunerSetup({ MAIN: { PWR: "On" }, TUN: { BAND: "AM", AMFREQ: "1440" } });
+    const s = await tunerSetup({ MAIN: { PWR: "On" }, TUN: { BAND: "AM", AMFREQ: "1440", FMFREQ: "98.10" } });
     // AM: whole kHz on AMFREQ.
     s.controller.handleStateChange("living.tuner.frequency", false, 1440);
     expect(s.client.sent).toEqual([{ subunit: "TUN", func: "AMFREQ", value: "1440" }]);
@@ -559,7 +559,10 @@ describe("YncaDeviceController unified tuner v2.0.0 (band-routed writes)", () =>
   });
 
   test("on a DAB device the preset recall picks DABPRESET or FMPRESET by the active band", async () => {
-    const s = await tunerSetup({ MAIN: { PWR: "On" }, DAB: { BAND: "DAB", DABPRESET: "No Preset" } });
+    const s = await tunerSetup({
+      MAIN: { PWR: "On" },
+      DAB: { BAND: "DAB", DABPRESET: "No Preset", FMPRESET: "No Preset" },
+    });
     s.controller.handleStateChange("living.tuner.preset", false, 5);
     expect(s.client.sent).toEqual([{ subunit: "DAB", func: "DABPRESET", value: "5" }]);
     s.client.emit({ subunit: "DAB", func: "BAND", value: "FM" });
@@ -696,5 +699,46 @@ describe("YncaDeviceController player review fixes (2.0.0 pre-release audit)", (
     // device has), while the playing zone keeps its routed values.
     expect(s.acked).toContainEqual({ id: "living.multiroom.zone2.player.playback", value: 1 });
     expect(s.acked).not.toContainEqual({ id: "living.player.playback", value: 1 });
+  });
+});
+
+describe("YncaDeviceController test-audit hardening (2.0.1)", () => {
+  test("a frequency write on a device WITHOUT a tuner sends nothing (claim with proof)", async () => {
+    const client = new FakeClient();
+    client.capabilities = { model: "WXA-50", subunits: { MAIN: { PWR: "On", INP: "HDMI1" } } };
+    const { deps } = makeDeps(client);
+    const controller = new YncaDeviceController("living", deps);
+    await controller.start();
+    client.sent.length = 0;
+    controller.handleStateChange("living.tuner.frequency", false, 98100);
+    controller.handleStateChange("living.tuner.preset", false, 3);
+    expect(client.sent).toEqual([]);
+  });
+
+  const INPUT_CASES: Array<[string, string]> = [
+    ["NET RADIO", "NETRADIO"],
+    ["Bluetooth", "BT"],
+    ["AirPlay", "AIRPLAY"],
+    ["iPod (USB)", "IPODUSB"],
+    ["Spotify", "SPOTIFY"],
+    ["SERVER", "SERVER"],
+  ];
+
+  test.each(INPUT_CASES)("the INP value %s routes the player block to subunit %s", async (input, subunit) => {
+    // The normalization (uppercase, strip non-alphanumerics) exists exactly for the
+    // hard names — a regex regression must fail here, not only on trivial inputs.
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX-A810",
+      subunits: { MAIN: { PWR: "On", INP: "HDMI1" }, [subunit]: { PLAYBACKINFO: "Stop" } },
+    };
+    const { acked, deps } = makeDeps(client);
+    const controller = new YncaDeviceController("living", deps);
+    await controller.start();
+    acked.length = 0;
+    client.emit({ subunit: "MAIN", func: "INP", value: input });
+    client.emit({ subunit, func: "PLAYBACKINFO", value: "Play" });
+    expect(acked).toContainEqual({ id: "living.player.source", value: input });
+    expect(acked).toContainEqual({ id: "living.player.playback", value: 0 });
   });
 });

@@ -102,7 +102,7 @@ class YxcDeviceController {
    * @returns true if the device reported capabilities and its tree was created
    */
   async start() {
-    var _a, _b, _c, _d, _e;
+    var _a, _b, _c, _d, _e, _f, _g;
     let model;
     try {
       const info = await this.deps.client.getDeviceInfo();
@@ -131,6 +131,10 @@ class YxcDeviceController {
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
     }
     await this.setupSceneLists(capabilities);
+    if (capabilities.media.includes("tuner") && ((_b = (_a = capabilities.tuner) == null ? void 0 : _a.bands) != null ? _b : []).includes("dab")) {
+      this.emit("tuner.dab.totalStations", 0);
+      this.emit("tuner.dab.scanProgress", 0);
+    }
     if (model) {
       this.emit("info.model", model);
     }
@@ -154,8 +158,8 @@ class YxcDeviceController {
     this.tunerFeatures = capabilities.tuner;
     this.hasClock = capabilities.clock !== void 0;
     this.signalZones = capabilities.zones.filter((zone) => zone.funcs.includes("signal_info")).map((zone) => zone.id);
-    this.hasMcPlaylist = (_b = (_a = capabilities.netusbFuncs) == null ? void 0 : _a.includes("mc_playlist")) != null ? _b : false;
-    this.hasPlayQueue = (_d = (_c = capabilities.netusbFuncs) == null ? void 0 : _c.includes("play_queue")) != null ? _d : false;
+    this.hasMcPlaylist = (_d = (_c = capabilities.netusbFuncs) == null ? void 0 : _c.includes("mc_playlist")) != null ? _d : false;
+    this.hasPlayQueue = (_f = (_e = capabilities.netusbFuncs) == null ? void 0 : _e.includes("play_queue")) != null ? _f : false;
     await this.setupBrowse(capabilities);
     await this.refreshMedia();
     if (this.mediaBlocks.includes("netusb") || this.mediaBlocks.includes("cd")) {
@@ -166,7 +170,7 @@ class YxcDeviceController {
       }
     }
     await this.refreshLists();
-    this.hasDistribution = (_e = capabilities.hasDistribution) != null ? _e : false;
+    this.hasDistribution = (_g = capabilities.hasDistribution) != null ? _g : false;
     if (this.hasDistribution) {
       await this.refreshDistribution();
     }

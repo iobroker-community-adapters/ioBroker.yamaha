@@ -24,6 +24,7 @@ __export(pure_helpers_exports, {
   isUsefulDeviceName: () => isUsefulDeviceName,
   legacyDeviceRow: () => legacyDeviceRow,
   mergeDiscovered: () => mergeDiscovered,
+  neverWrittenStateIds: () => neverWrittenStateIds,
   nextDeviceLabel: () => nextDeviceLabel,
   parseDevices: () => parseDevices,
   renamedObjectIds: () => renamedObjectIds,
@@ -277,6 +278,28 @@ const RENAMED_CHANNELS = [
   "player.musicCastLink",
   "lipSync"
 ];
+function neverWrittenStateIds(objects, states, deviceIds, namespace) {
+  const ids = [];
+  for (const [fullId, object] of Object.entries(objects)) {
+    const common = object == null ? void 0 : object.common;
+    if ((object == null ? void 0 : object.type) !== "state" || (common == null ? void 0 : common.read) === false) {
+      continue;
+    }
+    if ((common == null ? void 0 : common.custom) && Object.keys(common.custom).length > 0) {
+      continue;
+    }
+    const relative = stripNamespace(fullId, namespace);
+    const top = relative.split(".")[0];
+    if (!deviceIds.has(top) || relative.slice(top.length + 1).startsWith("info.")) {
+      continue;
+    }
+    const state = states[fullId];
+    if (!state || (state.val === null || state.val === void 0) && !state.lc) {
+      ids.push(fullId);
+    }
+  }
+  return ids;
+}
 function renamedObjectIds(existing, deviceIds, namespace) {
   var _a, _b;
   const stale = [];
@@ -340,6 +363,7 @@ function nextDeviceLabel(current, deviceId, candidate, rank, ownName, ownRank) {
   isUsefulDeviceName,
   legacyDeviceRow,
   mergeDiscovered,
+  neverWrittenStateIds,
   nextDeviceLabel,
   parseDevices,
   renamedObjectIds,

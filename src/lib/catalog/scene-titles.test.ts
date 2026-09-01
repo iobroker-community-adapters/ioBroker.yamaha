@@ -35,3 +35,20 @@ describe("scene titles from the shared device memory", () => {
     expect(resolveSceneNumber(null, undefined, "main")).toBeUndefined();
   });
 });
+
+describe("title source precedence", () => {
+  test("the XML declaration beats the YNCA names when BOTH transports reported titles", () => {
+    const memory = new ProbeMemory();
+    memory.set(
+      "xmlScenes:main",
+      `<YAMAHA_AV rsp="GET" RC="0"><Scene><Scene_Sel_Item>` +
+        `<Item_1><Param>Scene 1</Param><RW>W</RW><Title>XML Movie</Title></Item_1>` +
+        `</Scene_Sel_Item></Scene></YAMAHA_AV>`,
+    );
+    memory.set("yncaStaticValues", { MAIN: { SCENE1NAME: "YNCA Movie", SCENE2NAME: "YNCA TV" } });
+    // The per-zone XML declaration is the richer, zone-aware source — it must win.
+    expect(knownScenes(memory, "main")).toEqual([{ num: 1, title: "XML Movie" }]);
+    // A zone the XML never declared falls back to nothing (YNCA names are main-only).
+    expect(knownScenes(memory, "zone2")).toEqual([]);
+  });
+});

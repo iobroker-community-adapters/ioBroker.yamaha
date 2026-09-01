@@ -3,6 +3,7 @@ import {
   LABEL_RANK,
   legacyDeviceRow,
   mergeDiscovered,
+  neverWrittenStateIds,
   nextDeviceLabel,
   parseDevices,
   renamedObjectIds,
@@ -577,5 +578,52 @@ describe("nextDeviceLabel", () => {
   it("ignores a useless candidate", () => {
     expect(nextDeviceLabel(id, id, "Main Zone", LABEL_RANK.deviceName)).toBeUndefined();
     expect(nextDeviceLabel(id, id, "", LABEL_RANK.deviceName)).toBeUndefined();
+  });
+});
+
+describe("neverWrittenStateIds (one-time orphan purge per version)", () => {
+  const ns = "yamaha.0";
+  const stateObj = (read: boolean): { type: string; common: { read: boolean } } => ({ type: "state", common: { read } });
+
+  test("finds read-capable states that never carried a value; keeps buttons, filled states and foreign trees", () => {
+    const objects = {
+      [`${ns}.living.multiroom.zone2.soundProgram`]: stateObj(true), // orphan of an earlier version
+      [`${ns}.living.sound.direct`]: stateObj(true), // orphan
+      [`${ns}.living.player.play`]: stateObj(false), // button — naturally valueless
+      [`${ns}.living.volume`]: stateObj(true), // filled
+      [`${ns}.living.tuner.rdsText`]: stateObj(true), // filled with empty text (still a value)
+      [`${ns}.living.player`]: { type: "channel", common: {} }, // not a state
+      [`${ns}.other.sound.direct`]: stateObj(true), // not a swept device
+    };
+    const states = {
+      [`${ns}.living.multiroom.zone2.soundProgram`]: { val: null },
+      [`${ns}.living.sound.direct`]: null,
+      [`${ns}.living.player.play`]: { val: null },
+      [`${ns}.living.volume`]: { val: -40, lc: 123 },
+      [`${ns}.living.tuner.rdsText`]: { val: "", lc: 456 },
+    };
+    expect(neverWrittenStateIds(objects, states, new Set(["living"]), ns).sort()).toEqual([
+      `${ns}.living.multiroom.zone2.soundProgram`,
+      `${ns}.living.sound.direct`,
+    ]);
+  });
+
+  test("edge shapes: missing common counts as readable; lc of 0 counts as never written", () => {
+    const objects = {
+      [`${ns}.living.hdmi.out2`]: { type: "state" }, // no common at all — still purgeable
+      [`${ns}.living.tuner.dab.totalStations`]: stateObj(true),
+    };
+    const states = {
+      [`${ns}.living.hdmi.out2`]: {}, // no val, no lc
+      [`${ns}.living.tuner.dab.totalStations`]: { val: null, lc: 0 }, // lc 0 = never
+    };
+    expect(neverWrittenStateIds(objects, states, new Set(["living"]), ns).sort()).toEqual([
+      `${ns}.living.hdmi.out2`,
+      `${ns}.living.tuner.dab.totalStations`,
+    ]);
+    // A value of 0 with a real last-change is a WRITTEN state — never purged.
+    expect(
+      neverWrittenStateIds(objects, { [`${ns}.living.tuner.dab.totalStations`]: { val: 0, lc: 5 } }, new Set(["living"]), ns),
+    ).toEqual([`${ns}.living.hdmi.out2`]);
   });
 });

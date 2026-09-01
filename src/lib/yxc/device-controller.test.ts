@@ -39,6 +39,8 @@ interface FakeClient extends YxcClientLike {
   clockSettings: unknown;
   /** The netusb getPlayInfo answer (tuner/cd have fixed canned answers). */
   playInfo: unknown;
+  /** Per-zone getStatus answers; falls back to `status` for zones not listed. */
+  statusByZone: Record<string, unknown> | undefined;
   distRole: string;
   /** Make the zone status / name lookup fail, as an unreachable device would. */
   failStatus: boolean;
@@ -65,6 +67,7 @@ function makeFakeClient(features: unknown, status: unknown): FakeClient {
     tunerPresetInfo: { response_code: 0, preset_info: [] },
     clockSettings: { response_code: 0 },
     playInfo: {},
+    statusByZone: undefined,
     distRole: "server",
     failStatus: false,
     failNameText: false,
@@ -72,9 +75,13 @@ function makeFakeClient(features: unknown, status: unknown): FakeClient {
   // The answers that are more than "an empty success".
   const replies: Record<string, (args: unknown[]) => unknown> = {
     getFeatures: () => state.features,
-    getStatus: () => {
+    getStatus: ([zone]) => {
       if (state.failStatus) {
         throw new Error("device offline");
+      }
+      const byZone = state.statusByZone as Record<string, unknown> | undefined;
+      if (byZone && typeof zone === "string" && zone in byZone) {
+        return byZone[zone];
       }
       return state.status;
     },
@@ -1004,5 +1011,126 @@ describe("YxcDeviceController player.source seeding", () => {
     await s.controller.start();
     const sources = s.acks.filter(ack => ack.id === "living.player.source").map(ack => ack.value);
     expect(sources).toEqual(["net_radio"]);
+  });
+});
+
+describe("YxcDeviceController seed edge cases (2.0.1 hardening)", () => {
+  test("the DAB scan counters start at zero on a DAB-capable tuner — and only there", async () => {
+    // The RX-V6A getFeatures shape: bands come from tuner.func_list (fm/am/dab).
+    const dabFeatures = {
+      zone: [{ id: "main", func_list: ["power"] }],
+      tuner: { func_list: ["fm", "rds", "dab"], preset: { type: "separate", num: 40 } },
+    };
+    const s = setup(dabFeatures, { power: "on", input: "hdmi1" });
+    await s.controller.start();
+    // The device delivers the two counters only after a station scan — until then the
+    // documented start state is zero, never a valueless datapoint.
+    expect(s.acks).toContainEqual({ id: "living.tuner.dab.totalStations", value: 0 });
+    expect(s.acks).toContainEqual({ id: "living.tuner.dab.scanProgress", value: 0 });
+    // A tuner without DAB gets neither counter.
+    const fmOnly = setup(
+      { zone: [{ id: "main", func_list: ["power"] }], tuner: { func_list: ["fm", "rds"], preset: { type: "common", num: 40 } } },
+      { power: "on", input: "hdmi1" },
+    );
+    await fmOnly.controller.start();
+    expect(fmOnly.acks.some(ack => ack.id.startsWith("living.tuner.dab."))).toBe(false);
+  });
+
+  test("a cd-only device gets the cleared player block too (no netusb required)", async () => {
+    const s = setup({ zone: [{ id: "main", func_list: ["power"] }], cd: {} }, { power: "on", input: "hdmi1" });
+    await s.controller.start();
+    expect(s.acks).toContainEqual({ id: "living.player.source", value: "" });
+    expect(s.acks).toContainEqual({ id: "living.player.playback", value: 1 });
+  });
+});
+
+describe("YxcDeviceController test-audit hardening (2.0.1)", () => {
+  const twoZoneNetusb = {
+    zone: [
+      { id: "main", func_list: ["power"] },
+      { id: "zone2", func_list: ["power"] },
+    ],
+    netusb: {},
+  };
+
+  test("multi-zone routing: the LISTENING zone's block fills under its multiroom prefix, main stays untouched", async () => {
+    const s = setup(twoZoneNetusb, { power: "on", input: "hdmi1" });
+    s.client.statusByZone = {
+      main: { power: "on", input: "hdmi1" },
+      zone2: { power: "on", input: "net_radio" },
+    };
+    s.client.playInfo = { input: "net_radio", playback: "play", artist: "BBC" };
+    await s.controller.start();
+    expect(s.acks).toContainEqual({ id: "living.multiroom.zone2.player.artist", value: "BBC" });
+    expect(s.acks).toContainEqual({ id: "living.multiroom.zone2.player.source", value: "net_radio" });
+    expect(s.acks).not.toContainEqual({ id: "living.player.artist", value: "BBC" });
+    // Main (on HDMI) got its cleared resting shape instead.
+    expect(s.acks).toContainEqual({ id: "living.player.artist", value: "" });
+  });
+
+  test("multi-zone clear-on-switch: zone 2 leaving the source clears ITS block via the zone status alone", async () => {
+    const s = setup(twoZoneNetusb, { power: "on", input: "hdmi1" }, {}, () => true);
+    s.client.statusByZone = {
+      main: { power: "on", input: "hdmi1" },
+      zone2: { power: "on", input: "net_radio" },
+    };
+    s.client.playInfo = { input: "net_radio", playback: "play", artist: "BBC" };
+    await s.controller.start();
+    expect(s.acks).toContainEqual({ id: "living.multiroom.zone2.player.artist", value: "BBC" });
+    s.client.statusByZone = {
+      main: { power: "on", input: "hdmi1" },
+      zone2: { power: "on", input: "audio1" },
+    };
+    s.acks.length = 0;
+    s.fire.keepalive?.(); // push mode, first run → zone polls only
+    await flush();
+    expect(s.acks).toContainEqual({ id: "living.multiroom.zone2.player.artist", value: "" });
+    expect(s.acks).toContainEqual({ id: "living.multiroom.zone2.player.source", value: "" });
+  });
+
+  test("a band write is remembered BEFORE the round-trip — a frequency in the same turn uses the new band", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], tuner: { func_list: ["am", "fm"] } };
+    const s = setup(features, { power: "on", input: "tuner" });
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.tuner.band", false, "am");
+    s.controller.handleStateChange("living.tuner.frequency", false, 1440);
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "setBand", args: ["am"] });
+    expect(s.client.calls).toContainEqual({ method: "setFreq", args: ["am", 1440] });
+  });
+
+  test("two equalizer bands written back-to-back keep BOTH values (cache before round-trip)", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power", "equalizer"] }] };
+    const status = { power: "on", input: "hdmi1", equalizer: { mode: "manual", low: 1, mid: 2, high: 3 } };
+    const s = setup(features, status);
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.sound.equalizer.low", false, 7);
+    s.controller.handleStateChange("living.sound.equalizer.mid", false, -4);
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "setEqualizer", args: [7, 2, 3, "main"] });
+    expect(s.client.calls).toContainEqual({ method: "setEqualizer", args: [7, -4, 3, "main"] });
+  });
+
+  test("scene.list merges titles from the shared device memory where another transport reported them", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power", "scene"], scene_num: 3 }], netusb: {} };
+    const s = setup(features, { power: "on", input: "hdmi1" });
+    const memory = new ProbeMemory();
+    memory.set(
+      "xmlScenes:main",
+      `<YAMAHA_AV rsp="GET" RC="0"><Scene><Scene_Sel_Item>` +
+        `<Item_1><Param>Scene 1</Param><RW>W</RW><Title>Movie</Title></Item_1>` +
+        `<Item_2><Param>Scene 2</Param><RW>W</RW><Title>Radio</Title></Item_2>` +
+        `</Scene_Sel_Item></Scene></YAMAHA_AV>`,
+    );
+    (s.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
+    await s.controller.start();
+    const list = s.acks.find(ack => ack.id === "living.scene.list");
+    expect(JSON.parse(String(list?.value))).toEqual([
+      { num: 1, title: "Movie" },
+      { num: 2, title: "Radio" },
+      { num: 3, title: "" },
+    ]);
   });
 });

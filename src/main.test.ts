@@ -11,6 +11,7 @@ vi.mock("@iobroker/adapter-core", () => {
   class Adapter {
     public log = { silly: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
     public namespace = "yamaha.0";
+    public version = "0.0.0-test";
     public adapterDir = "/tmp/yamaha";
     public config: Record<string, unknown> = {};
     public objects = new Map<string, Record<string, unknown>>();
@@ -50,6 +51,13 @@ vi.mock("@iobroker/adapter-core", () => {
     });
     public delObjectAsync = vi.fn(async (id: string) => {
       this.objects.delete(this.key(id));
+    });
+    public getStatesAsync = vi.fn(async () => {
+      const out: Record<string, { val: unknown; ack: boolean }> = {};
+      for (const [k, v] of this.states) {
+        out[`${this.namespace}.${k}`] = v;
+      }
+      return out;
     });
     public getForeignObjectAsync = vi.fn(async (id: string) => this.foreignObjects.get(id) ?? null);
     public setForeignObjectAsync = vi.fn(async (id: string, obj: Record<string, unknown>) => {
@@ -617,9 +625,11 @@ describe("Yamaha datapoint balance in the log", () => {
    *
    * @param ctx the test context
    */
-  const settle = (ctx: { i: { setTimeout: ReturnType<typeof vi.fn> } }): void => {
+  const settle = async (ctx: { i: { setTimeout: ReturnType<typeof vi.fn> } }): Promise<void> => {
     const call = ctx.i.setTimeout.mock.calls.filter(c => c[1] === 5000).at(-1);
     (call?.[0] as (() => void) | undefined)?.();
+    // The settle callback awaits the orphan purge before logging the line.
+    await flush();
   };
 
   /**
@@ -638,7 +648,7 @@ describe("Yamaha datapoint balance in the log", () => {
     const upsert = upsertOf(ctx);
     await upsert("Living_room.main.power", { type: "state", common: { name: "p" } });
     await upsert("Living_room.volume", { type: "state", common: { name: "v" } });
-    settle(ctx);
+    await settle(ctx);
     expect(ctx.i.log.info).toHaveBeenCalledWith("Object tree updated: created 2 datapoint(s)");
   });
 
@@ -648,7 +658,7 @@ describe("Yamaha datapoint balance in the log", () => {
     await ctx.i.onReady();
     await flush();
     await upsertOf(ctx)("Living_room.main.power", { type: "state", common: { name: "p" } });
-    settle(ctx);
+    await settle(ctx);
     // The datapoint already existed, so touching it again is not a change. Without the
     // start-up snapshot this would report the whole tree as new on every restart.
     expect(ctx.i.log.info).not.toHaveBeenCalledWith(expect.stringContaining("Object tree updated"));
@@ -662,7 +672,7 @@ describe("Yamaha datapoint balance in the log", () => {
     await upsert("Living_room.main.power", { type: "state", common: { name: "p" } });
     // Every state runs through extendObject again on a reconnect (the role/unit retrofit).
     await upsert("Living_room.main.power", { type: "state", common: { name: "p" } });
-    settle(ctx);
+    await settle(ctx);
     expect(ctx.i.log.info).toHaveBeenCalledWith("Object tree updated: created 1 datapoint(s)");
   });
 
@@ -673,7 +683,7 @@ describe("Yamaha datapoint balance in the log", () => {
     await ctx.i.onReady();
     await flush();
     await upsertOf(ctx)("Living_room.main.power", { type: "state", common: { name: "p" } });
-    settle(ctx);
+    await settle(ctx);
     // The user made ONE change, so they read ONE result — not a removal line now and an
     // addition line later.
     expect(ctx.i.log.info).toHaveBeenCalledWith("Object tree updated: created 1 datapoint(s), removed 1 datapoint(s)");
@@ -687,7 +697,7 @@ describe("Yamaha datapoint balance in the log", () => {
     await ctx.i.onReady();
     await flush();
     await upsertOf(ctx)("Living_room.player", { type: "channel", common: { name: "c" } });
-    settle(ctx);
+    await settle(ctx);
     // Three objects go and one arrives, but the user only ever counts datapoints.
     expect(ctx.i.log.info).toHaveBeenCalledWith("Object tree updated: removed 1 datapoint(s)");
   });
@@ -1247,5 +1257,70 @@ describe("Yamaha description fetch", () => {
     const fetchUrl = await realFetch();
     net.http.error = new Error("ECONNREFUSED");
     await expect(fetchUrl("http://192.168.1.99/desc.xml")).rejects.toThrow("ECONNREFUSED");
+  });
+});
+
+describe("Yamaha never-filled purge (once per adapter version, after connect)", () => {
+  const settle = (ctx: { i: { setTimeout: ReturnType<typeof vi.fn> } }): void => {
+    const call = ctx.i.setTimeout.mock.calls.filter(c => c[1] === 5000).at(-1);
+    (call?.[0] as (() => void) | undefined)?.();
+  };
+
+  it("removes read states that never carried a value and stamps the device with the version", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room", { type: "device", common: {}, native: {} });
+    // Orphan of an earlier version: readable, no value ever.
+    ctx.i.objects.set("Living_room.sound.direct", { type: "state", common: { read: true }, native: {} });
+    // A filled state, a button and a user-linked state must survive.
+    ctx.i.objects.set("Living_room.volume", { type: "state", common: { read: true }, native: {} });
+    ctx.i.states.set("Living_room.volume", { val: -40, ack: true, lc: 5 } as never);
+    ctx.i.objects.set("Living_room.player.play", { type: "state", common: { read: false, write: true }, native: {} });
+    ctx.i.objects.set("Living_room.multiroom.zone2.soundProgram", {
+      type: "state",
+      common: { read: true, custom: { "history.0": { enabled: true } } },
+      native: {},
+    });
+    await ctx.i.onReady();
+    await flush();
+    await settle(ctx);
+    await flush();
+    expect(ctx.i.objects.has("Living_room.sound.direct")).toBe(false);
+    expect(ctx.i.objects.has("Living_room.volume")).toBe(true);
+    expect(ctx.i.objects.has("Living_room.player.play")).toBe(true);
+    // A deliberate user link (history binding) is never deleted behind their back.
+    expect(ctx.i.objects.has("Living_room.multiroom.zone2.soundProgram")).toBe(true);
+    expect((ctx.i.objects.get("Living_room")?.native as { purgeVersion?: string }).purgeVersion).toBe("0.0.0-test");
+    expect(ctx.i.log.debug).toHaveBeenCalledWith(expect.stringContaining("never-filled"));
+  });
+
+  it("runs ONCE per version: a device already stamped with the current version is not swept again", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room", { type: "device", common: {}, native: { purgeVersion: "0.0.0-test" } });
+    // Would be purged on a version change — but the stamp says this version already ran,
+    // so a fresh state merely waiting for its first value must not flap on every start.
+    ctx.i.objects.set("Living_room.tuner.rdsText", { type: "state", common: { read: true }, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    await settle(ctx);
+    await flush();
+    expect(ctx.i.objects.has("Living_room.tuner.rdsText")).toBe(true);
+    expect(ctx.i.log.debug).not.toHaveBeenCalledWith(expect.stringContaining("never-filled"));
+  });
+
+  it("a version CHANGE re-arms the sweep; a device that never connected is left alone", async () => {
+    const ctx = setup({ devices: [{ name: "Living room", ip: "192.168.1.10" }, { name: "Attic", ip: "192.168.1.11" }] }, { failIds: ["Attic"] });
+    ctx.i.objects.set("Living_room", { type: "device", common: {}, native: { purgeVersion: "1.7.0" } });
+    ctx.i.objects.set("Living_room.hdmi.out2", { type: "state", common: { read: true }, native: {} });
+    ctx.i.objects.set("Attic", { type: "device", common: {}, native: { purgeVersion: "1.7.0" } });
+    ctx.i.objects.set("Attic.sound.direct", { type: "state", common: { read: true }, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    await settle(ctx);
+    await flush();
+    expect(ctx.i.objects.has("Living_room.hdmi.out2")).toBe(false);
+    expect((ctx.i.objects.get("Living_room")?.native as { purgeVersion?: string }).purgeVersion).toBe("0.0.0-test");
+    // The offline device keeps its tree AND its old stamp — its sweep runs when it connects.
+    expect(ctx.i.objects.has("Attic.sound.direct")).toBe(true);
+    expect((ctx.i.objects.get("Attic")?.native as { purgeVersion?: string }).purgeVersion).toBe("1.7.0");
   });
 });
