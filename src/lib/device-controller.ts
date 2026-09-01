@@ -622,17 +622,29 @@ export class YncaDeviceController implements ConnectionHandle {
         sourceDef(`${zone.prefix}player.source`),
       );
     }
-    // Seed the source display: a device already playing at adapter start must not
-    // show an empty source until its first input switch (2.0.0 review finding — the
-    // sweep seeds the metadata, but `player.source` is controller-derived).
+    // Seed the block's resting shape: a device already playing at adapter start must
+    // not show an empty source until its first input switch, and a zone NOT playing a
+    // media source must show cleared values, not valueless states (2.0.0 review + live
+    // deployment check). Zones ON a source get their values from the routed sweep.
+    const presentFlat = new Set(
+      this.presentEntries.filter(entry => FLAT_PLAYER_ID.test(entry.id)).map(entry => entry.id),
+    );
     for (const zone of YNCA_ZONES) {
-      if (this.playerZones.includes(zone.key)) {
-        const input = this.zoneInputs.get(zone.key);
-        const playing = playerSubunitForInput(input) !== undefined;
-        this.deps.setStateAck(
-          `${this.deviceId}.${zone.prefix}player.source`,
-          playing && input !== undefined ? input : "",
-        );
+      if (!this.playerZones.includes(zone.key)) {
+        continue;
+      }
+      const input = this.zoneInputs.get(zone.key);
+      const playing = playerSubunitForInput(input) !== undefined;
+      this.deps.setStateAck(
+        `${this.deviceId}.${zone.prefix}player.source`,
+        playing && input !== undefined ? input : "",
+      );
+      if (!playing) {
+        for (const clear of YNCA_PLAYER_CLEAR) {
+          if (presentFlat.has(clear.id)) {
+            this.deps.setStateAck(`${this.deviceId}.${zone.prefix}${clear.id}`, clear.value);
+          }
+        }
       }
     }
   }

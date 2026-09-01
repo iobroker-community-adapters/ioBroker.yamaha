@@ -692,5 +692,9 @@ describe("YncaDeviceController player review fixes (2.0.0 pre-release audit)", (
     });
     expect(s.acked).toContainEqual({ id: "living.player.source", value: "NET RADIO" });
     expect(s.acked).toContainEqual({ id: "living.multiroom.zone2.player.source", value: "" });
+    // The idle zone's block is seeded with its cleared shape (only the states the
+    // device has), while the playing zone keeps its routed values.
+    expect(s.acked).toContainEqual({ id: "living.multiroom.zone2.player.playback", value: 1 });
+    expect(s.acked).not.toContainEqual({ id: "living.player.playback", value: 1 });
   });
 });

@@ -989,10 +989,13 @@ describe("YxcDeviceController player review fixes (2.0.0 pre-release audit)", ()
 });
 
 describe("YxcDeviceController player.source seeding", () => {
-  test("a zone starting on a non-media input shows an EMPTY source, not a valueless state", async () => {
+  test("a zone starting on a non-media input gets the WHOLE block cleared, not valueless states", async () => {
     const s = setup({ zone: [{ id: "main", func_list: ["power"] }], netusb: {} }, { power: "on", input: "hdmi1" });
     await s.controller.start();
     expect(s.acks).toContainEqual({ id: "living.player.source", value: "" });
+    expect(s.acks).toContainEqual({ id: "living.player.artist", value: "" });
+    expect(s.acks).toContainEqual({ id: "living.player.playback", value: 1 });
+    expect(s.acks).toContainEqual({ id: "living.player.elapsedTime", value: 0 });
   });
 
   test("a zone starting ON a media source keeps the routed source value (no empty overwrite)", async () => {

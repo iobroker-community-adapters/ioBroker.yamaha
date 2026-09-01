@@ -161,7 +161,7 @@ class YxcDeviceController {
     if (this.mediaBlocks.includes("netusb") || this.mediaBlocks.includes("cd")) {
       for (const zone of this.zones.length > 0 ? this.zones : ["main"]) {
         if (!this.zonePlayerBlock.has(zone)) {
-          this.emit(`${(0, import_zones.zonePrefix)(zone)}player.source`, "");
+          this.emitPlayerUpdates(zone, import_command_mapper.PLAYER_CLEAR);
         }
       }
     }

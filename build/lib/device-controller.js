@@ -441,14 +441,25 @@ class YncaDeviceController {
         sourceDef(`${zone.prefix}player.source`)
       );
     }
+    const presentFlat = new Set(
+      this.presentEntries.filter((entry) => FLAT_PLAYER_ID.test(entry.id)).map((entry) => entry.id)
+    );
     for (const zone of YNCA_ZONES) {
-      if (this.playerZones.includes(zone.key)) {
-        const input = this.zoneInputs.get(zone.key);
-        const playing = playerSubunitForInput(input) !== void 0;
-        this.deps.setStateAck(
-          `${this.deviceId}.${zone.prefix}player.source`,
-          playing && input !== void 0 ? input : ""
-        );
+      if (!this.playerZones.includes(zone.key)) {
+        continue;
+      }
+      const input = this.zoneInputs.get(zone.key);
+      const playing = playerSubunitForInput(input) !== void 0;
+      this.deps.setStateAck(
+        `${this.deviceId}.${zone.prefix}player.source`,
+        playing && input !== void 0 ? input : ""
+      );
+      if (!playing) {
+        for (const clear of YNCA_PLAYER_CLEAR) {
+          if (presentFlat.has(clear.id)) {
+            this.deps.setStateAck(`${this.deviceId}.${zone.prefix}${clear.id}`, clear.value);
+          }
+        }
       }
     }
   }

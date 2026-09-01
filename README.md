@@ -105,7 +105,7 @@ On the very first contact the adapter asks the receiver which functions it suppo
 -->
 ### **WORK IN PROGRESS**
 
-- (krobipd) Fixed: on MusicCast devices the playing-source datapoint starts as empty text for zones that are not playing a media source, instead of staying without a value until the first playback
+- (krobipd) Fixed: the player block of a zone that is not playing a media source starts with cleared values (empty texts, playback on stop) instead of staying without any value until the first playback
 
 ### 2.0.0 (2026-09-01)
 
