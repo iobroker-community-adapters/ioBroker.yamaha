@@ -103,6 +103,10 @@ On the very first contact the adapter asks the receiver which functions it suppo
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+### **WORK IN PROGRESS**
+
+- (krobipd) Fixed: on MusicCast devices the playing-source datapoint starts as empty text for zones that are not playing a media source, instead of staying without a value until the first playback
+
 ### 2.0.0 (2026-09-01)
 
 - (krobipd) Changed: one player block per zone now shows what is playing — source, title, artist, cover art and the transport buttons — instead of an identical, mostly empty block under every source
