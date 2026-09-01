@@ -103,7 +103,7 @@ On the very first contact the adapter asks the receiver which functions it suppo
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 2.0.1 (2026-09-01)
 
 - (krobipd) Fixed: devices on the oldest protocol no longer get datapoints their status never delivers — states are only created for what the device really answers, like on the other two protocols
 - (krobipd) Fixed: leftover datapoints that never carried a value — zone sound settings or a second HDMI output the receiver does not have — are cleaned away once when updating the adapter
@@ -144,17 +144,6 @@ On the very first contact the adapter asks the receiver which functions it suppo
 - (krobipd) Fixed: a MusicCast device that loses power is now reported as offline instead of still showing a connection, so the ready message and the connection indicator tell the truth
 - (krobipd) New: switching a datapoint group on or off in the settings now shows how many datapoints appeared or disappeared, so you no longer have to click through the object tree to check
 - (krobipd) New: optional error reporting via Sentry — only active if you enabled diagnostics in ioBroker, and it transmits no personal data
-
-### 1.4.0 (2026-08-26)
-
-- (krobipd) Fixed: commands sent in quick succession all arrive — a scene switching power, input and volume in one go used to lose everything after the first command
-- (krobipd) Fixed: a command the device rejects is now reported instead of counting as success, so a MusicCast device that stops answering is reconnected rather than silently freezing
-- (krobipd) Fixed: names and menu entries containing "&" or other special characters now read and write correctly on the older XML protocol
-- (krobipd) Fixed: writing one equalizer band no longer resets the other two when the device has not reported its bands yet
-- (krobipd) Fixed: switching the tuner band and setting a frequency right after each other now applies the frequency to the new band
-- (krobipd) Improved: startup with automatic discovery is much faster on networks with many devices, and a reconnect no longer re-asks what the device already told us
-- (krobipd) Fixed: recalling a favourite, a recently played item or a tuner preset now goes to the zone that is actually listening instead of always switching the main zone
-- (krobipd) Improved: stopping or restarting the adapter no longer leaves requests running that write to datapoints afterwards
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 

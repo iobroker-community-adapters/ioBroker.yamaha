@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "2.0.0",
+    "version": "2.0.1",
     "news": {
+      "2.0.1": {
+        "en": "Bug fixes: datapoints the device can never fill are no longer created, a one-time sweep clears never-filled leftovers, and idle player blocks start with cleared values",
+        "de": "Fehlerbereinigung: Datenpunkte, die das Gerät nie füllen kann, entstehen nicht mehr, ein Einmal-Durchlauf entfernt nie befüllte Altlasten, ruhende Player-Blöcke starten mit Leerwerten",
+        "ru": "Исправления: точки данных, которые устройство не может заполнить, больше не создаются, разовая очистка убирает пустые остатки, блоки плеера в покое стартуют с пустыми значениями",
+        "pt": "Correções: pontos de dados que o aparelho nunca pode preencher já não são criados, uma limpeza única remove restos nunca preenchidos, blocos do leitor em repouso arrancam vazios",
+        "nl": "Foutcorrecties: datapunten die het apparaat nooit kan vullen worden niet meer aangemaakt, een eenmalige opruiming verwijdert nooit gevulde resten, rustende spelerblokken starten leeg",
+        "fr": "Corrections : les points de données que l'appareil ne peut jamais remplir ne sont plus créés, un nettoyage unique retire les restes jamais remplis, les blocs lecteur au repos démarrent vides",
+        "it": "Correzioni: i punti dati che il dispositivo non può mai riempire non vengono più creati, una pulizia una tantum rimuove i resti mai riempiti, i blocchi lettore a riposo partono vuoti",
+        "es": "Correcciones: los puntos de datos que el equipo nunca puede llenar ya no se crean, una limpieza única quita los restos nunca llenados, los bloques del reproductor en reposo arrancan vacíos",
+        "pl": "Poprawki: punkty danych, których urządzenie nigdy nie wypełni, nie są już tworzone, jednorazowe czyszczenie usuwa niewypełnione resztki, spoczywające bloki odtwarzacza startują puste",
+        "uk": "Виправлення: точки даних, які пристрій ніколи не заповнить, більше не створюються, одноразове очищення прибирає порожні залишки, блоки плеєра у спокої стартують порожніми",
+        "zh-cn": "问题修复：不再创建设备永远无法填充的数据点，一次性清理移除从未填充的遗留项，空闲的播放器块以清空值启动"
+      },
       "2.0.0": {
         "en": "Reworked object tree: one player block per zone shows what is playing, the scene dropdown carries the receiver's own titles plus a scene list, and one tuner serves all bands",
         "de": "Überarbeiteter Objektbaum: ein Player-Block je Zone zeigt, was gerade läuft, das Szenen-Menü trägt die Titel des Geräts plus eine Szenen-Liste, und ein Tuner bedient alle Bänder",
@@ -80,19 +93,6 @@
         "pl": "Przeglądanie menu Net Radio, serwera i USB jak pilotem, zapisywanie presetów i ulubionych z ioBroker oraz parowanie Bluetooth.",
         "uk": "Перегляд меню Net Radio, сервера та USB як із пульта, збереження пресетів і закладок станцій з ioBroker, а також керування спарюванням Bluetooth.",
         "zh-cn": "像使用遥控器一样浏览 Net Radio、服务器和 USB 菜单，可从 ioBroker 保存预设和收藏电台，并支持蓝牙配对控制。"
-      },
-      "1.2.0": {
-        "en": "Fixes volume writes (values arrived tenfold too low) and adds preset and favourites selection, MusicCast lists with names, CD/DAB/RDS details and a clock and alarm view.",
-        "de": "Behebt das Lautstärke-Schreiben (Werte kamen zehnfach zu leise an) und ergänzt Preset-/Favoriten-Auswahl, MusicCast-Listen mit Namen, CD-/DAB-/RDS-Details und eine Uhr-/Wecker-Anzeige.",
-        "ru": "Исправляет запись громкости (значения приходили в десять раз ниже) и добавляет выбор пресетов и избранного, списки MusicCast с названиями, детали CD/DAB/RDS и просмотр часов и будильника.",
-        "pt": "Corrige a gravação do volume (valores chegavam dez vezes mais baixos) e adiciona seleção de presets e favoritos, listas MusicCast com nomes, detalhes de CD/DAB/RDS e vista de relógio e alarme.",
-        "nl": "Herstelt het schrijven van volume (waarden kwamen tienvoudig te laag aan) en voegt preset- en favorietenselectie toe, MusicCast-lijsten met namen, cd/DAB/RDS-details en een klok- en wekkerweergave.",
-        "fr": "Corrige l'écriture du volume (valeurs reçues dix fois trop bas) et ajoute présélections et favoris, listes MusicCast avec noms, détails CD/DAB/RDS et un affichage horloge/réveil.",
-        "it": "Corregge la scrittura del volume (valori ricevuti dieci volte troppo bassi) e aggiunge selezione di preset e preferiti, elenchi MusicCast con nomi, dettagli CD/DAB/RDS e vista orologio/sveglia.",
-        "es": "Corrige la escritura del volumen (valores diez veces más bajos) y añade presintonías y favoritos, listas MusicCast con nombres, detalles de CD/DAB/RDS y vista de reloj y alarma.",
-        "pl": "Naprawia zapis głośności (wartości docierały dziesięciokrotnie za nisko) i dodaje wybór presetów i ulubionych, listy MusicCast z nazwami, szczegóły CD/DAB/RDS oraz widok zegara i budzika.",
-        "uk": "Виправляє запис гучності (значення надходили вдесятеро нижчі) і додає вибір пресетів та улюбленого, списки MusicCast з назвами, деталі CD/DAB/RDS і перегляд годинника та будильника.",
-        "zh-cn": "修复音量写入（数值到达时低了十倍），并新增预设和收藏选择、含名称的 MusicCast 列表、CD/DAB/RDS 详情以及时钟和闹钟视图。"
       }
     },
     "titleLang": {
