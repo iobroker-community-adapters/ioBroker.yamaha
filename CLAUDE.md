@@ -385,6 +385,66 @@ nicht die Kanäle/Geräteknoten drumherum. Regel-Herkunft: Memory `feedback_date
   endet dort). `.releaseconfig.json` ist die Master-Kopie (Master seit 2026-09-02 auf Zeilenbreite
   120 formatiert). CI-Gate bleibt `npm run lint`.
 
+## Namen sind Übersetzungsobjekte (2026-09-02, Gate-Pflicht)
+
+`common.name` jedes States und Kanals ist ein Objekt über **elf Sprachen**, nie ein fester String
+(Kernteam-Linie mcm1957, nut2 #15; ioBroker löst selbst in die Sprache des Lesers auf). Umgesetzt
+in `lib/i18n.ts`: `tName(key, …args)` baut das Objekt aus **`admin/i18n/<lang>.json`** — denselben
+Dateien, aus denen die Konfigurationsseite liest. **Der Schlüssel IST der englische Name**, deshalb
+liest ein Schlüssel ohne Übersetzungseintrag trotzdem richtig, und der Typ `I18nKey` macht einen
+Tippfehler zum Compile-Fehler.
+
+- **Bewusst NICHT adapter-core `I18n`:** dessen `getTranslatedObject` **wirft**, solange `init()`
+  nicht lief — damit hinge jeder Objektname an der Startreihenfolge, und die reinen Katalogmodule
+  (samt ihrer Unit-Tests) zögen die ganze Adapter-Laufzeit mit herein. Der `I18n.init()`-Aufruf in
+  `onReady` ist deshalb entfallen.
+- **Zwei Wege, je nachdem WANN der Name gebraucht wird.** Die drei Protokoll-Kataloge sind
+  Modul-Konstanten (vor jedem Adapterstart ausgewertet) → sie tragen den **Schlüssel** (`nameKey`
+  auf `CatalogEntry`, `common.nameKey` bei XML/YXC, `CHANNEL_NAME_KEYS`), und die Objekt-Bauer
+  (`catalogToObjects`, `xml/device-controller`, `yxc/object-mapper`) lösen ihn auf. Alles, was zur
+  **Verbindungszeit** gebaut wird, umschließt sein Literal direkt mit `tName(...)`.
+- **`io-package.json` instanceObjects** tragen das fertige Objekt; der zentrale
+  `sync-iopackage-from-i18n.py` hält sie an `admin/i18n` (yamaha ist dort eingetragen).
+- **Plain string bleibt, was vom GERÄT kommt:** die Id eines gefundenen Geräts, ein
+  MusicCast-Wochentag-Weckkanal, der großgeschriebene Id-Rest eines nicht gelisteten Kanals. Da
+  gibt es nichts zu übersetzen.
+
+## Aufräumen, Identität und Ruheform (Fehler-Audit 2026-09-02)
+
+- **Kein Ordner ohne Datenpunkt.** `purgeChildlessChannels` (`pure-helpers.childlessChannelIds`)
+  entfernt im selben eingeschwungenen Moment wie der Verwaisten-Sweep jeden Kanal, unter dem
+  NIRGENDWO ein State liegt — beide Vorgänger fassen nur Datenpunkte an (`neverWrittenStateIds`
+  filtert auf `type === "state"`), weshalb `player.server` seit dem 2.0.0-Umbau als leeres
+  Versprechen im Baum stand (#617). Verschachtelte Leere löst sich selbst auf, Ordner zählen nicht
+  in die Datenpunkt-Bilanz, und ein Gerät, das in diesem Lauf nicht geantwortet hat, bleibt
+  unangetastet (kein Datenbank-Lesen, wenn nichts bereit ist).
+- **Ein Gerät ist seine Id, nicht seine Adresse.** `mergeDiscovered` schlüsselt nach Geräte-Id;
+  eine neue Adresse wird übernommen, und `discoverAdditionalDevices` verbindet ein umgezogenes
+  Gerät dort neu (`stopDevice` + `startDevice`, `knownDeviceIps` nachgeführt). Vorher warf der
+  Adress-Schlüssel den Fund als Id-Kollision weg und das Gerät blieb für immer offline. Solange
+  ein automatisch gefundenes Gerät offline ist, ist EINE gedrosselte Netzsuche scharf
+  (`REDISCOVER_MIN_INTERVAL_MS`, ein Zeitgeber für beliebig viele Geräte) — nur sie findet ein
+  umgezogenes Gerät wieder.
+- **Löschen löscht.** Die Gerätekarte eines gefundenen Geräts schreibt nur eine Datei (kein
+  Neustart), deshalb erledigt `removeDevice` selbst, was sonst erst ein späterer Start täte:
+  Wächter beenden, Teilbaum entfernen. Die Id landet zusätzlich in `ignored.json`, sonst legt die
+  nächste Suche das Gerät wieder an; ein manuelles Hinzufügen derselben Id hebt den Ausschluss auf.
+- **Ruheform auch für das Menü.** `BrowseEngine.seed()` setzt beim Verbinden das GANZE Fenster
+  zurück (acht Zeilen, Menüname, Ebene, Anzahl, Zeile, `rows`) — vorher nur `busy`/`path`, sodass
+  nach einem Neustart das Menü der letzten Sitzung stehen blieb (live gemessen: Zeilen sechs Tage
+  älter als die Verbindung).
+- **Kein Geräte-Platzhalter als Inhalt:** die DAB-Uhrzeit wird getrimmt und leer, wenn sie keine
+  Ziffer außer Null und keinen Monatsnamen trägt; die Senderliste veröffentlicht nur belegte
+  Fächer; `sound.signal.*` wird leer statt „---".
+- **`tuner.band` wird von zwei Einheiten gespeist** (TUN {AM,FM}, DAB {DAB,FM}). Einträge mit
+  derselben State-Id teilen sich die VEREINIGUNG ihrer Auswahl (`unionSharedDropdowns`), und ein
+  Band-Schreibvorgang wird nach dem WERT geroutet (AM→TUN, DAB→DAB, FM→DAB wo vorhanden). Vorher
+  gewann die zuletzt geschriebene Definition und AM verschwand.
+- **Auch das State-Abo ist ein Datenbank-Aufruf:** `subscribeStatesAsync` wird abgewartet; sein
+  Sternchen-Zweig gibt im Fehlerfall ein abgelehntes Promise zurück, und eine unbehandelte
+  Ablehnung stoppt die Instanz. Ein Fehler ist laut, aber nicht tödlich — der Baum füllt sich
+  weiter, nur Schreibvorgänge greifen nicht mehr.
+
 ## Stand
 
 Alle sieben Aufbauphasen abgeschlossen, danach der Multi-Transport-Neubau (alle antwortenden Protokolle
@@ -393,10 +453,10 @@ abschaltbaren Datenpunktgruppen und die Wiedergabe als Media-Player (Alexa/Googl
 funktional vollständig (3 Protokolle, Discovery, Migration, Härtung). Versionshistorie im README
 `## Changelog` (nicht hier dupliziert).
 
-**Offen (Gate seit 2026-09-02):** `common.name`/`desc` müssen Übersetzungsobjekte sein (Kernteam-Linie, nut2 #15) —
-yamaha trägt 158 feste englische Strings (drei Kataloge, Geräteheader in `main.ts`, io-package `instanceObjects`)
-plus zwei Vorlagen-Strings zur Sichtung; der State-Rollen-Prüfer blockt das nächste Release, bis die Namen über
-`admin/i18n` + `I18n.getTranslatedObject()` laufen. Eigener Auftrag, nicht nebenbei.
+**Erledigt 2026-09-02 (abends):** die Namens-Sperre des State-Rollen-Prüfers ist aufgehoben — 248 Namen laufen
+über `admin/i18n`, das Gate meldet „kein fester String in common.name/desc" (s. Abschnitt „Namen sind
+Übersetzungsobjekte"). Im selben Durchgang die Funde des Fehler-Audits nach #617/#618 (s. „Aufräumen, Identität
+und Ruheform"); Bericht `../../Ressourcen/yamaha/bugplan-2026-09-02.md`.
 
 ## Portierungs-Referenz (`../../Ressourcen/yamaha/legacy/`, NICHT im Adapter-Repo)
 
@@ -435,10 +495,11 @@ räumt den KOMPLETTEN Alt-Baum (47 Instanz-Objekte + dynamische `Realtime.*`/`Sy
 
 ## Tests
 
-- vitest, `src/**/*.test.ts` — Unit + Boot-Integrationstest (startet den Adapter real). 797 Tests (2.0.4).
+- vitest, `src/**/*.test.ts` — Unit + Boot-Integrationstest (startet den Adapter real). 825 Tests.
 - **Mutationstabellen** (`../../Ressourcen/iobroker-entwicklung/mutation-testing/`): `mutations_yamaha_all.py`
   (116 Regelbrüche, Wellen 1–5 vom 22.08., Nadeln am 02.09. nachgezogen, vier tote entfernt) + `mutations_yamaha_2026-09-02.py`
-  (24, Welle 6 = die Audit-Fixes; IDs Z1–Z24, W gehört Welle 5). Läufer `mutation-test.py`. Nadeln sind
+  (24, Welle 6 = die Audit-Fixes; IDs Z1–Z24, W gehört Welle 5) + `mutations_yamaha_2026-09-03.py`
+  (18, Welle 7 = die Fehlerbehebungen des Fehler-Audits, IDs Z1–Z18 in eigener Tabelle; 18/18 gefangen). Läufer `mutation-test.py`. Nadeln sind
   exakte Quellzeilen — nach Prettier-Umbrüchen oder Refactorings ZUERST den Nadel-Vorab-Check (jede Nadel
   genau 1×), sonst misst der Lauf nichts. Zwei äquivalente Mutanten (X2, X4 — unerreichbare
   Invarianten-Wächter, im Quelltext begründet); die vier anderen vom 22.08. (M9, X1, Y1, Y13) waren toter

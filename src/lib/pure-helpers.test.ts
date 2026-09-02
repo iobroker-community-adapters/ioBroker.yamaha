@@ -633,6 +633,17 @@ describe("childlessChannelIds (empty folders a tree rework left behind)", () => 
     expect(childlessChannelIds(objects, new Set(["living"]), ns)).toEqual([`${ns}.living.player.server`]);
   });
 
+  test("a folder counts as filled by a datapoint ANY number of levels below it", () => {
+    // Only the direct parent being marked would delete `player` although `player.usb.preset`
+    // lives under it.
+    const objects = {
+      [`${ns}.living.player`]: channel,
+      [`${ns}.living.player.usb`]: channel,
+      [`${ns}.living.player.usb.preset`]: state,
+    };
+    expect(childlessChannelIds(objects, new Set(["living"]), ns)).toEqual([]);
+  });
+
   test("removes a folder that holds nothing but other empty folders, deepest first", () => {
     const objects = {
       [`${ns}.living.legacy`]: channel,

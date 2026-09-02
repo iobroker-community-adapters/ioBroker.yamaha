@@ -527,6 +527,13 @@ describe("Yamaha onReady — configured devices", () => {
     expect(name.en).toBe("Model");
     expect(name.de).toBe("Modell");
     expect(Object.keys(name)).toHaveLength(11);
+    // A name with a placeholder is filled in EVERY language, not just English.
+    const flag = (ctx.i.objects.get("Living_room.info.transports.ynca")?.common as { name?: unknown }).name as Record<
+      string,
+      string
+    >;
+    expect(flag.en).toBe("YNCA connected");
+    expect(flag.de).toBe("YNCA verbunden");
   });
 });
 
@@ -1480,6 +1487,22 @@ describe("Yamaha never-filled purge (once per adapter version, after connect)", 
     expect(ctx.i.objects.has("Living_room.player")).toBe(true);
     expect(ctx.i.objects.has("Living_room.player.usb")).toBe(true);
     expect(ctx.i.log.debug).toHaveBeenCalledWith(expect.stringContaining("empty folder"));
+  });
+
+  it("does not even read the object tree while no device has answered", async () => {
+    // The sweep is skipped outright, not run over an empty device set — an all-offline
+    // instance must not pull the whole object tree out of the database every settle.
+    const ctx = setup({}, { failIds: ["Living_room"] });
+    // A leftover of a device that is gone arms the balance, so the settle really runs.
+    ctx.i.objects.set("Ghost.volume", { type: "state", common: { read: true }, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    const objectsRead = (ctx.i as unknown as { getAdapterObjectsAsync: ReturnType<typeof vi.fn> })
+      .getAdapterObjectsAsync;
+    objectsRead.mockClear();
+    settle(ctx);
+    await flush();
+    expect(objectsRead).not.toHaveBeenCalled();
   });
 
   it("leaves an offline device's folders alone — its tree is only swept once it answers", async () => {
