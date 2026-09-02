@@ -408,6 +408,16 @@ Tippfehler zum Compile-Fehler.
 - **Plain string bleibt, was vom GERÄT kommt:** die Id eines gefundenen Geräts, ein
   MusicCast-Wochentag-Weckkanal, der großgeschriebene Id-Rest eines nicht gelisteten Kanals. Da
   gibt es nichts zu übersetzen.
+- **⚠️ Der Quelltext ist nur die halbe Miete — der Name muss auch BESTEHENDE Objekte erreichen**
+  (live gemessen nach dem 2.1.0-Update, Gate/Lint/Tests/Mutation alle grün, im echten Baum trugen
+  trotzdem NEUN Datenpunkte den alten festen Namen). Zwei Ursachen derselben Form: ein mit
+  `setObjectNotExistsAsync` angelegtes Objekt wird nie wieder angefasst (der Geräte-Kopf —
+  `info.model`/`info.firmware` kamen nur richtig heraus, weil ein Katalog-Eintrag sie überschreibt),
+  und der js-controller lässt das `common` eines BESTEHENDEN `instanceObjects`-Objekts bei jedem
+  Update in Ruhe (die eigenen `info.*` des Adapters). Beide werden seit 2.1.1 bei jedem Start per
+  `extendObject` geschrieben (merged → Aufzeichnungs-Einstellungen des Nutzers überleben).
+  **Prüfung dafür: `python3 Entwicklung/scripts/check-live-tree.py yamaha` nach dem Server-Update** —
+  das ist die Hälfte, die kein statisches Gate sehen kann.
 
 ## Aufräumen, Identität und Ruheform (Fehler-Audit 2026-09-02)
 
