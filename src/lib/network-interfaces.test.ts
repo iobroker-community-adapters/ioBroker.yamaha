@@ -2,7 +2,13 @@ import { describe, it, expect } from "vitest";
 import type { NetworkInterfaceInfo } from "node:os";
 import { searchInterfaces } from "./network-interfaces";
 
-/** Shorthand for a network-interface entry — only the fields searchInterfaces reads. */
+/**
+ * Shorthand for a network-interface entry — only the fields searchInterfaces reads.
+ *
+ * @param address IP address of the interface
+ * @param family Address family string as node reports it
+ * @param internal Whether it is a loopback interface
+ */
 const nif = (address: string, family: string, internal: boolean): NetworkInterfaceInfo =>
   ({ address, family, internal }) as NetworkInterfaceInfo;
 

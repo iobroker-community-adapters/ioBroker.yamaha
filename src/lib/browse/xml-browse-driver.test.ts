@@ -4,10 +4,20 @@ import type { BrowseWindow } from "./types";
 
 const instantDelay = (): Promise<void> => Promise.resolve();
 
-/** A List_Info response body in the shape rxv reads (Menu_Status/Layer/Name + Current_List). */
+/**
+ * A List_Info response body in the shape rxv reads (Menu_Status/Layer/Name + Current_List).
+ *
+ * @param options Menu status fields of the response
+ * @param options.busy Whether the receiver reports the list as busy
+ * @param options.layer Menu layer number
+ * @param options.name Menu name
+ * @param options.lines [text, attribute] pairs for Line_1..n
+ */
 function listBody(options: { busy?: boolean; layer?: number; name?: string; lines?: Array<[string, string]> }): string {
   const lines = (options.lines ?? [])
-    .map(([text, attribute], i) => `<Line_${i + 1}><Txt>${text}</Txt><Attribute>${attribute}</Attribute></Line_${i + 1}>`)
+    .map(
+      ([text, attribute], i) => `<Line_${i + 1}><Txt>${text}</Txt><Attribute>${attribute}</Attribute></Line_${i + 1}>`,
+    )
     .join("");
   return (
     `<YAMAHA_AV rsp="GET" RC="0"><NET_RADIO><List_Info>` +

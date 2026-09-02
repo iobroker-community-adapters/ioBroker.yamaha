@@ -33,23 +33,23 @@ describe("YncaBrowseDriver", () => {
     expect(driver.sources()).toEqual({ netRadio: "Net Radio", usb: "USB" });
   });
 
-  it("opens a source by switching the input and reading LISTINFO", async () => {
+  it("opens a source by switching the input and reading LISTINFO", () => {
     const { driver, sent, gets } = setup(["NETRADIO"]);
-    await driver.open("netRadio");
+    driver.open("netRadio");
     expect(sent).toEqual([{ subunit: "MAIN", func: "INP", value: "NET RADIO" }]);
     expect(gets).toEqual([{ subunit: "NETRADIO", func: "LISTINFO" }]);
   });
 
-  it("puts the navigation commands on the wire and re-reads the window", async () => {
+  it("puts the navigation commands on the wire and re-reads the window", () => {
     const { driver, sent, gets } = setup(["NETRADIO"]);
-    await driver.open("netRadio");
+    driver.open("netRadio");
     sent.length = 0;
     gets.length = 0;
-    await driver.select(3);
-    await driver.pageDown();
-    await driver.pageUp();
-    await driver.back();
-    await driver.home();
+    driver.select(3);
+    driver.pageDown();
+    driver.pageUp();
+    driver.back();
+    driver.home();
     expect(sent).toEqual([
       { subunit: "NETRADIO", func: "LISTSEL", value: "Line_3" },
       { subunit: "NETRADIO", func: "LISTPAGE", value: "Down" },
@@ -62,7 +62,7 @@ describe("YncaBrowseDriver", () => {
 
   it("assembles a LISTINFO burst into one window (RX-A810 shape)", async () => {
     const { driver, windows } = setup(["NETRADIO"]);
-    await driver.open("netRadio");
+    driver.open("netRadio");
     for (const [func, value] of [
       ["LISTLAYER", "1"],
       ["LISTLAYERNAME", "NET RADIO"],
@@ -91,7 +91,7 @@ describe("YncaBrowseDriver", () => {
 
   it("ignores lines of other subunits and non-list functions", async () => {
     const { driver, windows } = setup(["NETRADIO", "USB"]);
-    await driver.open("netRadio");
+    driver.open("netRadio");
     driver.handleMessage({ subunit: "USB", func: "LINE1TXT", value: "elsewhere" });
     driver.handleMessage({ subunit: "NETRADIO", func: "PLAYBACKINFO", value: "Play" });
     await flush();

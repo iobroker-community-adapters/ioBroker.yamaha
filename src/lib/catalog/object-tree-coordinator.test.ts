@@ -100,13 +100,35 @@ describe("dropdown borrowing (v2.0.0 — labels from a non-owning transport)", (
       {
         transport: "ynca",
         objects: [
-          { id: "input", type: "state", common: { name: "Input", type: "string", role: "media.input", read: true, write: true, states: { HDMI1: "HDMI1" } } },
+          {
+            id: "input",
+            type: "state",
+            common: {
+              name: "Input",
+              type: "string",
+              role: "media.input",
+              read: true,
+              write: true,
+              states: { HDMI1: "HDMI1" },
+            },
+          },
         ],
       },
       {
         transport: "xml",
         objects: [
-          { id: "input", type: "state", common: { name: "Input", type: "string", role: "media.input", read: true, write: true, states: { AV1: "AV1" } } },
+          {
+            id: "input",
+            type: "state",
+            common: {
+              name: "Input",
+              type: "string",
+              role: "media.input",
+              read: true,
+              write: true,
+              states: { AV1: "AV1" },
+            },
+          },
         ],
       },
     ]);

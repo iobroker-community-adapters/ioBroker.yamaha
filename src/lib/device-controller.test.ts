@@ -13,7 +13,6 @@ const testGate = (): CommandGate =>
     timers: { schedule: (h, ms) => setTimeout(h, ms), cancel: t => clearTimeout(t as ReturnType<typeof setTimeout>) },
   });
 
-
 interface Msg {
   subunit: string;
   func: string;
@@ -42,23 +41,23 @@ class FakeClient implements YncaClientLike {
   private handler?: (message: Msg) => void;
 
   public async connect(): Promise<void> {}
-  public async readCapabilities(gets: Array<{ subunit: string; func: string }>): Promise<YncaCapabilities> {
+  public readCapabilities(gets: Array<{ subunit: string; func: string }>): Promise<YncaCapabilities> {
     this.requests.push(gets);
     if (this.availableSubunits && gets.length > 0 && gets.every(get => get.func === "AVAIL")) {
       const subunits: Record<string, Record<string, string>> = {};
       for (const subunit of this.availableSubunits) {
         subunits[subunit] = { AVAIL: "Ready" };
       }
-      return { model: "", subunits };
+      return Promise.resolve({ model: "", subunits });
     }
     if (this.listSubunits && gets.length > 0 && gets.every(get => get.func === "LISTINFO")) {
       const subunits: Record<string, Record<string, string>> = {};
       for (const subunit of this.listSubunits) {
         subunits[subunit] = { LISTLAYER: "1", LISTLAYERNAME: "Root", CURRLINE: "1", MAXLINE: "2" };
       }
-      return { model: "", subunits };
+      return Promise.resolve({ model: "", subunits });
     }
-    return this.capabilities;
+    return Promise.resolve(this.capabilities);
   }
   public send(subunit: string, func: string, value: string): void {
     this.sent.push({ subunit, func, value });
@@ -99,9 +98,10 @@ function makeDeps(client: FakeClient): {
     acked,
     deps: {
       client,
-      upsertObject: async (id: string, def: ObjectDef) => {
+      upsertObject: (id: string, def: ObjectDef) => {
         created.push(id);
         objects.push({ id, def });
+        return Promise.resolve();
       },
       setStateAck: (id: string, value: boolean | number | string) => {
         acked.push({ id, value });
@@ -434,14 +434,20 @@ describe("YncaDeviceController fast restart (persisted capability layer)", () =>
 
   test("a different device behind the address voids the memory and sweeps fresh", async () => {
     const client = new FakeClient();
-    client.capabilities = { model: "RX-A", subunits: { SYS: { MODELNAME: "RX-A", VERSION: "1.0" }, MAIN: { PWR: "On" } } };
+    client.capabilities = {
+      model: "RX-A",
+      subunits: { SYS: { MODELNAME: "RX-A", VERSION: "1.0" }, MAIN: { PWR: "On" } },
+    };
     const memory = new ProbeMemory();
     const { deps } = makeDeps(client);
     await new YncaDeviceController("living", { ...deps, probeMemory: memory }).start();
 
     // The device at this IP is swapped (different model): the cached layer must not build
     // the OLD device's tree — the identity mismatch forces the full sweep.
-    client.capabilities = { model: "RX-B", subunits: { SYS: { MODELNAME: "RX-B", VERSION: "2.0" }, MAIN: { PWR: "On" } } };
+    client.capabilities = {
+      model: "RX-B",
+      subunits: { SYS: { MODELNAME: "RX-B", VERSION: "2.0" }, MAIN: { PWR: "On" } },
+    };
     client.requests.length = 0;
     const { deps: deps2 } = makeDeps(client);
     await new YncaDeviceController("living", { ...deps2, probeMemory: memory }).start();
@@ -486,7 +492,12 @@ describe("YncaDeviceController write gating + refusal logging (#615 class)", () 
 });
 
 describe("YncaDeviceController scenes v2.0.0 (titles in the dropdown, one list, title writes)", () => {
-  function sceneSetup(): { controller: YncaDeviceController; client: FakeClient; objects: Array<{ id: string; def: ObjectDef }>; acked: Array<{ id: string; value: unknown }> } {
+  function sceneSetup(): {
+    controller: YncaDeviceController;
+    client: FakeClient;
+    objects: Array<{ id: string; def: ObjectDef }>;
+    acked: Array<{ id: string; value: unknown }>;
+  } {
     const client = new FakeClient();
     client.capabilities = {
       model: "RX-V473",
@@ -524,7 +535,9 @@ describe("YncaDeviceController scenes v2.0.0 (titles in the dropdown, one list, 
 });
 
 describe("YncaDeviceController unified tuner v2.0.0 (band-routed writes)", () => {
-  async function tunerSetup(subunits: YncaCapabilities["subunits"]): Promise<{ controller: YncaDeviceController; client: FakeClient }> {
+  async function tunerSetup(
+    subunits: YncaCapabilities["subunits"],
+  ): Promise<{ controller: YncaDeviceController; client: FakeClient }> {
     const client = new FakeClient();
     client.capabilities = { model: "RX-V473", subunits };
     const { deps } = makeDeps(client);

@@ -29,7 +29,11 @@ describe("mapYxcToObjects", () => {
       media: ["netusb"],
     }).map(o => o.id);
     expect(ids).toEqual(
-      expect.arrayContaining(["multiroom.zone2.player", "multiroom.zone2.player.playback", "multiroom.zone2.player.source"]),
+      expect.arrayContaining([
+        "multiroom.zone2.player",
+        "multiroom.zone2.player.playback",
+        "multiroom.zone2.player.source",
+      ]),
     );
     expect(ids).not.toContain("multiroom.zone3.player");
   });
@@ -125,7 +129,13 @@ describe("mapYxcToObjects", () => {
       o => o.id,
     );
     expect(ids).toEqual(
-      expect.arrayContaining(["player.repeat", "player.shuffle", "player.elapsedTime", "player.totalTime", "player.albumArt"]),
+      expect.arrayContaining([
+        "player.repeat",
+        "player.shuffle",
+        "player.elapsedTime",
+        "player.totalTime",
+        "player.albumArt",
+      ]),
     );
   });
 
@@ -141,7 +151,14 @@ describe("mapYxcToObjects", () => {
     const ids = objs.map(o => o.id);
     expect(ids).toContain("player.cd");
     expect(ids).toEqual(
-      expect.arrayContaining(["player.playback", "player.artist", "player.album", "player.track", "player.play", "player.stop"]),
+      expect.arrayContaining([
+        "player.playback",
+        "player.artist",
+        "player.album",
+        "player.track",
+        "player.play",
+        "player.stop",
+      ]),
     );
     // What the disc PLAYS lives in the flat block — no per-source copy remains.
     expect(ids).not.toContain("player.cd.playback");
@@ -284,8 +301,7 @@ describe("mapYxcToObjects tree hygiene", () => {
 
   test("device-reported value lists become dropdowns on their states", () => {
     const objs = mapYxcToObjects(parseYxcFeatures(rxA2070));
-    const common = (id: string): Record<string, unknown> | undefined =>
-      objs.find(o => o.id === id)?.common as Record<string, unknown> | undefined;
+    const common = (id: string): Record<string, unknown> | undefined => objs.find(o => o.id === id)?.common;
     expect(common("input")?.states).toMatchObject({ av1: "av1", airplay: "airplay" });
     expect(common("soundProgram")?.states).toMatchObject({ munich: "munich" });
     expect(common("sound.toneMode")?.states).toEqual({ manual: "manual" });

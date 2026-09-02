@@ -12,9 +12,11 @@ describe("DeviceSupervisor", () => {
     const scheduled: Array<() => void> = [];
     const connChanges: boolean[] = [];
     const supervisor = new DeviceSupervisor({
-      attempt: async () => {
+      attempt: () => {
         attempts++;
-        return attempts >= 3 ? { onDrop: () => {}, handleStateChange: () => {}, close: () => {} } : null;
+        return Promise.resolve(
+          attempts >= 3 ? { onDrop: () => {}, handleStateChange: () => {}, close: () => {} } : null,
+        );
       },
       schedule: cb => {
         scheduled.push(cb);
@@ -44,9 +46,9 @@ describe("DeviceSupervisor", () => {
     const scheduled: Array<() => void> = [];
     const connChanges: boolean[] = [];
     const supervisor = new DeviceSupervisor({
-      attempt: async () => {
+      attempt: () => {
         attempts++;
-        return { onDrop: cb => (dropCb = cb), handleStateChange: () => {}, close: () => {} };
+        return Promise.resolve({ onDrop: cb => (dropCb = cb), handleStateChange: () => {}, close: () => {} });
       },
       schedule: cb => {
         scheduled.push(cb);
@@ -76,9 +78,9 @@ describe("DeviceSupervisor", () => {
     let dropCb: () => void = () => {};
     const scheduled: Array<() => void> = [];
     const supervisor = new DeviceSupervisor({
-      attempt: async () => {
+      attempt: () => {
         attempts++;
-        return { onDrop: cb => (dropCb = cb), handleStateChange: () => {}, close: () => {} };
+        return Promise.resolve({ onDrop: cb => (dropCb = cb), handleStateChange: () => {}, close: () => {} });
       },
       schedule: cb => {
         scheduled.push(cb);
@@ -104,7 +106,8 @@ describe("DeviceSupervisor", () => {
     let closes = 0;
     const scheduled: Array<() => void> = [];
     const supervisor = new DeviceSupervisor({
-      attempt: async () => ({ onDrop: cb => (dropCb = cb), handleStateChange: () => {}, close: () => closes++ }),
+      attempt: () =>
+        Promise.resolve({ onDrop: cb => (dropCb = cb), handleStateChange: () => {}, close: () => closes++ }),
       schedule: cb => {
         scheduled.push(cb);
         return scheduled.length;
@@ -127,12 +130,12 @@ describe("DeviceSupervisor", () => {
     let attempts = 0;
     const scheduled: Array<() => void> = [];
     const supervisor = new DeviceSupervisor({
-      attempt: async () => {
+      attempt: () => {
         attempts++;
         if (attempts === 1) {
-          throw new Error("boom");
+          return Promise.reject(new Error("boom"));
         }
-        return { onDrop: () => {}, handleStateChange: () => {}, close: () => {} };
+        return Promise.resolve({ onDrop: () => {}, handleStateChange: () => {}, close: () => {} });
       },
       schedule: cb => {
         scheduled.push(cb);
@@ -155,11 +158,12 @@ describe("DeviceSupervisor", () => {
   test("routes state changes to the active connection, dropping them while offline", async () => {
     const calls: Array<[string, boolean, unknown]> = [];
     const supervisor = new DeviceSupervisor({
-      attempt: async () => ({
-        onDrop: () => {},
-        handleStateChange: (id, ack, val) => calls.push([id, ack, val]),
-        close: () => {},
-      }),
+      attempt: () =>
+        Promise.resolve({
+          onDrop: () => {},
+          handleStateChange: (id, ack, val) => calls.push([id, ack, val]),
+          close: () => {},
+        }),
       schedule: () => 0,
       cancel: () => {},
       onConnectionChange: () => {},
@@ -179,7 +183,7 @@ describe("DeviceSupervisor", () => {
 
 describe("DeviceSupervisor teardown", () => {
   test("a retry timer that fires after close attempts nothing", async () => {
-    const attempt = vi.fn(async () => null);
+    const attempt = vi.fn(() => Promise.resolve(null));
     const timers: Array<() => void> = [];
     const supervisor = new DeviceSupervisor({
       attempt,

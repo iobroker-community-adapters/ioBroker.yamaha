@@ -33,6 +33,9 @@ function recordingClient(): { client: YxcClientLike; calls: Array<[string, unkno
 /**
  * Map a write and run its client call, returning the recorded [method, args] — the
  * behavioural check replacing the former method-name-string comparison.
+ *
+ * @param stateId Datapoint id being written
+ * @param value Value written to it
  */
 async function ranCall(stateId: string, value: unknown): Promise<[string, unknown[]] | undefined> {
   const command = stateToYxc(stateId, value);

@@ -12,21 +12,23 @@ const fsMock = vi.hoisted(() => ({
   readError: null as Error | null,
 }));
 vi.mock("node:fs/promises", () => ({
-  readFile: async (path: string) => {
+  readFile: (path: string) => {
     if (fsMock.readError) {
-      throw fsMock.readError;
+      return Promise.reject(fsMock.readError);
     }
     const content = fsMock.files.get(path);
     if (content === undefined) {
-      throw new Error("ENOENT");
+      return Promise.reject(new Error("ENOENT"));
     }
-    return content;
+    return Promise.resolve(content);
   },
-  writeFile: async (path: string, content: string) => {
+  writeFile: (path: string, content: string) => {
     fsMock.files.set(path, content);
+    return Promise.resolve();
   },
-  mkdir: async (path: string) => {
+  mkdir: (path: string) => {
     fsMock.mkdirs.push(path);
+    return Promise.resolve();
   },
 }));
 vi.mock("@iobroker/adapter-core", () => ({

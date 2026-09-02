@@ -583,7 +583,10 @@ describe("nextDeviceLabel", () => {
 
 describe("neverWrittenStateIds (one-time orphan purge per version)", () => {
   const ns = "yamaha.0";
-  const stateObj = (read: boolean): { type: string; common: { read: boolean } } => ({ type: "state", common: { read } });
+  const stateObj = (read: boolean): { type: string; common: { read: boolean } } => ({
+    type: "state",
+    common: { read },
+  });
 
   test("finds read-capable states that never carried a value; keeps buttons, filled states and foreign trees", () => {
     const objects = {
@@ -630,7 +633,12 @@ describe("neverWrittenStateIds (one-time orphan purge per version)", () => {
     ]);
     // A value of 0 with a real last-change is a WRITTEN state — never purged.
     expect(
-      neverWrittenStateIds(objects, { [`${ns}.living.tuner.dab.totalStations`]: { val: 0, lc: 5 } }, new Set(["living"]), ns),
+      neverWrittenStateIds(
+        objects,
+        { [`${ns}.living.tuner.dab.totalStations`]: { val: 0, lc: 5 } },
+        new Set(["living"]),
+        ns,
+      ),
     ).toEqual([`${ns}.living.hdmi.out2`]);
   });
 });

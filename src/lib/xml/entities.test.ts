@@ -7,7 +7,7 @@ describe("decodeXmlText", () => {
   it("resolves the predefined entities", () => {
     expect(decodeXmlText("Rock &amp; Pop")).toBe("Rock & Pop");
     expect(decodeXmlText("&lt;tag&gt;")).toBe("<tag>");
-    expect(decodeXmlText("&quot;quoted&quot; &apos;single&apos;")).toBe('"quoted" \'single\'');
+    expect(decodeXmlText("&quot;quoted&quot; &apos;single&apos;")).toBe("\"quoted\" 'single'");
   });
 
   it("resolves numeric character references, decimal and hexadecimal", () => {
@@ -35,7 +35,8 @@ describe("escapeXmlText", () => {
 
 describe("XML values carrying entities (the predecessor's xml2js did this for free)", () => {
   it("decodes an input name in Basic_Status", () => {
-    const xml = "<YAMAHA_AV><Main_Zone><Basic_Status><Input><Input_Sel>AV &amp; Audio</Input_Sel></Input></Basic_Status></Main_Zone></YAMAHA_AV>";
+    const xml =
+      "<YAMAHA_AV><Main_Zone><Basic_Status><Input><Input_Sel>AV &amp; Audio</Input_Sel></Input></Basic_Status></Main_Zone></YAMAHA_AV>";
     expect(parseBasicStatus(xml).input).toBe("AV & Audio");
   });
 

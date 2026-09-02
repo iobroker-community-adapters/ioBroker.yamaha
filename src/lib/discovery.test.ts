@@ -21,15 +21,18 @@ describe("parseYamahaDescription", () => {
 describe("discoverYamaha", () => {
   test("returns Yamaha devices, skipping non-Yamaha and duplicate addresses", async () => {
     const devices = await discoverYamaha({
-      search: async () => [
-        { location: "http://1.1.1.1:49154/desc.xml", address: "1.1.1.1" },
-        { location: "http://2.2.2.2:49154/desc.xml", address: "2.2.2.2" },
-        { location: "http://1.1.1.1:49154/desc.xml", address: "1.1.1.1" },
-      ],
-      fetch: async url =>
-        url.includes("1.1.1.1")
-          ? "<manufacturer>Yamaha Corporation</manufacturer><friendlyName>RX-V685</friendlyName>"
-          : "<manufacturer>Sonos</manufacturer>",
+      search: () =>
+        Promise.resolve([
+          { location: "http://1.1.1.1:49154/desc.xml", address: "1.1.1.1" },
+          { location: "http://2.2.2.2:49154/desc.xml", address: "2.2.2.2" },
+          { location: "http://1.1.1.1:49154/desc.xml", address: "1.1.1.1" },
+        ]),
+      fetch: url =>
+        Promise.resolve(
+          url.includes("1.1.1.1")
+            ? "<manufacturer>Yamaha Corporation</manufacturer><friendlyName>RX-V685</friendlyName>"
+            : "<manufacturer>Sonos</manufacturer>",
+        ),
       log: silentLog,
     });
     expect(devices).toEqual([{ ip: "1.1.1.1", name: "RX-V685" }]);
@@ -37,15 +40,16 @@ describe("discoverYamaha", () => {
 
   test("swallows a fetch error for one device without failing the scan", async () => {
     const devices = await discoverYamaha({
-      search: async () => [
-        { location: "http://1.1.1.1/d.xml", address: "1.1.1.1" },
-        { location: "http://2.2.2.2/d.xml", address: "2.2.2.2" },
-      ],
-      fetch: async url => {
+      search: () =>
+        Promise.resolve([
+          { location: "http://1.1.1.1/d.xml", address: "1.1.1.1" },
+          { location: "http://2.2.2.2/d.xml", address: "2.2.2.2" },
+        ]),
+      fetch: url => {
         if (url.includes("1.1.1.1")) {
-          throw new Error("offline");
+          return Promise.reject(new Error("offline"));
         }
-        return "<manufacturer>Yamaha</manufacturer><friendlyName>WX-10</friendlyName>";
+        return Promise.resolve("<manufacturer>Yamaha</manufacturer><friendlyName>WX-10</friendlyName>");
       },
       log: silentLog,
     });

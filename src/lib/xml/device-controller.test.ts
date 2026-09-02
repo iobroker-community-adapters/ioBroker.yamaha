@@ -11,7 +11,6 @@ const testGate = (): CommandGate =>
     timers: { schedule: (h, ms) => setTimeout(h, ms), cancel: t => clearTimeout(t as ReturnType<typeof setTimeout>) },
   });
 
-
 const flush = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
 const silentLog = { debug: (): void => {}, info: (): void => {}, warn: (): void => {} };
 
@@ -20,26 +19,36 @@ class FakeClient implements XmlClientLike {
   /** Canned GET answers keyed `<element>|<inner>`; unmatched requests answer "" (declares none). */
   public xmlAnswers: Record<string, string> = {};
   public constructor(public statuses: Record<string, BasicStatus>) {}
-  public async getStatus(zone: string): Promise<BasicStatus> {
+  public getStatus(zone: string): Promise<BasicStatus> {
     this.calls.push({ method: "getStatus", zone });
-    return this.statuses[zone] ?? {};
+    return Promise.resolve(this.statuses[zone] ?? {});
   }
   public modelName: string | undefined = undefined;
-  public async getModelName(): Promise<string | undefined> {
+  public getModelName(): Promise<string | undefined> {
     this.calls.push({ method: "getModelName", zone: "" });
-    return this.modelName;
+    return Promise.resolve(this.modelName);
   }
-  public async send(zone: string, inner: string): Promise<void> {
+  public send(zone: string, inner: string): Promise<void> {
     this.calls.push({ method: "send", zone, inner });
+    return Promise.resolve();
   }
-  /** Probes (browse List_Info, scenes, inputs, tuner) — an empty body means "declares none". */
-  public async getXml(zone: string, inner: string): Promise<string> {
+  /**
+   * Probes (browse List_Info, scenes, inputs, tuner) — an empty body means "declares none".
+   *
+   * @param zone Zone element the probe is wrapped in
+   * @param inner Inner XML of the probe
+   */
+  public getXml(zone: string, inner: string): Promise<string> {
     this.calls.push({ method: "getXml", zone, inner });
-    return this.xmlAnswers[`${zone}|${inner}`] ?? "";
+    return Promise.resolve(this.xmlAnswers[`${zone}|${inner}`] ?? "");
   }
 }
 
-/** A device-style Scene_Sel_Item declaration (the RX-V6A capture shape). */
+/**
+ * A device-style Scene_Sel_Item declaration (the RX-V6A capture shape).
+ *
+ * @param scenes Scene numbers and titles to declare
+ */
 const sceneDeclaration = (scenes: Array<{ num: number; title: string }>): string =>
   `<YAMAHA_AV rsp="GET" RC="0"><Scene><Scene_Sel_Item>${scenes
     .map(
@@ -77,9 +86,10 @@ function setup(
           cancelled = true;
         };
       },
-      upsertObject: async (id, def) => {
+      upsertObject: (id, def) => {
         objects.push(id);
         defs.set(id, def);
+        return Promise.resolve();
       },
       setStateAck: (id, value) => {
         acks.push({ id, value });
@@ -348,7 +358,7 @@ describe("XmlDeviceController object tree and drop handling", () => {
 
 describe("XmlDeviceController browse surface (#613)", () => {
   const listBody =
-    "<YAMAHA_AV rsp=\"GET\" RC=\"0\"><NET_RADIO><List_Info><Menu_Status>Ready</Menu_Status>" +
+    '<YAMAHA_AV rsp="GET" RC="0"><NET_RADIO><List_Info><Menu_Status>Ready</Menu_Status>' +
     "<Menu_Layer>1</Menu_Layer><Menu_Name>NET RADIO</Menu_Name><Current_List>" +
     "<Line_1><Txt>Bookmarks</Txt><Attribute>Container</Attribute></Line_1></Current_List>" +
     "<Cursor_Position><Current_Line>1</Current_Line><Max_Line>1</Max_Line></Cursor_Position>" +
@@ -360,19 +370,20 @@ describe("XmlDeviceController browse surface (#613)", () => {
     objects: string[];
   } {
     const client = new FakeClient({ Main_Zone: { power: true } });
-    client.getXml = async (element: string, inner: string): Promise<string> => {
+    client.getXml = (element: string, inner: string): Promise<string> => {
       client.calls.push({ method: "getXml", zone: element, inner });
       if (element in answers) {
-        return answers[element];
+        return Promise.resolve(answers[element]);
       }
-      throw new Error("no such menu");
+      return Promise.reject(new Error("no such menu"));
     };
     const objects: string[] = [];
     const controller = new XmlDeviceController("living", {
       client,
       scheduleKeepalive: () => () => {},
-      upsertObject: async id => {
+      upsertObject: id => {
         objects.push(id);
+        return Promise.resolve();
       },
       setStateAck: () => {},
       log: silentLog,
@@ -408,7 +419,9 @@ describe("XmlDeviceController browse surface (#613)", () => {
     // Switching the input without fetching the menu is exactly the #613 symptom class
     // (empty menu) — the List_Info read must go out too.
     expect(
-      client.calls.some(call => call.method === "getXml" && call.zone === "NET_RADIO" && call.inner?.includes("List_Info")),
+      client.calls.some(
+        call => call.method === "getXml" && call.zone === "NET_RADIO" && call.inner?.includes("List_Info"),
+      ),
     ).toBe(true);
   });
 });
@@ -448,7 +461,15 @@ describe("XmlDeviceController claim-with-proof creation (2.0.1)", () => {
     // A MusicCast-era status: pureDirect/straight delivered, direct/hdmiOut2 never —
     // a blind full-catalog rollout left those standing as valueless objects.
     const s = setup({
-      Main_Zone: { power: true, volume: -40, mute: false, input: "HDMI1", pureDirect: false, straight: true, hdmiOut1: true },
+      Main_Zone: {
+        power: true,
+        volume: -40,
+        mute: false,
+        input: "HDMI1",
+        pureDirect: false,
+        straight: true,
+        hdmiOut1: true,
+      },
     });
     await s.controller.start();
     expect(s.objects).toContain("living.sound.pureDirect");

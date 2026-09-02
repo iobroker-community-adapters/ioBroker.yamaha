@@ -8,7 +8,12 @@ function state(id: string, name: string, extra: Record<string, unknown> = {}): O
   return { id, type: "state", common: { name, type: "number", role: "level", read: true, write: true, ...extra } };
 }
 
-/** A fake transport connection recording what the handle asks of it; its drop is triggerable. */
+/**
+ * A fake transport connection recording what the handle asks of it; its drop is triggerable.
+ *
+ * @param transport Which protocol the fake stands in for
+ * @param objects Object definitions the fake declares
+ */
 function fakeConn(
   transport: Transport,
   objects: readonly ObjectDef[],
@@ -48,8 +53,9 @@ function fakeConn(
 function setup(connections: TransportConnection[]): { handle: MultiTransportHandle; objects: string[] } {
   const objects: string[] = [];
   const handle = new MultiTransportHandle("living", connections, {
-    upsertObject: async id => {
+    upsertObject: id => {
       objects.push(id);
+      return Promise.resolve();
     },
     log: silentLog,
   });
@@ -97,7 +103,12 @@ describe("MultiTransportHandle", () => {
   });
 });
 
-/** Setup with per-transport reconnect wired: manual timers, GROWING backoff, a rebuild factory. */
+/**
+ * Setup with per-transport reconnect wired: manual timers, GROWING backoff, a rebuild factory.
+ *
+ * @param connections Initial connections handed to the handle
+ * @param rebuilds Per-transport factories used after a drop
+ */
 function reconnectSetup(
   connections: ConnectableTransport[],
   rebuilds: Partial<Record<Transport, () => ConnectableTransport>>,
@@ -118,8 +129,9 @@ function reconnectSetup(
   let cancelled = 0;
   const transportsReports: string[][] = [];
   const handle = new MultiTransportHandle("living", connections, {
-    upsertObject: async id => {
+    upsertObject: id => {
       objects.push(id);
+      return Promise.resolve();
     },
     log: { ...silentLog, debug: (m: string) => logs.push(m) },
     onTransports: names => transportsReports.push([...names]),
@@ -377,8 +389,9 @@ describe("MultiTransportHandle object write economy", () => {
       close: () => {},
     };
     const handle = new MultiTransportHandle("living", [connection], {
-      upsertObject: async id => {
+      upsertObject: id => {
         written.push(id);
+        return Promise.resolve();
       },
       log: { debug: () => {}, info: () => {}, warn: () => {} },
     });

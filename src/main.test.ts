@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import type * as OsModule from "node:os";
 
 /**
  * Orchestration tests for the adapter lifecycle. `@iobroker/adapter-core` is
@@ -22,73 +23,79 @@ vi.mock("@iobroker/adapter-core", () => {
     private key(id: string): string {
       return id.replace(`${this.namespace}.`, "");
     }
-    public setState = vi.fn(async (id: string, state: unknown) => {
+    public setState = vi.fn((id: string, state: unknown) => {
       const s = state as { val?: unknown; ack?: boolean };
       this.states.set(this.key(id), { val: s?.val, ack: s?.ack === true });
+      return Promise.resolve();
     });
-    public extendObject = vi.fn(async (id: string, obj: Record<string, unknown>) => {
+    public extendObject = vi.fn((id: string, obj: Record<string, unknown>) => {
       const k = this.key(id);
       const prev = this.objects.get(k) ?? {};
       this.objects.set(k, {
         ...prev,
         ...obj,
-        common: { ...((prev.common as object) ?? {}), ...((obj.common as object) ?? {}) },
-        native: { ...((prev.native as object) ?? {}), ...((obj.native as object) ?? {}) },
+        common: { ...(prev.common ?? {}), ...(obj.common ?? {}) },
+        native: { ...(prev.native ?? {}), ...(obj.native ?? {}) },
       });
+      return Promise.resolve();
     });
-    public setObjectNotExistsAsync = vi.fn(async (id: string, obj: Record<string, unknown>) => {
+    public setObjectNotExistsAsync = vi.fn((id: string, obj: Record<string, unknown>) => {
       if (!this.objects.has(this.key(id))) {
         this.objects.set(this.key(id), obj);
       }
+      return Promise.resolve();
     });
-    public getObjectAsync = vi.fn(async (id: string) => this.objects.get(this.key(id)) ?? null);
-    public getAdapterObjectsAsync = vi.fn(async () => {
+    public getObjectAsync = vi.fn((id: string) => Promise.resolve(this.objects.get(this.key(id)) ?? null));
+    public getAdapterObjectsAsync = vi.fn(() => {
       const out: Record<string, unknown> = {};
       for (const [k, v] of this.objects) {
         out[`${this.namespace}.${k}`] = v;
       }
-      return out;
+      return Promise.resolve(out);
     });
-    public delObjectAsync = vi.fn(async (id: string) => {
+    public delObjectAsync = vi.fn((id: string) => {
       this.objects.delete(this.key(id));
+      return Promise.resolve();
     });
-    public getStatesAsync = vi.fn(async () => {
+    public getStatesAsync = vi.fn(() => {
       const out: Record<string, { val: unknown; ack: boolean }> = {};
       for (const [k, v] of this.states) {
         out[`${this.namespace}.${k}`] = v;
       }
-      return out;
+      return Promise.resolve(out);
     });
-    public getForeignObjectAsync = vi.fn(async (id: string) => this.foreignObjects.get(id) ?? null);
-    public setForeignObjectAsync = vi.fn(async (id: string, obj: Record<string, unknown>) => {
+    public getForeignObjectAsync = vi.fn((id: string) => Promise.resolve(this.foreignObjects.get(id) ?? null));
+    public setForeignObjectAsync = vi.fn((id: string, obj: Record<string, unknown>) => {
       this.foreignObjects.set(id, obj);
+      return Promise.resolve();
     });
-    public extendForeignObjectAsync = vi.fn(async (id: string, patch: Record<string, unknown>) => {
+    public extendForeignObjectAsync = vi.fn((id: string, patch: Record<string, unknown>) => {
       const prev = this.foreignObjects.get(id) ?? {};
       this.foreignObjects.set(id, {
         ...prev,
-        native: { ...((prev.native as object) ?? {}), ...((patch.native as object) ?? {}) },
+        native: { ...(prev.native ?? {}), ...(patch.native ?? {}) },
       });
+      return Promise.resolve();
     });
     public subscribeStates = vi.fn((pattern: string) => {
       this.subscribed.push(pattern);
     });
-    public setTimeout = vi.fn((_cb: () => void, _ms: number) => ({ kind: "timeout" }) as unknown);
+    public setTimeout = vi.fn((_cb: () => void, _ms: number) => ({ kind: "timeout" }));
     public clearTimeout = vi.fn();
-    public setInterval = vi.fn(() => ({ kind: "interval" }) as unknown);
+    public setInterval = vi.fn(() => ({ kind: "interval" }));
     public clearInterval = vi.fn();
     constructor(_opts: unknown) {}
   }
   return {
     Adapter,
-    I18n: { init: vi.fn(async () => undefined) },
+    I18n: { init: vi.fn(() => Promise.resolve(undefined)) },
     getAbsoluteInstanceDataDir: () => "/tmp/yamaha-data",
   };
 });
 
 const mocks = vi.hoisted(() => ({
   attemptDevice: vi.fn(),
-  discoverYamaha: vi.fn(async (_deps?: unknown) => [] as Array<{ ip: string; name: string }>),
+  discoverYamaha: vi.fn((_deps?: unknown) => Promise.resolve([] as Array<{ ip: string; name: string }>)),
   discoveredStore: { devices: [] as Array<{ id: string; ip: string }> },
   pushReceivers: [] as Array<{
     start: ReturnType<typeof vi.fn>;
@@ -99,9 +106,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock("./lib/attempt-device", () => ({ attemptDevice: mocks.attemptDevice }));
 vi.mock("./lib/discovery", () => ({ discoverYamaha: mocks.discoverYamaha }));
 vi.mock("./lib/discovered-store", () => ({
-  readDiscovered: vi.fn(async () => mocks.discoveredStore.devices),
-  writeDiscovered: vi.fn(async (_d: unknown, devices: Array<{ id: string; ip: string }>) => {
+  readDiscovered: vi.fn(() => Promise.resolve(mocks.discoveredStore.devices)),
+  writeDiscovered: vi.fn((_d: unknown, devices: Array<{ id: string; ip: string }>) => {
     mocks.discoveredStore.devices = devices;
+    return Promise.resolve();
   }),
 }));
 vi.mock("./lib/discovered-store-deps", () => ({ discoveredStoreDeps: () => ({}) }));
@@ -176,7 +184,7 @@ const net = vi.hoisted(() => {
 });
 vi.mock("node:dgram", () => ({ createSocket: () => net.createSocket() }));
 vi.mock("node:os", async importOriginal => {
-  const actual = await importOriginal<typeof import("node:os")>();
+  const actual = await importOriginal<typeof OsModule>();
   const networkInterfaces = (): unknown => net.interfaces.value ?? actual.networkInterfaces();
   return { ...actual, default: { ...actual, networkInterfaces }, networkInterfaces };
 });
@@ -232,7 +240,7 @@ vi.mock("./lib/yxc/push-receiver", () => ({
       return () => undefined;
     });
     constructor(_deps: unknown) {
-      mocks.pushReceivers.push(this as never);
+      mocks.pushReceivers.push(this);
     }
   },
 }));
@@ -265,7 +273,11 @@ function fakeHandle(): FakeHandle {
   return h;
 }
 
-/** Typed access to the private members the orchestration tests drive. */
+/**
+ * Typed access to the private members the orchestration tests drive.
+ *
+ * @param adapter Adapter instance under test
+ */
 function internalOf(adapter: Yamaha): {
   onReady(): Promise<void>;
   onUnload(cb: () => void): void;
@@ -303,20 +315,21 @@ interface Ctx {
  *
  * @param config native config fields for this run
  * @param opts   which device ids fail to connect
+ * @param opts.failIds Device ids whose fake attempt reports failure
  */
 function setup(config: Record<string, unknown> = {}, opts: { failIds?: string[] } = {}): Ctx {
   const i = internalOf(new Yamaha());
   i.config = { devices: [{ name: "Living room", ip: "192.168.1.10" }], ...config };
   const calls: AttemptCall[] = [];
   const handles: FakeHandle[] = [];
-  mocks.attemptDevice.mockImplementation(async (device: AttemptCall["device"], deps: AttemptCall["deps"]) => {
+  mocks.attemptDevice.mockImplementation((device: AttemptCall["device"], deps: AttemptCall["deps"]) => {
     calls.push({ device, deps });
     if (opts.failIds?.includes(device.id)) {
-      return null;
+      return Promise.resolve(null);
     }
     const h = fakeHandle();
     handles.push(h);
-    return h;
+    return Promise.resolve(h);
   });
   return { i, calls, handles };
 }
@@ -624,6 +637,8 @@ describe("Yamaha datapoint balance in the log", () => {
    * Fire the settle timer the balance line waits on.
    *
    * @param ctx the test context
+   * @param ctx.i Adapter internals with the mocked timer
+   * @param ctx.i.setTimeout The mocked setTimeout whose 5 s call is fired
    */
   const settle = async (ctx: { i: { setTimeout: ReturnType<typeof vi.fn> } }): Promise<void> => {
     const call = ctx.i.setTimeout.mock.calls.filter(c => c[1] === 5000).at(-1);
@@ -636,9 +651,12 @@ describe("Yamaha datapoint balance in the log", () => {
    * The adapter's real object-creation path, as a connected transport uses it.
    *
    * @param ctx the test context
+   * @param ctx.calls Recorded attempt calls, the first carries the deps
    * @returns the upsert callback
    */
-  const upsertOf = (ctx: { calls: Array<{ deps: Record<string, unknown> }> }) =>
+  const upsertOf = (ctx: {
+    calls: Array<{ deps: Record<string, unknown> }>;
+  }): ((id: string, def: unknown) => Promise<void>) =>
     ctx.calls[0].deps.upsertObject as (id: string, def: unknown) => Promise<void>;
 
   it("reports the datapoints a device brought into the tree", async () => {
@@ -941,7 +959,7 @@ describe("Yamaha state changes", () => {
     expect(ctx.handles[0].changes).toEqual([]);
   });
 
-  it("does not throw for a write before anything connected", async () => {
+  it("does not throw for a write before anything connected", () => {
     const ctx = setup({ devices: [] });
     expect(() => ctx.i.onStateChange("yamaha.0.x.y.z", { val: 1, ack: false })).not.toThrow();
   });
@@ -1065,14 +1083,14 @@ describe("Yamaha SSDP search", () => {
   }> {
     let search!: (target: string, ms: number) => Promise<Array<{ location: string; address: string }>>;
     let fetchUrl!: (url: string) => Promise<string>;
-    mocks.discoverYamaha.mockImplementation(async (deps?: unknown) => {
+    mocks.discoverYamaha.mockImplementation((deps?: unknown) => {
       const d = deps as {
         search: typeof search;
         fetch: typeof fetchUrl;
       };
       search = d.search;
       fetchUrl = d.fetch;
-      return [];
+      return Promise.resolve([]);
     });
     const ctx = setup({ devices: [], ...config });
     await ctx.i.onReady();
@@ -1227,9 +1245,9 @@ describe("Yamaha SSDP search", () => {
 describe("Yamaha description fetch", () => {
   async function realFetch(): Promise<(url: string) => Promise<string>> {
     let fetchUrl!: (url: string) => Promise<string>;
-    mocks.discoverYamaha.mockImplementation(async (deps?: unknown) => {
+    mocks.discoverYamaha.mockImplementation((deps?: unknown) => {
       fetchUrl = (deps as { fetch: typeof fetchUrl }).fetch;
-      return [];
+      return Promise.resolve([]);
     });
     const ctx = setup({ devices: [] });
     await ctx.i.onReady();
@@ -1308,7 +1326,15 @@ describe("Yamaha never-filled purge (once per adapter version, after connect)", 
   });
 
   it("a version CHANGE re-arms the sweep; a device that never connected is left alone", async () => {
-    const ctx = setup({ devices: [{ name: "Living room", ip: "192.168.1.10" }, { name: "Attic", ip: "192.168.1.11" }] }, { failIds: ["Attic"] });
+    const ctx = setup(
+      {
+        devices: [
+          { name: "Living room", ip: "192.168.1.10" },
+          { name: "Attic", ip: "192.168.1.11" },
+        ],
+      },
+      { failIds: ["Attic"] },
+    );
     ctx.i.objects.set("Living_room", { type: "device", common: {}, native: { purgeVersion: "1.7.0" } });
     ctx.i.objects.set("Living_room.hdmi.out2", { type: "state", common: { read: true }, native: {} });
     ctx.i.objects.set("Attic", { type: "device", common: {}, native: { purgeVersion: "1.7.0" } });

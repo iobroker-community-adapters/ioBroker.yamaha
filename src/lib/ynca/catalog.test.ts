@@ -183,7 +183,7 @@ describe("YNCA catalog", () => {
     // Regression: gating the buttons on their write function PLAYBACK created them on no
     // real device — every fixture answers only PLAYBACKINFO. Object creation, not just the
     // catalog entry, must be verified against real device responses.
-    const capabilities = parseCapabilities(rxA810 as string[]);
+    const capabilities = parseCapabilities(rxA810);
     const ids = yncaObjectsFor(capabilities).map(object => object.id);
     expect(ids).toContain("player.playback");
     expect(ids).toContain("player.next");
@@ -492,9 +492,10 @@ describe("official-command-list additions (2026-08-25)", () => {
       func: "PAIRING",
       value: "Cancel",
     });
-    expect(
-      yncaStateUpdate({ subunit: "BT", func: "CONNECTINFO", value: "Connected" }, funcToEntry(cat)),
-    ).toEqual({ id: "player.bluetooth.connected", value: true });
+    expect(yncaStateUpdate({ subunit: "BT", func: "CONNECTINFO", value: "Connected" }, funcToEntry(cat))).toEqual({
+      id: "player.bluetooth.connected",
+      value: true,
+    });
   });
 
   test("tuner FM mode, tuned and stereo indicators decode from the wire", () => {

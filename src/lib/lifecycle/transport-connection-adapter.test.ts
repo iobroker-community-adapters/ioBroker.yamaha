@@ -42,7 +42,7 @@ describe("TransportConnectionAdapter", () => {
     const acks: Array<{ id: string; value: unknown }> = [];
     const adapter = new TransportConnectionAdapter("yxc", "living", (id, value) => acks.push({ id, value }));
     adapter.bind({
-      start: async () => true,
+      start: () => Promise.resolve(true),
       handleStateChange: () => {},
       onDrop: () => {},
       close: () => {},
@@ -59,7 +59,7 @@ describe("TransportConnectionAdapter", () => {
     let closed = false;
     const adapter = new TransportConnectionAdapter("xml", "living", () => {});
     adapter.bind({
-      start: async () => false,
+      start: () => Promise.resolve(false),
       handleStateChange: () => {},
       onDrop: () => {},
       close: () => {

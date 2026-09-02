@@ -165,6 +165,6 @@ describe("CommandGate", () => {
   test("passes the operation's result through", async () => {
     const t = fakeTimers();
     const gate = new CommandGate({ minSpacingMs: 0, timers: t.timers, now: t.now });
-    await expect(gate.run(async () => ({ ok: 1 }))).resolves.toEqual({ ok: 1 });
+    await expect(gate.run(() => Promise.resolve({ ok: 1 }))).resolves.toEqual({ ok: 1 });
   });
 });

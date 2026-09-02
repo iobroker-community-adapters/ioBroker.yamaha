@@ -1,3 +1,4 @@
+import type { Mock } from "vitest";
 // t() returns the key (with its arguments when it has any) so the tests assert on
 // the message CHOICE, not on wording.
 vi.mock("./lib/i18n", () => ({ t: (key: string, ...args: unknown[]) => (args.length ? { key, args } : key) }));
@@ -6,9 +7,10 @@ vi.mock("./lib/i18n", () => ({ t: (key: string, ...args: unknown[]) => (args.len
 // by an in-memory pair so the manager's auto-mode is testable without the disk.
 const store = vi.hoisted(() => ({ devices: [] as Array<{ id: string; ip: string }> }));
 vi.mock("./lib/discovered-store", () => ({
-  readDiscovered: vi.fn(async () => store.devices),
-  writeDiscovered: vi.fn(async (_deps: unknown, devices: Array<{ id: string; ip: string }>) => {
+  readDiscovered: vi.fn(() => Promise.resolve(store.devices)),
+  writeDiscovered: vi.fn((_deps: unknown, devices: Array<{ id: string; ip: string }>) => {
     store.devices = devices;
+    return Promise.resolve();
   }),
 }));
 vi.mock("./lib/discovered-store-deps", () => ({ discoveredStoreDeps: () => ({}) }));
@@ -76,7 +78,13 @@ describe("buildDeviceForm", () => {
 // read/modify/write cycle on the user's device table and the discovery store.
 // ---------------------------------------------------------------------------
 
-/** An in-memory `system.adapter.yamaha.0` config object plus the live info states. */
+/**
+ * An in-memory `system.adapter.yamaha.0` config object plus the live info states.
+ *
+ * @param devices Device list stored in native.devices
+ * @param states Info states the mock answers getForeignStateAsync from
+ * @param objects Foreign objects the mock answers getForeignObjectAsync from
+ */
 function mockAdapter(
   devices: unknown = [],
   states: Record<string, unknown> = {},
@@ -87,25 +95,36 @@ function mockAdapter(
     namespace: "yamaha.0",
     log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
     on: vi.fn(),
-    getForeignObjectAsync: vi.fn(async (id: string) =>
-      id === "system.adapter.yamaha.0" ? { native: { devices: stored } } : (objects[id] ?? null),
+    getForeignObjectAsync: vi.fn((id: string) =>
+      Promise.resolve(id === "system.adapter.yamaha.0" ? { native: { devices: stored } } : (objects[id] ?? null)),
     ),
-    extendForeignObjectAsync: vi.fn(async (_id: string, patch: { native: { devices: unknown } }) => {
+    extendForeignObjectAsync: vi.fn((_id: string, patch: { native: { devices: unknown } }) => {
       stored = patch.native.devices;
+      return Promise.resolve();
     }),
-    getForeignStateAsync: vi.fn(async (id: string) =>
-      id in states ? ({ val: states[id], ack: true } as ioBroker.State) : null,
+    getForeignStateAsync: vi.fn((id: string) =>
+      Promise.resolve(id in states ? ({ val: states[id], ack: true } as ioBroker.State) : null),
     ),
     _stored: () => stored as Array<{ name?: string; ip: string }>,
   };
 }
 
-/** A mock ActionContext with configurable form / confirmation answers. */
-function mockContext(opts: { form?: unknown; confirm?: boolean } = {}) {
+/**
+ * A mock ActionContext with configurable form / confirmation answers.
+ *
+ * @param opts Canned answers for the dialogs
+ * @param opts.form What showForm resolves with
+ * @param opts.confirm What showConfirmation resolves with (default true)
+ */
+function mockContext(opts: { form?: unknown; confirm?: boolean } = {}): {
+  showForm: Mock;
+  showConfirmation: Mock;
+  showMessage: Mock;
+} {
   return {
-    showForm: vi.fn(async (_schema: unknown, _options: unknown) => opts.form),
-    showConfirmation: vi.fn(async (_text: unknown) => opts.confirm ?? true),
-    showMessage: vi.fn(async (_text: unknown) => undefined),
+    showForm: vi.fn((_schema: unknown, _options: unknown) => Promise.resolve(opts.form)),
+    showConfirmation: vi.fn((_text: unknown) => Promise.resolve(opts.confirm ?? true)),
+    showMessage: vi.fn((_text: unknown) => Promise.resolve(undefined)),
   };
 }
 
@@ -264,7 +283,7 @@ describe("YamahaDeviceManagement", () => {
       const i = make([living, kitchen]);
       const ctx = mockContext({ form: undefined });
       await i.addDevice(ctx);
-      const schema = ctx.showForm.mock.calls[0][0] as unknown as FormSchema;
+      const schema = ctx.showForm.mock.calls[0][0] as FormSchema;
       expect(schema.items.ip.validator).toContain("192.168.1.10");
       expect(schema.items.ip.validator).toContain("192.168.1.11");
     });
@@ -309,7 +328,7 @@ describe("YamahaDeviceManagement", () => {
       const i = make([living, kitchen]);
       const ctx = mockContext({ form: undefined });
       await i.editDevice("Kitchen", ctx);
-      const schema = ctx.showForm.mock.calls[0][0] as unknown as FormSchema;
+      const schema = ctx.showForm.mock.calls[0][0] as FormSchema;
       // Otherwise opening a device and pressing OK unchanged greys the button out:
       // it clashes with itself and the row can never be edited.
       expect(schema.items.ip.validator).not.toContain("192.168.1.11");
@@ -413,5 +432,4 @@ describe("YamahaDeviceManagement", () => {
     const [card] = await cards([living]);
     expect(card.name).toBe("Living room");
   });
-
 });

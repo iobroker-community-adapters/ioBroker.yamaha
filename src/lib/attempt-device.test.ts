@@ -1,3 +1,4 @@
+import { vi } from "vitest";
 import { connectTransports, type ConnectableTransport } from "./attempt-device";
 import { ReachabilityDedup } from "./lifecycle/reachability-dedup";
 import type { ObjectDef } from "./catalog/types";
@@ -9,7 +10,13 @@ function state(id: string, name: string, extra: Record<string, unknown> = {}): O
   return { id, type: "state", common: { name, type: "number", role: "level", read: true, write: true, ...extra } };
 }
 
-/** A fake connectable transport: connect() yields a preset result; records seed + close. */
+/**
+ * A fake connectable transport: connect() yields a preset result; records seed + close.
+ *
+ * @param transport Which protocol the fake stands in for
+ * @param objects Object definitions the fake declares
+ * @param connectResult Preset connect() outcome, or a function producing it
+ */
 function fakeConn(
   transport: Transport,
   objects: readonly ObjectDef[],
@@ -162,7 +169,6 @@ describe("connectTransports", () => {
 // connects, and looks exactly like a device that does not speak it.
 // ---------------------------------------------------------------------------
 
-import { vi } from "vitest";
 import { attemptDevice } from "./attempt-device";
 
 const wire = vi.hoisted(() => ({
@@ -193,11 +199,18 @@ vi.mock("node:net", () => ({
     return s;
   },
 }));
+interface FakeRequest {
+  on(ev: string, h: (...a: unknown[]) => void): FakeRequest;
+  setTimeout(): undefined;
+  write(): undefined;
+  end(): undefined;
+  destroy(): undefined;
+}
 vi.mock("node:http", () => {
-  const make = (options: unknown) => {
+  const make = (options: unknown): FakeRequest => {
     wire.http.push((typeof options === "string" ? { url: options } : options) as Record<string, unknown>);
     const handlers: Record<string, Array<(...a: unknown[]) => void>> = {};
-    const req = {
+    const req: FakeRequest = {
       on: (ev: string, h: (...a: unknown[]) => void) => {
         (handlers[ev] ??= []).push(h);
         return req;
@@ -249,6 +262,10 @@ describe("attemptDevice builders", () => {
     expect(wire.tcp).toContainEqual({ host: "192.168.1.10", port: 50000 });
     // … while YXC and XML both speak HTTP on 80, XML on the control endpoint.
     expect(wire.http.some(o => o.port === 80 && o.path === "/YamahaRemoteControl/ctrl")).toBe(true);
-    expect(wire.http.some(o => String(o.url ?? o.host ?? "").includes("192.168.1.10"))).toBe(true);
+    expect(
+      wire.http.some(o =>
+        (typeof o.url === "string" ? o.url : typeof o.host === "string" ? o.host : "").includes("192.168.1.10"),
+      ),
+    ).toBe(true);
   });
 });

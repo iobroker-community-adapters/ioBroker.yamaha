@@ -328,8 +328,7 @@ describe("YncaClient", () => {
       const connected = client.connect();
       sockets[0].emitConnect();
       await connected;
-      const sweep = client.readCapabilities(
-        [
+      const sweep = client.readCapabilities([
         { subunit: "SYS", func: "MODELNAME" },
         { subunit: "MAIN", func: "PWR" },
       ]);
@@ -396,7 +395,7 @@ describe("YncaClient on a real TCP socket", () => {
     const socket = netMock.sockets[0];
     socket.emit("timeout");
     expect((socket.destroyed as Error).message).toBe("connect timeout");
-    socket.emit("error", socket.destroyed as Error);
+    socket.emit("error", socket.destroyed);
     socket.emit("close");
     await expect(connecting).rejects.toBeDefined();
     client.close();

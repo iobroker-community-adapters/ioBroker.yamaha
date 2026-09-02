@@ -2,7 +2,11 @@ import { YxcBrowseDriver } from "./yxc-browse-driver";
 import type { BrowseEngine } from "./browse-engine";
 import type { BrowseWindow } from "./types";
 
-/** A list_info response shaping helper. */
+/**
+ * A list_info response shaping helper.
+ *
+ * @param partial Fields that override the empty root list
+ */
 function listResponse(partial: Record<string, unknown>): Record<string, unknown> {
   return { response_code: 0, menu_layer: 1, menu_name: "Root", max_line: 0, list_info: [], ...partial };
 }

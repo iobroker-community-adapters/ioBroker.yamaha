@@ -142,7 +142,7 @@ describe("parseSceneList (the device's own scene declaration, #615)", () => {
 
   test("a refusal or unrelated body declares no scenes", () => {
     expect(parseSceneList("")).toEqual([]);
-    expect(parseSceneList("<YAMAHA_AV RC=\"2\"></YAMAHA_AV>")).toEqual([]);
+    expect(parseSceneList('<YAMAHA_AV RC="2"></YAMAHA_AV>')).toEqual([]);
   });
 });
 

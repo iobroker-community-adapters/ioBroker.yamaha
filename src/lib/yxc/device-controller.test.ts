@@ -12,7 +12,6 @@ const testGate = (): CommandGate =>
     timers: { schedule: (h, ms) => setTimeout(h, ms), cancel: t => clearTimeout(t as ReturnType<typeof setTimeout>) },
   });
 
-
 const flush = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
 const silentLog = { debug: (): void => {}, info: (): void => {}, warn: (): void => {} };
 
@@ -180,8 +179,9 @@ function setup(
         cancelled = true;
       };
     },
-    upsertObject: async id => {
+    upsertObject: id => {
       objects.push(id);
+      return Promise.resolve();
     },
     setStateAck: (id, value) => {
       acks.push({ id, value });
@@ -743,8 +743,9 @@ describe("YxcDeviceController browse surface (#613)", () => {
       client,
       registerPush: () => () => {},
       scheduleKeepalive: () => () => {},
-      upsertObject: async id => {
+      upsertObject: id => {
         objects.push(id);
+        return Promise.resolve();
       },
       setStateAck: () => {},
       log: silentLog,
@@ -784,7 +785,7 @@ describe("YxcDeviceController recall routing (which zone gets the favourite)", (
   };
 
   /** Set up a two-zone device where main plays HDMI and zone 2 plays net radio. */
-  async function twoZoneSetup(): Promise<{ controller: YxcDeviceController; client: FakeClient }> {
+  function twoZoneSetup(): Promise<{ controller: YxcDeviceController; client: FakeClient }> {
     const client = makeFakeClient(twoZones, { response_code: 0 });
     // getStatus answers per zone via the recorded call; the controller stores each zone's input.
     const controller = new YxcDeviceController("living", {
@@ -795,7 +796,7 @@ describe("YxcDeviceController recall routing (which zone gets the favourite)", (
       setStateAck: () => {},
       log: silentLog,
     });
-    return { controller, client };
+    return Promise.resolve({ controller, client });
   }
 
   test("a favourite goes to the zone that is listening to the network player, not always to main", async () => {
@@ -1029,7 +1030,10 @@ describe("YxcDeviceController seed edge cases (2.0.1 hardening)", () => {
     expect(s.acks).toContainEqual({ id: "living.tuner.dab.scanProgress", value: 0 });
     // A tuner without DAB gets neither counter.
     const fmOnly = setup(
-      { zone: [{ id: "main", func_list: ["power"] }], tuner: { func_list: ["fm", "rds"], preset: { type: "common", num: 40 } } },
+      {
+        zone: [{ id: "main", func_list: ["power"] }],
+        tuner: { func_list: ["fm", "rds"], preset: { type: "common", num: 40 } },
+      },
       { power: "on", input: "hdmi1" },
     );
     await fmOnly.controller.start();
