@@ -1,7 +1,5 @@
 {
   "header_devices": "Devices",
-  "introText": "Leave the table empty and the adapter finds MusicCast devices on the network by itself at startup — nothing to enter. Add devices (name + IP) to use only those instead. Older receivers (before ~2010, XML protocol) do not announce themselves on the network and must always be added here manually.",
-  "devicesTable": "Yamaha devices",
   "columnName": "Name",
   "columnIp": "IP address",
   "label_xmlPollInterval": "XML query interval (seconds)",

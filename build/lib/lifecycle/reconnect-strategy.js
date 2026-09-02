@@ -42,7 +42,7 @@ class ReconnectStrategy {
   nextDelay() {
     const delay = Math.min(this.baseMs * 2 ** this.attempt, this.maxMs);
     this.attempt++;
-    return Math.round(delay * (1 + this.jitter * Math.random()));
+    return Math.round(delay * (1 - this.jitter * Math.random()));
   }
   /** Reset the backoff to the base delay after a successful connection. */
   reset() {

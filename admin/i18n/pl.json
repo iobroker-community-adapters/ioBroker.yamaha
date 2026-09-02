@@ -1,7 +1,5 @@
 {
   "header_devices": "Urządzenia",
-  "introText": "Pozostaw tabelę pustą, a adapter sam znajdzie urządzenia MusicCast w sieci przy starcie — nic nie trzeba wpisywać. Dodaj urządzenia (nazwa + IP), aby używać tylko ich. Starsze amplitunery (sprzed ~2010, protokół XML) nie zgłaszają się w sieci i zawsze dodaje się je tutaj ręcznie.",
-  "devicesTable": "Urządzenia Yamaha",
   "columnName": "Nazwa",
   "columnIp": "Adres IP",
   "label_xmlPollInterval": "Interwał odpytywania XML (sekundy)",

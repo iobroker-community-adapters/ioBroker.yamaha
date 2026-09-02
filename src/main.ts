@@ -19,7 +19,7 @@ import {
   staleObjects,
   stripNamespace,
 } from "./lib/pure-helpers";
-import { errorMessage } from "./lib/util";
+import { errorMessage, MAX_HTTP_BODY_BYTES } from "./lib/util";
 import { discoverYamaha } from "./lib/discovery";
 import { readDiscovered, writeDiscovered } from "./lib/discovered-store";
 import { discoveredStoreDeps } from "./lib/discovered-store-deps";
@@ -96,6 +96,11 @@ export class Yamaha extends utils.Adapter {
   private balanceTimer: ioBroker.Timeout | undefined;
   /** Set when the start-up snapshot failed — a balance without it would be wrong, so none is written. */
   private balanceDisabled = false;
+  /**
+   * Latched after the first failed database write, so an outage warns once and the
+   * repeats stay at debug until a write goes through again (nut2 `failedUps` pattern).
+   */
+  private stateWritesFailing = false;
 
   /**
    * @param options adapter options passed through by js-controller
@@ -176,12 +181,21 @@ export class Yamaha extends utils.Adapter {
     pushReceiver: YxcPushReceiver,
     knownDeviceIps: Set<string>,
   ): Promise<void> {
+    if (this.unloading) {
+      // The background network search resolves on its own clock: a device it hands over
+      // after onUnload would open sockets and timers on an instance that is already gone.
+      return;
+    }
     this.deviceConnected.set(device.id, false);
     await this.ensureDeviceHeader(device.id, device.ip);
     // Stamp it disconnected BEFORE the first attempt: ioBroker keeps a state's last value
     // forever, so a crash or a power cut would otherwise leave the device green until it
     // reports again — and a device that never answers would stay green for good.
     await this.setState(`${device.id}.info.connection`, { val: false, ack: true });
+    // The three protocol flags follow the same rule: left at their last value, a crash
+    // would show "YNCA connected" on the card next to a red connection dot — for good, if
+    // the device never answers again.
+    this.setTransports(device.id, []);
     const reachability = new ReachabilityDedup();
     const subunitCache = await this.loadYncaSubunitCache(device.id);
     // Held here, not in the controllers: those are rebuilt on every connection attempt;
@@ -221,6 +235,9 @@ export class Yamaha extends utils.Adapter {
   ): Promise<void> {
     try {
       const merged = await this.runDiscovery();
+      if (this.unloading) {
+        return; // the search outlived the adapter — nothing may start now
+      }
       const fresh = merged.filter(device => !started.has(device.id));
       if (fresh.length === 0) {
         return;
@@ -251,13 +268,13 @@ export class Yamaha extends utils.Adapter {
       this.scheduleDatapointBalance();
     }
     this.deviceConnected.set(deviceId, connected);
-    void this.setState(`${deviceId}.info.connection`, { val: connected, ack: true });
+    this.writeState(`${deviceId}.info.connection`, connected);
     // A drop clears the per-transport flags; a (re)connect sets them again via onTransports.
     if (!connected) {
       this.setTransports(deviceId, []);
     }
     const anyConnected = [...this.deviceConnected.values()].some(Boolean);
-    void this.setState("info.connection", { val: anyConnected, ack: true });
+    this.writeState("info.connection", anyConnected);
     this.writeDeviceOverview();
   }
 
@@ -272,9 +289,9 @@ export class Yamaha extends utils.Adapter {
   private writeDeviceOverview(): void {
     const total = this.deviceConnected.size;
     const online = [...this.deviceConnected.values()].filter(Boolean).length;
-    void this.setState("info.devicesTotal", { val: total, ack: true });
-    void this.setState("info.devicesOnline", { val: online, ack: true });
-    void this.setState("info.devicesAllOnline", { val: total > 0 && online === total, ack: true });
+    this.writeState("info.devicesTotal", total);
+    this.writeState("info.devicesOnline", online);
+    this.writeState("info.devicesAllOnline", total > 0 && online === total);
   }
 
   /**
@@ -287,8 +304,66 @@ export class Yamaha extends utils.Adapter {
   private setTransports(deviceId: string, names: string[]): void {
     const live = new Set(names);
     for (const proto of TRANSPORT_IDS) {
-      void this.setState(`${deviceId}.info.transports.${proto}`, { val: live.has(proto), ack: true });
+      this.writeState(`${deviceId}.info.transports.${proto}`, live.has(proto));
     }
+  }
+
+  /**
+   * Write a state with ack — and OBSERVE the promise. js-controller turns an unhandled
+   * promise rejection into an adapter stop (`_exceptionHandler` → exit code
+   * UNCAUGHT_EXCEPTION, read in the controller source), and `setState` rejects whenever
+   * the states database is not reachable for a moment (`ERROR_DB_CLOSED`, or a pending
+   * command cancelled by a reconnecting Redis). Nine fire-and-forget writes used to run
+   * bare: one hiccup while a device pushed a value would have restarted the whole
+   * instance. The failure lands in the log instead — once per outage at warn, then at
+   * debug until a write succeeds again; during teardown it is expected and stays silent.
+   *
+   * @param id the state id (namespace-relative)
+   * @param value the value to write
+   */
+  private writeState(id: string, value: ioBroker.StateValue): void {
+    this.setState(id, { val: value, ack: true }).then(
+      () => {
+        this.stateWritesFailing = false;
+      },
+      (e: unknown) => this.noteWriteFailure(`state ${id}`, e),
+    );
+  }
+
+  /**
+   * Persist a device object's `native` part — observed like {@link writeState}. The two
+   * per-device caches (YNCA subunit probe, probe memory) persist through it.
+   *
+   * @param deviceId the device object id
+   * @param native the native fields to merge into the object
+   */
+  private persistDeviceNative(deviceId: string, native: Record<string, unknown>): void {
+    this.extendObject(deviceId, { native }).then(
+      () => {
+        this.stateWritesFailing = false;
+      },
+      (e: unknown) => this.noteWriteFailure(`device object ${deviceId}`, e),
+    );
+  }
+
+  /**
+   * Log a failed database write: warn on the first failure of an outage, debug for the
+   * repeats, silence while unloading (the database is going down with us).
+   *
+   * @param what which write failed, for the log line
+   * @param e the rejection reason
+   */
+  private noteWriteFailure(what: string, e: unknown): void {
+    if (this.unloading) {
+      return;
+    }
+    const message = `could not write ${what} (${errorMessage(e)})`;
+    if (this.stateWritesFailing) {
+      this.log.debug(message);
+      return;
+    }
+    this.stateWritesFailing = true;
+    this.log.warn(`${message} — repeats stay at debug until a write succeeds`);
   }
 
   /**
@@ -731,7 +806,7 @@ export class Yamaha extends utils.Adapter {
         if (!isGroupEnabled(id.slice(id.indexOf(".") + 1), this.config as unknown as Record<string, unknown>)) {
           return;
         }
-        void this.setState(id, { val: value, ack: true });
+        this.writeState(id, value);
         // A model report also decides the device-class icon on the device node — and, for a
         // device still carrying the ip it was migrated with, its readable name.
         if (id.endsWith(".info.model") && typeof value === "string" && value.length > 0) {
@@ -798,8 +873,9 @@ export class Yamaha extends utils.Adapter {
       }
       // A stopped adapter talks to nothing, so no device may keep claiming to be connected —
       // that state paints the symbol on the device object (statusStates.onlineId), and the
-      // instance-wide info.connection alone would leave every device green. The overview goes
-      // with them; devicesTotal stays, how many devices there are did not change.
+      // instance-wide info.connection alone would leave every device green. The protocol
+      // flags and the overview go with them; devicesTotal stays, how many devices there are
+      // did not change.
       //
       // The callback goes LAST, after the writes: reporting "done" straight away loses them,
       // the host tears the process down as soon as it is told.
@@ -807,6 +883,11 @@ export class Yamaha extends utils.Adapter {
       for (const deviceId of this.deviceConnected.keys()) {
         this.deviceConnected.set(deviceId, false);
         writes.push(this.setState(`${deviceId}.info.connection`, { val: false, ack: true }));
+        // The protocol flags on the card go down with the connection — a stopped adapter
+        // is connected over no protocol.
+        for (const proto of TRANSPORT_IDS) {
+          writes.push(this.setState(`${deviceId}.info.transports.${proto}`, { val: false, ack: true }));
+        }
       }
       writes.push(this.setState("info.devicesOnline", { val: 0, ack: true }));
       writes.push(this.setState("info.devicesAllOnline", { val: false, ack: true }));
@@ -888,7 +969,7 @@ export class Yamaha extends utils.Adapter {
       stored = undefined;
     }
     return createSubunitCache(isAvailSnapshot(stored) ? stored : undefined, snapshot => {
-      void this.extendObject(deviceId, { native: { yncaAvail: snapshot ?? null } });
+      this.persistDeviceNative(deviceId, { yncaAvail: snapshot ?? null });
     });
   }
 
@@ -918,7 +999,7 @@ export class Yamaha extends utils.Adapter {
       initial = undefined;
     }
     return new ProbeMemory(initial, entries => {
-      void this.extendObject(deviceId, { native: { probeCache: JSON.stringify(entries) } });
+      this.persistDeviceNative(deviceId, { probeCache: JSON.stringify(entries) });
     });
   }
 
@@ -1044,7 +1125,16 @@ export class Yamaha extends utils.Adapter {
     return new Promise((resolve, reject) => {
       const req = httpGet(url, res => {
         let data = "";
-        res.on("data", chunk => (data += String(chunk)));
+        let bytes = 0;
+        res.on("data", chunk => {
+          bytes += (chunk as Buffer).length;
+          if (bytes > MAX_HTTP_BODY_BYTES) {
+            // A description document is a few KB — whatever streams past the cap is not one.
+            res.destroy(new Error(`description too large: ${url}`));
+            return;
+          }
+          data += String(chunk);
+        });
         // A connection dropped mid-body emits on the RESPONSE stream, not the request —
         // without this handler that is an unhandled error event instead of a rejection.
         res.on("error", reject);

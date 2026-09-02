@@ -284,11 +284,15 @@ export class YncaClient {
 
   /**
    * Put one line on the wire through the command gate — the single choke point that keeps
-   * the specification's spacing.
+   * the specification's spacing. NEVER rejects: a closed gate is the normal teardown path,
+   * and a socket write that fails reports through the socket's own error/close handlers
+   * (the drop the supervisor reconnects on). A rejection here would surface as an
+   * unhandled promise rejection in the fire-and-forget send()/get() callers — and
+   * js-controller stops the adapter on those.
    *
    * @param line the encoded YNCA line (without the terminator)
    * @param priority user command or background read
-   * @returns resolves once the line was written (or silently when the gate closed)
+   * @returns resolves once the line was written, or once it is clear it never will be
    */
   private writeLine(line: string, priority: "user" | "background"): Promise<void> {
     return this.gate
@@ -296,9 +300,8 @@ export class YncaClient {
         this.socket?.write(`${line}\r\n`);
       }, priority)
       .catch((e: unknown) => {
-        // A closed gate is the normal teardown path, not an error worth surfacing.
         if (!(e instanceof CommandGateClosedError)) {
-          throw e;
+          this.lastError = e instanceof Error ? e : new Error(String(e));
         }
       });
   }

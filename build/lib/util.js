@@ -18,14 +18,17 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var util_exports = {};
 __export(util_exports, {
+  MAX_HTTP_BODY_BYTES: () => MAX_HTTP_BODY_BYTES,
   errorMessage: () => errorMessage
 });
 module.exports = __toCommonJS(util_exports);
 function errorMessage(e) {
   return e instanceof Error ? e.message : String(e);
 }
+const MAX_HTTP_BODY_BYTES = 1024 * 1024;
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  MAX_HTTP_BODY_BYTES,
   errorMessage
 });
 //# sourceMappingURL=util.js.map

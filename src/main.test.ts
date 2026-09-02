@@ -20,15 +20,25 @@ vi.mock("@iobroker/adapter-core", () => {
     public foreignObjects = new Map<string, Record<string, unknown>>();
     public subscribed: string[] = [];
     public on = vi.fn();
+    /** When set, every setState rejects with it — a states database that is not reachable. */
+    public setStateFail: Error | null = null;
+    /** When set, every extendObject rejects with it — an objects database that is not reachable. */
+    public extendObjectFail: Error | null = null;
     private key(id: string): string {
       return id.replace(`${this.namespace}.`, "");
     }
     public setState = vi.fn((id: string, state: unknown) => {
+      if (this.setStateFail) {
+        return Promise.reject(this.setStateFail);
+      }
       const s = state as { val?: unknown; ack?: boolean };
       this.states.set(this.key(id), { val: s?.val, ack: s?.ack === true });
       return Promise.resolve();
     });
     public extendObject = vi.fn((id: string, obj: Record<string, unknown>) => {
+      if (this.extendObjectFail) {
+        return Promise.reject(this.extendObjectFail);
+      }
       const k = this.key(id);
       const prev = this.objects.get(k) ?? {};
       this.objects.set(k, {
@@ -225,6 +235,8 @@ vi.mock("node:http", () => ({
             h();
           }
         },
+        // A destroyed response stream reports through its own error handler, like node's.
+        destroy: (e: Error) => (resHandlers.error ?? []).forEach(h => h(e)),
       });
     });
     return req;
@@ -247,6 +259,7 @@ vi.mock("./lib/yxc/push-receiver", () => ({
 
 import { Yamaha } from "./main";
 import { iconForModel } from "./lib/device-type";
+import { MAX_HTTP_BODY_BYTES } from "./lib/util";
 import { writeDiscovered } from "./lib/discovered-store";
 import type { ConnectionHandle } from "./lib/controller";
 
@@ -289,6 +302,8 @@ function internalOf(adapter: Yamaha): {
   foreignObjects: Map<string, Record<string, unknown>>;
   config: Record<string, unknown>;
   subscribed: string[];
+  setStateFail: Error | null;
+  extendObjectFail: Error | null;
   log: Record<"debug" | "info" | "warn" | "error", ReturnType<typeof vi.fn>>;
   setTimeout: ReturnType<typeof vi.fn>;
   clearTimeout: ReturnType<typeof vi.fn>;
@@ -1276,6 +1291,14 @@ describe("Yamaha description fetch", () => {
     net.http.error = new Error("ECONNREFUSED");
     await expect(fetchUrl("http://192.168.1.99/desc.xml")).rejects.toThrow("ECONNREFUSED");
   });
+
+  it("rejects a description that streams past the size cap instead of buffering it", async () => {
+    const fetchUrl = await realFetch();
+    // A description document is a few KB. Whatever answers on that address with more is
+    // not a Yamaha — and buffering it without a cap grows the process without bound.
+    net.http.body = "x".repeat(MAX_HTTP_BODY_BYTES + 1);
+    await expect(fetchUrl("http://192.168.1.20/desc.xml")).rejects.toThrow(/too large/);
+  });
 });
 
 describe("Yamaha never-filled purge (once per adapter version, after connect)", () => {
@@ -1348,5 +1371,170 @@ describe("Yamaha never-filled purge (once per adapter version, after connect)", 
     // The offline device keeps its tree AND its old stamp — its sweep runs when it connects.
     expect(ctx.i.objects.has("Attic.sound.direct")).toBe(true);
     expect((ctx.i.objects.get("Attic")?.native as { purgeVersion?: string }).purgeVersion).toBe("1.7.0");
+  });
+});
+
+describe("Yamaha guarded database writes (audit 2026-09-02 — a hiccup must not restart the instance)", () => {
+  const writeWarnings = (ctx: Ctx): string[] =>
+    ctx.i.log.warn.mock.calls.map(c => String(c[0])).filter(m => m.includes("could not write"));
+
+  it("logs a failed state write once at warn, repeats at debug, and re-arms after a success", async () => {
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    const setStateAck = ctx.calls[0].deps.setStateAck as (id: string, value: unknown) => void;
+    // js-controller turns an unhandled promise rejection into an adapter stop (exit code 6),
+    // and setState rejects whenever the states database is not reachable for a moment. A
+    // bare `void setState` on a device-pushed value would have restarted the instance.
+    ctx.i.setStateFail = new Error("States database not connected");
+    setStateAck("Living_room.volume", -30);
+    setStateAck("Living_room.mute", true);
+    await flush();
+    expect(writeWarnings(ctx)).toHaveLength(1);
+    expect(writeWarnings(ctx)[0]).toContain("could not write state Living_room.volume");
+    expect(ctx.i.log.debug).toHaveBeenCalledWith(expect.stringContaining("could not write state Living_room.mute"));
+    // A successful write re-arms the warning for the next outage.
+    ctx.i.setStateFail = null;
+    setStateAck("Living_room.volume", -29);
+    await flush();
+    ctx.i.setStateFail = new Error("connection is closed");
+    setStateAck("Living_room.volume", -28);
+    await flush();
+    expect(writeWarnings(ctx)).toHaveLength(2);
+  });
+
+  it("observes the connection markers and the overview the same way", async () => {
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    ctx.i.setStateFail = new Error("States database not connected");
+    ctx.i.reportConnection("Living_room", false);
+    await flush();
+    expect(writeWarnings(ctx)).toHaveLength(1);
+  });
+
+  it("observes the persistence writes of the per-device caches too", async () => {
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    ctx.i.extendObjectFail = new Error("Objects database not connected");
+    const cache = ctx.calls[0].deps.yncaSubunitCache as unknown as { set(snapshot: unknown): void };
+    cache.set({ subunits: ["MAIN"], model: "RX", firmware: "1.0" });
+    const memory = ctx.calls[0].deps.probeMemory as unknown as { set(key: string, value: unknown): void };
+    memory.set("features", { zones: [] });
+    await flush();
+    expect(writeWarnings(ctx)).toHaveLength(1);
+    expect(writeWarnings(ctx)[0]).toContain("could not write device object Living_room");
+  });
+
+  it("stays silent about failed writes while unloading — the database goes down with the adapter", async () => {
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    const setStateAck = ctx.calls[0].deps.setStateAck as (id: string, value: unknown) => void;
+    ctx.i.onUnload(vi.fn());
+    ctx.i.setStateFail = new Error("connection is closed");
+    setStateAck("Living_room.volume", -30);
+    await flush();
+    expect(writeWarnings(ctx)).toEqual([]);
+  });
+});
+
+describe("Yamaha protocol flags at start and stop (audit 2026-09-02)", () => {
+  it("resets stale protocol flags at startup — a crash must not leave 'YNCA connected' on the card", async () => {
+    // ioBroker keeps the last value: after a crash the card would show a green YNCA badge
+    // next to a red connection dot, for good if the device never answers again.
+    const ctx = setup({ devices: [{ name: "A", ip: "192.168.1.10" }] }, { failIds: ["A"] });
+    ctx.i.states.set("A.info.transports.ynca", { val: true, ack: true });
+    ctx.i.states.set("A.info.transports.yxc", { val: true, ack: true });
+    await ctx.i.onReady();
+    await flush();
+    for (const proto of ["ynca", "yxc", "xml"]) {
+      expect(ctx.i.states.get(`A.info.transports.${proto}`)).toEqual({ val: false, ack: true });
+    }
+  });
+
+  it("takes the protocol flags down on unload, with the connection", async () => {
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    (ctx.calls[0].deps.onTransports as (names: string[]) => void)(["ynca", "yxc"]);
+    expect(ctx.i.states.get("Living_room.info.transports.ynca")).toEqual({ val: true, ack: true });
+    ctx.i.onUnload(vi.fn());
+    await flush();
+    for (const proto of ["ynca", "yxc", "xml"]) {
+      expect(ctx.i.states.get(`Living_room.info.transports.${proto}`)).toEqual({ val: false, ack: true });
+    }
+  });
+});
+
+describe("Yamaha teardown races (audit 2026-09-02)", () => {
+  it("does not start a device the background search hands over after unload", async () => {
+    mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+    let release: (found: Array<{ ip: string; name: string }>) => void = () => undefined;
+    mocks.discoverYamaha.mockImplementation(() => new Promise(resolve => (release = resolve)));
+    const ctx = setup({ devices: [] });
+    await ctx.i.onReady();
+    expect(ctx.calls.map(c => c.device.ip)).toEqual(["192.168.1.20"]);
+    ctx.i.onUnload(vi.fn());
+    // The search outlived the adapter: a device started now would hold sockets and timers
+    // on an instance that is already gone.
+    release([{ ip: "192.168.1.21", name: "WX-021" }]);
+    await flush();
+    expect(ctx.calls.map(c => c.device.ip)).toEqual(["192.168.1.20"]);
+    // Nor does a stopped adapter announce a find it will not act on.
+    expect(ctx.i.log.info).not.toHaveBeenCalledWith(expect.stringContaining("discovery found"));
+  });
+
+  it("refuses to arm timers and keepalives for the transports after unload", async () => {
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    const deps = ctx.calls[0].deps;
+    ctx.i.onUnload(vi.fn());
+    ctx.i.setTimeout.mockClear();
+    ctx.i.setInterval.mockClear();
+    // A connect attempt still in flight resolves into a closing adapter — the framework
+    // would refuse the timer with a warn line per attempt, so the deps refuse it quietly.
+    const timer = (deps.timers as unknown as { schedule(cb: () => void, ms: number): unknown }).schedule(
+      () => undefined,
+      10,
+    );
+    expect(timer).toBeUndefined();
+    expect(ctx.i.setTimeout).not.toHaveBeenCalled();
+    const stop = (deps.scheduleKeepalive as (h: () => void, ms: number) => () => void)(() => undefined, 20);
+    expect(ctx.i.setInterval).not.toHaveBeenCalled();
+    expect(() => stop()).not.toThrow();
+  });
+});
+
+describe("Yamaha probe memory persistence (audit 2026-09-02)", () => {
+  it("restores the remembered device answers from the device object", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room", {
+      type: "device",
+      common: {},
+      native: { probeCache: JSON.stringify({ xmlModel: "RX-V771", features: { zones: [] } }) },
+    });
+    await ctx.i.onReady();
+    await flush();
+    const memory = ctx.calls[0].deps.probeMemory as unknown as { remembered(key: string): unknown };
+    // This is what makes a restart fast — without it every start re-asks everything.
+    expect(memory.remembered("xmlModel")).toBe("RX-V771");
+    expect(memory.remembered("features")).toEqual({ zones: [] });
+  });
+
+  it("starts with an empty memory when the stored value is not a JSON object", async () => {
+    for (const stored of ["not json", JSON.stringify([1, 2]), JSON.stringify("text"), 42]) {
+      const ctx = setup();
+      ctx.i.objects.set("Living_room", { type: "device", common: {}, native: { probeCache: stored } });
+      await ctx.i.onReady();
+      await flush();
+      const memory = ctx.calls[0].deps.probeMemory as unknown as { remembered(key: string): unknown };
+      // A hand-edited or half-written object must not feed the tree from invented answers —
+      // not even an array's or a string's index positions as keys.
+      expect(memory.remembered("xmlModel")).toBeUndefined();
+      expect(memory.remembered("0")).toBeUndefined();
+    }
   });
 });

@@ -1,7 +1,5 @@
 {
   "header_devices": "Dispositivos",
-  "introText": "Deixe a tabela vazia e o adaptador encontra sozinho os dispositivos MusicCast na rede ao arrancar — nada a introduzir. Adicione dispositivos (nome + IP) para usar apenas esses. Recetores antigos (antes de ~2010, protocolo XML) não se anunciam na rede e devem ser sempre adicionados aqui manualmente.",
-  "devicesTable": "Dispositivos Yamaha",
   "columnName": "Nome",
   "columnIp": "Endereço IP",
   "label_xmlPollInterval": "Intervalo de consulta XML (segundos)",

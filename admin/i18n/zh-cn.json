@@ -1,7 +1,5 @@
 {
   "header_devices": "设备",
-  "introText": "将表格留空，适配器会在启动时自动在网络中查找 MusicCast 设备——无需输入。添加设备（名称 + IP）则只使用这些设备。较旧的接收机（约 2010 年之前，XML 协议）不会在网络中通告自己，必须始终在此手动添加。",
-  "devicesTable": "Yamaha 设备",
   "columnName": "名称",
   "columnIp": "IP 地址",
   "label_xmlPollInterval": "XML 查询间隔（秒）",

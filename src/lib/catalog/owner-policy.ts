@@ -36,6 +36,13 @@ const OWNER_OVERRIDES: Record<string, readonly Transport[]> = {
   // and the 2012 generation (RX-V473/V475) answers the YNCA scene put with
   // @RESTRICTED (ynca-python PRACTICALITIES). The proven writers go first.
   "scene.recall": ["yxc", "xml", "ynca"],
+  // The scene LIST is presentation: number + title per slot. MusicCast knows the slot
+  // COUNT but no titles; XML declares the titles per zone, YNCA the main zone's names.
+  // By modernity MusicCast would own it and — connecting in seconds while the YNCA
+  // names ride a 19 s sweep — publish a title-less list on the first contact that then
+  // stands until the next restart. The title sources come first; a MusicCast-only
+  // device still owns its list alone.
+  "scene.list": ["xml", "ynca", "yxc"],
   // §3d richness loss — YNCA carries an enum dropdown that YXC/XML flatten to a free string.
   input: ["ynca", "yxc", "xml"],
   soundProgram: ["ynca", "yxc", "xml"],

@@ -875,15 +875,24 @@ export class YxcDeviceController implements ConnectionHandle {
       const u = updates.find(x => x.id === `${prefix}sound.equalizer.${b}`);
       return typeof u?.value === "number" ? u.value : undefined;
     };
-    if (band("low") === undefined && band("mid") === undefined && band("high") === undefined) {
+    const low = band("low");
+    const mid = band("mid");
+    const high = band("high");
+    if (low === undefined && mid === undefined && high === undefined) {
       return;
     }
-    const cur = this.lastEqualizer.get(zone) ?? { low: 0, mid: 0, high: 0 };
-    this.lastEqualizer.set(zone, {
-      low: band("low") ?? cur.low,
-      mid: band("mid") ?? cur.mid,
-      high: band("high") ?? cur.high,
-    });
+    const cur = this.lastEqualizer.get(zone);
+    if (!cur) {
+      // No cache yet: only a COMPLETE triple may seed it. Filling the gaps with 0 would hand
+      // the write path exactly the invented 0/0/0 it refuses to send — that safeguard only
+      // works if this cache never lies about a band.
+      if (low === undefined || mid === undefined || high === undefined) {
+        return;
+      }
+      this.lastEqualizer.set(zone, { low, mid, high });
+      return;
+    }
+    this.lastEqualizer.set(zone, { low: low ?? cur.low, mid: mid ?? cur.mid, high: high ?? cur.high });
   }
 
   /**

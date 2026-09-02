@@ -168,8 +168,10 @@ export class YxcBrowseDriver implements BrowseDriver {
     if (!this.active) {
       return undefined;
     }
+    // A refusal (response_code != 0) never arrives here: the client's transport already
+    // turns it into an error, which the engine reports. Only a null body is left to guard.
     const response = (await this.client.getListInfo(this.active.input, this.index)) as Record<string, unknown> | null;
-    if (!response || (typeof response.response_code === "number" && response.response_code !== 0)) {
+    if (!response) {
       return undefined;
     }
     const entries = Array.isArray(response.list_info) ? (response.list_info as RawListEntry[]) : [];

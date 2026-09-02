@@ -465,3 +465,26 @@ describe("YncaClient refusal attribution (#615)", () => {
     expect(refusals).toEqual(["@MAIN:SCENE=Scene 2"]);
   });
 });
+
+describe("YncaClient write failures (audit 2026-09-02)", () => {
+  test("a socket write that throws never surfaces as an unhandled rejection", async () => {
+    const { factory, sockets } = fixtureFactory();
+    const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
+    const connected = client.connect();
+    sockets[0].emitConnect();
+    await connected;
+    sockets[0].write = (): void => {
+      throw new Error("write after end");
+    };
+    // send()/get() are fire-and-forget: a rejection out of the gate would be an unhandled
+    // promise rejection — vitest fails the run on those, exactly as js-controller stops the
+    // adapter. The failure is kept as the drop reason instead.
+    client.send("MAIN", "PWR", "On");
+    client.get("SYS", "MODELNAME");
+    await drain();
+    let reason: Error | undefined;
+    client.onDrop(r => (reason = r));
+    sockets[0].emitClose();
+    expect(reason?.message).toBe("write after end");
+  });
+});

@@ -148,7 +148,7 @@ class YxcBrowseDriver {
       return void 0;
     }
     const response = await this.client.getListInfo(this.active.input, this.index);
-    if (!response || typeof response.response_code === "number" && response.response_code !== 0) {
+    if (!response) {
       return void 0;
     }
     const entries = Array.isArray(response.list_info) ? response.list_info : [];

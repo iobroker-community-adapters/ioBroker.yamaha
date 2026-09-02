@@ -35,6 +35,40 @@ export function assertXmlOk(xml: string, what: string): string {
   return xml;
 }
 
+/**
+ * A transport-level refusal carrying the HTTP status. The firmware answers a request for
+ * a node the model does not have with a BODYLESS HTTP 400 (captured RX-V6A behaviour) —
+ * a PERMANENT verdict ("this node does not exist here"), unlike a timeout or a connection
+ * error. Callers that remember answers per device need the distinction:
+ * {@link isPermanentXmlRefusal}.
+ */
+export class XmlHttpError extends Error {
+  /**
+   * @param message the error message
+   * @param statusCode the HTTP status the device answered with
+   */
+  public constructor(
+    message: string,
+    public readonly statusCode: number,
+  ) {
+    super(message);
+    this.name = "XmlHttpError";
+  }
+}
+
+/**
+ * Whether a failed XML read is the model's permanent verdict (the node does not exist:
+ * bodyless HTTP 400) rather than a transient failure (timeout, connection error, HTTP 5xx).
+ * A device that was merely busy or asleep must be asked again, or a probe that is
+ * remembered per device would record "declares none" for good.
+ *
+ * @param e the caught value
+ * @returns true when the refusal is permanent for this model
+ */
+export function isPermanentXmlRefusal(e: unknown): boolean {
+  return e instanceof XmlHttpError && e.statusCode === 400;
+}
+
 /** One scene as the device declares it in `<Scene_Sel_Item>`. */
 export interface XmlScene {
   /** The 1-based scene number (from the `<Param>Scene N</Param>` write value). */

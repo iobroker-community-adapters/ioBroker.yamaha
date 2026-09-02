@@ -18,9 +18,11 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var protocol_exports = {};
 __export(protocol_exports, {
+  XmlHttpError: () => XmlHttpError,
   assertXmlOk: () => assertXmlOk,
   encodeGet: () => encodeGet,
   encodePut: () => encodePut,
+  isPermanentXmlRefusal: () => isPermanentXmlRefusal,
   parseBasicStatus: () => parseBasicStatus,
   parseInputList: () => parseInputList,
   parseModelName: () => parseModelName,
@@ -43,6 +45,20 @@ function assertXmlOk(xml, what) {
     throw new Error(`device refused ${what} (RC=${code})`);
   }
   return xml;
+}
+class XmlHttpError extends Error {
+  /**
+   * @param message the error message
+   * @param statusCode the HTTP status the device answered with
+   */
+  constructor(message, statusCode) {
+    super(message);
+    this.statusCode = statusCode;
+    this.name = "XmlHttpError";
+  }
+}
+function isPermanentXmlRefusal(e) {
+  return e instanceof XmlHttpError && e.statusCode === 400;
 }
 function parseSceneList(xml) {
   const scenes = [];
@@ -188,9 +204,11 @@ function parseBasicStatus(xml) {
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  XmlHttpError,
   assertXmlOk,
   encodeGet,
   encodePut,
+  isPermanentXmlRefusal,
   parseBasicStatus,
   parseInputList,
   parseModelName,

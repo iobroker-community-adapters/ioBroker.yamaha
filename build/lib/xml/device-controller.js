@@ -181,22 +181,47 @@ class XmlDeviceController {
   /**
    * Read one element's list once per device: the answer is a property of the MODEL
    * (input lists, scene declarations), so reconnects reuse it via the probe memory.
-   * A refusal (RC/HTTP) or transport error yields an empty body — "declares none".
+   *
+   * Only a DEFINITE answer is remembered: a body, or the model's own "no such node"
+   * (bodyless HTTP 400 / return code 2, both captured on the RX-V6A) as "declares none".
+   * A transient failure — timeout, connection error, HTTP 5xx, or a state-dependent
+   * refusal (return code 3/4, "not now") — is NOT remembered: before this, one busy
+   * moment during the first contact recorded "no scenes" for that device for good, until
+   * the model changed. Now it is simply asked again on the next connect.
    *
    * @param key the probe-memory key
    * @param element the XML element to ask
    * @param inner the inner GET request
-   * @returns the raw response body, or "" when the device refused
+   * @returns the raw response body, or "" when the device (definitely or for now) has none
    */
-  probeXml(key, element, inner) {
+  async probeXml(key, element, inner) {
     const probe = async () => {
+      let body;
       try {
-        return await this.deps.client.getXml(element, inner);
-      } catch {
-        return "";
+        body = await this.deps.client.getXml(element, inner);
+      } catch (e) {
+        if ((0, import_protocol.isPermanentXmlRefusal)(e)) {
+          return "";
+        }
+        throw e;
       }
+      const rc = (0, import_protocol.parseReturnCode)(body);
+      if (rc !== void 0 && rc !== 0) {
+        if (rc === 2) {
+          return "";
+        }
+        throw new Error(`device refused ${element} probe (RC=${rc})`);
+      }
+      return body;
     };
-    return this.deps.probeMemory ? this.deps.probeMemory.once(key, probe) : probe();
+    try {
+      return this.deps.probeMemory ? await this.deps.probeMemory.once(key, probe) : await probe();
+    } catch (e) {
+      this.deps.log.debug(
+        `${this.deviceId}: ${key} probe failed, asking again on the next connect (${(0, import_util.errorMessage)(e)})`
+      );
+      return "";
+    }
   }
   /**
    * Build the scene surface from the device's OWN declaration (#615): each zone's
@@ -406,16 +431,27 @@ class XmlDeviceController {
           try {
             const body = await this.deps.client.getXml(source.element, "<List_Info>GetParam</List_Info>");
             return body.includes("<Menu_Status>") ? source.key : void 0;
-          } catch {
-            return void 0;
+          } catch (e) {
+            if ((0, import_protocol.isPermanentXmlRefusal)(e)) {
+              return void 0;
+            }
+            throw e;
           }
         })
       );
       return probes.filter((key) => key !== void 0);
     };
-    const available = new Set(
-      this.deps.probeMemory ? await this.deps.probeMemory.once("xmlBrowseSources", probe) : await probe()
-    );
+    let available;
+    try {
+      available = new Set(
+        this.deps.probeMemory ? await this.deps.probeMemory.once("xmlBrowseSources", probe) : await probe()
+      );
+    } catch (e) {
+      this.deps.log.debug(
+        `${this.deviceId}: browse probe failed, asking again on the next connect (${(0, import_util.errorMessage)(e)})`
+      );
+      return;
+    }
     if (available.size === 0) {
       return;
     }

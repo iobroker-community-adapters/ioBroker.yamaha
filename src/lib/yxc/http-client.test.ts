@@ -273,3 +273,28 @@ describe("gate priority classification", () => {
     }
   });
 });
+
+describe("YamahaYxcClient body cap (audit 2026-09-02)", () => {
+  test("rejects a body that streams past the size cap instead of buffering it", async () => {
+    // The largest real answer (getFeatures) is a few KB. Whatever answers on that address
+    // with megabytes is not a Yamaha — and an uncapped buffer grows the process without bound.
+    const server = createServer((_req, res) => {
+      res.setHeader("Content-Type", "application/json");
+      res.write("[");
+      const chunk = `${"1".repeat(64 * 1024)},`;
+      for (let i = 0; i < 20; i++) {
+        res.write(chunk);
+      }
+      res.end("1]");
+    });
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const { port } = server.address() as AddressInfo;
+    try {
+      const client = new YamahaYxcClient(`127.0.0.1:${port}`);
+      await expect(client.getStatus("main")).rejects.toThrow(/too large/);
+    } finally {
+      server.close();
+    }
+  });
+});

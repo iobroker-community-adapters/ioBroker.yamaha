@@ -33,10 +33,38 @@ describe("ReconnectStrategy jitter", () => {
       strategy.reset();
       return d;
     });
-    // Never below the nominal delay, never more than the declared 20 % above it.
-    expect(Math.min(...delays)).toBeGreaterThanOrEqual(1000);
-    expect(Math.max(...delays)).toBeLessThanOrEqual(1200);
+    // Never above the nominal delay, never more than the declared 20 % below it — the
+    // spread goes DOWNWARD since the 2026-09-02 audit, so a cap stays a cap.
+    expect(Math.max(...delays)).toBeLessThanOrEqual(1000);
+    expect(Math.min(...delays)).toBeGreaterThanOrEqual(800);
     // And genuinely spread — a constant value would put every device back in lockstep.
     expect(new Set(delays).size).toBeGreaterThan(5);
+  });
+
+  test("the jitter never lifts a delay above the cap (audit 2026-09-02)", () => {
+    // Before the fix the "60 s ceiling" reached 72 s: the spread was applied ABOVE the cap.
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.999);
+    try {
+      const backoff = new ReconnectStrategy(1000, 60000);
+      for (let i = 0; i < 12; i++) {
+        backoff.nextDelay();
+      }
+      const atCeiling = backoff.nextDelay();
+      expect(atCeiling).toBeLessThanOrEqual(60000);
+      expect(atCeiling).toBeGreaterThanOrEqual(48000);
+    } finally {
+      random.mockRestore();
+    }
+  });
+
+  test("two devices at the ceiling are still spread apart — the convoy breaks", () => {
+    // Spreading upward from a capped value could not do this: both would sit at the cap.
+    const random = vi.spyOn(Math, "random").mockReturnValueOnce(0).mockReturnValueOnce(0.5);
+    try {
+      expect(new ReconnectStrategy(60000, 60000).nextDelay()).toBe(60000);
+      expect(new ReconnectStrategy(60000, 60000).nextDelay()).toBe(54000);
+    } finally {
+      random.mockRestore();
+    }
   });
 });

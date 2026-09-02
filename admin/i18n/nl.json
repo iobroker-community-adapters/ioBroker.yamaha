@@ -1,7 +1,5 @@
 {
   "header_devices": "Apparaten",
-  "introText": "Laat de tabel leeg en de adapter vindt bij het opstarten zelf MusicCast-apparaten op het netwerk — niets in te voeren. Voeg apparaten (naam + IP) toe om alleen die te gebruiken. Oudere receivers (van vóór ~2010, XML-protocol) melden zich niet op het netwerk en moeten hier altijd handmatig worden toegevoegd.",
-  "devicesTable": "Yamaha-apparaten",
   "columnName": "Naam",
   "columnIp": "IP-adres",
   "label_xmlPollInterval": "XML-opvraaginterval (seconden)",

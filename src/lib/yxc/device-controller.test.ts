@@ -1138,3 +1138,39 @@ describe("YxcDeviceController test-audit hardening (2.0.1)", () => {
     ]);
   });
 });
+
+describe("YxcDeviceController equalizer cache seeding (audit 2026-09-02)", () => {
+  test("an incomplete FIRST status seeds no cache — a band write then refuses instead of inventing 0/0/0", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power", "equalizer"] }] };
+    // The device's first status carries only one band (fields it deems unchanged are omitted).
+    const s = setup(features, { power: "on", equalizer: { mid: 9 } });
+    const warnings: string[] = [];
+    (s.controller as unknown as { deps: { log: { debug(): void; info(): void; warn(m: string): void } } }).deps.log = {
+      ...silentLog,
+      warn: (m: string) => warnings.push(m),
+    };
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.sound.equalizer.low", false, 7);
+    await flush();
+    // Seeding the cache with {low: 0, mid: 9, high: 0} would have sent setEqualizer(7, 9, 0):
+    // the user's high band flattened to 0 dB — exactly what the write path's own guard
+    // exists to prevent. Without a complete triple the write is refused, visibly.
+    expect(s.client.calls.some(c => c.method === "setEqualizer")).toBe(false);
+    expect(warnings.some(w => w.includes("has not reported its equalizer bands"))).toBe(true);
+  });
+
+  test("a complete first status seeds the cache; later partial statuses merge into it", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power", "equalizer"] }] };
+    const status: Record<string, unknown> = { power: "on", equalizer: { low: 1, mid: 2, high: 3 } };
+    const s = setup(features, status);
+    await s.controller.start();
+    status.equalizer = { high: 5 };
+    s.fire.keepalive?.();
+    await flush();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.sound.equalizer.low", false, 7);
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "setEqualizer", args: [7, 2, 5, "main"] });
+  });
+});

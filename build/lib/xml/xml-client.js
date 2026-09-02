@@ -23,6 +23,7 @@ __export(xml_client_exports, {
 module.exports = __toCommonJS(xml_client_exports);
 var import_node_http = require("node:http");
 var import_protocol = require("./protocol");
+var import_util = require("../util");
 const CONTROL_PATH = "/YamahaRemoteControl/ctrl";
 const REQUEST_TIMEOUT_MS = 5e3;
 function defaultPoster(ip, body) {
@@ -31,11 +32,19 @@ function defaultPoster(ip, body) {
       { host: ip, port: 80, path: CONTROL_PATH, method: "POST", timeout: REQUEST_TIMEOUT_MS },
       (res) => {
         let data = "";
-        res.on("data", (chunk) => data += String(chunk));
+        let bytes = 0;
+        res.on("data", (chunk) => {
+          bytes += chunk.length;
+          if (bytes > import_util.MAX_HTTP_BODY_BYTES) {
+            res.destroy(new Error("XML response too large"));
+            return;
+          }
+          data += String(chunk);
+        });
         res.on("error", reject);
         res.on("end", () => {
           if (res.statusCode !== void 0 && (res.statusCode < 200 || res.statusCode >= 300)) {
-            reject(new Error(`device refused the request (HTTP ${res.statusCode})`));
+            reject(new import_protocol.XmlHttpError(`device refused the request (HTTP ${res.statusCode})`, res.statusCode));
             return;
           }
           resolve(data);

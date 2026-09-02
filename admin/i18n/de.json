@@ -1,7 +1,5 @@
 {
   "header_devices": "Geräte",
-  "introText": "Lass die Tabelle leer, dann findet der Adapter MusicCast-Geräte beim Start selbst im Netzwerk — nichts einzutragen. Trage Geräte (Name + IP) ein, um stattdessen nur diese zu nutzen. Ältere Receiver (vor ~2010, XML-Protokoll) melden sich nicht im Netzwerk und müssen hier immer manuell eingetragen werden.",
-  "devicesTable": "Yamaha-Geräte",
   "columnName": "Name",
   "columnIp": "IP-Adresse",
   "label_xmlPollInterval": "XML-Abfrageintervall (Sekunden)",

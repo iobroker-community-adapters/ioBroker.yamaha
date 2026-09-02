@@ -24,6 +24,7 @@ __export(http_client_exports, {
 });
 module.exports = __toCommonJS(http_client_exports);
 var import_node_http = require("node:http");
+var import_util = require("../util");
 function isWriteCommand(command) {
   var _a;
   const last = (_a = command.split("?")[0].split("/").pop()) != null ? _a : "";
@@ -40,7 +41,15 @@ function defaultSend(ip) {
     const url = `http://${ip}${API_BASE}${command}`;
     const onResponse = (res) => {
       let data = "";
-      res.on("data", (chunk) => data += String(chunk));
+      let bytes = 0;
+      res.on("data", (chunk) => {
+        bytes += chunk.length;
+        if (bytes > import_util.MAX_HTTP_BODY_BYTES) {
+          res.destroy(new Error(`YXC response too large: ${command}`));
+          return;
+        }
+        data += String(chunk);
+      });
       res.on("error", reject);
       res.on("end", () => {
         try {

@@ -1,6 +1,6 @@
 import { XmlDeviceController } from "./device-controller";
 import type { XmlClientLike } from "./device-controller";
-import type { BasicStatus } from "./protocol";
+import { XmlHttpError, type BasicStatus } from "./protocol";
 import { CommandGate } from "../lifecycle/command-gate";
 import { ProbeMemory } from "../lifecycle/probe-memory";
 
@@ -18,6 +18,8 @@ class FakeClient implements XmlClientLike {
   public calls: Array<{ method: string; zone: string; inner?: string }> = [];
   /** Canned GET answers keyed `<element>|<inner>`; unmatched requests answer "" (declares none). */
   public xmlAnswers: Record<string, string> = {};
+  /** Canned GET failures keyed like xmlAnswers — the probe sees a rejection (transient or a 400). */
+  public xmlErrors: Record<string, Error> = {};
   public constructor(public statuses: Record<string, BasicStatus>) {}
   public getStatus(zone: string): Promise<BasicStatus> {
     this.calls.push({ method: "getStatus", zone });
@@ -40,6 +42,10 @@ class FakeClient implements XmlClientLike {
    */
   public getXml(zone: string, inner: string): Promise<string> {
     this.calls.push({ method: "getXml", zone, inner });
+    const failure = this.xmlErrors[`${zone}|${inner}`];
+    if (failure) {
+      return Promise.reject(failure);
+    }
     return Promise.resolve(this.xmlAnswers[`${zone}|${inner}`] ?? "");
   }
 }
@@ -375,7 +381,9 @@ describe("XmlDeviceController browse surface (#613)", () => {
       if (element in answers) {
         return Promise.resolve(answers[element]);
       }
-      return Promise.reject(new Error("no such menu"));
+      // What a real receiver answers for a source without a menu: a bodyless HTTP 400
+      // (captured RX-V6A: tuner-list-info, bluetooth-list-info) — the model's own verdict.
+      return Promise.reject(new XmlHttpError("device refused the request (HTTP 400)", 400));
     };
     const objects: string[] = [];
     const controller = new XmlDeviceController("living", {
@@ -522,5 +530,100 @@ describe("XmlDeviceController proof edge cases (2.0.1 hardening)", () => {
     await second.controller.start();
     expect(second.objects).toContain("living.soundProgram");
     expect(second.acks).toContainEqual({ id: "living.soundProgram", value: "Standard" });
+  });
+});
+
+describe("XmlDeviceController probe memory verdicts (audit 2026-09-02)", () => {
+  const sceneRequest = "Main_Zone|<Scene><Scene_Sel_Item>GetParam</Scene_Sel_Item></Scene>";
+  const withMemory = (s: ReturnType<typeof setup>, memory: ProbeMemory): void => {
+    (s.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
+  };
+
+  test("a transient failure during the scene probe is NOT remembered — the next connect asks again", async () => {
+    const memory = new ProbeMemory();
+    const first = setup({ Main_Zone: { power: true } });
+    withMemory(first, memory);
+    first.client.modelName = "RX-V773";
+    // A busy receiver: the scene probe times out while the zone status answered fine.
+    first.client.xmlErrors[sceneRequest] = new Error("XML request timeout");
+    expect(await first.controller.start()).toBe(true);
+    expect(first.objects).not.toContain("living.scene.recall");
+    // Before this fix the timeout was remembered as "declares no scenes" — until the model changed.
+    expect(memory.remembered("xmlScenes:main")).toBeUndefined();
+
+    const second = setup({ Main_Zone: { power: true } });
+    withMemory(second, memory);
+    second.client.modelName = "RX-V773";
+    second.client.xmlAnswers[sceneRequest] = sceneDeclaration([{ num: 1, title: "Movie" }]);
+    await second.controller.start();
+    expect(second.client.calls.some(c => c.inner?.includes("Scene_Sel_Item"))).toBe(true);
+    expect(second.objects).toContain("living.scene.recall");
+  });
+
+  test("a bodyless HTTP 400 IS remembered as 'declares none' — the model's own verdict", async () => {
+    const memory = new ProbeMemory();
+    const first = setup({ Main_Zone: { power: true } });
+    withMemory(first, memory);
+    first.client.modelName = "RX-V773";
+    first.client.xmlErrors[sceneRequest] = new XmlHttpError("device refused the request (HTTP 400)", 400);
+    await first.controller.start();
+    expect(memory.remembered("xmlScenes:main")).toBe("");
+
+    const second = setup({ Main_Zone: { power: true } });
+    withMemory(second, memory);
+    second.client.modelName = "RX-V773";
+    await second.controller.start();
+    expect(second.client.calls.some(c => c.inner?.includes("Scene_Sel_Item"))).toBe(false);
+  });
+
+  test("return code 2 is definite, a state-dependent refusal (RC 3/4) is not", async () => {
+    const memory = new ProbeMemory();
+    const rc2 = setup({ Main_Zone: { power: true } });
+    withMemory(rc2, memory);
+    rc2.client.modelName = "RX-V773";
+    rc2.client.xmlAnswers[sceneRequest] = '<YAMAHA_AV rsp="GET" RC="2"><Main_Zone></Main_Zone></YAMAHA_AV>';
+    await rc2.controller.start();
+    expect(memory.remembered("xmlScenes:main")).toBe("");
+
+    const memory2 = new ProbeMemory();
+    const rc3 = setup({ Main_Zone: { power: true } });
+    withMemory(rc3, memory2);
+    rc3.client.modelName = "RX-V773";
+    rc3.client.xmlAnswers[sceneRequest] = '<YAMAHA_AV rsp="GET" RC="3"><Main_Zone></Main_Zone></YAMAHA_AV>';
+    await rc3.controller.start();
+    expect(rc3.objects).not.toContain("living.scene.recall");
+    expect(memory2.remembered("xmlScenes:main")).toBeUndefined();
+  });
+
+  test("a transient failure during the menu probe leaves the menus un-remembered, not 'none' for good", async () => {
+    const memory = new ProbeMemory();
+    const client = new FakeClient({ Main_Zone: { power: true } });
+    client.getXml = (element: string, inner: string): Promise<string> => {
+      client.calls.push({ method: "getXml", zone: element, inner });
+      if (inner.includes("List_Info")) {
+        return element === "NET_RADIO"
+          ? Promise.reject(new Error("XML request timeout"))
+          : Promise.reject(new XmlHttpError("device refused the request (HTTP 400)", 400));
+      }
+      return Promise.resolve("");
+    };
+    const objects: string[] = [];
+    const controller = new XmlDeviceController("living", {
+      client,
+      scheduleKeepalive: () => () => {},
+      upsertObject: id => {
+        objects.push(id);
+        return Promise.resolve();
+      },
+      setStateAck: () => {},
+      log: silentLog,
+      gate: testGate(),
+      probeMemory: memory,
+    });
+    await controller.start();
+    expect(objects.some(id => id.includes("player.browse"))).toBe(false);
+    // The NET_RADIO menu could not be asked — so nothing is remembered and the next
+    // connect probes again, instead of "this device has no menus" standing for good.
+    expect(memory.remembered("xmlBrowseSources")).toBeUndefined();
   });
 });

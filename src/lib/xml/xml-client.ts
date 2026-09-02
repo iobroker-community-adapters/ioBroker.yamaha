@@ -1,6 +1,15 @@
 import { request } from "node:http";
-import { assertXmlOk, encodeGet, encodePut, parseBasicStatus, parseModelName, type BasicStatus } from "./protocol";
+import {
+  assertXmlOk,
+  encodeGet,
+  encodePut,
+  parseBasicStatus,
+  parseModelName,
+  XmlHttpError,
+  type BasicStatus,
+} from "./protocol";
 import type { CommandGate } from "../lifecycle/command-gate";
+import { MAX_HTTP_BODY_BYTES } from "../util";
 
 /** The receiver's XML control endpoint. */
 const CONTROL_PATH = "/YamahaRemoteControl/ctrl";
@@ -23,14 +32,26 @@ function defaultPoster(ip: string, body: string): Promise<string> {
       { host: ip, port: 80, path: CONTROL_PATH, method: "POST", timeout: REQUEST_TIMEOUT_MS },
       res => {
         let data = "";
-        res.on("data", chunk => (data += String(chunk)));
+        let bytes = 0;
+        res.on("data", chunk => {
+          bytes += (chunk as Buffer).length;
+          if (bytes > MAX_HTTP_BODY_BYTES) {
+            // A Basic_Status or a menu window is a few KB — past the cap this is no
+            // receiver answer but a stream that would grow memory without bound.
+            res.destroy(new Error("XML response too large"));
+            return;
+          }
+          data += String(chunk);
+        });
         res.on("error", reject);
         res.on("end", () => {
           // The firmware answers a request for an unknown node with a BODYLESS HTTP 400
           // (captured RX-V6A behaviour) — that is a device verdict, not transport noise,
-          // and must reach the caller instead of masquerading as an empty success.
+          // and must reach the caller instead of masquerading as an empty success. The
+          // status travels with the error so a per-device probe can tell this permanent
+          // "no such node" from a transient failure.
           if (res.statusCode !== undefined && (res.statusCode < 200 || res.statusCode >= 300)) {
-            reject(new Error(`device refused the request (HTTP ${res.statusCode})`));
+            reject(new XmlHttpError(`device refused the request (HTTP ${res.statusCode})`, res.statusCode));
             return;
           }
           resolve(data);

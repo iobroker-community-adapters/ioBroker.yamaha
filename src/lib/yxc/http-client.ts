@@ -1,5 +1,6 @@
 import { get as httpGet, request as httpRequest, type IncomingMessage } from "node:http";
 import type { CommandGate } from "../lifecycle/command-gate";
+import { MAX_HTTP_BODY_BYTES } from "../util";
 
 /**
  * Whether a command path changes something on the device (as opposed to reading). The
@@ -72,7 +73,17 @@ function defaultSend(ip: string): YxcSend {
       const url = `http://${ip}${API_BASE}${command}`;
       const onResponse = (res: IncomingMessage): void => {
         let data = "";
-        res.on("data", chunk => (data += String(chunk)));
+        let bytes = 0;
+        res.on("data", chunk => {
+          bytes += (chunk as Buffer).length;
+          if (bytes > MAX_HTTP_BODY_BYTES) {
+            // The largest real answer (getFeatures) is a few KB — past the cap this is no
+            // device answer but a stream that would grow memory without bound.
+            res.destroy(new Error(`YXC response too large: ${command}`));
+            return;
+          }
+          data += String(chunk);
+        });
         // A connection dropped mid-body emits on the RESPONSE stream, not the request —
         // without this handler that is an unhandled error event, not a rejected promise.
         res.on("error", reject);

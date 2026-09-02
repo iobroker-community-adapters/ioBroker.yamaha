@@ -9,6 +9,7 @@ const httpMock = vi.hoisted(() => ({
   requests: [] as Array<{ options: Record<string, unknown>; written: string[]; ended: boolean; destroyed?: Error }>,
   body: "<YAMAHA_AV/>",
   mode: "ok",
+  status: 200,
 }));
 vi.mock("node:http", () => ({
   request: (options: Record<string, unknown>, cb: (res: unknown) => void) => {
@@ -34,6 +35,7 @@ vi.mock("node:http", () => ({
           }
           const resHandlers: Record<string, Array<(...a: unknown[]) => void>> = {};
           cb({
+            statusCode: httpMock.status,
             on: (ev: string, h: (...a: unknown[]) => void) => {
               (resHandlers[ev] ??= []).push(h);
               if (ev === "end") {
@@ -41,6 +43,8 @@ vi.mock("node:http", () => ({
                 h();
               }
             },
+            // A destroyed response stream reports through its own error handler, like node's.
+            destroy: (e: Error) => (resHandlers.error ?? []).forEach(h => h(e)),
           });
         });
       },
@@ -54,6 +58,8 @@ vi.mock("node:http", () => ({
 }));
 
 import { XmlClient } from "./xml-client";
+import { isPermanentXmlRefusal, XmlHttpError } from "./protocol";
+import { MAX_HTTP_BODY_BYTES } from "../util";
 
 describe("XmlClient", () => {
   test("send posts a PUT envelope to the control endpoint", async () => {
@@ -105,6 +111,7 @@ describe("XmlClient default HTTP poster", () => {
     httpMock.requests.length = 0;
     httpMock.body = "<YAMAHA_AV/>";
     httpMock.mode = "ok";
+    httpMock.status = 200;
   });
 
   test("POSTs the body to the receiver's control endpoint on port 80", async () => {
@@ -135,5 +142,34 @@ describe("XmlClient default HTTP poster", () => {
   test("rejects on a transport error", async () => {
     httpMock.mode = "error";
     await expect(new XmlClient("192.168.1.99").getModelName()).rejects.toThrow("ECONNREFUSED");
+  });
+});
+
+describe("XmlClient default poster — verdicts and limits (audit 2026-09-02)", () => {
+  beforeEach(() => {
+    httpMock.requests.length = 0;
+    httpMock.body = "<YAMAHA_AV/>";
+    httpMock.mode = "ok";
+    httpMock.status = 200;
+  });
+
+  test("a bodyless HTTP 400 travels as a typed, PERMANENT refusal — the model has no such node", async () => {
+    httpMock.status = 400;
+    httpMock.body = "";
+    const failure = await new XmlClient("192.168.1.10").getXml("Tuner", "<Play_Info>GetParam</Play_Info>").then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(failure).toBeInstanceOf(XmlHttpError);
+    expect((failure as XmlHttpError).statusCode).toBe(400);
+    expect(isPermanentXmlRefusal(failure)).toBe(true);
+    // A timeout, a connection error or a server error is NOT the model's verdict.
+    expect(isPermanentXmlRefusal(new Error("XML request timeout"))).toBe(false);
+    expect(isPermanentXmlRefusal(new XmlHttpError("device refused the request (HTTP 503)", 503))).toBe(false);
+  });
+
+  test("rejects a body that streams past the size cap instead of buffering it", async () => {
+    httpMock.body = "x".repeat(MAX_HTTP_BODY_BYTES + 1);
+    await expect(new XmlClient("192.168.1.10").getModelName()).rejects.toThrow(/too large/);
   });
 });

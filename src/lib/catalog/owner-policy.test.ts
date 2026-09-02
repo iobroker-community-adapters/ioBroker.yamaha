@@ -131,3 +131,14 @@ describe("scene.recall ownership (#615 — write-proof beats modernity)", () => 
     expect(pickOwner("scene.recall", ["ynca"])).toBe("ynca");
   });
 });
+
+describe("scene.list ownership (audit 2026-09-02 — title sources before the count source)", () => {
+  test("the transports that know the titles own the list; MusicCast only when it is alone", () => {
+    // MusicCast connects in seconds and knows the slot COUNT but no titles; by modernity it
+    // would publish a title-less list on the first contact that stands until the next restart.
+    expect(pickOwner("scene.list", ["yxc", "ynca"])).toBe("ynca");
+    expect(pickOwner("scene.list", ["yxc", "xml"])).toBe("xml");
+    expect(pickOwner("scene.list", ["yxc", "ynca", "xml"])).toBe("xml");
+    expect(pickOwner("scene.list", ["yxc"])).toBe("yxc");
+  });
+});

@@ -1,7 +1,7 @@
 {
   "version": 3,
   "sources": ["../../src/lib/util.ts"],
-  "sourcesContent": ["/**\n * The message of an unknown thrown value \u2014 `Error.message` when it is an Error, else\n * its string form. One helper for the `e instanceof Error ? e.message : String(e)`\n * idiom the transports would otherwise repeat in every catch.\n *\n * @param e the caught value\n * @returns a human-readable message\n */\nexport function errorMessage(e: unknown): string {\n  return e instanceof Error ? e.message : String(e);\n}\n"],
-  "mappings": ";;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAQO,SAAS,aAAa,GAAoB;AAC/C,SAAO,aAAa,QAAQ,EAAE,UAAU,OAAO,CAAC;AAClD;",
+  "sourcesContent": ["/**\n * The message of an unknown thrown value \u2014 `Error.message` when it is an Error, else\n * its string form. One helper for the `e instanceof Error ? e.message : String(e)`\n * idiom the transports would otherwise repeat in every catch.\n *\n * @param e the caught value\n * @returns a human-readable message\n */\nexport function errorMessage(e: unknown): string {\n  return e instanceof Error ? e.message : String(e);\n}\n\n/**\n * Cap for every HTTP response body the adapter reads from a device: MusicCast JSON, XML\n * answers, the UPnP description of the network search. Real answers are a few KB (the\n * largest observed, the RX-V6A getFeatures map, is ~5 KB). A body growing past this is\n * not a Yamaha answering \u2014 a misbehaving device or a foreign host at that address\n * streaming without end would otherwise grow the process's memory without bound.\n */\nexport const MAX_HTTP_BODY_BYTES = 1024 * 1024;\n"],
+  "mappings": ";;;;;;;;;;;;;;;;;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAQO,SAAS,aAAa,GAAoB;AAC/C,SAAO,aAAa,QAAQ,EAAE,UAAU,OAAO,CAAC;AAClD;AASO,MAAM,sBAAsB,OAAO;",
   "names": []
 }

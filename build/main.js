@@ -93,6 +93,11 @@ class Yamaha extends utils.Adapter {
   /** Set when the start-up snapshot failed — a balance without it would be wrong, so none is written. */
   balanceDisabled = false;
   /**
+   * Latched after the first failed database write, so an outage warns once and the
+   * repeats stay at debug until a write goes through again (nut2 `failedUps` pattern).
+   */
+  stateWritesFailing = false;
+  /**
    * @param options adapter options passed through by js-controller
    */
   constructor(options = {}) {
@@ -157,9 +162,13 @@ class Yamaha extends utils.Adapter {
    * @param knownDeviceIps the IPs of all supervised devices (multiroom link targets)
    */
   async startDevice(device, pushReceiver, knownDeviceIps) {
+    if (this.unloading) {
+      return;
+    }
     this.deviceConnected.set(device.id, false);
     await this.ensureDeviceHeader(device.id, device.ip);
     await this.setState(`${device.id}.info.connection`, { val: false, ack: true });
+    this.setTransports(device.id, []);
     const reachability = new import_reachability_dedup.ReachabilityDedup();
     const subunitCache = await this.loadYncaSubunitCache(device.id);
     const probeMemory = await this.loadProbeMemory(device.id);
@@ -192,6 +201,9 @@ class Yamaha extends utils.Adapter {
   async discoverAdditionalDevices(pushReceiver, knownDeviceIps, started) {
     try {
       const merged = await this.runDiscovery();
+      if (this.unloading) {
+        return;
+      }
       const fresh = merged.filter((device) => !started.has(device.id));
       if (fresh.length === 0) {
         return;
@@ -219,12 +231,12 @@ class Yamaha extends utils.Adapter {
       this.scheduleDatapointBalance();
     }
     this.deviceConnected.set(deviceId, connected);
-    void this.setState(`${deviceId}.info.connection`, { val: connected, ack: true });
+    this.writeState(`${deviceId}.info.connection`, connected);
     if (!connected) {
       this.setTransports(deviceId, []);
     }
     const anyConnected = [...this.deviceConnected.values()].some(Boolean);
-    void this.setState("info.connection", { val: anyConnected, ack: true });
+    this.writeState("info.connection", anyConnected);
     this.writeDeviceOverview();
   }
   /**
@@ -238,9 +250,9 @@ class Yamaha extends utils.Adapter {
   writeDeviceOverview() {
     const total = this.deviceConnected.size;
     const online = [...this.deviceConnected.values()].filter(Boolean).length;
-    void this.setState("info.devicesTotal", { val: total, ack: true });
-    void this.setState("info.devicesOnline", { val: online, ack: true });
-    void this.setState("info.devicesAllOnline", { val: total > 0 && online === total, ack: true });
+    this.writeState("info.devicesTotal", total);
+    this.writeState("info.devicesOnline", online);
+    this.writeState("info.devicesAllOnline", total > 0 && online === total);
   }
   /**
    * Reflect the live transport set into a device's `info.transports.*` flags so the
@@ -252,8 +264,63 @@ class Yamaha extends utils.Adapter {
   setTransports(deviceId, names) {
     const live = new Set(names);
     for (const proto of TRANSPORT_IDS) {
-      void this.setState(`${deviceId}.info.transports.${proto}`, { val: live.has(proto), ack: true });
+      this.writeState(`${deviceId}.info.transports.${proto}`, live.has(proto));
     }
+  }
+  /**
+   * Write a state with ack — and OBSERVE the promise. js-controller turns an unhandled
+   * promise rejection into an adapter stop (`_exceptionHandler` → exit code
+   * UNCAUGHT_EXCEPTION, read in the controller source), and `setState` rejects whenever
+   * the states database is not reachable for a moment (`ERROR_DB_CLOSED`, or a pending
+   * command cancelled by a reconnecting Redis). Nine fire-and-forget writes used to run
+   * bare: one hiccup while a device pushed a value would have restarted the whole
+   * instance. The failure lands in the log instead — once per outage at warn, then at
+   * debug until a write succeeds again; during teardown it is expected and stays silent.
+   *
+   * @param id the state id (namespace-relative)
+   * @param value the value to write
+   */
+  writeState(id, value) {
+    this.setState(id, { val: value, ack: true }).then(
+      () => {
+        this.stateWritesFailing = false;
+      },
+      (e) => this.noteWriteFailure(`state ${id}`, e)
+    );
+  }
+  /**
+   * Persist a device object's `native` part — observed like {@link writeState}. The two
+   * per-device caches (YNCA subunit probe, probe memory) persist through it.
+   *
+   * @param deviceId the device object id
+   * @param native the native fields to merge into the object
+   */
+  persistDeviceNative(deviceId, native) {
+    this.extendObject(deviceId, { native }).then(
+      () => {
+        this.stateWritesFailing = false;
+      },
+      (e) => this.noteWriteFailure(`device object ${deviceId}`, e)
+    );
+  }
+  /**
+   * Log a failed database write: warn on the first failure of an outage, debug for the
+   * repeats, silence while unloading (the database is going down with us).
+   *
+   * @param what which write failed, for the log line
+   * @param e the rejection reason
+   */
+  noteWriteFailure(what, e) {
+    if (this.unloading) {
+      return;
+    }
+    const message = `could not write ${what} (${(0, import_util.errorMessage)(e)})`;
+    if (this.stateWritesFailing) {
+      this.log.debug(message);
+      return;
+    }
+    this.stateWritesFailing = true;
+    this.log.warn(`${message} \u2014 repeats stay at debug until a write succeeds`);
   }
   /**
    * One-shot startup cleanup: delete every object that does not belong to a
@@ -638,7 +705,7 @@ class Yamaha extends utils.Adapter {
         if (!(0, import_groups.isGroupEnabled)(id.slice(id.indexOf(".") + 1), this.config)) {
           return;
         }
-        void this.setState(id, { val: value, ack: true });
+        this.writeState(id, value);
         if (id.endsWith(".info.model") && typeof value === "string" && value.length > 0) {
           const reporting = id.slice(0, id.indexOf("."));
           void this.updateDeviceIcon(reporting, value);
@@ -703,6 +770,9 @@ class Yamaha extends utils.Adapter {
       for (const deviceId of this.deviceConnected.keys()) {
         this.deviceConnected.set(deviceId, false);
         writes.push(this.setState(`${deviceId}.info.connection`, { val: false, ack: true }));
+        for (const proto of TRANSPORT_IDS) {
+          writes.push(this.setState(`${deviceId}.info.transports.${proto}`, { val: false, ack: true }));
+        }
       }
       writes.push(this.setState("info.devicesOnline", { val: 0, ack: true }));
       writes.push(this.setState("info.devicesAllOnline", { val: false, ack: true }));
@@ -777,7 +847,7 @@ class Yamaha extends utils.Adapter {
       stored = void 0;
     }
     return (0, import_subunit_cache.createSubunitCache)((0, import_subunit_cache.isAvailSnapshot)(stored) ? stored : void 0, (snapshot) => {
-      void this.extendObject(deviceId, { native: { yncaAvail: snapshot != null ? snapshot : null } });
+      this.persistDeviceNative(deviceId, { yncaAvail: snapshot != null ? snapshot : null });
     });
   }
   /**
@@ -805,7 +875,7 @@ class Yamaha extends utils.Adapter {
       initial = void 0;
     }
     return new import_probe_memory.ProbeMemory(initial, (entries) => {
-      void this.extendObject(deviceId, { native: { probeCache: JSON.stringify(entries) } });
+      this.persistDeviceNative(deviceId, { probeCache: JSON.stringify(entries) });
     });
   }
   /**
@@ -918,7 +988,15 @@ ST: ${target}\r
     return new Promise((resolve, reject) => {
       const req = (0, import_node_http.get)(url, (res) => {
         let data = "";
-        res.on("data", (chunk) => data += String(chunk));
+        let bytes = 0;
+        res.on("data", (chunk) => {
+          bytes += chunk.length;
+          if (bytes > import_util.MAX_HTTP_BODY_BYTES) {
+            res.destroy(new Error(`description too large: ${url}`));
+            return;
+          }
+          data += String(chunk);
+        });
         res.on("error", reject);
         res.on("end", () => resolve(data));
       });

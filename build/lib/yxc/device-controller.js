@@ -722,21 +722,26 @@ class YxcDeviceController {
    * @param updates the parsed status updates for that zone
    */
   cacheEqualizer(zone, updates) {
-    var _a, _b, _c, _d;
     const prefix = (0, import_zones.zonePrefix)(zone);
     const band = (b) => {
       const u = updates.find((x) => x.id === `${prefix}sound.equalizer.${b}`);
       return typeof (u == null ? void 0 : u.value) === "number" ? u.value : void 0;
     };
-    if (band("low") === void 0 && band("mid") === void 0 && band("high") === void 0) {
+    const low = band("low");
+    const mid = band("mid");
+    const high = band("high");
+    if (low === void 0 && mid === void 0 && high === void 0) {
       return;
     }
-    const cur = (_a = this.lastEqualizer.get(zone)) != null ? _a : { low: 0, mid: 0, high: 0 };
-    this.lastEqualizer.set(zone, {
-      low: (_b = band("low")) != null ? _b : cur.low,
-      mid: (_c = band("mid")) != null ? _c : cur.mid,
-      high: (_d = band("high")) != null ? _d : cur.high
-    });
+    const cur = this.lastEqualizer.get(zone);
+    if (!cur) {
+      if (low === void 0 || mid === void 0 || high === void 0) {
+        return;
+      }
+      this.lastEqualizer.set(zone, { low, mid, high });
+      return;
+    }
+    this.lastEqualizer.set(zone, { low: low != null ? low : cur.low, mid: mid != null ? mid : cur.mid, high: high != null ? high : cur.high });
   }
   /**
    * Apply a mapped command. A plain command runs its client call directly; the two
