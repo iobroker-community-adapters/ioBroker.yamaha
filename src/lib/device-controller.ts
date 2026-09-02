@@ -781,6 +781,24 @@ export class YncaDeviceController implements ConnectionHandle {
       }
       return true;
     }
+    if (stateId === "tuner.band") {
+      // Two subunits feed this one dropdown: AM lives only on TUN, DAB only on DAB, and FM on
+      // both — on a device that has DAB its FM half lives there too (that is where its FM
+      // frequency and presets are). Routing by the written VALUE keeps a dual-subunit device
+      // honest instead of sending every band to whichever entry happened to be mapped last.
+      const band = typeof value === "string" ? value : "";
+      const subunit = band === "AM" ? "TUN" : band === "DAB" || this.hasDab ? "DAB" : "TUN";
+      const entry = this.presentEntries.find(
+        candidate => candidate.id === "tuner.band" && candidate.subunit === subunit,
+      );
+      const triple = entry ? yncaCommand(stateId, value, new Map([[stateId, entry]])) : undefined;
+      if (triple) {
+        this.sendProven(triple.subunit, triple.func, triple.value);
+      } else {
+        this.deps.log.debug(`${this.deviceId}: band "${band}" is not available on this device — write dropped`);
+      }
+      return true;
+    }
     if (stateId === "tuner.preset" && this.hasDab) {
       const slot = Math.round(Number(value));
       if (Number.isFinite(slot) && slot >= 1) {

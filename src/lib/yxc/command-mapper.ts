@@ -461,8 +461,14 @@ export function parseYxcRecentList(info: unknown): StateValue | undefined {
 
 /**
  * Parse `/tuner/getPresetInfo` responses (one per fetched band) into the tuner
- * presets JSON state: an object keyed by band, each slot kept in its raw response
+ * presets JSON state: an object keyed by band, each STORED slot kept in its raw response
  * form plus its 1-based slot number (the shape varies per band and firmware).
+ *
+ * The device answers with its full slot count whether or not anything is stored — on a
+ * receiver with no tuner presets that is 40 FM plus 40 DAB entries of
+ * `{band:"unknown", number:0, text:""}`, a JSON datapoint nobody can use. Empty slots are
+ * dropped the same way the favourites list drops them; a slot is only empty when it says so
+ * on every count, so an unfamiliar firmware shape is kept rather than silently swallowed.
  *
  * @param byBand each fetched band's getPresetInfo response object
  * @returns the state update, or undefined when no band delivered a list
@@ -476,7 +482,7 @@ export function parseYxcTunerPresetLists(byBand: Record<string, unknown>): State
     }
     const slots: unknown[] = [];
     list.forEach((entry, index) => {
-      if (typeof entry === "object" && entry !== null) {
+      if (typeof entry === "object" && entry !== null && !isEmptyTunerPreset(entry as Record<string, unknown>)) {
         slots.push({ num: index + 1, ...(entry as Record<string, unknown>) });
       }
     });
@@ -486,6 +492,22 @@ export function parseYxcTunerPresetLists(byBand: Record<string, unknown>): State
     return undefined;
   }
   return { id: "tuner.presets", value: JSON.stringify(result) };
+}
+
+/**
+ * Whether a tuner preset slot holds nothing. The device marks an unused slot with the band
+ * `unknown`, frequency/service number 0 and empty text — a slot counts as empty only when
+ * none of the three carries anything, so a firmware that fills only some of them is kept.
+ *
+ * @param slot one raw preset_info entry
+ * @returns true when the slot is unused
+ */
+function isEmptyTunerPreset(slot: Record<string, unknown>): boolean {
+  const band = slot.band;
+  const hasBand = typeof band === "string" && band.length > 0 && band !== "unknown";
+  const hasNumber = typeof slot.number === "number" && slot.number !== 0;
+  const hasText = typeof slot.text === "string" && slot.text.trim().length > 0;
+  return !hasBand && !hasNumber && !hasText;
 }
 
 /**
@@ -507,14 +529,21 @@ export function parseYxcSignalInfo(info: unknown, zone: string): StateValue[] {
   }
   const a = audio as Record<string, unknown>;
   const updates: StateValue[] = [];
+  // With no signal on the input the device fills these with its own dash placeholder ("---").
+  // Passing that through makes a text datapoint that reads like content; empty says "nothing
+  // here" in the same way the player block's resting seeds do.
+  const text = (value: unknown): string => {
+    const trimmed = typeof value === "string" ? value.trim() : "";
+    return /^-+$/.test(trimmed) ? "" : trimmed;
+  };
   if (typeof a.format === "string") {
-    updates.push({ id: `${prefix}sound.signal.format`, value: a.format });
+    updates.push({ id: `${prefix}sound.signal.format`, value: text(a.format) });
   }
   if (typeof a.fs === "string") {
-    updates.push({ id: `${prefix}sound.signal.sampling`, value: a.fs });
+    updates.push({ id: `${prefix}sound.signal.sampling`, value: text(a.fs) });
   }
   if (typeof a.bit === "string") {
-    updates.push({ id: `${prefix}sound.signal.bits`, value: a.bit });
+    updates.push({ id: `${prefix}sound.signal.bits`, value: text(a.bit) });
   }
   if (typeof a.bitrate === "number") {
     updates.push({ id: `${prefix}sound.signal.bitrate`, value: a.bitrate });

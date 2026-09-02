@@ -441,6 +441,33 @@ describe("preset/recent selection (musiccast-adapter parity)", () => {
     expect(parseYxcTunerPresetLists({ fm: { response_code: 4 } })).toBeUndefined();
   });
 
+  test("parseYxcTunerPresetLists drops the device's empty slots but keeps anything with content", () => {
+    // A receiver with no presets stored answers with its full slot count — 40 per band of
+    // {band:"unknown", number:0, text:""}. Published raw that is a JSON datapoint of 80 blanks.
+    const update = parseYxcTunerPresetLists({
+      fm: {
+        preset_info: [
+          { band: "unknown", number: 0, hd_program: 0, text: "" },
+          { band: "fm", number: 98100, hd_program: 0, text: "" },
+          { band: "unknown", number: 0, text: "   " },
+          // Only the text is filled — an unfamiliar firmware shape is kept, not swallowed.
+          { band: "unknown", number: 0, text: "Radio Paradise" },
+        ],
+      },
+    });
+    expect(JSON.parse(String(update?.value))).toEqual({
+      fm: [
+        { num: 2, band: "fm", number: 98100, hd_program: 0, text: "" },
+        { num: 4, band: "unknown", number: 0, text: "Radio Paradise" },
+      ],
+    });
+  });
+
+  test("a band whose slots are all empty stays in the JSON as an empty list", () => {
+    const update = parseYxcTunerPresetLists({ dab: { preset_info: [{ band: "unknown", number: 0, text: "" }] } });
+    expect(JSON.parse(String(update?.value))).toEqual({ dab: [] });
+  });
+
   test("recall/step writes map to their client calls; the tuner preset stays declarative", async () => {
     expect(stateToYxc("player.netPlayer.recallRecent", 2)).toEqual({ kind: "netusbRecent", value: 2 });
     expect(await ranCall("tuner.presetUp", true)).toEqual(["switchTunerPreset", ["next"]]);
@@ -572,9 +599,15 @@ describe("signal info / playlists / play queue parsers (capture-verified shapes)
       { id: "sound.signal.bitrate", value: 0 },
     ]);
     expect(parseYxcSignalInfo({ response_code: 0 }, "main")).toEqual([]);
-    // A zone-2 response lands under the zone prefix.
+    // A zone-2 response lands under the zone prefix — and the device's "no signal" dash
+    // placeholder becomes an empty value instead of reading like content.
     expect(parseYxcSignalInfo({ audio: { format: "---" } }, "zone2")).toEqual([
-      { id: "multiroom.zone2.sound.signal.format", value: "---" },
+      { id: "multiroom.zone2.sound.signal.format", value: "" },
+    ]);
+    expect(parseYxcSignalInfo({ audio: { format: "PCM", fs: "---", bit: "  " } }, "main")).toEqual([
+      { id: "sound.signal.format", value: "PCM" },
+      { id: "sound.signal.sampling", value: "" },
+      { id: "sound.signal.bits", value: "" },
     ]);
   });
 

@@ -21,6 +21,35 @@ describe("YNCA catalog", () => {
     expect(power?.spec).toEqual({ kind: "onoff", on: "On", off: "Standby" });
   });
 
+  test("the DAB date/time drops the device's padded zero placeholder, keeps a real reading", () => {
+    // Text values pass through verbatim, and the receiver pads this field: with no DAB time it
+    // answers `"     \'00 00:00"` (measured on an RX-V6A, DAB status "not_ready"), against real
+    // readings of the form `04NOV\'22 12:24` in the reference logs.
+    const decode = buildYncaCatalog().find(e => e.id === "tuner.dab.dateTime")?.wireDecode;
+    expect(decode).toBeDefined();
+    expect(decode?.("     '00 00:00")).toBe("");
+    expect(decode?.("   ")).toBe("");
+    expect(decode?.("04NOV'22 12:24")).toBe("04NOV'22 12:24");
+    expect(decode?.("  04NOV'22 12:24 ")).toBe("04NOV'22 12:24");
+  });
+
+  test("a device answering both tuner subunits offers every band, not only the last-mapped set", () => {
+    // TUN carries {AM, FM}, DAB carries {DAB, FM} — both under the id tuner.band. Whichever
+    // definition the tree kept last used to decide the dropdown, so AM could silently vanish.
+    const dual = presentYncaEntries({ model: "X", subunits: { TUN: { BAND: "AM" }, DAB: { BAND: "DAB" } } });
+    const bands = dual.filter(e => e.id === "tuner.band");
+    expect(bands).toHaveLength(2);
+    for (const band of bands) {
+      expect(Object.keys((band.spec as EnumSpec).states).sort()).toEqual(["AM", "DAB", "FM"]);
+    }
+  });
+
+  test("a single-subunit device keeps exactly its own bands", () => {
+    const classic = presentYncaEntries({ model: "X", subunits: { TUN: { BAND: "AM" } } });
+    const band = classic.find(e => e.id === "tuner.band");
+    expect(Object.keys((band?.spec as EnumSpec).states).sort()).toEqual(["AM", "FM"]);
+  });
+
   test("each additional zone gets its own prefixed states", () => {
     expect(buildYncaCatalog().find(e => e.id === "multiroom.zone2.volume")).toMatchObject({
       subunit: "ZONE2",

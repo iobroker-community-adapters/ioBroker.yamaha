@@ -1050,6 +1050,16 @@ const DAB_FUNCS: FuncDef[] = [
     spec: { kind: "text" },
     write: false,
     role: "text",
+    // The device pads this field and reports an all-zero placeholder while it carries no DAB
+    // time (measured on an RX-V6A whose DAB status was "not_ready": `"     '00 00:00"`, against
+    // real values of the form `04NOV'22 12:24` in the reference logs). Text values pass through
+    // verbatim, so without this the datapoint shows the padding as its content. A real reading
+    // always carries a month name or a non-zero digit, so that is the test — safer than matching
+    // one placeholder spelling and blanking a real date by accident.
+    wireDecode: wire => {
+      const trimmed = wire.trim();
+      return /[A-Za-z1-9]/.test(trimmed) ? trimmed : "";
+    },
   },
   {
     func: "DABOFFAIR",
@@ -1550,9 +1560,46 @@ export function presentYncaEntries(
   capabilities: YncaCapabilities,
   catalog: readonly YncaEntry[] = YNCA_CATALOG,
 ): YncaEntry[] {
-  return catalog.filter(entry =>
+  const present = catalog.filter(entry =>
     readFuncsOf(entry).some(func => capabilities.subunits[entry.subunit]?.[func] !== undefined),
   );
+  return unionSharedDropdowns(present);
+}
+
+/**
+ * Give entries that share one state id the SAME dropdown, built from the union of their
+ * options.
+ *
+ * `tuner.band` is fed by two subunits: TUN offers {AM, FM}, DAB offers {DAB, FM}. Every one of
+ * the sixteen reference device logs answers on one subunit or the other, so today the two never
+ * meet — but if a device ever answered both, the object tree would keep whichever definition was
+ * written last and AM would silently vanish from a receiver that has it. Unioning the options
+ * costs nothing on a single-subunit device (the union of one list is that list) and keeps the
+ * dropdown honest on a dual one; which subunit a band write actually goes to is decided by the
+ * controller's tuner router, not by this list.
+ *
+ * @param entries the entries this device reported
+ * @returns the same entries, with shared enum dropdowns unioned
+ */
+function unionSharedDropdowns(entries: YncaEntry[]): YncaEntry[] {
+  const merged = new Map<string, Record<string, string>>();
+  for (const entry of entries) {
+    if (entry.spec.kind !== "enum") {
+      continue;
+    }
+    const seen = merged.get(entry.id);
+    merged.set(entry.id, { ...(seen ?? {}), ...entry.spec.states });
+  }
+  return entries.map(entry => {
+    if (entry.spec.kind !== "enum") {
+      return entry;
+    }
+    const states = merged.get(entry.id);
+    if (!states || Object.keys(states).length === Object.keys(entry.spec.states).length) {
+      return entry;
+    }
+    return { ...entry, spec: { ...entry.spec, states } };
+  });
 }
 
 /**
