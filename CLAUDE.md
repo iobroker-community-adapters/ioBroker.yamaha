@@ -393,6 +393,11 @@ abschaltbaren Datenpunktgruppen und die Wiedergabe als Media-Player (Alexa/Googl
 funktional vollständig (3 Protokolle, Discovery, Migration, Härtung). Versionshistorie im README
 `## Changelog` (nicht hier dupliziert).
 
+**Offen (Gate seit 2026-09-02):** `common.name`/`desc` müssen Übersetzungsobjekte sein (Kernteam-Linie, nut2 #15) —
+yamaha trägt 158 feste englische Strings (drei Kataloge, Geräteheader in `main.ts`, io-package `instanceObjects`)
+plus zwei Vorlagen-Strings zur Sichtung; der State-Rollen-Prüfer blockt das nächste Release, bis die Namen über
+`admin/i18n` + `I18n.getTranslatedObject()` laufen. Eigener Auftrag, nicht nebenbei.
+
 ## Portierungs-Referenz (`../../Ressourcen/yamaha/legacy/`, NICHT im Adapter-Repo)
 
 Alt-Code der Übernahme als Portierungs-Quelle — 2026-08-01 aus dem publizierten Adapter ausgelagert
