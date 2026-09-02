@@ -685,8 +685,15 @@ class Yamaha extends utils.Adapter {
     }
   }
   /**
-   * Create a device's header objects (the device node, its info channel and a
+   * Create AND refresh a device's header objects (the device node, its info channel and a
    * per-device connection indicator) so its state is visible even while offline.
+   *
+   * Written with `extendObject` on every start, not created once: an object that already exists
+   * is otherwise never touched again, so an instance upgraded from an older version keeps
+   * whatever that version wrote — measured live after the name translation, where these were the
+   * only device datapoints left with a plain-string name (`info.model`/`info.firmware` came out
+   * right only because a catalog entry upserts them on top). extendObject merges, so a recording
+   * setting a user attached survives.
    *
    * @param deviceId the id-safe device id
    * @param ip the device's current address (from config or discovery)

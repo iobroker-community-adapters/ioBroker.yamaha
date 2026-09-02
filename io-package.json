@@ -1,9 +1,9 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "2.1.0",
+    "version": "2.1.1",
     "news": {
-      "NEXT": {
+      "2.1.1": {
         "en": "On an instance updated from an earlier version, the info datapoints now get the translated names too instead of keeping the old ones.",
         "de": "Auf einer aktualisierten Instanz bekommen auch die info-Datenpunkte die übersetzten Namen, statt die alten zu behalten.",
         "ru": "На обновлённом экземпляре точки данных info тоже получают переведённые названия вместо старых.",

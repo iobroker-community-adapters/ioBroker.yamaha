@@ -1,4 +1,10 @@
 # Older changes
+## 2.0.1 (2026-09-01)
+
+- (krobipd) Fixed: devices on the oldest protocol no longer get datapoints their status never delivers — states are only created for what the device really answers, like on the other two protocols
+- (krobipd) Fixed: leftover datapoints that never carried a value — zone sound settings or a second HDMI output the receiver does not have — are cleaned away once when updating the adapter
+- (krobipd) Fixed: the player block of a zone that is not playing a media source starts with cleared values (empty texts, playback on stop) instead of staying without any value until the first playback
+- (krobipd) Fixed: the two DAB station-scan datapoints (stations found, scan progress) start at zero instead of staying without a value until the first station scan
 
 ## 2.0.0 (2026-09-01)
 
