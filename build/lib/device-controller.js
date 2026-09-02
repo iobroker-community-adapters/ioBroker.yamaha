@@ -23,6 +23,7 @@ __export(device_controller_exports, {
 module.exports = __toCommonJS(device_controller_exports);
 var import_capability = require("./ynca/capability");
 var import_value_coerce = require("./catalog/value-coerce");
+var import_i18n = require("./i18n");
 var import_catalog = require("./ynca/catalog");
 var import_surface = require("./browse/surface");
 var import_ynca_browse_driver = require("./browse/ynca-browse-driver");
@@ -160,7 +161,7 @@ class YncaDeviceController {
       await this.deps.upsertObject(`${this.deviceId}.scene.list`, {
         id: "scene.list",
         type: "state",
-        common: { name: "Scenes (number + title)", type: "string", role: "json", read: true, write: false }
+        common: { name: (0, import_i18n.tName)("Scenes (number + title)"), type: "string", role: "json", read: true, write: false }
       });
       this.deps.setStateAck(`${this.deviceId}.scene.list`, JSON.stringify(this.sceneTitles));
     }
@@ -426,7 +427,7 @@ class YncaDeviceController {
     const sourceDef = (id) => ({
       id,
       type: "state",
-      common: { name: "Playing source", type: "string", role: "text", read: true, write: false }
+      common: { name: (0, import_i18n.tName)("Playing source"), type: "string", role: "text", read: true, write: false }
     });
     await this.deps.upsertObject(`${this.deviceId}.player.source`, sourceDef("player.source"));
     this.playerZones = ["main"];
@@ -581,6 +582,20 @@ class YncaDeviceController {
         this.sendProven("TUN", "AMFREQ", String(Math.round(khz)));
       } else {
         this.sendProven("TUN", "FMFREQ", (0, import_value_coerce.formatWireNumber)(khz / 1e3, 2));
+      }
+      return true;
+    }
+    if (stateId === "tuner.band") {
+      const band = typeof value === "string" ? value : "";
+      const subunit = band === "AM" ? "TUN" : band === "DAB" || this.hasDab ? "DAB" : "TUN";
+      const entry = this.presentEntries.find(
+        (candidate) => candidate.id === "tuner.band" && candidate.subunit === subunit
+      );
+      const triple = entry ? (0, import_catalog.yncaCommand)(stateId, value, /* @__PURE__ */ new Map([[stateId, entry]])) : void 0;
+      if (triple) {
+        this.sendProven(triple.subunit, triple.func, triple.value);
+      } else {
+        this.deps.log.debug(`${this.deviceId}: band "${band}" is not available on this device \u2014 write dropped`);
       }
       return true;
     }

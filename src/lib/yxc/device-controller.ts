@@ -20,6 +20,7 @@ import {
 } from "./command-mapper";
 import { mediaToRefresh, netusbListsToRefresh, zonesToRefresh } from "./push";
 import type { ObjectDef } from "../catalog/types";
+import { tName } from "../i18n";
 import type { StateValue } from "../types";
 import type { ConnectionHandle, ControllerLog } from "../controller";
 import { errorMessage } from "../util";
@@ -722,7 +723,7 @@ export class YxcDeviceController implements ConnectionHandle {
       await this.deps.upsertObject(`${this.deviceId}.${id}`, {
         id,
         type: "state",
-        common: { name: "Scenes (number + title)", type: "string", role: "json", read: true, write: false },
+        common: { name: tName("Scenes (number + title)"), type: "string", role: "json", read: true, write: false },
       });
       this.emit(id, JSON.stringify(list));
     }

@@ -4,6 +4,15 @@ import rxA2070 from "./__fixtures__/RX_A2070_v1.json";
 import wx10 from "./__fixtures__/WX10_216_208.json";
 import isx18d from "./__fixtures__/ISX_18D_216_208.json";
 
+/**
+ * The English half of an object's translated name.
+ *
+ * @param object the object definition to read the name from
+ * @returns the English name, or undefined when there is none
+ */
+const englishName = (object: { common: { name: unknown } } | undefined): string | undefined =>
+  (object?.common.name as { en?: string } | undefined)?.en;
+
 function ids(fixture: unknown): string[] {
   return mapYxcToObjects(parseYxcFeatures(fixture)).map(o => o.id);
 }
@@ -83,7 +92,7 @@ describe("mapYxcToObjects", () => {
     // The folder itself tells the scope: a group of linked devices, not zones.
     const group = objs.find(o => o.id === "multiroom.group");
     expect(group?.type).toBe("channel");
-    expect(group?.common.name).toBe("MusicCast group (linked devices)");
+    expect(englishName(group)).toBe("MusicCast group (linked devices)");
     // Group name is read-only (the library's setGroupName payload is unverified).
     expect(objs.find(o => o.id === "multiroom.group.name")?.common.write).toBe(false);
   });
@@ -191,7 +200,7 @@ describe("mapYxcToObjects", () => {
     const ids = objs.map(o => o.id);
     expect(ids).toContain("advanced");
     expect(objs.find(o => o.id === "advanced")?.type).toBe("channel");
-    expect(objs.find(o => o.id === "advanced")?.common.name).toBe("Advanced");
+    expect(englishName(objs.find(o => o.id === "advanced"))).toBe("Advanced");
     expect(ids.indexOf("advanced")).toBeLessThan(ids.indexOf("advanced.maxVolume"));
   });
 
@@ -200,7 +209,7 @@ describe("mapYxcToObjects", () => {
     const ids = objs.map(o => o.id);
     expect(ids).toContain("sound");
     expect(objs.find(o => o.id === "sound")?.type).toBe("channel");
-    expect(objs.find(o => o.id === "sound")?.common.name).toBe("Sound");
+    expect(englishName(objs.find(o => o.id === "sound"))).toBe("Sound");
     expect(ids.indexOf("sound")).toBeLessThan(ids.indexOf("sound.equalizer.low"));
   });
 
@@ -214,7 +223,7 @@ describe("mapYxcToObjects", () => {
     });
     const ids = objs.map(o => o.id);
     expect(ids).toContain("multiroom.zone2.sound");
-    expect(objs.find(o => o.id === "multiroom.zone2.sound")?.common.name).toBe("Sound");
+    expect(englishName(objs.find(o => o.id === "multiroom.zone2.sound"))).toBe("Sound");
     expect(ids).toContain("multiroom.zone2.advanced");
   });
 

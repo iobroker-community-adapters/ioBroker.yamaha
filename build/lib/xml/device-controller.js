@@ -22,6 +22,7 @@ __export(device_controller_exports, {
 });
 module.exports = __toCommonJS(device_controller_exports);
 var import_types = require("../catalog/types");
+var import_i18n = require("../i18n");
 var import_protocol = require("./protocol");
 var import_command_mapper = require("./command-mapper");
 var import_catalog = require("./catalog");
@@ -66,7 +67,7 @@ class XmlDeviceController {
    * @returns true if the main zone answered and the tree was created
    */
   async start() {
-    var _a, _b, _c, _d;
+    var _a, _b, _c;
     const probes = await Promise.all(
       XML_ZONES.map(async (zone) => ({ zone, status: await this.tryGetStatus(zone.element) }))
     );
@@ -125,11 +126,14 @@ class XmlDeviceController {
             await this.deps.upsertObject(`${this.deviceId}.${channelId}`, {
               id: channelId,
               type: "channel",
-              common: { name: (_d = import_types.CHANNEL_NAMES[segments[i - 1]]) != null ? _d : segments[i - 1] }
+              common: {
+                name: import_types.CHANNEL_NAME_KEYS[segments[i - 1]] ? (0, import_i18n.tName)(import_types.CHANNEL_NAME_KEYS[segments[i - 1]]) : segments[i - 1]
+              }
             });
           }
         }
-        const common = { ...entry.common };
+        const { nameKey, ...rest } = entry.common;
+        const common = { ...rest, name: (0, import_i18n.tName)(nameKey) };
         const inputs = entry.state === "input" ? inputsByZone.get(zone.key) : void 0;
         if (inputs && inputs.length > 0) {
           common.states = Object.fromEntries(inputs.map((input) => [input, input]));
@@ -230,7 +234,7 @@ class XmlDeviceController {
         await this.deps.upsertObject(`${this.deviceId}.${channelId}`, {
           id: channelId,
           type: "channel",
-          common: { name: (_a = import_types.CHANNEL_NAMES.scene) != null ? _a : "Scenes" }
+          common: { name: (0, import_i18n.tName)((_a = import_types.CHANNEL_NAME_KEYS.scene) != null ? _a : "Scenes") }
         });
       }
       const max = Math.max(...scenes.map((scene) => scene.num));
@@ -238,7 +242,7 @@ class XmlDeviceController {
         id: `${channelId}.recall`,
         type: "state",
         common: {
-          name: "Recall scene",
+          name: (0, import_i18n.tName)("Recall scene"),
           type: "number",
           role: "level",
           read: true,
@@ -254,7 +258,7 @@ class XmlDeviceController {
       await this.deps.upsertObject(`${this.deviceId}.${channelId}.list`, {
         id: `${channelId}.list`,
         type: "state",
-        common: { name: "Scenes (number + title)", type: "string", role: "json", read: true, write: false }
+        common: { name: (0, import_i18n.tName)("Scenes (number + title)"), type: "string", role: "json", read: true, write: false }
       });
       this.emit(`${channelId}.list`, JSON.stringify(scenes));
     }
@@ -280,14 +284,14 @@ class XmlDeviceController {
       await this.deps.upsertObject(`${this.deviceId}.tuner`, {
         id: "tuner",
         type: "channel",
-        common: { name: (_a = import_types.CHANNEL_NAMES.tuner) != null ? _a : "Tuner" }
+        common: { name: (0, import_i18n.tName)((_a = import_types.CHANNEL_NAME_KEYS.tuner) != null ? _a : "Tuner") }
       });
     }
     const state = async (id, common) => {
       await this.deps.upsertObject(`${this.deviceId}.tuner.${id}`, { id: `tuner.${id}`, type: "state", common });
     };
     await state("preset", {
-      name: "Preset (recall by number)",
+      name: (0, import_i18n.tName)("Preset (recall by number)"),
       type: "number",
       role: "level",
       read: true,
@@ -297,17 +301,29 @@ class XmlDeviceController {
       step: 1
     });
     await state("frequency", {
-      name: "Frequency",
+      name: (0, import_i18n.tName)("Frequency"),
       type: "number",
       role: "value",
       unit: "kHz",
       read: true,
       write: false
     });
-    await state("rdsService", { name: "RDS station", type: "string", role: "text", read: true, write: false });
-    await state("rdsText", { name: "RDS text", type: "string", role: "text", read: true, write: false });
-    await state("tuned", { name: "Tuned to a station", type: "boolean", role: "indicator", read: true, write: false });
-    await state("stereo", { name: "Stereo reception", type: "boolean", role: "indicator", read: true, write: false });
+    await state("rdsService", { name: (0, import_i18n.tName)("RDS station"), type: "string", role: "text", read: true, write: false });
+    await state("rdsText", { name: (0, import_i18n.tName)("RDS text"), type: "string", role: "text", read: true, write: false });
+    await state("tuned", {
+      name: (0, import_i18n.tName)("Tuned to a station"),
+      type: "boolean",
+      role: "indicator",
+      read: true,
+      write: false
+    });
+    await state("stereo", {
+      name: (0, import_i18n.tName)("Stereo reception"),
+      type: "boolean",
+      role: "indicator",
+      read: true,
+      write: false
+    });
     this.emitTunerInfo(probe);
   }
   /**

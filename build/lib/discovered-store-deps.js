@@ -28,14 +28,21 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var discovered_store_deps_exports = {};
 __export(discovered_store_deps_exports, {
-  discoveredStoreDeps: () => discoveredStoreDeps
+  discoveredStoreDeps: () => discoveredStoreDeps,
+  ignoredStoreDeps: () => ignoredStoreDeps
 });
 module.exports = __toCommonJS(discovered_store_deps_exports);
 var utils = __toESM(require("@iobroker/adapter-core"));
 var import_promises = require("node:fs/promises");
 var import_node_path = require("node:path");
 function discoveredStoreDeps(adapter) {
-  const path = (0, import_node_path.join)(utils.getAbsoluteInstanceDataDir(adapter), "discovered.json");
+  return fileStoreDeps(adapter, "discovered.json");
+}
+function ignoredStoreDeps(adapter) {
+  return fileStoreDeps(adapter, "ignored.json");
+}
+function fileStoreDeps(adapter, fileName) {
+  const path = (0, import_node_path.join)(utils.getAbsoluteInstanceDataDir(adapter), fileName);
   return {
     read: async () => {
       try {
@@ -53,6 +60,7 @@ function discoveredStoreDeps(adapter) {
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
-  discoveredStoreDeps
+  discoveredStoreDeps,
+  ignoredStoreDeps
 });
 //# sourceMappingURL=discovered-store-deps.js.map

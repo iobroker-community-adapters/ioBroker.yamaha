@@ -35,13 +35,13 @@ var utils = __toESM(require("@iobroker/adapter-core"));
 var import_node_dgram = require("node:dgram");
 var import_node_http = require("node:http");
 var import_node_os = require("node:os");
-var import_node_path = require("node:path");
 var import_attempt_device = require("./lib/attempt-device");
 var import_network_interfaces = require("./lib/network-interfaces");
 var import_groups = require("./lib/catalog/groups");
 var import_device_type = require("./lib/device-type");
 var import_pure_helpers = require("./lib/pure-helpers");
 var import_util = require("./lib/util");
+var import_i18n = require("./lib/i18n");
 var import_discovery = require("./lib/discovery");
 var import_discovered_store = require("./lib/discovered-store");
 var import_discovered_store_deps = require("./lib/discovered-store-deps");
@@ -59,11 +59,22 @@ const SSDP_SEARCH_BURST = 3;
 const SSDP_SEARCH_INTERVAL_MS = 1e3;
 const TRANSPORT_IDS = ["ynca", "yxc", "xml"];
 const DATAPOINT_BALANCE_SETTLE_MS = 5e3;
+const REDISCOVER_MIN_INTERVAL_MS = 3e5;
 class Yamaha extends utils.Adapter {
   supervisors = [];
   /** deviceId → its supervisor, so a state change goes to ONE device, not to all of them. */
   supervisorById = /* @__PURE__ */ new Map();
   deviceConnected = /* @__PURE__ */ new Map();
+  /** deviceId → the record it is currently running with, so an address change is visible. */
+  deviceRecords = /* @__PURE__ */ new Map();
+  /** The addresses of all supervised devices — a multiroom group resolves its clients through it. */
+  knownDeviceIps = /* @__PURE__ */ new Set();
+  /** True while the instance runs whatever the network search finds (empty device table). */
+  autoMode = false;
+  /** Armed while an auto-found device is offline: the search that can bring it back. */
+  rediscoverTimer;
+  /** When the last background search ran, so the retry cannot become a scan loop. */
+  lastRediscovery = 0;
   pushReceiver;
   /**
    * Set the moment teardown begins: a connect attempt still in flight then resolves into
@@ -113,11 +124,6 @@ class Yamaha extends utils.Adapter {
   /** Start a supervisor for each configured device, then subscribe to state changes. */
   async onReady() {
     try {
-      await utils.I18n.init((0, import_node_path.join)(this.adapterDir, "admin"), this);
-    } catch (e) {
-      this.log.warn(`could not load admin translations (${(0, import_util.errorMessage)(e)}); card labels may be untranslated`);
-    }
-    try {
       this.log.info('starting \u2014 a "ready" message will follow for each device');
       await this.setState("info.connection", { val: false, ack: true });
       await this.migrateLegacyDevice();
@@ -130,10 +136,14 @@ class Yamaha extends utils.Adapter {
       if (this.unloading) {
         return;
       }
-      const knownDeviceIps = new Set(devices.map((device) => device.ip));
+      this.autoMode = configured.length === 0;
+      this.lastRediscovery = Date.now();
+      for (const device of devices) {
+        this.knownDeviceIps.add(device.ip);
+      }
       await this.snapshotExistingDatapoints();
       await this.cleanupStaleObjects(new Set(devices.map((device) => device.id)));
-      this.subscribeStates("*");
+      await this.subscribeToStates();
       const pushReceiver = new import_push_receiver.YxcPushReceiver({
         log: { debug: (message) => this.log.debug(message), warn: (message) => this.log.warn(message) },
         schedule: (cb, ms) => this.setTimeout(cb, ms),
@@ -145,11 +155,11 @@ class Yamaha extends utils.Adapter {
         this.log.info(`setting up ${devices.length} configured device(s)...`);
       }
       for (const device of devices) {
-        await this.startDevice(device, pushReceiver, knownDeviceIps);
+        await this.startDevice(device, pushReceiver);
       }
       this.writeDeviceOverview();
-      if (configured.length === 0 && devices.length > 0) {
-        void this.discoverAdditionalDevices(pushReceiver, knownDeviceIps, new Set(devices.map((device) => device.id)));
+      if (this.autoMode && devices.length > 0) {
+        void this.discoverAdditionalDevices(pushReceiver);
       }
     } catch (e) {
       this.log.error(`onReady failed: ${(0, import_util.errorMessage)(e)}`);
@@ -162,10 +172,11 @@ class Yamaha extends utils.Adapter {
    *
    * @param device the device record
    * @param pushReceiver the shared YXC push receiver
-   * @param knownDeviceIps the IPs of all supervised devices (multiroom link targets)
    */
-  async startDevice(device, pushReceiver, knownDeviceIps) {
+  async startDevice(device, pushReceiver) {
     this.deviceConnected.set(device.id, false);
+    this.deviceRecords.set(device.id, { ...device });
+    this.knownDeviceIps.add(device.ip);
     await this.ensureDeviceHeader(device.id, device.ip);
     await this.setState(`${device.id}.info.connection`, { val: false, ack: true });
     this.setTransports(device.id, []);
@@ -173,7 +184,7 @@ class Yamaha extends utils.Adapter {
     const subunitCache = await this.loadYncaSubunitCache(device.id);
     const probeMemory = await this.loadProbeMemory(device.id);
     const supervisor = new import_device_supervisor.DeviceSupervisor({
-      attempt: () => this.attemptDevice(device, pushReceiver, knownDeviceIps, reachability, subunitCache, probeMemory),
+      attempt: () => this.attemptDevice(device, pushReceiver, this.knownDeviceIps, reachability, subunitCache, probeMemory),
       schedule: (cb, ms) => this.setTimeout(cb, ms),
       cancel: (handle) => this.clearTimeout(handle),
       onConnectionChange: (connected) => this.reportConnection(device.id, connected),
@@ -189,33 +200,134 @@ class Yamaha extends utils.Adapter {
     supervisor.start();
   }
   /**
-   * The background half of auto-discovery: search the network, remember what was
-   * found, and bring devices online that are not supervised yet. The remembered
-   * devices did not wait for this — the search window (seconds) used to gate every
-   * restart although the devices were already known.
+   * The background half of auto-discovery: search the network, bring devices online that are
+   * not supervised yet, and move a device that answers at a NEW address. The remembered devices
+   * did not wait for this — the search window (seconds) used to gate every restart although the
+   * devices were already known.
+   *
+   * The address half matters because the object id — and with it the whole tree, its history and
+   * every visualisation binding — is fixed to the device, not to where it sits. A receiver that
+   * moved by DHCP is the same device at a new address, so its supervisor is rebuilt there instead
+   * of retrying an address nobody answers at any more.
    *
    * @param pushReceiver the shared YXC push receiver
-   * @param knownDeviceIps the IPs of all supervised devices (extended for newcomers)
-   * @param started the device ids already under supervision
    */
-  async discoverAdditionalDevices(pushReceiver, knownDeviceIps, started) {
+  async discoverAdditionalDevices(pushReceiver) {
     try {
       const merged = await this.runDiscovery();
       if (this.unloading) {
         return;
       }
-      const fresh = merged.filter((device) => !started.has(device.id));
-      if (fresh.length === 0) {
-        return;
+      let changed = false;
+      for (const device of merged) {
+        const running = this.deviceRecords.get(device.id);
+        if (!running) {
+          this.log.info(`discovery found ${device.id} \u2014 setting up`);
+          await this.startDevice(device, pushReceiver);
+          changed = true;
+        } else if (running.ip !== device.ip) {
+          this.log.info(`${device.id}: address changed from ${running.ip} to ${device.ip} \u2014 reconnecting it there`);
+          this.knownDeviceIps.delete(running.ip);
+          this.stopDevice(device.id);
+          await this.startDevice(device, pushReceiver);
+          changed = true;
+        }
       }
-      this.log.info(`discovery found ${fresh.length} new device(s) \u2014 setting up`);
-      for (const device of fresh) {
-        knownDeviceIps.add(device.ip);
-        await this.startDevice(device, pushReceiver, knownDeviceIps);
+      if (changed) {
+        this.writeDeviceOverview();
       }
-      this.writeDeviceOverview();
     } catch (e) {
       this.log.warn(`background discovery failed: ${(0, import_util.errorMessage)(e)}`);
+    }
+  }
+  /**
+   * Arm a background search because an auto-found device is offline — the only way back to a
+   * receiver that moved to another address, since it answers at the remembered one no more.
+   * Throttled: a device that is merely switched off must not turn this into a scan loop, and
+   * one timer covers however many devices are down.
+   */
+  scheduleRediscovery() {
+    if (!this.autoMode || this.unloading || this.rediscoverTimer !== void 0) {
+      return;
+    }
+    const receiver = this.pushReceiver;
+    if (!receiver) {
+      return;
+    }
+    const due = Math.max(0, REDISCOVER_MIN_INTERVAL_MS - (Date.now() - this.lastRediscovery));
+    this.rediscoverTimer = this.setTimeout(() => {
+      this.rediscoverTimer = void 0;
+      this.lastRediscovery = Date.now();
+      if (!this.unloading) {
+        void this.discoverAdditionalDevices(receiver);
+      }
+    }, due);
+  }
+  /**
+   * Stop supervising one device and release its supervisor. The object tree is untouched —
+   * a readdress puts the same device straight back on it.
+   *
+   * @param deviceId the id-safe device id
+   */
+  stopDevice(deviceId) {
+    const supervisor = this.supervisorById.get(deviceId);
+    if (!supervisor) {
+      return;
+    }
+    supervisor.close();
+    this.supervisorById.delete(deviceId);
+    const index = this.supervisors.indexOf(supervisor);
+    if (index >= 0) {
+      this.supervisors.splice(index, 1);
+    }
+  }
+  /**
+   * Remove one device for good: stop talking to it and delete its object tree.
+   *
+   * Driven by the device manager's delete action. Deleting a discovered device used to only
+   * empty the remembered list — the supervisor kept the connection, the tree stayed, and the card
+   * came back on the next start. Now the delete is what it says; the id is additionally kept in
+   * the ignored list (device manager) so a later search does not put the device back.
+   *
+   * @param deviceId the id-safe device id
+   */
+  async removeDevice(deviceId) {
+    this.stopDevice(deviceId);
+    const record = this.deviceRecords.get(deviceId);
+    if (record) {
+      this.knownDeviceIps.delete(record.ip);
+    }
+    this.deviceRecords.delete(deviceId);
+    this.deviceConnected.delete(deviceId);
+    this.readyDevices.delete(deviceId);
+    try {
+      await this.delObjectAsync(deviceId, { recursive: true });
+    } catch (e) {
+      this.log.warn(`could not remove the object tree of "${deviceId}" (${(0, import_util.errorMessage)(e)})`);
+    }
+    this.writeState("info.connection", [...this.deviceConnected.values()].some(Boolean));
+    this.writeDeviceOverview();
+  }
+  /**
+   * Subscribe to the adapter's own states — OBSERVED, like every other database call.
+   *
+   * `subscribeStates` without a callback returns a promise, and its wildcard branch reads the
+   * matching objects first: any failure there ends in `maybeCallbackWithError`, which rejects
+   * for everything except the plain "database closed" case (js-controller-common-db source).
+   * Left unawaited that is an unhandled rejection — and js-controller turns those into an
+   * adapter stop, the same trap the nine bare state writes carried.
+   *
+   * A failure is loud but not fatal: without the subscription the tree still fills from the
+   * devices, only user writes stop being applied. Saying so beats a silent half-working
+   * instance, and beats losing the whole start over it.
+   */
+  async subscribeToStates() {
+    try {
+      await this.subscribeStatesAsync("*");
+    } catch (e) {
+      this.log.error(
+        `could not subscribe to state changes (${(0, import_util.errorMessage)(e)}) \u2014 the tree still updates, but writes to datapoints will not reach the device until the instance is restarted`
+      );
     }
   }
   /**
@@ -234,6 +346,7 @@ class Yamaha extends utils.Adapter {
     this.writeState(`${deviceId}.info.connection`, connected);
     if (!connected) {
       this.setTransports(deviceId, []);
+      this.scheduleRediscovery();
     }
     const anyConnected = [...this.deviceConnected.values()].some(Boolean);
     this.writeState("info.connection", anyConnected);
@@ -408,6 +521,31 @@ class Yamaha extends utils.Adapter {
     }
   }
   /**
+   * Remove folders that hold no datapoint any more, under the devices that connected this run.
+   *
+   * The two sweeps above only ever delete datapoints, so a folder emptied by a tree rework stays
+   * behind and promises content it can never get — `player.server` is the live case: the v2.0.0
+   * migration deletes the SERVER source's playback copies, and the new tree gives that source no
+   * datapoint of its own. Runs on every start, not once per version: an empty folder is wrong
+   * whenever it is found, and re-reading the objects after the orphan purge catches the ones that
+   * purge just emptied. Not counted in the datapoint balance — a folder is not a datapoint.
+   */
+  async purgeChildlessChannels() {
+    if (this.readyDevices.size === 0) {
+      return;
+    }
+    const empty = (0, import_pure_helpers.childlessChannelIds)(await this.getAdapterObjectsAsync(), this.readyDevices, this.namespace);
+    for (const fullId of empty) {
+      try {
+        await this.delObjectAsync((0, import_pure_helpers.stripNamespace)(fullId, this.namespace));
+      } catch {
+      }
+    }
+    if (empty.length > 0) {
+      this.log.debug(`removed ${empty.length} empty folder(s) left over from an earlier object tree`);
+    }
+  }
+  /**
    * Remember every datapoint that already exists, ONCE per adapter run.
    *
    * @see knownDatapoints for why the create path alone cannot answer "is this new?"
@@ -469,6 +607,11 @@ class Yamaha extends utils.Adapter {
         } catch (e) {
           this.log.debug(`orphan purge failed (${(0, import_util.errorMessage)(e)}); skipped for this run`);
         }
+        try {
+          await this.purgeChildlessChannels();
+        } catch (e) {
+          this.log.debug(`empty-folder purge failed (${(0, import_util.errorMessage)(e)}); skipped for this run`);
+        }
         const parts = [];
         if (this.createdDatapoints > 0) {
           parts.push(`created ${this.createdDatapoints} datapoint(s)`);
@@ -513,33 +656,44 @@ class Yamaha extends utils.Adapter {
       },
       { preserve: { common: ["name"] } }
     );
-    await this.setObjectNotExistsAsync(`${deviceId}.info`, { type: "channel", common: { name: "Info" }, native: {} });
+    await this.setObjectNotExistsAsync(`${deviceId}.info`, {
+      type: "channel",
+      common: { name: (0, import_i18n.tName)("Info") },
+      native: {}
+    });
     await this.setObjectNotExistsAsync(`${deviceId}.info.connection`, {
       type: "state",
-      common: { name: "Connected", type: "boolean", role: "indicator.reachable", read: true, write: false, def: false },
+      common: {
+        name: (0, import_i18n.tName)("Connected"),
+        type: "boolean",
+        role: "indicator.reachable",
+        read: true,
+        write: false,
+        def: false
+      },
       native: {}
     });
     await this.setObjectNotExistsAsync(`${deviceId}.info.model`, {
       type: "state",
-      common: { name: "Model", type: "string", role: "text", read: true, write: false, def: "" },
+      common: { name: (0, import_i18n.tName)("Model"), type: "string", role: "text", read: true, write: false, def: "" },
       native: {}
     });
     await this.setObjectNotExistsAsync(`${deviceId}.info.ip`, {
       type: "state",
-      common: { name: "IP address", type: "string", role: "info.ip", read: true, write: false, def: "" },
+      common: { name: (0, import_i18n.tName)("IP address"), type: "string", role: "info.ip", read: true, write: false, def: "" },
       native: {}
     });
     await this.setState(`${deviceId}.info.ip`, { val: ip, ack: true });
     await this.setObjectNotExistsAsync(`${deviceId}.info.transports`, {
       type: "channel",
-      common: { name: "Transports" },
+      common: { name: (0, import_i18n.tName)("Transports") },
       native: {}
     });
     for (const proto of TRANSPORT_IDS) {
       await this.setObjectNotExistsAsync(`${deviceId}.info.transports.${proto}`, {
         type: "state",
         common: {
-          name: `${proto.toUpperCase()} connected`,
+          name: (0, import_i18n.tName)("%s connected", proto.toUpperCase()),
           type: "boolean",
           role: "indicator.reachable",
           read: true,
@@ -762,6 +916,7 @@ class Yamaha extends utils.Adapter {
     try {
       this.unloading = true;
       this.clearTimeout(this.balanceTimer);
+      this.clearTimeout(this.rediscoverTimer);
       (_a = this.pushReceiver) == null ? void 0 : _a.close();
       for (const supervisor of this.supervisors) {
         supervisor.close();
@@ -809,6 +964,7 @@ class Yamaha extends utils.Adapter {
    * @returns the merged device records
    */
   async runDiscovery() {
+    this.lastRediscovery = Date.now();
     const store = (0, import_discovered_store_deps.discoveredStoreDeps)(this);
     const known = await (0, import_discovered_store.readDiscovered)(store);
     let found = [];
@@ -826,8 +982,10 @@ class Yamaha extends utils.Adapter {
       found,
       (dropped, takenId) => this.log.warn(`discovered device "${dropped}" skipped \u2014 its object id "${takenId}" is already taken`)
     );
-    await (0, import_discovered_store.writeDiscovered)(store, merged);
-    return merged;
+    const ignored = new Set(await (0, import_discovered_store.readIgnored)((0, import_discovered_store_deps.ignoredStoreDeps)(this)));
+    const kept = ignored.size > 0 ? merged.filter((device) => !ignored.has(device.id)) : merged;
+    await (0, import_discovered_store.writeDiscovered)(store, kept);
+    return kept;
   }
   /**
    * Load a device's persisted YNCA subunit-cache (the AVAIL probe result) from its

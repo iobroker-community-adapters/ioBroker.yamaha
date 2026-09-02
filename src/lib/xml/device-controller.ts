@@ -1,4 +1,5 @@
-import { CHANNEL_NAMES, type ObjectDef } from "../catalog/types";
+import { CHANNEL_NAME_KEYS, type ObjectDef } from "../catalog/types";
+import { tName } from "../i18n";
 import {
   isPermanentXmlRefusal,
   parseInputList,
@@ -166,7 +167,7 @@ export class XmlDeviceController implements ConnectionHandle {
       this.zoneFields.set(zone.key, fields);
     }
     // Every parent — the zone channels included — is created by the per-state loop below
-    // and named from the shared CHANNEL_NAMES table (a zone that answered has at least
+    // and named from the shared CHANNEL_NAME_KEYS table (a zone that answered has at least
     // its power state, so its channel always comes into being this way).
     const createdChannels = new Set<string>();
     for (const zone of this.zones) {
@@ -189,11 +190,14 @@ export class XmlDeviceController implements ConnectionHandle {
             await this.deps.upsertObject(`${this.deviceId}.${channelId}`, {
               id: channelId,
               type: "channel",
-              common: { name: CHANNEL_NAMES[segments[i - 1]] ?? segments[i - 1] },
+              common: {
+                name: CHANNEL_NAME_KEYS[segments[i - 1]] ? tName(CHANNEL_NAME_KEYS[segments[i - 1]]) : segments[i - 1],
+              },
             });
           }
         }
-        const common = { ...entry.common };
+        const { nameKey, ...rest } = entry.common;
+        const common: ObjectDef["common"] = { ...rest, name: tName(nameKey) };
         // The device's own input list becomes the dropdown (XML-owned devices only —
         // where YNCA is present its dropdown wins via the owner policy).
         const inputs = entry.state === "input" ? inputsByZone.get(zone.key) : undefined;
@@ -303,7 +307,7 @@ export class XmlDeviceController implements ConnectionHandle {
         await this.deps.upsertObject(`${this.deviceId}.${channelId}`, {
           id: channelId,
           type: "channel",
-          common: { name: CHANNEL_NAMES.scene ?? "Scenes" },
+          common: { name: tName(CHANNEL_NAME_KEYS.scene ?? "Scenes") },
         });
       }
       const max = Math.max(...scenes.map(scene => scene.num));
@@ -311,7 +315,7 @@ export class XmlDeviceController implements ConnectionHandle {
         id: `${channelId}.recall`,
         type: "state",
         common: {
-          name: "Recall scene",
+          name: tName("Recall scene"),
           type: "number",
           role: "level",
           read: true,
@@ -330,7 +334,7 @@ export class XmlDeviceController implements ConnectionHandle {
       await this.deps.upsertObject(`${this.deviceId}.${channelId}.list`, {
         id: `${channelId}.list`,
         type: "state",
-        common: { name: "Scenes (number + title)", type: "string", role: "json", read: true, write: false },
+        common: { name: tName("Scenes (number + title)"), type: "string", role: "json", read: true, write: false },
       });
       this.emit(`${channelId}.list`, JSON.stringify(scenes));
     }
@@ -356,14 +360,14 @@ export class XmlDeviceController implements ConnectionHandle {
       await this.deps.upsertObject(`${this.deviceId}.tuner`, {
         id: "tuner",
         type: "channel",
-        common: { name: CHANNEL_NAMES.tuner ?? "Tuner" },
+        common: { name: tName(CHANNEL_NAME_KEYS.tuner ?? "Tuner") },
       });
     }
     const state = async (id: string, common: ObjectDef["common"]): Promise<void> => {
       await this.deps.upsertObject(`${this.deviceId}.tuner.${id}`, { id: `tuner.${id}`, type: "state", common });
     };
     await state("preset", {
-      name: "Preset (recall by number)",
+      name: tName("Preset (recall by number)"),
       type: "number",
       role: "level",
       read: true,
@@ -373,17 +377,29 @@ export class XmlDeviceController implements ConnectionHandle {
       step: 1,
     });
     await state("frequency", {
-      name: "Frequency",
+      name: tName("Frequency"),
       type: "number",
       role: "value",
       unit: "kHz",
       read: true,
       write: false,
     });
-    await state("rdsService", { name: "RDS station", type: "string", role: "text", read: true, write: false });
-    await state("rdsText", { name: "RDS text", type: "string", role: "text", read: true, write: false });
-    await state("tuned", { name: "Tuned to a station", type: "boolean", role: "indicator", read: true, write: false });
-    await state("stereo", { name: "Stereo reception", type: "boolean", role: "indicator", read: true, write: false });
+    await state("rdsService", { name: tName("RDS station"), type: "string", role: "text", read: true, write: false });
+    await state("rdsText", { name: tName("RDS text"), type: "string", role: "text", read: true, write: false });
+    await state("tuned", {
+      name: tName("Tuned to a station"),
+      type: "boolean",
+      role: "indicator",
+      read: true,
+      write: false,
+    });
+    await state("stereo", {
+      name: tName("Stereo reception"),
+      type: "boolean",
+      role: "indicator",
+      read: true,
+      write: false,
+    });
     this.emitTunerInfo(probe);
   }
 

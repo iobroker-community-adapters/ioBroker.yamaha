@@ -1,4 +1,5 @@
 import type { ValueSpec } from "./value-coerce";
+import type { I18nKey } from "../i18n";
 
 /**
  * One catalogued device function → one ioBroker state. The catalog is
@@ -16,8 +17,12 @@ import type { ValueSpec } from "./value-coerce";
 export interface CatalogEntry {
   /** State id relative to the device — dotted for a channel (e.g. `power`, `sound.bass`, `zone2.power`). */
   id: string;
-  /** Display name shown in the object browser. */
-  name: string;
+  /**
+   * The object's display name, as its translation KEY (the English text, which is also the key
+   * in `admin/i18n`). The catalogs are module-level constants, built before the adapter starts
+   * — so they carry the key and {@link catalogToObjects} resolves it into all eleven languages.
+   */
+  nameKey: I18nKey;
   /** Value semantics — drives type/role/states/range via {@link ValueSpec}. */
   spec: ValueSpec;
   /** Whether the user can write this state. */
@@ -34,7 +39,8 @@ export interface ObjectDef {
   type: "state" | "channel";
   /** ioBroker common part. */
   common: {
-    name: string;
+    /** Resolved to all admin languages — never a plain string (state-role gate). */
+    name: ioBroker.StringOrTranslated;
     type?: "boolean" | "number" | "string";
     role?: string;
     read?: boolean;
@@ -54,7 +60,7 @@ export interface ObjectDef {
  * like "Pc" or "Ipod" in the object browser. Keys match the real channel segments
  * (verified against the built catalogs); do not add speculative entries.
  */
-export const CHANNEL_NAMES: Record<string, string> = {
+export const CHANNEL_NAME_KEYS: Record<string, I18nKey> = {
   // Device info (metadata beside the per-device connection indicator)
   info: "Info",
   // Zones

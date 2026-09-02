@@ -1,4 +1,5 @@
 import type { ObjectDef } from "../catalog/types";
+import { tName } from "../i18n";
 
 /**
  * The object tree of the browsing surface. Every capable transport contributes the
@@ -14,47 +15,47 @@ export function browseObjectDefs(sources: Record<string, string>): ObjectDef[] {
   const line = (n: number): ObjectDef => ({
     id: `player.browse.line${n}`,
     type: "state",
-    common: { name: `Line ${n}`, type: "string", role: "text", read: true, write: false },
+    common: { name: tName("Line %s", n), type: "string", role: "text", read: true, write: false },
   });
-  const button = (id: string, name: string): ObjectDef => ({
+  const button = (id: string, name: ioBroker.StringOrTranslated): ObjectDef => ({
     id: `player.browse.${id}`,
     type: "state",
     common: { name, type: "boolean", role: "button", read: false, write: true },
   });
   return [
-    { id: "player", type: "channel", common: { name: "Media player" } },
-    { id: "player.browse", type: "channel", common: { name: "Browse" } },
+    { id: "player", type: "channel", common: { name: tName("Media player") } },
+    { id: "player.browse", type: "channel", common: { name: tName("Browse") } },
     {
       id: "player.browse.source",
       type: "state",
-      common: { name: "Source", type: "string", role: "state", read: true, write: true, states: sources },
+      common: { name: tName("Source"), type: "string", role: "state", read: true, write: true, states: sources },
     },
     {
       id: "player.browse.menuName",
       type: "state",
-      common: { name: "Menu name", type: "string", role: "text", read: true, write: false },
+      common: { name: tName("Menu name"), type: "string", role: "text", read: true, write: false },
     },
     {
       id: "player.browse.layer",
       type: "state",
-      common: { name: "Menu level", type: "number", role: "value", read: true, write: false },
+      common: { name: tName("Menu level"), type: "number", role: "value", read: true, write: false },
     },
     {
       id: "player.browse.totalItems",
       type: "state",
-      common: { name: "Total entries", type: "number", role: "value", read: true, write: false },
+      common: { name: tName("Total entries"), type: "number", role: "value", read: true, write: false },
     },
     {
       id: "player.browse.currentLine",
       type: "state",
-      common: { name: "Current line", type: "number", role: "value", read: true, write: false },
+      common: { name: tName("Current line"), type: "number", role: "value", read: true, write: false },
     },
     ...[1, 2, 3, 4, 5, 6, 7, 8].map(line),
     {
       id: "player.browse.selectLine",
       type: "state",
       common: {
-        name: "Select line (folder opens, item plays)",
+        name: tName("Select line (folder opens, item plays)"),
         type: "number",
         role: "level",
         read: true,
@@ -64,15 +65,15 @@ export function browseObjectDefs(sources: Record<string, string>): ObjectDef[] {
         step: 1,
       },
     },
-    button("pageUp", "Page up"),
-    button("pageDown", "Page down"),
-    button("back", "Back"),
-    button("home", "Menu root"),
+    button("pageUp", tName("Page up")),
+    button("pageDown", tName("Page down")),
+    button("back", tName("Back")),
+    button("home", tName("Menu root")),
     {
       id: "player.browse.path",
       type: "state",
       common: {
-        name: "Navigate path (e.g. Bookmarks>Radio Paradise)",
+        name: tName("Navigate path (e.g. Bookmarks>Radio Paradise)"),
         type: "string",
         role: "text",
         read: true,
@@ -82,12 +83,12 @@ export function browseObjectDefs(sources: Record<string, string>): ObjectDef[] {
     {
       id: "player.browse.rows",
       type: "state",
-      common: { name: "Rows (JSON)", type: "string", role: "json", read: true, write: false },
+      common: { name: tName("Rows (JSON)"), type: "string", role: "json", read: true, write: false },
     },
     {
       id: "player.browse.busy",
       type: "state",
-      common: { name: "Busy", type: "boolean", role: "indicator", read: true, write: false },
+      common: { name: tName("Busy"), type: "boolean", role: "indicator", read: true, write: false },
     },
   ];
 }

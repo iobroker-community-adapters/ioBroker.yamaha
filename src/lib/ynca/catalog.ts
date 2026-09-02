@@ -3,6 +3,7 @@ import type { CatalogEntry, ObjectDef } from "../catalog/types";
 import { decode, encode, formatWireNumber, isWritableValue, type ValueSpec } from "../catalog/value-coerce";
 import type { StateValue } from "../types";
 import type { YncaCapabilities } from "./capability";
+import type { I18nKey } from "../i18n";
 
 /**
  * A YNCA catalog entry: the object part ({@link CatalogEntry}) plus its subunit
@@ -207,7 +208,7 @@ const DECODER_STATES = selfMap([
 interface FuncDef {
   func: string;
   state: string;
-  name: string;
+  nameKey: I18nKey;
   spec: ValueSpec;
   write: boolean;
   role: string;
@@ -225,7 +226,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "PWR",
     state: "power",
-    name: "Power",
+    nameKey: "Power",
     spec: { kind: "onoff", on: "On", off: "Standby" },
     write: true,
     role: "switch.power",
@@ -233,7 +234,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "VOL",
     state: "volume",
-    name: "Volume",
+    nameKey: "Volume",
     spec: { kind: "number", unit: "dB", min: -80.5, max: 16.5, step: 0.5, decimals: 1 },
     write: true,
     role: "level.volume",
@@ -241,7 +242,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "MUTE",
     state: "mute",
-    name: "Mute",
+    nameKey: "Mute",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
     role: "media.mute",
@@ -249,7 +250,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "INP",
     state: "input",
-    name: "Input",
+    nameKey: "Input",
     spec: { kind: "enum", states: INPUT_STATES },
     write: true,
     role: "media.input",
@@ -257,7 +258,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "SOUNDPRG",
     state: "soundProgram",
-    name: "Sound program",
+    nameKey: "Sound program",
     spec: { kind: "enum", states: SOUNDPRG_STATES },
     write: true,
     role: "state",
@@ -265,7 +266,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "STRAIGHT",
     state: "sound.straight",
-    name: "Straight",
+    nameKey: "Straight",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
     role: "switch",
@@ -273,7 +274,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "ENHANCER",
     state: "sound.enhancer",
-    name: "Enhancer",
+    nameKey: "Enhancer",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
     role: "switch",
@@ -281,7 +282,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "PUREDIRMODE",
     state: "sound.pureDirect",
-    name: "Pure Direct",
+    nameKey: "Pure Direct",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
     role: "switch",
@@ -289,7 +290,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "SLEEP",
     state: "sleep",
-    name: "Sleep timer",
+    nameKey: "Sleep timer",
     spec: { kind: "enum", states: SLEEP_STATES },
     write: true,
     role: "state",
@@ -297,7 +298,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "SPBASS",
     state: "sound.bass",
-    name: "Bass",
+    nameKey: "Bass",
     spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5, decimals: 1 },
     write: true,
     role: "level",
@@ -305,7 +306,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "SPTREBLE",
     state: "sound.treble",
-    name: "Treble",
+    nameKey: "Treble",
     spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5, decimals: 1 },
     write: true,
     role: "level",
@@ -318,7 +319,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "TONEBASS",
     state: "sound.bass",
-    name: "Bass",
+    nameKey: "Bass",
     spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5, decimals: 1 },
     write: true,
     role: "level",
@@ -326,7 +327,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "TONETREBLE",
     state: "sound.treble",
-    name: "Treble",
+    nameKey: "Treble",
     spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5, decimals: 1 },
     write: true,
     role: "level",
@@ -336,7 +337,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "TONEMODE",
     state: "sound.toneMode",
-    name: "Tone control mode",
+    nameKey: "Tone control mode",
     spec: { kind: "text" },
     write: false,
     role: "text",
@@ -347,7 +348,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "DIALOGUELVL",
     state: "sound.dialogueLevel",
-    name: "Dialogue level",
+    nameKey: "Dialogue level",
     spec: { kind: "number", decimals: 0 },
     write: false,
     role: "value",
@@ -355,7 +356,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "DTSDIALOGUECONTROL",
     state: "sound.dtsDialogueControl",
-    name: "DTS dialogue control",
+    nameKey: "DTS dialogue control",
     spec: { kind: "number", decimals: 0 },
     write: false,
     role: "value",
@@ -363,7 +364,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "CONTENTSDISP",
     state: "sound.contentsDisplay",
-    name: "Contents display",
+    nameKey: "Contents display",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: false,
     role: "indicator",
@@ -371,7 +372,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "HDMIOUT",
     state: "hdmi.output",
-    name: "HDMI output",
+    nameKey: "HDMI output",
     spec: { kind: "enum", states: HDMIOUT_STATES },
     write: true,
     role: "state",
@@ -379,7 +380,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "ADAPTIVEDRC",
     state: "sound.adaptiveDrc",
-    name: "Adaptive DRC",
+    nameKey: "Adaptive DRC",
     spec: { kind: "enum", states: ADAPTIVEDRC_STATES },
     write: true,
     role: "state",
@@ -387,7 +388,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "SURROUNDAI",
     state: "sound.surroundAI",
-    name: "Surround AI",
+    nameKey: "Surround AI",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
     role: "switch",
@@ -395,7 +396,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "DIRMODE",
     state: "sound.direct",
-    name: "Direct",
+    nameKey: "Direct",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
     role: "switch",
@@ -403,7 +404,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "2CHDECODER",
     state: "sound.surroundDecoder",
-    name: "Surround decoder",
+    nameKey: "Surround decoder",
     spec: { kind: "enum", states: DECODER_STATES },
     write: true,
     role: "state",
@@ -411,7 +412,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "HPBASS",
     state: "sound.headphoneBass",
-    name: "Headphone bass",
+    nameKey: "Headphone bass",
     spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5, decimals: 1 },
     write: true,
     role: "level",
@@ -419,7 +420,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "HPTREBLE",
     state: "sound.headphoneTreble",
-    name: "Headphone treble",
+    nameKey: "Headphone treble",
     spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5, decimals: 1 },
     write: true,
     role: "level",
@@ -427,7 +428,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "EXBASS",
     state: "sound.extraBass",
-    name: "Extra Bass",
+    nameKey: "Extra Bass",
     spec: { kind: "onoff", on: "Auto", off: "Off" },
     write: true,
     role: "switch",
@@ -435,7 +436,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "3DCINEMA",
     state: "sound.cinemaDsp3d",
-    name: "CINEMA DSP 3D",
+    nameKey: "CINEMA DSP 3D",
     spec: { kind: "onoff", on: "Auto", off: "Off" },
     write: true,
     role: "switch",
@@ -443,7 +444,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "INITVOLMODE",
     state: "advanced.initialVolume.mode",
-    name: "Initial volume mode",
+    nameKey: "Initial volume mode",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
     role: "switch",
@@ -451,7 +452,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "INITVOLLVL",
     state: "advanced.initialVolume.level",
-    name: "Initial volume level",
+    nameKey: "Initial volume level",
     spec: { kind: "number", unit: "dB", min: -80.5, max: 16.5, step: 0.5, decimals: 1 },
     write: true,
     role: "level.volume",
@@ -459,7 +460,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "MAXVOL",
     state: "advanced.maxVolume",
-    name: "Maximum volume",
+    nameKey: "Maximum volume",
     // 5 dB grid with one mandatory decimal — except the literal ceiling 16.5, which is
     // valid despite being off-grid (the ynca-python MAXVOL special case).
     wireEncode: value => (Number(value) === 16.5 ? "16.5" : formatWireNumber(Number(value), 1, 5)),
@@ -472,7 +473,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "LIPSYNCHDMIOUT1OFFSET",
     state: "hdmi.lipSyncOut1",
-    name: "Lip sync HDMI OUT1 offset",
+    nameKey: "Lip sync HDMI OUT1 offset",
     spec: { kind: "number", unit: "ms", decimals: 0 },
     write: true,
     role: "level",
@@ -480,7 +481,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "LIPSYNCHDMIOUT2OFFSET",
     state: "hdmi.lipSyncOut2",
-    name: "Lip sync HDMI OUT2 offset",
+    nameKey: "Lip sync HDMI OUT2 offset",
     spec: { kind: "number", unit: "ms", decimals: 0 },
     write: true,
     role: "level",
@@ -488,7 +489,7 @@ const AMP_FUNCS: FuncDef[] = [
   {
     func: "ZONENAME",
     state: "zoneName",
-    name: "Zone name",
+    nameKey: "Zone name",
     spec: { kind: "text" },
     write: true,
     role: "text",
@@ -507,7 +508,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
   {
     func: "SPEAKERA",
     state: "advanced.speakers.speakerA",
-    name: "Speaker A",
+    nameKey: "Speaker A",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
     role: "switch",
@@ -515,7 +516,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
   {
     func: "SPEAKERB",
     state: "advanced.speakers.speakerB",
-    name: "Speaker B",
+    nameKey: "Speaker B",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
     role: "switch",
@@ -523,7 +524,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
   {
     func: "PWRB",
     state: "multiroom.zoneB.power",
-    name: "Zone B power",
+    nameKey: "Zone B power",
     spec: { kind: "onoff", on: "On", off: "Standby" },
     write: true,
     role: "switch.power",
@@ -531,7 +532,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
   {
     func: "ZONEBAVAIL",
     state: "multiroom.zoneB.available",
-    name: "Zone B availability",
+    nameKey: "Zone B availability",
     spec: { kind: "enum", states: ZONEB_AVAIL_STATES },
     write: false,
     role: "state",
@@ -539,7 +540,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
   {
     func: "ZONEBMUTE",
     state: "multiroom.zoneB.mute",
-    name: "Zone B mute",
+    nameKey: "Zone B mute",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
     role: "media.mute",
@@ -547,7 +548,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
   {
     func: "ZONEBVOL",
     state: "multiroom.zoneB.volume",
-    name: "Zone B volume",
+    nameKey: "Zone B volume",
     spec: { kind: "number", unit: "dB", min: -80.5, max: 16.5, step: 0.5, decimals: 1 },
     write: true,
     role: "level.volume",
@@ -555,7 +556,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
   {
     func: "ZONEBNAME",
     state: "multiroom.zoneB.name",
-    name: "Zone B name",
+    nameKey: "Zone B name",
     spec: { kind: "text" },
     write: true,
     role: "text",
@@ -565,7 +566,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
   {
     func: "ADAPTIVEDSP",
     state: "sound.adaptiveDsp",
-    name: "Adaptive DSP",
+    nameKey: "Adaptive DSP",
     spec: { kind: "enum", states: ADAPTIVEDRC_STATES },
     write: true,
     role: "state",
@@ -590,7 +591,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     subunit: "SYS",
     func: "PARTY",
     state: "multiroom.party",
-    name: "Party mode (all zones)",
+    nameKey: "Party mode (all zones)",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
     role: "switch",
@@ -599,7 +600,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     subunit: "TUN",
     func: "BAND",
     state: "tuner.band",
-    name: "Band",
+    nameKey: "Band",
     spec: { kind: "enum", states: BAND_STATES },
     write: true,
     role: "state",
@@ -611,7 +612,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     subunit: "TUN",
     func: "PRESET",
     state: "tuner.preset",
-    name: "Preset (recall by number)",
+    nameKey: "Preset (recall by number)",
     spec: { kind: "number", min: 0, max: 40, step: 1, decimals: 0 },
     write: true,
     role: "level",
@@ -621,7 +622,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     subunit: "TUN",
     func: "PRESET",
     state: "tuner.presetUp",
-    name: "Next preset",
+    nameKey: "Next preset",
     spec: { kind: "button" },
     write: true,
     role: "button",
@@ -633,7 +634,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     subunit: "TUN",
     func: "PRESET",
     state: "tuner.presetDown",
-    name: "Previous preset",
+    nameKey: "Previous preset",
     spec: { kind: "button" },
     write: true,
     role: "button",
@@ -645,7 +646,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     subunit: "TUN",
     func: "RDSTXTA",
     state: "tuner.rdsText",
-    name: "RDS text",
+    nameKey: "RDS text",
     spec: { kind: "text" },
     write: false,
     role: "text",
@@ -654,7 +655,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     subunit: "TUN",
     func: "RDSPRGSERVICE",
     state: "tuner.rdsService",
-    name: "RDS station",
+    nameKey: "RDS station",
     spec: { kind: "text" },
     write: false,
     role: "text",
@@ -669,7 +670,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     subunit: "TUN",
     func: "AMFREQ",
     state: "tuner.frequency",
-    name: "Frequency",
+    nameKey: "Frequency",
     spec: { kind: "number", unit: "kHz", decimals: 0 },
     write: true,
     role: "level",
@@ -678,7 +679,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     subunit: "TUN",
     func: "FMFREQ",
     state: "tuner.frequency",
-    name: "Frequency",
+    nameKey: "Frequency",
     spec: { kind: "number", unit: "kHz", decimals: 0 },
     write: true,
     role: "level",
@@ -688,7 +689,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     subunit: "TUN",
     func: "RDSTXTB",
     state: "tuner.rdsTextB",
-    name: "RDS text B",
+    nameKey: "RDS text B",
     spec: { kind: "text" },
     write: false,
     role: "text",
@@ -697,7 +698,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     subunit: "TUN",
     func: "RDSPRGTYPE",
     state: "tuner.rdsProgramType",
-    name: "RDS program type",
+    nameKey: "RDS program type",
     spec: { kind: "text" },
     write: false,
     role: "text",
@@ -706,7 +707,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     subunit: "TUN",
     func: "SEARCHMODE",
     state: "tuner.searchMode",
-    name: "Search mode",
+    nameKey: "Search mode",
     spec: { kind: "enum", states: TUN_SEARCHMODE_STATES },
     write: true,
     role: "state",
@@ -717,7 +718,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     subunit: "TUN",
     func: "FMMODE",
     state: "tuner.fmMode",
-    name: "FM mode",
+    nameKey: "FM mode",
     spec: { kind: "enum", states: selfMap(["Auto", "Mono"]) },
     write: true,
     role: "state",
@@ -727,7 +728,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     subunit: "TUN",
     func: "TUNED",
     state: "tuner.tuned",
-    name: "Tuned to a station",
+    nameKey: "Tuned to a station",
     spec: { kind: "onoff", on: "Assert", off: "Negate" },
     write: false,
     role: "indicator",
@@ -736,7 +737,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     subunit: "TUN",
     func: "SIGSTEREOMONO",
     state: "tuner.stereo",
-    name: "Stereo reception",
+    nameKey: "Stereo reception",
     spec: { kind: "onoff", on: "Assert", off: "Negate" },
     write: false,
     role: "indicator",
@@ -747,7 +748,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     subunit: "TUN",
     func: "MEM",
     state: "tuner.presetSave",
-    name: "Save to preset (0 = first free slot)",
+    nameKey: "Save to preset (0 = first free slot)",
     spec: { kind: "number", min: 0, max: 40, step: 1 },
     write: true,
     role: "level",
@@ -768,11 +769,11 @@ const SWFR_CNFG_STATES = selfMap(["None", "Use"]);
 const SYS_FUNCS: FuncDef[] = [
   // Device metadata lives under the info channel (like govee's info.model/info.firmware),
   // not in the system grab-bag. Renamed from system.model/system.version (audit F7).
-  { func: "MODELNAME", state: "info.model", name: "Model", spec: { kind: "text" }, write: false, role: "text" },
+  { func: "MODELNAME", state: "info.model", nameKey: "Model", spec: { kind: "text" }, write: false, role: "text" },
   {
     func: "VERSION",
     state: "info.firmware",
-    name: "Firmware version",
+    nameKey: "Firmware version",
     spec: { kind: "text" },
     write: false,
     role: "text",
@@ -780,7 +781,7 @@ const SYS_FUNCS: FuncDef[] = [
   {
     func: "PWR",
     state: "multiroom.masterPower",
-    name: "Master power (all zones)",
+    nameKey: "Master power (all zones)",
     spec: { kind: "onoff", on: "On", off: "Standby" },
     write: true,
     role: "switch.power",
@@ -788,7 +789,7 @@ const SYS_FUNCS: FuncDef[] = [
   {
     func: "PARTYMUTE",
     state: "multiroom.partyMute",
-    name: "Party mute (all zones)",
+    nameKey: "Party mute (all zones)",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
     role: "media.mute",
@@ -796,7 +797,7 @@ const SYS_FUNCS: FuncDef[] = [
   {
     func: "HDMIOUT1",
     state: "hdmi.out1",
-    name: "HDMI OUT1",
+    nameKey: "HDMI OUT1",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
     role: "switch",
@@ -804,7 +805,7 @@ const SYS_FUNCS: FuncDef[] = [
   {
     func: "HDMIOUT2",
     state: "hdmi.out2",
-    name: "HDMI OUT2",
+    nameKey: "HDMI OUT2",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
     role: "switch",
@@ -812,7 +813,7 @@ const SYS_FUNCS: FuncDef[] = [
   {
     func: "HDMIOUT3",
     state: "hdmi.out3",
-    name: "HDMI OUT3",
+    nameKey: "HDMI OUT3",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
     role: "switch",
@@ -820,7 +821,7 @@ const SYS_FUNCS: FuncDef[] = [
   {
     func: "SPPATTERN",
     state: "advanced.speakers.pattern",
-    name: "Speaker pattern",
+    nameKey: "Speaker pattern",
     spec: { kind: "enum", states: SPPATTERN_STATES },
     write: true,
     role: "state",
@@ -828,7 +829,7 @@ const SYS_FUNCS: FuncDef[] = [
   {
     func: "SPPATTERN1SWFR1CNFG",
     state: "advanced.speakers.pattern1Swfr1",
-    name: "Speaker pattern 1 subwoofer 1",
+    nameKey: "Speaker pattern 1 subwoofer 1",
     spec: { kind: "enum", states: SWFR_CNFG_STATES },
     write: true,
     role: "state",
@@ -836,7 +837,7 @@ const SYS_FUNCS: FuncDef[] = [
   {
     func: "SPPATTERN1SWFR2CNFG",
     state: "advanced.speakers.pattern1Swfr2",
-    name: "Speaker pattern 1 subwoofer 2",
+    nameKey: "Speaker pattern 1 subwoofer 2",
     spec: { kind: "enum", states: SWFR_CNFG_STATES },
     write: true,
     role: "state",
@@ -844,7 +845,7 @@ const SYS_FUNCS: FuncDef[] = [
   {
     func: "SPPATTERN2SWFR1CNFG",
     state: "advanced.speakers.pattern2Swfr1",
-    name: "Speaker pattern 2 subwoofer 1",
+    nameKey: "Speaker pattern 2 subwoofer 1",
     spec: { kind: "enum", states: SWFR_CNFG_STATES },
     write: true,
     role: "state",
@@ -852,7 +853,7 @@ const SYS_FUNCS: FuncDef[] = [
   {
     func: "SPPATTERN2SWFR2CNFG",
     state: "advanced.speakers.pattern2Swfr2",
-    name: "Speaker pattern 2 subwoofer 2",
+    nameKey: "Speaker pattern 2 subwoofer 2",
     spec: { kind: "enum", states: SWFR_CNFG_STATES },
     write: true,
     role: "state",
@@ -862,7 +863,7 @@ const SYS_FUNCS: FuncDef[] = [
   {
     func: "SPPATTERN1AMP",
     state: "advanced.speakers.pattern1Amp",
-    name: "Speaker pattern 1 amp assign",
+    nameKey: "Speaker pattern 1 amp assign",
     spec: { kind: "enum", states: selfMap(["Basic", "7ch +1ZONE", "5ch BI-AMP"]) },
     write: true,
     role: "state",
@@ -871,7 +872,7 @@ const SYS_FUNCS: FuncDef[] = [
   {
     func: "TRIG1MANUAL",
     state: "advanced.trigger1Manual",
-    name: "Trigger out 1 manual level",
+    nameKey: "Trigger out 1 manual level",
     spec: { kind: "enum", states: selfMap(["Lo", "Hi"]) },
     write: true,
     role: "state",
@@ -882,7 +883,7 @@ const SYS_FUNCS: FuncDef[] = [
   {
     func: "YNCAPORT",
     state: "advanced.yncaPort",
-    name: "YNCA control port",
+    nameKey: "YNCA control port",
     spec: { kind: "number", decimals: 0 },
     write: false,
     role: "value",
@@ -932,7 +933,7 @@ const DAB_FUNCS: FuncDef[] = [
   {
     func: "BAND",
     state: "band",
-    name: "Band",
+    nameKey: "Band",
     spec: { kind: "enum", states: DAB_BAND_STATES },
     write: true,
     role: "state",
@@ -940,16 +941,23 @@ const DAB_FUNCS: FuncDef[] = [
   {
     func: "DABCHLABEL",
     state: "dab.channelLabel",
-    name: "DAB channel",
+    nameKey: "DAB channel",
     spec: { kind: "text" },
     write: false,
     role: "text",
   },
-  { func: "DABDLSLABEL", state: "dab.dls", name: "DAB DLS text", spec: { kind: "text" }, write: false, role: "text" },
+  {
+    func: "DABDLSLABEL",
+    state: "dab.dls",
+    nameKey: "DAB DLS text",
+    spec: { kind: "text" },
+    write: false,
+    role: "text",
+  },
   {
     func: "DABENSEMBLELABEL",
     state: "dab.ensembleLabel",
-    name: "DAB ensemble",
+    nameKey: "DAB ensemble",
     spec: { kind: "text" },
     write: false,
     role: "text",
@@ -957,7 +965,7 @@ const DAB_FUNCS: FuncDef[] = [
   {
     func: "DABSERVICELABEL",
     state: "dab.serviceLabel",
-    name: "DAB service",
+    nameKey: "DAB service",
     spec: { kind: "text" },
     write: false,
     role: "text",
@@ -965,7 +973,7 @@ const DAB_FUNCS: FuncDef[] = [
   {
     func: "DABPRESET",
     state: "preset",
-    name: "Preset (recall by number)",
+    nameKey: "Preset (recall by number)",
     spec: { kind: "number", min: 0, max: 40, step: 1, decimals: 0 },
     write: true,
     role: "level",
@@ -974,7 +982,7 @@ const DAB_FUNCS: FuncDef[] = [
   {
     func: "DABPRGTYPE",
     state: "dab.programType",
-    name: "DAB program type",
+    nameKey: "DAB program type",
     spec: { kind: "text" },
     write: false,
     role: "text",
@@ -982,7 +990,7 @@ const DAB_FUNCS: FuncDef[] = [
   {
     func: "FMPRESET",
     state: "preset",
-    name: "Preset (recall by number)",
+    nameKey: "Preset (recall by number)",
     spec: { kind: "number", min: 0, max: 40, step: 1, decimals: 0 },
     write: true,
     role: "level",
@@ -991,7 +999,7 @@ const DAB_FUNCS: FuncDef[] = [
   {
     func: "FMRDSPRGSERVICE",
     state: "rdsService",
-    name: "RDS station",
+    nameKey: "RDS station",
     spec: { kind: "text" },
     write: false,
     role: "text",
@@ -999,16 +1007,16 @@ const DAB_FUNCS: FuncDef[] = [
   {
     func: "FMRDSPRGTYPE",
     state: "rdsProgramType",
-    name: "RDS program type",
+    nameKey: "RDS program type",
     spec: { kind: "text" },
     write: false,
     role: "text",
   },
-  { func: "FMRDSTXT", state: "rdsText", name: "RDS text", spec: { kind: "text" }, write: false, role: "text" },
+  { func: "FMRDSTXT", state: "rdsText", nameKey: "RDS text", spec: { kind: "text" }, write: false, role: "text" },
   {
     func: "FMSEARCHMODE",
     state: "searchMode",
-    name: "Search mode",
+    nameKey: "Search mode",
     spec: { kind: "enum", states: TUN_SEARCHMODE_STATES },
     write: true,
     role: "state",
@@ -1016,7 +1024,7 @@ const DAB_FUNCS: FuncDef[] = [
   {
     func: "FMFREQ",
     state: "frequency",
-    name: "Frequency",
+    nameKey: "Frequency",
     // Same wire form as the TUN FMFREQ above (MHz, two decimals) — read into the
     // unified kHz state; the controller routes the band-dependent write.
     spec: { kind: "number", unit: "kHz", decimals: 0 },
@@ -1030,7 +1038,7 @@ const DAB_FUNCS: FuncDef[] = [
   {
     func: "DABAUDIOMODE",
     state: "audioMode",
-    name: "Audio mode",
+    nameKey: "Audio mode",
     spec: { kind: "text" },
     write: false,
     role: "text",
@@ -1038,7 +1046,7 @@ const DAB_FUNCS: FuncDef[] = [
   {
     func: "DABBITRATE",
     state: "dab.bitRate",
-    name: "Bit rate",
+    nameKey: "Bit rate",
     spec: { kind: "number", decimals: 0 },
     write: false,
     role: "value",
@@ -1046,7 +1054,7 @@ const DAB_FUNCS: FuncDef[] = [
   {
     func: "DABDATETIME",
     state: "dab.dateTime",
-    name: "DAB date/time",
+    nameKey: "DAB date/time",
     spec: { kind: "text" },
     write: false,
     role: "text",
@@ -1064,7 +1072,7 @@ const DAB_FUNCS: FuncDef[] = [
   {
     func: "DABOFFAIR",
     state: "dab.offAir",
-    name: "Off air",
+    nameKey: "Off air",
     spec: { kind: "onoff", on: "Assert", off: "Negate" },
     write: false,
     role: "indicator",
@@ -1072,7 +1080,7 @@ const DAB_FUNCS: FuncDef[] = [
   {
     func: "FMRDSCLOCK",
     state: "rdsClock",
-    name: "RDS clock",
+    nameKey: "RDS clock",
     spec: { kind: "text" },
     write: false,
     role: "text",
@@ -1080,7 +1088,7 @@ const DAB_FUNCS: FuncDef[] = [
   {
     func: "FMSIGSTEREOMONO",
     state: "stereo",
-    name: "Stereo reception",
+    nameKey: "Stereo reception",
     spec: { kind: "onoff", on: "Assert", off: "Negate" },
     write: false,
     role: "indicator",
@@ -1088,7 +1096,7 @@ const DAB_FUNCS: FuncDef[] = [
   {
     func: "FMTUNED",
     state: "tuned",
-    name: "Tuned to a station",
+    nameKey: "Tuned to a station",
     spec: { kind: "onoff", on: "Assert", off: "Negate" },
     write: false,
     role: "indicator",
@@ -1138,7 +1146,7 @@ const PLAYER_FUNCS: Array<{
   readFunc?: string;
   readAliases?: string[];
   state: string;
-  name: string;
+  nameKey: I18nKey;
   spec: ValueSpec;
   write: boolean;
   role: string;
@@ -1151,32 +1159,32 @@ const PLAYER_FUNCS: Array<{
     func: "PLAYBACK",
     readFunc: "PLAYBACKINFO",
     state: "playback",
-    name: "Playback",
+    nameKey: "Playback",
     // media.state must be a number for the type-detector media-player slot; PLAYBACKINFO
     // reports Play/Pause/Stop (Skip Fwd/Rev are the separate next/prev buttons below).
     spec: { kind: "code", codes: { Play: 0, Stop: 1, Pause: 2 }, labels: { 0: "Play", 1: "Stop", 2: "Pause" } },
     write: true,
     role: "media.state",
   },
-  { func: "ARTIST", state: "artist", name: "Artist", spec: { kind: "text" }, write: false, role: "media.artist" },
-  { func: "ALBUM", state: "album", name: "Album", spec: { kind: "text" }, write: false, role: "media.album" },
+  { func: "ARTIST", state: "artist", nameKey: "Artist", spec: { kind: "text" }, write: false, role: "media.artist" },
+  { func: "ALBUM", state: "album", nameKey: "Album", spec: { kind: "text" }, write: false, role: "media.album" },
   // Streaming sources (Spotify/Tidal/Deezer, and Pandora firmware-dependent) report the
   // title under TRACK; older sources (server/usb/netradio/…) under SONG. Both feed `track`.
   {
     func: "SONG",
     readAliases: ["TRACK"],
     state: "track",
-    name: "Track",
+    nameKey: "Track",
     spec: { kind: "text" },
     write: false,
     role: "media.title",
   },
-  { func: "STATION", state: "station", name: "Station", spec: { kind: "text" }, write: false, role: "text" },
-  { func: "CHNAME", state: "channelName", name: "Channel name", spec: { kind: "text" }, write: false, role: "text" },
+  { func: "STATION", state: "station", nameKey: "Station", spec: { kind: "text" }, write: false, role: "text" },
+  { func: "CHNAME", state: "channelName", nameKey: "Channel name", spec: { kind: "text" }, write: false, role: "text" },
   {
     func: "TOTALTIME",
     state: "totalTime",
-    name: "Total time",
+    nameKey: "Total time",
     spec: { kind: "text" },
     write: false,
     role: "media.duration.text",
@@ -1184,7 +1192,7 @@ const PLAYER_FUNCS: Array<{
   {
     func: "ELAPSEDTIME",
     state: "elapsedTime",
-    name: "Elapsed time",
+    nameKey: "Elapsed time",
     spec: { kind: "text" },
     write: false,
     role: "media.elapsed.text",
@@ -1192,7 +1200,7 @@ const PLAYER_FUNCS: Array<{
   {
     func: "REPEAT",
     state: "repeat",
-    name: "Repeat",
+    nameKey: "Repeat",
     // media.mode.repeat is a number in the type-detector (off/one/all); code-mapped so it fills
     // the REPEAT slot and still reads/writes as labels.
     spec: { kind: "code", codes: { Off: 0, Single: 1, All: 2 }, labels: { 0: "Off", 1: "Single", 2: "All" } },
@@ -1202,7 +1210,7 @@ const PLAYER_FUNCS: Array<{
   {
     func: "SHUFFLE",
     state: "shuffle",
-    name: "Shuffle",
+    nameKey: "Shuffle",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
     // Boolean on/off shuffle → the type-detector media-player role (fills the SHUFFLE slot).
@@ -1218,7 +1226,7 @@ const PLAYER_FUNCS: Array<{
     func: "PLAYBACK",
     readFunc: "PLAYBACKINFO",
     state: "next",
-    name: "Next",
+    nameKey: "Next",
     spec: { kind: "button" },
     write: true,
     role: "button.next",
@@ -1229,7 +1237,7 @@ const PLAYER_FUNCS: Array<{
     func: "PLAYBACK",
     readFunc: "PLAYBACKINFO",
     state: "prev",
-    name: "Previous",
+    nameKey: "Previous",
     spec: { kind: "button" },
     write: true,
     role: "button.prev",
@@ -1250,7 +1258,7 @@ const PLAYER_FUNCS: Array<{
 function fnEntries(fns: readonly FuncDef[], subunit: string, prefix = ""): YncaEntry[] {
   return fns.map(fn => ({
     id: `${prefix}${fn.state}`,
-    name: fn.name,
+    nameKey: fn.nameKey,
     spec: fn.spec,
     write: fn.write,
     role: fn.role,
@@ -1285,7 +1293,7 @@ export function buildYncaCatalog(): YncaEntry[] {
   // Kept out of the device→state map (writeOnly), so a name answer never writes the state.
   entries.push({
     id: "scene.recall",
-    name: "Recall scene",
+    nameKey: "Recall scene",
     spec: { kind: "number", min: 1, max: 12, step: 1 },
     write: true,
     role: "level",
@@ -1305,7 +1313,7 @@ export function buildYncaCatalog(): YncaEntry[] {
     const upper = key.toUpperCase();
     entries.push({
       id: `advanced.inputNames.${key}`,
-      name: `Input name ${upper}`,
+      nameKey: "Input names",
       spec: { kind: "text" },
       write: false,
       role: "text",
@@ -1322,7 +1330,7 @@ export function buildYncaCatalog(): YncaEntry[] {
     for (const fn of PLAYER_FUNCS) {
       entries.push({
         id: `player.${fn.state}`,
-        name: fn.name,
+        nameKey: fn.nameKey,
         spec: fn.spec,
         write: fn.write,
         role: fn.role,
@@ -1342,7 +1350,7 @@ export function buildYncaCatalog(): YncaEntry[] {
     if (PRESET_SUBUNITS.includes(source.subunit)) {
       entries.push({
         id: `player.${source.channel}.preset`,
-        name: "Recall preset",
+        nameKey: "Recall preset",
         spec: { kind: "number", min: 0, max: 40, step: 1, decimals: 0 },
         write: true,
         role: "level",
@@ -1357,7 +1365,7 @@ export function buildYncaCatalog(): YncaEntry[] {
     if (MEM_SUBUNITS.includes(source.subunit)) {
       entries.push({
         id: `player.${source.channel}.presetSave`,
-        name: "Save to preset (0 = first free slot)",
+        nameKey: "Save to preset (0 = first free slot)",
         spec: { kind: "number", min: 0, max: 40, step: 1 },
         write: true,
         role: "level",
@@ -1374,7 +1382,7 @@ export function buildYncaCatalog(): YncaEntry[] {
   // from ioBroker" path the #613 workflow asked for.
   entries.push({
     id: "player.netRadio.bookmark",
-    name: "Bookmark current station",
+    nameKey: "Bookmark current station",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
     role: "switch",
@@ -1389,7 +1397,7 @@ export function buildYncaCatalog(): YncaEntry[] {
   entries.push(
     {
       id: "player.bluetooth.connected",
-      name: "Connected",
+      nameKey: "Connected",
       spec: { kind: "onoff", on: "Connected", off: "Disconnected" },
       write: false,
       role: "indicator",
@@ -1398,7 +1406,7 @@ export function buildYncaCatalog(): YncaEntry[] {
     },
     {
       id: "player.bluetooth.connect",
-      name: "Connect",
+      nameKey: "Connect",
       spec: { kind: "onoff", on: "Connect", off: "Disconnect" },
       write: true,
       role: "switch",
@@ -1409,7 +1417,7 @@ export function buildYncaCatalog(): YncaEntry[] {
     },
     {
       id: "player.bluetooth.pairing",
-      name: "Start pairing",
+      nameKey: "Start pairing",
       spec: { kind: "button" },
       write: true,
       role: "button",
@@ -1421,7 +1429,7 @@ export function buildYncaCatalog(): YncaEntry[] {
     },
     {
       id: "player.bluetooth.pairingCancel",
-      name: "Cancel pairing",
+      nameKey: "Cancel pairing",
       spec: { kind: "button" },
       write: true,
       role: "button",
@@ -1435,7 +1443,7 @@ export function buildYncaCatalog(): YncaEntry[] {
     // the AirPlay volume-interlock mode — read-only status, subunit-specific.
     {
       id: "player.bluetooth.deviceName",
-      name: "Paired device",
+      nameKey: "Paired device",
       spec: { kind: "text" },
       write: false,
       role: "text",
@@ -1444,7 +1452,7 @@ export function buildYncaCatalog(): YncaEntry[] {
     },
     {
       id: "player.airplay.volumeInterlock",
-      name: "Volume interlock",
+      nameKey: "Volume interlock",
       spec: { kind: "text" },
       write: false,
       role: "text",

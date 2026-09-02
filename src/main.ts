@@ -2,7 +2,6 @@ import * as utils from "@iobroker/adapter-core";
 import { createSocket } from "node:dgram";
 import { get as httpGet } from "node:http";
 import { networkInterfaces } from "node:os";
-import { join } from "node:path";
 import { attemptDevice } from "./lib/attempt-device";
 import { searchInterfaces } from "./lib/network-interfaces";
 import { isGroupEnabled } from "./lib/catalog/groups";
@@ -21,6 +20,7 @@ import {
   stripNamespace,
 } from "./lib/pure-helpers";
 import { errorMessage, MAX_HTTP_BODY_BYTES } from "./lib/util";
+import { tName } from "./lib/i18n";
 import { discoverYamaha } from "./lib/discovery";
 import { readDiscovered, readIgnored, writeDiscovered } from "./lib/discovered-store";
 import { discoveredStoreDeps, ignoredStoreDeps } from "./lib/discovered-store-deps";
@@ -137,13 +137,6 @@ export class Yamaha extends utils.Adapter {
 
   /** Start a supervisor for each configured device, then subscribe to state changes. */
   private async onReady(): Promise<void> {
-    // Load admin translations for the device-manager cards — a UI concern, in its own
-    // guarded block so an i18n failure never aborts core device startup below.
-    try {
-      await utils.I18n.init(join(this.adapterDir, "admin"), this);
-    } catch (e) {
-      this.log.warn(`could not load admin translations (${errorMessage(e)}); card labels may be untranslated`);
-    }
     try {
       this.log.info('starting — a "ready" message will follow for each device');
       await this.setState("info.connection", { val: false, ack: true });
@@ -744,10 +737,21 @@ export class Yamaha extends utils.Adapter {
       },
       { preserve: { common: ["name"] } },
     );
-    await this.setObjectNotExistsAsync(`${deviceId}.info`, { type: "channel", common: { name: "Info" }, native: {} });
+    await this.setObjectNotExistsAsync(`${deviceId}.info`, {
+      type: "channel",
+      common: { name: tName("Info") },
+      native: {},
+    });
     await this.setObjectNotExistsAsync(`${deviceId}.info.connection`, {
       type: "state",
-      common: { name: "Connected", type: "boolean", role: "indicator.reachable", read: true, write: false, def: false },
+      common: {
+        name: tName("Connected"),
+        type: "boolean",
+        role: "indicator.reachable",
+        read: true,
+        write: false,
+        def: false,
+      },
       native: {},
     });
     // Model name shown on the device-manager card. Filled by whichever transport reports it
@@ -755,7 +759,7 @@ export class Yamaha extends utils.Adapter {
     // offline device or a transport that does not report a model.
     await this.setObjectNotExistsAsync(`${deviceId}.info.model`, {
       type: "state",
-      common: { name: "Model", type: "string", role: "text", read: true, write: false, def: "" },
+      common: { name: tName("Model"), type: "string", role: "text", read: true, write: false, def: "" },
       native: {},
     });
     // The device's address — for a discovered device it lived only in the adapter's
@@ -763,7 +767,7 @@ export class Yamaha extends utils.Adapter {
     // could name it without a network search. Refreshed every start: DHCP may move it.
     await this.setObjectNotExistsAsync(`${deviceId}.info.ip`, {
       type: "state",
-      common: { name: "IP address", type: "string", role: "info.ip", read: true, write: false, def: "" },
+      common: { name: tName("IP address"), type: "string", role: "info.ip", read: true, write: false, def: "" },
       native: {},
     });
     await this.setState(`${deviceId}.info.ip`, { val: ip, ack: true });
@@ -772,14 +776,14 @@ export class Yamaha extends utils.Adapter {
     // renders all three (false) instead of nothing.
     await this.setObjectNotExistsAsync(`${deviceId}.info.transports`, {
       type: "channel",
-      common: { name: "Transports" },
+      common: { name: tName("Transports") },
       native: {},
     });
     for (const proto of TRANSPORT_IDS) {
       await this.setObjectNotExistsAsync(`${deviceId}.info.transports.${proto}`, {
         type: "state",
         common: {
-          name: `${proto.toUpperCase()} connected`,
+          name: tName("%s connected", proto.toUpperCase()),
           type: "boolean",
           role: "indicator.reachable",
           read: true,

@@ -27,6 +27,7 @@ var import_capability = require("./capability");
 var import_object_mapper = require("./object-mapper");
 var import_command_mapper = require("./command-mapper");
 var import_push = require("./push");
+var import_i18n = require("../i18n");
 var import_util = require("../util");
 var import_poll_drop_detector = require("../lifecycle/poll-drop-detector");
 var import_zones = require("./zones");
@@ -589,7 +590,7 @@ class YxcDeviceController {
       await this.deps.upsertObject(`${this.deviceId}.${id}`, {
         id,
         type: "state",
-        common: { name: "Scenes (number + title)", type: "string", role: "json", read: true, write: false }
+        common: { name: (0, import_i18n.tName)("Scenes (number + title)"), type: "string", role: "json", read: true, write: false }
       });
       this.emit(id, JSON.stringify(list));
     }

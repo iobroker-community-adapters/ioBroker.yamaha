@@ -513,15 +513,20 @@ describe("Yamaha onReady — configured devices", () => {
     expect(ctx.i.log.error).toHaveBeenCalledWith(expect.stringContaining("onReady failed: objects db down"));
   });
 
-  it("starts the devices even when the admin translations fail to load", async () => {
-    const utils = await import("@iobroker/adapter-core");
-    (utils.I18n.init as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("no i18n dir"));
+  it("gives every object a name in all eleven languages, never a plain string", async () => {
+    // ioBroker resolves a translation object into the reader's language itself; a plain string
+    // would freeze the tree in one language (core-team line, nut2 #15).
     const ctx = setup();
     await ctx.i.onReady();
     await flush();
-    // Card labels are cosmetic; the receivers are not.
-    expect(ctx.i.log.warn).toHaveBeenCalledWith(expect.stringContaining("could not load admin translations"));
-    expect(ctx.calls).toHaveLength(1);
+    const name = (ctx.i.objects.get("Living_room.info.model")?.common as { name?: unknown }).name as Record<
+      string,
+      string
+    >;
+    expect(typeof name).toBe("object");
+    expect(name.en).toBe("Model");
+    expect(name.de).toBe("Modell");
+    expect(Object.keys(name)).toHaveLength(11);
   });
 });
 

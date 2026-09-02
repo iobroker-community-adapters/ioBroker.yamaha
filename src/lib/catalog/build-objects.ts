@@ -1,9 +1,10 @@
 import { specToCommon } from "./value-coerce";
-import { CHANNEL_NAMES, type CatalogEntry, type ObjectDef } from "./types";
+import { CHANNEL_NAME_KEYS, type CatalogEntry, type ObjectDef } from "./types";
+import { tName } from "../i18n";
 
 /**
  * Capitalise the first character, as the fallback channel name for a channel id
- * not in {@link CHANNEL_NAMES}.
+ * not in {@link CHANNEL_NAME_KEYS}.
  *
  * @param segment the channel id segment
  * @returns the segment with its first character upper-cased
@@ -34,12 +35,14 @@ export function catalogToObjects(entries: CatalogEntry[]): ObjectDef[] {
         objects.push({
           id: channelId,
           type: "channel",
-          common: { name: CHANNEL_NAMES[segment] ?? capitalize(segment) },
+          // A listed channel is translated; an unlisted one keeps its capitalised id, which is
+          // a device-derived name and therefore has no translation to give.
+          common: { name: CHANNEL_NAME_KEYS[segment] ? tName(CHANNEL_NAME_KEYS[segment]) : capitalize(segment) },
         });
       }
     }
     const common = specToCommon(entry.spec, { write: entry.write, role: entry.role });
-    objects.push({ id: entry.id, type: "state", common: { name: entry.name, ...common } });
+    objects.push({ id: entry.id, type: "state", common: { name: tName(entry.nameKey), ...common } });
   }
   return objects;
 }

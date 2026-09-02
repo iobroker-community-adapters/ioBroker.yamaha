@@ -296,7 +296,8 @@ describe("XmlDeviceController object tree and drop handling", () => {
     // Rewriting the shared parent for every zone churns the object DB on each start.
     expect(s.objects.filter(id => id === "living.multiroom")).toHaveLength(1);
     // The zone channel carries its readable name from the shared CHANNEL_NAMES table.
-    expect(s.defs.get("living.multiroom.zone2")?.common?.name).toBe("Zone 2");
+    // Channel names are translation objects — the English half is what this test cares about.
+    expect((s.defs.get("living.multiroom.zone2")?.common?.name as { en?: string }).en).toBe("Zone 2");
   });
 
   test("ignores a write meant for another device", async () => {

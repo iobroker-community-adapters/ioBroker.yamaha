@@ -32,6 +32,11 @@ class YamahaDeviceManagement extends import_dm_utils.DeviceManagement {
   get objId() {
     return `system.adapter.${this.adapter.namespace}`;
   }
+  /** The running adapter, for the one action that has to reach into it (delete a device). */
+  get owner() {
+    const candidate = this.adapter;
+    return typeof candidate.removeDevice === "function" ? candidate : void 0;
+  }
   /** Read the manual device table (`native.devices`) as raw rows, keeping the name. */
   async readManual() {
     var _a;
@@ -173,6 +178,15 @@ class YamahaDeviceManagement extends import_dm_utils.DeviceManagement {
         return { refresh: true };
       }
       manual.push(row);
+      const ignoredDeps = (0, import_discovered_store_deps.ignoredStoreDeps)(this.adapter);
+      const ignored = await (0, import_discovered_store.readIgnored)(ignoredDeps);
+      const id = (0, import_device_management_helpers.rowId)(row);
+      if (ignored.includes(id)) {
+        await (0, import_discovered_store.writeIgnored)(
+          ignoredDeps,
+          ignored.filter((entry) => entry !== id)
+        );
+      }
       await this.writeManual(manual);
     }
     return { refresh: true };
@@ -219,6 +233,7 @@ class YamahaDeviceManagement extends import_dm_utils.DeviceManagement {
    * @returns a directive to reload the list
    */
   async deleteDevice(cardId, context) {
+    var _a;
     const manual = await this.readManual();
     if (manual.length > 0) {
       const index = manual.findIndex((r) => (0, import_device_management_helpers.rowId)(r) === cardId);
@@ -239,6 +254,9 @@ class YamahaDeviceManagement extends import_dm_utils.DeviceManagement {
       const confirmed = await context.showConfirmation((0, import_i18n.t)("dmDeleteConfirm", cardId));
       if (confirmed) {
         await (0, import_discovered_store.writeDiscovered)(store, remaining);
+        await ((_a = this.owner) == null ? void 0 : _a.removeDevice(cardId));
+        const ignoredDeps = (0, import_discovered_store_deps.ignoredStoreDeps)(this.adapter);
+        await (0, import_discovered_store.writeIgnored)(ignoredDeps, [...await (0, import_discovered_store.readIgnored)(ignoredDeps), cardId]);
       }
     }
     return { refresh: "devices" };

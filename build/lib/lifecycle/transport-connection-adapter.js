@@ -108,7 +108,7 @@ class TransportConnectionAdapter {
    */
   handleWrite(canonicalId, ack, value) {
     var _a, _b, _c, _d, _e;
-    const zone = (_b = (_a = /^(?:multiroom\.)?zone[234]\./.exec(canonicalId)) == null ? void 0 : _a[0]) != null ? _b : "";
+    const zone = (_b = (_a = import_owner_policy.ZONE_PREFIX.exec(canonicalId)) == null ? void 0 : _a[0]) != null ? _b : "";
     const template = canonicalId.slice(zone.length);
     const controllerId = zone + ((_d = (_c = INVERSE_DRIFT[this.transport]) == null ? void 0 : _c[template]) != null ? _d : template);
     (_e = this.controller) == null ? void 0 : _e.handleStateChange(`${this.deviceId}.${controllerId}`, ack, value);

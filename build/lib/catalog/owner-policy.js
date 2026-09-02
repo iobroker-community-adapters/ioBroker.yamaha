@@ -18,6 +18,7 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var owner_policy_exports = {};
 __export(owner_policy_exports, {
+  ZONE_PREFIX: () => ZONE_PREFIX,
   canonicalIdOf: () => canonicalIdOf,
   capabilityKeyOf: () => capabilityKeyOf,
   pickOwner: () => pickOwner,
@@ -60,24 +61,21 @@ const OWNER_OVERRIDES = {
   sleep: ["ynca", "xml", "yxc"],
   "tuner.band": ["ynca", "yxc"]
 };
+const ZONE_PREFIX = /^multiroom\.zone[234]\./;
 const ID_DRIFT = {
   yxc: { subwooferVolume: "sound.subwooferTrim", "multiroom.partyEnable": "multiroom.party" },
   xml: { hdmiOut1: "hdmi.out1", hdmiOut2: "hdmi.out2" }
 };
 function capabilityKeyOf(transport, stateId) {
   var _a, _b;
-  const template = stateId.replace(/^(?:multiroom\.)?zone[234]\./, "");
+  const template = stateId.replace(ZONE_PREFIX, "");
   return (_b = (_a = ID_DRIFT[transport]) == null ? void 0 : _a[template]) != null ? _b : template;
 }
 function canonicalIdOf(transport, stateId) {
   var _a, _b, _c, _d;
-  const zone = (_b = (_a = /^(?:multiroom\.)?zone[234]\./.exec(stateId)) == null ? void 0 : _a[0]) != null ? _b : "";
+  const zone = (_b = (_a = ZONE_PREFIX.exec(stateId)) == null ? void 0 : _a[0]) != null ? _b : "";
   const template = stateId.slice(zone.length);
-  const resolved = (_d = (_c = ID_DRIFT[transport]) == null ? void 0 : _c[template]) != null ? _d : template;
-  if (zone && !zone.startsWith("multiroom.")) {
-    return `multiroom.${zone}${resolved}`;
-  }
-  return zone + resolved;
+  return zone + ((_d = (_c = ID_DRIFT[transport]) == null ? void 0 : _c[template]) != null ? _d : template);
 }
 function pickOwner(key, candidates) {
   var _a, _b;
@@ -106,6 +104,7 @@ function resolveOwnership(offered) {
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  ZONE_PREFIX,
   canonicalIdOf,
   capabilityKeyOf,
   pickOwner,

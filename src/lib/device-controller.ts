@@ -1,6 +1,7 @@
 import { mergeYncaSubunits, type YncaCapabilities } from "./ynca/capability";
 import { formatWireNumber } from "./catalog/value-coerce";
 import type { ObjectDef } from "./catalog/types";
+import { tName } from "./i18n";
 import type { ConnectionHandle, ControllerLog } from "./controller";
 import {
   YNCA_CATALOG,
@@ -305,7 +306,7 @@ export class YncaDeviceController implements ConnectionHandle {
       await this.deps.upsertObject(`${this.deviceId}.scene.list`, {
         id: "scene.list",
         type: "state",
-        common: { name: "Scenes (number + title)", type: "string", role: "json", read: true, write: false },
+        common: { name: tName("Scenes (number + title)"), type: "string", role: "json", read: true, write: false },
       });
       this.deps.setStateAck(`${this.deviceId}.scene.list`, JSON.stringify(this.sceneTitles));
     }
@@ -615,7 +616,7 @@ export class YncaDeviceController implements ConnectionHandle {
     const sourceDef = (id: string): ObjectDef => ({
       id,
       type: "state",
-      common: { name: "Playing source", type: "string", role: "text", read: true, write: false },
+      common: { name: tName("Playing source"), type: "string", role: "text", read: true, write: false },
     });
     await this.deps.upsertObject(`${this.deviceId}.player.source`, sourceDef("player.source"));
     this.playerZones = ["main"];

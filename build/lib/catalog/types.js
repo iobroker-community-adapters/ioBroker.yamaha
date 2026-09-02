@@ -18,10 +18,10 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var types_exports = {};
 __export(types_exports, {
-  CHANNEL_NAMES: () => CHANNEL_NAMES
+  CHANNEL_NAME_KEYS: () => CHANNEL_NAME_KEYS
 });
 module.exports = __toCommonJS(types_exports);
-const CHANNEL_NAMES = {
+const CHANNEL_NAME_KEYS = {
   // Device info (metadata beside the per-device connection indicator)
   info: "Info",
   // Zones
@@ -72,6 +72,6 @@ const CHANNEL_NAMES = {
 };
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
-  CHANNEL_NAMES
+  CHANNEL_NAME_KEYS
 });
 //# sourceMappingURL=types.js.map

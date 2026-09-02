@@ -8,7 +8,7 @@ import {
   yncaObjectsFor,
   yncaStateUpdate,
 } from "./catalog";
-import { CHANNEL_NAMES } from "../catalog/types";
+import { CHANNEL_NAME_KEYS } from "../catalog/types";
 import type { EnumSpec } from "../catalog/value-coerce";
 import type { YncaCapabilities } from "./capability";
 import { capabilitiesFromLines as parseCapabilities } from "./__fixtures__/capabilities-from-lines";
@@ -471,7 +471,7 @@ describe("YNCA catalog", () => {
         segments.add(parts[i - 1]);
       }
     }
-    const uncurated = [...segments].filter(segment => !(segment in CHANNEL_NAMES));
+    const uncurated = [...segments].filter(segment => !(segment in CHANNEL_NAME_KEYS));
     expect(uncurated).toEqual([]);
   });
 });

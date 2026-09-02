@@ -1,5 +1,6 @@
 import type { StateValue } from "../types";
 import { YXC_ZONE_IDS, zonePrefix } from "./zones";
+import type { I18nKey } from "../i18n";
 import { isWritableValue } from "../catalog/value-coerce";
 import { YXC_AMP_CATALOG } from "./catalog";
 import type { YxcClientLike } from "./client-contract";
@@ -312,23 +313,29 @@ export const PLAYER_CLEAR: StateValue[] = [
  * both transports feed one node), with the object name each state is created under.
  * Single source for the object mapper (creation) and the parser below (read-back).
  */
-export const DAB_FIELDS: Array<{ field: string; id: string; type: "string" | "number" | "boolean"; name: string }> = [
-  { field: "service_label", id: "tuner.dab.serviceLabel", type: "string", name: "Service label" },
-  { field: "ensemble_label", id: "tuner.dab.ensembleLabel", type: "string", name: "Ensemble label" },
-  { field: "ch_label", id: "tuner.dab.channelLabel", type: "string", name: "Channel label" },
-  { field: "dls", id: "tuner.dab.dls", type: "string", name: "DLS text" },
-  { field: "program_type", id: "tuner.dab.programType", type: "string", name: "Programme type" },
+export const DAB_FIELDS: Array<{
+  field: string;
+  id: string;
+  type: "string" | "number" | "boolean";
+  /** Object name as its translation KEY — this table is a module-level constant. */
+  nameKey: I18nKey;
+}> = [
+  { field: "service_label", id: "tuner.dab.serviceLabel", type: "string", nameKey: "Service label" },
+  { field: "ensemble_label", id: "tuner.dab.ensembleLabel", type: "string", nameKey: "Ensemble label" },
+  { field: "ch_label", id: "tuner.dab.channelLabel", type: "string", nameKey: "Channel label" },
+  { field: "dls", id: "tuner.dab.dls", type: "string", nameKey: "DLS text" },
+  { field: "program_type", id: "tuner.dab.programType", type: "string", nameKey: "Programme type" },
   // preset and audio_mode are NOT listed here: the active-band parse feeds the
   // unified flat tuner.preset / tuner.audioMode states (v2.0.0).
-  { field: "status", id: "tuner.dab.status", type: "string", name: "DAB status" },
-  { field: "bit_rate", id: "tuner.dab.bitRate", type: "number", name: "Bit rate" },
-  { field: "quality", id: "tuner.dab.quality", type: "number", name: "Signal quality" },
-  { field: "off_air", id: "tuner.dab.offAir", type: "boolean", name: "Off air" },
-  { field: "dab_plus", id: "tuner.dab.dabPlus", type: "boolean", name: "DAB+" },
-  { field: "category", id: "tuner.dab.category", type: "string", name: "Service category" },
-  { field: "total_station_num", id: "tuner.dab.totalStations", type: "number", name: "Total stations" },
-  { field: "initial_scan_progress", id: "tuner.dab.scanProgress", type: "number", name: "Initial scan progress" },
-  { field: "tune_aid", id: "tuner.dab.tuneAid", type: "number", name: "Tune aid level" },
+  { field: "status", id: "tuner.dab.status", type: "string", nameKey: "DAB status" },
+  { field: "bit_rate", id: "tuner.dab.bitRate", type: "number", nameKey: "Bit rate" },
+  { field: "quality", id: "tuner.dab.quality", type: "number", nameKey: "Signal quality" },
+  { field: "off_air", id: "tuner.dab.offAir", type: "boolean", nameKey: "Off air" },
+  { field: "dab_plus", id: "tuner.dab.dabPlus", type: "boolean", nameKey: "DAB+" },
+  { field: "category", id: "tuner.dab.category", type: "string", nameKey: "Service category" },
+  { field: "total_station_num", id: "tuner.dab.totalStations", type: "number", nameKey: "Total stations" },
+  { field: "initial_scan_progress", id: "tuner.dab.scanProgress", type: "number", nameKey: "Initial scan progress" },
+  { field: "tune_aid", id: "tuner.dab.tuneAid", type: "number", nameKey: "Tune aid level" },
 ];
 
 /**

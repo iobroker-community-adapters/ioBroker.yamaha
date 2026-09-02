@@ -236,22 +236,22 @@ const PLAYER_CLEAR = [
   { id: "player.shuffle", value: false }
 ];
 const DAB_FIELDS = [
-  { field: "service_label", id: "tuner.dab.serviceLabel", type: "string", name: "Service label" },
-  { field: "ensemble_label", id: "tuner.dab.ensembleLabel", type: "string", name: "Ensemble label" },
-  { field: "ch_label", id: "tuner.dab.channelLabel", type: "string", name: "Channel label" },
-  { field: "dls", id: "tuner.dab.dls", type: "string", name: "DLS text" },
-  { field: "program_type", id: "tuner.dab.programType", type: "string", name: "Programme type" },
+  { field: "service_label", id: "tuner.dab.serviceLabel", type: "string", nameKey: "Service label" },
+  { field: "ensemble_label", id: "tuner.dab.ensembleLabel", type: "string", nameKey: "Ensemble label" },
+  { field: "ch_label", id: "tuner.dab.channelLabel", type: "string", nameKey: "Channel label" },
+  { field: "dls", id: "tuner.dab.dls", type: "string", nameKey: "DLS text" },
+  { field: "program_type", id: "tuner.dab.programType", type: "string", nameKey: "Programme type" },
   // preset and audio_mode are NOT listed here: the active-band parse feeds the
   // unified flat tuner.preset / tuner.audioMode states (v2.0.0).
-  { field: "status", id: "tuner.dab.status", type: "string", name: "DAB status" },
-  { field: "bit_rate", id: "tuner.dab.bitRate", type: "number", name: "Bit rate" },
-  { field: "quality", id: "tuner.dab.quality", type: "number", name: "Signal quality" },
-  { field: "off_air", id: "tuner.dab.offAir", type: "boolean", name: "Off air" },
-  { field: "dab_plus", id: "tuner.dab.dabPlus", type: "boolean", name: "DAB+" },
-  { field: "category", id: "tuner.dab.category", type: "string", name: "Service category" },
-  { field: "total_station_num", id: "tuner.dab.totalStations", type: "number", name: "Total stations" },
-  { field: "initial_scan_progress", id: "tuner.dab.scanProgress", type: "number", name: "Initial scan progress" },
-  { field: "tune_aid", id: "tuner.dab.tuneAid", type: "number", name: "Tune aid level" }
+  { field: "status", id: "tuner.dab.status", type: "string", nameKey: "DAB status" },
+  { field: "bit_rate", id: "tuner.dab.bitRate", type: "number", nameKey: "Bit rate" },
+  { field: "quality", id: "tuner.dab.quality", type: "number", nameKey: "Signal quality" },
+  { field: "off_air", id: "tuner.dab.offAir", type: "boolean", nameKey: "Off air" },
+  { field: "dab_plus", id: "tuner.dab.dabPlus", type: "boolean", nameKey: "DAB+" },
+  { field: "category", id: "tuner.dab.category", type: "string", nameKey: "Service category" },
+  { field: "total_station_num", id: "tuner.dab.totalStations", type: "number", nameKey: "Total stations" },
+  { field: "initial_scan_progress", id: "tuner.dab.scanProgress", type: "number", nameKey: "Initial scan progress" },
+  { field: "tune_aid", id: "tuner.dab.tuneAid", type: "number", nameKey: "Tune aid level" }
 ];
 function parseYxcTunerInfo(tunerInfo) {
   if (typeof tunerInfo !== "object" || tunerInfo === null) {
@@ -362,7 +362,7 @@ function parseYxcTunerPresetLists(byBand) {
     }
     const slots = [];
     list.forEach((entry, index) => {
-      if (typeof entry === "object" && entry !== null) {
+      if (typeof entry === "object" && entry !== null && !isEmptyTunerPreset(entry)) {
         slots.push({ num: index + 1, ...entry });
       }
     });
@@ -372,6 +372,13 @@ function parseYxcTunerPresetLists(byBand) {
     return void 0;
   }
   return { id: "tuner.presets", value: JSON.stringify(result) };
+}
+function isEmptyTunerPreset(slot) {
+  const band = slot.band;
+  const hasBand = typeof band === "string" && band.length > 0 && band !== "unknown";
+  const hasNumber = typeof slot.number === "number" && slot.number !== 0;
+  const hasText = typeof slot.text === "string" && slot.text.trim().length > 0;
+  return !hasBand && !hasNumber && !hasText;
 }
 function parseYxcSignalInfo(info, zone) {
   const audio = info == null ? void 0 : info.audio;
@@ -384,14 +391,18 @@ function parseYxcSignalInfo(info, zone) {
   }
   const a = audio;
   const updates = [];
+  const text = (value) => {
+    const trimmed = typeof value === "string" ? value.trim() : "";
+    return /^-+$/.test(trimmed) ? "" : trimmed;
+  };
   if (typeof a.format === "string") {
-    updates.push({ id: `${prefix}sound.signal.format`, value: a.format });
+    updates.push({ id: `${prefix}sound.signal.format`, value: text(a.format) });
   }
   if (typeof a.fs === "string") {
-    updates.push({ id: `${prefix}sound.signal.sampling`, value: a.fs });
+    updates.push({ id: `${prefix}sound.signal.sampling`, value: text(a.fs) });
   }
   if (typeof a.bit === "string") {
-    updates.push({ id: `${prefix}sound.signal.bits`, value: a.bit });
+    updates.push({ id: `${prefix}sound.signal.bits`, value: text(a.bit) });
   }
   if (typeof a.bitrate === "number") {
     updates.push({ id: `${prefix}sound.signal.bitrate`, value: a.bitrate });

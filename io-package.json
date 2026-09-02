@@ -272,7 +272,19 @@
       "_id": "info",
       "type": "channel",
       "common": {
-        "name": "Information"
+        "name": {
+          "en": "Information",
+          "de": "Information",
+          "ru": "Информация",
+          "pt": "Informação",
+          "nl": "Informatie",
+          "fr": "Informations",
+          "it": "Informazioni",
+          "es": "Información",
+          "pl": "Informacje",
+          "uk": "Інформація",
+          "zh-cn": "信息"
+        }
       },
       "native": {}
     },
@@ -281,7 +293,19 @@
       "type": "state",
       "common": {
         "role": "indicator.connected",
-        "name": "Device or service connected",
+        "name": {
+          "en": "Device or service connected",
+          "de": "Gerät oder Dienst verbunden",
+          "ru": "Устройство или служба подключены",
+          "pt": "Dispositivo ou serviço ligado",
+          "nl": "Apparaat of dienst verbonden",
+          "fr": "Appareil ou service connecté",
+          "it": "Dispositivo o servizio connesso",
+          "es": "Dispositivo o servicio conectado",
+          "pl": "Urządzenie lub usługa połączona",
+          "uk": "Пристрій або служба підключені",
+          "zh-cn": "设备或服务已连接"
+        },
         "type": "boolean",
         "read": true,
         "write": false,
@@ -293,7 +317,19 @@
       "_id": "info.devicesTotal",
       "type": "state",
       "common": {
-        "name": "Devices total",
+        "name": {
+          "en": "Devices total",
+          "de": "Geräte gesamt",
+          "ru": "Всего устройств",
+          "pt": "Total de dispositivos",
+          "nl": "Aantal apparaten",
+          "fr": "Nombre d'appareils",
+          "it": "Dispositivi totali",
+          "es": "Dispositivos en total",
+          "pl": "Liczba urządzeń",
+          "uk": "Усього пристроїв",
+          "zh-cn": "设备总数"
+        },
         "type": "number",
         "role": "value",
         "read": true,
@@ -306,7 +342,19 @@
       "_id": "info.devicesOnline",
       "type": "state",
       "common": {
-        "name": "Devices online",
+        "name": {
+          "en": "Devices online",
+          "de": "Geräte verbunden",
+          "ru": "Устройств на связи",
+          "pt": "Dispositivos online",
+          "nl": "Apparaten online",
+          "fr": "Appareils en ligne",
+          "it": "Dispositivi online",
+          "es": "Dispositivos en línea",
+          "pl": "Urządzenia online",
+          "uk": "Пристроїв на зв'язку",
+          "zh-cn": "在线设备"
+        },
         "type": "number",
         "role": "value",
         "read": true,
@@ -319,7 +367,19 @@
       "_id": "info.devicesAllOnline",
       "type": "state",
       "common": {
-        "name": "All devices online",
+        "name": {
+          "en": "All devices online",
+          "de": "Alle Geräte verbunden",
+          "ru": "Все устройства на связи",
+          "pt": "Todos os dispositivos online",
+          "nl": "Alle apparaten online",
+          "fr": "Tous les appareils en ligne",
+          "it": "Tutti i dispositivi online",
+          "es": "Todos los dispositivos en línea",
+          "pl": "Wszystkie urządzenia online",
+          "uk": "Усі пристрої на зв'язку",
+          "zh-cn": "所有设备在线"
+        },
         "type": "boolean",
         "role": "indicator",
         "read": true,

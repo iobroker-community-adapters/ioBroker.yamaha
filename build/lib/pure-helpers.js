@@ -21,6 +21,7 @@ __export(pure_helpers_exports, {
   LABEL_RANK: () => LABEL_RANK,
   RENAMED_CHANNELS: () => RENAMED_CHANNELS,
   RENAMED_STATE_IDS: () => RENAMED_STATE_IDS,
+  childlessChannelIds: () => childlessChannelIds,
   isUsefulDeviceName: () => isUsefulDeviceName,
   legacyDeviceRow: () => legacyDeviceRow,
   mergeDiscovered: () => mergeDiscovered,
@@ -67,28 +68,30 @@ function parseDevices(raw, onCollision) {
   return records;
 }
 function mergeDiscovered(known, found, onCollision) {
-  const byIp = /* @__PURE__ */ new Map();
-  const takenIds = /* @__PURE__ */ new Set(["info"]);
+  var _a;
+  const byId = /* @__PURE__ */ new Map();
   for (const device of known) {
-    if (byIp.has(device.ip) || takenIds.has(device.id)) {
+    if (device.id === "info" || byId.has(device.id)) {
       continue;
     }
-    byIp.set(device.ip, device);
-    takenIds.add(device.id);
+    byId.set(device.id, { ...device });
   }
   for (const device of found) {
-    if (byIp.has(device.ip)) {
+    const label = device.name || device.ip;
+    const id = sanitizeId(label);
+    const remembered = byId.get(id);
+    if (remembered) {
+      remembered.ip = device.ip;
       continue;
     }
-    const id = sanitizeId(device.name || device.ip);
-    if (takenIds.has(id)) {
-      onCollision == null ? void 0 : onCollision(device.name || device.ip, id);
+    const ipOwner = [...byId.values()].find((record) => record.ip === device.ip);
+    if (id === "info" || ipOwner) {
+      onCollision == null ? void 0 : onCollision(label, (_a = ipOwner == null ? void 0 : ipOwner.id) != null ? _a : id);
       continue;
     }
-    takenIds.add(id);
-    byIp.set(device.ip, { id, ip: device.ip });
+    byId.set(id, { id, ip: device.ip });
   }
-  return [...byIp.values()];
+  return [...byId.values()];
 }
 function staleObjects(existing, deviceIds, namespace) {
   if (deviceIds.size === 0) {
@@ -297,6 +300,28 @@ function neverWrittenStateIds(objects, states, deviceIds, namespace) {
   }
   return ids;
 }
+function childlessChannelIds(objects, deviceIds, namespace) {
+  const filled = /* @__PURE__ */ new Set();
+  for (const [fullId, object] of Object.entries(objects)) {
+    if ((object == null ? void 0 : object.type) !== "state") {
+      continue;
+    }
+    for (let cut = fullId.lastIndexOf("."); cut > 0; cut = fullId.lastIndexOf(".", cut - 1)) {
+      filled.add(fullId.slice(0, cut));
+    }
+  }
+  const ids = [];
+  for (const [fullId, object] of Object.entries(objects)) {
+    if ((object == null ? void 0 : object.type) !== "channel" || filled.has(fullId)) {
+      continue;
+    }
+    const relative = stripNamespace(fullId, namespace);
+    if (deviceIds.has(relative.split(".")[0])) {
+      ids.push(fullId);
+    }
+  }
+  return ids.sort((a, b) => b.length - a.length);
+}
 function renamedObjectIds(existing, deviceIds, namespace) {
   var _a, _b;
   const stale = [];
@@ -357,6 +382,7 @@ function nextDeviceLabel(current, deviceId, candidate, rank, ownName, ownRank) {
   LABEL_RANK,
   RENAMED_CHANNELS,
   RENAMED_STATE_IDS,
+  childlessChannelIds,
   isUsefulDeviceName,
   legacyDeviceRow,
   mergeDiscovered,

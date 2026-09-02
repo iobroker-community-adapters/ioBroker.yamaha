@@ -19,7 +19,9 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var discovered_store_exports = {};
 __export(discovered_store_exports, {
   readDiscovered: () => readDiscovered,
-  writeDiscovered: () => writeDiscovered
+  readIgnored: () => readIgnored,
+  writeDiscovered: () => writeDiscovered,
+  writeIgnored: () => writeIgnored
 });
 module.exports = __toCommonJS(discovered_store_exports);
 var import_util = require("./util");
@@ -47,9 +49,31 @@ async function writeDiscovered(deps, devices) {
     deps.log.debug(`discovered store: write failed (${(0, import_util.errorMessage)(e)})`);
   }
 }
+async function readIgnored(deps) {
+  try {
+    const raw = await deps.read();
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((id) => typeof id === "string") : [];
+  } catch (e) {
+    deps.log.debug(`ignored store: read failed, starting empty (${(0, import_util.errorMessage)(e)})`);
+    return [];
+  }
+}
+async function writeIgnored(deps, ids) {
+  try {
+    await deps.write(JSON.stringify([...new Set(ids)]));
+  } catch (e) {
+    deps.log.debug(`ignored store: write failed (${(0, import_util.errorMessage)(e)})`);
+  }
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   readDiscovered,
-  writeDiscovered
+  readIgnored,
+  writeDiscovered,
+  writeIgnored
 });
 //# sourceMappingURL=discovered-store.js.map
