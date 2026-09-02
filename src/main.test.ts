@@ -87,8 +87,18 @@ vi.mock("@iobroker/adapter-core", () => {
       });
       return Promise.resolve();
     });
-    public subscribeStates = vi.fn((pattern: string) => {
+    /**
+     * The adapter subscribes through the awaited `…Async` form so a rejection cannot become an
+     * unhandled one (js-controller turns those into an adapter stop). `subscribeFails` lets a
+     * test drive that rejection path.
+     */
+    public subscribeFails: Error | undefined;
+    public subscribeStatesAsync = vi.fn((pattern: string) => {
+      if (this.subscribeFails) {
+        return Promise.reject(this.subscribeFails);
+      }
       this.subscribed.push(pattern);
+      return Promise.resolve();
     });
     public setTimeout = vi.fn((_cb: () => void, _ms: number) => ({ kind: "timeout" }));
     public clearTimeout = vi.fn();
@@ -302,6 +312,7 @@ function internalOf(adapter: Yamaha): {
   foreignObjects: Map<string, Record<string, unknown>>;
   config: Record<string, unknown>;
   subscribed: string[];
+  subscribeFails: Error | undefined;
   setStateFail: Error | null;
   extendObjectFail: Error | null;
   log: Record<"debug" | "info" | "warn" | "error", ReturnType<typeof vi.fn>>;
@@ -398,6 +409,22 @@ describe("Yamaha onReady — configured devices", () => {
     expect(ctx.i.states.get("Living_room.info.connection")).toEqual({ val: true, ack: true });
     expect(ctx.i.states.get("info.connection")).toEqual({ val: true, ack: true });
     expect(ctx.i.subscribed).toEqual(["*"]);
+  });
+
+  it("survives a failing state subscription and still brings the devices up", async () => {
+    // subscribeStates without a callback returns a promise, and its wildcard branch rejects for
+    // anything but a plain closed database (js-controller-common-db `maybeCallbackWithError`).
+    // Unawaited that is an unhandled rejection — and js-controller stops the instance for those.
+    const ctx = setup();
+    ctx.i.subscribeFails = new Error("objects db unreachable");
+    await ctx.i.onReady();
+    await flush();
+
+    // Loud, not fatal: the device still connects and its tree still fills.
+    const errors = ctx.i.log.error.mock.calls.map(call => String(call[0]));
+    expect(errors.some(line => line.includes("could not subscribe to state changes"))).toBe(true);
+    expect(ctx.i.states.get("Living_room.info.connection")).toEqual({ val: true, ack: true });
+    expect(ctx.calls).toHaveLength(1);
   });
 
   it("does not overwrite a name the user changed on the device object", async () => {
@@ -1336,6 +1363,45 @@ describe("Yamaha never-filled purge (once per adapter version, after connect)", 
     expect(ctx.i.objects.has("Living_room.multiroom.zone2.soundProgram")).toBe(false);
     expect((ctx.i.objects.get("Living_room")?.native as { purgeVersion?: string }).purgeVersion).toBe("0.0.0-test");
     expect(ctx.i.log.debug).toHaveBeenCalledWith(expect.stringContaining("never-filled"));
+  });
+
+  it("removes a folder left empty by the tree rework, even when the version purge already ran", async () => {
+    const ctx = setup();
+    // The stamp says the once-per-version orphan sweep is done — the empty-folder sweep still
+    // has to run, otherwise `player.server` (emptied by the v2.0.0 migration, no datapoint of
+    // its own in the new tree) stays in the tree for good.
+    ctx.i.objects.set("Living_room", { type: "device", common: {}, native: { purgeVersion: "0.0.0-test" } });
+    ctx.i.objects.set("Living_room.player", { type: "channel", common: {}, native: {} });
+    ctx.i.objects.set("Living_room.player.track", { type: "state", common: { read: true }, native: {} });
+    ctx.i.states.set("Living_room.player.track", { val: "", ack: true, lc: 7 } as never);
+    ctx.i.objects.set("Living_room.player.server", { type: "channel", common: {}, native: {} });
+    ctx.i.objects.set("Living_room.player.usb", { type: "channel", common: {}, native: {} });
+    ctx.i.objects.set("Living_room.player.usb.preset", {
+      type: "state",
+      common: { read: false, write: true },
+      native: {},
+    });
+    await ctx.i.onReady();
+    await flush();
+    settle(ctx);
+    await flush();
+    expect(ctx.i.objects.has("Living_room.player.server")).toBe(false);
+    // The folders that still carry datapoints stay.
+    expect(ctx.i.objects.has("Living_room.player")).toBe(true);
+    expect(ctx.i.objects.has("Living_room.player.usb")).toBe(true);
+    expect(ctx.i.log.debug).toHaveBeenCalledWith(expect.stringContaining("empty folder"));
+  });
+
+  it("leaves an offline device's folders alone — its tree is only swept once it answers", async () => {
+    // No transport answers, so the device never reports connected.
+    const ctx = setup({}, { failIds: ["Living_room"] });
+    ctx.i.objects.set("Living_room", { type: "device", common: {}, native: {} });
+    ctx.i.objects.set("Living_room.player.server", { type: "channel", common: {}, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    settle(ctx);
+    await flush();
+    expect(ctx.i.objects.has("Living_room.player.server")).toBe(true);
   });
 
   it("runs ONCE per version: a device already stamped with the current version is not swept again", async () => {

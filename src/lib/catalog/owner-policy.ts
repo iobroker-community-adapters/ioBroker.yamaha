@@ -51,6 +51,15 @@ const OWNER_OVERRIDES: Record<string, readonly Transport[]> = {
 };
 
 /**
+ * A zoned state id's folder prefix. All three transports place their zones under
+ * `multiroom.zoneN.` (`yxc/zones.ts` `zonePrefix`, the YNCA catalog's zone table, the XML zone
+ * table) — the bare `zoneN.` form of the pre-v0.18.1 tree cannot be produced any more and is
+ * therefore NOT matched here. It still lives on in `pure-helpers.renamedObjectIds`, which has to
+ * recognise it to clean an upgraded instance's old tree; that is the one place it belongs.
+ */
+export const ZONE_PREFIX = /^multiroom\.zone[234]\./;
+
+/**
  * Per-transport state-id → canonical capability key, for the ids that drift between transports
  * (census §3f, verified against the catalogs). The canonical key is the census left column; the
  * transports not listed already use the canonical id. Zone prefixes are stripped separately.
@@ -70,7 +79,7 @@ const ID_DRIFT: Partial<Record<Transport, Readonly<Record<string, string>>>> = {
  * @returns the canonical capability key
  */
 export function capabilityKeyOf(transport: Transport, stateId: string): string {
-  const template = stateId.replace(/^(?:multiroom\.)?zone[234]\./, "");
+  const template = stateId.replace(ZONE_PREFIX, "");
   return ID_DRIFT[transport]?.[template] ?? template;
 }
 
@@ -85,13 +94,9 @@ export function capabilityKeyOf(transport: Transport, stateId: string): string {
  * @returns the canonical object id (zone prefix kept, drift resolved)
  */
 export function canonicalIdOf(transport: Transport, stateId: string): string {
-  const zone = /^(?:multiroom\.)?zone[234]\./.exec(stateId)?.[0] ?? "";
+  const zone = ZONE_PREFIX.exec(stateId)?.[0] ?? "";
   const template = stateId.slice(zone.length);
-  const resolved = ID_DRIFT[transport]?.[template] ?? template;
-  if (zone && !zone.startsWith("multiroom.")) {
-    return `multiroom.${zone}${resolved}`;
-  }
-  return zone + resolved;
+  return zone + (ID_DRIFT[transport]?.[template] ?? template);
 }
 
 /**

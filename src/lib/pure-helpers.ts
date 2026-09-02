@@ -402,6 +402,53 @@ export function neverWrittenStateIds(
 }
 
 /**
+ * Channels under a connected device that carry no datapoint anywhere below them — the folders a
+ * tree rework empties but never removes.
+ *
+ * Both existing sweeps miss these on purpose: {@link staleObjects} only knows whole device trees
+ * and named paths, and {@link neverWrittenStateIds} filters on `type === "state"`. So a folder
+ * whose datapoints the v2.0.0 migration deleted (`player.server` — the SERVER source keeps no own
+ * datapoint in the new tree) survives as an empty promise in the object tree, and every future
+ * rework that empties a folder instead of listing it would leave the same kind of leftover.
+ *
+ * Nested empties resolve by themselves: a channel counts as filled only when a STATE exists
+ * somewhere beneath it, so a folder holding nothing but other empty folders goes too. Deepest
+ * first, so children are deleted before their parents.
+ *
+ * @param objects all objects currently under the instance
+ * @param deviceIds the devices that have connected in this run (an offline device is left alone)
+ * @param namespace the adapter namespace (e.g. `yamaha.0`)
+ * @returns the full channel ids to delete, deepest first
+ */
+export function childlessChannelIds(
+  objects: Record<string, { type?: string } | undefined>,
+  deviceIds: Set<string>,
+  namespace: string,
+): string[] {
+  // Every path segment that has a datapoint below it, collected once over all objects.
+  const filled = new Set<string>();
+  for (const [fullId, object] of Object.entries(objects)) {
+    if (object?.type !== "state") {
+      continue;
+    }
+    for (let cut = fullId.lastIndexOf("."); cut > 0; cut = fullId.lastIndexOf(".", cut - 1)) {
+      filled.add(fullId.slice(0, cut));
+    }
+  }
+  const ids: string[] = [];
+  for (const [fullId, object] of Object.entries(objects)) {
+    if (object?.type !== "channel" || filled.has(fullId)) {
+      continue;
+    }
+    const relative = stripNamespace(fullId, namespace);
+    if (deviceIds.has(relative.split(".")[0])) {
+      ids.push(fullId);
+    }
+  }
+  return ids.sort((a, b) => b.length - a.length);
+}
+
+/**
  * The full ids of renamed old states (and old channel subtrees) that still exist
  * under a configured device, to be deleted on start-up so no orphan lingers beside
  * the new object. Deepest first, so children go before their parents.

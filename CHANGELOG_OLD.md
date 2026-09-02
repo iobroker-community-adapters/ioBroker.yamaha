@@ -1,4 +1,5 @@
 # Older changes
+
 ## 1.7.0 (2026-09-01)
 
 - (krobipd) Fixed: scene recall now uses the command each device declares itself and the protocol that can deliver it — on 2012-generation receivers a scene write did nothing at all (#615)

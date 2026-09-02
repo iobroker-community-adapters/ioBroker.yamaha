@@ -3,6 +3,7 @@ import {
   LABEL_RANK,
   legacyDeviceRow,
   mergeDiscovered,
+  childlessChannelIds,
   neverWrittenStateIds,
   nextDeviceLabel,
   parseDevices,
@@ -578,6 +579,59 @@ describe("nextDeviceLabel", () => {
   it("ignores a useless candidate", () => {
     expect(nextDeviceLabel(id, id, "Main Zone", LABEL_RANK.deviceName)).toBeUndefined();
     expect(nextDeviceLabel(id, id, "", LABEL_RANK.deviceName)).toBeUndefined();
+  });
+});
+
+describe("childlessChannelIds (empty folders a tree rework left behind)", () => {
+  const ns = "yamaha.0";
+  const channel = { type: "channel", common: {} };
+  const state = { type: "state", common: {} };
+
+  test("finds folders without any datapoint below them, keeps filled ones and foreign trees", () => {
+    const objects = {
+      [`${ns}.living`]: { type: "device", common: {} },
+      // The live case: v2.0.0 deleted the SERVER source's playback copies and the new tree
+      // gives that source no datapoint of its own — the folder stayed behind empty.
+      [`${ns}.living.player.server`]: channel,
+      // A sibling that kept its own datapoints is untouched.
+      [`${ns}.living.player.usb`]: channel,
+      [`${ns}.living.player.usb.preset`]: state,
+      [`${ns}.living.player`]: channel,
+      [`${ns}.living.player.track`]: state,
+      // Not this run's device — an offline device keeps its tree.
+      [`${ns}.other.player.server`]: channel,
+    };
+    expect(childlessChannelIds(objects, new Set(["living"]), ns)).toEqual([`${ns}.living.player.server`]);
+  });
+
+  test("removes a folder that holds nothing but other empty folders, deepest first", () => {
+    const objects = {
+      [`${ns}.living.legacy`]: channel,
+      [`${ns}.living.legacy.inner`]: channel,
+      [`${ns}.living.legacy.inner.deeper`]: channel,
+      [`${ns}.living.volume`]: state,
+    };
+    // Children before parents, so deleting one cannot orphan the next.
+    expect(childlessChannelIds(objects, new Set(["living"]), ns)).toEqual([
+      `${ns}.living.legacy.inner.deeper`,
+      `${ns}.living.legacy.inner`,
+      `${ns}.living.legacy`,
+    ]);
+  });
+
+  test("keeps a device's info folder, which always carries its header datapoints", () => {
+    const objects = {
+      [`${ns}.living.info`]: channel,
+      [`${ns}.living.info.connection`]: state,
+      [`${ns}.living.info.transports`]: channel,
+      [`${ns}.living.info.transports.ynca`]: state,
+    };
+    expect(childlessChannelIds(objects, new Set(["living"]), ns)).toEqual([]);
+  });
+
+  test("a device that has not connected in this run is left alone entirely", () => {
+    const objects = { [`${ns}.living.player.server`]: channel };
+    expect(childlessChannelIds(objects, new Set(), ns)).toEqual([]);
   });
 });
 

@@ -8,6 +8,7 @@ import { searchInterfaces } from "./lib/network-interfaces";
 import { isGroupEnabled } from "./lib/catalog/groups";
 import { iconForModel } from "./lib/device-type";
 import {
+  childlessChannelIds,
   LABEL_RANK,
   type LabelRank,
   legacyDeviceRow,
@@ -148,7 +149,7 @@ export class Yamaha extends utils.Adapter {
       // Before the cleanup and before any device connects — see knownDatapoints.
       await this.snapshotExistingDatapoints();
       await this.cleanupStaleObjects(new Set(devices.map(device => device.id)));
-      this.subscribeStates("*");
+      await this.subscribeToStates();
       const pushReceiver = new YxcPushReceiver({
         log: { debug: message => this.log.debug(message), warn: message => this.log.warn(message) },
         schedule: (cb, ms) => this.setTimeout(cb, ms),
@@ -253,6 +254,30 @@ export class Yamaha extends utils.Adapter {
       this.writeDeviceOverview();
     } catch (e) {
       this.log.warn(`background discovery failed: ${errorMessage(e)}`);
+    }
+  }
+
+  /**
+   * Subscribe to the adapter's own states — OBSERVED, like every other database call.
+   *
+   * `subscribeStates` without a callback returns a promise, and its wildcard branch reads the
+   * matching objects first: any failure there ends in `maybeCallbackWithError`, which rejects
+   * for everything except the plain "database closed" case (js-controller-common-db source).
+   * Left unawaited that is an unhandled rejection — and js-controller turns those into an
+   * adapter stop, the same trap the nine bare state writes carried.
+   *
+   * A failure is loud but not fatal: without the subscription the tree still fills from the
+   * devices, only user writes stop being applied. Saying so beats a silent half-working
+   * instance, and beats losing the whole start over it.
+   */
+  private async subscribeToStates(): Promise<void> {
+    try {
+      await this.subscribeStatesAsync("*");
+    } catch (e) {
+      this.log.error(
+        `could not subscribe to state changes (${errorMessage(e)}) — the tree still updates, ` +
+          `but writes to datapoints will not reach the device until the instance is restarted`,
+      );
     }
   }
 
@@ -463,6 +488,33 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
+   * Remove folders that hold no datapoint any more, under the devices that connected this run.
+   *
+   * The two sweeps above only ever delete datapoints, so a folder emptied by a tree rework stays
+   * behind and promises content it can never get — `player.server` is the live case: the v2.0.0
+   * migration deletes the SERVER source's playback copies, and the new tree gives that source no
+   * datapoint of its own. Runs on every start, not once per version: an empty folder is wrong
+   * whenever it is found, and re-reading the objects after the orphan purge catches the ones that
+   * purge just emptied. Not counted in the datapoint balance — a folder is not a datapoint.
+   */
+  private async purgeChildlessChannels(): Promise<void> {
+    if (this.readyDevices.size === 0) {
+      return;
+    }
+    const empty = childlessChannelIds(await this.getAdapterObjectsAsync(), this.readyDevices, this.namespace);
+    for (const fullId of empty) {
+      try {
+        await this.delObjectAsync(stripNamespace(fullId, this.namespace));
+      } catch {
+        // already removed together with its parent
+      }
+    }
+    if (empty.length > 0) {
+      this.log.debug(`removed ${empty.length} empty folder(s) left over from an earlier object tree`);
+    }
+  }
+
+  /**
    * Remember every datapoint that already exists, ONCE per adapter run.
    *
    * @see knownDatapoints for why the create path alone cannot answer "is this new?"
@@ -530,6 +582,12 @@ export class Yamaha extends utils.Adapter {
           await this.purgeNeverFilled();
         } catch (e) {
           this.log.debug(`orphan purge failed (${errorMessage(e)}); skipped for this run`);
+        }
+        // Then the folders those removals (or an earlier version's tree rework) left empty.
+        try {
+          await this.purgeChildlessChannels();
+        } catch (e) {
+          this.log.debug(`empty-folder purge failed (${errorMessage(e)}); skipped for this run`);
         }
         const parts: string[] = [];
         if (this.createdDatapoints > 0) {

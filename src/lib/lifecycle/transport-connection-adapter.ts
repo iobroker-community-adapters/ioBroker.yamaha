@@ -1,5 +1,5 @@
 import type { ObjectDef } from "../catalog/types";
-import { canonicalIdOf, type Transport } from "../catalog/owner-policy";
+import { canonicalIdOf, ZONE_PREFIX, type Transport } from "../catalog/owner-policy";
 import type { TransportConnection } from "./multi-transport-handle";
 
 /** Inverse of the id drifts: canonical template → the transport's own template (for routing writes back). */
@@ -115,7 +115,7 @@ export class TransportConnectionAdapter implements TransportConnection {
    * @param value the value written
    */
   public handleWrite(canonicalId: string, ack: boolean, value: unknown): void {
-    const zone = /^(?:multiroom\.)?zone[234]\./.exec(canonicalId)?.[0] ?? "";
+    const zone = ZONE_PREFIX.exec(canonicalId)?.[0] ?? "";
     const template = canonicalId.slice(zone.length);
     const controllerId = zone + (INVERSE_DRIFT[this.transport]?.[template] ?? template);
     this.controller?.handleStateChange(`${this.deviceId}.${controllerId}`, ack, value);
