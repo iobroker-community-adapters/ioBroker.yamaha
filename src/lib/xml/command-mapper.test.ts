@@ -154,3 +154,12 @@ describe("XML mapper zone guards", () => {
     expect(parseXmlStatus({ power: true }, "zone9")).toEqual([]);
   });
 });
+
+describe("stateToXml — device-wide settings stay on the main zone", () => {
+  it.each(["hdmiOut1", "hdmiOut2", "multiroom.party"])("does not write %s through a zone id", state => {
+    // These live on the System element and apply to the whole device; a zone-prefixed
+    // write would be a second, misleading path to the same setting.
+    expect(stateToXml(`multiroom.zone2.${state}`, true)).toBeUndefined();
+    expect(stateToXml(state, true)).toBeDefined();
+  });
+});

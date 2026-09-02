@@ -127,6 +127,9 @@ class Yamaha extends utils.Adapter {
         (dropped, takenId) => this.log.warn(`device "${dropped}" skipped \u2014 its object id "${takenId}" is already used by another device`)
       );
       const devices = configured.length > 0 ? configured : await this.autoDiscover();
+      if (this.unloading) {
+        return;
+      }
       const knownDeviceIps = new Set(devices.map((device) => device.ip));
       await this.snapshotExistingDatapoints();
       await this.cleanupStaleObjects(new Set(devices.map((device) => device.id)));
@@ -162,9 +165,6 @@ class Yamaha extends utils.Adapter {
    * @param knownDeviceIps the IPs of all supervised devices (multiroom link targets)
    */
   async startDevice(device, pushReceiver, knownDeviceIps) {
-    if (this.unloading) {
-      return;
-    }
     this.deviceConnected.set(device.id, false);
     await this.ensureDeviceHeader(device.id, device.ip);
     await this.setState(`${device.id}.info.connection`, { val: false, ack: true });

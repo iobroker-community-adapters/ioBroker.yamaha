@@ -138,6 +138,12 @@ export class Yamaha extends utils.Adapter {
         this.log.warn(`device "${dropped}" skipped — its object id "${takenId}" is already used by another device`),
       );
       const devices = configured.length > 0 ? configured : await this.autoDiscover();
+      if (this.unloading) {
+        // Stopped during the initial network search: it resolves on its own clock, and
+        // everything below — push socket, subscriptions, device sockets and timers —
+        // would come up on an instance that is already gone, with nothing left to close it.
+        return;
+      }
       const knownDeviceIps = new Set(devices.map(device => device.ip));
       // Before the cleanup and before any device connects — see knownDatapoints.
       await this.snapshotExistingDatapoints();
@@ -181,11 +187,8 @@ export class Yamaha extends utils.Adapter {
     pushReceiver: YxcPushReceiver,
     knownDeviceIps: Set<string>,
   ): Promise<void> {
-    if (this.unloading) {
-      // The background network search resolves on its own clock: a device it hands over
-      // after onUnload would open sockets and timers on an instance that is already gone.
-      return;
-    }
+    // Both callers check `unloading` after their network search resolves (onReady and
+    // discoverAdditionalDevices) — a device handed over after onUnload never gets here.
     this.deviceConnected.set(device.id, false);
     await this.ensureDeviceHeader(device.id, device.ip);
     // Stamp it disconnected BEFORE the first attempt: ioBroker keeps a state's last value

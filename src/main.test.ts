@@ -329,10 +329,11 @@ interface Ctx {
  * Build an adapter with a config and a fake per-device attempt.
  *
  * @param config native config fields for this run
- * @param opts   which device ids fail to connect
+ * @param opts   which device ids fail to connect or never answer
  * @param opts.failIds Device ids whose fake attempt reports failure
+ * @param opts.hangIds Device ids whose fake attempt never answers (stays pending)
  */
-function setup(config: Record<string, unknown> = {}, opts: { failIds?: string[] } = {}): Ctx {
+function setup(config: Record<string, unknown> = {}, opts: { failIds?: string[]; hangIds?: string[] } = {}): Ctx {
   const i = internalOf(new Yamaha());
   i.config = { devices: [{ name: "Living room", ip: "192.168.1.10" }], ...config };
   const calls: AttemptCall[] = [];
@@ -341,6 +342,9 @@ function setup(config: Record<string, unknown> = {}, opts: { failIds?: string[] 
     calls.push({ device, deps });
     if (opts.failIds?.includes(device.id)) {
       return Promise.resolve(null);
+    }
+    if (opts.hangIds?.includes(device.id)) {
+      return new Promise<null>(() => undefined); // an attempt that never answers
     }
     const h = fakeHandle();
     handles.push(h);
@@ -1443,12 +1447,15 @@ describe("Yamaha guarded database writes (audit 2026-09-02 — a hiccup must not
 describe("Yamaha protocol flags at start and stop (audit 2026-09-02)", () => {
   it("resets stale protocol flags at startup — a crash must not leave 'YNCA connected' on the card", async () => {
     // ioBroker keeps the last value: after a crash the card would show a green YNCA badge
-    // next to a red connection dot, for good if the device never answers again.
-    const ctx = setup({ devices: [{ name: "A", ip: "192.168.1.10" }] }, { failIds: ["A"] });
+    // next to a red connection dot, for good if the device never answers again. The attempt
+    // here never answers — so the reset must come from the start itself, not from the
+    // disconnect path a failed attempt would take.
+    const ctx = setup({ devices: [{ name: "A", ip: "192.168.1.10" }] }, { hangIds: ["A"] });
     ctx.i.states.set("A.info.transports.ynca", { val: true, ack: true });
     ctx.i.states.set("A.info.transports.yxc", { val: true, ack: true });
     await ctx.i.onReady();
     await flush();
+    expect(ctx.calls).toHaveLength(1);
     for (const proto of ["ynca", "yxc", "xml"]) {
       expect(ctx.i.states.get(`A.info.transports.${proto}`)).toEqual({ val: false, ack: true });
     }
@@ -1484,6 +1491,24 @@ describe("Yamaha teardown races (audit 2026-09-02)", () => {
     expect(ctx.calls.map(c => c.device.ip)).toEqual(["192.168.1.20"]);
     // Nor does a stopped adapter announce a find it will not act on.
     expect(ctx.i.log.info).not.toHaveBeenCalledWith(expect.stringContaining("discovery found"));
+  });
+
+  it("does not bring the instance up when the initial network search ends after unload", async () => {
+    // First setup without remembered devices: onReady waits for the search. A stop in that
+    // window used to be ignored — the push socket, the subscriptions and every found device
+    // came up afterwards on a dead instance, with no onUnload left to close them.
+    let release: (found: Array<{ ip: string; name: string }>) => void = () => undefined;
+    mocks.discoverYamaha.mockImplementation(() => new Promise(resolve => (release = resolve)));
+    const ctx = setup({ devices: [] });
+    const ready = ctx.i.onReady();
+    await flush();
+    ctx.i.onUnload(vi.fn());
+    release([{ ip: "192.168.1.21", name: "WX-021" }]);
+    await ready;
+    await flush();
+    expect(ctx.calls).toEqual([]);
+    expect(mocks.pushReceivers).toHaveLength(0);
+    expect(ctx.i.subscribed).toEqual([]);
   });
 
   it("refuses to arm timers and keepalives for the transports after unload", async () => {

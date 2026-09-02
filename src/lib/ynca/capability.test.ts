@@ -61,6 +61,15 @@ describe("mergeYncaSubunits (standby must not shrink the proven shape)", () => {
     });
   });
 
+  test("keeps a function the standby sweep of the SAME subunit did not answer", () => {
+    // The real standby case: MAIN still answers PWR, but the scene names and the tone
+    // controls come back @RESTRICTED — they must survive inside the subunit, not only
+    // whole subunits that stayed silent.
+    const remembered = { MAIN: { PWR: "On", SCENE1NAME: "Movie", TONEBASS: "0.0" } };
+    const fresh = { MAIN: { PWR: "Standby" } };
+    expect(mergeYncaSubunits(remembered, fresh).MAIN).toEqual({ PWR: "Standby", SCENE1NAME: "Movie", TONEBASS: "0.0" });
+  });
+
   test("does not mutate either input", () => {
     const remembered = { MAIN: { PWR: "On" } };
     const fresh = { MAIN: { PWR: "Standby" }, DAB: { BAND: "FM" } };
