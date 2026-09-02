@@ -3,6 +3,19 @@
     "name": "yamaha",
     "version": "2.0.4",
     "news": {
+      "NEXT": {
+        "en": "Datapoint names now appear in your ioBroker language. The empty \"Media server\" folder is removed, the menu view starts clean after a restart, a receiver that changed its address is found again, and deleting a found receiver really removes it.",
+        "de": "Datenpunkt-Namen erscheinen jetzt in deiner ioBroker-Sprache. Der leere Ordner \"Media server\" verschwindet, die Menü-Ansicht startet nach einem Neustart leer, ein Receiver mit neuer Adresse wird wiedergefunden, und das Löschen eines gefundenen Receivers entfernt ihn wirklich.",
+        "ru": "Названия точек данных теперь отображаются на языке ioBroker. Пустая папка \"Media server\" удаляется, меню после перезапуска начинается пустым, ресивер со сменившимся адресом снова находится, а удаление найденного ресивера действительно его убирает.",
+        "pt": "Os nomes dos pontos de dados aparecem agora no idioma do ioBroker. A pasta vazia \"Media server\" é removida, a vista de menu começa limpa após um reinício, um recetor que mudou de endereço volta a ser encontrado e apagar um recetor encontrado remove-o mesmo.",
+        "nl": "Datapuntnamen verschijnen nu in je ioBroker-taal. De lege map \"Media server\" wordt verwijderd, de menuweergave start leeg na een herstart, een receiver met een nieuw adres wordt weer gevonden, en het verwijderen van een gevonden receiver wist hem echt.",
+        "fr": "Les noms des points de données apparaissent maintenant dans votre langue ioBroker. Le dossier vide \"Media server\" est supprimé, la vue du menu démarre vide après un redémarrage, un ampli dont l'adresse a changé est retrouvé, et supprimer un ampli détecté le retire vraiment.",
+        "it": "I nomi dei datapoint appaiono ora nella lingua di ioBroker. La cartella vuota \"Media server\" viene rimossa, la vista del menu parte vuota dopo un riavvio, un ricevitore che ha cambiato indirizzo viene ritrovato e l'eliminazione di un ricevitore rilevato lo rimuove davvero.",
+        "es": "Los nombres de los puntos de datos aparecen ahora en tu idioma de ioBroker. La carpeta vacía \"Media server\" se elimina, la vista del menú empieza vacía tras un reinicio, un receptor que cambió de dirección se vuelve a encontrar y borrar un receptor detectado lo elimina de verdad.",
+        "pl": "Nazwy punktów danych pojawiają się teraz w Twoim języku ioBroker. Pusty folder \"Media server\" znika, widok menu startuje pusty po restarcie, odbiornik ze zmienionym adresem zostaje odnaleziony, a usunięcie znalezionego odbiornika naprawdę go usuwa.",
+        "uk": "Назви точок даних тепер відображаються мовою ioBroker. Порожня тека \"Media server\" видаляється, вигляд меню після перезапуску починається порожнім, ресивер зі зміненою адресою знаходиться знову, а видалення знайденого ресивера справді його прибирає.",
+        "zh-cn": "数据点名称现在以您的 ioBroker 语言显示。空的“Media server”文件夹被移除，重启后菜单视图从空白开始，更换地址的接收机会被重新找到，删除已发现的接收机将真正移除它。"
+      },
       "2.0.4": {
         "en": "Database hiccups no longer restart the adapter; protocol badges reset on start/stop; clean stop during discovery; scene titles, probe retries and equalizer fixed",
         "de": "Datenbank-Aussetzer starten den Adapter nicht mehr neu; Protokoll-Anzeigen bei Start/Stopp zurückgesetzt; sauberer Stopp während der Suche; Szenentitel, Sonden und Equalizer korrigiert",
@@ -80,19 +93,6 @@
         "pl": "Wywoływanie scen działa na każdej generacji i pokazuje tytuły, odrzucone polecenia są zgłaszane, restarty trwają sekundy, do tego pilot ekranowy i wiele nowych punktów danych.",
         "uk": "Виклик сцен працює на всіх поколіннях і показує назви, відхилені команди повідомляються, перезапуск триває секунди, плюс екранний пульт і багато нових точок даних.",
         "zh-cn": "场景调用适用于所有代次并显示名称，被拒绝的命令会被报告，重启只需数秒，另有屏幕遥控和众多新数据点。"
-      },
-      "1.6.0": {
-        "en": "Three new states show how many receivers are set up, how many are connected and whether that is all of them; a stopped adapter no longer shows a receiver as connected.",
-        "de": "Drei neue Datenpunkte zeigen, wie viele Receiver eingerichtet sind, wie viele verbunden sind und ob das alle sind; eine gestoppte Instanz zeigt keinen Receiver mehr als verbunden.",
-        "ru": "Три новых состояния показывают, сколько ресиверов настроено, сколько подключено и все ли это; остановленный адаптер больше не показывает ресивер подключённым.",
-        "pt": "Três novos estados mostram quantos receptores estão configurados, quantos estão ligados e se são todos; um adaptador parado deixa de mostrar um receptor como ligado.",
-        "nl": "Drie nieuwe datapunten tonen hoeveel receivers zijn ingesteld, hoeveel verbonden zijn en of dat alle zijn; een gestopte adapter toont geen receiver meer als verbonden.",
-        "fr": "Trois nouveaux états indiquent combien d'amplis sont configurés, combien sont connectés et si ce sont tous ; un adaptateur arrêté n'en affiche plus aucun comme connecté.",
-        "it": "Tre nuovi stati mostrano quanti sintoamplificatori sono configurati, quanti sono connessi e se sono tutti; un adapter fermo non ne mostra più nessuno come connesso.",
-        "es": "Tres nuevos estados muestran cuántos receptores están configurados, cuántos están conectados y si son todos; un adaptador detenido ya no muestra ninguno como conectado.",
-        "pl": "Trzy nowe stany pokazują, ile amplitunerów skonfigurowano, ile jest połączonych i czy to wszystkie; zatrzymany adapter nie pokazuje już żadnego jako połączonego.",
-        "uk": "Три нові стани показують, скільки ресиверів налаштовано, скільки під'єднано і чи це всі; зупинений адаптер більше не показує ресивер під'єднаним.",
-        "zh-cn": "三个新数据点显示已配置多少台功放、当前有多少台已连接以及是否全部连接；已停止的适配器不再把功放显示为已连接。"
       }
     },
     "titleLang": {
