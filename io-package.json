@@ -1,9 +1,9 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "2.0.4",
+    "version": "2.1.0",
     "news": {
-      "NEXT": {
+      "2.1.0": {
         "en": "Datapoint names now appear in your ioBroker language. The empty Media server folder is gone, the menu view starts clean, and a receiver that changed its address is found again.",
         "de": "Datenpunkt-Namen erscheinen jetzt in deiner ioBroker-Sprache. Der leere Ordner Media server ist weg, die Menü-Ansicht startet leer, und ein Receiver mit neuer Adresse wird wiedergefunden.",
         "ru": "Названия точек данных теперь на языке ioBroker. Пустая папка Media server удалена, меню начинается пустым, а ресивер со сменившимся адресом снова находится.",

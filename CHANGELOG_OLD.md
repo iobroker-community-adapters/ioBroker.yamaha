@@ -1,4 +1,13 @@
 # Older changes
+## 2.0.0 (2026-09-01)
+
+- (krobipd) Changed: one player block per zone now shows what is playing — source, title, artist, cover art and the transport buttons — instead of an identical, mostly empty block under every source
+- (krobipd) Changed: the scene name datapoints are gone — the recall dropdown carries the receiver's own titles, and scene.list offers every scene with number and title for visualizations
+- (krobipd) Changed: the tuner has one band, one frequency (kHz on every generation) and one preset for AM, FM and DAB; only genuinely DAB-specific detail stays under tuner.dab
+- (krobipd) Changed: the equalizer and the audio-signal info moved into their own folders under sound, the lip-sync offsets into hdmi, the speaker A/B switches to the speaker settings
+- (krobipd) New: zones can show different programs — zones 2 to 4 get their own player block, and play/pause/skip always act on whatever that zone is playing
+- (krobipd) Fixed: the on-screen remote keys and the tuner preset stepping on MusicCast devices count as button presses again — they no longer wait behind a running background refresh
+- (krobipd) Fixed: restarting or updating the adapter while a receiver was still connecting no longer produces shutdown warnings about timers in the log
 
 ## 1.7.0 (2026-09-01)
 

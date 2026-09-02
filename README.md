@@ -103,8 +103,7 @@ On the very first contact the adapter asks the receiver which functions it suppo
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
-
-### **WORK IN PROGRESS**
+### 2.1.0 (2026-09-02)
 
 - (krobipd) New: every datapoint name is now shown in your ioBroker language, in eleven languages; a name you changed yourself stays untouched
 - (krobipd) Fixed: the empty "Media server" folder left behind by the 2.0.0 object tree is removed, together with any other folder that no longer holds a datapoint
@@ -139,16 +138,6 @@ On the very first contact the adapter asks the receiver which functions it suppo
 - (krobipd) Fixed: leftover datapoints that never carried a value — zone sound settings or a second HDMI output the receiver does not have — are cleaned away once when updating the adapter
 - (krobipd) Fixed: the player block of a zone that is not playing a media source starts with cleared values (empty texts, playback on stop) instead of staying without any value until the first playback
 - (krobipd) Fixed: the two DAB station-scan datapoints (stations found, scan progress) start at zero instead of staying without a value until the first station scan
-
-### 2.0.0 (2026-09-01)
-
-- (krobipd) Changed: one player block per zone now shows what is playing — source, title, artist, cover art and the transport buttons — instead of an identical, mostly empty block under every source
-- (krobipd) Changed: the scene name datapoints are gone — the recall dropdown carries the receiver's own titles, and scene.list offers every scene with number and title for visualizations
-- (krobipd) Changed: the tuner has one band, one frequency (kHz on every generation) and one preset for AM, FM and DAB; only genuinely DAB-specific detail stays under tuner.dab
-- (krobipd) Changed: the equalizer and the audio-signal info moved into their own folders under sound, the lip-sync offsets into hdmi, the speaker A/B switches to the speaker settings
-- (krobipd) New: zones can show different programs — zones 2 to 4 get their own player block, and play/pause/skip always act on whatever that zone is playing
-- (krobipd) Fixed: the on-screen remote keys and the tuner preset stepping on MusicCast devices count as button presses again — they no longer wait behind a running background refresh
-- (krobipd) Fixed: restarting or updating the adapter while a receiver was still connecting no longer produces shutdown warnings about timers in the log
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 
