@@ -19,7 +19,6 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var zones_exports = {};
 __export(zones_exports, {
   YXC_ZONE_IDS: () => YXC_ZONE_IDS,
-  zoneChannel: () => zoneChannel,
   zonePrefix: () => zonePrefix
 });
 module.exports = __toCommonJS(zones_exports);
@@ -27,17 +26,9 @@ const YXC_ZONE_IDS = ["main", "zone2", "zone3", "zone4"];
 function zonePrefix(zone) {
   return zone === "main" ? "" : `multiroom.${zone}.`;
 }
-function zoneChannel(zone) {
-  if (zone === "main") {
-    return void 0;
-  }
-  const number = zone.replace("zone", "");
-  return { channel: `multiroom.${zone}`, name: `Zone ${number}` };
-}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   YXC_ZONE_IDS,
-  zoneChannel,
   zonePrefix
 });
 //# sourceMappingURL=zones.js.map

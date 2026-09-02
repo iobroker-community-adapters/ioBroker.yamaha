@@ -23,7 +23,6 @@ __export(object_tree_coordinator_exports, {
 module.exports = __toCommonJS(object_tree_coordinator_exports);
 var import_owner_policy = require("./owner-policy");
 function coordinateObjectTree(contributions) {
-  const order = [];
   const byId = /* @__PURE__ */ new Map();
   for (const { transport, objects } of contributions) {
     for (const obj of objects) {
@@ -32,17 +31,12 @@ function coordinateObjectTree(contributions) {
       if (!entry) {
         entry = { key: (0, import_owner_policy.capabilityKeyOf)(transport, obj.id), defs: /* @__PURE__ */ new Map() };
         byId.set(canonicalId, entry);
-        order.push(canonicalId);
       }
       entry.defs.set(transport, obj);
     }
   }
   const ownerByCanonicalId = /* @__PURE__ */ new Map();
-  const resolved = order.map((canonicalId) => {
-    const entry = byId.get(canonicalId);
-    if (!entry) {
-      throw new Error(`coordinateObjectTree: missing entry for ${canonicalId}`);
-    }
+  const resolved = [...byId].map(([canonicalId, entry]) => {
     const owner = (0, import_owner_policy.pickOwner)(entry.key, [...entry.defs.keys()]);
     ownerByCanonicalId.set(canonicalId, owner);
     const ownerDef = entry.defs.get(owner);

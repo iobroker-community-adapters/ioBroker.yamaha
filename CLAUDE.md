@@ -367,6 +367,13 @@ nicht die Kanäle/Geräteknoten drumherum. Regel-Herkunft: Memory `feedback_date
 - **Equalizer-Cache wird nur aus einem VOLLSTÄNDIGEN Tripel gesät** (`cacheEqualizer`): ein
   Erst-Status mit nur zwei Bändern darf keine erfundene 0 hinterlassen, die ein späterer
   Band-Write mit auf das Gerät schreibt; Teil-Updates mergen per `??` in den bestehenden Cache.
+- **Kanäle entstehen NUR in der Eltern-Schleife je Datenpunkt**, benannt aus `CHANNEL_NAMES` — keine
+  ausdrücklichen Kanal-Anlagen daneben. Die vier am 22.08. als „Deklaration" behaltenen Blöcke (XML-Zonenkanal,
+  MusicCast-Zonenkanal, `multiroom`/`multiroom.group`-Wächter) waren am vollständigen Code nachgewiesen tot:
+  eine Zone existiert nur mit mindestens einem Datenpunkt, und dessen Eltern-Schleife legt denselben Kanal
+  mit demselben Namen an. Ebenso weg: der wirkungslose `!group_multiroom`-Teil der Migration und die
+  Reihenfolge-Liste im Baum-Koordinator (Map-Iteration ist Einfügereihenfolge). krobi 02.09.: „nicht dass
+  sie eine Ausrede sind" — äquivalent ist ein Zwischenurteil, toter Code wird entfernt, nicht dokumentiert.
 - **Reconnect-Streuung nach UNTEN** (`delay · (1 − jitter·rand)`): die Obergrenze ist eine
   Obergrenze — vorher konnte der Jitter sie um 20 % überschreiten.
 - **Formatierung: das Repo ist seit 2026-09-02 prettier-sauber** (`npm run format:check` = 0) und
@@ -425,11 +432,12 @@ räumt den KOMPLETTEN Alt-Baum (47 Instanz-Objekte + dynamische `Realtime.*`/`Sy
 
 - vitest, `src/**/*.test.ts` — Unit + Boot-Integrationstest (startet den Adapter real). 797 Tests (2.0.4).
 - **Mutationstabellen** (`../../Ressourcen/iobroker-entwicklung/mutation-testing/`): `mutations_yamaha_all.py`
-  (120 Regelbrüche, Wellen 1–5 vom 22.08., Nadeln am 02.09. nachgezogen) + `mutations_yamaha_2026-09-02.py`
+  (116 Regelbrüche, Wellen 1–5 vom 22.08., Nadeln am 02.09. nachgezogen, vier tote entfernt) + `mutations_yamaha_2026-09-02.py`
   (24, Welle 6 = die Audit-Fixes; IDs Z1–Z24, W gehört Welle 5). Läufer `mutation-test.py`. Nadeln sind
   exakte Quellzeilen — nach Prettier-Umbrüchen oder Refactorings ZUERST den Nadel-Vorab-Check (jede Nadel
-  genau 1×), sonst misst der Lauf nichts. Sechs äquivalente Mutanten (M9, X1, X2, X4, Y1, Y13) sind
-  an Ort und Stelle im Quelltext begründet — ein Überlebender außerhalb dieser sechs ist eine Testlücke.
+  genau 1×), sonst misst der Lauf nichts. Zwei äquivalente Mutanten (X2, X4 — unerreichbare
+  Invarianten-Wächter, im Quelltext begründet); die vier anderen vom 22.08. (M9, X1, Y1, Y13) waren toter
+  bzw. doppelter Code und sind am 02.09. samt Zwillingen entfernt — ein Überlebender außerhalb X2/X4 ist eine Testlücke.
 - **HW-freies Testen:** `ynca`-Python bringt debug-server + echte Geräte-Logs → YNCA-Client dagegen testbar.
 
 ## Befehle

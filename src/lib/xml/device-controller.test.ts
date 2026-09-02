@@ -295,8 +295,7 @@ describe("XmlDeviceController object tree and drop handling", () => {
     expect(s.objects).toContain("living.multiroom.zone3");
     // Rewriting the shared parent for every zone churns the object DB on each start.
     expect(s.objects.filter(id => id === "living.multiroom")).toHaveLength(1);
-    // The zone channel must carry its own readable name — created only from the
-    // per-state parent loop it would be called "zone2" instead of "Zone 2".
+    // The zone channel carries its readable name from the shared CHANNEL_NAMES table.
     expect(s.defs.get("living.multiroom.zone2")?.common?.name).toBe("Zone 2");
   });
 

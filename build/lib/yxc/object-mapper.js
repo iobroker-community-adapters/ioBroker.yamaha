@@ -28,10 +28,7 @@ var import_command_mapper = require("./command-mapper");
 function selfMap(values) {
   return Object.fromEntries(values.map((value) => [value, value]));
 }
-const ZONES = import_zones.YXC_ZONE_IDS.map((id) => {
-  const channel = (0, import_zones.zoneChannel)(id);
-  return { id, prefix: (0, import_zones.zonePrefix)(id), ...channel ? { channel: channel.channel, channelName: channel.name } : {} };
-});
+const ZONES = import_zones.YXC_ZONE_IDS.map((id) => ({ id, prefix: (0, import_zones.zonePrefix)(id) }));
 const PLAYER_STATES = [
   {
     // What the zone is playing (the netusb source name, or `cd`) — read-only display;
@@ -105,7 +102,7 @@ function pushPlayerBlock(objects, prefix, channelName) {
   }
 }
 function mapYxcToObjects(capabilities) {
-  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m;
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
   const objects = [];
   const channels = /* @__PURE__ */ new Set();
   for (const zoneDef of ZONES) {
@@ -129,23 +126,6 @@ function mapYxcToObjects(capabilities) {
     if (!entries.some((entry) => entry.create.kind !== "always")) {
       continue;
     }
-    if (zoneDef.channel) {
-      const chSegments = zoneDef.channel.split(".");
-      for (let i = 1; i < chSegments.length; i++) {
-        const parentId = chSegments.slice(0, i).join(".");
-        if (!channels.has(parentId)) {
-          channels.add(parentId);
-          const seg = chSegments[i - 1];
-          objects.push({
-            id: parentId,
-            type: "channel",
-            common: { name: (_a = import_types.CHANNEL_NAMES[seg]) != null ? _a : seg.charAt(0).toUpperCase() + seg.slice(1) }
-          });
-        }
-      }
-      channels.add(zoneDef.channel);
-      objects.push({ id: zoneDef.channel, type: "channel", common: { name: (_b = zoneDef.channelName) != null ? _b : zoneDef.channel } });
-    }
     for (const entry of entries) {
       const fullId = `${zoneDef.prefix}${entry.state}`;
       const segments = fullId.split(".");
@@ -157,7 +137,7 @@ function mapYxcToObjects(capabilities) {
           objects.push({
             id: channelId,
             type: "channel",
-            common: { name: (_c = import_types.CHANNEL_NAMES[segment]) != null ? _c : segment.charAt(0).toUpperCase() + segment.slice(1) }
+            common: { name: (_a = import_types.CHANNEL_NAMES[segment]) != null ? _a : segment.charAt(0).toUpperCase() + segment.slice(1) }
           });
         }
       }
@@ -170,7 +150,7 @@ function mapYxcToObjects(capabilities) {
       if (entry.state === "input" && zone.inputs.length > 0) {
         common.states = selfMap(zone.inputs);
       }
-      const valueList = (_d = zone.valueLists) == null ? void 0 : _d[entry.state];
+      const valueList = (_b = zone.valueLists) == null ? void 0 : _b[entry.state];
       if (valueList) {
         common.states = selfMap(valueList);
       }
@@ -183,7 +163,7 @@ function mapYxcToObjects(capabilities) {
       }
     };
     if (zone.funcs.includes("scene") && zone.sceneNum && zone.sceneNum > 0) {
-      zoneChannelHelper(`${zoneDef.prefix}scene`, (_e = import_types.CHANNEL_NAMES.scene) != null ? _e : "Scenes");
+      zoneChannelHelper(`${zoneDef.prefix}scene`, (_c = import_types.CHANNEL_NAMES.scene) != null ? _c : "Scenes");
       objects.push({
         id: `${zoneDef.prefix}scene.recall`,
         type: "state",
@@ -200,7 +180,7 @@ function mapYxcToObjects(capabilities) {
       });
     }
     if (zone.funcs.includes("cursor") || zone.funcs.includes("menu")) {
-      zoneChannelHelper(`${zoneDef.prefix}remote`, (_f = import_types.CHANNEL_NAMES.remote) != null ? _f : "Remote control");
+      zoneChannelHelper(`${zoneDef.prefix}remote`, (_d = import_types.CHANNEL_NAMES.remote) != null ? _d : "Remote control");
       if (zone.funcs.includes("cursor")) {
         objects.push({
           id: `${zoneDef.prefix}remote.cursor`,
@@ -231,8 +211,8 @@ function mapYxcToObjects(capabilities) {
       }
     }
     if (zone.funcs.includes("signal_info")) {
-      zoneChannelHelper(`${zoneDef.prefix}sound`, (_g = import_types.CHANNEL_NAMES.sound) != null ? _g : "Sound");
-      zoneChannelHelper(`${zoneDef.prefix}sound.signal`, (_h = import_types.CHANNEL_NAMES.signal) != null ? _h : "Audio signal");
+      zoneChannelHelper(`${zoneDef.prefix}sound`, (_e = import_types.CHANNEL_NAMES.sound) != null ? _e : "Sound");
+      zoneChannelHelper(`${zoneDef.prefix}sound.signal`, (_f = import_types.CHANNEL_NAMES.signal) != null ? _f : "Audio signal");
       const signal = (id, name, type, role) => {
         objects.push({
           id: `${zoneDef.prefix}sound.signal.${id}`,
@@ -283,14 +263,14 @@ function mapYxcToObjects(capabilities) {
         min: 1
       }
     });
-    if ((_i = capabilities.netusbFuncs) == null ? void 0 : _i.includes("mc_playlist")) {
+    if ((_g = capabilities.netusbFuncs) == null ? void 0 : _g.includes("mc_playlist")) {
       objects.push({
         id: "player.netPlayer.playlists",
         type: "state",
         common: { name: "MusicCast playlists", type: "string", role: "json", read: true, write: false }
       });
     }
-    if ((_j = capabilities.netusbFuncs) == null ? void 0 : _j.includes("play_queue")) {
+    if ((_h = capabilities.netusbFuncs) == null ? void 0 : _h.includes("play_queue")) {
       objects.push({
         id: "player.netPlayer.queue",
         type: "state",
@@ -329,7 +309,7 @@ function mapYxcToObjects(capabilities) {
   if (capabilities.media.includes("tuner")) {
     objects.push({ id: "tuner", type: "channel", common: { name: "Tuner" } });
     const bandCommon = { name: "Band", type: "string", role: "state", read: true, write: true };
-    const bands = (_l = (_k = capabilities.tuner) == null ? void 0 : _k.bands) != null ? _l : [];
+    const bands = (_j = (_i = capabilities.tuner) == null ? void 0 : _i.bands) != null ? _j : [];
     if (bands.length > 0) {
       bandCommon.states = selfMap(bands);
     }
@@ -367,7 +347,7 @@ function mapYxcToObjects(capabilities) {
       write: true,
       min: 0
     };
-    if ((_m = capabilities.tuner) == null ? void 0 : _m.presetNum) {
+    if ((_k = capabilities.tuner) == null ? void 0 : _k.presetNum) {
       presetCommon.max = capabilities.tuner.presetNum;
     }
     objects.push({ id: "tuner.preset", type: "state", common: presetCommon });
@@ -485,14 +465,6 @@ function mapYxcToObjects(capabilities) {
     }
   }
   if (capabilities.hasDistribution) {
-    if (!channels.has("multiroom")) {
-      channels.add("multiroom");
-      objects.push({ id: "multiroom", type: "channel", common: { name: "Multiroom" } });
-    }
-    if (!channels.has("multiroom.group")) {
-      channels.add("multiroom.group");
-      objects.push({ id: "multiroom.group", type: "channel", common: { name: import_types.CHANNEL_NAMES.group } });
-    }
     const distState = (id, name, role) => {
       objects.push({
         id: `multiroom.group.${id}`,

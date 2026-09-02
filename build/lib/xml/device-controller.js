@@ -32,9 +32,9 @@ var import_xml_browse_driver = require("../browse/xml-browse-driver");
 const DEFAULT_POLL_INTERVAL_MS = 60 * 1e3;
 const XML_ZONES = [
   { key: "main", element: "Main_Zone", prefix: "" },
-  { key: "zone2", element: "Zone_2", prefix: "multiroom.zone2.", channel: "multiroom.zone2", channelName: "Zone 2" },
-  { key: "zone3", element: "Zone_3", prefix: "multiroom.zone3.", channel: "multiroom.zone3", channelName: "Zone 3" },
-  { key: "zone4", element: "Zone_4", prefix: "multiroom.zone4.", channel: "multiroom.zone4", channelName: "Zone 4" }
+  { key: "zone2", element: "Zone_2", prefix: "multiroom.zone2." },
+  { key: "zone3", element: "Zone_3", prefix: "multiroom.zone3." },
+  { key: "zone4", element: "Zone_4", prefix: "multiroom.zone4." }
 ];
 class XmlDeviceController {
   /**
@@ -66,7 +66,7 @@ class XmlDeviceController {
    * @returns true if the main zone answered and the tree was created
    */
   async start() {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d;
     const probes = await Promise.all(
       XML_ZONES.map(async (zone) => ({ zone, status: await this.tryGetStatus(zone.element) }))
     );
@@ -109,32 +109,11 @@ class XmlDeviceController {
     }
     const createdChannels = /* @__PURE__ */ new Set();
     for (const zone of this.zones) {
-      if (zone.channel) {
-        const chSegments = zone.channel.split(".");
-        for (let i = 1; i < chSegments.length; i++) {
-          const parentId = chSegments.slice(0, i).join(".");
-          if (!createdChannels.has(parentId)) {
-            createdChannels.add(parentId);
-            const seg = chSegments[i - 1];
-            await this.deps.upsertObject(`${this.deviceId}.${parentId}`, {
-              id: parentId,
-              type: "channel",
-              common: { name: (_c = import_types.CHANNEL_NAMES[seg]) != null ? _c : seg.charAt(0).toUpperCase() + seg.slice(1) }
-            });
-          }
-        }
-        createdChannels.add(zone.channel);
-        await this.deps.upsertObject(`${this.deviceId}.${zone.channel}`, {
-          id: zone.channel,
-          type: "channel",
-          common: { name: (_d = zone.channelName) != null ? _d : zone.channel }
-        });
-      }
       for (const entry of import_catalog.XML_AMP_CATALOG) {
         if (entry.mainOnly && zone.key !== "main") {
           continue;
         }
-        if (entry.statusField !== void 0 && !((_e = this.zoneFields.get(zone.key)) == null ? void 0 : _e.has(entry.statusField))) {
+        if (entry.statusField !== void 0 && !((_c = this.zoneFields.get(zone.key)) == null ? void 0 : _c.has(entry.statusField))) {
           continue;
         }
         const stateId = `${zone.prefix}${entry.state}`;
@@ -146,7 +125,7 @@ class XmlDeviceController {
             await this.deps.upsertObject(`${this.deviceId}.${channelId}`, {
               id: channelId,
               type: "channel",
-              common: { name: (_f = import_types.CHANNEL_NAMES[segments[i - 1]]) != null ? _f : segments[i - 1] }
+              common: { name: (_d = import_types.CHANNEL_NAMES[segments[i - 1]]) != null ? _d : segments[i - 1] }
             });
           }
         }

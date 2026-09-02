@@ -279,11 +279,13 @@ describe("mapYxcToObjects tree hygiene", () => {
   });
 
   test("creates every channel exactly once, however many zones or blocks need it", () => {
+    // equalizer + signal_info both hang under `sound`, cursor brings `remote`: the
+    // block helpers must meet channels the per-state loop already created.
     const objs = mapYxcToObjects({
       zones: [
-        { id: "main", funcs: ["power", "equalizer"], inputs: [] },
-        { id: "zone2", funcs: ["power", "equalizer"], inputs: [] },
-        { id: "zone3", funcs: ["power", "equalizer"], inputs: [] },
+        { id: "main", funcs: ["power", "equalizer", "signal_info", "cursor"], inputs: [] },
+        { id: "zone2", funcs: ["power", "equalizer", "signal_info", "cursor"], inputs: [] },
+        { id: "zone3", funcs: ["power", "equalizer", "signal_info"], inputs: [] },
       ],
       media: [],
       hasDistribution: true,

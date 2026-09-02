@@ -644,14 +644,14 @@ class Yamaha extends utils.Adapter {
     if (!("group_zones" in config)) {
       return;
     }
-    if (config.group_zones && !config.group_multiroom) {
+    if (config.group_zones) {
       config.group_multiroom = true;
     }
     delete config.group_zones;
     try {
       const obj = await this.getForeignObjectAsync(`system.adapter.${this.namespace}`);
       if (obj == null ? void 0 : obj.native) {
-        if (obj.native.group_zones && !obj.native.group_multiroom) {
+        if (obj.native.group_zones) {
           obj.native.group_multiroom = true;
         }
         delete obj.native.group_zones;

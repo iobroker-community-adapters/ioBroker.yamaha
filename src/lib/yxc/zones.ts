@@ -21,17 +21,3 @@ export const YXC_ZONE_IDS = ["main", "zone2", "zone3", "zone4"] as const;
 export function zonePrefix(zone: string): string {
   return zone === "main" ? "" : `multiroom.${zone}.`;
 }
-
-/**
- * The channel a non-main zone's states hang under, and its display name.
- *
- * @param zone the zone id
- * @returns channel id and name, or undefined for the main zone (it has no channel)
- */
-export function zoneChannel(zone: string): { channel: string; name: string } | undefined {
-  if (zone === "main") {
-    return undefined;
-  }
-  const number = zone.replace("zone", "");
-  return { channel: `multiroom.${zone}`, name: `Zone ${number}` };
-}

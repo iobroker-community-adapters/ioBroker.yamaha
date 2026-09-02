@@ -1,5 +1,5 @@
 import { CHANNEL_NAMES, type ObjectDef } from "../catalog/types";
-import { YXC_ZONE_IDS, zoneChannel, zonePrefix } from "./zones";
+import { YXC_ZONE_IDS, zonePrefix } from "./zones";
 import type { YxcCapabilities } from "./capability";
 import { YXC_AMP_CATALOG } from "./catalog";
 import { ALARM_DAYS, DAB_FIELDS } from "./command-mapper";
@@ -15,10 +15,7 @@ function selfMap(values: readonly string[]): Record<string, string> {
 }
 
 /** The zones the adapter maps: main flat, zone2-4 each under multiroom. */
-const ZONES: Array<{ id: string; prefix: string; channel?: string; channelName?: string }> = YXC_ZONE_IDS.map(id => {
-  const channel = zoneChannel(id);
-  return { id, prefix: zonePrefix(id), ...(channel ? { channel: channel.channel, channelName: channel.name } : {}) };
-});
+const ZONES: Array<{ id: string; prefix: string }> = YXC_ZONE_IDS.map(id => ({ id, prefix: zonePrefix(id) }));
 
 /** The "now playing" block's states (v2.0.0, one per zone): read metadata + transport buttons. */
 const PLAYER_STATES: Array<{ state: string; common: ObjectDef["common"] }> = [
@@ -140,23 +137,8 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
     if (!entries.some(entry => entry.create.kind !== "always")) {
       continue;
     }
-    if (zoneDef.channel) {
-      const chSegments = zoneDef.channel.split(".");
-      for (let i = 1; i < chSegments.length; i++) {
-        const parentId = chSegments.slice(0, i).join(".");
-        if (!channels.has(parentId)) {
-          channels.add(parentId);
-          const seg = chSegments[i - 1];
-          objects.push({
-            id: parentId,
-            type: "channel",
-            common: { name: CHANNEL_NAMES[seg] ?? seg.charAt(0).toUpperCase() + seg.slice(1) },
-          });
-        }
-      }
-      channels.add(zoneDef.channel);
-      objects.push({ id: zoneDef.channel, type: "channel", common: { name: zoneDef.channelName ?? zoneDef.channel } });
-    }
+    // Every parent — the zone channel included — is created by the per-state loop and
+    // named from the shared CHANNEL_NAMES table (a zone exists only with an entry).
     for (const entry of entries) {
       const fullId = `${zoneDef.prefix}${entry.state}`;
       const segments = fullId.split(".");
@@ -523,19 +505,10 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
     }
   }
   if (capabilities.hasDistribution) {
-    if (!channels.has("multiroom")) {
-      channels.add("multiroom");
-      objects.push({ id: "multiroom", type: "channel", common: { name: "Multiroom" } });
-    }
-    // The MusicCast-Link states get their own folder so the tree itself tells the scope:
-    // directly under multiroom = all zones of this device, group = linked devices.
-    // (Unobservable today: the zone catalog carries multiroom.group.streamingEnabled,
-    // so the generic parent loop above already created this channel — with the same
-    // CHANNEL_NAMES.group name. Kept as the declaration; the loop is a derivation.)
-    if (!channels.has("multiroom.group")) {
-      channels.add("multiroom.group");
-      objects.push({ id: "multiroom.group", type: "channel", common: { name: CHANNEL_NAMES.group } });
-    }
+    // The MusicCast-Link states live in their own folder so the tree itself tells the
+    // scope: directly under multiroom = all zones of this device, group = linked devices.
+    // Both channels already exist: the main zone's always-created
+    // multiroom.group.streamingEnabled state brought them in through the parent loop.
     const distState = (id: string, name: string, role: string): void => {
       objects.push({
         id: `multiroom.group.${id}`,

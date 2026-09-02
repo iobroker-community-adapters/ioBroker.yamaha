@@ -22,7 +22,7 @@ export function coordinateObjectTree(contributions: readonly TransportObjects[])
   objects: ObjectDef[];
   ownerByCanonicalId: Map<string, Transport>;
 } {
-  const order: string[] = [];
+  // Map iteration follows insertion order, so first-seen order needs no side list.
   const byId = new Map<string, { key: string; defs: Map<Transport, ObjectDef> }>();
   for (const { transport, objects } of contributions) {
     for (const obj of objects) {
@@ -31,24 +31,18 @@ export function coordinateObjectTree(contributions: readonly TransportObjects[])
       if (!entry) {
         entry = { key: capabilityKeyOf(transport, obj.id), defs: new Map() };
         byId.set(canonicalId, entry);
-        order.push(canonicalId);
       }
       entry.defs.set(transport, obj);
     }
   }
   const ownerByCanonicalId = new Map<string, Transport>();
-  const resolved: ObjectDef[] = order.map(canonicalId => {
-    const entry = byId.get(canonicalId);
-    // Both throws below are internal invariants, not reachable states: `order` is
-    // built from `byId`'s own keys, and pickOwner always returns one of the
-    // candidates it was handed (= this entry's own defs). They exist so a future
-    // change to either side fails loudly instead of writing an empty object.
-    if (!entry) {
-      throw new Error(`coordinateObjectTree: missing entry for ${canonicalId}`);
-    }
+  const resolved: ObjectDef[] = [...byId].map(([canonicalId, entry]) => {
     const owner = pickOwner(entry.key, [...entry.defs.keys()]);
     ownerByCanonicalId.set(canonicalId, owner);
     const ownerDef = entry.defs.get(owner);
+    // Internal invariant, not a reachable state: pickOwner always returns one of the
+    // candidates it was handed (= this entry's own defs). It exists so a future change
+    // to pickOwner fails loudly instead of writing an empty object.
     if (!ownerDef) {
       throw new Error(`coordinateObjectTree: owner ${owner} has no def for ${canonicalId}`);
     }
