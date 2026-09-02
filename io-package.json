@@ -3,6 +3,19 @@
     "name": "yamaha",
     "version": "2.1.0",
     "news": {
+      "NEXT": {
+        "en": "On an instance updated from an earlier version, the info datapoints now get the translated names too instead of keeping the old ones.",
+        "de": "Auf einer aktualisierten Instanz bekommen auch die info-Datenpunkte die übersetzten Namen, statt die alten zu behalten.",
+        "ru": "На обновлённом экземпляре точки данных info тоже получают переведённые названия вместо старых.",
+        "pt": "Numa instância atualizada, os pontos de dados info passam a receber os nomes traduzidos em vez de manter os antigos.",
+        "nl": "Op een bijgewerkte instantie krijgen ook de info-datapunten de vertaalde namen in plaats van de oude te behouden.",
+        "fr": "Sur une instance mise à jour, les points de données info reçoivent aussi les noms traduits au lieu de garder les anciens.",
+        "it": "Su un'istanza aggiornata anche i datapoint info ricevono i nomi tradotti invece di mantenere i vecchi.",
+        "es": "En una instancia actualizada, los puntos de datos info también reciben los nombres traducidos en lugar de conservar los antiguos.",
+        "pl": "Na zaktualizowanej instancji punkty danych info również otrzymują przetłumaczone nazwy zamiast zachowywać stare.",
+        "uk": "На оновленому екземплярі точки даних info також отримують перекладені назви замість старих.",
+        "zh-cn": "在已更新的实例上，info 数据点现在也会获得翻译后的名称，而不再保留旧名称。"
+      },
       "2.1.0": {
         "en": "Datapoint names now appear in your ioBroker language. The empty Media server folder is gone, the menu view starts clean, and a receiver that changed its address is found again.",
         "de": "Datenpunkt-Namen erscheinen jetzt in deiner ioBroker-Sprache. Der leere Ordner Media server ist weg, die Menü-Ansicht startet leer, und ein Receiver mit neuer Adresse wird wiedergefunden.",
@@ -80,19 +93,6 @@
         "pl": "Przebudowane drzewo obiektów: jeden blok odtwarzacza na strefę pokazuje, co gra, menu scen niesie tytuły z urządzenia plus listę scen, a jeden tuner obsługuje wszystkie pasma",
         "uk": "Перероблене дерево об'єктів: один блок плеєра на зону показує, що грає, меню сцен несе назви з пристрою плюс список сцен, один тюнер обслуговує всі діапазони",
         "zh-cn": "重构的对象树：每个区域一个播放器块显示当前播放内容，场景菜单带设备自带的标题外加场景列表，所有波段共用一个调谐器"
-      },
-      "1.7.0": {
-        "en": "Scene recall works on every generation and shows titles, refused commands are reported, restarts finish in seconds, plus on-screen remote and many new datapoints.",
-        "de": "Szenen-Aufruf klappt auf jeder Generation und zeigt Titel, abgelehnte Befehle werden gemeldet, Neustarts dauern Sekunden, dazu Bildschirm-Fernbedienung und viele neue Datenpunkte.",
-        "ru": "Вызов сцен работает на всех поколениях и показывает названия, отклонённые команды отображаются, перезапуск занимает секунды, плюс экранный пульт и много новых точек данных.",
-        "pt": "A chamada de cenas funciona em todas as gerações e mostra títulos, comandos recusados são reportados, reinícios demoram segundos, além de controlo no ecrã e muitos pontos novos.",
-        "nl": "Scène-oproep werkt op elke generatie en toont titels, geweigerde commando's worden gemeld, herstarts duren seconden, plus schermafstandsbediening en veel nieuwe datapunten.",
-        "fr": "Le rappel de scène fonctionne sur toutes les générations et affiche les titres, les commandes refusées sont signalées, les redémarrages prennent quelques secondes, plus de nouveaux points de données.",
-        "it": "Il richiamo scene funziona su ogni generazione e mostra i titoli, i comandi rifiutati vengono segnalati, i riavvii durano secondi, più telecomando su schermo e molti nuovi datapoint.",
-        "es": "La llamada de escenas funciona en todas las generaciones y muestra títulos, los comandos rechazados se notifican, los reinicios tardan segundos, más mando en pantalla y muchos puntos nuevos.",
-        "pl": "Wywoływanie scen działa na każdej generacji i pokazuje tytuły, odrzucone polecenia są zgłaszane, restarty trwają sekundy, do tego pilot ekranowy i wiele nowych punktów danych.",
-        "uk": "Виклик сцен працює на всіх поколіннях і показує назви, відхилені команди повідомляються, перезапуск триває секунди, плюс екранний пульт і багато нових точок даних.",
-        "zh-cn": "场景调用适用于所有代次并显示名称，被拒绝的命令会被报告，重启只需数秒，另有屏幕遥控和众多新数据点。"
       }
     },
     "titleLang": {

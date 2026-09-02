@@ -143,6 +143,7 @@ class Yamaha extends utils.Adapter {
       }
       await this.snapshotExistingDatapoints();
       await this.cleanupStaleObjects(new Set(devices.map((device) => device.id)));
+      await this.ensureInstanceInfoObjects();
       await this.subscribeToStates();
       const pushReceiver = new import_push_receiver.YxcPushReceiver({
         log: { debug: (message) => this.log.debug(message), warn: (message) => this.log.warn(message) },
@@ -628,6 +629,62 @@ class Yamaha extends utils.Adapter {
     }, DATAPOINT_BALANCE_SETTLE_MS);
   }
   /**
+   * Refresh the adapter's OWN `info.*` objects.
+   *
+   * js-controller creates them from `io-package.json` `instanceObjects` when the instance is
+   * added, and leaves an existing object's `common` alone on every later upgrade — so an
+   * instance that predates a change keeps whatever the old version wrote. Measured after the
+   * name translation went live: five of them still carried a plain-string name while the whole
+   * rest of the tree was translated. Writing them here every start closes that half; extendObject
+   * merges, so a recording setting or anything else a user attached survives.
+   */
+  async ensureInstanceInfoObjects() {
+    const objects = [
+      ["info", { id: "info", type: "channel", common: { name: (0, import_i18n.tName)("Information") } }],
+      [
+        "info.connection",
+        {
+          id: "info.connection",
+          type: "state",
+          common: {
+            name: (0, import_i18n.tName)("Device or service connected"),
+            type: "boolean",
+            role: "indicator.connected",
+            read: true,
+            write: false
+          }
+        }
+      ],
+      [
+        "info.devicesTotal",
+        {
+          id: "info.devicesTotal",
+          type: "state",
+          common: { name: (0, import_i18n.tName)("Devices total"), type: "number", role: "value", read: true, write: false }
+        }
+      ],
+      [
+        "info.devicesOnline",
+        {
+          id: "info.devicesOnline",
+          type: "state",
+          common: { name: (0, import_i18n.tName)("Devices online"), type: "number", role: "value", read: true, write: false }
+        }
+      ],
+      [
+        "info.devicesAllOnline",
+        {
+          id: "info.devicesAllOnline",
+          type: "state",
+          common: { name: (0, import_i18n.tName)("All devices online"), type: "boolean", role: "indicator", read: true, write: false }
+        }
+      ]
+    ];
+    for (const [id, def] of objects) {
+      await this.extendObject(id, { type: def.type, common: def.common, native: {} });
+    }
+  }
+  /**
    * Create a device's header objects (the device node, its info channel and a
    * per-device connection indicator) so its state is visible even while offline.
    *
@@ -656,12 +713,12 @@ class Yamaha extends utils.Adapter {
       },
       { preserve: { common: ["name"] } }
     );
-    await this.setObjectNotExistsAsync(`${deviceId}.info`, {
+    await this.extendObject(`${deviceId}.info`, {
       type: "channel",
       common: { name: (0, import_i18n.tName)("Info") },
       native: {}
     });
-    await this.setObjectNotExistsAsync(`${deviceId}.info.connection`, {
+    await this.extendObject(`${deviceId}.info.connection`, {
       type: "state",
       common: {
         name: (0, import_i18n.tName)("Connected"),
@@ -673,24 +730,24 @@ class Yamaha extends utils.Adapter {
       },
       native: {}
     });
-    await this.setObjectNotExistsAsync(`${deviceId}.info.model`, {
+    await this.extendObject(`${deviceId}.info.model`, {
       type: "state",
       common: { name: (0, import_i18n.tName)("Model"), type: "string", role: "text", read: true, write: false, def: "" },
       native: {}
     });
-    await this.setObjectNotExistsAsync(`${deviceId}.info.ip`, {
+    await this.extendObject(`${deviceId}.info.ip`, {
       type: "state",
       common: { name: (0, import_i18n.tName)("IP address"), type: "string", role: "info.ip", read: true, write: false, def: "" },
       native: {}
     });
     await this.setState(`${deviceId}.info.ip`, { val: ip, ack: true });
-    await this.setObjectNotExistsAsync(`${deviceId}.info.transports`, {
+    await this.extendObject(`${deviceId}.info.transports`, {
       type: "channel",
       common: { name: (0, import_i18n.tName)("Transports") },
       native: {}
     });
     for (const proto of TRANSPORT_IDS) {
-      await this.setObjectNotExistsAsync(`${deviceId}.info.transports.${proto}`, {
+      await this.extendObject(`${deviceId}.info.transports.${proto}`, {
         type: "state",
         common: {
           name: (0, import_i18n.tName)("%s connected", proto.toUpperCase()),

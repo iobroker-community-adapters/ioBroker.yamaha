@@ -27,6 +27,7 @@ import { discoveredStoreDeps, ignoredStoreDeps } from "./lib/discovered-store-de
 import { YxcPushReceiver } from "./lib/yxc/push-receiver";
 import { YamahaDeviceManagement } from "./device-management";
 import type { DeviceRecord } from "./lib/types";
+import type { ObjectDef } from "./lib/catalog/types";
 import { DeviceSupervisor, type ConnectionHandle } from "./lib/lifecycle/device-supervisor";
 import { ReconnectStrategy } from "./lib/lifecycle/reconnect-strategy";
 import { ReachabilityDedup } from "./lib/lifecycle/reachability-dedup";
@@ -165,6 +166,7 @@ export class Yamaha extends utils.Adapter {
       // Before the cleanup and before any device connects — see knownDatapoints.
       await this.snapshotExistingDatapoints();
       await this.cleanupStaleObjects(new Set(devices.map(device => device.id)));
+      await this.ensureInstanceInfoObjects();
       await this.subscribeToStates();
       const pushReceiver = new YxcPushReceiver({
         log: { debug: message => this.log.debug(message), warn: message => this.log.warn(message) },
@@ -701,6 +703,63 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
+   * Refresh the adapter's OWN `info.*` objects.
+   *
+   * js-controller creates them from `io-package.json` `instanceObjects` when the instance is
+   * added, and leaves an existing object's `common` alone on every later upgrade — so an
+   * instance that predates a change keeps whatever the old version wrote. Measured after the
+   * name translation went live: five of them still carried a plain-string name while the whole
+   * rest of the tree was translated. Writing them here every start closes that half; extendObject
+   * merges, so a recording setting or anything else a user attached survives.
+   */
+  private async ensureInstanceInfoObjects(): Promise<void> {
+    const objects: Array<[string, ObjectDef]> = [
+      ["info", { id: "info", type: "channel", common: { name: tName("Information") } }],
+      [
+        "info.connection",
+        {
+          id: "info.connection",
+          type: "state",
+          common: {
+            name: tName("Device or service connected"),
+            type: "boolean",
+            role: "indicator.connected",
+            read: true,
+            write: false,
+          },
+        },
+      ],
+      [
+        "info.devicesTotal",
+        {
+          id: "info.devicesTotal",
+          type: "state",
+          common: { name: tName("Devices total"), type: "number", role: "value", read: true, write: false },
+        },
+      ],
+      [
+        "info.devicesOnline",
+        {
+          id: "info.devicesOnline",
+          type: "state",
+          common: { name: tName("Devices online"), type: "number", role: "value", read: true, write: false },
+        },
+      ],
+      [
+        "info.devicesAllOnline",
+        {
+          id: "info.devicesAllOnline",
+          type: "state",
+          common: { name: tName("All devices online"), type: "boolean", role: "indicator", read: true, write: false },
+        },
+      ],
+    ];
+    for (const [id, def] of objects) {
+      await this.extendObject(id, { type: def.type, common: def.common, native: {} });
+    }
+  }
+
+  /**
    * Create a device's header objects (the device node, its info channel and a
    * per-device connection indicator) so its state is visible even while offline.
    *
@@ -737,12 +796,12 @@ export class Yamaha extends utils.Adapter {
       },
       { preserve: { common: ["name"] } },
     );
-    await this.setObjectNotExistsAsync(`${deviceId}.info`, {
+    await this.extendObject(`${deviceId}.info`, {
       type: "channel",
       common: { name: tName("Info") },
       native: {},
     });
-    await this.setObjectNotExistsAsync(`${deviceId}.info.connection`, {
+    await this.extendObject(`${deviceId}.info.connection`, {
       type: "state",
       common: {
         name: tName("Connected"),
@@ -757,7 +816,7 @@ export class Yamaha extends utils.Adapter {
     // Model name shown on the device-manager card. Filled by whichever transport reports it
     // (YNCA MODELNAME, YXC/XML model); created here so the card's model line binds even for an
     // offline device or a transport that does not report a model.
-    await this.setObjectNotExistsAsync(`${deviceId}.info.model`, {
+    await this.extendObject(`${deviceId}.info.model`, {
       type: "state",
       common: { name: tName("Model"), type: "string", role: "text", read: true, write: false, def: "" },
       native: {},
@@ -765,7 +824,7 @@ export class Yamaha extends utils.Adapter {
     // The device's address — for a discovered device it lived only in the adapter's
     // internals, so no diagnosis (log capture, browser access to the device's own pages)
     // could name it without a network search. Refreshed every start: DHCP may move it.
-    await this.setObjectNotExistsAsync(`${deviceId}.info.ip`, {
+    await this.extendObject(`${deviceId}.info.ip`, {
       type: "state",
       common: { name: tName("IP address"), type: "string", role: "info.ip", read: true, write: false, def: "" },
       native: {},
@@ -774,13 +833,13 @@ export class Yamaha extends utils.Adapter {
     // Per-transport connection flags, fed by the live set from connectTransports and read live
     // by the device-manager card indicators. Created here so an offline device's card still
     // renders all three (false) instead of nothing.
-    await this.setObjectNotExistsAsync(`${deviceId}.info.transports`, {
+    await this.extendObject(`${deviceId}.info.transports`, {
       type: "channel",
       common: { name: tName("Transports") },
       native: {},
     });
     for (const proto of TRANSPORT_IDS) {
-      await this.setObjectNotExistsAsync(`${deviceId}.info.transports.${proto}`, {
+      await this.extendObject(`${deviceId}.info.transports.${proto}`, {
         type: "state",
         common: {
           name: tName("%s connected", proto.toUpperCase()),

@@ -513,6 +513,21 @@ describe("Yamaha onReady — configured devices", () => {
     expect(ctx.i.log.error).toHaveBeenCalledWith(expect.stringContaining("onReady failed: objects db down"));
   });
 
+  it("refreshes the header and instance objects, so an upgraded instance gets the new names too", async () => {
+    // js-controller leaves an existing instanceObject's common alone on an upgrade, and the
+    // device header used to be created once and never touched again — measured live after the
+    // name translation: nine datapoints still carried the old plain-string name.
+    const ctx = setup();
+    ctx.i.objects.set("info.devicesTotal", { type: "state", common: { name: "Devices total" }, native: {} });
+    ctx.i.objects.set("Living_room.info.connection", { type: "state", common: { name: "Connected" }, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    const nameOf = (id: string): unknown => (ctx.i.objects.get(id)?.common as { name?: unknown }).name;
+    expect((nameOf("info.devicesTotal") as { en?: string }).en).toBe("Devices total");
+    expect((nameOf("info.devicesTotal") as { de?: string }).de).toBe("Geräte gesamt");
+    expect((nameOf("Living_room.info.connection") as { de?: string }).de).toBe("Verbunden");
+  });
+
   it("gives every object a name in all eleven languages, never a plain string", async () => {
     // ioBroker resolves a translation object into the reader's language itself; a plain string
     // would freeze the tree in one language (core-team line, nut2 #15).

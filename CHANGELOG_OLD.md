@@ -1,4 +1,5 @@
 # Older changes
+
 ## 2.0.0 (2026-09-01)
 
 - (krobipd) Changed: one player block per zone now shows what is playing — source, title, artist, cover art and the transport buttons — instead of an identical, mostly empty block under every source
