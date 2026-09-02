@@ -4,17 +4,17 @@
     "version": "2.0.4",
     "news": {
       "NEXT": {
-        "en": "Datapoint names now appear in your ioBroker language. The empty \"Media server\" folder is removed, the menu view starts clean after a restart, a receiver that changed its address is found again, and deleting a found receiver really removes it.",
-        "de": "Datenpunkt-Namen erscheinen jetzt in deiner ioBroker-Sprache. Der leere Ordner \"Media server\" verschwindet, die Menü-Ansicht startet nach einem Neustart leer, ein Receiver mit neuer Adresse wird wiedergefunden, und das Löschen eines gefundenen Receivers entfernt ihn wirklich.",
-        "ru": "Названия точек данных теперь отображаются на языке ioBroker. Пустая папка \"Media server\" удаляется, меню после перезапуска начинается пустым, ресивер со сменившимся адресом снова находится, а удаление найденного ресивера действительно его убирает.",
-        "pt": "Os nomes dos pontos de dados aparecem agora no idioma do ioBroker. A pasta vazia \"Media server\" é removida, a vista de menu começa limpa após um reinício, um recetor que mudou de endereço volta a ser encontrado e apagar um recetor encontrado remove-o mesmo.",
-        "nl": "Datapuntnamen verschijnen nu in je ioBroker-taal. De lege map \"Media server\" wordt verwijderd, de menuweergave start leeg na een herstart, een receiver met een nieuw adres wordt weer gevonden, en het verwijderen van een gevonden receiver wist hem echt.",
-        "fr": "Les noms des points de données apparaissent maintenant dans votre langue ioBroker. Le dossier vide \"Media server\" est supprimé, la vue du menu démarre vide après un redémarrage, un ampli dont l'adresse a changé est retrouvé, et supprimer un ampli détecté le retire vraiment.",
-        "it": "I nomi dei datapoint appaiono ora nella lingua di ioBroker. La cartella vuota \"Media server\" viene rimossa, la vista del menu parte vuota dopo un riavvio, un ricevitore che ha cambiato indirizzo viene ritrovato e l'eliminazione di un ricevitore rilevato lo rimuove davvero.",
-        "es": "Los nombres de los puntos de datos aparecen ahora en tu idioma de ioBroker. La carpeta vacía \"Media server\" se elimina, la vista del menú empieza vacía tras un reinicio, un receptor que cambió de dirección se vuelve a encontrar y borrar un receptor detectado lo elimina de verdad.",
-        "pl": "Nazwy punktów danych pojawiają się teraz w Twoim języku ioBroker. Pusty folder \"Media server\" znika, widok menu startuje pusty po restarcie, odbiornik ze zmienionym adresem zostaje odnaleziony, a usunięcie znalezionego odbiornika naprawdę go usuwa.",
-        "uk": "Назви точок даних тепер відображаються мовою ioBroker. Порожня тека \"Media server\" видаляється, вигляд меню після перезапуску починається порожнім, ресивер зі зміненою адресою знаходиться знову, а видалення знайденого ресивера справді його прибирає.",
-        "zh-cn": "数据点名称现在以您的 ioBroker 语言显示。空的“Media server”文件夹被移除，重启后菜单视图从空白开始，更换地址的接收机会被重新找到，删除已发现的接收机将真正移除它。"
+        "en": "Datapoint names now appear in your ioBroker language. The empty Media server folder is gone, the menu view starts clean, and a receiver that changed its address is found again.",
+        "de": "Datenpunkt-Namen erscheinen jetzt in deiner ioBroker-Sprache. Der leere Ordner Media server ist weg, die Menü-Ansicht startet leer, und ein Receiver mit neuer Adresse wird wiedergefunden.",
+        "ru": "Названия точек данных теперь на языке ioBroker. Пустая папка Media server удалена, меню начинается пустым, а ресивер со сменившимся адресом снова находится.",
+        "pt": "Os nomes dos pontos de dados aparecem no idioma do ioBroker. A pasta vazia Media server desapareceu, a vista de menu começa limpa e um recetor que mudou de endereço é reencontrado.",
+        "nl": "Datapuntnamen verschijnen nu in je ioBroker-taal. De lege map Media server is weg, de menuweergave start leeg, en een receiver met een nieuw adres wordt weer gevonden.",
+        "fr": "Les noms des points de données s'affichent dans votre langue ioBroker. Le dossier vide Media server a disparu, la vue du menu démarre vide et un ampli ayant changé d'adresse est retrouvé.",
+        "it": "I nomi dei datapoint appaiono nella lingua di ioBroker. La cartella vuota Media server è sparita, la vista del menu parte vuota e un ricevitore con nuovo indirizzo viene ritrovato.",
+        "es": "Los nombres de los puntos de datos aparecen en tu idioma de ioBroker. La carpeta vacía Media server ha desaparecido, el menú empieza vacío y un receptor que cambió de dirección se reencuentra.",
+        "pl": "Nazwy punktów danych pojawiają się w Twoim języku ioBroker. Pusty folder Media server zniknął, widok menu startuje pusty, a odbiornik ze zmienionym adresem zostaje odnaleziony.",
+        "uk": "Назви точок даних тепер мовою ioBroker. Порожню теку Media server видалено, вигляд меню починається порожнім, а ресивер зі зміненою адресою знаходиться знову.",
+        "zh-cn": "数据点名称现在以您的 ioBroker 语言显示。空的 Media server 文件夹已移除，菜单视图从空白开始，更换地址的接收机会被重新找到。"
       },
       "2.0.4": {
         "en": "Database hiccups no longer restart the adapter; protocol badges reset on start/stop; clean stop during discovery; scene titles, probe retries and equalizer fixed",
