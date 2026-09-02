@@ -53,7 +53,8 @@ zugeteilten Datenpunkte. Owner je Datenpunkt = das modernste ANWESENDE, aber ver
 (`lib/catalog/owner-policy.ts`: Rang YXC > YNCA > XML, überstimmt vom reicheren/schreibbaren/korrekt-skalierten
 Transport laut Zensus); `lib/catalog/object-tree-coordinator.ts` berechnet daraus EINEN Baum, jeder State genau
 einmal, jeder Write an den Owner. **Wiederkehrende Antworten werden pro Gerät gemerkt** (`lib/lifecycle/probe-memory.ts`, gehalten in
-`main.ts` neben Subunit-Cache und Reachability-Dedup, NICHT persistiert): YXC-`getFeatures`/Modell/Name
+`main.ts` neben Subunit-Cache und Reachability-Dedup, seit 2.0.0 PERSISTIERT im Geräteobjekt `native.probeCache` —
+s. „Schnellstart" unten): YXC-`getFeatures`/Modell/Name
 und die XML-Browse-Quellen-Probe sind über die Gerätelaufzeit konstant — ein Reconnect fragt sie nicht
 erneut. Der YNCA-Subunit-Cache prüft die Identität jetzt ZUERST (2 Abrufe Modell+Firmware, ~0,2 s) und
 sweept erst danach; vorher kostete ein veralteter Cache Sweep→Probe→Sweep (~40 s, langsamer als ohne
@@ -221,6 +222,7 @@ Antwort des Geräts wird gelesen. Belege: `Ressourcen/yamaha/device-captures/rx-
   Diagnose brauchte eine Netzsuche; jetzt Datenpunkt, je Start aufgefrischt.
 
 **Schnellstart (krobi 2026-09-01: „warum arbeiten wir hier nicht mit caches"):**
+
 - **ProbeMemory ist PERSISTENT** (Geräteobjekt `native.probeCache`, als JSON-STRING —
   extendObject MERGED verschachtelte Objekte, gelöschte Schlüssel stünden sonst wieder
   auf; `loadProbeMemory` in main.ts). Frische-Wächter je Transport, jeder validiert
@@ -270,6 +272,7 @@ Der Zonen-Präfix-Strip in `renamedObjectIds` kennt seit v2.0.0 auch `multiroom.
   · `hdmi.lipSyncOut1/2` (lipSync-Ordner weg) · `advanced.speakers.speakerA/B`.
 
 **v2.0.1 — „kein wertloses Lese-Feld" (Live-Feld-Audit, drei Mechanismen):**
+
 - **XML claim-with-proof** (der letzte Transport ohne Beweis-Pflicht): AMP-Katalog-Objekte
   entstehen nur für Basic_Status-Felder, die DIESES Gerät liefert; gelieferte Feldmenge je Zone
   als persistierte UNION im ProbeMemory (`xmlStatusFields:<zone>` — Standby-Start schrumpft den
@@ -327,6 +330,54 @@ verbinden asynchron und parallel, deshalb ein 5-Sekunden-Nachlauf (`DATAPOINT_BA
 statt einer Zeile je Gerät: EINE Umschaltung, EIN Ergebnis. Gezählt werden NUR `state`-Objekte,
 nicht die Kanäle/Geräteknoten drumherum. Regel-Herkunft: Memory `feedback_datenpunkt_bilanz_im_log`.
 
+## Voll-Audit 2026-09-02 (v2.0.4) — Regeln, die im Code stehen müssen
+
+16-Dimensionen-Audit + Speicher/Leaks + Sicherheit + Test-Audit mit Mutationstests; Bericht
+`../../Ressourcen/yamaha/test-audit-2026-09-02.md`. Zehn Funde, alle umgesetzt (krobi: „kein Filter").
+
+- **Jeder Datenbank-Schreibvorgang wird BEOBACHTET** — `writeState(id, value)` /
+  `persistDeviceNative(deviceId, native)` in `main.ts`, nie `void this.setState(...)`. Grund
+  (js-controller-Quelle gelesen): eine unbehandelte Promise-Ablehnung wird zu
+  `_exceptionHandler(err, true)` → Instanz-Stopp; `setState` ohne Callback lehnt ab, sobald die
+  States-DB gerade nicht erreichbar ist (`ERROR_DB_CLOSED`, Redis-Reconnect). Neun nackte
+  Writes hätten bei einem Schluckauf die Instanz neu gestartet. Fehler: EINE Warnung, Wiederholungen
+  auf debug bis ein Write gelingt (`stateWritesFailing`), still während `unloading`. Gleiche Regel
+  für den YNCA-Socket: `writeLine` lehnt nie ab — ein Schreibfehler wird `lastError` (Drop-Grund).
+- **Protokoll-Flaggen `info.transports.<proto>` sind kein Letztwert:** `startDevice` setzt sie VOR
+  dem ersten Versuch auf false (die Karte zeigte nach einem Absturz „YNCA ✓" neben rotem Punkt —
+  für immer, wenn das Gerät nie wieder antwortet), `onUnload` nimmt sie mit der Verbindung herunter.
+- **Netzsuche überlebt den Stopp:** `onReady` prüft `unloading` NACH der blockierenden Erstsuche
+  (sonst kamen UDP-Empfänger, Abos und Geräte auf einer toten Instanz hoch — niemand schließt sie
+  mehr), `discoverAdditionalDevices` nach der Hintergrundsuche; `timers.schedule`/`scheduleKeepalive`
+  verweigern nach `unloading`. `startDevice` selbst hat KEINEN Wächter mehr — beide Aufrufer prüfen.
+- **`scene.list` gehört dem Titel-Lieferanten** (Owner-Override `xml > ynca > yxc`): MusicCast kennt
+  nur die Slot-ANZAHL; als Owner nach Modernität hätte es beim ersten Kontakt eine titellose Liste
+  veröffentlicht, die bis zum Neustart stand (YNCA-Namen kommen erst mit dem 19-s-Sweep).
+- **Körper-Kappe 1 MiB** (`MAX_HTTP_BODY_BYTES`, `util.ts`) auf allen drei HTTP-Wegen
+  (Gerätebeschreibung, YXC, XML) — Abbruch per `res.destroy(err)` (landet im `res`-Fehlerhandler;
+  `req` ist in `onResponse` noch nicht definiert → `no-use-before-define`). Echte Antworten: wenige KB,
+  größte `getFeatures` ~5 KB.
+- **XML-Sonden merken nur ENDGÜLTIGE Urteile** (`probeXml`, Browse-Quellen-Probe im
+  `xml/device-controller.ts`): endgültig = körperloses HTTP 400 (`XmlHttpError`,
+  `isPermanentXmlRefusal`) oder `RC=2` (Knoten existiert nicht — Ernte RX-V6A 2026-09-01);
+  vorübergehend = Timeout, anderer HTTP-Status, `RC 3/4` → wirft, `once()` merkt nichts, nächster
+  Connect fragt neu. Vorher merkte sich ein Timeout beim Verbinden dauerhaft „keine Szenen/Menüs".
+  Die Ernte lief am EINGESCHALTETEN Gerät — das Standby-Verhalten ist unbelegt, deshalb die
+  Asymmetrie (nur beweisbar Negatives wird gemerkt).
+- **Equalizer-Cache wird nur aus einem VOLLSTÄNDIGEN Tripel gesät** (`cacheEqualizer`): ein
+  Erst-Status mit nur zwei Bändern darf keine erfundene 0 hinterlassen, die ein späterer
+  Band-Write mit auf das Gerät schreibt; Teil-Updates mergen per `??` in den bestehenden Cache.
+- **Reconnect-Streuung nach UNTEN** (`delay · (1 − jitter·rand)`): die Obergrenze ist eine
+  Obergrenze — vorher konnte der Jitter sie um 20 % überschreiten.
+- **Formatierung: das Repo ist seit 2026-09-02 prettier-sauber** (`npm run format:check` = 0) und
+  bleibt es — `npm run format` ist gefahrlos. Ausschlussmuster in den beiden `format`-Skripten
+  (KEINE `.prettierignore` — Repochecker W0084/W5048): `build/` (Compiler-Ausgabe),
+  `io-package.json` (Release-Skript, i18n-Sync und Konsistenz-Autofix schreiben aufgeklapptes JSON),
+  `.github/**` (Community-/Bot-Vorlagen von mcm1957 und iobroker-bot — einfache Anführungszeichen,
+  eigene Formen; der Konsistenz-Audit vergleicht sie im Community-Zweig, unsere Formatierungshoheit
+  endet dort). `.releaseconfig.json` ist die Master-Kopie (Master seit 2026-09-02 auf Zeilenbreite
+  120 formatiert). CI-Gate bleibt `npm run lint`.
+
 ## Stand
 
 Alle sieben Aufbauphasen abgeschlossen, danach der Multi-Transport-Neubau (alle antwortenden Protokolle
@@ -372,12 +423,18 @@ räumt den KOMPLETTEN Alt-Baum (47 Instanz-Objekte + dynamische `Realtime.*`/`Sy
 
 ## Tests
 
-- vitest, `src/**/*.test.ts` — Unit + Boot-Integrationstest (startet den Adapter real).
+- vitest, `src/**/*.test.ts` — Unit + Boot-Integrationstest (startet den Adapter real). 797 Tests (2.0.4).
+- **Mutationstabellen** (`../../Ressourcen/iobroker-entwicklung/mutation-testing/`): `mutations_yamaha_all.py`
+  (120 Regelbrüche, Wellen 1–5 vom 22.08., Nadeln am 02.09. nachgezogen) + `mutations_yamaha_2026-09-02.py`
+  (24, Welle 6 = die Audit-Fixes; IDs Z1–Z24, W gehört Welle 5). Läufer `mutation-test.py`. Nadeln sind
+  exakte Quellzeilen — nach Prettier-Umbrüchen oder Refactorings ZUERST den Nadel-Vorab-Check (jede Nadel
+  genau 1×), sonst misst der Lauf nichts. Sechs äquivalente Mutanten (M9, X1, X2, X4, Y1, Y13) sind
+  an Ort und Stelle im Quelltext begründet — ein Überlebender außerhalb dieser sechs ist eine Testlücke.
 - **HW-freies Testen:** `ynca`-Python bringt debug-server + echte Geräte-Logs → YNCA-Client dagegen testbar.
 
 ## Befehle
 
-- `npm run build` · `npm test` · `npm run lint` · `npm run check` · `npm run release`.
+- `npm run build` · `npm test` · `npm run lint` · `npm run check` · `npm run format:check` (muss 0 melden) · `npm run release`.
 
 ## Versionshistorie
 

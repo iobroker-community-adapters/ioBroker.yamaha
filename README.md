@@ -103,6 +103,17 @@ On the very first contact the adapter asks the receiver which functions it suppo
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+
+### **WORK IN PROGRESS**
+
+- (krobipd) Fixed: a short outage of the ioBroker database no longer restarts the adapter — a failed write is logged once and the next value is written normally
+- (krobipd) Fixed: the protocol badges on the device card are reset when a device starts and when the adapter stops, so a crash no longer leaves a green badge next to a red dot
+- (krobipd) Fixed: stopping or restarting the adapter while it is still searching the network now stops it completely — it no longer keeps working half-started until the next restart
+- (krobipd) Fixed: the scene list keeps its titles on MusicCast receivers that also answer over XML or YNCA — the title-less MusicCast list no longer replaces it at startup
+- (krobipd) Fixed: a timeout while probing an older receiver for scenes or menus is asked again on the next connect instead of being remembered as "none" until the next restart
+- (krobipd) Fixed: writing one equalizer band before the receiver reported all three no longer sends zeros for the other two — the zone status is fetched first
+- (krobipd) Improved: a receiver that is off for a while is retried no later than the configured maximum wait, and an oversized answer from a wrong host can no longer eat the adapter's memory
+
 ### 2.0.3 (2026-09-01)
 
 - (krobipd) Fixed: the update cleanup now removes every never-filled leftover datapoint — a history recording setting no longer shields it, because nothing was ever recorded there and nothing is lost

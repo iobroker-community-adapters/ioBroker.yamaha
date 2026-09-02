@@ -1,4 +1,5 @@
 # Older changes
+
 ## 1.6.0 (2026-08-27)
 
 - (krobipd) New: three states show how many receivers are set up, how many are connected right now and whether that is all of them — one line to watch instead of every device

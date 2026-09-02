@@ -3,6 +3,19 @@
     "name": "yamaha",
     "version": "2.0.3",
     "news": {
+      "NEXT": {
+        "en": "Database hiccups no longer restart the adapter; protocol badges reset on start/stop; clean stop during discovery; scene titles, probe retries and equalizer fixed",
+        "de": "Datenbank-Aussetzer starten den Adapter nicht mehr neu; Protokoll-Anzeigen bei Start/Stopp zurückgesetzt; sauberer Stopp während der Suche; Szenentitel, Sonden und Equalizer korrigiert",
+        "ru": "Сбои базы данных больше не перезапускают адаптер; индикаторы протоколов сбрасываются при старте/остановке; чистая остановка во время поиска; исправлены сцены, пробы и эквалайзер",
+        "pt": "Falhas da base de dados já não reiniciam o adaptador; indicadores de protocolo repostos ao iniciar/parar; paragem limpa durante a pesquisa; cenas, sondas e equalizador corrigidos",
+        "nl": "Databasestoringen herstarten de adapter niet meer; protocolindicatoren gereset bij start/stop; schoon stoppen tijdens het zoeken; scènetitels, peilingen en equalizer gecorrigeerd",
+        "fr": "Les coupures de la base ne redémarrent plus l'adaptateur ; indicateurs de protocole réinitialisés au démarrage/arrêt ; arrêt propre pendant la recherche ; scènes, sondes et égaliseur corrigés",
+        "it": "Le interruzioni del database non riavviano più l'adapter; indicatori di protocollo azzerati all'avvio/arresto; arresto pulito durante la ricerca; scene, sonde ed equalizzatore corretti",
+        "es": "Los fallos de la base de datos ya no reinician el adaptador; indicadores de protocolo restablecidos al iniciar/detener; parada limpia durante la búsqueda; escenas, sondeos y ecualizador corregidos",
+        "pl": "Zakłócenia bazy danych nie restartują już adaptera; wskaźniki protokołów zerowane przy starcie/stopie; czyste zatrzymanie podczas wyszukiwania; poprawiono sceny, sondy i equalizer",
+        "uk": "Збої бази даних більше не перезапускають адаптер; індикатори протоколів скидаються під час запуску/зупинки; чиста зупинка під час пошуку; виправлено сцени, проби й еквалайзер",
+        "zh-cn": "数据库短暂故障不再重启适配器；协议指示在启动和停止时重置；搜索期间可干净停止；修复场景标题、探测重试和均衡器写入"
+      },
       "2.0.3": {
         "en": "The update cleanup now removes every never-filled leftover datapoint — a history recording setting no longer shields it, because nothing was ever recorded there and nothing is lost",
         "de": "Das Update-Aufräumen entfernt jetzt jeden nie befüllten Alt-Datenpunkt — eine Verlaufs-Aufzeichnungseinstellung schützt ihn nicht mehr, denn dort wurde nie etwas aufgezeichnet",
@@ -80,19 +93,6 @@
         "pl": "Trzy nowe stany pokazują, ile amplitunerów skonfigurowano, ile jest połączonych i czy to wszystkie; zatrzymany adapter nie pokazuje już żadnego jako połączonego.",
         "uk": "Три нові стани показують, скільки ресиверів налаштовано, скільки під'єднано і чи це всі; зупинений адаптер більше не показує ресивер під'єднаним.",
         "zh-cn": "三个新数据点显示已配置多少台功放、当前有多少台已连接以及是否全部连接；已停止的适配器不再把功放显示为已连接。"
-      },
-      "1.5.0": {
-        "en": "Fixed: menu browsing on receivers that serve their menus over the old XML protocol (#613)\nFixed: a MusicCast device that loses power is reported as offline instead of still showing a connection\nSwitching a datapoint group on or off now shows how many datapoints appeared or disappeared\nNew: optional error reporting via Sentry, without any personal data",
-        "de": "Behoben: Menü-Browsing bei Receivern, die ihr Menü über das alte XML-Protokoll liefern (#613)\nBehoben: Ein stromlos gewordenes MusicCast-Gerät wird als offline gemeldet statt weiter als verbunden\nBeim Umschalten einer Datenpunktgruppe siehst du jetzt, wie viele Datenpunkte dazugekommen oder weggefallen sind\nNeu: Optionale Fehlerberichte über Sentry, ohne persönliche Daten",
-        "ru": "Исправлено: навигация по меню на ресиверах, которые отдают меню по старому протоколу XML (#613)\nИсправлено: обесточенное устройство MusicCast сообщается как отключённое, а не как подключённое\nПри переключении группы точек данных теперь видно, сколько точек добавилось или исчезло\nНовое: необязательная отправка отчётов об ошибках через Sentry, без персональных данных",
-        "pt": "Corrigido: navegação de menus em recetores que servem o menu pelo antigo protocolo XML (#613)\nCorrigido: um dispositivo MusicCast sem energia é indicado como offline em vez de continuar ligado\nAo ativar ou desativar um grupo de pontos de dados vê agora quantos pontos surgiram ou desapareceram\nNovo: relatório de erros opcional via Sentry, sem dados pessoais",
-        "nl": "Opgelost: menunavigatie op ontvangers die hun menu via het oude XML-protocol aanbieden (#613)\nOpgelost: een MusicCast-apparaat zonder stroom wordt als offline gemeld in plaats van nog verbonden\nBij het in- of uitschakelen van een datapuntgroep zie je nu hoeveel datapunten erbij kwamen of verdwenen\nNieuw: optionele foutrapportage via Sentry, zonder persoonsgegevens",
-        "fr": "Corrigé : navigation dans les menus des amplis qui servent leur menu via l'ancien protocole XML (#613)\nCorrigé : un appareil MusicCast hors tension est signalé hors ligne au lieu de rester connecté\nEn activant ou désactivant un groupe de points de données, vous voyez désormais combien de points sont apparus ou ont disparu\nNouveau : rapport d'erreurs optionnel via Sentry, sans données personnelles",
-        "it": "Corretto: navigazione dei menu sui ricevitori che li offrono tramite il vecchio protocollo XML (#613)\nCorretto: un dispositivo MusicCast senza corrente viene segnalato offline invece che ancora connesso\nAttivando o disattivando un gruppo di datapoint ora vedi quanti datapoint sono comparsi o spariti\nNovità: segnalazione errori opzionale tramite Sentry, senza dati personali",
-        "es": "Corregido: navegación por menús en receptores que los sirven por el antiguo protocolo XML (#613)\nCorregido: un dispositivo MusicCast sin corriente se informa como desconectado en lugar de conectado\nAl activar o desactivar un grupo de puntos de datos ahora ves cuántos puntos aparecieron o desaparecieron\nNuevo: informe de errores opcional mediante Sentry, sin datos personales",
-        "pl": "Poprawiono: przeglądanie menu w amplitunerach udostępniających je starym protokołem XML (#613)\nPoprawiono: pozbawione zasilania urządzenie MusicCast jest zgłaszane jako offline, a nie nadal połączone\nPo włączeniu lub wyłączeniu grupy punktów danych widzisz teraz, ile punktów przybyło lub zniknęło\nNowość: opcjonalne raportowanie błędów przez Sentry, bez danych osobowych",
-        "uk": "Виправлено: навігація меню на ресиверах, які надають меню старим протоколом XML (#613)\nВиправлено: знеструмлений пристрій MusicCast повідомляється як офлайн, а не як підключений\nПісля вмикання чи вимикання групи точок даних тепер видно, скільки точок з'явилося або зникло\nНове: необов'язкові звіти про помилки через Sentry, без персональних даних",
-        "zh-cn": "修复：可通过旧版 XML 协议提供菜单的功放现在可以浏览菜单 (#613)\n修复：断电的 MusicCast 设备会报告为离线，而不再显示为已连接\n开启或关闭数据点分组后，现在可以看到新增或消失了多少数据点\n新增：可选的 Sentry 错误报告，不传输个人数据"
       }
     },
     "titleLang": {
