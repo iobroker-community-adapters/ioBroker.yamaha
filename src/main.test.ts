@@ -63,8 +63,16 @@ vi.mock("@iobroker/adapter-core", () => {
       }
       return Promise.resolve(out);
     });
-    public delObjectAsync = vi.fn((id: string) => {
-      this.objects.delete(this.key(id));
+    public delObjectAsync = vi.fn((id: string, options?: { recursive?: boolean }) => {
+      const key = this.key(id);
+      this.objects.delete(key);
+      if (options?.recursive) {
+        for (const existing of [...this.objects.keys()]) {
+          if (existing.startsWith(`${key}.`)) {
+            this.objects.delete(existing);
+          }
+        }
+      }
       return Promise.resolve();
     });
     public getStatesAsync = vi.fn(() => {
@@ -116,7 +124,7 @@ vi.mock("@iobroker/adapter-core", () => {
 const mocks = vi.hoisted(() => ({
   attemptDevice: vi.fn(),
   discoverYamaha: vi.fn((_deps?: unknown) => Promise.resolve([] as Array<{ ip: string; name: string }>)),
-  discoveredStore: { devices: [] as Array<{ id: string; ip: string }> },
+  discoveredStore: { devices: [] as Array<{ id: string; ip: string }>, ignored: [] as string[] },
   pushReceivers: [] as Array<{
     start: ReturnType<typeof vi.fn>;
     close: ReturnType<typeof vi.fn>;
@@ -131,8 +139,16 @@ vi.mock("./lib/discovered-store", () => ({
     mocks.discoveredStore.devices = devices;
     return Promise.resolve();
   }),
+  readIgnored: vi.fn(() => Promise.resolve(mocks.discoveredStore.ignored)),
+  writeIgnored: vi.fn((_d: unknown, ids: string[]) => {
+    mocks.discoveredStore.ignored = [...ids];
+    return Promise.resolve();
+  }),
 }));
-vi.mock("./lib/discovered-store-deps", () => ({ discoveredStoreDeps: () => ({}) }));
+vi.mock("./lib/discovered-store-deps", () => ({
+  discoveredStoreDeps: () => ({}),
+  ignoredStoreDeps: () => ({}),
+}));
 
 /** A fake dgram + http pair, so the SSDP search and the description fetch are testable. */
 const net = vi.hoisted(() => {
@@ -306,6 +322,7 @@ function internalOf(adapter: Yamaha): {
   onUnload(cb: () => void): void;
   onStateChange(id: string, state: unknown): void;
   reportConnection(deviceId: string, connected: boolean): void;
+  removeDevice(deviceId: string): Promise<void>;
   xmlPollIntervalMs(): number;
   objects: Map<string, Record<string, unknown>>;
   states: Map<string, { val: unknown; ack: boolean }>;
@@ -370,6 +387,7 @@ const flush = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 5)
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.discoveredStore.devices = [];
+  mocks.discoveredStore.ignored = [];
   mocks.pushReceivers.length = 0;
   mocks.discoverYamaha.mockResolvedValue([]);
   net.sockets.length = 0;
@@ -517,6 +535,73 @@ describe("Yamaha auto-discovery", () => {
     // Persisting the find is the standby protection: a receiver that is off during
     // the next start would otherwise disappear from the tree.
     expect(writeDiscovered).toHaveBeenCalledWith({}, [expect.objectContaining({ ip: "192.168.1.20" })]);
+  });
+
+  it("moves a remembered device that now answers at another address instead of losing it", async () => {
+    // DHCP moved the receiver. Keyed by address the merge dropped the find as an id clash and
+    // the device stayed offline for good — the id, not the address, is the device.
+    mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+    mocks.discoverYamaha.mockResolvedValue([{ ip: "192.168.1.99", name: "RX-V685" }]);
+    const ctx = setup({ devices: [] });
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.calls.map(c => c.device.ip)).toEqual(["192.168.1.20", "192.168.1.99"]);
+    expect(ctx.i.log.info).toHaveBeenCalledWith(expect.stringContaining("address changed"));
+    // The tree stays where it is — same id, same history, same bindings.
+    expect(ctx.calls.map(c => c.device.id)).toEqual(["RX-V685", "RX-V685"]);
+    // And the old address stops being offered as a multiroom link target.
+    expect([...ctx.calls[1].deps.knownDeviceIps]).toEqual(["192.168.1.99"]);
+  });
+
+  it("leaves a rediscovered device alone while its address is unchanged", async () => {
+    mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+    mocks.discoverYamaha.mockResolvedValue([{ ip: "192.168.1.20", name: "RX-V685" }]);
+    const ctx = setup({ devices: [] });
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.calls).toHaveLength(1);
+  });
+
+  it("does not set up a device the user deleted from the card list", async () => {
+    mocks.discoveredStore.ignored = ["RX-V685"];
+    mocks.discoverYamaha.mockResolvedValue([{ ip: "192.168.1.20", name: "RX-V685" }]);
+    const ctx = setup({ devices: [] });
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.calls).toHaveLength(0);
+    // The exclusion also keeps it out of the remembered list, so nothing resurrects it later.
+    expect(mocks.discoveredStore.devices).toEqual([]);
+  });
+
+  it("removeDevice stops the supervisor, drops the tree and updates the overview", async () => {
+    mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+    const ctx = setup({ devices: [] });
+    await ctx.i.onReady();
+    await flush();
+    ctx.i.objects.set("RX-V685.player.track", { type: "state", common: {}, native: {} });
+    expect(ctx.i.states.get("info.devicesTotal")).toEqual({ val: 1, ack: true });
+
+    await ctx.i.removeDevice("RX-V685");
+
+    // The connection goes with it — a deleted device may not keep a supervisor running.
+    expect(ctx.handles[0].closed).toBeGreaterThan(0);
+    expect(ctx.i.objects.has("RX-V685")).toBe(false);
+    expect(ctx.i.objects.has("RX-V685.player.track")).toBe(false);
+    expect(ctx.i.states.get("info.devicesTotal")).toEqual({ val: 0, ack: true });
+    expect(ctx.i.states.get("info.connection")).toEqual({ val: false, ack: true });
+  });
+
+  it("arms one throttled search while an auto-found device is offline", async () => {
+    mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+    const ctx = setup({ devices: [] }, { failIds: ["RX-V685"] });
+    await ctx.i.onReady();
+    await flush();
+    // Armed, and waiting out the throttle after the start-up search — not scanning at once.
+    const armed = (): unknown[] => ctx.i.setTimeout.mock.calls.filter(c => Number(c[1]) > 200000);
+    expect(armed()).toHaveLength(1);
+    // A second drop must not stack a second search on top of the armed one.
+    ctx.i.reportConnection("RX-V685", false);
+    expect(armed()).toHaveLength(1);
   });
 
   it("keeps running the remembered devices when the scan itself fails", async () => {

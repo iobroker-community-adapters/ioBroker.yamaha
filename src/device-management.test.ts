@@ -5,19 +5,27 @@ vi.mock("./lib/i18n", () => ({ t: (key: string, ...args: unknown[]) => (args.len
 
 // The discovered-devices store is a JSON file in the instance data dir — replaced
 // by an in-memory pair so the manager's auto-mode is testable without the disk.
-const store = vi.hoisted(() => ({ devices: [] as Array<{ id: string; ip: string }> }));
+const store = vi.hoisted(() => ({ devices: [] as Array<{ id: string; ip: string }>, ignored: [] as string[] }));
 vi.mock("./lib/discovered-store", () => ({
   readDiscovered: vi.fn(() => Promise.resolve(store.devices)),
   writeDiscovered: vi.fn((_deps: unknown, devices: Array<{ id: string; ip: string }>) => {
     store.devices = devices;
     return Promise.resolve();
   }),
+  readIgnored: vi.fn(() => Promise.resolve(store.ignored)),
+  writeIgnored: vi.fn((_deps: unknown, ids: string[]) => {
+    store.ignored = [...ids];
+    return Promise.resolve();
+  }),
 }));
-vi.mock("./lib/discovered-store-deps", () => ({ discoveredStoreDeps: () => ({}) }));
+vi.mock("./lib/discovered-store-deps", () => ({
+  discoveredStoreDeps: () => ({}),
+  ignoredStoreDeps: () => ({}),
+}));
 
 import { buildDeviceForm, findClash } from "./device-management-helpers";
 import { YamahaDeviceManagement } from "./device-management";
-import { readDiscovered, writeDiscovered } from "./lib/discovered-store";
+import { readDiscovered, writeDiscovered, writeIgnored } from "./lib/discovered-store";
 
 describe("findClash", () => {
   const rows = [
@@ -105,6 +113,8 @@ function mockAdapter(
     getForeignStateAsync: vi.fn((id: string) =>
       Promise.resolve(id in states ? ({ val: states[id], ack: true } as ioBroker.State) : null),
     ),
+    // The one adapter method the backend reaches for: stop the device and drop its tree.
+    removeDevice: vi.fn(() => Promise.resolve()),
     _stored: () => stored as Array<{ name?: string; ip: string }>,
   };
 }
@@ -183,6 +193,7 @@ describe("YamahaDeviceManagement", () => {
 
   beforeEach(() => {
     store.devices = [];
+    store.ignored = [];
     vi.clearAllMocks();
   });
 
@@ -400,6 +411,26 @@ describe("YamahaDeviceManagement", () => {
       // Deleting only the objects would let the standby-protection merge bring the
       // device back on the next start — the user could never get rid of it.
       expect(writeDiscovered).toHaveBeenCalledWith({}, [{ id: "wx-021", ip: "192.168.1.21" }]);
+      // Writing that file restarts nothing, so the delete itself has to stop the device and
+      // take its tree away — otherwise the card vanishes while the connection keeps running.
+      expect(adapter.removeDevice).toHaveBeenCalledWith("rx-v685");
+      // And it has to stay deleted: the next search would otherwise find the receiver again.
+      expect(writeIgnored).toHaveBeenCalledWith({}, ["rx-v685"]);
+    });
+
+    it("does not touch the device or the exclusion list when the user declines", async () => {
+      store.devices = [{ id: "rx-v685", ip: "192.168.1.20" }];
+      const i = make([]);
+      await i.deleteDevice("rx-v685", mockContext({ confirm: false }));
+      expect(adapter.removeDevice).not.toHaveBeenCalled();
+      expect(writeIgnored).not.toHaveBeenCalled();
+    });
+
+    it("adding the same device by hand lifts an earlier exclusion", async () => {
+      store.ignored = ["Bedroom"];
+      const i = make([]);
+      await i.addDevice(mockContext({ form: { name: "Bedroom", ip: "192.168.1.30" } }));
+      expect(writeIgnored).toHaveBeenCalledWith({}, []);
     });
 
     it("keeps a discovered device when the user declines, and asks nothing for an unknown one", async () => {

@@ -72,6 +72,38 @@ describe("rowLabel", () => {
 });
 
 describe("BrowseEngine", () => {
+  it("seeds the whole surface into its resting form, not just busy and path", () => {
+    // The window states are written nowhere but in onWindow. Seeded only partially, the last
+    // session's menu stayed in the tree across restarts — a visualisation showed a menu that
+    // was not open (measured live: rows six days older than the connection).
+    const { engine, emitted } = setup();
+    engine.seed();
+    const byId = Object.fromEntries(emitted.map(e => [e.id, e.value]));
+    expect(byId["player.browse.busy"]).toBe(false);
+    expect(byId["player.browse.path"]).toBe("");
+    expect(byId["player.browse.menuName"]).toBe("");
+    expect(byId["player.browse.layer"]).toBe(0);
+    expect(byId["player.browse.totalItems"]).toBe(0);
+    expect(byId["player.browse.currentLine"]).toBe(0);
+    expect(byId["player.browse.rows"]).toBe("[]");
+    for (let line = 1; line <= 8; line++) {
+      expect(byId[`player.browse.line${line}`]).toBe("");
+    }
+  });
+
+  it("a seed after a rendered window clears the stale lines", () => {
+    const { engine, emitted } = setup();
+    engine.onWindow(
+      window({ menuName: "Radio", totalItems: 10, rows: [{ line: 1, text: "Favorites", kind: "folder" }] }),
+    );
+    emitted.length = 0;
+    engine.seed();
+    const byId = Object.fromEntries(emitted.map(e => [e.id, e.value]));
+    expect(byId["player.browse.line1"]).toBe("");
+    expect(byId["player.browse.menuName"]).toBe("");
+    expect(byId["player.browse.totalItems"]).toBe(0);
+  });
+
   it("renders a window to the browse states, blanking unused lines", () => {
     const { engine, emitted } = setup();
     engine.onWindow(

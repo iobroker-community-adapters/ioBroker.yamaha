@@ -7,8 +7,8 @@ import {
 } from "@iobroker/dm-utils";
 import { t } from "./lib/i18n";
 import { iconForModel } from "./lib/device-type";
-import { readDiscovered, writeDiscovered } from "./lib/discovered-store";
-import { discoveredStoreDeps } from "./lib/discovered-store-deps";
+import { readDiscovered, readIgnored, writeDiscovered, writeIgnored } from "./lib/discovered-store";
+import { discoveredStoreDeps, ignoredStoreDeps } from "./lib/discovered-store-deps";
 import type { DeviceRecord } from "./lib/types";
 import {
   TRANSPORTS,
@@ -18,6 +18,12 @@ import {
   type CardDevice,
   type ManualRow,
 } from "./device-management-helpers";
+
+/** The one adapter method this backend needs beyond the plain ioBroker surface. */
+interface DeviceOwner {
+  /** Stop supervising a device and delete its object tree. */
+  removeDevice(deviceId: string): Promise<void>;
+}
 
 /**
  * ioBroker device-manager backend: the Yamaha receivers as cards showing the live model,
@@ -30,6 +36,12 @@ export class YamahaDeviceManagement extends DeviceManagement {
   /** The instance object id whose `native` holds the manual device table. */
   private get objId(): string {
     return `system.adapter.${this.adapter.namespace}`;
+  }
+
+  /** The running adapter, for the one action that has to reach into it (delete a device). */
+  private get owner(): DeviceOwner | undefined {
+    const candidate = this.adapter as unknown as Partial<DeviceOwner>;
+    return typeof candidate.removeDevice === "function" ? (candidate as DeviceOwner) : undefined;
   }
 
   /** Read the manual device table (`native.devices`) as raw rows, keeping the name. */
@@ -184,6 +196,17 @@ export class YamahaDeviceManagement extends DeviceManagement {
         return { refresh: true };
       }
       manual.push(row);
+      // Adding a device by hand undoes an earlier delete of the same id — otherwise the
+      // exclusion would silently outlive the decision that created it.
+      const ignoredDeps = ignoredStoreDeps(this.adapter);
+      const ignored = await readIgnored(ignoredDeps);
+      const id = rowId(row);
+      if (ignored.includes(id)) {
+        await writeIgnored(
+          ignoredDeps,
+          ignored.filter(entry => entry !== id),
+        );
+      }
       await this.writeManual(manual);
     }
     return { refresh: true };
@@ -251,6 +274,13 @@ export class YamahaDeviceManagement extends DeviceManagement {
       const confirmed = await context.showConfirmation(t("dmDeleteConfirm", cardId));
       if (confirmed) {
         await writeDiscovered(store, remaining);
+        // Writing this file restarts nothing, so the delete has to do the two things a restart
+        // would otherwise do much later: stop talking to the device and take its tree away.
+        await this.owner?.removeDevice(cardId);
+        // And it has to STAY deleted — without this the next network search finds the receiver
+        // and puts the card straight back.
+        const ignoredDeps = ignoredStoreDeps(this.adapter);
+        await writeIgnored(ignoredDeps, [...(await readIgnored(ignoredDeps)), cardId]);
       }
     }
     return { refresh: "devices" };

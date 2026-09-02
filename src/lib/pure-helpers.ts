@@ -87,43 +87,54 @@ export function parseDevices(raw: unknown, onCollision?: (dropped: string, taken
  * Merge freshly discovered devices into the set already known from earlier runs
  * (the auto-discovery standby protection). A known device is kept even when this
  * run's scan did not find it — a receiver in deep standby answers no SSDP, and its
- * object tree must survive. New addresses are added; a discovered device is turned
- * into a record via its friendly name (or its ip when it advertises none), and one
- * whose id would collide with an already-kept device is skipped (reported via
- * `onCollision`, so the missing device is explainable). De-duplicated by ip.
+ * object tree must survive.
+ *
+ * Identity is the device ID (derived from the friendly name it advertises, or from its
+ * address when it advertises none) — NOT its address. Keyed by address, a receiver that
+ * moved to a new address by DHCP was lost for good: the remembered record kept the old
+ * address, the same receiver found at the new one produced the same id, and the id clash
+ * dropped it. It stayed offline with no way back, because the id is what the whole object
+ * tree hangs off. Now the same id simply carries the new address over.
+ *
+ * A genuine clash remains a clash: a DIFFERENT device sitting on an address another
+ * record already claims is skipped and reported through `onCollision`, so a missing
+ * device is explainable rather than silent.
  *
  * @param known the device records remembered from earlier runs
  * @param found the devices discovered this run
  * @param onCollision called with the dropped device's name/ip and the clashing id
- * @returns the merged records, de-duplicated by ip
+ * @returns the merged records, one per device id
  */
 export function mergeDiscovered(
   known: DeviceRecord[],
   found: DiscoveredDevice[],
   onCollision?: (dropped: string, takenId: string) => void,
 ): DeviceRecord[] {
-  const byIp = new Map<string, DeviceRecord>();
-  const takenIds = new Set<string>(["info"]); // reserved: the adapter's own info channel
+  const byId = new Map<string, DeviceRecord>();
   for (const device of known) {
-    if (byIp.has(device.ip) || takenIds.has(device.id)) {
+    // "info" is the adapter's own channel — a device may never claim it.
+    if (device.id === "info" || byId.has(device.id)) {
       continue;
     }
-    byIp.set(device.ip, device);
-    takenIds.add(device.id);
+    byId.set(device.id, { ...device });
   }
   for (const device of found) {
-    if (byIp.has(device.ip)) {
+    const label = device.name || device.ip;
+    const id = sanitizeId(label);
+    const remembered = byId.get(id);
+    if (remembered) {
+      // Same device, possibly at a new address — carry the address over, keep the id.
+      remembered.ip = device.ip;
       continue;
     }
-    const id = sanitizeId(device.name || device.ip);
-    if (takenIds.has(id)) {
-      onCollision?.(device.name || device.ip, id);
+    const ipOwner = [...byId.values()].find(record => record.ip === device.ip);
+    if (id === "info" || ipOwner) {
+      onCollision?.(label, ipOwner?.id ?? id);
       continue;
     }
-    takenIds.add(id);
-    byIp.set(device.ip, { id, ip: device.ip });
+    byId.set(id, { id, ip: device.ip });
   }
-  return [...byIp.values()];
+  return [...byId.values()];
 }
 
 /**

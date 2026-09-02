@@ -60,10 +60,28 @@ export class BrowseEngine {
     private readonly deps: BrowseEngineDeps,
   ) {}
 
-  /** Seed the surface: the source dropdown exists via the objects; states start empty. */
+  /**
+   * Seed the surface into its resting form on every connect: no menu is open yet, so every
+   * window state has to say so.
+   *
+   * Only `busy` and `path` used to be seeded, and the window states are written nowhere but in
+   * {@link onWindow} — so the eight lines, the menu name and the rows kept whatever the last
+   * browsing session had painted, across restarts and for as long as nobody browsed again
+   * (measured on a live receiver: rows from six days earlier next to a connection minutes old).
+   * A visualisation or script reading them saw a menu that is not open. Same rule as the player
+   * block's resting seeds in v2.0.1 — the browse block was simply missed then.
+   */
   public seed(): void {
     this.deps.emit("player.browse.busy", false);
     this.deps.emit("player.browse.path", "");
+    this.deps.emit("player.browse.menuName", "");
+    this.deps.emit("player.browse.layer", 0);
+    this.deps.emit("player.browse.totalItems", 0);
+    this.deps.emit("player.browse.currentLine", 0);
+    for (let line = 1; line <= 8; line++) {
+      this.deps.emit(`player.browse.line${line}`, "");
+    }
+    this.deps.emit("player.browse.rows", "[]");
   }
 
   /** Stop accepting operations (the controller is closing). */

@@ -166,7 +166,9 @@ describe("mergeDiscovered", () => {
     expect(mergeDiscovered([{ id: "Living", ip: "1.1.1.1" }], [])).toEqual([{ id: "Living", ip: "1.1.1.1" }]);
   });
 
-  test("keeps the known id and ip when the same device is rediscovered", () => {
+  test("keeps the known id when the device renamed itself — the id carries the whole object tree", () => {
+    // The address is already claimed by the remembered record, so the new name does not open a
+    // second tree; renaming a receiver must not orphan its history and visualisation bindings.
     expect(mergeDiscovered([{ id: "Living", ip: "1.1.1.1" }], [{ ip: "1.1.1.1", name: "Renamed" }])).toEqual([
       { id: "Living", ip: "1.1.1.1" },
     ]);
@@ -183,14 +185,41 @@ describe("mergeDiscovered", () => {
     expect(mergeDiscovered([], [{ ip: "3.3.3.3", name: "" }])).toEqual([{ id: "3_3_3_3", ip: "3.3.3.3" }]);
   });
 
-  test("skips a discovery whose id would collide with a kept device — and reports it", () => {
+  test("carries a new address over when the same device moved (DHCP), instead of dropping it", () => {
+    // Keyed by address this was a dead end: the remembered record kept 1.1.1.1, the same
+    // receiver found at 9.9.9.9 produced the same id, and the id clash dropped it — the device
+    // stayed offline for good. Identity is the id, so the address simply follows.
     const collisions: Array<[string, string]> = [];
     expect(
       mergeDiscovered([{ id: "Living", ip: "1.1.1.1" }], [{ ip: "9.9.9.9", name: "Living" }], (dropped, takenId) =>
         collisions.push([dropped, takenId]),
       ),
+    ).toEqual([{ id: "Living", ip: "9.9.9.9" }]);
+    expect(collisions).toEqual([]);
+  });
+
+  test("does not mutate the remembered records handed in", () => {
+    const known = [{ id: "Living", ip: "1.1.1.1" }];
+    mergeDiscovered(known, [{ ip: "9.9.9.9", name: "Living" }]);
+    expect(known).toEqual([{ id: "Living", ip: "1.1.1.1" }]);
+  });
+
+  test("skips a DIFFERENT device sitting on an address another record already claims — and reports it", () => {
+    const collisions: Array<[string, string]> = [];
+    expect(
+      mergeDiscovered([{ id: "Living", ip: "1.1.1.1" }], [{ ip: "1.1.1.1", name: "Kitchen" }], (dropped, takenId) =>
+        collisions.push([dropped, takenId]),
+      ),
     ).toEqual([{ id: "Living", ip: "1.1.1.1" }]);
-    expect(collisions).toEqual([["Living", "Living"]]);
+    expect(collisions).toEqual([["Kitchen", "Living"]]);
+  });
+
+  test("never lets a discovery claim the adapter's own info channel", () => {
+    const collisions: Array<[string, string]> = [];
+    expect(
+      mergeDiscovered([], [{ ip: "4.4.4.4", name: "info" }], (dropped, takenId) => collisions.push([dropped, takenId])),
+    ).toEqual([]);
+    expect(collisions).toEqual([["info", "info"]]);
   });
 });
 

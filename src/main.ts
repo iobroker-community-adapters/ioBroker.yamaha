@@ -22,8 +22,8 @@ import {
 } from "./lib/pure-helpers";
 import { errorMessage, MAX_HTTP_BODY_BYTES } from "./lib/util";
 import { discoverYamaha } from "./lib/discovery";
-import { readDiscovered, writeDiscovered } from "./lib/discovered-store";
-import { discoveredStoreDeps } from "./lib/discovered-store-deps";
+import { readDiscovered, readIgnored, writeDiscovered } from "./lib/discovered-store";
+import { discoveredStoreDeps, ignoredStoreDeps } from "./lib/discovered-store-deps";
 import { YxcPushReceiver } from "./lib/yxc/push-receiver";
 import { YamahaDeviceManagement } from "./device-management";
 import type { DeviceRecord } from "./lib/types";
@@ -55,6 +55,13 @@ const TRANSPORT_IDS = ["ynca", "yxc", "xml"] as const;
 const DATAPOINT_BALANCE_SETTLE_MS = 5000;
 
 /**
+ * Shortest gap between two network searches triggered by an offline auto-found device. A
+ * receiver that moved to another address answers nowhere else, so the search is the only way
+ * back to it — but a device that is simply switched off must not turn that into a scan loop.
+ */
+const REDISCOVER_MIN_INTERVAL_MS = 300000;
+
+/**
  * ioBroker.yamaha — controls Yamaha AV receivers and MusicCast devices.
  *
  * Each configured device is driven by a supervisor that keeps a multi-transport
@@ -69,6 +76,16 @@ export class Yamaha extends utils.Adapter {
   /** deviceId → its supervisor, so a state change goes to ONE device, not to all of them. */
   private readonly supervisorById = new Map<string, DeviceSupervisor>();
   private readonly deviceConnected = new Map<string, boolean>();
+  /** deviceId → the record it is currently running with, so an address change is visible. */
+  private readonly deviceRecords = new Map<string, DeviceRecord>();
+  /** The addresses of all supervised devices — a multiroom group resolves its clients through it. */
+  private readonly knownDeviceIps = new Set<string>();
+  /** True while the instance runs whatever the network search finds (empty device table). */
+  private autoMode = false;
+  /** Armed while an auto-found device is offline: the search that can bring it back. */
+  private rediscoverTimer: ioBroker.Timeout | undefined;
+  /** When the last background search ran, so the retry cannot become a scan loop. */
+  private lastRediscovery = 0;
   private pushReceiver: YxcPushReceiver | undefined;
   /**
    * Set the moment teardown begins: a connect attempt still in flight then resolves into
@@ -145,7 +162,13 @@ export class Yamaha extends utils.Adapter {
         // would come up on an instance that is already gone, with nothing left to close it.
         return;
       }
-      const knownDeviceIps = new Set(devices.map(device => device.ip));
+      this.autoMode = configured.length === 0;
+      // The start-up search (blocking first setup, or the background one below) is the first
+      // search of this run — an offline device must not fire another one right behind it.
+      this.lastRediscovery = Date.now();
+      for (const device of devices) {
+        this.knownDeviceIps.add(device.ip);
+      }
       // Before the cleanup and before any device connects — see knownDatapoints.
       await this.snapshotExistingDatapoints();
       await this.cleanupStaleObjects(new Set(devices.map(device => device.id)));
@@ -161,13 +184,13 @@ export class Yamaha extends utils.Adapter {
         this.log.info(`setting up ${devices.length} configured device(s)...`);
       }
       for (const device of devices) {
-        await this.startDevice(device, pushReceiver, knownDeviceIps);
+        await this.startDevice(device, pushReceiver);
       }
       this.writeDeviceOverview();
       // Auto mode with remembered devices: they started WITHOUT waiting for the network
-      // search — it runs behind them and only ADDS newcomers to the running instance.
-      if (configured.length === 0 && devices.length > 0) {
-        void this.discoverAdditionalDevices(pushReceiver, knownDeviceIps, new Set(devices.map(device => device.id)));
+      // search — it runs behind them, adds newcomers and moves a device that changed address.
+      if (this.autoMode && devices.length > 0) {
+        void this.discoverAdditionalDevices(pushReceiver);
       }
     } catch (e) {
       this.log.error(`onReady failed: ${errorMessage(e)}`);
@@ -181,16 +204,13 @@ export class Yamaha extends utils.Adapter {
    *
    * @param device the device record
    * @param pushReceiver the shared YXC push receiver
-   * @param knownDeviceIps the IPs of all supervised devices (multiroom link targets)
    */
-  private async startDevice(
-    device: DeviceRecord,
-    pushReceiver: YxcPushReceiver,
-    knownDeviceIps: Set<string>,
-  ): Promise<void> {
+  private async startDevice(device: DeviceRecord, pushReceiver: YxcPushReceiver): Promise<void> {
     // Both callers check `unloading` after their network search resolves (onReady and
     // discoverAdditionalDevices) — a device handed over after onUnload never gets here.
     this.deviceConnected.set(device.id, false);
+    this.deviceRecords.set(device.id, { ...device });
+    this.knownDeviceIps.add(device.ip);
     await this.ensureDeviceHeader(device.id, device.ip);
     // Stamp it disconnected BEFORE the first attempt: ioBroker keeps a state's last value
     // forever, so a crash or a power cut would otherwise leave the device green until it
@@ -206,7 +226,8 @@ export class Yamaha extends utils.Adapter {
     // persisted at the device object, so a restart starts from the remembered answers.
     const probeMemory = await this.loadProbeMemory(device.id);
     const supervisor = new DeviceSupervisor({
-      attempt: () => this.attemptDevice(device, pushReceiver, knownDeviceIps, reachability, subunitCache, probeMemory),
+      attempt: () =>
+        this.attemptDevice(device, pushReceiver, this.knownDeviceIps, reachability, subunitCache, probeMemory),
       schedule: (cb, ms) => this.setTimeout(cb, ms),
       cancel: handle => this.clearTimeout(handle as ioBroker.Timeout | undefined),
       onConnectionChange: connected => this.reportConnection(device.id, connected),
@@ -223,38 +244,116 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
-   * The background half of auto-discovery: search the network, remember what was
-   * found, and bring devices online that are not supervised yet. The remembered
-   * devices did not wait for this — the search window (seconds) used to gate every
-   * restart although the devices were already known.
+   * The background half of auto-discovery: search the network, bring devices online that are
+   * not supervised yet, and move a device that answers at a NEW address. The remembered devices
+   * did not wait for this — the search window (seconds) used to gate every restart although the
+   * devices were already known.
+   *
+   * The address half matters because the object id — and with it the whole tree, its history and
+   * every visualisation binding — is fixed to the device, not to where it sits. A receiver that
+   * moved by DHCP is the same device at a new address, so its supervisor is rebuilt there instead
+   * of retrying an address nobody answers at any more.
    *
    * @param pushReceiver the shared YXC push receiver
-   * @param knownDeviceIps the IPs of all supervised devices (extended for newcomers)
-   * @param started the device ids already under supervision
    */
-  private async discoverAdditionalDevices(
-    pushReceiver: YxcPushReceiver,
-    knownDeviceIps: Set<string>,
-    started: Set<string>,
-  ): Promise<void> {
+  private async discoverAdditionalDevices(pushReceiver: YxcPushReceiver): Promise<void> {
     try {
       const merged = await this.runDiscovery();
       if (this.unloading) {
         return; // the search outlived the adapter — nothing may start now
       }
-      const fresh = merged.filter(device => !started.has(device.id));
-      if (fresh.length === 0) {
-        return;
+      let changed = false;
+      for (const device of merged) {
+        const running = this.deviceRecords.get(device.id);
+        if (!running) {
+          this.log.info(`discovery found ${device.id} — setting up`);
+          await this.startDevice(device, pushReceiver);
+          changed = true;
+        } else if (running.ip !== device.ip) {
+          this.log.info(`${device.id}: address changed from ${running.ip} to ${device.ip} — reconnecting it there`);
+          this.knownDeviceIps.delete(running.ip);
+          this.stopDevice(device.id);
+          await this.startDevice(device, pushReceiver);
+          changed = true;
+        }
       }
-      this.log.info(`discovery found ${fresh.length} new device(s) — setting up`);
-      for (const device of fresh) {
-        knownDeviceIps.add(device.ip);
-        await this.startDevice(device, pushReceiver, knownDeviceIps);
+      if (changed) {
+        this.writeDeviceOverview();
       }
-      this.writeDeviceOverview();
     } catch (e) {
       this.log.warn(`background discovery failed: ${errorMessage(e)}`);
     }
+  }
+
+  /**
+   * Arm a background search because an auto-found device is offline — the only way back to a
+   * receiver that moved to another address, since it answers at the remembered one no more.
+   * Throttled: a device that is merely switched off must not turn this into a scan loop, and
+   * one timer covers however many devices are down.
+   */
+  private scheduleRediscovery(): void {
+    if (!this.autoMode || this.unloading || this.rediscoverTimer !== undefined) {
+      return;
+    }
+    const receiver = this.pushReceiver;
+    if (!receiver) {
+      return;
+    }
+    const due = Math.max(0, REDISCOVER_MIN_INTERVAL_MS - (Date.now() - this.lastRediscovery));
+    this.rediscoverTimer = this.setTimeout(() => {
+      this.rediscoverTimer = undefined;
+      this.lastRediscovery = Date.now();
+      if (!this.unloading) {
+        void this.discoverAdditionalDevices(receiver);
+      }
+    }, due);
+  }
+
+  /**
+   * Stop supervising one device and release its supervisor. The object tree is untouched —
+   * a readdress puts the same device straight back on it.
+   *
+   * @param deviceId the id-safe device id
+   */
+  private stopDevice(deviceId: string): void {
+    const supervisor = this.supervisorById.get(deviceId);
+    if (!supervisor) {
+      return;
+    }
+    supervisor.close();
+    this.supervisorById.delete(deviceId);
+    const index = this.supervisors.indexOf(supervisor);
+    if (index >= 0) {
+      this.supervisors.splice(index, 1);
+    }
+  }
+
+  /**
+   * Remove one device for good: stop talking to it and delete its object tree.
+   *
+   * Driven by the device manager's delete action. Deleting a discovered device used to only
+   * empty the remembered list — the supervisor kept the connection, the tree stayed, and the card
+   * came back on the next start. Now the delete is what it says; the id is additionally kept in
+   * the ignored list (device manager) so a later search does not put the device back.
+   *
+   * @param deviceId the id-safe device id
+   */
+  public async removeDevice(deviceId: string): Promise<void> {
+    this.stopDevice(deviceId);
+    const record = this.deviceRecords.get(deviceId);
+    if (record) {
+      this.knownDeviceIps.delete(record.ip);
+    }
+    this.deviceRecords.delete(deviceId);
+    this.deviceConnected.delete(deviceId);
+    this.readyDevices.delete(deviceId);
+    try {
+      await this.delObjectAsync(deviceId, { recursive: true });
+    } catch (e) {
+      this.log.warn(`could not remove the object tree of "${deviceId}" (${errorMessage(e)})`);
+    }
+    this.writeState("info.connection", [...this.deviceConnected.values()].some(Boolean));
+    this.writeDeviceOverview();
   }
 
   /**
@@ -300,6 +399,8 @@ export class Yamaha extends utils.Adapter {
     // A drop clears the per-transport flags; a (re)connect sets them again via onTransports.
     if (!connected) {
       this.setTransports(deviceId, []);
+      // In auto mode the device may simply have moved — only a search can find it again.
+      this.scheduleRediscovery();
     }
     const anyConnected = [...this.deviceConnected.values()].some(Boolean);
     this.writeState("info.connection", anyConnected);
@@ -926,6 +1027,7 @@ export class Yamaha extends utils.Adapter {
     try {
       this.unloading = true;
       this.clearTimeout(this.balanceTimer);
+      this.clearTimeout(this.rediscoverTimer);
       this.pushReceiver?.close();
       for (const supervisor of this.supervisors) {
         supervisor.close();
@@ -992,6 +1094,9 @@ export class Yamaha extends utils.Adapter {
    * @returns the merged device records
    */
   private async runDiscovery(): Promise<DeviceRecord[]> {
+    // Every search counts against the throttle, whoever asked for it — otherwise the first
+    // offline device would fire another one right behind the start-up search.
+    this.lastRediscovery = Date.now();
     const store = discoveredStoreDeps(this);
     const known = await readDiscovered(store);
     let found: Array<{ ip: string; name: string }> = [];
@@ -1007,8 +1112,12 @@ export class Yamaha extends utils.Adapter {
     const merged = mergeDiscovered(known, found, (dropped, takenId) =>
       this.log.warn(`discovered device "${dropped}" skipped — its object id "${takenId}" is already taken`),
     );
-    await writeDiscovered(store, merged);
-    return merged;
+    // Devices the user deleted from the card list stay out — otherwise the next search simply
+    // undoes the delete.
+    const ignored = new Set(await readIgnored(ignoredStoreDeps(this)));
+    const kept = ignored.size > 0 ? merged.filter(device => !ignored.has(device.id)) : merged;
+    await writeDiscovered(store, kept);
+    return kept;
   }
 
   /**

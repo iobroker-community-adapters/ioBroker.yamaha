@@ -13,7 +13,30 @@ import type { DiscoveredStoreDeps } from "./discovered-store";
  * @returns the store's read/write/log dependencies
  */
 export function discoveredStoreDeps(adapter: ioBroker.Adapter): DiscoveredStoreDeps {
-  const path = join(utils.getAbsoluteInstanceDataDir(adapter), "discovered.json");
+  return fileStoreDeps(adapter, "discovered.json");
+}
+
+/**
+ * The ignored-devices store's file-access deps — the device ids the user deleted from the
+ * auto-discovered list, so a following network search does not put them back. Its own file
+ * next to the discovered one, so neither format has to migrate.
+ *
+ * @param adapter the adapter instance (for the data dir and the log)
+ * @returns the store's read/write/log dependencies
+ */
+export function ignoredStoreDeps(adapter: ioBroker.Adapter): DiscoveredStoreDeps {
+  return fileStoreDeps(adapter, "ignored.json");
+}
+
+/**
+ * One JSON file in the instance data directory as store deps (no `native` write, so no restart).
+ *
+ * @param adapter the adapter instance (for the data dir and the log)
+ * @param fileName the file inside the instance data directory
+ * @returns the store's read/write/log dependencies
+ */
+function fileStoreDeps(adapter: ioBroker.Adapter, fileName: string): DiscoveredStoreDeps {
+  const path = join(utils.getAbsoluteInstanceDataDir(adapter), fileName);
   return {
     read: async () => {
       try {

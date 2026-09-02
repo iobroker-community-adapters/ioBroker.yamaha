@@ -63,3 +63,43 @@ export async function writeDiscovered(deps: DiscoveredStoreDeps, devices: Device
     deps.log.debug(`discovered store: write failed (${errorMessage(e)})`);
   }
 }
+
+/**
+ * Read the device ids the user removed from the auto-discovered list.
+ *
+ * Deleting a discovered device only ever emptied the remembered list, so the next network
+ * search found the receiver again and put it straight back — the delete button was undone by
+ * the adapter itself. The ids kept here are skipped by every following search.
+ *
+ * @param deps file access and logger
+ * @returns the ignored device ids (empty when none/unreadable)
+ */
+export async function readIgnored(deps: DiscoveredStoreDeps): Promise<string[]> {
+  try {
+    const raw = await deps.read();
+    if (!raw) {
+      return [];
+    }
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
+  } catch (e) {
+    deps.log.debug(`ignored store: read failed, starting empty (${errorMessage(e)})`);
+    return [];
+  }
+}
+
+/**
+ * Persist the ignored device ids. A write failure is logged and swallowed for the same reason
+ * as the discovered store's: it costs the exclusion until the next successful run, it must not
+ * break startup or the delete action.
+ *
+ * @param deps file access and logger
+ * @param ids the device ids to keep out of auto-discovery
+ */
+export async function writeIgnored(deps: DiscoveredStoreDeps, ids: readonly string[]): Promise<void> {
+  try {
+    await deps.write(JSON.stringify([...new Set(ids)]));
+  } catch (e) {
+    deps.log.debug(`ignored store: write failed (${errorMessage(e)})`);
+  }
+}
