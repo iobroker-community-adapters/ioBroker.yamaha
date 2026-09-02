@@ -103,8 +103,7 @@ On the very first contact the adapter asks the receiver which functions it suppo
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
-
-### **WORK IN PROGRESS**
+### 2.0.4 (2026-09-02)
 
 - (krobipd) Fixed: a short outage of the ioBroker database no longer restarts the adapter — a failed write is logged once and the next value is written normally
 - (krobipd) Fixed: the protocol badges on the device card are reset when a device starts and when the adapter stops, so a crash no longer leaves a green badge next to a red dot
@@ -138,19 +137,6 @@ On the very first contact the adapter asks the receiver which functions it suppo
 - (krobipd) New: zones can show different programs — zones 2 to 4 get their own player block, and play/pause/skip always act on whatever that zone is playing
 - (krobipd) Fixed: the on-screen remote keys and the tuner preset stepping on MusicCast devices count as button presses again — they no longer wait behind a running background refresh
 - (krobipd) Fixed: restarting or updating the adapter while a receiver was still connecting no longer produces shutdown warnings about timers in the log
-
-### 1.7.0 (2026-09-01)
-
-- (krobipd) Fixed: scene recall now uses the command each device declares itself and the protocol that can deliver it — on 2012-generation receivers a scene write did nothing at all (#615)
-- (krobipd) New: scenes show their titles ("Movie Viewing", …) as datapoints and in the recall dropdown, and zones with their own scenes get their own scene recall
-- (krobipd) Fixed: the menu back button falls back to the older cursor command when a device refuses the standard one, so leaving a folder works on 2012-generation receivers too (#613)
-- (krobipd) New: the adapter now reports when the receiver refuses a command, including the device's own answer — a dead button no longer fails without a trace
-- (krobipd) New: bass and treble on MusicCast-generation receivers over YNCA, dialogue level, DAB signal details, the paired Bluetooth device name and more — the device is asked in its own dialect
-- (krobipd) New: on-screen remote control datapoints (cursor pad and menu keys), the current audio signal info, MusicCast playlists and the play queue on MusicCast devices
-- (krobipd) New: receivers from before 2010 get their tuner back — preset recall, frequency and radio text — and every input dropdown lists exactly the inputs the device really has
-- (krobipd) New: the receiver's IP address is shown as a datapoint, so diagnosis and the device's own web pages are one click away
-- (krobipd) Improved: restarts are fast — the adapter remembers what each device can do, brings it online in seconds and refreshes values in the background; only the first contact asks everything
-- (krobipd) Improved: known devices no longer wait for the network search at startup — it runs in the background and only adds newcomers
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 

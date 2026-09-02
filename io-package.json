@@ -1,9 +1,9 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "2.0.3",
+    "version": "2.0.4",
     "news": {
-      "NEXT": {
+      "2.0.4": {
         "en": "Database hiccups no longer restart the adapter; protocol badges reset on start/stop; clean stop during discovery; scene titles, probe retries and equalizer fixed",
         "de": "Datenbank-Aussetzer starten den Adapter nicht mehr neu; Protokoll-Anzeigen bei Start/Stopp zurückgesetzt; sauberer Stopp während der Suche; Szenentitel, Sonden und Equalizer korrigiert",
         "ru": "Сбои базы данных больше не перезапускают адаптер; индикаторы протоколов сбрасываются при старте/остановке; чистая остановка во время поиска; исправлены сцены, пробы и эквалайзер",
