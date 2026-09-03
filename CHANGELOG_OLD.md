@@ -1,4 +1,7 @@
 # Older changes
+## 2.1.1 (2026-09-02)
+
+- (krobipd) Fixed: on an updated instance the info datapoints now get the translated names too, instead of keeping the ones an older version had written
 
 ## 2.1.0 (2026-09-02)
 

@@ -103,8 +103,7 @@ On the very first contact the adapter asks the receiver which functions it suppo
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
-
-### **WORK IN PROGRESS**
+### 2.3.3 (2026-09-03)
 
 - (krobipd) New: the menu browser, the MusicCast group, the clock alarm and the disc drive now explain their datapoints too, in eleven languages
 
@@ -134,10 +133,6 @@ On the very first contact the adapter asks the receiver which functions it suppo
 - (krobipd) Fixed: going one menu level back on an older receiver no longer jumps two levels when the reply gets lost
 - (krobipd) Fixed: a play or pause sent from a script or a visualization now reaches the receiver in every case
 - (krobipd) Improved: each of the 23 input-name datapoints now carries the input it names, instead of all reading the same
-
-### 2.1.1 (2026-09-02)
-
-- (krobipd) Fixed: on an updated instance the info datapoints now get the translated names too, instead of keeping the ones an older version had written
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 
