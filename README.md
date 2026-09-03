@@ -103,6 +103,7 @@ On the very first contact the adapter asks the receiver which functions it suppo
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+
 ### 2.2.0 (2026-09-03)
 
 - (krobipd) Changed: the playback times are now a number in seconds, so the media player, Alexa and Google can show them on every receiver

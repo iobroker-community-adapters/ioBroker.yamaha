@@ -41,9 +41,11 @@ const LANGUAGES: Record<string, Record<string, string>> = {
  * A text in all eleven admin languages.
  *
  * `%s` placeholders are filled in EVERY language (as adapter-core does), so a name with a
- * number or a protocol in it stays translated. A language missing the key falls back to the key
- * itself, which is the English text — so a forgotten translation reads correctly instead of
- * showing a key.
+ * number or a protocol in it stays translated. A language missing the key falls back to the
+ * ENGLISH text, never to the key: the keys are identifiers (fleet standard, gate
+ * `audit_i18n_keys`), so falling back to the key would put `soundAdaptiveDrc` in front of the
+ * user. Before 2026-09-03 the keys WERE the English text and `?? key` happened to read
+ * correctly — that is exactly the coincidence that hid the deviation.
  *
  * @param key the English text, which is also its translation key
  * @param args values substituted into the key's `%s` placeholders, in order
@@ -52,7 +54,7 @@ const LANGUAGES: Record<string, Record<string, string>> = {
 function translated(key: I18nKey, args: (string | number | boolean | null)[]): ioBroker.StringOrTranslated {
   const out: Record<string, string> = {};
   for (const [lang, words] of Object.entries(LANGUAGES)) {
-    let text = words[key] ?? key;
+    let text = words[key] ?? en[key] ?? key;
     for (const arg of args) {
       text = text.replace("%s", arg === null ? "null" : String(arg));
     }

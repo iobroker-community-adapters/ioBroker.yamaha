@@ -331,7 +331,7 @@ export class YncaDeviceController implements ConnectionHandle {
       await this.deps.upsertObject(`${this.deviceId}.scene.list`, {
         id: "scene.list",
         type: "state",
-        common: { name: tName("Scenes (number + title)"), type: "string", role: "json", read: true, write: false },
+        common: { name: tName("scenesNumberTitle"), type: "string", role: "json", read: true, write: false },
       });
       this.deps.setStateAck(`${this.deviceId}.scene.list`, JSON.stringify(this.sceneTitles));
     }
@@ -712,7 +712,7 @@ export class YncaDeviceController implements ConnectionHandle {
     const sourceDef = (id: string): ObjectDef => ({
       id,
       type: "state",
-      common: { name: tName("Playing source"), type: "string", role: "text", read: true, write: false },
+      common: { name: tName("playingSource"), type: "string", role: "text", read: true, write: false },
     });
     await this.deps.upsertObject(`${this.deviceId}.player.source`, sourceDef("player.source"));
     this.playerZones = ["main"];

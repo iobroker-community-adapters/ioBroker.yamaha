@@ -24,13 +24,13 @@ const PLAYER_STATES: Array<{ state: string; common: Omit<ObjectDef["common"], "n
     // What the zone is playing (the netusb source name, or `cd`) — read-only display;
     // switching happens over the zone's `input` state.
     state: "source",
-    common: { nameKey: "Playing source", type: "string", role: "text", read: true, write: false },
+    common: { nameKey: "playingSource", type: "string", role: "text", read: true, write: false },
   },
   {
     state: "playback",
     common: {
       // media.state is a number in the type-detector; the same 0/1/2 coding as the YNCA player.
-      nameKey: "Playback",
+      nameKey: "playback",
       type: "number",
       role: "media.state",
       read: true,
@@ -38,9 +38,9 @@ const PLAYER_STATES: Array<{ state: string; common: Omit<ObjectDef["common"], "n
       states: { 0: "Play", 1: "Stop", 2: "Pause" },
     },
   },
-  { state: "artist", common: { nameKey: "Artist", type: "string", role: "media.artist", read: true, write: false } },
-  { state: "album", common: { nameKey: "Album", type: "string", role: "media.album", read: true, write: false } },
-  { state: "track", common: { nameKey: "Track", type: "string", role: "media.title", read: true, write: false } },
+  { state: "artist", common: { nameKey: "artist", type: "string", role: "media.artist", read: true, write: false } },
+  { state: "album", common: { nameKey: "album", type: "string", role: "media.album", read: true, write: false } },
+  { state: "track", common: { nameKey: "track", type: "string", role: "media.title", read: true, write: false } },
   // Read-only playback metadata, typed exactly like the YNCA sources so both players
   // present the same shape on one device: repeat as the media.mode.repeat number code
   // (wire off/one/all, captures-verified), shuffle as a media.mode.shuffle boolean
@@ -48,7 +48,7 @@ const PLAYER_STATES: Array<{ state: string; common: Omit<ObjectDef["common"], "n
   {
     state: "repeat",
     common: {
-      nameKey: "Repeat",
+      nameKey: "repeat",
       type: "number",
       role: "media.mode.repeat",
       read: true,
@@ -58,7 +58,7 @@ const PLAYER_STATES: Array<{ state: string; common: Omit<ObjectDef["common"], "n
   },
   {
     state: "shuffle",
-    common: { nameKey: "Shuffle", type: "boolean", role: "media.mode.shuffle", read: true, write: false },
+    common: { nameKey: "shuffle", type: "boolean", role: "media.mode.shuffle", read: true, write: false },
   },
   // Both forms of each time, from the one value the device reports: the seconds fill the
   // type detector's media-player slot (it takes nothing else), the text is what a
@@ -66,12 +66,12 @@ const PLAYER_STATES: Array<{ state: string; common: Omit<ObjectDef["common"], "n
   // way round — so the datapoints mean the same thing on every device.
   {
     state: "elapsedTime",
-    common: { nameKey: "Elapsed time", type: "number", unit: "s", role: "media.elapsed", read: true, write: false },
+    common: { nameKey: "elapsedTime", type: "number", unit: "s", role: "media.elapsed", read: true, write: false },
   },
   {
     state: "elapsedTimeText",
     common: {
-      nameKey: "Elapsed time (readable)",
+      nameKey: "elapsedTimeReadable",
       type: "string",
       role: "media.elapsed.text",
       read: true,
@@ -80,30 +80,30 @@ const PLAYER_STATES: Array<{ state: string; common: Omit<ObjectDef["common"], "n
   },
   {
     state: "totalTime",
-    common: { nameKey: "Total time", type: "number", unit: "s", role: "media.duration", read: true, write: false },
+    common: { nameKey: "totalTime", type: "number", unit: "s", role: "media.duration", read: true, write: false },
   },
   {
     state: "totalTimeText",
-    common: { nameKey: "Total time (readable)", type: "string", role: "media.duration.text", read: true, write: false },
+    common: { nameKey: "totalTimeReadable", type: "string", role: "media.duration.text", read: true, write: false },
   },
   {
     state: "albumArt",
-    common: { nameKey: "Album art", type: "string", role: "media.cover", read: true, write: false },
+    common: { nameKey: "albumArt", type: "string", role: "media.cover", read: true, write: false },
   },
   // Transport buttons carry the type-detector media-player roles so a MusicCast player's
   // controls are recognised as play/pause/stop/next/prev, not generic buttons.
-  { state: "play", common: { nameKey: "Play", type: "boolean", role: "button.play", read: false, write: true } },
-  { state: "pause", common: { nameKey: "Pause", type: "boolean", role: "button.pause", read: false, write: true } },
-  { state: "stop", common: { nameKey: "Stop", type: "boolean", role: "button.stop", read: false, write: true } },
-  { state: "next", common: { nameKey: "Next", type: "boolean", role: "button.next", read: false, write: true } },
-  { state: "prev", common: { nameKey: "Previous", type: "boolean", role: "button.prev", read: false, write: true } },
+  { state: "play", common: { nameKey: "play", type: "boolean", role: "button.play", read: false, write: true } },
+  { state: "pause", common: { nameKey: "pause", type: "boolean", role: "button.pause", read: false, write: true } },
+  { state: "stop", common: { nameKey: "stop", type: "boolean", role: "button.stop", read: false, write: true } },
+  { state: "next", common: { nameKey: "next", type: "boolean", role: "button.next", read: false, write: true } },
+  { state: "prev", common: { nameKey: "previous", type: "boolean", role: "button.prev", read: false, write: true } },
   {
     state: "repeatToggle",
-    common: { nameKey: "Toggle repeat", type: "boolean", role: "button", read: false, write: true },
+    common: { nameKey: "toggleRepeat", type: "boolean", role: "button", read: false, write: true },
   },
   {
     state: "shuffleToggle",
-    common: { nameKey: "Toggle shuffle", type: "boolean", role: "button", read: false, write: true },
+    common: { nameKey: "toggleShuffle", type: "boolean", role: "button", read: false, write: true },
   },
 ];
 
@@ -219,7 +219,7 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
         id: `${zoneDef.prefix}scene.recall`,
         type: "state",
         common: {
-          name: tName("Recall scene"),
+          name: tName("recallScene"),
           type: "number",
           role: "level",
           read: true,
@@ -239,7 +239,7 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
           id: `${zoneDef.prefix}remote.cursor`,
           type: "state",
           common: {
-            name: tName("Cursor pad"),
+            name: tName("cursorPad"),
             type: "string",
             role: "state",
             read: false,
@@ -253,7 +253,7 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
           id: `${zoneDef.prefix}remote.menu`,
           type: "state",
           common: {
-            name: tName("Menu key"),
+            name: tName("menuKey"),
             type: "string",
             role: "state",
             read: false,
@@ -280,47 +280,47 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
           common: { name, type, role, read: true, write: false },
         });
       };
-      signal("format", tName("Audio signal format"), "string", "text");
-      signal("sampling", tName("Audio sampling rate"), "string", "text");
-      signal("bits", tName("Audio bit depth"), "string", "text");
-      signal("bitrate", tName("Audio bitrate"), "number", "value");
+      signal("format", tName("audioSignalFormat"), "string", "text");
+      signal("sampling", tName("audioSamplingRate"), "string", "text");
+      signal("bits", tName("audioBitDepth"), "string", "text");
+      signal("bitrate", tName("audioBitrate"), "number", "value");
     }
   }
   if (capabilities.media.includes("netusb") || capabilities.media.includes("cd")) {
     // ONE "now playing" block per zone (v2.0.0): the controller feeds it from
     // whichever source the zone is listening to (netusb or cd) and clears it on a
     // source switch. The source folders below keep only their genuinely own states.
-    pushPlayerBlock(objects, "player", tName("Media player"));
+    pushPlayerBlock(objects, "player", tName("mediaPlayer"));
     for (const zone of capabilities.zones) {
       if (zone.id !== "main") {
-        pushPlayerBlock(objects, `${zonePrefix(zone.id)}player`, tName("Media player"));
+        pushPlayerBlock(objects, `${zonePrefix(zone.id)}player`, tName("mediaPlayer"));
       }
     }
   }
   if (capabilities.media.includes("netusb")) {
-    objects.push({ id: "player.netPlayer", type: "channel", common: { name: tName("Network player") } });
+    objects.push({ id: "player.netPlayer", type: "channel", common: { name: tName("networkPlayer") } });
     objects.push({
       id: "player.netPlayer.preset",
       type: "state",
-      common: { name: tName("Recall preset"), type: "number", role: "level", read: true, write: true, min: 1 },
+      common: { name: tName("recallPreset"), type: "number", role: "level", read: true, write: true, min: 1 },
     });
     // The favourites and recently-played lists (names included) plus the recall-by-number
     // for recents — the musiccast adapter's selection surface, on our tree.
     objects.push({
       id: "player.netPlayer.presets",
       type: "state",
-      common: { name: tName("Favourites (stored presets)"), type: "string", role: "json", read: true, write: false },
+      common: { name: tName("favouritesStoredPresets"), type: "string", role: "json", read: true, write: false },
     });
     objects.push({
       id: "player.netPlayer.recent",
       type: "state",
-      common: { name: tName("Recently played"), type: "string", role: "json", read: true, write: false },
+      common: { name: tName("recentlyPlayed"), type: "string", role: "json", read: true, write: false },
     });
     objects.push({
       id: "player.netPlayer.recallRecent",
       type: "state",
       common: {
-        name: tName("Recall recently played (number)"),
+        name: tName("recallRecentlyPlayedNumber"),
         type: "number",
         role: "level",
         read: true,
@@ -335,50 +335,50 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
       objects.push({
         id: "player.netPlayer.playlists",
         type: "state",
-        common: { name: tName("MusicCast playlists"), type: "string", role: "json", read: true, write: false },
+        common: { name: tName("musiccastPlaylists"), type: "string", role: "json", read: true, write: false },
       });
     }
     if (capabilities.netusbFuncs?.includes("play_queue")) {
       objects.push({
         id: "player.netPlayer.queue",
         type: "state",
-        common: { name: tName("Play queue"), type: "string", role: "json", read: true, write: false },
+        common: { name: tName("playQueue"), type: "string", role: "json", read: true, write: false },
       });
     }
   }
   if (capabilities.media.includes("cd")) {
     // Drive-own states only — what the disc is PLAYING shows in the flat block above.
-    objects.push({ id: "player.cd", type: "channel", common: { name: tName("CD") } });
+    objects.push({ id: "player.cd", type: "channel", common: { name: tName("cd") } });
     objects.push({
       id: "player.cd.tray",
       type: "state",
-      common: { name: tName("Toggle tray"), type: "boolean", role: "button", read: false, write: true },
+      common: { name: tName("toggleTray"), type: "boolean", role: "button", read: false, write: true },
     });
     objects.push({
       id: "player.cd.trackNumber",
       type: "state",
-      common: { name: tName("Track number"), type: "number", role: "value", read: true, write: false },
+      common: { name: tName("trackNumber"), type: "number", role: "value", read: true, write: false },
     });
     objects.push({
       id: "player.cd.totalTracks",
       type: "state",
-      common: { name: tName("Total tracks"), type: "number", role: "value", read: true, write: false },
+      common: { name: tName("totalTracks"), type: "number", role: "value", read: true, write: false },
     });
     objects.push({
       id: "player.cd.discTime",
       type: "state",
-      common: { name: tName("Disc time"), type: "number", unit: "s", role: "value", read: true, write: false },
+      common: { name: tName("discTime"), type: "number", unit: "s", role: "value", read: true, write: false },
     });
     objects.push({
       id: "player.cd.deviceStatus",
       type: "state",
-      common: { name: tName("Drive status"), type: "string", role: "state", read: true, write: false },
+      common: { name: tName("driveStatus"), type: "string", role: "state", read: true, write: false },
     });
   }
   if (capabilities.media.includes("tuner")) {
-    objects.push({ id: "tuner", type: "channel", common: { name: tName("Tuner") } });
+    objects.push({ id: "tuner", type: "channel", common: { name: tName("tuner") } });
     const bandCommon: ObjectDef["common"] = {
-      name: tName("Band"),
+      name: tName("band"),
       type: "string",
       role: "state",
       read: true,
@@ -394,33 +394,33 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
     objects.push({
       id: "tuner.frequency",
       type: "state",
-      common: { name: tName("Frequency"), type: "number", unit: "kHz", role: "level", read: true, write: true },
+      common: { name: tName("frequency"), type: "number", unit: "kHz", role: "level", read: true, write: true },
     });
     objects.push({
       id: "tuner.rdsText",
       type: "state",
-      common: { name: tName("RDS text"), type: "string", role: "text", read: true, write: false },
+      common: { name: tName("rdsText"), type: "string", role: "text", read: true, write: false },
     });
     objects.push({
       id: "tuner.rdsTextB",
       type: "state",
-      common: { name: tName("RDS text B"), type: "string", role: "text", read: true, write: false },
+      common: { name: tName("rdsTextB"), type: "string", role: "text", read: true, write: false },
     });
     objects.push({
       id: "tuner.rdsService",
       type: "state",
-      common: { name: tName("RDS station"), type: "string", role: "text", read: true, write: false },
+      common: { name: tName("rdsStation"), type: "string", role: "text", read: true, write: false },
     });
     objects.push({
       id: "tuner.rdsProgramType",
       type: "state",
-      common: { name: tName("RDS programme type"), type: "string", role: "text", read: true, write: false },
+      common: { name: tName("rdsProgrammeType"), type: "string", role: "text", read: true, write: false },
     });
     // The stored-station surface: recall by number (writable), the active slot read back
     // from play info, up/down stepping, and the stored lists (with what the device knows
     // about each slot) as JSON — the selection surface the musiccast adapter offered.
     const presetCommon: ObjectDef["common"] = {
-      name: tName("Preset (recall by number)"),
+      name: tName("presetRecallByNumber"),
       type: "number",
       role: "level",
       read: true,
@@ -434,30 +434,30 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
     objects.push({
       id: "tuner.presetUp",
       type: "state",
-      common: { name: tName("Next preset"), type: "boolean", role: "button", read: false, write: true },
+      common: { name: tName("nextPreset"), type: "boolean", role: "button", read: false, write: true },
     });
     objects.push({
       id: "tuner.presetDown",
       type: "state",
-      common: { name: tName("Previous preset"), type: "boolean", role: "button", read: false, write: true },
+      common: { name: tName("previousPreset"), type: "boolean", role: "button", read: false, write: true },
     });
     objects.push({
       id: "tuner.presets",
       type: "state",
-      common: { name: tName("Stored presets"), type: "string", role: "json", read: true, write: false },
+      common: { name: tName("storedPresets"), type: "string", role: "json", read: true, write: false },
     });
     objects.push({
       id: "tuner.tuned",
       type: "state",
-      common: { name: tName("Tuned"), type: "boolean", role: "indicator", read: true, write: false },
+      common: { name: tName("tuned"), type: "boolean", role: "indicator", read: true, write: false },
     });
     objects.push({
       id: "tuner.audioMode",
       type: "state",
-      common: { name: tName("Audio mode"), type: "string", role: "state", read: true, write: false },
+      common: { name: tName("audioMode"), type: "string", role: "state", read: true, write: false },
     });
     if (bands.includes("dab")) {
-      objects.push({ id: "tuner.dab", type: "channel", common: { name: tName("DAB") } });
+      objects.push({ id: "tuner.dab", type: "channel", common: { name: tName("dab") } });
       for (const field of DAB_FIELDS) {
         objects.push({
           id: field.id,
@@ -477,25 +477,25 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
     // The clock/alarm block, as the musiccast adapter showed it — read-only display
     // (the predecessor's clock datapoints had no working write path either); the
     // devices that report it are the desk-audio/clock models.
-    objects.push({ id: "clock", type: "channel", common: { name: tName("Clock & alarm") } });
+    objects.push({ id: "clock", type: "channel", common: { name: tName("clockAlarm") } });
     objects.push({
       id: "clock.autoSync",
       type: "state",
-      common: { name: tName("Automatic time sync"), type: "boolean", role: "indicator", read: true, write: false },
+      common: { name: tName("automaticTimeSync"), type: "boolean", role: "indicator", read: true, write: false },
     });
     objects.push({
       id: "clock.format",
       type: "state",
-      common: { name: tName("Clock format"), type: "string", role: "state", read: true, write: false },
+      common: { name: tName("clockFormat"), type: "string", role: "state", read: true, write: false },
     });
-    objects.push({ id: "clock.alarm", type: "channel", common: { name: tName("Alarm") } });
+    objects.push({ id: "clock.alarm", type: "channel", common: { name: tName("alarm") } });
     objects.push({
       id: "clock.alarm.on",
       type: "state",
-      common: { name: tName("Alarm armed"), type: "boolean", role: "indicator", read: true, write: false },
+      common: { name: tName("alarmArmed"), type: "boolean", role: "indicator", read: true, write: false },
     });
     const volumeCommon: ObjectDef["common"] = {
-      name: tName("Alarm volume"),
+      name: tName("alarmVolume"),
       type: "number",
       role: "value",
       read: true,
@@ -509,28 +509,28 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
     objects.push({
       id: "clock.alarm.fadeInterval",
       type: "state",
-      common: { name: tName("Fade-in time"), type: "number", unit: "s", role: "value", read: true, write: false },
+      common: { name: tName("fadeInTime"), type: "number", unit: "s", role: "value", read: true, write: false },
     });
     objects.push({
       id: "clock.alarm.fadeType",
       type: "state",
-      common: { name: tName("Fade type"), type: "number", role: "value", read: true, write: false },
+      common: { name: tName("fadeType"), type: "number", role: "value", read: true, write: false },
     });
     objects.push({
       id: "clock.alarm.mode",
       type: "state",
-      common: { name: tName("Alarm mode"), type: "string", role: "state", read: true, write: false },
+      common: { name: tName("alarmMode"), type: "string", role: "state", read: true, write: false },
     });
     objects.push({
       id: "clock.alarm.repeat",
       type: "state",
-      common: { name: tName("Repeat (snooze)"), type: "boolean", role: "indicator", read: true, write: false },
+      common: { name: tName("repeatSnooze"), type: "boolean", role: "indicator", read: true, write: false },
     });
     const detailChannels = ["oneday", ...(capabilities.clock.alarmModes.includes("weekly") ? ALARM_DAYS : [])];
     for (const channel of detailChannels) {
       // The weekday channels are named by the device; only the fixed one-day channel translates.
       const label: ioBroker.StringOrTranslated =
-        channel === "oneday" ? tName("One-day alarm") : channel.charAt(0).toUpperCase() + channel.slice(1);
+        channel === "oneday" ? tName("oneDayAlarm") : channel.charAt(0).toUpperCase() + channel.slice(1);
       objects.push({ id: `clock.alarm.${channel}`, type: "channel", common: { name: label } });
       const detail = (
         id: string,
@@ -544,14 +544,14 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
           common: { name, type, role, read: true, write: false },
         });
       };
-      detail("enable", tName("Enabled"), "boolean", "indicator");
-      detail("time", tName("Alarm time"), "string", "text");
-      detail("beep", tName("Beep"), "boolean", "indicator");
-      detail("playbackType", tName("Playback type"), "string", "state");
-      detail("resumeInput", tName("Resume input"), "string", "state");
-      detail("presetType", tName("Preset type"), "string", "state");
-      detail("presetNumber", tName("Preset number"), "number", "value");
-      detail("presetInput", tName("Preset source"), "string", "state");
+      detail("enable", tName("enabled"), "boolean", "indicator");
+      detail("time", tName("alarmTime"), "string", "text");
+      detail("beep", tName("beep"), "boolean", "indicator");
+      detail("playbackType", tName("playbackType"), "string", "state");
+      detail("resumeInput", tName("resumeInput"), "string", "state");
+      detail("presetType", tName("presetType"), "string", "state");
+      detail("presetNumber", tName("presetNumber"), "number", "value");
+      detail("presetInput", tName("presetSource"), "string", "state");
     }
   }
   if (capabilities.hasDistribution) {
@@ -566,20 +566,20 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
         common: { name, type: "string", role, read: true, write: false },
       });
     };
-    distState("role", tName("Role (server/client)"), "state");
-    distState("id", tName("Group ID"), "text");
-    distState("name", tName("Group name"), "text");
-    distState("serverZone", tName("Server zone (feeds the group)"), "text");
-    distState("linkedDevices", tName("Linked devices"), "json");
+    distState("role", tName("roleServerClient"), "state");
+    distState("id", tName("groupID"), "text");
+    distState("name", tName("groupName"), "text");
+    distState("serverZone", tName("serverZoneFeedsTheGroup"), "text");
+    distState("linkedDevices", tName("linkedDevices"), "json");
     objects.push({
       id: "multiroom.group.leave",
       type: "state",
-      common: { name: tName("Leave group"), type: "boolean", role: "button", read: false, write: true },
+      common: { name: tName("leaveGroup"), type: "boolean", role: "button", read: false, write: true },
     });
     objects.push({
       id: "multiroom.group.linkDevice",
       type: "state",
-      common: { name: tName("Link a device (its IP)"), type: "string", role: "text", read: false, write: true },
+      common: { name: tName("linkADeviceItsIP"), type: "string", role: "text", read: false, write: true },
     });
   }
   return objects;

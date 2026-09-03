@@ -14,7 +14,7 @@ describe("catalogToObjects", () => {
     const entries: CatalogEntry[] = [
       {
         id: "power",
-        nameKey: "Power",
+        nameKey: "power",
         spec: { kind: "onoff", on: "On", off: "Standby" },
         write: true,
         role: "switch.power",
@@ -34,7 +34,7 @@ describe("catalogToObjects", () => {
     const entries: CatalogEntry[] = [
       {
         id: "input",
-        nameKey: "Input",
+        nameKey: "input",
         spec: { kind: "enum", states: { HDMI1: "HDMI1" } },
         write: true,
         role: "media.input",
@@ -47,8 +47,8 @@ describe("catalogToObjects", () => {
 
   test("a dotted id creates its channel object once, before the states", () => {
     const entries: CatalogEntry[] = [
-      { id: "sound.bass", nameKey: "Bass", spec: { kind: "number", unit: "dB", min: -6, max: 6 }, write: true },
-      { id: "sound.treble", nameKey: "Treble", spec: { kind: "number", unit: "dB", min: -6, max: 6 }, write: true },
+      { id: "sound.bass", nameKey: "bass", spec: { kind: "number", unit: "dB", min: -6, max: 6 }, write: true },
+      { id: "sound.treble", nameKey: "treble", spec: { kind: "number", unit: "dB", min: -6, max: 6 }, write: true },
     ];
     const objs = catalogToObjects(entries);
     expect(objs[0]).toMatchObject({ id: "sound", type: "channel" });
@@ -58,14 +58,14 @@ describe("catalogToObjects", () => {
   });
 
   test("an unknown channel id falls back to its capitalised segment", () => {
-    const entries: CatalogEntry[] = [{ id: "widget.artist", nameKey: "Artist", spec: { kind: "text" }, write: false }];
+    const entries: CatalogEntry[] = [{ id: "widget.artist", nameKey: "artist", spec: { kind: "text" }, write: false }];
     const [channel] = catalogToObjects(entries);
     // An unlisted channel keeps its capitalised id — a device-derived name has no translation.
     expect(channel).toEqual({ id: "widget", type: "channel", common: { name: "Widget" } });
   });
 
   test("a known channel id uses its curated display name, not the raw capitalised id", () => {
-    const entries: CatalogEntry[] = [{ id: "pc.artist", nameKey: "Artist", spec: { kind: "text" }, write: false }];
+    const entries: CatalogEntry[] = [{ id: "pc.artist", nameKey: "artist", spec: { kind: "text" }, write: false }];
     const [channel] = catalogToObjects(entries);
     expect(englishName(channel)).toBe("PC"); // curated, not "Pc"
   });
@@ -80,7 +80,7 @@ describe("catalogToObjects", () => {
     const entries: YncaEntry[] = [
       {
         id: "power",
-        nameKey: "Power",
+        nameKey: "power",
         spec: { kind: "onoff", on: "On", off: "Standby" },
         write: true,
         role: "switch.power",

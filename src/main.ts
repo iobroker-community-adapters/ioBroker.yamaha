@@ -718,13 +718,13 @@ export class Yamaha extends utils.Adapter {
     // for THIS object". This is the one place where that distinction cost a release (2.1.1).
     await this.extendObject("info", {
       type: "channel",
-      common: { name: tName("Information") },
+      common: { name: tName("information") },
       native: {},
     });
     await this.extendObject("info.connection", {
       type: "state",
       common: {
-        name: tName("Device or service connected"),
+        name: tName("deviceOrServiceConnected"),
         type: "boolean",
         role: "indicator.connected",
         read: true,
@@ -734,17 +734,17 @@ export class Yamaha extends utils.Adapter {
     });
     await this.extendObject("info.devicesTotal", {
       type: "state",
-      common: { name: tName("Devices total"), type: "number", role: "value", read: true, write: false },
+      common: { name: tName("devicesTotal"), type: "number", role: "value", read: true, write: false },
       native: {},
     });
     await this.extendObject("info.devicesOnline", {
       type: "state",
-      common: { name: tName("Devices online"), type: "number", role: "value", read: true, write: false },
+      common: { name: tName("devicesOnline"), type: "number", role: "value", read: true, write: false },
       native: {},
     });
     await this.extendObject("info.devicesAllOnline", {
       type: "state",
-      common: { name: tName("All devices online"), type: "boolean", role: "indicator", read: true, write: false },
+      common: { name: tName("allDevicesOnline"), type: "boolean", role: "indicator", read: true, write: false },
       native: {},
     });
   }
@@ -795,13 +795,13 @@ export class Yamaha extends utils.Adapter {
     );
     await this.extendObject(`${deviceId}.info`, {
       type: "channel",
-      common: { name: tName("Info") },
+      common: { name: tName("info") },
       native: {},
     });
     await this.extendObject(`${deviceId}.info.connection`, {
       type: "state",
       common: {
-        name: tName("Connected"),
+        name: tName("connected"),
         type: "boolean",
         role: "indicator.reachable",
         read: true,
@@ -815,7 +815,7 @@ export class Yamaha extends utils.Adapter {
     // offline device or a transport that does not report a model.
     await this.extendObject(`${deviceId}.info.model`, {
       type: "state",
-      common: { name: tName("Model"), type: "string", role: "text", read: true, write: false, def: "" },
+      common: { name: tName("model"), type: "string", role: "text", read: true, write: false, def: "" },
       native: {},
     });
     // The device's address — for a discovered device it lived only in the adapter's
@@ -823,7 +823,7 @@ export class Yamaha extends utils.Adapter {
     // could name it without a network search. Refreshed every start: DHCP may move it.
     await this.extendObject(`${deviceId}.info.ip`, {
       type: "state",
-      common: { name: tName("IP address"), type: "string", role: "info.ip", read: true, write: false, def: "" },
+      common: { name: tName("ipAddress"), type: "string", role: "info.ip", read: true, write: false, def: "" },
       native: {},
     });
     await this.setState(`${deviceId}.info.ip`, { val: ip, ack: true });
@@ -832,14 +832,14 @@ export class Yamaha extends utils.Adapter {
     // renders all three (false) instead of nothing.
     await this.extendObject(`${deviceId}.info.transports`, {
       type: "channel",
-      common: { name: tName("Transports") },
+      common: { name: tName("transports") },
       native: {},
     });
     for (const proto of TRANSPORT_IDS) {
       await this.extendObject(`${deviceId}.info.transports.${proto}`, {
         type: "state",
         common: {
-          name: tName("%s connected", proto.toUpperCase()),
+          name: tName("transportConnected", proto.toUpperCase()),
           type: "boolean",
           role: "indicator.reachable",
           read: true,

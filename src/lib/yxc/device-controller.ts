@@ -752,7 +752,7 @@ export class YxcDeviceController implements ConnectionHandle {
       await this.deps.upsertObject(`${this.deviceId}.${id}`, {
         id,
         type: "state",
-        common: { name: tName("Scenes (number + title)"), type: "string", role: "json", read: true, write: false },
+        common: { name: tName("scenesNumberTitle"), type: "string", role: "json", read: true, write: false },
       });
       this.emit(id, JSON.stringify(list));
     }
