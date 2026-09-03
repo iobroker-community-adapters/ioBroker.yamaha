@@ -103,8 +103,7 @@ On the very first contact the adapter asks the receiver which functions it suppo
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
-
-### **WORK IN PROGRESS**
+### 2.3.2 (2026-09-03)
 
 - (krobipd) Fixed: eight tuner and scene datapoints still showed no explanation on MusicCast and older XML receivers
 
@@ -134,17 +133,6 @@ On the very first contact the adapter asks the receiver which functions it suppo
 ### 2.1.1 (2026-09-02)
 
 - (krobipd) Fixed: on an updated instance the info datapoints now get the translated names too, instead of keeping the ones an older version had written
-
-### 2.1.0 (2026-09-02)
-
-- (krobipd) New: every datapoint name is now shown in your ioBroker language, in eleven languages; a name you changed yourself stays untouched
-- (krobipd) Fixed: the empty "Media server" folder left behind by the 2.0.0 object tree is removed, together with any other folder that no longer holds a datapoint
-- (krobipd) Fixed: the menu view starts empty after a restart instead of still showing the menu from the last time you browsed
-- (krobipd) Fixed: a receiver that gets a new address from your router is found again and reconnected there, instead of staying offline for good
-- (krobipd) Fixed: deleting an automatically found receiver now really removes it — the connection is closed, its datapoints are gone, and the next search does not bring it back
-- (krobipd) Fixed: the DAB date, the audio signal fields and the tuner preset list no longer show the receiver's own placeholder text — they stay empty, and only stored presets are listed
-- (krobipd) Fixed: on a receiver with both an analogue and a DAB tuner the AM band stays selectable and every band change reaches the right tuner
-- (krobipd) Fixed: a hiccup of the ioBroker database while the adapter starts no longer stops the instance — it says so in the log and keeps the receivers running
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 

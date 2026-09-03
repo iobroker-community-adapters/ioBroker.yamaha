@@ -1,9 +1,9 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "2.3.1",
+    "version": "2.3.2",
     "news": {
-      "NEXT": {
+      "2.3.2": {
         "en": "Fixed: eight tuner and scene datapoints still showed no explanation on MusicCast and XML receivers",
         "de": "Behoben: acht Tuner- und Szenen-Datenpunkte zeigten auf MusicCast- und XML-Receivern noch keine Erklärung",
         "ru": "Исправлено: восемь датапоинтов тюнера и сцен не имели пояснения на MusicCast- и XML-ресиверах",
@@ -122,10 +122,19 @@
       "zh-cn": "通过网络控制 Yamaha AV 接收器和 MusicCast 设备"
     },
     "docs": {
-      "en": ["docs/en/README.md"],
-      "de": ["docs/de/README.md"]
+      "en": [
+        "docs/en/README.md"
+      ],
+      "de": [
+        "docs/de/README.md"
+      ]
     },
-    "keywords": ["yamaha", "avr", "receiver", "musiccast"],
+    "keywords": [
+      "yamaha",
+      "avr",
+      "receiver",
+      "musiccast"
+    ],
     "plugins": {
       "sentry": {
         "dsn": "https://66f27ceff38c1ce1e6cdcc3095ba06d3@o4511524771266560.ingest.de.sentry.io/4511524773560400"
@@ -173,7 +182,10 @@
       {
         "condition": {
           "operand": "and",
-          "rules": ["oldVersion<1.0.0", "newVersion>=1.0.0"]
+          "rules": [
+            "oldVersion<1.0.0",
+            "newVersion>=1.0.0"
+          ]
         },
         "title": {
           "en": "Complete rebuild — new object tree",
@@ -202,12 +214,18 @@
           "zh-cn": "适配器已完全重建，现在将 YNCA、MusicCast 和旧的 XML 协议合而为一。对象树是全新的：旧的数据点（volume、power、Commands、Realtime 等）会被自动删除，功放会作为带类型数据点的设备重新创建。已配置的 IP 地址会被保留。请将脚本和可视化更新到新的数据点路径。"
         },
         "level": "warn",
-        "buttons": ["agree", "cancel"]
+        "buttons": [
+          "agree",
+          "cancel"
+        ]
       },
       {
         "condition": {
           "operand": "and",
-          "rules": ["oldVersion<2.0.0", "newVersion>=2.0.0"]
+          "rules": [
+            "oldVersion<2.0.0",
+            "newVersion>=2.0.0"
+          ]
         },
         "title": {
           "en": "Reworked object tree — one player per zone",
@@ -236,12 +254,18 @@
           "zh-cn": "2.0.0 版重构了对象树：每个区域一个播放器块显示当前播放内容（不再在每个音源下重复相同的块），场景变为带设备自带标题的下拉菜单外加 scene.list 数据点，调谐器对所有波段统一为一个波段/频率/预设，均衡器和信号信息移至 sound 下，唇音同步移至 hdmi 下。适配器首次启动时会自动删除旧数据点并创建新数据点。请将脚本和可视化更新到新路径。"
         },
         "level": "warn",
-        "buttons": ["agree", "cancel"]
+        "buttons": [
+          "agree",
+          "cancel"
+        ]
       },
       {
         "condition": {
           "operand": "and",
-          "rules": ["oldVersion<2.2.0", "newVersion>=2.2.0"]
+          "rules": [
+            "oldVersion<2.2.0",
+            "newVersion>=2.2.0"
+          ]
         },
         "title": {
           "en": "Playback times are now seconds",
@@ -270,7 +294,10 @@
           "zh-cn": "player.elapsedTime 和 player.totalTime 由文本改为以秒为单位的数字，这样媒体播放器组件、Alexa 和 Google 在所有设备上都能使用它们。易读形式（“1:23”）移到新的数据点 player.elapsedTimeText 和 player.totalTimeText。请将绑定旧文本的脚本、记录和可视化改到新的文本数据点。"
         },
         "level": "warn",
-        "buttons": ["agree", "cancel"]
+        "buttons": [
+          "agree",
+          "cancel"
+        ]
       }
     ]
   },
