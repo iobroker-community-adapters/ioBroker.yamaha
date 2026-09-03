@@ -1,4 +1,5 @@
 # Older changes
+
 ## 2.0.4 (2026-09-02)
 
 - (krobipd) Fixed: a short outage of the ioBroker database no longer restarts the adapter — a failed write is logged once and the next value is written normally

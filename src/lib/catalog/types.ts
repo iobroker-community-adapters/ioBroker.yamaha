@@ -57,6 +57,14 @@ export interface ObjectDef {
   common: {
     /** Resolved to all admin languages — never a plain string (state-role gate). */
     name: ioBroker.StringOrTranslated;
+    /**
+     * The datapoint's explanation, resolved to all admin languages. Absent where the datapoint
+     * explains itself — the fleet standard wants an empty field there, not invented prose.
+     * The field was MISSING from this type until 2026-09-03, which is why the tuner and scene
+     * datapoints built directly by the MusicCast and XML controllers could never carry one:
+     * the catalogs had the key, the object type had nowhere to put it.
+     */
+    desc?: ioBroker.StringOrTranslated;
     type?: "boolean" | "number" | "string";
     role?: string;
     read?: boolean;

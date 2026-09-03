@@ -326,6 +326,7 @@ export class XmlDeviceController implements ConnectionHandle {
         type: "state",
         common: {
           name: tName("recallScene"),
+          desc: tName("descRecallScene"),
           type: "number",
           role: "level",
           read: true,
@@ -378,6 +379,7 @@ export class XmlDeviceController implements ConnectionHandle {
     };
     await state("preset", {
       name: tName("presetRecallByNumber"),
+      desc: tName("descPresetRecallByNumber"),
       type: "number",
       role: "level",
       read: true,
@@ -396,10 +398,25 @@ export class XmlDeviceController implements ConnectionHandle {
       read: true,
       write: false,
     });
-    await state("rdsService", { name: tName("rdsStation"), type: "string", role: "text", read: true, write: false });
-    await state("rdsText", { name: tName("rdsText"), type: "string", role: "text", read: true, write: false });
+    await state("rdsService", {
+      name: tName("rdsStation"),
+      desc: tName("descRdsStation"),
+      type: "string",
+      role: "text",
+      read: true,
+      write: false,
+    });
+    await state("rdsText", {
+      name: tName("rdsText"),
+      desc: tName("descRdsText"),
+      type: "string",
+      role: "text",
+      read: true,
+      write: false,
+    });
     await state("tuned", {
       name: tName("tunedToAStation"),
+      desc: tName("descTunedToAStation"),
       type: "boolean",
       role: "indicator",
       read: true,
@@ -407,6 +424,7 @@ export class XmlDeviceController implements ConnectionHandle {
     });
     await state("stereo", {
       name: tName("stereoReception"),
+      desc: tName("descStereoReception"),
       type: "boolean",
       role: "indicator",
       read: true,

@@ -255,6 +255,7 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
         type: "state",
         common: {
           name: tName("recallScene"),
+          desc: tName("descRecallScene"),
           type: "number",
           role: "level",
           read: true,
@@ -337,7 +338,15 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
     objects.push({
       id: "player.netPlayer.preset",
       type: "state",
-      common: { name: tName("recallPreset"), type: "number", role: "level", read: true, write: true, min: 1 },
+      common: {
+        name: tName("recallPreset"),
+        desc: tName("descRecallPreset"),
+        type: "number",
+        role: "level",
+        read: true,
+        write: true,
+        min: 1,
+      },
     });
     // The favourites and recently-played lists (names included) plus the recall-by-number
     // for recents — the musiccast adapter's selection surface, on our tree.
@@ -434,17 +443,38 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
     objects.push({
       id: "tuner.rdsText",
       type: "state",
-      common: { name: tName("rdsText"), type: "string", role: "text", read: true, write: false },
+      common: {
+        name: tName("rdsText"),
+        desc: tName("descRdsText"),
+        type: "string",
+        role: "text",
+        read: true,
+        write: false,
+      },
     });
     objects.push({
       id: "tuner.rdsTextB",
       type: "state",
-      common: { name: tName("rdsTextB"), type: "string", role: "text", read: true, write: false },
+      common: {
+        name: tName("rdsTextB"),
+        desc: tName("descRdsTextB"),
+        type: "string",
+        role: "text",
+        read: true,
+        write: false,
+      },
     });
     objects.push({
       id: "tuner.rdsService",
       type: "state",
-      common: { name: tName("rdsStation"), type: "string", role: "text", read: true, write: false },
+      common: {
+        name: tName("rdsStation"),
+        desc: tName("descRdsStation"),
+        type: "string",
+        role: "text",
+        read: true,
+        write: false,
+      },
     });
     objects.push({
       id: "tuner.rdsProgramType",
@@ -456,6 +486,7 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
     // about each slot) as JSON — the selection surface the musiccast adapter offered.
     const presetCommon: ObjectDef["common"] = {
       name: tName("presetRecallByNumber"),
+      desc: tName("descPresetRecallByNumber"),
       type: "number",
       role: "level",
       read: true,
@@ -489,7 +520,14 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
     objects.push({
       id: "tuner.audioMode",
       type: "state",
-      common: { name: tName("audioMode"), type: "string", role: "state", read: true, write: false },
+      common: {
+        name: tName("audioMode"),
+        desc: tName("descAudioMode"),
+        type: "string",
+        role: "state",
+        read: true,
+        write: false,
+      },
     });
     if (bands.includes("dab")) {
       objects.push({ id: "tuner.dab", type: "channel", common: { name: tName("dab") } });

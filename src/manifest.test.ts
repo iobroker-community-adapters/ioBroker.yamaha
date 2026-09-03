@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { SWITCHABLE_GROUPS } from "./lib/catalog/groups";
 import { YNCA_CATALOG } from "./lib/ynca/catalog";
@@ -129,5 +129,55 @@ describe("every datapoint has a description decision", () => {
       [...undecided].map(([key, id]) => `${key} (${id})`),
       "each of these needs either a descKey or an entry in SELF_EXPLANATORY",
     ).toEqual([]);
+  });
+});
+
+describe("no object is built without the explanation that exists for it", () => {
+  /**
+   * The catalog invariant above walks the four TABLES. It cannot see the objects that the
+   * MusicCast and XML controllers build inline with `tName("someKey")` — and those were exactly
+   * the ones left without a description twice in a row: first because the insertion only matched
+   * table entries, then because `ObjectDef["common"]` had no `desc` field at all, so the key had
+   * nowhere to go. Both times the tree looked complete and eight tuner/scene datapoints were bare.
+   *
+   * This check reads the SOURCE instead: wherever a translation key is used to name an object and
+   * an explanation key exists for it, the explanation has to be used too.
+   */
+  it("every name key with an explanation uses it", () => {
+    const root = join(__dirname);
+    const en = JSON.parse(readFileSync(join(root, "../admin/i18n/en.json"), "utf8")) as Record<string, string>;
+    const explained = new Map<string, string>();
+    for (const key of Object.keys(en)) {
+      if (key.startsWith("desc") && !key.startsWith("descChannel")) {
+        explained.set(key[4].toLowerCase() + key.slice(5), key);
+      }
+    }
+    const files: string[] = [];
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(full);
+        } else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) {
+          files.push(full);
+        }
+      }
+    };
+    walk(root);
+    const missing: string[] = [];
+    for (const file of files) {
+      const source = readFileSync(file, "utf8");
+      for (const match of source.matchAll(/(?:nameKey:\s*"|tName\(\s*")([A-Za-z0-9]+)"/g)) {
+        const descKey = explained.get(match[1]);
+        if (!descKey) {
+          continue;
+        }
+        const around = source.slice(Math.max(0, match.index - 200), match.index + 240);
+        if (!around.includes(descKey)) {
+          missing.push(`${file.slice(root.length + 1)}: ${match[1]} → ${descKey}`);
+        }
+      }
+    }
+    expect(missing, "these build an object but drop the explanation that exists for it").toEqual([]);
   });
 });

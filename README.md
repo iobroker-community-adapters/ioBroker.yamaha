@@ -103,6 +103,11 @@ On the very first contact the adapter asks the receiver which functions it suppo
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+
+### **WORK IN PROGRESS**
+
+- (krobipd) Fixed: eight tuner and scene datapoints still showed no explanation on MusicCast and older XML receivers
+
 ### 2.3.1 (2026-09-03)
 
 - (krobipd) Fixed: the new datapoint explanations were missing on MusicCast and older XML devices, so those users saw an empty description where the receiver has one

@@ -3,6 +3,19 @@
     "name": "yamaha",
     "version": "2.3.1",
     "news": {
+      "NEXT": {
+        "en": "Fixed: eight tuner and scene datapoints still showed no explanation on MusicCast and XML receivers",
+        "de": "Behoben: acht Tuner- und Szenen-Datenpunkte zeigten auf MusicCast- und XML-Receivern noch keine Erklärung",
+        "ru": "Исправлено: восемь датапоинтов тюнера и сцен не имели пояснения на MusicCast- и XML-ресиверах",
+        "pt": "Corrigido: oito pontos de dados de sintonizador e cenas ainda não mostravam explicação em recetores MusicCast e XML",
+        "nl": "Opgelost: acht tuner- en scènedatapunten toonden op MusicCast- en XML-receivers nog geen uitleg",
+        "fr": "Corrigé : huit points de données tuner et scène n'affichaient encore aucune explication sur les amplis MusicCast et XML",
+        "it": "Corretto: otto datapoint di sintonizzatore e scene non mostravano ancora spiegazioni su ricevitori MusicCast e XML",
+        "es": "Corregido: ocho puntos de datos de sintonizador y escenas aún no mostraban explicación en receptores MusicCast y XML",
+        "pl": "Naprawiono: osiem punktów danych tunera i scen nadal nie miało objaśnienia na amplitunerach MusicCast i XML",
+        "uk": "Виправлено: вісім датапоінтів тюнера й сцен ще не мали пояснення на ресиверах MusicCast та XML",
+        "zh-cn": "修复：MusicCast 与 XML 功放上仍有八个调谐器与场景数据点没有说明"
+      },
       "2.3.1": {
         "en": "Fixed: the new datapoint explanations were missing on MusicCast and older XML devices",
         "de": "Behoben: die neuen Datenpunkt-Erklärungen fehlten auf MusicCast- und älteren XML-Geräten",
@@ -80,19 +93,6 @@
         "pl": "Zakłócenia bazy danych nie restartują już adaptera; wskaźniki protokołów zerowane przy starcie/stopie; czyste zatrzymanie podczas wyszukiwania; poprawiono sceny, sondy i equalizer",
         "uk": "Збої бази даних більше не перезапускають адаптер; індикатори протоколів скидаються під час запуску/зупинки; чиста зупинка під час пошуку; виправлено сцени, проби й еквалайзер",
         "zh-cn": "数据库短暂故障不再重启适配器；协议指示在启动和停止时重置；搜索期间可干净停止；修复场景标题、探测重试和均衡器写入"
-      },
-      "2.0.3": {
-        "en": "The update cleanup now removes every never-filled leftover datapoint — a history recording setting no longer shields it, because nothing was ever recorded there and nothing is lost",
-        "de": "Das Update-Aufräumen entfernt jetzt jeden nie befüllten Alt-Datenpunkt — eine Verlaufs-Aufzeichnungseinstellung schützt ihn nicht mehr, denn dort wurde nie etwas aufgezeichnet",
-        "ru": "Очистка при обновлении теперь удаляет каждую незаполненную устаревшую точку данных — настройка записи истории больше не защищает её, ведь туда никогда ничего не записывалось",
-        "pt": "A limpeza de atualização agora remove todos os pontos de dados antigos nunca preenchidos — uma configuração de gravação de histórico não os protege mais, pois nada foi gravado lá",
-        "nl": "De update-opschoning verwijdert nu elk nooit gevuld achtergebleven datapunt — een instelling voor historie-opname beschermt het niet meer, want er is daar nooit iets opgenomen",
-        "fr": "Le nettoyage de mise à jour supprime désormais chaque point de données jamais rempli — un réglage d'enregistrement d'historique ne le protège plus, car rien n'y a jamais été enregistré",
-        "it": "La pulizia dell'aggiornamento ora rimuove ogni datapoint residuo mai riempito — un'impostazione di registrazione della cronologia non lo protegge più, lì non è mai stato registrato nulla",
-        "es": "La limpieza de actualización ahora elimina cada punto de datos antiguo nunca llenado — un ajuste de grabación de historial ya no lo protege, pues allí nunca se grabó nada",
-        "pl": "Czyszczenie przy aktualizacji usuwa teraz każdy nigdy niewypełniony stary punkt danych — ustawienie zapisu historii już go nie chroni, bo nic tam nigdy nie zapisano",
-        "uk": "Очищення під час оновлення тепер видаляє кожну ніколи не заповнену застарілу точку даних — налаштування запису історії більше не захищає її, адже туди ніколи нічого не записувалось",
-        "zh-cn": "更新清理现在会删除每个从未填充过的遗留数据点——历史记录设置不再保护它，因为那里从未记录过任何数据，不会有任何损失"
       }
     },
     "titleLang": {
@@ -122,19 +122,10 @@
       "zh-cn": "通过网络控制 Yamaha AV 接收器和 MusicCast 设备"
     },
     "docs": {
-      "en": [
-        "docs/en/README.md"
-      ],
-      "de": [
-        "docs/de/README.md"
-      ]
+      "en": ["docs/en/README.md"],
+      "de": ["docs/de/README.md"]
     },
-    "keywords": [
-      "yamaha",
-      "avr",
-      "receiver",
-      "musiccast"
-    ],
+    "keywords": ["yamaha", "avr", "receiver", "musiccast"],
     "plugins": {
       "sentry": {
         "dsn": "https://66f27ceff38c1ce1e6cdcc3095ba06d3@o4511524771266560.ingest.de.sentry.io/4511524773560400"
@@ -182,10 +173,7 @@
       {
         "condition": {
           "operand": "and",
-          "rules": [
-            "oldVersion<1.0.0",
-            "newVersion>=1.0.0"
-          ]
+          "rules": ["oldVersion<1.0.0", "newVersion>=1.0.0"]
         },
         "title": {
           "en": "Complete rebuild — new object tree",
@@ -214,18 +202,12 @@
           "zh-cn": "适配器已完全重建，现在将 YNCA、MusicCast 和旧的 XML 协议合而为一。对象树是全新的：旧的数据点（volume、power、Commands、Realtime 等）会被自动删除，功放会作为带类型数据点的设备重新创建。已配置的 IP 地址会被保留。请将脚本和可视化更新到新的数据点路径。"
         },
         "level": "warn",
-        "buttons": [
-          "agree",
-          "cancel"
-        ]
+        "buttons": ["agree", "cancel"]
       },
       {
         "condition": {
           "operand": "and",
-          "rules": [
-            "oldVersion<2.0.0",
-            "newVersion>=2.0.0"
-          ]
+          "rules": ["oldVersion<2.0.0", "newVersion>=2.0.0"]
         },
         "title": {
           "en": "Reworked object tree — one player per zone",
@@ -254,18 +236,12 @@
           "zh-cn": "2.0.0 版重构了对象树：每个区域一个播放器块显示当前播放内容（不再在每个音源下重复相同的块），场景变为带设备自带标题的下拉菜单外加 scene.list 数据点，调谐器对所有波段统一为一个波段/频率/预设，均衡器和信号信息移至 sound 下，唇音同步移至 hdmi 下。适配器首次启动时会自动删除旧数据点并创建新数据点。请将脚本和可视化更新到新路径。"
         },
         "level": "warn",
-        "buttons": [
-          "agree",
-          "cancel"
-        ]
+        "buttons": ["agree", "cancel"]
       },
       {
         "condition": {
           "operand": "and",
-          "rules": [
-            "oldVersion<2.2.0",
-            "newVersion>=2.2.0"
-          ]
+          "rules": ["oldVersion<2.2.0", "newVersion>=2.2.0"]
         },
         "title": {
           "en": "Playback times are now seconds",
@@ -294,10 +270,7 @@
           "zh-cn": "player.elapsedTime 和 player.totalTime 由文本改为以秒为单位的数字，这样媒体播放器组件、Alexa 和 Google 在所有设备上都能使用它们。易读形式（“1:23”）移到新的数据点 player.elapsedTimeText 和 player.totalTimeText。请将绑定旧文本的脚本、记录和可视化改到新的文本数据点。"
         },
         "level": "warn",
-        "buttons": [
-          "agree",
-          "cancel"
-        ]
+        "buttons": ["agree", "cancel"]
       }
     ]
   },

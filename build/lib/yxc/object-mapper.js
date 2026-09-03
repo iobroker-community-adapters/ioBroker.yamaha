@@ -231,6 +231,7 @@ function mapYxcToObjects(capabilities) {
         type: "state",
         common: {
           name: (0, import_i18n.tName)("recallScene"),
+          desc: (0, import_i18n.tName)("descRecallScene"),
           type: "number",
           role: "level",
           read: true,
@@ -301,7 +302,15 @@ function mapYxcToObjects(capabilities) {
     objects.push({
       id: "player.netPlayer.preset",
       type: "state",
-      common: { name: (0, import_i18n.tName)("recallPreset"), type: "number", role: "level", read: true, write: true, min: 1 }
+      common: {
+        name: (0, import_i18n.tName)("recallPreset"),
+        desc: (0, import_i18n.tName)("descRecallPreset"),
+        type: "number",
+        role: "level",
+        read: true,
+        write: true,
+        min: 1
+      }
     });
     objects.push({
       id: "player.netPlayer.presets",
@@ -390,17 +399,38 @@ function mapYxcToObjects(capabilities) {
     objects.push({
       id: "tuner.rdsText",
       type: "state",
-      common: { name: (0, import_i18n.tName)("rdsText"), type: "string", role: "text", read: true, write: false }
+      common: {
+        name: (0, import_i18n.tName)("rdsText"),
+        desc: (0, import_i18n.tName)("descRdsText"),
+        type: "string",
+        role: "text",
+        read: true,
+        write: false
+      }
     });
     objects.push({
       id: "tuner.rdsTextB",
       type: "state",
-      common: { name: (0, import_i18n.tName)("rdsTextB"), type: "string", role: "text", read: true, write: false }
+      common: {
+        name: (0, import_i18n.tName)("rdsTextB"),
+        desc: (0, import_i18n.tName)("descRdsTextB"),
+        type: "string",
+        role: "text",
+        read: true,
+        write: false
+      }
     });
     objects.push({
       id: "tuner.rdsService",
       type: "state",
-      common: { name: (0, import_i18n.tName)("rdsStation"), type: "string", role: "text", read: true, write: false }
+      common: {
+        name: (0, import_i18n.tName)("rdsStation"),
+        desc: (0, import_i18n.tName)("descRdsStation"),
+        type: "string",
+        role: "text",
+        read: true,
+        write: false
+      }
     });
     objects.push({
       id: "tuner.rdsProgramType",
@@ -409,6 +439,7 @@ function mapYxcToObjects(capabilities) {
     });
     const presetCommon = {
       name: (0, import_i18n.tName)("presetRecallByNumber"),
+      desc: (0, import_i18n.tName)("descPresetRecallByNumber"),
       type: "number",
       role: "level",
       read: true,
@@ -442,7 +473,14 @@ function mapYxcToObjects(capabilities) {
     objects.push({
       id: "tuner.audioMode",
       type: "state",
-      common: { name: (0, import_i18n.tName)("audioMode"), type: "string", role: "state", read: true, write: false }
+      common: {
+        name: (0, import_i18n.tName)("audioMode"),
+        desc: (0, import_i18n.tName)("descAudioMode"),
+        type: "string",
+        role: "state",
+        read: true,
+        write: false
+      }
     });
     if (bands.includes("dab")) {
       objects.push({ id: "tuner.dab", type: "channel", common: { name: (0, import_i18n.tName)("dab") } });

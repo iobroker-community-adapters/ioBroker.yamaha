@@ -251,6 +251,7 @@ class XmlDeviceController {
         type: "state",
         common: {
           name: (0, import_i18n.tName)("recallScene"),
+          desc: (0, import_i18n.tName)("descRecallScene"),
           type: "number",
           role: "level",
           read: true,
@@ -300,6 +301,7 @@ class XmlDeviceController {
     };
     await state("preset", {
       name: (0, import_i18n.tName)("presetRecallByNumber"),
+      desc: (0, import_i18n.tName)("descPresetRecallByNumber"),
       type: "number",
       role: "level",
       read: true,
@@ -318,10 +320,25 @@ class XmlDeviceController {
       read: true,
       write: false
     });
-    await state("rdsService", { name: (0, import_i18n.tName)("rdsStation"), type: "string", role: "text", read: true, write: false });
-    await state("rdsText", { name: (0, import_i18n.tName)("rdsText"), type: "string", role: "text", read: true, write: false });
+    await state("rdsService", {
+      name: (0, import_i18n.tName)("rdsStation"),
+      desc: (0, import_i18n.tName)("descRdsStation"),
+      type: "string",
+      role: "text",
+      read: true,
+      write: false
+    });
+    await state("rdsText", {
+      name: (0, import_i18n.tName)("rdsText"),
+      desc: (0, import_i18n.tName)("descRdsText"),
+      type: "string",
+      role: "text",
+      read: true,
+      write: false
+    });
     await state("tuned", {
       name: (0, import_i18n.tName)("tunedToAStation"),
+      desc: (0, import_i18n.tName)("descTunedToAStation"),
       type: "boolean",
       role: "indicator",
       read: true,
@@ -329,6 +346,7 @@ class XmlDeviceController {
     });
     await state("stereo", {
       name: (0, import_i18n.tName)("stereoReception"),
+      desc: (0, import_i18n.tName)("descStereoReception"),
       type: "boolean",
       role: "indicator",
       read: true,
