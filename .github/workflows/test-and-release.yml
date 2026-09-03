@@ -27,6 +27,10 @@ on:
     paths-ignore:
       - "**.md"
       - "docs/**"
+      - ".gitignore"
+      - ".gitattributes"
+      - ".editorconfig"
+      - "LICENSE"
   pull_request: {}
 
 # Cancel previous PR/branch runs when a new commit is pushed
