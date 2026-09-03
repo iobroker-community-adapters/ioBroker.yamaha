@@ -3,6 +3,19 @@
     "name": "yamaha",
     "version": "2.2.0",
     "news": {
+      "NEXT": {
+        "en": "New: every datapoint and folder now carries a short explanation in eleven languages\nImproved: an untranslated text falls back to English instead of an internal key",
+        "de": "Neu: jeder Datenpunkt und jeder Ordner trägt jetzt eine kurze Erklärung in elf Sprachen\nVerbessert: ein noch nicht übersetzter Text fällt auf Englisch zurück statt auf eine interne Kennung",
+        "ru": "Новое: каждый датапоинт и папка теперь имеют краткое пояснение на одиннадцати языках\nУлучшено: непереведённый текст показывает английский вместо внутреннего ключа",
+        "pt": "Novo: cada ponto de dados e pasta tem agora uma explicação curta em onze línguas\nMelhorado: um texto sem tradução recorre ao inglês em vez de uma chave interna",
+        "nl": "Nieuw: elk datapunt en elke map heeft nu een korte uitleg in elf talen\nVerbeterd: een onvertaalde tekst valt terug op Engels in plaats van een interne sleutel",
+        "fr": "Nouveau : chaque point de données et dossier porte désormais une courte explication en onze langues\nAmélioré : un texte non traduit revient à l'anglais au lieu d'une clé interne",
+        "it": "Nuovo: ogni datapoint e cartella ha ora una breve spiegazione in undici lingue\nMigliorato: un testo non tradotto ripiega sull'inglese invece che su una chiave interna",
+        "es": "Nuevo: cada punto de datos y carpeta lleva ahora una breve explicación en once idiomas\nMejorado: un texto sin traducir recurre al inglés en vez de a una clave interna",
+        "pl": "Nowość: każdy punkt danych i folder ma teraz krótkie wyjaśnienie w jedenastu językach\nUlepszono: nieprzetłumaczony tekst wraca do angielskiego zamiast do klucza wewnętrznego",
+        "uk": "Нове: кожен датапоінт і тека тепер мають коротке пояснення одинадцятьма мовами\nПокращено: неперекладений текст показує англійську замість внутрішнього ключа",
+        "zh-cn": "新增：每个数据点和文件夹现在都带有十一种语言的简短说明\n改进：尚未翻译的文本回退为英文，而不是显示内部键名"
+      },
       "2.2.0": {
         "en": "Playback times are now seconds, with the readable form in new text datapoints. After a restart the adapter reads menu, band and input from the receiver instead of from memory.",
         "de": "Wiedergabezeiten sind jetzt Sekunden, die lesbare Form steht in neuen Text-Datenpunkten. Nach einem Neustart liest der Adapter Menü, Band und Eingang vom Receiver statt aus dem Speicher.",
@@ -80,19 +93,6 @@
         "pl": "Poprawka: restart przy amplitunerze w trybie czuwania nie zapomina już potwierdzonych możliwości — zapamiętana mapa możliwości dla tego samego urządzenia i firmware tylko rośnie",
         "uk": "Виправлення: перезапуск, коли ресивер у режимі очікування, більше не забуває підтверджені можливості — збережена карта можливостей для того ж пристрою і прошивки лише росте",
         "zh-cn": "问题修复：接收机待机时重启不再遗忘已被证实的能力——同一设备和固件的能力记录只会增长"
-      },
-      "2.0.1": {
-        "en": "Bug fixes: datapoints the device can never fill are no longer created, a one-time sweep clears never-filled leftovers, and idle player blocks start with cleared values",
-        "de": "Fehlerbereinigung: Datenpunkte, die das Gerät nie füllen kann, entstehen nicht mehr, ein Einmal-Durchlauf entfernt nie befüllte Altlasten, ruhende Player-Blöcke starten mit Leerwerten",
-        "ru": "Исправления: точки данных, которые устройство не может заполнить, больше не создаются, разовая очистка убирает пустые остатки, блоки плеера в покое стартуют с пустыми значениями",
-        "pt": "Correções: pontos de dados que o aparelho nunca pode preencher já não são criados, uma limpeza única remove restos nunca preenchidos, blocos do leitor em repouso arrancam vazios",
-        "nl": "Foutcorrecties: datapunten die het apparaat nooit kan vullen worden niet meer aangemaakt, een eenmalige opruiming verwijdert nooit gevulde resten, rustende spelerblokken starten leeg",
-        "fr": "Corrections : les points de données que l'appareil ne peut jamais remplir ne sont plus créés, un nettoyage unique retire les restes jamais remplis, les blocs lecteur au repos démarrent vides",
-        "it": "Correzioni: i punti dati che il dispositivo non può mai riempire non vengono più creati, una pulizia una tantum rimuove i resti mai riempiti, i blocchi lettore a riposo partono vuoti",
-        "es": "Correcciones: los puntos de datos que el equipo nunca puede llenar ya no se crean, una limpieza única quita los restos nunca llenados, los bloques del reproductor en reposo arrancan vacíos",
-        "pl": "Poprawki: punkty danych, których urządzenie nigdy nie wypełni, nie są już tworzone, jednorazowe czyszczenie usuwa niewypełnione resztki, spoczywające bloki odtwarzacza startują puste",
-        "uk": "Виправлення: точки даних, які пристрій ніколи не заповнить, більше не створюються, одноразове очищення прибирає порожні залишки, блоки плеєра у спокої стартують порожніми",
-        "zh-cn": "问题修复：不再创建设备永远无法填充的数据点，一次性清理移除从未填充的遗留项，空闲的播放器块以清空值启动"
       }
     },
     "titleLang": {
