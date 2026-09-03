@@ -158,6 +158,7 @@ class YncaClient {
    * model); it self-reschedules and is stopped on drop and on close.
    */
   startKeepalive() {
+    this.stopKeepalive();
     this.keepaliveTimer = this.timers.schedule(() => {
       this.get("SYS", "MODELNAME");
       this.startKeepalive();

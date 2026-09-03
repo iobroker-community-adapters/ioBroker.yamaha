@@ -4,9 +4,9 @@ export default defineConfig({
   test: {
     globals: true,
     include: ["src/**/*.test.ts", "test/standards/*.test.ts"],
-    // Scaffold stage has no unit tests yet — the first arrive with the
-    // command-router in the next build phase. Don't fail the run until then.
-    passWithNoTests: true,
+    // No `passWithNoTests`: with it, an `include` that stops matching (a path rework, a
+    // moved file) reports GREEN instead of red — the run could not tell "no tests" from
+    // "all tests pass". The suite has had tests since the command-router phase.
     watch: false,
     pool: "forks",
     forks: { singleFork: false },

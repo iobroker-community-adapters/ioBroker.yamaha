@@ -1,4 +1,5 @@
 # Older changes
+
 ## 2.0.1 (2026-09-01)
 
 - (krobipd) Fixed: devices on the oldest protocol no longer get datapoints their status never delivers — states are only created for what the device really answers, like on the other two protocols

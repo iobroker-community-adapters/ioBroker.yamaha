@@ -257,8 +257,12 @@ export function encode(spec: ValueSpec, value: boolean | number | string): strin
     case "text":
       return String(value);
     case "code": {
-      // Reverse the code table: the written numeric code back to its wire token.
-      const token = Object.keys(spec.codes).find(w => spec.codes[w] === value);
+      // Reverse the code table: the written numeric code back to its wire token. Compared
+      // as a NUMBER, not strictly: a coded state is a number state, but a visualisation or
+      // a script may well write "0" instead of 0 — a strict comparison found nothing and
+      // put the bare digit on the wire instead of "Play".
+      const code = Number(value);
+      const token = Object.keys(spec.codes).find(w => spec.codes[w] === code);
       return token ?? String(value);
     }
     case "button":

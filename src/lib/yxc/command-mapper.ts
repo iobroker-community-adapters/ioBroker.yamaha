@@ -2,6 +2,7 @@ import type { StateValue } from "../types";
 import { YXC_ZONE_IDS, zonePrefix } from "./zones";
 import type { I18nKey } from "../i18n";
 import { isWritableValue } from "../catalog/value-coerce";
+import { formatPlayTime } from "../catalog/play-time";
 import { YXC_AMP_CATALOG } from "./catalog";
 import type { YxcClientLike } from "./client-contract";
 
@@ -260,13 +261,18 @@ export function parseYxcPlayInfo(playInfo: unknown, block: "netusb" | "cd" = "ne
   if (typeof albumArt === "string") {
     updates.push({ id: "player.albumArt", value: albumArt });
   }
+  // Both forms of each time — see catalog/play-time.ts. MusicCast reports the seconds, so
+  // the readable text is formatted from them here; the YNCA side parses its text into the
+  // same seconds. One meaning per datapoint, on every device.
   const elapsed = info.play_time;
   if (typeof elapsed === "number") {
     updates.push({ id: "player.elapsedTime", value: elapsed });
+    updates.push({ id: "player.elapsedTimeText", value: formatPlayTime(elapsed) });
   }
   const total = info.total_time;
   if (typeof total === "number") {
     updates.push({ id: "player.totalTime", value: total });
+    updates.push({ id: "player.totalTimeText", value: formatPlayTime(total) });
   }
   // The playing source: netusb reports its active input ("spotify", "net_radio", …);
   // the CD block IS its source.
@@ -303,7 +309,9 @@ export const PLAYER_CLEAR: StateValue[] = [
   { id: "player.track", value: "" },
   { id: "player.albumArt", value: "" },
   { id: "player.elapsedTime", value: 0 },
+  { id: "player.elapsedTimeText", value: "" },
   { id: "player.totalTime", value: 0 },
+  { id: "player.totalTimeText", value: "" },
   { id: "player.repeat", value: 0 },
   { id: "player.shuffle", value: false },
 ];

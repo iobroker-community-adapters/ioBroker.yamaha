@@ -121,18 +121,31 @@ class XmlBrowseDriver {
   /** Go one menu level back — falling back to `Left` when the device refuses `Return`. */
   async back() {
     try {
-      await this.control(`<Cursor>${this.backCursor}</Cursor>`);
+      await this.send(`<Cursor>${this.backCursor}</Cursor>`);
     } catch (e) {
       if (this.backCursor !== "Return") {
         throw e;
       }
       this.backCursor = "Left";
-      await this.control("<Cursor>Left</Cursor>");
+      await this.send("<Cursor>Left</Cursor>");
     }
+    await this.fetch();
   }
   /** Return to the menu root. */
   async home() {
     await this.control("<Cursor>Return to Home</Cursor>");
+  }
+  /**
+   * Send a List_Control command to the active source — WITHOUT reading the window back,
+   * so a caller can tell a device refusal from a failed follow-up read (see {@link back}).
+   *
+   * @param inner the List_Control payload (Direct_Sel, Cursor, Jump_Line)
+   */
+  async send(inner) {
+    if (!this.active) {
+      return;
+    }
+    await this.client.send(this.active.element, `<List_Control>${inner}</List_Control>`);
   }
   /**
    * Send a List_Control command to the active source and read the window back.
@@ -143,7 +156,7 @@ class XmlBrowseDriver {
     if (!this.active) {
       return;
     }
-    await this.client.send(this.active.element, `<List_Control>${inner}</List_Control>`);
+    await this.send(inner);
     await this.fetch();
   }
   /**

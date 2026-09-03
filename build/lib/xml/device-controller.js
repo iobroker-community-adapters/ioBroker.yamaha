@@ -56,7 +56,7 @@ class XmlDeviceController {
   scenesByZone = /* @__PURE__ */ new Map();
   /** Whether the device answers `<Tuner><Play_Info>` (the classic pre-2010 tuner). */
   hasTuner = false;
-  /** The amp state ids this controller actually created (claim-with-proof gate for writes). */
+  /** The amp state ids this controller actually created — the claim-with-proof gate for BOTH ways. */
   createdStates = /* @__PURE__ */ new Set();
   /** Per zone: the Basic_Status fields this device is known to deliver (persisted union). */
   zoneFields = /* @__PURE__ */ new Map();
@@ -127,7 +127,9 @@ class XmlDeviceController {
               id: channelId,
               type: "channel",
               common: {
-                name: import_types.CHANNEL_NAME_KEYS[segments[i - 1]] ? (0, import_i18n.tName)(import_types.CHANNEL_NAME_KEYS[segments[i - 1]]) : segments[i - 1]
+                // Capitalised like the catalog path does it, so the same folder cannot end up
+                // called "sound" here and "Sound" there depending on which transport owns it.
+                name: import_types.CHANNEL_NAME_KEYS[segments[i - 1]] ? (0, import_i18n.tName)(import_types.CHANNEL_NAME_KEYS[segments[i - 1]]) : segments[i - 1].charAt(0).toUpperCase() + segments[i - 1].slice(1)
               }
             });
           }
@@ -296,7 +298,9 @@ class XmlDeviceController {
       role: "level",
       read: true,
       write: true,
-      min: 0,
+      // Slot 1 upwards — `handleTunerWrite` drops a 0, so offering it as the lower bound
+      // invited a write that goes nowhere.
+      min: 1,
       max: 40,
       step: 1
     });
@@ -324,7 +328,7 @@ class XmlDeviceController {
       read: true,
       write: false
     });
-    this.emitTunerInfo(probe);
+    await this.refreshTuner();
   }
   /**
    * Write the tuner states from a Play_Info response.
@@ -501,6 +505,10 @@ class XmlDeviceController {
     if (this.handleTunerWrite(stateId, value)) {
       return;
     }
+    if (!this.createdStates.has(stateId)) {
+      this.deps.log.debug(`${this.deviceId}: ${stateId} was not reported by this device \u2014 write dropped`);
+      return;
+    }
     const command = (0, import_command_mapper.stateToXml)(stateId, value);
     if (command) {
       void this.applyCommand(command);
@@ -528,16 +536,20 @@ class XmlDeviceController {
    * row, the device is judged gone and a drop is reported so the supervisor reconnects.
    */
   async keepalive() {
-    let anyOk = false;
-    for (const zone of this.zones) {
-      if (await this.refreshZone(zone)) {
-        anyOk = true;
+    try {
+      let anyOk = false;
+      for (const zone of this.zones) {
+        if (await this.refreshZone(zone)) {
+          anyOk = true;
+        }
       }
+      if (this.hasTuner) {
+        await this.refreshTuner();
+      }
+      this.dropDetector.record(anyOk);
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: keepalive poll failed: ${(0, import_util.errorMessage)(e)}`);
     }
-    if (this.hasTuner) {
-      await this.refreshTuner();
-    }
-    this.dropDetector.record(anyOk);
   }
   /**
    * Fetch a zone's status and write its amp states with ack.

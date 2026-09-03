@@ -1,3 +1,10 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { catalogToObjects } from "./catalog/build-objects";
+import { YNCA_CATALOG } from "./ynca/catalog";
+import { XML_AMP_CATALOG } from "./xml/catalog";
+import { parseYxcFeatures } from "./yxc/capability";
+import { mapYxcToObjects } from "./yxc/object-mapper";
 import {
   isUsefulDeviceName,
   LABEL_RANK,
@@ -7,6 +14,8 @@ import {
   neverWrittenStateIds,
   nextDeviceLabel,
   parseDevices,
+  RENAMED_CHANNELS,
+  RENAMED_STATE_IDS,
   renamedObjectIds,
   sanitizeId,
   staleObjects,
@@ -734,5 +743,57 @@ describe("neverWrittenStateIds (one-time orphan purge per version)", () => {
         ns,
       ),
     ).toEqual([`${ns}.living.hdmi.out2`]);
+  });
+});
+
+describe("the migration tables never touch a datapoint that is still alive", () => {
+  /**
+   * Every state and channel id the three catalogs can build today. YXC is device-specific,
+   * so its side is the union over all bundled capability captures.
+   *
+   * @returns every id today's object tree can contain
+   */
+  function liveIds(): Set<string> {
+    const ids = new Set<string>();
+    for (const object of catalogToObjects(YNCA_CATALOG.map(entry => entry))) {
+      ids.add(object.id);
+    }
+    for (const entry of XML_AMP_CATALOG) {
+      ids.add(entry.state);
+    }
+    const fixtures = join(__dirname, "yxc", "__fixtures__");
+    for (const file of readdirSync(fixtures).filter(name => name.endsWith(".json"))) {
+      let capabilities;
+      try {
+        capabilities = parseYxcFeatures(JSON.parse(readFileSync(join(fixtures, file), "utf8")));
+      } catch {
+        continue; // not a getFeatures capture
+      }
+      for (const object of mapYxcToObjects(capabilities)) {
+        ids.add(object.id);
+      }
+    }
+    // `renamedObjectIds` matches a zone-stripped form too, so both shapes have to be clean.
+    for (const id of [...ids]) {
+      const stripped = /^multiroom\.zone[234]\.(.*)$/.exec(id);
+      if (stripped) {
+        ids.add(stripped[1]);
+      }
+    }
+    return ids;
+  }
+
+  it("no renamed state id and no renamed channel shadows a live one", () => {
+    // These tables delete on EVERY start. An entry that matches an id the adapter still
+    // builds would wipe that datapoint (or a whole folder) at every single start, recreate
+    // it on connect, and say so in nothing louder than a debug line — the user would just
+    // see datapoints and their history disappearing. The tables grow with every tree rework,
+    // which is exactly when the mistake gets made.
+    const live = liveIds();
+    expect(RENAMED_STATE_IDS.filter(id => live.has(id))).toEqual([]);
+    const shadowed = RENAMED_CHANNELS.filter(channel =>
+      [...live].some(id => id === channel || id.startsWith(`${channel}.`)),
+    );
+    expect(shadowed).toEqual([]);
   });
 });

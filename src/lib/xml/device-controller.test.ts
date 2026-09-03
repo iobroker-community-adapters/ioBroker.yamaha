@@ -266,6 +266,56 @@ describe("XmlDeviceController", () => {
     });
   });
 
+  test("the tuner values are read fresh, never replayed from the remembered probe", async () => {
+    // The existence probe is remembered per device (a model property) — its BODY is a
+    // snapshot of that moment. Seeding from it published the frequency and RDS text of an
+    // earlier session as the CURRENT reading, until the first poll up to a whole interval later.
+    const playInfo = (preset: number, val: number, station: string): string =>
+      `<YAMAHA_AV rsp="GET" RC="0"><Tuner><Play_Info><Preset><Preset_Sel>${preset}</Preset_Sel></Preset>` +
+      `<Tuning><Freq><Val>${val}</Val><Exp>2</Exp><Unit>MHz</Unit></Freq></Tuning>` +
+      `<Meta_Info><Program_Service>${station}</Program_Service></Meta_Info></Play_Info></Tuner></YAMAHA_AV>`;
+
+    const memory = new ProbeMemory();
+    const first = setup({ Main_Zone: { power: true } });
+    (first.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
+    first.client.modelName = "RX-V773";
+    first.client.xmlAnswers["Tuner|<Play_Info>GetParam</Play_Info>"] = playInfo(3, 9810, "Radio X");
+    await first.controller.start();
+
+    // Second connect, same device — but it plays a different station now.
+    const second = setup({ Main_Zone: { power: true } });
+    (second.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
+    second.client.modelName = "RX-V773";
+    second.client.xmlAnswers["Tuner|<Play_Info>GetParam</Play_Info>"] = playInfo(7, 10430, "Radio Y");
+    await second.controller.start();
+    expect(second.acks).toContainEqual({ id: "living.tuner.rdsService", value: "Radio Y" });
+    expect(second.acks).toContainEqual({ id: "living.tuner.frequency", value: 104300 });
+    // Nothing from the earlier session is published as the current reading.
+    expect(second.acks.some(a => a.value === "Radio X")).toBe(false);
+    expect(second.acks.some(a => a.id === "living.tuner.frequency" && a.value === 98100)).toBe(false);
+  });
+
+  test("a write to a datapoint this device never reported is dropped, not sent blind", async () => {
+    // Object creation has been proof-gated since 2.0.1 — only fields the device's own
+    // Basic_Status delivers. The write way was not: a datapoint an adapter version before
+    // that created, and that once carried a value (so no sweep removes it), still put a
+    // blind command on the wire that the receiver answers with a refusal.
+    const s = setup({ Main_Zone: { power: true, volume: -30 } });
+    await s.controller.start();
+    expect(s.objects).toContain("living.volume");
+    expect(s.objects).not.toContain("living.sound.bass");
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.volume", false, -25);
+    await flush();
+    expect(s.client.calls.some(c => c.method === "send")).toBe(true);
+
+    // …and the one the device never reported goes nowhere.
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.sound.bass", false, 3);
+    await flush();
+    expect(s.client.calls).toEqual([]);
+  });
+
   test("a device without <Tuner> gets no tuner states", async () => {
     const s = setup({ Main_Zone: { power: true } });
     await s.controller.start();

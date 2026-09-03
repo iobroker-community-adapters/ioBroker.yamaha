@@ -28,6 +28,7 @@ function capitalize(segment) {
   return segment.charAt(0).toUpperCase() + segment.slice(1);
 }
 function catalogToObjects(entries) {
+  var _a;
   const objects = [];
   const channels = /* @__PURE__ */ new Set();
   for (const entry of entries) {
@@ -47,7 +48,11 @@ function catalogToObjects(entries) {
       }
     }
     const common = (0, import_value_coerce.specToCommon)(entry.spec, { write: entry.write, role: entry.role });
-    objects.push({ id: entry.id, type: "state", common: { name: (0, import_i18n.tName)(entry.nameKey), ...common } });
+    objects.push({
+      id: entry.id,
+      type: "state",
+      common: { name: (0, import_i18n.tName)(entry.nameKey, ...(_a = entry.nameArgs) != null ? _a : []), ...common }
+    });
   }
   return objects;
 }

@@ -42,7 +42,11 @@ export function catalogToObjects(entries: CatalogEntry[]): ObjectDef[] {
       }
     }
     const common = specToCommon(entry.spec, { write: entry.write, role: entry.role });
-    objects.push({ id: entry.id, type: "state", common: { name: tName(entry.nameKey), ...common } });
+    objects.push({
+      id: entry.id,
+      type: "state",
+      common: { name: tName(entry.nameKey, ...(entry.nameArgs ?? [])), ...common },
+    });
   }
   return objects;
 }

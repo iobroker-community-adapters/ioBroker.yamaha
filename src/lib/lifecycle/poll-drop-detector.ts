@@ -17,6 +17,8 @@ export class PollDropDetector {
   private failures = 0;
   private dropped = false;
   private handler: ((reason?: Error) => void) | undefined;
+  /** A drop that fired before onDrop was registered — delivered once it is. */
+  private pending: Error | undefined;
 
   /**
    * @param maxFailures consecutive failed polls before the device counts as gone
@@ -30,6 +32,11 @@ export class PollDropDetector {
    */
   public onDrop(cb: (reason?: Error) => void): void {
     this.handler = cb;
+    if (this.pending) {
+      const reason = this.pending;
+      this.pending = undefined;
+      cb(reason);
+    }
   }
 
   /**
@@ -53,6 +60,15 @@ export class PollDropDetector {
       return;
     }
     this.dropped = true;
-    this.handler?.(new Error(`${this.maxFailures} polls failed`));
+    const reason = new Error(`${this.maxFailures} polls failed`);
+    if (this.handler) {
+      this.handler(reason);
+      return;
+    }
+    // Latched, not lost: the handler is registered by the multi-transport handle only after
+    // every transport connected, so a drop judged before that would have vanished — and
+    // because `dropped` is set, it would never be reported again either. The YNCA client and
+    // the handle both latch for exactly this; the polled transports were the odd ones out.
+    this.pending = reason;
   }
 }

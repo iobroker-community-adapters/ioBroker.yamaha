@@ -22,7 +22,12 @@ vi.mock("node:http", () => ({
         return req;
       },
       write: (b: string) => entry.written.push(b),
-      end: () => {
+      // node's `end(body)` writes the body and finishes in one call — the client uses that
+      // form since the request carries a Content-Length header.
+      end: (b?: string | Buffer) => {
+        if (b !== undefined) {
+          entry.written.push(String(b));
+        }
         entry.ended = true;
         queueMicrotask(() => {
           if (httpMock.mode === "error") {
@@ -129,6 +134,18 @@ describe("XmlClient default HTTP poster", () => {
     });
     expect(req.written[0]).toContain('<YAMAHA_AV cmd="GET">');
     expect(req.ended).toBe(true);
+  });
+
+  test("sends the body with a Content-Length header, never chunked", async () => {
+    // The 2000s-era firmware this transport exists for cannot be relied on to read a
+    // `Transfer-Encoding: chunked` request body — and node uses exactly that when no
+    // length header is set. Every reference implementation (the predecessor adapter via
+    // `request`, rxv via python-requests, the openHAB binding) sends a length.
+    await new XmlClient("192.168.1.10").getStatus("Main_Zone");
+    const req = httpMock.requests[0];
+    const headers = req.options.headers as Record<string, unknown>;
+    expect(headers["Content-Length"]).toBe(Buffer.byteLength(req.written[0], "utf8"));
+    expect(String(headers["Content-Type"])).toContain("text/xml");
   });
 
   test("fails fast instead of hanging when the receiver does not answer", async () => {

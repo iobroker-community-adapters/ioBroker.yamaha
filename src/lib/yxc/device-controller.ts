@@ -199,8 +199,14 @@ export class YxcDeviceController implements ConnectionHandle {
     // Capabilities and name are constant while the device runs, so on a reconnect —
     // and, persisted, on a restart — they come from the per-device memory instead of
     // costing more round-trips on a connection that is being (re-)established anyway.
-    const capabilities = await this.remember("features", async () =>
-      parseYxcFeatures(await this.deps.client.getFeatures()),
+    // A capability set with no zone at all is not a MusicCast device answering — it is a
+    // truncated or malformed answer. Returned to this run, but NOT remembered: remembering
+    // it would freeze the device's shape for good (every later connect reads the memory),
+    // and it would also disarm the liveness check below, which needs the zones.
+    const capabilities = await this.remember(
+      "features",
+      async () => parseYxcFeatures(await this.deps.client.getFeatures()),
+      features => features.zones.length > 0,
     );
     const objects = mapYxcToObjects(capabilities);
     if (objects.length === 0) {
@@ -248,7 +254,11 @@ export class YxcDeviceController implements ConnectionHandle {
     // MusicCast ✓" out of memory while YNCA and XML failed honestly, and info.connection stayed
     // true for a device that was not there (krobi's RX-V6A, 2026-08-26). A device that answers
     // no zone at all is gone — a standby device still answers, it just reports power=standby.
-    if (this.zones.length > 0 && !zonesAnswered.some(Boolean)) {
+    // No `zones.length > 0` escape any more: a device that declares NO zone cannot prove it
+    // is alive either, and the whole point of this check is that nothing may report "ready"
+    // out of memory. Everything before it — capabilities, model, name — can come from the
+    // persisted memory without a single request reaching the device.
+    if (!zonesAnswered.some(Boolean)) {
       this.deps.log.debug(`${this.deviceId}: no zone answered getStatus — device unreachable (YXC)`);
       return false;
     }
@@ -288,10 +298,11 @@ export class YxcDeviceController implements ConnectionHandle {
    *
    * @param key what is being remembered
    * @param probe the request to run when nothing is remembered yet
+   * @param isUsable optional plausibility check — an answer it rejects is used but not remembered
    * @returns the remembered or freshly fetched value
    */
-  private remember<T>(key: string, probe: () => Promise<T>): Promise<T> {
-    return this.deps.probeMemory ? this.deps.probeMemory.once(key, probe) : probe();
+  private remember<T>(key: string, probe: () => Promise<T>, isUsable?: (value: T) => boolean): Promise<T> {
+    return this.deps.probeMemory ? this.deps.probeMemory.once(key, probe, isUsable) : probe();
   }
 
   /**
@@ -362,8 +373,18 @@ export class YxcDeviceController implements ConnectionHandle {
     // have come over XML or YNCA while MusicCast owns the recall.
     const sceneMatch = /^(?:multiroom\.(zone[234])\.)?scene\.recall$/.exec(stateId);
     if (sceneMatch && typeof value === "string" && !/^\d+$/.test(value.trim())) {
-      const resolved = resolveSceneNumber(value, this.deps.probeMemory, sceneMatch[1] ?? "main");
+      const zoneKey = sceneMatch[1] ?? "main";
+      const resolved = resolveSceneNumber(value, this.deps.probeMemory, zoneKey);
       if (resolved === undefined) {
+        // Same rule as the YNCA side: a write that goes nowhere leaves a trace.
+        this.deps.log.debug(
+          `${this.deviceId}: scene "${value}" is unknown for ${zoneKey} — write dropped ` +
+            `(known: ${
+              knownScenes(this.deps.probeMemory, zoneKey)
+                .map(scene => scene.title)
+                .join(", ") || "none yet"
+            })`,
+        );
         return;
       }
       value = resolved;
@@ -465,25 +486,33 @@ export class YxcDeviceController implements ConnectionHandle {
    * info.connection and reconnect.
    */
   private async keepalive(): Promise<void> {
-    // Zones in parallel: their writes are disjoint and one zone stuck in its timeout must
-    // not delay the others (a four-zone receiver used to poll them strictly in series).
-    const zones = this.zones.length > 0 ? this.zones : ["main"];
-    const anyOk = (await Promise.all(zones.map(zone => this.refreshZone(zone)))).some(Boolean);
-    // Every request above already carried the subscription headers, so the push
-    // registration is renewed either way. What still has to be polled depends on whether
-    // push works: with push the device announces media, list and group changes itself, so
-    // the full sweep only runs occasionally as a safety net (UDP can drop a packet);
-    // without push it is the only way anything ever updates.
-    this.keepaliveRuns++;
-    const fullSweep = !this.deps.pushActive?.() || this.keepaliveRuns % PUSH_MODE_FULL_SWEEP_EVERY === 0;
-    if (fullSweep) {
-      await this.refreshMedia();
-      await this.refreshLists();
-      if (this.hasDistribution) {
-        await this.refreshDistribution();
+    // The keepalive is an async handler on an adapter timer: a rejection here is an
+    // UNHANDLED rejection, and js-controller turns those into an adapter stop. Every step
+    // below catches for itself today, so the guard is what makes that a guarantee instead
+    // of something the next change has to remember.
+    try {
+      // Zones in parallel: their writes are disjoint and one zone stuck in its timeout must
+      // not delay the others (a four-zone receiver used to poll them strictly in series).
+      const zones = this.zones.length > 0 ? this.zones : ["main"];
+      const anyOk = (await Promise.all(zones.map(zone => this.refreshZone(zone)))).some(Boolean);
+      // Every request above already carried the subscription headers, so the push
+      // registration is renewed either way. What still has to be polled depends on whether
+      // push works: with push the device announces media, list and group changes itself, so
+      // the full sweep only runs occasionally as a safety net (UDP can drop a packet);
+      // without push it is the only way anything ever updates.
+      this.keepaliveRuns++;
+      const fullSweep = !this.deps.pushActive?.() || this.keepaliveRuns % PUSH_MODE_FULL_SWEEP_EVERY === 0;
+      if (fullSweep) {
+        await this.refreshMedia();
+        await this.refreshLists();
+        if (this.hasDistribution) {
+          await this.refreshDistribution();
+        }
       }
+      this.dropDetector.record(anyOk);
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: keepalive poll failed: ${errorMessage(e)}`);
     }
-    this.dropDetector.record(anyOk);
   }
 
   /**
@@ -841,7 +870,10 @@ export class YxcDeviceController implements ConnectionHandle {
       const updates = parseYxcStatus(status, zone);
       for (const update of updates) {
         this.emit(update.id, update.value);
-        if (update.id.endsWith("input") && typeof update.value === "string") {
+        // The EXACT id, not a suffix: this value decides which source a zone's player block
+        // and its transport buttons follow. A future status field ending in "input" would
+        // have bent that routing silently.
+        if (update.id === `${zonePrefix(zone)}input` && typeof update.value === "string") {
           const previous = this.lastZoneInput.get(zone);
           this.lastZoneInput.set(zone, update.value);
           if (previous !== update.value) {

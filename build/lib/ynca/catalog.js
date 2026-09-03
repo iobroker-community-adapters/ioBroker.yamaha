@@ -32,6 +32,7 @@ __export(catalog_exports, {
 module.exports = __toCommonJS(catalog_exports);
 var import_build_objects = require("../catalog/build-objects");
 var import_value_coerce = require("../catalog/value-coerce");
+var import_play_time = require("../catalog/play-time");
 function readFuncOf(entry) {
   var _a;
   return (_a = entry.readFunc) != null ? _a : entry.func;
@@ -277,7 +278,10 @@ const AMP_FUNCS = [
     nameKey: "Tone control mode",
     spec: { kind: "text" },
     write: false,
-    role: "text"
+    // `state`, not `text`: it is a mode out of a fixed set, and MusicCast even declares the
+    // list for it. Both transports feed this one id, so the role must not depend on which of
+    // them happens to own it.
+    role: "state"
   },
   // Dialogue level / DTS dialogue control / contents display / the AirPlay volume
   // interlock: reported by the MusicCast generation (RX-V6A sweep), write structure
@@ -832,6 +836,7 @@ const INPUT_NAME_KEYS = [
   "usb",
   "vaux"
 ];
+const INPUT_NAME_LABELS = { vaux: "V-AUX", multich: "MULTI CH" };
 const DAB_FUNCS = [
   // v2.0.0 tuner unification: the DAB subunit's FM half IS the same tuner every
   // non-DAB device carries flat under tuner.* — so band, preset, frequency, search
@@ -950,7 +955,8 @@ const DAB_FUNCS = [
     nameKey: "Audio mode",
     spec: { kind: "text" },
     write: false,
-    role: "text"
+    // `state` like the MusicCast side — see sound.toneMode above.
+    role: "state"
   },
   {
     func: "DABBITRATE",
@@ -1058,21 +1064,52 @@ const PLAYER_FUNCS = [
   },
   { func: "STATION", state: "station", nameKey: "Station", spec: { kind: "text" }, write: false, role: "text" },
   { func: "CHNAME", state: "channelName", nameKey: "Channel name", spec: { kind: "text" }, write: false, role: "text" },
+  // The times come off the YNCA wire as text ("1:23") and off MusicCast as seconds. Both
+  // forms are published on every device, from the one value: the NUMBER fills the type
+  // detector's media-player slot (it accepts nothing else), the text is what a
+  // visualisation shows. Without the number a YNCA-only receiver had no time at all in
+  // the player, and the datapoint's very type depended on which protocol answered.
   {
     func: "TOTALTIME",
     state: "totalTime",
     nameKey: "Total time",
+    spec: { kind: "number", unit: "s", decimals: 0 },
+    write: false,
+    role: "media.duration",
+    wireDecode: (wire) => {
+      var _a;
+      return String((_a = (0, import_play_time.parsePlayTime)(wire)) != null ? _a : "");
+    }
+  },
+  {
+    func: "TOTALTIME",
+    state: "totalTimeText",
+    nameKey: "Total time (readable)",
     spec: { kind: "text" },
     write: false,
-    role: "media.duration.text"
+    role: "media.duration.text",
+    derived: true
   },
   {
     func: "ELAPSEDTIME",
     state: "elapsedTime",
     nameKey: "Elapsed time",
+    spec: { kind: "number", unit: "s", decimals: 0 },
+    write: false,
+    role: "media.elapsed",
+    wireDecode: (wire) => {
+      var _a;
+      return String((_a = (0, import_play_time.parsePlayTime)(wire)) != null ? _a : "");
+    }
+  },
+  {
+    func: "ELAPSEDTIME",
+    state: "elapsedTimeText",
+    nameKey: "Elapsed time (readable)",
     spec: { kind: "text" },
     write: false,
-    role: "media.elapsed.text"
+    role: "media.elapsed.text",
+    derived: true
   },
   {
     func: "REPEAT",
@@ -1138,6 +1175,7 @@ function fnEntries(fns, subunit, prefix = "") {
   }));
 }
 function buildYncaCatalog() {
+  var _a;
   const entries = [];
   for (const zone of ZONES) {
     entries.push(...fnEntries(AMP_FUNCS, zone.subunit, zone.prefix));
@@ -1164,7 +1202,11 @@ function buildYncaCatalog() {
     const upper = key.toUpperCase();
     entries.push({
       id: `advanced.inputNames.${key}`,
-      nameKey: "Input names",
+      // Each of the 23 carries the input it names — they all read "Input names" before,
+      // the folder's own label, so the object tree showed the folder and 23 children with
+      // one and the same text and only the id told them apart.
+      nameKey: "Input name (%s)",
+      nameArgs: [(_a = INPUT_NAME_LABELS[key]) != null ? _a : upper],
       spec: { kind: "text" },
       write: false,
       role: "text",
@@ -1186,7 +1228,9 @@ function buildYncaCatalog() {
         readFunc: fn.readFunc,
         readAliases: fn.readAliases,
         wireEncode: fn.wireEncode,
-        writeOnly: fn.writeOnly
+        wireDecode: fn.wireDecode,
+        writeOnly: fn.writeOnly,
+        derived: fn.derived
       });
     }
     if (PRESET_SUBUNITS.includes(source.subunit)) {
@@ -1324,7 +1368,7 @@ function sweepGets(entries) {
 }
 function funcToEntry(entries) {
   return new Map(
-    entries.filter((entry) => !entry.writeOnly).flatMap((entry) => readFuncsOf(entry).map((func) => [`${entry.subunit}:${func}`, entry]))
+    entries.filter((entry) => !entry.writeOnly && !entry.derived).flatMap((entry) => readFuncsOf(entry).map((func) => [`${entry.subunit}:${func}`, entry]))
   );
 }
 function idToEntry(entries) {
@@ -1376,7 +1420,7 @@ function yncaCommand(stateId, value, map) {
   if (!(entry == null ? void 0 : entry.write)) {
     return void 0;
   }
-  if (!(0, import_value_coerce.isWritableValue)(value, entry.spec.kind === "number")) {
+  if (!(0, import_value_coerce.isWritableValue)(value, entry.spec.kind === "number" || entry.spec.kind === "code")) {
     return void 0;
   }
   const wire = entry.wireEncode ? entry.wireEncode(value) : (0, import_value_coerce.encode)(entry.spec, value);

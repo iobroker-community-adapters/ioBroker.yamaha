@@ -320,6 +320,25 @@ describe("YncaClient", () => {
     }
   });
 
+  test("starting the keepalive twice leaves exactly one timer, not one that cannot be cancelled", () => {
+    // The second call used to overwrite the handle while the first timer kept
+    // re-scheduling itself — a 30 s poll nobody could stop for the rest of the process.
+    vi.useFakeTimers();
+    try {
+      const fx = fixtureFactory();
+      const client = new YncaClient("1.2.3.4", testTimers, testGate(), fx.factory);
+      void client.connect();
+      fx.sockets[0].emitConnect();
+      client.startKeepalive();
+      client.startKeepalive();
+      expect(vi.getTimerCount()).toBe(1);
+      client.close();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("readCapabilities throws on a mid-sweep drop instead of returning a partial report", async () => {
     vi.useFakeTimers();
     try {

@@ -87,7 +87,7 @@ export class XmlDeviceController implements ConnectionHandle {
   private readonly scenesByZone = new Map<string, XmlScene[]>();
   /** Whether the device answers `<Tuner><Play_Info>` (the classic pre-2010 tuner). */
   private hasTuner = false;
-  /** The amp state ids this controller actually created (claim-with-proof gate for writes). */
+  /** The amp state ids this controller actually created — the claim-with-proof gate for BOTH ways. */
   private readonly createdStates = new Set<string>();
   /** Per zone: the Basic_Status fields this device is known to deliver (persisted union). */
   private readonly zoneFields = new Map<string, Set<string>>();
@@ -191,7 +191,11 @@ export class XmlDeviceController implements ConnectionHandle {
               id: channelId,
               type: "channel",
               common: {
-                name: CHANNEL_NAME_KEYS[segments[i - 1]] ? tName(CHANNEL_NAME_KEYS[segments[i - 1]]) : segments[i - 1],
+                // Capitalised like the catalog path does it, so the same folder cannot end up
+                // called "sound" here and "Sound" there depending on which transport owns it.
+                name: CHANNEL_NAME_KEYS[segments[i - 1]]
+                  ? tName(CHANNEL_NAME_KEYS[segments[i - 1]])
+                  : segments[i - 1].charAt(0).toUpperCase() + segments[i - 1].slice(1),
               },
             });
           }
@@ -372,7 +376,9 @@ export class XmlDeviceController implements ConnectionHandle {
       role: "level",
       read: true,
       write: true,
-      min: 0,
+      // Slot 1 upwards — `handleTunerWrite` drops a 0, so offering it as the lower bound
+      // invited a write that goes nowhere.
+      min: 1,
       max: 40,
       step: 1,
     });
@@ -400,7 +406,13 @@ export class XmlDeviceController implements ConnectionHandle {
       read: true,
       write: false,
     });
-    this.emitTunerInfo(probe);
+    // NOT `emitTunerInfo(probe)`: the probe body comes out of the PERSISTED memory on every
+    // reconnect and restart, so seeding from it published a snapshot of an earlier session
+    // — frequency, RDS station and text, "tuned" — as the CURRENT reading, until the first
+    // poll up to a whole interval later. The existence verdict is a model property and stays
+    // remembered; the values are read fresh. (Same class as the menu's resting shape, which
+    // showed rows six days older than the connection until it was fixed.)
+    await this.refreshTuner();
   }
 
   /**
@@ -590,6 +602,17 @@ export class XmlDeviceController implements ConnectionHandle {
     if (this.handleTunerWrite(stateId, value)) {
       return;
     }
+    // Claim with proof, on the WRITE way too. Object creation has been proof-gated since
+    // 2.0.1 (only fields this device's Basic_Status really delivers), but the write path was
+    // not — the comment on `createdStates` claimed otherwise while it guarded the read side
+    // alone. XML was the last transport without it: YNCA writes only through its per-device
+    // write map, MusicCast only through device-declared endpoints. It bites on a datapoint an
+    // adapter version before 2.0.1 created and that once carried a value, so no sweep removes
+    // it: writing it put a blind command on the wire that the device answers with a refusal.
+    if (!this.createdStates.has(stateId)) {
+      this.deps.log.debug(`${this.deviceId}: ${stateId} was not reported by this device — write dropped`);
+      return;
+    }
     const command = stateToXml(stateId, value);
     if (command) {
       void this.applyCommand(command);
@@ -621,16 +644,24 @@ export class XmlDeviceController implements ConnectionHandle {
    * row, the device is judged gone and a drop is reported so the supervisor reconnects.
    */
   private async keepalive(): Promise<void> {
-    let anyOk = false;
-    for (const zone of this.zones) {
-      if (await this.refreshZone(zone)) {
-        anyOk = true;
+    // The keepalive is an async handler on an adapter timer: a rejection here is an
+    // UNHANDLED rejection, and js-controller turns those into an adapter stop. Every step
+    // below catches for itself today, so the guard is what makes that a guarantee instead
+    // of something the next change has to remember.
+    try {
+      let anyOk = false;
+      for (const zone of this.zones) {
+        if (await this.refreshZone(zone)) {
+          anyOk = true;
+        }
       }
+      if (this.hasTuner) {
+        await this.refreshTuner();
+      }
+      this.dropDetector.record(anyOk);
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: keepalive poll failed: ${errorMessage(e)}`);
     }
-    if (this.hasTuner) {
-      await this.refreshTuner();
-    }
-    this.dropDetector.record(anyOk);
   }
 
   /**

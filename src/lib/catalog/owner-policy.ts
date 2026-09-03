@@ -117,31 +117,3 @@ export function pickOwner(key: string, candidates: readonly Transport[]): Transp
   const owner = preference.find(t => candidates.includes(t)) ?? MODERNITY.find(t => candidates.includes(t));
   return owner ?? candidates[0];
 }
-
-/**
- * Build the owner map for a device: given which capability keys each present transport offers,
- * resolve every key to exactly one owning transport (via {@link pickOwner}). This is the
- * dedup decision behind the unified object tree — each state is written by one transport only.
- *
- * @param offered the capability keys each present transport offers (absent transport = none)
- * @returns a map from capability key to its owning transport
- */
-export function resolveOwnership(offered: Partial<Record<Transport, readonly string[]>>): Map<string, Transport> {
-  const candidates = new Map<string, Transport[]>();
-  // Iterate in modernity order so the candidate lists are deterministic.
-  for (const transport of MODERNITY) {
-    for (const key of offered[transport] ?? []) {
-      const list = candidates.get(key);
-      if (list) {
-        list.push(transport);
-      } else {
-        candidates.set(key, [transport]);
-      }
-    }
-  }
-  const owners = new Map<string, Transport>();
-  for (const [key, cands] of candidates) {
-    owners.set(key, pickOwner(key, cands));
-  }
-  return owners;
-}

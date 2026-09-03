@@ -52,6 +52,8 @@ export class YncaBrowseDriver implements BrowseDriver {
   private readonly kinds = new Map<number, BrowseRowKind>();
   /** True while a settle delay is pending, so one burst renders once. */
   private renderPending = false;
+  /** True between asking for a window and the first field of the answer — see {@link refresh}. */
+  private awaitingWindow = false;
   private closed = false;
 
   /**
@@ -134,6 +136,13 @@ export class YncaBrowseDriver implements BrowseDriver {
   /** Re-read the current window (`LISTINFO=?` answers with the full field burst). */
   private refresh(): void {
     if (this.active) {
+      // Cleared when the ANSWER starts arriving, not here: clearing eagerly would let a
+      // render that is already pending paint eight empty lines before the new window shows
+      // up. Every reference device answers with all eight lines (empty ones included), so
+      // today the assembly is fully overwritten anyway — this makes it independent of the
+      // firmware, for one that sends only the filled lines and would otherwise show the
+      // tail of the PREVIOUS window under a shorter menu.
+      this.awaitingWindow = true;
       this.client.get(this.active.subunit, "LISTINFO");
     }
   }
@@ -151,6 +160,15 @@ export class YncaBrowseDriver implements BrowseDriver {
   public handleMessage(message: { subunit: string; func: string; value: string }): void {
     if (!this.active || message.subunit !== this.active.subunit) {
       return;
+    }
+    const isWindowField =
+      /^LINE[1-8](TXT|ATRIB)$/.test(message.func) ||
+      ["LISTLAYERNAME", "LISTLAYER", "MAXLINE", "CURRLINE"].includes(message.func);
+    if (isWindowField && this.awaitingWindow) {
+      // The first field of the answer we asked for: everything still standing belongs to the
+      // window before it.
+      this.awaitingWindow = false;
+      this.resetAssembly();
     }
     const line = /^LINE([1-8])(TXT|ATRIB)$/.exec(message.func);
     if (line) {
@@ -188,8 +206,9 @@ export class YncaBrowseDriver implements BrowseDriver {
     this.refresh();
   }
 
-  /** Clear the assembly when a new source's menu replaces the old one. */
+  /** Clear the window assembly — on a source switch, and when a freshly asked window starts arriving. */
   private resetAssembly(): void {
+    this.awaitingWindow = false;
     this.menuName = "";
     this.layer = 0;
     this.totalItems = 0;

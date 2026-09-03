@@ -9,6 +9,7 @@ import {
   yncaStateUpdate,
 } from "./catalog";
 import { CHANNEL_NAME_KEYS } from "../catalog/types";
+import { catalogToObjects } from "../catalog/build-objects";
 import type { EnumSpec } from "../catalog/value-coerce";
 import type { YncaCapabilities } from "./capability";
 import { capabilitiesFromLines as parseCapabilities } from "./__fixtures__/capabilities-from-lines";
@@ -186,6 +187,62 @@ describe("YNCA catalog", () => {
       id: "player.playback",
       value: 0,
     });
+  });
+
+  test("the playback times are seconds, with the readable form beside them", () => {
+    // The wire carries "1:23"; the datapoint the media player binds to needs seconds, and
+    // the readable form is a second datapoint fed from the same answer. Before this, YNCA
+    // published only the text — so the player had no time at all on a YNCA-only receiver,
+    // and the datapoint's TYPE depended on which protocol answered.
+    const cat = buildYncaCatalog().filter(e => e.subunit === "NETRADIO");
+    const elapsed = cat.find(e => e.id === "player.elapsedTime");
+    expect(elapsed).toMatchObject({ role: "media.elapsed", write: false });
+    expect(elapsed?.spec).toMatchObject({ kind: "number", unit: "s" });
+    const text = cat.find(e => e.id === "player.elapsedTimeText");
+    expect(text).toMatchObject({ role: "media.elapsed.text", derived: true });
+
+    const map = funcToEntry(cat);
+    // The derived twin shares the wire function, so it must NOT displace its source in the
+    // device→state map (that map is keyed SUBUNIT:FUNC — last one in wins).
+    expect(map.get("NETRADIO:ELAPSEDTIME")?.id).toBe("player.elapsedTime");
+    expect(yncaStateUpdate({ subunit: "NETRADIO", func: "ELAPSEDTIME", value: "1:23" }, map)).toEqual({
+      id: "player.elapsedTime",
+      value: 83,
+    });
+    expect(yncaStateUpdate({ subunit: "NETRADIO", func: "TOTALTIME", value: "1:02:03" }, map)).toEqual({
+      id: "player.totalTime",
+      value: 3723,
+    });
+    // A stopped source answers with a placeholder — that is no time, so no value is written.
+    expect(yncaStateUpdate({ subunit: "NETRADIO", func: "ELAPSEDTIME", value: "--:--" }, map)).toBeUndefined();
+    expect(yncaStateUpdate({ subunit: "NETRADIO", func: "ELAPSEDTIME", value: "" }, map)).toBeUndefined();
+  });
+
+  test("each assignable input name carries the input it names", () => {
+    // All 23 used to read "Input names" — the folder's own label — so the object tree showed
+    // a folder and 23 children with one and the same text.
+    const named = buildYncaCatalog().filter(e => e.id.startsWith("advanced.inputNames."));
+    expect(named).toHaveLength(23);
+    const objects = catalogToObjects(named).filter(o => o.type === "state");
+    const english = objects.map(o => (o.common.name as Record<string, string>).en);
+    expect(new Set(english).size).toBe(23);
+    expect(english).toContain("Input name (HDMI1)");
+    // The two that are not simply the upper-cased key follow the device's own spelling.
+    expect(english).toContain("Input name (V-AUX)");
+    expect(english).toContain("Input name (MULTI CH)");
+  });
+
+  test("a coded write accepts the number as text, and still refuses junk", () => {
+    // ioBroker lets anything write a state: a VIS widget or a script may send "0" for a
+    // numeric coded state. That has to reach the device as its command word, while a
+    // null/empty/non-numeric write stays dropped.
+    const map = idToEntry(buildYncaCatalog().filter(e => e.subunit === "NETRADIO"));
+    expect(yncaCommand("player.playback", 0, map)).toMatchObject({ func: "PLAYBACK", value: "Play" });
+    expect(yncaCommand("player.playback", "0", map)).toMatchObject({ func: "PLAYBACK", value: "Play" });
+    expect(yncaCommand("player.repeat", "2", map)).toMatchObject({ func: "REPEAT", value: "All" });
+    expect(yncaCommand("player.playback", null, map)).toBeUndefined();
+    expect(yncaCommand("player.playback", "", map)).toBeUndefined();
+    expect(yncaCommand("player.playback", "abc", map)).toBeUndefined();
   });
 
   test("track skip is exposed as next/prev buttons that put Skip Fwd/Rev on PLAYBACK", () => {

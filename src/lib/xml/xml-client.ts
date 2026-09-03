@@ -23,13 +23,26 @@ export type XmlPoster = (ip: string, body: string) => Promise<string>;
  * Default poster backed by node:http — POSTs to the device's control endpoint on port 80.
  *
  * @param ip the device IP
- * @param body the XML request body
+ * @param payload the XML request body
  * @returns the response body
  */
-function defaultPoster(ip: string, body: string): Promise<string> {
+function defaultPoster(ip: string, payload: string): Promise<string> {
   return new Promise((resolve, reject) => {
+    // Content-Length, not chunked: without a length header node streams the body with
+    // `Transfer-Encoding: chunked`, and the 2000s-era firmware this transport exists for
+    // is not reliably able to read that. EVERY reference for this path sends a length —
+    // the predecessor adapter through the `request` library, rxv through python-requests,
+    // the openHAB binding through its HTTP client. We were the only one that did not.
+    const body = Buffer.from(payload, "utf8");
     const req = request(
-      { host: ip, port: 80, path: CONTROL_PATH, method: "POST", timeout: REQUEST_TIMEOUT_MS },
+      {
+        host: ip,
+        port: 80,
+        path: CONTROL_PATH,
+        method: "POST",
+        timeout: REQUEST_TIMEOUT_MS,
+        headers: { "Content-Type": "text/xml; charset=utf-8", "Content-Length": body.length },
+      },
       res => {
         let data = "";
         let bytes = 0;
@@ -60,8 +73,7 @@ function defaultPoster(ip: string, body: string): Promise<string> {
     );
     req.on("error", reject);
     req.on("timeout", () => req.destroy(new Error("XML request timeout")));
-    req.write(body);
-    req.end();
+    req.end(body);
   });
 }
 

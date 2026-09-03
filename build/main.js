@@ -639,50 +639,37 @@ class Yamaha extends utils.Adapter {
    * merges, so a recording setting or anything else a user attached survives.
    */
   async ensureInstanceInfoObjects() {
-    const objects = [
-      ["info", { id: "info", type: "channel", common: { name: (0, import_i18n.tName)("Information") } }],
-      [
-        "info.connection",
-        {
-          id: "info.connection",
-          type: "state",
-          common: {
-            name: (0, import_i18n.tName)("Device or service connected"),
-            type: "boolean",
-            role: "indicator.connected",
-            read: true,
-            write: false
-          }
-        }
-      ],
-      [
-        "info.devicesTotal",
-        {
-          id: "info.devicesTotal",
-          type: "state",
-          common: { name: (0, import_i18n.tName)("Devices total"), type: "number", role: "value", read: true, write: false }
-        }
-      ],
-      [
-        "info.devicesOnline",
-        {
-          id: "info.devicesOnline",
-          type: "state",
-          common: { name: (0, import_i18n.tName)("Devices online"), type: "number", role: "value", read: true, write: false }
-        }
-      ],
-      [
-        "info.devicesAllOnline",
-        {
-          id: "info.devicesAllOnline",
-          type: "state",
-          common: { name: (0, import_i18n.tName)("All devices online"), type: "boolean", role: "indicator", read: true, write: false }
-        }
-      ]
-    ];
-    for (const [id, def] of objects) {
-      await this.extendObject(id, { type: def.type, common: def.common, native: {} });
-    }
+    await this.extendObject("info", {
+      type: "channel",
+      common: { name: (0, import_i18n.tName)("Information") },
+      native: {}
+    });
+    await this.extendObject("info.connection", {
+      type: "state",
+      common: {
+        name: (0, import_i18n.tName)("Device or service connected"),
+        type: "boolean",
+        role: "indicator.connected",
+        read: true,
+        write: false
+      },
+      native: {}
+    });
+    await this.extendObject("info.devicesTotal", {
+      type: "state",
+      common: { name: (0, import_i18n.tName)("Devices total"), type: "number", role: "value", read: true, write: false },
+      native: {}
+    });
+    await this.extendObject("info.devicesOnline", {
+      type: "state",
+      common: { name: (0, import_i18n.tName)("Devices online"), type: "number", role: "value", read: true, write: false },
+      native: {}
+    });
+    await this.extendObject("info.devicesAllOnline", {
+      type: "state",
+      common: { name: (0, import_i18n.tName)("All devices online"), type: "boolean", role: "indicator", read: true, write: false },
+      native: {}
+    });
   }
   /**
    * Create AND refresh a device's header objects (the device node, its info channel and a

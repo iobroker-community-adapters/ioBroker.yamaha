@@ -75,6 +75,11 @@ describe("specToCommon", () => {
     expect(decode(spec, "Skip Fwd")).toBeUndefined();
     expect(encode(spec, 0)).toBe("Play");
     expect(encode(spec, 2)).toBe("Pause");
+    // A coded state IS a number state, but a visualisation or a script may write the
+    // number as text. Before, the strict lookup found nothing and the bare digit went
+    // on the wire instead of the command word.
+    expect(encode(spec, "0")).toBe("Play");
+    expect(encode(spec, "2")).toBe("Pause");
   });
 
   test("an explicit role override wins", () => {

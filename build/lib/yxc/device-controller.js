@@ -121,7 +121,8 @@ class YxcDeviceController {
     }
     const capabilities = await this.remember(
       "features",
-      async () => (0, import_capability.parseYxcFeatures)(await this.deps.client.getFeatures())
+      async () => (0, import_capability.parseYxcFeatures)(await this.deps.client.getFeatures()),
+      (features) => features.zones.length > 0
     );
     const objects = (0, import_object_mapper.mapYxcToObjects)(capabilities);
     if (objects.length === 0) {
@@ -151,7 +152,7 @@ class YxcDeviceController {
     }
     this.zones = capabilities.zones.map((zone) => zone.id);
     const zonesAnswered = await Promise.all(this.zones.map((zone) => this.refreshZone(zone)));
-    if (this.zones.length > 0 && !zonesAnswered.some(Boolean)) {
+    if (!zonesAnswered.some(Boolean)) {
       this.deps.log.debug(`${this.deviceId}: no zone answered getStatus \u2014 device unreachable (YXC)`);
       return false;
     }
@@ -185,10 +186,11 @@ class YxcDeviceController {
    *
    * @param key what is being remembered
    * @param probe the request to run when nothing is remembered yet
+   * @param isUsable optional plausibility check — an answer it rejects is used but not remembered
    * @returns the remembered or freshly fetched value
    */
-  remember(key, probe) {
-    return this.deps.probeMemory ? this.deps.probeMemory.once(key, probe) : probe();
+  remember(key, probe, isUsable) {
+    return this.deps.probeMemory ? this.deps.probeMemory.once(key, probe, isUsable) : probe();
   }
   /**
    * The zone a recall should be routed to: recalling a favourite does not just start it, it
@@ -255,8 +257,12 @@ class YxcDeviceController {
     }
     const sceneMatch = /^(?:multiroom\.(zone[234])\.)?scene\.recall$/.exec(stateId);
     if (sceneMatch && typeof value === "string" && !/^\d+$/.test(value.trim())) {
-      const resolved = (0, import_scene_titles.resolveSceneNumber)(value, this.deps.probeMemory, (_b = sceneMatch[1]) != null ? _b : "main");
+      const zoneKey = (_b = sceneMatch[1]) != null ? _b : "main";
+      const resolved = (0, import_scene_titles.resolveSceneNumber)(value, this.deps.probeMemory, zoneKey);
       if (resolved === void 0) {
+        this.deps.log.debug(
+          `${this.deviceId}: scene "${value}" is unknown for ${zoneKey} \u2014 write dropped (known: ${(0, import_scene_titles.knownScenes)(this.deps.probeMemory, zoneKey).map((scene) => scene.title).join(", ") || "none yet"})`
+        );
         return;
       }
       value = resolved;
@@ -350,18 +356,22 @@ class YxcDeviceController {
    */
   async keepalive() {
     var _a, _b;
-    const zones = this.zones.length > 0 ? this.zones : ["main"];
-    const anyOk = (await Promise.all(zones.map((zone) => this.refreshZone(zone)))).some(Boolean);
-    this.keepaliveRuns++;
-    const fullSweep = !((_b = (_a = this.deps).pushActive) == null ? void 0 : _b.call(_a)) || this.keepaliveRuns % PUSH_MODE_FULL_SWEEP_EVERY === 0;
-    if (fullSweep) {
-      await this.refreshMedia();
-      await this.refreshLists();
-      if (this.hasDistribution) {
-        await this.refreshDistribution();
+    try {
+      const zones = this.zones.length > 0 ? this.zones : ["main"];
+      const anyOk = (await Promise.all(zones.map((zone) => this.refreshZone(zone)))).some(Boolean);
+      this.keepaliveRuns++;
+      const fullSweep = !((_b = (_a = this.deps).pushActive) == null ? void 0 : _b.call(_a)) || this.keepaliveRuns % PUSH_MODE_FULL_SWEEP_EVERY === 0;
+      if (fullSweep) {
+        await this.refreshMedia();
+        await this.refreshLists();
+        if (this.hasDistribution) {
+          await this.refreshDistribution();
+        }
       }
+      this.dropDetector.record(anyOk);
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: keepalive poll failed: ${(0, import_util.errorMessage)(e)}`);
     }
-    this.dropDetector.record(anyOk);
   }
   /**
    * Refresh the list-shaped surfaces: the netusb favourites and recently-played
@@ -700,7 +710,7 @@ class YxcDeviceController {
       const updates = (0, import_command_mapper.parseYxcStatus)(status, zone);
       for (const update of updates) {
         this.emit(update.id, update.value);
-        if (update.id.endsWith("input") && typeof update.value === "string") {
+        if (update.id === `${(0, import_zones.zonePrefix)(zone)}input` && typeof update.value === "string") {
           const previous = this.lastZoneInput.get(zone);
           this.lastZoneInput.set(zone, update.value);
           if (previous !== update.value) {

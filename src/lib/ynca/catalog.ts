@@ -4,6 +4,7 @@ import { decode, encode, formatWireNumber, isWritableValue, type ValueSpec } fro
 import type { StateValue } from "../types";
 import type { YncaCapabilities } from "./capability";
 import type { I18nKey } from "../i18n";
+import { parsePlayTime } from "../catalog/play-time";
 
 /**
  * A YNCA catalog entry: the object part ({@link CatalogEntry}) plus its subunit
@@ -46,6 +47,14 @@ export interface YncaEntry extends CatalogEntry {
    * an empty slot, which becomes 0 on the number state).
    */
   wireDecode?: (wire: string) => string;
+  /**
+   * The state is DERIVED from another entry's value, not mapped from the wire. It carries
+   * the same read function only so the object is created exactly where the source state is
+   * — the device→state map skips it, because two entries cannot share one wire function
+   * there (the map is keyed `SUBUNIT:FUNC`, so the second would displace the first).
+   * The controller writes it alongside its source; the readable playback times use this.
+   */
+  derived?: boolean;
 }
 
 /**
@@ -340,7 +349,10 @@ const AMP_FUNCS: FuncDef[] = [
     nameKey: "Tone control mode",
     spec: { kind: "text" },
     write: false,
-    role: "text",
+    // `state`, not `text`: it is a mode out of a fixed set, and MusicCast even declares the
+    // list for it. Both transports feed this one id, so the role must not depend on which of
+    // them happens to own it.
+    role: "state",
   },
   // Dialogue level / DTS dialogue control / contents display / the AirPlay volume
   // interlock: reported by the MusicCast generation (RX-V6A sweep), write structure
@@ -919,6 +931,13 @@ const INPUT_NAME_KEYS = [
 ];
 
 /**
+ * How an input key is written in the datapoint's NAME. The two that are not simply the
+ * upper-cased key are spelled the way the device itself lists them in the input dropdown
+ * ({@link INPUT_STATES}), so the name and the selectable value read alike.
+ */
+const INPUT_NAME_LABELS: Readonly<Record<string, string>> = { vaux: "V-AUX", multich: "MULTI CH" };
+
+/**
  * DAB tuner functions (the `@DAB` subunit on DAB+-capable receivers). Mapped under
  * a `dab` channel of their own so DAB/FM labels never collide with the AM/FM `@TUN`
  * tuner's `tuner.*` states. The subunit also carries an FM frequency (FMFREQ).
@@ -1041,7 +1060,8 @@ const DAB_FUNCS: FuncDef[] = [
     nameKey: "Audio mode",
     spec: { kind: "text" },
     write: false,
-    role: "text",
+    // `state` like the MusicCast side — see sound.toneMode above.
+    role: "state",
   },
   {
     func: "DABBITRATE",
@@ -1152,8 +1172,12 @@ const PLAYER_FUNCS: Array<{
   role: string;
   /** Fixed wire value for an action button (e.g. Skip Fwd), overriding the spec's encode. */
   wireEncode?: (value: boolean | number | string) => string;
+  /** Wire-value pre-transform before decode (see {@link YncaEntry.wireDecode}). */
+  wireDecode?: (wire: string) => string;
   /** Keep out of the device→state map (a write-only action, never read back). */
   writeOnly?: boolean;
+  /** Written by the controller from another state's value (see {@link YncaEntry.derived}). */
+  derived?: boolean;
 }> = [
   {
     func: "PLAYBACK",
@@ -1181,21 +1205,46 @@ const PLAYER_FUNCS: Array<{
   },
   { func: "STATION", state: "station", nameKey: "Station", spec: { kind: "text" }, write: false, role: "text" },
   { func: "CHNAME", state: "channelName", nameKey: "Channel name", spec: { kind: "text" }, write: false, role: "text" },
+  // The times come off the YNCA wire as text ("1:23") and off MusicCast as seconds. Both
+  // forms are published on every device, from the one value: the NUMBER fills the type
+  // detector's media-player slot (it accepts nothing else), the text is what a
+  // visualisation shows. Without the number a YNCA-only receiver had no time at all in
+  // the player, and the datapoint's very type depended on which protocol answered.
   {
     func: "TOTALTIME",
     state: "totalTime",
     nameKey: "Total time",
+    spec: { kind: "number", unit: "s", decimals: 0 },
+    write: false,
+    role: "media.duration",
+    wireDecode: wire => String(parsePlayTime(wire) ?? ""),
+  },
+  {
+    func: "TOTALTIME",
+    state: "totalTimeText",
+    nameKey: "Total time (readable)",
     spec: { kind: "text" },
     write: false,
     role: "media.duration.text",
+    derived: true,
   },
   {
     func: "ELAPSEDTIME",
     state: "elapsedTime",
     nameKey: "Elapsed time",
+    spec: { kind: "number", unit: "s", decimals: 0 },
+    write: false,
+    role: "media.elapsed",
+    wireDecode: wire => String(parsePlayTime(wire) ?? ""),
+  },
+  {
+    func: "ELAPSEDTIME",
+    state: "elapsedTimeText",
+    nameKey: "Elapsed time (readable)",
     spec: { kind: "text" },
     write: false,
     role: "media.elapsed.text",
+    derived: true,
   },
   {
     func: "REPEAT",
@@ -1313,7 +1362,11 @@ export function buildYncaCatalog(): YncaEntry[] {
     const upper = key.toUpperCase();
     entries.push({
       id: `advanced.inputNames.${key}`,
-      nameKey: "Input names",
+      // Each of the 23 carries the input it names — they all read "Input names" before,
+      // the folder's own label, so the object tree showed the folder and 23 children with
+      // one and the same text and only the id told them apart.
+      nameKey: "Input name (%s)",
+      nameArgs: [INPUT_NAME_LABELS[key] ?? upper],
       spec: { kind: "text" },
       write: false,
       role: "text",
@@ -1339,7 +1392,9 @@ export function buildYncaCatalog(): YncaEntry[] {
         readFunc: fn.readFunc,
         readAliases: fn.readAliases,
         wireEncode: fn.wireEncode,
+        wireDecode: fn.wireDecode,
         writeOnly: fn.writeOnly,
+        derived: fn.derived,
       });
     }
     // Favourite recall (#613): PRESET is writable on the sources whose spec subunit
@@ -1522,7 +1577,7 @@ export function sweepGets(entries: readonly YncaEntry[]): Array<{ subunit: strin
 export function funcToEntry(entries: readonly YncaEntry[]): Map<string, YncaEntry> {
   return new Map(
     entries
-      .filter(entry => !entry.writeOnly)
+      .filter(entry => !entry.writeOnly && !entry.derived)
       .flatMap(entry => readFuncsOf(entry).map(func => [`${entry.subunit}:${func}`, entry] as const)),
   );
 }
@@ -1655,8 +1710,10 @@ export function yncaCommand(
     return undefined;
   }
   // Guard the write value: a null/undefined or non-finite-number write must not be
-  // turned into a bogus command (e.g. `@TUN:AMFREQ=null`).
-  if (!isWritableValue(value, entry.spec.kind === "number")) {
+  // turned into a bogus command (e.g. `@TUN:AMFREQ=null`). A CODED entry is a number
+  // state too (playback/repeat carry 0/1/2), so it is held to the same check — that is
+  // also what lets `encode` accept a numeric string for it.
+  if (!isWritableValue(value, entry.spec.kind === "number" || entry.spec.kind === "code")) {
     return undefined;
   }
   const wire = entry.wireEncode

@@ -151,8 +151,12 @@ export class XmlBrowseDriver implements BrowseDriver {
 
   /** Go one menu level back — falling back to `Left` when the device refuses `Return`. */
   public async back(): Promise<void> {
+    // ONLY the command is guarded, never the window read that follows it. `control()`
+    // does both, so catching around it treated a failed read as "the device refuses
+    // Return" — it then sent a SECOND back (the user jumped two levels) and switched
+    // this connection to `Left` for good, over what was a passing network hiccup.
     try {
-      await this.control(`<Cursor>${this.backCursor}</Cursor>`);
+      await this.send(`<Cursor>${this.backCursor}</Cursor>`);
     } catch (e) {
       // Only a refusal of the DEFAULT vocabulary triggers the generation fallback;
       // a device that also refuses Left (or a transport error) surfaces normally.
@@ -160,13 +164,27 @@ export class XmlBrowseDriver implements BrowseDriver {
         throw e;
       }
       this.backCursor = "Left";
-      await this.control("<Cursor>Left</Cursor>");
+      await this.send("<Cursor>Left</Cursor>");
     }
+    await this.fetch();
   }
 
   /** Return to the menu root. */
   public async home(): Promise<void> {
     await this.control("<Cursor>Return to Home</Cursor>");
+  }
+
+  /**
+   * Send a List_Control command to the active source — WITHOUT reading the window back,
+   * so a caller can tell a device refusal from a failed follow-up read (see {@link back}).
+   *
+   * @param inner the List_Control payload (Direct_Sel, Cursor, Jump_Line)
+   */
+  private async send(inner: string): Promise<void> {
+    if (!this.active) {
+      return;
+    }
+    await this.client.send(this.active.element, `<List_Control>${inner}</List_Control>`);
   }
 
   /**
@@ -178,7 +196,7 @@ export class XmlBrowseDriver implements BrowseDriver {
     if (!this.active) {
       return;
     }
-    await this.client.send(this.active.element, `<List_Control>${inner}</List_Control>`);
+    await this.send(inner);
     await this.fetch();
   }
 

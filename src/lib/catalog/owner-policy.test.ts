@@ -1,4 +1,4 @@
-import { canonicalIdOf, capabilityKeyOf, pickOwner, resolveOwnership } from "./owner-policy";
+import { canonicalIdOf, capabilityKeyOf, pickOwner } from "./owner-policy";
 
 describe("pickOwner — which transport owns a shared capability", () => {
   test("a capability only one transport offers is owned by that transport", () => {
@@ -43,27 +43,6 @@ describe("pickOwner — which transport owns a shared capability", () => {
   test("an override falls back to modernity when none of its preferred transports are present", () => {
     expect(pickOwner("volume", ["yxc"])).toBe("yxc");
     expect(pickOwner("input", ["yxc", "xml"])).toBe("yxc");
-  });
-});
-
-describe("resolveOwnership — the owner map across all offered transports", () => {
-  test("each capability resolves to its owner; shared by policy, exclusive to its sole transport", () => {
-    const owner = resolveOwnership({
-      ynca: ["power", "volume", "input", "scene.recall"],
-      yxc: ["power", "volume", "input", "dist.role"],
-    });
-    expect(owner.get("power")).toBe("yxc");
-    expect(owner.get("volume")).toBe("ynca");
-    expect(owner.get("input")).toBe("ynca");
-    expect(owner.get("scene.recall")).toBe("ynca");
-    expect(owner.get("dist.role")).toBe("yxc");
-  });
-
-  test("a single offered transport owns everything it offers", () => {
-    const owner = resolveOwnership({ ynca: ["power", "volume"] });
-    expect(owner.get("power")).toBe("ynca");
-    expect(owner.get("volume")).toBe("ynca");
-    expect(owner.size).toBe(2);
   });
 });
 

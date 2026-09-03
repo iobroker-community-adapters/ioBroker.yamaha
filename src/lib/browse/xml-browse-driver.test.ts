@@ -182,4 +182,34 @@ describe("XmlBrowseDriver back fallback (#613)", () => {
     await driver.back();
     expect(sent).toEqual(["<List_Control><Cursor>Return</Cursor></List_Control>"]);
   });
+
+  it("a failing window READ is not mistaken for a refused Return", async () => {
+    // The command went out fine, only the follow-up read failed (timeout, brief network
+    // hiccup). Treating that as a refusal used to send a SECOND back — the user jumped two
+    // menu levels — and pinned this connection to `Left` for good.
+    const sent: string[] = [];
+    let readable = true;
+    const driver = new XmlBrowseDriver(
+      {
+        send: (_element, inner) => {
+          sent.push(inner);
+          return Promise.resolve();
+        },
+        getXml: () => (readable ? Promise.resolve(listBody({})) : Promise.reject(new Error("socket hang up"))),
+      },
+      new Set(["netRadio"]),
+      instantDelay,
+    );
+    driver.attach({ onWindow: (): void => {} } as unknown as BrowseEngine);
+    await driver.open("netRadio");
+    sent.length = 0;
+    readable = false;
+    await expect(driver.back()).rejects.toThrow("socket hang up");
+    expect(sent).toEqual(["<List_Control><Cursor>Return</Cursor></List_Control>"]);
+    // …and the vocabulary is unchanged: the next back still tries Return.
+    readable = true;
+    sent.length = 0;
+    await driver.back();
+    expect(sent).toEqual(["<List_Control><Cursor>Return</Cursor></List_Control>"]);
+  });
 });

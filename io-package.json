@@ -3,6 +3,19 @@
     "name": "yamaha",
     "version": "2.1.1",
     "news": {
+      "NEXT": {
+        "en": "Playback times are now seconds, with the readable form in new text datapoints. After a restart the adapter reads menu, band and input from the receiver instead of from memory.",
+        "de": "Wiedergabezeiten sind jetzt Sekunden, die lesbare Form steht in neuen Text-Datenpunkten. Nach einem Neustart liest der Adapter Menü, Band und Eingang vom Receiver statt aus dem Speicher.",
+        "ru": "Время воспроизведения теперь в секундах, читаемая форма — в новых текстовых точках данных. После перезапуска адаптер читает меню, диапазон и вход с ресивера, а не из памяти.",
+        "pt": "Os tempos de reprodução são agora segundos, a forma legível fica em novos pontos de dados de texto. Após reiniciar, o adaptador lê menu, banda e entrada do recetor em vez da memória.",
+        "nl": "Afspeeltijden zijn nu seconden, de leesbare vorm staat in nieuwe tekstdatapunten. Na een herstart leest de adapter menu, band en ingang van de receiver in plaats van uit het geheugen.",
+        "fr": "Les temps de lecture sont en secondes, la forme lisible se trouve dans de nouveaux points texte. Après un redémarrage, menu, bande et entrée sont lus sur l'ampli et non en mémoire.",
+        "it": "I tempi di riproduzione sono ora in secondi, la forma leggibile è in nuovi datapoint di testo. Dopo un riavvio l'adattatore legge menu, banda e ingresso dal ricevitore, non dalla memoria.",
+        "es": "Los tiempos de reproducción ahora son segundos y la forma legible está en nuevos puntos de texto. Tras reiniciar, el adaptador lee menú, banda y entrada del receptor, no de la memoria.",
+        "pl": "Czasy odtwarzania są teraz w sekundach, czytelna forma trafiła do nowych punktów tekstowych. Po restarcie adapter odczytuje menu, pasmo i wejście z amplitunera, a nie z pamięci.",
+        "uk": "Час відтворення тепер у секундах, зручна форма — у нових текстових точках даних. Після перезапуску адаптер читає меню, діапазон і вхід з ресивера, а не з пам'яті.",
+        "zh-cn": "播放时间现在以秒为单位，易读形式移到新的文本数据点。重启后，适配器从功放读取菜单、波段和输入源，而不是从缓存。"
+      },
       "2.1.1": {
         "en": "On an instance updated from an earlier version, the info datapoints now get the translated names too instead of keeping the old ones.",
         "de": "Auf einer aktualisierten Instanz bekommen auch die info-Datenpunkte die übersetzten Namen, statt die alten zu behalten.",
@@ -80,19 +93,6 @@
         "pl": "Poprawki: punkty danych, których urządzenie nigdy nie wypełni, nie są już tworzone, jednorazowe czyszczenie usuwa niewypełnione resztki, spoczywające bloki odtwarzacza startują puste",
         "uk": "Виправлення: точки даних, які пристрій ніколи не заповнить, більше не створюються, одноразове очищення прибирає порожні залишки, блоки плеєра у спокої стартують порожніми",
         "zh-cn": "问题修复：不再创建设备永远无法填充的数据点，一次性清理移除从未填充的遗留项，空闲的播放器块以清空值启动"
-      },
-      "2.0.0": {
-        "en": "Reworked object tree: one player block per zone shows what is playing, the scene dropdown carries the receiver's own titles plus a scene list, and one tuner serves all bands",
-        "de": "Überarbeiteter Objektbaum: ein Player-Block je Zone zeigt, was gerade läuft, das Szenen-Menü trägt die Titel des Geräts plus eine Szenen-Liste, und ein Tuner bedient alle Bänder",
-        "ru": "Переработанное дерево объектов: один блок плеера на зону показывает, что играет, меню сцен несёт названия с устройства плюс список сцен, один тюнер обслуживает все диапазоны",
-        "pt": "Árvore de objetos reformulada: um bloco de leitor por zona mostra o que toca, o menu de cenas traz os títulos do aparelho mais uma lista de cenas, e um sintonizador serve todas as bandas",
-        "nl": "Herwerkte objectboom: één spelerblok per zone toont wat er speelt, het scènemenu draagt de titels van het apparaat plus een scènelijst, en één tuner bedient alle banden",
-        "fr": "Arborescence remaniée : un bloc lecteur par zone montre ce qui joue, le menu de scènes porte les titres de l'appareil plus une liste de scènes, et un tuner sert toutes les bandes",
-        "it": "Albero oggetti rinnovato: un blocco lettore per zona mostra cosa suona, il menu scene porta i titoli del dispositivo più un elenco scene, e un sintonizzatore serve tutte le bande",
-        "es": "Árbol de objetos renovado: un bloque de reproductor por zona muestra lo que suena, el menú de escenas lleva los títulos del equipo más una lista de escenas, y un sintonizador sirve todas las bandas",
-        "pl": "Przebudowane drzewo obiektów: jeden blok odtwarzacza na strefę pokazuje, co gra, menu scen niesie tytuły z urządzenia plus listę scen, a jeden tuner obsługuje wszystkie pasma",
-        "uk": "Перероблене дерево об'єктів: один блок плеєра на зону показує, що грає, меню сцен несе назви з пристрою плюс список сцен, один тюнер обслуговує всі діапазони",
-        "zh-cn": "重构的对象树：每个区域一个播放器块显示当前播放内容，场景菜单带设备自带的标题外加场景列表，所有波段共用一个调谐器"
       }
     },
     "titleLang": {
@@ -244,6 +244,46 @@
           "pl": "Wersja 2.0.0 przebudowuje drzewo obiektów: JEDEN blok odtwarzacza na strefę pokazuje, co gra (zamiast identycznego bloku pod każdym źródłem), sceny stają się listą rozwijaną z tytułami z urządzenia plus punktem scene.list, tuner dostaje jedno pasmo/częstotliwość/preset dla wszystkich pasm, korektor i informacje o sygnale przenoszą się pod sound, synchronizacja ust pod hdmi. Adapter sam usuwa stare punkty danych przy pierwszym starcie i tworzy nowe. Zaktualizuj skrypty i wizualizacje do nowych ścieżek.",
           "uk": "Версія 2.0.0 переробляє дерево об'єктів: ОДИН блок плеєра на зону показує, що грає (замість однакового блока під кожним джерелом), сцени стають випадним списком із назвами з пристрою плюс точка scene.list, тюнер отримує один діапазон/частоту/пресет для всіх діапазонів, еквалайзер та інформація про сигнал переїжджають під sound, синхронізація губ — під hdmi. Адаптер сам видаляє старі точки даних під час першого запуску і створює нові. Оновіть скрипти та візуалізації на нові шляхи.",
           "zh-cn": "2.0.0 版重构了对象树：每个区域一个播放器块显示当前播放内容（不再在每个音源下重复相同的块），场景变为带设备自带标题的下拉菜单外加 scene.list 数据点，调谐器对所有波段统一为一个波段/频率/预设，均衡器和信号信息移至 sound 下，唇音同步移至 hdmi 下。适配器首次启动时会自动删除旧数据点并创建新数据点。请将脚本和可视化更新到新路径。"
+        },
+        "level": "warn",
+        "buttons": [
+          "agree",
+          "cancel"
+        ]
+      },
+      {
+        "condition": {
+          "operand": "and",
+          "rules": [
+            "oldVersion<2.2.0",
+            "newVersion>=2.2.0"
+          ]
+        },
+        "title": {
+          "en": "Playback times are now seconds",
+          "de": "Wiedergabezeiten sind jetzt Sekunden",
+          "ru": "Время воспроизведения теперь в секундах",
+          "pt": "Os tempos de reprodução são agora segundos",
+          "nl": "Afspeeltijden zijn nu seconden",
+          "fr": "Les temps de lecture sont désormais en secondes",
+          "it": "I tempi di riproduzione sono ora in secondi",
+          "es": "Los tiempos de reproducción ahora son segundos",
+          "pl": "Czasy odtwarzania są teraz w sekundach",
+          "uk": "Час відтворення тепер у секундах",
+          "zh-cn": "播放时间现在以秒为单位"
+        },
+        "text": {
+          "en": "player.elapsedTime and player.totalTime change from text to a number in seconds, so the media-player widget, Alexa and Google can use them on every device. The readable form (\"1:23\") moves to the new datapoints player.elapsedTimeText and player.totalTimeText. Scripts, recordings and visualizations bound to the old text need to be pointed at the new text datapoints.",
+          "de": "player.elapsedTime und player.totalTime wechseln von Text auf eine Zahl in Sekunden, damit das Medienspieler-Widget, Alexa und Google sie auf jedem Gerät nutzen können. Die lesbare Form („1:23\") steht ab jetzt in den neuen Datenpunkten player.elapsedTimeText und player.totalTimeText. Skripte, Aufzeichnungen und Visualisierungen, die am alten Text hängen, bitte auf die neuen Text-Datenpunkte umstellen.",
+          "ru": "player.elapsedTime и player.totalTime меняются с текста на число в секундах, чтобы виджет медиаплеера, Alexa и Google могли использовать их на любом устройстве. Читаемая форма («1:23») теперь в новых точках данных player.elapsedTimeText и player.totalTimeText. Скрипты, записи и визуализации, привязанные к старому тексту, переведите на новые текстовые точки данных.",
+          "pt": "player.elapsedTime e player.totalTime passam de texto para um número em segundos, para que o widget de leitor de média, a Alexa e o Google os possam usar em qualquer aparelho. A forma legível («1:23») passa para os novos pontos de dados player.elapsedTimeText e player.totalTimeText. Ajuste scripts, gravações e visualizações que dependiam do texto antigo.",
+          "nl": "player.elapsedTime en player.totalTime gaan van tekst naar een getal in seconden, zodat de mediaspeler-widget, Alexa en Google ze op elk apparaat kunnen gebruiken. De leesbare vorm (\"1:23\") staat voortaan in de nieuwe datapunten player.elapsedTimeText en player.totalTimeText. Pas scripts, opnames en visualisaties aan die aan de oude tekst hingen.",
+          "fr": "player.elapsedTime et player.totalTime passent du texte à un nombre en secondes, afin que le widget lecteur multimédia, Alexa et Google puissent les utiliser sur tous les appareils. La forme lisible (« 1:23 ») se trouve désormais dans les nouveaux points de données player.elapsedTimeText et player.totalTimeText. Adaptez scripts, enregistrements et visualisations liés à l'ancien texte.",
+          "it": "player.elapsedTime e player.totalTime passano da testo a un numero in secondi, così il widget del lettore multimediale, Alexa e Google possono usarli su ogni dispositivo. La forma leggibile (\"1:23\") si trova ora nei nuovi datapoint player.elapsedTimeText e player.totalTimeText. Adattare script, registrazioni e visualizzazioni legati al vecchio testo.",
+          "es": "player.elapsedTime y player.totalTime pasan de texto a un número en segundos, para que el widget de reproductor multimedia, Alexa y Google puedan usarlos en cualquier dispositivo. La forma legible («1:23») pasa a los nuevos puntos de datos player.elapsedTimeText y player.totalTimeText. Ajuste scripts, grabaciones y visualizaciones que dependían del texto anterior.",
+          "pl": "player.elapsedTime i player.totalTime zmieniają się z tekstu na liczbę w sekundach, aby widget odtwarzacza, Alexa i Google mogły z nich korzystać na każdym urządzeniu. Czytelna forma („1:23\") trafia do nowych punktów danych player.elapsedTimeText i player.totalTimeText. Skrypty, zapisy i wizualizacje oparte na starym tekście przestaw na nowe punkty.",
+          "uk": "player.elapsedTime і player.totalTime змінюються з тексту на число в секундах, щоб віджет медіаплеєра, Alexa та Google могли використовувати їх на будь-якому пристрої. Зручна форма («1:23») тепер у нових точках даних player.elapsedTimeText і player.totalTimeText. Скрипти, записи та візуалізації, прив'язані до старого тексту, переведіть на нові текстові точки.",
+          "zh-cn": "player.elapsedTime 和 player.totalTime 由文本改为以秒为单位的数字，这样媒体播放器组件、Alexa 和 Google 在所有设备上都能使用它们。易读形式（“1:23”）移到新的数据点 player.elapsedTimeText 和 player.totalTimeText。请将绑定旧文本的脚本、记录和可视化改到新的文本数据点。"
         },
         "level": "warn",
         "buttons": [

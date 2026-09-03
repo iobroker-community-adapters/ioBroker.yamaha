@@ -23,6 +23,7 @@ __export(device_controller_exports, {
 module.exports = __toCommonJS(device_controller_exports);
 var import_capability = require("./ynca/capability");
 var import_value_coerce = require("./catalog/value-coerce");
+var import_play_time = require("./catalog/play-time");
 var import_i18n = require("./i18n");
 var import_catalog = require("./ynca/catalog");
 var import_surface = require("./browse/surface");
@@ -71,8 +72,10 @@ const YNCA_PLAYER_CLEAR = [
   { id: "player.track", value: "" },
   { id: "player.station", value: "" },
   { id: "player.channelName", value: "" },
-  { id: "player.elapsedTime", value: "" },
-  { id: "player.totalTime", value: "" },
+  { id: "player.elapsedTime", value: 0 },
+  { id: "player.elapsedTimeText", value: "" },
+  { id: "player.totalTime", value: 0 },
+  { id: "player.totalTimeText", value: "" },
   { id: "player.repeat", value: 0 },
   { id: "player.shuffle", value: false }
 ];
@@ -83,6 +86,18 @@ function isCachedCapabilities(value) {
   return typeof candidate === "object" && candidate !== null && typeof candidate.model === "string" && typeof candidate.firmware === "string" && typeof candidate.subunits === "object" && candidate.subunits !== null;
 }
 const LIST_PROOF = /^(LISTLAYER|LISTLAYERNAME|CURRLINE|MAXLINE|LINE[1-8](TXT|ATRIB))$/;
+function sceneTitlesOf(subunits) {
+  var _a;
+  const main = (_a = subunits.MAIN) != null ? _a : {};
+  const scenes = [];
+  for (let n = 1; n <= 12; n++) {
+    const title = main[`SCENE${n}NAME`];
+    if (typeof title === "string" && title.length > 0) {
+      scenes.push({ num: n, title });
+    }
+  }
+  return scenes;
+}
 class YncaDeviceController {
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
@@ -120,7 +135,7 @@ class YncaDeviceController {
    * @returns true if the device reported capabilities and its tree was created
    */
   async start() {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
+    var _a, _b, _c, _d, _e, _f, _g;
     await this.deps.client.connect();
     const catalog = this.deps.isEntryEnabled ? import_catalog.YNCA_CATALOG.filter((entry) => this.deps.isEntryEnabled(entry.id)) : import_catalog.YNCA_CATALOG;
     const resolved = await this.resolveCapabilities(catalog);
@@ -128,8 +143,9 @@ class YncaDeviceController {
     const present = (0, import_catalog.presentYncaEntries)(capabilities, catalog);
     this.writeMap = (0, import_catalog.idToEntry)(present);
     this.presentEntries = present;
+    const live = fromCache ? await this.readDecisiveValues(capabilities) : capabilities;
     for (const zone of YNCA_ZONES) {
-      const input = (_a = capabilities.subunits[zone.subunit]) == null ? void 0 : _a.INP;
+      const input = (_a = live.subunits[zone.subunit]) == null ? void 0 : _a.INP;
       if (typeof input === "string") {
         this.zoneInputs.set(zone.key, input);
       }
@@ -143,14 +159,7 @@ class YncaDeviceController {
       _b,
       (command, verdict) => this.deps.log.warn(`${this.deviceId}: device refused "${command}" (@${verdict.toUpperCase()})`)
     );
-    const main = (_d = capabilities.subunits.MAIN) != null ? _d : {};
-    this.sceneTitles = [];
-    for (let n = 1; n <= 12; n++) {
-      const title = main[`SCENE${n}NAME`];
-      if (typeof title === "string" && title.length > 0) {
-        this.sceneTitles.push({ num: n, title });
-      }
-    }
+    this.sceneTitles = sceneTitlesOf(capabilities.subunits);
     for (const object of objects) {
       if (object.id === "scene.recall" && this.sceneTitles.length > 0) {
         object.common.states = Object.fromEntries(this.sceneTitles.map((scene) => [scene.num, scene.title]));
@@ -181,8 +190,8 @@ class YncaDeviceController {
       }
     }
     this.hasDab = capabilities.subunits.DAB !== void 0;
-    this.tunerBand = ((_h = (_g = (_e = capabilities.subunits.DAB) == null ? void 0 : _e.BAND) != null ? _g : (_f = capabilities.subunits.TUN) == null ? void 0 : _f.BAND) != null ? _h : "").toUpperCase();
-    await this.setupBrowse(capabilities);
+    this.tunerBand = ((_g = (_f = (_d = live.subunits.DAB) == null ? void 0 : _d.BAND) != null ? _f : (_e = live.subunits.TUN) == null ? void 0 : _e.BAND) != null ? _g : "").toUpperCase();
+    await this.setupBrowse(live);
     this.deps.client.onMessage((message) => {
       var _a2;
       (_a2 = this.browseDriver) == null ? void 0 : _a2.handleMessage(message);
@@ -222,7 +231,7 @@ class YncaDeviceController {
    * @returns the capabilities and whether they came from the persisted layer
    */
   async resolveCapabilities(catalog) {
-    var _a, _b, _c, _d, _e, _f, _g;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     const identity = await this.deps.client.readCapabilities([
       { subunit: "SYS", func: "MODELNAME" },
       { subunit: "SYS", func: "VERSION" }
@@ -243,8 +252,52 @@ class YncaDeviceController {
         firmware: (_f = (_e = capabilities.subunits.SYS) == null ? void 0 : _e.VERSION) != null ? _f : firmware,
         subunits: capabilities.subunits
       });
+    } else {
+      (_h = this.deps.probeMemory) == null ? void 0 : _h.drop((key) => key === STATIC_KEY);
     }
     return { capabilities, fromCache: false };
+  }
+  /**
+   * Re-read the handful of values the START makes DECISIONS from, and lay them over the
+   * remembered shape (fresh wins).
+   *
+   * The persisted capability layer is a shape whose values are the last run's leftovers —
+   * the type says so ("used for SHAPE only"). Three decisions used them anyway, and a
+   * receiver stands in standby most of the time, so the memory usually says `PWR=Standby`:
+   * - the menu claim skips its proof while the device is not on, so a stale "Standby"
+   *   made YNCA claim `player.browse.*` UNPROVEN and displace the XML driver that does
+   *   probe — issue #613, brought back in through the cache;
+   * - a `tuner.frequency` write is routed by the band, so a stale band sends AMFREQ where
+   *   FMFREQ belongs (a wrong command on the wire, not just a stale reading);
+   * - the player's transport buttons are routed by the zone's input, so a stale input
+   *   sends play/pause to the source the zone listened to LAST time.
+   *
+   * Six reads at most (~0.6 s through the gate), once per connect. A drop during them
+   * fails the connect — which is honest: the device is gone.
+   *
+   * @param remembered the capability shape from the persisted layer
+   * @returns the remembered shape with the live answers laid over it
+   */
+  async readDecisiveValues(remembered) {
+    const gets = [];
+    if (remembered.subunits.MAIN !== void 0) {
+      gets.push({ subunit: "MAIN", func: "PWR" });
+    }
+    for (const zone of YNCA_ZONES) {
+      if (remembered.subunits[zone.subunit] !== void 0) {
+        gets.push({ subunit: zone.subunit, func: "INP" });
+      }
+    }
+    for (const subunit of ["TUN", "DAB"]) {
+      if (remembered.subunits[subunit] !== void 0) {
+        gets.push({ subunit, func: "BAND" });
+      }
+    }
+    if (gets.length === 0) {
+      return remembered;
+    }
+    const fresh = await this.deps.client.readCapabilities(gets);
+    return { model: remembered.model, subunits: (0, import_capability.mergeYncaSubunits)(remembered.subunits, fresh.subunits) };
   }
   /**
    * The fast path's second half: re-ask every catalogued function of the present
@@ -286,6 +339,13 @@ class YncaDeviceController {
       });
       this.presentEntries = (0, import_catalog.presentYncaEntries)({ model: fresh.model, subunits }, catalog);
       this.writeMap = (0, import_catalog.idToEntry)(this.presentEntries);
+      const titles = sceneTitlesOf(subunits);
+      if (JSON.stringify(titles) !== JSON.stringify(this.sceneTitles)) {
+        this.sceneTitles = titles;
+        if (titles.length > 0) {
+          this.deps.setStateAck(`${this.deviceId}.scene.list`, JSON.stringify(titles));
+        }
+      }
       this.deps.log.debug(`${this.deviceId}: background value refresh done (YNCA)`);
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: background value refresh failed: ${String(e)}`);
@@ -389,6 +449,9 @@ class YncaDeviceController {
       const needle = value.trim().toLowerCase();
       const match = this.sceneTitles.find((scene) => scene.title.toLowerCase() === needle);
       if (match === void 0) {
+        this.deps.log.debug(
+          `${this.deviceId}: scene "${value}" is not one this device declares \u2014 write dropped (known: ${this.sceneTitles.map((scene) => scene.title).join(", ") || "none yet"})`
+        );
         return;
       }
       value = match.num;
@@ -477,12 +540,16 @@ class YncaDeviceController {
    * @param value the decoded value
    */
   routePlayerUpdate(subunit, id, value) {
+    const twin = (0, import_play_time.playTimeTwin)(id, value);
     for (const zone of YNCA_ZONES) {
       if (!this.playerZones.includes(zone.key)) {
         continue;
       }
       if (playerSubunitForInput(this.zoneInputs.get(zone.key)) === subunit) {
         this.deps.setStateAck(`${this.deviceId}.${zone.prefix}${id}`, value);
+        if (twin) {
+          this.deps.setStateAck(`${this.deviceId}.${zone.prefix}${twin.id}`, twin.value);
+        }
       }
     }
   }

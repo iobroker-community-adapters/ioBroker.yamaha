@@ -21,8 +21,7 @@ __export(owner_policy_exports, {
   ZONE_PREFIX: () => ZONE_PREFIX,
   canonicalIdOf: () => canonicalIdOf,
   capabilityKeyOf: () => capabilityKeyOf,
-  pickOwner: () => pickOwner,
-  resolveOwnership: () => resolveOwnership
+  pickOwner: () => pickOwner
 });
 module.exports = __toCommonJS(owner_policy_exports);
 const MODERNITY = ["yxc", "ynca", "xml"];
@@ -83,31 +82,11 @@ function pickOwner(key, candidates) {
   const owner = (_b = preference.find((t) => candidates.includes(t))) != null ? _b : MODERNITY.find((t) => candidates.includes(t));
   return owner != null ? owner : candidates[0];
 }
-function resolveOwnership(offered) {
-  var _a;
-  const candidates = /* @__PURE__ */ new Map();
-  for (const transport of MODERNITY) {
-    for (const key of (_a = offered[transport]) != null ? _a : []) {
-      const list = candidates.get(key);
-      if (list) {
-        list.push(transport);
-      } else {
-        candidates.set(key, [transport]);
-      }
-    }
-  }
-  const owners = /* @__PURE__ */ new Map();
-  for (const [key, cands] of candidates) {
-    owners.set(key, pickOwner(key, cands));
-  }
-  return owners;
-}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   ZONE_PREFIX,
   canonicalIdOf,
   capabilityKeyOf,
-  pickOwner,
-  resolveOwnership
+  pickOwner
 });
 //# sourceMappingURL=owner-policy.js.map

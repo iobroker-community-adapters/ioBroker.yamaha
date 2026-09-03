@@ -330,6 +330,52 @@ verbinden asynchron und parallel, deshalb ein 5-Sekunden-Nachlauf (`DATAPOINT_BA
 statt einer Zeile je Gerät: EINE Umschaltung, EIN Ergebnis. Gezählt werden NUR `state`-Objekte,
 nicht die Kanäle/Geräteknoten drumherum. Regel-Herkunft: Memory `feedback_datenpunkt_bilanz_im_log`.
 
+## In-Depth-Audit 2026-09-03 (v2.2.0) — Regeln, die im Code stehen müssen
+
+Bericht `../../Ressourcen/yamaha/audit-2026-09-03.md`, Plan `plan-2026-09-03.md`. Der ganze
+Produktivcode wurde zeilenweise gelesen; alle Funde sind umgesetzt.
+
+- **Der Schnellstart entscheidet NIE an gemerkten Werten.** Der persistierte Fähigkeits-Layer ist
+  eine GESTALT, seine Werte sind die des letzten Laufs (so steht es im Typ). Drei Entscheidungen
+  hingen trotzdem daran: die Menü-Beweispflicht (`MAIN:PWR`), das Tuner-Band-Routing und die
+  Player-Zuordnung je Zone (`INP`). `readDecisiveValues` liest diese drei live, bevor sie gebraucht
+  werden (≤ 6 Abrufe, einmal pro Verbindung) und legt sie über die Gestalt. Ein Receiver steht die
+  meiste Zeit in Bereitschaft — der gemerkte `PWR=Standby` machte aus dem ersten Neustart nach dem
+  Einschalten einen ungeprüften Menü-Anspruch und damit #613 über den Cache.
+- **Wiedergabezeiten gibt es in BEIDEN Formen, aus einer Quelle** (`catalog/play-time.ts`):
+  `player.elapsedTime`/`totalTime` als Zahl in Sekunden (`media.elapsed`/`media.duration` — der
+  Typ-Erkenner nimmt für diese Plätze nur Zahlen), `…Text` als „1:23"
+  (`media.elapsed.text`/`media.duration.text`). YNCA rechnet seinen Text in Sekunden, MusicCast
+  formatiert seine Sekunden — dadurch hängen weder Typ noch Schreibweise am Transport. Vorbild:
+  sonos + alexa2 führen dasselbe Paar. Der Typwechsel läuft über `extendObject`, NICHT über die
+  Umzugstabelle ([[reference_iobroker_objekt_aendern_ohne_loeschen]]: nie löschen, um zu ändern).
+- **Ein Datenpunkt-Name je Datenpunkt.** Die 23 Eingangsnamen trugen alle den Ordnernamen „Input
+  names"; `CatalogEntry.nameArgs` füllt jetzt die `%s`-Stelle des Schlüssels je Eintrag.
+- **Eine gemerkte Antwort wird auf Plausibilität geprüft** (`ProbeMemory.once(key, probe, isUsable)`):
+  eine technisch erfolgreiche, inhaltlich abgeschnittene Antwort (MusicCast-Fähigkeiten ohne eine
+  einzige Zone) wird benutzt, aber NICHT gemerkt — sonst fror sie die Gerätegestalt für immer ein.
+  Im selben Zug ist die `zones.length > 0`-Ausnahme aus der Lebend-Prüfung des MusicCast-Starts raus.
+- **Der XML-Befehl trägt `Content-Length`** — Node schickt ohne Längenangabe „chunked", und jede
+  Referenz für diesen Weg (Vorgänger-Adapter, rxv, openHAB) sendet eine Länge. Und
+  `/tuner/setFreq` trägt den Pflichtparameter `tuning=direct` (gebündelte Referenzbibliothek
+  `yxc_api_cmd.js:1186`); der alte Test hatte die falsche URL festgeschrieben, weil er aus der
+  Implementierung statt aus der Quelle geschrieben war.
+- **Kein Schreibvorgang ohne Beweis — auch bei XML.** `createdStates` sperrt jetzt beide Wege; der
+  Kommentar behauptete das schon, gegolten hat es nur für den Leseweg.
+- **`keepalive()` fängt selbst** (YXC + XML): es hängt als async-Handler am Zeitgeber, eine
+  Ablehnung wäre unbehandelt und stoppt die Instanz.
+- **Szenentitel heilen im Betrieb**: `refreshInBackground` zieht `sceneTitles` und `scene.list` nach
+  (die Beschriftung des Auswahlfelds kann nicht live folgen — der Baum wird einmal je Verbindung
+  koordiniert — und kommt mit dem nächsten Start). Ein Titel, den das Gerät nicht kennt, hinterlässt
+  eine debug-Zeile statt gar nichts.
+- **Der XML-Tuner wird live gelesen, nie aus dem gemerkten Antwortkörper geseedet** — sonst stand
+  die Station der vorigen Sitzung als aktueller Wert im Baum, bis der erste Poll lief.
+- **Sperre gegen die eigene Umzugstabelle** (`pure-helpers.test.ts`): kein Eintrag in
+  `RENAMED_STATE_IDS`/`RENAMED_CHANNELS` darf eine Id treffen, die die drei Kataloge heute noch
+  bauen — sonst löscht der Adapter denselben Datenpunkt bei JEDEM Start. Am echten Defekt bewiesen.
+- **Die abschaltbaren Datenpunkt-Gruppen sind an drei Stellen gleich** (`manifest.test.ts`):
+  `SWITCHABLE_GROUPS`, die Schalter in `jsonConfig` und die Vorgaben im Manifest.
+
 ## Voll-Audit 2026-09-02 (v2.0.4) — Regeln, die im Code stehen müssen
 
 16-Dimensionen-Audit + Speicher/Leaks + Sicherheit + Test-Audit mit Mutationstests; Bericht
@@ -505,7 +551,13 @@ räumt den KOMPLETTEN Alt-Baum (47 Instanz-Objekte + dynamische `Realtime.*`/`Sy
 
 ## Tests
 
-- vitest, `src/**/*.test.ts` — Unit + Boot-Integrationstest (startet den Adapter real). 825 Tests.
+- **Zwei getrennte Läufe, und `npm test` fährt seit 2.2.0 BEIDE.** `test:ts` = vitest über
+  `src/**/*.test.ts` + `test/standards/` (851 Tests) — darin ist auch `src/main.test.ts`, das den
+  Adapter GEMOCKT hochfährt, nicht echt. Der echte Boot-Test ist `test/integration.js`
+  (`@iobroker/testing` startet js-controller + Instanz, ~30 s) und hängt an `test:integration`;
+  bis 2.1.1 lief er lokal nie mit, obwohl die CI ihn fährt (`testing-action-adapter` ruft
+  `test:unit` UND `test:integration`). `passWithNoTests` ist raus — ein nicht mehr greifendes
+  `include` muss rot melden, nicht grün.
 - **Mutationstabellen** (`../../Ressourcen/iobroker-entwicklung/mutation-testing/`): `mutations_yamaha_all.py`
   (116 Regelbrüche, Wellen 1–5 vom 22.08., Nadeln am 02.09. nachgezogen, vier tote entfernt) + `mutations_yamaha_2026-09-02.py`
   (24, Welle 6 = die Audit-Fixes; IDs Z1–Z24, W gehört Welle 5) + `mutations_yamaha_2026-09-03.py`

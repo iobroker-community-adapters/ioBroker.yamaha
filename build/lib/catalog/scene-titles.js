@@ -19,8 +19,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var scene_titles_exports = {};
 __export(scene_titles_exports, {
   knownScenes: () => knownScenes,
-  resolveSceneNumber: () => resolveSceneNumber,
-  sceneStatesMap: () => sceneStatesMap
+  resolveSceneNumber: () => resolveSceneNumber
 });
 module.exports = __toCommonJS(scene_titles_exports);
 var import_protocol = require("../xml/protocol");
@@ -65,17 +64,9 @@ function resolveSceneNumber(value, memory, zoneKey) {
   const match = knownScenes(memory, zoneKey).find((scene) => scene.title.toLowerCase() === needle);
   return match == null ? void 0 : match.num;
 }
-function sceneStatesMap(memory, zoneKey) {
-  const scenes = knownScenes(memory, zoneKey);
-  if (scenes.length === 0) {
-    return void 0;
-  }
-  return Object.fromEntries(scenes.map((scene) => [scene.num, scene.title]));
-}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   knownScenes,
-  resolveSceneNumber,
-  sceneStatesMap
+  resolveSceneNumber
 });
 //# sourceMappingURL=scene-titles.js.map

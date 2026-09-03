@@ -33,6 +33,8 @@ class PollDropDetector {
   failures = 0;
   dropped = false;
   handler;
+  /** A drop that fired before onDrop was registered — delivered once it is. */
+  pending;
   /**
    * Register the supervisor's drop handler.
    *
@@ -40,6 +42,11 @@ class PollDropDetector {
    */
   onDrop(cb) {
     this.handler = cb;
+    if (this.pending) {
+      const reason = this.pending;
+      this.pending = void 0;
+      cb(reason);
+    }
   }
   /**
    * Record a poll's outcome.
@@ -57,12 +64,16 @@ class PollDropDetector {
   }
   /** Report the drop once — repeat calls are ignored, as is a report after close. */
   report() {
-    var _a;
     if (this.dropped) {
       return;
     }
     this.dropped = true;
-    (_a = this.handler) == null ? void 0 : _a.call(this, new Error(`${this.maxFailures} polls failed`));
+    const reason = new Error(`${this.maxFailures} polls failed`);
+    if (this.handler) {
+      this.handler(reason);
+      return;
+    }
+    this.pending = reason;
   }
 }
 // Annotate the CommonJS export names for ESM import in node:

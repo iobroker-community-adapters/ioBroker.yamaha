@@ -23,6 +23,12 @@ export interface CatalogEntry {
    * — so they carry the key and {@link catalogToObjects} resolves it into all eleven languages.
    */
   nameKey: I18nKey;
+  /**
+   * Values substituted into the name key's `%s` placeholders, in order. Lets a family of
+   * datapoints built in a loop carry distinguishable names (the assignable input names)
+   * instead of all sharing the family's label.
+   */
+  nameArgs?: Array<string | number>;
   /** Value semantics — drives type/role/states/range via {@link ValueSpec}. */
   spec: ValueSpec;
   /** Whether the user can write this state. */

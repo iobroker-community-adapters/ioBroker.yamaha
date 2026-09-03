@@ -98,3 +98,38 @@ describe("YncaBrowseDriver", () => {
     expect(windows).toHaveLength(0);
   });
 });
+
+describe("YncaBrowseDriver window replacement", () => {
+  it("a shorter next window does not keep the rows of the previous one", async () => {
+    // Every reference device answers with all eight lines, empty ones included — so today
+    // the assembly is overwritten wholesale. A firmware that sends only the filled lines
+    // would otherwise leave the tail of the last window standing under a shorter menu.
+    const windows: Array<{ rows: Array<{ line: number; text: string }> }> = [];
+    const sent: Array<{ func: string; value: string }> = [];
+    const driver = new YncaBrowseDriver(
+      {
+        send: (_s, func, value) => sent.push({ func, value }),
+        get: () => {},
+      },
+      new Set(["NETRADIO"]),
+      () => Promise.resolve(),
+    );
+    driver.attach({ onWindow: (w: { rows: Array<{ line: number; text: string }> }) => windows.push(w) } as never);
+    driver.open("netRadio");
+    for (const [n, text] of [
+      [1, "One"],
+      [2, "Two"],
+      [3, "Three"],
+    ] as Array<[number, string]>) {
+      driver.handleMessage({ subunit: "NETRADIO", func: `LINE${n}TXT`, value: text });
+    }
+    await new Promise(resolve => setImmediate(resolve));
+    expect(windows.at(-1)?.rows.map(r => r.text)).toEqual(["One", "Two", "Three"]);
+
+    // Enter a folder that holds a single entry — and the device reports only that one line.
+    driver.select(1);
+    driver.handleMessage({ subunit: "NETRADIO", func: "LINE1TXT", value: "Only" });
+    await new Promise(resolve => setImmediate(resolve));
+    expect(windows.at(-1)?.rows.map(r => r.text)).toEqual(["Only"]);
+  });
+});

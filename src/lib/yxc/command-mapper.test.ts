@@ -245,8 +245,12 @@ describe("parseYxcPlayInfo", () => {
       { id: "player.shuffle", value: false },
       { id: "player.playback", value: 0 },
       { id: "player.albumArt", value: "/cover.jpg" },
+      // Both forms of each time, from the one reported value — the seconds fill the
+      // media-player slot, the text is what a visualisation shows.
       { id: "player.elapsedTime", value: 42 },
+      { id: "player.elapsedTimeText", value: "0:42" },
       { id: "player.totalTime", value: 215 },
+      { id: "player.totalTimeText", value: "3:35" },
     ]);
   });
 });

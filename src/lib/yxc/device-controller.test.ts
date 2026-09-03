@@ -595,6 +595,36 @@ describe("YxcDeviceController reachability (a remembered device must still answe
     expect(await build(second).start()).toBe(false);
     expect(second.calls.some(call => call.method === "getFeatures")).toBe(false);
   });
+
+  it("a capability answer without a single zone is not remembered", async () => {
+    // A truncated getFeatures still parses — into zero zones. Remembering that froze the
+    // device's shape for good (every later connect read the memory instead of asking), and
+    // it disarmed the liveness check above, which has nothing left to ask. So: used for
+    // this attempt, never written to the memory.
+    const memory = new ProbeMemory();
+    const build = (client: FakeClient): YxcDeviceController =>
+      new YxcDeviceController("living", {
+        client,
+        registerPush: () => () => {},
+        scheduleKeepalive: () => () => {},
+        upsertObject: async () => {},
+        setStateAck: () => {},
+        log: silentLog,
+        gate: testGate(),
+        probeMemory: memory,
+      });
+
+    const truncated = makeFakeClient({ netusb: {} }, { power: "on" });
+    // No zone answers, so nothing proves the device is there — the start fails honestly
+    // instead of reporting "ready" out of a shape nobody could verify.
+    expect(await build(truncated).start()).toBe(false);
+    expect(memory.remembered("features")).toBeUndefined();
+
+    // The next connect asks again — and a complete answer works normally.
+    const healthy = makeFakeClient(oneZone, { power: "on" });
+    expect(await build(healthy).start()).toBe(true);
+    expect(healthy.calls.some(call => call.method === "getFeatures")).toBe(true);
+  });
 });
 
 describe("zoneNameFrom", () => {

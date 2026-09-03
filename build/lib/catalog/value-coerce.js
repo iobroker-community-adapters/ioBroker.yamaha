@@ -119,7 +119,8 @@ function encode(spec, value) {
     case "text":
       return String(value);
     case "code": {
-      const token = Object.keys(spec.codes).find((w) => spec.codes[w] === value);
+      const code = Number(value);
+      const token = Object.keys(spec.codes).find((w) => spec.codes[w] === code);
       return token != null ? token : String(value);
     }
     case "button":

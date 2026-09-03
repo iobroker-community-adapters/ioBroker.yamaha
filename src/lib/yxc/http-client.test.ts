@@ -165,8 +165,11 @@ describe("YamahaYxcClient player and tuner commands", () => {
     expect(last()).toBe("/cd/toggleTray");
     await client.setBand("fm");
     expect(last()).toBe("/tuner/setBand?band=fm");
+    // `tuning=direct` is mandatory for an absolute frequency — the reference library
+    // (yamaha-yxc-nodejs yxc_api_cmd.js:1186) sends it, we used to drop it and the
+    // device refused every frequency write.
     await client.setFreq("fm", 87500);
-    expect(last()).toBe("/tuner/setFreq?band=fm&num=87500");
+    expect(last()).toBe("/tuner/setFreq?band=fm&tuning=direct&num=87500");
     await client.setPartyMode(true);
     expect(last()).toBe("/system/setPartyMode?enable=true");
     await client.setPartyMode(false);
@@ -189,6 +192,30 @@ describe("YamahaYxcClient player and tuner commands", () => {
     expect(last()).toBe("/tuner/switchPreset?dir=next");
     await client.getClockSettings();
     expect(last()).toBe("/clock/getSettings");
+  });
+
+  test("the six read endpoints that had no URL test at all", async () => {
+    // These had no assertion of any kind — and MusicCast is the transport nobody here can
+    // check against hardware, so a typo would surface only at a user's device. The gap was
+    // not theoretical: `setFreq` above was missing its mandatory `tuning` parameter, and the
+    // one test it did have asserted the broken URL, because it had been written from the
+    // implementation instead of from the reference library.
+    const { client, last } = capture();
+    await client.getDeviceInfo();
+    expect(last()).toBe("/system/getDeviceInfo");
+    // Deliberately WITHOUT `?id=`: only the whole-device form answers with the `zone_list`
+    // the device name is read from. (The bundled library always passes a zone id — this is
+    // our own shape, and `zoneNameFrom` depends on it.)
+    await client.getNameText();
+    expect(last()).toBe("/system/getNameText");
+    await client.getListInfo("net_radio", 8);
+    expect(last()).toBe("/netusb/getListInfo?input=net_radio&index=8&size=8");
+    await client.getSignalInfo("main");
+    expect(last()).toBe("/main/getSignalInfo");
+    await client.getMcPlaylistName();
+    expect(last()).toBe("/netusb/getMcPlaylistName");
+    await client.getPlayQueue();
+    expect(last()).toBe("/netusb/getPlayQueue?index=0&size=8");
   });
 
   test("a device refusal (response_code != 0) becomes an error, not a silent success", async () => {

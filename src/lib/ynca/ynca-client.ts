@@ -231,6 +231,9 @@ export class YncaClient {
    * model); it self-reschedules and is stopped on drop and on close.
    */
   public startKeepalive(): void {
+    // Replace, never stack: a second call would overwrite the handle while the first timer
+    // keeps re-scheduling itself — an un-cancellable 30 s poll for the rest of the process.
+    this.stopKeepalive();
     this.keepaliveTimer = this.timers.schedule(() => {
       this.get("SYS", "MODELNAME");
       this.startKeepalive();

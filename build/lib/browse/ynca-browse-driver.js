@@ -58,6 +58,8 @@ class YncaBrowseDriver {
   kinds = /* @__PURE__ */ new Map();
   /** True while a settle delay is pending, so one burst renders once. */
   renderPending = false;
+  /** True between asking for a window and the first field of the answer — see {@link refresh}. */
+  awaitingWindow = false;
   closed = false;
   /**
    * Attach the engine that renders the windows (set after both are constructed).
@@ -119,6 +121,7 @@ class YncaBrowseDriver {
   /** Re-read the current window (`LISTINFO=?` answers with the full field burst). */
   refresh() {
     if (this.active) {
+      this.awaitingWindow = true;
       this.client.get(this.active.subunit, "LISTINFO");
     }
   }
@@ -136,6 +139,11 @@ class YncaBrowseDriver {
     var _a;
     if (!this.active || message.subunit !== this.active.subunit) {
       return;
+    }
+    const isWindowField = /^LINE[1-8](TXT|ATRIB)$/.test(message.func) || ["LISTLAYERNAME", "LISTLAYER", "MAXLINE", "CURRLINE"].includes(message.func);
+    if (isWindowField && this.awaitingWindow) {
+      this.awaitingWindow = false;
+      this.resetAssembly();
     }
     const line = /^LINE([1-8])(TXT|ATRIB)$/.exec(message.func);
     if (line) {
@@ -171,8 +179,9 @@ class YncaBrowseDriver {
     this.client.send(this.active.subunit, func, value);
     this.refresh();
   }
-  /** Clear the assembly when a new source's menu replaces the old one. */
+  /** Clear the window assembly — on a source switch, and when a freshly asked window starts arriving. */
   resetAssembly() {
+    this.awaitingWindow = false;
     this.menuName = "";
     this.layer = 0;
     this.totalItems = 0;

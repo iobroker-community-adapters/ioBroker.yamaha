@@ -387,10 +387,136 @@ describe("YncaDeviceController browse surface (#613)", () => {
     expect(created).toContain("living.player.browse.source");
     expect(client.requests.some(gets => gets.every(get => get.func === "LISTINFO"))).toBe(false);
   });
+
+  test("a REMEMBERED standby does not skip the proof — the power is read live (#613 via the cache)", async () => {
+    // The persisted layer holds the LAST run's values, and a receiver stands in standby
+    // most of the time. Deciding the menu claim on that made YNCA claim player.browse.*
+    // unproven on the first restart after the user switched the receiver on — displacing
+    // the XML driver that does probe. That is #613, brought back in through the cache.
+    const memory = new ProbeMemory({
+      yncaCapabilities: {
+        model: "RX-V473",
+        firmware: "1.0",
+        subunits: { MAIN: { PWR: "Standby" }, NETRADIO: { PLAYBACKINFO: "Stop" } },
+      },
+    });
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX-V473",
+      // The device is ON now — and it cannot serve YNCA menus (the RX-V473 case).
+      subunits: { SYS: { MODELNAME: "RX-V473", VERSION: "1.0" }, MAIN: { PWR: "On", INP: "NET RADIO" } },
+    };
+    client.listSubunits = [];
+    const { created, deps } = makeDeps(client);
+    deps.gate = testGate();
+    await new YncaDeviceController("living", { ...deps, probeMemory: memory }).start();
+    // The probe ran (the live power said "On") and found nothing — so no claim, and the
+    // XML transport keeps the menus it can actually serve.
+    expect(client.requests.some(gets => gets.every(get => get.func === "LISTINFO"))).toBe(true);
+    expect(created.some(id => id.includes("player.browse"))).toBe(false);
+  });
 });
 
 describe("YncaDeviceController fast restart (persisted capability layer)", () => {
   const flushAsync = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
+
+  test("a playback time is published as seconds AND as readable text", async () => {
+    // Both forms come from the one device answer: the seconds fill the media-player slot
+    // (the type detector takes nothing else), the text is what a visualisation shows.
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX",
+      subunits: {
+        SYS: { MODELNAME: "RX", VERSION: "1.0" },
+        MAIN: { PWR: "On", INP: "NET RADIO" },
+        NETRADIO: { PLAYBACKINFO: "Play", ELAPSEDTIME: "1:23", TOTALTIME: "1:02:03" },
+      },
+    };
+    const { acked, deps } = makeDeps(client);
+    await new YncaDeviceController("living", deps).start();
+    expect(acked).toContainEqual({ id: "living.player.elapsedTime", value: 83 });
+    expect(acked).toContainEqual({ id: "living.player.elapsedTimeText", value: "1:23" });
+    expect(acked).toContainEqual({ id: "living.player.totalTime", value: 3723 });
+    expect(acked).toContainEqual({ id: "living.player.totalTimeText", value: "1:02:03" });
+  });
+
+  test("a scene renamed at the receiver reaches the running session", async () => {
+    // Scene titles are no datapoints any more, so nothing but this refresh carries them
+    // into a running session: the fast path built them from the memory, and a rename
+    // stayed invisible until the next start — a write by the NEW title was dropped.
+    const memory = new ProbeMemory({
+      yncaCapabilities: {
+        model: "RX",
+        firmware: "1.0",
+        subunits: { MAIN: { PWR: "On", SCENE1NAME: "Old name" }, SYS: { MODELNAME: "RX", VERSION: "1.0" } },
+      },
+    });
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX",
+      subunits: { SYS: { MODELNAME: "RX", VERSION: "1.0" }, MAIN: { PWR: "On", SCENE1NAME: "Movie night" } },
+    };
+    const { acked, deps } = makeDeps(client);
+    const controller = new YncaDeviceController("living", { ...deps, probeMemory: memory });
+    await controller.start();
+    await flushAsync();
+    expect(acked.filter(a => a.id === "living.scene.list").pop()?.value).toBe(
+      JSON.stringify([{ num: 1, title: "Movie night" }]),
+    );
+    // …and the write by title resolves against the FRESH list.
+    client.sent.length = 0;
+    controller.handleStateChange("living.scene.recall", false, "Movie night");
+    expect(client.sent).toEqual([{ subunit: "MAIN", func: "SCENE", value: "Scene 1" }]);
+  });
+
+  test("a band-routed write follows the LIVE band, not the remembered one", async () => {
+    // The remembered layer says AM (that is where the tuner stood when the adapter last
+    // ran); the device is on FM now. Routing the frequency by the memory put AMFREQ on
+    // the wire — a wrong command, not just a stale reading.
+    const memory = new ProbeMemory({
+      yncaCapabilities: {
+        model: "RX",
+        firmware: "1.0",
+        subunits: { MAIN: { PWR: "On" }, TUN: { BAND: "AM", AMFREQ: "1080", FMFREQ: "100.90" } },
+      },
+    });
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX",
+      subunits: { SYS: { MODELNAME: "RX", VERSION: "1.0" }, MAIN: { PWR: "On" }, TUN: { BAND: "FM" } },
+    };
+    const { deps } = makeDeps(client);
+    const controller = new YncaDeviceController("living", { ...deps, probeMemory: memory });
+    await controller.start();
+    controller.handleStateChange("living.tuner.frequency", false, 100900);
+    expect(client.sent).toEqual([{ subunit: "TUN", func: "FMFREQ", value: "100.90" }]);
+  });
+
+  test("a player button follows the zone's LIVE input, not the remembered one", async () => {
+    // Same class: the transport buttons are routed by what the zone is listening to. A
+    // remembered input sent play/pause to the source the zone listened to LAST run.
+    const memory = new ProbeMemory({
+      yncaCapabilities: {
+        model: "RX",
+        firmware: "1.0",
+        subunits: {
+          MAIN: { PWR: "On", INP: "NET RADIO" },
+          NETRADIO: { PLAYBACKINFO: "Play" },
+          SPOTIFY: { PLAYBACKINFO: "Play" },
+        },
+      },
+    });
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX",
+      subunits: { SYS: { MODELNAME: "RX", VERSION: "1.0" }, MAIN: { PWR: "On", INP: "Spotify" } },
+    };
+    const { deps } = makeDeps(client);
+    const controller = new YncaDeviceController("living", { ...deps, probeMemory: memory });
+    await controller.start();
+    controller.handleStateChange("living.player.playback", false, 2);
+    expect(client.sent).toEqual([{ subunit: "SPOTIFY", func: "PLAYBACK", value: "Pause" }]);
+  });
 
   test("the second connect builds the tree from the memory and refreshes values behind the ready line", async () => {
     const client = new FakeClient();
@@ -413,10 +539,14 @@ describe("YncaDeviceController fast restart (persisted capability layer)", () =>
     client.requests.length = 0;
     const { created, acked, deps: deps2 } = makeDeps(client);
     await new YncaDeviceController("living", { ...deps2, probeMemory: memory }).start();
-    // The only request the READY LINE waited for is the identity read; no AVAIL probe,
-    // no blocking sweep.
+    // The only request the READY LINE waited for is the identity read plus the handful of
+    // values the start DECIDES from; no AVAIL probe, no blocking sweep.
     expect(client.requests[0].map(get => get.func)).toEqual(["MODELNAME", "VERSION"]);
     expect(client.requests.some(gets => gets.every(get => get.func === "AVAIL"))).toBe(false);
+    // The remembered layer is a SHAPE — its values are the last run's. Power, the zone
+    // inputs and the tuner band decide something (menu claim, write routing), so they are
+    // read live before use instead of taken from the memory.
+    expect(client.requests[1].map(get => `${get.subunit}:${get.func}`)).toEqual(["MAIN:PWR", "MAIN:INP"]);
     expect(created).toContain("living.advanced.inputNames.hdmi1");
     expect(created).toContain("living.power");
     // Stale values are not seeded — the states hold last-known values anyway. The
@@ -426,8 +556,8 @@ describe("YncaDeviceController fast restart (persisted capability layer)", () =>
     // The full question round then runs BEHIND the ready line as a value refresh —
     // statics included, so a rename at the device heals in seconds, not on a restart.
     await flushAsync();
-    expect(client.requests).toHaveLength(2);
-    const background = client.requests[1];
+    expect(client.requests).toHaveLength(3);
+    const background = client.requests[2];
     expect(background.some(get => get.func === "PWR")).toBe(true);
     expect(background.some(get => get.func === "INPNAMEHDMI1")).toBe(true);
   });

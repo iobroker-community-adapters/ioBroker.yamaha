@@ -86,19 +86,3 @@ export function resolveSceneNumber(
   const match = knownScenes(memory, zoneKey).find(scene => scene.title.toLowerCase() === needle);
   return match?.num;
 }
-
-/**
- * The dropdown label map for a zone's scene recall (number → title), or undefined
- * when no transport reported titles.
- *
- * @param memory the device's shared probe memory
- * @param zoneKey the zone
- * @returns the states map, or undefined
- */
-export function sceneStatesMap(memory: ProbeMemory | undefined, zoneKey: string): Record<string, string> | undefined {
-  const scenes = knownScenes(memory, zoneKey);
-  if (scenes.length === 0) {
-    return undefined;
-  }
-  return Object.fromEntries(scenes.map(scene => [scene.num, scene.title]));
-}

@@ -447,14 +447,17 @@ class YamahaYxcClient {
     return this.send(`/tuner/setBand?band=${q(band)}`);
   }
   /**
-   * Set the tuner frequency for a band (the device needs both band and value).
+   * Set the tuner frequency for a band. `tuning` selects HOW to tune and is not optional:
+   * the reference library sends `tuning=direct` for an absolute frequency
+   * (`yamaha-yxc-nodejs/lib/yxc_api_cmd.js:1186` setFreqDirect). Without it the device
+   * answers a non-zero response code and the write never reaches the tuner.
    *
    * @param band the band the frequency belongs to
    * @param freq the frequency (kHz, as the device reports it)
    * @returns the command response
    */
   setFreq(band, freq) {
-    return this.send(`/tuner/setFreq?band=${q(band)}&num=${q(freq)}`);
+    return this.send(`/tuner/setFreq?band=${q(band)}&tuning=direct&num=${q(freq)}`);
   }
   /**
    * Turn party mode on/off (system-wide).

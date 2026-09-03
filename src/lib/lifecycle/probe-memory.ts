@@ -32,15 +32,25 @@ export class ProbeMemory {
   /**
    * Return the remembered answer, or run the probe once and remember it.
    *
+   * `isUsable` is the guard against remembering a DEGENERATE answer. A probe can succeed
+   * technically and still carry nothing usable — a truncated getFeatures parses into zero
+   * zones — and without the guard that answer was kept for good: every later connect read
+   * it back out of the memory and never asked again, until model or firmware changed. The
+   * value is still returned to the caller; only the remembering is skipped.
+   *
    * @param key what is being remembered (e.g. "xmlBrowseSources")
    * @param probe the probe to run when nothing is remembered yet
+   * @param isUsable optional plausibility check — a value it rejects is not remembered
    * @returns the remembered or freshly probed value
    */
-  public async once<T>(key: string, probe: () => Promise<T>): Promise<T> {
+  public async once<T>(key: string, probe: () => Promise<T>, isUsable?: (value: T) => boolean): Promise<T> {
     if (this.values.has(key)) {
       return this.values.get(key) as T;
     }
     const value = await probe();
+    if (isUsable && !isUsable(value)) {
+      return value;
+    }
     this.values.set(key, value);
     this.persistNow();
     return value;

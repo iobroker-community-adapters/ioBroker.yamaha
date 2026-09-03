@@ -60,13 +60,31 @@ const PLAYER_STATES: Array<{ state: string; common: Omit<ObjectDef["common"], "n
     state: "shuffle",
     common: { nameKey: "Shuffle", type: "boolean", role: "media.mode.shuffle", read: true, write: false },
   },
+  // Both forms of each time, from the one value the device reports: the seconds fill the
+  // type detector's media-player slot (it takes nothing else), the text is what a
+  // visualisation shows. The YNCA side publishes exactly the same pair, converted the other
+  // way round — so the datapoints mean the same thing on every device.
   {
     state: "elapsedTime",
     common: { nameKey: "Elapsed time", type: "number", unit: "s", role: "media.elapsed", read: true, write: false },
   },
   {
+    state: "elapsedTimeText",
+    common: {
+      nameKey: "Elapsed time (readable)",
+      type: "string",
+      role: "media.elapsed.text",
+      read: true,
+      write: false,
+    },
+  },
+  {
     state: "totalTime",
     common: { nameKey: "Total time", type: "number", unit: "s", role: "media.duration", read: true, write: false },
+  },
+  {
+    state: "totalTimeText",
+    common: { nameKey: "Total time (readable)", type: "string", role: "media.duration.text", read: true, write: false },
   },
   {
     state: "albumArt",

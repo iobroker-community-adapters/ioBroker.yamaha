@@ -37,6 +37,7 @@ __export(command_mapper_exports, {
 module.exports = __toCommonJS(command_mapper_exports);
 var import_zones = require("./zones");
 var import_value_coerce = require("../catalog/value-coerce");
+var import_play_time = require("../catalog/play-time");
 var import_catalog = require("./catalog");
 function readStatusField(status, read) {
   if ("path" in read) {
@@ -199,10 +200,12 @@ function parseYxcPlayInfo(playInfo, block = "netusb") {
   const elapsed = info.play_time;
   if (typeof elapsed === "number") {
     updates.push({ id: "player.elapsedTime", value: elapsed });
+    updates.push({ id: "player.elapsedTimeText", value: (0, import_play_time.formatPlayTime)(elapsed) });
   }
   const total = info.total_time;
   if (typeof total === "number") {
     updates.push({ id: "player.totalTime", value: total });
+    updates.push({ id: "player.totalTimeText", value: (0, import_play_time.formatPlayTime)(total) });
   }
   if (block === "cd") {
     updates.push({ id: "player.source", value: "cd" });
@@ -231,7 +234,9 @@ const PLAYER_CLEAR = [
   { id: "player.track", value: "" },
   { id: "player.albumArt", value: "" },
   { id: "player.elapsedTime", value: 0 },
+  { id: "player.elapsedTimeText", value: "" },
   { id: "player.totalTime", value: 0 },
+  { id: "player.totalTimeText", value: "" },
   { id: "player.repeat", value: 0 },
   { id: "player.shuffle", value: false }
 ];

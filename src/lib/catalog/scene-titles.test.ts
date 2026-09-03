@@ -1,4 +1,4 @@
-import { knownScenes, resolveSceneNumber, sceneStatesMap } from "./scene-titles";
+import { knownScenes, resolveSceneNumber } from "./scene-titles";
 import { ProbeMemory } from "../lifecycle/probe-memory";
 
 const declaration =
@@ -23,7 +23,6 @@ describe("scene titles from the shared device memory", () => {
       { num: 1, title: "BD/DVD" },
       { num: 4, title: "RADIO" },
     ]);
-    expect(sceneStatesMap(memory, "main")).toEqual({ 1: "BD/DVD", 4: "RADIO" });
   });
 
   test("resolveSceneNumber takes numbers, numeric strings and titles (case-insensitive)", () => {

@@ -1,5 +1,6 @@
 import { mergeYncaSubunits, type YncaCapabilities } from "./ynca/capability";
 import { formatWireNumber } from "./catalog/value-coerce";
+import { playTimeTwin } from "./catalog/play-time";
 import type { ObjectDef } from "./catalog/types";
 import { tName } from "./i18n";
 import type { ConnectionHandle, ControllerLog } from "./controller";
@@ -34,9 +35,13 @@ const AVAIL_PROBE = availGets(YNCA_CATALOG);
  * Functions whose VALUE cannot change while the device runs: the 23 assignable input names
  * and the 12 scene names. They cost 35 of the ~187 paced reads of a targeted sweep (3.5 s
  * at the specification's mandatory 100 ms spacing) and answer the same thing every time, so
- * a reconnect reuses what the first connect learned. Deliberately per adapter RUN, not
- * persisted: renaming an input at the receiver shows up after the next adapter restart
- * rather than needing anyone to invalidate a stored file.
+ * a reconnect reuses what the first connect learned.
+ *
+ * They live in the PERSISTED probe memory (the device object's `native.probeCache`), so the
+ * saving survives a restart too — the freshness guard is the device identity, and a renamed
+ * input heals through the background refresh, which re-reads them. (This used to be
+ * documented as "per adapter run, not persisted"; that stopped being true with the
+ * fast-restart rework and the comment was left behind.)
  */
 const STATIC_FUNC = /^(INPNAME|SCENE\d+NAME$)/;
 
@@ -109,8 +114,10 @@ const YNCA_PLAYER_CLEAR: Array<{ id: string; value: number | string | boolean }>
   { id: "player.track", value: "" },
   { id: "player.station", value: "" },
   { id: "player.channelName", value: "" },
-  { id: "player.elapsedTime", value: "" },
-  { id: "player.totalTime", value: "" },
+  { id: "player.elapsedTime", value: 0 },
+  { id: "player.elapsedTimeText", value: "" },
+  { id: "player.totalTime", value: 0 },
+  { id: "player.totalTimeText", value: "" },
   { id: "player.repeat", value: 0 },
   { id: "player.shuffle", value: false },
 ];
@@ -155,6 +162,26 @@ function isCachedCapabilities(value: unknown): value is CachedCapabilities {
  * `LISTINFO=?` answer is made of (RX-A810 reference log). See {@link YncaDeviceController.probeBrowseSubunits}.
  */
 const LIST_PROOF = /^(LISTLAYER|LISTLAYERNAME|CURRLINE|MAXLINE|LINE[1-8](TXT|ATRIB))$/;
+
+/**
+ * The scenes a device declares, read from its `SCENExNAME` answers on MAIN. Used both by
+ * the init and by the background refresh, so a scene renamed at the receiver reaches the
+ * running session instead of waiting for the next start.
+ *
+ * @param subunits the swept subunit→function map
+ * @returns the declared scenes, lowest number first
+ */
+function sceneTitlesOf(subunits: Record<string, Record<string, string>>): Array<{ num: number; title: string }> {
+  const main = subunits.MAIN ?? {};
+  const scenes: Array<{ num: number; title: string }> = [];
+  for (let n = 1; n <= 12; n++) {
+    const title = main[`SCENE${n}NAME`];
+    if (typeof title === "string" && title.length > 0) {
+      scenes.push({ num: n, title });
+    }
+  }
+  return scenes;
+}
 
 /** The subset of the YNCA client the controller uses (so tests can inject a fake). */
 export interface YncaClientLike {
@@ -266,10 +293,15 @@ export class YncaDeviceController implements ConnectionHandle {
     const present = presentYncaEntries(capabilities, catalog);
     this.writeMap = idToEntry(present);
     this.presentEntries = present;
+    // On the fast path `capabilities` carries the values of the LAST run — the persisted
+    // layer is a SHAPE, its values are leftovers. Everything that DECIDES something
+    // (which menus may be claimed, which wire function a band-routed write takes, which
+    // source a zone's player buttons act on) is therefore re-read live before use.
+    const live = fromCache ? await this.readDecisiveValues(capabilities) : capabilities;
     // Seed each zone's input from the sweep — the player routing needs to know what
     // every zone is listening to before the first INP push arrives.
     for (const zone of YNCA_ZONES) {
-      const input = capabilities.subunits[zone.subunit]?.INP;
+      const input = live.subunits[zone.subunit]?.INP;
       if (typeof input === "string") {
         this.zoneInputs.set(zone.key, input);
       }
@@ -287,14 +319,7 @@ export class YncaDeviceController implements ConnectionHandle {
     );
     // The scene titles ride the sweep as SCENExNAME answers; they become the recall
     // dropdown's labels and the one scene.list state (v2.0.0 — no per-name datapoints).
-    const main = capabilities.subunits.MAIN ?? {};
-    this.sceneTitles = [];
-    for (let n = 1; n <= 12; n++) {
-      const title = main[`SCENE${n}NAME`];
-      if (typeof title === "string" && title.length > 0) {
-        this.sceneTitles.push({ num: n, title });
-      }
-    }
+    this.sceneTitles = sceneTitlesOf(capabilities.subunits);
     // Parents before children (channels before their states) — created in order.
     for (const object of objects) {
       if (object.id === "scene.recall" && this.sceneTitles.length > 0) {
@@ -331,10 +356,11 @@ export class YncaDeviceController implements ConnectionHandle {
       }
     }
     // The band decides which wire function a tuner.frequency/preset write goes to
-    // (v2.0.0 unification) — seeded from the sweep, kept fresh from the live pushes.
+    // (v2.0.0 unification) — read live above, kept fresh from the live pushes. Whether
+    // the device HAS a DAB subunit is shape, so that half may come from the memory.
     this.hasDab = capabilities.subunits.DAB !== undefined;
-    this.tunerBand = (capabilities.subunits.DAB?.BAND ?? capabilities.subunits.TUN?.BAND ?? "").toUpperCase();
-    await this.setupBrowse(capabilities);
+    this.tunerBand = (live.subunits.DAB?.BAND ?? live.subunits.TUN?.BAND ?? "").toUpperCase();
+    await this.setupBrowse(live);
     this.deps.client.onMessage(message => {
       // The browse driver sees every line first: list lines (LINE1TXT…, LISTINFO
       // bursts, auto-feedback) are not catalogued and would otherwise be dropped.
@@ -409,8 +435,57 @@ export class YncaDeviceController implements ConnectionHandle {
         firmware: capabilities.subunits.SYS?.VERSION ?? firmware,
         subunits: capabilities.subunits,
       } satisfies CachedCapabilities);
+    } else {
+      // No model, no identity — and without an identity nothing can ever invalidate what was
+      // remembered. The statics (input and scene names) are written by the sweep regardless,
+      // so leaving them behind froze those names for good on a device that does not answer
+      // SYS:MODELNAME. The two keys live and die together.
+      this.deps.probeMemory?.drop(key => key === STATIC_KEY);
     }
     return { capabilities, fromCache: false };
+  }
+
+  /**
+   * Re-read the handful of values the START makes DECISIONS from, and lay them over the
+   * remembered shape (fresh wins).
+   *
+   * The persisted capability layer is a shape whose values are the last run's leftovers —
+   * the type says so ("used for SHAPE only"). Three decisions used them anyway, and a
+   * receiver stands in standby most of the time, so the memory usually says `PWR=Standby`:
+   * - the menu claim skips its proof while the device is not on, so a stale "Standby"
+   *   made YNCA claim `player.browse.*` UNPROVEN and displace the XML driver that does
+   *   probe — issue #613, brought back in through the cache;
+   * - a `tuner.frequency` write is routed by the band, so a stale band sends AMFREQ where
+   *   FMFREQ belongs (a wrong command on the wire, not just a stale reading);
+   * - the player's transport buttons are routed by the zone's input, so a stale input
+   *   sends play/pause to the source the zone listened to LAST time.
+   *
+   * Six reads at most (~0.6 s through the gate), once per connect. A drop during them
+   * fails the connect — which is honest: the device is gone.
+   *
+   * @param remembered the capability shape from the persisted layer
+   * @returns the remembered shape with the live answers laid over it
+   */
+  private async readDecisiveValues(remembered: YncaCapabilities): Promise<YncaCapabilities> {
+    const gets: Array<{ subunit: string; func: string }> = [];
+    if (remembered.subunits.MAIN !== undefined) {
+      gets.push({ subunit: "MAIN", func: "PWR" });
+    }
+    for (const zone of YNCA_ZONES) {
+      if (remembered.subunits[zone.subunit] !== undefined) {
+        gets.push({ subunit: zone.subunit, func: "INP" });
+      }
+    }
+    for (const subunit of ["TUN", "DAB"]) {
+      if (remembered.subunits[subunit] !== undefined) {
+        gets.push({ subunit, func: "BAND" });
+      }
+    }
+    if (gets.length === 0) {
+      return remembered;
+    }
+    const fresh = await this.deps.client.readCapabilities(gets);
+    return { model: remembered.model, subunits: mergeYncaSubunits(remembered.subunits, fresh.subunits) };
   }
 
   /**
@@ -462,6 +537,21 @@ export class YncaDeviceController implements ConnectionHandle {
       // proven write surface until the next restart either.
       this.presentEntries = presentYncaEntries({ model: fresh.model, subunits }, catalog);
       this.writeMap = idToEntry(this.presentEntries);
+      // Scene titles are not datapoints any more (v2.0.0), so nothing else carries them
+      // into the running session: on the fast path they came from the memory, and a scene
+      // renamed at the receiver stayed invisible until the NEXT start — including for a
+      // write by title, which resolved against the old list and was dropped. The refresh
+      // reads SCENExNAME anyway, so the list and the lookup follow it here.
+      // (The recall dropdown's LABELS cannot follow live: the unified tree is coordinated
+      // once per connection, so a later object write would not be materialised. They come
+      // with the next start, out of the layer just persisted.)
+      const titles = sceneTitlesOf(subunits);
+      if (JSON.stringify(titles) !== JSON.stringify(this.sceneTitles)) {
+        this.sceneTitles = titles;
+        if (titles.length > 0) {
+          this.deps.setStateAck(`${this.deviceId}.scene.list`, JSON.stringify(titles));
+        }
+      }
       this.deps.log.debug(`${this.deviceId}: background value refresh done (YNCA)`);
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: background value refresh failed: ${String(e)}`);
@@ -573,6 +663,12 @@ export class YncaDeviceController implements ConnectionHandle {
       const needle = value.trim().toLowerCase();
       const match = this.sceneTitles.find(scene => scene.title.toLowerCase() === needle);
       if (match === undefined) {
+        // A dead button has to leave a trace — this was the one write path in the adapter
+        // that dropped a user action without a word (#615's lesson, applied to itself).
+        this.deps.log.debug(
+          `${this.deviceId}: scene "${value}" is not one this device declares — write dropped ` +
+            `(known: ${this.sceneTitles.map(scene => scene.title).join(", ") || "none yet"})`,
+        );
         return;
       }
       value = match.num;
@@ -671,12 +767,18 @@ export class YncaDeviceController implements ConnectionHandle {
    * @param value the decoded value
    */
   private routePlayerUpdate(subunit: string, id: string, value: boolean | number | string): void {
+    // A playback time is published in both forms, from this one value: the seconds fill
+    // the media-player slot, the readable text is what a visualisation shows.
+    const twin = playTimeTwin(id, value);
     for (const zone of YNCA_ZONES) {
       if (!this.playerZones.includes(zone.key)) {
         continue;
       }
       if (playerSubunitForInput(this.zoneInputs.get(zone.key)) === subunit) {
         this.deps.setStateAck(`${this.deviceId}.${zone.prefix}${id}`, value);
+        if (twin) {
+          this.deps.setStateAck(`${this.deviceId}.${zone.prefix}${twin.id}`, twin.value);
+        }
       }
     }
   }

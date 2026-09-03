@@ -26,10 +26,18 @@ var import_protocol = require("./protocol");
 var import_util = require("../util");
 const CONTROL_PATH = "/YamahaRemoteControl/ctrl";
 const REQUEST_TIMEOUT_MS = 5e3;
-function defaultPoster(ip, body) {
+function defaultPoster(ip, payload) {
   return new Promise((resolve, reject) => {
+    const body = Buffer.from(payload, "utf8");
     const req = (0, import_node_http.request)(
-      { host: ip, port: 80, path: CONTROL_PATH, method: "POST", timeout: REQUEST_TIMEOUT_MS },
+      {
+        host: ip,
+        port: 80,
+        path: CONTROL_PATH,
+        method: "POST",
+        timeout: REQUEST_TIMEOUT_MS,
+        headers: { "Content-Type": "text/xml; charset=utf-8", "Content-Length": body.length }
+      },
       (res) => {
         let data = "";
         let bytes = 0;
@@ -53,8 +61,7 @@ function defaultPoster(ip, body) {
     );
     req.on("error", reject);
     req.on("timeout", () => req.destroy(new Error("XML request timeout")));
-    req.write(body);
-    req.end();
+    req.end(body);
   });
 }
 class XmlClient {
