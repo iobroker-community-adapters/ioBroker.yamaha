@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { SWITCHABLE_GROUPS } from "./lib/catalog/groups";
+import { YNCA_CATALOG } from "./lib/ynca/catalog";
+import { YXC_AMP_CATALOG } from "./lib/yxc/catalog";
 
 /**
  * Manifest and admin wiring the integration boot test cannot see. Both checks here guard
@@ -41,5 +43,76 @@ describe("io-package.json manifest", () => {
         `${name} has no group`,
       ).toContain(name);
     }
+  });
+});
+
+describe("every datapoint has a description decision", () => {
+  /**
+   * The fleet standard (`feedback_beschreibung_ist_erklaerung`) wants `common.desc` to be a real
+   * explanation where the adapter has something to say, and EMPTY where it does not — an invented
+   * sentence is worse than nothing. A gate therefore cannot simply demand a description everywhere.
+   *
+   * What it CAN demand is that the decision was made: every catalog entry either carries a
+   * `descKey`, or its name key is listed below as self-explanatory. A new datapoint that is in
+   * neither fails this test, so the gap can never be silent again — which is exactly how yamaha
+   * ended up with 0 descriptions on 190 datapoints while every existing gate stayed green
+   * (they only ever checked a description that was already there).
+   */
+  const SELF_EXPLANATORY = new Set<string>([
+    "power",
+    "volume",
+    "mute",
+    "input",
+    "sleepTimer",
+    "bass",
+    "treble",
+    "zoneName",
+    "model",
+    "firmwareVersion",
+    "band",
+    "frequency",
+    "nextPreset",
+    "previousPreset",
+    "playback",
+    "artist",
+    "album",
+    "track",
+    "station",
+    "channelName",
+    "repeat",
+    "shuffle",
+    "next",
+    "previous",
+    "connected",
+    "connect",
+    "startPairing",
+    "cancelPairing",
+    "pairedDevice",
+    "speakerA",
+    "speakerB",
+    "zoneBPower",
+    "zoneBMute",
+    "zoneBVolume",
+    "zoneBName",
+  ]);
+
+  it("no catalog entry is left undecided", () => {
+    const undecided = new Map<string, string>();
+    for (const entry of [...YNCA_CATALOG, ...YXC_AMP_CATALOG]) {
+      const nameKey = (entry as { nameKey?: string }).nameKey;
+      const descKey = (entry as { descKey?: string }).descKey;
+      const derived = (entry as { derived?: boolean }).derived;
+      if (derived || !nameKey || descKey || SELF_EXPLANATORY.has(nameKey)) {
+        continue;
+      }
+      const id = (entry as { id?: string; state?: string }).id ?? (entry as { state?: string }).state ?? "?";
+      if (!undecided.has(nameKey)) {
+        undecided.set(nameKey, id);
+      }
+    }
+    expect(
+      [...undecided].map(([key, id]) => `${key} (${id})`),
+      "each of these needs either a descKey or an entry in SELF_EXPLANATORY",
+    ).toEqual([]);
   });
 });

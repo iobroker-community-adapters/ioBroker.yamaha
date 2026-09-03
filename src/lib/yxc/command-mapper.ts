@@ -327,6 +327,8 @@ export const DAB_FIELDS: Array<{
   type: "string" | "number" | "boolean";
   /** Object name as its translation KEY — this table is a module-level constant. */
   nameKey: I18nKey;
+  /** Explanation key — absent means self-explanatory. */
+  descKey?: I18nKey;
 }> = [
   { field: "service_label", id: "tuner.dab.serviceLabel", type: "string", nameKey: "serviceLabel" },
   { field: "ensemble_label", id: "tuner.dab.ensembleLabel", type: "string", nameKey: "ensembleLabel" },

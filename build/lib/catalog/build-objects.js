@@ -43,7 +43,10 @@ function catalogToObjects(entries) {
           type: "channel",
           // A listed channel is translated; an unlisted one keeps its capitalised id, which is
           // a device-derived name and therefore has no translation to give.
-          common: { name: import_types.CHANNEL_NAME_KEYS[segment] ? (0, import_i18n.tName)(import_types.CHANNEL_NAME_KEYS[segment]) : capitalize(segment) }
+          common: {
+            name: import_types.CHANNEL_NAME_KEYS[segment] ? (0, import_i18n.tName)(import_types.CHANNEL_NAME_KEYS[segment]) : capitalize(segment),
+            ...import_types.CHANNEL_DESC_KEYS[segment] ? { desc: (0, import_i18n.tName)(import_types.CHANNEL_DESC_KEYS[segment]) } : {}
+          }
         });
       }
     }
@@ -51,7 +54,13 @@ function catalogToObjects(entries) {
     objects.push({
       id: entry.id,
       type: "state",
-      common: { name: (0, import_i18n.tName)(entry.nameKey, ...(_a = entry.nameArgs) != null ? _a : []), ...common }
+      common: {
+        name: (0, import_i18n.tName)(entry.nameKey, ...(_a = entry.nameArgs) != null ? _a : []),
+        // Only written when the catalog carries one. An absent key means "explains itself" —
+        // the fleet standard wants the field empty there, not filled with invented prose.
+        ...entry.descKey ? { desc: (0, import_i18n.tName)(entry.descKey) } : {},
+        ...common
+      }
     });
   }
   return objects;

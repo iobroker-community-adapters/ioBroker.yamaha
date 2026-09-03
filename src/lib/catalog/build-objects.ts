@@ -1,5 +1,5 @@
 import { specToCommon } from "./value-coerce";
-import { CHANNEL_NAME_KEYS, type CatalogEntry, type ObjectDef } from "./types";
+import { CHANNEL_DESC_KEYS, CHANNEL_NAME_KEYS, type CatalogEntry, type ObjectDef } from "./types";
 import { tName } from "../i18n";
 
 /**
@@ -37,7 +37,10 @@ export function catalogToObjects(entries: CatalogEntry[]): ObjectDef[] {
           type: "channel",
           // A listed channel is translated; an unlisted one keeps its capitalised id, which is
           // a device-derived name and therefore has no translation to give.
-          common: { name: CHANNEL_NAME_KEYS[segment] ? tName(CHANNEL_NAME_KEYS[segment]) : capitalize(segment) },
+          common: {
+            name: CHANNEL_NAME_KEYS[segment] ? tName(CHANNEL_NAME_KEYS[segment]) : capitalize(segment),
+            ...(CHANNEL_DESC_KEYS[segment] ? { desc: tName(CHANNEL_DESC_KEYS[segment]) } : {}),
+          },
         });
       }
     }
@@ -45,7 +48,13 @@ export function catalogToObjects(entries: CatalogEntry[]): ObjectDef[] {
     objects.push({
       id: entry.id,
       type: "state",
-      common: { name: tName(entry.nameKey, ...(entry.nameArgs ?? [])), ...common },
+      common: {
+        name: tName(entry.nameKey, ...(entry.nameArgs ?? [])),
+        // Only written when the catalog carries one. An absent key means "explains itself" —
+        // the fleet standard wants the field empty there, not filled with invented prose.
+        ...(entry.descKey ? { desc: tName(entry.descKey) } : {}),
+        ...common,
+      },
     });
   }
   return objects;

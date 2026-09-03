@@ -600,7 +600,7 @@ class YxcDeviceController {
       await this.deps.upsertObject(`${this.deviceId}.${id}`, {
         id,
         type: "state",
-        common: { name: (0, import_i18n.tName)("Scenes (number + title)"), type: "string", role: "json", read: true, write: false }
+        common: { name: (0, import_i18n.tName)("scenesNumberTitle"), type: "string", role: "json", read: true, write: false }
       });
       this.emit(id, JSON.stringify(list));
     }

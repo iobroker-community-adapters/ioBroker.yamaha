@@ -19,7 +19,10 @@ function selfMap(values: readonly string[]): Record<string, string> {
 const ZONES: Array<{ id: string; prefix: string }> = YXC_ZONE_IDS.map(id => ({ id, prefix: zonePrefix(id) }));
 
 /** The "now playing" block's states (v2.0.0, one per zone): read metadata + transport buttons. */
-const PLAYER_STATES: Array<{ state: string; common: Omit<ObjectDef["common"], "name"> & { nameKey: I18nKey } }> = [
+const PLAYER_STATES: Array<{
+  state: string;
+  common: Omit<ObjectDef["common"], "name"> & { nameKey: I18nKey; descKey?: I18nKey };
+}> = [
   {
     // What the zone is playing (the netusb source name, or `cd`) — read-only display;
     // switching happens over the zone's `input` state.
@@ -72,6 +75,7 @@ const PLAYER_STATES: Array<{ state: string; common: Omit<ObjectDef["common"], "n
     state: "elapsedTimeText",
     common: {
       nameKey: "elapsedTimeReadable",
+      descKey: "descElapsedTimeReadable",
       type: "string",
       role: "media.elapsed.text",
       read: true,
@@ -118,11 +122,15 @@ const PLAYER_STATES: Array<{ state: string; common: Omit<ObjectDef["common"], "n
 function pushPlayerBlock(objects: ObjectDef[], prefix: string, channelName: ioBroker.StringOrTranslated): void {
   objects.push({ id: prefix, type: "channel", common: { name: channelName } });
   for (const player of PLAYER_STATES) {
-    const { nameKey: playerNameKey, ...playerCommon } = player.common;
+    const { nameKey: playerNameKey, descKey: playerDescKey, ...playerCommon } = player.common;
     objects.push({
       id: `${prefix}.${player.state}`,
       type: "state",
-      common: { ...playerCommon, name: tName(playerNameKey) },
+      common: {
+        ...playerCommon,
+        name: tName(playerNameKey),
+        ...(playerDescKey ? { desc: tName(playerDescKey) } : {}),
+      },
     });
   }
 }
@@ -185,8 +193,12 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
           });
         }
       }
-      const { nameKey: entryNameKey, ...entryRest } = entry.common;
-      const common: ObjectDef["common"] = { ...entryRest, name: tName(entryNameKey) };
+      const { nameKey: entryNameKey, descKey: entryDescKey, ...entryRest } = entry.common;
+      const common: ObjectDef["common"] = {
+        ...entryRest,
+        name: tName(entryNameKey),
+        ...(entryDescKey ? { desc: tName(entryDescKey) } : {}),
+      };
       if (entry.state === "volume" && zone.volumeRange) {
         common.min = zone.volumeRange.min;
         common.max = zone.volumeRange.max;
@@ -464,6 +476,7 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
           type: "state",
           common: {
             name: tName(field.nameKey),
+            ...(field.descKey ? { desc: tName(field.descKey) } : {}),
             type: field.type,
             role: field.type === "boolean" ? "indicator" : field.type === "number" ? "value" : "text",
             read: true,

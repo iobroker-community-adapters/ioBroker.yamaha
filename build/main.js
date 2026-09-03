@@ -641,13 +641,13 @@ class Yamaha extends utils.Adapter {
   async ensureInstanceInfoObjects() {
     await this.extendObject("info", {
       type: "channel",
-      common: { name: (0, import_i18n.tName)("Information") },
+      common: { name: (0, import_i18n.tName)("information") },
       native: {}
     });
     await this.extendObject("info.connection", {
       type: "state",
       common: {
-        name: (0, import_i18n.tName)("Device or service connected"),
+        name: (0, import_i18n.tName)("deviceOrServiceConnected"),
         type: "boolean",
         role: "indicator.connected",
         read: true,
@@ -657,17 +657,17 @@ class Yamaha extends utils.Adapter {
     });
     await this.extendObject("info.devicesTotal", {
       type: "state",
-      common: { name: (0, import_i18n.tName)("Devices total"), type: "number", role: "value", read: true, write: false },
+      common: { name: (0, import_i18n.tName)("devicesTotal"), type: "number", role: "value", read: true, write: false },
       native: {}
     });
     await this.extendObject("info.devicesOnline", {
       type: "state",
-      common: { name: (0, import_i18n.tName)("Devices online"), type: "number", role: "value", read: true, write: false },
+      common: { name: (0, import_i18n.tName)("devicesOnline"), type: "number", role: "value", read: true, write: false },
       native: {}
     });
     await this.extendObject("info.devicesAllOnline", {
       type: "state",
-      common: { name: (0, import_i18n.tName)("All devices online"), type: "boolean", role: "indicator", read: true, write: false },
+      common: { name: (0, import_i18n.tName)("allDevicesOnline"), type: "boolean", role: "indicator", read: true, write: false },
       native: {}
     });
   }
@@ -709,13 +709,13 @@ class Yamaha extends utils.Adapter {
     );
     await this.extendObject(`${deviceId}.info`, {
       type: "channel",
-      common: { name: (0, import_i18n.tName)("Info") },
+      common: { name: (0, import_i18n.tName)("info") },
       native: {}
     });
     await this.extendObject(`${deviceId}.info.connection`, {
       type: "state",
       common: {
-        name: (0, import_i18n.tName)("Connected"),
+        name: (0, import_i18n.tName)("connected"),
         type: "boolean",
         role: "indicator.reachable",
         read: true,
@@ -726,25 +726,25 @@ class Yamaha extends utils.Adapter {
     });
     await this.extendObject(`${deviceId}.info.model`, {
       type: "state",
-      common: { name: (0, import_i18n.tName)("Model"), type: "string", role: "text", read: true, write: false, def: "" },
+      common: { name: (0, import_i18n.tName)("model"), type: "string", role: "text", read: true, write: false, def: "" },
       native: {}
     });
     await this.extendObject(`${deviceId}.info.ip`, {
       type: "state",
-      common: { name: (0, import_i18n.tName)("IP address"), type: "string", role: "info.ip", read: true, write: false, def: "" },
+      common: { name: (0, import_i18n.tName)("ipAddress"), type: "string", role: "info.ip", read: true, write: false, def: "" },
       native: {}
     });
     await this.setState(`${deviceId}.info.ip`, { val: ip, ack: true });
     await this.extendObject(`${deviceId}.info.transports`, {
       type: "channel",
-      common: { name: (0, import_i18n.tName)("Transports") },
+      common: { name: (0, import_i18n.tName)("transports") },
       native: {}
     });
     for (const proto of TRANSPORT_IDS) {
       await this.extendObject(`${deviceId}.info.transports.${proto}`, {
         type: "state",
         common: {
-          name: (0, import_i18n.tName)("%s connected", proto.toUpperCase()),
+          name: (0, import_i18n.tName)("transportConnected", proto.toUpperCase()),
           type: "boolean",
           role: "indicator.reachable",
           read: true,

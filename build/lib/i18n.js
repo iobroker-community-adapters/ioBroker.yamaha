@@ -57,10 +57,10 @@ const LANGUAGES = {
   "zh-cn": import_zh_cn.default
 };
 function translated(key, args) {
-  var _a;
+  var _a, _b;
   const out = {};
   for (const [lang, words] of Object.entries(LANGUAGES)) {
-    let text = (_a = words[key]) != null ? _a : key;
+    let text = (_b = (_a = words[key]) != null ? _a : import_en.default[key]) != null ? _b : key;
     for (const arg of args) {
       text = text.replace("%s", arg === null ? "null" : String(arg));
     }

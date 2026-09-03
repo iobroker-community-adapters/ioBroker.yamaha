@@ -29,6 +29,16 @@ export interface CatalogEntry {
    * instead of all sharing the family's label.
    */
   nameArgs?: Array<string | number>;
+  /**
+   * The datapoint's EXPLANATION, as its translation key (fleet standard
+   * `feedback_beschreibung_ist_erklaerung`): one short sentence saying what the value means,
+   * never the protocol identifier and never the name again. Deliberately OPTIONAL — where a
+   * datapoint explains itself (`power`, `volume`, `artist`) an invented sentence would be
+   * noise, and the standard asks for an empty field rather than filler. What must never
+   * happen is a SILENT gap, so every catalog entry without a key is listed by name in
+   * `SELF_EXPLANATORY` and the manifest test refuses an entry that is in neither.
+   */
+  descKey?: I18nKey;
   /** Value semantics — drives type/role/states/range via {@link ValueSpec}. */
   spec: ValueSpec;
   /** Whether the user can write this state. */
@@ -66,6 +76,31 @@ export interface ObjectDef {
  * like "Pc" or "Ipod" in the object browser. Keys match the real channel segments
  * (verified against the built catalogs); do not add speculative entries.
  */
+/**
+ * Explanations for the channel ids that need one — the folders whose purpose is not obvious
+ * from their name. Same rule as {@link CatalogEntry.descKey}: a folder that explains itself
+ * (`sound`, `tuner`, a source name like `spotify`) stays out, because the fleet standard wants
+ * an empty description rather than filler. Keys are the identifiers in `admin/i18n`.
+ */
+export const CHANNEL_DESC_KEYS: Record<string, I18nKey> = {
+  info: "descChannelInfo",
+  zoneB: "descChannelZoneB",
+  advanced: "descChannelAdvanced",
+  speakers: "descChannelSpeakers",
+  scene: "descChannelScene",
+  remote: "descChannelRemote",
+  inputNames: "descChannelInputNames",
+  initialVolume: "descChannelInitialVolume",
+  equalizer: "descChannelEqualizer",
+  signal: "descChannelSignal",
+  dab: "descChannelDab",
+  player: "descChannelPlayer",
+  multiroom: "descChannelMultiroom",
+  group: "descChannelGroup",
+  musicCastLink: "descChannelMusicCastLink",
+  browse: "descChannelBrowse",
+};
+
 export const CHANNEL_NAME_KEYS: Record<string, I18nKey> = {
   // Device info (metadata beside the per-device connection indicator)
   info: "info",

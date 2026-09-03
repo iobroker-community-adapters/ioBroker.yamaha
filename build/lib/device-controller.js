@@ -170,7 +170,7 @@ class YncaDeviceController {
       await this.deps.upsertObject(`${this.deviceId}.scene.list`, {
         id: "scene.list",
         type: "state",
-        common: { name: (0, import_i18n.tName)("Scenes (number + title)"), type: "string", role: "json", read: true, write: false }
+        common: { name: (0, import_i18n.tName)("scenesNumberTitle"), type: "string", role: "json", read: true, write: false }
       });
       this.deps.setStateAck(`${this.deviceId}.scene.list`, JSON.stringify(this.sceneTitles));
     }
@@ -490,7 +490,7 @@ class YncaDeviceController {
     const sourceDef = (id) => ({
       id,
       type: "state",
-      common: { name: (0, import_i18n.tName)("Playing source"), type: "string", role: "text", read: true, write: false }
+      common: { name: (0, import_i18n.tName)("playingSource"), type: "string", role: "text", read: true, write: false }
     });
     await this.deps.upsertObject(`${this.deviceId}.player.source`, sourceDef("player.source"));
     this.playerZones = ["main"];

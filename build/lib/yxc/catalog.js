@@ -27,7 +27,7 @@ const str = (value) => String(value);
 const YXC_AMP_CATALOG = [
   {
     state: "power",
-    common: { nameKey: "Power", type: "boolean", role: "switch.power", read: true, write: true },
+    common: { nameKey: "power", type: "boolean", role: "switch.power", read: true, write: true },
     create: { kind: "func", func: "power" },
     read: { field: "power" },
     fromStatus: (value) => value === "on",
@@ -35,7 +35,7 @@ const YXC_AMP_CATALOG = [
   },
   {
     state: "volume",
-    common: { nameKey: "Volume", type: "number", role: "level.volume", read: true, write: true },
+    common: { nameKey: "volume", type: "number", role: "level.volume", read: true, write: true },
     create: { kind: "func", func: "volume" },
     read: { field: "volume" },
     fromStatus: num,
@@ -43,7 +43,7 @@ const YXC_AMP_CATALOG = [
   },
   {
     state: "mute",
-    common: { nameKey: "Mute", type: "boolean", role: "media.mute", read: true, write: true },
+    common: { nameKey: "mute", type: "boolean", role: "media.mute", read: true, write: true },
     create: { kind: "func", func: "mute" },
     read: { field: "mute" },
     fromStatus: bool,
@@ -51,7 +51,7 @@ const YXC_AMP_CATALOG = [
   },
   {
     state: "input",
-    common: { nameKey: "Input", type: "string", role: "media.input", read: true, write: true },
+    common: { nameKey: "input", type: "string", role: "media.input", read: true, write: true },
     create: { kind: "input" },
     read: { field: "input" },
     fromStatus: str,
@@ -59,7 +59,7 @@ const YXC_AMP_CATALOG = [
   },
   {
     state: "soundProgram",
-    common: { nameKey: "Sound program", type: "string", role: "state", read: true, write: true },
+    common: { nameKey: "soundProgram", type: "string", role: "state", read: true, write: true },
     create: { kind: "func", func: "sound_program" },
     read: { field: "sound_program" },
     fromStatus: str,
@@ -67,7 +67,7 @@ const YXC_AMP_CATALOG = [
   },
   {
     state: "sound.enhancer",
-    common: { nameKey: "Enhancer", type: "boolean", role: "switch", read: true, write: true },
+    common: { nameKey: "enhancer", type: "boolean", role: "switch", read: true, write: true },
     create: { kind: "func", func: "enhancer" },
     read: { field: "enhancer" },
     fromStatus: bool,
@@ -75,7 +75,7 @@ const YXC_AMP_CATALOG = [
   },
   {
     state: "sound.pureDirect",
-    common: { nameKey: "Pure Direct", type: "boolean", role: "switch", read: true, write: true },
+    common: { nameKey: "pureDirect", type: "boolean", role: "switch", read: true, write: true },
     create: { kind: "func", func: "pure_direct" },
     read: { field: "pure_direct" },
     fromStatus: bool,
@@ -83,7 +83,7 @@ const YXC_AMP_CATALOG = [
   },
   {
     state: "subwooferVolume",
-    common: { nameKey: "Subwoofer trim", type: "number", unit: "dB", role: "level", read: true, write: true },
+    common: { nameKey: "subwooferTrim", type: "number", unit: "dB", role: "level", read: true, write: true },
     create: { kind: "func", func: "subwoofer_volume" },
     read: { field: "subwoofer_volume" },
     fromStatus: num,
@@ -91,7 +91,7 @@ const YXC_AMP_CATALOG = [
   },
   {
     state: "sound.bass",
-    common: { nameKey: "Bass", type: "number", unit: "dB", role: "level", read: true, write: true },
+    common: { nameKey: "bass", type: "number", unit: "dB", role: "level", read: true, write: true },
     create: { kind: "func", func: "tone_control" },
     read: { path: ["tone_control", "bass"] },
     fromStatus: num,
@@ -99,14 +99,14 @@ const YXC_AMP_CATALOG = [
   },
   {
     state: "sound.toneMode",
-    common: { nameKey: "Tone control mode", type: "string", role: "state", read: true, write: false },
+    common: { nameKey: "toneControlMode", type: "string", role: "state", read: true, write: false },
     create: { kind: "func", func: "tone_control" },
     read: { path: ["tone_control", "mode"] },
     fromStatus: str
   },
   {
     state: "sound.treble",
-    common: { nameKey: "Treble", type: "number", unit: "dB", role: "level", read: true, write: true },
+    common: { nameKey: "treble", type: "number", unit: "dB", role: "level", read: true, write: true },
     create: { kind: "func", func: "tone_control" },
     read: { path: ["tone_control", "treble"] },
     fromStatus: num,
@@ -114,7 +114,7 @@ const YXC_AMP_CATALOG = [
   },
   {
     state: "sleep",
-    common: { nameKey: "Sleep timer", type: "number", unit: "min", role: "level", read: true, write: true },
+    common: { nameKey: "sleepTimer", type: "number", unit: "min", role: "level", read: true, write: true },
     create: { kind: "func", func: "sleep" },
     read: { field: "sleep" },
     fromStatus: num,
@@ -122,70 +122,70 @@ const YXC_AMP_CATALOG = [
   },
   {
     state: "sound.dialogueLevel",
-    common: { nameKey: "Dialogue level", type: "number", role: "value", read: true, write: false },
+    common: { nameKey: "dialogueLevel", type: "number", role: "value", read: true, write: false },
     create: { kind: "func", func: "dialogue_level" },
     read: { field: "dialogue_level" },
     fromStatus: num
   },
   {
     state: "actualVolume",
-    common: { nameKey: "Volume (dB)", type: "number", unit: "dB", role: "value", read: true, write: false },
+    common: { nameKey: "volumeDB", type: "number", unit: "dB", role: "value", read: true, write: false },
     create: { kind: "func", func: "actual_volume" },
     read: { path: ["actual_volume", "value"] },
     fromStatus: num
   },
   {
     state: "actualVolumeMode",
-    common: { nameKey: "Volume display mode", type: "string", role: "state", read: true, write: false },
+    common: { nameKey: "volumeDisplayMode", type: "string", role: "state", read: true, write: false },
     create: { kind: "func", func: "actual_volume" },
     read: { path: ["actual_volume", "mode"] },
     fromStatus: str
   },
   {
     state: "sound.contentsDisplay",
-    common: { nameKey: "Contents display", type: "boolean", role: "indicator", read: true, write: false },
+    common: { nameKey: "contentsDisplay", type: "boolean", role: "indicator", read: true, write: false },
     create: { kind: "func", func: "contents_display" },
     read: { field: "contents_display" },
     fromStatus: bool
   },
   {
     state: "sound.surroundDecoder",
-    common: { nameKey: "Surround decoder", type: "string", role: "text", read: true, write: false },
+    common: { nameKey: "surroundDecoder", type: "string", role: "text", read: true, write: false },
     create: { kind: "func", func: "surr_decoder_type" },
     read: { field: "surr_decoder_type" },
     fromStatus: str
   },
   {
     state: "sound.audioSelect",
-    common: { nameKey: "Audio select", type: "string", role: "text", read: true, write: false },
+    common: { nameKey: "audioSelect", type: "string", role: "text", read: true, write: false },
     create: { kind: "func", func: "audio_select" },
     read: { field: "audio_select" },
     fromStatus: str
   },
   {
     state: "sound.linkControl",
-    common: { nameKey: "Link control", type: "string", role: "text", read: true, write: false },
+    common: { nameKey: "linkControl", type: "string", role: "text", read: true, write: false },
     create: { kind: "func", func: "link_control" },
     read: { field: "link_control" },
     fromStatus: str
   },
   {
     state: "sound.linkAudioDelay",
-    common: { nameKey: "Link audio delay", type: "string", role: "text", read: true, write: false },
+    common: { nameKey: "linkAudioDelay", type: "string", role: "text", read: true, write: false },
     create: { kind: "func", func: "link_audio_delay" },
     read: { field: "link_audio_delay" },
     fromStatus: str
   },
   {
     state: "sound.linkAudioQuality",
-    common: { nameKey: "Link audio quality", type: "string", role: "text", read: true, write: false },
+    common: { nameKey: "linkAudioQuality", type: "string", role: "text", read: true, write: false },
     create: { kind: "func", func: "link_audio_quality" },
     read: { field: "link_audio_quality" },
     fromStatus: str
   },
   {
     state: "sound.direct",
-    common: { nameKey: "Direct", type: "boolean", role: "switch", read: true, write: true },
+    common: { nameKey: "direct", type: "boolean", role: "switch", read: true, write: true },
     create: { kind: "func", func: "direct" },
     read: { field: "direct" },
     fromStatus: bool,
@@ -193,7 +193,7 @@ const YXC_AMP_CATALOG = [
   },
   {
     state: "sound.clearVoice",
-    common: { nameKey: "Clear Voice", type: "boolean", role: "switch", read: true, write: true },
+    common: { nameKey: "clearVoice", type: "boolean", role: "switch", read: true, write: true },
     create: { kind: "func", func: "clear_voice" },
     read: { field: "clear_voice" },
     fromStatus: bool,
@@ -201,7 +201,7 @@ const YXC_AMP_CATALOG = [
   },
   {
     state: "sound.bassExtension",
-    common: { nameKey: "Bass extension", type: "boolean", role: "switch", read: true, write: true },
+    common: { nameKey: "bassExtension", type: "boolean", role: "switch", read: true, write: true },
     create: { kind: "func", func: "bass_extension" },
     read: { field: "bass_extension" },
     fromStatus: bool,
@@ -209,7 +209,7 @@ const YXC_AMP_CATALOG = [
   },
   {
     state: "sound.balance",
-    common: { nameKey: "Balance", type: "number", role: "level", read: true, write: true },
+    common: { nameKey: "balance", type: "number", role: "level", read: true, write: true },
     create: { kind: "func", func: "balance" },
     read: { field: "balance" },
     fromStatus: num,
@@ -217,35 +217,35 @@ const YXC_AMP_CATALOG = [
   },
   {
     state: "sound.adaptiveDrc",
-    common: { nameKey: "Adaptive DRC", type: "boolean", role: "indicator", read: true, write: false },
+    common: { nameKey: "adaptiveDRC", type: "boolean", role: "indicator", read: true, write: false },
     create: { kind: "func", func: "adaptive_drc" },
     read: { field: "adaptive_drc" },
     fromStatus: bool
   },
   {
     state: "sound.adaptiveDspLevel",
-    common: { nameKey: "Adaptive DSP level", type: "boolean", role: "indicator", read: true, write: false },
+    common: { nameKey: "adaptiveDSPLevel", type: "boolean", role: "indicator", read: true, write: false },
     create: { kind: "func", func: "adaptive_dsp_level" },
     read: { field: "adaptive_dsp_level" },
     fromStatus: bool
   },
   {
     state: "sound.extraBass",
-    common: { nameKey: "Extra Bass", type: "boolean", role: "indicator", read: true, write: false },
+    common: { nameKey: "extraBass", type: "boolean", role: "indicator", read: true, write: false },
     create: { kind: "func", func: "extra_bass" },
     read: { field: "extra_bass" },
     fromStatus: bool
   },
   {
     state: "sound.monaural",
-    common: { nameKey: "Monaural", type: "boolean", role: "indicator", read: true, write: false },
+    common: { nameKey: "monaural", type: "boolean", role: "indicator", read: true, write: false },
     create: { kind: "func", func: "mono" },
     read: { field: "mono" },
     fromStatus: bool
   },
   {
     state: "sound.surround3d",
-    common: { nameKey: "Surround 3D", type: "boolean", role: "indicator", read: true, write: false },
+    common: { nameKey: "surround3D", type: "boolean", role: "indicator", read: true, write: false },
     create: { kind: "func", func: "surround_3d" },
     read: { field: "surround_3d" },
     fromStatus: bool
@@ -253,7 +253,8 @@ const YXC_AMP_CATALOG = [
   {
     state: "sound.dialogueLift",
     common: {
-      nameKey: "Dialogue lift",
+      nameKey: "dialogueLift",
+      descKey: "descDialogueLift",
       type: "number",
       role: "value",
       read: true,
@@ -268,49 +269,49 @@ const YXC_AMP_CATALOG = [
   },
   {
     state: "sound.dtsDialogueControl",
-    common: { nameKey: "DTS dialogue control", type: "number", role: "value", read: true, write: false },
+    common: { nameKey: "dtsDialogueControl", type: "number", role: "value", read: true, write: false },
     create: { kind: "func", func: "dts_dialogue_control" },
     read: { field: "dts_dialogue_control" },
     fromStatus: num
   },
   {
     state: "sound.equalizer.mode",
-    common: { nameKey: "Equalizer mode", type: "string", role: "state", read: true, write: false },
+    common: { nameKey: "equalizerMode", type: "string", role: "state", read: true, write: false },
     create: { kind: "func", func: "equalizer" },
     read: { path: ["equalizer", "mode"] },
     fromStatus: str
   },
   {
     state: "sound.equalizer.low",
-    common: { nameKey: "Equalizer low", type: "number", unit: "dB", role: "level", read: true, write: true },
+    common: { nameKey: "equalizerLow", type: "number", unit: "dB", role: "level", read: true, write: true },
     create: { kind: "func", func: "equalizer" },
     read: { path: ["equalizer", "low"] },
     fromStatus: num
   },
   {
     state: "sound.equalizer.mid",
-    common: { nameKey: "Equalizer mid", type: "number", unit: "dB", role: "level", read: true, write: true },
+    common: { nameKey: "equalizerMid", type: "number", unit: "dB", role: "level", read: true, write: true },
     create: { kind: "func", func: "equalizer" },
     read: { path: ["equalizer", "mid"] },
     fromStatus: num
   },
   {
     state: "sound.equalizer.high",
-    common: { nameKey: "Equalizer high", type: "number", unit: "dB", role: "level", read: true, write: true },
+    common: { nameKey: "equalizerHigh", type: "number", unit: "dB", role: "level", read: true, write: true },
     create: { kind: "func", func: "equalizer" },
     read: { path: ["equalizer", "high"] },
     fromStatus: num
   },
   {
     state: "advanced.maxVolume",
-    common: { nameKey: "Maximum volume", type: "number", role: "value", read: true, write: false },
+    common: { nameKey: "maximumVolume", type: "number", role: "value", read: true, write: false },
     create: { kind: "always" },
     read: { field: "max_volume" },
     fromStatus: num
   },
   {
     state: "inputText",
-    common: { nameKey: "Input name (display)", type: "string", role: "text", read: true, write: false },
+    common: { nameKey: "inputNameDisplay", type: "string", role: "text", read: true, write: false },
     create: { kind: "always" },
     read: { field: "input_text" },
     fromStatus: str
@@ -321,14 +322,14 @@ const YXC_AMP_CATALOG = [
     // distribution_enable says the zone MAY be used for Link streaming — proven on a live
     // device reporting true while in no group (role none) — not that it streams right now.
     state: "multiroom.group.streamingEnabled",
-    common: { nameKey: "Multiroom streaming enabled", type: "boolean", role: "indicator", read: true, write: false },
+    common: { nameKey: "multiroomStreamingEnabled", type: "boolean", role: "indicator", read: true, write: false },
     create: { kind: "always" },
     read: { field: "distribution_enable" },
     fromStatus: bool
   },
   {
     state: "multiroom.partyEnable",
-    common: { nameKey: "Party mode (all zones)", type: "boolean", role: "switch", read: true, write: true },
+    common: { nameKey: "partyModeAllZones", type: "boolean", role: "switch", read: true, write: true },
     create: { kind: "always" },
     read: { field: "party_enable" },
     fromStatus: bool,

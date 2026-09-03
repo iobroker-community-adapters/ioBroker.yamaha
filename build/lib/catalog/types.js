@@ -18,60 +18,80 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var types_exports = {};
 __export(types_exports, {
+  CHANNEL_DESC_KEYS: () => CHANNEL_DESC_KEYS,
   CHANNEL_NAME_KEYS: () => CHANNEL_NAME_KEYS
 });
 module.exports = __toCommonJS(types_exports);
+const CHANNEL_DESC_KEYS = {
+  info: "descChannelInfo",
+  zoneB: "descChannelZoneB",
+  advanced: "descChannelAdvanced",
+  speakers: "descChannelSpeakers",
+  scene: "descChannelScene",
+  remote: "descChannelRemote",
+  inputNames: "descChannelInputNames",
+  initialVolume: "descChannelInitialVolume",
+  equalizer: "descChannelEqualizer",
+  signal: "descChannelSignal",
+  dab: "descChannelDab",
+  player: "descChannelPlayer",
+  multiroom: "descChannelMultiroom",
+  group: "descChannelGroup",
+  musicCastLink: "descChannelMusicCastLink",
+  browse: "descChannelBrowse"
+};
 const CHANNEL_NAME_KEYS = {
   // Device info (metadata beside the per-device connection indicator)
-  info: "Info",
+  info: "info",
   // Zones
-  zone2: "Zone 2",
-  zone3: "Zone 3",
-  zone4: "Zone 4",
-  zoneB: "Zone B",
+  zone2: "zone2",
+  zone3: "zone3",
+  zone4: "zone4",
+  zoneB: "zoneB",
   // Amplifier groups
-  sound: "Sound",
-  advanced: "Advanced",
-  hdmi: "HDMI",
-  speakers: "Speakers",
-  scene: "Scenes",
-  remote: "Remote control",
-  inputNames: "Input names",
-  initialVolume: "Initial volume",
-  equalizer: "Equalizer",
-  signal: "Audio signal",
+  sound: "sound",
+  advanced: "advanced",
+  hdmi: "hdmi",
+  speakers: "speakers",
+  scene: "scenes",
+  remote: "remoteControl",
+  inputNames: "inputNames",
+  initialVolume: "initialVolume",
+  equalizer: "equalizer",
+  signal: "audioSignal",
   // Tuner
-  tuner: "Tuner",
-  dab: "DAB",
+  tuner: "tuner",
+  dab: "dab",
   // Media player container + multiroom
-  player: "Media player",
-  multiroom: "Multiroom",
+  player: "mediaPlayer",
+  multiroom: "multiroom",
   // The MusicCast-Link folder under multiroom — a group of linked DEVICES, not zones.
-  group: "MusicCast group (linked devices)",
+  group: "musiccastGroupLinkedDevices",
   // Media player sources
-  netRadio: "Net radio",
-  server: "Media server",
-  usb: "USB",
-  spotify: "Spotify",
-  deezer: "Deezer",
-  tidal: "Tidal",
-  napster: "Napster",
-  pandora: "Pandora",
-  rhapsody: "Rhapsody",
-  sirius: "SiriusXM",
-  airplay: "AirPlay",
-  bluetooth: "Bluetooth",
-  pc: "PC",
-  musicCastLink: "MusicCast Link",
+  netRadio: "netRadio",
+  server: "mediaServer",
+  usb: "usb",
+  spotify: "spotify",
+  deezer: "deezer",
+  tidal: "tidal",
+  napster: "napster",
+  pandora: "pandora",
+  rhapsody: "rhapsody",
+  sirius: "siriusxm",
+  airplay: "airplay",
+  bluetooth: "bluetooth",
+  pc: "pc",
+  musicCastLink: "musiccastLink",
   ipod: "iPod",
-  ipodUsb: "iPod (USB)",
+  ipodUsb: "ipodUSB",
   // YXC/XML media channels
-  cd: "CD",
-  netPlayer: "Network player",
-  clock: "Clock"
+  cd: "cd",
+  netPlayer: "networkPlayer",
+  clock: "clock"
 };
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  CHANNEL_DESC_KEYS,
   CHANNEL_NAME_KEYS
 });
 //# sourceMappingURL=types.js.map

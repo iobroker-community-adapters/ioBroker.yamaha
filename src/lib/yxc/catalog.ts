@@ -20,7 +20,7 @@ export interface YxcAmpEntry {
    * ioBroker common for the object, carrying its name as a translation KEY: this catalog is a
    * module-level constant, so the object-mapper resolves the key when it creates the object.
    */
-  common: Omit<ObjectDef["common"], "name"> & { nameKey: I18nKey };
+  common: Omit<ObjectDef["common"], "name"> & { nameKey: I18nKey; descKey?: I18nKey };
   /**
    * When the state is created: `func` = only if the zone's func_list advertises that
    * feature key; `always` = a core status field created for every active zone;
@@ -274,6 +274,7 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     state: "sound.dialogueLift",
     common: {
       nameKey: "dialogueLift",
+      descKey: "descDialogueLift",
       type: "number",
       role: "value",
       read: true,

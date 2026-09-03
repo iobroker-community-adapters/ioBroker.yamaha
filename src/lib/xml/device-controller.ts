@@ -200,8 +200,14 @@ export class XmlDeviceController implements ConnectionHandle {
             });
           }
         }
-        const { nameKey, ...rest } = entry.common;
-        const common: ObjectDef["common"] = { ...rest, name: tName(nameKey) };
+        const { nameKey, descKey, ...rest } = entry.common;
+        const common: ObjectDef["common"] = {
+          ...rest,
+          name: tName(nameKey),
+          // An absent key means the datapoint explains itself — the fleet standard wants the
+          // field empty there rather than filled with invented prose.
+          ...(descKey ? { desc: tName(descKey) } : {}),
+        };
         // The device's own input list becomes the dropdown (XML-owned devices only —
         // where YNCA is present its dropdown wins via the owner policy).
         const inputs = entry.state === "input" ? inputsByZone.get(zone.key) : undefined;

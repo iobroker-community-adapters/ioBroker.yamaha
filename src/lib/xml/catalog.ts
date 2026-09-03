@@ -17,7 +17,7 @@ export interface XmlAmpEntry {
    * ioBroker common for the object, carrying its name as a translation KEY: this catalog is a
    * module-level constant, so the controller resolves the key when it creates the object.
    */
-  common: Omit<ObjectDef["common"], "name"> & { nameKey: I18nKey };
+  common: Omit<ObjectDef["common"], "name"> & { nameKey: I18nKey; descKey?: I18nKey };
   /** The Basic_Status field this state reads from; absent for a write-only command (e.g. scene recall). */
   statusField?: keyof BasicStatus;
   /** Build the inner PUT XML for a written value; absent means read-only. */
@@ -153,6 +153,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     state: "sound.subwooferTrim",
     common: {
       nameKey: "subwooferTrim",
+      descKey: "descSubwooferTrim",
       type: "number",
       role: "level",
       read: true,
@@ -182,6 +183,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     state: "sound.dialogueLift",
     common: {
       nameKey: "dialogueLift",
+      descKey: "descDialogueLift",
       type: "number",
       role: "level",
       read: true,

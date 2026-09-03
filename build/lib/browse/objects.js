@@ -26,7 +26,7 @@ function browseObjectDefs(sources) {
   const line = (n) => ({
     id: `player.browse.line${n}`,
     type: "state",
-    common: { name: (0, import_i18n.tName)("Line %s", n), type: "string", role: "text", read: true, write: false }
+    common: { name: (0, import_i18n.tName)("line", n), type: "string", role: "text", read: true, write: false }
   });
   const button = (id, name) => ({
     id: `player.browse.${id}`,
@@ -34,39 +34,39 @@ function browseObjectDefs(sources) {
     common: { name, type: "boolean", role: "button", read: false, write: true }
   });
   return [
-    { id: "player", type: "channel", common: { name: (0, import_i18n.tName)("Media player") } },
-    { id: "player.browse", type: "channel", common: { name: (0, import_i18n.tName)("Browse") } },
+    { id: "player", type: "channel", common: { name: (0, import_i18n.tName)("mediaPlayer") } },
+    { id: "player.browse", type: "channel", common: { name: (0, import_i18n.tName)("browse") } },
     {
       id: "player.browse.source",
       type: "state",
-      common: { name: (0, import_i18n.tName)("Source"), type: "string", role: "state", read: true, write: true, states: sources }
+      common: { name: (0, import_i18n.tName)("source"), type: "string", role: "state", read: true, write: true, states: sources }
     },
     {
       id: "player.browse.menuName",
       type: "state",
-      common: { name: (0, import_i18n.tName)("Menu name"), type: "string", role: "text", read: true, write: false }
+      common: { name: (0, import_i18n.tName)("menuName"), type: "string", role: "text", read: true, write: false }
     },
     {
       id: "player.browse.layer",
       type: "state",
-      common: { name: (0, import_i18n.tName)("Menu level"), type: "number", role: "value", read: true, write: false }
+      common: { name: (0, import_i18n.tName)("menuLevel"), type: "number", role: "value", read: true, write: false }
     },
     {
       id: "player.browse.totalItems",
       type: "state",
-      common: { name: (0, import_i18n.tName)("Total entries"), type: "number", role: "value", read: true, write: false }
+      common: { name: (0, import_i18n.tName)("totalEntries"), type: "number", role: "value", read: true, write: false }
     },
     {
       id: "player.browse.currentLine",
       type: "state",
-      common: { name: (0, import_i18n.tName)("Current line"), type: "number", role: "value", read: true, write: false }
+      common: { name: (0, import_i18n.tName)("currentLine"), type: "number", role: "value", read: true, write: false }
     },
     ...[1, 2, 3, 4, 5, 6, 7, 8].map(line),
     {
       id: "player.browse.selectLine",
       type: "state",
       common: {
-        name: (0, import_i18n.tName)("Select line (folder opens, item plays)"),
+        name: (0, import_i18n.tName)("selectLineFolderOpensItemPlays"),
         type: "number",
         role: "level",
         read: true,
@@ -76,15 +76,15 @@ function browseObjectDefs(sources) {
         step: 1
       }
     },
-    button("pageUp", (0, import_i18n.tName)("Page up")),
-    button("pageDown", (0, import_i18n.tName)("Page down")),
-    button("back", (0, import_i18n.tName)("Back")),
-    button("home", (0, import_i18n.tName)("Menu root")),
+    button("pageUp", (0, import_i18n.tName)("pageUp")),
+    button("pageDown", (0, import_i18n.tName)("pageDown")),
+    button("back", (0, import_i18n.tName)("back")),
+    button("home", (0, import_i18n.tName)("menuRoot")),
     {
       id: "player.browse.path",
       type: "state",
       common: {
-        name: (0, import_i18n.tName)("Navigate path (e.g. Bookmarks>Radio Paradise)"),
+        name: (0, import_i18n.tName)("navigatePathEGBookmarksRadioParadise"),
         type: "string",
         role: "text",
         read: true,
@@ -94,12 +94,12 @@ function browseObjectDefs(sources) {
     {
       id: "player.browse.rows",
       type: "state",
-      common: { name: (0, import_i18n.tName)("Rows (JSON)"), type: "string", role: "json", read: true, write: false }
+      common: { name: (0, import_i18n.tName)("rowsJSON"), type: "string", role: "json", read: true, write: false }
     },
     {
       id: "player.browse.busy",
       type: "state",
-      common: { name: (0, import_i18n.tName)("Busy"), type: "boolean", role: "indicator", read: true, write: false }
+      common: { name: (0, import_i18n.tName)("busy"), type: "boolean", role: "indicator", read: true, write: false }
     }
   ];
 }

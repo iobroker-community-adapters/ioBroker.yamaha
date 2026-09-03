@@ -134,8 +134,14 @@ class XmlDeviceController {
             });
           }
         }
-        const { nameKey, ...rest } = entry.common;
-        const common = { ...rest, name: (0, import_i18n.tName)(nameKey) };
+        const { nameKey, descKey, ...rest } = entry.common;
+        const common = {
+          ...rest,
+          name: (0, import_i18n.tName)(nameKey),
+          // An absent key means the datapoint explains itself — the fleet standard wants the
+          // field empty there rather than filled with invented prose.
+          ...descKey ? { desc: (0, import_i18n.tName)(descKey) } : {}
+        };
         const inputs = entry.state === "input" ? inputsByZone.get(zone.key) : void 0;
         if (inputs && inputs.length > 0) {
           common.states = Object.fromEntries(inputs.map((input) => [input, input]));
@@ -244,7 +250,7 @@ class XmlDeviceController {
         id: `${channelId}.recall`,
         type: "state",
         common: {
-          name: (0, import_i18n.tName)("Recall scene"),
+          name: (0, import_i18n.tName)("recallScene"),
           type: "number",
           role: "level",
           read: true,
@@ -260,7 +266,7 @@ class XmlDeviceController {
       await this.deps.upsertObject(`${this.deviceId}.${channelId}.list`, {
         id: `${channelId}.list`,
         type: "state",
-        common: { name: (0, import_i18n.tName)("Scenes (number + title)"), type: "string", role: "json", read: true, write: false }
+        common: { name: (0, import_i18n.tName)("scenesNumberTitle"), type: "string", role: "json", read: true, write: false }
       });
       this.emit(`${channelId}.list`, JSON.stringify(scenes));
     }
@@ -293,7 +299,7 @@ class XmlDeviceController {
       await this.deps.upsertObject(`${this.deviceId}.tuner.${id}`, { id: `tuner.${id}`, type: "state", common });
     };
     await state("preset", {
-      name: (0, import_i18n.tName)("Preset (recall by number)"),
+      name: (0, import_i18n.tName)("presetRecallByNumber"),
       type: "number",
       role: "level",
       read: true,
@@ -305,24 +311,24 @@ class XmlDeviceController {
       step: 1
     });
     await state("frequency", {
-      name: (0, import_i18n.tName)("Frequency"),
+      name: (0, import_i18n.tName)("frequency"),
       type: "number",
       role: "value",
       unit: "kHz",
       read: true,
       write: false
     });
-    await state("rdsService", { name: (0, import_i18n.tName)("RDS station"), type: "string", role: "text", read: true, write: false });
-    await state("rdsText", { name: (0, import_i18n.tName)("RDS text"), type: "string", role: "text", read: true, write: false });
+    await state("rdsService", { name: (0, import_i18n.tName)("rdsStation"), type: "string", role: "text", read: true, write: false });
+    await state("rdsText", { name: (0, import_i18n.tName)("rdsText"), type: "string", role: "text", read: true, write: false });
     await state("tuned", {
-      name: (0, import_i18n.tName)("Tuned to a station"),
+      name: (0, import_i18n.tName)("tunedToAStation"),
       type: "boolean",
       role: "indicator",
       read: true,
       write: false
     });
     await state("stereo", {
-      name: (0, import_i18n.tName)("Stereo reception"),
+      name: (0, import_i18n.tName)("stereoReception"),
       type: "boolean",
       role: "indicator",
       read: true,
