@@ -509,6 +509,19 @@ abschaltbaren Datenpunktgruppen und die Wiedergabe als Media-Player (Alexa/Googl
 funktional vollständig (3 Protokolle, Discovery, Migration, Härtung). Versionshistorie im README
 `## Changelog` (nicht hier dupliziert).
 
+**🔴 OFFEN nach v2.2.0 — die Datenpunkt-Beschreibungen fehlen komplett.** Am echten Objektbaum
+gemessen (2026-09-03, `check-live-tree.py`): **0 von 190 Datenpunkten tragen eine `common.desc`** —
+nut2 hat 60, homeconnect 69, govee-smart 91. Leer ist laut Flottenstandard richtig, wo der Adapter
+nichts zu sagen hat (`power`, `volume`), aber ein AV-Receiver ist voll mit Begriffen, die niemand
+von selbst versteht: `sound.adaptiveDrc`, `sound.linkAudioDelay`, `sound.dtsDialogueControl`,
+`advanced.speakers.pattern1Amp`, `tuner.dab.tuneAid`, `advanced.trigger1Manual`, `actualVolumeMode`,
+`multiroom.group.streamingEnabled`. Dort ist die Beschreibung die einzige Erklärung, die der Nutzer
+im Objektbaum überhaupt sieht. **Plan für v2.3.0:** Texttabelle nach dem nut2-/homeconnect-Muster
+(`src/lib/state-texts.ts`, Schlüssel → Erklärung), ein Satz je Datenpunkt in elf Sprachen über
+`admin/i18n`, leer wo nichts Belastbares steht. Die Datenpunkte aus dem MANIFEST (`instanceObjects`,
+`info.*`) laufen über `sync-iopackage-from-i18n.py` und werden dabei leicht vergessen. Standard:
+Memory `feedback_beschreibung_ist_erklaerung`.
+
 **Erledigt 2026-09-02 (abends):** die Namens-Sperre des State-Rollen-Prüfers ist aufgehoben — 248 Namen laufen
 über `admin/i18n`, das Gate meldet „kein fester String in common.name/desc" (s. Abschnitt „Namen sind
 Übersetzungsobjekte"). Im selben Durchgang die Funde des Fehler-Audits nach #617/#618 (s. „Aufräumen, Identität
