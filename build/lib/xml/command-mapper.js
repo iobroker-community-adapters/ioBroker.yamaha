@@ -4,24 +4,22 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
-  for (var name in all) __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if ((from && typeof from === "object") || typeof from === "function") {
+  if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, {
-          get: () => from[key],
-          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
-        });
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
   }
   return to;
 };
-var __toCommonJS = mod => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var command_mapper_exports = {};
 __export(command_mapper_exports, {
   parseXmlStatus: () => parseXmlStatus,
-  stateToXml: () => stateToXml,
+  stateToXml: () => stateToXml
 });
 module.exports = __toCommonJS(command_mapper_exports);
 var import_value_coerce = require("../catalog/value-coerce");
@@ -31,7 +29,7 @@ const ZONE_PREFIX = {
   main: "",
   zone2: "multiroom.zone2.",
   zone3: "multiroom.zone3.",
-  zone4: "multiroom.zone4.",
+  zone4: "multiroom.zone4."
 };
 function stateToXml(stateId, value) {
   var _a;
@@ -42,12 +40,8 @@ function stateToXml(stateId, value) {
     zoneKey = zoneMatch[1];
     name = zoneMatch[2];
   }
-  const entry = import_catalog.XML_AMP_CATALOG.find(e => e.state === name);
-  if (
-    !(entry == null ? void 0 : entry.toInner) ||
-    (entry.mainOnly && zoneKey !== "main") ||
-    !(0, import_value_coerce.isWritableValue)(value, entry.common.type === "number")
-  ) {
+  const entry = import_catalog.XML_AMP_CATALOG.find((e) => e.state === name);
+  if (!(entry == null ? void 0 : entry.toInner) || entry.mainOnly && zoneKey !== "main" || !(0, import_value_coerce.isWritableValue)(value, entry.common.type === "number")) {
     return void 0;
   }
   const zone = (_a = entry.writeZone) != null ? _a : ZONE_ELEMENT[zoneKey];
@@ -71,9 +65,8 @@ function parseXmlStatus(status, zone) {
   return updates;
 }
 // Annotate the CommonJS export names for ESM import in node:
-0 &&
-  (module.exports = {
-    parseXmlStatus,
-    stateToXml,
-  });
+0 && (module.exports = {
+  parseXmlStatus,
+  stateToXml
+});
 //# sourceMappingURL=command-mapper.js.map

@@ -1,9 +1,9 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "2.3.0",
+    "version": "2.3.1",
     "news": {
-      "NEXT": {
+      "2.3.1": {
         "en": "Fixed: the new datapoint explanations were missing on MusicCast and older XML devices",
         "de": "Behoben: die neuen Datenpunkt-Erklärungen fehlten auf MusicCast- und älteren XML-Geräten",
         "ru": "Исправлено: новые пояснения к датапоинтам отсутствовали на MusicCast и старых XML-устройствах",

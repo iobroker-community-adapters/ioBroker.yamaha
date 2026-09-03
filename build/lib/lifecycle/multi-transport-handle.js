@@ -4,23 +4,21 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
-  for (var name in all) __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if ((from && typeof from === "object") || typeof from === "function") {
+  if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, {
-          get: () => from[key],
-          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
-        });
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
   }
   return to;
 };
-var __toCommonJS = mod => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var multi_transport_handle_exports = {};
 __export(multi_transport_handle_exports, {
-  MultiTransportHandle: () => MultiTransportHandle,
+  MultiTransportHandle: () => MultiTransportHandle
 });
 module.exports = __toCommonJS(multi_transport_handle_exports);
 var import_object_tree_coordinator = require("../catalog/object-tree-coordinator");
@@ -49,7 +47,7 @@ class MultiTransportHandle {
   async start() {
     await this.coordinate();
     for (const connection of this.live) {
-      connection.onDrop(reason => this.handleTransportDrop(connection, reason));
+      connection.onDrop((reason) => this.handleTransportDrop(connection, reason));
     }
     this.reportTransports();
   }
@@ -58,9 +56,9 @@ class MultiTransportHandle {
    * ownership, upsert the objects (idempotent), and re-arm every transport's owned set.
    */
   async coordinate() {
-    const contributions = this.live.map(connection => ({
+    const contributions = this.live.map((connection) => ({
       transport: connection.transport,
-      objects: connection.buildObjects(),
+      objects: connection.buildObjects()
     }));
     const { objects, ownerByCanonicalId } = (0, import_object_tree_coordinator.coordinateObjectTree)(contributions);
     this.ownerByCanonicalId = ownerByCanonicalId;
@@ -94,12 +92,7 @@ class MultiTransportHandle {
   /** Report the live transport set (device-manager card indicators / info.transports.*). */
   reportTransports() {
     var _a, _b;
-    (_b = (_a = this.deps).onTransports) == null
-      ? void 0
-      : _b.call(
-          _a,
-          this.live.map(connection => connection.transport),
-        );
+    (_b = (_a = this.deps).onTransports) == null ? void 0 : _b.call(_a, this.live.map((connection) => connection.transport));
   }
   /**
    * One transport dropped. Remove and close it; if others are still live, reconnect just
@@ -123,7 +116,7 @@ class MultiTransportHandle {
     }
     this.reportTransports();
     this.deps.log.debug(
-      `${this.deviceId}/${connection.transport}: transport dropped, reconnecting it${reason ? ` (${reason.message})` : ""} \u2014 other transports keep running`,
+      `${this.deviceId}/${connection.transport}: transport dropped, reconnecting it${reason ? ` (${reason.message})` : ""} \u2014 other transports keep running`
     );
     this.scheduleTransportRetry(connection.transport);
   }
@@ -161,7 +154,7 @@ class MultiTransportHandle {
       connected = await connection.connect();
       if (connected && !this.closed) {
         this.live.push(connection);
-        connection.onDrop(reason => this.handleTransportDrop(connection, reason));
+        connection.onDrop((reason) => this.handleTransportDrop(connection, reason));
         await this.coordinate();
         this.retries.delete(transport);
         this.reportTransports();
@@ -170,7 +163,7 @@ class MultiTransportHandle {
       }
     } catch (e) {
       this.deps.log.debug(
-        `${this.deviceId}/${transport}: reconnect attempt failed (${e instanceof Error ? e.message : String(e)})`,
+        `${this.deviceId}/${transport}: reconnect attempt failed (${e instanceof Error ? e.message : String(e)})`
       );
       const index = this.live.indexOf(connection);
       if (index >= 0) {
@@ -231,11 +224,9 @@ class MultiTransportHandle {
     if (owner === void 0) {
       return;
     }
-    const connection = this.live.find(c => c.transport === owner);
+    const connection = this.live.find((c) => c.transport === owner);
     if (!connection) {
-      this.deps.log.debug(
-        `${this.deviceId}: write to ${canonicalId} dropped \u2014 its transport (${owner}) is offline`,
-      );
+      this.deps.log.debug(`${this.deviceId}: write to ${canonicalId} dropped \u2014 its transport (${owner}) is offline`);
       return;
     }
     connection.handleWrite(canonicalId, ack, value);
@@ -265,8 +256,7 @@ class MultiTransportHandle {
   }
 }
 // Annotate the CommonJS export names for ESM import in node:
-0 &&
-  (module.exports = {
-    MultiTransportHandle,
-  });
+0 && (module.exports = {
+  MultiTransportHandle
+});
 //# sourceMappingURL=multi-transport-handle.js.map

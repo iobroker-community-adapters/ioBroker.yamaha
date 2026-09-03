@@ -4,24 +4,22 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
-  for (var name in all) __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if ((from && typeof from === "object") || typeof from === "function") {
+  if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, {
-          get: () => from[key],
-          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
-        });
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
   }
   return to;
 };
-var __toCommonJS = mod => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var command_gate_exports = {};
 __export(command_gate_exports, {
   CommandGate: () => CommandGate,
-  CommandGateClosedError: () => CommandGateClosedError,
+  CommandGateClosedError: () => CommandGateClosedError
 });
 module.exports = __toCommonJS(command_gate_exports);
 class CommandGateClosedError extends Error {
@@ -38,7 +36,7 @@ class CommandGate {
   constructor(options) {
     this.options = options;
     var _a;
-    this.now = (_a = options.now) != null ? _a : () => Date.now();
+    this.now = (_a = options.now) != null ? _a : (() => Date.now());
   }
   queue = [];
   controller = new AbortController();
@@ -68,7 +66,7 @@ class CommandGate {
     return new Promise((resolve, reject) => {
       const waiting = { run, resolve, reject, priority };
       if (priority === "user") {
-        const firstBackground = this.queue.findIndex(entry => entry.priority === "background");
+        const firstBackground = this.queue.findIndex((entry) => entry.priority === "background");
         if (firstBackground < 0) {
           this.queue.push(waiting);
         } else {
@@ -92,7 +90,7 @@ class CommandGate {
     if (this.closed) {
       return Promise.resolve();
     }
-    return new Promise(resolve => {
+    return new Promise((resolve) => {
       const armed = {};
       const onAbort = () => {
         this.options.timers.cancel(armed.timer);
@@ -160,9 +158,8 @@ class CommandGate {
   }
 }
 // Annotate the CommonJS export names for ESM import in node:
-0 &&
-  (module.exports = {
-    CommandGate,
-    CommandGateClosedError,
-  });
+0 && (module.exports = {
+  CommandGate,
+  CommandGateClosedError
+});
 //# sourceMappingURL=command-gate.js.map

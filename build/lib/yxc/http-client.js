@@ -4,25 +4,23 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
-  for (var name in all) __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if ((from && typeof from === "object") || typeof from === "function") {
+  if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, {
-          get: () => from[key],
-          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
-        });
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
   }
   return to;
 };
-var __toCommonJS = mod => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var http_client_exports = {};
 __export(http_client_exports, {
   YXC_SUBSCRIPTION_HEADERS: () => YXC_SUBSCRIPTION_HEADERS,
   YamahaYxcClient: () => YamahaYxcClient,
-  isWriteCommand: () => isWriteCommand,
+  isWriteCommand: () => isWriteCommand
 });
 module.exports = __toCommonJS(http_client_exports);
 var import_node_http = require("node:http");
@@ -36,46 +34,42 @@ const REQUEST_TIMEOUT_MS = 4e3;
 const API_BASE = "/YamahaExtendedControl/v1";
 const YXC_SUBSCRIPTION_HEADERS = {
   "X-AppName": "MusicCast/1.0",
-  "X-AppPort": "41100",
+  "X-AppPort": "41100"
 };
 function defaultSend(ip) {
-  return (command, body) =>
-    new Promise((resolve, reject) => {
-      const url = `http://${ip}${API_BASE}${command}`;
-      const onResponse = res => {
-        let data = "";
-        let bytes = 0;
-        res.on("data", chunk => {
-          bytes += chunk.length;
-          if (bytes > import_util.MAX_HTTP_BODY_BYTES) {
-            res.destroy(new Error(`YXC response too large: ${command}`));
-            return;
-          }
-          data += String(chunk);
-        });
-        res.on("error", reject);
-        res.on("end", () => {
-          try {
-            resolve(assertOk(JSON.parse(data), command));
-          } catch (e) {
-            reject(e instanceof Error ? e : new Error(String(e)));
-          }
-        });
-      };
-      const req =
-        body === void 0
-          ? (0, import_node_http.get)(url, { headers: { ...YXC_SUBSCRIPTION_HEADERS } }, onResponse)
-          : (0, import_node_http.request)(
-              url,
-              { method: "POST", headers: { "Content-Type": "application/json", ...YXC_SUBSCRIPTION_HEADERS } },
-              onResponse,
-            );
-      req.on("error", reject);
-      req.setTimeout(REQUEST_TIMEOUT_MS, () => req.destroy(new Error(`YXC request timed out: ${command}`)));
-      if (body !== void 0) {
-        req.end(body);
-      }
-    });
+  return (command, body) => new Promise((resolve, reject) => {
+    const url = `http://${ip}${API_BASE}${command}`;
+    const onResponse = (res) => {
+      let data = "";
+      let bytes = 0;
+      res.on("data", (chunk) => {
+        bytes += chunk.length;
+        if (bytes > import_util.MAX_HTTP_BODY_BYTES) {
+          res.destroy(new Error(`YXC response too large: ${command}`));
+          return;
+        }
+        data += String(chunk);
+      });
+      res.on("error", reject);
+      res.on("end", () => {
+        try {
+          resolve(assertOk(JSON.parse(data), command));
+        } catch (e) {
+          reject(e instanceof Error ? e : new Error(String(e)));
+        }
+      });
+    };
+    const req = body === void 0 ? (0, import_node_http.get)(url, { headers: { ...YXC_SUBSCRIPTION_HEADERS } }, onResponse) : (0, import_node_http.request)(
+      url,
+      { method: "POST", headers: { "Content-Type": "application/json", ...YXC_SUBSCRIPTION_HEADERS } },
+      onResponse
+    );
+    req.on("error", reject);
+    req.setTimeout(REQUEST_TIMEOUT_MS, () => req.destroy(new Error(`YXC request timed out: ${command}`)));
+    if (body !== void 0) {
+      req.end(body);
+    }
+  });
 }
 function assertOk(payload, command) {
   const code = payload == null ? void 0 : payload.response_code;
@@ -102,9 +96,7 @@ class YamahaYxcClient {
    *   with user priority so a button press overtakes background polling.
    */
   constructor(ip, send = defaultSend(ip), gate) {
-    this.send = gate
-      ? (command, body) => gate.run(() => send(command, body), isWriteCommand(command) ? "user" : "background")
-      : send;
+    this.send = gate ? (command, body) => gate.run(() => send(command, body), isWriteCommand(command) ? "user" : "background") : send;
   }
   /**
    * Read the device's capabilities (zones, functions, inputs, ranges).
@@ -638,10 +630,9 @@ class YamahaYxcClient {
   }
 }
 // Annotate the CommonJS export names for ESM import in node:
-0 &&
-  (module.exports = {
-    YXC_SUBSCRIPTION_HEADERS,
-    YamahaYxcClient,
-    isWriteCommand,
-  });
+0 && (module.exports = {
+  YXC_SUBSCRIPTION_HEADERS,
+  YamahaYxcClient,
+  isWriteCommand
+});
 //# sourceMappingURL=http-client.js.map

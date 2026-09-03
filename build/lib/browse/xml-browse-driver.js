@@ -4,25 +4,23 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
-  for (var name in all) __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if ((from && typeof from === "object") || typeof from === "function") {
+  if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, {
-          get: () => from[key],
-          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
-        });
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
   }
   return to;
 };
-var __toCommonJS = mod => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var xml_browse_driver_exports = {};
 __export(xml_browse_driver_exports, {
   XML_BROWSE_SOURCES: () => XML_BROWSE_SOURCES,
   XmlBrowseDriver: () => XmlBrowseDriver,
-  parseXmlListInfo: () => parseXmlListInfo,
+  parseXmlListInfo: () => parseXmlListInfo
 });
 module.exports = __toCommonJS(xml_browse_driver_exports);
 var import_types = require("./types");
@@ -32,7 +30,7 @@ const MAX_BUSY_POLLS = 10;
 const XML_BROWSE_SOURCES = [
   { element: "NET_RADIO", key: "netRadio", label: "Net Radio", input: "NET RADIO" },
   { element: "SERVER", key: "server", label: "Media server", input: "SERVER" },
-  { element: "USB", key: "usb", label: "USB", input: "USB" },
+  { element: "USB", key: "usb", label: "USB", input: "USB" }
 ];
 function parseXmlListInfo(xml) {
   var _a, _b, _c, _d, _e, _f, _g, _h, _i;
@@ -43,21 +41,17 @@ function parseXmlListInfo(xml) {
       rows.push({
         line: Number(match[1]),
         text: (0, import_entities.decodeXmlText)(match[2]),
-        kind: (_a = import_types.ROW_KIND_BY_ATTRIBUTE[match[3]]) != null ? _a : "item",
+        kind: (_a = import_types.ROW_KIND_BY_ATTRIBUTE[match[3]]) != null ? _a : "item"
       });
     }
   }
   return {
     ready: !/<Menu_Status>Busy<\/Menu_Status>/.test(xml),
-    menuName: (0, import_entities.decodeXmlText)(
-      (_c = (_b = /<Menu_Name>([^<]*)<\/Menu_Name>/.exec(xml)) == null ? void 0 : _b[1]) != null ? _c : "",
-    ),
+    menuName: (0, import_entities.decodeXmlText)((_c = (_b = /<Menu_Name>([^<]*)<\/Menu_Name>/.exec(xml)) == null ? void 0 : _b[1]) != null ? _c : ""),
     layer: Number((_e = (_d = /<Menu_Layer>(\d+)<\/Menu_Layer>/.exec(xml)) == null ? void 0 : _d[1]) != null ? _e : 0),
-    currentLine: Number(
-      (_g = (_f = /<Current_Line>(\d+)<\/Current_Line>/.exec(xml)) == null ? void 0 : _f[1]) != null ? _g : 1,
-    ),
+    currentLine: Number((_g = (_f = /<Current_Line>(\d+)<\/Current_Line>/.exec(xml)) == null ? void 0 : _f[1]) != null ? _g : 1),
     totalItems: Number((_i = (_h = /<Max_Line>(\d+)<\/Max_Line>/.exec(xml)) == null ? void 0 : _h[1]) != null ? _i : 0),
-    rows,
+    rows
   };
 }
 class XmlBrowseDriver {
@@ -91,8 +85,8 @@ class XmlBrowseDriver {
   }
   /** @returns the selectable sources this device offers (state value → label) */
   sources() {
-    const entries = XML_BROWSE_SOURCES.filter(source => this.available.has(source.key));
-    return Object.fromEntries(entries.map(source => [source.key, source.label]));
+    const entries = XML_BROWSE_SOURCES.filter((source) => this.available.has(source.key));
+    return Object.fromEntries(entries.map((source) => [source.key, source.label]));
   }
   /**
    * Open a source's menu: switch the main-zone input to it and read the window.
@@ -100,7 +94,7 @@ class XmlBrowseDriver {
    * @param source the source key (from {@link sources})
    */
   async open(source) {
-    const entry = XML_BROWSE_SOURCES.find(s => s.key === source && this.available.has(s.key));
+    const entry = XML_BROWSE_SOURCES.find((s) => s.key === source && this.available.has(s.key));
     if (!entry) {
       return;
     }
@@ -187,15 +181,13 @@ class XmlBrowseDriver {
     const window = await this.readWindow();
     if (window) {
       this.lastTotal = window.totalItems;
-      (_a = this.engine) == null
-        ? void 0
-        : _a.onWindow({
-            menuName: window.menuName,
-            layer: window.layer,
-            totalItems: window.totalItems,
-            currentLine: window.currentLine,
-            rows: window.rows,
-          });
+      (_a = this.engine) == null ? void 0 : _a.onWindow({
+        menuName: window.menuName,
+        layer: window.layer,
+        totalItems: window.totalItems,
+        currentLine: window.currentLine,
+        rows: window.rows
+      });
     }
   }
   /**
@@ -218,10 +210,9 @@ class XmlBrowseDriver {
   }
 }
 // Annotate the CommonJS export names for ESM import in node:
-0 &&
-  (module.exports = {
-    XML_BROWSE_SOURCES,
-    XmlBrowseDriver,
-    parseXmlListInfo,
-  });
+0 && (module.exports = {
+  XML_BROWSE_SOURCES,
+  XmlBrowseDriver,
+  parseXmlListInfo
+});
 //# sourceMappingURL=xml-browse-driver.js.map

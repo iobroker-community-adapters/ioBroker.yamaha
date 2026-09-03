@@ -4,24 +4,22 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
-  for (var name in all) __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if ((from && typeof from === "object") || typeof from === "function") {
+  if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, {
-          get: () => from[key],
-          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
-        });
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
   }
   return to;
 };
-var __toCommonJS = mod => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var yxc_browse_driver_exports = {};
 __export(yxc_browse_driver_exports, {
   YXC_BROWSE_SOURCES: () => YXC_BROWSE_SOURCES,
-  YxcBrowseDriver: () => YxcBrowseDriver,
+  YxcBrowseDriver: () => YxcBrowseDriver
 });
 module.exports = __toCommonJS(yxc_browse_driver_exports);
 const PAGE_SIZE = 8;
@@ -38,7 +36,7 @@ const YXC_BROWSE_SOURCES = [
   { input: "radiko", key: "radiko", label: "radiko" },
   { input: "qobuz", key: "qobuz", label: "Qobuz" },
   { input: "deezer", key: "deezer", label: "Deezer" },
-  { input: "amazon_music", key: "amazonMusic", label: "Amazon Music" },
+  { input: "amazon_music", key: "amazonMusic", label: "Amazon Music" }
 ];
 class YxcBrowseDriver {
   /**
@@ -66,8 +64,8 @@ class YxcBrowseDriver {
   }
   /** @returns the selectable sources this device offers (state value → label) */
   sources() {
-    const entries = YXC_BROWSE_SOURCES.filter(source => this.inputList.includes(source.input));
-    return Object.fromEntries(entries.map(source => [source.key, source.label]));
+    const entries = YXC_BROWSE_SOURCES.filter((source) => this.inputList.includes(source.input));
+    return Object.fromEntries(entries.map((source) => [source.key, source.label]));
   }
   /**
    * Open a source's list at the device's current position in it.
@@ -75,7 +73,7 @@ class YxcBrowseDriver {
    * @param source the source key (from {@link sources})
    */
   async open(source) {
-    const entry = YXC_BROWSE_SOURCES.find(s => s.key === source && this.inputList.includes(s.input));
+    const entry = YXC_BROWSE_SOURCES.find((s) => s.key === source && this.inputList.includes(s.input));
     if (!entry) {
       return;
     }
@@ -90,7 +88,7 @@ class YxcBrowseDriver {
    * @param line the line number (1–8)
    */
   async select(line) {
-    const row = this.rows.find(r => r.line === line);
+    const row = this.rows.find((r) => r.line === line);
     if (!this.active || !row || row.kind === "unselectable" || row.kind === "unplayable") {
       return;
     }
@@ -161,7 +159,7 @@ class YxcBrowseDriver {
       const row = {
         line: i + 1,
         text: typeof entry.text === "string" ? entry.text : "",
-        kind: playable ? "item" : selectable ? "folder" : "unselectable",
+        kind: playable ? "item" : selectable ? "folder" : "unselectable"
       };
       if (typeof entry.thumbnail === "string" && entry.thumbnail.length > 0) {
         row.thumbnail = entry.thumbnail;
@@ -170,22 +168,19 @@ class YxcBrowseDriver {
     });
     this.totalItems = typeof response.max_line === "number" ? response.max_line : this.rows.length;
     const layer = typeof response.menu_layer === "number" ? response.menu_layer : 0;
-    (_a = this.engine) == null
-      ? void 0
-      : _a.onWindow({
-          menuName: typeof response.menu_name === "string" ? response.menu_name : "",
-          layer,
-          totalItems: this.totalItems,
-          currentLine: this.index + 1,
-          rows: this.rows,
-        });
+    (_a = this.engine) == null ? void 0 : _a.onWindow({
+      menuName: typeof response.menu_name === "string" ? response.menu_name : "",
+      layer,
+      totalItems: this.totalItems,
+      currentLine: this.index + 1,
+      rows: this.rows
+    });
     return layer;
   }
 }
 // Annotate the CommonJS export names for ESM import in node:
-0 &&
-  (module.exports = {
-    YXC_BROWSE_SOURCES,
-    YxcBrowseDriver,
-  });
+0 && (module.exports = {
+  YXC_BROWSE_SOURCES,
+  YxcBrowseDriver
+});
 //# sourceMappingURL=yxc-browse-driver.js.map

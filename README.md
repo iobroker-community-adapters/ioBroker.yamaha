@@ -103,8 +103,7 @@ On the very first contact the adapter asks the receiver which functions it suppo
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
-
-### **WORK IN PROGRESS**
+### 2.3.1 (2026-09-03)
 
 - (krobipd) Fixed: the new datapoint explanations were missing on MusicCast and older XML devices, so those users saw an empty description where the receiver has one
 
@@ -141,16 +140,6 @@ On the very first contact the adapter asks the receiver which functions it suppo
 - (krobipd) Fixed: the DAB date, the audio signal fields and the tuner preset list no longer show the receiver's own placeholder text — they stay empty, and only stored presets are listed
 - (krobipd) Fixed: on a receiver with both an analogue and a DAB tuner the AM band stays selectable and every band change reaches the right tuner
 - (krobipd) Fixed: a hiccup of the ioBroker database while the adapter starts no longer stops the instance — it says so in the log and keeps the receivers running
-
-### 2.0.4 (2026-09-02)
-
-- (krobipd) Fixed: a short outage of the ioBroker database no longer restarts the adapter — a failed write is logged once and the next value is written normally
-- (krobipd) Fixed: the protocol badges on the device card are reset when a device starts and when the adapter stops, so a crash no longer leaves a green badge next to a red dot
-- (krobipd) Fixed: stopping or restarting the adapter while it is still searching the network now stops it completely — it no longer keeps working half-started until the next restart
-- (krobipd) Fixed: the scene list keeps its titles on MusicCast receivers that also answer over XML or YNCA — the title-less MusicCast list no longer replaces it at startup
-- (krobipd) Fixed: a timeout while probing an older receiver for scenes or menus is asked again on the next connect instead of being remembered as "none" until the next restart
-- (krobipd) Fixed: writing one equalizer band before the receiver reported all three no longer sends zeros for the other two — the zone status is fetched first
-- (krobipd) Improved: a receiver that is off for a while is retried no later than the configured maximum wait, and an oversized answer from a wrong host can no longer eat the adapter's memory
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 

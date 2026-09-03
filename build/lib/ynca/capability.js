@@ -4,31 +4,29 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
-  for (var name in all) __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if ((from && typeof from === "object") || typeof from === "function") {
+  if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, {
-          get: () => from[key],
-          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
-        });
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
   }
   return to;
 };
-var __toCommonJS = mod => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var capability_exports = {};
 __export(capability_exports, {
   buildCapabilities: () => buildCapabilities,
-  mergeYncaSubunits: () => mergeYncaSubunits,
+  mergeYncaSubunits: () => mergeYncaSubunits
 });
 module.exports = __toCommonJS(capability_exports);
 function buildCapabilities(messages) {
   var _a, _b, _c, _d;
   const subunits = {};
   for (const message of messages) {
-    ((_b = subunits[(_a = message.subunit)]) != null ? _b : (subunits[_a] = {}))[message.func] = message.value;
+    ((_b = subunits[_a = message.subunit]) != null ? _b : subunits[_a] = {})[message.func] = message.value;
   }
   return { model: (_d = (_c = subunits.SYS) == null ? void 0 : _c.MODELNAME) != null ? _d : "", subunits };
 }
@@ -43,9 +41,8 @@ function mergeYncaSubunits(remembered, fresh) {
   return merged;
 }
 // Annotate the CommonJS export names for ESM import in node:
-0 &&
-  (module.exports = {
-    buildCapabilities,
-    mergeYncaSubunits,
-  });
+0 && (module.exports = {
+  buildCapabilities,
+  mergeYncaSubunits
+});
 //# sourceMappingURL=capability.js.map

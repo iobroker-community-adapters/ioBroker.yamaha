@@ -4,23 +4,21 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
-  for (var name in all) __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if ((from && typeof from === "object") || typeof from === "function") {
+  if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, {
-          get: () => from[key],
-          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
-        });
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
   }
   return to;
 };
-var __toCommonJS = mod => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var object_mapper_exports = {};
 __export(object_mapper_exports, {
-  mapYxcToObjects: () => mapYxcToObjects,
+  mapYxcToObjects: () => mapYxcToObjects
 });
 module.exports = __toCommonJS(object_mapper_exports);
 var import_types = require("../catalog/types");
@@ -29,15 +27,15 @@ var import_zones = require("./zones");
 var import_catalog = require("./catalog");
 var import_command_mapper = require("./command-mapper");
 function selfMap(values) {
-  return Object.fromEntries(values.map(value => [value, value]));
+  return Object.fromEntries(values.map((value) => [value, value]));
 }
-const ZONES = import_zones.YXC_ZONE_IDS.map(id => ({ id, prefix: (0, import_zones.zonePrefix)(id) }));
+const ZONES = import_zones.YXC_ZONE_IDS.map((id) => ({ id, prefix: (0, import_zones.zonePrefix)(id) }));
 const PLAYER_STATES = [
   {
     // What the zone is playing (the netusb source name, or `cd`) — read-only display;
     // switching happens over the zone's `input` state.
     state: "source",
-    common: { nameKey: "playingSource", type: "string", role: "text", read: true, write: false },
+    common: { nameKey: "playingSource", type: "string", role: "text", read: true, write: false }
   },
   {
     state: "playback",
@@ -48,8 +46,8 @@ const PLAYER_STATES = [
       role: "media.state",
       read: true,
       write: false,
-      states: { 0: "Play", 1: "Stop", 2: "Pause" },
-    },
+      states: { 0: "Play", 1: "Stop", 2: "Pause" }
+    }
   },
   { state: "artist", common: { nameKey: "artist", type: "string", role: "media.artist", read: true, write: false } },
   { state: "album", common: { nameKey: "album", type: "string", role: "media.album", read: true, write: false } },
@@ -66,12 +64,12 @@ const PLAYER_STATES = [
       role: "media.mode.repeat",
       read: true,
       write: false,
-      states: { 0: "Off", 1: "Single", 2: "All" },
-    },
+      states: { 0: "Off", 1: "Single", 2: "All" }
+    }
   },
   {
     state: "shuffle",
-    common: { nameKey: "shuffle", type: "boolean", role: "media.mode.shuffle", read: true, write: false },
+    common: { nameKey: "shuffle", type: "boolean", role: "media.mode.shuffle", read: true, write: false }
   },
   // Both forms of each time, from the one value the device reports: the seconds fill the
   // type detector's media-player slot (it takes nothing else), the text is what a
@@ -86,8 +84,8 @@ const PLAYER_STATES = [
       unit: "s",
       role: "media.elapsed",
       read: true,
-      write: false,
-    },
+      write: false
+    }
   },
   {
     state: "elapsedTimeText",
@@ -97,8 +95,8 @@ const PLAYER_STATES = [
       type: "string",
       role: "media.elapsed.text",
       read: true,
-      write: false,
-    },
+      write: false
+    }
   },
   {
     state: "totalTime",
@@ -109,8 +107,8 @@ const PLAYER_STATES = [
       unit: "s",
       role: "media.duration",
       read: true,
-      write: false,
-    },
+      write: false
+    }
   },
   {
     state: "totalTimeText",
@@ -120,12 +118,12 @@ const PLAYER_STATES = [
       type: "string",
       role: "media.duration.text",
       read: true,
-      write: false,
-    },
+      write: false
+    }
   },
   {
     state: "albumArt",
-    common: { nameKey: "albumArt", type: "string", role: "media.cover", read: true, write: false },
+    common: { nameKey: "albumArt", type: "string", role: "media.cover", read: true, write: false }
   },
   // Transport buttons carry the type-detector media-player roles so a MusicCast player's
   // controls are recognised as play/pause/stop/next/prev, not generic buttons.
@@ -136,12 +134,12 @@ const PLAYER_STATES = [
   { state: "prev", common: { nameKey: "previous", type: "boolean", role: "button.prev", read: false, write: true } },
   {
     state: "repeatToggle",
-    common: { nameKey: "toggleRepeat", type: "boolean", role: "button", read: false, write: true },
+    common: { nameKey: "toggleRepeat", type: "boolean", role: "button", read: false, write: true }
   },
   {
     state: "shuffleToggle",
-    common: { nameKey: "toggleShuffle", type: "boolean", role: "button", read: false, write: true },
-  },
+    common: { nameKey: "toggleShuffle", type: "boolean", role: "button", read: false, write: true }
+  }
 ];
 function pushPlayerBlock(objects, prefix, channelName) {
   objects.push({ id: prefix, type: "channel", common: { name: channelName } });
@@ -153,8 +151,8 @@ function pushPlayerBlock(objects, prefix, channelName) {
       common: {
         ...playerCommon,
         name: (0, import_i18n.tName)(playerNameKey),
-        ...(playerDescKey ? { desc: (0, import_i18n.tName)(playerDescKey) } : {}),
-      },
+        ...playerDescKey ? { desc: (0, import_i18n.tName)(playerDescKey) } : {}
+      }
     });
   }
 }
@@ -163,12 +161,12 @@ function mapYxcToObjects(capabilities) {
   const objects = [];
   const channels = /* @__PURE__ */ new Set();
   for (const zoneDef of ZONES) {
-    const zone = capabilities.zones.find(z => z.id === zoneDef.id);
+    const zone = capabilities.zones.find((z) => z.id === zoneDef.id);
     if (!zone) {
       continue;
     }
     const hasInput = zone.inputs.length > 0;
-    const entries = import_catalog.YXC_AMP_CATALOG.filter(entry => {
+    const entries = import_catalog.YXC_AMP_CATALOG.filter((entry) => {
       if (zoneDef.id !== "main" && entry.state.startsWith("multiroom.")) {
         return false;
       }
@@ -180,7 +178,7 @@ function mapYxcToObjects(capabilities) {
       }
       return zone.funcs.includes(entry.create.func);
     });
-    if (!entries.some(entry => entry.create.kind !== "always")) {
+    if (!entries.some((entry) => entry.create.kind !== "always")) {
       continue;
     }
     for (const entry of entries) {
@@ -195,10 +193,8 @@ function mapYxcToObjects(capabilities) {
             id: channelId,
             type: "channel",
             common: {
-              name: import_types.CHANNEL_NAME_KEYS[segment]
-                ? (0, import_i18n.tName)(import_types.CHANNEL_NAME_KEYS[segment])
-                : segment.charAt(0).toUpperCase() + segment.slice(1),
-            },
+              name: import_types.CHANNEL_NAME_KEYS[segment] ? (0, import_i18n.tName)(import_types.CHANNEL_NAME_KEYS[segment]) : segment.charAt(0).toUpperCase() + segment.slice(1)
+            }
           });
         }
       }
@@ -206,7 +202,7 @@ function mapYxcToObjects(capabilities) {
       const common = {
         ...entryRest,
         name: (0, import_i18n.tName)(entryNameKey),
-        ...(entryDescKey ? { desc: (0, import_i18n.tName)(entryDescKey) } : {}),
+        ...entryDescKey ? { desc: (0, import_i18n.tName)(entryDescKey) } : {}
       };
       if (entry.state === "volume" && zone.volumeRange) {
         common.min = zone.volumeRange.min;
@@ -229,10 +225,7 @@ function mapYxcToObjects(capabilities) {
       }
     };
     if (zone.funcs.includes("scene") && zone.sceneNum && zone.sceneNum > 0) {
-      zoneChannelHelper(
-        `${zoneDef.prefix}scene`,
-        (0, import_i18n.tName)((_b = import_types.CHANNEL_NAME_KEYS.scene) != null ? _b : "Scenes"),
-      );
+      zoneChannelHelper(`${zoneDef.prefix}scene`, (0, import_i18n.tName)((_b = import_types.CHANNEL_NAME_KEYS.scene) != null ? _b : "Scenes"));
       objects.push({
         id: `${zoneDef.prefix}scene.recall`,
         type: "state",
@@ -244,15 +237,12 @@ function mapYxcToObjects(capabilities) {
           write: true,
           min: 1,
           max: zone.sceneNum,
-          step: 1,
-        },
+          step: 1
+        }
       });
     }
     if (zone.funcs.includes("cursor") || zone.funcs.includes("menu")) {
-      zoneChannelHelper(
-        `${zoneDef.prefix}remote`,
-        (0, import_i18n.tName)((_c = import_types.CHANNEL_NAME_KEYS.remote) != null ? _c : "Remote control"),
-      );
+      zoneChannelHelper(`${zoneDef.prefix}remote`, (0, import_i18n.tName)((_c = import_types.CHANNEL_NAME_KEYS.remote) != null ? _c : "Remote control"));
       if (zone.funcs.includes("cursor")) {
         objects.push({
           id: `${zoneDef.prefix}remote.cursor`,
@@ -263,8 +253,8 @@ function mapYxcToObjects(capabilities) {
             role: "state",
             read: false,
             write: true,
-            states: selfMap(["up", "down", "left", "right", "select", "return"]),
-          },
+            states: selfMap(["up", "down", "left", "right", "select", "return"])
+          }
         });
       }
       if (zone.funcs.includes("menu")) {
@@ -277,25 +267,19 @@ function mapYxcToObjects(capabilities) {
             role: "state",
             read: false,
             write: true,
-            states: selfMap(["on_screen", "top_menu", "menu", "option", "display", "home"]),
-          },
+            states: selfMap(["on_screen", "top_menu", "menu", "option", "display", "home"])
+          }
         });
       }
     }
     if (zone.funcs.includes("signal_info")) {
-      zoneChannelHelper(
-        `${zoneDef.prefix}sound`,
-        (0, import_i18n.tName)((_d = import_types.CHANNEL_NAME_KEYS.sound) != null ? _d : "Sound"),
-      );
-      zoneChannelHelper(
-        `${zoneDef.prefix}sound.signal`,
-        (0, import_i18n.tName)((_e = import_types.CHANNEL_NAME_KEYS.signal) != null ? _e : "Audio signal"),
-      );
+      zoneChannelHelper(`${zoneDef.prefix}sound`, (0, import_i18n.tName)((_d = import_types.CHANNEL_NAME_KEYS.sound) != null ? _d : "Sound"));
+      zoneChannelHelper(`${zoneDef.prefix}sound.signal`, (0, import_i18n.tName)((_e = import_types.CHANNEL_NAME_KEYS.signal) != null ? _e : "Audio signal"));
       const signal = (id, name, type, role) => {
         objects.push({
           id: `${zoneDef.prefix}sound.signal.${id}`,
           type: "state",
-          common: { name, type, role, read: true, write: false },
+          common: { name, type, role, read: true, write: false }
         });
       };
       signal("format", (0, import_i18n.tName)("audioSignalFormat"), "string", "text");
@@ -308,53 +292,26 @@ function mapYxcToObjects(capabilities) {
     pushPlayerBlock(objects, "player", (0, import_i18n.tName)("mediaPlayer"));
     for (const zone of capabilities.zones) {
       if (zone.id !== "main") {
-        pushPlayerBlock(
-          objects,
-          `${(0, import_zones.zonePrefix)(zone.id)}player`,
-          (0, import_i18n.tName)("mediaPlayer"),
-        );
+        pushPlayerBlock(objects, `${(0, import_zones.zonePrefix)(zone.id)}player`, (0, import_i18n.tName)("mediaPlayer"));
       }
     }
   }
   if (capabilities.media.includes("netusb")) {
-    objects.push({
-      id: "player.netPlayer",
-      type: "channel",
-      common: { name: (0, import_i18n.tName)("networkPlayer") },
-    });
+    objects.push({ id: "player.netPlayer", type: "channel", common: { name: (0, import_i18n.tName)("networkPlayer") } });
     objects.push({
       id: "player.netPlayer.preset",
       type: "state",
-      common: {
-        name: (0, import_i18n.tName)("recallPreset"),
-        type: "number",
-        role: "level",
-        read: true,
-        write: true,
-        min: 1,
-      },
+      common: { name: (0, import_i18n.tName)("recallPreset"), type: "number", role: "level", read: true, write: true, min: 1 }
     });
     objects.push({
       id: "player.netPlayer.presets",
       type: "state",
-      common: {
-        name: (0, import_i18n.tName)("favouritesStoredPresets"),
-        type: "string",
-        role: "json",
-        read: true,
-        write: false,
-      },
+      common: { name: (0, import_i18n.tName)("favouritesStoredPresets"), type: "string", role: "json", read: true, write: false }
     });
     objects.push({
       id: "player.netPlayer.recent",
       type: "state",
-      common: {
-        name: (0, import_i18n.tName)("recentlyPlayed"),
-        type: "string",
-        role: "json",
-        read: true,
-        write: false,
-      },
+      common: { name: (0, import_i18n.tName)("recentlyPlayed"), type: "string", role: "json", read: true, write: false }
     });
     objects.push({
       id: "player.netPlayer.recallRecent",
@@ -365,27 +322,21 @@ function mapYxcToObjects(capabilities) {
         role: "level",
         read: true,
         write: true,
-        min: 1,
-      },
+        min: 1
+      }
     });
     if ((_f = capabilities.netusbFuncs) == null ? void 0 : _f.includes("mc_playlist")) {
       objects.push({
         id: "player.netPlayer.playlists",
         type: "state",
-        common: {
-          name: (0, import_i18n.tName)("musiccastPlaylists"),
-          type: "string",
-          role: "json",
-          read: true,
-          write: false,
-        },
+        common: { name: (0, import_i18n.tName)("musiccastPlaylists"), type: "string", role: "json", read: true, write: false }
       });
     }
     if ((_g = capabilities.netusbFuncs) == null ? void 0 : _g.includes("play_queue")) {
       objects.push({
         id: "player.netPlayer.queue",
         type: "state",
-        common: { name: (0, import_i18n.tName)("playQueue"), type: "string", role: "json", read: true, write: false },
+        common: { name: (0, import_i18n.tName)("playQueue"), type: "string", role: "json", read: true, write: false }
       });
     }
   }
@@ -394,34 +345,27 @@ function mapYxcToObjects(capabilities) {
     objects.push({
       id: "player.cd.tray",
       type: "state",
-      common: { name: (0, import_i18n.tName)("toggleTray"), type: "boolean", role: "button", read: false, write: true },
+      common: { name: (0, import_i18n.tName)("toggleTray"), type: "boolean", role: "button", read: false, write: true }
     });
     objects.push({
       id: "player.cd.trackNumber",
       type: "state",
-      common: { name: (0, import_i18n.tName)("trackNumber"), type: "number", role: "value", read: true, write: false },
+      common: { name: (0, import_i18n.tName)("trackNumber"), type: "number", role: "value", read: true, write: false }
     });
     objects.push({
       id: "player.cd.totalTracks",
       type: "state",
-      common: { name: (0, import_i18n.tName)("totalTracks"), type: "number", role: "value", read: true, write: false },
+      common: { name: (0, import_i18n.tName)("totalTracks"), type: "number", role: "value", read: true, write: false }
     });
     objects.push({
       id: "player.cd.discTime",
       type: "state",
-      common: {
-        name: (0, import_i18n.tName)("discTime"),
-        type: "number",
-        unit: "s",
-        role: "value",
-        read: true,
-        write: false,
-      },
+      common: { name: (0, import_i18n.tName)("discTime"), type: "number", unit: "s", role: "value", read: true, write: false }
     });
     objects.push({
       id: "player.cd.deviceStatus",
       type: "state",
-      common: { name: (0, import_i18n.tName)("driveStatus"), type: "string", role: "state", read: true, write: false },
+      common: { name: (0, import_i18n.tName)("driveStatus"), type: "string", role: "state", read: true, write: false }
     });
   }
   if (capabilities.media.includes("tuner")) {
@@ -431,7 +375,7 @@ function mapYxcToObjects(capabilities) {
       type: "string",
       role: "state",
       read: true,
-      write: true,
+      write: true
     };
     const bands = (_i = (_h = capabilities.tuner) == null ? void 0 : _h.bands) != null ? _i : [];
     if (bands.length > 0) {
@@ -441,40 +385,27 @@ function mapYxcToObjects(capabilities) {
     objects.push({
       id: "tuner.frequency",
       type: "state",
-      common: {
-        name: (0, import_i18n.tName)("frequency"),
-        type: "number",
-        unit: "kHz",
-        role: "level",
-        read: true,
-        write: true,
-      },
+      common: { name: (0, import_i18n.tName)("frequency"), type: "number", unit: "kHz", role: "level", read: true, write: true }
     });
     objects.push({
       id: "tuner.rdsText",
       type: "state",
-      common: { name: (0, import_i18n.tName)("rdsText"), type: "string", role: "text", read: true, write: false },
+      common: { name: (0, import_i18n.tName)("rdsText"), type: "string", role: "text", read: true, write: false }
     });
     objects.push({
       id: "tuner.rdsTextB",
       type: "state",
-      common: { name: (0, import_i18n.tName)("rdsTextB"), type: "string", role: "text", read: true, write: false },
+      common: { name: (0, import_i18n.tName)("rdsTextB"), type: "string", role: "text", read: true, write: false }
     });
     objects.push({
       id: "tuner.rdsService",
       type: "state",
-      common: { name: (0, import_i18n.tName)("rdsStation"), type: "string", role: "text", read: true, write: false },
+      common: { name: (0, import_i18n.tName)("rdsStation"), type: "string", role: "text", read: true, write: false }
     });
     objects.push({
       id: "tuner.rdsProgramType",
       type: "state",
-      common: {
-        name: (0, import_i18n.tName)("rdsProgrammeType"),
-        type: "string",
-        role: "text",
-        read: true,
-        write: false,
-      },
+      common: { name: (0, import_i18n.tName)("rdsProgrammeType"), type: "string", role: "text", read: true, write: false }
     });
     const presetCommon = {
       name: (0, import_i18n.tName)("presetRecallByNumber"),
@@ -482,7 +413,7 @@ function mapYxcToObjects(capabilities) {
       role: "level",
       read: true,
       write: true,
-      min: 0,
+      min: 0
     };
     if ((_j = capabilities.tuner) == null ? void 0 : _j.presetNum) {
       presetCommon.max = capabilities.tuner.presetNum;
@@ -491,33 +422,27 @@ function mapYxcToObjects(capabilities) {
     objects.push({
       id: "tuner.presetUp",
       type: "state",
-      common: { name: (0, import_i18n.tName)("nextPreset"), type: "boolean", role: "button", read: false, write: true },
+      common: { name: (0, import_i18n.tName)("nextPreset"), type: "boolean", role: "button", read: false, write: true }
     });
     objects.push({
       id: "tuner.presetDown",
       type: "state",
-      common: {
-        name: (0, import_i18n.tName)("previousPreset"),
-        type: "boolean",
-        role: "button",
-        read: false,
-        write: true,
-      },
+      common: { name: (0, import_i18n.tName)("previousPreset"), type: "boolean", role: "button", read: false, write: true }
     });
     objects.push({
       id: "tuner.presets",
       type: "state",
-      common: { name: (0, import_i18n.tName)("storedPresets"), type: "string", role: "json", read: true, write: false },
+      common: { name: (0, import_i18n.tName)("storedPresets"), type: "string", role: "json", read: true, write: false }
     });
     objects.push({
       id: "tuner.tuned",
       type: "state",
-      common: { name: (0, import_i18n.tName)("tuned"), type: "boolean", role: "indicator", read: true, write: false },
+      common: { name: (0, import_i18n.tName)("tuned"), type: "boolean", role: "indicator", read: true, write: false }
     });
     objects.push({
       id: "tuner.audioMode",
       type: "state",
-      common: { name: (0, import_i18n.tName)("audioMode"), type: "string", role: "state", read: true, write: false },
+      common: { name: (0, import_i18n.tName)("audioMode"), type: "string", role: "state", read: true, write: false }
     });
     if (bands.includes("dab")) {
       objects.push({ id: "tuner.dab", type: "channel", common: { name: (0, import_i18n.tName)("dab") } });
@@ -527,12 +452,12 @@ function mapYxcToObjects(capabilities) {
           type: "state",
           common: {
             name: (0, import_i18n.tName)(field.nameKey),
-            ...(field.descKey ? { desc: (0, import_i18n.tName)(field.descKey) } : {}),
+            ...field.descKey ? { desc: (0, import_i18n.tName)(field.descKey) } : {},
             type: field.type,
             role: field.type === "boolean" ? "indicator" : field.type === "number" ? "value" : "text",
             read: true,
-            write: false,
-          },
+            write: false
+          }
         });
       }
     }
@@ -542,37 +467,25 @@ function mapYxcToObjects(capabilities) {
     objects.push({
       id: "clock.autoSync",
       type: "state",
-      common: {
-        name: (0, import_i18n.tName)("automaticTimeSync"),
-        type: "boolean",
-        role: "indicator",
-        read: true,
-        write: false,
-      },
+      common: { name: (0, import_i18n.tName)("automaticTimeSync"), type: "boolean", role: "indicator", read: true, write: false }
     });
     objects.push({
       id: "clock.format",
       type: "state",
-      common: { name: (0, import_i18n.tName)("clockFormat"), type: "string", role: "state", read: true, write: false },
+      common: { name: (0, import_i18n.tName)("clockFormat"), type: "string", role: "state", read: true, write: false }
     });
     objects.push({ id: "clock.alarm", type: "channel", common: { name: (0, import_i18n.tName)("alarm") } });
     objects.push({
       id: "clock.alarm.on",
       type: "state",
-      common: {
-        name: (0, import_i18n.tName)("alarmArmed"),
-        type: "boolean",
-        role: "indicator",
-        read: true,
-        write: false,
-      },
+      common: { name: (0, import_i18n.tName)("alarmArmed"), type: "boolean", role: "indicator", read: true, write: false }
     });
     const volumeCommon = {
       name: (0, import_i18n.tName)("alarmVolume"),
       type: "number",
       role: "value",
       read: true,
-      write: false,
+      write: false
     };
     if (capabilities.clock.alarmVolumeRange) {
       volumeCommon.min = capabilities.clock.alarmVolumeRange.min;
@@ -582,51 +495,32 @@ function mapYxcToObjects(capabilities) {
     objects.push({
       id: "clock.alarm.fadeInterval",
       type: "state",
-      common: {
-        name: (0, import_i18n.tName)("fadeInTime"),
-        type: "number",
-        unit: "s",
-        role: "value",
-        read: true,
-        write: false,
-      },
+      common: { name: (0, import_i18n.tName)("fadeInTime"), type: "number", unit: "s", role: "value", read: true, write: false }
     });
     objects.push({
       id: "clock.alarm.fadeType",
       type: "state",
-      common: { name: (0, import_i18n.tName)("fadeType"), type: "number", role: "value", read: true, write: false },
+      common: { name: (0, import_i18n.tName)("fadeType"), type: "number", role: "value", read: true, write: false }
     });
     objects.push({
       id: "clock.alarm.mode",
       type: "state",
-      common: { name: (0, import_i18n.tName)("alarmMode"), type: "string", role: "state", read: true, write: false },
+      common: { name: (0, import_i18n.tName)("alarmMode"), type: "string", role: "state", read: true, write: false }
     });
     objects.push({
       id: "clock.alarm.repeat",
       type: "state",
-      common: {
-        name: (0, import_i18n.tName)("repeatSnooze"),
-        type: "boolean",
-        role: "indicator",
-        read: true,
-        write: false,
-      },
+      common: { name: (0, import_i18n.tName)("repeatSnooze"), type: "boolean", role: "indicator", read: true, write: false }
     });
-    const detailChannels = [
-      "oneday",
-      ...(capabilities.clock.alarmModes.includes("weekly") ? import_command_mapper.ALARM_DAYS : []),
-    ];
+    const detailChannels = ["oneday", ...capabilities.clock.alarmModes.includes("weekly") ? import_command_mapper.ALARM_DAYS : []];
     for (const channel of detailChannels) {
-      const label =
-        channel === "oneday"
-          ? (0, import_i18n.tName)("oneDayAlarm")
-          : channel.charAt(0).toUpperCase() + channel.slice(1);
+      const label = channel === "oneday" ? (0, import_i18n.tName)("oneDayAlarm") : channel.charAt(0).toUpperCase() + channel.slice(1);
       objects.push({ id: `clock.alarm.${channel}`, type: "channel", common: { name: label } });
       const detail = (id, name, type, role) => {
         objects.push({
           id: `clock.alarm.${channel}.${id}`,
           type: "state",
-          common: { name, type, role, read: true, write: false },
+          common: { name, type, role, read: true, write: false }
         });
       };
       detail("enable", (0, import_i18n.tName)("enabled"), "boolean", "indicator");
@@ -644,7 +538,7 @@ function mapYxcToObjects(capabilities) {
       objects.push({
         id: `multiroom.group.${id}`,
         type: "state",
-        common: { name, type: "string", role, read: true, write: false },
+        common: { name, type: "string", role, read: true, write: false }
       });
     };
     distState("role", (0, import_i18n.tName)("roleServerClient"), "state");
@@ -655,25 +549,18 @@ function mapYxcToObjects(capabilities) {
     objects.push({
       id: "multiroom.group.leave",
       type: "state",
-      common: { name: (0, import_i18n.tName)("leaveGroup"), type: "boolean", role: "button", read: false, write: true },
+      common: { name: (0, import_i18n.tName)("leaveGroup"), type: "boolean", role: "button", read: false, write: true }
     });
     objects.push({
       id: "multiroom.group.linkDevice",
       type: "state",
-      common: {
-        name: (0, import_i18n.tName)("linkADeviceItsIP"),
-        type: "string",
-        role: "text",
-        read: false,
-        write: true,
-      },
+      common: { name: (0, import_i18n.tName)("linkADeviceItsIP"), type: "string", role: "text", read: false, write: true }
     });
   }
   return objects;
 }
 // Annotate the CommonJS export names for ESM import in node:
-0 &&
-  (module.exports = {
-    mapYxcToObjects,
-  });
+0 && (module.exports = {
+  mapYxcToObjects
+});
 //# sourceMappingURL=object-mapper.js.map

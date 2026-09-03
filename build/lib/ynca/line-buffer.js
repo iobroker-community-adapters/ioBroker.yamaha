@@ -4,23 +4,21 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
-  for (var name in all) __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if ((from && typeof from === "object") || typeof from === "function") {
+  if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, {
-          get: () => from[key],
-          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
-        });
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
   }
   return to;
 };
-var __toCommonJS = mod => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var line_buffer_exports = {};
 __export(line_buffer_exports, {
-  LineBuffer: () => LineBuffer,
+  LineBuffer: () => LineBuffer
 });
 module.exports = __toCommonJS(line_buffer_exports);
 const MAX_BUFFER = 64 * 1024;
@@ -41,12 +39,11 @@ class LineBuffer {
     if (this.buffer.length > MAX_BUFFER) {
       this.buffer = "";
     }
-    return parts.filter(line => line.length > 0);
+    return parts.filter((line) => line.length > 0);
   }
 }
 // Annotate the CommonJS export names for ESM import in node:
-0 &&
-  (module.exports = {
-    LineBuffer,
-  });
+0 && (module.exports = {
+  LineBuffer
+});
 //# sourceMappingURL=line-buffer.js.map

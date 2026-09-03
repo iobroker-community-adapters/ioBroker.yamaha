@@ -4,27 +4,25 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
-  for (var name in all) __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if ((from && typeof from === "object") || typeof from === "function") {
+  if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, {
-          get: () => from[key],
-          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
-        });
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
   }
   return to;
 };
-var __toCommonJS = mod => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var value_coerce_exports = {};
 __export(value_coerce_exports, {
   decode: () => decode,
   encode: () => encode,
   formatWireNumber: () => formatWireNumber,
   isWritableValue: () => isWritableValue,
-  specToCommon: () => specToCommon,
+  specToCommon: () => specToCommon
 });
 module.exports = __toCommonJS(value_coerce_exports);
 function specToCommon(spec, opts = {}) {
@@ -36,12 +34,7 @@ function specToCommon(spec, opts = {}) {
     case "enum":
       return { type: "string", role: (_c = opts.role) != null ? _c : "state", read: true, write, states: spec.states };
     case "number": {
-      const common = {
-        type: "number",
-        role: (_d = opts.role) != null ? _d : write ? "level" : "value",
-        read: true,
-        write,
-      };
+      const common = { type: "number", role: (_d = opts.role) != null ? _d : write ? "level" : "value", read: true, write };
       if (spec.unit !== void 0) {
         common.unit = spec.unit;
       }
@@ -127,7 +120,7 @@ function encode(spec, value) {
       return String(value);
     case "code": {
       const code = Number(value);
-      const token = Object.keys(spec.codes).find(w => spec.codes[w] === code);
+      const token = Object.keys(spec.codes).find((w) => spec.codes[w] === code);
       return token != null ? token : String(value);
     }
     case "button":
@@ -135,12 +128,11 @@ function encode(spec, value) {
   }
 }
 // Annotate the CommonJS export names for ESM import in node:
-0 &&
-  (module.exports = {
-    decode,
-    encode,
-    formatWireNumber,
-    isWritableValue,
-    specToCommon,
-  });
+0 && (module.exports = {
+  decode,
+  encode,
+  formatWireNumber,
+  isWritableValue,
+  specToCommon
+});
 //# sourceMappingURL=value-coerce.js.map

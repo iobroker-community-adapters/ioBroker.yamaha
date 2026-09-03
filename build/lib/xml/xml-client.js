@@ -4,23 +4,21 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
-  for (var name in all) __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if ((from && typeof from === "object") || typeof from === "function") {
+  if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, {
-          get: () => from[key],
-          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
-        });
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
   }
   return to;
 };
-var __toCommonJS = mod => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var xml_client_exports = {};
 __export(xml_client_exports, {
-  XmlClient: () => XmlClient,
+  XmlClient: () => XmlClient
 });
 module.exports = __toCommonJS(xml_client_exports);
 var import_node_http = require("node:http");
@@ -38,12 +36,12 @@ function defaultPoster(ip, payload) {
         path: CONTROL_PATH,
         method: "POST",
         timeout: REQUEST_TIMEOUT_MS,
-        headers: { "Content-Type": "text/xml; charset=utf-8", "Content-Length": body.length },
+        headers: { "Content-Type": "text/xml; charset=utf-8", "Content-Length": body.length }
       },
-      res => {
+      (res) => {
         let data = "";
         let bytes = 0;
-        res.on("data", chunk => {
+        res.on("data", (chunk) => {
           bytes += chunk.length;
           if (bytes > import_util.MAX_HTTP_BODY_BYTES) {
             res.destroy(new Error("XML response too large"));
@@ -54,14 +52,12 @@ function defaultPoster(ip, payload) {
         res.on("error", reject);
         res.on("end", () => {
           if (res.statusCode !== void 0 && (res.statusCode < 200 || res.statusCode >= 300)) {
-            reject(
-              new import_protocol.XmlHttpError(`device refused the request (HTTP ${res.statusCode})`, res.statusCode),
-            );
+            reject(new import_protocol.XmlHttpError(`device refused the request (HTTP ${res.statusCode})`, res.statusCode));
             return;
           }
           resolve(data);
         });
-      },
+      }
     );
     req.on("error", reject);
     req.on("timeout", () => req.destroy(new Error("XML request timeout")));
@@ -78,9 +74,7 @@ class XmlClient {
    */
   constructor(ip, post = defaultPoster, gate) {
     this.ip = ip;
-    this.request = gate
-      ? (ip_, body) => gate.run(() => post(ip_, body), body.includes('cmd="PUT"') ? "user" : "background")
-      : post;
+    this.request = gate ? (ip_, body) => gate.run(() => post(ip_, body), body.includes('cmd="PUT"') ? "user" : "background") : post;
   }
   request;
   /**
@@ -92,10 +86,7 @@ class XmlClient {
    * @param inner the inner command XML
    */
   async send(zone, inner) {
-    (0, import_protocol.assertXmlOk)(
-      await this.request(this.ip, (0, import_protocol.encodePut)(zone, inner)),
-      `<${zone}>${inner}`,
-    );
+    (0, import_protocol.assertXmlOk)(await this.request(this.ip, (0, import_protocol.encodePut)(zone, inner)), `<${zone}>${inner}`);
   }
   /**
    * Read a zone's Basic_Status. A refusal throws — an absent zone must not look
@@ -105,10 +96,7 @@ class XmlClient {
    * @returns the parsed amplifier fields
    */
   async getStatus(zone) {
-    const response = await this.request(
-      this.ip,
-      (0, import_protocol.encodeGet)(zone, "<Basic_Status>GetParam</Basic_Status>"),
-    );
+    const response = await this.request(this.ip, (0, import_protocol.encodeGet)(zone, "<Basic_Status>GetParam</Basic_Status>"));
     return (0, import_protocol.parseBasicStatus)((0, import_protocol.assertXmlOk)(response, `<${zone}> Basic_Status`));
   }
   /**
@@ -134,8 +122,7 @@ class XmlClient {
   }
 }
 // Annotate the CommonJS export names for ESM import in node:
-0 &&
-  (module.exports = {
-    XmlClient,
-  });
+0 && (module.exports = {
+  XmlClient
+});
 //# sourceMappingURL=xml-client.js.map

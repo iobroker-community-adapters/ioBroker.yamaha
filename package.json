@@ -1,6 +1,6 @@
 {
   "name": "iobroker.yamaha",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "description": "ioBroker adapter for Yamaha AV receivers and MusicCast devices",
   "author": {
     "name": "krobi",
@@ -64,11 +64,11 @@
     "@tsconfig/node22": "^22.0.5",
     "@types/iobroker": "npm:@iobroker/types@^7.2.2",
     "@types/node": "^22",
-    "@vitest/coverage-v8": "^4.1.11",
+    "@vitest/coverage-v8": "^5.0.0",
     "iobroker-adapter-checks": "^0.3.0",
     "rimraf": "^6.1.3",
     "typescript": "~6.0.3",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.0"
   },
   "main": "build/main.js",
   "files": [
@@ -105,7 +105,7 @@
       "serialize-javascript": "^7.0.5"
     },
     "@alcalzone/esbuild-register": {
-      "esbuild": "^0.25.0"
+      "esbuild": "^0.28.0"
     }
   }
 }

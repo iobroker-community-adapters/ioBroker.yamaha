@@ -4,20 +4,18 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
-  for (var name in all) __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if ((from && typeof from === "object") || typeof from === "function") {
+  if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, {
-          get: () => from[key],
-          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
-        });
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
   }
   return to;
 };
-var __toCommonJS = mod => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var pure_helpers_exports = {};
 __export(pure_helpers_exports, {
   LABEL_RANK: () => LABEL_RANK,
@@ -33,7 +31,7 @@ __export(pure_helpers_exports, {
   renamedObjectIds: () => renamedObjectIds,
   sanitizeId: () => sanitizeId,
   staleObjects: () => staleObjects,
-  stripNamespace: () => stripNamespace,
+  stripNamespace: () => stripNamespace
 });
 module.exports = __toCommonJS(pure_helpers_exports);
 function isConfiguredDevice(entry) {
@@ -41,11 +39,7 @@ function isConfiguredDevice(entry) {
     return false;
   }
   const candidate = entry;
-  return (
-    typeof candidate.ip === "string" &&
-    candidate.ip.length > 0 &&
-    (candidate.name === void 0 || typeof candidate.name === "string")
-  );
+  return typeof candidate.ip === "string" && candidate.ip.length > 0 && (candidate.name === void 0 || typeof candidate.name === "string");
 }
 function sanitizeId(raw) {
   return raw.replace(/[^A-Za-z0-9\-_]/g, "_");
@@ -90,7 +84,7 @@ function mergeDiscovered(known, found, onCollision) {
       remembered.ip = device.ip;
       continue;
     }
-    const ipOwner = [...byId.values()].find(record => record.ip === device.ip);
+    const ipOwner = [...byId.values()].find((record) => record.ip === device.ip);
     if (id === "info" || ipOwner) {
       onCollision == null ? void 0 : onCollision(label, (_a = ipOwner == null ? void 0 : ipOwner.id) != null ? _a : id);
       continue;
@@ -103,11 +97,11 @@ function staleObjects(existing, deviceIds, namespace) {
   if (deviceIds.size === 0) {
     return [];
   }
-  const isKept = fullId => {
+  const isKept = (fullId) => {
     const top = stripNamespace(fullId, namespace).split(".")[0];
     return top === "info" || deviceIds.has(top);
   };
-  return existing.filter(id => !isKept(id)).sort((a, b) => b.length - a.length);
+  return existing.filter((id) => !isKept(id)).sort((a, b) => b.length - a.length);
 }
 const V2_PLAYER_BLOCK_STATES = [
   "playback",
@@ -128,7 +122,7 @@ const V2_PLAYER_BLOCK_STATES = [
   "next",
   "prev",
   "repeatToggle",
-  "shuffleToggle",
+  "shuffleToggle"
 ];
 const V2_SLIMMED_SOURCES = [
   "netPlayer",
@@ -142,7 +136,7 @@ const V2_SLIMMED_SOURCES = [
   "sirius",
   "pc",
   "airplay",
-  "bluetooth",
+  "bluetooth"
 ];
 const RENAMED_STATE_IDS = [
   "hdmiOut",
@@ -168,7 +162,7 @@ const RENAMED_STATE_IDS = [
   // ---- v2.0.0 tree rework ------------------------------------------------------
   // Player unification: the per-source copies of the playback block are gone (the
   // slimmed folders keep only their own preset/pairing/drive states).
-  ...V2_SLIMMED_SOURCES.flatMap(source => V2_PLAYER_BLOCK_STATES.map(state => `player.${source}.${state}`)),
+  ...V2_SLIMMED_SOURCES.flatMap((source) => V2_PLAYER_BLOCK_STATES.map((state) => `player.${source}.${state}`)),
   // Scenes: the twelve per-name datapoints became the recall dropdown + scene.list.
   ...Array.from({ length: 12 }, (_unused, i) => `scene.name${i + 1}`),
   // Tuner unification: ONE band/frequency/preset; the DAB subunit's FM half moved
@@ -199,7 +193,7 @@ const RENAMED_STATE_IDS = [
   // HDMI polish: the lip-sync offsets moved into the hdmi folder (the lipSync
   // channel itself is in RENAMED_CHANNELS); the A/B toggles joined the speakers.
   "advanced.speakerA",
-  "advanced.speakerB",
+  "advanced.speakerB"
 ];
 const RENAMED_CHANNELS = [
   // pre-0.11 system folder
@@ -285,7 +279,7 @@ const RENAMED_CHANNELS = [
   "player.ipod",
   "player.ipodUsb",
   "player.musicCastLink",
-  "lipSync",
+  "lipSync"
 ];
 function neverWrittenStateIds(objects, states, deviceIds, namespace) {
   const ids = [];
@@ -300,7 +294,7 @@ function neverWrittenStateIds(objects, states, deviceIds, namespace) {
       continue;
     }
     const state = states[fullId];
-    if (!state || ((state.val === null || state.val === void 0) && !state.lc)) {
+    if (!state || (state.val === null || state.val === void 0) && !state.lc) {
       ids.push(fullId);
     }
   }
@@ -342,7 +336,7 @@ function renamedObjectIds(existing, deviceIds, namespace) {
       const template = rel.slice(zone.length);
       const renamedState = RENAMED_STATE_IDS.includes(rel) || RENAMED_STATE_IDS.includes(template);
       const underRenamedChannel = RENAMED_CHANNELS.some(
-        ch => rel === ch || rel.startsWith(`${ch}.`) || template === ch || template.startsWith(`${ch}.`),
+        (ch) => rel === ch || rel.startsWith(`${ch}.`) || template === ch || template.startsWith(`${ch}.`)
       );
       if (renamedState || underRenamedChannel) {
         stale.push(full);
@@ -355,12 +349,7 @@ function legacyDeviceRow(config) {
   if (Array.isArray(config.devices) && config.devices.length > 0) {
     return void 0;
   }
-  const raw =
-    typeof config.ip === "string" && config.ip
-      ? config.ip
-      : typeof config.IP === "string" && config.IP
-        ? config.IP
-        : void 0;
+  const raw = typeof config.ip === "string" && config.ip ? config.ip : typeof config.IP === "string" && config.IP ? config.IP : void 0;
   if (!raw) {
     return void 0;
   }
@@ -389,21 +378,20 @@ function nextDeviceLabel(current, deviceId, candidate, rank, ownName, ownRank) {
   return wanted;
 }
 // Annotate the CommonJS export names for ESM import in node:
-0 &&
-  (module.exports = {
-    LABEL_RANK,
-    RENAMED_CHANNELS,
-    RENAMED_STATE_IDS,
-    childlessChannelIds,
-    isUsefulDeviceName,
-    legacyDeviceRow,
-    mergeDiscovered,
-    neverWrittenStateIds,
-    nextDeviceLabel,
-    parseDevices,
-    renamedObjectIds,
-    sanitizeId,
-    staleObjects,
-    stripNamespace,
-  });
+0 && (module.exports = {
+  LABEL_RANK,
+  RENAMED_CHANNELS,
+  RENAMED_STATE_IDS,
+  childlessChannelIds,
+  isUsefulDeviceName,
+  legacyDeviceRow,
+  mergeDiscovered,
+  neverWrittenStateIds,
+  nextDeviceLabel,
+  parseDevices,
+  renamedObjectIds,
+  sanitizeId,
+  staleObjects,
+  stripNamespace
+});
 //# sourceMappingURL=pure-helpers.js.map

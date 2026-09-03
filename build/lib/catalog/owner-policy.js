@@ -4,26 +4,24 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
-  for (var name in all) __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if ((from && typeof from === "object") || typeof from === "function") {
+  if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, {
-          get: () => from[key],
-          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
-        });
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
   }
   return to;
 };
-var __toCommonJS = mod => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var owner_policy_exports = {};
 __export(owner_policy_exports, {
   ZONE_PREFIX: () => ZONE_PREFIX,
   canonicalIdOf: () => canonicalIdOf,
   capabilityKeyOf: () => capabilityKeyOf,
-  pickOwner: () => pickOwner,
+  pickOwner: () => pickOwner
 });
 module.exports = __toCommonJS(owner_policy_exports);
 const MODERNITY = ["yxc", "ynca", "xml"];
@@ -60,12 +58,12 @@ const OWNER_OVERRIDES = {
   input: ["ynca", "yxc", "xml"],
   soundProgram: ["ynca", "yxc", "xml"],
   sleep: ["ynca", "xml", "yxc"],
-  "tuner.band": ["ynca", "yxc"],
+  "tuner.band": ["ynca", "yxc"]
 };
 const ZONE_PREFIX = /^multiroom\.zone[234]\./;
 const ID_DRIFT = {
   yxc: { subwooferVolume: "sound.subwooferTrim", "multiroom.partyEnable": "multiroom.party" },
-  xml: { hdmiOut1: "hdmi.out1", hdmiOut2: "hdmi.out2" },
+  xml: { hdmiOut1: "hdmi.out1", hdmiOut2: "hdmi.out2" }
 };
 function capabilityKeyOf(transport, stateId) {
   var _a, _b;
@@ -81,16 +79,14 @@ function canonicalIdOf(transport, stateId) {
 function pickOwner(key, candidates) {
   var _a, _b;
   const preference = (_a = OWNER_OVERRIDES[key]) != null ? _a : MODERNITY;
-  const owner =
-    (_b = preference.find(t => candidates.includes(t))) != null ? _b : MODERNITY.find(t => candidates.includes(t));
+  const owner = (_b = preference.find((t) => candidates.includes(t))) != null ? _b : MODERNITY.find((t) => candidates.includes(t));
   return owner != null ? owner : candidates[0];
 }
 // Annotate the CommonJS export names for ESM import in node:
-0 &&
-  (module.exports = {
-    ZONE_PREFIX,
-    canonicalIdOf,
-    capabilityKeyOf,
-    pickOwner,
-  });
+0 && (module.exports = {
+  ZONE_PREFIX,
+  canonicalIdOf,
+  capabilityKeyOf,
+  pickOwner
+});
 //# sourceMappingURL=owner-policy.js.map
