@@ -44,22 +44,50 @@ function browseObjectDefs(sources) {
     {
       id: "player.browse.menuName",
       type: "state",
-      common: { name: (0, import_i18n.tName)("menuName"), type: "string", role: "text", read: true, write: false }
+      common: {
+        name: (0, import_i18n.tName)("menuName"),
+        desc: (0, import_i18n.tName)("descMenuName"),
+        type: "string",
+        role: "text",
+        read: true,
+        write: false
+      }
     },
     {
       id: "player.browse.layer",
       type: "state",
-      common: { name: (0, import_i18n.tName)("menuLevel"), type: "number", role: "value", read: true, write: false }
+      common: {
+        name: (0, import_i18n.tName)("menuLevel"),
+        desc: (0, import_i18n.tName)("descMenuLevel"),
+        type: "number",
+        role: "value",
+        read: true,
+        write: false
+      }
     },
     {
       id: "player.browse.totalItems",
       type: "state",
-      common: { name: (0, import_i18n.tName)("totalEntries"), type: "number", role: "value", read: true, write: false }
+      common: {
+        name: (0, import_i18n.tName)("totalEntries"),
+        desc: (0, import_i18n.tName)("descTotalEntries"),
+        type: "number",
+        role: "value",
+        read: true,
+        write: false
+      }
     },
     {
       id: "player.browse.currentLine",
       type: "state",
-      common: { name: (0, import_i18n.tName)("currentLine"), type: "number", role: "value", read: true, write: false }
+      common: {
+        name: (0, import_i18n.tName)("currentLine"),
+        desc: (0, import_i18n.tName)("descCurrentLine"),
+        type: "number",
+        role: "value",
+        read: true,
+        write: false
+      }
     },
     ...[1, 2, 3, 4, 5, 6, 7, 8].map(line),
     {
@@ -67,6 +95,7 @@ function browseObjectDefs(sources) {
       type: "state",
       common: {
         name: (0, import_i18n.tName)("selectLineFolderOpensItemPlays"),
+        desc: (0, import_i18n.tName)("descSelectLineFolderOpensItemPlays"),
         type: "number",
         role: "level",
         read: true,
@@ -85,6 +114,7 @@ function browseObjectDefs(sources) {
       type: "state",
       common: {
         name: (0, import_i18n.tName)("navigatePathEGBookmarksRadioParadise"),
+        desc: (0, import_i18n.tName)("descNavigatePathEGBookmarksRadioParadise"),
         type: "string",
         role: "text",
         read: true,
@@ -94,12 +124,26 @@ function browseObjectDefs(sources) {
     {
       id: "player.browse.rows",
       type: "state",
-      common: { name: (0, import_i18n.tName)("rowsJSON"), type: "string", role: "json", read: true, write: false }
+      common: {
+        name: (0, import_i18n.tName)("rowsJSON"),
+        desc: (0, import_i18n.tName)("descRowsJSON"),
+        type: "string",
+        role: "json",
+        read: true,
+        write: false
+      }
     },
     {
       id: "player.browse.busy",
       type: "state",
-      common: { name: (0, import_i18n.tName)("busy"), type: "boolean", role: "indicator", read: true, write: false }
+      common: {
+        name: (0, import_i18n.tName)("busy"),
+        desc: (0, import_i18n.tName)("descBusy"),
+        type: "boolean",
+        role: "indicator",
+        read: true,
+        write: false
+      }
     }
   ];
 }

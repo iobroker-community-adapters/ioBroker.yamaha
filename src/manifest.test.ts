@@ -165,6 +165,42 @@ describe("no object is built without the explanation that exists for it", () => 
     };
     walk(root);
     const missing: string[] = [];
+    const undecidedNames: string[] = [];
+    /** Object names that need no explanation — the name already says it. */
+    const NAMES_WITHOUT_EXPLANATION = new Set<string>([
+      "alarm",
+      "alarmArmed",
+      "alarmMode",
+      "alarmVolume",
+      "allDevicesOnline",
+      "band",
+      "browse",
+      "cd",
+      "connected",
+      "dab",
+      "deviceOrServiceConnected",
+      "devicesOnline",
+      "devicesTotal",
+      "discTime",
+      "favouritesStoredPresets",
+      "frequency",
+      "info",
+      "information",
+      "ipAddress",
+      "mediaPlayer",
+      "model",
+      "musiccastPlaylists",
+      "networkPlayer",
+      "nextPreset",
+      "playQueue",
+      "previousPreset",
+      "recentlyPlayed",
+      "source",
+      "storedPresets",
+      "totalTracks",
+      "trackNumber",
+      "tuner",
+    ]);
     for (const file of files) {
       const source = readFileSync(file, "utf8");
       for (const match of source.matchAll(/(?:nameKey:\s*"|tName\(\s*")([A-Za-z0-9]+)"/g)) {
@@ -177,7 +213,21 @@ describe("no object is built without the explanation that exists for it", () => 
           missing.push(`${file.slice(root.length + 1)}: ${match[1]} → ${descKey}`);
         }
       }
+      // The symmetric half: an object NAME that carries no explanation at all must be a
+      // deliberate decision, not an oversight. Two datapoints slipped through the rule above
+      // because the same meaning had a SECOND key (`tuned` beside `tunedToAStation`), for which
+      // no explanation existed — so nothing was demanded and the tree stayed bare.
+      for (const match of source.matchAll(/name:\s*tName\("([A-Za-z0-9]+)"\)/g)) {
+        const after = source.slice(match.index, match.index + 300);
+        if (after.includes("desc: tName(") || NAMES_WITHOUT_EXPLANATION.has(match[1])) {
+          continue;
+        }
+        undecidedNames.push(`${file.slice(root.length + 1)}: ${match[1]}`);
+      }
     }
     expect(missing, "these build an object but drop the explanation that exists for it").toEqual([]);
+    expect(undecidedNames, "these name an object with no explanation and are not listed as self-explanatory").toEqual(
+      [],
+    );
   });
 });

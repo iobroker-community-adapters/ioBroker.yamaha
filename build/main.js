@@ -737,7 +737,7 @@ class Yamaha extends utils.Adapter {
     await this.setState(`${deviceId}.info.ip`, { val: ip, ack: true });
     await this.extendObject(`${deviceId}.info.transports`, {
       type: "channel",
-      common: { name: (0, import_i18n.tName)("transports") },
+      common: { name: (0, import_i18n.tName)("transports"), desc: (0, import_i18n.tName)("descTransports") },
       native: {}
     });
     for (const proto of TRANSPORT_IDS) {

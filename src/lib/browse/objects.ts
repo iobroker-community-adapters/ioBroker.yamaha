@@ -33,22 +33,50 @@ export function browseObjectDefs(sources: Record<string, string>): ObjectDef[] {
     {
       id: "player.browse.menuName",
       type: "state",
-      common: { name: tName("menuName"), type: "string", role: "text", read: true, write: false },
+      common: {
+        name: tName("menuName"),
+        desc: tName("descMenuName"),
+        type: "string",
+        role: "text",
+        read: true,
+        write: false,
+      },
     },
     {
       id: "player.browse.layer",
       type: "state",
-      common: { name: tName("menuLevel"), type: "number", role: "value", read: true, write: false },
+      common: {
+        name: tName("menuLevel"),
+        desc: tName("descMenuLevel"),
+        type: "number",
+        role: "value",
+        read: true,
+        write: false,
+      },
     },
     {
       id: "player.browse.totalItems",
       type: "state",
-      common: { name: tName("totalEntries"), type: "number", role: "value", read: true, write: false },
+      common: {
+        name: tName("totalEntries"),
+        desc: tName("descTotalEntries"),
+        type: "number",
+        role: "value",
+        read: true,
+        write: false,
+      },
     },
     {
       id: "player.browse.currentLine",
       type: "state",
-      common: { name: tName("currentLine"), type: "number", role: "value", read: true, write: false },
+      common: {
+        name: tName("currentLine"),
+        desc: tName("descCurrentLine"),
+        type: "number",
+        role: "value",
+        read: true,
+        write: false,
+      },
     },
     ...[1, 2, 3, 4, 5, 6, 7, 8].map(line),
     {
@@ -56,6 +84,7 @@ export function browseObjectDefs(sources: Record<string, string>): ObjectDef[] {
       type: "state",
       common: {
         name: tName("selectLineFolderOpensItemPlays"),
+        desc: tName("descSelectLineFolderOpensItemPlays"),
         type: "number",
         role: "level",
         read: true,
@@ -74,6 +103,7 @@ export function browseObjectDefs(sources: Record<string, string>): ObjectDef[] {
       type: "state",
       common: {
         name: tName("navigatePathEGBookmarksRadioParadise"),
+        desc: tName("descNavigatePathEGBookmarksRadioParadise"),
         type: "string",
         role: "text",
         read: true,
@@ -83,12 +113,26 @@ export function browseObjectDefs(sources: Record<string, string>): ObjectDef[] {
     {
       id: "player.browse.rows",
       type: "state",
-      common: { name: tName("rowsJSON"), type: "string", role: "json", read: true, write: false },
+      common: {
+        name: tName("rowsJSON"),
+        desc: tName("descRowsJSON"),
+        type: "string",
+        role: "json",
+        read: true,
+        write: false,
+      },
     },
     {
       id: "player.browse.busy",
       type: "state",
-      common: { name: tName("busy"), type: "boolean", role: "indicator", read: true, write: false },
+      common: {
+        name: tName("busy"),
+        desc: tName("descBusy"),
+        type: "boolean",
+        role: "indicator",
+        read: true,
+        write: false,
+      },
     },
   ];
 }

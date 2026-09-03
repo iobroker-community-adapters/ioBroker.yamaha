@@ -832,7 +832,7 @@ export class Yamaha extends utils.Adapter {
     // renders all three (false) instead of nothing.
     await this.extendObject(`${deviceId}.info.transports`, {
       type: "channel",
-      common: { name: tName("transports") },
+      common: { name: tName("transports"), desc: tName("descTransports") },
       native: {},
     });
     for (const proto of TRANSPORT_IDS) {

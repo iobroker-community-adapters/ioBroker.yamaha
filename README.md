@@ -103,6 +103,11 @@ On the very first contact the adapter asks the receiver which functions it suppo
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+
+### **WORK IN PROGRESS**
+
+- (krobipd) New: the menu browser, the MusicCast group, the clock alarm and the disc drive now explain their datapoints too, in eleven languages
+
 ### 2.3.2 (2026-09-03)
 
 - (krobipd) Fixed: eight tuner and scene datapoints still showed no explanation on MusicCast and older XML receivers

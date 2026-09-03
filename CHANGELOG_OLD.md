@@ -1,4 +1,5 @@
 # Older changes
+
 ## 2.1.0 (2026-09-02)
 
 - (krobipd) New: every datapoint name is now shown in your ioBroker language, in eleven languages; a name you changed yourself stays untouched

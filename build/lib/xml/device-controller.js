@@ -267,7 +267,14 @@ class XmlDeviceController {
       await this.deps.upsertObject(`${this.deviceId}.${channelId}.list`, {
         id: `${channelId}.list`,
         type: "state",
-        common: { name: (0, import_i18n.tName)("scenesNumberTitle"), type: "string", role: "json", read: true, write: false }
+        common: {
+          name: (0, import_i18n.tName)("scenesNumberTitle"),
+          desc: (0, import_i18n.tName)("descScenesNumberTitle"),
+          type: "string",
+          role: "json",
+          read: true,
+          write: false
+        }
       });
       this.emit(`${channelId}.list`, JSON.stringify(scenes));
     }
