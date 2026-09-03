@@ -121,6 +121,14 @@
       "uk": "Керування AV-ресиверами та пристроями MusicCast Yamaha через мережу",
       "zh-cn": "通过网络控制 Yamaha AV 接收器和 MusicCast 设备"
     },
+    "docs": {
+      "en": [
+        "docs/en/README.md"
+      ],
+      "de": [
+        "docs/de/README.md"
+      ]
+    },
     "keywords": [
       "yamaha",
       "avr",
