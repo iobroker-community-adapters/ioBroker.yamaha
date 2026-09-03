@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { SWITCHABLE_GROUPS } from "./lib/catalog/groups";
 import { YNCA_CATALOG } from "./lib/ynca/catalog";
 import { YXC_AMP_CATALOG } from "./lib/yxc/catalog";
+import { XML_AMP_CATALOG } from "./lib/xml/catalog";
+import { DAB_FIELDS } from "./lib/yxc/command-mapper";
 
 /**
  * Manifest and admin wiring the integration boot test cannot see. Both checks here guard
@@ -94,15 +96,28 @@ describe("every datapoint has a description decision", () => {
     "zoneBMute",
     "zoneBVolume",
     "zoneBName",
+    // MusicCast/XML-only, ebenfalls selbsterklaerend
+    "balance",
+    "monaural",
+    "equalizerLow",
+    "equalizerMid",
+    "equalizerHigh",
+    "inputNameDisplay",
   ]);
 
   it("no catalog entry is left undecided", () => {
     const undecided = new Map<string, string>();
-    for (const entry of [...YNCA_CATALOG, ...YXC_AMP_CATALOG]) {
-      const nameKey = (entry as { nameKey?: string }).nameKey;
-      const descKey = (entry as { descKey?: string }).descKey;
-      const derived = (entry as { derived?: boolean }).derived;
-      if (derived || !nameKey || descKey || SELF_EXPLANATORY.has(nameKey)) {
+    // ALL four catalogs, and BOTH entry shapes. The YNCA table carries `nameKey`/`descKey` on the
+    // entry itself; the MusicCast and XML tables carry them inside `common`. A first version of
+    // this test only read the top level — so it silently skipped every MusicCast and XML entry
+    // and reported "all decided" while 29 of them had no explanation. Measured on the live tree:
+    // 59 datapoints should have carried one, 25 did.
+    for (const entry of [...YNCA_CATALOG, ...YXC_AMP_CATALOG, ...XML_AMP_CATALOG, ...DAB_FIELDS]) {
+      const shallow = entry as { nameKey?: string; descKey?: string; derived?: boolean };
+      const nested = (entry as { common?: { nameKey?: string; descKey?: string } }).common;
+      const nameKey = shallow.nameKey ?? nested?.nameKey;
+      const descKey = shallow.descKey ?? nested?.descKey;
+      if (shallow.derived || !nameKey || descKey || SELF_EXPLANATORY.has(nameKey)) {
         continue;
       }
       const id = (entry as { id?: string; state?: string }).id ?? (entry as { state?: string }).state ?? "?";

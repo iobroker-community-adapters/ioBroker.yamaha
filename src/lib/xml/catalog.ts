@@ -67,33 +67,54 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
   },
   {
     state: "soundProgram",
-    common: { nameKey: "soundProgram", type: "string", role: "state", read: true, write: true },
+    common: {
+      nameKey: "soundProgram",
+      descKey: "descSoundProgram",
+      type: "string",
+      role: "state",
+      read: true,
+      write: true,
+    },
     statusField: "soundProgram",
     toInner: value =>
       `<Surround><Program_Sel><Current><Sound_Program>${escapeXmlText(value)}</Sound_Program></Current></Program_Sel></Surround>`,
   },
   {
     state: "sound.pureDirect",
-    common: { nameKey: "pureDirect", type: "boolean", role: "switch", read: true, write: true },
+    common: {
+      nameKey: "pureDirect",
+      descKey: "descPureDirect",
+      type: "boolean",
+      role: "switch",
+      read: true,
+      write: true,
+    },
     statusField: "pureDirect",
     toInner: value => `<Sound_Video><Pure_Direct><Mode>${value ? "On" : "Off"}</Mode></Pure_Direct></Sound_Video>`,
   },
   {
     state: "sound.straight",
-    common: { nameKey: "straight", type: "boolean", role: "switch", read: true, write: true },
+    common: { nameKey: "straight", descKey: "descStraight", type: "boolean", role: "switch", read: true, write: true },
     statusField: "straight",
     toInner: value =>
       `<Surround><Program_Sel><Current><Straight>${value ? "On" : "Off"}</Straight></Current></Program_Sel></Surround>`,
   },
   {
     state: "sound.direct",
-    common: { nameKey: "direct", type: "boolean", role: "switch", read: true, write: true },
+    common: { nameKey: "direct", descKey: "descDirect", type: "boolean", role: "switch", read: true, write: true },
     statusField: "direct",
     toInner: value => `<Sound_Video><Direct><Mode>${value ? "On" : "Off"}</Mode></Direct></Sound_Video>`,
   },
   {
     state: "sound.adaptiveDrc",
-    common: { nameKey: "adaptiveDRC", type: "string", role: "state", read: true, write: true },
+    common: {
+      nameKey: "adaptiveDRC",
+      descKey: "descAdaptiveDRC",
+      type: "string",
+      role: "state",
+      read: true,
+      write: true,
+    },
     statusField: "adaptiveDrc",
     toInner: value => `<Sound_Video><Adaptive_DRC>${escapeXmlText(value)}</Adaptive_DRC></Sound_Video>`,
   },
@@ -101,7 +122,14 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     // Read-only: openHAB reads the Dialogue_Lvl path, but the write value structure
     // (Val/Exp/Unit vs bare) is not confirmed by a reference, so no write is offered.
     state: "sound.dialogueLevel",
-    common: { nameKey: "dialogueLevel", type: "number", role: "value", read: true, write: false },
+    common: {
+      nameKey: "dialogueLevel",
+      descKey: "descDialogueLevel",
+      type: "number",
+      role: "value",
+      read: true,
+      write: false,
+    },
     statusField: "dialogueLevel",
   },
   {
@@ -169,13 +197,27 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
   },
   {
     state: "sound.extraBass",
-    common: { nameKey: "extraBass", type: "boolean", role: "switch", read: true, write: true },
+    common: {
+      nameKey: "extraBass",
+      descKey: "descExtraBass",
+      type: "boolean",
+      role: "switch",
+      read: true,
+      write: true,
+    },
     statusField: "extraBass",
     toInner: value => `<Sound_Video><Extra_Bass>${value ? "Auto" : "Off"}</Extra_Bass></Sound_Video>`,
   },
   {
     state: "sound.ypaoVolume",
-    common: { nameKey: "ypaoVolume", type: "boolean", role: "switch", read: true, write: true },
+    common: {
+      nameKey: "ypaoVolume",
+      descKey: "descYpaoVolume",
+      type: "boolean",
+      role: "switch",
+      read: true,
+      write: true,
+    },
     statusField: "ypaoVolume",
     toInner: value => `<Sound_Video><YPAO_Volume>${value ? "Auto" : "Off"}</YPAO_Volume></Sound_Video>`,
   },
@@ -204,7 +246,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
   // predecessor's blind `Scene_Load` is gone; nothing ever proved it worked (#615).
   {
     state: "hdmiOut1",
-    common: { nameKey: "hdmiOUT1", type: "boolean", role: "switch", read: true, write: true },
+    common: { nameKey: "hdmiOUT1", descKey: "descHdmiOUT1", type: "boolean", role: "switch", read: true, write: true },
     statusField: "hdmiOut1",
     mainOnly: true,
     writeZone: "System",
@@ -212,7 +254,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
   },
   {
     state: "hdmiOut2",
-    common: { nameKey: "hdmiOUT2", type: "boolean", role: "switch", read: true, write: true },
+    common: { nameKey: "hdmiOUT2", descKey: "descHdmiOUT2", type: "boolean", role: "switch", read: true, write: true },
     statusField: "hdmiOut2",
     mainOnly: true,
     writeZone: "System",
@@ -220,7 +262,14 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
   },
   {
     state: "multiroom.party",
-    common: { nameKey: "partyModeAllZones", type: "boolean", role: "switch", read: true, write: true },
+    common: {
+      nameKey: "partyModeAllZones",
+      descKey: "descPartyModeAllZones",
+      type: "boolean",
+      role: "switch",
+      read: true,
+      write: true,
+    },
     statusField: "party",
     mainOnly: true,
     writeZone: "System",

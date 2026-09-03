@@ -330,22 +330,64 @@ export const DAB_FIELDS: Array<{
   /** Explanation key — absent means self-explanatory. */
   descKey?: I18nKey;
 }> = [
-  { field: "service_label", id: "tuner.dab.serviceLabel", type: "string", nameKey: "serviceLabel" },
-  { field: "ensemble_label", id: "tuner.dab.ensembleLabel", type: "string", nameKey: "ensembleLabel" },
-  { field: "ch_label", id: "tuner.dab.channelLabel", type: "string", nameKey: "channelLabel" },
-  { field: "dls", id: "tuner.dab.dls", type: "string", nameKey: "dlsText" },
-  { field: "program_type", id: "tuner.dab.programType", type: "string", nameKey: "programmeType" },
+  {
+    field: "service_label",
+    id: "tuner.dab.serviceLabel",
+    type: "string",
+    nameKey: "serviceLabel",
+    descKey: "descDabService",
+  },
+  {
+    field: "ensemble_label",
+    id: "tuner.dab.ensembleLabel",
+    type: "string",
+    nameKey: "ensembleLabel",
+    descKey: "descDabEnsemble",
+  },
+  {
+    field: "ch_label",
+    id: "tuner.dab.channelLabel",
+    type: "string",
+    nameKey: "channelLabel",
+    descKey: "descDabChannel",
+  },
+  { field: "dls", id: "tuner.dab.dls", type: "string", nameKey: "dlsText", descKey: "descDabDLSText" },
+  {
+    field: "program_type",
+    id: "tuner.dab.programType",
+    type: "string",
+    nameKey: "programmeType",
+    descKey: "descDabProgramType",
+  },
   // preset and audio_mode are NOT listed here: the active-band parse feeds the
   // unified flat tuner.preset / tuner.audioMode states (v2.0.0).
-  { field: "status", id: "tuner.dab.status", type: "string", nameKey: "dabStatus" },
-  { field: "bit_rate", id: "tuner.dab.bitRate", type: "number", nameKey: "bitRate" },
-  { field: "quality", id: "tuner.dab.quality", type: "number", nameKey: "signalQuality" },
-  { field: "off_air", id: "tuner.dab.offAir", type: "boolean", nameKey: "offAir" },
-  { field: "dab_plus", id: "tuner.dab.dabPlus", type: "boolean", nameKey: "dabPlus" },
-  { field: "category", id: "tuner.dab.category", type: "string", nameKey: "serviceCategory" },
-  { field: "total_station_num", id: "tuner.dab.totalStations", type: "number", nameKey: "totalStations" },
-  { field: "initial_scan_progress", id: "tuner.dab.scanProgress", type: "number", nameKey: "initialScanProgress" },
-  { field: "tune_aid", id: "tuner.dab.tuneAid", type: "number", nameKey: "tuneAidLevel" },
+  { field: "status", id: "tuner.dab.status", type: "string", nameKey: "dabStatus", descKey: "descDabStatus" },
+  { field: "bit_rate", id: "tuner.dab.bitRate", type: "number", nameKey: "bitRate", descKey: "descBitRate" },
+  { field: "quality", id: "tuner.dab.quality", type: "number", nameKey: "signalQuality", descKey: "descSignalQuality" },
+  { field: "off_air", id: "tuner.dab.offAir", type: "boolean", nameKey: "offAir", descKey: "descOffAir" },
+  { field: "dab_plus", id: "tuner.dab.dabPlus", type: "boolean", nameKey: "dabPlus", descKey: "descDabPlus" },
+  {
+    field: "category",
+    id: "tuner.dab.category",
+    type: "string",
+    nameKey: "serviceCategory",
+    descKey: "descServiceCategory",
+  },
+  {
+    field: "total_station_num",
+    id: "tuner.dab.totalStations",
+    type: "number",
+    nameKey: "totalStations",
+    descKey: "descTotalStations",
+  },
+  {
+    field: "initial_scan_progress",
+    id: "tuner.dab.scanProgress",
+    type: "number",
+    nameKey: "initialScanProgress",
+    descKey: "descInitialScanProgress",
+  },
+  { field: "tune_aid", id: "tuner.dab.tuneAid", type: "number", nameKey: "tuneAidLevel", descKey: "descTuneAidLevel" },
 ];
 
 /**

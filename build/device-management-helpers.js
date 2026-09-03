@@ -4,24 +4,26 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name in all) __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if (from && typeof from === "object" || typeof from === "function") {
+  if ((from && typeof from === "object") || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+        __defProp(to, key, {
+          get: () => from[key],
+          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
+        });
   }
   return to;
 };
-var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __toCommonJS = mod => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var device_management_helpers_exports = {};
 __export(device_management_helpers_exports, {
   TRANSPORTS: () => TRANSPORTS,
   buildDeviceForm: () => buildDeviceForm,
   findClash: () => findClash,
-  rowId: () => rowId
+  rowId: () => rowId,
 });
 module.exports = __toCommonJS(device_management_helpers_exports);
 var import_i18n = require("./lib/i18n");
@@ -42,7 +44,7 @@ function buildDeviceForm(usedIps) {
         type: "text",
         label: (0, import_i18n.t)("columnName"),
         sm: 12,
-        md: 6
+        md: 6,
       },
       ip: {
         type: "text",
@@ -51,9 +53,9 @@ function buildDeviceForm(usedIps) {
         validatorErrorText: (0, import_i18n.t)("invalidIp"),
         validatorNoSaveOnError: true,
         sm: 12,
-        md: 6
-      }
-    }
+        md: 6,
+      },
+    },
   };
 }
 function findClash(rows, candidate, exceptIndex) {
@@ -75,10 +77,11 @@ function findClash(rows, candidate, exceptIndex) {
   return null;
 }
 // Annotate the CommonJS export names for ESM import in node:
-0 && (module.exports = {
-  TRANSPORTS,
-  buildDeviceForm,
-  findClash,
-  rowId
-});
+0 &&
+  (module.exports = {
+    TRANSPORTS,
+    buildDeviceForm,
+    findClash,
+    rowId,
+  });
 //# sourceMappingURL=device-management-helpers.js.map

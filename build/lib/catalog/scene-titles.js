@@ -4,22 +4,24 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name in all) __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if (from && typeof from === "object" || typeof from === "function") {
+  if ((from && typeof from === "object") || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+        __defProp(to, key, {
+          get: () => from[key],
+          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
+        });
   }
   return to;
 };
-var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __toCommonJS = mod => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var scene_titles_exports = {};
 __export(scene_titles_exports, {
   knownScenes: () => knownScenes,
-  resolveSceneNumber: () => resolveSceneNumber
+  resolveSceneNumber: () => resolveSceneNumber,
 });
 module.exports = __toCommonJS(scene_titles_exports);
 var import_protocol = require("../xml/protocol");
@@ -61,12 +63,13 @@ function resolveSceneNumber(value, memory, zoneKey) {
     return Number(trimmed);
   }
   const needle = trimmed.toLowerCase();
-  const match = knownScenes(memory, zoneKey).find((scene) => scene.title.toLowerCase() === needle);
+  const match = knownScenes(memory, zoneKey).find(scene => scene.title.toLowerCase() === needle);
   return match == null ? void 0 : match.num;
 }
 // Annotate the CommonJS export names for ESM import in node:
-0 && (module.exports = {
-  knownScenes,
-  resolveSceneNumber
-});
+0 &&
+  (module.exports = {
+    knownScenes,
+    resolveSceneNumber,
+  });
 //# sourceMappingURL=scene-titles.js.map

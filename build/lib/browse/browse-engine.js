@@ -4,22 +4,24 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name in all) __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if (from && typeof from === "object" || typeof from === "function") {
+  if ((from && typeof from === "object") || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+        __defProp(to, key, {
+          get: () => from[key],
+          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
+        });
   }
   return to;
 };
-var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __toCommonJS = mod => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var browse_engine_exports = {};
 __export(browse_engine_exports, {
   BrowseEngine: () => BrowseEngine,
-  rowLabel: () => rowLabel
+  rowLabel: () => rowLabel,
 });
 module.exports = __toCommonJS(browse_engine_exports);
 var import_util = require("../util");
@@ -94,7 +96,7 @@ class BrowseEngine {
     this.deps.emit("player.browse.totalItems", window.totalItems);
     this.deps.emit("player.browse.currentLine", window.currentLine);
     for (let line = 1; line <= 8; line++) {
-      const row = window.rows.find((r) => r.line === line);
+      const row = window.rows.find(r => r.line === line);
       this.deps.emit(`player.browse.line${line}`, row ? rowLabel(row) : "");
     }
     this.deps.emit("player.browse.rows", JSON.stringify(window.rows));
@@ -203,18 +205,21 @@ class BrowseEngine {
    * @param path the path, e.g. `Bookmarks>Radio Paradise`
    */
   async walkPath(path) {
-    const segments = path.split(">").map((segment) => segment.trim()).filter((segment) => segment.length > 0);
+    const segments = path
+      .split(">")
+      .map(segment => segment.trim())
+      .filter(segment => segment.length > 0);
     if (segments.length === 0) {
       return;
     }
     let version = this.windowVersion;
     await this.driver.home();
-    if (!await this.waitForWindow(version)) {
+    if (!(await this.waitForWindow(version))) {
       this.deps.log.warn(`browse: path "${path}" aborted \u2014 the menu root did not load`);
       return;
     }
     for (const segment of segments) {
-      if (!await this.findAndSelect(segment)) {
+      if (!(await this.findAndSelect(segment))) {
         this.deps.log.warn(`browse: path "${path}" aborted \u2014 "${segment}" not found in this menu`);
         return;
       }
@@ -234,7 +239,7 @@ class BrowseEngine {
       if (!window) {
         return false;
       }
-      const row = window.rows.find((r) => r.text === text && r.kind !== "unselectable");
+      const row = window.rows.find(r => r.text === text && r.kind !== "unselectable");
       if (row) {
         await this.driver.select(row.line);
         return true;
@@ -244,7 +249,7 @@ class BrowseEngine {
       }
       const version = this.windowVersion;
       await this.driver.pageDown();
-      if (!await this.waitForWindow(version)) {
+      if (!(await this.waitForWindow(version))) {
         return false;
       }
     }
@@ -252,8 +257,9 @@ class BrowseEngine {
   }
 }
 // Annotate the CommonJS export names for ESM import in node:
-0 && (module.exports = {
-  BrowseEngine,
-  rowLabel
-});
+0 &&
+  (module.exports = {
+    BrowseEngine,
+    rowLabel,
+  });
 //# sourceMappingURL=browse-engine.js.map

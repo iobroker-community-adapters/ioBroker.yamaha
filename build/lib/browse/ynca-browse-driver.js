@@ -4,22 +4,24 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name in all) __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if (from && typeof from === "object" || typeof from === "function") {
+  if ((from && typeof from === "object") || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+        __defProp(to, key, {
+          get: () => from[key],
+          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
+        });
   }
   return to;
 };
-var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __toCommonJS = mod => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var ynca_browse_driver_exports = {};
 __export(ynca_browse_driver_exports, {
   YNCA_BROWSE_SOURCES: () => YNCA_BROWSE_SOURCES,
-  YncaBrowseDriver: () => YncaBrowseDriver
+  YncaBrowseDriver: () => YncaBrowseDriver,
 });
 module.exports = __toCommonJS(ynca_browse_driver_exports);
 var import_types = require("./types");
@@ -34,7 +36,7 @@ const YNCA_BROWSE_SOURCES = [
   { subunit: "NAPSTER", key: "napster", label: "Napster", input: "Napster" },
   { subunit: "PANDORA", key: "pandora", label: "Pandora", input: "Pandora" },
   { subunit: "RHAP", key: "rhapsody", label: "Rhapsody", input: "Rhapsody" },
-  { subunit: "SIRIUS", key: "sirius", label: "SiriusXM", input: "SIRIUS" }
+  { subunit: "SIRIUS", key: "sirius", label: "SiriusXM", input: "SIRIUS" },
 ];
 class YncaBrowseDriver {
   /**
@@ -75,8 +77,8 @@ class YncaBrowseDriver {
   }
   /** @returns the selectable sources this device offers (state value → label) */
   sources() {
-    const entries = YNCA_BROWSE_SOURCES.filter((source) => this.present.has(source.subunit));
-    return Object.fromEntries(entries.map((source) => [source.key, source.label]));
+    const entries = YNCA_BROWSE_SOURCES.filter(source => this.present.has(source.subunit));
+    return Object.fromEntries(entries.map(source => [source.key, source.label]));
   }
   /**
    * Open a source's menu: switch the main-zone input to it (browsing follows the
@@ -85,7 +87,7 @@ class YncaBrowseDriver {
    * @param source the source key (from {@link sources})
    */
   open(source) {
-    const entry = YNCA_BROWSE_SOURCES.find((s) => s.key === source && this.present.has(s.subunit));
+    const entry = YNCA_BROWSE_SOURCES.find(s => s.key === source && this.present.has(s.subunit));
     if (!entry) {
       return;
     }
@@ -140,7 +142,9 @@ class YncaBrowseDriver {
     if (!this.active || message.subunit !== this.active.subunit) {
       return;
     }
-    const isWindowField = /^LINE[1-8](TXT|ATRIB)$/.test(message.func) || ["LISTLAYERNAME", "LISTLAYER", "MAXLINE", "CURRLINE"].includes(message.func);
+    const isWindowField =
+      /^LINE[1-8](TXT|ATRIB)$/.test(message.func) ||
+      ["LISTLAYERNAME", "LISTLAYER", "MAXLINE", "CURRLINE"].includes(message.func);
     if (isWindowField && this.awaitingWindow) {
       this.awaitingWindow = false;
       this.resetAssembly();
@@ -212,18 +216,21 @@ class YncaBrowseDriver {
         rows.push({ line, text, kind: (_b = this.kinds.get(line)) != null ? _b : "item" });
       }
     }
-    (_c = this.engine) == null ? void 0 : _c.onWindow({
-      menuName: this.menuName,
-      layer: this.layer,
-      totalItems: this.totalItems,
-      currentLine: this.currentLine,
-      rows
-    });
+    (_c = this.engine) == null
+      ? void 0
+      : _c.onWindow({
+          menuName: this.menuName,
+          layer: this.layer,
+          totalItems: this.totalItems,
+          currentLine: this.currentLine,
+          rows,
+        });
   }
 }
 // Annotate the CommonJS export names for ESM import in node:
-0 && (module.exports = {
-  YNCA_BROWSE_SOURCES,
-  YncaBrowseDriver
-});
+0 &&
+  (module.exports = {
+    YNCA_BROWSE_SOURCES,
+    YncaBrowseDriver,
+  });
 //# sourceMappingURL=ynca-browse-driver.js.map

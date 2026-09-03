@@ -4,22 +4,24 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name in all) __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if (from && typeof from === "object" || typeof from === "function") {
+  if ((from && typeof from === "object") || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+        __defProp(to, key, {
+          get: () => from[key],
+          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
+        });
   }
   return to;
 };
-var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __toCommonJS = mod => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var device_controller_exports = {};
 __export(device_controller_exports, {
   YxcDeviceController: () => YxcDeviceController,
-  zoneNameFrom: () => zoneNameFrom
+  zoneNameFrom: () => zoneNameFrom,
 });
 module.exports = __toCommonJS(device_controller_exports);
 var import_node_crypto = require("node:crypto");
@@ -112,7 +114,7 @@ class YxcDeviceController {
       const identity = `${model != null ? model : ""}|${typeof version === "number" || typeof version === "string" ? version : ""}`;
       if (this.deps.probeMemory && this.deps.probeMemory.remembered("yxcIdentity") !== identity) {
         this.deps.probeMemory.drop(
-          (key) => key === "features" || key === "name" || key === "model" || key === "yxcIdentity"
+          key => key === "features" || key === "name" || key === "model" || key === "yxcIdentity",
         );
         this.deps.probeMemory.set("yxcIdentity", identity);
       }
@@ -122,7 +124,7 @@ class YxcDeviceController {
     const capabilities = await this.remember(
       "features",
       async () => (0, import_capability.parseYxcFeatures)(await this.deps.client.getFeatures()),
-      (features) => features.zones.length > 0
+      features => features.zones.length > 0,
     );
     const objects = (0, import_object_mapper.mapYxcToObjects)(capabilities);
     if (objects.length === 0) {
@@ -133,7 +135,10 @@ class YxcDeviceController {
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
     }
     await this.setupSceneLists(capabilities);
-    if (capabilities.media.includes("tuner") && ((_b = (_a = capabilities.tuner) == null ? void 0 : _a.bands) != null ? _b : []).includes("dab")) {
+    if (
+      capabilities.media.includes("tuner") &&
+      ((_b = (_a = capabilities.tuner) == null ? void 0 : _a.bands) != null ? _b : []).includes("dab")
+    ) {
       this.emit("tuner.dab.totalStations", 0);
       this.emit("tuner.dab.scanProgress", 0);
     }
@@ -150,8 +155,8 @@ class YxcDeviceController {
         this.deps.log.debug(`${this.deviceId}: getNameText failed (${(0, import_util.errorMessage)(e)})`);
       }
     }
-    this.zones = capabilities.zones.map((zone) => zone.id);
-    const zonesAnswered = await Promise.all(this.zones.map((zone) => this.refreshZone(zone)));
+    this.zones = capabilities.zones.map(zone => zone.id);
+    const zonesAnswered = await Promise.all(this.zones.map(zone => this.refreshZone(zone)));
     if (!zonesAnswered.some(Boolean)) {
       this.deps.log.debug(`${this.deviceId}: no zone answered getStatus \u2014 device unreachable (YXC)`);
       return false;
@@ -159,9 +164,11 @@ class YxcDeviceController {
     this.mediaBlocks = capabilities.media;
     this.tunerFeatures = capabilities.tuner;
     this.hasClock = capabilities.clock !== void 0;
-    this.signalZones = capabilities.zones.filter((zone) => zone.funcs.includes("signal_info")).map((zone) => zone.id);
-    this.hasMcPlaylist = (_d = (_c = capabilities.netusbFuncs) == null ? void 0 : _c.includes("mc_playlist")) != null ? _d : false;
-    this.hasPlayQueue = (_f = (_e = capabilities.netusbFuncs) == null ? void 0 : _e.includes("play_queue")) != null ? _f : false;
+    this.signalZones = capabilities.zones.filter(zone => zone.funcs.includes("signal_info")).map(zone => zone.id);
+    this.hasMcPlaylist =
+      (_d = (_c = capabilities.netusbFuncs) == null ? void 0 : _c.includes("mc_playlist")) != null ? _d : false;
+    this.hasPlayQueue =
+      (_f = (_e = capabilities.netusbFuncs) == null ? void 0 : _e.includes("play_queue")) != null ? _f : false;
     await this.setupBrowse(capabilities);
     await this.refreshMedia();
     if (this.mediaBlocks.includes("netusb") || this.mediaBlocks.includes("cd")) {
@@ -176,7 +183,7 @@ class YxcDeviceController {
     if (this.hasDistribution) {
       await this.refreshDistribution();
     }
-    this.cancelPush = this.deps.registerPush((event) => this.onPush(event));
+    this.cancelPush = this.deps.registerPush(event => this.onPush(event));
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), KEEPALIVE_MS);
     this.deps.log.debug(`${this.deviceId}: MusicCast device ready (YXC)`);
     return true;
@@ -261,7 +268,11 @@ class YxcDeviceController {
       const resolved = (0, import_scene_titles.resolveSceneNumber)(value, this.deps.probeMemory, zoneKey);
       if (resolved === void 0) {
         this.deps.log.debug(
-          `${this.deviceId}: scene "${value}" is unknown for ${zoneKey} \u2014 write dropped (known: ${(0, import_scene_titles.knownScenes)(this.deps.probeMemory, zoneKey).map((scene) => scene.title).join(", ") || "none yet"})`
+          `${this.deviceId}: scene "${value}" is unknown for ${zoneKey} \u2014 write dropped (known: ${
+            (0, import_scene_titles.knownScenes)(this.deps.probeMemory, zoneKey)
+              .map(scene => scene.title)
+              .join(", ") || "none yet"
+          })`,
         );
         return;
       }
@@ -302,13 +313,14 @@ class YxcDeviceController {
     if (!gate || !capabilities.media.includes("netusb")) {
       return;
     }
-    const inputs = (_b = (_a = capabilities.zones.find((zone) => zone.id === "main")) == null ? void 0 : _a.inputs) != null ? _b : [];
+    const inputs =
+      (_b = (_a = capabilities.zones.find(zone => zone.id === "main")) == null ? void 0 : _a.inputs) != null ? _b : [];
     const driver = new import_yxc_browse_driver.YxcBrowseDriver(this.deps.client, inputs);
     this.browseEngine = await (0, import_surface.createBrowseSurface)(driver, this.deviceId, {
       upsertObject: this.deps.upsertObject,
       emit: (id, value) => this.emit(id, value),
       log: this.deps.log,
-      delay: (ms) => gate.delay(ms)
+      delay: ms => gate.delay(ms),
     });
   }
   /** Cancel the keepalive and unregister the push handler. Synchronous — safe from onUnload. */
@@ -358,9 +370,11 @@ class YxcDeviceController {
     var _a, _b;
     try {
       const zones = this.zones.length > 0 ? this.zones : ["main"];
-      const anyOk = (await Promise.all(zones.map((zone) => this.refreshZone(zone)))).some(Boolean);
+      const anyOk = (await Promise.all(zones.map(zone => this.refreshZone(zone)))).some(Boolean);
       this.keepaliveRuns++;
-      const fullSweep = !((_b = (_a = this.deps).pushActive) == null ? void 0 : _b.call(_a)) || this.keepaliveRuns % PUSH_MODE_FULL_SWEEP_EVERY === 0;
+      const fullSweep =
+        !((_b = (_a = this.deps).pushActive) == null ? void 0 : _b.call(_a)) ||
+        this.keepaliveRuns % PUSH_MODE_FULL_SWEEP_EVERY === 0;
       if (fullSweep) {
         await this.refreshMedia();
         await this.refreshLists();
@@ -424,7 +438,10 @@ class YxcDeviceController {
   async refreshSignalInfo() {
     for (const zone of this.signalZones) {
       try {
-        for (const update of (0, import_command_mapper.parseYxcSignalInfo)(await this.deps.client.getSignalInfo(zone), zone)) {
+        for (const update of (0, import_command_mapper.parseYxcSignalInfo)(
+          await this.deps.client.getSignalInfo(zone),
+          zone,
+        )) {
           this.emit(update.id, update.value);
         }
       } catch (e) {
@@ -460,13 +477,20 @@ class YxcDeviceController {
    */
   async refreshTunerPresets() {
     var _a, _b, _c;
-    const bands = ((_a = this.tunerFeatures) == null ? void 0 : _a.presetType) === "common" ? ["common"] : (_c = (_b = this.tunerFeatures) == null ? void 0 : _b.bands) != null ? _c : ["fm"];
+    const bands =
+      ((_a = this.tunerFeatures) == null ? void 0 : _a.presetType) === "common"
+        ? ["common"]
+        : (_c = (_b = this.tunerFeatures) == null ? void 0 : _b.bands) != null
+          ? _c
+          : ["fm"];
     const byBand = {};
     for (const band of bands) {
       try {
         byBand[band] = await this.deps.client.getTunerPresetInfo(band);
       } catch (e) {
-        this.deps.log.debug(`${this.deviceId}: getTunerPresetInfo(${band}) failed: ${(0, import_util.errorMessage)(e)}`);
+        this.deps.log.debug(
+          `${this.deviceId}: getTunerPresetInfo(${band}) failed: ${(0, import_util.errorMessage)(e)}`,
+        );
       }
     }
     const update = (0, import_command_mapper.parseYxcTunerPresetLists)(byBand);
@@ -486,7 +510,7 @@ class YxcDeviceController {
   }
   /** Refresh every player source the device offers (network player, cd, tuner). */
   async refreshMedia() {
-    await Promise.all(this.mediaBlocks.map((block) => this.refreshMediaSource(block)));
+    await Promise.all(this.mediaBlocks.map(block => this.refreshMediaSource(block)));
   }
   /**
    * Fetch one media source's play info and write the parsed states with ack. The
@@ -511,14 +535,16 @@ class YxcDeviceController {
       const source = block === "cd" ? "cd" : "netusb";
       const updates = (0, import_command_mapper.parseYxcPlayInfo)(info, source);
       if (source === "netusb") {
-        const active = updates.find((update) => update.id === "player.source");
+        const active = updates.find(update => update.id === "player.source");
         if (typeof (active == null ? void 0 : active.value) === "string") {
           this.lastNetusbInput = active.value;
         }
       }
       this.routePlayerBlock(source, updates);
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: getPlayInfo(${arg != null ? arg : ""}) failed: ${(0, import_util.errorMessage)(e)}`);
+      this.deps.log.debug(
+        `${this.deviceId}: getPlayInfo(${arg != null ? arg : ""}) failed: ${(0, import_util.errorMessage)(e)}`,
+      );
     }
   }
   /**
@@ -588,19 +614,27 @@ class YxcDeviceController {
       if (!zone.funcs.includes("scene") || zone.sceneNum === void 0 || zone.sceneNum <= 0) {
         continue;
       }
-      const titles = new Map((0, import_scene_titles.knownScenes)(this.deps.probeMemory, zone.id).map((scene) => [scene.num, scene.title]));
+      const titles = new Map(
+        (0, import_scene_titles.knownScenes)(this.deps.probeMemory, zone.id).map(scene => [scene.num, scene.title]),
+      );
       const list = Array.from({ length: zone.sceneNum }, (_unused, i) => {
         var _a;
         return {
           num: i + 1,
-          title: (_a = titles.get(i + 1)) != null ? _a : ""
+          title: (_a = titles.get(i + 1)) != null ? _a : "",
         };
       });
       const id = `${(0, import_zones.zonePrefix)(zone.id)}scene.list`;
       await this.deps.upsertObject(`${this.deviceId}.${id}`, {
         id,
         type: "state",
-        common: { name: (0, import_i18n.tName)("scenesNumberTitle"), type: "string", role: "json", read: true, write: false }
+        common: {
+          name: (0, import_i18n.tName)("scenesNumberTitle"),
+          type: "string",
+          role: "json",
+          read: true,
+          write: false,
+        },
       });
       this.emit(id, JSON.stringify(list));
     }
@@ -734,8 +768,8 @@ class YxcDeviceController {
    */
   cacheEqualizer(zone, updates) {
     const prefix = (0, import_zones.zonePrefix)(zone);
-    const band = (b) => {
-      const u = updates.find((x) => x.id === `${prefix}sound.equalizer.${b}`);
+    const band = b => {
+      const u = updates.find(x => x.id === `${prefix}sound.equalizer.${b}`);
       return typeof (u == null ? void 0 : u.value) === "number" ? u.value : void 0;
     };
     const low = band("low");
@@ -752,7 +786,11 @@ class YxcDeviceController {
       this.lastEqualizer.set(zone, { low, mid, high });
       return;
     }
-    this.lastEqualizer.set(zone, { low: low != null ? low : cur.low, mid: mid != null ? mid : cur.mid, high: high != null ? high : cur.high });
+    this.lastEqualizer.set(zone, {
+      low: low != null ? low : cur.low,
+      mid: mid != null ? mid : cur.mid,
+      high: high != null ? high : cur.high,
+    });
   }
   /**
    * Apply a mapped command. A plain command runs its client call directly; the two
@@ -778,7 +816,7 @@ class YxcDeviceController {
           }
           if (!current) {
             this.deps.log.warn(
-              `${this.deviceId}: not writing ${stateId} \u2014 the device has not reported its equalizer bands yet`
+              `${this.deviceId}: not writing ${stateId} \u2014 the device has not reported its equalizer bands yet`,
             );
             break;
           }
@@ -795,7 +833,8 @@ class YxcDeviceController {
           await this.deps.client.setFreq(this.lastTunerBand, command.value);
           break;
         case "tunerPreset": {
-          const band = ((_a = this.tunerFeatures) == null ? void 0 : _a.presetType) === "common" ? "common" : this.lastTunerBand;
+          const band =
+            ((_a = this.tunerFeatures) == null ? void 0 : _a.presetType) === "common" ? "common" : this.lastTunerBand;
           await this.deps.client.recallTunerPreset(band, command.value, this.zoneListeningTo("tuner"));
           break;
         }
@@ -808,7 +847,9 @@ class YxcDeviceController {
         case "playerTransport": {
           const block = this.playerBlockFor(this.lastZoneInput.get(command.zone));
           if (block === void 0) {
-            this.deps.log.debug(`${this.deviceId}: ${stateId} ignored \u2014 ${command.zone} is not playing a media source`);
+            this.deps.log.debug(
+              `${this.deviceId}: ${stateId} ignored \u2014 ${command.zone} is not playing a media source`,
+            );
             break;
           }
           await this.runTransport(block, command.action);
@@ -837,7 +878,7 @@ class YxcDeviceController {
         next: () => client.nextNet(),
         prev: () => client.prevNet(),
         repeatToggle: () => client.toggleNetRepeat(),
-        shuffleToggle: () => client.toggleNetShuffle()
+        shuffleToggle: () => client.toggleNetShuffle(),
       };
       await net[action]();
       return;
@@ -849,14 +890,15 @@ class YxcDeviceController {
       next: () => client.setCDPlayback("next"),
       prev: () => client.setCDPlayback("previous"),
       repeatToggle: () => client.toggleCDRepeat(),
-      shuffleToggle: () => client.toggleCDShuffle()
+      shuffleToggle: () => client.toggleCDShuffle(),
     };
     await cd[action]();
   }
 }
 // Annotate the CommonJS export names for ESM import in node:
-0 && (module.exports = {
-  YxcDeviceController,
-  zoneNameFrom
-});
+0 &&
+  (module.exports = {
+    YxcDeviceController,
+    zoneNameFrom,
+  });
 //# sourceMappingURL=device-controller.js.map

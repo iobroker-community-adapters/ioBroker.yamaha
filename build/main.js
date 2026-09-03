@@ -6,29 +6,34 @@ var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name in all) __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if (from && typeof from === "object" || typeof from === "function") {
+  if ((from && typeof from === "object") || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+        __defProp(to, key, {
+          get: () => from[key],
+          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
+        });
   }
   return to;
 };
-var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
-  // If the importer is in node compatibility mode or this is not an ESM
-  // file that has been converted to a CommonJS file using a Babel-
-  // compatible transform (i.e. "__esModule" has not been set), then set
-  // "default" to the CommonJS "module.exports" for node compatibility.
-  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
-  mod
-));
-var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __toESM = (mod, isNodeMode, target) => (
+  (target = mod != null ? __create(__getProtoOf(mod)) : {}),
+  __copyProps(
+    // If the importer is in node compatibility mode or this is not an ESM
+    // file that has been converted to a CommonJS file using a Babel-
+    // compatible transform (i.e. "__esModule" has not been set), then set
+    // "default" to the CommonJS "module.exports" for node compatibility.
+    isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+    mod,
+  )
+);
+var __toCommonJS = mod => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var main_exports = {};
 __export(main_exports, {
-  Yamaha: () => Yamaha
+  Yamaha: () => Yamaha,
 });
 module.exports = __toCommonJS(main_exports);
 var utils = __toESM(require("@iobroker/adapter-core"));
@@ -114,7 +119,7 @@ class Yamaha extends utils.Adapter {
   constructor(options = {}) {
     super({
       ...options,
-      name: "yamaha"
+      name: "yamaha",
     });
     this.on("ready", this.onReady.bind(this));
     this.on("stateChange", this.onStateChange.bind(this));
@@ -128,9 +133,10 @@ class Yamaha extends utils.Adapter {
       await this.setState("info.connection", { val: false, ack: true });
       await this.migrateLegacyDevice();
       await this.migrateGroupZones();
-      const configured = (0, import_pure_helpers.parseDevices)(
-        this.config.devices,
-        (dropped, takenId) => this.log.warn(`device "${dropped}" skipped \u2014 its object id "${takenId}" is already used by another device`)
+      const configured = (0, import_pure_helpers.parseDevices)(this.config.devices, (dropped, takenId) =>
+        this.log.warn(
+          `device "${dropped}" skipped \u2014 its object id "${takenId}" is already used by another device`,
+        ),
       );
       const devices = configured.length > 0 ? configured : await this.autoDiscover();
       if (this.unloading) {
@@ -142,13 +148,13 @@ class Yamaha extends utils.Adapter {
         this.knownDeviceIps.add(device.ip);
       }
       await this.snapshotExistingDatapoints();
-      await this.cleanupStaleObjects(new Set(devices.map((device) => device.id)));
+      await this.cleanupStaleObjects(new Set(devices.map(device => device.id)));
       await this.ensureInstanceInfoObjects();
       await this.subscribeToStates();
       const pushReceiver = new import_push_receiver.YxcPushReceiver({
-        log: { debug: (message) => this.log.debug(message), warn: (message) => this.log.warn(message) },
+        log: { debug: message => this.log.debug(message), warn: message => this.log.warn(message) },
         schedule: (cb, ms) => this.setTimeout(cb, ms),
-        cancel: (handle) => this.clearTimeout(handle)
+        cancel: handle => this.clearTimeout(handle),
       });
       pushReceiver.start();
       this.pushReceiver = pushReceiver;
@@ -185,16 +191,17 @@ class Yamaha extends utils.Adapter {
     const subunitCache = await this.loadYncaSubunitCache(device.id);
     const probeMemory = await this.loadProbeMemory(device.id);
     const supervisor = new import_device_supervisor.DeviceSupervisor({
-      attempt: () => this.attemptDevice(device, pushReceiver, this.knownDeviceIps, reachability, subunitCache, probeMemory),
+      attempt: () =>
+        this.attemptDevice(device, pushReceiver, this.knownDeviceIps, reachability, subunitCache, probeMemory),
       schedule: (cb, ms) => this.setTimeout(cb, ms),
-      cancel: (handle) => this.clearTimeout(handle),
-      onConnectionChange: (connected) => this.reportConnection(device.id, connected),
+      cancel: handle => this.clearTimeout(handle),
+      onConnectionChange: connected => this.reportConnection(device.id, connected),
       backoff: new import_reconnect_strategy.ReconnectStrategy(RECONNECT_BASE_MS, RECONNECT_MAX_MS),
       log: {
-        debug: (message) => this.log.debug(message),
-        info: (message) => this.log.info(message),
-        warn: (message) => this.log.warn(message)
-      }
+        debug: message => this.log.debug(message),
+        info: message => this.log.info(message),
+        warn: message => this.log.warn(message),
+      },
     });
     this.supervisors.push(supervisor);
     this.supervisorById.set(device.id, supervisor);
@@ -227,7 +234,9 @@ class Yamaha extends utils.Adapter {
           await this.startDevice(device, pushReceiver);
           changed = true;
         } else if (running.ip !== device.ip) {
-          this.log.info(`${device.id}: address changed from ${running.ip} to ${device.ip} \u2014 reconnecting it there`);
+          this.log.info(
+            `${device.id}: address changed from ${running.ip} to ${device.ip} \u2014 reconnecting it there`,
+          );
           this.knownDeviceIps.delete(running.ip);
           this.stopDevice(device.id);
           await this.startDevice(device, pushReceiver);
@@ -327,7 +336,7 @@ class Yamaha extends utils.Adapter {
       await this.subscribeStatesAsync("*");
     } catch (e) {
       this.log.error(
-        `could not subscribe to state changes (${(0, import_util.errorMessage)(e)}) \u2014 the tree still updates, but writes to datapoints will not reach the device until the instance is restarted`
+        `could not subscribe to state changes (${(0, import_util.errorMessage)(e)}) \u2014 the tree still updates, but writes to datapoints will not reach the device until the instance is restarted`,
       );
     }
   }
@@ -399,7 +408,7 @@ class Yamaha extends utils.Adapter {
       () => {
         this.stateWritesFailing = false;
       },
-      (e) => this.noteWriteFailure(`state ${id}`, e)
+      e => this.noteWriteFailure(`state ${id}`, e),
     );
   }
   /**
@@ -414,7 +423,7 @@ class Yamaha extends utils.Adapter {
       () => {
         this.stateWritesFailing = false;
       },
-      (e) => this.noteWriteFailure(`device object ${deviceId}`, e)
+      e => this.noteWriteFailure(`device object ${deviceId}`, e),
     );
   }
   /**
@@ -450,7 +459,7 @@ class Yamaha extends utils.Adapter {
     const stale = (0, import_pure_helpers.staleObjects)(existing, deviceIds, this.namespace);
     const renamed = (0, import_pure_helpers.renamedObjectIds)(existing, deviceIds, this.namespace);
     const config = this.config;
-    const disabled = existing.filter((full) => {
+    const disabled = existing.filter(full => {
       for (const deviceId of deviceIds) {
         const base = `${this.namespace}.${deviceId}.`;
         if (full.startsWith(base) && !(0, import_groups.isGroupEnabled)(full.slice(base.length), config)) {
@@ -462,8 +471,7 @@ class Yamaha extends utils.Adapter {
     for (const fullId of [...stale, ...renamed, ...disabled]) {
       try {
         await this.delObjectAsync((0, import_pure_helpers.stripNamespace)(fullId, this.namespace));
-      } catch {
-      }
+      } catch {}
     }
     if (stale.length > 0) {
       this.log.debug(`removed ${stale.length} object(s) from a previous configuration`);
@@ -475,10 +483,10 @@ class Yamaha extends utils.Adapter {
       this.log.debug(`removed ${disabled.length} object(s) from switched-off datapoint groups`);
     }
     this.noteDatapointsRemoved(
-      [...stale, ...renamed, ...disabled].filter((fullId) => {
+      [...stale, ...renamed, ...disabled].filter(fullId => {
         var _a;
         return ((_a = allObjects[fullId]) == null ? void 0 : _a.type) === "state";
-      })
+      }),
     );
   }
   /**
@@ -504,14 +512,16 @@ class Yamaha extends utils.Adapter {
     }
     const allObjects = await this.getAdapterObjectsAsync();
     const states = await this.getStatesAsync("*");
-    const purged = (0, import_pure_helpers.neverWrittenStateIds)(allObjects, states, new Set(candidates), this.namespace).filter(
-      (fullId) => !this.touchedThisRun.has((0, import_pure_helpers.stripNamespace)(fullId, this.namespace))
-    );
+    const purged = (0, import_pure_helpers.neverWrittenStateIds)(
+      allObjects,
+      states,
+      new Set(candidates),
+      this.namespace,
+    ).filter(fullId => !this.touchedThisRun.has((0, import_pure_helpers.stripNamespace)(fullId, this.namespace)));
     for (const fullId of purged) {
       try {
         await this.delObjectAsync((0, import_pure_helpers.stripNamespace)(fullId, this.namespace));
-      } catch {
-      }
+      } catch {}
     }
     for (const deviceId of candidates) {
       await this.extendObject(deviceId, { native: { purgeVersion: this.version } });
@@ -535,12 +545,15 @@ class Yamaha extends utils.Adapter {
     if (this.readyDevices.size === 0) {
       return;
     }
-    const empty = (0, import_pure_helpers.childlessChannelIds)(await this.getAdapterObjectsAsync(), this.readyDevices, this.namespace);
+    const empty = (0, import_pure_helpers.childlessChannelIds)(
+      await this.getAdapterObjectsAsync(),
+      this.readyDevices,
+      this.namespace,
+    );
     for (const fullId of empty) {
       try {
         await this.delObjectAsync((0, import_pure_helpers.stripNamespace)(fullId, this.namespace));
-      } catch {
-      }
+      } catch {}
     }
     if (empty.length > 0) {
       this.log.debug(`removed ${empty.length} empty folder(s) left over from an earlier object tree`);
@@ -559,7 +572,9 @@ class Yamaha extends utils.Adapter {
         }
       }
     } catch (e) {
-      this.log.debug(`could not read the existing datapoints (${(0, import_util.errorMessage)(e)}); balance line disabled`);
+      this.log.debug(
+        `could not read the existing datapoints (${(0, import_util.errorMessage)(e)}); balance line disabled`,
+      );
       this.balanceDisabled = true;
     }
   }
@@ -642,7 +657,7 @@ class Yamaha extends utils.Adapter {
     await this.extendObject("info", {
       type: "channel",
       common: { name: (0, import_i18n.tName)("information") },
-      native: {}
+      native: {},
     });
     await this.extendObject("info.connection", {
       type: "state",
@@ -651,24 +666,36 @@ class Yamaha extends utils.Adapter {
         type: "boolean",
         role: "indicator.connected",
         read: true,
-        write: false
+        write: false,
       },
-      native: {}
+      native: {},
     });
     await this.extendObject("info.devicesTotal", {
       type: "state",
       common: { name: (0, import_i18n.tName)("devicesTotal"), type: "number", role: "value", read: true, write: false },
-      native: {}
+      native: {},
     });
     await this.extendObject("info.devicesOnline", {
       type: "state",
-      common: { name: (0, import_i18n.tName)("devicesOnline"), type: "number", role: "value", read: true, write: false },
-      native: {}
+      common: {
+        name: (0, import_i18n.tName)("devicesOnline"),
+        type: "number",
+        role: "value",
+        read: true,
+        write: false,
+      },
+      native: {},
     });
     await this.extendObject("info.devicesAllOnline", {
       type: "state",
-      common: { name: (0, import_i18n.tName)("allDevicesOnline"), type: "boolean", role: "indicator", read: true, write: false },
-      native: {}
+      common: {
+        name: (0, import_i18n.tName)("allDevicesOnline"),
+        type: "boolean",
+        role: "indicator",
+        read: true,
+        write: false,
+      },
+      native: {},
     });
   }
   /**
@@ -690,7 +717,9 @@ class Yamaha extends utils.Adapter {
     let icon;
     try {
       const existing = await this.getObjectAsync(deviceId);
-      icon = ((_a = existing == null ? void 0 : existing.common) == null ? void 0 : _a.icon) ? void 0 : (0, import_device_type.iconForModel)(void 0);
+      icon = ((_a = existing == null ? void 0 : existing.common) == null ? void 0 : _a.icon)
+        ? void 0
+        : (0, import_device_type.iconForModel)(void 0);
     } catch {
       icon = void 0;
     }
@@ -700,17 +729,17 @@ class Yamaha extends utils.Adapter {
         type: "device",
         common: {
           name: deviceId,
-          ...icon ? { icon } : {},
-          statusStates: { onlineId: `${this.namespace}.${deviceId}.info.connection` }
+          ...(icon ? { icon } : {}),
+          statusStates: { onlineId: `${this.namespace}.${deviceId}.info.connection` },
         },
-        native: {}
+        native: {},
       },
-      { preserve: { common: ["name"] } }
+      { preserve: { common: ["name"] } },
     );
     await this.extendObject(`${deviceId}.info`, {
       type: "channel",
       common: { name: (0, import_i18n.tName)("info") },
-      native: {}
+      native: {},
     });
     await this.extendObject(`${deviceId}.info.connection`, {
       type: "state",
@@ -720,25 +749,39 @@ class Yamaha extends utils.Adapter {
         role: "indicator.reachable",
         read: true,
         write: false,
-        def: false
+        def: false,
       },
-      native: {}
+      native: {},
     });
     await this.extendObject(`${deviceId}.info.model`, {
       type: "state",
-      common: { name: (0, import_i18n.tName)("model"), type: "string", role: "text", read: true, write: false, def: "" },
-      native: {}
+      common: {
+        name: (0, import_i18n.tName)("model"),
+        type: "string",
+        role: "text",
+        read: true,
+        write: false,
+        def: "",
+      },
+      native: {},
     });
     await this.extendObject(`${deviceId}.info.ip`, {
       type: "state",
-      common: { name: (0, import_i18n.tName)("ipAddress"), type: "string", role: "info.ip", read: true, write: false, def: "" },
-      native: {}
+      common: {
+        name: (0, import_i18n.tName)("ipAddress"),
+        type: "string",
+        role: "info.ip",
+        read: true,
+        write: false,
+        def: "",
+      },
+      native: {},
     });
     await this.setState(`${deviceId}.info.ip`, { val: ip, ack: true });
     await this.extendObject(`${deviceId}.info.transports`, {
       type: "channel",
       common: { name: (0, import_i18n.tName)("transports") },
-      native: {}
+      native: {},
     });
     for (const proto of TRANSPORT_IDS) {
       await this.extendObject(`${deviceId}.info.transports.${proto}`, {
@@ -749,9 +792,9 @@ class Yamaha extends utils.Adapter {
           role: "indicator.reachable",
           read: true,
           write: false,
-          def: false
+          def: false,
         },
-        native: {}
+        native: {},
       });
     }
   }
@@ -778,14 +821,15 @@ class Yamaha extends utils.Adapter {
     var _a, _b;
     const own = this.deviceLabels.get(deviceId);
     try {
-      const current = (_b = (_a = await this.getObjectAsync(deviceId)) == null ? void 0 : _a.common) == null ? void 0 : _b.name;
+      const current =
+        (_b = (_a = await this.getObjectAsync(deviceId)) == null ? void 0 : _a.common) == null ? void 0 : _b.name;
       const label = (0, import_pure_helpers.nextDeviceLabel)(
         typeof current === "string" ? current : void 0,
         deviceId,
         candidate,
         rank,
         own == null ? void 0 : own.name,
-        own == null ? void 0 : own.rank
+        own == null ? void 0 : own.rank,
       );
       if (label === void 0) {
         return;
@@ -835,7 +879,7 @@ class Yamaha extends utils.Adapter {
       this.log.info(`carried the previous single-device config (${row.ip}) over into the device table`);
     } catch (e) {
       this.log.warn(
-        `could not persist the migrated device table (${(0, import_util.errorMessage)(e)}); running with the in-memory value`
+        `could not persist the migrated device table (${(0, import_util.errorMessage)(e)}); running with the in-memory value`,
       );
     }
   }
@@ -890,11 +934,11 @@ class Yamaha extends utils.Adapter {
       yncaSubunitCache,
       probeMemory,
       // Group gate for the YNCA sweep: a disabled group's functions are never even fetched.
-      isEntryEnabled: (id) => (0, import_groups.isGroupEnabled)(id, this.config),
+      isEntryEnabled: id => (0, import_groups.isGroupEnabled)(id, this.config),
       log: {
-        debug: (message) => this.log.debug(message),
-        info: (message) => this.log.info(message),
-        warn: (message) => this.log.warn(message)
+        debug: message => this.log.debug(message),
+        info: message => this.log.info(message),
+        warn: message => this.log.warn(message),
       },
       upsertObject: async (id, def) => {
         if (!(0, import_groups.isGroupEnabled)(id.slice(id.indexOf(".") + 1), this.config)) {
@@ -917,17 +961,16 @@ class Yamaha extends utils.Adapter {
           void this.updateDeviceLabel(reporting, value, import_pure_helpers.LABEL_RANK.model);
         }
       },
-      onDeviceName: (name) => void this.updateDeviceLabel(device.id, name, import_pure_helpers.LABEL_RANK.deviceName),
+      onDeviceName: name => void this.updateDeviceLabel(device.id, name, import_pure_helpers.LABEL_RANK.deviceName),
       timers: {
-        schedule: (handler, ms) => this.unloading ? void 0 : this.setTimeout(handler, ms),
-        cancel: (handle) => this.clearTimeout(handle)
+        schedule: (handler, ms) => (this.unloading ? void 0 : this.setTimeout(handler, ms)),
+        cancel: handle => this.clearTimeout(handle),
       },
       registerPush: (ip, onPush) => pushReceiver.register(ip, onPush),
       pushActive: () => pushReceiver.isListening(),
       scheduleKeepalive: (handler, ms) => {
         if (this.unloading) {
-          return () => {
-          };
+          return () => {};
         }
         const timer = this.setInterval(handler, ms);
         return () => {
@@ -937,8 +980,8 @@ class Yamaha extends utils.Adapter {
         };
       },
       xmlPollIntervalMs: this.xmlPollIntervalMs(),
-      onTransports: (names) => this.setTransports(device.id, names),
-      knownDeviceIps
+      onTransports: names => this.setTransports(device.id, names),
+      knownDeviceIps,
     });
   }
   /**
@@ -982,11 +1025,11 @@ class Yamaha extends utils.Adapter {
       }
       writes.push(this.setState("info.devicesOnline", { val: 0, ack: true }));
       writes.push(this.setState("info.devicesAllOnline", { val: false, ack: true }));
-      void Promise.all(writes).catch(() => {
-      }).finally(callback);
+      void Promise.all(writes)
+        .catch(() => {})
+        .finally(callback);
       return;
-    } catch {
-    }
+    } catch {}
     callback();
   }
   /**
@@ -1022,19 +1065,19 @@ class Yamaha extends utils.Adapter {
     try {
       found = await (0, import_discovery.discoverYamaha)({
         search: (target, ms) => this.ssdpSearch(target, ms),
-        fetch: (url) => this.fetchUrl(url),
-        log: { debug: (message) => this.log.debug(message), warn: (message) => this.log.warn(message) }
+        fetch: url => this.fetchUrl(url),
+        log: { debug: message => this.log.debug(message), warn: message => this.log.warn(message) },
       });
     } catch (e) {
       this.log.warn(`auto-discovery scan failed, using the remembered devices: ${(0, import_util.errorMessage)(e)}`);
     }
-    const merged = (0, import_pure_helpers.mergeDiscovered)(
-      known,
-      found,
-      (dropped, takenId) => this.log.warn(`discovered device "${dropped}" skipped \u2014 its object id "${takenId}" is already taken`)
+    const merged = (0, import_pure_helpers.mergeDiscovered)(known, found, (dropped, takenId) =>
+      this.log.warn(`discovered device "${dropped}" skipped \u2014 its object id "${takenId}" is already taken`),
     );
-    const ignored = new Set(await (0, import_discovered_store.readIgnored)((0, import_discovered_store_deps.ignoredStoreDeps)(this)));
-    const kept = ignored.size > 0 ? merged.filter((device) => !ignored.has(device.id)) : merged;
+    const ignored = new Set(
+      await (0, import_discovered_store.readIgnored)((0, import_discovered_store_deps.ignoredStoreDeps)(this)),
+    );
+    const kept = ignored.size > 0 ? merged.filter(device => !ignored.has(device.id)) : merged;
     await (0, import_discovered_store.writeDiscovered)(store, kept);
     return kept;
   }
@@ -1051,13 +1094,17 @@ class Yamaha extends utils.Adapter {
     var _a, _b;
     let stored;
     try {
-      stored = (_b = (_a = await this.getObjectAsync(deviceId)) == null ? void 0 : _a.native) == null ? void 0 : _b.yncaAvail;
+      stored =
+        (_b = (_a = await this.getObjectAsync(deviceId)) == null ? void 0 : _a.native) == null ? void 0 : _b.yncaAvail;
     } catch {
       stored = void 0;
     }
-    return (0, import_subunit_cache.createSubunitCache)((0, import_subunit_cache.isAvailSnapshot)(stored) ? stored : void 0, (snapshot) => {
-      this.persistDeviceNative(deviceId, { yncaAvail: snapshot != null ? snapshot : null });
-    });
+    return (0, import_subunit_cache.createSubunitCache)(
+      (0, import_subunit_cache.isAvailSnapshot)(stored) ? stored : void 0,
+      snapshot => {
+        this.persistDeviceNative(deviceId, { yncaAvail: snapshot != null ? snapshot : null });
+      },
+    );
   }
   /**
    * Load a device's persisted probe memory (constant device answers: capabilities,
@@ -1073,7 +1120,8 @@ class Yamaha extends utils.Adapter {
     var _a, _b;
     let initial;
     try {
-      const stored = (_b = (_a = await this.getObjectAsync(deviceId)) == null ? void 0 : _a.native) == null ? void 0 : _b.probeCache;
+      const stored =
+        (_b = (_a = await this.getObjectAsync(deviceId)) == null ? void 0 : _a.native) == null ? void 0 : _b.probeCache;
       if (typeof stored === "string") {
         const parsed = JSON.parse(stored);
         if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
@@ -1083,7 +1131,7 @@ class Yamaha extends utils.Adapter {
     } catch {
       initial = void 0;
     }
-    return new import_probe_memory.ProbeMemory(initial, (entries) => {
+    return new import_probe_memory.ProbeMemory(initial, entries => {
       this.persistDeviceNative(deviceId, { probeCache: JSON.stringify(entries) });
     });
   }
@@ -1112,8 +1160,11 @@ class Yamaha extends utils.Adapter {
    * @returns the responders
    */
   ssdpSearch(target, timeoutMs) {
-    return new Promise((resolve) => {
-      const bindAddrs = (0, import_network_interfaces.searchInterfaces)(this.config.networkInterface, (0, import_node_os.networkInterfaces)());
+    return new Promise(resolve => {
+      const bindAddrs = (0, import_network_interfaces.searchInterfaces)(
+        this.config.networkInterface,
+        (0, import_node_os.networkInterfaces)(),
+      );
       const responders = [];
       const sockets = [];
       let settled = false;
@@ -1125,12 +1176,11 @@ class Yamaha extends utils.Adapter {
         for (const socket of sockets) {
           try {
             socket.close();
-          } catch {
-          }
+          } catch {}
         }
         resolve(responders);
       };
-      const searchFrom = (bindAddr) => {
+      const searchFrom = bindAddr => {
         const socket = (0, import_node_dgram.createSocket)("udp4");
         sockets.push(socket);
         socket.on("message", (msg, rinfo) => {
@@ -1139,14 +1189,13 @@ class Yamaha extends utils.Adapter {
             responders.push({ location: location[1], address: rinfo.address });
           }
         });
-        socket.on("error", (err) => {
+        socket.on("error", err => {
           this.log.warn(
-            `discovery socket failed${bindAddr ? ` on interface ${bindAddr}` : ""}: ${(0, import_util.errorMessage)(err)}${bindAddr ? " \u2014 check the Network Interface setting" : ""}`
+            `discovery socket failed${bindAddr ? ` on interface ${bindAddr}` : ""}: ${(0, import_util.errorMessage)(err)}${bindAddr ? " \u2014 check the Network Interface setting" : ""}`,
           );
           try {
             socket.close();
-          } catch {
-          }
+          } catch {}
         });
         const sendSearch = () => {
           if (settled) {
@@ -1161,15 +1210,16 @@ ST: ${target}\r
 `;
           try {
             socket.send(msearch, 1900, "239.255.255.250");
-          } catch {
-          }
+          } catch {}
         };
         socket.bind(0, bindAddr, () => {
           if (bindAddr) {
             try {
               socket.setMulticastInterface(bindAddr);
             } catch {
-              this.log.info(`discovery: could not pin multicast egress to ${bindAddr} \u2014 using the default interface`);
+              this.log.info(
+                `discovery: could not pin multicast egress to ${bindAddr} \u2014 using the default interface`,
+              );
             }
           }
           for (let i = 0; i < SSDP_SEARCH_BURST; i++) {
@@ -1195,10 +1245,10 @@ ST: ${target}\r
    */
   fetchUrl(url) {
     return new Promise((resolve, reject) => {
-      const req = (0, import_node_http.get)(url, (res) => {
+      const req = (0, import_node_http.get)(url, res => {
         let data = "";
         let bytes = 0;
-        res.on("data", (chunk) => {
+        res.on("data", chunk => {
           bytes += chunk.length;
           if (bytes > import_util.MAX_HTTP_BODY_BYTES) {
             res.destroy(new Error(`description too large: ${url}`));
@@ -1215,12 +1265,13 @@ ST: ${target}\r
   }
 }
 if (require.main !== module) {
-  module.exports = (options) => new Yamaha(options);
+  module.exports = options => new Yamaha(options);
 } else {
   (() => new Yamaha())();
 }
 // Annotate the CommonJS export names for ESM import in node:
-0 && (module.exports = {
-  Yamaha
-});
+0 &&
+  (module.exports = {
+    Yamaha,
+  });
 //# sourceMappingURL=main.js.map

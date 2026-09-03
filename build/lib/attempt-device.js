@@ -4,22 +4,24 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name in all) __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if (from && typeof from === "object" || typeof from === "function") {
+  if ((from && typeof from === "object") || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+        __defProp(to, key, {
+          get: () => from[key],
+          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
+        });
   }
   return to;
 };
-var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __toCommonJS = mod => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var attempt_device_exports = {};
 __export(attempt_device_exports, {
   attemptDevice: () => attemptDevice,
-  connectTransports: () => connectTransports
+  connectTransports: () => connectTransports,
 });
 module.exports = __toCommonJS(attempt_device_exports);
 var import_ynca_client = require("./ynca/ynca-client");
@@ -40,35 +42,38 @@ const COMMAND_SPACING_MS = { ynca: 100, yxc: 0, xml: 0 };
 async function connectTransports(deviceId, attempts, deps) {
   var _a, _b, _c;
   const results = await Promise.all(
-    attempts.map(async (attempt) => {
+    attempts.map(async attempt => {
       const conn = attempt.build();
       try {
         if (await conn.connect()) {
           return conn;
         }
       } catch (e) {
-        deps.log.debug(`${deviceId}/${conn.transport}: transport did not connect (${(0, import_util.errorMessage)(e)})`);
+        deps.log.debug(
+          `${deviceId}/${conn.transport}: transport did not connect (${(0, import_util.errorMessage)(e)})`,
+        );
       }
       conn.close();
       return null;
-    })
+    }),
   );
-  const live = results.filter((conn) => conn !== null);
+  const live = results.filter(conn => conn !== null);
   if (live.length === 0) {
     const level = (_b = (_a = deps.reachability) == null ? void 0 : _a.reportUnreachable()) != null ? _b : "warn";
     deps.log[level](`${deviceId}: no reachable transport (YNCA/YXC/XML)`);
     return null;
   }
   (_c = deps.reachability) == null ? void 0 : _c.reportReachable();
-  const rebuilds = new Map(attempts.map((attempt) => [attempt.transport, attempt.build]));
+  const rebuilds = new Map(attempts.map(attempt => [attempt.transport, attempt.build]));
   const handle = new import_multi_transport_handle.MultiTransportHandle(deviceId, live, {
     upsertObject: deps.upsertObject,
     log: deps.log,
     onTransports: deps.onTransports,
-    rebuild: deps.timers ? (transport) => rebuilds.get(transport)() : void 0,
+    rebuild: deps.timers ? transport => rebuilds.get(transport)() : void 0,
     schedule: deps.timers ? (cb, ms) => deps.timers.schedule(cb, ms) : void 0,
-    cancel: deps.timers ? (handle_) => deps.timers.cancel(handle_) : void 0,
-    backoffFactory: () => new import_reconnect_strategy.ReconnectStrategy(TRANSPORT_RECONNECT_BASE_MS, TRANSPORT_RECONNECT_MAX_MS)
+    cancel: deps.timers ? handle_ => deps.timers.cancel(handle_) : void 0,
+    backoffFactory: () =>
+      new import_reconnect_strategy.ReconnectStrategy(TRANSPORT_RECONNECT_BASE_MS, TRANSPORT_RECONNECT_MAX_MS),
   });
   try {
     await handle.start();
@@ -79,14 +84,15 @@ async function connectTransports(deviceId, attempts, deps) {
   deps.log.info(
     (0, import_ready_line.readyLine)(
       deviceId,
-      live.map((conn) => conn.transport)
-    )
+      live.map(conn => conn.transport),
+    ),
   );
   return handle;
 }
 function attemptDevice(device, deps) {
   const { log, upsertObject, setStateAck, timers } = deps;
-  const gateFor = (transport) => new import_command_gate.CommandGate({ minSpacingMs: COMMAND_SPACING_MS[transport], timers });
+  const gateFor = transport =>
+    new import_command_gate.CommandGate({ minSpacingMs: COMMAND_SPACING_MS[transport], timers });
   const buildYnca = () => {
     const ynca = new import_transport_connection_adapter.TransportConnectionAdapter("ynca", device.id, setStateAck);
     const gate = gateFor("ynca");
@@ -99,8 +105,8 @@ function attemptDevice(device, deps) {
         log,
         isEntryEnabled: deps.isEntryEnabled,
         subunitCache: deps.yncaSubunitCache,
-        probeMemory: deps.probeMemory
-      })
+        probeMemory: deps.probeMemory,
+      }),
     );
     return ynca;
   };
@@ -113,8 +119,9 @@ function attemptDevice(device, deps) {
         // Resolve another configured device's client for a multiroom link — never this device
         // itself. The partner's own gate belongs to its own connection, so this one-off client
         // stays ungated (a single link call, not a stream of commands).
-        clientFor: (ip) => ip !== device.ip && deps.knownDeviceIps.has(ip) ? new import_http_client.YamahaYxcClient(ip) : void 0,
-        registerPush: (onPush) => deps.registerPush(device.ip, onPush),
+        clientFor: ip =>
+          ip !== device.ip && deps.knownDeviceIps.has(ip) ? new import_http_client.YamahaYxcClient(ip) : void 0,
+        registerPush: onPush => deps.registerPush(device.ip, onPush),
         pushActive: deps.pushActive,
         probeMemory: deps.probeMemory,
         scheduleKeepalive: deps.scheduleKeepalive,
@@ -122,8 +129,8 @@ function attemptDevice(device, deps) {
         setStateAck: yxc.interceptSetStateAck,
         reportDeviceName: deps.onDeviceName,
         log,
-        gate
-      })
+        gate,
+      }),
     );
     return yxc;
   };
@@ -140,10 +147,10 @@ function attemptDevice(device, deps) {
           setStateAck: xml.interceptSetStateAck,
           log,
           gate,
-          probeMemory: deps.probeMemory
+          probeMemory: deps.probeMemory,
         },
-        deps.xmlPollIntervalMs
-      )
+        deps.xmlPollIntervalMs,
+      ),
     );
     return xml;
   };
@@ -152,20 +159,21 @@ function attemptDevice(device, deps) {
     [
       { transport: "ynca", build: buildYnca },
       { transport: "yxc", build: buildYxc },
-      { transport: "xml", build: buildXml }
+      { transport: "xml", build: buildXml },
     ],
     {
       upsertObject,
       log,
       onTransports: deps.onTransports,
       reachability: deps.reachability,
-      timers: deps.timers
-    }
+      timers: deps.timers,
+    },
   );
 }
 // Annotate the CommonJS export names for ESM import in node:
-0 && (module.exports = {
-  attemptDevice,
-  connectTransports
-});
+0 &&
+  (module.exports = {
+    attemptDevice,
+    connectTransports,
+  });
 //# sourceMappingURL=attempt-device.js.map

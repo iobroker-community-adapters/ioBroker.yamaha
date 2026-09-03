@@ -4,22 +4,24 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name in all) __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if (from && typeof from === "object" || typeof from === "function") {
+  if ((from && typeof from === "object") || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+        __defProp(to, key, {
+          get: () => from[key],
+          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
+        });
   }
   return to;
 };
-var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __toCommonJS = mod => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var ynca_client_exports = {};
 __export(ynca_client_exports, {
   YNCA_PORT: () => YNCA_PORT,
-  YncaClient: () => YncaClient
+  YncaClient: () => YncaClient,
 });
 module.exports = __toCommonJS(ynca_client_exports);
 var import_node_net = require("node:net");
@@ -38,24 +40,24 @@ function defaultFactory(host, port) {
   socket.on("timeout", () => socket.destroy(new Error("connect timeout")));
   socket.on("connect", () => socket.setTimeout(0));
   return {
-    write: (data) => {
+    write: data => {
       socket.write(data);
     },
     destroy: () => {
       socket.destroy();
     },
-    onData: (handler) => {
-      socket.on("data", (chunk) => handler(chunk.toString()));
+    onData: handler => {
+      socket.on("data", chunk => handler(chunk.toString()));
     },
-    onConnect: (handler) => {
+    onConnect: handler => {
       socket.on("connect", handler);
     },
-    onClose: (handler) => {
+    onClose: handler => {
       socket.on("close", handler);
     },
-    onError: (handler) => {
+    onError: handler => {
       socket.on("error", handler);
-    }
+    },
   };
 }
 class YncaClient {
@@ -106,9 +108,9 @@ class YncaClient {
       this.everReachable = true;
       onFirstConnect == null ? void 0 : onFirstConnect();
     });
-    socket.onData((chunk) => this.handleData(chunk));
+    socket.onData(chunk => this.handleData(chunk));
     socket.onClose(() => this.handleClose());
-    socket.onError((err) => {
+    socket.onError(err => {
       this.lastError = err;
       if (!this.reachable) {
         onFirstError == null ? void 0 : onFirstError(err);
@@ -216,15 +218,19 @@ class YncaClient {
    * @returns resolves once the line was written, or once it is clear it never will be
    */
   writeLine(line, priority) {
-    return this.gate.run(() => {
-      var _a;
-      (_a = this.socket) == null ? void 0 : _a.write(`${line}\r
+    return this.gate
+      .run(() => {
+        var _a;
+        (_a = this.socket) == null
+          ? void 0
+          : _a.write(`${line}\r
 `);
-    }, priority).catch((e) => {
-      if (!(e instanceof import_command_gate.CommandGateClosedError)) {
-        this.lastError = e instanceof Error ? e : new Error(String(e));
-      }
-    });
+      }, priority)
+      .catch(e => {
+        if (!(e instanceof import_command_gate.CommandGateClosedError)) {
+          this.lastError = e instanceof Error ? e : new Error(String(e));
+        }
+      });
   }
   /**
    * Register a handler for decoded messages from the receiver.
@@ -266,7 +272,7 @@ class YncaClient {
   async readCapabilities(gets) {
     const collected = [];
     let markerSeen;
-    const collector = (message) => {
+    const collector = message => {
       collected.push(message);
       if (message.subunit === "SYS" && message.func === "VERSION") {
         markerSeen == null ? void 0 : markerSeen();
@@ -283,7 +289,7 @@ class YncaClient {
       if (!this.reachable) {
         throw new Error("connection lost during capability sweep");
       }
-      await this.awaitSweepMarker((handler) => markerSeen = handler);
+      await this.awaitSweepMarker(handler => (markerSeen = handler));
       return (0, import_capability.buildCapabilities)(collected);
     } finally {
       const index = this.messageHandlers.indexOf(collector);
@@ -301,7 +307,7 @@ class YncaClient {
    */
   async awaitSweepMarker(arm) {
     let settled = false;
-    const answered = new Promise((resolve) => {
+    const answered = new Promise(resolve => {
       arm(() => {
         if (!settled) {
           settled = true;
@@ -314,7 +320,7 @@ class YncaClient {
       answered,
       this.gate.delay(SWEEP_MARKER_TIMEOUT_MS).then(() => {
         settled = true;
-      })
+      }),
     ]);
   }
   /** Whether the connection is currently up. */
@@ -337,8 +343,9 @@ class YncaClient {
   }
 }
 // Annotate the CommonJS export names for ESM import in node:
-0 && (module.exports = {
-  YNCA_PORT,
-  YncaClient
-});
+0 &&
+  (module.exports = {
+    YNCA_PORT,
+    YncaClient,
+  });
 //# sourceMappingURL=ynca-client.js.map

@@ -69,7 +69,15 @@ const PLAYER_STATES: Array<{
   // way round — so the datapoints mean the same thing on every device.
   {
     state: "elapsedTime",
-    common: { nameKey: "elapsedTime", type: "number", unit: "s", role: "media.elapsed", read: true, write: false },
+    common: {
+      nameKey: "elapsedTime",
+      descKey: "descElapsedTime",
+      type: "number",
+      unit: "s",
+      role: "media.elapsed",
+      read: true,
+      write: false,
+    },
   },
   {
     state: "elapsedTimeText",
@@ -84,11 +92,26 @@ const PLAYER_STATES: Array<{
   },
   {
     state: "totalTime",
-    common: { nameKey: "totalTime", type: "number", unit: "s", role: "media.duration", read: true, write: false },
+    common: {
+      nameKey: "totalTime",
+      descKey: "descTotalTime",
+      type: "number",
+      unit: "s",
+      role: "media.duration",
+      read: true,
+      write: false,
+    },
   },
   {
     state: "totalTimeText",
-    common: { nameKey: "totalTimeReadable", type: "string", role: "media.duration.text", read: true, write: false },
+    common: {
+      nameKey: "totalTimeReadable",
+      descKey: "descTotalTimeReadable",
+      type: "string",
+      role: "media.duration.text",
+      read: true,
+      write: false,
+    },
   },
   {
     state: "albumArt",

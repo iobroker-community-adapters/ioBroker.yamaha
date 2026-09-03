@@ -4,21 +4,23 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name in all) __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if (from && typeof from === "object" || typeof from === "function") {
+  if ((from && typeof from === "object") || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+        __defProp(to, key, {
+          get: () => from[key],
+          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
+        });
   }
   return to;
 };
-var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __toCommonJS = mod => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var device_controller_exports = {};
 __export(device_controller_exports, {
-  XmlDeviceController: () => XmlDeviceController
+  XmlDeviceController: () => XmlDeviceController,
 });
 module.exports = __toCommonJS(device_controller_exports);
 var import_types = require("../catalog/types");
@@ -35,7 +37,7 @@ const XML_ZONES = [
   { key: "main", element: "Main_Zone", prefix: "" },
   { key: "zone2", element: "Zone_2", prefix: "multiroom.zone2." },
   { key: "zone3", element: "Zone_3", prefix: "multiroom.zone3." },
-  { key: "zone4", element: "Zone_4", prefix: "multiroom.zone4." }
+  { key: "zone4", element: "Zone_4", prefix: "multiroom.zone4." },
 ];
 class XmlDeviceController {
   /**
@@ -69,20 +71,20 @@ class XmlDeviceController {
   async start() {
     var _a, _b, _c;
     const probes = await Promise.all(
-      XML_ZONES.map(async (zone) => ({ zone, status: await this.tryGetStatus(zone.element) }))
+      XML_ZONES.map(async zone => ({ zone, status: await this.tryGetStatus(zone.element) })),
     );
-    const answered = probes.filter((probe) => probe.status && Object.keys(probe.status).length > 0);
-    if (!answered.some((probe) => probe.zone.key === "main")) {
+    const answered = probes.filter(probe => probe.status && Object.keys(probe.status).length > 0);
+    if (!answered.some(probe => probe.zone.key === "main")) {
       this.deps.log.debug(`${this.deviceId}: no XML main zone \u2014 creating no objects`);
       return false;
     }
-    this.zones = answered.map((probe) => probe.zone);
+    this.zones = answered.map(probe => probe.zone);
     let model;
     try {
       model = await this.deps.client.getModelName();
       if (model !== void 0 && this.deps.probeMemory) {
         if (this.deps.probeMemory.remembered("xmlModel") !== model) {
-          this.deps.probeMemory.drop((key) => key.startsWith("xml"));
+          this.deps.probeMemory.drop(key => key.startsWith("xml"));
           this.deps.probeMemory.set("xmlModel", model);
         }
       }
@@ -94,7 +96,7 @@ class XmlDeviceController {
       const body = await this.probeXml(
         `xmlInputs:${zone.key}`,
         zone.element,
-        "<Input><Input_Sel_Item>GetParam</Input_Sel_Item></Input>"
+        "<Input><Input_Sel_Item>GetParam</Input_Sel_Item></Input>",
       );
       inputsByZone.set(zone.key, (0, import_protocol.parseInputList)(body));
     }
@@ -114,7 +116,10 @@ class XmlDeviceController {
         if (entry.mainOnly && zone.key !== "main") {
           continue;
         }
-        if (entry.statusField !== void 0 && !((_c = this.zoneFields.get(zone.key)) == null ? void 0 : _c.has(entry.statusField))) {
+        if (
+          entry.statusField !== void 0 &&
+          !((_c = this.zoneFields.get(zone.key)) == null ? void 0 : _c.has(entry.statusField))
+        ) {
           continue;
         }
         const stateId = `${zone.prefix}${entry.state}`;
@@ -129,8 +134,10 @@ class XmlDeviceController {
               common: {
                 // Capitalised like the catalog path does it, so the same folder cannot end up
                 // called "sound" here and "Sound" there depending on which transport owns it.
-                name: import_types.CHANNEL_NAME_KEYS[segments[i - 1]] ? (0, import_i18n.tName)(import_types.CHANNEL_NAME_KEYS[segments[i - 1]]) : segments[i - 1].charAt(0).toUpperCase() + segments[i - 1].slice(1)
-              }
+                name: import_types.CHANNEL_NAME_KEYS[segments[i - 1]]
+                  ? (0, import_i18n.tName)(import_types.CHANNEL_NAME_KEYS[segments[i - 1]])
+                  : segments[i - 1].charAt(0).toUpperCase() + segments[i - 1].slice(1),
+              },
             });
           }
         }
@@ -140,16 +147,16 @@ class XmlDeviceController {
           name: (0, import_i18n.tName)(nameKey),
           // An absent key means the datapoint explains itself — the fleet standard wants the
           // field empty there rather than filled with invented prose.
-          ...descKey ? { desc: (0, import_i18n.tName)(descKey) } : {}
+          ...(descKey ? { desc: (0, import_i18n.tName)(descKey) } : {}),
         };
         const inputs = entry.state === "input" ? inputsByZone.get(zone.key) : void 0;
         if (inputs && inputs.length > 0) {
-          common.states = Object.fromEntries(inputs.map((input) => [input, input]));
+          common.states = Object.fromEntries(inputs.map(input => [input, input]));
         }
         await this.deps.upsertObject(`${this.deviceId}.${stateId}`, {
           id: stateId,
           type: "state",
-          common
+          common,
         });
         this.createdStates.add(stateId);
       }
@@ -209,7 +216,7 @@ class XmlDeviceController {
       return this.deps.probeMemory ? await this.deps.probeMemory.once(key, probe) : await probe();
     } catch (e) {
       this.deps.log.debug(
-        `${this.deviceId}: ${key} probe failed, asking again on the next connect (${(0, import_util.errorMessage)(e)})`
+        `${this.deviceId}: ${key} probe failed, asking again on the next connect (${(0, import_util.errorMessage)(e)})`,
       );
       return "";
     }
@@ -229,7 +236,7 @@ class XmlDeviceController {
       const body = await this.probeXml(
         `xmlScenes:${zone.key}`,
         zone.element,
-        "<Scene><Scene_Sel_Item>GetParam</Scene_Sel_Item></Scene>"
+        "<Scene><Scene_Sel_Item>GetParam</Scene_Sel_Item></Scene>",
       );
       const scenes = (0, import_protocol.parseSceneList)(body);
       if (scenes.length === 0) {
@@ -242,10 +249,10 @@ class XmlDeviceController {
         await this.deps.upsertObject(`${this.deviceId}.${channelId}`, {
           id: channelId,
           type: "channel",
-          common: { name: (0, import_i18n.tName)((_a = import_types.CHANNEL_NAME_KEYS.scene) != null ? _a : "Scenes") }
+          common: { name: (0, import_i18n.tName)((_a = import_types.CHANNEL_NAME_KEYS.scene) != null ? _a : "Scenes") },
         });
       }
-      const max = Math.max(...scenes.map((scene) => scene.num));
+      const max = Math.max(...scenes.map(scene => scene.num));
       await this.deps.upsertObject(`${this.deviceId}.${channelId}.recall`, {
         id: `${channelId}.recall`,
         type: "state",
@@ -260,13 +267,19 @@ class XmlDeviceController {
           step: 1,
           // The declared titles as the dropdown, so the picker shows "Movie Viewing",
           // not a bare number.
-          states: Object.fromEntries(scenes.map((scene) => [scene.num, scene.title]))
-        }
+          states: Object.fromEntries(scenes.map(scene => [scene.num, scene.title])),
+        },
       });
       await this.deps.upsertObject(`${this.deviceId}.${channelId}.list`, {
         id: `${channelId}.list`,
         type: "state",
-        common: { name: (0, import_i18n.tName)("scenesNumberTitle"), type: "string", role: "json", read: true, write: false }
+        common: {
+          name: (0, import_i18n.tName)("scenesNumberTitle"),
+          type: "string",
+          role: "json",
+          read: true,
+          write: false,
+        },
       });
       this.emit(`${channelId}.list`, JSON.stringify(scenes));
     }
@@ -292,7 +305,7 @@ class XmlDeviceController {
       await this.deps.upsertObject(`${this.deviceId}.tuner`, {
         id: "tuner",
         type: "channel",
-        common: { name: (0, import_i18n.tName)((_a = import_types.CHANNEL_NAME_KEYS.tuner) != null ? _a : "Tuner") }
+        common: { name: (0, import_i18n.tName)((_a = import_types.CHANNEL_NAME_KEYS.tuner) != null ? _a : "Tuner") },
       });
     }
     const state = async (id, common) => {
@@ -308,7 +321,7 @@ class XmlDeviceController {
       // invited a write that goes nowhere.
       min: 1,
       max: 40,
-      step: 1
+      step: 1,
     });
     await state("frequency", {
       name: (0, import_i18n.tName)("frequency"),
@@ -316,23 +329,35 @@ class XmlDeviceController {
       role: "value",
       unit: "kHz",
       read: true,
-      write: false
+      write: false,
     });
-    await state("rdsService", { name: (0, import_i18n.tName)("rdsStation"), type: "string", role: "text", read: true, write: false });
-    await state("rdsText", { name: (0, import_i18n.tName)("rdsText"), type: "string", role: "text", read: true, write: false });
+    await state("rdsService", {
+      name: (0, import_i18n.tName)("rdsStation"),
+      type: "string",
+      role: "text",
+      read: true,
+      write: false,
+    });
+    await state("rdsText", {
+      name: (0, import_i18n.tName)("rdsText"),
+      type: "string",
+      role: "text",
+      read: true,
+      write: false,
+    });
     await state("tuned", {
       name: (0, import_i18n.tName)("tunedToAStation"),
       type: "boolean",
       role: "indicator",
       read: true,
-      write: false
+      write: false,
     });
     await state("stereo", {
       name: (0, import_i18n.tName)("stereoReception"),
       type: "boolean",
       role: "indicator",
       read: true,
-      write: false
+      write: false,
     });
     await this.refreshTuner();
   }
@@ -389,7 +414,7 @@ class XmlDeviceController {
     }
     void this.applyCommand({
       zone: "Tuner",
-      inner: `<Play_Control><Preset><Preset_Sel>${num}</Preset_Sel></Preset></Play_Control>`
+      inner: `<Play_Control><Preset><Preset_Sel>${num}</Preset_Sel></Preset></Play_Control>`,
     });
     return true;
   }
@@ -409,11 +434,18 @@ class XmlDeviceController {
       return false;
     }
     const zoneKey = (_a = match[1]) != null ? _a : "main";
-    const zone = this.zones.find((z) => z.key === zoneKey);
+    const zone = this.zones.find(z => z.key === zoneKey);
     const scenes = this.scenesByZone.get(zoneKey);
-    const byTitle = typeof value === "string" && !/^\d+$/.test(value.trim()) ? (_b = scenes == null ? void 0 : scenes.find((scene) => scene.title.toLowerCase() === value.trim().toLowerCase())) == null ? void 0 : _b.num : void 0;
+    const byTitle =
+      typeof value === "string" && !/^\d+$/.test(value.trim())
+        ? (_b =
+            scenes == null ? void 0 : scenes.find(scene => scene.title.toLowerCase() === value.trim().toLowerCase())) ==
+          null
+          ? void 0
+          : _b.num
+        : void 0;
     const num = byTitle != null ? byTitle : Math.round(Number(value));
-    if (!zone || !scenes || !scenes.some((scene) => scene.num === num)) {
+    if (!zone || !scenes || !scenes.some(scene => scene.num === num)) {
       return true;
     }
     void this.applyCommand({ zone: zone.element, inner: `<Scene><Scene_Sel>Scene ${num}</Scene_Sel></Scene>` });
@@ -429,10 +461,10 @@ class XmlDeviceController {
     if (!gate) {
       return;
     }
-    const delay = (ms) => gate.delay(ms);
+    const delay = ms => gate.delay(ms);
     const probe = async () => {
       const probes = await Promise.all(
-        import_xml_browse_driver.XML_BROWSE_SOURCES.map(async (source) => {
+        import_xml_browse_driver.XML_BROWSE_SOURCES.map(async source => {
           try {
             const body = await this.deps.client.getXml(source.element, "<List_Info>GetParam</List_Info>");
             return body.includes("<Menu_Status>") ? source.key : void 0;
@@ -442,18 +474,18 @@ class XmlDeviceController {
             }
             throw e;
           }
-        })
+        }),
       );
-      return probes.filter((key) => key !== void 0);
+      return probes.filter(key => key !== void 0);
     };
     let available;
     try {
       available = new Set(
-        this.deps.probeMemory ? await this.deps.probeMemory.once("xmlBrowseSources", probe) : await probe()
+        this.deps.probeMemory ? await this.deps.probeMemory.once("xmlBrowseSources", probe) : await probe(),
       );
     } catch (e) {
       this.deps.log.debug(
-        `${this.deviceId}: browse probe failed, asking again on the next connect (${(0, import_util.errorMessage)(e)})`
+        `${this.deviceId}: browse probe failed, asking again on the next connect (${(0, import_util.errorMessage)(e)})`,
       );
       return;
     }
@@ -465,7 +497,7 @@ class XmlDeviceController {
       upsertObject: this.deps.upsertObject,
       emit: (id, value) => this.emit(id, value),
       log: this.deps.log,
-      delay
+      delay,
     });
   }
   /**
@@ -627,7 +659,8 @@ class XmlDeviceController {
   }
 }
 // Annotate the CommonJS export names for ESM import in node:
-0 && (module.exports = {
-  XmlDeviceController
-});
+0 &&
+  (module.exports = {
+    XmlDeviceController,
+  });
 //# sourceMappingURL=device-controller.js.map

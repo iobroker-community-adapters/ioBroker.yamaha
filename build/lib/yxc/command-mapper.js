@@ -4,18 +4,20 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name in all) __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if (from && typeof from === "object" || typeof from === "function") {
+  if ((from && typeof from === "object") || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+        __defProp(to, key, {
+          get: () => from[key],
+          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
+        });
   }
   return to;
 };
-var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __toCommonJS = mod => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var command_mapper_exports = {};
 __export(command_mapper_exports, {
   ALARM_DAYS: () => ALARM_DAYS,
@@ -32,7 +34,7 @@ __export(command_mapper_exports, {
   parseYxcStatus: () => parseYxcStatus,
   parseYxcTunerInfo: () => parseYxcTunerInfo,
   parseYxcTunerPresetLists: () => parseYxcTunerPresetLists,
-  stateToYxc: () => stateToYxc
+  stateToYxc: () => stateToYxc,
 });
 module.exports = __toCommonJS(command_mapper_exports);
 var import_zones = require("./zones");
@@ -53,13 +55,13 @@ function readStatusField(status, read) {
   return status[read.field];
 }
 const BUTTON_ACTIONS = {
-  "player.cd.tray": (client) => client.toggleTray()
+  "player.cd.tray": client => client.toggleTray(),
 };
 const PLAYER_TRANSPORTS = ["play", "pause", "stop", "next", "prev", "repeatToggle", "shuffleToggle"];
 const EQ_CHANNELS = {
   "sound.equalizer.low": "low",
   "sound.equalizer.mid": "mid",
-  "sound.equalizer.high": "high"
+  "sound.equalizer.high": "high",
 };
 function parseYxcStatus(zoneStatus, zone) {
   if (typeof zoneStatus !== "object" || zoneStatus === null) {
@@ -105,10 +107,10 @@ function stateToYxc(stateId, value) {
     return { kind: "tunerPreset", value: Number(value) };
   }
   if (stateId === "tuner.presetUp") {
-    return { kind: "run", run: (client) => client.switchTunerPreset("next") };
+    return { kind: "run", run: client => client.switchTunerPreset("next") };
   }
   if (stateId === "tuner.presetDown") {
-    return { kind: "run", run: (client) => client.switchTunerPreset("previous") };
+    return { kind: "run", run: client => client.switchTunerPreset("previous") };
   }
   let zone = "main";
   let name = stateId;
@@ -120,15 +122,15 @@ function stateToYxc(stateId, value) {
   if (name === "scene.recall" && (0, import_value_coerce.isWritableValue)(value, true)) {
     const num = Math.round(Number(value));
     const sceneZone = zone;
-    return { kind: "run", run: (client) => client.recallScene(num, sceneZone) };
+    return { kind: "run", run: client => client.recallScene(num, sceneZone) };
   }
   if (name === "remote.cursor" && (0, import_value_coerce.isWritableValue)(value, false)) {
     const cursorZone = zone;
-    return { kind: "run", run: (client) => client.controlCursor(String(value), cursorZone) };
+    return { kind: "run", run: client => client.controlCursor(String(value), cursorZone) };
   }
   if (name === "remote.menu" && (0, import_value_coerce.isWritableValue)(value, false)) {
     const menuZone = zone;
-    return { kind: "run", run: (client) => client.controlMenu(String(value), menuZone) };
+    return { kind: "run", run: client => client.controlMenu(String(value), menuZone) };
   }
   if (name.startsWith("player.")) {
     const action = name.slice("player.".length);
@@ -140,12 +142,15 @@ function stateToYxc(stateId, value) {
   if (eqBand && (0, import_value_coerce.isWritableValue)(value, true)) {
     return { kind: "equalizer", zone, band: eqBand, value: Number(value) };
   }
-  const entry = import_catalog.YXC_AMP_CATALOG.find((e) => e.state === name);
-  if (!(entry == null ? void 0 : entry.write) || !(0, import_value_coerce.isWritableValue)(value, entry.common.type === "number")) {
+  const entry = import_catalog.YXC_AMP_CATALOG.find(e => e.state === name);
+  if (
+    !(entry == null ? void 0 : entry.write) ||
+    !(0, import_value_coerce.isWritableValue)(value, entry.common.type === "number")
+  ) {
     return void 0;
   }
   const { apply } = entry.write;
-  return { kind: "run", run: (client) => apply(client, value, zone) };
+  return { kind: "run", run: client => apply(client, value, zone) };
 }
 function parseYxcDistribution(info) {
   if (typeof info !== "object" || info === null) {
@@ -238,25 +243,67 @@ const PLAYER_CLEAR = [
   { id: "player.totalTime", value: 0 },
   { id: "player.totalTimeText", value: "" },
   { id: "player.repeat", value: 0 },
-  { id: "player.shuffle", value: false }
+  { id: "player.shuffle", value: false },
 ];
 const DAB_FIELDS = [
-  { field: "service_label", id: "tuner.dab.serviceLabel", type: "string", nameKey: "serviceLabel" },
-  { field: "ensemble_label", id: "tuner.dab.ensembleLabel", type: "string", nameKey: "ensembleLabel" },
-  { field: "ch_label", id: "tuner.dab.channelLabel", type: "string", nameKey: "channelLabel" },
-  { field: "dls", id: "tuner.dab.dls", type: "string", nameKey: "dlsText" },
-  { field: "program_type", id: "tuner.dab.programType", type: "string", nameKey: "programmeType" },
+  {
+    field: "service_label",
+    id: "tuner.dab.serviceLabel",
+    type: "string",
+    nameKey: "serviceLabel",
+    descKey: "descDabService",
+  },
+  {
+    field: "ensemble_label",
+    id: "tuner.dab.ensembleLabel",
+    type: "string",
+    nameKey: "ensembleLabel",
+    descKey: "descDabEnsemble",
+  },
+  {
+    field: "ch_label",
+    id: "tuner.dab.channelLabel",
+    type: "string",
+    nameKey: "channelLabel",
+    descKey: "descDabChannel",
+  },
+  { field: "dls", id: "tuner.dab.dls", type: "string", nameKey: "dlsText", descKey: "descDabDLSText" },
+  {
+    field: "program_type",
+    id: "tuner.dab.programType",
+    type: "string",
+    nameKey: "programmeType",
+    descKey: "descDabProgramType",
+  },
   // preset and audio_mode are NOT listed here: the active-band parse feeds the
   // unified flat tuner.preset / tuner.audioMode states (v2.0.0).
-  { field: "status", id: "tuner.dab.status", type: "string", nameKey: "dabStatus" },
-  { field: "bit_rate", id: "tuner.dab.bitRate", type: "number", nameKey: "bitRate" },
-  { field: "quality", id: "tuner.dab.quality", type: "number", nameKey: "signalQuality" },
-  { field: "off_air", id: "tuner.dab.offAir", type: "boolean", nameKey: "offAir" },
-  { field: "dab_plus", id: "tuner.dab.dabPlus", type: "boolean", nameKey: "dabPlus" },
-  { field: "category", id: "tuner.dab.category", type: "string", nameKey: "serviceCategory" },
-  { field: "total_station_num", id: "tuner.dab.totalStations", type: "number", nameKey: "totalStations" },
-  { field: "initial_scan_progress", id: "tuner.dab.scanProgress", type: "number", nameKey: "initialScanProgress" },
-  { field: "tune_aid", id: "tuner.dab.tuneAid", type: "number", nameKey: "tuneAidLevel" }
+  { field: "status", id: "tuner.dab.status", type: "string", nameKey: "dabStatus", descKey: "descDabStatus" },
+  { field: "bit_rate", id: "tuner.dab.bitRate", type: "number", nameKey: "bitRate", descKey: "descBitRate" },
+  { field: "quality", id: "tuner.dab.quality", type: "number", nameKey: "signalQuality", descKey: "descSignalQuality" },
+  { field: "off_air", id: "tuner.dab.offAir", type: "boolean", nameKey: "offAir", descKey: "descOffAir" },
+  { field: "dab_plus", id: "tuner.dab.dabPlus", type: "boolean", nameKey: "dabPlus", descKey: "descDabPlus" },
+  {
+    field: "category",
+    id: "tuner.dab.category",
+    type: "string",
+    nameKey: "serviceCategory",
+    descKey: "descServiceCategory",
+  },
+  {
+    field: "total_station_num",
+    id: "tuner.dab.totalStations",
+    type: "number",
+    nameKey: "totalStations",
+    descKey: "descTotalStations",
+  },
+  {
+    field: "initial_scan_progress",
+    id: "tuner.dab.scanProgress",
+    type: "number",
+    nameKey: "initialScanProgress",
+    descKey: "descInitialScanProgress",
+  },
+  { field: "tune_aid", id: "tuner.dab.tuneAid", type: "number", nameKey: "tuneAidLevel", descKey: "descTuneAidLevel" },
 ];
 function parseYxcTunerInfo(tunerInfo) {
   if (typeof tunerInfo !== "object" || tunerInfo === null) {
@@ -346,7 +393,7 @@ function parseYxcRecentList(info) {
     const item = {
       num: index + 1,
       input: e.input,
-      name: e.text
+      name: e.text,
     };
     if (typeof e.albumart_url === "string" && e.albumart_url.length > 0) {
       item.albumArt = e.albumart_url;
@@ -396,7 +443,7 @@ function parseYxcSignalInfo(info, zone) {
   }
   const a = audio;
   const updates = [];
-  const text = (value) => {
+  const text = value => {
     const trimmed = typeof value === "string" ? value.trim() : "";
     return /^-+$/.test(trimmed) ? "" : trimmed;
   };
@@ -419,7 +466,7 @@ function parseYxcPlaylistNames(info) {
   if (!Array.isArray(names)) {
     return void 0;
   }
-  const list = names.map((name, index) => ({ num: index + 1, name })).filter((entry) => typeof entry.name === "string");
+  const list = names.map((name, index) => ({ num: index + 1, name })).filter(entry => typeof entry.name === "string");
   return { id: "player.netPlayer.playlists", value: JSON.stringify(list) };
 }
 function parseYxcPlayQueue(info) {
@@ -433,7 +480,7 @@ function parseYxcPlayQueue(info) {
   const value = {
     playingIndex: typeof q.playing_index === "number" ? q.playing_index : -1,
     totalTracks: typeof q.max_line === "number" ? q.max_line : q.track_info.length,
-    tracks: q.track_info
+    tracks: q.track_info,
   };
   return { id: "player.netPlayer.queue", value: JSON.stringify(value) };
 }
@@ -521,21 +568,22 @@ function parseYxcClock(settings) {
   return updates;
 }
 // Annotate the CommonJS export names for ESM import in node:
-0 && (module.exports = {
-  ALARM_DAYS,
-  DAB_FIELDS,
-  PLAYER_CLEAR,
-  parseYxcClock,
-  parseYxcDistribution,
-  parseYxcPlayInfo,
-  parseYxcPlayQueue,
-  parseYxcPlaylistNames,
-  parseYxcPresetList,
-  parseYxcRecentList,
-  parseYxcSignalInfo,
-  parseYxcStatus,
-  parseYxcTunerInfo,
-  parseYxcTunerPresetLists,
-  stateToYxc
-});
+0 &&
+  (module.exports = {
+    ALARM_DAYS,
+    DAB_FIELDS,
+    PLAYER_CLEAR,
+    parseYxcClock,
+    parseYxcDistribution,
+    parseYxcPlayInfo,
+    parseYxcPlayQueue,
+    parseYxcPlaylistNames,
+    parseYxcPresetList,
+    parseYxcRecentList,
+    parseYxcSignalInfo,
+    parseYxcStatus,
+    parseYxcTunerInfo,
+    parseYxcTunerPresetLists,
+    stateToYxc,
+  });
 //# sourceMappingURL=command-mapper.js.map

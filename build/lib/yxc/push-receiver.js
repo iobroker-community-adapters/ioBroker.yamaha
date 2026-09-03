@@ -4,21 +4,23 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name in all) __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if (from && typeof from === "object" || typeof from === "function") {
+  if ((from && typeof from === "object") || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+        __defProp(to, key, {
+          get: () => from[key],
+          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
+        });
   }
   return to;
 };
-var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __toCommonJS = mod => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var push_receiver_exports = {};
 __export(push_receiver_exports, {
-  YxcPushReceiver: () => YxcPushReceiver
+  YxcPushReceiver: () => YxcPushReceiver,
 });
 module.exports = __toCommonJS(push_receiver_exports);
 var import_node_dgram = require("node:dgram");
@@ -27,21 +29,21 @@ const REBIND_DELAY_MS = 1e4;
 function defaultFactory() {
   const socket = (0, import_node_dgram.createSocket)("udp4");
   return {
-    onMessage: (handler) => {
+    onMessage: handler => {
       socket.on("message", (msg, rinfo) => handler(msg.toString(), rinfo.address));
     },
-    onError: (handler) => {
+    onError: handler => {
       socket.on("error", handler);
     },
-    onListening: (handler) => {
+    onListening: handler => {
       socket.on("listening", handler);
     },
-    bind: (port) => {
+    bind: port => {
       socket.bind(port);
     },
     close: () => {
       socket.close();
-    }
+    },
   };
 }
 class YxcPushReceiver {
@@ -75,7 +77,7 @@ class YxcPushReceiver {
   start() {
     const socket = this.factory();
     this.socket = socket;
-    socket.onError((err) => this.handleError(err));
+    socket.onError(err => this.handleError(err));
     socket.onMessage((payload, address) => this.dispatch(payload, address));
     socket.onListening(() => {
       this.listening = true;
@@ -92,7 +94,7 @@ class YxcPushReceiver {
     }
     if (!this.listening) {
       this.deps.log.warn(
-        `YXC push port :${YXC_PUSH_PORT} unavailable \u2014 MusicCast devices are polled, not pushed: ${err.message}`
+        `YXC push port :${YXC_PUSH_PORT} unavailable \u2014 MusicCast devices are polled, not pushed: ${err.message}`,
       );
       return;
     }
@@ -142,7 +144,8 @@ class YxcPushReceiver {
   }
 }
 // Annotate the CommonJS export names for ESM import in node:
-0 && (module.exports = {
-  YxcPushReceiver
-});
+0 &&
+  (module.exports = {
+    YxcPushReceiver,
+  });
 //# sourceMappingURL=push-receiver.js.map

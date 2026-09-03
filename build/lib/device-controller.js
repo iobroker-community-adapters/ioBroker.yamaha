@@ -4,21 +4,23 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name in all) __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if (from && typeof from === "object" || typeof from === "function") {
+  if ((from && typeof from === "object") || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+        __defProp(to, key, {
+          get: () => from[key],
+          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
+        });
   }
   return to;
 };
-var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __toCommonJS = mod => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var device_controller_exports = {};
 __export(device_controller_exports, {
-  YncaDeviceController: () => YncaDeviceController
+  YncaDeviceController: () => YncaDeviceController,
 });
 module.exports = __toCommonJS(device_controller_exports);
 var import_capability = require("./ynca/capability");
@@ -36,7 +38,7 @@ const YNCA_ZONES = [
   { key: "main", subunit: "MAIN", prefix: "" },
   { key: "zone2", subunit: "ZONE2", prefix: "multiroom.zone2." },
   { key: "zone3", subunit: "ZONE3", prefix: "multiroom.zone3." },
-  { key: "zone4", subunit: "ZONE4", prefix: "multiroom.zone4." }
+  { key: "zone4", subunit: "ZONE4", prefix: "multiroom.zone4." },
 ];
 const INPUT_SUBUNITS = {
   NETRADIO: "NETRADIO",
@@ -56,7 +58,7 @@ const INPUT_SUBUNITS = {
   PC: "PC",
   MUSICCASTLINK: "MCLINK",
   IPOD: "IPOD",
-  IPODUSB: "IPODUSB"
+  IPODUSB: "IPODUSB",
 };
 function playerSubunitForInput(input) {
   if (typeof input !== "string" || input.length === 0) {
@@ -77,13 +79,20 @@ const YNCA_PLAYER_CLEAR = [
   { id: "player.totalTime", value: 0 },
   { id: "player.totalTimeText", value: "" },
   { id: "player.repeat", value: 0 },
-  { id: "player.shuffle", value: false }
+  { id: "player.shuffle", value: false },
 ];
 const STATIC_KEY = "yncaStaticValues";
 const CAPS_KEY = "yncaCapabilities";
 function isCachedCapabilities(value) {
   const candidate = value;
-  return typeof candidate === "object" && candidate !== null && typeof candidate.model === "string" && typeof candidate.firmware === "string" && typeof candidate.subunits === "object" && candidate.subunits !== null;
+  return (
+    typeof candidate === "object" &&
+    candidate !== null &&
+    typeof candidate.model === "string" &&
+    typeof candidate.firmware === "string" &&
+    typeof candidate.subunits === "object" &&
+    candidate.subunits !== null
+  );
 }
 const LIST_PROOF = /^(LISTLAYER|LISTLAYERNAME|CURRLINE|MAXLINE|LINE[1-8](TXT|ATRIB))$/;
 function sceneTitlesOf(subunits) {
@@ -137,7 +146,9 @@ class YncaDeviceController {
   async start() {
     var _a, _b, _c, _d, _e, _f, _g;
     await this.deps.client.connect();
-    const catalog = this.deps.isEntryEnabled ? import_catalog.YNCA_CATALOG.filter((entry) => this.deps.isEntryEnabled(entry.id)) : import_catalog.YNCA_CATALOG;
+    const catalog = this.deps.isEntryEnabled
+      ? import_catalog.YNCA_CATALOG.filter(entry => this.deps.isEntryEnabled(entry.id))
+      : import_catalog.YNCA_CATALOG;
     const resolved = await this.resolveCapabilities(catalog);
     const { capabilities, fromCache } = resolved;
     const present = (0, import_catalog.presentYncaEntries)(capabilities, catalog);
@@ -155,14 +166,15 @@ class YncaDeviceController {
       this.deps.log.warn(`${this.deviceId}: no capabilities reported \u2014 creating no objects`);
       return false;
     }
-    (_c = (_b = this.deps.client).onRefusal) == null ? void 0 : _c.call(
-      _b,
-      (command, verdict) => this.deps.log.warn(`${this.deviceId}: device refused "${command}" (@${verdict.toUpperCase()})`)
-    );
+    (_c = (_b = this.deps.client).onRefusal) == null
+      ? void 0
+      : _c.call(_b, (command, verdict) =>
+          this.deps.log.warn(`${this.deviceId}: device refused "${command}" (@${verdict.toUpperCase()})`),
+        );
     this.sceneTitles = sceneTitlesOf(capabilities.subunits);
     for (const object of objects) {
       if (object.id === "scene.recall" && this.sceneTitles.length > 0) {
-        object.common.states = Object.fromEntries(this.sceneTitles.map((scene) => [scene.num, scene.title]));
+        object.common.states = Object.fromEntries(this.sceneTitles.map(scene => [scene.num, scene.title]));
       }
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
     }
@@ -170,7 +182,13 @@ class YncaDeviceController {
       await this.deps.upsertObject(`${this.deviceId}.scene.list`, {
         id: "scene.list",
         type: "state",
-        common: { name: (0, import_i18n.tName)("scenesNumberTitle"), type: "string", role: "json", read: true, write: false }
+        common: {
+          name: (0, import_i18n.tName)("scenesNumberTitle"),
+          type: "string",
+          role: "json",
+          read: true,
+          write: false,
+        },
       });
       this.deps.setStateAck(`${this.deviceId}.scene.list`, JSON.stringify(this.sceneTitles));
     }
@@ -190,16 +208,25 @@ class YncaDeviceController {
       }
     }
     this.hasDab = capabilities.subunits.DAB !== void 0;
-    this.tunerBand = ((_g = (_f = (_d = live.subunits.DAB) == null ? void 0 : _d.BAND) != null ? _f : (_e = live.subunits.TUN) == null ? void 0 : _e.BAND) != null ? _g : "").toUpperCase();
+    this.tunerBand = (
+      (_g =
+        (_f = (_d = live.subunits.DAB) == null ? void 0 : _d.BAND) != null
+          ? _f
+          : (_e = live.subunits.TUN) == null
+            ? void 0
+            : _e.BAND) != null
+        ? _g
+        : ""
+    ).toUpperCase();
     await this.setupBrowse(live);
-    this.deps.client.onMessage((message) => {
+    this.deps.client.onMessage(message => {
       var _a2;
       (_a2 = this.browseDriver) == null ? void 0 : _a2.handleMessage(message);
       if (message.func === "BAND" && (message.subunit === "TUN" || message.subunit === "DAB")) {
         this.tunerBand = message.value.toUpperCase();
       }
       if (message.func === "INP") {
-        const zone = YNCA_ZONES.find((z) => z.subunit === message.subunit);
+        const zone = YNCA_ZONES.find(z => z.subunit === message.subunit);
         if (zone) {
           this.handleInputSwitch(zone.key, message.value);
         }
@@ -234,7 +261,7 @@ class YncaDeviceController {
     var _a, _b, _c, _d, _e, _f, _g, _h;
     const identity = await this.deps.client.readCapabilities([
       { subunit: "SYS", func: "MODELNAME" },
-      { subunit: "SYS", func: "VERSION" }
+      { subunit: "SYS", func: "VERSION" },
     ]);
     const model = identity.model;
     const firmware = (_b = (_a = identity.subunits.SYS) == null ? void 0 : _a.VERSION) != null ? _b : "";
@@ -243,17 +270,19 @@ class YncaDeviceController {
       return { capabilities: { model, subunits: remembered.subunits }, fromCache: true };
     }
     if (remembered !== void 0) {
-      (_d = this.deps.probeMemory) == null ? void 0 : _d.drop((key) => key === CAPS_KEY || key === STATIC_KEY);
+      (_d = this.deps.probeMemory) == null ? void 0 : _d.drop(key => key === CAPS_KEY || key === STATIC_KEY);
     }
     const capabilities = await this.sweepDevice(catalog, model, firmware);
     if (capabilities.model) {
-      (_g = this.deps.probeMemory) == null ? void 0 : _g.set(CAPS_KEY, {
-        model: capabilities.model,
-        firmware: (_f = (_e = capabilities.subunits.SYS) == null ? void 0 : _e.VERSION) != null ? _f : firmware,
-        subunits: capabilities.subunits
-      });
+      (_g = this.deps.probeMemory) == null
+        ? void 0
+        : _g.set(CAPS_KEY, {
+            model: capabilities.model,
+            firmware: (_f = (_e = capabilities.subunits.SYS) == null ? void 0 : _e.VERSION) != null ? _f : firmware,
+            subunits: capabilities.subunits,
+          });
     } else {
-      (_h = this.deps.probeMemory) == null ? void 0 : _h.drop((key) => key === STATIC_KEY);
+      (_h = this.deps.probeMemory) == null ? void 0 : _h.drop(key => key === STATIC_KEY);
     }
     return { capabilities, fromCache: false };
   }
@@ -297,7 +326,10 @@ class YncaDeviceController {
       return remembered;
     }
     const fresh = await this.deps.client.readCapabilities(gets);
-    return { model: remembered.model, subunits: (0, import_capability.mergeYncaSubunits)(remembered.subunits, fresh.subunits) };
+    return {
+      model: remembered.model,
+      subunits: (0, import_capability.mergeYncaSubunits)(remembered.subunits, fresh.subunits),
+    };
   }
   /**
    * The fast path's second half: re-ask every catalogued function of the present
@@ -315,7 +347,7 @@ class YncaDeviceController {
     try {
       const cached = (_a = this.deps.subunitCache) == null ? void 0 : _a.get();
       const gets = (0, import_catalog.sweepGets)(catalog).filter(
-        (get) => get.subunit === "SYS" || !cached || cached.subunits.includes(get.subunit)
+        get => get.subunit === "SYS" || !cached || cached.subunits.includes(get.subunit),
       );
       const fresh = await this.deps.client.readCapabilities(gets);
       if (!fresh.model) {
@@ -325,18 +357,22 @@ class YncaDeviceController {
       for (const [subunit, funcs] of Object.entries(fresh.subunits)) {
         for (const [func, value] of Object.entries(funcs)) {
           if (STATIC_FUNC.test(func)) {
-            ((_b = statics[subunit]) != null ? _b : statics[subunit] = {})[func] = value;
+            ((_b = statics[subunit]) != null ? _b : (statics[subunit] = {}))[func] = value;
           }
         }
       }
       (_c = this.deps.probeMemory) == null ? void 0 : _c.set(STATIC_KEY, statics);
       const remembered = (_d = this.deps.probeMemory) == null ? void 0 : _d.remembered(CAPS_KEY);
-      const subunits = isCachedCapabilities(remembered) ? (0, import_capability.mergeYncaSubunits)(remembered.subunits, fresh.subunits) : fresh.subunits;
-      (_g = this.deps.probeMemory) == null ? void 0 : _g.set(CAPS_KEY, {
-        model: fresh.model,
-        firmware: (_f = (_e = fresh.subunits.SYS) == null ? void 0 : _e.VERSION) != null ? _f : "",
-        subunits
-      });
+      const subunits = isCachedCapabilities(remembered)
+        ? (0, import_capability.mergeYncaSubunits)(remembered.subunits, fresh.subunits)
+        : fresh.subunits;
+      (_g = this.deps.probeMemory) == null
+        ? void 0
+        : _g.set(CAPS_KEY, {
+            model: fresh.model,
+            firmware: (_f = (_e = fresh.subunits.SYS) == null ? void 0 : _e.VERSION) != null ? _f : "",
+            subunits,
+          });
       this.presentEntries = (0, import_catalog.presentYncaEntries)({ model: fresh.model, subunits }, catalog);
       this.writeMap = (0, import_catalog.idToEntry)(this.presentEntries);
       const titles = sceneTitlesOf(subunits);
@@ -383,11 +419,13 @@ class YncaDeviceController {
     }
     const capabilities = await this.targetedSweep(catalog, present);
     if (capabilities.model) {
-      (_e = this.deps.subunitCache) == null ? void 0 : _e.set({
-        subunits: [...present],
-        model: capabilities.model,
-        firmware: (_d = (_c = capabilities.subunits.SYS) == null ? void 0 : _c.VERSION) != null ? _d : ""
-      });
+      (_e = this.deps.subunitCache) == null
+        ? void 0
+        : _e.set({
+            subunits: [...present],
+            model: capabilities.model,
+            firmware: (_d = (_c = capabilities.subunits.SYS) == null ? void 0 : _c.VERSION) != null ? _d : "",
+          });
     }
     return capabilities;
   }
@@ -401,10 +439,12 @@ class YncaDeviceController {
    */
   async targetedSweep(catalog, present) {
     var _a, _b, _c;
-    const gets = (0, import_catalog.sweepGets)(catalog).filter((get) => get.subunit === "SYS" || present.has(get.subunit));
+    const gets = (0, import_catalog.sweepGets)(catalog).filter(
+      get => get.subunit === "SYS" || present.has(get.subunit),
+    );
     const remembered = (_a = this.deps.probeMemory) == null ? void 0 : _a.remembered(STATIC_KEY);
     const capabilities = await this.deps.client.readCapabilities(
-      remembered ? gets.filter((get) => !STATIC_FUNC.test(get.func)) : gets
+      remembered ? gets.filter(get => !STATIC_FUNC.test(get.func)) : gets,
     );
     if (remembered) {
       for (const [subunit, funcs] of Object.entries(remembered)) {
@@ -416,7 +456,7 @@ class YncaDeviceController {
     for (const [subunit, funcs] of Object.entries(capabilities.subunits)) {
       for (const [func, value] of Object.entries(funcs)) {
         if (STATIC_FUNC.test(func)) {
-          ((_b = statics[subunit]) != null ? _b : statics[subunit] = {})[func] = value;
+          ((_b = statics[subunit]) != null ? _b : (statics[subunit] = {}))[func] = value;
         }
       }
     }
@@ -447,10 +487,10 @@ class YncaDeviceController {
     }
     if (stateId === "scene.recall" && typeof value === "string" && !/^\d+$/.test(value.trim())) {
       const needle = value.trim().toLowerCase();
-      const match = this.sceneTitles.find((scene) => scene.title.toLowerCase() === needle);
+      const match = this.sceneTitles.find(scene => scene.title.toLowerCase() === needle);
       if (match === void 0) {
         this.deps.log.debug(
-          `${this.deviceId}: scene "${value}" is not one this device declares \u2014 write dropped (known: ${this.sceneTitles.map((scene) => scene.title).join(", ") || "none yet"})`
+          `${this.deviceId}: scene "${value}" is not one this device declares \u2014 write dropped (known: ${this.sceneTitles.map(scene => scene.title).join(", ") || "none yet"})`,
         );
         return;
       }
@@ -481,16 +521,16 @@ class YncaDeviceController {
    */
   async setupZonePlayers(capabilities, objects) {
     const playerObjects = objects.filter(
-      (object) => object.id === "player" || object.type === "state" && FLAT_PLAYER_ID.test(object.id)
+      object => object.id === "player" || (object.type === "state" && FLAT_PLAYER_ID.test(object.id)),
     );
-    if (!playerObjects.some((object) => object.type === "state")) {
+    if (!playerObjects.some(object => object.type === "state")) {
       this.playerZones = [];
       return;
     }
-    const sourceDef = (id) => ({
+    const sourceDef = id => ({
       id,
       type: "state",
-      common: { name: (0, import_i18n.tName)("playingSource"), type: "string", role: "text", read: true, write: false }
+      common: { name: (0, import_i18n.tName)("playingSource"), type: "string", role: "text", read: true, write: false },
     });
     await this.deps.upsertObject(`${this.deviceId}.player.source`, sourceDef("player.source"));
     this.playerZones = ["main"];
@@ -505,11 +545,11 @@ class YncaDeviceController {
       }
       await this.deps.upsertObject(
         `${this.deviceId}.${zone.prefix}player.source`,
-        sourceDef(`${zone.prefix}player.source`)
+        sourceDef(`${zone.prefix}player.source`),
       );
     }
     const presentFlat = new Set(
-      this.presentEntries.filter((entry) => FLAT_PLAYER_ID.test(entry.id)).map((entry) => entry.id)
+      this.presentEntries.filter(entry => FLAT_PLAYER_ID.test(entry.id)).map(entry => entry.id),
     );
     for (const zone of YNCA_ZONES) {
       if (!this.playerZones.includes(zone.key)) {
@@ -517,10 +557,7 @@ class YncaDeviceController {
       }
       const input = this.zoneInputs.get(zone.key);
       const playing = playerSubunitForInput(input) !== void 0;
-      this.deps.setStateAck(
-        `${this.deviceId}.${zone.prefix}player.source`,
-        playing && input !== void 0 ? input : ""
-      );
+      this.deps.setStateAck(`${this.deviceId}.${zone.prefix}player.source`, playing && input !== void 0 ? input : "");
       if (!playing) {
         for (const clear of YNCA_PLAYER_CLEAR) {
           if (presentFlat.has(clear.id)) {
@@ -570,12 +607,12 @@ class YncaDeviceController {
     if (before === after || !this.playerZones.includes(zoneKey)) {
       return;
     }
-    const zone = YNCA_ZONES.find((z) => z.key === zoneKey);
+    const zone = YNCA_ZONES.find(z => z.key === zoneKey);
     if (!zone) {
       return;
     }
     const presentFlat = new Set(
-      this.presentEntries.filter((entry) => FLAT_PLAYER_ID.test(entry.id)).map((entry) => entry.id)
+      this.presentEntries.filter(entry => FLAT_PLAYER_ID.test(entry.id)).map(entry => entry.id),
     );
     for (const clear of YNCA_PLAYER_CLEAR) {
       if (presentFlat.has(clear.id)) {
@@ -610,7 +647,7 @@ class YncaDeviceController {
       this.deps.log.debug(`${this.deviceId}: ${flatId} ignored \u2014 ${zoneKey} is not playing a media source`);
       return;
     }
-    const entry = this.presentEntries.find((e) => e.id === flatId && e.subunit === subunit);
+    const entry = this.presentEntries.find(e => e.id === flatId && e.subunit === subunit);
     if (entry === void 0) {
       this.deps.log.debug(`${this.deviceId}: ${flatId} ignored \u2014 ${subunit} did not report it`);
       return;
@@ -656,9 +693,11 @@ class YncaDeviceController {
       const band = typeof value === "string" ? value : "";
       const subunit = band === "AM" ? "TUN" : band === "DAB" || this.hasDab ? "DAB" : "TUN";
       const entry = this.presentEntries.find(
-        (candidate) => candidate.id === "tuner.band" && candidate.subunit === subunit
+        candidate => candidate.id === "tuner.band" && candidate.subunit === subunit,
       );
-      const triple = entry ? (0, import_catalog.yncaCommand)(stateId, value, /* @__PURE__ */ new Map([[stateId, entry]])) : void 0;
+      const triple = entry
+        ? (0, import_catalog.yncaCommand)(stateId, value, /* @__PURE__ */ new Map([[stateId, entry]]))
+        : void 0;
       if (triple) {
         this.sendProven(triple.subunit, triple.func, triple.value);
       } else {
@@ -686,7 +725,7 @@ class YncaDeviceController {
    * @param wire the encoded wire value
    */
   sendProven(subunit, func, wire) {
-    if (!this.presentEntries.some((entry) => entry.subunit === subunit && entry.func === func)) {
+    if (!this.presentEntries.some(entry => entry.subunit === subunit && entry.func === func)) {
       this.deps.log.debug(`${this.deviceId}: ${subunit}:${func} not reported by this device \u2014 write dropped`);
       return;
     }
@@ -703,13 +742,18 @@ class YncaDeviceController {
   async setupBrowse(capabilities) {
     var _a, _b;
     const gate = this.deps.gate;
-    if (!gate || ((_b = (_a = this.deps).isEntryEnabled) == null ? void 0 : _b.call(_a, "player.browse.source")) === false) {
+    if (
+      !gate ||
+      ((_b = (_a = this.deps).isEntryEnabled) == null ? void 0 : _b.call(_a, "player.browse.source")) === false
+    ) {
       return;
     }
-    const delay = (ms) => gate.delay(ms);
+    const delay = ms => gate.delay(ms);
     const present = await this.probeBrowseSubunits(capabilities);
     if (present.size === 0) {
-      this.deps.log.debug(`${this.deviceId}: no YNCA source answers LISTINFO \u2014 leaving menus to another transport`);
+      this.deps.log.debug(
+        `${this.deviceId}: no YNCA source answers LISTINFO \u2014 leaving menus to another transport`,
+      );
       return;
     }
     const driver = new import_ynca_browse_driver.YncaBrowseDriver(this.deps.client, present, delay);
@@ -717,7 +761,7 @@ class YncaDeviceController {
       upsertObject: this.deps.upsertObject,
       emit: (id, value) => this.deps.setStateAck(`${this.deviceId}.${id}`, value),
       log: this.deps.log,
-      delay
+      delay,
     });
     if (this.browseEngine) {
       this.browseDriver = driver;
@@ -736,21 +780,25 @@ class YncaDeviceController {
    */
   async probeBrowseSubunits(capabilities) {
     var _a;
-    const candidates = import_ynca_browse_driver.YNCA_BROWSE_SOURCES.filter((source) => source.subunit in capabilities.subunits);
+    const candidates = import_ynca_browse_driver.YNCA_BROWSE_SOURCES.filter(
+      source => source.subunit in capabilities.subunits,
+    );
     if (candidates.length === 0) {
       return /* @__PURE__ */ new Set();
     }
     if (((_a = capabilities.subunits.MAIN) == null ? void 0 : _a.PWR) !== "On") {
-      return new Set(candidates.map((source) => source.subunit));
+      return new Set(candidates.map(source => source.subunit));
     }
     const answer = await this.deps.client.readCapabilities(
-      candidates.map((source) => ({ subunit: source.subunit, func: "LISTINFO" }))
+      candidates.map(source => ({ subunit: source.subunit, func: "LISTINFO" })),
     );
     return new Set(
-      candidates.map((source) => source.subunit).filter((subunit) => {
-        var _a2;
-        return Object.keys((_a2 = answer.subunits[subunit]) != null ? _a2 : {}).some((func) => LIST_PROOF.test(func));
-      })
+      candidates
+        .map(source => source.subunit)
+        .filter(subunit => {
+          var _a2;
+          return Object.keys((_a2 = answer.subunits[subunit]) != null ? _a2 : {}).some(func => LIST_PROOF.test(func));
+        }),
     );
   }
   /**
@@ -771,7 +819,8 @@ class YncaDeviceController {
   }
 }
 // Annotate the CommonJS export names for ESM import in node:
-0 && (module.exports = {
-  YncaDeviceController
-});
+0 &&
+  (module.exports = {
+    YncaDeviceController,
+  });
 //# sourceMappingURL=device-controller.js.map

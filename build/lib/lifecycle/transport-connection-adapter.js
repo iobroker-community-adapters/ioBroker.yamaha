@@ -4,27 +4,29 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name in all) __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if (from && typeof from === "object" || typeof from === "function") {
+  if ((from && typeof from === "object") || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+        __defProp(to, key, {
+          get: () => from[key],
+          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
+        });
   }
   return to;
 };
-var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __toCommonJS = mod => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var transport_connection_adapter_exports = {};
 __export(transport_connection_adapter_exports, {
-  TransportConnectionAdapter: () => TransportConnectionAdapter
+  TransportConnectionAdapter: () => TransportConnectionAdapter,
 });
 module.exports = __toCommonJS(transport_connection_adapter_exports);
 var import_owner_policy = require("../catalog/owner-policy");
 const INVERSE_DRIFT = {
   yxc: { "sound.subwooferTrim": "subwooferVolume", "multiroom.party": "multiroom.partyEnable" },
-  xml: { "hdmi.out1": "hdmiOut1", "hdmi.out2": "hdmiOut2" }
+  xml: { "hdmi.out1": "hdmiOut1", "hdmi.out2": "hdmiOut2" },
 };
 class TransportConnectionAdapter {
   /**
@@ -108,9 +110,11 @@ class TransportConnectionAdapter {
    */
   handleWrite(canonicalId, ack, value) {
     var _a, _b, _c, _d, _e;
-    const zone = (_b = (_a = import_owner_policy.ZONE_PREFIX.exec(canonicalId)) == null ? void 0 : _a[0]) != null ? _b : "";
+    const zone =
+      (_b = (_a = import_owner_policy.ZONE_PREFIX.exec(canonicalId)) == null ? void 0 : _a[0]) != null ? _b : "";
     const template = canonicalId.slice(zone.length);
-    const controllerId = zone + ((_d = (_c = INVERSE_DRIFT[this.transport]) == null ? void 0 : _c[template]) != null ? _d : template);
+    const controllerId =
+      zone + ((_d = (_c = INVERSE_DRIFT[this.transport]) == null ? void 0 : _c[template]) != null ? _d : template);
     (_e = this.controller) == null ? void 0 : _e.handleStateChange(`${this.deviceId}.${controllerId}`, ack, value);
   }
   /**
@@ -136,7 +140,8 @@ class TransportConnectionAdapter {
   }
 }
 // Annotate the CommonJS export names for ESM import in node:
-0 && (module.exports = {
-  TransportConnectionAdapter
-});
+0 &&
+  (module.exports = {
+    TransportConnectionAdapter,
+  });
 //# sourceMappingURL=transport-connection-adapter.js.map

@@ -4,21 +4,23 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name in all) __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if (from && typeof from === "object" || typeof from === "function") {
+  if ((from && typeof from === "object") || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
       if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+        __defProp(to, key, {
+          get: () => from[key],
+          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable,
+        });
   }
   return to;
 };
-var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __toCommonJS = mod => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var device_management_exports = {};
 __export(device_management_exports, {
-  YamahaDeviceManagement: () => YamahaDeviceManagement
+  YamahaDeviceManagement: () => YamahaDeviceManagement,
 });
 module.exports = __toCommonJS(device_management_exports);
 var import_dm_utils = require("@iobroker/dm-utils");
@@ -45,9 +47,7 @@ class YamahaDeviceManagement extends import_dm_utils.DeviceManagement {
     if (!Array.isArray(devices)) {
       return [];
     }
-    return devices.filter(
-      (d) => !!d && typeof d.ip === "string" && d.ip.length > 0
-    );
+    return devices.filter(d => !!d && typeof d.ip === "string" && d.ip.length > 0);
   }
   /**
    * Persist the manual device table; writing `native.*` restarts the adapter with the new set.
@@ -78,8 +78,10 @@ class YamahaDeviceManagement extends import_dm_utils.DeviceManagement {
       }
       return cards;
     }
-    const discovered = await (0, import_discovered_store.readDiscovered)((0, import_discovered_store_deps.discoveredStoreDeps)(this.adapter));
-    return discovered.map((d) => ({ id: d.id, ip: d.ip, name: d.id, source: "discovered" }));
+    const discovered = await (0, import_discovered_store.readDiscovered)(
+      (0, import_discovered_store_deps.discoveredStoreDeps)(this.adapter),
+    );
+    return discovered.map(d => ({ id: d.id, ip: d.ip, name: d.id, source: "discovered" }));
   }
   /**
    * Populate the manager with one card per running device.
@@ -91,14 +93,17 @@ class YamahaDeviceManagement extends import_dm_utils.DeviceManagement {
     for (const card of await this.cards()) {
       const [model, node] = await Promise.all([
         this.adapter.getForeignStateAsync(`${this.adapter.namespace}.${card.id}.info.model`),
-        this.adapter.getForeignObjectAsync(`${this.adapter.namespace}.${card.id}`)
+        this.adapter.getForeignObjectAsync(`${this.adapter.namespace}.${card.id}`),
       ]);
-      const label = typeof ((_a = node == null ? void 0 : node.common) == null ? void 0 : _a.name) === "string" ? node.common.name : void 0;
+      const label =
+        typeof ((_a = node == null ? void 0 : node.common) == null ? void 0 : _a.name) === "string"
+          ? node.common.name
+          : void 0;
       context.addDevice(
         this.toDeviceInfo(
           label && label !== card.id ? { ...card, name: label } : card,
-          typeof (model == null ? void 0 : model.val) === "string" ? model.val : void 0
-        )
+          typeof (model == null ? void 0 : model.val) === "string" ? model.val : void 0,
+        ),
       );
     }
   }
@@ -118,13 +123,13 @@ class YamahaDeviceManagement extends import_dm_utils.DeviceManagement {
       id: "delete",
       icon: "delete",
       description: (0, import_i18n.t)("dmDelete"),
-      handler: async (id, ctx) => this.deleteDevice(id, ctx)
+      handler: async (id, ctx) => this.deleteDevice(id, ctx),
     };
     const edit = {
       id: "edit",
       icon: "edit",
       description: (0, import_i18n.t)("dmEdit"),
-      handler: async (id, ctx) => this.editDevice(id, ctx)
+      handler: async (id, ctx) => this.editDevice(id, ctx),
     };
     return {
       id: card.id,
@@ -133,19 +138,19 @@ class YamahaDeviceManagement extends import_dm_utils.DeviceManagement {
       model: { stateId: `${base}.info.model` },
       identifier: card.ip,
       status: {
-        connection: { stateId: `${base}.info.connection`, mapping: { true: "connected", false: "disconnected" } }
+        connection: { stateId: `${base}.info.connection`, mapping: { true: "connected", false: "disconnected" } },
       },
       // No icon: the indicator icon accepts only a reserved/`fa-*`/`data:`/URL name, so a plain
       // "wifi" rendered as a "?". The transport label as text plus a green "on" colour carries it;
       // `hideIfEmpty` shows only the protocols this device is actually connected over.
-      indicators: import_device_management_helpers.TRANSPORTS.map((tr) => ({
+      indicators: import_device_management_helpers.TRANSPORTS.map(tr => ({
         id: `transport-${tr.id}`,
         value: { stateId: `${base}.info.transports.${tr.id}` },
         text: tr.label,
         colorOn: "ok",
-        hideIfEmpty: true
+        hideIfEmpty: true,
       })),
-      actions: card.source === "manual" ? [edit, del] : [del]
+      actions: card.source === "manual" ? [edit, del] : [del],
     };
   }
   /**
@@ -157,7 +162,9 @@ class YamahaDeviceManagement extends import_dm_utils.DeviceManagement {
     return {
       apiVersion: "v3",
       identifierLabel: (0, import_i18n.t)("ipLabel"),
-      actions: [{ id: "add", icon: "add", description: (0, import_i18n.t)("dmAdd"), handler: async (ctx) => this.addDevice(ctx) }]
+      actions: [
+        { id: "add", icon: "add", description: (0, import_i18n.t)("dmAdd"), handler: async ctx => this.addDevice(ctx) },
+      ],
     };
   }
   /**
@@ -169,7 +176,9 @@ class YamahaDeviceManagement extends import_dm_utils.DeviceManagement {
    */
   async addDevice(context) {
     const manual = await this.readManual();
-    const data = await context.showForm((0, import_device_management_helpers.buildDeviceForm)(manual.map((r) => r.ip)), { title: (0, import_i18n.t)("dmAdd") });
+    const data = await context.showForm((0, import_device_management_helpers.buildDeviceForm)(manual.map(r => r.ip)), {
+      title: (0, import_i18n.t)("dmAdd"),
+    });
     if (data && typeof data.ip === "string" && data.ip.trim()) {
       const row = { name: typeof data.name === "string" ? data.name.trim() : "", ip: data.ip.trim() };
       const clash = (0, import_device_management_helpers.findClash)(manual, row, -1);
@@ -184,7 +193,7 @@ class YamahaDeviceManagement extends import_dm_utils.DeviceManagement {
       if (ignored.includes(id)) {
         await (0, import_discovered_store.writeIgnored)(
           ignoredDeps,
-          ignored.filter((entry) => entry !== id)
+          ignored.filter(entry => entry !== id),
         );
       }
       await this.writeManual(manual);
@@ -201,15 +210,15 @@ class YamahaDeviceManagement extends import_dm_utils.DeviceManagement {
   async editDevice(cardId, context) {
     var _a;
     const manual = await this.readManual();
-    const index = manual.findIndex((r) => (0, import_device_management_helpers.rowId)(r) === cardId);
+    const index = manual.findIndex(r => (0, import_device_management_helpers.rowId)(r) === cardId);
     if (index < 0) {
       return { refresh: "devices" };
     }
     const current = manual[index];
-    const usedIps = manual.filter((_, i) => i !== index).map((r) => r.ip);
+    const usedIps = manual.filter((_, i) => i !== index).map(r => r.ip);
     const data = await context.showForm((0, import_device_management_helpers.buildDeviceForm)(usedIps), {
       title: (0, import_i18n.t)("dmEditTitle"),
-      data: { name: (_a = current.name) != null ? _a : "", ip: current.ip }
+      data: { name: (_a = current.name) != null ? _a : "", ip: current.ip },
     });
     if (data && typeof data.ip === "string" && data.ip.trim()) {
       const row = { name: typeof data.name === "string" ? data.name.trim() : "", ip: data.ip.trim() };
@@ -236,11 +245,13 @@ class YamahaDeviceManagement extends import_dm_utils.DeviceManagement {
     var _a;
     const manual = await this.readManual();
     if (manual.length > 0) {
-      const index = manual.findIndex((r) => (0, import_device_management_helpers.rowId)(r) === cardId);
+      const index = manual.findIndex(r => (0, import_device_management_helpers.rowId)(r) === cardId);
       if (index < 0) {
         return { refresh: "devices" };
       }
-      const confirmed = await context.showConfirmation((0, import_i18n.t)("dmDeleteConfirm", manual[index].name || manual[index].ip));
+      const confirmed = await context.showConfirmation(
+        (0, import_i18n.t)("dmDeleteConfirm", manual[index].name || manual[index].ip),
+      );
       if (confirmed) {
         manual.splice(index, 1);
         await this.writeManual(manual);
@@ -249,21 +260,25 @@ class YamahaDeviceManagement extends import_dm_utils.DeviceManagement {
     }
     const store = (0, import_discovered_store_deps.discoveredStoreDeps)(this.adapter);
     const discovered = await (0, import_discovered_store.readDiscovered)(store);
-    const remaining = discovered.filter((d) => d.id !== cardId);
+    const remaining = discovered.filter(d => d.id !== cardId);
     if (remaining.length !== discovered.length) {
       const confirmed = await context.showConfirmation((0, import_i18n.t)("dmDeleteConfirm", cardId));
       if (confirmed) {
         await (0, import_discovered_store.writeDiscovered)(store, remaining);
         await ((_a = this.owner) == null ? void 0 : _a.removeDevice(cardId));
         const ignoredDeps = (0, import_discovered_store_deps.ignoredStoreDeps)(this.adapter);
-        await (0, import_discovered_store.writeIgnored)(ignoredDeps, [...await (0, import_discovered_store.readIgnored)(ignoredDeps), cardId]);
+        await (0, import_discovered_store.writeIgnored)(ignoredDeps, [
+          ...(await (0, import_discovered_store.readIgnored)(ignoredDeps)),
+          cardId,
+        ]);
       }
     }
     return { refresh: "devices" };
   }
 }
 // Annotate the CommonJS export names for ESM import in node:
-0 && (module.exports = {
-  YamahaDeviceManagement
-});
+0 &&
+  (module.exports = {
+    YamahaDeviceManagement,
+  });
 //# sourceMappingURL=device-management.js.map
