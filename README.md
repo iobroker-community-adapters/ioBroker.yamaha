@@ -102,6 +102,8 @@ On the very first contact the adapter asks the receiver which functions it suppo
 <!--
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
+-->
+### 2.2.0 (2026-09-03)
 
 - (krobipd) Changed: the playback times are now a number in seconds, so the media player, Alexa and Google can show them on every receiver
 - (krobipd) New: the readable playback times ("1:23") moved to their own datapoints, next to the seconds — bind whichever form your visualization needs
@@ -143,10 +145,6 @@ On the very first contact the adapter asks the receiver which functions it suppo
 ### 2.0.3 (2026-09-01)
 
 - (krobipd) Fixed: the update cleanup now removes every never-filled leftover datapoint — a history recording setting no longer shields it, because nothing was ever recorded there and nothing is lost
-
-### 2.0.2 (2026-09-01)
-
-- (krobipd) Fixed: a restart while the receiver stands by no longer forgets abilities the device proved while awake — the remembered capability map only ever grows for the same device and firmware
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 

@@ -1,9 +1,9 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "2.1.1",
+    "version": "2.2.0",
     "news": {
-      "NEXT": {
+      "2.2.0": {
         "en": "Playback times are now seconds, with the readable form in new text datapoints. After a restart the adapter reads menu, band and input from the receiver instead of from memory.",
         "de": "Wiedergabezeiten sind jetzt Sekunden, die lesbare Form steht in neuen Text-Datenpunkten. Nach einem Neustart liest der Adapter Menü, Band und Eingang vom Receiver statt aus dem Speicher.",
         "ru": "Время воспроизведения теперь в секундах, читаемая форма — в новых текстовых точках данных. После перезапуска адаптер читает меню, диапазон и вход с ресивера, а не из памяти.",
