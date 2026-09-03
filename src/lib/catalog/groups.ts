@@ -7,7 +7,10 @@
  *
  * Every group is a real channel prefix in the tree (`player.*`, `tuner.*`, `hdmi.*`,
  * `multiroom.*`, `scene.*`, `sound.*`, `advanced.*`) — the toggle and the folder a datapoint
- * visually sits in are the same thing, never decoupled. Zone 2/3/4, Zone B, masterPower, party
+ * visually sits in are the same thing, never decoupled. `remote.*` is the ONE folder that does
+ * not carry its own name: the on-screen remote is what the menu is operated with, and on the two
+ * text protocols it is built by the browsing surface itself — so it has to follow the same switch,
+ * or turning "Playback & browsing" off would leave a pad standing that nothing drives any more. Zone 2/3/4, Zone B, masterPower, party
  * and distribution all live under `multiroom.*`. Legacy flat pre-v0.15.0 ids need no handling
  * here: the start-up cleanup deletes them via `RENAMED_CHANNELS` before anything queries them.
  */
@@ -30,7 +33,8 @@ export const SWITCHABLE_GROUPS: readonly GroupId[] = [
 /**
  * The datapoint group a state id belongs to, decided by its first path segment. Every group is a
  * real folder prefix in the tree, so the first segment of the id determines the group directly:
- * `multiroom.*` (including zones, masterPower, party), `player.*`, `tuner.*`, `hdmi.*`, `sound.*`,
+ * `multiroom.*` (including zones, masterPower, party), `player.*` (with the on-screen remote
+ * `remote.*`, see above), `tuner.*`, `hdmi.*`, `sound.*`,
  * `advanced.*`, `scene.*`. Anything not matched — the amplifier core (power, volume, input,
  * sleep …), `info.*` — is the always-on `amp` group.
  *
@@ -46,7 +50,7 @@ export function groupOf(stateId: string): GroupId {
   if (seg === "hdmi") {
     return "hdmi";
   }
-  if (seg === "player") {
+  if (seg === "player" || seg === "remote") {
     return "player";
   }
   if (seg === "tuner") {

@@ -317,6 +317,44 @@ describe("YncaDeviceController browse surface (#613)", () => {
     expect(client.gets).toContainEqual({ subunit: "NETRADIO", func: "LISTINFO" });
   });
 
+  test("creates the on-screen remote and puts a cursor key on MAIN", async () => {
+    // The end-to-end path that matters: the pad is NOT a catalog entry (LISTCURSOR is
+    // write-only and answers no sweep, so a catalog entry would never be "present" on a
+    // real device). It is created by the browsing surface, and `left` — the key the 2012
+    // generation needs to step back (#613) — has to leave on the MAIN subunit, the only
+    // one whose LISTCURSOR declares Left and Right.
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX",
+      subunits: { MAIN: { PWR: "On" }, NETRADIO: { PLAYBACKINFO: "Stop" } },
+    };
+    client.listSubunits = ["NETRADIO"];
+    const { created, deps } = makeDeps(client);
+    deps.gate = testGate();
+    const controller = new YncaDeviceController("living", deps);
+    await controller.start();
+    expect(created).toContain("living.remote.cursor");
+    expect(created).toContain("living.remote.menu");
+    client.sent.length = 0;
+    controller.handleStateChange("living.remote.cursor", false, "left");
+    controller.handleStateChange("living.remote.menu", false, "top_menu");
+    for (let i = 0; i < 6; i++) {
+      await flush();
+    }
+    expect(client.sent).toContainEqual({ subunit: "MAIN", func: "LISTCURSOR", value: "Left" });
+    expect(client.sent).toContainEqual({ subunit: "MAIN", func: "LISTMENU", value: "Top Menu" });
+  });
+
+  test("no browsable subunit means no remote pad either", async () => {
+    const client = new FakeClient();
+    client.capabilities = { model: "RX", subunits: { MAIN: { PWR: "On" } } };
+    client.listSubunits = [];
+    const { created, deps } = makeDeps(client);
+    deps.gate = testGate();
+    await new YncaDeviceController("living", deps).start();
+    expect(created.some(id => id.includes("remote"))).toBe(false);
+  });
+
   test("creates no browse tree without a browsable subunit", async () => {
     const client = new FakeClient();
     client.capabilities = { model: "RX", subunits: { MAIN: { PWR: "On" } } };

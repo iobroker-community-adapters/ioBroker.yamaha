@@ -23,7 +23,7 @@ legacy XML protocol of the oldest pre-2010 models — behind one object tree.
 - **Presets and favourites** — recall tuner presets and stored network/USB favourites by number, step through presets, save the current station to a preset slot or bookmark it, and read the stored lists with their names (MusicCast); recently-played recall on MusicCast devices
 - **Menu browsing** — page through the Net Radio, media-server and USB menus like with the remote: the visible menu lines as datapoints, select-by-line, and a path datapoint that navigates to a favourite in one write
 - **Scenes with their names** — recall a scene by number or by its title from a dropdown that shows the names the receiver reports, per zone — plus a scene list for visualizations
-- **On-screen remote** — cursor pad and menu keys as datapoints on MusicCast devices, for driving the receiver's own on-screen menus
+- **On-screen remote** — cursor pad and menu keys as datapoints, on **all three protocols**: the same words drive a 2024 MusicCast device, a YNCA receiver and a pre-2010 XML model
 - **Clock & alarm view** — MusicCast desk-audio devices show their clock and alarm settings
 - **Capability-driven** — states are generated from what each device reports, no hardcoded model list
 - **Automatic discovery** — an empty device list finds and sets up MusicCast devices at startup
@@ -61,8 +61,8 @@ The **Data points** section switches whole groups of datapoints on or off — **
 Each receiver becomes one device node with themed groups — the same groups the
 **Data points** switches control. Only what your device reports is created.
 
-- **Amplifier core** (always on) — power, volume, mute, input, sound program, sleep, plus the device info with model, firmware, IP address and connection; MusicCast devices add an on-screen `remote` (cursor pad, menu keys).
-- **`player`** — ONE "now playing" block per zone: `player.source` says what the zone is listening to, and playback state, artist, album, track, cover art, times and the transport buttons always describe exactly that — whatever source is playing. Zones 2–4 get their own block under `multiroom.zoneN.player`. The source folders keep only what is genuinely their own: preset recall & save for net radio/server/USB, the MusicCast favourite/recent/playlist/queue lists under `player.netPlayer`, the CD drive states, Bluetooth pairing and the AirPlay volume interlock. The `player.browse` folder mirrors the device's media menu: the eight visible lines (folders and titles marked by symbol), `selectLine` acts like OK on the remote, page/back/root buttons, a `rows` JSON for widgets and a `path` datapoint that walks e.g. `Bookmarks>Radio Paradise` on one write.
+- **Amplifier core** (always on) — power, volume, mute, input, sound program, sleep, plus the device info with model, firmware, IP address and connection.
+- **`player`** — ONE "now playing" block per zone: `player.source` says what the zone is listening to, and playback state, artist, album, track, cover art, times and the transport buttons always describe exactly that — whatever source is playing. Zones 2–4 get their own block under `multiroom.zoneN.player`. The source folders keep only what is genuinely their own: preset recall & save for net radio/server/USB, the MusicCast favourite/recent/playlist/queue lists under `player.netPlayer`, the CD drive states, Bluetooth pairing and the AirPlay volume interlock. The `player.browse` folder mirrors the device's media menu: the eight visible lines (folders and titles marked by symbol), `selectLine` acts like OK on the remote, page/back/root buttons, a `rows` JSON for widgets and a `path` datapoint that walks e.g. `Bookmarks>Radio Paradise` on one write. Beside it, `remote.cursor` (and `remote.menu` where the protocol has it) is the on-screen remote itself — `up`, `down`, `left`, `right`, `select`, `return`, `home` mean the same on every receiver, whichever protocol it speaks.
 - **`tuner`** — one band, one frequency (kHz on every generation) and one preset for AM, FM and DAB, plus RDS texts and reception flags; only genuinely DAB-specific detail (service, ensemble, DLS, …) sits under `tuner.dab`.
 - **`multiroom`** — zones 2–4 (each with its own player and scene block), Zone B, the all-zones switches (master power, party mode) and the MusicCast device group in its own `multiroom.group` folder.
 - **`hdmi`** — the HDMI outputs and the two lip-sync offsets.
@@ -103,6 +103,11 @@ On the very first contact the adapter asks the receiver which functions it suppo
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+### 2.4.0 (2026-09-03)
+
+- (krobipd) New: the on-screen remote reaches every protocol now — the cursor pad and the menu keys work on YNCA and pre-2010 XML receivers, not just on MusicCast
+- (krobipd) Changed: stepping one menu level back no longer switches to a substitute key on a receiver that rejects it — on those models the new cursor pad does it
+
 ### 2.3.3 (2026-09-03)
 
 - (krobipd) New: the menu browser, the MusicCast group, the clock alarm and the disc drive now explain their datapoints too, in eleven languages
@@ -119,20 +124,6 @@ On the very first contact the adapter asks the receiver which functions it suppo
 
 - (krobipd) New: every datapoint and every folder now carries a short explanation in eleven languages, so the object tree tells you what a value actually means
 - (krobipd) Improved: a text that has no translation yet falls back to readable English instead of showing an internal key
-
-### 2.2.0 (2026-09-03)
-
-- (krobipd) Changed: the playback times are now a number in seconds, so the media player, Alexa and Google can show them on every receiver
-- (krobipd) New: the readable playback times ("1:23") moved to their own datapoints, next to the seconds — bind whichever form your visualization needs
-- (krobipd) Fixed: after a restart the adapter asks the receiver again instead of trusting what it remembered, so the menu, the tuner band and each zone's source are the current ones
-- (krobipd) Fixed: setting a tuner frequency on a MusicCast device never reached it — the command was incomplete
-- (krobipd) Fixed: commands to a receiver from before 2010 are now sent the way every comparable program sends them; older models can reject the previous form outright
-- (krobipd) Fixed: a scene you renamed at the receiver now appears while the adapter runs, and recalling a scene by an unknown name says so in the log instead of doing nothing
-- (krobipd) Fixed: after a restart the tuner of an older receiver no longer shows the station of the previous session until the next poll
-- (krobipd) Fixed: an incomplete answer from a MusicCast device is no longer kept as that device's capabilities, and a device that answers nothing is no longer shown as connected
-- (krobipd) Fixed: going one menu level back on an older receiver no longer jumps two levels when the reply gets lost
-- (krobipd) Fixed: a play or pause sent from a script or a visualization now reaches the receiver in every case
-- (krobipd) Improved: each of the 23 input-name datapoints now carries the input it names, instead of all reading the same
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 

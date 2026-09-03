@@ -72,6 +72,21 @@ export function parseXmlListInfo(xml: string): XmlListInfo {
 }
 
 /**
+ * The pad in XML wire words. Same seven keys as YNCA's main zone, two of them spelled
+ * differently (`Return`, `Return to Home`). There is no documented menu-key command on this
+ * generation, so the driver offers no `remote.menu`.
+ */
+const XML_CURSOR_WIRE: Record<string, string> = {
+  up: "Up",
+  down: "Down",
+  left: "Left",
+  right: "Right",
+  select: "Sel",
+  return: "Return",
+  home: "Return to Home",
+};
+
+/**
  * The XML/YNC list driver over `<List_Info>` + `<List_Control>` (the predecessor
  * adapter's browsing path). Pull-based: every operation re-reads the window, polling
  * while the device reports the menu as busy (levels come from the catalog service).
@@ -81,14 +96,6 @@ export class XmlBrowseDriver implements BrowseDriver {
   private engine: BrowseEngine | undefined;
   private active: { element: string; key: string; input: string } | undefined;
   private lastTotal = 0;
-  /**
-   * The cursor value this device accepts for "one level back". The spec vocabulary is
-   * `Return`, but the 2012 generation (RX-V473 class) refuses it and accepts `Left`
-   * instead (user-measured on the predecessor adapter, #613). First refusal switches
-   * permanently for this device.
-   */
-  private backCursor: "Return" | "Left" = "Return";
-
   /**
    * @param client the XML client slice (send + getXml)
    * @param available the source keys whose List_Info the start-up probe answered
@@ -149,29 +156,42 @@ export class XmlBrowseDriver implements BrowseDriver {
     await this.jumpBy(8);
   }
 
-  /** Go one menu level back — falling back to `Left` when the device refuses `Return`. */
+  /**
+   * Go one menu level back.
+   *
+   * Always `Return`, never a learned substitute (krobi 2026-09-03): a refusal on ONE model is
+   * no reason to change the word for every other model, and a transport error is not a refusal
+   * at all. Where a receiver of the 2012 generation rejects it (#613), the user reaches the same
+   * step through `remote.cursor` = `left`, which that generation accepts.
+   */
   public async back(): Promise<void> {
-    // ONLY the command is guarded, never the window read that follows it. `control()`
-    // does both, so catching around it treated a failed read as "the device refuses
-    // Return" — it then sent a SECOND back (the user jumped two levels) and switched
-    // this connection to `Left` for good, over what was a passing network hiccup.
-    try {
-      await this.send(`<Cursor>${this.backCursor}</Cursor>`);
-    } catch (e) {
-      // Only a refusal of the DEFAULT vocabulary triggers the generation fallback;
-      // a device that also refuses Left (or a transport error) surfaces normally.
-      if (this.backCursor !== "Return") {
-        throw e;
-      }
-      this.backCursor = "Left";
-      await this.send("<Cursor>Left</Cursor>");
-    }
-    await this.fetch();
+    await this.control("<Cursor>Return</Cursor>");
   }
 
   /** Return to the menu root. */
   public async home(): Promise<void> {
     await this.control("<Cursor>Return to Home</Cursor>");
+  }
+
+  /** The cursor keys this protocol declares — the full pad, `<List_Control><Cursor>`. */
+  public readonly cursorValues = Object.keys(XML_CURSOR_WIRE);
+
+  /**
+   * Press a cursor key on the open list.
+   *
+   * XML/YNC knows the cursor ONLY inside `List_Control`, addressed to the source whose menu
+   * is open (`PUT <NET_RADIO><List_Control>…`) — this generation has no zone-wide remote
+   * endpoint, and inventing one would put a blind command on the wire. With no menu open the
+   * press therefore goes nowhere, which `send()` already handles.
+   *
+   * @param value one of {@link cursorValues}
+   */
+  public async cursor(value: string): Promise<void> {
+    const wire = XML_CURSOR_WIRE[value];
+    if (wire === undefined) {
+      return;
+    }
+    await this.control(`<Cursor>${wire}</Cursor>`);
   }
 
   /**

@@ -116,6 +116,40 @@ export class BrowseEngine {
   }
 
   /**
+   * Handle a user write to the on-screen remote (`remote.cursor`, `remote.menu`).
+   *
+   * Deliberately NOT through {@link run}: a remote key is a single press, not a menu
+   * operation. `run` serialises and DROPS a second write while one is in flight, which on a
+   * pad — where the user holds a direction — would swallow presses; and it would raise `busy`
+   * on a surface nobody is browsing. Ordering and pacing on the wire are the command gate's
+   * job, and it does that for every transport already.
+   *
+   * @param stateId the state id relative to the device (`remote.…`)
+   * @param value the written value
+   */
+  public handleRemoteWrite(stateId: string, value: unknown): void {
+    if (this.closed || typeof value !== "string") {
+      return;
+    }
+    const press =
+      stateId === "remote.cursor"
+        ? { what: `cursor ${value}`, key: this.driver.cursorValues, run: () => this.driver.cursor?.(value) }
+        : stateId === "remote.menu"
+          ? { what: `menu ${value}`, key: this.driver.menuValues, run: () => this.driver.menu?.(value) }
+          : undefined;
+    if (!press?.key?.includes(value)) {
+      return;
+    }
+    void (async (): Promise<void> => {
+      try {
+        await press.run();
+      } catch (e) {
+        this.deps.log.warn(`browse: ${press.what} failed: ${errorMessage(e)}`);
+      }
+    })();
+  }
+
+  /**
    * Handle a user write to one of the browse states.
    *
    * @param stateId the state id relative to the device (`player.browse.…`)

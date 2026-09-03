@@ -509,18 +509,45 @@ abschaltbaren Datenpunktgruppen und die Wiedergabe als Media-Player (Alexa/Googl
 funktional vollständig (3 Protokolle, Discovery, Migration, Härtung). Versionshistorie im README
 `## Changelog` (nicht hier dupliziert).
 
-**🔴 OFFEN nach v2.2.0 — die Datenpunkt-Beschreibungen fehlen komplett.** Am echten Objektbaum
-gemessen (2026-09-03, `check-live-tree.py`): **0 von 190 Datenpunkten tragen eine `common.desc`** —
-nut2 hat 60, homeconnect 69, govee-smart 91. Leer ist laut Flottenstandard richtig, wo der Adapter
-nichts zu sagen hat (`power`, `volume`), aber ein AV-Receiver ist voll mit Begriffen, die niemand
-von selbst versteht: `sound.adaptiveDrc`, `sound.linkAudioDelay`, `sound.dtsDialogueControl`,
-`advanced.speakers.pattern1Amp`, `tuner.dab.tuneAid`, `advanced.trigger1Manual`, `actualVolumeMode`,
-`multiroom.group.streamingEnabled`. Dort ist die Beschreibung die einzige Erklärung, die der Nutzer
-im Objektbaum überhaupt sieht. **Plan für v2.3.0:** Texttabelle nach dem nut2-/homeconnect-Muster
-(`src/lib/state-texts.ts`, Schlüssel → Erklärung), ein Satz je Datenpunkt in elf Sprachen über
-`admin/i18n`, leer wo nichts Belastbares steht. Die Datenpunkte aus dem MANIFEST (`instanceObjects`,
-`info.*`) laufen über `sync-iopackage-from-i18n.py` und werden dabei leicht vergessen. Standard:
-Memory `feedback_beschreibung_ist_erklaerung`.
+**Erledigt mit v2.3.0–v2.3.3:** die Datenpunkt-Beschreibungen. Jeder Datenpunkt und jeder Ordner
+trägt eine Erklärung in elf Sprachen (`descKey` am Katalog-Eintrag, `CHANNEL_DESC_KEYS` an den
+Ordnern), leer nur dort, wo es nichts zu erklären gibt. Drei Sperren halten das: die Katalog-Invariante
+über alle vier Listen, ein Quelltext-Gate über JEDE nicht-Test-`.ts` (jeder `nameKey`/`tName`-Schlüssel
+braucht sein `desc<Key>`) und die Gegenrichtung (jeder `name: tName(...)` braucht `desc: tName(` in der
+Nähe oder steht in `NAMES_WITHOUT_EXPLANATION`). Der erste Anlauf maß gegen krobis Gerätebaum und fand
+deshalb nur, was DIESES Gerät hat — die Gates lesen jetzt den Katalog bzw. den Quelltext
+([[feedback_user_hardware_ist_sample]]).
+
+## Die Bildschirm-Fernbedienung auf allen drei Protokollen (v2.4.0, #613)
+
+`remote.cursor`/`remote.menu` gab es nur auf MusicCast. Sie liegen jetzt auf allen drei Transporten,
+mit EINEM Vokabular (`up/down/left/right/select/return/home`, Menü `on_screen/top_menu/menu/option/
+display/home` — die MusicCast-Wörter, weil bestehende Skripte sie schon schreiben); YNCA und XML
+übersetzen in ihre Drahtwörter (`Sel`, `Back to Home`, `Return to Home`). Jedes Gerät bietet nur die
+Tasten, die sein Protokoll wirklich deklariert.
+
+- **Der Katalog ist der FALSCHE Ort** (Fehler dieser Sitzung, vor dem Release gefunden):
+  `presentYncaEntries` lässt nur Einträge durch, deren Funktion das Gerät im Sweep BEANTWORTET hat —
+  `LISTCURSOR`/`LISTMENU` sind PUT-only und antworten nie. Ein Katalog-Eintrag hätte am echten Gerät
+  null Datenpunkte erzeugt, obwohl der statische Katalog acht zeigte. Der Pad entsteht deshalb in
+  `browse/surface.ts`, wo der LISTINFO-Beweis schon vorliegt.
+- **YNCA schickt an `@MAIN`, nie an den offenen Quellen-Subunit.** Die offizielle Befehlsliste gibt
+  MAIN das VOLLE Kreuz (Up/Down/Left/Right/Sel/Back/Back to Home), den Quellen-Subunits nur
+  Up/Down/Sel/Back/Back to Home — kein Left/Right. Genau `Left` ist die Taste, die die 2012er-
+  Generation für „eine Ebene zurück" nimmt (#613). Zonen 2–4 haben gar kein LISTCURSOR.
+- **XML kennt den Cursor NUR in `List_Control`**, adressiert an die Quelle, deren Menü offen ist
+  (`PUT <NET_RADIO><List_Control>`) — kein zonenweiter Endpunkt, keine Menütasten. Ohne offenes Menü
+  geht der Tastendruck ins Leere; erfunden wird nichts.
+- **`back` bleibt auf dem eigenen Wort des Geräts** (krobi 2026-09-03) — der gelernte Rückfall
+  `Return`→`Left` im XML-Treiber ist RAUS: eine Ablehnung beweist nicht, dass das Modell den Schritt
+  nicht kann, und ein Gerät, das `Back` beherrscht, darf nicht wegen eines anderen umgestellt werden.
+  Wer sie braucht, drückt `left` am Pad.
+- **Der Pad hängt an der Wiedergabe-Gruppe** (`groupOf`, der einzige Ordner, der nicht seinen eigenen
+  Namen trägt): auf YNCA/XML baut ihn die Browse-Oberfläche, also muss er mit demselben Schalter
+  verschwinden — sonst bliebe ein Kreuz stehen, das niemand mehr bedient.
+- **Kein Browse-Schloss für den Pad:** `handleRemoteWrite` läuft NICHT durch `run()` — das
+  serialisiert und verwirft den zweiten Druck, während der erste unterwegs ist. Takt und Reihenfolge
+  macht die Befehls-Schleuse ohnehin für jeden Transport.
 
 **Erledigt 2026-09-02 (abends):** die Namens-Sperre des State-Rollen-Prüfers ist aufgehoben — 248 Namen laufen
 über `admin/i18n`, das Gate meldet „kein fester String in common.name/desc" (s. Abschnitt „Namen sind
@@ -574,7 +601,10 @@ räumt den KOMPLETTEN Alt-Baum (47 Instanz-Objekte + dynamische `Realtime.*`/`Sy
 - **Mutationstabellen** (`../../Ressourcen/iobroker-entwicklung/mutation-testing/`): `mutations_yamaha_all.py`
   (116 Regelbrüche, Wellen 1–5 vom 22.08., Nadeln am 02.09. nachgezogen, vier tote entfernt) + `mutations_yamaha_2026-09-02.py`
   (24, Welle 6 = die Audit-Fixes; IDs Z1–Z24, W gehört Welle 5) + `mutations_yamaha_2026-09-03.py`
-  (18, Welle 7 = die Fehlerbehebungen des Fehler-Audits, IDs Z1–Z18 in eigener Tabelle; 18/18 gefangen). Läufer `mutation-test.py`. Nadeln sind
+  (18, Welle 7 = die Fehlerbehebungen des Fehler-Audits, IDs Z1–Z18 in eigener Tabelle; 18/18 gefangen) +
+  `mutations_yamaha_2026-09-03-w8.py` (Welle 8, IDs A1–A24; A7 am 03.09. neu verankert auf die Regel: `back` sendet
+  immer das Protokoll-Wort) + `mutations_yamaha_2026-09-04-w9.py` (Welle 9 = die Bildschirm-Fernbedienung, IDs B1–B3;
+  3/3 gefangen). Läufer `mutation-test.py`. Nadeln sind
   exakte Quellzeilen — nach Prettier-Umbrüchen oder Refactorings ZUERST den Nadel-Vorab-Check (jede Nadel
   genau 1×), sonst misst der Lauf nichts. Zwei äquivalente Mutanten (X2, X4 — unerreichbare
   Invarianten-Wächter, im Quelltext begründet); die vier anderen vom 22.08. (M9, X1, Y1, Y13) waren toter

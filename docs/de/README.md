@@ -62,6 +62,8 @@ Jeder Receiver wird ein Gerät. Darunter:
   eigener Lautstärke und eigenem Eingang, Hauptschalter, Party-Modus und die MusicCast-Gruppe.
 - **scene** — eine Szene über ihre Nummer oder ihren Namen aufrufen, dazu die Liste der
   Szenen, die das Gerät meldet.
+- **remote** — die Bildschirm-Fernbedienung: ein Steuerkreuz und, wo der Receiver sie hat, die
+  Menütasten.
 - **sound, hdmi, advanced** — Klangregelung, Equalizer, Signalinformationen, HDMI-Ausgänge,
   Lautsprechereinstellungen, die frei belegbaren Eingangsnamen.
 
@@ -78,7 +80,8 @@ denselben Wert als lesbaren Text (`1:23`), für eine Visualisierung, die ihn nur
 ### Datenpunktgruppen abschalten
 
 Sieben Gruppen lassen sich in den Einstellungen abschalten: Wiedergabe, Tuner, Multiroom,
-HDMI, Szenen, Klang und Erweitert, dazu die Uhr auf Geräten, die eine haben. Wird eine Gruppe
+HDMI, Szenen, Klang und Erweitert, dazu die Uhr auf Geräten, die eine haben. Das Menü und die
+Bildschirm-Fernbedienung gehören zur Wiedergabe-Gruppe. Wird eine Gruppe
 abgeschaltet, verschwinden ihre Datenpunkte — der Adapter lässt keine leeren Reste stehen.
 Beim Wiedereinschalten entstehen sie mit der nächsten Verbindung neu.
 
@@ -102,6 +105,17 @@ setState("yamaha.0.wohnzimmer.volume", -35.5);
 ```javascript
 setState("yamaha.0.wohnzimmer.scene.recall", "Movie Viewing");
 ```
+
+**Eine Taste der Bildschirm-Fernbedienung drücken** — `up`, `down`, `left`, `right`, `select`,
+`return`, `home`:
+
+```javascript
+setState("yamaha.0.wohnzimmer.remote.cursor", "left");
+```
+
+Die Wörter sind auf allen drei Protokollen dieselben, ein Skript überlebt also den Gerätewechsel.
+Angeboten wird nur, was das Gerät wirklich kann: ältere Modelle kennen keine Menütasten, und ihr
+Steuerkreuz wirkt auf das geöffnete Menü.
 
 **Im Menü einer Netzwerkquelle blättern.** `player.browse.source` öffnet eine Quelle, die acht
 Datenpunkte `line1` bis `line8` zeigen das aktuelle Fenster, `selectLine` wirkt wie die

@@ -133,3 +133,61 @@ describe("YncaBrowseDriver window replacement", () => {
     expect(windows.at(-1)?.rows.map(r => r.text)).toEqual(["Only"]);
   });
 });
+
+describe("YncaBrowseDriver remote pad (#613)", () => {
+  it("sends every cursor key to MAIN, in the wire words of the official command list", () => {
+    const { driver, sent } = setup(["NETRADIO"]);
+    driver.open("netRadio");
+    sent.length = 0;
+    for (const value of driver.cursorValues) {
+      driver.cursor(value);
+    }
+    expect(driver.cursorValues).toEqual(["up", "down", "left", "right", "select", "return", "home"]);
+    expect(sent).toEqual([
+      { subunit: "MAIN", func: "LISTCURSOR", value: "Up" },
+      { subunit: "MAIN", func: "LISTCURSOR", value: "Down" },
+      { subunit: "MAIN", func: "LISTCURSOR", value: "Left" },
+      { subunit: "MAIN", func: "LISTCURSOR", value: "Right" },
+      { subunit: "MAIN", func: "LISTCURSOR", value: "Sel" },
+      { subunit: "MAIN", func: "LISTCURSOR", value: "Back" },
+      { subunit: "MAIN", func: "LISTCURSOR", value: "Back to Home" },
+    ]);
+  });
+
+  it("addresses MAIN and not the open source — that is where Left and Right exist", () => {
+    // `@MAIN:LISTCURSOR` declares all seven keys; the source subunits declare only
+    // Up/Down/Sel/Back/Back to Home. A pad on the source would have no Left — which is
+    // exactly the key the reporter's receiver needs (#613).
+    const { driver, sent } = setup(["NETRADIO"]);
+    driver.open("netRadio");
+    sent.length = 0;
+    driver.cursor("left");
+    expect(sent).toEqual([{ subunit: "MAIN", func: "LISTCURSOR", value: "Left" }]);
+  });
+
+  it("works with no menu open — the pad drives the on-screen menu, not a list", () => {
+    const { driver, sent } = setup(["NETRADIO"]);
+    driver.cursor("up");
+    driver.menu("on_screen");
+    expect(sent).toEqual([
+      { subunit: "MAIN", func: "LISTCURSOR", value: "Up" },
+      { subunit: "MAIN", func: "LISTMENU", value: "On Screen" },
+    ]);
+  });
+
+  it("offers only the menu keys this protocol has, and sends nothing for the others", () => {
+    const { driver, sent } = setup(["NETRADIO"]);
+    expect(driver.menuValues).toEqual(["on_screen", "top_menu", "menu", "option"]);
+    driver.menu("display");
+    driver.menu("home");
+    driver.cursor("nonsense");
+    expect(sent).toEqual([]);
+  });
+
+  it("sends nothing once the connection is closed", () => {
+    const { driver, sent } = setup(["NETRADIO"]);
+    driver.close();
+    driver.cursor("up");
+    expect(sent).toEqual([]);
+  });
+});

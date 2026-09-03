@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "2.3.3",
+    "version": "2.4.0",
     "news": {
+      "2.4.0": {
+        "en": "The on-screen remote now works on all three protocols: cursor pad and menu keys on YNCA and pre-2010 XML receivers too, with the same words as on MusicCast.",
+        "de": "Die Bildschirm-Fernbedienung gibt es jetzt auf allen drei Protokollen: Steuerkreuz und Menütasten auch auf YNCA- und XML-Receivern, mit denselben Wörtern wie auf MusicCast.",
+        "ru": "Экранный пульт теперь работает во всех трёх протоколах: крестовина и кнопки меню также на ресиверах YNCA и XML, с теми же значениями, что и на MusicCast.",
+        "pt": "O comando no ecrã funciona agora nos três protocolos: cursor e teclas de menu também em receptores YNCA e XML, com as mesmas palavras do MusicCast.",
+        "nl": "De schermafstandsbediening werkt nu op alle drie protocollen: cursorpad en menutoetsen ook op YNCA- en XML-receivers, met dezelfde woorden als op MusicCast.",
+        "fr": "La télécommande à l'écran fonctionne sur les trois protocoles : pavé directionnel et touches de menu aussi sur les amplis YNCA et XML, avec les mots de MusicCast.",
+        "it": "Il telecomando a schermo funziona su tutti e tre i protocolli: pad direzionale e tasti menu anche su sintoamplificatori YNCA e XML, con le stesse parole di MusicCast.",
+        "es": "El mando en pantalla funciona ya en los tres protocolos: cruceta y teclas de menú también en receptores YNCA y XML, con las mismas palabras que en MusicCast.",
+        "pl": "Pilot ekranowy działa teraz we wszystkich trzech protokołach: krzyżak i klawisze menu także w amplitunerach YNCA i XML, z tymi samymi słowami co w MusicCast.",
+        "uk": "Екранний пульт тепер працює в усіх трьох протоколах: хрестовина та кнопки меню також на ресиверах YNCA і XML, з тими самими значеннями, що й на MusicCast.",
+        "zh-cn": "屏幕遥控现已支持全部三种协议：YNCA 和 2010 年前的 XML 功放同样具备方向键和菜单键，用词与 MusicCast 一致。"
+      },
       "2.3.3": {
         "en": "New: menu browser, MusicCast group, clock alarm and disc drive now explain their datapoints too",
         "de": "Neu: Menü-Browser, MusicCast-Gruppe, Weckruf und Laufwerk erklären jetzt ebenfalls ihre Datenpunkte",
@@ -80,19 +93,6 @@
         "pl": "Na zaktualizowanej instancji punkty danych info również otrzymują przetłumaczone nazwy zamiast zachowywać stare.",
         "uk": "На оновленому екземплярі точки даних info також отримують перекладені назви замість старих.",
         "zh-cn": "在已更新的实例上，info 数据点现在也会获得翻译后的名称，而不再保留旧名称。"
-      },
-      "2.1.0": {
-        "en": "Datapoint names now appear in your ioBroker language. The empty Media server folder is gone, the menu view starts clean, and a receiver that changed its address is found again.",
-        "de": "Datenpunkt-Namen erscheinen jetzt in deiner ioBroker-Sprache. Der leere Ordner Media server ist weg, die Menü-Ansicht startet leer, und ein Receiver mit neuer Adresse wird wiedergefunden.",
-        "ru": "Названия точек данных теперь на языке ioBroker. Пустая папка Media server удалена, меню начинается пустым, а ресивер со сменившимся адресом снова находится.",
-        "pt": "Os nomes dos pontos de dados aparecem no idioma do ioBroker. A pasta vazia Media server desapareceu, a vista de menu começa limpa e um recetor que mudou de endereço é reencontrado.",
-        "nl": "Datapuntnamen verschijnen nu in je ioBroker-taal. De lege map Media server is weg, de menuweergave start leeg, en een receiver met een nieuw adres wordt weer gevonden.",
-        "fr": "Les noms des points de données s'affichent dans votre langue ioBroker. Le dossier vide Media server a disparu, la vue du menu démarre vide et un ampli ayant changé d'adresse est retrouvé.",
-        "it": "I nomi dei datapoint appaiono nella lingua di ioBroker. La cartella vuota Media server è sparita, la vista del menu parte vuota e un ricevitore con nuovo indirizzo viene ritrovato.",
-        "es": "Los nombres de los puntos de datos aparecen en tu idioma de ioBroker. La carpeta vacía Media server ha desaparecido, el menú empieza vacío y un receptor que cambió de dirección se reencuentra.",
-        "pl": "Nazwy punktów danych pojawiają się w Twoim języku ioBroker. Pusty folder Media server zniknął, widok menu startuje pusty, a odbiornik ze zmienionym adresem zostaje odnaleziony.",
-        "uk": "Назви точок даних тепер мовою ioBroker. Порожню теку Media server видалено, вигляд меню починається порожнім, а ресивер зі зміненою адресою знаходиться знову.",
-        "zh-cn": "数据点名称现在以您的 ioBroker 语言显示。空的 Media server 文件夹已移除，菜单视图从空白开始，更换地址的接收机会被重新找到。"
       }
     },
     "titleLang": {

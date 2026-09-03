@@ -517,7 +517,7 @@ class XmlDeviceController {
    * @param value the new value
    */
   handleStateChange(fullStateId, ack, value) {
-    var _a;
+    var _a, _b;
     if (ack) {
       return;
     }
@@ -526,8 +526,12 @@ class XmlDeviceController {
       return;
     }
     const stateId = fullStateId.slice(prefix.length);
+    if (stateId.startsWith("remote.")) {
+      (_a = this.browseEngine) == null ? void 0 : _a.handleRemoteWrite(stateId, value);
+      return;
+    }
     if (stateId.startsWith("player.browse.")) {
-      (_a = this.browseEngine) == null ? void 0 : _a.handleWrite(stateId, value);
+      (_b = this.browseEngine) == null ? void 0 : _b.handleWrite(stateId, value);
       return;
     }
     if (this.handleSceneWrite(stateId, value)) {

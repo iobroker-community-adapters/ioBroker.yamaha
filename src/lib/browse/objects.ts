@@ -1,3 +1,4 @@
+import { CHANNEL_DESC_KEYS, CHANNEL_NAME_KEYS } from "../catalog/types";
 import type { ObjectDef } from "../catalog/types";
 import { tName } from "../i18n";
 
@@ -135,4 +136,63 @@ export function browseObjectDefs(sources: Record<string, string>): ObjectDef[] {
       },
     },
   ];
+}
+
+/**
+ * The on-screen remote of one transport: the cursor pad, and the menu keys where the
+ * protocol has them.
+ *
+ * Lives beside the browsing surface because that is where the proof is. A cursor key is a
+ * LIST command on both text protocols (`LISTCURSOR`, `<List_Control><Cursor>`), so a device
+ * that answered no list probe has no pad either — the same rule that keeps the menu folder
+ * off a receiver that cannot browse (#613). Ids are unprefixed, i.e. the main zone: neither
+ * YNCA nor XML declares a cursor for zones 2–4.
+ *
+ * @param cursorValues the cursor words this transport supports (empty/absent = no pad)
+ * @param menuValues the menu keys this transport supports (empty/absent = none)
+ * @returns the channel and state definitions, parents first
+ */
+export function remoteObjectDefs(cursorValues?: readonly string[], menuValues?: readonly string[]): ObjectDef[] {
+  const states = (values: readonly string[]): Record<string, string> =>
+    Object.fromEntries(values.map(value => [value, value]));
+  const defs: ObjectDef[] = [];
+  if (!cursorValues?.length && !menuValues?.length) {
+    return defs;
+  }
+  defs.push({
+    id: "remote",
+    type: "channel",
+    common: { name: tName(CHANNEL_NAME_KEYS.remote), desc: tName(CHANNEL_DESC_KEYS.remote) },
+  });
+  if (cursorValues?.length) {
+    defs.push({
+      id: "remote.cursor",
+      type: "state",
+      common: {
+        name: tName("cursorPad"),
+        desc: tName("descCursorPad"),
+        type: "string",
+        role: "state",
+        read: false,
+        write: true,
+        states: states(cursorValues),
+      },
+    });
+  }
+  if (menuValues?.length) {
+    defs.push({
+      id: "remote.menu",
+      type: "state",
+      common: {
+        name: tName("menuKey"),
+        desc: tName("descMenuKey"),
+        type: "string",
+        role: "state",
+        read: false,
+        write: true,
+        states: states(menuValues),
+      },
+    });
+  }
+  return defs;
 }

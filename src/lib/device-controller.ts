@@ -661,6 +661,10 @@ export class YncaDeviceController implements ConnectionHandle {
       return;
     }
     const stateId = fullStateId.slice(prefix.length);
+    if (stateId.startsWith("remote.")) {
+      this.browseEngine?.handleRemoteWrite(stateId, value);
+      return;
+    }
     if (stateId.startsWith("player.browse.")) {
       this.browseEngine?.handleWrite(stateId, value);
       return;

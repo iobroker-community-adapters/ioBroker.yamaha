@@ -28,7 +28,8 @@ async function createBrowseSurface(driver, deviceId, deps) {
   if (Object.keys(sources).length === 0) {
     return void 0;
   }
-  for (const def of (0, import_objects.browseObjectDefs)(sources)) {
+  const defs = [...(0, import_objects.browseObjectDefs)(sources), ...(0, import_objects.remoteObjectDefs)(driver.cursorValues, driver.menuValues)];
+  for (const def of defs) {
     await deps.upsertObject(`${deviceId}.${def.id}`, def);
   }
   const engine = new import_browse_engine.BrowseEngine(driver, {

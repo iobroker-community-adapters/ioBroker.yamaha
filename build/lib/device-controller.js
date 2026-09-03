@@ -439,7 +439,7 @@ class YncaDeviceController {
    * @param value the new value
    */
   handleStateChange(fullStateId, ack, value) {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
     if (ack) {
       return;
     }
@@ -448,8 +448,12 @@ class YncaDeviceController {
       return;
     }
     const stateId = fullStateId.slice(prefix.length);
+    if (stateId.startsWith("remote.")) {
+      (_a = this.browseEngine) == null ? void 0 : _a.handleRemoteWrite(stateId, value);
+      return;
+    }
     if (stateId.startsWith("player.browse.")) {
-      (_a = this.browseEngine) == null ? void 0 : _a.handleWrite(stateId, value);
+      (_b = this.browseEngine) == null ? void 0 : _b.handleWrite(stateId, value);
       return;
     }
     if (stateId === "scene.recall" && typeof value === "string" && !/^\d+$/.test(value.trim())) {
@@ -465,13 +469,13 @@ class YncaDeviceController {
     }
     const playerWrite = /^(?:multiroom\.(zone[234])\.)?player\.(playback|repeat|shuffle|next|prev)$/.exec(stateId);
     if (playerWrite) {
-      this.handlePlayerWrite((_b = playerWrite[1]) != null ? _b : "main", `player.${playerWrite[2]}`, value);
+      this.handlePlayerWrite((_c = playerWrite[1]) != null ? _c : "main", `player.${playerWrite[2]}`, value);
       return;
     }
     if (this.handleTunerWrite(stateId, value)) {
       return;
     }
-    const triple = (0, import_catalog.yncaCommand)(stateId, value, (_c = this.writeMap) != null ? _c : ID_MAP);
+    const triple = (0, import_catalog.yncaCommand)(stateId, value, (_d = this.writeMap) != null ? _d : ID_MAP);
     if (triple) {
       this.deps.client.send(triple.subunit, triple.func, triple.value);
     }

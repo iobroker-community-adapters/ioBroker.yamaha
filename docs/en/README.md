@@ -61,6 +61,8 @@ Each receiver becomes one device. Under it:
   and input, master power, party mode, and the MusicCast group.
 - **scene** — recall a scene by number or by its name, plus the list of scenes the device
   declares.
+- **remote** — the on-screen remote: a cursor pad, and the menu keys where the receiver has
+  them.
 - **sound, hdmi, advanced** — tone controls, equalizer, signal information, HDMI outputs,
   speaker settings, the assignable input names.
 
@@ -77,7 +79,8 @@ as readable text (`1:23`), for a visualization that just wants to show it.
 ### Switching datapoint groups off
 
 Seven groups can be switched off in the settings: playback, tuner, multiroom, HDMI, scenes,
-sound and advanced, plus the clock on devices that have one. Switching a group off removes
+sound and advanced, plus the clock on devices that have one. The menu and the on-screen remote
+belong to the playback group. Switching a group off removes
 its datapoints — the adapter does not leave empty leftovers behind. Switching it on again
 recreates them at the next connection.
 
@@ -101,6 +104,17 @@ setState("yamaha.0.living.volume", -35.5);
 ```javascript
 setState("yamaha.0.living.scene.recall", "Movie Viewing");
 ```
+
+**Press a key on the on-screen remote** — `up`, `down`, `left`, `right`, `select`, `return`,
+`home`:
+
+```javascript
+setState("yamaha.0.living.remote.cursor", "left");
+```
+
+The words are the same on all three protocols, so a script keeps working when you replace the
+receiver. A device only offers the keys it really has: older models know no menu keys, and their
+cursor works on the menu that is open.
 
 **Browse the menu of a network source.** `player.browse.source` opens a source, the eight
 `line1` … `line8` datapoints show the current window, `selectLine` acts like the OK key, and

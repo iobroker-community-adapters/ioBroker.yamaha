@@ -32,6 +32,14 @@ class FakeDriver implements BrowseDriver {
   public home(): void {
     this.record("home");
   }
+  public readonly cursorValues = ["up", "left"];
+  public cursor(value: string): void {
+    this.record(`cursor:${value}`);
+  }
+  public readonly menuValues = ["menu"];
+  public menu(value: string): void {
+    this.record(`menu:${value}`);
+  }
   public refresh(): void {
     this.record("refresh");
   }
@@ -231,5 +239,46 @@ describe("BrowseEngine", () => {
     await flush();
     const busyValues = emitted.filter(e => e.id === "player.browse.busy").map(e => e.value);
     expect(busyValues).toEqual([true, false]);
+  });
+});
+
+describe("BrowseEngine remote pad", () => {
+  it("passes a key press to the driver", async () => {
+    const { engine, driver } = setup();
+    engine.handleRemoteWrite("remote.cursor", "left");
+    engine.handleRemoteWrite("remote.menu", "menu");
+    await flush();
+    expect(driver.calls).toEqual(["cursor:left", "menu:menu"]);
+  });
+
+  it("drops a word this device does not have, and anything that is not a key", async () => {
+    const { engine, driver } = setup();
+    engine.handleRemoteWrite("remote.cursor", "right");
+    engine.handleRemoteWrite("remote.menu", "option");
+    engine.handleRemoteWrite("remote.cursor", 4);
+    engine.handleRemoteWrite("remote.something", "up");
+    await flush();
+    expect(driver.calls).toEqual([]);
+  });
+
+  it("does not take the browse lock: a held direction key keeps going through", async () => {
+    // `run()` serialises menu operations and DROPS the second one while the first is in
+    // flight — on a pad that would swallow presses, and it would raise `busy` on a surface
+    // nobody is browsing. Pacing on the wire is the command gate's job.
+    const { engine, driver, emitted } = setup();
+    engine.handleRemoteWrite("remote.cursor", "up");
+    engine.handleRemoteWrite("remote.cursor", "up");
+    engine.handleRemoteWrite("remote.cursor", "up");
+    await flush();
+    expect(driver.calls).toEqual(["cursor:up", "cursor:up", "cursor:up"]);
+    expect(emitted.filter(e => e.id === "player.browse.busy")).toEqual([]);
+  });
+
+  it("sends nothing after close", async () => {
+    const { engine, driver } = setup();
+    engine.close();
+    engine.handleRemoteWrite("remote.cursor", "up");
+    await flush();
+    expect(driver.calls).toEqual([]);
   });
 });

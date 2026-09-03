@@ -126,7 +126,7 @@ describe("XmlBrowseDriver", () => {
   });
 });
 
-describe("XmlBrowseDriver back fallback (#613)", () => {
+describe("XmlBrowseDriver back and the cursor pad (#613)", () => {
   function refusalSetup(refuse: Set<string>): {
     driver: XmlBrowseDriver;
     sent: string[];
@@ -151,28 +151,18 @@ describe("XmlBrowseDriver back fallback (#613)", () => {
     return { driver, sent };
   }
 
-  it("falls back to Cursor=Left when the device refuses Return, and remembers the choice", async () => {
-    // The 2012 generation (RX-V473 class) refuses "Return" but accepts "Left" —
-    // the user-measured behaviour of the predecessor's working setup.
+  it("keeps sending Return even after a device refused it — no learned substitute", async () => {
+    // A refusal is not proof that the model lacks the step, and one model's answer must
+    // never change the word for every other model (krobi 2026-09-03). The refusal surfaces
+    // (the engine logs it); the user's way back on such a device is the cursor pad below.
     const { driver, sent } = refusalSetup(new Set(["<Cursor>Return</Cursor>"]));
     await driver.open("netRadio");
     sent.length = 0;
-    await driver.back();
-    expect(sent).toEqual([
-      "<List_Control><Cursor>Return</Cursor></List_Control>",
-      "<List_Control><Cursor>Left</Cursor></List_Control>",
-    ]);
-    // The next back skips the refused vocabulary entirely.
-    sent.length = 0;
-    await driver.back();
-    expect(sent).toEqual(["<List_Control><Cursor>Left</Cursor></List_Control>"]);
-  });
-
-  it("a device refusing both vocabularies surfaces the refusal (the engine logs it)", async () => {
-    const { driver, sent } = refusalSetup(new Set(["<Cursor>Return</Cursor>", "<Cursor>Left</Cursor>"]));
-    await driver.open("netRadio");
+    await expect(driver.back()).rejects.toThrow("device refused");
+    expect(sent).toEqual(["<List_Control><Cursor>Return</Cursor></List_Control>"]);
     sent.length = 0;
     await expect(driver.back()).rejects.toThrow("device refused");
+    expect(sent).toEqual(["<List_Control><Cursor>Return</Cursor></List_Control>"]);
   });
 
   it("a modern device keeps using Return", async () => {
@@ -183,10 +173,36 @@ describe("XmlBrowseDriver back fallback (#613)", () => {
     expect(sent).toEqual(["<List_Control><Cursor>Return</Cursor></List_Control>"]);
   });
 
+  it("the cursor pad reaches every key this protocol declares, in the shared vocabulary", async () => {
+    const { driver, sent } = refusalSetup(new Set());
+    await driver.open("netRadio");
+    sent.length = 0;
+    for (const value of driver.cursorValues) {
+      await driver.cursor(value);
+    }
+    expect(driver.cursorValues).toEqual(["up", "down", "left", "right", "select", "return", "home"]);
+    expect(sent).toEqual([
+      "<List_Control><Cursor>Up</Cursor></List_Control>",
+      "<List_Control><Cursor>Down</Cursor></List_Control>",
+      "<List_Control><Cursor>Left</Cursor></List_Control>",
+      "<List_Control><Cursor>Right</Cursor></List_Control>",
+      "<List_Control><Cursor>Sel</Cursor></List_Control>",
+      "<List_Control><Cursor>Return</Cursor></List_Control>",
+      "<List_Control><Cursor>Return to Home</Cursor></List_Control>",
+    ]);
+  });
+
+  it("a word this protocol does not have never reaches the wire", async () => {
+    const { driver, sent } = refusalSetup(new Set());
+    await driver.open("netRadio");
+    sent.length = 0;
+    await driver.cursor("on_screen");
+    expect(sent).toEqual([]);
+  });
+
   it("a failing window READ is not mistaken for a refused Return", async () => {
     // The command went out fine, only the follow-up read failed (timeout, brief network
-    // hiccup). Treating that as a refusal used to send a SECOND back — the user jumped two
-    // menu levels — and pinned this connection to `Left` for good.
+    // hiccup) — the next back still sends the same word.
     const sent: string[] = [];
     let readable = true;
     const driver = new XmlBrowseDriver(
@@ -206,7 +222,6 @@ describe("XmlBrowseDriver back fallback (#613)", () => {
     readable = false;
     await expect(driver.back()).rejects.toThrow("socket hang up");
     expect(sent).toEqual(["<List_Control><Cursor>Return</Cursor></List_Control>"]);
-    // …and the vocabulary is unchanged: the next back still tries Return.
     readable = true;
     sent.length = 0;
     await driver.back();

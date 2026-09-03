@@ -41,7 +41,7 @@ function groupOf(stateId) {
   if (seg === "hdmi") {
     return "hdmi";
   }
-  if (seg === "player") {
+  if (seg === "player" || seg === "remote") {
     return "player";
   }
   if (seg === "tuner") {

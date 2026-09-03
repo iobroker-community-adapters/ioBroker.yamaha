@@ -137,3 +137,13 @@ describe("isGroupEnabled", () => {
     expect(isGroupEnabled("clock.alarm.on", {})).toBe(true);
   });
 });
+
+describe("groupOf — the on-screen remote", () => {
+  it("counts the remote pad as part of playback & browsing, on every transport", () => {
+    // The pad is how the menu is operated, and on YNCA/XML the browsing surface creates it.
+    // Were it in the always-on core, switching the group off would leave a dead pad behind.
+    expect(groupOf("remote.cursor")).toBe("player");
+    expect(groupOf("remote.menu")).toBe("player");
+    expect(groupOf("multiroom.zone2.remote.cursor")).toBe("multiroom");
+  });
+});

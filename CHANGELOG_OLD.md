@@ -1,4 +1,18 @@
 # Older changes
+## 2.2.0 (2026-09-03)
+
+- (krobipd) Changed: the playback times are now a number in seconds, so the media player, Alexa and Google can show them on every receiver
+- (krobipd) New: the readable playback times ("1:23") moved to their own datapoints, next to the seconds — bind whichever form your visualization needs
+- (krobipd) Fixed: after a restart the adapter asks the receiver again instead of trusting what it remembered, so the menu, the tuner band and each zone's source are the current ones
+- (krobipd) Fixed: setting a tuner frequency on a MusicCast device never reached it — the command was incomplete
+- (krobipd) Fixed: commands to a receiver from before 2010 are now sent the way every comparable program sends them; older models can reject the previous form outright
+- (krobipd) Fixed: a scene you renamed at the receiver now appears while the adapter runs, and recalling a scene by an unknown name says so in the log instead of doing nothing
+- (krobipd) Fixed: after a restart the tuner of an older receiver no longer shows the station of the previous session until the next poll
+- (krobipd) Fixed: an incomplete answer from a MusicCast device is no longer kept as that device's capabilities, and a device that answers nothing is no longer shown as connected
+- (krobipd) Fixed: going one menu level back on an older receiver no longer jumps two levels when the reply gets lost
+- (krobipd) Fixed: a play or pause sent from a script or a visualization now reaches the receiver in every case
+- (krobipd) Improved: each of the 23 input-name datapoints now carries the input it names, instead of all reading the same
+
 ## 2.1.1 (2026-09-02)
 
 - (krobipd) Fixed: on an updated instance the info datapoints now get the translated names too, instead of keeping the ones an older version had written

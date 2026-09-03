@@ -18,9 +18,11 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 var objects_exports = {};
 __export(objects_exports, {
-  browseObjectDefs: () => browseObjectDefs
+  browseObjectDefs: () => browseObjectDefs,
+  remoteObjectDefs: () => remoteObjectDefs
 });
 module.exports = __toCommonJS(objects_exports);
+var import_types = require("../catalog/types");
 var import_i18n = require("../i18n");
 function browseObjectDefs(sources) {
   const line = (n) => ({
@@ -147,8 +149,52 @@ function browseObjectDefs(sources) {
     }
   ];
 }
+function remoteObjectDefs(cursorValues, menuValues) {
+  const states = (values) => Object.fromEntries(values.map((value) => [value, value]));
+  const defs = [];
+  if (!(cursorValues == null ? void 0 : cursorValues.length) && !(menuValues == null ? void 0 : menuValues.length)) {
+    return defs;
+  }
+  defs.push({
+    id: "remote",
+    type: "channel",
+    common: { name: (0, import_i18n.tName)(import_types.CHANNEL_NAME_KEYS.remote), desc: (0, import_i18n.tName)(import_types.CHANNEL_DESC_KEYS.remote) }
+  });
+  if (cursorValues == null ? void 0 : cursorValues.length) {
+    defs.push({
+      id: "remote.cursor",
+      type: "state",
+      common: {
+        name: (0, import_i18n.tName)("cursorPad"),
+        desc: (0, import_i18n.tName)("descCursorPad"),
+        type: "string",
+        role: "state",
+        read: false,
+        write: true,
+        states: states(cursorValues)
+      }
+    });
+  }
+  if (menuValues == null ? void 0 : menuValues.length) {
+    defs.push({
+      id: "remote.menu",
+      type: "state",
+      common: {
+        name: (0, import_i18n.tName)("menuKey"),
+        desc: (0, import_i18n.tName)("descMenuKey"),
+        type: "string",
+        role: "state",
+        read: false,
+        write: true,
+        states: states(menuValues)
+      }
+    });
+  }
+  return defs;
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
-  browseObjectDefs
+  browseObjectDefs,
+  remoteObjectDefs
 });
 //# sourceMappingURL=objects.js.map

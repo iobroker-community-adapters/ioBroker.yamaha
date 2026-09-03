@@ -32,6 +32,29 @@ export interface YncaBrowseClient {
 }
 
 /**
+ * The main-zone pad in wire words. `@MAIN:LISTCURSOR` declares all seven keys and
+ * `@MAIN:LISTMENU` four of the six menu keys — the two the receiver has no wire word for
+ * (display, home) stay out of the dropdown instead of being mapped onto something else.
+ * Source: the official command list, `Ressourcen/yamaha/ynca-command-list-rx-v671.txt`.
+ */
+const YNCA_CURSOR_WIRE: Record<string, string> = {
+  up: "Up",
+  down: "Down",
+  left: "Left",
+  right: "Right",
+  select: "Sel",
+  return: "Back",
+  home: "Back to Home",
+};
+
+const YNCA_MENU_WIRE: Record<string, string> = {
+  on_screen: "On Screen",
+  top_menu: "Top Menu",
+  menu: "Menu",
+  option: "Option",
+};
+
+/**
  * The YNCA list driver: navigation writes go out as LISTSEL/LISTPAGE/LISTCURSOR
  * commands, the window comes back as a burst of LISTLAYER/LISTLAYERNAME/CURRLINE/
  * MAXLINE/LINE1TXT…LINE8TXT lines — solicited by a `LISTINFO=?` read, and pushed
@@ -81,6 +104,12 @@ export class YncaBrowseDriver implements BrowseDriver {
     this.closed = true;
   }
 
+  /** The cursor keys this protocol has on the main zone. */
+  public readonly cursorValues = Object.keys(YNCA_CURSOR_WIRE);
+
+  /** The menu keys this protocol has on the main zone. */
+  public readonly menuValues = Object.keys(YNCA_MENU_WIRE);
+
   /** @returns the selectable sources this device offers (state value → label) */
   public sources(): Record<string, string> {
     const entries = YNCA_BROWSE_SOURCES.filter(source => this.present.has(source.subunit));
@@ -123,7 +152,15 @@ export class YncaBrowseDriver implements BrowseDriver {
     this.command("LISTPAGE", "Down");
   }
 
-  /** Go one menu level back. */
+  /**
+   * Go one menu level back.
+   *
+   * Always `Back`, never a learned substitute: a refusal is not proof that the model lacks the
+   * step — `@RESTRICTED` also comes back while the receiver is in standby, and switching the
+   * whole device to `Left` on that would break the receivers where `Back` is the right word.
+   * A model that only knows `Left` (RX-V473, issue #613) is served by `remote.cursor`, which
+   * offers every value the official command list declares, including `Left`.
+   */
   public back(): void {
     this.command("LISTCURSOR", "Back");
   }
@@ -131,6 +168,46 @@ export class YncaBrowseDriver implements BrowseDriver {
   /** Return to the menu root. */
   public home(): void {
     this.command("LISTCURSOR", "Back to Home");
+  }
+
+  /**
+   * Press a cursor key — always on `@MAIN`, never on the open source.
+   *
+   * The official command list gives MAIN the FULL pad (Up/Down/Left/Right/Sel/Back/Back to
+   * Home) while the source subunits (`@NETRADIO`, `@USB`, …) declare only
+   * Up/Down/Sel/Back/Back to Home — no Left, no Right. Sending to MAIN therefore gives the
+   * user every key the device has, and it works with no list open: this is the on-screen
+   * menu of the receiver, not a list window. That is also the way out for a model that
+   * refuses `Back` on the list (#613) — `left` steps back there.
+   *
+   * @param value one of {@link cursorValues}
+   */
+  public cursor(value: string): void {
+    this.send("LISTCURSOR", YNCA_CURSOR_WIRE[value]);
+  }
+
+  /**
+   * Press a menu key (`@MAIN:LISTMENU`).
+   *
+   * @param value one of {@link menuValues}
+   */
+  public menu(value: string): void {
+    this.send("LISTMENU", YNCA_MENU_WIRE[value]);
+  }
+
+  /**
+   * Send one main-zone remote command and re-read the window.
+   *
+   * @param func the YNCA function (LISTCURSOR, LISTMENU)
+   * @param wire the wire value, or undefined for a word this device has no key for
+   */
+  private send(func: string, wire: string | undefined): void {
+    if (this.closed || wire === undefined) {
+      return;
+    }
+    this.client.send("MAIN", func, wire);
+    // Only if a list is open: the pad also drives the on-screen menu, which reports nothing.
+    this.refresh();
   }
 
   /** Re-read the current window (`LISTINFO=?` answers with the full field burst). */

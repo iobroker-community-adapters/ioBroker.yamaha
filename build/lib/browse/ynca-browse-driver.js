@@ -36,6 +36,21 @@ const YNCA_BROWSE_SOURCES = [
   { subunit: "RHAP", key: "rhapsody", label: "Rhapsody", input: "Rhapsody" },
   { subunit: "SIRIUS", key: "sirius", label: "SiriusXM", input: "SIRIUS" }
 ];
+const YNCA_CURSOR_WIRE = {
+  up: "Up",
+  down: "Down",
+  left: "Left",
+  right: "Right",
+  select: "Sel",
+  return: "Back",
+  home: "Back to Home"
+};
+const YNCA_MENU_WIRE = {
+  on_screen: "On Screen",
+  top_menu: "Top Menu",
+  menu: "Menu",
+  option: "Option"
+};
 class YncaBrowseDriver {
   /**
    * @param client the YNCA client slice (send + get)
@@ -73,6 +88,10 @@ class YncaBrowseDriver {
   close() {
     this.closed = true;
   }
+  /** The cursor keys this protocol has on the main zone. */
+  cursorValues = Object.keys(YNCA_CURSOR_WIRE);
+  /** The menu keys this protocol has on the main zone. */
+  menuValues = Object.keys(YNCA_MENU_WIRE);
   /** @returns the selectable sources this device offers (state value → label) */
   sources() {
     const entries = YNCA_BROWSE_SOURCES.filter((source) => this.present.has(source.subunit));
@@ -110,13 +129,57 @@ class YncaBrowseDriver {
   pageDown() {
     this.command("LISTPAGE", "Down");
   }
-  /** Go one menu level back. */
+  /**
+   * Go one menu level back.
+   *
+   * Always `Back`, never a learned substitute: a refusal is not proof that the model lacks the
+   * step — `@RESTRICTED` also comes back while the receiver is in standby, and switching the
+   * whole device to `Left` on that would break the receivers where `Back` is the right word.
+   * A model that only knows `Left` (RX-V473, issue #613) is served by `remote.cursor`, which
+   * offers every value the official command list declares, including `Left`.
+   */
   back() {
     this.command("LISTCURSOR", "Back");
   }
   /** Return to the menu root. */
   home() {
     this.command("LISTCURSOR", "Back to Home");
+  }
+  /**
+   * Press a cursor key — always on `@MAIN`, never on the open source.
+   *
+   * The official command list gives MAIN the FULL pad (Up/Down/Left/Right/Sel/Back/Back to
+   * Home) while the source subunits (`@NETRADIO`, `@USB`, …) declare only
+   * Up/Down/Sel/Back/Back to Home — no Left, no Right. Sending to MAIN therefore gives the
+   * user every key the device has, and it works with no list open: this is the on-screen
+   * menu of the receiver, not a list window. That is also the way out for a model that
+   * refuses `Back` on the list (#613) — `left` steps back there.
+   *
+   * @param value one of {@link cursorValues}
+   */
+  cursor(value) {
+    this.send("LISTCURSOR", YNCA_CURSOR_WIRE[value]);
+  }
+  /**
+   * Press a menu key (`@MAIN:LISTMENU`).
+   *
+   * @param value one of {@link menuValues}
+   */
+  menu(value) {
+    this.send("LISTMENU", YNCA_MENU_WIRE[value]);
+  }
+  /**
+   * Send one main-zone remote command and re-read the window.
+   *
+   * @param func the YNCA function (LISTCURSOR, LISTMENU)
+   * @param wire the wire value, or undefined for a word this device has no key for
+   */
+  send(func, wire) {
+    if (this.closed || wire === void 0) {
+      return;
+    }
+    this.client.send("MAIN", func, wire);
+    this.refresh();
   }
   /** Re-read the current window (`LISTINFO=?` answers with the full field burst). */
   refresh() {

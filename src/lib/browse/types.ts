@@ -62,7 +62,44 @@ export interface BrowseDriver {
   back(): Promise<void> | void;
   /** Return to the menu root. */
   home(): Promise<void> | void;
+  /**
+   * The cursor-pad values this transport supports, from {@link CURSOR_VALUES} — absent
+   * where the protocol has no cursor pad. The device tree offers exactly this subset, so a
+   * word that appears in the dropdown always works on that device.
+   */
+  cursorValues?: readonly string[];
+  /**
+   * Press a cursor key.
+   *
+   * @param value one of {@link cursorValues}
+   */
+  cursor?(value: string): Promise<void> | void;
+  /** The menu keys this transport supports, from {@link MENU_VALUES} — absent where it has none. */
+  menuValues?: readonly string[];
+  /**
+   * Press a menu key.
+   *
+   * @param value one of {@link menuValues}
+   */
+  menu?(value: string): Promise<void> | void;
 }
+
+/**
+ * The on-screen remote, in ONE vocabulary for all three protocols.
+ *
+ * The words are MusicCast's, because that is the set `remote.cursor`/`remote.menu` have carried
+ * since v1.x — a script that presses `select` today must keep working. YNCA and XML spell the
+ * same keys differently on the wire (`Sel`, `Back to Home`, `Return to Home`); each driver
+ * translates, so the datapoint means the same thing on a 2009 receiver and on a 2024 one.
+ *
+ * A transport publishes only the words it really has: the YNCA source subunits know no
+ * Left/Right, and no XML menu key is documented at all. A missing word is left out of that
+ * device's dropdown rather than mapped onto something that merely looks similar.
+ */
+export const CURSOR_VALUES = ["up", "down", "left", "right", "select", "return", "home"] as const;
+
+/** The menu keys, same vocabulary rule as {@link CURSOR_VALUES}. */
+export const MENU_VALUES = ["on_screen", "top_menu", "menu", "option", "display", "home"] as const;
 
 /**
  * How the two text protocols name a row's kind. YNCA (`LINE1ATRIB`) and XML

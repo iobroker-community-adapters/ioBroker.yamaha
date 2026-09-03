@@ -1,5 +1,5 @@
 import { BrowseEngine } from "./browse-engine";
-import { browseObjectDefs } from "./objects";
+import { browseObjectDefs, remoteObjectDefs } from "./objects";
 import type { BrowseDriver } from "./types";
 import type { ObjectDef } from "../catalog/types";
 import type { ControllerLog } from "../controller";
@@ -38,7 +38,8 @@ export async function createBrowseSurface(
   if (Object.keys(sources).length === 0) {
     return undefined;
   }
-  for (const def of browseObjectDefs(sources)) {
+  const defs = [...browseObjectDefs(sources), ...remoteObjectDefs(driver.cursorValues, driver.menuValues)];
+  for (const def of defs) {
     await deps.upsertObject(`${deviceId}.${def.id}`, def);
   }
   const engine = new BrowseEngine(driver, {
