@@ -1,9 +1,9 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "2.2.0",
+    "version": "2.3.0",
     "news": {
-      "NEXT": {
+      "2.3.0": {
         "en": "New: every datapoint and folder now carries a short explanation in eleven languages\nImproved: an untranslated text falls back to English instead of an internal key",
         "de": "Neu: jeder Datenpunkt und jeder Ordner trägt jetzt eine kurze Erklärung in elf Sprachen\nVerbessert: ein noch nicht übersetzter Text fällt auf Englisch zurück statt auf eine interne Kennung",
         "ru": "Новое: каждый датапоинт и папка теперь имеют краткое пояснение на одиннадцати языках\nУлучшено: непереведённый текст показывает английский вместо внутреннего ключа",

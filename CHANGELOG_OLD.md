@@ -1,4 +1,7 @@
 # Older changes
+## 2.0.3 (2026-09-01)
+
+- (krobipd) Fixed: the update cleanup now removes every never-filled leftover datapoint — a history recording setting no longer shields it, because nothing was ever recorded there and nothing is lost
 
 ## 2.0.2 (2026-09-01)
 

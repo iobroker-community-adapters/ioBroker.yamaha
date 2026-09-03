@@ -103,8 +103,7 @@ On the very first contact the adapter asks the receiver which functions it suppo
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
-
-### **WORK IN PROGRESS**
+### 2.3.0 (2026-09-03)
 
 - (krobipd) New: every datapoint and every folder now carries a short explanation in eleven languages, so the object tree tells you what a value actually means
 - (krobipd) Improved: a text that has no translation yet falls back to readable English instead of showing an internal key
@@ -147,10 +146,6 @@ On the very first contact the adapter asks the receiver which functions it suppo
 - (krobipd) Fixed: a timeout while probing an older receiver for scenes or menus is asked again on the next connect instead of being remembered as "none" until the next restart
 - (krobipd) Fixed: writing one equalizer band before the receiver reported all three no longer sends zeros for the other two — the zone status is fetched first
 - (krobipd) Improved: a receiver that is off for a while is retried no later than the configured maximum wait, and an oversized answer from a wrong host can no longer eat the adapter's memory
-
-### 2.0.3 (2026-09-01)
-
-- (krobipd) Fixed: the update cleanup now removes every never-filled leftover datapoint — a history recording setting no longer shields it, because nothing was ever recorded there and nothing is lost
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 
