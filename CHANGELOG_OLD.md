@@ -1,4 +1,7 @@
 # Older changes
+## 2.3.1 (2026-09-03)
+
+- (krobipd) Fixed: the new datapoint explanations were missing on MusicCast and older XML devices, so those users saw an empty description where the receiver has one
 
 ## 2.3.0 (2026-09-03)
 

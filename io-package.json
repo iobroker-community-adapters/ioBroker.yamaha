@@ -1,9 +1,22 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "2.5.0",
+    "version": "2.5.1",
     "nogit": true,
     "news": {
+      "2.5.1": {
+        "en": "Installing straight from GitHub is no longer offered: the adapter is built before publishing, so it is installed from the ioBroker repository instead.",
+        "de": "Die Installation direkt von GitHub wird nicht mehr angeboten: Der Adapter wird vor der Veröffentlichung gebaut und kommt daher aus dem ioBroker-Repository.",
+        "ru": "Установка напрямую с GitHub больше не предлагается: адаптер собирается перед публикацией и поэтому устанавливается из репозитория ioBroker.",
+        "pt": "A instalação diretamente do GitHub deixou de ser oferecida: o adaptador é compilado antes da publicação e por isso é instalado a partir do repositório ioBroker.",
+        "nl": "Installeren rechtstreeks vanaf GitHub wordt niet meer aangeboden: de adapter wordt vóór publicatie gebouwd en komt daarom uit de ioBroker-repository.",
+        "fr": "L’installation directe depuis GitHub n’est plus proposée : l’adaptateur est compilé avant publication et s’installe donc depuis le dépôt ioBroker.",
+        "it": "L’installazione diretta da GitHub non è più proposta: l’adattatore viene compilato prima della pubblicazione e quindi si installa dal repository ioBroker.",
+        "es": "La instalación directa desde GitHub ya no se ofrece: el adaptador se compila antes de publicarse y por eso se instala desde el repositorio de ioBroker.",
+        "pl": "Instalacja bezpośrednio z GitHuba nie jest już oferowana: adapter jest budowany przed publikacją, dlatego instaluje się go z repozytorium ioBroker.",
+        "uk": "Встановлення безпосередньо з GitHub більше не пропонується: адаптер збирається перед публікацією, тому встановлюється з репозиторію ioBroker.",
+        "zh-cn": "不再提供直接从 GitHub 安装：适配器在发布前完成构建，因此请从 ioBroker 仓库安装。"
+      },
       "2.5.0": {
         "en": "Datapoint groups now switch off in every zone, sliders know the device's own limits, and the tone controls no longer show doubled decibels on MusicCast.",
         "de": "Datenpunktgruppen schalten jetzt in jeder Zone ab, Schieberegler kennen die Gerätegrenzen, und die Tonregelung zeigt auf MusicCast keine doppelten Dezibel mehr.",
@@ -81,19 +94,6 @@
         "pl": "Nowość: każdy punkt danych i folder ma teraz krótkie wyjaśnienie w jedenastu językach\nUlepszono: nieprzetłumaczony tekst wraca do angielskiego zamiast do klucza wewnętrznego",
         "uk": "Нове: кожен датапоінт і тека тепер мають коротке пояснення одинадцятьма мовами\nПокращено: неперекладений текст показує англійську замість внутрішнього ключа",
         "zh-cn": "新增：每个数据点和文件夹现在都带有十一种语言的简短说明\n改进：尚未翻译的文本回退为英文，而不是显示内部键名"
-      },
-      "2.2.0": {
-        "en": "Playback times are now seconds, with the readable form in new text datapoints. After a restart the adapter reads menu, band and input from the receiver instead of from memory.",
-        "de": "Wiedergabezeiten sind jetzt Sekunden, die lesbare Form steht in neuen Text-Datenpunkten. Nach einem Neustart liest der Adapter Menü, Band und Eingang vom Receiver statt aus dem Speicher.",
-        "ru": "Время воспроизведения теперь в секундах, читаемая форма — в новых текстовых точках данных. После перезапуска адаптер читает меню, диапазон и вход с ресивера, а не из памяти.",
-        "pt": "Os tempos de reprodução são agora segundos, a forma legível fica em novos pontos de dados de texto. Após reiniciar, o adaptador lê menu, banda e entrada do recetor em vez da memória.",
-        "nl": "Afspeeltijden zijn nu seconden, de leesbare vorm staat in nieuwe tekstdatapunten. Na een herstart leest de adapter menu, band en ingang van de receiver in plaats van uit het geheugen.",
-        "fr": "Les temps de lecture sont en secondes, la forme lisible se trouve dans de nouveaux points texte. Après un redémarrage, menu, bande et entrée sont lus sur l'ampli et non en mémoire.",
-        "it": "I tempi di riproduzione sono ora in secondi, la forma leggibile è in nuovi datapoint di testo. Dopo un riavvio l'adattatore legge menu, banda e ingresso dal ricevitore, non dalla memoria.",
-        "es": "Los tiempos de reproducción ahora son segundos y la forma legible está en nuevos puntos de texto. Tras reiniciar, el adaptador lee menú, banda y entrada del receptor, no de la memoria.",
-        "pl": "Czasy odtwarzania są teraz w sekundach, czytelna forma trafiła do nowych punktów tekstowych. Po restarcie adapter odczytuje menu, pasmo i wejście z amplitunera, a nie z pamięci.",
-        "uk": "Час відтворення тепер у секундах, зручна форма — у нових текстових точках даних. Після перезапуску адаптер читає меню, діапазон і вхід з ресивера, а не з пам'яті.",
-        "zh-cn": "播放时间现在以秒为单位，易读形式移到新的文本数据点。重启后，适配器从功放读取菜单、波段和输入源，而不是从缓存。"
       }
     },
     "titleLang": {

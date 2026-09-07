@@ -61,6 +61,10 @@ async function waitForSettledTree(harness, deviceCount) {
   // and a tree of nothing but headers looks perfectly "stable", which is how an empty inventory
   // passes a naive count check. The header is exactly the `info.` subtree, so "carries a
   // datapoint outside info." is the precise question, not a threshold that has to be guessed.
+  // The adapter's OWN `yamaha.0.info.*` branch sits at the same depth as a device's header and
+  // must be excluded by its first segment — counted as a device it inflates the tally by one,
+  // which lets the loop leave while a real device is still missing and fails the assert once
+  // every device has in fact arrived.
   let withTree = 0;
   for (let i = 0; i < 240 && withTree < deviceCount; i++) {
     await new Promise(done => setTimeout(done, 1000));
@@ -68,7 +72,7 @@ async function waitForSettledTree(harness, deviceCount) {
     const devices = new Set();
     for (const row of list.rows) {
       const rest = row.id.slice(NS.length).split(".");
-      if (rest.length > 1 && rest[1] !== "info" && row.value?.type === "state") {
+      if (rest.length > 1 && rest[0] !== "info" && rest[1] !== "info" && row.value?.type === "state") {
         devices.add(rest[0]);
       }
     }
