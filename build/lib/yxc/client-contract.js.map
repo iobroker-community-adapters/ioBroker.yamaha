@@ -1,7 +1,0 @@
-{
-  "version": 3,
-  "sources": ["../../../src/lib/yxc/client-contract.ts"],
-  "sourcesContent": ["import type { YamahaYxcClient } from \"./http-client\";\n\n/**\n * The YXC (MusicCast) client surface the adapter drives \u2014 DERIVED from the client class\n * instead of typed out a second time.\n *\n * It used to be a hand-written interface of fifty method signatures. That was measured and\n * found to be a full copy, not the intended subset: every one of those methods is really\n * called, and the class had exactly one more. So the interface carried no information the\n * class did not already have \u2014 it only had to be kept in step with it by hand, and it forced\n * every test double to spell all fifty methods out again. No other adapter in the fleet\n * types its client twice (nut2 uses its client class directly).\n *\n * The mapped type keeps what the interface was actually good for: it is the PUBLIC surface\n * only (private members are not part of `keyof`) and it is structural, so a test double can\n * satisfy it without extending the class \u2014 which a plain `= YamahaYxcClient` would not allow,\n * because a class with private fields is compared nominally.\n */\nexport type YxcClientLike = { [K in keyof YamahaYxcClient]: YamahaYxcClient[K] };\n"],
-  "mappings": ";;;;;;;;;;;;;;AAAA;AAAA;",
-  "names": []
-}

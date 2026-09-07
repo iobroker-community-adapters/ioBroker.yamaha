@@ -1,7 +1,0 @@
-{
-  "version": 3,
-  "sources": ["../../src/lib/types.ts"],
-  "sourcesContent": ["/** A configured device (name + address, from the admin device table). */\nexport interface DeviceRecord {\n  /** Stable device id (used as the object-tree path segment). */\n  id: string;\n  /** Device IP address. */\n  ip: string;\n}\n\n/** A unified state id and its typed value (catalog / status-parser form). */\nexport interface StateValue {\n  /** State id relative to the device (e.g. `power`, `zone2.volume`). */\n  id: string;\n  /** Typed value for the state. */\n  value: boolean | number | string;\n}\n"],
-  "mappings": ";;;;;;;;;;;;;;AAAA;AAAA;",
-  "names": []
-}

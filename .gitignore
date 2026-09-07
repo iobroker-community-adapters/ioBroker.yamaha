@@ -33,3 +33,6 @@ coverage/
 .claude/dev-history.md
 CLAUDE.local.md
 docs/superpowers/
+
+# Build output — the CI builds before publish; the adapter cannot be installed from GitHub.
+build/

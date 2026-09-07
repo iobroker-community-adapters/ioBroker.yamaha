@@ -2,6 +2,7 @@
   "common": {
     "name": "yamaha",
     "version": "2.5.0",
+    "nogit": true,
     "news": {
       "2.5.0": {
         "en": "Datapoint groups now switch off in every zone, sliders know the device's own limits, and the tone controls no longer show doubled decibels on MusicCast.",

@@ -43,6 +43,8 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
 - js-controller >= 7.2.2
 - admin >= 8.0.11
 
+> The adapter CANNOT be installed via GitHub: The adapter must be installed via the ioBroker repository (stable or latest).
+
 ## Ports
 
 - **UDP 41100 (listening)** — MusicCast devices push their change events to this port on the ioBroker host.
