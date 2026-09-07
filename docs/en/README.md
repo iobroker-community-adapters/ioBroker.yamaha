@@ -64,7 +64,9 @@ Each receiver becomes one device. Under it:
 - **remote** — the on-screen remote: a cursor pad, and the menu keys where the receiver has
   them.
 - **sound, hdmi, advanced** — tone controls, equalizer, signal information, HDMI outputs,
-  speaker settings, the assignable input names.
+  speaker settings, the assignable input names. On MusicCast devices the device-wide settings
+  join them: automatic standby and display brightness. Numeric datapoints carry the limits the
+  device itself declares, so a slider offers exactly the range the receiver accepts.
 
 Only what your device actually reports is created. A soundbar gets no zone 4, a stereo
 receiver no surround decoder.

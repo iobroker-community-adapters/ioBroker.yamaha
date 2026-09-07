@@ -65,7 +65,10 @@ Jeder Receiver wird ein Gerät. Darunter:
 - **remote** — die Bildschirm-Fernbedienung: ein Steuerkreuz und, wo der Receiver sie hat, die
   Menütasten.
 - **sound, hdmi, advanced** — Klangregelung, Equalizer, Signalinformationen, HDMI-Ausgänge,
-  Lautsprechereinstellungen, die frei belegbaren Eingangsnamen.
+  Lautsprechereinstellungen, die frei belegbaren Eingangsnamen. Auf MusicCast-Geräten kommen die
+  geräteweiten Einstellungen dazu: automatische Abschaltung und Display-Helligkeit. Zahlen-
+  Datenpunkte tragen die Grenzen, die das Gerät selbst angibt — ein Schieberegler bietet damit
+  genau den Bereich an, den der Receiver annimmt.
 
 Angelegt wird nur, was Ihr Gerät wirklich meldet. Eine Soundbar bekommt keine Zone 4, ein
 Stereo-Receiver keinen Surround-Dekoder.

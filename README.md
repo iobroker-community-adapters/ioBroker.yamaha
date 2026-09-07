@@ -24,6 +24,8 @@ legacy XML protocol of the oldest pre-2010 models — behind one object tree.
 - **Menu browsing** — page through the Net Radio, media-server and USB menus like with the remote: the visible menu lines as datapoints, select-by-line, and a path datapoint that navigates to a favourite in one write
 - **Scenes with their names** — recall a scene by number or by its title from a dropdown that shows the names the receiver reports, per zone — plus a scene list for visualizations
 - **On-screen remote** — cursor pad and menu keys as datapoints, on **all three protocols**: the same words drive a 2024 MusicCast device, a YNCA receiver and a pre-2010 XML model
+- **Setup datapoints of the 2010 receiver generation** — speaker configuration, HDMI and lip-sync settings, trigger assignment per input, subwoofer trim, YPAO volume and the RDS clock, on the models that report them
+- **Device-wide MusicCast settings** — automatic standby, display brightness and the HDMI outputs, readable and writable where the device offers them
 - **Clock & alarm view** — MusicCast desk-audio devices show their clock and alarm settings
 - **Capability-driven** — states are generated from what each device reports, no hardcoded model list
 - **Automatic discovery** — an empty device list finds and sets up MusicCast devices at startup
@@ -103,6 +105,7 @@ On the very first contact the adapter asks the receiver which functions it suppo
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+
 ### 2.5.0 (2026-09-07)
 
 - (krobipd) Fixed: switching off a datapoint group now clears it in every zone — turning off "Sound" used to leave the zone 2/3/4 sound datapoints standing, and "Playback" left 304 of them

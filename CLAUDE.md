@@ -707,13 +707,21 @@ in ein öffentliches Repo.
   bis 2.1.1 lief er lokal nie mit, obwohl die CI ihn fährt (`testing-action-adapter` ruft
   `test:unit` UND `test:integration`). `passWithNoTests` ist raus — ein nicht mehr greifendes
   `include` muss rot melden, nicht grün.
-- **Mutationstabellen** (`../../Ressourcen/iobroker-entwicklung/mutation-testing/`): `mutations_yamaha_all.py`
+- **Mutationstabellen** (`../../Ressourcen/iobroker-entwicklung/mutation-testing/`) — **ELF Dateien, und das
+  Gate prüft ALLE.** ⚠️ Die fünf Wellen-Originale `mutations_yamaha.py` · `…2.py` · `…3.py` · `…4.py` ·
+  `…5.py` (36/32/26/11/11 Nadeln) leben NEBEN der Sammeltabelle `mutations_yamaha_all.py`, die dieselben
+  Regeln zusammenfasst — sie sind kein Altbestand. Wer nur die datierten Tabellen nachzieht, lässt fünf
+  Nadeln ins Leere zeigen und merkt es erst, wenn D09 den Release stoppt (2026-09-07: R5, R7, V7, V8, X4 —
+  in `_all.py` nachgezogen, in den Originalen vergessen). Die Äquivalenz-Vermerke (`EQUIVALENT`) gehören in
+  JEDE Tabelle, die den Mutanten führt. Im Einzelnen: `mutations_yamaha_all.py`
   (116 Regelbrüche, Wellen 1–5 vom 22.08., Nadeln am 02.09. nachgezogen, vier tote entfernt) + `mutations_yamaha_2026-09-02.py`
   (24, Welle 6 = die Audit-Fixes; IDs Z1–Z24, W gehört Welle 5) + `mutations_yamaha_2026-09-03.py`
   (18, Welle 7 = die Fehlerbehebungen des Fehler-Audits, IDs Z1–Z18 in eigener Tabelle; 18/18 gefangen) +
   `mutations_yamaha_2026-09-03-w8.py` (Welle 8, IDs A1–A24; A7 am 03.09. neu verankert auf die Regel: `back` sendet
   immer das Protokoll-Wort) + `mutations_yamaha_2026-09-04-w9.py` (Welle 9 = die Bildschirm-Fernbedienung, IDs B1–B3;
-  3/3 gefangen). Läufer `mutation-test.py`. Nadeln sind
+  3/3 gefangen) + `mutations_yamaha_2026-09-06-w10.py` (Welle 10 = das Voll-Audit vom 06./07.09., IDs C1–C13;
+  13/13 gefangen — darunter C10 der Override, den der eigene Katalog-Zuwachs aushebelte, und C12/C13 die
+  beiden Funde des Objekt-Inventars). Läufer `mutation-test.py`. Nadeln sind
   exakte Quellzeilen — nach Prettier-Umbrüchen oder Refactorings ZUERST den Nadel-Vorab-Check (jede Nadel
   genau 1×), sonst misst der Lauf nichts. Zwei äquivalente Mutanten (X2, X4 — unerreichbare
   Invarianten-Wächter, im Quelltext begründet); die vier anderen vom 22.08. (M9, X1, Y1, Y13) waren toter

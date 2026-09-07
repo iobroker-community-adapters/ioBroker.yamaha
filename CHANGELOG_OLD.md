@@ -1,4 +1,5 @@
 # Older changes
+
 ## 2.3.0 (2026-09-03)
 
 - (krobipd) New: every datapoint and every folder now carries a short explanation in eleven languages, so the object tree tells you what a value actually means
