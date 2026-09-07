@@ -1,4 +1,5 @@
 # Older changes
+
 ## 2.3.2 (2026-09-03)
 
 - (krobipd) Fixed: eight tuner and scene datapoints still showed no explanation on MusicCast and older XML receivers

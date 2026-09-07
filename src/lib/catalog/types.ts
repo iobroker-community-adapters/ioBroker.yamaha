@@ -35,8 +35,9 @@ export interface CatalogEntry {
    * never the protocol identifier and never the name again. Deliberately OPTIONAL — where a
    * datapoint explains itself (`power`, `volume`, `artist`) an invented sentence would be
    * noise, and the standard asks for an empty field rather than filler. What must never
-   * happen is a SILENT gap, so every catalog entry without a key is listed by name in
-   * `SELF_EXPLANATORY` and the manifest test refuses an entry that is in neither.
+   * happen is a SILENT gap, so every catalog entry without a key is covered by a pattern in
+   * `test/self-explaining.json` — the one decision file, which the fleet inventory gate holds
+   * against the built object tree — and the manifest test refuses an entry that is in neither.
    */
   descKey?: I18nKey;
   /** Value semantics — drives type/role/states/range via {@link ValueSpec}. */

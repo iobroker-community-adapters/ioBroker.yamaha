@@ -704,6 +704,15 @@ in ein öffentliches Repo.
   fehlt, und die Zusicherung schlägt fehl, sobald alle da sind (`only 8 of 7 …`, Gate D06 rot beim
   2.5.1-Vorlauf; das Inventar selbst blieb heil, weil die Ruhe-Schleife danach den Baum fertig
   werden lässt).
+- **⚠️ Auf einem GESÄTEN Baum log dieses Wartekriterium (2.5.2 repariert).** Die Aufstiegs-Suite legt
+  das Vorgänger-Inventar vorab an — damit sind beide alten Bedingungen nach EINER Sekunde erfüllt:
+  jedes Gerät trägt schon Datenpunkte, und `extendObject` auf ein vorhandenes Objekt ändert die
+  Zeilenzahl nicht. Der Abzug entstand also, während die drei YNCA-Receiver noch sweepten; 75 von 174
+  neuen Beschreibungen fehlten im Vergleich, und vorher verglich die Suite den Abzug schlicht mit sich
+  selbst. Zwei Bedingungen schließen das: ein Gerät zählt erst als gebaut, wenn es **verbunden**
+  meldet (`device-supervisor.ts` setzt das nach `attempt()`, und `multi-transport-handle.ts` schreibt
+  die Objekte VOR `onTransports`; die Zustandsdatenbank startet leer, auch wenn die Objekte gesät
+  sind), und die Ruhe-Schleife vergleicht den INHALT der verglichenen Felder statt der Zeilenzahl.
 - **`npm run build` gehört von Hand davor** — der Lauf startet den Adapter aus `build/`.
 - **Zwei Fehler fand schon der erste Lauf**, beide unsichtbar für Quelltext-Gate, Rollen-Gate und
   906 Tests, weil beide erst im GEBAUTEN Baum entstehen: (a) `player.browse` trug einen festen

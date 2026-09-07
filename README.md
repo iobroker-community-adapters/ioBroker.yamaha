@@ -107,6 +107,7 @@ On the very first contact the adapter asks the receiver which functions it suppo
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+
 ### 2.5.2 (2026-09-07)
 
 - (krobipd) Improved: 174 more datapoints explain themselves — volume and tone now say which scale they use, the stored lists say what is inside them, and the menu rows say what they are for
