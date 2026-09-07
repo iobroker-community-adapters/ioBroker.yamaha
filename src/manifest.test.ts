@@ -55,58 +55,69 @@ describe("every datapoint has a description decision", () => {
    * sentence is worse than nothing. A gate therefore cannot simply demand a description everywhere.
    *
    * What it CAN demand is that the decision was made: every catalog entry either carries a
-   * `descKey`, or its name key is listed below as self-explanatory. A new datapoint that is in
-   * neither fails this test, so the gap can never be silent again — which is exactly how yamaha
+   * `descKey`, or its state id is declared self-explaining WITH A REASON. A new datapoint that is
+   * in neither fails this test, so the gap can never be silent again — which is exactly how yamaha
    * ended up with 0 descriptions on 190 datapoints while every existing gate stayed green
    * (they only ever checked a description that was already there).
+   *
+   * **The declarations live in `test/self-explaining.json`, not here** (fleet gate D08,
+   * `Entwicklung/scripts/check-object-inventory.py`, 2026-09-07): that file is the one decision
+   * list, and the gate holds it against the built object inventory. This test covers the OTHER
+   * surface — a catalog entry no fixture device produces is invisible to the inventory, and there
+   * are 21 of them (Bluetooth source, Zone B, the A/B speaker terminals, MusicCast balance …).
+   * Reading the same file keeps the two from drifting apart.
    */
-  const SELF_EXPLANATORY = new Set<string>([
-    "power",
-    "volume",
-    "mute",
-    "input",
-    "sleepTimer",
-    "bass",
-    "treble",
-    "zoneName",
-    "model",
-    "firmwareVersion",
-    "band",
-    "frequency",
-    "nextPreset",
-    "previousPreset",
-    "playback",
-    "artist",
-    "album",
-    "track",
-    "station",
-    "channelName",
-    "repeat",
-    "shuffle",
-    "next",
-    "previous",
-    "connected",
-    "connect",
-    "startPairing",
-    "cancelPairing",
-    "pairedDevice",
-    "speakerA",
-    "speakerB",
-    "zoneBPower",
-    "zoneBMute",
-    "zoneBVolume",
-    "zoneBName",
-    // MusicCast/XML-only, ebenfalls selbsterklaerend
-    "balance",
-    "monaural",
-    "equalizerLow",
-    "equalizerMid",
-    "equalizerHigh",
-    "inputNameDisplay",
-  ]);
+  const declared = JSON.parse(readFileSync(join(__dirname, "..", "test", "self-explaining.json"), "utf8")) as Record<
+    string,
+    string
+  >;
+  const inventory = Object.keys(
+    JSON.parse(readFileSync(join(__dirname, "..", "test", "objects.inventory.json"), "utf8")) as Record<
+      string,
+      unknown
+    >,
+    // `yamaha.0.<device>.<id>` → the device-relative id the catalogs use.
+  ).map(id => id.split(".").slice(3).join("."));
+
+  /**
+   * The catalog entries no fixture device builds, so `test/self-explaining.json` cannot carry
+   * them: a pattern there that matches nothing in the inventory is itself a D08 finding
+   * ("nothing on stock"). Id → why the name alone is enough. The two assertions below keep this
+   * list from becoming a second, drifting decision list: an entry that a pattern already covers,
+   * or one a fixture device has started building, has to move.
+   */
+  const OFF_INVENTORY: Record<string, string> = {
+    "advanced.speakers.speakerA": "A terminal switch named after the terminal it switches.",
+    "advanced.speakers.speakerB": "A terminal switch named after the terminal it switches.",
+    "multiroom.zoneB.name": "Zone B's own name; the zoneB channel explains what Zone B is.",
+    "multiroom.zoneB.volume": "Zone B's volume, in the decibels its range already shows.",
+    "player.bluetooth.connect": "A key whose name IS its function: connect the paired source.",
+    "player.bluetooth.connected": "Whether a Bluetooth source is connected, in the folder that names the protocol.",
+    "player.bluetooth.deviceName": "The name of the paired source, which is what the datapoint is called.",
+    "player.bluetooth.pairing": "A key whose name IS its function: put the receiver into pairing mode.",
+    "player.bluetooth.pairingCancel": "A key whose name IS its function: stop pairing again.",
+    "player.channelName": "The channel name a satellite-radio source delivers; the name is the field.",
+    "sound.balance": "The left/right balance of the zone, in the range the device declares.",
+    "sound.monaural": "Switches the zone to mono — name and switch role are the whole statement.",
+  };
+
+  /**
+   * Does a declaration pattern cover this id? `*` stands for EXACTLY ONE segment, never more —
+   * the same rule the fleet gate applies, so a pattern means the same thing on both surfaces.
+   *
+   * @param pattern the declaration pattern (`*.multiroom.*.power`)
+   * @param id the state id to test, with a device segment in front
+   * @returns whether the pattern covers the id
+   */
+  const covers = (pattern: string, id: string): boolean => {
+    const p = pattern.split(".");
+    const o = id.split(".");
+    return p.length === o.length && p.every((seg, i) => seg === "*" || seg === o[i]);
+  };
+  const isDeclared = (id: string): boolean => Object.keys(declared).some(pattern => covers(pattern, `device.${id}`));
 
   it("no catalog entry is left undecided", () => {
-    const undecided = new Map<string, string>();
+    const undecided: string[] = [];
     // ALL four catalogs, and BOTH entry shapes. The YNCA table carries `nameKey`/`descKey` on the
     // entry itself; the MusicCast and XML tables carry them inside `common`. A first version of
     // this test only read the top level — so it silently skipped every MusicCast and XML entry
@@ -117,17 +128,43 @@ describe("every datapoint has a description decision", () => {
       const nested = (entry as { common?: { nameKey?: string; descKey?: string } }).common;
       const nameKey = shallow.nameKey ?? nested?.nameKey;
       const descKey = shallow.descKey ?? nested?.descKey;
-      if (shallow.derived || !nameKey || descKey || SELF_EXPLANATORY.has(nameKey)) {
+      if (shallow.derived || !nameKey || descKey) {
         continue;
       }
+      // The YNCA table bakes the zone prefix into the id; the MusicCast and XML tables are
+      // zone-relative and the mapper prefixes them, so their id here is the main zone's. The
+      // per-zone copies carry the same decision and are the inventory gate's business.
       const id = (entry as { id?: string; state?: string }).id ?? (entry as { state?: string }).state ?? "?";
-      if (!undecided.has(nameKey)) {
-        undecided.set(nameKey, id);
+      if (!isDeclared(id) && !(id in OFF_INVENTORY)) {
+        undecided.push(`${id} (${nameKey})`);
       }
     }
     expect(
-      [...undecided].map(([key, id]) => `${key} (${id})`),
-      "each of these needs either a descKey or an entry in SELF_EXPLANATORY",
+      [...new Set(undecided)].sort(),
+      "each of these needs either a descKey or an entry in test/self-explaining.json",
+    ).toEqual([]);
+  });
+
+  it("declares nothing here that the inventory can decide", () => {
+    // Both halves of "one decision list": an entry a pattern already covers is a duplicate that
+    // can drift, and one a fixture device has started building belongs in the JSON, where the
+    // fleet gate re-checks it against the real tree on every release.
+    expect(
+      Object.keys(OFF_INVENTORY).filter(id => isDeclared(id)),
+      "test/self-explaining.json already covers these — drop them here",
+    ).toEqual([]);
+    expect(
+      Object.keys(OFF_INVENTORY).filter(id => inventory.includes(id)),
+      "a fixture device builds these now — move them into test/self-explaining.json",
+    ).toEqual([]);
+  });
+
+  it("gives every declaration a reason, not a shrug", () => {
+    // Same floor as the fleet gate: a reason under 15 characters is not a reason.
+    expect(
+      Object.entries(OFF_INVENTORY)
+        .filter(([, reason]) => reason.trim().length < 15)
+        .map(([id]) => id),
     ).toEqual([]);
   });
 });
@@ -176,27 +213,19 @@ describe("no object is built without the explanation that exists for it", () => 
       "band",
       "browse",
       "cd",
-      "connected",
       "dab",
-      "deviceOrServiceConnected",
       "devicesOnline",
       "devicesTotal",
       "discTime",
-      "favouritesStoredPresets",
       "frequency",
       "info",
       "information",
       "ipAddress",
       "mediaPlayer",
       "model",
-      "musiccastPlaylists",
       "networkPlayer",
       "nextPreset",
-      "playQueue",
       "previousPreset",
-      "recentlyPlayed",
-      "source",
-      "storedPresets",
       "totalTracks",
       "trackNumber",
       "tuner",

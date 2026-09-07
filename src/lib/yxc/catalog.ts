@@ -66,7 +66,14 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
   },
   {
     state: "volume",
-    common: { nameKey: "volume", type: "number", role: "level.volume", read: true, write: true },
+    common: {
+      nameKey: "volume",
+      descKey: "descVolume",
+      type: "number",
+      role: "level.volume",
+      read: true,
+      write: true,
+    },
     create: { kind: "func", func: "volume" },
     read: { field: "volume" },
     fromStatus: num,
@@ -144,7 +151,7 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
   },
   {
     state: "sound.bass",
-    common: { nameKey: "bass", type: "number", role: "level", read: true, write: true },
+    common: { nameKey: "bass", descKey: "descBass", type: "number", role: "level", read: true, write: true },
     create: { kind: "func", func: "tone_control" },
     read: { path: ["tone_control", "bass"] },
     fromStatus: num,
@@ -166,7 +173,7 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
   },
   {
     state: "sound.treble",
-    common: { nameKey: "treble", type: "number", role: "level", read: true, write: true },
+    common: { nameKey: "treble", descKey: "descTreble", type: "number", role: "level", read: true, write: true },
     create: { kind: "func", func: "tone_control" },
     read: { path: ["tone_control", "treble"] },
     fromStatus: num,
@@ -174,7 +181,15 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
   },
   {
     state: "sleep",
-    common: { nameKey: "sleepTimer", type: "number", unit: "min", role: "level", read: true, write: true },
+    common: {
+      nameKey: "sleepTimer",
+      descKey: "descSleepTimer",
+      type: "number",
+      unit: "min",
+      role: "level",
+      read: true,
+      write: true,
+    },
     create: { kind: "func", func: "sleep" },
     read: { field: "sleep" },
     fromStatus: num,

@@ -54,6 +54,15 @@ async function startWithFixtures(harness) {
  * specification demands, so a receiver needs the better part of a minute; the datapoint
  * balance then settles for another five seconds before the tree is final.
  *
+ * ⚠️ On a SEEDED tree (the upgrade suite) both of the old conditions were true one second
+ * after the start: every device already had its states, and the row count of an existing
+ * tree does not grow when the adapter merely refreshes it. The dump was therefore taken
+ * while the three YNCA receivers were still sweeping, and the suite compared the SEED with
+ * itself — it reported "everything reached" for 174 datapoints the run had not touched yet.
+ * Two conditions close that: a device counts as built only once it REPORTS connected (the
+ * supervisor flips that flag after `attempt()` has written the tree), and the quiet loop
+ * compares the object CONTENT, not the row count, so a refreshed description resets it.
+ *
  * @param {import("@iobroker/testing").TestHarness} harness the running harness
  */
 async function waitForSettledTree(harness, deviceCount) {
@@ -66,6 +75,7 @@ async function waitForSettledTree(harness, deviceCount) {
   // which lets the loop leave while a real device is still missing and fails the assert once
   // every device has in fact arrived.
   let withTree = 0;
+  let built = new Set();
   for (let i = 0; i < 240 && withTree < deviceCount; i++) {
     await new Promise(done => setTimeout(done, 1000));
     const list = await harness.objects.getObjectListAsync({ startkey: NS, endkey: `${NS}香` });
@@ -77,20 +87,39 @@ async function waitForSettledTree(harness, deviceCount) {
       }
     }
     withTree = devices.size;
+    built = devices;
   }
   assert.strictEqual(withTree, deviceCount, `only ${withTree} of ${deviceCount} fixture devices built a tree`);
+  // Then connected: a tree can be there and still be the OLD one. The supervisor reports a
+  // device connected only after `attempt()` has built its objects, so this is the signal that
+  // the run has actually touched them — the only one a seeded tree does not fake (the states
+  // database starts empty even when the objects are pre-filled).
+  const deviceIds = [...built];
+  let connected = 0;
+  for (let i = 0; i < 240 && connected < deviceCount; i++) {
+    await new Promise(done => setTimeout(done, 1000));
+    const states = await Promise.all(deviceIds.map(id => harness.states.getStateAsync(`${NS}${id}.info.connection`)));
+    connected = states.filter(state => state?.val === true).length;
+  }
+  assert.strictEqual(connected, deviceCount, `only ${connected} of ${deviceCount} fixture devices connected`);
   // Then quiet: the datapoint balance settles five seconds after the last device, and the
-  // object tree is only final once that has passed.
-  let previous = -1;
+  // object tree is only final once that has passed. Compared is the CONTENT of the fields the
+  // upgrade assertion reads — a second transport that joins late refreshes texts without
+  // adding a row, and a row count would call that "quiet".
+  let previous = "";
   let stable = 0;
   for (let i = 0; i < 60 && stable < 8; i++) {
     await new Promise(done => setTimeout(done, 1000));
     const list = await harness.objects.getObjectListAsync({ startkey: NS, endkey: `${NS}香` });
-    const count = list.rows.length;
-    stable = count === previous && count > 0 ? stable + 1 : 0;
-    previous = count;
+    const fingerprint = JSON.stringify(
+      list.rows
+        .map(row => [row.id, row.value?.type, ...COMPARED.map(field => row.value?.common?.[field])])
+        .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+    );
+    stable = fingerprint === previous && list.rows.length > 0 ? stable + 1 : 0;
+    previous = fingerprint;
   }
-  assert.ok(previous > 0, "no objects created — the fixture devices did not reach the adapter");
+  assert.ok(previous.length > 2, "no objects created — the fixture devices did not reach the adapter");
 }
 
 /**

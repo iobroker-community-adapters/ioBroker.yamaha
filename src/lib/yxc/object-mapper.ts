@@ -123,7 +123,14 @@ const PLAYER_STATES: Array<{
   },
   {
     state: "albumArt",
-    common: { nameKey: "albumArt", type: "string", role: "media.cover", read: true, write: false },
+    common: {
+      nameKey: "albumArt",
+      descKey: "descAlbumArt",
+      type: "string",
+      role: "media.cover",
+      read: true,
+      write: false,
+    },
   },
   // Transport buttons carry the type-detector media-player roles so a MusicCast player's
   // controls are recognised as play/pause/stop/next/prev, not generic buttons.
@@ -134,11 +141,25 @@ const PLAYER_STATES: Array<{
   { state: "prev", common: { nameKey: "previous", type: "boolean", role: "button.prev", read: false, write: true } },
   {
     state: "repeatToggle",
-    common: { nameKey: "toggleRepeat", type: "boolean", role: "button", read: false, write: true },
+    common: {
+      nameKey: "toggleRepeat",
+      descKey: "descToggleRepeat",
+      type: "boolean",
+      role: "button",
+      read: false,
+      write: true,
+    },
   },
   {
     state: "shuffleToggle",
-    common: { nameKey: "toggleShuffle", type: "boolean", role: "button", read: false, write: true },
+    common: {
+      nameKey: "toggleShuffle",
+      descKey: "descToggleShuffle",
+      type: "boolean",
+      role: "button",
+      read: false,
+      write: true,
+    },
   },
 ];
 
@@ -344,17 +365,18 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
         name: ioBroker.StringOrTranslated,
         type: "string" | "number",
         role: "text" | "value",
+        desc?: ioBroker.StringOrTranslated,
       ): void => {
         objects.push({
           id: `${zoneDef.prefix}sound.signal.${id}`,
           type: "state",
-          common: { name, type, role, read: true, write: false },
+          common: { name, ...(desc ? { desc } : {}), type, role, read: true, write: false },
         });
       };
       signal("format", tName("audioSignalFormat"), "string", "text");
       signal("sampling", tName("audioSamplingRate"), "string", "text");
       signal("bits", tName("audioBitDepth"), "string", "text");
-      signal("bitrate", tName("audioBitrate"), "number", "value");
+      signal("bitrate", tName("audioBitrate"), "number", "value", tName("descAudioBitrate"));
     }
   }
   if (capabilities.media.includes("netusb") || capabilities.media.includes("cd")) {
@@ -388,12 +410,26 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
     objects.push({
       id: "player.netPlayer.presets",
       type: "state",
-      common: { name: tName("favouritesStoredPresets"), type: "string", role: "json", read: true, write: false },
+      common: {
+        name: tName("favouritesStoredPresets"),
+        desc: tName("descFavouritesStoredPresets"),
+        type: "string",
+        role: "json",
+        read: true,
+        write: false,
+      },
     });
     objects.push({
       id: "player.netPlayer.recent",
       type: "state",
-      common: { name: tName("recentlyPlayed"), type: "string", role: "json", read: true, write: false },
+      common: {
+        name: tName("recentlyPlayed"),
+        desc: tName("descRecentlyPlayed"),
+        type: "string",
+        role: "json",
+        read: true,
+        write: false,
+      },
     });
     objects.push({
       id: "player.netPlayer.recallRecent",
@@ -415,14 +451,28 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
       objects.push({
         id: "player.netPlayer.playlists",
         type: "state",
-        common: { name: tName("musiccastPlaylists"), type: "string", role: "json", read: true, write: false },
+        common: {
+          name: tName("musiccastPlaylists"),
+          desc: tName("descMusiccastPlaylists"),
+          type: "string",
+          role: "json",
+          read: true,
+          write: false,
+        },
       });
     }
     if (capabilities.netusbFuncs?.includes("play_queue")) {
       objects.push({
         id: "player.netPlayer.queue",
         type: "state",
-        common: { name: tName("playQueue"), type: "string", role: "json", read: true, write: false },
+        common: {
+          name: tName("playQueue"),
+          desc: tName("descPlayQueue"),
+          type: "string",
+          role: "json",
+          read: true,
+          write: false,
+        },
       });
     }
   }
@@ -567,7 +617,14 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
     objects.push({
       id: "tuner.presets",
       type: "state",
-      common: { name: tName("storedPresets"), type: "string", role: "json", read: true, write: false },
+      common: {
+        name: tName("storedPresets"),
+        desc: tName("descStoredPresets"),
+        type: "string",
+        role: "json",
+        read: true,
+        write: false,
+      },
     });
     objects.push({
       id: "tuner.tuned",
@@ -737,18 +794,23 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
     // scope: directly under multiroom = all zones of this device, group = linked devices.
     // Both channels already exist: the main zone's always-created
     // multiroom.group.streamingEnabled state brought them in through the parent loop.
-    const distState = (id: string, name: ioBroker.StringOrTranslated, role: string): void => {
+    const distState = (
+      id: string,
+      name: ioBroker.StringOrTranslated,
+      role: string,
+      desc?: ioBroker.StringOrTranslated,
+    ): void => {
       objects.push({
         id: `multiroom.group.${id}`,
         type: "state",
-        common: { name, type: "string", role, read: true, write: false },
+        common: { name, ...(desc ? { desc } : {}), type: "string", role, read: true, write: false },
       });
     };
-    distState("role", tName("roleServerClient"), "state");
-    distState("id", tName("groupID"), "text");
+    distState("role", tName("roleServerClient"), "state", tName("descRoleServerClient"));
+    distState("id", tName("groupID"), "text", tName("descGroupID"));
     distState("name", tName("groupName"), "text");
     distState("serverZone", tName("serverZoneFeedsTheGroup"), "text");
-    distState("linkedDevices", tName("linkedDevices"), "json");
+    distState("linkedDevices", tName("linkedDevices"), "json", tName("descLinkedDevices"));
     objects.push({
       id: "multiroom.group.leave",
       type: "state",

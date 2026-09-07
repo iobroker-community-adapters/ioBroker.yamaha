@@ -746,6 +746,7 @@ export class Yamaha extends utils.Adapter {
       type: "state",
       common: {
         name: tName("deviceOrServiceConnected"),
+        desc: tName("descDeviceOrServiceConnected"),
         type: "boolean",
         role: "indicator.connected",
         read: true,
@@ -823,6 +824,9 @@ export class Yamaha extends utils.Adapter {
       type: "state",
       common: {
         name: tName("connected"),
+        // Its own explanation key: the name key `connected` is shared with the Bluetooth
+        // source's "Connected", which means something else entirely.
+        desc: tName("descDeviceConnected"),
         type: "boolean",
         role: "indicator.reachable",
         read: true,

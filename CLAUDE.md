@@ -588,6 +588,17 @@ Nähe oder steht in `NAMES_WITHOUT_EXPLANATION`). Der erste Anlauf maß gegen kr
 deshalb nur, was DIESES Gerät hat — die Gates lesen jetzt den Katalog bzw. den Quelltext
 ([[feedback_user_hardware_ist_sample]]).
 
+**Wo die Entscheidung „leer ist richtig" seit 2026-09-07 steht: `test/self-explaining.json`.**
+Muster → Begründung (Englisch, ohne Namensraum, `*` = genau EIN Id-Abschnitt). Das Flotten-Gate D08
+(`Entwicklung/scripts/check-object-inventory.py`) hält die Datei gegen das gebaute Objekt-Inventar:
+ein stummer Datenpunkt ohne Muster, ein Muster ohne Treffer, ein Muster, dessen Treffer ALLE eine
+Beschreibung tragen, und eine Begründung unter 15 Zeichen sind je ein Fund. Die Katalog-Invariante in
+`manifest.test.ts` führt deshalb keine eigene Liste mehr, sondern LIEST dieselbe Datei — sie deckt die
+andere Fläche ab: 21 Katalog-Einträge, die kein Fixture-Gerät baut (Bluetooth-Quelle, Zone B, die
+A/B-Lautsprecherklemmen, MusicCast-Balance …). Für die zwölf davon, die kein Muster erreicht, steht
+`OFF_INVENTORY` im Test — und zwei Zusicherungen halten sie klein: ein Eintrag, den ein Muster schon
+deckt, und einer, den ein Fixture-Gerät inzwischen baut, sind beide rot.
+
 ## Die Bildschirm-Fernbedienung auf allen drei Protokollen (v2.4.0, #613)
 
 `remote.cursor`/`remote.menu` gab es nur auf MusicCast. Sie liegen jetzt auf allen drei Transporten,

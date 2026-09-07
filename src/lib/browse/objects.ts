@@ -16,12 +16,19 @@ export function browseObjectDefs(sources: Record<string, string>): ObjectDef[] {
   const line = (n: number): ObjectDef => ({
     id: `player.browse.line${n}`,
     type: "state",
-    common: { name: tName("line", n), type: "string", role: "text", read: true, write: false },
+    common: {
+      name: tName("line", n),
+      desc: tName("descLine"),
+      type: "string",
+      role: "text",
+      read: true,
+      write: false,
+    },
   });
-  const button = (id: string, name: ioBroker.StringOrTranslated): ObjectDef => ({
+  const button = (id: string, name: ioBroker.StringOrTranslated, desc?: ioBroker.StringOrTranslated): ObjectDef => ({
     id: `player.browse.${id}`,
     type: "state",
-    common: { name, type: "boolean", role: "button", read: false, write: true },
+    common: { name, ...(desc ? { desc } : {}), type: "boolean", role: "button", read: false, write: true },
   });
   return [
     { id: "player", type: "channel", common: channelCommon("player") },
@@ -29,7 +36,15 @@ export function browseObjectDefs(sources: Record<string, string>): ObjectDef[] {
     {
       id: "player.browse.source",
       type: "state",
-      common: { name: tName("source"), type: "string", role: "state", read: true, write: true, states: sources },
+      common: {
+        name: tName("source"),
+        desc: tName("descSource"),
+        type: "string",
+        role: "state",
+        read: true,
+        write: true,
+        states: sources,
+      },
     },
     {
       id: "player.browse.menuName",
@@ -95,8 +110,8 @@ export function browseObjectDefs(sources: Record<string, string>): ObjectDef[] {
         step: 1,
       },
     },
-    button("pageUp", tName("pageUp")),
-    button("pageDown", tName("pageDown")),
+    button("pageUp", tName("pageUp"), tName("descPageUp")),
+    button("pageDown", tName("pageDown"), tName("descPageDown")),
     button("back", tName("back")),
     button("home", tName("menuRoot")),
     {

@@ -40,6 +40,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     state: "volume",
     common: {
       nameKey: "volume",
+      descKey: "descVolume",
       type: "number",
       role: "level.volume",
       read: true,
@@ -134,7 +135,14 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
   },
   {
     state: "sleep",
-    common: { nameKey: "sleepTimer", type: "string", role: "state", read: true, write: true },
+    common: {
+      nameKey: "sleepTimer",
+      descKey: "descSleepTimer",
+      type: "string",
+      role: "state",
+      read: true,
+      write: true,
+    },
     statusField: "sleep",
     toInner: value => `<Power_Control><Sleep>${escapeXmlText(value)}</Sleep></Power_Control>`,
   },
@@ -147,6 +155,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     state: "sound.bass",
     common: {
       nameKey: "bass",
+      descKey: "descBass",
       type: "number",
       role: "level",
       read: true,
@@ -164,6 +173,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     state: "sound.treble",
     common: {
       nameKey: "treble",
+      descKey: "descTreble",
       type: "number",
       role: "level",
       read: true,
