@@ -61,7 +61,6 @@ class MultiTransportHandle {
       objects: connection.buildObjects()
     }));
     const { objects, ownerByCanonicalId } = (0, import_object_tree_coordinator.coordinateObjectTree)(contributions);
-    this.ownerByCanonicalId = ownerByCanonicalId;
     for (const object of objects) {
       const fingerprint = JSON.stringify(object);
       if (this.writtenObjects.get(object.id) === fingerprint) {
@@ -70,6 +69,7 @@ class MultiTransportHandle {
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
       this.writtenObjects.set(object.id, fingerprint);
     }
+    this.ownerByCanonicalId = ownerByCanonicalId;
     for (const connection of this.live) {
       await connection.seedOwned(this.ownedFor(connection.transport));
     }

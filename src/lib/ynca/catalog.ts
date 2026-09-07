@@ -540,6 +540,168 @@ const ZONEB_AVAIL_STATES = selfMap(["Not Connected", "Not Ready", "Ready"]);
  * Kept out of AMP_FUNCS so they are not created for ZONE2-4.
  */
 const MAIN_ONLY_FUNCS: FuncDef[] = [
+  // --- Setup surface of the 2010 generation (audit 2026-09-06): answered by real receivers in
+  // the bundled protocols, no datapoint until now. Values from the official command list.
+  {
+    func: "SWFRTRIM",
+    state: "sound.subwooferTrim",
+    nameKey: "subwooferTrim",
+    descKey: "descSubwooferTrim",
+    // The wire form carries one decimal (`0.0`, `3.0` in the CX-A5100/RX-V583/RX-V673/TSR-7810
+    // protocols). The BOUNDS are the ones this adapter's XML catalog already uses for the same
+    // physical trim — the RX-V671 list does not carry the function, so nothing tighter is
+    // documented; the number stays readable either way.
+    spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5, decimals: 1 },
+    write: true,
+    role: "level",
+  },
+  {
+    func: "YPAOVOL",
+    state: "sound.ypaoVolume",
+    nameKey: "ypaoVolume",
+    descKey: "descYpaoVolume",
+    spec: { kind: "onoff", on: "Auto", off: "Off" },
+    write: true,
+    role: "switch",
+  },
+  {
+    func: "HDMIAUDOUTAMP",
+    state: "hdmi.audioToAmp",
+    nameKey: "hdmiAudioToAmplifier",
+    descKey: "descHdmiAudioToAmplifier",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    write: true,
+    role: "switch",
+  },
+  {
+    func: "HDMIAUDOUT1",
+    state: "hdmi.audioToOut1",
+    nameKey: "hdmiAudioToOutput1",
+    descKey: "descHdmiAudioToOutput1",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    write: true,
+    role: "switch",
+  },
+  {
+    func: "HDMIAUDOUT2",
+    state: "hdmi.audioToOut2",
+    nameKey: "hdmiAudioToOutput2",
+    descKey: "descHdmiAudioToOutput2",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    write: true,
+    role: "switch",
+  },
+  {
+    func: "HDMIRESOL",
+    state: "hdmi.resolution",
+    nameKey: "hdmiVideoResolution",
+    descKey: "descHdmiVideoResolution",
+    spec: { kind: "enum", states: selfMap(["Auto", "480p / 576p", "720p", "1080i", "1080p", "Through"]) },
+    write: true,
+    role: "state",
+  },
+  {
+    func: "HDMIASPECT",
+    state: "hdmi.aspect",
+    nameKey: "hdmiVideoAspect",
+    descKey: "descHdmiVideoAspect",
+    spec: { kind: "enum", states: selfMap(["Through", "16:9 Normal"]) },
+    write: true,
+    role: "state",
+  },
+  {
+    func: "HDMIPROCESSING",
+    state: "hdmi.videoProcessing",
+    nameKey: "hdmiVideoProcessing",
+    descKey: "descHdmiVideoProcessing",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    write: true,
+    role: "switch",
+  },
+  {
+    func: "LIPSYNCMODE",
+    state: "hdmi.lipSyncMode",
+    nameKey: "lipSyncMode",
+    descKey: "descLipSyncMode",
+    spec: { kind: "enum", states: selfMap(["Auto", "Manual"]) },
+    write: true,
+    role: "state",
+  },
+  {
+    func: "LIPSYNCANLGOUT",
+    state: "hdmi.lipSyncAnalogOut",
+    nameKey: "lipSyncAnalogOutput",
+    descKey: "descLipSyncAnalogOutput",
+    spec: { kind: "number", unit: "ms", min: 0, max: 250, step: 1, decimals: 0 },
+    write: true,
+    role: "level",
+  },
+  {
+    func: "LIPSYNCHDMIOUT1MANUAL",
+    state: "hdmi.lipSyncOut1Manual",
+    nameKey: "lipSyncHdmiOutput1Manual",
+    descKey: "descLipSyncHdmiOutput1Manual",
+    spec: { kind: "number", unit: "ms", min: 0, max: 250, step: 1, decimals: 0 },
+    write: true,
+    role: "level",
+  },
+  {
+    func: "LIPSYNCHDMIOUT2MANUAL",
+    state: "hdmi.lipSyncOut2Manual",
+    nameKey: "lipSyncHdmiOutput2Manual",
+    descKey: "descLipSyncHdmiOutput2Manual",
+    spec: { kind: "number", unit: "ms", min: 0, max: 250, step: 1, decimals: 0 },
+    write: true,
+    role: "level",
+  },
+  {
+    func: "LIPSYNCSELINFO",
+    state: "hdmi.lipSyncSource",
+    nameKey: "lipSyncActiveOutput",
+    descKey: "descLipSyncActiveOutput",
+    spec: { kind: "enum", states: selfMap(["Analog", "HDMI1 Auto", "HDMI1 Manual", "HDMI2 Auto", "HDMI2 Manual"]) },
+    write: false,
+    role: "state",
+  },
+  {
+    func: "LIPSYNCOFFSETINFO",
+    state: "hdmi.lipSyncOffset",
+    nameKey: "lipSyncOffsetReportedByDisplay",
+    descKey: "descLipSyncOffsetReportedByDisplay",
+    spec: { kind: "number", unit: "ms", min: 0, max: 250, step: 1, decimals: 0 },
+    write: false,
+    role: "value",
+  },
+  {
+    func: "DECODERSEL",
+    state: "sound.decoderSelect",
+    nameKey: "decoderSelect",
+    descKey: "descDecoderSelect",
+    spec: { kind: "enum", states: selfMap(["Auto", "DTS", "Unavailable"]) },
+    write: true,
+    role: "state",
+  },
+  {
+    func: "EXSURDECODER",
+    state: "sound.extendedSurround",
+    nameKey: "extendedSurround",
+    descKey: "descExtendedSurround",
+    spec: {
+      kind: "enum",
+      states: selfMap(["Off", "Auto", "Dolby PLIIx Movie", "Dolby PLIIx Music", "EX/ES"]),
+    },
+    write: true,
+    role: "state",
+  },
+  {
+    func: "TVAUDIN1",
+    state: "advanced.tvAudioIn1",
+    nameKey: "tvAudioReturnInput",
+    descKey: "descTvAudioReturnInput",
+    spec: { kind: "enum", states: selfMap(["AV1", "AV2", "AV3", "AV4", "AV5", "AV6", "AUDIO1", "AUDIO2"]) },
+    write: true,
+    role: "state",
+  },
   // The A/B toggles belong with the other speaker settings (v2.0.0).
   {
     func: "SPEAKERA",
@@ -681,6 +843,16 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     readFunc: "PRESET",
     writeOnly: true,
     wireEncode: () => "Down",
+  },
+  {
+    subunit: "TUN",
+    func: "RDSCLOCK",
+    state: "tuner.rdsClock",
+    nameKey: "rdsClockTime",
+    descKey: "descRdsClockTime",
+    spec: { kind: "text" },
+    write: false,
+    role: "text",
   },
   {
     subunit: "TUN",
@@ -919,6 +1091,130 @@ const SYS_FUNCS: FuncDef[] = [
   },
   // Amp-assign for speaker pattern 1 (official RX-V671 list: PUT+GET with the three
   // documented values; the RX-V6A answers "Basic").
+  // --- Setup surface of the 2010 generation and later (audit 2026-09-06). Measured against the
+  // 15 bundled device protocols: these functions are ANSWERED by real receivers and had no
+  // datapoint at all. Values come from the official command list
+  // (`Ressourcen/yamaha/ynca-command-list-rx-v671.txt`), never from a guess.
+  {
+    func: "MEMGRD",
+    state: "advanced.memoryGuard",
+    nameKey: "memoryGuard",
+    descKey: "descMemoryGuard",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    write: true,
+    role: "switch",
+  },
+  {
+    func: "VIDANLGCONV",
+    state: "advanced.analogVideoConversion",
+    nameKey: "analogVideoConversion",
+    descKey: "descAnalogVideoConversion",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    write: true,
+    role: "switch",
+  },
+  {
+    func: "DMCCONTROL",
+    state: "advanced.dmcControl",
+    nameKey: "dmcControl",
+    descKey: "descDmcControl",
+    spec: { kind: "onoff", on: "Enable", off: "Disable" },
+    write: true,
+    role: "switch",
+  },
+  {
+    func: "TRIG1TYPE",
+    state: "advanced.trigger1Type",
+    nameKey: "triggerOut1Type",
+    descKey: "descTriggerOut1Type",
+    spec: { kind: "enum", states: selfMap(["Manual", "Power", "Zone and Input"]) },
+    write: true,
+    role: "state",
+  },
+  {
+    func: "TRIG1ZONE",
+    state: "advanced.trigger1Zone",
+    nameKey: "triggerOut1Zone",
+    descKey: "descTriggerOut1Zone",
+    spec: { kind: "enum", states: selfMap(["Main Zone", "Zone2", "All"]) },
+    write: true,
+    role: "state",
+  },
+  {
+    func: "SPPATTERN1FRNTCNFG",
+    state: "advanced.speakers.pattern1Front",
+    nameKey: "speakerPattern1Front",
+    descKey: "descSpeakerPattern1Front",
+    spec: { kind: "enum", states: selfMap(["Small", "Large"]) },
+    write: true,
+    role: "state",
+  },
+  {
+    func: "SPPATTERN1CENTCNFG",
+    state: "advanced.speakers.pattern1Center",
+    nameKey: "speakerPattern1Center",
+    descKey: "descSpeakerPattern1Center",
+    spec: { kind: "enum", states: selfMap(["None", "Small", "Large"]) },
+    write: true,
+    role: "state",
+  },
+  {
+    func: "SPPATTERN1SURCNFG",
+    state: "advanced.speakers.pattern1Surround",
+    nameKey: "speakerPattern1Surround",
+    descKey: "descSpeakerPattern1Surround",
+    spec: { kind: "enum", states: selfMap(["None", "Small", "Large"]) },
+    write: true,
+    role: "state",
+  },
+  {
+    func: "SPPATTERN1SURBCNFG",
+    state: "advanced.speakers.pattern1SurroundBack",
+    nameKey: "speakerPattern1SurroundBack",
+    descKey: "descSpeakerPattern1SurroundBack",
+    spec: { kind: "enum", states: selfMap(["None", "Small x1", "Large x1", "Small x2", "Large x2"]) },
+    write: true,
+    role: "state",
+  },
+  {
+    func: "SPPATTERN1FRNTPRES",
+    state: "advanced.speakers.pattern1FrontPresence",
+    nameKey: "speakerPattern1FrontPresence",
+    descKey: "descSpeakerPattern1FrontPresence",
+    spec: { kind: "enum", states: selfMap(["None", "Use"]) },
+    write: true,
+    role: "state",
+  },
+  {
+    func: "SPPATTERN1EXBASS",
+    state: "advanced.speakers.pattern1ExtraBass",
+    nameKey: "speakerPattern1ExtraBass",
+    descKey: "descSpeakerPattern1ExtraBass",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    write: true,
+    role: "switch",
+  },
+  {
+    func: "SPPATTERN1SWFR1PHASE",
+    state: "advanced.speakers.pattern1Subwoofer1Phase",
+    nameKey: "speakerPattern1Subwoofer1Phase",
+    descKey: "descSpeakerPattern1Subwoofer1Phase",
+    spec: { kind: "enum", states: selfMap(["Normal", "Reverse"]) },
+    write: true,
+    role: "state",
+  },
+  {
+    func: "SPPATTERN1SWFRCRSOVR",
+    state: "advanced.speakers.pattern1SubwooferCrossover",
+    nameKey: "speakerPattern1SubwooferCrossover",
+    descKey: "descSpeakerPattern1SubwooferCrossover",
+    spec: {
+      kind: "enum",
+      states: selfMap(["40 Hz", "60 Hz", "80 Hz", "90 Hz", "100 Hz", "110 Hz", "120 Hz", "160 Hz", "200 Hz"]),
+    },
+    write: true,
+    role: "state",
+  },
   {
     func: "SPPATTERN1AMP",
     state: "advanced.speakers.pattern1Amp",
@@ -956,6 +1252,7 @@ const SYS_FUNCS: FuncDef[] = [
 // function is INPNAME + the upper-cased key (audio1 → INPNAMEAUDIO1).
 const INPUT_NAME_KEYS = [
   "audio1",
+  "aux",
   "audio2",
   "audio3",
   "audio4",
@@ -974,10 +1271,15 @@ const INPUT_NAME_KEYS = [
   "hdmi5",
   "hdmi6",
   "hdmi7",
+  "mclink",
   "multich",
+  "netradio",
   "phono",
+  "server",
+  "tuner",
   "usb",
   "vaux",
+  "bt",
 ];
 
 /**
@@ -985,7 +1287,44 @@ const INPUT_NAME_KEYS = [
  * upper-cased key are spelled the way the device itself lists them in the input dropdown
  * ({@link INPUT_STATES}), so the name and the selectable value read alike.
  */
-const INPUT_NAME_LABELS: Readonly<Record<string, string>> = { vaux: "V-AUX", multich: "MULTI CH" };
+/**
+ * The inputs the official command list gives a `TRIG1INP<INPUT>` function. Not the same set as
+ * {@link INPUT_NAME_KEYS}: a trigger can follow a NETWORK source (net radio, Napster, PC, USB)
+ * that carries no renameable input name, while the renameable MULTI CH / DOCK inputs have no
+ * trigger function.
+ */
+const TRIGGER_INPUT_KEYS = [
+  "audio1",
+  "audio2",
+  "av1",
+  "av2",
+  "av3",
+  "av4",
+  "av5",
+  "av6",
+  "hdmi1",
+  "hdmi2",
+  "hdmi3",
+  "hdmi4",
+  "hdmi5",
+  "hdmi6",
+  "hdmi7",
+  "napster",
+  "netradio",
+  "pc",
+  "phono",
+  "tuner",
+  "usb",
+  "vaux",
+];
+
+const INPUT_NAME_LABELS: Readonly<Record<string, string>> = {
+  vaux: "V-AUX",
+  multich: "MULTI CH",
+  mclink: "MusicCast Link",
+  netradio: "NET RADIO",
+  bt: "Bluetooth",
+};
 
 /**
  * DAB tuner functions (the `@DAB` subunit on DAB+-capable receivers). Mapped under
@@ -1441,6 +1780,22 @@ export function buildYncaCatalog(): YncaEntry[] {
     entries.push(...fnEntries([fn], fn.subunit));
   }
   entries.push(...fnEntries(SYS_FUNCS, "SYS"));
+  // Trigger-out 1, per input (official list `@SYS:TRIG1INP<INPUT>`, Lo/Hi). Answered by the
+  // 2010 generation and unmapped until the 2026-09-06 audit: the adapter carried the manual
+  // trigger level but not the per-input assignment that decides WHEN the trigger fires.
+  for (const key of TRIGGER_INPUT_KEYS) {
+    entries.push({
+      id: `advanced.trigger1Inputs.${key}`,
+      nameKey: "triggerOut1ForInput",
+      descKey: "descTriggerOut1ForInput",
+      nameArgs: [INPUT_NAME_LABELS[key] ?? key.toUpperCase()],
+      spec: { kind: "enum", states: selfMap(["Lo", "Hi"]) },
+      write: true,
+      role: "state",
+      subunit: "SYS",
+      func: `TRIG1INP${key.toUpperCase()}`,
+    });
+  }
   for (const key of INPUT_NAME_KEYS) {
     const upper = key.toUpperCase();
     entries.push({
@@ -1518,6 +1873,21 @@ export function buildYncaCatalog(): YncaEntry[] {
         wireEncode: value => (Number(value) === 0 ? "Auto" : String(Math.round(Number(value)))),
       });
     }
+  }
+  // iPod control mode (@IPOD:MODE / @IPODUSB:MODE, official list: Normal/Extended). Source-own,
+  // so it lives in the source folder — the v2.0.0 cut removed those folders because nothing but
+  // the shared playback block was left in them; this puts genuine content back (audit 2026-09-06).
+  for (const source of ["ipod", "ipodUsb"] as const) {
+    entries.push({
+      id: `player.${source}.mode`,
+      nameKey: "ipodControlMode",
+      descKey: "descIpodControlMode",
+      spec: { kind: "enum", states: selfMap(["Normal", "Extended"]) },
+      write: true,
+      role: "state",
+      subunit: source === "ipod" ? "IPOD" : "IPODUSB",
+      func: "MODE",
+    });
   }
   // Net-radio bookmark (@NETRADIO:BOOKMARK, official list + attested): true bookmarks
   // the currently playing station, false removes the bookmark — the "save a favourite

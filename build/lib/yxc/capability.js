@@ -25,6 +25,22 @@ const MEDIA_BLOCKS = ["netusb", "tuner", "cd"];
 function stringList(value) {
   return Array.isArray(value) ? value.filter((entry) => typeof entry === "string") : [];
 }
+function parseRanges(rangeStep) {
+  const out = {};
+  if (!Array.isArray(rangeStep)) {
+    return out;
+  }
+  for (const entry of rangeStep) {
+    if (typeof entry !== "object" || entry === null) {
+      continue;
+    }
+    const range = entry;
+    if (typeof range.id === "string" && typeof range.min === "number" && typeof range.max === "number" && typeof range.step === "number") {
+      out[range.id] = { min: range.min, max: range.max, step: range.step };
+    }
+  }
+  return out;
+}
 function parseRange(rangeStep, id) {
   if (!Array.isArray(rangeStep)) {
     return void 0;
@@ -102,7 +118,7 @@ function parseYxcFeatures(response) {
           id: zone.id,
           funcs: stringList(zone.func_list),
           inputs: stringList(zone.input_list),
-          volumeRange: parseRange(zone.range_step, "volume"),
+          ranges: parseRanges(zone.range_step),
           valueLists: parseValueLists(zone),
           sceneNum: typeof zone.scene_num === "number" ? zone.scene_num : void 0
         });
@@ -111,7 +127,9 @@ function parseYxcFeatures(response) {
   }
   const media = MEDIA_BLOCKS.filter((block) => block in obj);
   const netusb = obj.netusb;
+  const system = typeof obj.system === "object" && obj.system !== null ? obj.system : {};
   return {
+    systemRanges: parseRanges(system.range_step),
     zones,
     media,
     netusbFuncs: typeof netusb === "object" && netusb !== null ? stringList(netusb.func_list) : void 0,

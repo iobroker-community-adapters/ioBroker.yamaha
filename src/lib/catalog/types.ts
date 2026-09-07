@@ -1,5 +1,5 @@
 import type { ValueSpec } from "./value-coerce";
-import type { I18nKey } from "../i18n";
+import { tName, type I18nKey } from "../i18n";
 
 /**
  * One catalogued device function → one ioBroker state. The catalog is
@@ -49,6 +49,19 @@ export interface CatalogEntry {
 
 /** An object to create in the device tree: a state or a channel. */
 export interface ObjectDef {
+  /**
+   * Set when the transport could not PROVE it serves this capability and is claiming it on
+   * presence alone. The object-tree coordinator then prefers a transport that DID prove it,
+   * whatever the modernity rank says.
+   *
+   * The one case today is the YNCA menu claim: a receiver in standby answers `@RESTRICTED` to
+   * every media subunit, which is indistinguishable from "cannot browse", so the claim is kept
+   * rather than stripping the menus off a device that serves them once it is on. A receiver
+   * spends most of its life in standby, so that unproven claim is the NORMAL state at adapter
+   * start — and ranking above XML it displaced the transport that does probe. That is issue
+   * #613, reached through the standby door (audit 2026-09-06). Never written to the object.
+   */
+  unproven?: boolean;
   /** Object id relative to the device. */
   id: string;
   /** Object kind. */
@@ -105,8 +118,8 @@ export const CHANNEL_DESC_KEYS: Record<string, I18nKey> = {
   player: "descChannelPlayer",
   multiroom: "descChannelMultiroom",
   group: "descChannelGroup",
-  musicCastLink: "descChannelMusicCastLink",
   browse: "descChannelBrowse",
+  trigger1Inputs: "descChannelTrigger1Inputs",
 };
 
 export const CHANNEL_NAME_KEYS: Record<string, I18nKey> = {
@@ -137,12 +150,11 @@ export const CHANNEL_NAME_KEYS: Record<string, I18nKey> = {
   // The MusicCast-Link folder under multiroom — a group of linked DEVICES, not zones.
   group: "musiccastGroupLinkedDevices",
   // Media player sources
+  ipod: "iPod",
+  ipodUsb: "ipodUSB",
   netRadio: "netRadio",
-  server: "mediaServer",
+  trigger1Inputs: "trigger1Inputs",
   usb: "usb",
-  spotify: "spotify",
-  deezer: "deezer",
-  tidal: "tidal",
   napster: "napster",
   pandora: "pandora",
   rhapsody: "rhapsody",
@@ -151,10 +163,37 @@ export const CHANNEL_NAME_KEYS: Record<string, I18nKey> = {
   bluetooth: "bluetooth",
   pc: "pc",
   musicCastLink: "musiccastLink",
-  ipod: "iPod",
-  ipodUsb: "ipodUSB",
+  // The browsing surface's own folder. It was missing here until the object inventory measured
+  // the built tree (2026-09-07): the folder HAS an explanation, so it went out with a translated
+  // desc next to the hard-coded English fallback name "Browse" — on every device.
+  browse: "browse",
   // YXC/XML media channels
   cd: "cd",
   netPlayer: "networkPlayer",
   clock: "clock",
 };
+
+/**
+ * The `common` of a channel object: its translated name, plus its explanation where one
+ * exists. THE one place that answers both questions — the four object builders (the shared
+ * catalog path, the MusicCast object mapper, the XML controller and the browsing surface) all
+ * go through it.
+ *
+ * It exists because they did not: only the catalog path read {@link CHANNEL_DESC_KEYS}, so
+ * every folder built by MusicCast or XML came out without an explanation, and on a device that
+ * speaks both the owner policy handed the description-less MusicCast definition to the user
+ * (audit 2026-09-06: 3 of 303 folders explained on the MusicCast path against 105 of 213 on
+ * the YNCA one). A folder id not listed falls back to its capitalised segment — that is a
+ * device-derived name (a MusicCast weekday alarm channel), which has nothing to translate.
+ *
+ * @param segment the channel's last path segment
+ * @returns the channel's common (name, and desc where the segment has one)
+ */
+export function channelCommon(segment: string): ObjectDef["common"] {
+  const nameKey = CHANNEL_NAME_KEYS[segment];
+  const descKey = CHANNEL_DESC_KEYS[segment];
+  return {
+    name: nameKey ? tName(nameKey) : segment.charAt(0).toUpperCase() + segment.slice(1),
+    ...(descKey ? { desc: tName(descKey) } : {}),
+  };
+}

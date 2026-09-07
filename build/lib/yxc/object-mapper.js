@@ -22,6 +22,7 @@ __export(object_mapper_exports, {
 });
 module.exports = __toCommonJS(object_mapper_exports);
 var import_types = require("../catalog/types");
+var import_remote = require("./remote");
 var import_i18n = require("../i18n");
 var import_zones = require("./zones");
 var import_catalog = require("./catalog");
@@ -163,8 +164,22 @@ function pushPlayerBlock(objects, prefix, channelName) {
     });
   }
 }
+const RANGE_BY_STATE = {
+  volume: "volume",
+  "sound.bass": "tone_control",
+  "sound.treble": "tone_control",
+  subwooferVolume: "subwoofer_volume",
+  "sound.dialogueLevel": "dialogue_level",
+  "sound.dialogueLift": "dialogue_lift",
+  "sound.dtsDialogueControl": "dts_dialogue_control",
+  "sound.balance": "balance",
+  "sound.equalizer.low": "equalizer",
+  "sound.equalizer.mid": "equalizer",
+  "sound.equalizer.high": "equalizer",
+  actualVolume: "actual_volume_db"
+};
 function mapYxcToObjects(capabilities) {
-  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
+  var _a, _b, _c, _d, _e, _f, _g;
   const objects = [];
   const channels = /* @__PURE__ */ new Set();
   for (const zoneDef of ZONES) {
@@ -199,9 +214,7 @@ function mapYxcToObjects(capabilities) {
           objects.push({
             id: channelId,
             type: "channel",
-            common: {
-              name: import_types.CHANNEL_NAME_KEYS[segment] ? (0, import_i18n.tName)(import_types.CHANNEL_NAME_KEYS[segment]) : segment.charAt(0).toUpperCase() + segment.slice(1)
-            }
+            common: (0, import_types.channelCommon)(segment)
           });
         }
       }
@@ -211,28 +224,30 @@ function mapYxcToObjects(capabilities) {
         name: (0, import_i18n.tName)(entryNameKey),
         ...entryDescKey ? { desc: (0, import_i18n.tName)(entryDescKey) } : {}
       };
-      if (entry.state === "volume" && zone.volumeRange) {
-        common.min = zone.volumeRange.min;
-        common.max = zone.volumeRange.max;
-        common.step = zone.volumeRange.step;
+      const rangeId = RANGE_BY_STATE[entry.state];
+      const range = rangeId ? (_a = zone.ranges) == null ? void 0 : _a[rangeId] : void 0;
+      if (range) {
+        common.min = range.min;
+        common.max = range.max;
+        common.step = range.step;
       }
       if (entry.state === "input" && zone.inputs.length > 0) {
         common.states = selfMap(zone.inputs);
       }
-      const valueList = (_a = zone.valueLists) == null ? void 0 : _a[entry.state];
+      const valueList = (_b = zone.valueLists) == null ? void 0 : _b[entry.state];
       if (valueList) {
         common.states = selfMap(valueList);
       }
       objects.push({ id: fullId, type: "state", common });
     }
-    const zoneChannelHelper = (id, name) => {
+    const zoneChannelHelper = (id, common) => {
       if (!channels.has(id)) {
         channels.add(id);
-        objects.push({ id, type: "channel", common: { name } });
+        objects.push({ id, type: "channel", common });
       }
     };
     if (zone.funcs.includes("scene") && zone.sceneNum && zone.sceneNum > 0) {
-      zoneChannelHelper(`${zoneDef.prefix}scene`, (0, import_i18n.tName)((_b = import_types.CHANNEL_NAME_KEYS.scene) != null ? _b : "Scenes"));
+      zoneChannelHelper(`${zoneDef.prefix}scene`, (0, import_types.channelCommon)("scene"));
       objects.push({
         id: `${zoneDef.prefix}scene.recall`,
         type: "state",
@@ -250,7 +265,7 @@ function mapYxcToObjects(capabilities) {
       });
     }
     if (zone.funcs.includes("cursor") || zone.funcs.includes("menu")) {
-      zoneChannelHelper(`${zoneDef.prefix}remote`, (0, import_i18n.tName)((_c = import_types.CHANNEL_NAME_KEYS.remote) != null ? _c : "Remote control"));
+      zoneChannelHelper(`${zoneDef.prefix}remote`, (0, import_types.channelCommon)("remote"));
       if (zone.funcs.includes("cursor")) {
         objects.push({
           id: `${zoneDef.prefix}remote.cursor`,
@@ -262,7 +277,7 @@ function mapYxcToObjects(capabilities) {
             role: "state",
             read: false,
             write: true,
-            states: selfMap(["up", "down", "left", "right", "select", "return"])
+            states: selfMap([...import_remote.YXC_CURSOR_VALUES])
           }
         });
       }
@@ -277,14 +292,14 @@ function mapYxcToObjects(capabilities) {
             role: "state",
             read: false,
             write: true,
-            states: selfMap(["on_screen", "top_menu", "menu", "option", "display", "home"])
+            states: selfMap([...import_remote.YXC_MENU_VALUES])
           }
         });
       }
     }
     if (zone.funcs.includes("signal_info")) {
-      zoneChannelHelper(`${zoneDef.prefix}sound`, (0, import_i18n.tName)((_d = import_types.CHANNEL_NAME_KEYS.sound) != null ? _d : "Sound"));
-      zoneChannelHelper(`${zoneDef.prefix}sound.signal`, (0, import_i18n.tName)((_e = import_types.CHANNEL_NAME_KEYS.signal) != null ? _e : "Audio signal"));
+      zoneChannelHelper(`${zoneDef.prefix}sound`, (0, import_types.channelCommon)("sound"));
+      zoneChannelHelper(`${zoneDef.prefix}sound.signal`, (0, import_types.channelCommon)("signal"));
       const signal = (id, name, type, role) => {
         objects.push({
           id: `${zoneDef.prefix}sound.signal.${id}`,
@@ -344,14 +359,14 @@ function mapYxcToObjects(capabilities) {
         min: 1
       }
     });
-    if ((_f = capabilities.netusbFuncs) == null ? void 0 : _f.includes("mc_playlist")) {
+    if ((_c = capabilities.netusbFuncs) == null ? void 0 : _c.includes("mc_playlist")) {
       objects.push({
         id: "player.netPlayer.playlists",
         type: "state",
         common: { name: (0, import_i18n.tName)("musiccastPlaylists"), type: "string", role: "json", read: true, write: false }
       });
     }
-    if ((_g = capabilities.netusbFuncs) == null ? void 0 : _g.includes("play_queue")) {
+    if ((_d = capabilities.netusbFuncs) == null ? void 0 : _d.includes("play_queue")) {
       objects.push({
         id: "player.netPlayer.queue",
         type: "state",
@@ -410,7 +425,7 @@ function mapYxcToObjects(capabilities) {
       read: true,
       write: true
     };
-    const bands = (_i = (_h = capabilities.tuner) == null ? void 0 : _h.bands) != null ? _i : [];
+    const bands = (_f = (_e = capabilities.tuner) == null ? void 0 : _e.bands) != null ? _f : [];
     if (bands.length > 0) {
       bandCommon.states = selfMap(bands);
     }
@@ -477,7 +492,7 @@ function mapYxcToObjects(capabilities) {
       write: true,
       min: 0
     };
-    if ((_j = capabilities.tuner) == null ? void 0 : _j.presetNum) {
+    if ((_g = capabilities.tuner) == null ? void 0 : _g.presetNum) {
       presetCommon.max = capabilities.tuner.presetNum;
     }
     objects.push({ id: "tuner.preset", type: "state", common: presetCommon });

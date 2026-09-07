@@ -24,9 +24,6 @@ module.exports = __toCommonJS(build_objects_exports);
 var import_value_coerce = require("./value-coerce");
 var import_types = require("./types");
 var import_i18n = require("../i18n");
-function capitalize(segment) {
-  return segment.charAt(0).toUpperCase() + segment.slice(1);
-}
 function catalogToObjects(entries) {
   var _a;
   const objects = [];
@@ -43,10 +40,7 @@ function catalogToObjects(entries) {
           type: "channel",
           // A listed channel is translated; an unlisted one keeps its capitalised id, which is
           // a device-derived name and therefore has no translation to give.
-          common: {
-            name: import_types.CHANNEL_NAME_KEYS[segment] ? (0, import_i18n.tName)(import_types.CHANNEL_NAME_KEYS[segment]) : capitalize(segment),
-            ...import_types.CHANNEL_DESC_KEYS[segment] ? { desc: (0, import_i18n.tName)(import_types.CHANNEL_DESC_KEYS[segment]) } : {}
-          }
+          common: (0, import_types.channelCommon)(segment)
         });
       }
     }

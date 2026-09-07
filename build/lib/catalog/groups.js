@@ -20,9 +20,11 @@ var groups_exports = {};
 __export(groups_exports, {
   SWITCHABLE_GROUPS: () => SWITCHABLE_GROUPS,
   groupOf: () => groupOf,
+  groupsOf: () => groupsOf,
   isGroupEnabled: () => isGroupEnabled
 });
 module.exports = __toCommonJS(groups_exports);
+var import_owner_policy = require("./owner-policy");
 const SWITCHABLE_GROUPS = [
   "player",
   "tuner",
@@ -34,7 +36,8 @@ const SWITCHABLE_GROUPS = [
   "clock"
 ];
 function groupOf(stateId) {
-  const seg = stateId.includes(".") ? stateId.slice(0, stateId.indexOf(".")) : stateId;
+  const template = stateId.replace(import_owner_policy.ZONE_PREFIX, "");
+  const seg = template.includes(".") ? template.slice(0, template.indexOf(".")) : template;
   if (seg === "multiroom") {
     return "multiroom";
   }
@@ -61,17 +64,21 @@ function groupOf(stateId) {
   }
   return "amp";
 }
-function isGroupEnabled(stateId, config) {
-  const group = groupOf(stateId);
-  if (group === "amp") {
-    return true;
+function groupsOf(stateId) {
+  const theme = groupOf(stateId);
+  if (!import_owner_policy.ZONE_PREFIX.test(stateId) || theme === "multiroom") {
+    return [theme];
   }
-  return config[`group_${group}`] !== false;
+  return ["multiroom", theme];
+}
+function isGroupEnabled(stateId, config) {
+  return groupsOf(stateId).every((group) => group === "amp" || config[`group_${group}`] !== false);
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   SWITCHABLE_GROUPS,
   groupOf,
+  groupsOf,
   isGroupEnabled
 });
 //# sourceMappingURL=groups.js.map

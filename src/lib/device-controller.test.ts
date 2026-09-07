@@ -989,3 +989,38 @@ describe("YncaDeviceController capability persistence (standby must not shrink i
     expect(caps.subunits.MAIN.PWR).toBe("Standby");
   });
 });
+
+describe("YncaDeviceController — the standby menu claim is marked unproven (audit 2026-09-06)", () => {
+  test("a receiver in standby claims the menus, but not as a proof", async () => {
+    // A receiver answers @RESTRICTED for its media subunits while it sleeps, which cannot be
+    // told apart from "cannot browse" — so the claim is kept rather than stripping the menus
+    // off a device that serves them once it is on. It must NOT outrank a transport that
+    // proved it, or #613 comes back through the standby door.
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX-V473",
+      subunits: { MAIN: { PWR: "Standby" }, NETRADIO: { PLAYBACKINFO: "Stop" } },
+    };
+    const { objects, deps } = makeDeps(client);
+    await new YncaDeviceController("living", { ...deps, gate: testGate() }).start();
+
+    const browse = objects.filter(entry => entry.id.startsWith("living.player.browse."));
+    expect(browse.length).toBeGreaterThan(0);
+    expect(browse.every(entry => entry.def.unproven === true)).toBe(true);
+  });
+
+  test("an awake receiver that answers the list probe claims it as proven", async () => {
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX-A810",
+      subunits: { MAIN: { PWR: "On" }, NETRADIO: { PLAYBACKINFO: "Play" } },
+    };
+    client.listSubunits = ["NETRADIO"];
+    const { objects, deps } = makeDeps(client);
+    await new YncaDeviceController("living", { ...deps, gate: testGate() }).start();
+
+    const browse = objects.filter(entry => entry.id.startsWith("living.player.browse."));
+    expect(browse.length).toBeGreaterThan(0);
+    expect(browse.some(entry => entry.def.unproven)).toBe(false);
+  });
+});

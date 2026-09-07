@@ -1,4 +1,5 @@
-import { CHANNEL_NAME_KEYS, type ObjectDef } from "../catalog/types";
+import { channelCommon, type ObjectDef } from "../catalog/types";
+import { YXC_CURSOR_VALUES, YXC_MENU_VALUES } from "./remote";
 import { tName, type I18nKey } from "../i18n";
 import { YXC_ZONE_IDS, zonePrefix } from "./zones";
 import type { YxcCapabilities } from "./capability";
@@ -166,6 +167,29 @@ function pushPlayerBlock(objects: ObjectDef[], prefix: string, channelName: ioBr
 }
 
 /**
+ * The `range_step` id that carries a state's bounds. The names are the device's own
+ * (capture-verified across 25 models); a state not listed here declares no range.
+ *
+ * `actualVolume` deliberately takes the dB range, not the numeric one: the datapoint is
+ * declared in dB, and a device that reports both would otherwise get the union of two
+ * different scales.
+ */
+const RANGE_BY_STATE: Readonly<Record<string, string>> = {
+  volume: "volume",
+  "sound.bass": "tone_control",
+  "sound.treble": "tone_control",
+  subwooferVolume: "subwoofer_volume",
+  "sound.dialogueLevel": "dialogue_level",
+  "sound.dialogueLift": "dialogue_lift",
+  "sound.dtsDialogueControl": "dts_dialogue_control",
+  "sound.balance": "balance",
+  "sound.equalizer.low": "equalizer",
+  "sound.equalizer.mid": "equalizer",
+  "sound.equalizer.high": "equalizer",
+  actualVolume: "actual_volume_db",
+};
+
+/**
  * Turn YXC capabilities into the unified object tree: main's functions as
  * top-level states, each additional zone as a channel with its own states. An
  * input state is added when the zone offers inputs. Player sources (netusb, cd)
@@ -215,11 +239,7 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
           objects.push({
             id: channelId,
             type: "channel",
-            common: {
-              name: CHANNEL_NAME_KEYS[segment]
-                ? tName(CHANNEL_NAME_KEYS[segment])
-                : segment.charAt(0).toUpperCase() + segment.slice(1),
-            },
+            common: channelCommon(segment),
           });
         }
       }
@@ -229,10 +249,16 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
         name: tName(entryNameKey),
         ...(entryDescKey ? { desc: tName(entryDescKey) } : {}),
       };
-      if (entry.state === "volume" && zone.volumeRange) {
-        common.min = zone.volumeRange.min;
-        common.max = zone.volumeRange.max;
-        common.step = zone.volumeRange.step;
+      // The device declares the bounds of its own numeric controls in `range_step`; whatever
+      // it says wins over anything the catalog could guess. Only `volume` used to be read
+      // (audit 2026-09-06) — bass, treble, subwoofer trim, dialogue level/lift, DTS dialogue
+      // control, balance and the equalizer bands stood there as numbers without a slider.
+      const rangeId = RANGE_BY_STATE[entry.state];
+      const range = rangeId ? zone.ranges?.[rangeId] : undefined;
+      if (range) {
+        common.min = range.min;
+        common.max = range.max;
+        common.step = range.step;
       }
       // The device's own allowed-value lists (getFeatures) become dropdowns: the zone's
       // inputs on the input state, sound_program_list & co on their states. On a device
@@ -247,16 +273,16 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
       }
       objects.push({ id: fullId, type: "state", common });
     }
-    const zoneChannelHelper = (id: string, name: ioBroker.StringOrTranslated): void => {
+    const zoneChannelHelper = (id: string, common: ObjectDef["common"]): void => {
       if (!channels.has(id)) {
         channels.add(id);
-        objects.push({ id, type: "channel", common: { name } });
+        objects.push({ id, type: "channel", common });
       }
     };
     // Scene recall (#615): the zone declares `scene` + scene_num — per zone, so a
     // Zone-2 scene is first-class (the RX-V6A declares 8 for main AND zone2).
     if (zone.funcs.includes("scene") && zone.sceneNum && zone.sceneNum > 0) {
-      zoneChannelHelper(`${zoneDef.prefix}scene`, tName(CHANNEL_NAME_KEYS.scene ?? "Scenes"));
+      zoneChannelHelper(`${zoneDef.prefix}scene`, channelCommon("scene"));
       objects.push({
         id: `${zoneDef.prefix}scene.recall`,
         type: "state",
@@ -276,7 +302,7 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
     // The on-screen remote (cursor pad + menu keys) — declared as zone functions
     // `cursor`/`menu`; the endpoints and their vocabulary are device-verified.
     if (zone.funcs.includes("cursor") || zone.funcs.includes("menu")) {
-      zoneChannelHelper(`${zoneDef.prefix}remote`, tName(CHANNEL_NAME_KEYS.remote ?? "Remote control"));
+      zoneChannelHelper(`${zoneDef.prefix}remote`, channelCommon("remote"));
       if (zone.funcs.includes("cursor")) {
         objects.push({
           id: `${zoneDef.prefix}remote.cursor`,
@@ -288,7 +314,7 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
             role: "state",
             read: false,
             write: true,
-            states: selfMap(["up", "down", "left", "right", "select", "return"]),
+            states: selfMap([...YXC_CURSOR_VALUES]),
           },
         });
       }
@@ -303,7 +329,7 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
             role: "state",
             read: false,
             write: true,
-            states: selfMap(["on_screen", "top_menu", "menu", "option", "display", "home"]),
+            states: selfMap([...YXC_MENU_VALUES]),
           },
         });
       }
@@ -311,8 +337,8 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
     // The audio-signal info (own endpoint, declared as `signal_info`): what the zone
     // currently decodes — format, sampling rate, bit depth, bitrate.
     if (zone.funcs.includes("signal_info")) {
-      zoneChannelHelper(`${zoneDef.prefix}sound`, tName(CHANNEL_NAME_KEYS.sound ?? "Sound"));
-      zoneChannelHelper(`${zoneDef.prefix}sound.signal`, tName(CHANNEL_NAME_KEYS.signal ?? "Audio signal"));
+      zoneChannelHelper(`${zoneDef.prefix}sound`, channelCommon("sound"));
+      zoneChannelHelper(`${zoneDef.prefix}sound.signal`, channelCommon("signal"));
       const signal = (
         id: string,
         name: ioBroker.StringOrTranslated,

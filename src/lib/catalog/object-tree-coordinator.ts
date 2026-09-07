@@ -1,4 +1,4 @@
-import type { ObjectDef } from "./types";
+import { channelCommon, type ObjectDef } from "./types";
 import { canonicalIdOf, capabilityKeyOf, pickOwner, type Transport } from "./owner-policy";
 
 /** One transport's contribution: the objects its catalog builds for this device. */
@@ -37,7 +37,8 @@ export function coordinateObjectTree(contributions: readonly TransportObjects[])
   }
   const ownerByCanonicalId = new Map<string, Transport>();
   const resolved: ObjectDef[] = [...byId].map(([canonicalId, entry]) => {
-    const owner = pickOwner(entry.key, [...entry.defs.keys()]);
+    const unproven = new Set([...entry.defs].filter(([, def]) => def.unproven).map(([transport]) => transport));
+    const owner = pickOwner(entry.key, [...entry.defs.keys()], unproven);
     ownerByCanonicalId.set(canonicalId, owner);
     const ownerDef = entry.defs.get(owner);
     // Internal invariant, not a reachable state: pickOwner always returns one of the
@@ -62,6 +63,23 @@ export function coordinateObjectTree(contributions: readonly TransportObjects[])
     }
     return resolvedDef;
   });
+  // Id drift can CREATE a parent path that no transport ever built a channel for: XML calls the
+  // first HDMI output `hdmiOut1` — one flat segment, so its own parent loop makes no channel —
+  // and canonicalIdOf turns it into `hdmi.out1`, which now needs an `hdmi` folder. Nobody was
+  // responsible for that folder, and an XML-only receiver ended up with a datapoint whose parent
+  // object did not exist (repochecker E3009, measured on the object inventory 2026-09-07).
+  // This is the one place that knows the canonical ids, so it is the one place that can close it.
+  const present = new Set(resolved.map(object => object.id));
+  for (const object of [...resolved]) {
+    const segments = object.id.split(".");
+    for (let i = 1; i < segments.length; i++) {
+      const channelId = segments.slice(0, i).join(".");
+      if (!present.has(channelId)) {
+        present.add(channelId);
+        resolved.push({ id: channelId, type: "channel", common: channelCommon(segments[i - 1]) });
+      }
+    }
+  }
   // Parents before children: shallower id paths (fewer dotted segments) first. Array.sort is
   // stable (ES2019+), so equal-depth objects keep their first-seen order.
   resolved.sort((a, b) => a.id.split(".").length - b.id.split(".").length);

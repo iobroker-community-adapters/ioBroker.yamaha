@@ -37,6 +37,18 @@ const OWNER_OVERRIDES = {
   "player.playback": ["ynca", "yxc"],
   "player.repeat": ["ynca", "yxc"],
   "player.shuffle": ["ynca", "yxc"],
+  // §3a scale conflict, second case (audit 2026-09-06): MusicCast counts the tone controls in
+  // half-decibels (−12…+12 in 25 steps over the same range the YNCA spec calls −6…+6 dB in 25
+  // steps of 0.5, measured across 19 device captures). Both scales are correct for their own
+  // protocol, but only one of them is decibels — so the documented dB scale wins wherever it is
+  // present, exactly like `volume`. A MusicCast-only device keeps its own scale and its own
+  // declared bounds, without a unit claim.
+  "sound.bass": ["ynca", "xml", "yxc"],
+  "sound.treble": ["ynca", "xml", "yxc"],
+  // YNCA joined this key with the 2026-09-06 catalog wave (MAIN:SWFRTRIM, wire form `0.0`/`3.0`);
+  // it is the documented-decibel side, so it goes in front — without it MusicCast would have won
+  // back the very scale conflict this override exists to prevent, on every YNCA+MusicCast receiver.
+  "sound.subwooferTrim": ["ynca", "xml", "yxc"],
   "sound.extraBass": ["ynca", "xml", "yxc"],
   "sound.adaptiveDrc": ["ynca", "xml", "yxc"],
   "sound.surroundDecoder": ["ynca", "yxc"],
@@ -76,11 +88,13 @@ function canonicalIdOf(transport, stateId) {
   const template = stateId.slice(zone.length);
   return zone + ((_d = (_c = ID_DRIFT[transport]) == null ? void 0 : _c[template]) != null ? _d : template);
 }
-function pickOwner(key, candidates) {
+function pickOwner(key, candidates, unproven) {
   var _a, _b;
+  const proven = unproven ? candidates.filter((t) => !unproven.has(t)) : candidates;
+  const pool = proven.length > 0 ? proven : candidates;
   const preference = (_a = OWNER_OVERRIDES[key]) != null ? _a : MODERNITY;
-  const owner = (_b = preference.find((t) => candidates.includes(t))) != null ? _b : MODERNITY.find((t) => candidates.includes(t));
-  return owner != null ? owner : candidates[0];
+  const owner = (_b = preference.find((t) => pool.includes(t))) != null ? _b : MODERNITY.find((t) => pool.includes(t));
+  return owner != null ? owner : pool[0];
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {

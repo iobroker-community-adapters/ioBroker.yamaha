@@ -39,6 +39,7 @@ var import_zones = require("./zones");
 var import_value_coerce = require("../catalog/value-coerce");
 var import_play_time = require("../catalog/play-time");
 var import_catalog = require("./catalog");
+var import_remote = require("./remote");
 function readStatusField(status, read) {
   if ("path" in read) {
     let value = status;
@@ -122,13 +123,19 @@ function stateToYxc(stateId, value) {
     const sceneZone = zone;
     return { kind: "run", run: (client) => client.recallScene(num, sceneZone) };
   }
-  if (name === "remote.cursor" && (0, import_value_coerce.isWritableValue)(value, false)) {
+  if (name === "remote.cursor") {
+    if (!(0, import_remote.isRemoteWord)(import_remote.YXC_CURSOR_VALUES, value)) {
+      return void 0;
+    }
     const cursorZone = zone;
-    return { kind: "run", run: (client) => client.controlCursor(String(value), cursorZone) };
+    return { kind: "run", run: (client) => client.controlCursor(value, cursorZone) };
   }
-  if (name === "remote.menu" && (0, import_value_coerce.isWritableValue)(value, false)) {
+  if (name === "remote.menu") {
+    if (!(0, import_remote.isRemoteWord)(import_remote.YXC_MENU_VALUES, value)) {
+      return void 0;
+    }
     const menuZone = zone;
-    return { kind: "run", run: (client) => client.controlMenu(String(value), menuZone) };
+    return { kind: "run", run: (client) => client.controlMenu(value, menuZone) };
   }
   if (name.startsWith("player.")) {
     const action = name.slice("player.".length);

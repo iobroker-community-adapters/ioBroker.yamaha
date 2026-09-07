@@ -104,6 +104,12 @@ class Yamaha extends utils.Adapter {
   /** Set when the start-up snapshot failed — a balance without it would be wrong, so none is written. */
   balanceDisabled = false;
   /**
+   * True while the settle pass runs. Its own purges report their removals, which used to
+   * re-arm the timer and run the whole pass a second time five seconds later — two more full
+   * reads of the object tree for a round that could only ever remove nothing (audit 2026-09-06).
+   */
+  balanceSettling = false;
+  /**
    * Latched after the first failed database write, so an outage warns once and the
    * repeats stay at debug until a write goes through again (nut2 `failedUps` pattern).
    */
@@ -156,7 +162,11 @@ class Yamaha extends utils.Adapter {
         this.log.info(`setting up ${devices.length} configured device(s)...`);
       }
       for (const device of devices) {
-        await this.startDevice(device, pushReceiver);
+        try {
+          await this.startDevice(device, pushReceiver);
+        } catch (e) {
+          this.log.error(`${device.id}: could not be set up (${(0, import_util.errorMessage)(e)}) \u2014 the other devices continue`);
+        }
       }
       this.writeDeviceOverview();
       if (this.autoMode && devices.length > 0) {
@@ -222,16 +232,20 @@ class Yamaha extends utils.Adapter {
       let changed = false;
       for (const device of merged) {
         const running = this.deviceRecords.get(device.id);
-        if (!running) {
-          this.log.info(`discovery found ${device.id} \u2014 setting up`);
-          await this.startDevice(device, pushReceiver);
-          changed = true;
-        } else if (running.ip !== device.ip) {
-          this.log.info(`${device.id}: address changed from ${running.ip} to ${device.ip} \u2014 reconnecting it there`);
-          this.knownDeviceIps.delete(running.ip);
-          this.stopDevice(device.id);
-          await this.startDevice(device, pushReceiver);
-          changed = true;
+        try {
+          if (!running) {
+            this.log.info(`discovery found ${device.id} \u2014 setting up`);
+            await this.startDevice(device, pushReceiver);
+            changed = true;
+          } else if (running.ip !== device.ip) {
+            this.log.info(`${device.id}: address changed from ${running.ip} to ${device.ip} \u2014 reconnecting it there`);
+            this.knownDeviceIps.delete(running.ip);
+            this.stopDevice(device.id);
+            await this.startDevice(device, pushReceiver);
+            changed = true;
+          }
+        } catch (e) {
+          this.log.error(`${device.id}: could not be set up (${(0, import_util.errorMessage)(e)}) \u2014 the other devices continue`);
         }
       }
       if (changed) {
@@ -596,13 +610,14 @@ class Yamaha extends utils.Adapter {
    * user made ONE change and reads ONE result.
    */
   scheduleDatapointBalance() {
-    if (this.balanceDisabled) {
+    if (this.balanceDisabled || this.balanceSettling) {
       return;
     }
     this.clearTimeout(this.balanceTimer);
     this.balanceTimer = this.setTimeout(() => {
       this.balanceTimer = void 0;
       void (async () => {
+        this.balanceSettling = true;
         try {
           await this.purgeNeverFilled();
         } catch (e) {
@@ -625,6 +640,7 @@ class Yamaha extends utils.Adapter {
         if (parts.length > 0) {
           this.log.info(`Object tree updated: ${parts.join(", ")}`);
         }
+        this.balanceSettling = false;
       })();
     }, DATAPOINT_BALANCE_SETTLE_MS);
   }

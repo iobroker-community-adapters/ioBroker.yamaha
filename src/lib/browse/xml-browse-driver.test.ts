@@ -228,3 +228,31 @@ describe("XmlBrowseDriver back and the cursor pad (#613)", () => {
     expect(sent).toEqual(["<List_Control><Cursor>Return</Cursor></List_Control>"]);
   });
 });
+
+describe("XmlBrowseDriver — a cursor press with no open menu says so (audit 2026-09-06)", () => {
+  it("warns instead of returning in silence", async () => {
+    // The pad is offered on this generation because List_Control declares the full cross, but
+    // the command is addressed to the source whose menu is open. With none open the press used
+    // to vanish without a word: the user saw a complete pad that did nothing.
+    const warnings: string[] = [];
+    const calls: string[] = [];
+    const driver = new XmlBrowseDriver(
+      {
+        send: (element, inner) => {
+          calls.push(`${element}:${inner}`);
+          return Promise.resolve();
+        },
+        getXml: () => Promise.resolve(""),
+      },
+      new Set(["netRadio"]),
+      instantDelay,
+      { debug: () => {}, info: () => {}, warn: message => warnings.push(message) },
+    );
+
+    await driver.cursor("left");
+
+    expect(calls).toEqual([]);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("player.browse.source");
+  });
+});

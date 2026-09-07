@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { groupOf, isGroupEnabled, SWITCHABLE_GROUPS } from "./groups";
+import { groupOf, groupsOf, isGroupEnabled, SWITCHABLE_GROUPS } from "./groups";
 
 describe("groupOf", () => {
   it("maps player sources to the player group", () => {
@@ -14,9 +14,12 @@ describe("groupOf", () => {
     expect(groupOf("tuner.dab.channelLabel")).toBe("tuner");
   });
 
-  it("maps each extra zone to the multiroom group", () => {
-    expect(groupOf("multiroom.zone2.volume")).toBe("multiroom");
-    expect(groupOf("multiroom.zone4.power")).toBe("multiroom");
+  it("gives a zone's amp core the amp theme — the zone itself hangs on multiroom", () => {
+    // The theme is read with the zone prefix stripped: a zone's volume is amp-core, exactly
+    // like the main zone's. That it disappears with the multiroom switch is groupsOf's job.
+    expect(groupOf("multiroom.zone2.volume")).toBe("amp");
+    expect(groupOf("multiroom.zone4.power")).toBe("amp");
+    expect(groupsOf("multiroom.zone2.volume")).toEqual(["multiroom", "amp"]);
   });
 
   it("maps the bare multiroom zone channel objects to multiroom", () => {
@@ -57,8 +60,10 @@ describe("groupOf", () => {
     expect(groupOf("sound.bassExtension")).toBe("sound");
     expect(groupOf("sound.ypaoVolume")).toBe("sound");
     expect(groupOf("sound.headphoneBass")).toBe("sound");
-    // a zone's sound items sit under multiroom — disabling multiroom removes ALL zone states
-    expect(groupOf("multiroom.zone2.sound.enhancer")).toBe("multiroom");
+    // A zone's sound item is a SOUND datapoint that happens to live in a zone: the Sound
+    // switch has to reach it, and the Multiroom switch does too (audit 2026-09-06).
+    expect(groupOf("multiroom.zone2.sound.enhancer")).toBe("sound");
+    expect(groupsOf("multiroom.zone2.sound.enhancer")).toEqual(["multiroom", "sound"]);
   });
 
   it("maps every setup/config id to the advanced group — all now real advanced.* ids", () => {
@@ -82,12 +87,12 @@ describe("groupOf", () => {
     expect(groupOf("multiroom.partyMute")).toBe("multiroom");
   });
 
-  it("maps HDMI routing and lip-sync to the hdmi group on main; zoned HDMI follows multiroom", () => {
+  it("maps HDMI routing and lip-sync to the hdmi group, in the zones too", () => {
     expect(groupOf("hdmi.output")).toBe("hdmi");
     expect(groupOf("hdmi.lipSyncOut1")).toBe("hdmi");
-    // zoned HDMI states live under multiroom — disabling multiroom removes all zone states
-    expect(groupOf("multiroom.zone2.hdmi.output")).toBe("multiroom");
-    expect(groupOf("multiroom.zone3.hdmi.lipSyncOut2")).toBe("multiroom");
+    // Zoned HDMI is HDMI, and follows both switches.
+    expect(groupOf("multiroom.zone2.hdmi.output")).toBe("hdmi");
+    expect(groupsOf("multiroom.zone3.hdmi.lipSyncOut2")).toEqual(["multiroom", "hdmi"]);
   });
 
   it("does not offer the amp core as a switch and has no zones group", () => {
@@ -144,6 +149,47 @@ describe("groupOf — the on-screen remote", () => {
     // Were it in the always-on core, switching the group off would leave a dead pad behind.
     expect(groupOf("remote.cursor")).toBe("player");
     expect(groupOf("remote.menu")).toBe("player");
-    expect(groupOf("multiroom.zone2.remote.cursor")).toBe("multiroom");
+    expect(groupOf("multiroom.zone2.remote.cursor")).toBe("player");
+    expect(groupsOf("multiroom.zone2.remote.cursor")).toEqual(["multiroom", "player"]);
+  });
+});
+
+describe("a switch reaches its own theme in EVERY zone (audit 2026-09-06)", () => {
+  // Measured over 25 MusicCast and 15 YNCA device captures: reading the first path segment
+  // raw left 304 playback, 57+26 sound, 16+20 advanced and 12 scene datapoints of the zones
+  // standing after the switch that was meant to remove them.
+  const zoned = [
+    ["group_player", "multiroom.zone2.player.playback"],
+    ["group_player", "multiroom.zone2.remote.cursor"],
+    ["group_sound", "multiroom.zone3.sound.enhancer"],
+    ["group_advanced", "multiroom.zone2.advanced.maxVolume"],
+    ["group_scene", "multiroom.zone4.scene.recall"],
+    ["group_hdmi", "multiroom.zone2.hdmi.output"],
+    ["group_tuner", "multiroom.zone2.tuner.band"],
+  ] as const;
+
+  it.each(zoned)("%s = false removes %s", (flag, id) => {
+    expect(isGroupEnabled(id, { [flag]: false })).toBe(false);
+  });
+
+  it("and multiroom still removes the zones whole, whatever their theme", () => {
+    for (const [, id] of zoned) {
+      expect(isGroupEnabled(id, { group_multiroom: false })).toBe(false);
+    }
+    // while the device-wide multiroom states carry no second group
+    expect(groupsOf("multiroom.party")).toEqual(["multiroom"]);
+    expect(groupsOf("multiroom.group.leave")).toEqual(["multiroom"]);
+  });
+
+  it("leaves the main zone's datapoints alone when only multiroom is off", () => {
+    expect(isGroupEnabled("sound.enhancer", { group_multiroom: false })).toBe(true);
+    expect(isGroupEnabled("player.playback", { group_multiroom: false })).toBe(true);
+  });
+});
+
+describe("audit 2026-09-06 — the group switch reaches its own theme in every zone", () => {
+  it("a zone datapoint hangs on multiroom AND its theme", () => {
+    expect(groupsOf("multiroom.zone2.sound.enhancer")).toEqual(["multiroom", "sound"]);
+    expect(groupsOf("sound.enhancer")).toEqual(["sound"]);
   });
 });

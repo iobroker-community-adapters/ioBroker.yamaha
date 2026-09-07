@@ -126,11 +126,9 @@ class XmlDeviceController {
             await this.deps.upsertObject(`${this.deviceId}.${channelId}`, {
               id: channelId,
               type: "channel",
-              common: {
-                // Capitalised like the catalog path does it, so the same folder cannot end up
-                // called "sound" here and "Sound" there depending on which transport owns it.
-                name: import_types.CHANNEL_NAME_KEYS[segments[i - 1]] ? (0, import_i18n.tName)(import_types.CHANNEL_NAME_KEYS[segments[i - 1]]) : segments[i - 1].charAt(0).toUpperCase() + segments[i - 1].slice(1)
-              }
+              // Name AND explanation from the one shared table, so the same folder cannot end
+              // up called "sound" here and "Sound" there depending on which transport owns it.
+              common: (0, import_types.channelCommon)(segments[i - 1])
             });
           }
         }
@@ -224,7 +222,6 @@ class XmlDeviceController {
    * @param createdChannels the channel ids already created (extended here)
    */
   async setupScenes(createdChannels) {
-    var _a;
     for (const zone of this.zones) {
       const body = await this.probeXml(
         `xmlScenes:${zone.key}`,
@@ -242,7 +239,7 @@ class XmlDeviceController {
         await this.deps.upsertObject(`${this.deviceId}.${channelId}`, {
           id: channelId,
           type: "channel",
-          common: { name: (0, import_i18n.tName)((_a = import_types.CHANNEL_NAME_KEYS.scene) != null ? _a : "Scenes") }
+          common: (0, import_types.channelCommon)("scene")
         });
       }
       const max = Math.max(...scenes.map((scene) => scene.num));
@@ -289,7 +286,6 @@ class XmlDeviceController {
    * @param createdChannels the channel ids already created (extended here)
    */
   async setupTuner(createdChannels) {
-    var _a;
     const probe = await this.probeXml("xmlTuner", "Tuner", "<Play_Info>GetParam</Play_Info>");
     if (probe.length === 0) {
       return;
@@ -300,7 +296,7 @@ class XmlDeviceController {
       await this.deps.upsertObject(`${this.deviceId}.tuner`, {
         id: "tuner",
         type: "channel",
-        common: { name: (0, import_i18n.tName)((_a = import_types.CHANNEL_NAME_KEYS.tuner) != null ? _a : "Tuner") }
+        common: (0, import_types.channelCommon)("tuner")
       });
     }
     const state = async (id, common) => {
@@ -485,7 +481,7 @@ class XmlDeviceController {
     if (available.size === 0) {
       return;
     }
-    const driver = new import_xml_browse_driver.XmlBrowseDriver(this.deps.client, available, delay);
+    const driver = new import_xml_browse_driver.XmlBrowseDriver(this.deps.client, available, delay, this.deps.log);
     this.browseEngine = await (0, import_surface.createBrowseSurface)(driver, this.deviceId, {
       upsertObject: this.deps.upsertObject,
       emit: (id, value) => this.emit(id, value),

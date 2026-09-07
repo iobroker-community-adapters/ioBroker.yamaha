@@ -27,6 +27,8 @@ import { errorMessage } from "../util";
 import { PollDropDetector } from "../lifecycle/poll-drop-detector";
 import type { ProbeMemory } from "../lifecycle/probe-memory";
 import { zonePrefix } from "./zones";
+import { presentSystemEntries, type YxcSystemEntry } from "./system-catalog";
+import { channelCommon } from "../catalog/types";
 import { knownScenes, resolveSceneNumber } from "../catalog/scene-titles";
 import type { CommandGate } from "../lifecycle/command-gate";
 import type { BrowseEngine } from "../browse/browse-engine";
@@ -159,6 +161,12 @@ export class YxcDeviceController implements ConnectionHandle {
   /** Counts keepalive runs, so the safety-net sweep can run every Nth one under push. */
   private keepaliveRuns = 0;
   private browseEngine: BrowseEngine | undefined;
+  /**
+   * The device-wide settings this receiver really answers (`/system/getFuncStatus`). Empty
+   * until the first successful call — claim with proof, exactly like the XML side's status
+   * fields: a capability list is a promise, the answer is the evidence.
+   */
+  private systemEntries: YxcSystemEntry[] = [];
 
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
@@ -286,11 +294,92 @@ export class YxcDeviceController implements ConnectionHandle {
     if (this.hasDistribution) {
       await this.refreshDistribution();
     }
+    await this.setupSystemStates(capabilities);
     this.cancelPush = this.deps.registerPush(event => this.onPush(event));
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), KEEPALIVE_MS);
     // The adapter logs one combined "ready" line across all transports; this stays at debug.
     this.deps.log.debug(`${this.deviceId}: MusicCast device ready (YXC)`);
     return true;
+  }
+
+  /**
+   * Create and seed the device-wide settings (`/system/getFuncStatus`) — the counterpart of a
+   * zone's getStatus for everything that belongs to the device rather than to a zone. Only the
+   * fields this device really delivers become objects.
+   *
+   * @param capabilities the parsed getFeatures capabilities (for the system-block ranges)
+   */
+  private async setupSystemStates(capabilities: YxcCapabilities): Promise<void> {
+    let status: unknown;
+    try {
+      status = await this.deps.client.getFuncStatus();
+    } catch (e) {
+      // A device that does not answer simply keeps no device-wide settings this run.
+      this.deps.log.debug(`${this.deviceId}: getFuncStatus failed (${errorMessage(e)})`);
+      return;
+    }
+    this.systemEntries = presentSystemEntries(status);
+    if (this.systemEntries.length === 0) {
+      return;
+    }
+    const parents = new Set<string>();
+    for (const entry of this.systemEntries) {
+      const segments = entry.state.split(".");
+      for (let i = 1; i < segments.length; i++) {
+        const channelId = segments.slice(0, i).join(".");
+        if (!parents.has(channelId)) {
+          parents.add(channelId);
+          await this.deps.upsertObject(`${this.deviceId}.${channelId}`, {
+            id: channelId,
+            type: "channel",
+            common: channelCommon(segments[i - 1]),
+          });
+        }
+      }
+      const { nameKey, descKey, ...rest } = entry.common;
+      const common: ObjectDef["common"] = {
+        ...rest,
+        name: tName(nameKey),
+        ...(descKey ? { desc: tName(descKey) } : {}),
+      };
+      const range = entry.rangeId ? capabilities.systemRanges?.[entry.rangeId] : undefined;
+      if (range) {
+        common.min = range.min;
+        common.max = range.max;
+        common.step = range.step;
+      }
+      await this.deps.upsertObject(`${this.deviceId}.${entry.state}`, { id: entry.state, type: "state", common });
+    }
+    this.applySystemStatus(status);
+  }
+
+  /**
+   * Write the device-wide values from a getFuncStatus response.
+   *
+   * @param status the getFuncStatus response
+   */
+  private applySystemStatus(status: unknown): void {
+    if (typeof status !== "object" || status === null) {
+      return;
+    }
+    const fields = status as Record<string, unknown>;
+    for (const entry of this.systemEntries) {
+      if (entry.field in fields) {
+        this.emit(entry.state, entry.fromStatus(fields[entry.field]));
+      }
+    }
+  }
+
+  /** Re-read the device-wide settings during the keepalive, so a change at the device shows up. */
+  private async refreshSystemStates(): Promise<void> {
+    if (this.systemEntries.length === 0) {
+      return;
+    }
+    try {
+      this.applySystemStatus(await this.deps.client.getFuncStatus());
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: getFuncStatus refresh failed (${errorMessage(e)})`);
+    }
   }
 
   /**
@@ -398,9 +487,35 @@ export class YxcDeviceController implements ConnectionHandle {
       void this.linkClient(String(value));
       return;
     }
+    // Device-wide settings are not part of the zone command map — they carry their own setters.
+    const systemEntry = this.systemEntries.find(entry => entry.state === stateId);
+    if (systemEntry) {
+      if (systemEntry.write) {
+        void this.applySystemWrite(systemEntry, value);
+      } else {
+        this.deps.log.debug(`${this.deviceId}: ${stateId} is read-only on MusicCast — write dropped`);
+      }
+      return;
+    }
     const command = stateToYxc(stateId, value);
     if (command) {
       void this.applyCommand(stateId, command);
+    }
+  }
+
+  /**
+   * Apply a write to a device-wide setting and read the block back, so the state shows what
+   * the device actually took.
+   *
+   * @param entry the system catalog entry
+   * @param value the written value
+   */
+  private async applySystemWrite(entry: YxcSystemEntry, value: unknown): Promise<void> {
+    try {
+      await entry.write?.apply(this.deps.client, value);
+      this.applySystemStatus(await this.deps.client.getFuncStatus());
+    } catch (e) {
+      this.deps.log.warn(`${this.deviceId}: ${entry.state} could not be set (${errorMessage(e)})`);
     }
   }
 
@@ -503,6 +618,7 @@ export class YxcDeviceController implements ConnectionHandle {
       this.keepaliveRuns++;
       const fullSweep = !this.deps.pushActive?.() || this.keepaliveRuns % PUSH_MODE_FULL_SWEEP_EVERY === 0;
       if (fullSweep) {
+        await this.refreshSystemStates();
         await this.refreshMedia();
         await this.refreshLists();
         if (this.hasDistribution) {

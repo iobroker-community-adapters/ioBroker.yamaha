@@ -23,12 +23,13 @@ __export(surface_exports, {
 module.exports = __toCommonJS(surface_exports);
 var import_browse_engine = require("./browse-engine");
 var import_objects = require("./objects");
-async function createBrowseSurface(driver, deviceId, deps) {
+async function createBrowseSurface(driver, deviceId, deps, unproven = false) {
   const sources = driver.sources();
   if (Object.keys(sources).length === 0) {
     return void 0;
   }
-  const defs = [...(0, import_objects.browseObjectDefs)(sources), ...(0, import_objects.remoteObjectDefs)(driver.cursorValues, driver.menuValues)];
+  const built = [...(0, import_objects.browseObjectDefs)(sources), ...(0, import_objects.remoteObjectDefs)(driver.cursorValues, driver.menuValues)];
+  const defs = unproven ? built.map((def) => ({ ...def, unproven: true })) : built;
   for (const def of defs) {
     await deps.upsertObject(`${deviceId}.${def.id}`, def);
   }

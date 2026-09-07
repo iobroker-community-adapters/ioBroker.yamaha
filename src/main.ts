@@ -115,6 +115,12 @@ export class Yamaha extends utils.Adapter {
   /** Set when the start-up snapshot failed — a balance without it would be wrong, so none is written. */
   private balanceDisabled = false;
   /**
+   * True while the settle pass runs. Its own purges report their removals, which used to
+   * re-arm the timer and run the whole pass a second time five seconds later — two more full
+   * reads of the object tree for a round that could only ever remove nothing (audit 2026-09-06).
+   */
+  private balanceSettling = false;
+  /**
    * Latched after the first failed database write, so an outage warns once and the
    * repeats stay at debug until a write goes through again (nut2 `failedUps` pattern).
    */
@@ -178,7 +184,15 @@ export class Yamaha extends utils.Adapter {
         this.log.info(`setting up ${devices.length} configured device(s)...`);
       }
       for (const device of devices) {
-        await this.startDevice(device, pushReceiver);
+        // Per device, so one failure does not cost the rest of the run: startDevice writes
+        // header objects and the disconnected stamp, and a states/objects hiccup on device
+        // two used to abort onReady — devices three and four never came up, the overview was
+        // never written and the background search never ran (audit 2026-09-06).
+        try {
+          await this.startDevice(device, pushReceiver);
+        } catch (e) {
+          this.log.error(`${device.id}: could not be set up (${errorMessage(e)}) — the other devices continue`);
+        }
       }
       this.writeDeviceOverview();
       // Auto mode with remembered devices: they started WITHOUT waiting for the network
@@ -259,16 +273,21 @@ export class Yamaha extends utils.Adapter {
       let changed = false;
       for (const device of merged) {
         const running = this.deviceRecords.get(device.id);
-        if (!running) {
-          this.log.info(`discovery found ${device.id} — setting up`);
-          await this.startDevice(device, pushReceiver);
-          changed = true;
-        } else if (running.ip !== device.ip) {
-          this.log.info(`${device.id}: address changed from ${running.ip} to ${device.ip} — reconnecting it there`);
-          this.knownDeviceIps.delete(running.ip);
-          this.stopDevice(device.id);
-          await this.startDevice(device, pushReceiver);
-          changed = true;
+        try {
+          if (!running) {
+            this.log.info(`discovery found ${device.id} — setting up`);
+            await this.startDevice(device, pushReceiver);
+            changed = true;
+          } else if (running.ip !== device.ip) {
+            this.log.info(`${device.id}: address changed from ${running.ip} to ${device.ip} — reconnecting it there`);
+            this.knownDeviceIps.delete(running.ip);
+            this.stopDevice(device.id);
+            await this.startDevice(device, pushReceiver);
+            changed = true;
+          }
+        } catch (e) {
+          // Same rule as the start-up loop: one device must not end the round for the others.
+          this.log.error(`${device.id}: could not be set up (${errorMessage(e)}) — the other devices continue`);
         }
       }
       if (changed) {
@@ -664,13 +683,14 @@ export class Yamaha extends utils.Adapter {
    * user made ONE change and reads ONE result.
    */
   private scheduleDatapointBalance(): void {
-    if (this.balanceDisabled) {
+    if (this.balanceDisabled || this.balanceSettling) {
       return;
     }
     this.clearTimeout(this.balanceTimer);
     this.balanceTimer = this.setTimeout(() => {
       this.balanceTimer = undefined;
       void (async () => {
+        this.balanceSettling = true;
         // The tree has settled: sweep the never-filled orphans FIRST, so their
         // removals land in the same balance line the user is about to read.
         try {
@@ -697,6 +717,7 @@ export class Yamaha extends utils.Adapter {
         if (parts.length > 0) {
           this.log.info(`Object tree updated: ${parts.join(", ")}`);
         }
+        this.balanceSettling = false;
       })();
     }, DATAPOINT_BALANCE_SETTLE_MS);
   }

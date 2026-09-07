@@ -476,9 +476,13 @@ class YncaDeviceController {
       return;
     }
     const triple = (0, import_catalog.yncaCommand)(stateId, value, (_d = this.writeMap) != null ? _d : ID_MAP);
-    if (triple) {
-      this.deps.client.send(triple.subunit, triple.func, triple.value);
+    if (!triple) {
+      this.deps.log.debug(
+        `${this.deviceId}: ${stateId} is not writable on this device \u2014 write dropped (not reported in the sweep, or a read-only function)`
+      );
+      return;
     }
+    this.deps.client.send(triple.subunit, triple.func, triple.value);
   }
   /**
    * Create the per-zone player mirrors (v2.0.0): every present ZONEn gets its own
@@ -725,18 +729,23 @@ class YncaDeviceController {
       return;
     }
     const delay = (ms) => gate.delay(ms);
-    const present = await this.probeBrowseSubunits(capabilities);
+    const { subunits: present, proven } = await this.probeBrowseSubunits(capabilities);
     if (present.size === 0) {
       this.deps.log.debug(`${this.deviceId}: no YNCA source answers LISTINFO \u2014 leaving menus to another transport`);
       return;
     }
     const driver = new import_ynca_browse_driver.YncaBrowseDriver(this.deps.client, present, delay);
-    this.browseEngine = await (0, import_surface.createBrowseSurface)(driver, this.deviceId, {
-      upsertObject: this.deps.upsertObject,
-      emit: (id, value) => this.deps.setStateAck(`${this.deviceId}.${id}`, value),
-      log: this.deps.log,
-      delay
-    });
+    this.browseEngine = await (0, import_surface.createBrowseSurface)(
+      driver,
+      this.deviceId,
+      {
+        upsertObject: this.deps.upsertObject,
+        emit: (id, value) => this.deps.setStateAck(`${this.deviceId}.${id}`, value),
+        log: this.deps.log,
+        delay
+      },
+      !proven
+    );
     if (this.browseEngine) {
       this.browseDriver = driver;
     }
@@ -750,26 +759,29 @@ class YncaDeviceController {
    * presence alone and, ranking higher, silently displaced the transport that could deliver.
    *
    * @param capabilities the device's swept capabilities
-   * @returns the subunits that answered with list data
+   * @returns the subunits that answered with list data, and whether that answer is a PROOF
    */
   async probeBrowseSubunits(capabilities) {
     var _a;
     const candidates = import_ynca_browse_driver.YNCA_BROWSE_SOURCES.filter((source) => source.subunit in capabilities.subunits);
     if (candidates.length === 0) {
-      return /* @__PURE__ */ new Set();
+      return { subunits: /* @__PURE__ */ new Set(), proven: true };
     }
     if (((_a = capabilities.subunits.MAIN) == null ? void 0 : _a.PWR) !== "On") {
-      return new Set(candidates.map((source) => source.subunit));
+      return { subunits: new Set(candidates.map((source) => source.subunit)), proven: false };
     }
     const answer = await this.deps.client.readCapabilities(
       candidates.map((source) => ({ subunit: source.subunit, func: "LISTINFO" }))
     );
-    return new Set(
-      candidates.map((source) => source.subunit).filter((subunit) => {
-        var _a2;
-        return Object.keys((_a2 = answer.subunits[subunit]) != null ? _a2 : {}).some((func) => LIST_PROOF.test(func));
-      })
-    );
+    return {
+      subunits: new Set(
+        candidates.map((source) => source.subunit).filter((subunit) => {
+          var _a2;
+          return Object.keys((_a2 = answer.subunits[subunit]) != null ? _a2 : {}).some((func) => LIST_PROOF.test(func));
+        })
+      ),
+      proven: true
+    };
   }
   /**
    * Register the supervisor's drop handler — delegated to the client's socket drop,

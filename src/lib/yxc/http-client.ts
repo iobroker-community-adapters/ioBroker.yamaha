@@ -190,6 +190,49 @@ export class YamahaYxcClient {
   }
 
   /**
+   * Read the device-wide switch states (`/system/getFuncStatus`, bundled reference library
+   * `yxc_api_cmd.js`). This is the counterpart of a zone's getStatus for everything that is
+   * NOT per zone — the auto standby, the display brightness, the HDMI outputs. The adapter
+   * never asked for it until the 2026-09-06 audit, so those settings had no datapoint at all
+   * while every one of the bundled device captures declares the matching capability.
+   *
+   * @returns the getFuncStatus response
+   */
+  public getFuncStatus(): Promise<unknown> {
+    return this.send("/system/getFuncStatus");
+  }
+
+  /**
+   * Switch the automatic standby on or off (`/system/setAutoPowerStandby`, reference library).
+   *
+   * @param on true to let the receiver power itself down when idle
+   * @returns the command response
+   */
+  public setAutoPowerStandby(on: boolean): Promise<unknown> {
+    return this.send(`/system/setAutoPowerStandby?enable=${on ? "true" : "false"}`);
+  }
+
+  /**
+   * Switch HDMI output 1 on or off (`/system/setHdmiOut1`, reference library).
+   *
+   * @param on true to feed the display on HDMI output 1
+   * @returns the command response
+   */
+  public setHdmiOut1(on: boolean): Promise<unknown> {
+    return this.send(`/system/setHdmiOut1?enable=${on ? "true" : "false"}`);
+  }
+
+  /**
+   * Switch HDMI output 2 on or off (`/system/setHdmiOut2`, reference library).
+   *
+   * @param on true to feed the display on HDMI output 2
+   * @returns the command response
+   */
+  public setHdmiOut2(on: boolean): Promise<unknown> {
+    return this.send(`/system/setHdmiOut2?enable=${on ? "true" : "false"}`);
+  }
+
+  /**
    * Read a zone's current status.
    *
    * @param zone the zone (`main`, `zone2`, …)

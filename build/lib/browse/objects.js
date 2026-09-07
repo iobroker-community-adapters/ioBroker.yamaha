@@ -36,8 +36,8 @@ function browseObjectDefs(sources) {
     common: { name, type: "boolean", role: "button", read: false, write: true }
   });
   return [
-    { id: "player", type: "channel", common: { name: (0, import_i18n.tName)("mediaPlayer") } },
-    { id: "player.browse", type: "channel", common: { name: (0, import_i18n.tName)("browse") } },
+    { id: "player", type: "channel", common: (0, import_types.channelCommon)("player") },
+    { id: "player.browse", type: "channel", common: (0, import_types.channelCommon)("browse") },
     {
       id: "player.browse.source",
       type: "state",
@@ -158,7 +158,7 @@ function remoteObjectDefs(cursorValues, menuValues) {
   defs.push({
     id: "remote",
     type: "channel",
-    common: { name: (0, import_i18n.tName)(import_types.CHANNEL_NAME_KEYS.remote), desc: (0, import_i18n.tName)(import_types.CHANNEL_DESC_KEYS.remote) }
+    common: (0, import_types.channelCommon)("remote")
   });
   if (cursorValues == null ? void 0 : cursorValues.length) {
     defs.push({

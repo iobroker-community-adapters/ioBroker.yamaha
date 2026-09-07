@@ -20,11 +20,15 @@ var types_exports = {};
 __export(types_exports, {
   CURSOR_VALUES: () => CURSOR_VALUES,
   MENU_VALUES: () => MENU_VALUES,
-  ROW_KIND_BY_ATTRIBUTE: () => ROW_KIND_BY_ATTRIBUTE
+  ROW_KIND_BY_ATTRIBUTE: () => ROW_KIND_BY_ATTRIBUTE,
+  wireFor: () => wireFor
 });
 module.exports = __toCommonJS(types_exports);
 const CURSOR_VALUES = ["up", "down", "left", "right", "select", "return", "home"];
 const MENU_VALUES = ["on_screen", "top_menu", "menu", "option", "display", "home"];
+function wireFor(table, value) {
+  return table[value];
+}
 const ROW_KIND_BY_ATTRIBUTE = {
   Container: "folder",
   Item: "item",
@@ -35,6 +39,7 @@ const ROW_KIND_BY_ATTRIBUTE = {
 0 && (module.exports = {
   CURSOR_VALUES,
   MENU_VALUES,
-  ROW_KIND_BY_ATTRIBUTE
+  ROW_KIND_BY_ATTRIBUTE,
+  wireFor
 });
 //# sourceMappingURL=types.js.map

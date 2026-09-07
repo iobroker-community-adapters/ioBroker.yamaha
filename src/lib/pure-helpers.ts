@@ -357,11 +357,13 @@ export const RENAMED_CHANNELS = [
   "inputNames",
   // ---- v2.0.0 tree rework: the always-empty source channels are gone entirely
   // (their playback lives in the flat per-zone block), lip sync moved into hdmi.
+  // `player.ipod`/`player.ipodUsb` came BACK on 2026-09-06: the official command list gives
+  // both sources an own `MODE` (Normal/Extended), so the folders carry genuine content again
+  // and must not be deleted on every start — the migration-table guard in pure-helpers.test.ts
+  // is what caught the contradiction.
   "player.spotify",
   "player.deezer",
   "player.tidal",
-  "player.ipod",
-  "player.ipodUsb",
   "player.musicCastLink",
   "lipSync",
 ];

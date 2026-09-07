@@ -98,8 +98,38 @@ export interface BrowseDriver {
  */
 export const CURSOR_VALUES = ["up", "down", "left", "right", "select", "return", "home"] as const;
 
+/** One cursor word — the type behind every transport's wire table. */
+export type CursorValue = (typeof CURSOR_VALUES)[number];
+
 /** The menu keys, same vocabulary rule as {@link CURSOR_VALUES}. */
 export const MENU_VALUES = ["on_screen", "top_menu", "menu", "option", "display", "home"] as const;
+
+/** One menu key — the type behind every transport's wire table. */
+export type MenuValue = (typeof MENU_VALUES)[number];
+
+/**
+ * A transport's translation table: the words it really has, mapped to its own wire spelling.
+ * `Partial` because no transport has to carry the whole vocabulary — YNCA has no wire word for
+ * `display`/`home` on the menu, MusicCast has no `home` on the cursor, XML has no menu keys at
+ * all. What the type DOES enforce is that a table can only contain words from the vocabulary
+ * above: until 2026-09-06 the three transports each kept a private literal list and
+ * {@link CURSOR_VALUES} was read by nobody, so the lists had already drifted apart without
+ * anything noticing (audit 2026-09-06).
+ */
+export type WireTable<K extends string> = Partial<Record<K, string>>;
+
+/**
+ * The wire spelling a transport has for one written word, or undefined when it has none.
+ * Takes a plain string because that is what arrives from a state write — the lookup is the
+ * validation.
+ *
+ * @param table the transport's wire table
+ * @param value the vocabulary word that was written
+ * @returns the transport's wire spelling, or undefined
+ */
+export function wireFor<K extends string>(table: WireTable<K>, value: string): string | undefined {
+  return (table as Record<string, string | undefined>)[value];
+}
 
 /**
  * How the two text protocols name a row's kind. YNCA (`LINE1ATRIB`) and XML

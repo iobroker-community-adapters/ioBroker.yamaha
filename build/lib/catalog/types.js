@@ -19,9 +19,11 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var types_exports = {};
 __export(types_exports, {
   CHANNEL_DESC_KEYS: () => CHANNEL_DESC_KEYS,
-  CHANNEL_NAME_KEYS: () => CHANNEL_NAME_KEYS
+  CHANNEL_NAME_KEYS: () => CHANNEL_NAME_KEYS,
+  channelCommon: () => channelCommon
 });
 module.exports = __toCommonJS(types_exports);
+var import_i18n = require("../i18n");
 const CHANNEL_DESC_KEYS = {
   info: "descChannelInfo",
   zoneB: "descChannelZoneB",
@@ -37,8 +39,8 @@ const CHANNEL_DESC_KEYS = {
   player: "descChannelPlayer",
   multiroom: "descChannelMultiroom",
   group: "descChannelGroup",
-  musicCastLink: "descChannelMusicCastLink",
-  browse: "descChannelBrowse"
+  browse: "descChannelBrowse",
+  trigger1Inputs: "descChannelTrigger1Inputs"
 };
 const CHANNEL_NAME_KEYS = {
   // Device info (metadata beside the per-device connection indicator)
@@ -68,12 +70,11 @@ const CHANNEL_NAME_KEYS = {
   // The MusicCast-Link folder under multiroom — a group of linked DEVICES, not zones.
   group: "musiccastGroupLinkedDevices",
   // Media player sources
+  ipod: "iPod",
+  ipodUsb: "ipodUSB",
   netRadio: "netRadio",
-  server: "mediaServer",
+  trigger1Inputs: "trigger1Inputs",
   usb: "usb",
-  spotify: "spotify",
-  deezer: "deezer",
-  tidal: "tidal",
   napster: "napster",
   pandora: "pandora",
   rhapsody: "rhapsody",
@@ -82,16 +83,27 @@ const CHANNEL_NAME_KEYS = {
   bluetooth: "bluetooth",
   pc: "pc",
   musicCastLink: "musiccastLink",
-  ipod: "iPod",
-  ipodUsb: "ipodUSB",
+  // The browsing surface's own folder. It was missing here until the object inventory measured
+  // the built tree (2026-09-07): the folder HAS an explanation, so it went out with a translated
+  // desc next to the hard-coded English fallback name "Browse" — on every device.
+  browse: "browse",
   // YXC/XML media channels
   cd: "cd",
   netPlayer: "networkPlayer",
   clock: "clock"
 };
+function channelCommon(segment) {
+  const nameKey = CHANNEL_NAME_KEYS[segment];
+  const descKey = CHANNEL_DESC_KEYS[segment];
+  return {
+    name: nameKey ? (0, import_i18n.tName)(nameKey) : segment.charAt(0).toUpperCase() + segment.slice(1),
+    ...descKey ? { desc: (0, import_i18n.tName)(descKey) } : {}
+  };
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   CHANNEL_DESC_KEYS,
-  CHANNEL_NAME_KEYS
+  CHANNEL_NAME_KEYS,
+  channelCommon
 });
 //# sourceMappingURL=types.js.map

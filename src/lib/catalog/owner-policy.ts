@@ -26,6 +26,18 @@ const OWNER_OVERRIDES: Record<string, readonly Transport[]> = {
   "player.playback": ["ynca", "yxc"],
   "player.repeat": ["ynca", "yxc"],
   "player.shuffle": ["ynca", "yxc"],
+  // §3a scale conflict, second case (audit 2026-09-06): MusicCast counts the tone controls in
+  // half-decibels (−12…+12 in 25 steps over the same range the YNCA spec calls −6…+6 dB in 25
+  // steps of 0.5, measured across 19 device captures). Both scales are correct for their own
+  // protocol, but only one of them is decibels — so the documented dB scale wins wherever it is
+  // present, exactly like `volume`. A MusicCast-only device keeps its own scale and its own
+  // declared bounds, without a unit claim.
+  "sound.bass": ["ynca", "xml", "yxc"],
+  "sound.treble": ["ynca", "xml", "yxc"],
+  // YNCA joined this key with the 2026-09-06 catalog wave (MAIN:SWFRTRIM, wire form `0.0`/`3.0`);
+  // it is the documented-decibel side, so it goes in front — without it MusicCast would have won
+  // back the very scale conflict this override exists to prevent, on every YNCA+MusicCast receiver.
+  "sound.subwooferTrim": ["ynca", "xml", "yxc"],
   "sound.extraBass": ["ynca", "xml", "yxc"],
   "sound.adaptiveDrc": ["ynca", "xml", "yxc"],
   "sound.surroundDecoder": ["ynca", "yxc"],
@@ -105,15 +117,25 @@ export function canonicalIdOf(transport: Transport, stateId: string): string {
  * transport would be lossy. An override that lists none of the present candidates falls back
  * to modernity, so any non-empty candidate set resolves.
  *
+ * A transport that could not PROVE it serves the capability is only chosen when no proven
+ * candidate exists — a proof beats both the modernity rank and an override. That is what keeps
+ * a receiver in standby (whose YNCA menu claim cannot be probed) from displacing the XML driver
+ * that answered a real `List_Info` (#613, audit 2026-09-06).
+ *
  * @param key the transport-neutral capability key (the unified state id)
  * @param candidates the present transports that offer this key (non-empty)
+ * @param unproven the candidates claiming the key without a proof
  * @returns the owning transport
  */
-export function pickOwner(key: string, candidates: readonly Transport[]): Transport {
+export function pickOwner(key: string, candidates: readonly Transport[], unproven?: ReadonlySet<Transport>): Transport {
+  const proven = unproven ? candidates.filter(t => !unproven.has(t)) : candidates;
+  // Only when NOBODY proved it does an unproven claim get the capability — otherwise the
+  // datapoint would vanish from a device where just one transport can serve it at all.
+  const pool = proven.length > 0 ? proven : candidates;
   const preference = OWNER_OVERRIDES[key] ?? MODERNITY;
   // The MODERNITY fallback is defence for a FUTURE override: every entry in the
   // current table lists at least two transports, so an override can never miss all
   // present candidates while more than one is present — today it is unobservable.
-  const owner = preference.find(t => candidates.includes(t)) ?? MODERNITY.find(t => candidates.includes(t));
-  return owner ?? candidates[0];
+  const owner = preference.find(t => pool.includes(t)) ?? MODERNITY.find(t => pool.includes(t));
+  return owner ?? pool[0];
 }

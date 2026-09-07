@@ -1,5 +1,13 @@
-import { ROW_KIND_BY_ATTRIBUTE, type BrowseDriver, type BrowseRow } from "./types";
+import {
+  ROW_KIND_BY_ATTRIBUTE,
+  wireFor,
+  type BrowseDriver,
+  type BrowseRow,
+  type CursorValue,
+  type WireTable,
+} from "./types";
 import type { BrowseEngine } from "./browse-engine";
+import type { ControllerLog } from "../controller";
 import { decodeXmlText } from "../xml/entities";
 
 /** How often to re-read while the device reports Menu_Status Busy. */
@@ -76,7 +84,7 @@ export function parseXmlListInfo(xml: string): XmlListInfo {
  * differently (`Return`, `Return to Home`). There is no documented menu-key command on this
  * generation, so the driver offers no `remote.menu`.
  */
-const XML_CURSOR_WIRE: Record<string, string> = {
+const XML_CURSOR_WIRE: WireTable<CursorValue> = {
   up: "Up",
   down: "Down",
   left: "Left",
@@ -100,11 +108,13 @@ export class XmlBrowseDriver implements BrowseDriver {
    * @param client the XML client slice (send + getXml)
    * @param available the source keys whose List_Info the start-up probe answered
    * @param delay adapter-managed delay
+   * @param log adapter log — a cursor press with no open menu has to say so
    */
   public constructor(
     private readonly client: XmlBrowseClient,
     private readonly available: ReadonlySet<string>,
     private readonly delay: (ms: number) => Promise<void>,
+    private readonly log?: ControllerLog,
   ) {}
 
   /**
@@ -187,8 +197,19 @@ export class XmlBrowseDriver implements BrowseDriver {
    * @param value one of {@link cursorValues}
    */
   public async cursor(value: string): Promise<void> {
-    const wire = XML_CURSOR_WIRE[value];
+    const wire = wireFor(XML_CURSOR_WIRE, value);
     if (wire === undefined) {
+      return;
+    }
+    if (!this.active) {
+      // The pad is offered on this generation because `List_Control` declares the full cross —
+      // but the command is addressed to the source whose menu is open, so with no menu open
+      // there is nowhere to send it. It used to return in silence: the user pressed a key on a
+      // complete-looking pad and got nothing, not even a log line (audit 2026-09-06).
+      this.log?.warn(
+        `cursor ${value} ignored — this receiver only accepts the cursor inside an open menu; ` +
+          `pick a source in player.browse.source first`,
+      );
       return;
     }
     await this.control(`<Cursor>${wire}</Cursor>`);

@@ -1,4 +1,9 @@
 # Older changes
+## 2.3.0 (2026-09-03)
+
+- (krobipd) New: every datapoint and every folder now carries a short explanation in eleven languages, so the object tree tells you what a value actually means
+- (krobipd) Improved: a text that has no translation yet falls back to readable English instead of showing an internal key
+
 ## 2.2.0 (2026-09-03)
 
 - (krobipd) Changed: the playback times are now a number in seconds, so the media player, Alexa and Google can show them on every receiver

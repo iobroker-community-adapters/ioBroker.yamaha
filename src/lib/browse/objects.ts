@@ -1,4 +1,4 @@
-import { CHANNEL_DESC_KEYS, CHANNEL_NAME_KEYS } from "../catalog/types";
+import { channelCommon } from "../catalog/types";
 import type { ObjectDef } from "../catalog/types";
 import { tName } from "../i18n";
 
@@ -24,8 +24,8 @@ export function browseObjectDefs(sources: Record<string, string>): ObjectDef[] {
     common: { name, type: "boolean", role: "button", read: false, write: true },
   });
   return [
-    { id: "player", type: "channel", common: { name: tName("mediaPlayer") } },
-    { id: "player.browse", type: "channel", common: { name: tName("browse") } },
+    { id: "player", type: "channel", common: channelCommon("player") },
+    { id: "player.browse", type: "channel", common: channelCommon("browse") },
     {
       id: "player.browse.source",
       type: "state",
@@ -162,7 +162,7 @@ export function remoteObjectDefs(cursorValues?: readonly string[], menuValues?: 
   defs.push({
     id: "remote",
     type: "channel",
-    common: { name: tName(CHANNEL_NAME_KEYS.remote), desc: tName(CHANNEL_DESC_KEYS.remote) },
+    common: channelCommon("remote"),
   });
   if (cursorValues?.length) {
     defs.push({

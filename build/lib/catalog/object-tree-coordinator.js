@@ -21,6 +21,7 @@ __export(object_tree_coordinator_exports, {
   coordinateObjectTree: () => coordinateObjectTree
 });
 module.exports = __toCommonJS(object_tree_coordinator_exports);
+var import_types = require("./types");
 var import_owner_policy = require("./owner-policy");
 function coordinateObjectTree(contributions) {
   const byId = /* @__PURE__ */ new Map();
@@ -37,7 +38,8 @@ function coordinateObjectTree(contributions) {
   }
   const ownerByCanonicalId = /* @__PURE__ */ new Map();
   const resolved = [...byId].map(([canonicalId, entry]) => {
-    const owner = (0, import_owner_policy.pickOwner)(entry.key, [...entry.defs.keys()]);
+    const unproven = new Set([...entry.defs].filter(([, def]) => def.unproven).map(([transport]) => transport));
+    const owner = (0, import_owner_policy.pickOwner)(entry.key, [...entry.defs.keys()], unproven);
     ownerByCanonicalId.set(canonicalId, owner);
     const ownerDef = entry.defs.get(owner);
     if (!ownerDef) {
@@ -54,6 +56,17 @@ function coordinateObjectTree(contributions) {
     }
     return resolvedDef;
   });
+  const present = new Set(resolved.map((object) => object.id));
+  for (const object of [...resolved]) {
+    const segments = object.id.split(".");
+    for (let i = 1; i < segments.length; i++) {
+      const channelId = segments.slice(0, i).join(".");
+      if (!present.has(channelId)) {
+        present.add(channelId);
+        resolved.push({ id: channelId, type: "channel", common: (0, import_types.channelCommon)(segments[i - 1]) });
+      }
+    }
+  }
   resolved.sort((a, b) => a.id.split(".").length - b.id.split(".").length);
   return { objects: resolved, ownerByCanonicalId };
 }

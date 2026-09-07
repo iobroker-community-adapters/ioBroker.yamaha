@@ -68,11 +68,13 @@ class XmlBrowseDriver {
    * @param client the XML client slice (send + getXml)
    * @param available the source keys whose List_Info the start-up probe answered
    * @param delay adapter-managed delay
+   * @param log adapter log — a cursor press with no open menu has to say so
    */
-  constructor(client, available, delay) {
+  constructor(client, available, delay, log) {
     this.client = client;
     this.available = available;
     this.delay = delay;
+    this.log = log;
   }
   engine;
   active;
@@ -148,8 +150,15 @@ class XmlBrowseDriver {
    * @param value one of {@link cursorValues}
    */
   async cursor(value) {
-    const wire = XML_CURSOR_WIRE[value];
+    var _a;
+    const wire = (0, import_types.wireFor)(XML_CURSOR_WIRE, value);
     if (wire === void 0) {
+      return;
+    }
+    if (!this.active) {
+      (_a = this.log) == null ? void 0 : _a.warn(
+        `cursor ${value} ignored \u2014 this receiver only accepts the cursor inside an open menu; pick a source in player.browse.source first`
+      );
       return;
     }
     await this.control(`<Cursor>${wire}</Cursor>`);

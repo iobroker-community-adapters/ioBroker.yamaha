@@ -68,7 +68,15 @@ export class DeviceSupervisor {
    * @param value the new value
    */
   public handleStateChange(fullStateId: string, ack: boolean, value: unknown): void {
-    this.handle?.handleStateChange(fullStateId, ack, value);
+    if (!this.handle) {
+      // Offline: the write reaches no transport. Saying so beats the silence a button press
+      // used to get here — the handle logs the same way when only ITS transport is down.
+      if (!ack) {
+        this.deps.log.debug(`${fullStateId}: write dropped — the device is offline`);
+      }
+      return;
+    }
+    this.handle.handleStateChange(fullStateId, ack, value);
   }
 
   private async attemptOnce(): Promise<void> {

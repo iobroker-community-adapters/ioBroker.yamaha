@@ -697,9 +697,19 @@ export class YncaDeviceController implements ConnectionHandle {
       return;
     }
     const triple = yncaCommand(stateId, value, this.writeMap ?? ID_MAP);
-    if (triple) {
-      this.deps.client.send(triple.subunit, triple.func, triple.value);
+    if (!triple) {
+      // The one write path that still dropped a user action without a word. Every special
+      // route above (scene, player, tuner, sendProven) says why it did nothing; this is the
+      // generic one, and it carries the majority of the writes — power, volume, input, sound
+      // programme. `yncaCommand` returns nothing when this device never reported the function
+      // or when the entry is read-only, and both are worth a line (audit 2026-09-06).
+      this.deps.log.debug(
+        `${this.deviceId}: ${stateId} is not writable on this device — write dropped ` +
+          `(not reported in the sweep, or a read-only function)`,
+      );
+      return;
     }
+    this.deps.client.send(triple.subunit, triple.func, triple.value);
   }
 
   /**
@@ -962,7 +972,7 @@ export class YncaDeviceController implements ConnectionHandle {
       return;
     }
     const delay = (ms: number): Promise<void> => gate.delay(ms);
-    const present = await this.probeBrowseSubunits(capabilities);
+    const { subunits: present, proven } = await this.probeBrowseSubunits(capabilities);
     if (present.size === 0) {
       // Leaving the states uncreated is what hands browsing to another transport: the owner
       // policy ranks by modernity (yxc > ynca > xml), so an unproven YNCA claim would beat a
@@ -972,12 +982,17 @@ export class YncaDeviceController implements ConnectionHandle {
       return;
     }
     const driver = new YncaBrowseDriver(this.deps.client, present, delay);
-    this.browseEngine = await createBrowseSurface(driver, this.deviceId, {
-      upsertObject: this.deps.upsertObject,
-      emit: (id, value) => this.deps.setStateAck(`${this.deviceId}.${id}`, value),
-      log: this.deps.log,
-      delay,
-    });
+    this.browseEngine = await createBrowseSurface(
+      driver,
+      this.deviceId,
+      {
+        upsertObject: this.deps.upsertObject,
+        emit: (id, value) => this.deps.setStateAck(`${this.deviceId}.${id}`, value),
+        log: this.deps.log,
+        delay,
+      },
+      !proven,
+    );
     if (this.browseEngine) {
       this.browseDriver = driver;
     }
@@ -992,19 +1007,25 @@ export class YncaDeviceController implements ConnectionHandle {
    * presence alone and, ranking higher, silently displaced the transport that could deliver.
    *
    * @param capabilities the device's swept capabilities
-   * @returns the subunits that answered with list data
+   * @returns the subunits that answered with list data, and whether that answer is a PROOF
    */
-  private async probeBrowseSubunits(capabilities: YncaCapabilities): Promise<ReadonlySet<string>> {
+  private async probeBrowseSubunits(
+    capabilities: YncaCapabilities,
+  ): Promise<{ subunits: ReadonlySet<string>; proven: boolean }> {
     const candidates = YNCA_BROWSE_SOURCES.filter(source => source.subunit in capabilities.subunits);
     if (candidates.length === 0) {
-      return new Set();
+      return { subunits: new Set(), proven: true };
     }
     // A receiver in standby answers @RESTRICTED for its media subunits, which is
     // indistinguishable from "cannot browse" and would strip the menus off a device that
     // serves them perfectly once it is on. Nobody browses a sleeping receiver, so keep the
     // claim and let the next connect — with the device awake — do the real probe.
     if (capabilities.subunits.MAIN?.PWR !== "On") {
-      return new Set(candidates.map(source => source.subunit));
+      // Claimed, but NOT proven: the coordinator hands the surface to a transport that could
+      // prove it (XML probes at any power state). Without that, a receiver that was in standby
+      // at adapter start — the normal case — displaced the driver that actually works on the
+      // 2012 generation, for the whole run (#613 through the standby door, audit 2026-09-06).
+      return { subunits: new Set(candidates.map(source => source.subunit)), proven: false };
     }
     const answer = await this.deps.client.readCapabilities(
       candidates.map(source => ({ subunit: source.subunit, func: "LISTINFO" })),
@@ -1012,11 +1033,14 @@ export class YncaDeviceController implements ConnectionHandle {
     // Only a real list answer counts. Both refusals — `@UNDEFINED` (function unknown) and
     // `@RESTRICTED` (source not usable right now) — carry no subunit, so they cannot be
     // attributed to one request; it is the ABSENCE of an answer that excludes a subunit.
-    return new Set(
-      candidates
-        .map(source => source.subunit)
-        .filter(subunit => Object.keys(answer.subunits[subunit] ?? {}).some(func => LIST_PROOF.test(func))),
-    );
+    return {
+      subunits: new Set(
+        candidates
+          .map(source => source.subunit)
+          .filter(subunit => Object.keys(answer.subunits[subunit] ?? {}).some(func => LIST_PROOF.test(func))),
+      ),
+      proven: true,
+    };
   }
 
   /**

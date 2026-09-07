@@ -43,6 +43,17 @@ const bool = (value: unknown): boolean => Boolean(value);
 const num = (value: unknown): number => Number(value);
 const str = (value: unknown): string => String(value);
 
+/**
+ * MusicCast's tone/equalizer numbers are DEVICE STEPS, not decibels — measured, not assumed:
+ * 19 of the bundled device captures declare `tone_control` as −12…+12 in steps of 1, which is
+ * 25 steps over exactly the range the YNCA specification calls −6…+6 dB in steps of 0.5 (also
+ * 25 steps). The MusicCast number is therefore half-decibels, and labelling it "dB" showed the
+ * user twice the value the receiver applies. The bounds now come from the device's own
+ * `range_step` (see the object mapper), so the datapoint says what the device accepts without
+ * claiming a unit nobody documented. Where a receiver also speaks YNCA or XML, the owner policy
+ * hands these states to the transport whose scale IS documented in decibels.
+ */
+
 /** The unified YXC amplifier catalog — object + read/write mapping in one list. */
 export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
   {
@@ -133,7 +144,7 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
   },
   {
     state: "sound.bass",
-    common: { nameKey: "bass", type: "number", unit: "dB", role: "level", read: true, write: true },
+    common: { nameKey: "bass", type: "number", role: "level", read: true, write: true },
     create: { kind: "func", func: "tone_control" },
     read: { path: ["tone_control", "bass"] },
     fromStatus: num,
@@ -155,7 +166,7 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
   },
   {
     state: "sound.treble",
-    common: { nameKey: "treble", type: "number", unit: "dB", role: "level", read: true, write: true },
+    common: { nameKey: "treble", type: "number", role: "level", read: true, write: true },
     create: { kind: "func", func: "tone_control" },
     read: { path: ["tone_control", "treble"] },
     fromStatus: num,
@@ -452,21 +463,21 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
   },
   {
     state: "sound.equalizer.low",
-    common: { nameKey: "equalizerLow", type: "number", unit: "dB", role: "level", read: true, write: true },
+    common: { nameKey: "equalizerLow", type: "number", role: "level", read: true, write: true },
     create: { kind: "func", func: "equalizer" },
     read: { path: ["equalizer", "low"] },
     fromStatus: num,
   },
   {
     state: "sound.equalizer.mid",
-    common: { nameKey: "equalizerMid", type: "number", unit: "dB", role: "level", read: true, write: true },
+    common: { nameKey: "equalizerMid", type: "number", role: "level", read: true, write: true },
     create: { kind: "func", func: "equalizer" },
     read: { path: ["equalizer", "mid"] },
     fromStatus: num,
   },
   {
     state: "sound.equalizer.high",
-    common: { nameKey: "equalizerHigh", type: "number", unit: "dB", role: "level", read: true, write: true },
+    common: { nameKey: "equalizerHigh", type: "number", role: "level", read: true, write: true },
     create: { kind: "func", func: "equalizer" },
     read: { path: ["equalizer", "high"] },
     fromStatus: num,

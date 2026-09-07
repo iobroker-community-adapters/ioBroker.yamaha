@@ -113,7 +113,7 @@ const YXC_AMP_CATALOG = [
   },
   {
     state: "sound.bass",
-    common: { nameKey: "bass", type: "number", unit: "dB", role: "level", read: true, write: true },
+    common: { nameKey: "bass", type: "number", role: "level", read: true, write: true },
     create: { kind: "func", func: "tone_control" },
     read: { path: ["tone_control", "bass"] },
     fromStatus: num,
@@ -135,7 +135,7 @@ const YXC_AMP_CATALOG = [
   },
   {
     state: "sound.treble",
-    common: { nameKey: "treble", type: "number", unit: "dB", role: "level", read: true, write: true },
+    common: { nameKey: "treble", type: "number", role: "level", read: true, write: true },
     create: { kind: "func", func: "tone_control" },
     read: { path: ["tone_control", "treble"] },
     fromStatus: num,
@@ -432,21 +432,21 @@ const YXC_AMP_CATALOG = [
   },
   {
     state: "sound.equalizer.low",
-    common: { nameKey: "equalizerLow", type: "number", unit: "dB", role: "level", read: true, write: true },
+    common: { nameKey: "equalizerLow", type: "number", role: "level", read: true, write: true },
     create: { kind: "func", func: "equalizer" },
     read: { path: ["equalizer", "low"] },
     fromStatus: num
   },
   {
     state: "sound.equalizer.mid",
-    common: { nameKey: "equalizerMid", type: "number", unit: "dB", role: "level", read: true, write: true },
+    common: { nameKey: "equalizerMid", type: "number", role: "level", read: true, write: true },
     create: { kind: "func", func: "equalizer" },
     read: { path: ["equalizer", "mid"] },
     fromStatus: num
   },
   {
     state: "sound.equalizer.high",
-    common: { nameKey: "equalizerHigh", type: "number", unit: "dB", role: "level", read: true, write: true },
+    common: { nameKey: "equalizerHigh", type: "number", role: "level", read: true, write: true },
     create: { kind: "func", func: "equalizer" },
     read: { path: ["equalizer", "high"] },
     fromStatus: num

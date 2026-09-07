@@ -158,7 +158,7 @@ class YncaBrowseDriver {
    * @param value one of {@link cursorValues}
    */
   cursor(value) {
-    this.send("LISTCURSOR", YNCA_CURSOR_WIRE[value]);
+    this.send("LISTCURSOR", (0, import_types.wireFor)(YNCA_CURSOR_WIRE, value));
   }
   /**
    * Press a menu key (`@MAIN:LISTMENU`).
@@ -166,7 +166,7 @@ class YncaBrowseDriver {
    * @param value one of {@link menuValues}
    */
   menu(value) {
-    this.send("LISTMENU", YNCA_MENU_WIRE[value]);
+    this.send("LISTMENU", (0, import_types.wireFor)(YNCA_MENU_WIRE, value));
   }
   /**
    * Send one main-zone remote command and re-read the window.

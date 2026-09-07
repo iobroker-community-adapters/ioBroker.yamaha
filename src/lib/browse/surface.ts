@@ -27,18 +27,23 @@ export interface BrowseSurfaceDeps {
  * @param driver the transport's list driver
  * @param deviceId the id-safe device id
  * @param deps the controller callbacks
+ * @param unproven true when the transport claims the surface without having proved it
  * @returns the engine driving the surface, or undefined when there is nothing to browse
  */
 export async function createBrowseSurface(
   driver: BrowseDriver & { attach(engine: BrowseEngine): void },
   deviceId: string,
   deps: BrowseSurfaceDeps,
+  unproven = false,
 ): Promise<BrowseEngine | undefined> {
   const sources = driver.sources();
   if (Object.keys(sources).length === 0) {
     return undefined;
   }
-  const defs = [...browseObjectDefs(sources), ...remoteObjectDefs(driver.cursorValues, driver.menuValues)];
+  const built = [...browseObjectDefs(sources), ...remoteObjectDefs(driver.cursorValues, driver.menuValues)];
+  // A claim the transport could not prove is marked, so the coordinator prefers one that
+  // could — see ObjectDef.unproven (#613 through the standby door).
+  const defs = unproven ? built.map(def => ({ ...def, unproven: true })) : built;
   for (const def of defs) {
     await deps.upsertObject(`${deviceId}.${def.id}`, def);
   }

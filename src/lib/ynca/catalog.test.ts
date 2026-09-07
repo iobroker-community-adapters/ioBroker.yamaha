@@ -151,14 +151,17 @@ describe("YNCA catalog", () => {
     expect(cat.find(e => e.id === "advanced.speakers.pattern")?.spec.kind).toBe("enum");
   });
 
-  test("all 23 input names are read-only text states on SYS", () => {
+  test("all 29 input names are read-only text states on SYS", () => {
     const cat = buildYncaCatalog();
     expect(cat.find(e => e.id === "advanced.inputNames.hdmi1")).toMatchObject({
       subunit: "SYS",
       func: "INPNAMEHDMI1",
       write: false,
     });
-    expect(cat.filter(e => e.id.startsWith("advanced.inputNames.")).length).toBe(23);
+    // 29 since the 2026-09-06 audit: an RX-V583 protocol answers INPNAME for the network and
+    // system sources too (TUNER, AUX, SERVER, NET RADIO, MusicCast Link, Bluetooth), which the
+    // physical-inputs-only list did not carry — a user who renamed those saw nothing.
+    expect(cat.filter(e => e.id.startsWith("advanced.inputNames.")).length).toBe(29);
   });
 
   test("the AM/FM tuner is complete: RDS text B, program type and search mode", () => {
@@ -219,17 +222,19 @@ describe("YNCA catalog", () => {
   });
 
   test("each assignable input name carries the input it names", () => {
-    // All 23 used to read "Input names" — the folder's own label — so the object tree showed
-    // a folder and 23 children with one and the same text.
+    // All of them used to read "Input names" — the folder's own label — so the object tree
+    // showed a folder and its children with one and the same text.
     const named = buildYncaCatalog().filter(e => e.id.startsWith("advanced.inputNames."));
-    expect(named).toHaveLength(23);
+    expect(named).toHaveLength(29);
     const objects = catalogToObjects(named).filter(o => o.type === "state");
     const english = objects.map(o => (o.common.name as Record<string, string>).en);
-    expect(new Set(english).size).toBe(23);
+    expect(new Set(english).size).toBe(29);
     expect(english).toContain("Input name (HDMI1)");
     // The two that are not simply the upper-cased key follow the device's own spelling.
     expect(english).toContain("Input name (V-AUX)");
     expect(english).toContain("Input name (MULTI CH)");
+    expect(english).toContain("Input name (MusicCast Link)");
+    expect(english).toContain("Input name (NET RADIO)");
   });
 
   test("a coded write accepts the number as text, and still refuses junk", () => {

@@ -31,28 +31,43 @@ describe("parseYxcFeatures", () => {
 
   test("extracts a zone's raw volume range from range_step", () => {
     const main = parseYxcFeatures(rxA2070).zones.find(z => z.id === "main");
-    expect(main?.volumeRange).toEqual({ min: 0, max: 161, step: 1 });
+    expect(main?.ranges?.volume).toEqual({ min: 0, max: 161, step: 1 });
   });
 
-  test("ignores a volume range whose numbers are not numbers", () => {
+  test("ignores a range whose numbers are not numbers", () => {
     // The range comes straight off the device. A string min would land in
     // common.min and make the admin slider refuse every value the user picks.
     const caps = parseYxcFeatures({
       zone: [{ id: "main", range_step: [{ id: "volume", min: "0", max: 161, step: 1 }] }],
     });
-    expect(caps.zones.find(z => z.id === "main")?.volumeRange).toBeUndefined();
+    expect(caps.zones.find(z => z.id === "main")?.ranges?.volume).toBeUndefined();
   });
 
-  test("ignores a range block for something other than the volume", () => {
+  test("keeps every declared range apart, and reports none for an id the device omits", () => {
     const caps = parseYxcFeatures({
       zone: [{ id: "main", range_step: ["nope", null, { id: "tone_control", min: -10, max: 10, step: 1 }] }],
     });
-    expect(caps.zones.find(z => z.id === "main")?.volumeRange).toBeUndefined();
+    const ranges = caps.zones.find(z => z.id === "main")?.ranges;
+    expect(ranges?.volume).toBeUndefined();
+    expect(ranges?.tone_control).toEqual({ min: -10, max: 10, step: 1 });
   });
 
   test("returns empty capabilities for a malformed response", () => {
     expect(parseYxcFeatures(null)).toEqual({ zones: [], media: [], hasDistribution: false });
-    expect(parseYxcFeatures({ zone: "nope" })).toEqual({ zones: [], media: [], hasDistribution: false });
+    expect(parseYxcFeatures({ zone: "nope" })).toMatchObject({ zones: [], media: [], hasDistribution: false });
+    // A response without a system block declares no device-wide ranges — not undefined,
+    // so a caller can look one up without a guard.
+    expect(parseYxcFeatures({ zone: "nope" }).systemRanges).toEqual({});
+  });
+
+  test("reads the device-wide ranges from the system block", () => {
+    // The dimmer range is the device's own and differs per model (ISX-18D declares -1..2,
+    // the WX-21 0..2) — the audit on 2026-09-06 found it parsed and thrown away.
+    const caps = parseYxcFeatures({
+      zone: [{ id: "main" }],
+      system: { range_step: [{ id: "dimmer", min: -1, max: 2, step: 1 }] },
+    });
+    expect(caps.systemRanges).toEqual({ dimmer: { min: -1, max: 2, step: 1 } });
   });
 
   test("flags a device that reports a distribution block for multiroom", () => {
@@ -106,5 +121,21 @@ describe("scene count and netusb functions (RX-V6A getFeatures, 2026-09-01)", ()
     const caps = parseYxcFeatures({ response_code: 0, zone: [{ id: "main", func_list: ["power"] }] });
     expect(caps.zones[0].sceneNum).toBeUndefined();
     expect(caps.netusbFuncs).toBeUndefined();
+  });
+});
+
+describe("parseYxcFeatures — a malformed range entry is skipped, not half-read", () => {
+  it("ignores an entry whose id is not a string", () => {
+    const caps = parseYxcFeatures({
+      zone: [{ id: "main", range_step: [{ id: 42, min: 0, max: 1, step: 1 }] }],
+    });
+    expect(caps.zones[0]?.ranges).toEqual({});
+  });
+
+  it("ignores an entry with a missing bound", () => {
+    const caps = parseYxcFeatures({
+      zone: [{ id: "main", range_step: [{ id: "tone_control", min: 0, max: 1 }] }],
+    });
+    expect(caps.zones[0]?.ranges).toEqual({});
   });
 });

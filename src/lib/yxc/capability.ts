@@ -6,8 +6,16 @@ export interface YxcZone {
   funcs: string[];
   /** Inputs the zone offers. */
   inputs: string[];
-  /** The zone's raw volume range (min/max/step), if the device reports one. */
-  volumeRange?: { min: number; max: number; step: number };
+  /**
+   * EVERY range the zone declares in `range_step`, keyed by its id (`tone_control`,
+   * `subwoofer_volume`, `dialogue_level`, `equalizer`, …). Only `volume` used to be read;
+   * the rest was parsed and thrown away, so bass, treble, the subwoofer trim, the dialogue
+   * controls, the balance and the equalizer bands reached the user as numbers with no
+   * min/max/step — no slider in a visualisation, no bound in the admin, and an out-of-range
+   * write went to the device unchecked (audit 2026-09-06, measured over 25 device captures:
+   * 10 of 11 declared ranges were dropped).
+   */
+  ranges?: Record<string, { min: number; max: number; step: number }>;
   /**
    * The zone's per-device value lists from getFeatures (`sound_program_list`,
    * `surr_decoder_type_list`, …), keyed by the unified state id they belong to. They
@@ -50,6 +58,11 @@ export interface YxcCapabilities {
   tuner?: YxcTunerFeatures;
   /** The clock/alarm features, when the device has the clock block. */
   clock?: YxcClockFeatures;
+  /**
+   * The ranges the SYSTEM block declares (`dimmer`, …) — the device-wide counterpart of a
+   * zone's {@link YxcZone.ranges}, for the states that belong to the device, not to a zone.
+   */
+  systemRanges?: Record<string, { min: number; max: number; step: number }>;
 }
 
 // Only true media-player sources — subsystems that report play info and
@@ -68,11 +81,39 @@ function stringList(value: unknown): string[] {
 }
 
 /**
- * Extract one id's range from a getFeatures `range_step` array.
+ * Every range a getFeatures `range_step` array declares, keyed by its id.
  *
  * @param rangeStep the `range_step` array
- * @param id the range id to look for (`volume`, `alarm_volume`, …)
- * @returns the range (min/max/step), or undefined if not reported
+ * @returns the declared ranges (empty when the array is missing or malformed)
+ */
+function parseRanges(rangeStep: unknown): Record<string, { min: number; max: number; step: number }> {
+  const out: Record<string, { min: number; max: number; step: number }> = {};
+  if (!Array.isArray(rangeStep)) {
+    return out;
+  }
+  for (const entry of rangeStep) {
+    if (typeof entry !== "object" || entry === null) {
+      continue;
+    }
+    const range = entry as Record<string, unknown>;
+    if (
+      typeof range.id === "string" &&
+      typeof range.min === "number" &&
+      typeof range.max === "number" &&
+      typeof range.step === "number"
+    ) {
+      out[range.id] = { min: range.min, max: range.max, step: range.step };
+    }
+  }
+  return out;
+}
+
+/**
+ * One id's range — {@link parseRanges} for a single lookup.
+ *
+ * @param rangeStep the `range_step` array
+ * @param id the range id to look for
+ * @returns the range, or undefined if not reported
  */
 function parseRange(rangeStep: unknown, id: string): { min: number; max: number; step: number } | undefined {
   if (!Array.isArray(rangeStep)) {
@@ -193,7 +234,7 @@ export function parseYxcFeatures(response: unknown): YxcCapabilities {
           id: zone.id,
           funcs: stringList(zone.func_list),
           inputs: stringList(zone.input_list),
-          volumeRange: parseRange(zone.range_step, "volume"),
+          ranges: parseRanges(zone.range_step),
           valueLists: parseValueLists(zone),
           sceneNum: typeof zone.scene_num === "number" ? zone.scene_num : undefined,
         });
@@ -202,7 +243,9 @@ export function parseYxcFeatures(response: unknown): YxcCapabilities {
   }
   const media = MEDIA_BLOCKS.filter(block => block in obj);
   const netusb = obj.netusb;
+  const system = typeof obj.system === "object" && obj.system !== null ? (obj.system as Record<string, unknown>) : {};
   return {
+    systemRanges: parseRanges(system.range_step),
     zones,
     media,
     netusbFuncs:

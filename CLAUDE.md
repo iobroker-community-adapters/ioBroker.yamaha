@@ -133,8 +133,8 @@ Unterordner `multiroom.group` (role/id/name/serverZone/linkedDevices/linkDevice/
 `streamingEnabled` = „Zone DARF streamen", live belegt true ohne Gruppe), Zonen als `multiroom.zoneN`-Unterordner.
 Die zwei gerätweiten YXC-Katalog-Einträge (`multiroom.partyEnable`/`multiroom.group.streamingEnabled` aus dem
 Zonen-Status) werden von Objekt-Mapper UND Status-Parser NUR für die Main-Zone emittiert — sonst entstehen
-`multiroom.zoneN.multiroom.*`-Duplikate (der v1.0.0-Bugfund). Sieben Datenpunktgruppen
-(Wiedergabe/Tuner/Multiroom/HDMI/Szenen/Klang/Erweitert) sind
+`multiroom.zoneN.multiroom.*`-Duplikate (der v1.0.0-Bugfund). Acht Datenpunktgruppen
+(Wiedergabe/Tuner/Multiroom/HDMI/Szenen/Klang/Erweitert/Uhr) sind
 im Admin per `group_*`-Schalter abschaltbar — Zone 2/3/4, Zone B und masterPower gehören zur Multiroom-Gruppe — `isGroupEnabled` gated `upsertObject`+`setStateAck`,
 `cleanupStaleObjects` räumt eine abgeschaltete Gruppe weg (beszel-Muster); der Verstärker-Kern (Power/Volume/Mute/
 Input/Sound-Programm/Sleep/Info) ist immer an, ohne eigenen Schalter (wie beszels `info.online`/`.status`). Alt-IDs
@@ -376,6 +376,74 @@ Produktivcode wurde zeilenweise gelesen; alle Funde sind umgesetzt.
 - **Die abschaltbaren Datenpunkt-Gruppen sind an drei Stellen gleich** (`manifest.test.ts`):
   `SWITCHABLE_GROUPS`, die Schalter in `jsonConfig` und die Vorgaben im Manifest.
 
+## Voll-Audit 2026-09-06 — Regeln, die im Code stehen müssen
+
+Bericht `../../Ressourcen/yamaha/audit-2026-09-06.md`. **Jede Zahl darin ist über die gebündelten
+Mitschnitte von 25 MusicCast-Modellen und 15 YNCA-Geräteprotokollen gemessen** — kein einzelnes Gerät
+entscheidet etwas ([[feedback_user_hardware_ist_sample]]). Alle Funde sind umgesetzt.
+
+- **Ein Gruppenschalter erreicht sein Thema in JEDER Zone.** `groupOf` liest das Segment, NACHDEM der
+  Zonen-Präfix abgestreift ist; `groupsOf` sagt, dass ein Zonen-Datenpunkt an zwei Schaltern hängt
+  (multiroom UND sein Thema), und `isGroupEnabled` verlangt beide. Vorher entschied das erste
+  Segment roh — „Klang aus" räumte die Hauptzone und ließ 57+26 Klang-Datenpunkte der Zonen stehen,
+  „Wiedergabe aus" 304.
+- **Die Erklärung eines Ordners kommt aus EINER Quelle** (`catalog/types.ts channelCommon`). Vorher
+  las nur der Katalog-Weg `CHANNEL_DESC_KEYS`; der MusicCast-Objekt-Mapper und der XML-Controller
+  bauten `name` ohne `desc`, und da für gemeinsame Ordner die Modernität entscheidet, gewann die
+  Form ohne Erklärung: 3 von 303 Ordnern über alle Modelle. Jetzt 162 von 303 (der Rest erklärt
+  sich selbst und bleibt bewusst leer). Das Quelltext-Gate sieht `descChannel*` NICHT — die
+  Katalog-Invariante in `manifest.test.ts` schließt sie aus, deshalb hängt diese Klasse an
+  `channelCommon` als einziger Stelle.
+- **Was das Gerät an Grenzen deklariert, gewinnt.** `capability.ts parseRanges` liest den GANZEN
+  `range_step` (Zone und System), `object-mapper.ts RANGE_BY_STATE` hängt ihn an den Datenpunkt.
+  Vorher wurden 10 von 11 deklarierten Bereichen gelesen und weggeworfen; Zahlen-Datenpunkte mit
+  Grenzen: 41 → 238.
+- **MusicCast zählt die Tonregelung in HALBEN Dezibel**, nicht in dB: 19 Mitschnitte deklarieren
+  `tone_control` als −12…+12 in 25 Schritten — dieselben 25 Schritte, die die YNCA-Spec −6…+6 dB
+  in 0,5er-Schritten nennt. Das `dB`-Etikett an den MusicCast-Einträgen ist deshalb weg, und
+  `sound.bass`/`sound.treble`/`sound.subwooferTrim` gehören per Override dem Transport, dessen
+  Skala als Dezibel dokumentiert ist (wie `volume`). Ein reines MusicCast-Gerät behält seine
+  eigene Skala mit seinen eigenen Grenzen — ohne Einheiten-Behauptung.
+- **Ein BEWEIS schlägt den Rang.** `ObjectDef.unproven` markiert einen Anspruch ohne Nachweis,
+  `pickOwner` zieht einen bewiesenen Kandidaten vor. Der Fall: im Bereitschaftszustand antworten
+  die Medien-Subunits `@RESTRICTED`, also kann der YNCA-Menü-Anspruch nicht geprüft werden — und ein
+  Receiver steht beim Adapterstart meistens in Bereitschaft. Der ungeprüfte Anspruch verdrängte
+  damit den XML-Treiber, der bei jedem Zustand probt: **#613 durch die Standby-Tür.**
+- **Kein Schreibweg ohne Spur.** Der generische YNCA-Pfad hat jetzt seinen `else`-Zweig (alle
+  Sonderpfade hatten längst einen), der Supervisor meldet einen Schreibvorgang auf ein offline
+  Gerät, und der XML-Pad sagt, dass er ohne offenes Menü nichts senden kann.
+- **Das Fernbedienungs-Vokabular steht EINMAL** (`browse/types.ts` + `yxc/remote.ts`): die
+  Draht-Tabellen sind über `WireTable<CursorValue|MenuValue>` an die Wortliste gebunden, ein
+  Tippfehler ist ein Compile-Fehler. Vorher gab es vier Listen, und die Cursor-Listen wichen schon
+  ab. Der MusicCast-Schreibweg prüft den Wert jetzt wie der Engine-Weg.
+- **Der Katalog kennt jede Funktion, die ein Geräteprotokoll meldet** (491 statt 430 Paare): die
+  RDS-Uhrzeit auf dem klassischen Tuner, der Subwoofer-Trim und die YPAO-Lautstärke über YNCA, die
+  Trigger-Zuordnung je Eingang, die Lautsprecher-Konfiguration, die HDMI- und Lippensynchron-
+  Einstellungen der 2010er Generation, sechs weitere Eingangsnamen und der iPod-Bedienmodus.
+  Gemessen an den 15 Protokollen: 61 unbekannte Paare → 0. Werte IMMER aus der offiziellen
+  Befehlsliste, nie geraten.
+- **`/system/getFuncStatus` wird abgefragt** (`yxc/system-catalog.ts`): die geräteweiten
+  Einstellungen (automatische Abschaltung, Display-Helligkeit, HDMI-Ausgänge) hatten keinen
+  Datenpunkt, obwohl bis zu 25 von 25 Modellen die Fähigkeit deklarieren und die gebündelte
+  Referenzbibliothek jeden benutzten Endpunkt führt. Claim-with-proof wie bei XML: angelegt wird
+  nur, was DIESES Gerät im `getFuncStatus` wirklich liefert.
+- **`player.ipod`/`player.ipodUsb` sind aus `RENAMED_CHANNELS` RAUS**: mit `MODE` tragen die Ordner
+  wieder Eigenes, und die Umzugstabelle darf keinen lebenden Datenpunkt löschen. Die Sperre in
+  `pure-helpers.test.ts` hat den Widerspruch gefangen — genau dafür ist sie da.
+- **Ein Gerät reißt die anderen nicht mehr mit**: `startDevice` ist je Gerät gekapselt, ein
+  Datenbank-Schluckauf beim zweiten Receiver kostet nicht mehr den Rest des Starts.
+- **Wächst der Katalog, wächst die Override-Tabelle mit.** `OWNER_OVERRIDES` listet je Id die
+  BEVORZUGTE Reihenfolge — ein Transport, der die Id neu bekommt und dort nicht steht, fällt hinter
+  jeden gelisteten zurück, und die Modernität gewinnt wieder. Genau das passierte in dieser Sitzung:
+  `sound.subwooferTrim` bekam mit `MAIN:SWFRTRIM` einen YNCA-Träger, der Override listete nur
+  `xml, yxc` — auf jedem MusicCast+YNCA-Receiver stand damit wieder die MusicCast-Skala im
+  dB-Datenpunkt. **Nach jeder Katalog-Erweiterung die Tabelle gegen die drei Kataloge gegenprüfen**
+  (Formvergleich: 12 abweichende gemeinsame Fähigkeiten, davon 0 ohne Override), und einen
+  Override-Test IMMER mit dem Paar schreiben, das der neue Träger bildet — das alte Paar bleibt grün.
+- **Der Preis von F6 ist gemessen:** +61 Sweep-Abrufe (398 → 459), bei 100 ms Takt +6,1 s im vollen
+  Blind-Sweep; 58 davon auf SYS+MAIN, also auf jedem Gerät. Einmal je unbekanntes Gerät — der
+  persistierte `yncaCapabilities`-Layer trägt den nächsten Start.
+
 ## Voll-Audit 2026-09-02 (v2.0.4) — Regeln, die im Code stehen müssen
 
 16-Dimensionen-Audit + Speicher/Leaks + Sicherheit + Test-Audit mit Mutationstests; Bericht
@@ -426,6 +494,8 @@ Produktivcode wurde zeilenweise gelesen; alle Funde sind umgesetzt.
   bleibt es — `npm run format` ist gefahrlos. Ausschlussmuster in den beiden `format`-Skripten
   (KEINE `.prettierignore` — Repochecker W0084/W5048): `build/` (Compiler-Ausgabe),
   `io-package.json` (Release-Skript, i18n-Sync und Konsistenz-Autofix schreiben aufgeklapptes JSON),
+  `.remember/**` (Arbeitsordner des Sitzungs-Werkzeugs: git-ignoriert, aber prettier liest die
+  PLATTE — zwei Zustandsdateien darin machten den Release-Lauf am 2026-09-07 rot),
   `.github/**` (Community-/Bot-Vorlagen von mcm1957 und iobroker-bot — einfache Anführungszeichen,
   eigene Formen; der Konsistenz-Audit vergleicht sie im Community-Zweig, unsere Formatierungshoheit
   endet dort). `.releaseconfig.json` ist die Master-Kopie (Master seit 2026-09-02 auf Zeilenbreite
@@ -588,6 +658,45 @@ räumt den KOMPLETTEN Alt-Baum (47 Instanz-Objekte + dynamische `Realtime.*`/`Sy
   nicht migrierbar (fremder Namensraum) → freiwilliger Umstieg + Doku.
 - **Manifest bleibt auf der released Version** — den Bump macht `npm run release`.
 - **Sentry seit v1.5.0** auf krobis eigenem power-dreams-Projekt (de.sentry.io, EU) — dieselbe DSN wie die übrigen Adapter, NICHT der geerbte community-DSN (der wurde bei der Übernahme entfernt). Details: Memory `reference_sentry_integration`.
+
+## Objekt-Inventar aus Fixtures (`npm run test:inventory`)
+
+Der Nachweis, dass ein Update JEDEN Datenpunkt einer bestehenden Installation erreicht — ohne
+Server, für alle Gerätetypen (Flottenstandard, `Entwicklung/CLAUDE_TEMPLATES.md`). Sieben
+Fixture-Geräte decken die fünf Geräteklassen aus `device-type.ts` UND alle Transport-Kombinationen
+ab: MusicCast+YNCA (RX-A2070), YNCA allein (RX-V473, R-N500), XML allein (RX-V6A), MusicCast allein
+(WX-030, YSP-1600, CD-NT670D). Die Antworten sind echte Geräteantworten aus den gebündelten
+Mitschnitten, destilliert nach `test/fixtures/inventory/` — die XML-Hälfte ist von krobis eigener
+Konfiguration bereinigt (Eingangsnamen auf Werkseinstellung, System-ID genullt), sie gehört nicht
+in ein öffentliches Repo.
+
+- **Der Adapter bekommt KEINE Test-Naht.** `XmlClient`/`YamahaYxcClient` nehmen zwar einen
+  einspeisbaren Transport, aber `attempt-device.ts` baut sie mit den Vorgaben, und von der
+  Konfiguration führt kein Weg dorthin. Statt einen zu legen, biegt `test/inventory-hook.cjs` die
+  ZIELADRESSE außerhalb des Adapters um (`NODE_OPTIONS=--require`, Routing-Tabelle über die
+  Umgebung). Unbekannte Geräteadressen werden abgewiesen: eine vergessene Route fällt auf, statt
+  still ins echte Netz zu gehen.
+- **Drei Fallen, alle am echten Fehlversuch belegt:** (a) `net.connect(options)` reicht Node's
+  normalisiertes `[options, cb]`-Array als EIN Argument weiter und markiert es mit einem internen
+  Symbol — ein neu gebautes Array wird mit `ERR_MISSING_ARGS` abgelehnt, es muss an Ort und Stelle
+  geändert werden. (b) MusicCast adressiert per URL-Zeichenkette, XML per Options-Objekt; wer nur
+  eine Form erkennt, bekommt einen halb verbundenen Baum. (c) Was der Haken nicht sicher als
+  Geräteaufruf erkennt, geht UNVERÄNDERT durch — der Adapter spricht über dieselben APIs mit der
+  Zustands-/Objektdatenbank, und ein „normalisierendes" Argument dort beendet die Instanz vor dem
+  ersten Gerätekontakt.
+- **Gewartet wird auf einen BAUM, nicht auf eine Zahl.** Der Gerätekopf (`info.*`) existiert lange
+  vor der ersten Transportantwort, also sieht ein Baum aus lauter Köpfen „stabil" aus und das
+  Inventar käme leer heraus. Erst wenn jedes Gerät mehr als seine Kopfobjekte trägt, wird auf Ruhe
+  gewartet (Bilanz-Nachlauf 5 s).
+- **`npm run build` gehört von Hand davor** — der Lauf startet den Adapter aus `build/`.
+- **Zwei Fehler fand schon der erste Lauf**, beide unsichtbar für Quelltext-Gate, Rollen-Gate und
+  906 Tests, weil beide erst im GEBAUTEN Baum entstehen: (a) `player.browse` trug einen festen
+  englischen Ordnernamen — Namens- und Erklärungstabelle sind unabhängig, `browse` stand nur in der
+  zweiten; die Invariante „ein Ordner mit Erklärung hat einen übersetzten Namen" steht jetzt im
+  Test. (b) Die Id-Drift `hdmiOut1` → `hdmi.out1` erzeugt einen Elternpfad, für den keine
+  Eltern-Schleife zuständig ist (der XML-Katalogeintrag hat kein Segment) — der Datenpunkt stand
+  ohne Elternobjekt im Baum (E3009). Geschlossen im **Baum-Koordinator**: er kennt als Einziger die
+  kanonischen Ids, also gilt die Reparatur für jede künftige Drift.
 
 ## Tests
 

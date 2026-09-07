@@ -44,8 +44,13 @@ class DeviceSupervisor {
    * @param value the new value
    */
   handleStateChange(fullStateId, ack, value) {
-    var _a;
-    (_a = this.handle) == null ? void 0 : _a.handleStateChange(fullStateId, ack, value);
+    if (!this.handle) {
+      if (!ack) {
+        this.deps.log.debug(`${fullStateId}: write dropped \u2014 the device is offline`);
+      }
+      return;
+    }
+    this.handle.handleStateChange(fullStateId, ack, value);
   }
   async attemptOnce() {
     if (this.closed) {

@@ -1,0 +1,44 @@
+[
+  {
+    "id": "rxa2070",
+    "ip": "10.10.0.11",
+    "class": "avReceiver",
+    "why": "MusicCast AV receiver that also speaks YNCA — the common case, and the only combination where the owner policy has to decide between two live transports"
+  },
+  {
+    "id": "rxv473",
+    "ip": "10.10.0.12",
+    "class": "avReceiver",
+    "why": "2012 generation, YNCA only (no MusicCast) — the device behind #613"
+  },
+  {
+    "id": "rxv6a",
+    "ip": "10.10.0.13",
+    "class": "avReceiver",
+    "why": "XML/YNC only — the pre-2010 control path, from the 2026-09-01 harvest"
+  },
+  {
+    "id": "rn500",
+    "ip": "10.10.0.14",
+    "class": "stereoReceiver",
+    "why": "network stereo receiver: no zones, no surround — the amp core alone"
+  },
+  {
+    "id": "wx030",
+    "ip": "10.10.0.15",
+    "class": "speaker",
+    "why": "wireless speaker: MusicCast only, no HDMI, no tuner"
+  },
+  {
+    "id": "ysp1600",
+    "ip": "10.10.0.16",
+    "class": "soundbar",
+    "why": "soundbar: MusicCast only, its own sound programs"
+  },
+  {
+    "id": "cdnt670d",
+    "ip": "10.10.0.17",
+    "class": "cdSystem",
+    "why": "CD receiver: the cd.* block and the fifth device class"
+  }
+]

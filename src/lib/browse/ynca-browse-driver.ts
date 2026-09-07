@@ -1,4 +1,13 @@
-import { ROW_KIND_BY_ATTRIBUTE, type BrowseDriver, type BrowseRow, type BrowseRowKind } from "./types";
+import {
+  ROW_KIND_BY_ATTRIBUTE,
+  wireFor,
+  type BrowseDriver,
+  type BrowseRow,
+  type BrowseRowKind,
+  type CursorValue,
+  type MenuValue,
+  type WireTable,
+} from "./types";
 import type { BrowseEngine } from "./browse-engine";
 
 /** Collect a burst of list lines for this long before rendering the window. */
@@ -37,7 +46,7 @@ export interface YncaBrowseClient {
  * (display, home) stay out of the dropdown instead of being mapped onto something else.
  * Source: the official command list, `Ressourcen/yamaha/ynca-command-list-rx-v671.txt`.
  */
-const YNCA_CURSOR_WIRE: Record<string, string> = {
+const YNCA_CURSOR_WIRE: WireTable<CursorValue> = {
   up: "Up",
   down: "Down",
   left: "Left",
@@ -47,7 +56,7 @@ const YNCA_CURSOR_WIRE: Record<string, string> = {
   home: "Back to Home",
 };
 
-const YNCA_MENU_WIRE: Record<string, string> = {
+const YNCA_MENU_WIRE: WireTable<MenuValue> = {
   on_screen: "On Screen",
   top_menu: "Top Menu",
   menu: "Menu",
@@ -183,7 +192,7 @@ export class YncaBrowseDriver implements BrowseDriver {
    * @param value one of {@link cursorValues}
    */
   public cursor(value: string): void {
-    this.send("LISTCURSOR", YNCA_CURSOR_WIRE[value]);
+    this.send("LISTCURSOR", wireFor(YNCA_CURSOR_WIRE, value));
   }
 
   /**
@@ -192,7 +201,7 @@ export class YncaBrowseDriver implements BrowseDriver {
    * @param value one of {@link menuValues}
    */
   public menu(value: string): void {
-    this.send("LISTMENU", YNCA_MENU_WIRE[value]);
+    this.send("LISTMENU", wireFor(YNCA_MENU_WIRE, value));
   }
 
   /**

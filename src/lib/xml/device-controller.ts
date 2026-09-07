@@ -1,4 +1,4 @@
-import { CHANNEL_NAME_KEYS, type ObjectDef } from "../catalog/types";
+import { channelCommon, type ObjectDef } from "../catalog/types";
 import { tName } from "../i18n";
 import {
   isPermanentXmlRefusal,
@@ -167,7 +167,7 @@ export class XmlDeviceController implements ConnectionHandle {
       this.zoneFields.set(zone.key, fields);
     }
     // Every parent — the zone channels included — is created by the per-state loop below
-    // and named from the shared CHANNEL_NAME_KEYS table (a zone that answered has at least
+    // and named from the shared channel table (a zone that answered has at least
     // its power state, so its channel always comes into being this way).
     const createdChannels = new Set<string>();
     for (const zone of this.zones) {
@@ -190,13 +190,9 @@ export class XmlDeviceController implements ConnectionHandle {
             await this.deps.upsertObject(`${this.deviceId}.${channelId}`, {
               id: channelId,
               type: "channel",
-              common: {
-                // Capitalised like the catalog path does it, so the same folder cannot end up
-                // called "sound" here and "Sound" there depending on which transport owns it.
-                name: CHANNEL_NAME_KEYS[segments[i - 1]]
-                  ? tName(CHANNEL_NAME_KEYS[segments[i - 1]])
-                  : segments[i - 1].charAt(0).toUpperCase() + segments[i - 1].slice(1),
-              },
+              // Name AND explanation from the one shared table, so the same folder cannot end
+              // up called "sound" here and "Sound" there depending on which transport owns it.
+              common: channelCommon(segments[i - 1]),
             });
           }
         }
@@ -317,7 +313,7 @@ export class XmlDeviceController implements ConnectionHandle {
         await this.deps.upsertObject(`${this.deviceId}.${channelId}`, {
           id: channelId,
           type: "channel",
-          common: { name: tName(CHANNEL_NAME_KEYS.scene ?? "Scenes") },
+          common: channelCommon("scene"),
         });
       }
       const max = Math.max(...scenes.map(scene => scene.num));
@@ -378,7 +374,7 @@ export class XmlDeviceController implements ConnectionHandle {
       await this.deps.upsertObject(`${this.deviceId}.tuner`, {
         id: "tuner",
         type: "channel",
-        common: { name: tName(CHANNEL_NAME_KEYS.tuner ?? "Tuner") },
+        common: channelCommon("tuner"),
       });
     }
     const state = async (id: string, common: ObjectDef["common"]): Promise<void> => {
@@ -581,7 +577,7 @@ export class XmlDeviceController implements ConnectionHandle {
     if (available.size === 0) {
       return;
     }
-    const driver = new XmlBrowseDriver(this.deps.client, available, delay);
+    const driver = new XmlBrowseDriver(this.deps.client, available, delay, this.deps.log);
     this.browseEngine = await createBrowseSurface(driver, this.deviceId, {
       upsertObject: this.deps.upsertObject,
       emit: (id, value) => this.emit(id, value),

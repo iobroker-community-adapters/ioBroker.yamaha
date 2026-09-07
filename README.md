@@ -103,6 +103,16 @@ On the very first contact the adapter asks the receiver which functions it suppo
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+### 2.5.0 (2026-09-07)
+
+- (krobipd) Fixed: switching off a datapoint group now clears it in every zone — turning off "Sound" used to leave the zone 2/3/4 sound datapoints standing, and "Playback" left 304 of them
+- (krobipd) Fixed: folders explain themselves on all three protocols now — on MusicCast and older XML receivers the explanation was missing, so a speaker or soundbar got almost none
+- (krobipd) Improved: numeric datapoints carry the limits the device itself declares, so a slider offers exactly the range the receiver accepts instead of an open number field
+- (krobipd) New: 61 setup datapoints of the 2010 receiver generation — speaker configuration, HDMI and lip-sync settings, trigger assignment, subwoofer trim, YPAO volume and the RDS clock
+- (krobipd) New: the device-wide MusicCast settings are readable and writable — automatic standby, display brightness and the two HDMI outputs, created only where the device really offers them
+- (krobipd) Fixed: bass, treble and subwoofer trim showed doubled values on MusicCast receivers — that scale counts in half decibels and was labelled as decibels
+- (krobipd) Fixed: a receiver that was in standby when the adapter started could end up with an empty media menu until the next restart
+
 ### 2.4.0 (2026-09-03)
 
 - (krobipd) New: the on-screen remote reaches every protocol now — the cursor pad and the menu keys work on YNCA and pre-2010 XML receivers, not just on MusicCast
@@ -119,11 +129,6 @@ On the very first contact the adapter asks the receiver which functions it suppo
 ### 2.3.1 (2026-09-03)
 
 - (krobipd) Fixed: the new datapoint explanations were missing on MusicCast and older XML devices, so those users saw an empty description where the receiver has one
-
-### 2.3.0 (2026-09-03)
-
-- (krobipd) New: every datapoint and every folder now carries a short explanation in eleven languages, so the object tree tells you what a value actually means
-- (krobipd) Improved: a text that has no translation yet falls back to readable English instead of showing an internal key
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 

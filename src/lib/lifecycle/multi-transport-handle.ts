@@ -106,7 +106,6 @@ export class MultiTransportHandle implements ConnectionHandle {
       objects: connection.buildObjects(),
     }));
     const { objects, ownerByCanonicalId } = coordinateObjectTree(contributions);
-    this.ownerByCanonicalId = ownerByCanonicalId;
     // Parents before children is guaranteed by the coordinator, so intermediate channels
     // exist. Only definitions that actually CHANGED are written: coordinate() runs again
     // on every reconnect and on every single transport's return, and a receiver on a
@@ -120,6 +119,11 @@ export class MultiTransportHandle implements ConnectionHandle {
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
       this.writtenObjects.set(object.id, fingerprint);
     }
+    // Only now, with the tree written: an upsert that throws leaves the PREVIOUS ownership in
+    // place instead of a map that already names a transport this attempt failed to bring in —
+    // a user write would then have been routed to a transport that is not live (self-healing
+    // on the next attempt, but silently dropped until then).
+    this.ownerByCanonicalId = ownerByCanonicalId;
     for (const connection of this.live) {
       await connection.seedOwned(this.ownedFor(connection.transport));
     }

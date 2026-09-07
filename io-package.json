@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "2.4.0",
+    "version": "2.5.0",
     "news": {
+      "2.5.0": {
+        "en": "Datapoint groups now switch off in every zone, sliders know the device's own limits, and the tone controls no longer show doubled decibels on MusicCast.",
+        "de": "Datenpunktgruppen schalten jetzt in jeder Zone ab, Schieberegler kennen die Gerätegrenzen, und die Tonregelung zeigt auf MusicCast keine doppelten Dezibel mehr.",
+        "ru": "Группы точек данных теперь отключаются во всех зонах, ползунки знают пределы устройства, а регуляторы тембра больше не показывают удвоенные децибелы на MusicCast.",
+        "pt": "Os grupos de pontos de dados desligam-se agora em todas as zonas, os cursores conhecem os limites do aparelho e os controlos de tom já não mostram decibéis duplicados no MusicCast.",
+        "nl": "Datapuntgroepen schakelen nu in elke zone uit, schuifregelaars kennen de grenzen van het apparaat en de toonregeling toont op MusicCast geen dubbele decibels meer.",
+        "fr": "Les groupes de points de données se désactivent dans chaque zone, les curseurs connaissent les limites de l'appareil et les réglages de tonalité n'affichent plus de décibels doublés sur MusicCast.",
+        "it": "I gruppi di datapoint ora si disattivano in ogni zona, i cursori conoscono i limiti dell'apparecchio e i controlli di tono non mostrano più decibel raddoppiati su MusicCast.",
+        "es": "Los grupos de puntos de datos ahora se desactivan en todas las zonas, los deslizadores conocen los límites del aparato y los controles de tono ya no muestran decibelios duplicados en MusicCast.",
+        "pl": "Grupy punktów danych wyłączają się teraz w każdej strefie, suwaki znają granice urządzenia, a regulacja barwy nie pokazuje już podwojonych decybeli na MusicCast.",
+        "uk": "Групи точок даних тепер вимикаються в кожній зоні, повзунки знають межі пристрою, а регулятори тембру більше не показують подвоєні децибели на MusicCast.",
+        "zh-cn": "数据点分组现在可在每个区域关闭，滑块知晓设备自身的取值范围，音调控制在 MusicCast 上不再显示翻倍的分贝值。"
+      },
       "2.4.0": {
         "en": "The on-screen remote now works on all three protocols: cursor pad and menu keys on YNCA and pre-2010 XML receivers too, with the same words as on MusicCast.",
         "de": "Die Bildschirm-Fernbedienung gibt es jetzt auf allen drei Protokollen: Steuerkreuz und Menütasten auch auf YNCA- und XML-Receivern, mit denselben Wörtern wie auf MusicCast.",
@@ -80,19 +93,6 @@
         "pl": "Czasy odtwarzania są teraz w sekundach, czytelna forma trafiła do nowych punktów tekstowych. Po restarcie adapter odczytuje menu, pasmo i wejście z amplitunera, a nie z pamięci.",
         "uk": "Час відтворення тепер у секундах, зручна форма — у нових текстових точках даних. Після перезапуску адаптер читає меню, діапазон і вхід з ресивера, а не з пам'яті.",
         "zh-cn": "播放时间现在以秒为单位，易读形式移到新的文本数据点。重启后，适配器从功放读取菜单、波段和输入源，而不是从缓存。"
-      },
-      "2.1.1": {
-        "en": "On an instance updated from an earlier version, the info datapoints now get the translated names too instead of keeping the old ones.",
-        "de": "Auf einer aktualisierten Instanz bekommen auch die info-Datenpunkte die übersetzten Namen, statt die alten zu behalten.",
-        "ru": "На обновлённом экземпляре точки данных info тоже получают переведённые названия вместо старых.",
-        "pt": "Numa instância atualizada, os pontos de dados info passam a receber os nomes traduzidos em vez de manter os antigos.",
-        "nl": "Op een bijgewerkte instantie krijgen ook de info-datapunten de vertaalde namen in plaats van de oude te behouden.",
-        "fr": "Sur une instance mise à jour, les points de données info reçoivent aussi les noms traduits au lieu de garder les anciens.",
-        "it": "Su un'istanza aggiornata anche i datapoint info ricevono i nomi tradotti invece di mantenere i vecchi.",
-        "es": "En una instancia actualizada, los puntos de datos info también reciben los nombres traducidos en lugar de conservar los antiguos.",
-        "pl": "Na zaktualizowanej instancji punkty danych info również otrzymują przetłumaczone nazwy zamiast zachowywać stare.",
-        "uk": "На оновленому екземплярі точки даних info також отримують перекладені назви замість старих.",
-        "zh-cn": "在已更新的实例上，info 数据点现在也会获得翻译后的名称，而不再保留旧名称。"
       }
     },
     "titleLang": {

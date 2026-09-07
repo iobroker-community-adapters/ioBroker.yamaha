@@ -4,6 +4,7 @@ import type { I18nKey } from "../i18n";
 import { isWritableValue } from "../catalog/value-coerce";
 import { formatPlayTime } from "../catalog/play-time";
 import { YXC_AMP_CATALOG } from "./catalog";
+import { isRemoteWord, YXC_CURSOR_VALUES, YXC_MENU_VALUES } from "./remote";
 import type { YxcClientLike } from "./client-contract";
 
 /**
@@ -158,13 +159,23 @@ export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefi
     const sceneZone = zone;
     return { kind: "run", run: client => client.recallScene(num, sceneZone) };
   }
-  if (name === "remote.cursor" && isWritableValue(value, false)) {
+  // The written word is checked against the transport's own vocabulary, exactly as the
+  // browsing engine does it for YNCA and XML. The dropdown is a hint, not a constraint: a
+  // script can write anything, and this was the one remote path that passed it straight to
+  // the device (audit 2026-09-06).
+  if (name === "remote.cursor") {
+    if (!isRemoteWord(YXC_CURSOR_VALUES, value)) {
+      return undefined;
+    }
     const cursorZone = zone;
-    return { kind: "run", run: client => client.controlCursor(String(value), cursorZone) };
+    return { kind: "run", run: client => client.controlCursor(value, cursorZone) };
   }
-  if (name === "remote.menu" && isWritableValue(value, false)) {
+  if (name === "remote.menu") {
+    if (!isRemoteWord(YXC_MENU_VALUES, value)) {
+      return undefined;
+    }
     const menuZone = zone;
-    return { kind: "run", run: client => client.controlMenu(String(value), menuZone) };
+    return { kind: "run", run: client => client.controlMenu(value, menuZone) };
   }
   // The unified player block's transport buttons (v2.0.0): declarative, because only
   // the controller knows which source (netusb or cd) the zone is playing.
