@@ -687,7 +687,12 @@ in ein öffentliches Repo.
 - **Gewartet wird auf einen BAUM, nicht auf eine Zahl.** Der Gerätekopf (`info.*`) existiert lange
   vor der ersten Transportantwort, also sieht ein Baum aus lauter Köpfen „stabil" aus und das
   Inventar käme leer heraus. Erst wenn jedes Gerät mehr als seine Kopfobjekte trägt, wird auf Ruhe
-  gewartet (Bilanz-Nachlauf 5 s).
+  gewartet (Bilanz-Nachlauf 5 s). ⚠️ **Der ADAPTER-eigene Zweig `yamaha.0.info.*` liegt auf
+  derselben Tiefe wie ein Gerätekopf** und muss am ERSTEN Segment ausgeschlossen werden — als Gerät
+  mitgezählt erhöht er den Stand um eins: die Schleife steigt aus, während ein echtes Gerät noch
+  fehlt, und die Zusicherung schlägt fehl, sobald alle da sind (`only 8 of 7 …`, Gate D06 rot beim
+  2.5.1-Vorlauf; das Inventar selbst blieb heil, weil die Ruhe-Schleife danach den Baum fertig
+  werden lässt).
 - **`npm run build` gehört von Hand davor** — der Lauf startet den Adapter aus `build/`.
 - **Zwei Fehler fand schon der erste Lauf**, beide unsichtbar für Quelltext-Gate, Rollen-Gate und
   906 Tests, weil beide erst im GEBAUTEN Baum entstehen: (a) `player.browse` trug einen festen
