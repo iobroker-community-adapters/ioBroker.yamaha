@@ -107,8 +107,7 @@ On the very first contact the adapter asks the receiver which functions it suppo
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
-
-### **WORK IN PROGRESS**
+### 2.5.2 (2026-09-07)
 
 - (krobipd) Improved: 174 more datapoints explain themselves — volume and tone now say which scale they use, the stored lists say what is inside them, and the menu rows say what they are for
 - (krobipd) Improved: a receiver's "Connected" now says what it means — a device on network standby answers as well, so it is not the same as being switched on
@@ -135,10 +134,6 @@ On the very first contact the adapter asks the receiver which functions it suppo
 ### 2.3.3 (2026-09-03)
 
 - (krobipd) New: the menu browser, the MusicCast group, the clock alarm and the disc drive now explain their datapoints too, in eleven languages
-
-### 2.3.2 (2026-09-03)
-
-- (krobipd) Fixed: eight tuner and scene datapoints still showed no explanation on MusicCast and older XML receivers
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 

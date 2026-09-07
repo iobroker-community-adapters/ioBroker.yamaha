@@ -1,9 +1,22 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "2.5.1",
+    "version": "2.5.2",
     "nogit": true,
     "news": {
+      "2.5.2": {
+        "en": "174 more datapoints now explain themselves — volume and tone say which scale they use, the stored lists say what is inside them, and Connected means reachable, not switched on.",
+        "de": "174 weitere Datenpunkte erklären sich jetzt selbst — Lautstärke und Klang nennen ihre Skala, die gespeicherten Listen sagen, was drinsteht, und Verbunden heißt erreichbar, nicht eingeschaltet.",
+        "ru": "Ещё 174 датапоинта теперь объясняют себя: громкость и тембр называют свою шкалу, сохранённые списки говорят, что внутри, а «Подключено» значит доступен, а не включён.",
+        "pt": "Mais 174 pontos de dados explicam-se agora: volume e tom indicam a sua escala, as listas guardadas dizem o que contêm, e Ligado significa alcançável, não em funcionamento.",
+        "nl": "174 datapunten meer leggen zichzelf nu uit: volume en toon noemen hun schaal, de opgeslagen lijsten zeggen wat erin staat, en Verbonden betekent bereikbaar, niet ingeschakeld.",
+        "fr": "174 points de données de plus s’expliquent désormais : volume et tonalité indiquent leur échelle, les listes mémorisées disent ce qu’elles contiennent, et Connecté signifie joignable, pas allumé.",
+        "it": "Altri 174 datapoint ora si spiegano da sé: volume e toni indicano la loro scala, gli elenchi memorizzati dicono cosa contengono, e Connesso significa raggiungibile, non acceso.",
+        "es": "174 puntos de datos más se explican ahora: volumen y tono indican su escala, las listas guardadas dicen qué contienen, y Conectado significa accesible, no encendido.",
+        "pl": "Kolejne 174 punkty danych same się objaśniają: głośność i barwa podają swoją skalę, zapisane listy mówią, co zawierają, a Połączono znaczy osiągalny, nie włączony.",
+        "uk": "Ще 174 датапоінти тепер пояснюють себе: гучність і тембр називають свою шкалу, збережені списки кажуть, що всередині, а «З'єднано» означає доступний, а не ввімкнений.",
+        "zh-cn": "另有 174 个数据点现在会自我说明：音量和音调标明所用刻度，已存列表说明其内容，“已连接”表示可达，而非已开机。"
+      },
       "2.5.1": {
         "en": "Installing straight from GitHub is no longer offered: the adapter is built before publishing, so it is installed from the ioBroker repository instead.",
         "de": "Die Installation direkt von GitHub wird nicht mehr angeboten: Der Adapter wird vor der Veröffentlichung gebaut und kommt daher aus dem ioBroker-Repository.",
@@ -81,19 +94,6 @@
         "pl": "Naprawiono: nowe objaśnienia punktów danych brakowały na urządzeniach MusicCast i starszych XML",
         "uk": "Виправлено: нові пояснення датапоінтів були відсутні на MusicCast та старих XML-пристроях",
         "zh-cn": "修复：新的数据点说明在 MusicCast 与较旧的 XML 设备上缺失"
-      },
-      "2.3.0": {
-        "en": "New: every datapoint and folder now carries a short explanation in eleven languages\nImproved: an untranslated text falls back to English instead of an internal key",
-        "de": "Neu: jeder Datenpunkt und jeder Ordner trägt jetzt eine kurze Erklärung in elf Sprachen\nVerbessert: ein noch nicht übersetzter Text fällt auf Englisch zurück statt auf eine interne Kennung",
-        "ru": "Новое: каждый датапоинт и папка теперь имеют краткое пояснение на одиннадцати языках\nУлучшено: непереведённый текст показывает английский вместо внутреннего ключа",
-        "pt": "Novo: cada ponto de dados e pasta tem agora uma explicação curta em onze línguas\nMelhorado: um texto sem tradução recorre ao inglês em vez de uma chave interna",
-        "nl": "Nieuw: elk datapunt en elke map heeft nu een korte uitleg in elf talen\nVerbeterd: een onvertaalde tekst valt terug op Engels in plaats van een interne sleutel",
-        "fr": "Nouveau : chaque point de données et dossier porte désormais une courte explication en onze langues\nAmélioré : un texte non traduit revient à l'anglais au lieu d'une clé interne",
-        "it": "Nuovo: ogni datapoint e cartella ha ora una breve spiegazione in undici lingue\nMigliorato: un testo non tradotto ripiega sull'inglese invece che su una chiave interna",
-        "es": "Nuevo: cada punto de datos y carpeta lleva ahora una breve explicación en once idiomas\nMejorado: un texto sin traducir recurre al inglés en vez de a una clave interna",
-        "pl": "Nowość: każdy punkt danych i folder ma teraz krótkie wyjaśnienie w jedenastu językach\nUlepszono: nieprzetłumaczony tekst wraca do angielskiego zamiast do klucza wewnętrznego",
-        "uk": "Нове: кожен датапоінт і тека тепер мають коротке пояснення одинадцятьма мовами\nПокращено: неперекладений текст показує англійську замість внутрішнього ключа",
-        "zh-cn": "新增：每个数据点和文件夹现在都带有十一种语言的简短说明\n改进：尚未翻译的文本回退为英文，而不是显示内部键名"
       }
     },
     "titleLang": {
