@@ -36,3 +36,6 @@ docs/superpowers/
 
 # Build output — the CI builds before publish; the adapter cannot be installed from GitHub.
 build/
+
+# Session memory of the note-taking hook — never repository content
+.remember/

@@ -87,8 +87,8 @@
     "coverage": "vitest run --coverage",
     "lint": "eslint",
     "lint:fix": "eslint --fix",
-    "format": "prettier --write . \"!build/**\" \"!io-package.json\" \"!.github/**\" \"!.remember/**\"",
-    "format:check": "prettier --check . \"!build/**\" \"!io-package.json\" \"!.github/**\" \"!.remember/**\"",
+    "format": "prettier --write . \"!build/**\" \"!admin/custom/**\" \"!src-admin/.__mf__temp/**\" \"!src-admin/package.json\" \"!src-admin/package-lock.json\" \"!.github/**\" \"!.vscode/**\" \"!io-package.json\" \"!README.md\" \"!CHANGELOG_OLD.md\" \"!package-lock.json\" \"!.releaseconfig.json\" \"!tsconfig.json\" \"!tsconfig.build.json\" \"!test/objects.inventory.json\"",
+    "format:check": "prettier --check . \"!build/**\" \"!admin/custom/**\" \"!src-admin/.__mf__temp/**\" \"!src-admin/package.json\" \"!src-admin/package-lock.json\" \"!.github/**\" \"!.vscode/**\" \"!io-package.json\" \"!README.md\" \"!CHANGELOG_OLD.md\" \"!package-lock.json\" \"!.releaseconfig.json\" \"!tsconfig.json\" \"!tsconfig.build.json\" \"!test/objects.inventory.json\"",
     "release": "release-script",
     "translate": "translate-adapter"
   },
