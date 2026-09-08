@@ -207,6 +207,28 @@ describe("mergeDiscovered", () => {
     expect(collisions).toEqual([]);
   });
 
+  test("a remembered device found at an address another remembered record holds keeps its id and takes the address", () => {
+    // Identity is the id: the remembered record wins over the address owner. Without the
+    // `remembered` lookup the found device would be treated as a stranger on Kitchen's address,
+    // reported as a collision and dropped — Living would stay at its dead 1.1.1.1 forever
+    // (mutation S4, 2026-09-08).
+    const collisions: Array<[string, string]> = [];
+    expect(
+      mergeDiscovered(
+        [
+          { id: "Living", ip: "1.1.1.1" },
+          { id: "Kitchen", ip: "2.2.2.2" },
+        ],
+        [{ ip: "2.2.2.2", name: "Living" }],
+        (dropped, takenId) => collisions.push([dropped, takenId]),
+      ),
+    ).toEqual([
+      { id: "Living", ip: "2.2.2.2" },
+      { id: "Kitchen", ip: "2.2.2.2" },
+    ]);
+    expect(collisions).toEqual([]);
+  });
+
   test("does not mutate the remembered records handed in", () => {
     const known = [{ id: "Living", ip: "1.1.1.1" }];
     mergeDiscovered(known, [{ ip: "9.9.9.9", name: "Living" }]);
