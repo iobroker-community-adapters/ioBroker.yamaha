@@ -106,7 +106,13 @@ describe("parseBasicStatus", () => {
       <Volume><Lvl><Val>-300</Val><Exp>1</Exp><Unit>dB</Unit></Lvl><Mute>Off</Mute></Volume>
       <Input><Input_Sel>HDMI1</Input_Sel></Input>
     </Basic_Status></Main_Zone></YAMAHA_AV>`;
-    expect(parseBasicStatus(xml)).toEqual({ power: true, volume: -30, mute: false, input: "HDMI1" });
+    expect(parseBasicStatus(xml)).toEqual({
+      dialect: "classic",
+      power: true,
+      volume: -30,
+      mute: false,
+      input: "HDMI1",
+    });
   });
 
   test("returns only the fields the response carries", () => {
@@ -268,5 +274,38 @@ describe("parseDescriptor — the enumerations a classic receiver carries in des
 
   test("a body without any of the blocks yields the empty declaration", () => {
     expect(parseDescriptor("<Unit/>")).toEqual({ programs: [], sleep: [], adaptiveDrc: [] });
+  });
+});
+
+describe("parseBasicStatus — the 2008 dialect (RX-V3900: Vol, Surr, Pgm)", () => {
+  test("volume, mute, program and straight are read from Vol/Surr/Pgm, and the dialect is noted", () => {
+    const status = parseBasicStatus(readFixture("basic-status-rx-v3900.xml"));
+    expect(status).toMatchObject({
+      power: true,
+      volume: -46,
+      mute: false,
+      input: "TV",
+      soundProgram: "2ch Stereo",
+      straight: false,
+      sleep: "Off",
+      dialect: "legacy",
+    });
+  });
+
+  test("the classic dialect is recognised as such", () => {
+    expect(parseBasicStatus("<Basic_Status><Volume><Lvl><Val>-300</Val></Lvl></Volume></Basic_Status>").dialect).toBe(
+      "classic",
+    );
+    expect(
+      parseBasicStatus(
+        "<Basic_Status><Surround><Program_Sel><Current><Sound_Program>Standard</Sound_Program></Current></Program_Sel></Surround></Basic_Status>",
+      ).dialect,
+    ).toBe("classic");
+  });
+
+  test("a status without a volume or program element declares no dialect", () => {
+    expect(
+      parseBasicStatus("<Basic_Status><Power_Control><Power>On</Power></Power_Control></Basic_Status>").dialect,
+    ).toBeUndefined();
   });
 });

@@ -1,7 +1,7 @@
 import type { ObjectDef } from "../catalog/types";
 import type { I18nKey } from "../i18n";
 import { escapeXmlText } from "./entities";
-import type { BasicStatus } from "./protocol";
+import type { BasicStatus, XmlDialect } from "./protocol";
 
 /**
  * The single source for XML/YNC amplifier states: one entry per unified state
@@ -20,8 +20,12 @@ export interface XmlAmpEntry {
   common: Omit<ObjectDef["common"], "name"> & { nameKey: I18nKey; descKey?: I18nKey };
   /** The Basic_Status field this state reads from; absent for a write-only command (e.g. scene recall). */
   statusField?: keyof BasicStatus;
-  /** Build the inner PUT XML for a written value; absent means read-only. */
-  toInner?: (value: unknown) => string;
+  /**
+   * Build the inner PUT XML for a written value; absent means read-only. The dialect is the
+   * spelling THIS device answered its status with (see {@link XmlDialect}); an entry whose
+   * element differs between the generations builds the device's own.
+   */
+  toInner?: (value: unknown, dialect?: XmlDialect) => string;
   /** Only exists on the main zone (a system/main-wide feature like scenes, HDMI outputs, party). */
   mainOnly?: boolean;
   /** Override the write target element (e.g. `System` for HDMI outputs and party); default is the zone element. */
@@ -51,14 +55,19 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
       step: 0.5,
     },
     statusField: "volume",
-    toInner: value =>
-      `<Volume><Lvl><Val>${Math.round(Number(value) * 10)}</Val><Exp>1</Exp><Unit>dB</Unit></Lvl></Volume>`,
+    toInner: (value: unknown, dialect?: XmlDialect): string => {
+      const element = dialect === "legacy" ? "Vol" : "Volume";
+      return `<${element}><Lvl><Val>${Math.round(Number(value) * 10)}</Val><Exp>1</Exp><Unit>dB</Unit></Lvl></${element}>`;
+    },
   },
   {
     state: "mute",
     common: { nameKey: "mute", type: "boolean", role: "media.mute", read: true, write: true },
     statusField: "mute",
-    toInner: value => `<Volume><Mute>${value ? "On" : "Off"}</Mute></Volume>`,
+    toInner: (value: unknown, dialect?: XmlDialect): string => {
+      const element = dialect === "legacy" ? "Vol" : "Volume";
+      return `<${element}><Mute>${value ? "On" : "Off"}</Mute></${element}>`;
+    },
   },
   {
     state: "input",
@@ -77,8 +86,10 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
       write: true,
     },
     statusField: "soundProgram",
-    toInner: value =>
-      `<Surround><Program_Sel><Current><Sound_Program>${escapeXmlText(value)}</Sound_Program></Current></Program_Sel></Surround>`,
+    toInner: (value, dialect) =>
+      dialect === "legacy"
+        ? `<Surr><Pgm_Sel><Pgm>${escapeXmlText(value)}</Pgm></Pgm_Sel></Surr>`
+        : `<Surround><Program_Sel><Current><Sound_Program>${escapeXmlText(value)}</Sound_Program></Current></Program_Sel></Surround>`,
   },
   {
     state: "sound.pureDirect",
@@ -97,8 +108,10 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     state: "sound.straight",
     common: { nameKey: "straight", descKey: "descStraight", type: "boolean", role: "switch", read: true, write: true },
     statusField: "straight",
-    toInner: value =>
-      `<Surround><Program_Sel><Current><Straight>${value ? "On" : "Off"}</Straight></Current></Program_Sel></Surround>`,
+    toInner: (value, dialect) =>
+      dialect === "legacy"
+        ? `<Surr><Pgm_Sel><Straight>${value ? "On" : "Off"}</Straight></Pgm_Sel></Surr>`
+        : `<Surround><Program_Sel><Current><Straight>${value ? "On" : "Off"}</Straight></Current></Program_Sel></Surround>`,
   },
   {
     state: "sound.direct",

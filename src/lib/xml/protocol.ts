@@ -356,8 +356,19 @@ export function parseDescriptor(xml: string): XmlDescriptor {
   return descriptor;
 }
 
+/**
+ * The two spellings of the amplifier block. The 2008 generation (RX-V3900, openHAB capture,
+ * its own desc.xml) answers `<Vol><Lvl>`, `<Vol><Mute>` and `<Surr><Pgm_Sel><Pgm>`; every
+ * generation from 2010 on `<Volume><Lvl>`, `<Volume><Mute>` and
+ * `<Surround><Program_Sel><Current><Sound_Program>`. A write follows the spelling the device
+ * itself answered with — the dialect is a property of the model.
+ */
+export type XmlDialect = "classic" | "legacy";
+
 /** The amplifier fields a Basic_Status response can carry. */
 export interface BasicStatus {
+  /** Which spelling the block used — set when it carried a volume or a program element at all. */
+  dialect?: XmlDialect;
   /** Power state (true = on). */
   power?: boolean;
   /** Volume in decibels. */
@@ -414,10 +425,17 @@ export function parseBasicStatus(xml: string): BasicStatus {
   if (power) {
     status.power = power[1] === "On";
   }
+  // Both dialects are read (see XmlDialect): the 2008 generation had NO volume, mute or
+  // program on this transport until 2.6.0 — the very generation the transport exists for.
+  if (/<Vol>|<Pgm_Sel>/.test(xml)) {
+    status.dialect = "legacy";
+  } else if (/<Volume>|<Program_Sel>/.test(xml)) {
+    status.dialect = "classic";
+  }
   // Scope the volume to its <Volume><Lvl> parent — a bare <Val> also matches
   // Dialogue_Lvl and other <Val>-carrying fields, so an unscoped match would read
   // the wrong field as the volume.
-  const volume = /<Volume>\s*<Lvl>\s*<Val>(-?\d+)<\/Val>/.exec(xml);
+  const volume = /<(?:Volume|Vol)>\s*<Lvl>\s*<Val>(-?\d+)<\/Val>/.exec(xml);
   if (volume) {
     status.volume = Number(volume[1]) / 10;
   }
@@ -429,7 +447,7 @@ export function parseBasicStatus(xml: string): BasicStatus {
   if (input) {
     status.input = decodeXmlText(input[1]);
   }
-  const soundProgram = /<Sound_Program>([^<]+)<\/Sound_Program>/.exec(xml);
+  const soundProgram = /<(?:Sound_Program|Pgm)>([^<]+)<\/(?:Sound_Program|Pgm)>/.exec(xml);
   if (soundProgram) {
     status.soundProgram = decodeXmlText(soundProgram[1]);
   }

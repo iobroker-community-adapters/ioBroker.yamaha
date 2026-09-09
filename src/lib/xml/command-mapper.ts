@@ -1,5 +1,5 @@
 import type { StateValue } from "../types";
-import type { BasicStatus } from "./protocol";
+import type { BasicStatus, XmlDialect } from "./protocol";
 import { isWritableValue } from "../catalog/value-coerce";
 import { XML_AMP_CATALOG } from "./catalog";
 
@@ -24,9 +24,11 @@ const ZONE_PREFIX: Record<string, string> = {
  *
  * @param stateId the state id (e.g. `power`, `zone2.volume`)
  * @param value the value written to the state
+ * @param dialect the spelling this device answers its status with (see {@link XmlDialect});
+ *   absent = classic
  * @returns the XML command, or undefined if the state or its zone is not mapped
  */
-export function stateToXml(stateId: string, value: unknown): XmlCommand | undefined {
+export function stateToXml(stateId: string, value: unknown, dialect?: XmlDialect): XmlCommand | undefined {
   let zoneKey = "main";
   let name = stateId;
   const zoneMatch = /^multiroom\.(zone[234])\.(.+)$/.exec(stateId);
@@ -49,7 +51,7 @@ export function stateToXml(stateId: string, value: unknown): XmlCommand | undefi
   if (!zone) {
     return undefined;
   }
-  return { zone, inner: entry.toInner(value) };
+  return { zone, inner: entry.toInner(value, dialect) };
 }
 
 /**

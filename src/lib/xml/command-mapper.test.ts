@@ -163,3 +163,32 @@ describe("stateToXml — device-wide settings stay on the main zone", () => {
     expect(stateToXml(state, true)).toBeDefined();
   });
 });
+
+describe("stateToXml — the 2008 dialect writes the elements the device itself answered with", () => {
+  test("volume, mute, program and straight use Vol / Surr>Pgm_Sel on the legacy dialect", () => {
+    expect(stateToXml("volume", -46, "legacy")?.inner).toBe(
+      "<Vol><Lvl><Val>-460</Val><Exp>1</Exp><Unit>dB</Unit></Lvl></Vol>",
+    );
+    expect(stateToXml("mute", true, "legacy")?.inner).toBe("<Vol><Mute>On</Mute></Vol>");
+    expect(stateToXml("soundProgram", "2ch Stereo", "legacy")?.inner).toBe(
+      "<Surr><Pgm_Sel><Pgm>2ch Stereo</Pgm></Pgm_Sel></Surr>",
+    );
+    expect(stateToXml("sound.straight", true, "legacy")?.inner).toBe(
+      "<Surr><Pgm_Sel><Straight>On</Straight></Pgm_Sel></Surr>",
+    );
+  });
+
+  test("the classic dialect (and no dialect at all) keeps the Volume / Surround>Program_Sel elements", () => {
+    expect(stateToXml("volume", -46, "classic")?.inner).toContain("<Volume><Lvl>");
+    expect(stateToXml("volume", -46)?.inner).toContain("<Volume><Lvl>");
+    expect(stateToXml("mute", false)?.inner).toBe("<Volume><Mute>Off</Mute></Volume>");
+    expect(stateToXml("soundProgram", "Standard", "classic")?.inner).toContain("<Surround><Program_Sel><Current>");
+  });
+
+  test("a zone write on the legacy dialect lands on the zone element with the legacy inner", () => {
+    expect(stateToXml("multiroom.zone2.volume", -20, "legacy")).toEqual({
+      zone: "Zone_2",
+      inner: "<Vol><Lvl><Val>-200</Val><Exp>1</Exp><Unit>dB</Unit></Lvl></Vol>",
+    });
+  });
+});

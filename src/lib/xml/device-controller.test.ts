@@ -867,3 +867,58 @@ describe("XmlDeviceController probe memory verdicts (audit 2026-09-02)", () => {
     expect(memory.remembered("xmlBrowseSources")).toBeUndefined();
   });
 });
+
+describe("the 2008 dialect drives every write and is remembered (RX-V3900)", () => {
+  const withMemory = (s: ReturnType<typeof setup>, memory: ProbeMemory): void => {
+    (s.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
+  };
+  const legacyMain: BasicStatus = {
+    power: true,
+    volume: -46,
+    mute: false,
+    input: "TV",
+    soundProgram: "2ch Stereo",
+    straight: false,
+    sleep: "Off",
+    dialect: "legacy",
+  };
+
+  test("a volume write after a legacy status goes out as Vol, a program write as Surr>Pgm_Sel", async () => {
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
+    const s = setup({ Main_Zone: legacyMain });
+    withMemory(s, memory);
+    await s.controller.start();
+    s.controller.handleStateChange("living.volume", false, -40);
+    s.controller.handleStateChange("living.soundProgram", false, "Standard");
+    await new Promise(resolve => setImmediate(resolve));
+    const sent = s.client.calls.filter(c => c.method === "send").map(c => c.inner);
+    expect(sent).toContain("<Vol><Lvl><Val>-400</Val><Exp>1</Exp><Unit>dB</Unit></Lvl></Vol>");
+    expect(sent).toContain("<Surr><Pgm_Sel><Pgm>Standard</Pgm></Pgm_Sel></Surr>");
+    // The dialect is a property of the model — remembered for the next start.
+    expect(memory.remembered("xmlDialect")).toBe("legacy");
+  });
+
+  test("a remembered legacy dialect drives the writes even before the first status carries one", async () => {
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA, xmlDialect: "legacy" });
+    // The zone answers power only this time (standby, say) — no dialect in the status.
+    const s = setup({ Main_Zone: { power: false, mute: false } });
+    withMemory(s, memory);
+    await s.controller.start();
+    s.controller.handleStateChange("living.mute", false, true);
+    await new Promise(resolve => setImmediate(resolve));
+    expect(s.client.calls.filter(c => c.method === "send").map(c => c.inner)).toContain("<Vol><Mute>On</Mute></Vol>");
+  });
+
+  test("a classic receiver keeps the classic elements — nothing is remembered as legacy", async () => {
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
+    const s = setup({ Main_Zone: { power: true, volume: -30, mute: false, dialect: "classic" } });
+    withMemory(s, memory);
+    await s.controller.start();
+    s.controller.handleStateChange("living.volume", false, -25);
+    await new Promise(resolve => setImmediate(resolve));
+    expect(s.client.calls.filter(c => c.method === "send").map(c => c.inner)).toContain(
+      "<Volume><Lvl><Val>-250</Val><Exp>1</Exp><Unit>dB</Unit></Lvl></Volume>",
+    );
+    expect(memory.remembered("xmlDialect")).toBe("classic");
+  });
+});

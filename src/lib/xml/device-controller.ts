@@ -9,6 +9,7 @@ import {
   parseTunerInfo,
   type BasicStatus,
   type XmlDescriptor,
+  type XmlDialect,
   type XmlScene,
   type XmlSystemConfig,
 } from "./protocol";
@@ -94,6 +95,12 @@ export class XmlDeviceController implements ConnectionHandle {
   private hasTuner = false;
   /** The amp state ids this controller actually created — the claim-with-proof gate for BOTH ways. */
   private readonly createdStates = new Set<string>();
+  /**
+   * The spelling this device answers its amplifier block with (see XmlDialect) — learned from
+   * the first status that carries one, remembered as `xmlDialect` (a property of the model,
+   * dropped with the XML identity), and put on every write. Undefined = classic.
+   */
+  private dialect: XmlDialect | undefined;
   /** Per zone: the Basic_Status fields this device is known to deliver (persisted union). */
   private readonly zoneFields = new Map<string, Set<string>>();
 
@@ -143,6 +150,10 @@ export class XmlDeviceController implements ConnectionHandle {
         // the input names as evidence (a flag 0 proves a source absent, a name adds an input).
         this.deps.probeMemory.set("xmlConfig", config);
       }
+    }
+    const rememberedDialect = this.deps.probeMemory?.remembered("xmlDialect");
+    if (rememberedDialect === "classic" || rememberedDialect === "legacy") {
+      this.dialect = rememberedDialect;
     }
     // Zones flagged 0 are not probed. Guards (advisor round 2026-09-09): a block that flags the
     // MAIN zone 0, or no block at all (2008 generation), probes every zone as before; a zone
@@ -747,7 +758,7 @@ export class XmlDeviceController implements ConnectionHandle {
       this.deps.log.debug(`${this.deviceId}: ${stateId} was not reported by this device — write dropped`);
       return;
     }
-    const command = stateToXml(stateId, value);
+    const command = stateToXml(stateId, value, this.dialect);
     if (command) {
       void this.applyCommand(command);
     }
@@ -821,6 +832,10 @@ export class XmlDeviceController implements ConnectionHandle {
    * @param status the parsed Basic_Status
    */
   private seedZone(zone: XmlZone, status: BasicStatus): void {
+    if (status.dialect !== undefined && status.dialect !== this.dialect) {
+      this.dialect = status.dialect;
+      this.deps.probeMemory?.set("xmlDialect", status.dialect);
+    }
     // A field the device delivers for the FIRST time mid-run has no object yet
     // (claim-with-proof creates only proven fields at start): remember it — the next
     // start creates it — and skip the write, so no state lands without an object.
