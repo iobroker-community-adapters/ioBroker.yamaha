@@ -409,4 +409,34 @@ describe("MultiTransportHandle object write economy", () => {
     await (handle as unknown as { coordinate(): Promise<void> }).coordinate();
     expect(written).toEqual(["living.volume"]);
   });
+
+  test("a declared list survives a re-coordination while its transport is away (#619)", async () => {
+    const input = (states: Record<string, string>, declared = false): ObjectDef => ({
+      id: "input",
+      type: "state",
+      ...(declared ? { declaredStates: true } : {}),
+      common: { name: "Input", type: "string", role: "media.input", read: true, write: true, states },
+    });
+    const ynca = fakeConn("ynca", [input({ HDMI1: "HDMI1", Spotify: "Spotify" })]);
+    const yxc = fakeConn("yxc", [state("sound.equalizer.low", "EQ low")]);
+    const xml = fakeConn("xml", [input({ HDMI1: "HDMI1" }, true)]);
+    const written: Array<{ id: string; def: ObjectDef }> = [];
+    const handle = new MultiTransportHandle("living", [ynca, yxc, xml], {
+      upsertObject: (id, def) => {
+        written.push({ id, def });
+        return Promise.resolve();
+      },
+      log: silentLog,
+    });
+    await handle.start();
+    expect(written.find(w => w.id === "living.input")?.def.common.states).toEqual({ HDMI1: "HDMI1" });
+
+    // XML drops (no rebuild deps → it stays away); MusicCast's return re-coordinates the tree.
+    xml.drop();
+    written.length = 0;
+    await (handle as unknown as { coordinate(): Promise<void> }).coordinate();
+    // The list is a property of the MODEL, not of the transport that read it: the input keeps the
+    // declared 1-entry list, nothing is rewritten — no grow-and-shrink with every transport hiccup.
+    expect(written.filter(w => w.id === "living.input")).toEqual([]);
+  });
 });

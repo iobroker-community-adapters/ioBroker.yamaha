@@ -66,6 +66,8 @@ export class MultiTransportHandle implements ConnectionHandle {
   private ownerByCanonicalId = new Map<string, Transport>();
   /** Object id → the definition last written, so an unchanged re-coordination writes nothing. */
   private readonly writtenObjects = new Map<string, string>();
+  /** Canonical id → the last DECLARED value list seen, kept while its transport is away (see coordinate). */
+  private readonly declaredStates = new Map<string, Record<string, string>>();
   private readonly live: TransportConnection[];
   private readonly retries = new Map<Transport, { timer: unknown; backoff: { nextDelay(): number } }>();
   private supervisorDrop: ((reason?: Error) => void) | undefined;
@@ -106,6 +108,24 @@ export class MultiTransportHandle implements ConnectionHandle {
       objects: connection.buildObjects(),
     }));
     const { objects, ownerByCanonicalId } = coordinateObjectTree(contributions);
+    // A declared value list is a property of the MODEL, not of the transport that read it. When the
+    // declaring transport is away during a re-coordination (XML dropped, MusicCast just returned),
+    // the union-carrying owner would take the dropdown back to the catalog list — and hand it over
+    // again when XML returns. Keep the last declaration on such a def instead (#619).
+    for (const object of objects) {
+      if (!object.common.states) {
+        continue;
+      }
+      if (object.declaredStates) {
+        this.declaredStates.set(object.id, object.common.states);
+      } else {
+        const remembered = this.declaredStates.get(object.id);
+        if (remembered) {
+          object.common = { ...object.common, states: remembered };
+          object.declaredStates = true;
+        }
+      }
+    }
     // Parents before children is guaranteed by the coordinator, so intermediate channels
     // exist. Only definitions that actually CHANGED are written: coordinate() runs again
     // on every reconnect and on every single transport's return, and a receiver on a
