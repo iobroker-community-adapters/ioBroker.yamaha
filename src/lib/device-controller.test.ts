@@ -1548,3 +1548,64 @@ describe("YncaDeviceController sweep plan on the fast path", () => {
     expect(stored?.subunits.ZONE2.SOUNDPRG).toBe("Standard");
   });
 });
+
+describe("YncaDeviceController — the tree follows the device within the session (2.7.0)", () => {
+  const flushAsync = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
+
+  test("a value the device reports for the first time grows its dropdown in the SAME session", async () => {
+    const client = new FakeClient();
+    client.capabilities = { model: "RX", subunits: { MAIN: { PWR: "On", SOUNDPRG: "Standard" } } };
+    const { objects, deps } = makeDeps(client);
+    await new YncaDeviceController("living", deps).start();
+    const before = objects.filter(o => o.id === "living.soundProgram").pop();
+    expect(before?.def.common.states).not.toHaveProperty("Enhanced");
+    objects.length = 0;
+    // The receiver reports a program the catalog's candidate list does not carry.
+    client.emit({ subunit: "MAIN", func: "SOUNDPRG", value: "Enhanced" });
+    await flushAsync();
+    const after = objects.filter(o => o.id === "living.soundProgram").pop();
+    expect(after?.def.common.states).toHaveProperty("Enhanced");
+    // Only what changed is re-upserted — not the whole tree.
+    expect(objects.some(o => o.id === "living.power")).toBe(false);
+  });
+
+  test("a function the background refresh answers for the first time becomes an object in the SAME session", async () => {
+    const memory = new ProbeMemory({
+      __schema: DISCOVERY_SCHEMA,
+      yncaCapabilities: {
+        model: "RX",
+        firmware: "1.0",
+        subunits: { SYS: { MODELNAME: "RX", VERSION: "1.0" }, MAIN: { PWR: "On" } },
+      },
+    });
+    const client = new FakeClient();
+    // The device now answers a function the remembered shape does not carry.
+    client.capabilities = {
+      model: "RX",
+      subunits: { SYS: { MODELNAME: "RX", VERSION: "1.0" }, MAIN: { PWR: "On", MUTE: "Off" } },
+    };
+    const { objects, deps } = makeDeps(client);
+    await new YncaDeviceController("living", { ...deps, probeMemory: memory }).start();
+    expect(objects.some(o => o.id === "living.mute")).toBe(false);
+    await flushAsync();
+    await flushAsync();
+    expect(objects.some(o => o.id === "living.mute")).toBe(true);
+  });
+
+  test("a refresh that finds nothing new upserts nothing", async () => {
+    const shape = {
+      model: "RX",
+      firmware: "1.0",
+      subunits: { SYS: { MODELNAME: "RX", VERSION: "1.0" }, MAIN: { PWR: "On", MUTE: "Off" } },
+    };
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA, yncaCapabilities: shape });
+    const client = new FakeClient();
+    client.capabilities = { model: "RX", subunits: shape.subunits };
+    const { objects, deps } = makeDeps(client);
+    await new YncaDeviceController("living", { ...deps, probeMemory: memory }).start();
+    objects.length = 0;
+    await flushAsync();
+    await flushAsync();
+    expect(objects).toEqual([]);
+  });
+});

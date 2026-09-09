@@ -619,18 +619,24 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
-   * Once per adapter version and device (marker `purgeVersion` in the device's capability
-   * profile): remove read-capable states under a CONNECTED device that never carried a
-   * value and were not (re)created by this run's transports — over-declarations of an
-   * earlier adapter version that today's claim-with-proof creation no longer makes.
-   * Deleting them is lossless (no value, no history). Runs after the tree settled, so
-   * a device that has not connected in this run keeps its tree untouched — its sweep
-   * happens on the first start that reaches it.
+   * Remove read-capable states under a CONNECTED device that never carried a value and were not
+   * (re)created by this run's transports — over-declarations of an earlier adapter version that
+   * today's claim-with-proof creation no longer makes. Deleting them is lossless (no value, no
+   * history). Runs after the tree settled, so a device that has not connected in this run keeps
+   * its tree untouched — its sweep happens on the first start that reaches it.
+   *
+   * TWO starts decide, not one (2.7.0): a receiver in standby answers many functions
+   * `@RESTRICTED`, so one run seeing a datapoint untouched is no proof the device lost it. The
+   * first run RECORDS the candidates in the device's capability profile (`pendingPurge`), the
+   * next run deletes those still untouched and still never filled, and forgets the rest. A device
+   * is examined once per adapter version (`purgeVersion`) OR whenever it carries a recorded
+   * candidate — the confirmation has to reach its second start even without a new version.
    */
   private async purgeNeverFilled(): Promise<void> {
     const candidates: string[] = [];
     for (const deviceId of this.readyDevices) {
-      if (this.profiles.get(deviceId)?.purgeVersion !== this.version) {
+      const profile = this.profiles.get(deviceId);
+      if (profile?.purgeVersion !== this.version || (profile?.pendingPurge.length ?? 0) > 0) {
         candidates.push(deviceId);
       }
     }
@@ -639,21 +645,31 @@ export class Yamaha extends utils.Adapter {
     }
     const allObjects = await this.getAdapterObjectsAsync();
     const states = await this.getStatesAsync("*");
-    const purged = neverWrittenStateIds(allObjects, states, new Set(candidates), this.namespace).filter(
+    const untouched = neverWrittenStateIds(allObjects, states, new Set(candidates), this.namespace).filter(
       fullId => !this.touchedThisRun.has(stripNamespace(fullId, this.namespace)),
     );
-    for (const fullId of purged) {
-      try {
-        await this.delObjectAsync(stripNamespace(fullId, this.namespace));
-      } catch {
-        // already gone
-      }
-    }
+    const purged: string[] = [];
     for (const deviceId of candidates) {
-      this.profiles.get(deviceId)?.markPurged(this.version ?? "");
+      const profile = this.profiles.get(deviceId);
+      const seenNow = untouched
+        .filter(fullId => fullId.startsWith(`${this.namespace}.${deviceId}.`))
+        .map(fullId => stripNamespace(fullId, this.namespace));
+      const recorded = new Set(profile?.pendingPurge ?? []);
+      const confirmed = seenNow.filter(id => recorded.has(id));
+      for (const id of confirmed) {
+        try {
+          await this.delObjectAsync(id);
+          purged.push(`${this.namespace}.${id}`);
+        } catch {
+          // already gone
+        }
+      }
+      // Whatever is untouched THIS run and was not just deleted waits for the next run.
+      profile?.setPendingPurge(seenNow.filter(id => !confirmed.includes(id)));
+      profile?.markPurged(this.version ?? "");
     }
     if (purged.length > 0) {
-      this.log.debug(`removed ${purged.length} never-filled object(s) from an earlier version`);
+      this.log.debug(`removed ${purged.length} never-filled object(s), confirmed over two starts`);
       this.noteDatapointsRemoved(purged);
     }
   }

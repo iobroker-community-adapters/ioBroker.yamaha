@@ -1528,6 +1528,19 @@ describe("Yamaha never-filled purge (once per adapter version, after connect)", 
     }
   };
   /**
+   * The datapoints recorded for the next start's purge confirmation (2.7.0).
+   *
+   * @param ctx the test context
+   * @param deviceId the device object id
+   * @returns the recorded ids
+   */
+  const pendingPurgeOf = (ctx: Ctx, deviceId: string): string[] => {
+    const native = (ctx.i.objects.get(deviceId)?.native ?? {}) as { capabilityProfile?: string };
+    return typeof native.capabilityProfile === "string"
+      ? ((JSON.parse(native.capabilityProfile) as { pendingPurge?: string[] }).pendingPurge ?? [])
+      : [];
+  };
+  /**
    * The purge marker as the device object carries it: in the capability profile (2.7.0), else the legacy key.
    *
    * @param ctx the test context
@@ -1542,7 +1555,7 @@ describe("Yamaha never-filled purge (once per adapter version, after connect)", 
     return native.purgeVersion;
   };
 
-  it("removes read states that never carried a value and stamps the device with the version", async () => {
+  it("records the never-filled orphans on the first start and deletes them on the second", async () => {
     const ctx = setup();
     ctx.i.objects.set("Living_room", { type: "device", common: {}, native: {} });
     // Orphan of an earlier version: readable, no value ever.
@@ -1560,15 +1573,110 @@ describe("Yamaha never-filled purge (once per adapter version, after connect)", 
     await flush();
     settle(ctx);
     await flush();
-    expect(ctx.i.objects.has("Living_room.sound.direct")).toBe(false);
-    expect(ctx.i.objects.has("Living_room.volume")).toBe(true);
-    expect(ctx.i.objects.has("Living_room.player.play")).toBe(true);
-    // A recording setting is user business — never a factor in whether the adapter keeps a datapoint.
-    expect(ctx.i.objects.has("Living_room.multiroom.zone2.soundProgram")).toBe(false);
     flushNative(ctx);
     await flush();
+    // First start: nothing deleted yet — a standby receiver would lose datapoints it still has.
+    expect(ctx.i.objects.has("Living_room.sound.direct")).toBe(true);
     expect(purgeVersionOf(ctx, "Living_room")).toBe("0.0.0-test");
-    expect(ctx.i.log.debug).toHaveBeenCalledWith(expect.stringContaining("never-filled"));
+    expect(pendingPurgeOf(ctx, "Living_room")).toEqual(
+      expect.arrayContaining(["Living_room.sound.direct", "Living_room.multiroom.zone2.soundProgram"]),
+    );
+
+    // Second start with the same profile: the confirmed ones go, the filled and write-only stay.
+    const second = setup();
+    second.i.objects.set("Living_room", ctx.i.objects.get("Living_room")!);
+    for (const id of [
+      "Living_room.sound.direct",
+      "Living_room.volume",
+      "Living_room.player.play",
+      "Living_room.multiroom.zone2.soundProgram",
+    ]) {
+      second.i.objects.set(id, ctx.i.objects.get(id)!);
+    }
+    second.i.states.set("Living_room.volume", { val: -40, ack: true, lc: 5 } as never);
+    await second.i.onReady();
+    await flush();
+    settle(second);
+    await flush();
+    flushNative(second);
+    await flush();
+    expect(second.i.objects.has("Living_room.sound.direct")).toBe(false);
+    expect(second.i.objects.has("Living_room.volume")).toBe(true);
+    expect(second.i.objects.has("Living_room.player.play")).toBe(true);
+    // A recording setting is user business — never a factor in whether the adapter keeps a datapoint.
+    expect(second.i.objects.has("Living_room.multiroom.zone2.soundProgram")).toBe(false);
+    expect(second.i.log.debug).toHaveBeenCalledWith(expect.stringContaining("never-filled"));
+  });
+
+  it("a never-filled orphan is deleted only on the SECOND start that finds it — the first records it", async () => {
+    // A device in standby answers many functions @RESTRICTED, so ONE start seeing a datapoint
+    // untouched is no proof it is gone. The first start records the candidates in the device's
+    // capability profile, the next one deletes those still untouched (advisor 2026-09-09).
+    const first = setup();
+    first.i.objects.set("Living_room", { type: "device", common: {}, native: {} });
+    first.i.objects.set("Living_room.sound.direct", { type: "state", common: { read: true }, native: {} });
+    await first.i.onReady();
+    await flush();
+    settle(first);
+    await flush();
+    flushNative(first);
+    await flush();
+    expect(first.i.objects.has("Living_room.sound.direct")).toBe(true);
+    expect(pendingPurgeOf(first, "Living_room")).toEqual(["Living_room.sound.direct"]);
+    expect(purgeVersionOf(first, "Living_room")).toBe("0.0.0-test");
+
+    // Second start, same profile: still untouched, still never filled → gone, list cleared.
+    const second = setup();
+    second.i.objects.set("Living_room", {
+      type: "device",
+      common: {},
+      native: (first.i.objects.get("Living_room") as { native: Record<string, unknown> }).native,
+    });
+    second.i.objects.set("Living_room.sound.direct", { type: "state", common: { read: true }, native: {} });
+    await second.i.onReady();
+    await flush();
+    settle(second);
+    await flush();
+    flushNative(second);
+    await flush();
+    expect(second.i.objects.has("Living_room.sound.direct")).toBe(false);
+    const after = JSON.parse(
+      (second.i.objects.get("Living_room")?.native as { capabilityProfile: string }).capabilityProfile,
+    ) as { pendingPurge?: string[] };
+    expect(after.pendingPurge ?? []).toEqual([]);
+  });
+
+  it("a recorded candidate that carries a value by the second start is kept and forgotten", async () => {
+    const first = setup();
+    first.i.objects.set("Living_room", { type: "device", common: {}, native: {} });
+    first.i.objects.set("Living_room.tuner.rdsText", { type: "state", common: { read: true }, native: {} });
+    await first.i.onReady();
+    await flush();
+    settle(first);
+    await flush();
+    flushNative(first);
+    await flush();
+
+    const second = setup();
+    second.i.objects.set("Living_room", {
+      type: "device",
+      common: {},
+      native: (first.i.objects.get("Living_room") as { native: Record<string, unknown> }).native,
+    });
+    second.i.objects.set("Living_room.tuner.rdsText", { type: "state", common: { read: true }, native: {} });
+    // The device filled it in the meantime.
+    second.i.states.set("Living_room.tuner.rdsText", { val: "Radio", ack: true, lc: 9 } as never);
+    await second.i.onReady();
+    await flush();
+    settle(second);
+    await flush();
+    flushNative(second);
+    await flush();
+    expect(second.i.objects.has("Living_room.tuner.rdsText")).toBe(true);
+    const after = JSON.parse(
+      (second.i.objects.get("Living_room")?.native as { capabilityProfile: string }).capabilityProfile,
+    ) as { pendingPurge?: string[] };
+    expect(after.pendingPurge ?? []).toEqual([]);
   });
 
   it("removes a folder left empty by the tree rework, even when the version purge already ran", async () => {
@@ -1658,14 +1766,17 @@ describe("Yamaha never-filled purge (once per adapter version, after connect)", 
     await flush();
     settle(ctx);
     await flush();
-    expect(ctx.i.objects.has("Living_room.hdmi.out2")).toBe(false);
     flushNative(ctx);
     await flush();
+    // The version change re-arms the examination; the deletion itself waits for the confirmation.
+    expect(ctx.i.objects.has("Living_room.hdmi.out2")).toBe(true);
+    expect(pendingPurgeOf(ctx, "Living_room")).toContain("Living_room.hdmi.out2");
     expect(purgeVersionOf(ctx, "Living_room")).toBe("0.0.0-test");
     // The offline device keeps its tree AND its old stamp — its sweep runs when it connects. The
     // stamp moved into the capability profile at load (legacy key converted), the value did not.
     expect(ctx.i.objects.has("Attic.sound.direct")).toBe(true);
     expect(purgeVersionOf(ctx, "Attic")).toBe("1.7.0");
+    expect(pendingPurgeOf(ctx, "Attic")).toEqual([]);
   });
 });
 

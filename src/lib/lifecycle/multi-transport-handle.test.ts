@@ -22,8 +22,10 @@ function fakeConn(
   writes: Array<{ id: string; value: unknown }>;
   closed: boolean;
   drop: (reason?: Error) => void;
+  changeShape: () => void;
 } {
   let dropHandler: ((reason?: Error) => void) | undefined;
+  let shapeHandler: (() => void) | undefined;
   const conn = {
     transport,
     seeded: [] as string[],
@@ -45,6 +47,12 @@ function fakeConn(
     },
     drop: (reason?: Error): void => {
       dropHandler?.(reason);
+    },
+    onShapeChanged: (cb: () => void): void => {
+      shapeHandler = cb;
+    },
+    changeShape: (): void => {
+      shapeHandler?.();
     },
   };
   return conn;
@@ -438,5 +446,61 @@ describe("MultiTransportHandle object write economy", () => {
     // The list is a property of the MODEL, not of the transport that read it: the input keeps the
     // declared 1-entry list, nothing is rewritten — no grow-and-shrink with every transport hiccup.
     expect(written.filter(w => w.id === "living.input")).toEqual([]);
+  });
+});
+
+describe("MultiTransportHandle — a tree that follows the device within a session (2.7.0)", () => {
+  const flush = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
+
+  test("a transport's shape change re-coordinates the tree: the new object is written and owned", async () => {
+    const yncaObjects = [state("volume", "Volume dB", { unit: "dB" })];
+    const ynca = fakeConn("ynca", yncaObjects);
+    const yxc = fakeConn("yxc", [state("dist.role", "Role")]);
+    const { handle, objects } = setup([ynca, yxc]);
+    await handle.start();
+    objects.length = 0;
+    // A function the receiver answered later (a push, a background refresh) — the controller
+    // upserted it through its adapter, which signals the handle.
+    yncaObjects.push(state("mute", "Mute"));
+    ynca.changeShape();
+    await flush();
+    expect(objects).toEqual(["living.mute"]);
+    expect(ynca.seeded).toContain("mute");
+    handle.handleStateChange("living.mute", false, true);
+    expect(ynca.writes).toContainEqual({ id: "mute", value: true });
+  });
+
+  test("a shape signal without a real change writes nothing", async () => {
+    const ynca = fakeConn("ynca", [state("volume", "Volume dB")]);
+    const { handle, objects } = setup([ynca]);
+    await handle.start();
+    objects.length = 0;
+    ynca.changeShape();
+    await flush();
+    expect(objects).toEqual([]);
+  });
+
+  test("a dropped transport shrinks nothing — removals stay a start-time decision", async () => {
+    const ynca = fakeConn("ynca", [state("volume", "Volume dB")]);
+    const yxc = fakeConn("yxc", [state("dist.role", "Role")]);
+    const { handle, objects } = setup([ynca, yxc]);
+    await handle.start();
+    objects.length = 0;
+    yxc.drop();
+    await flush();
+    expect(objects).toEqual([]);
+  });
+
+  test("a shape change after close is ignored", async () => {
+    const yncaObjects = [state("volume", "Volume dB")];
+    const ynca = fakeConn("ynca", yncaObjects);
+    const { handle, objects } = setup([ynca]);
+    await handle.start();
+    handle.close();
+    objects.length = 0;
+    yncaObjects.push(state("mute", "Mute"));
+    ynca.changeShape();
+    await flush();
+    expect(objects).toEqual([]);
   });
 });

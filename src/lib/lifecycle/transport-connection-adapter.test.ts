@@ -71,3 +71,80 @@ describe("TransportConnectionAdapter", () => {
     expect(closed).toBe(true);
   });
 });
+
+describe("TransportConnectionAdapter within a session (2.7.0 re-collect)", () => {
+  const bound = (adapter: TransportConnectionAdapter, start: () => Promise<boolean>): void =>
+    adapter.bind({ start, handleStateChange: () => {}, onDrop: () => {}, close: () => {} });
+
+  test("an upsert after the first coordination replaces the def by id and signals a shape change — once per real change", async () => {
+    const adapter = new TransportConnectionAdapter("ynca", "living", () => {});
+    bound(adapter, async () => {
+      await adapter.interceptUpsert("living.volume", st("volume"));
+      return true;
+    });
+    let fired = 0;
+    adapter.onShapeChanged(() => {
+      fired++;
+    });
+    await adapter.connect();
+    // Collected during start: no signal — the handle coordinates once after connect anyway.
+    expect(fired).toBe(0);
+    adapter.seedOwned(new Set(["volume"]));
+    // A new object mid-session: signalled, appended.
+    await adapter.interceptUpsert("living.mute", st("mute"));
+    expect(fired).toBe(1);
+    expect(adapter.buildObjects().map(o => o.id)).toEqual(["volume", "mute"]);
+    // The same def again: nothing changed, no signal (a controller may re-upsert freely).
+    await adapter.interceptUpsert("living.mute", st("mute"));
+    expect(fired).toBe(1);
+    // A changed def for a known id replaces it in place (order kept — parents before children).
+    await adapter.interceptUpsert("living.volume", {
+      ...st("volume"),
+      common: { ...st("volume").common, name: "Volume (dB)" },
+    });
+    expect(fired).toBe(2);
+    expect(adapter.buildObjects().map(o => [o.id, o.common.name])).toEqual([
+      ["volume", "Volume (dB)"],
+      ["mute", "mute"],
+    ]);
+  });
+
+  test("a value for an object created mid-session waits for the re-coordination, a foreign id is dropped", async () => {
+    const acks: Array<{ id: string; value: unknown }> = [];
+    const adapter = new TransportConnectionAdapter("ynca", "living", (id, value) => acks.push({ id, value }));
+    bound(adapter, () => Promise.resolve(true));
+    await adapter.connect();
+    adapter.seedOwned(new Set(["volume"]));
+    // The object for `mute` appears mid-session; its value arrives BEFORE the handle re-coordinated.
+    await adapter.interceptUpsert("living.mute", st("mute"));
+    adapter.interceptSetStateAck("living.mute", true);
+    // A value for an id this transport never built belongs to another transport — dropped, not buffered.
+    adapter.interceptSetStateAck("living.dist.role", "server");
+    expect(acks).toEqual([]);
+    adapter.seedOwned(new Set(["volume", "mute"]));
+    expect(acks).toEqual([{ id: "living.mute", value: true }]);
+    // The wait is over: a later push goes straight through, and nothing is replayed twice.
+    adapter.interceptSetStateAck("living.mute", false);
+    adapter.seedOwned(new Set(["volume", "mute"]));
+    expect(acks).toEqual([
+      { id: "living.mute", value: true },
+      { id: "living.mute", value: false },
+    ]);
+  });
+
+  test("an object created mid-session whose id another transport owns: its value is dropped at the arming", async () => {
+    const acks: Array<{ id: string; value: unknown }> = [];
+    const adapter = new TransportConnectionAdapter("ynca", "living", (id, value) => acks.push({ id, value }));
+    bound(adapter, () => Promise.resolve(true));
+    await adapter.connect();
+    adapter.seedOwned(new Set(["volume"]));
+    await adapter.interceptUpsert("living.mute", st("mute"));
+    adapter.interceptSetStateAck("living.mute", true);
+    // The coordination gave `mute` to another transport — the buffered value is discarded, and
+    // the buffer does not grow with every later push either.
+    adapter.seedOwned(new Set(["volume"]));
+    adapter.interceptSetStateAck("living.mute", false);
+    adapter.seedOwned(new Set(["volume"]));
+    expect(acks).toEqual([]);
+  });
+});

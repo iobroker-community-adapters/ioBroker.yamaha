@@ -751,7 +751,9 @@ describe("XmlDeviceController proof edge cases (2.0.1 hardening)", () => {
     expect(s.objects).toContain("living.multiroom.zone2.input");
   });
 
-  test("a field first delivered mid-run is remembered for the next start, never written without an object", async () => {
+  test("a field first delivered mid-run gets its object AND its value in the same session, and is remembered", async () => {
+    // Until 2.6.0 the field was only remembered and the write skipped (no state without an
+    // object); since 2.7.0 the object is created at once and the value follows it.
     const memory = new ProbeMemory();
     const s = setup({ Main_Zone: { power: true } });
     (s.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
@@ -761,10 +763,10 @@ describe("XmlDeviceController proof edge cases (2.0.1 hardening)", () => {
     s.client.statuses = { Main_Zone: { power: true, soundProgram: "Standard" } };
     s.fire.keepalive?.();
     await flush();
-    // No write lands without an object — but the field is remembered…
-    expect(s.acks).not.toContainEqual({ id: "living.soundProgram", value: "Standard" });
+    expect(s.objects).toContain("living.soundProgram");
+    expect(s.acks).toContainEqual({ id: "living.soundProgram", value: "Standard" });
     expect(memory.remembered<string[]>("xmlStatusFields:main")).toContain("soundProgram");
-    // …so the NEXT start (same device memory) creates and fills it.
+    // The next start (same device memory) has it from the remembered field set.
     const second = setup({ Main_Zone: { power: true, soundProgram: "Standard" } });
     (second.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
     await second.controller.start();
@@ -1021,5 +1023,44 @@ describe("the zone commands desc.xml declares: pads, transport keys, zone names 
     await s.controller.start();
     expect(s.defs.has("living.zoneName")).toBe(false);
     expect(s.defs.has("living.multiroom.zone2.zoneName")).toBe(false);
+  });
+});
+
+describe("XML: a field the device delivers for the first time becomes an object in the SAME session (2.7.0)", () => {
+  const statuses = { Main_Zone: { power: true, volume: -40 } };
+
+  test("a poll that carries a new field creates its object and writes the value at once", async () => {
+    const s = setup(statuses);
+    await s.controller.start();
+    expect(s.defs.has("living.sound.enhancer")).toBe(false);
+    s.objects.length = 0;
+    s.acks.length = 0;
+    // The receiver was in standby at start and reports the enhancer only now.
+    s.client.statuses.Main_Zone = { power: true, volume: -40, enhancer: true };
+    s.fire.keepalive?.();
+    await flush();
+    expect(s.objects).toContain("living.sound.enhancer");
+    expect(s.acks).toContainEqual({ id: "living.sound.enhancer", value: true });
+  });
+
+  test("a poll with the same fields creates nothing", async () => {
+    const s = setup(statuses);
+    await s.controller.start();
+    s.objects.length = 0;
+    s.fire.keepalive?.();
+    await flush();
+    expect(s.objects).toEqual([]);
+  });
+
+  test("a field that vanishes from a later poll removes nothing — shrinking stays a start-time decision", async () => {
+    const s = setup({ Main_Zone: { power: true, volume: -40, enhancer: true } });
+    await s.controller.start();
+    expect(s.defs.has("living.sound.enhancer")).toBe(true);
+    s.objects.length = 0;
+    s.client.statuses.Main_Zone = { power: true, volume: -40 };
+    s.fire.keepalive?.();
+    await flush();
+    expect(s.objects).toEqual([]);
+    expect(s.defs.has("living.sound.enhancer")).toBe(true);
   });
 });

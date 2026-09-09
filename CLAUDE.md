@@ -234,9 +234,9 @@ Antwort des Geräts wird gelesen. Belege: `Ressourcen/yamaha/device-captures/rx-
   persistierte `yncaCapabilities`-Layer (Modell+Firmware), steht der Baum aus der Form
   SOFORT, es wird NICHT mit alten Werten geseedet (die States tragen sie ohnehin), und
   die volle Fragerunde läuft als Hintergrund-Werte-Auffrischung durch den Live-Handler —
-  inkl. Statics (Umbenennungen heilen in Sekunden statt beim Neustart). FORM-Änderungen
-  werden nur persistiert (Objekte erscheinen beim nächsten Start): der Baum wird EINMAL
-  pro Verbindung koordiniert, ein später `interceptUpsert` würde nie materialisiert.
+  inkl. Statics (Umbenennungen heilen in Sekunden statt beim Neustart). FORM-Änderungen werden
+  persistiert UND veröffentlicht: seit 2.7.0 baut der Controller die Objekte aus der gewachsenen
+  Form neu und das Handle koordiniert erneut, der Datenpunkt erscheint in DERSELBEN Sitzung.
 - **Netzsuche blockiert Bekannte nicht mehr:** `autoDiscover` gibt gemerkte Geräte
   sofort zurück; `discoverAdditionalDevices` sucht im Hintergrund und startet NUR
   Neuzugänge (`startDevice` aus der onReady-Schleife ausgelagert).
@@ -670,9 +670,9 @@ Wortschätze standen statisch, Deklarationen der Geräte blieben ungelesen, Spei
   `previousShapeHash`); Form geändert bei released Schema → Bump verlangt, bei unreleased Schema → nur der
   Stempel wird nachgezogen, Bump ohne Formänderung → rot. Die Adapter-VERSION als Auslöser war verworfen: der
   Baum wird einmal je Verbindung koordiniert, jedes Patch-Release hätte alle Geräte umsonst neu gesweept.
-- **Beobachtete Werte kommen einen Start später** (Advisor A1): ein neuer Wert wird sofort in den State
-  geschrieben und in `yncaObserved` gemerkt; die Dropdown-Liste folgt beim nächsten Start (der Baum wird nur beim
-  Verbinden koordiniert). Ein Enum ohne Kandidaten und ohne Beobachtung ist ein Text-State, kein leeres Dropdown
+- **Beobachtete Werte wirken sofort** (seit 2.7.0; bis 2.6.0 einen Start später): ein neuer Wert wird in den State
+  geschrieben, in `yncaObserved` gemerkt und die Dropdown-Liste noch in derselben Sitzung nachgezogen (der
+  Controller veröffentlicht die geänderten Objekte, das Handle koordiniert erneut). Ein Enum ohne Kandidaten und ohne Beobachtung ist ein Text-State, kein leeres Dropdown
   (SPPATTERN1AMP: 3–14 modellspezifische Strings, kein gemeinsamer Kern).
 - **Ein schrumpfendes Dropdown schrumpft wirklich**: `extendObject` merged `common.states` Schlüssel für Schlüssel,
   deshalb schreibt `upsertObject` erst `states: null`, wenn die gespeicherte Karte einen Schlüssel trägt, den die
@@ -738,7 +738,21 @@ Wortschätze standen statisch, Deklarationen der Geräte blieben ungelesen, Spei
   die Eingangs-Ableitung (`deviceInputStates`, dieselbe Regel wie das Dropdown) die Quelle nicht als abwesend
   bewiesen hat; physische Eingänge immer (YNCA kann sie nicht beurteilen). Alles in `planSweep`, das auch der
   Hintergrund-Refresh des Fast Path nutzt (die Union mit der gemerkten Form schrumpft dort nichts).
-- Mutationswelle 12 (`mutations_yamaha_2026-09-09-w12.py`, P1–P7) hält jede dieser Regeln.
+- **Der Baum folgt dem Gerät INNERHALB der Sitzung** (`onShapeChanged`): der Transport-Adapter hält seine Objekte
+  als Karte (Id → letzte Definition) und meldet dem Handle jede ECHTE Änderung nach der ersten Koordination; das
+  Handle koordiniert serialisiert neu (verkettet hinter dem laufenden Lauf — `coordinate()` wartet auf seine
+  Upserts und stellt erst danach die Besitzkarte scharf) und schreibt nur geänderte Definitionen. Auslöser: der
+  YNCA-Hintergrund-Refresh mit neuer Form, ein erstmals gemeldeter Enum-Wert (`recordObserved`) und ein erstmals
+  geliefertes XML-Statusfeld (`createZoneStates` aus `seedZone`). Der Controller merkt sich die zuletzt
+  veröffentlichte Definition je Id, damit ein Republish nicht 250 Objekte durchreicht. Ein Wert, der für ein gerade
+  erst entstandenes Objekt eintrifft, wartet auf die nächste Zuteilung (`awaitingOwnership`) — ein fremder Wert
+  wird verworfen wie bisher. ADDITIV: ein Transport-Ausfall koordiniert nicht, Verkleinerungen bleiben eine
+  Start-Entscheidung.
+- **Entfernung braucht ZWEI Starts** (`purgeNeverFilled` + `pendingPurge` im Profil): ein Receiver im Standby
+  antwortet vielen Funktionen `@RESTRICTED`, ein einzelner Lauf ist also kein Beweis. Der erste Lauf merkt die nie
+  gefüllten, von keinem Transport berührten Datenpunkte vor, der nächste löscht die weiterhin unberührten und
+  vergisst den Rest. Geprüft wird ein Gerät je Adapter-Version ODER solange es Vorgemerkte trägt.
+- Mutationswelle 12 (`mutations_yamaha_2026-09-09-w12.py`, P1–P14) hält jede dieser Regeln.
 
 ## Portierungs-Referenz (`../../Ressourcen/yamaha/legacy/`, NICHT im Adapter-Repo)
 

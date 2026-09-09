@@ -228,8 +228,8 @@ export class YxcDeviceController implements ConnectionHandle {
     // zone stuck in its timeout must not hold up the device's readiness): the value a zone
     // reports right now belongs in its dropdown even where the device's own list omits it (the
     // RX-A2070 capture lists only "manual" as tone-control mode and answers "auto"), and the
-    // tree is coordinated once per connect, so a later write could not widen a list. One
-    // request per zone, reused below as the seed.
+    // list has to carry it from the start (a later widening is possible since 2.7.0, but a
+    // dropdown must not be wrong in between). One request per zone, reused below as the seed.
     const statuses = await Promise.all(this.zones.map(zone => this.fetchZoneStatus(zone)));
     const reported: Record<string, Record<string, string>> = {};
     this.zones.forEach((zone, index) => {

@@ -371,6 +371,12 @@ export class YncaDeviceController implements ConnectionHandle {
   private presentSubunits = new Set<string>();
   /** The enum values this device ever reported (see OBSERVED_KEY), persisted on every addition. */
   private observed: ObservedValues = {};
+  /** The (group-filtered) catalog of this connection, for rebuilding objects mid-session. */
+  private catalog: readonly YncaEntry[] = [];
+  /** The capability shape the current object tree was built from — grown by pushes and refreshes. */
+  private shape: YncaCapabilities = { model: "", subunits: {} };
+  /** Object id → the definition last upserted, so a republish writes only what really changed. */
+  private readonly published = new Map<string, string>();
 
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
@@ -394,6 +400,7 @@ export class YncaDeviceController implements ConnectionHandle {
     const catalog = this.deps.isEntryEnabled
       ? YNCA_CATALOG.filter(entry => this.deps.isEntryEnabled!(entry.id))
       : YNCA_CATALOG;
+    this.catalog = catalog;
     const resolved = await this.resolveCapabilities(catalog);
     const { capabilities, fromCache } = resolved;
     const present = presentYncaEntries(capabilities, catalog);
@@ -416,6 +423,7 @@ export class YncaDeviceController implements ConnectionHandle {
     this.recordObservedAll(capabilities);
     this.recordObservedAll(live);
     const evidence = this.inputEvidence(capabilities);
+    this.shape = { model: capabilities.model, subunits: capabilities.subunits };
     const objects = yncaObjectsFor(capabilities, catalog, this.statesResolver(live, evidence));
     if (objects.length === 0) {
       this.deps.log.warn(`${this.deviceId}: no capabilities reported — creating no objects`);
@@ -453,7 +461,7 @@ export class YncaDeviceController implements ConnectionHandle {
       if (titles !== undefined && titles.length > 0) {
         object.common.states = Object.fromEntries(titles.map(scene => [scene.num, scene.title]));
       }
-      await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
+      await this.upsertTracked(object);
     }
     for (const zone of YNCA_ZONES) {
       const titles = zone.key === "main" ? this.sceneTitles : this.zoneSceneTitles.get(zone.key);
@@ -510,8 +518,9 @@ export class YncaDeviceController implements ConnectionHandle {
       // The browse driver sees every line first: list lines (LINE1TXT…, LISTINFO
       // bursts, auto-feedback) are not catalogued and would otherwise be dropped.
       this.browseDriver?.handleMessage(message);
-      // A value never seen before joins the observed store now and the dropdown on the next
-      // start (the tree is coordinated once per connect); the state gets the value at once.
+      // A value never seen before joins the observed store, and since 2.7.0 its dropdown too —
+      // the object is rebuilt and the handle re-coordinates within the session (before, the
+      // dropdown followed one start later). The state gets the value at once either way.
       this.recordObserved(message.subunit, message.func, message.value);
       if (message.func === "BAND" && ["TUN", "DAB", "HDRADIO"].includes(message.subunit)) {
         this.tunerBand = message.value.toUpperCase();
@@ -651,9 +660,9 @@ export class YncaDeviceController implements ConnectionHandle {
    * subunits — the answers stream into the states through the live message handler,
    * so current values arrive within the usual sweep time WITHOUT having gated the
    * ready line. Completion refreshes the persisted layers (capabilities, statics)
-   * and the write map; a SHAPE change (a function newly answered) is only persisted —
-   * its object appears on the next start, because the unified tree is coordinated
-   * once per connect and a late upsert would not materialize.
+   * and the write map; a SHAPE change (a function newly answered) is persisted AND published —
+   * since 2.7.0 the objects are rebuilt from the grown shape and the handle re-coordinates the
+   * unified tree, so the datapoint appears in this session instead of one start later.
    *
    * @param catalog the (group-filtered) catalog
    */
@@ -698,14 +707,18 @@ export class YncaDeviceController implements ConnectionHandle {
       // proven write surface until the next restart either.
       this.presentEntries = presentYncaEntries({ model: fresh.model, subunits }, catalog);
       this.writeMap = idToEntry(this.presentEntries);
+      // A function the refresh answered for the first time becomes an object in THIS session
+      // (2.7.0): the shape the tree is built from grows, the objects are republished, and the
+      // handle re-coordinates. Purely additive — the union above never drops a proven ability.
+      this.shape = { model: fresh.model || this.shape.model, subunits };
+      await this.republishObjects();
       // Scene titles are not datapoints any more (v2.0.0), so nothing else carries them
       // into the running session: on the fast path they came from the memory, and a scene
       // renamed at the receiver stayed invisible until the NEXT start — including for a
       // write by title, which resolved against the old list and was dropped. The refresh
       // reads SCENExNAME anyway, so the list and the lookup follow it here.
-      // (The recall dropdown's LABELS cannot follow live: the unified tree is coordinated
-      // once per connection, so a later object write would not be materialised. They come
-      // with the next start, out of the layer just persisted.)
+      // (The recall dropdown's LABELS follow through the republish below, which rebuilds every
+      // object from the grown shape — the scene titles among them.)
       const titles = sceneTitlesOf(subunits);
       if (JSON.stringify(titles) !== JSON.stringify(this.sceneTitles)) {
         this.sceneTitles = titles;
@@ -930,6 +943,54 @@ export class YncaDeviceController implements ConnectionHandle {
     }
     list.push(value);
     this.deps.probeMemory?.set(OBSERVED_KEY, this.observed);
+    // The dropdown follows within the SESSION (2.7.0): the object is rebuilt with the grown list
+    // and re-upserted; the handle re-coordinates and writes only what really changed. Before, an
+    // observed value reached the dropdown one start later.
+    void this.republishObjects();
+  }
+
+  /**
+   * Rebuild this transport's objects from the shape it knows now and upsert them. Idempotent by
+   * construction: the transport adapter keeps the last definition per id, so an unchanged object
+   * is neither written nor signalled — only a real change reaches the handle's re-coordination.
+   * Silent before the tree stood (no shape yet) and while nothing is present.
+   */
+  private async republishObjects(): Promise<void> {
+    if (this.presentEntries.length === 0 || Object.keys(this.shape.subunits).length === 0) {
+      return;
+    }
+    try {
+      const objects = yncaObjectsFor(
+        this.shape,
+        this.catalog,
+        this.statesResolver(this.shape, this.inputEvidence(this.shape)),
+      );
+      for (const object of objects) {
+        const titles = this.sceneTitlesFor(object.id);
+        if (titles !== undefined && titles.length > 0) {
+          object.common.states = Object.fromEntries(titles.map(scene => [scene.num, scene.title]));
+        }
+        await this.upsertTracked(object);
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: could not republish the object tree: ${String(e)}`);
+    }
+  }
+
+  /**
+   * Upsert an object and remember its definition, so the next republish writes only what really
+   * changed. A device answering a new value republishes the whole tree; without this every one of
+   * ~250 definitions would be handed on, and the handle would re-coordinate for each of them.
+   *
+   * @param object the object definition to write
+   */
+  private async upsertTracked(object: ObjectDef): Promise<void> {
+    const fingerprint = JSON.stringify(object);
+    if (this.published.get(object.id) === fingerprint) {
+      return;
+    }
+    this.published.set(object.id, fingerprint);
+    await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
   }
 
   /**

@@ -19,6 +19,12 @@ export interface TransportConnection {
   handleWrite(canonicalId: string, ack: boolean, value: unknown): void;
   /** Register a drop handler for this transport. */
   onDrop(cb: (reason?: Error) => void): void;
+  /**
+   * Register the handler the transport calls when it learned something mid-session that changes
+   * the objects it would build (2.7.0). Optional: a transport that never changes shape within a
+   * session simply does not offer it.
+   */
+  onShapeChanged?(cb: () => void): void;
   /** Close this transport's connection. Synchronous — safe from onUnload. */
   close(): void;
 }
@@ -71,6 +77,8 @@ export class MultiTransportHandle implements ConnectionHandle {
   private readonly live: TransportConnection[];
   private readonly retries = new Map<Transport, { timer: unknown; backoff: { nextDelay(): number } }>();
   private supervisorDrop: ((reason?: Error) => void) | undefined;
+  /** The coordination in flight, so two signals never run `coordinate()` concurrently. */
+  private coordinating: Promise<void> = Promise.resolve();
   /** All transports went down before the supervisor registered onDrop — delivered on registration. */
   private pendingDrop: Error | undefined | false = false;
   private droppedAll = false;
@@ -94,8 +102,42 @@ export class MultiTransportHandle implements ConnectionHandle {
     await this.coordinate();
     for (const connection of this.live) {
       connection.onDrop(reason => this.handleTransportDrop(connection, reason));
+      this.armShapeChanges(connection);
     }
     this.reportTransports();
+  }
+
+  /**
+   * Let a transport ask for a re-coordination when it learned something mid-session (a function a
+   * background refresh answered, an XML status field delivered for the first time, a dropdown
+   * grown by an observed value). Runs SERIALIZED behind whatever coordination is in flight —
+   * `coordinate()` awaits its upserts and then swaps the ownership map, so two concurrent runs
+   * could arm a transport with a half-built map. Additive by nature: a re-coordination writes only
+   * changed definitions, and a transport that DROPPED does not trigger one, so nothing shrinks
+   * within a session — removals stay a start-time decision.
+   *
+   * @param connection the transport to listen to
+   */
+  private armShapeChanges(connection: TransportConnection): void {
+    connection.onShapeChanged?.(() => {
+      if (this.closed) {
+        return;
+      }
+      this.coordinating = this.coordinating.then(async () => {
+        if (this.closed || !this.live.includes(connection)) {
+          return;
+        }
+        try {
+          await this.coordinate();
+        } catch (e) {
+          this.deps.log.debug(
+            `${this.deviceId}/${connection.transport}: re-coordination after a shape change failed (${
+              e instanceof Error ? e.message : String(e)
+            })`,
+          );
+        }
+      });
+    });
   }
 
   /**
@@ -233,6 +275,7 @@ export class MultiTransportHandle implements ConnectionHandle {
       if (connected && !this.closed) {
         this.live.push(connection);
         connection.onDrop(reason => this.handleTransportDrop(connection, reason));
+        this.armShapeChanges(connection);
         await this.coordinate();
         this.retries.delete(transport);
         this.reportTransports();

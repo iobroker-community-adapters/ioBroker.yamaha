@@ -115,6 +115,11 @@ export class XmlDeviceController implements ConnectionHandle {
   private hasTuner = false;
   /** The amp state ids this controller actually created — the claim-with-proof gate for BOTH ways. */
   private readonly createdStates = new Set<string>();
+  /** Channel ids already created — shared by the start-up build and the mid-session growth. */
+  private readonly createdChannels = new Set<string>();
+  /** The per-zone `Input_Sel_Item` lists and the device description, kept for a mid-session build. */
+  private inputsByZone: ReadonlyMap<string, string[]> = new Map();
+  private deviceDescriptor: XmlDescriptor = { programs: [], sleep: [], adaptiveDrc: [] };
   /**
    * The spelling this device answers its amplifier block with (see XmlDialect) — learned from
    * the first status that carries one, remembered as `xmlDialect` (a property of the model,
@@ -243,65 +248,11 @@ export class XmlDeviceController implements ConnectionHandle {
     // Every parent — the zone channels included — is created by the per-state loop below
     // and named from the shared channel table (a zone that answered has at least
     // its power state, so its channel always comes into being this way).
-    const createdChannels = new Set<string>();
+    this.inputsByZone = inputsByZone;
+    this.deviceDescriptor = descriptor;
+    const createdChannels = this.createdChannels;
     for (const zone of this.zones) {
-      for (const entry of XML_AMP_CATALOG) {
-        // Main/system-wide features (scenes, HDMI outputs, party) exist only on the main zone;
-        // the pre-out level mode only on the zones.
-        if ((entry.mainOnly && zone.key !== "main") || (entry.zonesOnly && zone.key === "main")) {
-          continue;
-        }
-        // Claim with proof: skip what this device's status never delivered.
-        if (entry.statusField !== undefined && !this.zoneFields.get(zone.key)?.has(entry.statusField)) {
-          continue;
-        }
-        const stateId = `${zone.prefix}${entry.state}`;
-        // A dotted state (e.g. scene.recall) needs its parent channel created first.
-        const segments = stateId.split(".");
-        for (let i = 1; i < segments.length; i++) {
-          const channelId = segments.slice(0, i).join(".");
-          if (!createdChannels.has(channelId)) {
-            createdChannels.add(channelId);
-            await this.deps.upsertObject(`${this.deviceId}.${channelId}`, {
-              id: channelId,
-              type: "channel",
-              // Name AND explanation from the one shared table, so the same folder cannot end
-              // up called "sound" here and "Sound" there depending on which transport owns it.
-              common: channelCommon(segments[i - 1]),
-            });
-          }
-        }
-        const { nameKey, descKey, ...rest } = entry.common;
-        const common: ObjectDef["common"] = {
-          ...rest,
-          name: tName(nameKey),
-          // An absent key means the datapoint explains itself — the fleet standard wants the
-          // field empty there rather than filled with invented prose.
-          ...(descKey ? { desc: tName(descKey) } : {}),
-        };
-        // The device's own lists become the dropdowns — DECLARED, so the coordinator puts them on
-        // the YNCA-owned datapoint too (#619): the zone's `Input_Sel_Item` list, and from the
-        // device description the sound programs (main zone), the sleep steps and the Adaptive
-        // DRC values. Until 2026-09-09 the comment here said the YNCA union would win where YNCA
-        // is present; that is exactly what the reporter saw.
-        const declaredList = this.declaredListFor(entry.state, zone.key, inputsByZone, descriptor);
-        const declared = declaredList !== undefined && declaredList.length > 0;
-        if (declared) {
-          common.states = Object.fromEntries(declaredList.map(value => [value, value]));
-        }
-        if (entry.state === "sound.dialogueLevel" && descriptor.dialogueLevel) {
-          common.min = descriptor.dialogueLevel.min;
-          common.max = descriptor.dialogueLevel.max;
-          common.step = descriptor.dialogueLevel.step;
-        }
-        await this.deps.upsertObject(`${this.deviceId}.${stateId}`, {
-          id: stateId,
-          type: "state",
-          common,
-          ...(declared ? { declaredStates: true } : {}),
-        });
-        this.createdStates.add(stateId);
-      }
+      await this.createZoneStates(zone);
     }
     await this.setupScenes(createdChannels);
     await this.setupTuner(createdChannels);
@@ -873,6 +824,77 @@ export class XmlDeviceController implements ConnectionHandle {
   }
 
   /**
+   * Create (or update) one zone's amp states from what this device's status has DELIVERED so far
+   * (`zoneFields`). Runs at start and again when a poll carries a field for the first time —
+   * 2.7.0: the object appears in the SAME session instead of one start later. Idempotent: an
+   * unchanged definition is written again at most once per new field, and nothing is removed here.
+   *
+   * @param zone the zone to build
+   */
+  private async createZoneStates(zone: XmlZone): Promise<void> {
+    const createdChannels = this.createdChannels;
+    const inputsByZone = this.inputsByZone;
+    const descriptor = this.deviceDescriptor;
+    for (const entry of XML_AMP_CATALOG) {
+      // Main/system-wide features (scenes, HDMI outputs, party) exist only on the main zone;
+      // the pre-out level mode only on the zones.
+      if ((entry.mainOnly && zone.key !== "main") || (entry.zonesOnly && zone.key === "main")) {
+        continue;
+      }
+      // Claim with proof: skip what this device's status never delivered.
+      if (entry.statusField !== undefined && !this.zoneFields.get(zone.key)?.has(entry.statusField)) {
+        continue;
+      }
+      const stateId = `${zone.prefix}${entry.state}`;
+      // A dotted state (e.g. scene.recall) needs its parent channel created first.
+      const segments = stateId.split(".");
+      for (let i = 1; i < segments.length; i++) {
+        const channelId = segments.slice(0, i).join(".");
+        if (!createdChannels.has(channelId)) {
+          createdChannels.add(channelId);
+          await this.deps.upsertObject(`${this.deviceId}.${channelId}`, {
+            id: channelId,
+            type: "channel",
+            // Name AND explanation from the one shared table, so the same folder cannot end
+            // up called "sound" here and "Sound" there depending on which transport owns it.
+            common: channelCommon(segments[i - 1]),
+          });
+        }
+      }
+      const { nameKey, descKey, ...rest } = entry.common;
+      const common: ObjectDef["common"] = {
+        ...rest,
+        name: tName(nameKey),
+        // An absent key means the datapoint explains itself — the fleet standard wants the
+        // field empty there rather than filled with invented prose.
+        ...(descKey ? { desc: tName(descKey) } : {}),
+      };
+      // The device's own lists become the dropdowns — DECLARED, so the coordinator puts them on
+      // the YNCA-owned datapoint too (#619): the zone's `Input_Sel_Item` list, and from the
+      // device description the sound programs (main zone), the sleep steps and the Adaptive
+      // DRC values. Until 2026-09-09 the comment here said the YNCA union would win where YNCA
+      // is present; that is exactly what the reporter saw.
+      const declaredList = this.declaredListFor(entry.state, zone.key, inputsByZone, descriptor);
+      const declared = declaredList !== undefined && declaredList.length > 0;
+      if (declared) {
+        common.states = Object.fromEntries(declaredList.map(value => [value, value]));
+      }
+      if (entry.state === "sound.dialogueLevel" && descriptor.dialogueLevel) {
+        common.min = descriptor.dialogueLevel.min;
+        common.max = descriptor.dialogueLevel.max;
+        common.step = descriptor.dialogueLevel.step;
+      }
+      await this.deps.upsertObject(`${this.deviceId}.${stateId}`, {
+        id: stateId,
+        type: "state",
+        common,
+        ...(declared ? { declaredStates: true } : {}),
+      });
+      this.createdStates.add(stateId);
+    }
+  }
+
+  /**
    * Write a zone's amp states from an already-fetched Basic_Status (used to seed
    * from the start-up probe without a second round-trip).
    *
@@ -898,6 +920,21 @@ export class XmlDeviceController implements ConnectionHandle {
       }
       if (grew) {
         this.deps.probeMemory?.set(`xmlStatusFields:${zone.key}`, [...known]);
+        // 2.7.0: the objects for the new fields are built NOW and their values written right
+        // after, instead of appearing one start later. The transport adapter signals the handle,
+        // which re-coordinates the unified tree. A field that VANISHES from a later poll removes
+        // nothing — `zoneFields` is a union, shrinking stays a start-time decision.
+        void this.createZoneStates(zone)
+          .then(() => {
+            for (const update of parseXmlStatus(status, zone.key)) {
+              if (this.createdStates.has(update.id)) {
+                this.emit(update.id, update.value);
+              }
+            }
+          })
+          .catch((e: unknown) => {
+            this.deps.log.debug(`${this.deviceId}: could not create the new status fields: ${errorMessage(e)}`);
+          });
       }
     }
     for (const update of parseXmlStatus(status, zone.key)) {

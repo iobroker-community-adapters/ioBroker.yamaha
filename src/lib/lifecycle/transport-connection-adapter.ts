@@ -28,10 +28,14 @@ export interface AdaptedController {
  * (drift-reversed) id. This keeps the three controllers untouched behind the multi-transport handle.
  */
 export class TransportConnectionAdapter implements TransportConnection {
-  private readonly collected: ObjectDef[] = [];
+  /** Canonical id → the def last collected for it (a later upsert of the same id replaces it). */
+  private readonly collected = new Map<string, ObjectDef>();
   private readonly buffered: Array<{ canonicalId: string; value: boolean | number | string }> = [];
   private owned: ReadonlySet<string> | undefined;
   private controller: AdaptedController | undefined;
+  private shapeChanged: (() => void) | undefined;
+  /** Ids upserted since the last {@link seedOwned} — their values wait for the re-coordination. */
+  private readonly awaitingOwnership = new Set<string>();
 
   /**
    * @param transport the transport this adapts
@@ -52,7 +56,19 @@ export class TransportConnectionAdapter implements TransportConnection {
    * @returns a resolved promise (the controller's upsert dep is async)
    */
   public readonly interceptUpsert = (_fullId: string, def: ObjectDef): Promise<void> => {
-    this.collected.push({ ...def, id: this.canonical(def.id) });
+    const object: ObjectDef = { ...def, id: this.canonical(def.id) };
+    const previous = this.collected.get(object.id);
+    this.collected.set(object.id, object);
+    // While the handle has not coordinated yet (the connect's own upserts), the collection is
+    // simply filled — it coordinates once afterwards. Later, a controller that learns something
+    // mid-session (a function answered by a background refresh or a push, an XML status field
+    // delivered for the first time, a dropdown grown by an observed value) signals the handle,
+    // which re-coordinates the live set. Only a REAL change signals: a controller may re-upsert
+    // the same definition freely, and a signal per push would re-fingerprint the whole tree.
+    if (this.owned && JSON.stringify(previous) !== JSON.stringify(object)) {
+      this.awaitingOwnership.add(object.id);
+      this.shapeChanged?.();
+    }
     return Promise.resolve();
   };
 
@@ -64,11 +80,14 @@ export class TransportConnectionAdapter implements TransportConnection {
    */
   public readonly interceptSetStateAck = (fullId: string, value: boolean | number | string): void => {
     const canonicalId = this.canonical(this.relative(fullId));
-    if (this.owned) {
-      if (this.owned.has(canonicalId)) {
-        this.setStateAck(`${this.deviceId}.${canonicalId}`, value);
-      }
-    } else {
+    if (this.owned?.has(canonicalId)) {
+      this.setStateAck(`${this.deviceId}.${canonicalId}`, value);
+      return;
+    }
+    // Before the first ownership arming, and for an object this transport created SINCE that
+    // arming (it is owned only after the handle re-coordinated), the value waits. An id the
+    // adapter never built is another transport's business and is dropped as before.
+    if (!this.owned || this.awaitingOwnership.has(canonicalId)) {
       this.buffered.push({ canonicalId, value });
     }
   };
@@ -87,9 +106,19 @@ export class TransportConnectionAdapter implements TransportConnection {
     return (await this.controller?.start()) ?? false;
   }
 
-  /** The objects the controller built, canonicalized. Valid after {@link connect}. */
+  /** The objects the controller built, canonicalized, in first-seen order. Valid after {@link connect}. */
   public buildObjects(): readonly ObjectDef[] {
-    return this.collected;
+    return [...this.collected.values()];
+  }
+
+  /**
+   * Register the handle's re-coordination callback (2.7.0). Called when an upsert after the
+   * first coordination really changed the shape — never during connect.
+   *
+   * @param cb invoked on every shape change
+   */
+  public onShapeChanged(cb: () => void): void {
+    this.shapeChanged = cb;
   }
 
   /**
@@ -99,12 +128,14 @@ export class TransportConnectionAdapter implements TransportConnection {
    */
   public seedOwned(owned: ReadonlySet<string>): void {
     this.owned = owned;
-    for (const seed of this.buffered) {
+    // Values that waited for this arming: delivered when the id landed here, dropped when it
+    // did not (another transport owns it). Either way the wait ends — the buffer stays bounded.
+    for (const seed of this.buffered.splice(0)) {
       if (owned.has(seed.canonicalId)) {
         this.setStateAck(`${this.deviceId}.${seed.canonicalId}`, seed.value);
       }
     }
-    this.buffered.length = 0;
+    this.awaitingOwnership.clear();
   }
 
   /**
