@@ -412,6 +412,16 @@ entscheidet etwas ([[feedback_user_hardware_ist_sample]]). Alle Funde sind umges
   zieht `reshapeActualVolume()` aus `applyZoneStatus` genau diese eine Definition nach, sobald das
   Gerät die Anzeigeart wechselt — und weil `upsertObject` ein `extendObject` ist, überschreibt die
   numerische Fassung die gespeicherte Einheit mit `unit: ""` statt zu löschen.
+- **Das Eingangs-Dropdown trägt die Namen, die der BESITZER am Gerät vergeben hat** (seit 2.7.2):
+  die klassische XML-Auskunft `Input_Sel_Item` liefert je Eintrag ein `<Param>` (den Schaltwert,
+  `HDMI1`) UND ein `<Title>` (den vergebenen Namen, „Apple TV"). `parseInputLabels()` in
+  `xml/protocol.ts` liest beides, der XML-Controller hält die Karte je Zone und beschriftet
+  `common.states` damit; ein Eintrag ohne oder mit leerem Titel wird mit seinem Wert beschriftet, ein
+  Gerät ohne XML bleibt wie bisher. Geschaltet wird IMMER mit dem Protokollwert — die Beschriftung ist
+  reine Anzeige, Skripte brechen nicht. Wichtig: der Koordinator reicht die Karte an den BESITZENDEN
+  Transport weiter; auf einem Gerät, dessen `input` MusicCast gehört, wäre die Änderung sonst
+  wirkungslos (am RX-V6A live belegt: alle sieben umbenannten HDMI-Buchsen stehen im Dropdown,
+  AUDIO1–5/PHONO/TV behalten den Protokollwert, weil das Gerät für sie keinen Titel führt).
 - **MusicCast zählt die Tonregelung in HALBEN Dezibel**, nicht in dB: 19 Mitschnitte deklarieren
   `tone_control` als −12…+12 in 25 Schritten — dieselben 25 Schritte, die die YNCA-Spec −6…+6 dB
   in 0,5er-Schritten nennt. Das `dB`-Etikett an den MusicCast-Einträgen ist deshalb weg, und
