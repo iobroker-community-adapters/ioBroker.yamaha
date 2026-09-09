@@ -1167,3 +1167,13 @@ describe("HD Radio and the Sirius subunits (coverage audit 2026-09-09, 7 + 6/4/1
     }
   });
 });
+
+describe("the resolver hands the reported value to the object (for the coordinator's adoption rule)", () => {
+  test("an enum object carries reportedValue when the resolver names one", () => {
+    const entries = presentYncaEntries({ model: "X", subunits: { MAIN: { INP: "TV" } } });
+    const objects = catalogToObjects(entries, entry =>
+      entry.id === "input" ? { states: { TV: "TV", HDMI1: "HDMI1" }, origin: "derived", reported: "TV" } : undefined,
+    );
+    expect(objects.find(o => o.id === "input")).toMatchObject({ reportedValue: "TV", statesOrigin: "derived" });
+  });
+});

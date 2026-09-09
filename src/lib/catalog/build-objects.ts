@@ -9,7 +9,7 @@ import { tName } from "../i18n";
  */
 export type StatesResolver = (
   entry: CatalogEntry,
-) => { states: Record<string, string>; origin: NonNullable<ObjectDef["statesOrigin"]> } | undefined;
+) => { states: Record<string, string>; origin: NonNullable<ObjectDef["statesOrigin"]>; reported?: string } | undefined;
 
 /**
  * Turn catalog entries into the object tree: a channel object for every dotted
@@ -55,6 +55,7 @@ export function catalogToObjects(entries: CatalogEntry[], resolve?: StatesResolv
       id: entry.id,
       type: "state",
       ...(resolved && common.states ? { statesOrigin: resolved.origin } : {}),
+      ...(resolved?.reported ? { reportedValue: resolved.reported } : {}),
       common: {
         name: tName(entry.nameKey, ...(entry.nameArgs ?? [])),
         // Only written when the catalog carries one. An absent key means "explains itself" —

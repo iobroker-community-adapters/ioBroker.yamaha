@@ -81,6 +81,13 @@ export interface ObjectDef {
    * a static catalog list. Never written to the object, like `unproven`.
    */
   statesOrigin?: "declared" | "derived" | "candidates";
+  /**
+   * The value the owning transport reports for this datapoint right now (enums only). The
+   * coordinator keeps it on a declared list it adopts from another transport — a dropdown must
+   * never hide the value the device is showing, whichever transport declared the list. Never
+   * written to the object.
+   */
+  reportedValue?: string;
   /** Object id relative to the device. */
   id: string;
   /** Object kind. */

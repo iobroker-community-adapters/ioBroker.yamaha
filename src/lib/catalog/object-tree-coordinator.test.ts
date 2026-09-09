@@ -269,3 +269,40 @@ describe("a MusicCast list reaches a YNCA-owned datapoint through the dictionary
     expect(objects.find(o => o.id === "input")?.common.states).toEqual({ hdmi1: "hdmi1", net_radio: "net_radio" });
   });
 });
+
+describe("the value the owner reports always stays on an adopted declared list (2026-09-09)", () => {
+  const input = (states: Record<string, string>, extra: Partial<ObjectDef> = {}): ObjectDef => ({
+    id: "input",
+    type: "state",
+    ...extra,
+    common: { name: "Input", type: "string", role: "media.input", read: true, write: true, states },
+  });
+
+  test("an XML declaration that lacks the input YNCA reports right now gets that value appended", () => {
+    const { objects } = coordinateObjectTree([
+      {
+        transport: "ynca",
+        objects: [input({ HDMI1: "HDMI1", TV: "TV", Spotify: "Spotify" }, { reportedValue: "TV" })],
+      },
+      { transport: "xml", objects: [input({ HDMI1: "HDMI1", AV1: "AV1" }, { declaredStates: true })] },
+    ]);
+    expect(objects.find(o => o.id === "input")?.common.states).toEqual({ HDMI1: "HDMI1", AV1: "AV1", TV: "TV" });
+  });
+
+  test("a translated MusicCast list gets the YNCA-reported value too, and nothing is appended when it is already there", () => {
+    const { objects } = coordinateObjectTree([
+      { transport: "ynca", objects: [input({ HDMI1: "HDMI1", TV: "TV" }, { reportedValue: "TV" })] },
+      { transport: "yxc", objects: [input({ hdmi1: "hdmi1", net_radio: "net_radio" }, { declaredStates: true })] },
+    ]);
+    expect(objects.find(o => o.id === "input")?.common.states).toEqual({
+      HDMI1: "HDMI1",
+      "NET RADIO": "NET RADIO",
+      TV: "TV",
+    });
+    const same = coordinateObjectTree([
+      { transport: "ynca", objects: [input({ HDMI1: "HDMI1" }, { reportedValue: "HDMI1" })] },
+      { transport: "xml", objects: [input({ HDMI1: "HDMI1", AV1: "AV1" }, { declaredStates: true })] },
+    ]);
+    expect(same.objects.find(o => o.id === "input")?.common.states).toEqual({ HDMI1: "HDMI1", AV1: "AV1" });
+  });
+});

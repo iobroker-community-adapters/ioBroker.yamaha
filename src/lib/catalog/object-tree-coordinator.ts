@@ -11,6 +11,22 @@ export interface TransportObjects {
 }
 
 /**
+ * A declared list with the owner's currently reported value kept on it: a dropdown must never
+ * hide what the device is showing, whichever transport declared the list (the harness measures
+ * it on every fixture; an RX-A2070 whose YNCA half reports TV while its MusicCast list has none).
+ *
+ * @param states the adopted declared map
+ * @param reported the value the owner reports right now, if known
+ * @returns the map, the reported value appended when it was missing
+ */
+function withReported(states: Record<string, string>, reported: string | undefined): Record<string, string> {
+  if (!reported || reported in states) {
+    return states;
+  }
+  return { ...states, [reported]: reported };
+}
+
+/**
  * Merge the present transports' catalogs into one unified object tree. Each capability appears
  * exactly once, emitted by its owning transport (see {@link pickOwner}) under the canonical id;
  * drifting ids and per-zone duplicates across transports collapse to one node. Objects are
@@ -24,7 +40,13 @@ export function coordinateObjectTree(contributions: readonly TransportObjects[])
   ownerByCanonicalId: Map<string, Transport>;
 } {
   // Map iteration follows insertion order, so first-seen order needs no side list.
-  const byId = new Map<string, { key: string; defs: Map<Transport, ObjectDef> }>();
+  const byId = new Map<
+    string,
+    {
+      key: string;
+      defs: Map<Transport, ObjectDef>;
+    }
+  >();
   for (const { transport, objects } of contributions) {
     for (const obj of objects) {
       const canonicalId = canonicalIdOf(transport, obj.id);
@@ -66,7 +88,10 @@ export function coordinateObjectTree(contributions: readonly TransportObjects[])
     } else if (!ownerDef.declaredStates) {
       for (const [transport, def] of entry.defs) {
         if (def.declaredStates && def.common.states && STATES_VOCABULARY[transport] === STATES_VOCABULARY[owner]) {
-          resolvedDef.common = { ...resolvedDef.common, states: def.common.states };
+          resolvedDef.common = {
+            ...resolvedDef.common,
+            states: withReported(def.common.states, ownerDef.reportedValue),
+          };
           resolvedDef.declaredStates = true;
           break;
         }
@@ -80,7 +105,7 @@ export function coordinateObjectTree(contributions: readonly TransportObjects[])
           if (def.declaredStates && def.common.states && STATES_VOCABULARY[transport] === "musiccast") {
             const translated = translateDeclaredStates(entry.key, def.common.states);
             if (translated) {
-              resolvedDef.common = { ...resolvedDef.common, states: translated };
+              resolvedDef.common = { ...resolvedDef.common, states: withReported(translated, ownerDef.reportedValue) };
               resolvedDef.declaredStates = true;
               break;
             }

@@ -932,7 +932,7 @@ export class YncaDeviceController implements ConnectionHandle {
       if (yncaEntry.func === "INP") {
         const zone = YNCA_ZONES.find(z => z.subunit === yncaEntry.subunit);
         if (zone) {
-          return { states: deviceInputStates(evidence, zone.key, current), origin: "derived" };
+          return { states: deviceInputStates(evidence, zone.key, current), origin: "derived", reported: current };
         }
       }
       if (/^TRIG\dZONE$/.test(yncaEntry.func)) {
@@ -943,10 +943,14 @@ export class YncaDeviceController implements ConnectionHandle {
         if (current && !values.includes(current)) {
           values.push(current);
         }
-        return { states: Object.fromEntries(values.map(value => [value, value])), origin: "derived" };
+        return {
+          states: Object.fromEntries(values.map(value => [value, value])),
+          origin: "derived",
+          reported: current,
+        };
       }
       const observed = this.observed[yncaEntry.subunit]?.[readFunc] ?? [];
-      return { states: enumStatesFor(yncaEntry, observed, current), origin: "candidates" };
+      return { states: enumStatesFor(yncaEntry, observed, current), origin: "candidates", reported: current };
     };
   }
 

@@ -1,4 +1,9 @@
-import { translateDeclaredStates, translateMusicCastInputs, translateMusicCastPrograms } from "./musiccast-vocabulary";
+import {
+  translateDeclaredStates,
+  translateMusicCastDecoders,
+  translateMusicCastInputs,
+  translateMusicCastPrograms,
+} from "./musiccast-vocabulary";
 import rxV6a from "./__fixtures__/rx-v6a-input-lists.json";
 import rxA2070 from "../yxc/__fixtures__/RX_A2070_v1.json";
 import ysp1600 from "../yxc/__fixtures__/YSP1600_312_208.json";
@@ -91,5 +96,44 @@ describe("translateDeclaredStates — the coordinator's hook", () => {
       "Hall in Munich": "Hall in Munich",
     });
     expect(translateDeclaredStates("sound.toneMode", { manual: "manual" })).toBeUndefined();
+  });
+});
+
+describe("MusicCast surround decoder ids → the YNCA 2CHDECODER names (Task 17, pulled into 2.6.0)", () => {
+  test("the 2017/2020 list translates completely, toggle skipped — it is a command, not a decoder", () => {
+    const translated = translateMusicCastDecoders([
+      "toggle",
+      "auto",
+      "dolby_surround",
+      "dts_neural_x",
+      "dts_neo6_cinema",
+      "dts_neo6_music",
+    ]);
+    expect(translated).toEqual({
+      Auto: "Auto",
+      "Dolby Surround": "Dolby Surround",
+      "DTS Neural:X": "DTS Neural:X",
+      "DTS NEO:6 Cinema": "DTS NEO:6 Cinema",
+      "DTS NEO:6 Music": "DTS NEO:6 Music",
+    });
+  });
+
+  test("the 2015 Pro Logic ids translate to the official spellings", () => {
+    expect(translateMusicCastDecoders(["dolby_pl", "dolby_pl2x_movie", "dolby_pl2x_music", "dolby_pl2x_game"])).toEqual(
+      {
+        "Dolby PL": "Dolby PL",
+        "Dolby PLIIx Movie": "Dolby PLIIx Movie",
+        "Dolby PLIIx Music": "Dolby PLIIx Music",
+        "Dolby PLIIx Game": "Dolby PLIIx Game",
+      },
+    );
+  });
+
+  test("an unknown id refuses the whole list, and the coordinator hook serves the decoder key", () => {
+    expect(translateMusicCastDecoders(["auto", "something_new"])).toBeUndefined();
+    expect(translateDeclaredStates("sound.surroundDecoder", { auto: "auto", dts_neural_x: "dts_neural_x" })).toEqual({
+      Auto: "Auto",
+      "DTS Neural:X": "DTS Neural:X",
+    });
   });
 });

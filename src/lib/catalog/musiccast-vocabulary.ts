@@ -127,6 +127,28 @@ export const MUSICCAST_PROGRAM_NAMES: Readonly<Record<string, string>> = {
 const NOT_A_PROGRAM: ReadonlySet<string> = new Set(["straight"]);
 
 /**
+ * MusicCast `surr_decoder_type_list` ids → the YNCA `2CHDECODER` spelling. The ten ids are every
+ * one the 26 bundled getFeatures captures declare (2026-09-09); the spellings are the official
+ * command lists' (the nine-value core) and the receivers' own answers (`Auto`, `Dolby Surround`,
+ * `DTS Neural:X` — ynca-python's TwoChDecoder enum, the protocol reference). `toggle` is a
+ * command, not a decoder, and is skipped like `straight` among the programs.
+ */
+export const MUSICCAST_DECODER_NAMES: Readonly<Record<string, string>> = {
+  auto: "Auto",
+  dolby_surround: "Dolby Surround",
+  dts_neural_x: "DTS Neural:X",
+  dts_neo6_cinema: "DTS NEO:6 Cinema",
+  dts_neo6_music: "DTS NEO:6 Music",
+  dolby_pl: "Dolby PL",
+  dolby_pl2x_movie: "Dolby PLIIx Movie",
+  dolby_pl2x_music: "Dolby PLIIx Music",
+  dolby_pl2x_game: "Dolby PLIIx Game",
+};
+
+/** MusicCast decoder ids that are no decoder over YNCA (`toggle` steps through the list). */
+const NOT_A_DECODER: ReadonlySet<string> = new Set(["toggle"]);
+
+/**
  * Translate a MusicCast id list with one dictionary — all or nothing.
  *
  * @param ids the MusicCast ids
@@ -175,6 +197,16 @@ export function translateMusicCastPrograms(ids: readonly string[]): Record<strin
 }
 
 /**
+ * Translate a MusicCast surround decoder list into the classic dropdown (`toggle` skipped).
+ *
+ * @param ids the MusicCast decoder ids of one zone
+ * @returns the classic value → label map, or undefined when the list does not translate completely
+ */
+export function translateMusicCastDecoders(ids: readonly string[]): Record<string, string> | undefined {
+  return translateAll(ids, MUSICCAST_DECODER_NAMES, NOT_A_DECODER);
+}
+
+/**
  * The coordinator's hook: the classic spelling of a MusicCast-declared list for a capability,
  * or undefined where no dictionary exists or the list does not translate completely.
  *
@@ -191,6 +223,9 @@ export function translateDeclaredStates(
   }
   if (key === "soundProgram") {
     return translateMusicCastPrograms(Object.keys(states));
+  }
+  if (key === "sound.surroundDecoder") {
+    return translateMusicCastDecoders(Object.keys(states));
   }
   return undefined;
 }
