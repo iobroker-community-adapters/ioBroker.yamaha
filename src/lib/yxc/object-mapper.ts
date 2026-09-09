@@ -218,9 +218,14 @@ const RANGE_BY_STATE: Readonly<Record<string, string>> = {
  * parents before children. States and their common come from {@link YXC_AMP_CATALOG}.
  *
  * @param capabilities the parsed YXC capabilities
+ * @param current the string values each zone reports right now (zone id → state id → value), so
+ *   a reported value is always in its dropdown even where the device's own list omits it
  * @returns the object definitions to create
  */
-export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
+export function mapYxcToObjects(
+  capabilities: YxcCapabilities,
+  current?: Readonly<Record<string, Readonly<Record<string, string>>>>,
+): ObjectDef[] {
   const objects: ObjectDef[] = [];
   const channels = new Set<string>();
   for (const zoneDef of ZONES) {
@@ -281,18 +286,27 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
         common.max = range.max;
         common.step = range.step;
       }
-      // The device's own allowed-value lists (getFeatures) become dropdowns: the zone's
-      // inputs on the input state, sound_program_list & co on their states. On a device
-      // that also speaks YNCA the YNCA-owned dropdown wins via the owner policy — these
-      // matter on MusicCast-only devices, where the raw string was the old poverty.
+      // The device's own allowed-value lists (getFeatures) become dropdowns — DECLARED, so the
+      // coordinator puts them on a YNCA-owned datapoint too, through the dictionary (#619):
+      // the zone's inputs on the input state, sound_program_list & co on their states. What the
+      // zone REPORTS right now is always selectable as well: the RX-A2070 capture lists only
+      // "manual" as tone-control mode and answers "auto" — a device contradicting itself must
+      // not leave the admin with a raw value nobody can pick again.
+      let declared = false;
       if (entry.state === "input" && zone.inputs.length > 0) {
         common.states = selfMap(zone.inputs);
+        declared = true;
       }
       const valueList = zone.valueLists?.[entry.state];
       if (valueList) {
         common.states = selfMap(valueList);
+        declared = true;
       }
-      objects.push({ id: fullId, type: "state", common });
+      const reported = current?.[zone.id]?.[entry.state];
+      if (common.states && typeof reported === "string" && reported.length > 0 && !(reported in common.states)) {
+        common.states = { ...common.states, [reported]: reported };
+      }
+      objects.push({ id: fullId, type: "state", common, ...(declared ? { declaredStates: true } : {}) });
     }
     const zoneChannelHelper = (id: string, common: ObjectDef["common"]): void => {
       if (!channels.has(id)) {
@@ -321,10 +335,22 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
       });
     }
     // The on-screen remote (cursor pad + menu keys) — declared as zone functions
-    // `cursor`/`menu`; the endpoints and their vocabulary are device-verified.
+    // `cursor`/`menu`. The words come from the zone's own `cursor_list`/`menu_list` where the
+    // firmware declares them (declared); a zone that declares none keeps the shared vocabulary,
+    // which is the MAXIMUM any MusicCast device accepts (device-verified endpoints).
     if (zone.funcs.includes("cursor") || zone.funcs.includes("menu")) {
       zoneChannelHelper(`${zoneDef.prefix}remote`, channelCommon("remote"));
+      const wordsFor = (
+        id: "remote.cursor" | "remote.menu",
+        fallback: readonly string[],
+      ): { states: Record<string, string>; declared: boolean } => {
+        const declaredWords = zone.valueLists?.[id];
+        return declaredWords
+          ? { states: selfMap(declaredWords), declared: true }
+          : { states: selfMap([...fallback]), declared: false };
+      };
       if (zone.funcs.includes("cursor")) {
+        const words = wordsFor("remote.cursor", YXC_CURSOR_VALUES);
         objects.push({
           id: `${zoneDef.prefix}remote.cursor`,
           type: "state",
@@ -335,11 +361,13 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
             role: "state",
             read: false,
             write: true,
-            states: selfMap([...YXC_CURSOR_VALUES]),
+            states: words.states,
           },
+          ...(words.declared ? { declaredStates: true } : {}),
         });
       }
       if (zone.funcs.includes("menu")) {
+        const words = wordsFor("remote.menu", YXC_MENU_VALUES);
         objects.push({
           id: `${zoneDef.prefix}remote.menu`,
           type: "state",
@@ -350,8 +378,9 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
             role: "state",
             read: false,
             write: true,
-            states: selfMap([...YXC_MENU_VALUES]),
+            states: words.states,
           },
+          ...(words.declared ? { declaredStates: true } : {}),
         });
       }
     }
@@ -534,12 +563,24 @@ export function mapYxcToObjects(capabilities: YxcCapabilities): ObjectDef[] {
     }
     objects.push({ id: "tuner.band", type: "state", common: bandCommon });
     // Frequency in kHz — FM/AM/DAB all report kHz in getPlayInfo (FM 100900 =
-    // 100.9 MHz, AM 1080, DAB 180064), verified against real device captures.
-    objects.push({
-      id: "tuner.frequency",
-      type: "state",
-      common: { name: tName("frequency"), type: "number", unit: "kHz", role: "level", read: true, write: true },
-    });
+    // 100.9 MHz, AM 1080, DAB 180064), verified against real device captures. The bounds are
+    // the ENVELOPE of the ranges the device declares per band (AM 531 kHz … FM 108000 kHz):
+    // one datapoint serves every band, so it can carry the outer limits but no single step
+    // (FM steps 50 kHz, 200 in the US; AM 9 or 10).
+    const frequencyCommon: ObjectDef["common"] = {
+      name: tName("frequency"),
+      type: "number",
+      unit: "kHz",
+      role: "level",
+      read: true,
+      write: true,
+    };
+    const bandRanges = Object.values(capabilities.tuner?.ranges ?? {});
+    if (bandRanges.length > 0) {
+      frequencyCommon.min = Math.min(...bandRanges.map(range => range.min));
+      frequencyCommon.max = Math.max(...bandRanges.map(range => range.max));
+    }
+    objects.push({ id: "tuner.frequency", type: "state", common: frequencyCommon });
     objects.push({
       id: "tuner.rdsText",
       type: "state",

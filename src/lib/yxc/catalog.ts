@@ -432,6 +432,25 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     fromStatus: bool,
   },
   {
+    // Surround:AI — declared as `surround_ai` and reported in getStatus by the RX-A3080 capture
+    // (the one bundled device of its class). Read-only here: no bundled reference documents a
+    // MusicCast setter, so the YNCA SURROUNDAI switch stays the writable one and wins the
+    // datapoint where both transports are live (owner policy). Same id as the YNCA entry —
+    // one capability, one canonical id.
+    state: "sound.surroundAI",
+    common: {
+      nameKey: "surroundAI",
+      descKey: "descSurroundAI",
+      type: "boolean",
+      role: "indicator",
+      read: true,
+      write: false,
+    },
+    create: { kind: "func", func: "surround_ai" },
+    read: { field: "surround_ai" },
+    fromStatus: bool,
+  },
+  {
     state: "sound.dialogueLift",
     common: {
       nameKey: "dialogueLift",

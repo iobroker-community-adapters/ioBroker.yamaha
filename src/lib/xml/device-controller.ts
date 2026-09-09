@@ -225,16 +225,19 @@ export class XmlDeviceController implements ConnectionHandle {
           // field empty there rather than filled with invented prose.
           ...(descKey ? { desc: tName(descKey) } : {}),
         };
-        // The device's own input list becomes the dropdown (XML-owned devices only —
-        // where YNCA is present its dropdown wins via the owner policy).
+        // The device's own input list becomes the dropdown — DECLARED, so the coordinator puts
+        // it on the YNCA-owned datapoint too (#619). Until 2026-09-09 the comment here said the
+        // YNCA union would win where YNCA is present; that is exactly what the reporter saw.
         const inputs = entry.state === "input" ? inputsByZone.get(zone.key) : undefined;
-        if (inputs && inputs.length > 0) {
+        const declared = inputs !== undefined && inputs.length > 0;
+        if (declared) {
           common.states = Object.fromEntries(inputs.map(input => [input, input]));
         }
         await this.deps.upsertObject(`${this.deviceId}.${stateId}`, {
           id: stateId,
           type: "state",
           common,
+          ...(declared ? { declaredStates: true } : {}),
         });
         this.createdStates.add(stateId);
       }

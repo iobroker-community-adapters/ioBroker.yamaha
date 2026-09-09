@@ -1,5 +1,6 @@
 import { YxcDeviceController, zoneNameFrom } from "./device-controller";
 import type { YxcClientLike } from "./device-controller";
+import type { ObjectDef } from "../catalog/types";
 import wx10 from "./__fixtures__/WX10_216_208.json";
 import ysp from "./__fixtures__/status/YSP1600_main.json";
 import { CommandGate } from "../lifecycle/command-gate";
@@ -150,6 +151,7 @@ function setup(
   controller: YxcDeviceController;
   client: FakeClient;
   objects: string[];
+  defs: Map<string, ObjectDef>;
   acks: Array<{ id: string; value: unknown }>;
   fire: { push?: (event: unknown) => void; keepalive?: () => void };
   names: string[];
@@ -158,6 +160,7 @@ function setup(
 } {
   const client = makeFakeClient(features, status);
   const objects: string[] = [];
+  const defs = new Map<string, ObjectDef>();
   const acks: Array<{ id: string; value: unknown }> = [];
   const names: string[] = [];
   const fire: { push?: (event: unknown) => void; keepalive?: () => void } = {};
@@ -179,8 +182,9 @@ function setup(
         cancelled = true;
       };
     },
-    upsertObject: id => {
+    upsertObject: (id, def) => {
       objects.push(id);
+      defs.set(id, def);
       return Promise.resolve();
     },
     setStateAck: (id, value) => {
@@ -195,6 +199,7 @@ function setup(
     controller,
     client,
     objects,
+    defs,
     acks,
     names,
     fire,
@@ -236,6 +241,47 @@ describe("YxcDeviceController", () => {
     const s = setup({}, ysp);
     expect(await s.controller.start()).toBe(false);
     expect(s.objects).toEqual([]);
+  });
+
+  test("the status is read BEFORE the objects, so a reported value joins its declared list (RX-A2070 tone mode)", async () => {
+    const features = {
+      response_code: 0,
+      system: {},
+      zone: [
+        { id: "main", func_list: ["power", "tone_control"], input_list: ["hdmi1"], tone_control_mode_list: ["manual"] },
+      ],
+    };
+    const s = setup(features, {
+      response_code: 0,
+      power: "on",
+      input: "av1",
+      tone_control: { mode: "auto", bass: 0, treble: 0 },
+    });
+    await s.controller.start();
+    expect(s.defs.get("living.sound.toneMode")?.common.states).toEqual({ manual: "manual", auto: "auto" });
+    expect(s.defs.get("living.input")?.common.states).toEqual({ hdmi1: "hdmi1", av1: "av1" });
+    // Still one status request per zone at start — the seed reuses the same answer.
+    expect(s.client.calls.filter(call => call.method === "getStatus")).toHaveLength(1);
+    expect(s.acks).toContainEqual({ id: "living.sound.toneMode", value: "auto" });
+  });
+
+  test("a declared menu word outside the shared vocabulary reaches the device; an undeclared one is dropped", async () => {
+    const features = {
+      response_code: 0,
+      system: {},
+      zone: [{ id: "main", func_list: ["power", "menu"], input_list: [], menu_list: ["on_screen", "menu", "red"] }],
+    };
+    const s = setup(features, { response_code: 0, power: "on" });
+    await s.controller.start();
+    expect(Object.keys(s.defs.get("living.remote.menu")?.common.states ?? {})).toEqual(["on_screen", "menu", "red"]);
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.remote.menu", false, "red");
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "controlMenu", args: ["red", "main"] });
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.remote.menu", false, "purple");
+    await flush();
+    expect(s.client.calls).toEqual([]);
   });
 
   test("a user write (ack false) becomes the matching client call", async () => {

@@ -52,6 +52,24 @@ describe("parseYxcFeatures", () => {
     expect(ranges?.tone_control).toEqual({ min: -10, max: 10, step: 1 });
   });
 
+  test("the on-screen remote vocabularies are the zone's own lists (menu_list varies per device)", () => {
+    // Measured over 26 captures: one cursor list everywhere, three menu variants — 5, 9 and 12 words.
+    const v481 = parseYxcFeatures(rxV481).zones.find(z => z.id === "main");
+    expect(v481?.valueLists?.["remote.cursor"]).toEqual(["up", "down", "left", "right", "select", "return"]);
+    expect(v481?.valueLists?.["remote.menu"]).toEqual(["on_screen", "top_menu", "menu", "option", "display"]);
+    expect(parseYxcFeatures(rxA2070).zones.find(z => z.id === "main")?.valueLists?.["remote.menu"]).toHaveLength(9);
+    expect(parseYxcFeatures(rxV685).zones.find(z => z.id === "main")?.valueLists?.["remote.menu"]).toHaveLength(12);
+  });
+
+  test("the tuner's frequency ranges are read per band", () => {
+    expect(parseYxcFeatures(rxV685).tuner?.ranges).toEqual({
+      am: { min: 531, max: 1611, step: 9 },
+      fm: { min: 87500, max: 108000, step: 50 },
+    });
+    // A tuner block without range_step declares no ranges — undefined, not an empty object.
+    expect(parseYxcFeatures({ zone: [{ id: "main" }], tuner: { func_list: ["fm"] } }).tuner?.ranges).toBeUndefined();
+  });
+
   test("returns empty capabilities for a malformed response", () => {
     expect(parseYxcFeatures(null)).toEqual({ zones: [], media: [], hasDistribution: false });
     expect(parseYxcFeatures({ zone: "nope" })).toMatchObject({ zones: [], media: [], hasDistribution: false });
@@ -85,13 +103,23 @@ describe("parseYxcFeatures", () => {
   test("parses the tuner features: bands and a per-band (separate) preset list", () => {
     // ISX-18D: func_list fm/dab plus non-band flags, preset {type separate, num 30}.
     const tuner = parseYxcFeatures(isx18d).tuner;
-    expect(tuner).toEqual({ bands: ["fm", "dab"], presetType: "separate", presetNum: 30 });
+    expect(tuner).toEqual({
+      bands: ["fm", "dab"],
+      presetType: "separate",
+      presetNum: 30,
+      ranges: { fm: { min: 87500, max: 108000, step: 50 } },
+    });
   });
 
   test("parses a shared (common) tuner preset list", () => {
     // RX-V481: am/fm with one common 40-slot list.
     const tuner = parseYxcFeatures(rxV481).tuner;
-    expect(tuner).toEqual({ bands: ["am", "fm"], presetType: "common", presetNum: 40 });
+    expect(tuner).toEqual({
+      bands: ["am", "fm"],
+      presetType: "common",
+      presetNum: 40,
+      ranges: { am: { min: 531, max: 1611, step: 9 }, fm: { min: 87500, max: 108000, step: 50 } },
+    });
   });
 
   test("parses the clock features: alarm modes and the alarm volume range", () => {

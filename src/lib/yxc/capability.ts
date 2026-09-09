@@ -34,6 +34,8 @@ export interface YxcTunerFeatures {
   presetType: "common" | "separate";
   /** How many preset slots the device has. */
   presetNum?: number;
+  /** The frequency range the device declares per band (`range_step` ids `fm`/`am`/`dab`), when any. */
+  ranges?: Record<string, { min: number; max: number; step: number }>;
 }
 
 /** The clock/alarm block of a YXC getFeatures response, as far as the adapter uses it. */
@@ -150,6 +152,12 @@ const ZONE_VALUE_LISTS: Readonly<Record<string, string>> = {
   link_control_list: "sound.linkControl",
   link_audio_delay_list: "sound.linkAudioDelay",
   link_audio_quality_list: "sound.linkAudioQuality",
+  // The on-screen remote words THIS zone accepts. Measured over 26 captures (2026-09-09): one
+  // cursor list everywhere, but three menu variants — 5, 9 and 12 words (help/home/mode and the
+  // four colour keys only on some models). The shared vocabulary is the maximum, the device's
+  // list is the truth; before this the dropdown offered all 12 on every zone.
+  cursor_list: "remote.cursor",
+  menu_list: "remote.menu",
 };
 
 /**
@@ -186,10 +194,15 @@ function parseTunerFeatures(tuner: unknown): YxcTunerFeatures | undefined {
   const obj = tuner as Record<string, unknown>;
   const bands = stringList(obj.func_list).filter(func => TUNER_BANDS.includes(func));
   const preset = (typeof obj.preset === "object" && obj.preset !== null ? obj.preset : {}) as Record<string, unknown>;
+  // The frequency range per band (`range_step` ids `fm`, `am`, `dab`): FM 87500–108000 in 50 kHz
+  // steps on 13 captured tuners (87500–107900/200 on the US model), AM 531–1611/9 or 530–1710/10.
+  // Parsed and dropped until 2026-09-09 — tuner.frequency stood without any bound.
+  const ranges = parseRanges(obj.range_step);
   return {
     bands,
     presetType: preset.type === "common" ? "common" : "separate",
     presetNum: typeof preset.num === "number" ? preset.num : undefined,
+    ...(Object.keys(ranges).length > 0 ? { ranges } : {}),
   };
 }
 

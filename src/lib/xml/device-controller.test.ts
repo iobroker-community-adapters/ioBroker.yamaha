@@ -424,8 +424,19 @@ describe("XmlDeviceController", () => {
       `<Item_1><Param>HDMI1</Param><RW>RW</RW></Item_1><Item_2><Param>NET RADIO</Param><RW>RW</RW></Item_2>` +
       `</Input_Sel_Item></Input></Main_Zone></YAMAHA_AV>`;
     await s.controller.start();
-    const input = s.defs.get("living.input") as { common?: { states?: Record<string, string> } } | undefined;
+    const input = s.defs.get("living.input") as
+      { declaredStates?: boolean; common?: { states?: Record<string, string> } } | undefined;
     expect(input?.common?.states).toEqual({ HDMI1: "HDMI1", "NET RADIO": "NET RADIO" });
+    // The list is the receiver's own declaration — the coordinator may put it on a YNCA-owned input.
+    expect(input?.declaredStates).toBe(true);
+  });
+
+  test("a zone that declares no inputs gets a plain input state, not a declared empty list", async () => {
+    const s = setup({ Main_Zone: { power: true, input: "HDMI1" } });
+    await s.controller.start();
+    const input = s.defs.get("living.input") as { declaredStates?: boolean; common?: { states?: unknown } } | undefined;
+    expect(input?.common?.states).toBeUndefined();
+    expect(input?.declaredStates).toBeUndefined();
   });
 });
 

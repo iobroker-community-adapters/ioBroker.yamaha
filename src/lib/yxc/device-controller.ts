@@ -139,6 +139,8 @@ export class YxcDeviceController implements ConnectionHandle {
   private lastTunerBand = "fm";
   /** Each zone's currently selected input, from its status — see {@link zoneListeningTo}. */
   private readonly lastZoneInput = new Map<string, string>();
+  /** Each zone's declared value lists (getFeatures), for the on-screen remote's write guard. */
+  private readonly zoneValueLists = new Map<string, Readonly<Record<string, string[]>>>();
   /** The source the network player is currently on (netusb `input`, e.g. "net_radio"). */
   private lastNetusbInput = "";
   /** Which source currently feeds each zone's "now playing" block (v2.0.0 routing). */
@@ -216,7 +218,35 @@ export class YxcDeviceController implements ConnectionHandle {
       async () => parseYxcFeatures(await this.deps.client.getFeatures()),
       features => features.zones.length > 0,
     );
-    const objects = mapYxcToObjects(capabilities);
+    this.zones = capabilities.zones.map(zone => zone.id);
+    for (const zone of capabilities.zones) {
+      if (zone.valueLists) {
+        this.zoneValueLists.set(zone.id, zone.valueLists);
+      }
+    }
+    // Every zone's status comes BEFORE the objects (zones in parallel — disjoint writes, and a
+    // zone stuck in its timeout must not hold up the device's readiness): the value a zone
+    // reports right now belongs in its dropdown even where the device's own list omits it (the
+    // RX-A2070 capture lists only "manual" as tone-control mode and answers "auto"), and the
+    // tree is coordinated once per connect, so a later write could not widen a list. One
+    // request per zone, reused below as the seed.
+    const statuses = await Promise.all(this.zones.map(zone => this.fetchZoneStatus(zone)));
+    const reported: Record<string, Record<string, string>> = {};
+    this.zones.forEach((zone, index) => {
+      const status = statuses[index];
+      if (status === undefined) {
+        return;
+      }
+      const prefix = zonePrefix(zone);
+      const values: Record<string, string> = {};
+      for (const update of parseYxcStatus(status, zone)) {
+        if (typeof update.value === "string" && update.id.startsWith(prefix)) {
+          values[update.id.slice(prefix.length)] = update.value;
+        }
+      }
+      reported[zone] = values;
+    });
+    const objects = mapYxcToObjects(capabilities, reported);
     if (objects.length === 0) {
       this.deps.log.warn(`${this.deviceId}: no capabilities reported — creating no objects`);
       return false;
@@ -251,10 +281,14 @@ export class YxcDeviceController implements ConnectionHandle {
         this.deps.log.debug(`${this.deviceId}: getNameText failed (${errorMessage(e)})`);
       }
     }
-    this.zones = capabilities.zones.map(zone => zone.id);
-    // Zones in parallel — disjoint writes, and a zone stuck in its timeout must not hold
-    // up the device's readiness.
-    const zonesAnswered = await Promise.all(this.zones.map(zone => this.refreshZone(zone)));
+    // Seed every zone from the status fetched above — the same answer, not a second request.
+    const zonesAnswered = statuses.map((status, index) => {
+      if (status === undefined) {
+        return false;
+      }
+      this.applyZoneStatus(this.zones[index], status);
+      return true;
+    });
     // The zone status is the one request of this start that ALWAYS goes to the device: the
     // capabilities above come from the probe memory on every reconnect, and model/name are
     // best-effort, so nothing before this point can tell a live device from a dead one. Without
@@ -496,6 +530,23 @@ export class YxcDeviceController implements ConnectionHandle {
         this.deps.log.debug(`${this.deviceId}: ${stateId} is read-only on MusicCast — write dropped`);
       }
       return;
+    }
+    // The on-screen remote: a word the zone DECLARES (cursor_list/menu_list) goes to the device
+    // even where the shared vocabulary lacks it — help, mode and the four colour keys exist on
+    // some models only. A word in neither list is dropped by the vocabulary check below.
+    const remoteMatch = /^(?:multiroom\.(zone[234])\.)?remote\.(cursor|menu)$/.exec(stateId);
+    if (remoteMatch && typeof value === "string") {
+      const zone = remoteMatch[1] ?? "main";
+      const listId = remoteMatch[2] === "cursor" ? "remote.cursor" : "remote.menu";
+      if (this.zoneValueLists.get(zone)?.[listId]?.includes(value)) {
+        const word = value;
+        void this.applyCommand(stateId, {
+          kind: "run",
+          run: client =>
+            listId === "remote.cursor" ? client.controlCursor(word, zone) : client.controlMenu(word, zone),
+        });
+        return;
+      }
     }
     const command = stateToYxc(stateId, value);
     if (command) {
@@ -988,32 +1039,55 @@ export class YxcDeviceController implements ConnectionHandle {
    * @returns true if the status was fetched, false if the request failed
    */
   private async refreshZone(zone: string): Promise<boolean> {
-    try {
-      const status = await this.deps.client.getStatus(zone);
-      const updates = parseYxcStatus(status, zone);
-      for (const update of updates) {
-        this.emit(update.id, update.value);
-        // The EXACT id, not a suffix: this value decides which source a zone's player block
-        // and its transport buttons follow. A future status field ending in "input" would
-        // have bent that routing silently.
-        if (update.id === `${zonePrefix(zone)}input` && typeof update.value === "string") {
-          const previous = this.lastZoneInput.get(zone);
-          this.lastZoneInput.set(zone, update.value);
-          if (previous !== update.value) {
-            // The zone changed its input — re-target its player block NOW. Media
-            // pushes alone cannot cover this: a zone leaving a still-playing source
-            // (or joining one another zone already plays) changes nothing about the
-            // source itself, so no netusb/cd push ever arrives (2.0.0 review finding).
-            this.retargetZonePlayer(zone);
-          }
-        }
-      }
-      this.cacheEqualizer(zone, updates);
-      return true;
-    } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: getStatus(${zone}) failed: ${errorMessage(e)}`);
+    const status = await this.fetchZoneStatus(zone);
+    if (status === undefined) {
       return false;
     }
+    this.applyZoneStatus(zone, status);
+    return true;
+  }
+
+  /**
+   * Fetch a zone's status, swallowing the failure of an absent zone or an offline device.
+   *
+   * @param zone the zone to ask
+   * @returns the raw getStatus answer, or undefined when the request failed
+   */
+  private async fetchZoneStatus(zone: string): Promise<unknown> {
+    try {
+      return await this.deps.client.getStatus(zone);
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: getStatus(${zone}) failed: ${errorMessage(e)}`);
+      return undefined;
+    }
+  }
+
+  /**
+   * Write a zone's amp states from an already-fetched status.
+   *
+   * @param zone the zone the status belongs to
+   * @param status the raw getStatus answer
+   */
+  private applyZoneStatus(zone: string, status: unknown): void {
+    const updates = parseYxcStatus(status, zone);
+    for (const update of updates) {
+      this.emit(update.id, update.value);
+      // The EXACT id, not a suffix: this value decides which source a zone's player block
+      // and its transport buttons follow. A future status field ending in "input" would
+      // have bent that routing silently.
+      if (update.id === `${zonePrefix(zone)}input` && typeof update.value === "string") {
+        const previous = this.lastZoneInput.get(zone);
+        this.lastZoneInput.set(zone, update.value);
+        if (previous !== update.value) {
+          // The zone changed its input — re-target its player block NOW. Media
+          // pushes alone cannot cover this: a zone leaving a still-playing source
+          // (or joining one another zone already plays) changes nothing about the
+          // source itself, so no netusb/cd push ever arrives (2.0.0 review finding).
+          this.retargetZonePlayer(zone);
+        }
+      }
+    }
+    this.cacheEqualizer(zone, updates);
   }
 
   /**

@@ -55,6 +55,9 @@ const OWNER_OVERRIDES: Record<string, readonly Transport[]> = {
   "sound.extraBass": ["ynca", "xml", "yxc"],
   "sound.adaptiveDrc": ["ynca", "xml", "yxc"],
   "sound.surroundDecoder": ["ynca", "yxc"],
+  // Surround:AI joined MusicCast on 2026-09-09 (the RX-A3080 declares `surround_ai` and reports it
+  // in getStatus) as a read-only indicator; YNCA's SURROUNDAI switch is the writable one.
+  "sound.surroundAI": ["ynca", "yxc"],
   "sound.dialogueLift": ["xml", "yxc"],
   // Write-proof beats modernity rank for the scene TRIGGER (#615): YXC declares the
   // recall endpoint per zone (device-verified), XML declares the write value in its

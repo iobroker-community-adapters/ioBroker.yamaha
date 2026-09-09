@@ -1,5 +1,6 @@
 import { mapYxcToObjects } from "./object-mapper";
 import { parseYxcFeatures } from "./capability";
+import { YXC_MENU_VALUES } from "./remote";
 import rxA2070 from "./__fixtures__/RX_A2070_v1.json";
 import wx10 from "./__fixtures__/WX10_216_208.json";
 import isx18d from "./__fixtures__/ISX_18D_216_208.json";
@@ -438,5 +439,119 @@ describe("scene / remote / signal / netusb-list objects (RX-V6A getFeatures shap
     expect(bare).not.toContain("remote.cursor");
     expect(bare).not.toContain("player.netPlayer.playlists");
     expect(bare).not.toContain("player.netPlayer.queue");
+  });
+});
+
+describe("the device's own lists are DECLARED, and the words it reports are always selectable (2026-09-09)", () => {
+  test("the zone's input list and value lists carry the declared mark (#619)", () => {
+    const objs = mapYxcToObjects({
+      zones: [
+        {
+          id: "main",
+          funcs: ["power", "sound_program"],
+          inputs: ["hdmi1", "net_radio"],
+          valueLists: { soundProgram: ["standard", "munich"] },
+        },
+      ],
+      media: [],
+    });
+    const input = objs.find(o => o.id === "input");
+    expect(input?.common.states).toEqual({ hdmi1: "hdmi1", net_radio: "net_radio" });
+    expect(input?.declaredStates).toBe(true);
+    expect(objs.find(o => o.id === "soundProgram")?.declaredStates).toBe(true);
+    // A state without a device list is not declared.
+    expect(objs.find(o => o.id === "power")?.declaredStates).toBeUndefined();
+  });
+
+  test("remote.menu and remote.cursor offer exactly the words this zone declares, not the shared maximum", () => {
+    const objs = mapYxcToObjects({
+      zones: [
+        {
+          id: "main",
+          funcs: ["power", "cursor", "menu"],
+          inputs: [],
+          valueLists: { "remote.cursor": ["up", "down", "select", "return"], "remote.menu": ["on_screen", "menu"] },
+        },
+      ],
+      media: [],
+    });
+    expect(Object.keys(objs.find(o => o.id === "remote.menu")?.common.states ?? {})).toEqual(["on_screen", "menu"]);
+    expect(Object.keys(objs.find(o => o.id === "remote.cursor")?.common.states ?? {})).toEqual([
+      "up",
+      "down",
+      "select",
+      "return",
+    ]);
+    expect(objs.find(o => o.id === "remote.menu")?.declaredStates).toBe(true);
+    expect(objs.find(o => o.id === "remote.cursor")?.declaredStates).toBe(true);
+  });
+
+  test("a zone with cursor/menu but no lists keeps the shared vocabulary as the dropdown, undeclared", () => {
+    const objs = mapYxcToObjects({
+      zones: [{ id: "main", funcs: ["power", "cursor", "menu"], inputs: [] }],
+      media: [],
+    });
+    expect(Object.keys(objs.find(o => o.id === "remote.menu")?.common.states ?? {})).toEqual([...YXC_MENU_VALUES]);
+    expect(objs.find(o => o.id === "remote.menu")?.declaredStates).toBeUndefined();
+  });
+
+  test("the value a zone reports right now joins its declared list (RX-A2070: tone mode 'auto' against a list of 'manual')", () => {
+    const objs = mapYxcToObjects(
+      {
+        zones: [
+          {
+            id: "main",
+            funcs: ["power", "tone_control"],
+            inputs: ["hdmi1"],
+            valueLists: { "sound.toneMode": ["manual"] },
+          },
+        ],
+        media: [],
+      },
+      { main: { "sound.toneMode": "auto", input: "av1" } },
+    );
+    expect(objs.find(o => o.id === "sound.toneMode")?.common.states).toEqual({ manual: "manual", auto: "auto" });
+    expect(objs.find(o => o.id === "input")?.common.states).toEqual({ hdmi1: "hdmi1", av1: "av1" });
+    // Still the device's declaration — what it reports is as good as what it lists.
+    expect(objs.find(o => o.id === "sound.toneMode")?.declaredStates).toBe(true);
+  });
+
+  test("tuner.frequency carries the envelope of the declared band ranges, without a step", () => {
+    const objs = mapYxcToObjects({
+      zones: [{ id: "main", funcs: ["power"], inputs: [] }],
+      media: ["tuner"],
+      tuner: {
+        bands: ["fm", "am"],
+        presetType: "common",
+        ranges: { fm: { min: 87500, max: 108000, step: 50 }, am: { min: 531, max: 1611, step: 9 } },
+      },
+    });
+    const freq = objs.find(o => o.id === "tuner.frequency")?.common;
+    expect(freq?.min).toBe(531);
+    expect(freq?.max).toBe(108000);
+    // FM steps 50 kHz (200 in the US), AM 9 or 10 — one datapoint for every band can carry the
+    // envelope, not a step.
+    expect(freq?.step).toBeUndefined();
+  });
+
+  test("a tuner without declared ranges keeps an unbounded frequency", () => {
+    const objs = mapYxcToObjects({
+      zones: [{ id: "main", funcs: ["power"], inputs: [] }],
+      media: ["tuner"],
+      tuner: { bands: ["fm"], presetType: "common" },
+    });
+    const freq = objs.find(o => o.id === "tuner.frequency")?.common;
+    expect(freq?.min).toBeUndefined();
+    expect(freq?.max).toBeUndefined();
+  });
+
+  test("a zone declaring surround_ai gets the read-only Surround:AI indicator under the YNCA id", () => {
+    const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power", "surround_ai"], inputs: [] }], media: [] });
+    const ai = objs.find(o => o.id === "sound.surroundAI");
+    expect(ai?.common.type).toBe("boolean");
+    expect(ai?.common.write).toBe(false);
+    expect(
+      mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: [] }).map(o => o.id),
+    ).not.toContain("sound.surroundAI");
   });
 });

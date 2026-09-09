@@ -353,15 +353,8 @@
             "tx_connectivity_type_max": 3
           },
           "web_control_url": "/AdvancedSettings.html?mc=true",
-          "party_volume_list": [
-            "up",
-            "down"
-          ],
-          "hdmi_standby_through_list": [
-            "off",
-            "on",
-            "auto"
-          ]
+          "party_volume_list": ["up", "down"],
+          "hdmi_standby_through_list": ["off", "on", "auto"]
         },
         "zone": [
           {
@@ -452,19 +445,9 @@
               "dts_neo6_cinema",
               "dts_neo6_music"
             ],
-            "tone_control_mode_list": [
-              "manual"
-            ],
-            "link_control_list": [
-              "speed",
-              "standard",
-              "stability"
-            ],
-            "link_audio_delay_list": [
-              "audio_sync",
-              "balanced",
-              "lip_sync"
-            ],
+            "tone_control_mode_list": ["manual"],
+            "link_control_list": ["speed", "standard", "stability"],
+            "link_audio_delay_list": ["audio_sync", "balanced", "lip_sync"],
             "range_step": [
               {
                 "id": "volume",
@@ -516,14 +499,7 @@
               }
             ],
             "scene_num": 8,
-            "cursor_list": [
-              "up",
-              "down",
-              "left",
-              "right",
-              "select",
-              "return"
-            ],
+            "cursor_list": ["up", "down", "left", "right", "select", "return"],
             "menu_list": [
               "on_screen",
               "top_menu",
@@ -538,10 +514,7 @@
               "yellow",
               "blue"
             ],
-            "actual_volume_mode_list": [
-              "db",
-              "numeric"
-            ]
+            "actual_volume_mode_list": ["db", "numeric"]
           },
           {
             "id": "zone2",
@@ -583,16 +556,8 @@
               "phono",
               "main_sync"
             ],
-            "tone_control_mode_list": [
-              "manual",
-              "auto",
-              "bypass"
-            ],
-            "link_control_list": [
-              "speed",
-              "standard",
-              "stability"
-            ],
+            "tone_control_mode_list": ["manual", "auto", "bypass"],
+            "link_control_list": ["speed", "standard", "stability"],
             "range_step": [
               {
                 "id": "volume",
@@ -626,18 +591,11 @@
               }
             ],
             "scene_num": 8,
-            "actual_volume_mode_list": [
-              "db",
-              "numeric"
-            ]
+            "actual_volume_mode_list": ["db", "numeric"]
           }
         ],
         "tuner": {
-          "func_list": [
-            "fm",
-            "rds",
-            "dab"
-          ],
+          "func_list": ["fm", "rds", "dab"],
           "range_step": [
             {
               "id": "fm",
@@ -652,13 +610,7 @@
           }
         },
         "netusb": {
-          "func_list": [
-            "recent_info",
-            "play_queue",
-            "mc_playlist",
-            "streaming_service_use",
-            "previous_force"
-          ],
+          "func_list": ["recent_info", "play_queue", "mc_playlist", "streaming_service_use", "previous_force"],
           "preset": {
             "num": 40
           },
@@ -682,19 +634,12 @@
         },
         "distribution": {
           "version": 2.0,
-          "compatible_client": [
-            2
-          ],
+          "compatible_client": [2],
           "client_max": 19,
-          "server_zone_list": [
-            "main",
-            "zone2"
-          ],
+          "server_zone_list": ["main", "zone2"],
           "mc_surround": {
             "version": 1.0,
-            "func_list": [
-              "mcss_error_info"
-            ],
+            "func_list": ["mcss_error_info"],
             "master_role": {
               "surround_pair": true,
               "stereo_pair": false,
@@ -1243,10 +1188,7 @@
             "text": ""
           }
         ],
-        "func_list": [
-          "clear",
-          "move"
-        ]
+        "func_list": ["clear", "move"]
       },
       "netusb/getRecentInfo": {
         "response_code": 0,
@@ -1543,13 +1485,7 @@
       },
       "netusb/getMcPlaylistName": {
         "response_code": 0,
-        "name_list": [
-          "Playlist 1",
-          "Playlist 2",
-          "Playlist 3",
-          "Playlist 4",
-          "Playlist 5"
-        ]
+        "name_list": ["Playlist 1", "Playlist 2", "Playlist 3", "Playlist 4", "Playlist 5"]
       },
       "netusb/getMcPlaylist": {
         "response_code": 0,
@@ -1888,10 +1824,7 @@
             "text": ""
           }
         ],
-        "func_list": [
-          "clear",
-          "move"
-        ]
+        "func_list": ["clear", "move"]
       },
       "dist/getDistributionInfo": {
         "response_code": 0,
