@@ -39,7 +39,7 @@ const FIXTURE_DEVICES = loadFixtures().length;
  * state, so they are dropped from the inventory — otherwise two runs of the same fixtures
  * could differ over nothing that describes the object tree.
  */
-const RUN_STATE_NATIVE = ["probeCache", "yncaAvail", "purgeVersion"];
+const RUN_STATE_NATIVE = ["capabilityProfile", "probeCache", "yncaAvail", "purgeVersion"];
 
 let fixtures;
 
@@ -180,6 +180,31 @@ tests.integration(ADAPTER_DIR, {
         const objects = await dumpObjects(harness);
         assert.ok(Object.keys(objects).length > 0, "no objects created — fixtures did not reach the adapter");
         fs.writeFileSync(INVENTORY, `${JSON.stringify(objects, null, 2)}\n`);
+      });
+
+      it("keeps every device's capability profile small (one JSON string per device object)", async function () {
+        this.timeout(60000);
+        // The profile is the one persisted memory per device (2.7.0): parsed declarations only,
+        // never raw XML (desc.xml is 90–160 KB). Read from the RAW objects — dumpObjects strips it.
+        const list = await harness.objects.getObjectListAsync({ startkey: NS, endkey: `${NS}香` });
+        const sizes = [];
+        for (const row of list.rows) {
+          if (row.value?.type !== "device") {
+            continue;
+          }
+          const profile = row.value.native?.capabilityProfile;
+          assert.strictEqual(typeof profile, "string", `${row.id}: no capability profile after the connect`);
+          for (const legacy of ["probeCache", "yncaAvail", "purgeVersion"]) {
+            assert.ok(
+              row.value.native?.[legacy] === undefined || row.value.native?.[legacy] === null,
+              `${row.id}: legacy key native.${legacy} still present next to the profile`,
+            );
+          }
+          sizes.push(`${row.id}: ${profile.length} bytes`);
+          assert.ok(profile.length < 40000, `${row.id}: capability profile is ${profile.length} bytes (limit 40000)`);
+        }
+        assert.ok(sizes.length >= FIXTURE_DEVICES, `only ${sizes.length} device profiles found`);
+        console.log(`capability profile sizes:\n  ${sizes.join("\n  ")}`);
       });
 
       it("covers every device class the adapter distinguishes", async function () {

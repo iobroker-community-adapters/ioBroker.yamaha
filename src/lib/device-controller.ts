@@ -214,6 +214,13 @@ interface CachedCapabilities {
   firmware: string;
   /** The captured subunit→function map (values are last-known, used for SHAPE only). */
   subunits: Record<string, Record<string, string>>;
+  /**
+   * Whether the sweep that captured the shape reached its end: `readCapabilities` throws on a
+   * drop, so a stored shape is complete by construction — the flag documents it (2.7.0), and a
+   * future partial-sweep path must set it false, in which case the shape may add and never
+   * subtract. Absent on a shape written before 2.7.0 (read as complete: it was).
+   */
+  complete?: boolean;
 }
 
 /**
@@ -582,6 +589,7 @@ export class YncaDeviceController implements ConnectionHandle {
         model: capabilities.model,
         firmware: capabilities.subunits.SYS?.VERSION ?? firmware,
         subunits: capabilities.subunits,
+        complete: true,
       } satisfies CachedCapabilities);
     } else {
       // No model, no identity — and without an identity nothing can ever invalidate what was
@@ -680,6 +688,7 @@ export class YncaDeviceController implements ConnectionHandle {
         model: fresh.model,
         firmware: fresh.subunits.SYS?.VERSION ?? "",
         subunits,
+        complete: true,
       } satisfies CachedCapabilities);
       // The write map follows the union too — a standby refresh must not shrink the
       // proven write surface until the next restart either.

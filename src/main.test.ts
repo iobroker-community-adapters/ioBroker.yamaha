@@ -1517,6 +1517,30 @@ describe("Yamaha never-filled purge (once per adapter version, after connect)", 
     const call = ctx.i.setTimeout.mock.calls.filter(c => c[1] === 5000).at(-1);
     (call?.[0] as (() => void) | undefined)?.();
   };
+  /**
+   * Let every armed native coalescing window (250 ms) fire — the profile is written then, not at once.
+   *
+   * @param ctx the test context
+   */
+  const flushNative = (ctx: Ctx): void => {
+    for (const call of ctx.i.setTimeout.mock.calls.filter(c => c[1] === 250)) {
+      (call[0] as () => void)();
+    }
+  };
+  /**
+   * The purge marker as the device object carries it: in the capability profile (2.7.0), else the legacy key.
+   *
+   * @param ctx the test context
+   * @param deviceId the device object id
+   * @returns the marker, or undefined
+   */
+  const purgeVersionOf = (ctx: Ctx, deviceId: string): string | undefined => {
+    const native = (ctx.i.objects.get(deviceId)?.native ?? {}) as { capabilityProfile?: string; purgeVersion?: string };
+    if (typeof native.capabilityProfile === "string") {
+      return (JSON.parse(native.capabilityProfile) as { purgeVersion?: string }).purgeVersion;
+    }
+    return native.purgeVersion;
+  };
 
   it("removes read states that never carried a value and stamps the device with the version", async () => {
     const ctx = setup();
@@ -1541,7 +1565,9 @@ describe("Yamaha never-filled purge (once per adapter version, after connect)", 
     expect(ctx.i.objects.has("Living_room.player.play")).toBe(true);
     // A recording setting is user business — never a factor in whether the adapter keeps a datapoint.
     expect(ctx.i.objects.has("Living_room.multiroom.zone2.soundProgram")).toBe(false);
-    expect((ctx.i.objects.get("Living_room")?.native as { purgeVersion?: string }).purgeVersion).toBe("0.0.0-test");
+    flushNative(ctx);
+    await flush();
+    expect(purgeVersionOf(ctx, "Living_room")).toBe("0.0.0-test");
     expect(ctx.i.log.debug).toHaveBeenCalledWith(expect.stringContaining("never-filled"));
   });
 
@@ -1633,10 +1659,13 @@ describe("Yamaha never-filled purge (once per adapter version, after connect)", 
     settle(ctx);
     await flush();
     expect(ctx.i.objects.has("Living_room.hdmi.out2")).toBe(false);
-    expect((ctx.i.objects.get("Living_room")?.native as { purgeVersion?: string }).purgeVersion).toBe("0.0.0-test");
-    // The offline device keeps its tree AND its old stamp — its sweep runs when it connects.
+    flushNative(ctx);
+    await flush();
+    expect(purgeVersionOf(ctx, "Living_room")).toBe("0.0.0-test");
+    // The offline device keeps its tree AND its old stamp — its sweep runs when it connects. The
+    // stamp moved into the capability profile at load (legacy key converted), the value did not.
     expect(ctx.i.objects.has("Attic.sound.direct")).toBe(true);
-    expect((ctx.i.objects.get("Attic")?.native as { purgeVersion?: string }).purgeVersion).toBe("1.7.0");
+    expect(purgeVersionOf(ctx, "Attic")).toBe("1.7.0");
   });
 });
 
@@ -1878,11 +1907,12 @@ describe("per-device memory and the discovery schema (2.6.0)", () => {
     await flush();
     const writes = extendObject.mock.calls.filter(call => call[0] === "Living_room");
     expect(writes).toHaveLength(1);
-    const stored = JSON.parse((writes[0][1] as { native: { probeCache: string } }).native.probeCache) as Record<
-      string,
-      unknown
-    >;
-    expect(stored).toMatchObject({ a: 1, b: 2, c: 3, __schema: DISCOVERY_SCHEMA });
+    const stored = JSON.parse((writes[0][1] as { native: { capabilityProfile: string } }).native.capabilityProfile) as {
+      schema: number;
+      memory: Record<string, unknown>;
+    };
+    expect(stored.schema).toBe(DISCOVERY_SCHEMA);
+    expect(stored.memory).toMatchObject({ a: 1, b: 2, c: 3 });
   });
 
   it("flushes a pending native write on unload, before the callback", async () => {

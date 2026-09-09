@@ -1,7 +1,7 @@
 import { DISCOVERY_SCHEMA } from "./discovery-schema";
 
 /** The bookkeeping key of a persisted snapshot — never a remembered answer. */
-const SCHEMA_KEY = "__schema";
+export const SCHEMA_KEY = "__schema";
 
 /**
  * What a device told us about ITSELF and will keep telling us: which of its sources can be

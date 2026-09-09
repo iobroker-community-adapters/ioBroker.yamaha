@@ -30,9 +30,9 @@ import type { DeviceRecord } from "./lib/types";
 import { DeviceSupervisor, type ConnectionHandle } from "./lib/lifecycle/device-supervisor";
 import { ReconnectStrategy } from "./lib/lifecycle/reconnect-strategy";
 import { ReachabilityDedup } from "./lib/lifecycle/reachability-dedup";
-import { createSubunitCache, isAvailSnapshot, type YncaSubunitCache } from "./lib/ynca/subunit-cache";
-import { ProbeMemory, memorySchemaOf } from "./lib/lifecycle/probe-memory";
-import { DISCOVERY_SCHEMA } from "./lib/lifecycle/discovery-schema";
+import type { YncaSubunitCache } from "./lib/ynca/subunit-cache";
+import type { ProbeMemory } from "./lib/lifecycle/probe-memory";
+import { DeviceProfileStore } from "./lib/lifecycle/capability-profile";
 
 /** Supervisor reconnect backoff bounds (exponential: 1s, 2s … capped at 60s). */
 const RECONNECT_BASE_MS = 1000;
@@ -146,6 +146,8 @@ export class Yamaha extends utils.Adapter {
    * repeats stay at debug until a write goes through again (nut2 `failedUps` pattern).
    */
   private stateWritesFailing = false;
+  /** Per device, its capability profile (probe memory, YNCA snapshot, purge marker) — see loadDeviceProfile. */
+  private readonly profiles = new Map<string, DeviceProfileStore>();
   /** Per device, the native patch inside its coalescing window (see persistDeviceNative). */
   private readonly pendingNative = new Map<string, PendingNative>();
 
@@ -252,10 +254,12 @@ export class Yamaha extends utils.Adapter {
     // the device never answers again.
     this.setTransports(device.id, []);
     const reachability = new ReachabilityDedup();
-    const subunitCache = await this.loadYncaSubunitCache(device.id);
     // Held here, not in the controllers: those are rebuilt on every connection attempt;
-    // persisted at the device object, so a restart starts from the remembered answers.
-    const probeMemory = await this.loadProbeMemory(device.id);
+    // persisted at the device object (one capability profile), so a restart starts from the
+    // remembered answers.
+    const profile = await this.loadDeviceProfile(device.id);
+    const subunitCache = profile.subunitCache;
+    const probeMemory = profile.probeMemory;
     const supervisor = new DeviceSupervisor({
       attempt: () =>
         this.attemptDevice(device, pushReceiver, this.knownDeviceIps, reachability, subunitCache, probeMemory),
@@ -615,8 +619,8 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
-   * Once per adapter version and device (marker `native.purgeVersion` on the DEVICE
-   * object): remove read-capable states under a CONNECTED device that never carried a
+   * Once per adapter version and device (marker `purgeVersion` in the device's capability
+   * profile): remove read-capable states under a CONNECTED device that never carried a
    * value and were not (re)created by this run's transports — over-declarations of an
    * earlier adapter version that today's claim-with-proof creation no longer makes.
    * Deleting them is lossless (no value, no history). Runs after the tree settled, so
@@ -626,8 +630,7 @@ export class Yamaha extends utils.Adapter {
   private async purgeNeverFilled(): Promise<void> {
     const candidates: string[] = [];
     for (const deviceId of this.readyDevices) {
-      const device = await this.getObjectAsync(deviceId);
-      if ((device?.native as Record<string, unknown> | undefined)?.purgeVersion !== this.version) {
+      if (this.profiles.get(deviceId)?.purgeVersion !== this.version) {
         candidates.push(deviceId);
       }
     }
@@ -647,7 +650,7 @@ export class Yamaha extends utils.Adapter {
       }
     }
     for (const deviceId of candidates) {
-      await this.extendObject(deviceId, { native: { purgeVersion: this.version } });
+      this.profiles.get(deviceId)?.markPurged(this.version ?? "");
     }
     if (purged.length > 0) {
       this.log.debug(`removed ${purged.length} never-filled object(s) from an earlier version`);
@@ -1295,60 +1298,30 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
-   * Load a device's persisted YNCA subunit-cache (the AVAIL probe result) from its
-   * device object's native part, wrapped so updates persist back there. The device
-   * object is the right home: writing an instance object's native restarts the
-   * adapter, a device object's does not.
+   * Load a device's capability profile — the one persisted memory of what the device told us
+   * (probe memory, YNCA subunit snapshot, purge marker) — from its device object's native
+   * part, wrapped so every change persists back there through the coalescing writer. The
+   * device object is the right home: writing an instance object's native restarts the
+   * adapter, a device object's does not. Legacy keys of 2.5.2/2.6.0 are converted at load.
    *
    * @param deviceId the id-safe device id
-   * @returns the per-device cache
+   * @returns the per-device profile store
    */
-  private async loadYncaSubunitCache(deviceId: string): Promise<YncaSubunitCache> {
-    let stored: unknown;
+  private async loadDeviceProfile(deviceId: string): Promise<DeviceProfileStore> {
+    let native: Record<string, unknown> | undefined;
     try {
-      stored = (await this.getObjectAsync(deviceId))?.native?.yncaAvail;
+      native = (await this.getObjectAsync(deviceId))?.native;
     } catch {
-      stored = undefined;
+      native = undefined;
     }
-    return createSubunitCache(isAvailSnapshot(stored) ? stored : undefined, snapshot => {
-      this.persistDeviceNative(deviceId, { yncaAvail: snapshot ?? null });
+    const store = new DeviceProfileStore(deviceId, native, {
+      adapterVersion: this.version ?? "",
+      now: () => new Date().toISOString(),
+      persist: patch => this.persistDeviceNative(deviceId, patch),
+      log: message => this.log.debug(message),
     });
-  }
-
-  /**
-   * Load a device's persisted probe memory (constant device answers: capabilities,
-   * declared scenes/inputs, names) from its device object's native part, wrapped so
-   * every change persists back there — the same home as the subunit cache. This is
-   * what makes a restart fast: the object tree is rebuilt from the remembered
-   * answers while only the live proofs and the value refresh still go to the device.
-   *
-   * @param deviceId the id-safe device id
-   * @returns the per-device memory
-   */
-  private async loadProbeMemory(deviceId: string): Promise<ProbeMemory> {
-    // Stored as a JSON STRING deliberately: extendObject MERGES nested objects, so a
-    // dropped key would rise from the dead on the next persist — a string replaces.
-    let initial: Record<string, unknown> | undefined;
-    try {
-      const stored = (await this.getObjectAsync(deviceId))?.native?.probeCache;
-      if (typeof stored === "string") {
-        const parsed: unknown = JSON.parse(stored);
-        if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-          initial = parsed as Record<string, unknown>;
-        }
-      }
-    } catch {
-      initial = undefined;
-    }
-    const stored = memorySchemaOf(initial);
-    if (initial !== undefined && stored !== DISCOVERY_SCHEMA) {
-      this.log.debug(
-        `${deviceId}: discovery logic changed (schema ${stored} → ${DISCOVERY_SCHEMA}) — re-learning the device`,
-      );
-    }
-    return new ProbeMemory(initial, entries => {
-      this.persistDeviceNative(deviceId, { probeCache: JSON.stringify(entries) });
-    });
+    this.profiles.set(deviceId, store);
+    return store;
   }
 
   /**
