@@ -177,8 +177,8 @@ describe("YncaBrowseDriver remote pad (#613)", () => {
 
   it("offers only the menu keys this protocol has, and sends nothing for the others", () => {
     const { driver, sent } = setup(["NETRADIO"]);
-    expect(driver.menuValues).toEqual(["on_screen", "top_menu", "menu", "option"]);
-    driver.menu("display");
+    expect(driver.menuValues).toEqual(["on_screen", "top_menu", "menu", "option", "display"]);
+    driver.menu("home");
     driver.menu("home");
     driver.cursor("nonsense");
     expect(sent).toEqual([]);
@@ -189,5 +189,44 @@ describe("YncaBrowseDriver remote pad (#613)", () => {
     driver.close();
     driver.cursor("up");
     expect(sent).toEqual([]);
+  });
+});
+
+describe("the 2015 generation's zone-wide pad (@MAIN:CURSOR / @MAIN:MENU, RX-A850 list)", () => {
+  it("in the zone dialect the pad sends CURSOR/MENU with the 2015 words; the list dialect stays the default", () => {
+    const { driver, sent } = setup(["NETRADIO"]);
+    driver.cursor("return");
+    expect(sent).toEqual([{ subunit: "MAIN", func: "LISTCURSOR", value: "Back" }]);
+    sent.length = 0;
+    driver.usePadDialect("zone");
+    driver.cursor("return");
+    driver.cursor("home");
+    driver.cursor("select");
+    driver.menu("display");
+    driver.menu("top_menu");
+    expect(sent).toEqual([
+      { subunit: "MAIN", func: "CURSOR", value: "Return" },
+      { subunit: "MAIN", func: "CURSOR", value: "Return to Home" },
+      { subunit: "MAIN", func: "CURSOR", value: "Sel" },
+      { subunit: "MAIN", func: "MENU", value: "Display" },
+      { subunit: "MAIN", func: "MENU", value: "Top Menu" },
+    ]);
+  });
+
+  it("a refused list-dialect key is sent again in the zone dialect, and the dialect sticks", () => {
+    const { driver, sent } = setup(["NETRADIO"]);
+    expect(driver.retryInZoneDialect("LISTCURSOR", "Back to Home")).toBe(true);
+    expect(driver.padDialect).toBe("zone");
+    expect(sent).toEqual([{ subunit: "MAIN", func: "CURSOR", value: "Return to Home" }]);
+    sent.length = 0;
+    driver.menu("option");
+    expect(sent).toEqual([{ subunit: "MAIN", func: "MENU", value: "Option" }]);
+    // A refusal in the zone dialect is not retried — nothing left to switch to.
+    expect(driver.retryInZoneDialect("LISTCURSOR", "Up")).toBe(false);
+  });
+
+  it("the menu keys are the five of both generations — Display included (RX-A3020 2012 list, RX-A850 2015 list)", () => {
+    const { driver } = setup(["NETRADIO"]);
+    expect(driver.menuValues).toEqual(["on_screen", "top_menu", "menu", "option", "display"]);
   });
 });

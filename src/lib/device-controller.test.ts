@@ -1325,3 +1325,62 @@ describe("HD Radio in the tuner router (coverage audit 2026-09-09)", () => {
     expect(s.client.sent).toEqual([{ subunit: "HDRADIO", func: "PRESET", value: "2" }]);
   });
 });
+
+describe("the YNCA pad dialect of the 2015 generation (RX-A850: @MAIN:CURSOR/MENU instead of LISTCURSOR/LISTMENU)", () => {
+  async function padSetup(memory?: ProbeMemory): Promise<{
+    client: FakeClient;
+    refuse: (command: string, verdict: "restricted" | "undefined") => void;
+    controller: YncaDeviceController;
+  }> {
+    const client = new FakeClient();
+    client.availableSubunits = ["MAIN", "NETRADIO"];
+    client.listSubunits = ["NETRADIO"];
+    client.capabilities = {
+      model: "RX-A850",
+      subunits: {
+        SYS: { MODELNAME: "RX-A850", VERSION: "1" },
+        MAIN: { PWR: "On", INP: "NET RADIO" },
+        NETRADIO: { PLAYBACKINFO: "Play" },
+      },
+    };
+    const { deps } = makeDeps(client);
+    deps.gate = testGate();
+    if (memory) {
+      deps.probeMemory = memory;
+    }
+    let refuse: ((command: string, verdict: "restricted" | "undefined") => void) | undefined;
+    client.onRefusal = (handler): void => {
+      refuse = handler;
+    };
+    const controller = new YncaDeviceController("living", deps);
+    await controller.start();
+    client.sent.length = 0;
+    return { client, refuse: refuse!, controller };
+  }
+
+  test("an @UNDEFINED for a list-dialect key switches the pad to CURSOR/MENU, resends the key and remembers the dialect", async () => {
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
+    const s = await padSetup(memory);
+    s.controller.handleStateChange("living.remote.cursor", false, "up");
+    expect(s.client.sent).toEqual([{ subunit: "MAIN", func: "LISTCURSOR", value: "Up" }]);
+    s.refuse("@MAIN:LISTCURSOR=Up", "undefined");
+    expect(s.client.sent).toEqual([
+      { subunit: "MAIN", func: "LISTCURSOR", value: "Up" },
+      { subunit: "MAIN", func: "CURSOR", value: "Up" },
+    ]);
+    expect(memory.remembered("yncaPadDialect")).toBe("zone");
+    s.client.sent.length = 0;
+    s.controller.handleStateChange("living.remote.menu", false, "on_screen");
+    expect(s.client.sent).toEqual([{ subunit: "MAIN", func: "MENU", value: "On Screen" }]);
+  });
+
+  test("an @RESTRICTED (not now) changes nothing, and a remembered zone dialect is used from the first press", async () => {
+    const first = await padSetup(new ProbeMemory({ __schema: DISCOVERY_SCHEMA }));
+    first.controller.handleStateChange("living.remote.cursor", false, "down");
+    first.refuse("@MAIN:LISTCURSOR=Down", "restricted");
+    expect(first.client.sent).toEqual([{ subunit: "MAIN", func: "LISTCURSOR", value: "Down" }]);
+    const second = await padSetup(new ProbeMemory({ __schema: DISCOVERY_SCHEMA, yncaPadDialect: "zone" }));
+    second.controller.handleStateChange("living.remote.cursor", false, "return");
+    expect(second.client.sent).toEqual([{ subunit: "MAIN", func: "CURSOR", value: "Return" }]);
+  });
+});

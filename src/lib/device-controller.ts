@@ -135,6 +135,9 @@ const STATIC_KEY = "yncaStaticValues";
 /** Memory key for the persisted capability shape (the fast-restart layer). */
 const CAPS_KEY = "yncaCapabilities";
 
+/** Memory key for the pad dialect a device revealed (`zone` = the 2015 generation's CURSOR/MENU). */
+const PAD_DIALECT_KEY = "yncaPadDialect";
+
 /**
  * Memory key for the enum values this device ever reported: subunit → function → values, in
  * the order first seen. YNCA declares no value lists, so a device's own spelling is learned
@@ -412,9 +415,18 @@ export class YncaDeviceController implements ConnectionHandle {
     // A user command the device rejects must leave a trace: @RESTRICTED (not allowed /
     // not possible right now) and @UNDEFINED (unknown on this model) were silently
     // dropped before — the class of invisible failures behind #615.
-    this.deps.client.onRefusal?.((command, verdict) =>
-      this.deps.log.warn(`${this.deviceId}: device refused "${command}" (@${verdict.toUpperCase()})`),
-    );
+    this.deps.client.onRefusal?.((command, verdict) => {
+      // The 2015 generation (RX-A850 list) has no LISTCURSOR/LISTMENU on MAIN but CURSOR/MENU:
+      // an @UNDEFINED (unknown function on this model — @RESTRICTED means "not now") for a
+      // list-dialect key switches the pad over, resends the key and remembers the dialect.
+      const listKey = /^@MAIN:(LISTCURSOR|LISTMENU)=(.+)$/.exec(command);
+      if (verdict === "undefined" && listKey && this.browseDriver?.retryInZoneDialect(listKey[1], listKey[2])) {
+        this.deps.probeMemory?.set(PAD_DIALECT_KEY, "zone");
+        this.deps.log.info(`${this.deviceId}: the pad speaks the 2015 dialect (@MAIN:CURSOR/MENU) — switched`);
+        return;
+      }
+      this.deps.log.warn(`${this.deviceId}: device refused "${command}" (@${verdict.toUpperCase()})`);
+    });
     // The scene titles ride the sweep as SCENExNAME answers; they become the recall
     // dropdown's labels and the one scene.list state (v2.0.0 — no per-name datapoints).
     this.sceneTitles = sceneTitlesOf(capabilities.subunits);
@@ -1293,7 +1305,8 @@ export class YncaDeviceController implements ConnectionHandle {
       this.deps.log.debug(`${this.deviceId}: no YNCA source answers LISTINFO — leaving menus to another transport`);
       return;
     }
-    const driver = new YncaBrowseDriver(this.deps.client, present, delay);
+    const remembered = this.deps.probeMemory?.remembered(PAD_DIALECT_KEY);
+    const driver = new YncaBrowseDriver(this.deps.client, present, delay, remembered === "zone" ? "zone" : "list");
     this.browseEngine = await createBrowseSurface(
       driver,
       this.deviceId,

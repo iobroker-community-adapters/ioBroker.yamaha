@@ -45,10 +45,10 @@ export interface YncaBrowseClient {
 }
 
 /**
- * The main-zone pad in wire words. `@MAIN:LISTCURSOR` declares all seven keys and
- * `@MAIN:LISTMENU` four of the six menu keys — the two the receiver has no wire word for
- * (display, home) stay out of the dropdown instead of being mapped onto something else.
- * Source: the official command list, `Ressourcen/yamaha/ynca-command-list-rx-v671.txt`.
+ * The main-zone pad in wire words, LIST dialect (2010–2012 generation): `@MAIN:LISTCURSOR`
+ * declares all seven keys, `@MAIN:LISTMENU` five of the six menu keys — `home` has no menu
+ * wire word and stays out of the dropdown instead of being mapped onto something else.
+ * Sources: the official command lists (RX-V671 2011; `Display` from the RX-A3020 2012 list).
  */
 const YNCA_CURSOR_WIRE: WireTable<CursorValue> = {
   up: "Up",
@@ -65,7 +65,35 @@ const YNCA_MENU_WIRE: WireTable<MenuValue> = {
   top_menu: "Top Menu",
   menu: "Menu",
   option: "Option",
+  display: "Display",
 };
+
+/**
+ * The same pad in the ZONE dialect of the 2015 generation (RX-A850 official list): `@MAIN:CURSOR`
+ * with `Return` / `Return to Home` where the list dialect says `Back`, and `@MAIN:MENU`. The
+ * receiver answers `@UNDEFINED` to a list-dialect key — that verdict (unknown function on this
+ * model, unlike `@RESTRICTED` = not now) is what switches a device over, once, and for good.
+ */
+const YNCA_ZONE_CURSOR_WIRE: WireTable<CursorValue> = {
+  up: "Up",
+  down: "Down",
+  left: "Left",
+  right: "Right",
+  select: "Sel",
+  return: "Return",
+  home: "Return to Home",
+};
+
+const YNCA_ZONE_MENU_WIRE: WireTable<MenuValue> = {
+  on_screen: "On Screen",
+  top_menu: "Top Menu",
+  menu: "Menu",
+  option: "Option",
+  display: "Display",
+};
+
+/** Which wire functions the main-zone pad uses (see {@link YNCA_ZONE_CURSOR_WIRE}). */
+export type YncaPadDialect = "list" | "zone";
 
 /**
  * The YNCA list driver: navigation writes go out as LISTSEL/LISTPAGE/LISTCURSOR
@@ -97,11 +125,57 @@ export class YncaBrowseDriver implements BrowseDriver {
    * @param present the browsable subunits this device reported in the AVAIL probe
    * @param delay adapter-managed delay
    */
+  /**
+   * @param client the client slice (send + get)
+   * @param present the source subunits that proved their menus
+   * @param delay adapter-managed delay
+   * @param padDialect the pad dialect this device is known to speak (remembered per device)
+   */
   public constructor(
     private readonly client: YncaBrowseClient,
     private readonly present: ReadonlySet<string>,
     private readonly delay: (ms: number) => Promise<void>,
+    public padDialect: YncaPadDialect = "list",
   ) {}
+
+  /**
+   * Switch the pad's dialect (see {@link YncaPadDialect}).
+   *
+   * @param dialect the dialect to use from now on
+   */
+  public usePadDialect(dialect: YncaPadDialect): void {
+    this.padDialect = dialect;
+  }
+
+  /**
+   * A list-dialect key the device answered `@UNDEFINED` to: switch to the zone dialect and send
+   * the same key again in it, so the press that revealed the dialect is not lost.
+   *
+   * @param func the refused function (LISTCURSOR or LISTMENU)
+   * @param wire the refused wire value
+   * @returns true when the key was resent (list dialect was active and the word is known)
+   */
+  public retryInZoneDialect(func: string, wire: string): boolean {
+    if (this.padDialect !== "list") {
+      return false;
+    }
+    const word =
+      func === "LISTCURSOR"
+        ? Object.keys(YNCA_CURSOR_WIRE).find(key => wireFor(YNCA_CURSOR_WIRE, key) === wire)
+        : func === "LISTMENU"
+          ? Object.keys(YNCA_MENU_WIRE).find(key => wireFor(YNCA_MENU_WIRE, key) === wire)
+          : undefined;
+    if (word === undefined) {
+      return false;
+    }
+    this.padDialect = "zone";
+    if (func === "LISTCURSOR") {
+      this.cursor(word);
+    } else {
+      this.menu(word);
+    }
+    return true;
+  }
 
   /**
    * Attach the engine that renders the windows (set after both are constructed).
@@ -196,15 +270,23 @@ export class YncaBrowseDriver implements BrowseDriver {
    * @param value one of {@link cursorValues}
    */
   public cursor(value: string): void {
+    if (this.padDialect === "zone") {
+      this.send("CURSOR", wireFor(YNCA_ZONE_CURSOR_WIRE, value));
+      return;
+    }
     this.send("LISTCURSOR", wireFor(YNCA_CURSOR_WIRE, value));
   }
 
   /**
-   * Press a menu key (`@MAIN:LISTMENU`).
+   * Press a menu key (`@MAIN:LISTMENU`, or `@MAIN:MENU` in the zone dialect).
    *
    * @param value one of {@link menuValues}
    */
   public menu(value: string): void {
+    if (this.padDialect === "zone") {
+      this.send("MENU", wireFor(YNCA_ZONE_MENU_WIRE, value));
+      return;
+    }
     this.send("LISTMENU", wireFor(YNCA_MENU_WIRE, value));
   }
 
