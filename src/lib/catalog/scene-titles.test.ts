@@ -1,5 +1,6 @@
 import { knownScenes, resolveSceneNumber } from "./scene-titles";
 import { ProbeMemory } from "../lifecycle/probe-memory";
+import { DISCOVERY_SCHEMA } from "../lifecycle/discovery-schema";
 
 const declaration =
   '<YAMAHA_AV rsp="GET" RC="0"><Main_Zone><Scene><Scene_Sel_Item>' +
@@ -9,7 +10,7 @@ const declaration =
 
 describe("scene titles from the shared device memory", () => {
   test("reads the XML declaration per zone", () => {
-    const memory = new ProbeMemory({ "xmlScenes:main": declaration });
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA, "xmlScenes:main": declaration });
     expect(knownScenes(memory, "main")).toEqual([
       { num: 1, title: "Movie Viewing" },
       { num: 2, title: "Radio Listening" },
@@ -18,7 +19,10 @@ describe("scene titles from the shared device memory", () => {
   });
 
   test("falls back to the YNCA scene names for the main zone", () => {
-    const memory = new ProbeMemory({ yncaStaticValues: { MAIN: { SCENE1NAME: "BD/DVD", SCENE4NAME: "RADIO" } } });
+    const memory = new ProbeMemory({
+      __schema: DISCOVERY_SCHEMA,
+      yncaStaticValues: { MAIN: { SCENE1NAME: "BD/DVD", SCENE4NAME: "RADIO" } },
+    });
     expect(knownScenes(memory, "main")).toEqual([
       { num: 1, title: "BD/DVD" },
       { num: 4, title: "RADIO" },
@@ -26,7 +30,7 @@ describe("scene titles from the shared device memory", () => {
   });
 
   test("resolveSceneNumber takes numbers, numeric strings and titles (case-insensitive)", () => {
-    const memory = new ProbeMemory({ "xmlScenes:main": declaration });
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA, "xmlScenes:main": declaration });
     expect(resolveSceneNumber(2, memory, "main")).toBe(2);
     expect(resolveSceneNumber("3", memory, "main")).toBe(3);
     expect(resolveSceneNumber("movie viewing", memory, "main")).toBe(1);

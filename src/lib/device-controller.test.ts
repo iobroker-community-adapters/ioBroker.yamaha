@@ -5,6 +5,7 @@ import type { ObjectDef } from "./catalog/types";
 import { createSubunitCache } from "./ynca/subunit-cache";
 import { CommandGate } from "./lifecycle/command-gate";
 import { ProbeMemory } from "./lifecycle/probe-memory";
+import { DISCOVERY_SCHEMA } from "./lifecycle/discovery-schema";
 
 /** A real command gate for the controller under test (pacing has its own suite). */
 const testGate = (): CommandGate =>
@@ -254,7 +255,10 @@ describe("YncaDeviceController two-pass sweep", () => {
       subunits: { SYS: { MODELNAME: "RX-V6A", VERSION: "1.80" }, MAIN: { PWR: "On" } },
     };
     const persisted: unknown[] = [];
-    const cache = createSubunitCache({ subunits: ["MAIN"], model: "RX-V6A", firmware: "1.80" }, s => persisted.push(s));
+    const cache = createSubunitCache(
+      { schema: DISCOVERY_SCHEMA, subunits: ["MAIN"], model: "RX-V6A", firmware: "1.80" },
+      s => persisted.push(s),
+    );
     const { deps } = makeDeps(client);
     await new YncaDeviceController("living", { ...deps, subunitCache: cache }).start();
     // Three requests: the cheap identity check (model + firmware, ~0.2 s), the BASIC bundle
@@ -280,14 +284,20 @@ describe("YncaDeviceController two-pass sweep", () => {
       subunits: { SYS: { MODELNAME: "RX-A4A", VERSION: "2.10" }, MAIN: { PWR: "On" } },
     };
     const persisted: unknown[] = [];
-    const cache = createSubunitCache({ subunits: ["MAIN"], model: "RX-V6A", firmware: "1.80" }, s => persisted.push(s));
+    const cache = createSubunitCache(
+      { schema: DISCOVERY_SCHEMA, subunits: ["MAIN"], model: "RX-V6A", firmware: "1.80" },
+      s => persisted.push(s),
+    );
     const { deps } = makeDeps(client);
     await new YncaDeviceController("living", { ...deps, subunitCache: cache }).start();
     // Identity (mismatch → cache cleared), probe, BASIC bundles, fresh targeted sweep.
     expect(client.requests).toHaveLength(4);
     expect(client.requests[1].every(get => get.func === "AVAIL")).toBe(true);
     // clear() persisted undefined, then set() persisted the fresh snapshot.
-    expect(persisted).toEqual([undefined, { subunits: ["MAIN", "ZONE2"], model: "RX-A4A", firmware: "2.10" }]);
+    expect(persisted).toEqual([
+      undefined,
+      { schema: DISCOVERY_SCHEMA, subunits: ["MAIN", "ZONE2"], model: "RX-A4A", firmware: "2.10" },
+    ]);
   });
 
   test("a disabled datapoint group is excluded from the sweep AND the objects", async () => {
@@ -455,6 +465,7 @@ describe("YncaDeviceController browse surface (#613)", () => {
     // unproven on the first restart after the user switched the receiver on — displacing
     // the XML driver that does probe. That is #613, brought back in through the cache.
     const memory = new ProbeMemory({
+      __schema: DISCOVERY_SCHEMA,
       yncaCapabilities: {
         model: "RX-V473",
         firmware: "1.0",
@@ -506,6 +517,7 @@ describe("YncaDeviceController fast restart (persisted capability layer)", () =>
     // into a running session: the fast path built them from the memory, and a rename
     // stayed invisible until the next start — a write by the NEW title was dropped.
     const memory = new ProbeMemory({
+      __schema: DISCOVERY_SCHEMA,
       yncaCapabilities: {
         model: "RX",
         firmware: "1.0",
@@ -535,6 +547,7 @@ describe("YncaDeviceController fast restart (persisted capability layer)", () =>
     // ran); the device is on FM now. Routing the frequency by the memory put AMFREQ on
     // the wire — a wrong command, not just a stale reading.
     const memory = new ProbeMemory({
+      __schema: DISCOVERY_SCHEMA,
       yncaCapabilities: {
         model: "RX",
         firmware: "1.0",
@@ -557,6 +570,7 @@ describe("YncaDeviceController fast restart (persisted capability layer)", () =>
     // Same class: the transport buttons are routed by what the zone is listening to. A
     // remembered input sent play/pause to the source the zone listened to LAST run.
     const memory = new ProbeMemory({
+      __schema: DISCOVERY_SCHEMA,
       yncaCapabilities: {
         model: "RX",
         firmware: "1.0",
@@ -989,7 +1003,7 @@ describe("YncaDeviceController capability persistence (standby must not shrink i
     };
     let stored: Record<string, unknown> = {};
     const memory = new ProbeMemory(
-      { yncaCapabilities: { model: "RX", firmware: "1.0", subunits: richSubunits } },
+      { __schema: DISCOVERY_SCHEMA, yncaCapabilities: { model: "RX", firmware: "1.0", subunits: richSubunits } },
       entries => {
         stored = entries;
       },
@@ -1095,9 +1109,13 @@ describe("YNCA dropdowns from proof — inputs narrowed by evidence, observed va
       subunits: { SYS: { MODELNAME: "RX-V473", VERSION: "2.0" }, MAIN: { PWR: "On", INP: "HDMI1" } },
     };
     const memory = new ProbeMemory({
+      __schema: DISCOVERY_SCHEMA,
       yncaCapabilities: { model: "RX-V473", firmware: "2.0", subunits: client.capabilities.subunits },
     });
-    const cache = createSubunitCache({ subunits: ["MAIN"], model: "RX-V473", firmware: "1.0" }, () => {});
+    const cache = createSubunitCache(
+      { schema: DISCOVERY_SCHEMA, subunits: ["MAIN"], model: "RX-V473", firmware: "1.0" },
+      () => {},
+    );
     const { objects, deps } = makeDeps(client);
     await new YncaDeviceController("living", { ...deps, probeMemory: memory, subunitCache: cache }).start();
     // The stale snapshot says "MAIN only" — trusting it would strip every source. It is ignored.

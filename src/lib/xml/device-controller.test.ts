@@ -5,6 +5,7 @@ import type { XmlClientLike } from "./device-controller";
 import { XmlHttpError, type BasicStatus, type XmlSystemConfig } from "./protocol";
 import { CommandGate } from "../lifecycle/command-gate";
 import { ProbeMemory } from "../lifecycle/probe-memory";
+import { DISCOVERY_SCHEMA } from "../lifecycle/discovery-schema";
 
 /** A real command gate for the controller under test (pacing has its own suite). */
 const testGate = (): CommandGate =>
@@ -196,6 +197,7 @@ describe("XmlDeviceController", () => {
 
     test("the identity key is model + system id + version: a firmware update drops the XML memory", async () => {
       const memory = new ProbeMemory({
+        __schema: DISCOVERY_SCHEMA,
         xmlIdentity: "RX-V6A|057CCF73|1.79/3.14",
         "xmlInputs:main": "<Input_Sel_Item/>",
       });
@@ -210,6 +212,7 @@ describe("XmlDeviceController", () => {
 
     test("the same identity keeps the XML memory — no re-read", async () => {
       const memory = new ProbeMemory({
+        __schema: DISCOVERY_SCHEMA,
         xmlIdentity: "RX-V6A|057CCF73|1.80/3.14",
         "xmlInputs:main": "<Input_Sel_Item/>",
       });
@@ -509,7 +512,10 @@ describe("desc.xml — the classic generation's own enumerations (2026-09-09)", 
   });
 
   test("a remembered description is not read again", async () => {
-    const memory = new ProbeMemory({ xmlDescriptor: { programs: ["Standard"], sleep: [], adaptiveDrc: [] } });
+    const memory = new ProbeMemory({
+      __schema: DISCOVERY_SCHEMA,
+      xmlDescriptor: { programs: ["Standard"], sleep: [], adaptiveDrc: [] },
+    });
     const s = setup({ Main_Zone: { power: true, soundProgram: "Standard" } });
     withMemory(s, memory);
     await s.controller.start();

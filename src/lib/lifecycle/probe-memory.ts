@@ -1,3 +1,8 @@
+import { DISCOVERY_SCHEMA } from "./discovery-schema";
+
+/** The bookkeeping key of a persisted snapshot — never a remembered answer. */
+const SCHEMA_KEY = "__schema";
+
 /**
  * What a device told us about ITSELF and will keep telling us: which of its sources can be
  * browsed, which capabilities it reports, what it is called. These answers are constant for
@@ -17,15 +22,23 @@ export class ProbeMemory {
   private readonly values = new Map<string, unknown>();
 
   /**
-   * @param initial the persisted entries to start from (an adapter restart), if any
+   * @param initial the persisted entries to start from (an adapter restart), if any — discarded
+   *   whole when they were learned under another discovery schema (see {@link DISCOVERY_SCHEMA})
    * @param persist called with a plain-object snapshot after every change, if persistence is wired
+   * @param schema the discovery schema this memory is kept under (the adapter's current one)
    */
   public constructor(
     initial?: Record<string, unknown>,
     private readonly persist?: (entries: Record<string, unknown>) => void,
+    private readonly schema: number = DISCOVERY_SCHEMA,
   ) {
+    if (memorySchemaOf(initial) !== schema) {
+      return;
+    }
     for (const [key, value] of Object.entries(initial ?? {})) {
-      this.values.set(key, value);
+      if (key !== SCHEMA_KEY) {
+        this.values.set(key, value);
+      }
     }
   }
 
@@ -108,6 +121,19 @@ export class ProbeMemory {
     if (!this.persist) {
       return;
     }
-    this.persist(Object.fromEntries(this.values));
+    // The schema travels with every snapshot, so the next load knows which logic learned it.
+    this.persist({ [SCHEMA_KEY]: this.schema, ...Object.fromEntries(this.values) });
   }
+}
+
+/**
+ * The discovery schema a persisted memory was learned under: its `__schema` field, or 0 for a
+ * memory written before the field existed (every installation before 2.6.0).
+ *
+ * @param initial the persisted entries
+ * @returns the schema number
+ */
+export function memorySchemaOf(initial: Record<string, unknown> | undefined): number {
+  const stored = initial?.[SCHEMA_KEY];
+  return typeof stored === "number" && Number.isFinite(stored) ? stored : 0;
 }

@@ -293,6 +293,7 @@ vi.mock("./lib/yxc/push-receiver", () => ({
 }));
 
 import { Yamaha } from "./main";
+import { DISCOVERY_SCHEMA } from "./lib/lifecycle/discovery-schema";
 import { iconForModel } from "./lib/device-type";
 import { MAX_HTTP_BODY_BYTES } from "./lib/util";
 import { writeDiscovered } from "./lib/discovered-store";
@@ -1136,7 +1137,7 @@ describe("Yamaha transport plumbing", () => {
 
   it("uses a well-formed capability snapshot so the probe is skipped on a reconnect", async () => {
     const ctx = setup();
-    const snapshot = { subunits: ["MAIN"], model: "RX-V685", firmware: "1.93" };
+    const snapshot = { schema: DISCOVERY_SCHEMA, subunits: ["MAIN"], model: "RX-V685", firmware: "1.93" };
     ctx.i.objects.set("Living_room", { type: "device", common: {}, native: { yncaAvail: snapshot } });
     await ctx.i.onReady();
     await flush();
@@ -1683,10 +1684,14 @@ describe("Yamaha guarded database writes (audit 2026-09-02 — a hiccup must not
     await ctx.i.onReady();
     await flush();
     ctx.i.extendObjectFail = new Error("Objects database not connected");
+    ctx.i.setTimeout.mockClear();
     const cache = ctx.calls[0].deps.yncaSubunitCache as unknown as { set(snapshot: unknown): void };
     cache.set({ subunits: ["MAIN"], model: "RX", firmware: "1.0" });
     const memory = ctx.calls[0].deps.probeMemory as unknown as { set(key: string, value: unknown): void };
     memory.set("features", { zones: [] });
+    // Both changes sit in ONE coalescing window; its timer firing is the write that fails.
+    expect(ctx.i.setTimeout).toHaveBeenCalledTimes(1);
+    (ctx.i.setTimeout.mock.calls[0][0] as () => void)();
     await flush();
     expect(writeWarnings(ctx)).toHaveLength(1);
     expect(writeWarnings(ctx)[0]).toContain("could not write device object Living_room");
@@ -1800,7 +1805,9 @@ describe("Yamaha probe memory persistence (audit 2026-09-02)", () => {
     ctx.i.objects.set("Living_room", {
       type: "device",
       common: {},
-      native: { probeCache: JSON.stringify({ xmlModel: "RX-V771", features: { zones: [] } }) },
+      native: {
+        probeCache: JSON.stringify({ __schema: DISCOVERY_SCHEMA, xmlModel: "RX-V771", features: { zones: [] } }),
+      },
     });
     await ctx.i.onReady();
     await flush();
@@ -1822,5 +1829,77 @@ describe("Yamaha probe memory persistence (audit 2026-09-02)", () => {
       expect(memory.remembered("xmlModel")).toBeUndefined();
       expect(memory.remembered("0")).toBeUndefined();
     }
+  });
+});
+
+describe("per-device memory and the discovery schema (2.6.0)", () => {
+  it("drops a probe memory learned under another discovery schema and says so", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room", {
+      type: "device",
+      common: {},
+      native: { probeCache: JSON.stringify({ __schema: DISCOVERY_SCHEMA - 1, xmlModel: "RX-V771" }) },
+    });
+    await ctx.i.onReady();
+    await flush();
+    const memory = ctx.calls[0].deps.probeMemory as unknown as { remembered(key: string): unknown };
+    // The remembered answers were turned into objects by an older discovery logic — the device
+    // is re-learned with the current one on this very connect.
+    expect(memory.remembered("xmlModel")).toBeUndefined();
+    expect(ctx.i.log.debug).toHaveBeenCalledWith(expect.stringContaining("discovery logic changed"));
+  });
+
+  it("drops a YNCA subunit snapshot of another discovery schema like a model mismatch", async () => {
+    const ctx = setup();
+    const snapshot = { schema: DISCOVERY_SCHEMA - 1, subunits: ["MAIN"], model: "RX-V685", firmware: "1.93" };
+    ctx.i.objects.set("Living_room", { type: "device", common: {}, native: { yncaAvail: snapshot } });
+    await ctx.i.onReady();
+    await flush();
+    const cache = ctx.calls[0].deps.yncaSubunitCache as unknown as { get(): unknown };
+    expect(cache.get()).toBeUndefined();
+  });
+
+  it("coalesces the native writes of one device: three changes within the window, one write", async () => {
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    const extendObject = (ctx.i as unknown as { extendObject: ReturnType<typeof vi.fn> }).extendObject;
+    extendObject.mockClear();
+    ctx.i.setTimeout.mockClear();
+    const memory = ctx.calls[0].deps.probeMemory as unknown as { set(key: string, value: unknown): void };
+    memory.set("a", 1);
+    memory.set("b", 2);
+    memory.set("c", 3);
+    // Nothing written yet — one timer armed for the device …
+    expect(extendObject).not.toHaveBeenCalled();
+    expect(ctx.i.setTimeout).toHaveBeenCalledTimes(1);
+    // … and when it fires, ONE write carries the latest snapshot.
+    (ctx.i.setTimeout.mock.calls[0][0] as () => void)();
+    await flush();
+    const writes = extendObject.mock.calls.filter(call => call[0] === "Living_room");
+    expect(writes).toHaveLength(1);
+    const stored = JSON.parse((writes[0][1] as { native: { probeCache: string } }).native.probeCache) as Record<
+      string,
+      unknown
+    >;
+    expect(stored).toMatchObject({ a: 1, b: 2, c: 3, __schema: DISCOVERY_SCHEMA });
+  });
+
+  it("flushes a pending native write on unload, before the callback", async () => {
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    const extendObject = (ctx.i as unknown as { extendObject: ReturnType<typeof vi.fn> }).extendObject;
+    extendObject.mockClear();
+    const memory = ctx.calls[0].deps.probeMemory as unknown as { set(key: string, value: unknown): void };
+    memory.set("late", true);
+    expect(extendObject).not.toHaveBeenCalled();
+    const cb = vi.fn();
+    ctx.i.onUnload(cb);
+    // The pending snapshot is written at once; its timer is cleared, not left to fire on a dead adapter.
+    expect(extendObject.mock.calls.filter(call => call[0] === "Living_room")).toHaveLength(1);
+    expect(ctx.i.clearTimeout).toHaveBeenCalled();
+    await flush();
+    expect(cb).toHaveBeenCalledTimes(1);
   });
 });

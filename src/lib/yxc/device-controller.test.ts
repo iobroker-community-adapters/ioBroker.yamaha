@@ -5,6 +5,7 @@ import wx10 from "./__fixtures__/WX10_216_208.json";
 import ysp from "./__fixtures__/status/YSP1600_main.json";
 import { CommandGate } from "../lifecycle/command-gate";
 import { ProbeMemory } from "../lifecycle/probe-memory";
+import { DISCOVERY_SCHEMA } from "../lifecycle/discovery-schema";
 
 /** A real command gate for the controller under test (pacing has its own suite). */
 const testGate = (): CommandGate =>
@@ -1002,7 +1003,7 @@ describe("YxcDeviceController scene title writes (shared memory)", () => {
       '<YAMAHA_AV rsp="GET" RC="0"><Main_Zone><Scene><Scene_Sel_Item>' +
       "<Item_4><Param>Scene 4</Param><RW>W</RW><Title>NET Audio</Title></Item_4>" +
       "</Scene_Sel_Item></Scene></Main_Zone></YAMAHA_AV>";
-    const memory = new ProbeMemory({ "xmlScenes:main": declaration });
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA, "xmlScenes:main": declaration });
     const s = setup(
       { response_code: 0, zone: [{ id: "main", func_list: ["power", "scene"], input_list: ["hdmi1"], scene_num: 8 }] },
       { response_code: 0, power: "on" },

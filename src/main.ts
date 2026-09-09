@@ -31,7 +31,8 @@ import { DeviceSupervisor, type ConnectionHandle } from "./lib/lifecycle/device-
 import { ReconnectStrategy } from "./lib/lifecycle/reconnect-strategy";
 import { ReachabilityDedup } from "./lib/lifecycle/reachability-dedup";
 import { createSubunitCache, isAvailSnapshot, type YncaSubunitCache } from "./lib/ynca/subunit-cache";
-import { ProbeMemory } from "./lib/lifecycle/probe-memory";
+import { ProbeMemory, memorySchemaOf } from "./lib/lifecycle/probe-memory";
+import { DISCOVERY_SCHEMA } from "./lib/lifecycle/discovery-schema";
 
 /** Supervisor reconnect backoff bounds (exponential: 1s, 2s … capped at 60s). */
 const RECONNECT_BASE_MS = 1000;
@@ -60,6 +61,20 @@ const DATAPOINT_BALANCE_SETTLE_MS = 5000;
  * back to it — but a device that is simply switched off must not turn that into a scan loop.
  */
 const REDISCOVER_MIN_INTERVAL_MS = 300000;
+
+/**
+ * How long a device object's native writes are collected before ONE extendObject carries them
+ * (the probe memory persists on every change — dozens within a first connect's first second).
+ */
+const NATIVE_PERSIST_WINDOW_MS = 250;
+
+/** A device's native patch waiting for its coalescing window to end. */
+interface PendingNative {
+  /** The merged patch (latest value per key wins). */
+  native: Record<string, unknown>;
+  /** The window timer; undefined when the adapter refused one (shutdown) and the write ran at once. */
+  timer?: ioBroker.Timeout;
+}
 
 /**
  * ioBroker.yamaha — controls Yamaha AV receivers and MusicCast devices.
@@ -131,6 +146,8 @@ export class Yamaha extends utils.Adapter {
    * repeats stay at debug until a write goes through again (nut2 `failedUps` pattern).
    */
   private stateWritesFailing = false;
+  /** Per device, the native patch inside its coalescing window (see persistDeviceNative). */
+  private readonly pendingNative = new Map<string, PendingNative>();
 
   /**
    * @param options adapter options passed through by js-controller
@@ -486,7 +503,38 @@ export class Yamaha extends utils.Adapter {
    * @param native the native fields to merge into the object
    */
   private persistDeviceNative(deviceId: string, native: Record<string, unknown>): void {
-    this.extendObject(deviceId, { native }).then(
+    // Coalesced per device: the probe memory persists on EVERY change, and a first connect
+    // changes it dozens of times within a second (every observed enum value, every declared
+    // list) — each was one extendObject on the device object. Latest wins, one write per window.
+    const pending = this.pendingNative.get(deviceId);
+    if (pending) {
+      Object.assign(pending.native, native);
+      return;
+    }
+    const entry: PendingNative = { native: { ...native } };
+    this.pendingNative.set(deviceId, entry);
+    // this.setTimeout refuses during shutdown (returns undefined) — then write at once.
+    entry.timer = this.setTimeout(() => this.flushDeviceNative(deviceId), NATIVE_PERSIST_WINDOW_MS);
+    if (!entry.timer) {
+      void this.flushDeviceNative(deviceId);
+    }
+  }
+
+  /**
+   * Write a device's pending native patch now (the coalescing window ended, or the adapter is
+   * unloading).
+   *
+   * @param deviceId the id-safe device id
+   * @returns the write, for the unload path to wait on
+   */
+  private flushDeviceNative(deviceId: string): Promise<void> {
+    const pending = this.pendingNative.get(deviceId);
+    if (!pending) {
+      return Promise.resolve();
+    }
+    this.pendingNative.delete(deviceId);
+    this.clearTimeout(pending.timer);
+    return this.extendObject(deviceId, { native: pending.native }).then(
       () => {
         this.stateWritesFailing = false;
       },
@@ -1173,6 +1221,11 @@ export class Yamaha extends utils.Adapter {
       }
       writes.push(this.setState("info.devicesOnline", { val: 0, ack: true }));
       writes.push(this.setState("info.devicesAllOnline", { val: false, ack: true }));
+      // A device memory still inside its coalescing window is written now — a timer on a
+      // stopped adapter never fires, and the memory is what the next start rests on.
+      for (const deviceId of [...this.pendingNative.keys()]) {
+        writes.push(this.flushDeviceNative(deviceId));
+      }
       void Promise.all(writes)
         .catch(() => {
           /* states DB already going down — nothing left to report to */
@@ -1286,6 +1339,12 @@ export class Yamaha extends utils.Adapter {
       }
     } catch {
       initial = undefined;
+    }
+    const stored = memorySchemaOf(initial);
+    if (initial !== undefined && stored !== DISCOVERY_SCHEMA) {
+      this.log.debug(
+        `${deviceId}: discovery logic changed (schema ${stored} → ${DISCOVERY_SCHEMA}) — re-learning the device`,
+      );
     }
     return new ProbeMemory(initial, entries => {
       this.persistDeviceNative(deviceId, { probeCache: JSON.stringify(entries) });
