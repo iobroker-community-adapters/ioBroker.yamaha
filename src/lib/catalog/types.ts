@@ -63,6 +63,15 @@ export interface ObjectDef {
    * #613, reached through the standby door (audit 2026-09-06). Never written to the object.
    */
   unproven?: boolean;
+  /**
+   * The `common.states` map is the DEVICE'S OWN declaration of the selectable values — the XML
+   * `Input_Sel_Item` list, the `desc.xml` enumerations, the MusicCast `input_list` and value
+   * lists — not a catalog union. The object-tree coordinator lets such a declaration replace a
+   * union on the owning transport's datapoint (#619: the YNCA-owned input showed all 54 catalog
+   * inputs while XML had read the receiver's own list). Only within one wire vocabulary, see
+   * `STATES_VOCABULARY`. Never written to the object, like `unproven`.
+   */
+  declaredStates?: boolean;
   /** Object id relative to the device. */
   id: string;
   /** Object kind. */

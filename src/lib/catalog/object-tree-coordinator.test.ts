@@ -135,3 +135,72 @@ describe("dropdown borrowing (v2.0.0 — labels from a non-owning transport)", (
     expect(objects.find(o => o.id === "input")?.common.states).toEqual({ HDMI1: "HDMI1" });
   });
 });
+
+describe("declared value lists beat a catalog union (#619)", () => {
+  const input = (states: Record<string, string>, opts: { declared?: boolean; id?: string } = {}): ObjectDef => ({
+    id: opts.id ?? "input",
+    type: "state",
+    ...(opts.declared ? { declaredStates: true } : {}),
+    common: { name: "Input", type: "string", role: "media.input", read: true, write: true, states },
+  });
+  const union = { HDMI1: "HDMI1", AV1: "AV1", Spotify: "Spotify" };
+
+  test("the XML input list replaces the YNCA union on the YNCA-owned input", () => {
+    const { objects, ownerByCanonicalId } = coordinateObjectTree([
+      { transport: "ynca", objects: [input(union)] },
+      { transport: "xml", objects: [input({ HDMI1: "HDMI1", "NET RADIO": "NET RADIO" }, { declared: true })] },
+    ]);
+    // YNCA keeps the write path (its INP push, its vocabulary) …
+    expect(ownerByCanonicalId.get("input")).toBe("ynca");
+    // … but the picker shows what the device itself declares.
+    const resolved = objects.find(o => o.id === "input");
+    expect(resolved?.common.states).toEqual({ HDMI1: "HDMI1", "NET RADIO": "NET RADIO" });
+    expect(resolved?.declaredStates).toBe(true);
+  });
+
+  test("a MusicCast list with a soundbar id is never adopted by a YNCA-owned input — different wire vocabulary", () => {
+    const { objects } = coordinateObjectTree([
+      { transport: "ynca", objects: [input(union)] },
+      { transport: "yxc", objects: [input({ hdmi: "hdmi", analog: "analog" }, { declared: true })] },
+    ]);
+    // "hdmi" is not a value the YNCA write path can send — the union stays.
+    expect(objects.find(o => o.id === "input")?.common.states).toEqual(union);
+  });
+
+  test("an owner's own declaration is kept over another transport's", () => {
+    const { objects, ownerByCanonicalId } = coordinateObjectTree([
+      { transport: "yxc", objects: [input({ hdmi1: "hdmi1" }, { declared: true })] },
+      { transport: "xml", objects: [input({ HDMI1: "HDMI1" }, { declared: true })] },
+    ]);
+    expect(ownerByCanonicalId.get("input")).toBe("yxc");
+    expect(objects.find(o => o.id === "input")?.common.states).toEqual({ hdmi1: "hdmi1" });
+  });
+
+  test("the union stays where nobody declares", () => {
+    const { objects } = coordinateObjectTree([
+      { transport: "ynca", objects: [input(union)] },
+      { transport: "xml", objects: [input({ AV1: "AV1" })] },
+    ]);
+    expect(objects.find(o => o.id === "input")?.common.states).toEqual(union);
+  });
+
+  test("a zone's declaration lands on that zone's datapoint only", () => {
+    const { objects } = coordinateObjectTree([
+      { transport: "ynca", objects: [input(union), input(union, { id: "multiroom.zone2.input" })] },
+      {
+        transport: "xml",
+        objects: [
+          input(
+            { AUDIO1: "AUDIO1", "Main Zone Sync": "Main Zone Sync" },
+            { declared: true, id: "multiroom.zone2.input" },
+          ),
+        ],
+      },
+    ]);
+    expect(objects.find(o => o.id === "input")?.common.states).toEqual(union);
+    expect(objects.find(o => o.id === "multiroom.zone2.input")?.common.states).toEqual({
+      AUDIO1: "AUDIO1",
+      "Main Zone Sync": "Main Zone Sync",
+    });
+  });
+});

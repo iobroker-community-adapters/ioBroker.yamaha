@@ -9,6 +9,20 @@ export type Transport = "yxc" | "ynca" | "xml";
 const MODERNITY: readonly Transport[] = ["yxc", "ynca", "xml"];
 
 /**
+ * The wire vocabulary a transport's dropdown VALUES are spelled in. YNCA and the XML API share the
+ * classic spelling — the RX-V6A harvest lists the same 27 main-zone / 20 zone-2 inputs over both,
+ * and every INP value of Yamaha's 21 official YNCA lists is a verbatim XML `Param` of the six XML
+ * input lists (analysis 2026-09-08). MusicCast has its own ids ("hdmi1", "net_radio").
+ * A declared list may replace a union only on a datapoint whose owner WRITES the same vocabulary:
+ * a MusicCast list on a YNCA-owned input would offer values the write path cannot send.
+ */
+export const STATES_VOCABULARY: Readonly<Record<Transport, "classic" | "musiccast">> = {
+  ynca: "classic",
+  xml: "classic",
+  yxc: "musiccast",
+};
+
+/**
  * Per-capability ownership preference that OVERRIDES pure modernity — from the capability
  * census (`Ressourcen/yamaha/capability-census-2026-08-11.md` §3). These are the shared keys
  * where YXC is present but NOT equivalent: wrong scale, read-only, or a poorer type. Each list
@@ -55,7 +69,13 @@ const OWNER_OVERRIDES: Record<string, readonly Transport[]> = {
   // stands until the next restart. The title sources come first; a MusicCast-only
   // device still owns its list alone.
   "scene.list": ["xml", "ynca", "yxc"],
-  // §3d richness loss — YNCA carries an enum dropdown that YXC/XML flatten to a free string.
+  // input / soundProgram: every transport carries a device list today (XML `Input_Sel_Item` and
+  // desc.xml, MusicCast `input_list`/`sound_program_list`, the YNCA candidates narrowed by the
+  // probe), so the census's "richness loss" (§3d) is no longer the reason. YNCA stays in front
+  // because it REPORTS a switch instantly over its held connection (XML polls) and because its
+  // spelling is what every existing script writes ("HDMI1", not "hdmi1"). The device's own list
+  // still reaches the dropdown: the coordinator adopts a declared list on the YNCA-owned
+  // datapoint (#619), from XML directly and from MusicCast through the evidenced dictionary.
   input: ["ynca", "yxc", "xml"],
   soundProgram: ["ynca", "yxc", "xml"],
   sleep: ["ynca", "xml", "yxc"],

@@ -1,5 +1,5 @@
 import { channelCommon, type ObjectDef } from "./types";
-import { canonicalIdOf, capabilityKeyOf, pickOwner, type Transport } from "./owner-policy";
+import { canonicalIdOf, capabilityKeyOf, pickOwner, STATES_VOCABULARY, type Transport } from "./owner-policy";
 
 /** One transport's contribution: the objects its catalog builds for this device. */
 export interface TransportObjects {
@@ -47,16 +47,26 @@ export function coordinateObjectTree(contributions: readonly TransportObjects[])
     if (!ownerDef) {
       throw new Error(`coordinateObjectTree: owner ${owner} has no def for ${canonicalId}`);
     }
-    // Dropdown borrowing: the owner wins the WRITE PATH, but another transport may know
-    // the value labels the owner cannot deliver — the scene titles come over XML/YNCA
-    // while MusicCast owns the recall, the device's own input list comes over XML while
-    // YNCA owns the input. The label map is pure presentation, so borrowing it never
-    // changes routing; borrowed in modernity-independent claim order (first with one).
+    // Dropdown borrowing, two cases. (a) The owner has no labels at all: another claimant's map
+    // is pure presentation and is taken as is (the scene titles over XML/YNCA while MusicCast owns
+    // the recall). (b) The owner carries a catalog UNION and another transport carries the
+    // device's OWN declaration: the declaration wins (#619 — the XML input list on the YNCA-owned
+    // input), but only within one wire vocabulary, because the map's KEYS are what the owner's
+    // write path will be asked to send. Borrowing never changes routing; borrowed in
+    // modernity-independent claim order (first with one).
     const resolvedDef: ObjectDef = { ...ownerDef, id: canonicalId };
     if (!resolvedDef.common.states) {
       for (const def of entry.defs.values()) {
         if (def.common.states) {
           resolvedDef.common = { ...resolvedDef.common, states: def.common.states };
+          break;
+        }
+      }
+    } else if (!ownerDef.declaredStates) {
+      for (const [transport, def] of entry.defs) {
+        if (def.declaredStates && def.common.states && STATES_VOCABULARY[transport] === STATES_VOCABULARY[owner]) {
+          resolvedDef.common = { ...resolvedDef.common, states: def.common.states };
+          resolvedDef.declaredStates = true;
           break;
         }
       }
