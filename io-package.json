@@ -1,10 +1,10 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "2.7.0",
+    "version": "2.7.1",
     "nogit": true,
     "news": {
-      "NEXT": {
+      "2.7.1": {
         "en": "The first connection asks a receiver only what its generation can answer, and a datapoint the device reveals later now appears at once instead of after a restart.",
         "de": "Die erste Verbindung fragt einen Receiver nur noch, was seine Generation beantworten kann, und ein später gemeldeter Datenpunkt erscheint sofort statt erst nach einem Neustart.",
         "ru": "Первое подключение спрашивает ресивер только о том, что умеет его поколение, а точка данных, о которой устройство сообщает позже, появляется сразу, а не после перезапуска.",
