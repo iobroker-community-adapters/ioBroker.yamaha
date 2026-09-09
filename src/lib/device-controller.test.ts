@@ -20,6 +20,9 @@ interface Msg {
   value: string;
 }
 
+/** The one-GET-answers-many functions of the official lists (see bundleGets in the catalog). */
+const BUNDLE_FUNCS = new Set(["BASIC", "SCENENAME", "SIGINFO", "RDSINFO", "METAINFO"]);
+
 class FakeClient implements YncaClientLike {
   public sent: Msg[] = [];
   public closed = false;
@@ -39,8 +42,8 @@ class FakeClient implements YncaClientLike {
   public listSubunits?: string[];
   /** Every readCapabilities request list, for asserting what was actually swept. */
   public requests: Array<Array<{ subunit: string; func: string }>> = [];
-  /** The zones a BASIC bundle was asked for, in order. */
-  public basicAsked: string[] = [];
+  /** Every bundle GET asked (`SUBUNIT:FUNC`), in order. */
+  public bundlesAsked: string[] = [];
   private handler?: (message: Msg) => void;
 
   public async connect(): Promise<void> {}
@@ -53,17 +56,18 @@ class FakeClient implements YncaClientLike {
       }
       return Promise.resolve({ model: "", subunits });
     }
-    if (gets.length > 0 && gets.every(get => get.func === "BASIC")) {
-      // A BASIC bundle answers with the functions the zone has — on a fake, whatever the
-      // capabilities carry for that zone (a real receiver lists 15–25 of them).
+    if (gets.length > 0 && gets.every(get => BUNDLE_FUNCS.has(get.func))) {
+      // A bundle (BASIC, SCENENAME, SIGINFO, RDSINFO, METAINFO) answers with the functions the
+      // subunit has — on a fake, whatever the capabilities carry for it (a real BASIC lists
+      // 15–25 of them).
       const subunits: Record<string, Record<string, string>> = {};
       for (const get of gets) {
-        const zone = this.capabilities.subunits[get.subunit];
-        if (zone) {
-          subunits[get.subunit] = { ...zone };
+        const subunit = this.capabilities.subunits[get.subunit];
+        if (subunit) {
+          subunits[get.subunit] = { ...subunit };
         }
       }
-      this.basicAsked.push(...gets.map(get => get.subunit));
+      this.bundlesAsked.push(...gets.map(get => `${get.subunit}:${get.func}`));
       return Promise.resolve({ model: "", subunits });
     }
     if (this.listSubunits && gets.length > 0 && gets.every(get => get.func === "LISTINFO")) {
@@ -226,7 +230,12 @@ describe("YncaDeviceController two-pass sweep", () => {
     expect(client.requests[1].every(get => get.func === "AVAIL")).toBe(true);
     // SYS answers no AVAIL and must never be probed…
     expect(client.requests[1].some(get => get.subunit === "SYS")).toBe(false);
-    expect(client.requests[2].map(get => `${get.subunit}:${get.func}`)).toEqual(["MAIN:BASIC"]);
+    expect(client.requests[2].map(get => `${get.subunit}:${get.func}`)).toEqual([
+      "MAIN:BASIC",
+      "MAIN:SCENENAME",
+      "TUN:SIGINFO",
+      "TUN:RDSINFO",
+    ]);
     // …but is always part of the sweep; absent subunits (ZONE2, player sources) are not.
     const sweptSubunits = new Set(client.requests[3].map(get => get.subunit));
     expect(sweptSubunits.has("SYS")).toBe(true);
@@ -1149,7 +1158,7 @@ describe("YNCA dropdowns from proof — inputs narrowed by evidence, observed va
     };
     const { deps, created } = makeDeps(client);
     await new YncaDeviceController("living", deps).start();
-    expect(client.basicAsked).toEqual(["MAIN", "ZONE2"]);
+    expect(client.bundlesAsked.filter(pair => pair.endsWith(":BASIC"))).toEqual(["MAIN:BASIC", "ZONE2:BASIC"]);
     expect(created).toContain("living.multiroom.zone2.power");
     // A function BASIC answered is not asked again individually.
     const individual = client.requests.flat().filter(get => get.subunit === "ZONE2" && get.func === "PWR");
@@ -1188,5 +1197,79 @@ describe("YNCA dropdowns from proof — inputs narrowed by evidence, observed va
     const { objects, deps } = makeDeps(client);
     await new YncaDeviceController("living", deps).start();
     expect(objects.find(o => o.id === "living.advanced.speakers.pattern1Amp")?.def.common.states).toBeUndefined();
+  });
+});
+
+describe("the completed command lists in the controller (coverage audit 2026-09-09)", () => {
+  test("every bundle of a present subunit is asked before the sweep, in one request list", async () => {
+    const client = new FakeClient();
+    client.availableSubunits = ["MAIN", "TUN", "NETRADIO"];
+    client.capabilities = {
+      model: "RX-V671",
+      subunits: {
+        SYS: { MODELNAME: "RX-V671", VERSION: "1" },
+        MAIN: { PWR: "On" },
+        TUN: { BAND: "FM" },
+        NETRADIO: { PLAYBACKINFO: "Play" },
+      },
+    };
+    const { deps } = makeDeps(client);
+    await new YncaDeviceController("living", deps).start();
+    expect(client.bundlesAsked).toEqual(
+      expect.arrayContaining(["MAIN:BASIC", "MAIN:SCENENAME", "TUN:SIGINFO", "TUN:RDSINFO", "NETRADIO:METAINFO"]),
+    );
+    expect(client.bundlesAsked.some(pair => pair.startsWith("ZONE2:"))).toBe(false);
+    // One request list carried them all (identity, probe, bundles, sweep).
+    expect(client.requests).toHaveLength(4);
+  });
+
+  test("a zone's scenes get their titles on the dropdown and a list of their own", async () => {
+    const client = new FakeClient();
+    client.availableSubunits = ["MAIN", "ZONE2"];
+    client.capabilities = {
+      model: "RX-A2020",
+      subunits: {
+        SYS: { MODELNAME: "RX-A2020", VERSION: "1" },
+        MAIN: { PWR: "On", SCENE1NAME: "BD/DVD" },
+        ZONE2: { PWR: "On", SCENE1NAME: "Radio", SCENE2NAME: "Net", SCENE4NAME: "Party" },
+      },
+    };
+    const { objects, deps, acked } = makeDeps(client);
+    await new YncaDeviceController("living", deps).start();
+    expect(objects.find(o => o.id === "living.multiroom.zone2.scene.recall")?.def.common.states).toEqual({
+      1: "Radio",
+      2: "Net",
+      4: "Party",
+    });
+    expect(acked).toContainEqual({
+      id: "living.multiroom.zone2.scene.list",
+      value: JSON.stringify([
+        { num: 1, title: "Radio" },
+        { num: 2, title: "Net" },
+        { num: 4, title: "Party" },
+      ]),
+    });
+    // The main zone keeps its own list untouched by the zone's.
+    expect(acked).toContainEqual({ id: "living.scene.list", value: JSON.stringify([{ num: 1, title: "BD/DVD" }]) });
+  });
+
+  test("trigger output 2's zone list is derived from the zones the device has, like trigger 1's", async () => {
+    const client = new FakeClient();
+    client.availableSubunits = ["MAIN", "ZONE2"];
+    client.capabilities = {
+      model: "RX-A3020",
+      subunits: {
+        SYS: { MODELNAME: "RX-A3020", VERSION: "1", TRIG2ZONE: "Zone2" },
+        MAIN: { PWR: "On" },
+        ZONE2: { PWR: "On" },
+      },
+    };
+    const { objects, deps } = makeDeps(client);
+    await new YncaDeviceController("living", deps).start();
+    expect(Object.keys(objects.find(o => o.id === "living.advanced.trigger2Zone")?.def.common.states ?? {})).toEqual([
+      "Main Zone",
+      "Zone2",
+      "All",
+    ]);
   });
 });

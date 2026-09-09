@@ -1,6 +1,7 @@
 import {
   availGets,
   buildYncaCatalog,
+  bundleGets,
   deviceInputStates,
   enumStatesFor,
   funcToEntry,
@@ -10,6 +11,7 @@ import {
   yncaCommand,
   yncaObjectsFor,
   yncaStateUpdate,
+  type YncaEntry,
 } from "./catalog";
 import { CHANNEL_NAME_KEYS } from "../catalog/types";
 import { catalogToObjects } from "../catalog/build-objects";
@@ -839,5 +841,186 @@ describe("enumStatesFor — the candidates of the generation plus everything the
 
   test("the current value is offered even when it was never observed before", () => {
     expect(enumStatesFor(entry("HDMIASPECT"), [], "Whatever")).toHaveProperty("Whatever");
+  });
+});
+
+describe("the 2010–2015 command lists, completed (coverage audit 2026-09-09)", () => {
+  const cat = buildYncaCatalog();
+  const find = (subunit: string, func: string, id?: string): YncaEntry | undefined =>
+    cat.find(e => e.subunit === subunit && e.func === func && (id === undefined || e.id === id));
+
+  test("the second TV audio return input and the audio select share the official value sets", () => {
+    expect(find("MAIN", "TVAUDIN2")).toMatchObject({ id: "advanced.tvAudioIn2", write: true });
+    expect((find("MAIN", "TVAUDIN2")?.spec as EnumSpec).states).toEqual(
+      (find("MAIN", "TVAUDIN1")?.spec as EnumSpec).states,
+    );
+    expect(find("MAIN", "AUDSEL")).toMatchObject({ id: "advanced.audioSelect", write: true });
+    expect(Object.keys((find("MAIN", "AUDSEL")?.spec as EnumSpec).states)).toEqual([
+      "Auto",
+      "HDMI",
+      "Coax/Opt",
+      "Analog",
+    ]);
+  });
+
+  test("zones carry balance, pre-out mode, the 2010 tone dialect and four scenes — the main zone does not", () => {
+    expect(find("ZONE2", "BALANCE")).toMatchObject({ id: "multiroom.zone2.sound.balance" });
+    expect(find("ZONE2", "BALANCE")?.spec).toMatchObject({ kind: "number", min: -20, max: 20, step: 1 });
+    expect(find("ZONE3", "VOLFIXVAR")).toMatchObject({ id: "multiroom.zone3.volumeOutput" });
+    expect(Object.keys((find("ZONE3", "VOLFIXVAR")?.spec as EnumSpec).states)).toEqual(["Variable", "Fixed"]);
+    expect(find("ZONE2", "BASS")).toMatchObject({ id: "multiroom.zone2.sound.bass" });
+    expect(find("ZONE2", "BASS")?.spec).toMatchObject({ kind: "number", unit: "dB", min: -10, max: 10, step: 2 });
+    expect(find("ZONE2", "TREBLE")).toMatchObject({ id: "multiroom.zone2.sound.treble" });
+    for (const subunit of ["ZONE2", "ZONE3", "ZONE4"]) {
+      const recall = find(subunit, "SCENE");
+      expect(recall).toMatchObject({ readFunc: "SCENE1NAME", readAliases: ["SCENE2NAME", "SCENE3NAME", "SCENE4NAME"] });
+      expect(recall?.spec).toMatchObject({ kind: "number", min: 1, max: 4 });
+      expect(recall?.wireEncode?.(3)).toBe("Scene 3");
+    }
+    for (const func of ["BALANCE", "VOLFIXVAR", "BASS", "TREBLE"]) {
+      expect(find("MAIN", func)).toBeUndefined();
+    }
+  });
+
+  test("system-wide: party volume keys, HDMI video mode, the lip-sync block, RS-232C standby, region, tuner step, update notice", () => {
+    expect(find("SYS", "PARTYVOL", "multiroom.partyVolumeUp")).toMatchObject({ readFunc: "PARTY", writeOnly: true });
+    expect(find("SYS", "PARTYVOL", "multiroom.partyVolumeUp")?.wireEncode?.(true)).toBe("Up");
+    expect(find("SYS", "PARTYVOL", "multiroom.partyVolumeDown")?.wireEncode?.(true)).toBe("Down");
+    expect(Object.keys((find("SYS", "HDMIVIDEOMODE")?.spec as EnumSpec).states)).toEqual(["Direct", "Processing"]);
+    expect(find("SYS", "HDMIVIDEOMODE")?.id).toBe("hdmi.videoMode");
+    expect(Object.keys((find("SYS", "LIPSYNCMODE")?.spec as EnumSpec).states)).toEqual(["Manual", "Auto"]);
+    expect(find("SYS", "LIPSYNCTOTALDELAY")).toMatchObject({ id: "hdmi.lipSyncTotalDelay", write: true });
+    expect(find("SYS", "LIPSYNCTOTALDELAY")?.spec).toMatchObject({
+      kind: "number",
+      unit: "ms",
+      min: 0,
+      max: 500,
+      step: 1,
+    });
+    expect(find("SYS", "LIPSYNCTOTALDELAYINFO")).toMatchObject({ id: "hdmi.lipSyncTvOffset", write: false });
+    expect(find("SYS", "LIPSYNCSELINFO")).toMatchObject({ id: "hdmi.lipSyncOutput", write: false });
+    expect(Object.keys((find("SYS", "LIPSYNCSELINFO")?.spec as EnumSpec).states)).toEqual([
+      "Disable",
+      "Analog",
+      "HDMI1 Auto",
+      "HDMI1 Manual",
+      "HDMI2 Auto",
+      "HDMI2 Manual",
+    ]);
+    expect(find("SYS", "RS232CSTANDBY")).toMatchObject({ id: "advanced.rs232Standby", write: true });
+    expect(find("SYS", "RS232CSTANDBY")?.spec).toEqual({ kind: "onoff", on: "On", off: "Off" });
+    expect(find("SYS", "DEST")).toMatchObject({ id: "info.region", write: false });
+    expect(find("SYS", "FREQSTEP")).toMatchObject({ id: "tuner.frequencyStep", write: false });
+    expect(Object.keys((find("SYS", "FREQSTEP")?.spec as EnumSpec).states)).toEqual([
+      "FM50/AM9",
+      "FM100/AM9",
+      "FM100/AM10",
+      "FM200/AM10",
+    ]);
+    expect(find("SYS", "UPDTNOTICEMSG")).toMatchObject({ id: "advanced.updateNotice", write: true });
+    // A PUT-only function without any readable proof gets no datapoint (REMOTECODE).
+    expect(find("SYS", "REMOTECODE")).toBeUndefined();
+  });
+
+  test("trigger output 2 mirrors trigger output 1, and both cover every input the lists assign a trigger to", () => {
+    for (const n of [1, 2]) {
+      expect(find("SYS", `TRIG${n}TYPE`)).toMatchObject({ id: `advanced.trigger${n}Type`, nameArgs: [n] });
+      expect(find("SYS", `TRIG${n}ZONE`)).toMatchObject({ id: `advanced.trigger${n}Zone`, nameArgs: [n] });
+      expect(find("SYS", `TRIG${n}MANUAL`)).toMatchObject({ id: `advanced.trigger${n}Manual` });
+      for (const key of [
+        "audio1",
+        "av7",
+        "hdmi7",
+        "airplay",
+        "bt",
+        "dock",
+        "ipodusb",
+        "multich",
+        "net",
+        "siriusxm",
+        "spotify",
+        "uaw",
+      ]) {
+        const entry = find("SYS", `TRIG${n}INP${key.toUpperCase()}`);
+        expect(entry, `${n}:${key}`).toMatchObject({ id: `advanced.trigger${n}Inputs.${key}` });
+      }
+      expect(find("SYS", `TRIG${n}INPIPODUSB`)?.nameArgs).toEqual([n, "iPod (USB)"]);
+    }
+    expect(find("SYS", "TRIG1INPHDMI7")?.spec).toEqual({ kind: "enum", states: { Lo: "Lo", Hi: "Hi" } });
+  });
+
+  test("speaker pattern 2 mirrors pattern 1 entry for entry, with the pattern number in the name", () => {
+    const pattern = (n: number): YncaEntry[] =>
+      cat
+        .filter(e => e.subunit === "SYS" && e.func.startsWith(`SPPATTERN${n}`))
+        .sort((a, b) => a.func.localeCompare(b.func));
+    const one = pattern(1);
+    const two = pattern(2);
+    expect(one.length).toBeGreaterThanOrEqual(21);
+    expect(two.map(e => e.func)).toEqual(one.map(e => e.func.replace("SPPATTERN1", "SPPATTERN2")));
+    expect(two.map(e => e.id)).toEqual(one.map(e => e.id.replace("pattern1", "pattern2")));
+    for (const [a, b] of one.map((e, i) => [e, two[i]] as const)) {
+      expect(b.spec, a.func).toEqual(a.spec);
+      expect(b.nameKey).toBe(a.nameKey);
+      expect(a.nameArgs).toEqual([1]);
+      expect(b.nameArgs).toEqual([2]);
+    }
+    // The 2012 crossover per speaker group, the rear presence pair, the second subwoofer's
+    // phase and the subwoofer layout; the 2015 front-presence config/crossover and layouts.
+    for (const func of [
+      "FRNTCRSOVR",
+      "CENTCRSOVR",
+      "SURCRSOVR",
+      "SURBCRSOVR",
+      "REARPRES",
+      "SWFR2PHASE",
+      "SWFRLAYOUT",
+      "FPLAYOUT",
+      "FPRESCNFG",
+      "FPRESCRSOVR",
+      "SURLAYOUT",
+    ]) {
+      expect(find("SYS", `SPPATTERN1${func}`), func).toBeDefined();
+    }
+    expect(Object.keys((find("SYS", "SPPATTERN1SWFRLAYOUT")?.spec as EnumSpec).states)).toEqual([
+      "Left & Right",
+      "Front & Rear",
+      "Monaural x2",
+    ]);
+    expect(Object.keys((find("SYS", "SPPATTERN1FPLAYOUT")?.spec as EnumSpec).states)).toEqual([
+      "Front",
+      "Overhead",
+      "Dolby",
+    ]);
+    expect(Object.keys((find("SYS", "SPPATTERN1SURLAYOUT")?.spec as EnumSpec).states)).toEqual(["Rear", "Front"]);
+    expect(Object.keys((find("SYS", "SPPATTERN1FPRESCNFG")?.spec as EnumSpec).states)).toEqual([
+      "None",
+      "Small",
+      "Large",
+    ]);
+    expect((find("SYS", "SPPATTERN1CENTCRSOVR")?.spec as EnumSpec).states).toEqual(
+      (find("SYS", "SPPATTERN1SWFRCRSOVR")?.spec as EnumSpec).states,
+    );
+  });
+
+  test("the sweep bundles: one GET that answers many, per present subunit — never for an absent one", () => {
+    const gets = bundleGets(new Set(["MAIN", "ZONE2", "TUN", "NETRADIO", "USB"]));
+    const pairs = gets.map(get => `${get.subunit}:${get.func}`);
+    expect(pairs).toEqual(
+      expect.arrayContaining([
+        "MAIN:BASIC",
+        "MAIN:SCENENAME",
+        "ZONE2:BASIC",
+        "ZONE2:SCENENAME",
+        "TUN:SIGINFO",
+        "TUN:RDSINFO",
+        "NETRADIO:METAINFO",
+        "USB:METAINFO",
+      ]),
+    );
+    expect(pairs.some(pair => pair.startsWith("ZONE3:") || pair.startsWith("SPOTIFY:"))).toBe(false);
+    expect(bundleGets(new Set())).toEqual([]);
+    // A bundle function is never a catalog function of its own.
+    expect(cat.some(e => ["BASIC", "SCENENAME", "SIGINFO", "RDSINFO", "METAINFO"].includes(e.func))).toBe(false);
   });
 });

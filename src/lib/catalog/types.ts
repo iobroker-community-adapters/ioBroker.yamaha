@@ -139,6 +139,7 @@ export const CHANNEL_DESC_KEYS: Record<string, I18nKey> = {
   group: "descChannelGroup",
   browse: "descChannelBrowse",
   trigger1Inputs: "descChannelTrigger1Inputs",
+  trigger2Inputs: "descChannelTrigger2Inputs",
 };
 
 export const CHANNEL_NAME_KEYS: Record<string, I18nKey> = {
@@ -173,6 +174,7 @@ export const CHANNEL_NAME_KEYS: Record<string, I18nKey> = {
   ipodUsb: "ipodUSB",
   netRadio: "netRadio",
   trigger1Inputs: "trigger1Inputs",
+  trigger2Inputs: "trigger2Inputs",
   usb: "usb",
   napster: "napster",
   pandora: "pandora",

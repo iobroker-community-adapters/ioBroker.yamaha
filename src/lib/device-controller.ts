@@ -8,6 +8,7 @@ import {
   SOURCE_INPUTS,
   YNCA_CATALOG,
   availGets,
+  bundleGets,
   deviceInputStates,
   enumStatesFor,
   funcToEntry,
@@ -243,13 +244,18 @@ const LIST_PROOF = /^(LISTLAYER|LISTLAYERNAME|CURRLINE|MAXLINE|LINE[1-8](TXT|ATR
  * running session instead of waiting for the next start.
  *
  * @param subunits the swept subunit→function map
+ * @param subunit the zone subunit whose scenes to read (MAIN, ZONE2 …)
  * @returns the declared scenes, lowest number first
  */
-function sceneTitlesOf(subunits: Record<string, Record<string, string>>): Array<{ num: number; title: string }> {
-  const main = subunits.MAIN ?? {};
+function sceneTitlesOf(
+  subunits: Record<string, Record<string, string>>,
+  subunit = "MAIN",
+): Array<{ num: number; title: string }> {
+  const answers = subunits[subunit] ?? {};
   const scenes: Array<{ num: number; title: string }> = [];
-  for (let n = 1; n <= 12; n++) {
-    const title = main[`SCENE${n}NAME`];
+  // MAIN declares up to twelve scenes, a zone four (official lists).
+  for (let n = 1; n <= (subunit === "MAIN" ? 12 : 4); n++) {
+    const title = answers[`SCENE${n}NAME`];
     if (typeof title === "string" && title.length > 0) {
       scenes.push({ num: n, title });
     }
@@ -329,6 +335,8 @@ export class YncaDeviceController implements ConnectionHandle {
   private writeMap: Map<string, YncaEntry> | undefined;
   /** The device's scene titles (SCENExNAME), for the recall dropdown, the list state and title writes. */
   private sceneTitles: Array<{ num: number; title: string }> = [];
+  /** The zones' own scene titles (ZONEn SCENE1–4NAME), keyed by zone (`zone2` …). */
+  private readonly zoneSceneTitles = new Map<string, Array<{ num: number; title: string }>>();
   /** The tuner's current band (AM/FM/DAB), for the band-dependent frequency/preset writes. */
   private tunerBand = "";
   /** Whether the device carries the DAB subunit (its FM half shares the flat tuner ids). */
@@ -408,16 +416,29 @@ export class YncaDeviceController implements ConnectionHandle {
     // The scene titles ride the sweep as SCENExNAME answers; they become the recall
     // dropdown's labels and the one scene.list state (v2.0.0 — no per-name datapoints).
     this.sceneTitles = sceneTitlesOf(capabilities.subunits);
+    // A zone's four scenes (official lists, ZONE2–4) get the same treatment under the zone.
+    this.zoneSceneTitles.clear();
+    for (const zone of YNCA_ZONES) {
+      const titles = zone.key === "main" ? [] : sceneTitlesOf(capabilities.subunits, zone.subunit);
+      if (titles.length > 0) {
+        this.zoneSceneTitles.set(zone.key, titles);
+      }
+    }
     // Parents before children (channels before their states) — created in order.
     for (const object of objects) {
-      if (object.id === "scene.recall" && this.sceneTitles.length > 0) {
-        object.common.states = Object.fromEntries(this.sceneTitles.map(scene => [scene.num, scene.title]));
+      const titles = this.sceneTitlesFor(object.id);
+      if (titles !== undefined && titles.length > 0) {
+        object.common.states = Object.fromEntries(titles.map(scene => [scene.num, scene.title]));
       }
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
     }
-    if (this.sceneTitles.length > 0) {
-      await this.deps.upsertObject(`${this.deviceId}.scene.list`, {
-        id: "scene.list",
+    for (const zone of YNCA_ZONES) {
+      const titles = zone.key === "main" ? this.sceneTitles : this.zoneSceneTitles.get(zone.key);
+      if (titles === undefined || titles.length === 0) {
+        continue;
+      }
+      await this.deps.upsertObject(`${this.deviceId}.${zone.prefix}scene.list`, {
+        id: `${zone.prefix}scene.list`,
         type: "state",
         common: {
           name: tName("scenesNumberTitle"),
@@ -428,7 +449,7 @@ export class YncaDeviceController implements ConnectionHandle {
           write: false,
         },
       });
-      this.deps.setStateAck(`${this.deviceId}.scene.list`, JSON.stringify(this.sceneTitles));
+      this.deps.setStateAck(`${this.deviceId}.${zone.prefix}scene.list`, JSON.stringify(titles));
     }
     await this.setupZonePlayers(capabilities, objects);
     // Seed the states with the values read during the init sweep. On the fast path the
@@ -659,6 +680,18 @@ export class YncaDeviceController implements ConnectionHandle {
           this.deps.setStateAck(`${this.deviceId}.scene.list`, JSON.stringify(titles));
         }
       }
+      for (const zone of YNCA_ZONES) {
+        if (zone.key === "main") {
+          continue;
+        }
+        const zoneTitles = sceneTitlesOf(subunits, zone.subunit);
+        if (JSON.stringify(zoneTitles) !== JSON.stringify(this.zoneSceneTitles.get(zone.key) ?? [])) {
+          this.zoneSceneTitles.set(zone.key, zoneTitles);
+          if (zoneTitles.length > 0) {
+            this.deps.setStateAck(`${this.deviceId}.${zone.prefix}scene.list`, JSON.stringify(zoneTitles));
+          }
+        }
+      }
       this.deps.log.debug(`${this.deviceId}: background value refresh done (YNCA)`);
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: background value refresh failed: ${String(e)}`);
@@ -724,13 +757,14 @@ export class YncaDeviceController implements ConnectionHandle {
    * @returns the assembled capabilities
    */
   private async targetedSweep(catalog: readonly YncaEntry[], present: ReadonlySet<string>): Promise<YncaCapabilities> {
-    // The BASIC bundle of every present zone first: one GET answers 15–25 functions at once
-    // (the official lists; ynca-python reads it the same way). Every function it answered is
-    // proof and is not asked again individually; a function it lacks is still asked — BASIC
-    // is additive, never a filter (the RX-V1067 leaves functions out of it that it does answer
-    // on their own, ynca-python: "Not in BASIC on RX-V1067"). A zone without BASIC answers
-    // nothing (`@UNDEFINED` carries no subunit) and loses nothing.
-    const basic = await this.readBasicBundles(present);
+    // The bundles of every present subunit first (BASIC: one GET answers 15–25 functions at
+    // once, the official lists; ynca-python reads it the same way — and SCENENAME, SIGINFO,
+    // RDSINFO, METAINFO likewise). Every function a bundle answered is proof and is not asked
+    // again individually; a function it lacks is still asked — a bundle is additive, never a
+    // filter (the RX-V1067 leaves functions out of BASIC that it does answer on their own,
+    // ynca-python: "Not in BASIC on RX-V1067"). A subunit without the bundle answers nothing
+    // (`@UNDEFINED` carries no subunit) and loses nothing.
+    const basic = await this.readBundles(present);
     const answered = new Set(
       Object.entries(basic.subunits).flatMap(([subunit, funcs]) =>
         Object.keys(funcs).map(func => `${subunit}:${func}`),
@@ -768,22 +802,35 @@ export class YncaDeviceController implements ConnectionHandle {
   }
 
   /**
-   * Read the BASIC bundle of every present zone (MAIN, ZONE2–4) in one paced request list —
-   * the answers are ordinary `@ZONE:FUNC=value` lines the collector absorbs. Nothing to ask
-   * (no zone present, e.g. a blind sweep) → an empty report without a wire round trip.
+   * Read every bundle of the present subunits (BASIC and SCENENAME per zone, SIGINFO/RDSINFO on
+   * the tuner, METAINFO per player — see `bundleGets`) in ONE paced request list; the answers
+   * are ordinary `@SUBUNIT:FUNC=value` lines the collector absorbs. Nothing to ask (no subunit
+   * present, e.g. a blind sweep) → an empty report without a wire round trip.
    *
    * @param present the subunits that answered the AVAIL probe
    * @returns the bundled answers
    */
-  private async readBasicBundles(present: ReadonlySet<string>): Promise<YncaCapabilities> {
-    const gets = YNCA_ZONES.filter(zone => present.has(zone.subunit)).map(zone => ({
-      subunit: zone.subunit,
-      func: "BASIC",
-    }));
+  private async readBundles(present: ReadonlySet<string>): Promise<YncaCapabilities> {
+    const gets = bundleGets(present);
     if (gets.length === 0) {
       return { model: "", subunits: {} };
     }
     return await this.deps.client.readCapabilities(gets);
+  }
+
+  /**
+   * The scene titles a recall datapoint's dropdown shows: the main zone's for `scene.recall`,
+   * a zone's own for `multiroom.zoneN.scene.recall`, undefined for any other id.
+   *
+   * @param stateId the state id relative to the device
+   * @returns the titles, or undefined when the id is no scene recall
+   */
+  private sceneTitlesFor(stateId: string): Array<{ num: number; title: string }> | undefined {
+    const match = /^(?:multiroom\.(zone[234])\.)?scene\.recall$/.exec(stateId);
+    if (!match) {
+      return undefined;
+    }
+    return match[1] ? (this.zoneSceneTitles.get(match[1]) ?? []) : this.sceneTitles;
   }
 
   /**
@@ -868,7 +915,7 @@ export class YncaDeviceController implements ConnectionHandle {
           return { states: deviceInputStates(evidence, zone.key, current), origin: "derived" };
         }
       }
-      if (yncaEntry.func === "TRIG1ZONE") {
+      if (/^TRIG\dZONE$/.test(yncaEntry.func)) {
         const zones = YNCA_ZONES.filter(zone => zone.key !== "main" && evidence.present.has(zone.subunit)).map(
           zone => `Zone${zone.key.slice(4)}`,
         );
@@ -908,16 +955,18 @@ export class YncaDeviceController implements ConnectionHandle {
       this.browseEngine?.handleWrite(stateId, value);
       return;
     }
-    // A scene TITLE is as valid a recall write as its number ("Movie Viewing" → 1).
-    if (stateId === "scene.recall" && typeof value === "string" && !/^\d+$/.test(value.trim())) {
+    // A scene TITLE is as valid a recall write as its number ("Movie Viewing" → 1) — on the
+    // main zone and on a zone with scenes of its own.
+    const sceneTitles = this.sceneTitlesFor(stateId);
+    if (sceneTitles !== undefined && typeof value === "string" && !/^\d+$/.test(value.trim())) {
       const needle = value.trim().toLowerCase();
-      const match = this.sceneTitles.find(scene => scene.title.toLowerCase() === needle);
+      const match = sceneTitles.find(scene => scene.title.toLowerCase() === needle);
       if (match === undefined) {
         // A dead button has to leave a trace — this was the one write path in the adapter
         // that dropped a user action without a word (#615's lesson, applied to itself).
         this.deps.log.debug(
           `${this.deviceId}: scene "${value}" is not one this device declares — write dropped ` +
-            `(known: ${this.sceneTitles.map(scene => scene.title).join(", ") || "none yet"})`,
+            `(known: ${sceneTitles.map(scene => scene.title).join(", ") || "none yet"})`,
         );
         return;
       }

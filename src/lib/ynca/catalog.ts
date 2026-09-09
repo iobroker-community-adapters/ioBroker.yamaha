@@ -303,6 +303,7 @@ const SOUNDPRG_STATES = selfMap([
 ]);
 
 const SLEEP_STATES = selfMap(["Off", "30 min", "60 min", "90 min", "120 min"]);
+const TVAUDIN_STATES = selfMap(["AV1", "AV2", "AV3", "AV4", "AV5", "AV6", "AUDIO1", "AUDIO2"]);
 // `OUT` is the single-output spelling of the RX-A700/RX-V671 class (official lists), the
 // OUT1/OUT2 pair the two-output class.
 const HDMIOUT_STATES = selfMap(["Off", "OUT", "OUT1", "OUT2", "OUT1 + 2"]);
@@ -344,6 +345,10 @@ interface FuncDef {
   readFunc?: string;
   /** Write-only command, kept out of the device→state map (see {@link YncaEntry.writeOnly}). */
   writeOnly?: boolean;
+  /** Values for the name key's `%s` placeholders (see {@link CatalogEntry.nameArgs}). */
+  nameArgs?: Array<string | number>;
+  /** Further functions the device answers this entry under (see {@link YncaEntry.readAliases}). */
+  readAliases?: string[];
 }
 
 const AMP_FUNCS: FuncDef[] = [
@@ -818,7 +823,28 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     state: "advanced.tvAudioIn1",
     nameKey: "tvAudioReturnInput",
     descKey: "descTvAudioReturnInput",
-    spec: { kind: "enum", states: selfMap(["AV1", "AV2", "AV3", "AV4", "AV5", "AV6", "AUDIO1", "AUDIO2"]) },
+    spec: { kind: "enum", states: TVAUDIN_STATES },
+    write: true,
+    role: "state",
+  },
+  // The second return input (11 of the 21 official lists: the models with two HDMI outputs).
+  {
+    func: "TVAUDIN2",
+    state: "advanced.tvAudioIn2",
+    nameKey: "tvAudioReturnInput2",
+    descKey: "descTvAudioReturnInput2",
+    spec: { kind: "enum", states: TVAUDIN_STATES },
+    write: true,
+    role: "state",
+  },
+  // Audio select (9 lists): which terminal's sound the current input uses. `Unavailable` is
+  // GET-only and reaches the dropdown as an observed value.
+  {
+    func: "AUDSEL",
+    state: "advanced.audioSelect",
+    nameKey: "audioSelect",
+    descKey: "descAudioSelect",
+    spec: { kind: "enum", states: selfMap(["Auto", "HDMI", "Coax/Opt", "Analog"]) },
     write: true,
     role: "state",
   },
@@ -903,6 +929,65 @@ const ZONES: Array<{ subunit: string; prefix: string }> = [
   { subunit: "ZONE2", prefix: "multiroom.zone2." },
   { subunit: "ZONE3", prefix: "multiroom.zone3." },
   { subunit: "ZONE4", prefix: "multiroom.zone4." },
+];
+
+/**
+ * Functions the official lists give the ZONES only, never MAIN: the pre-out level mode and the
+ * channel balance (RX-A1010–A3020 class), the 2010 generation's plain tone dialect (`BASS`/
+ * `TREBLE` on ZONE2/3 next to MAIN's SPBASS/SPTREBLE — -10…10 dB in 2 dB steps, first decimal
+ * mandatory) and the four zone scenes (ZONE2–4, `Scene 1`…`Scene 4`, names SCENE1–4NAME).
+ * Claim with proof keeps a zone without them clean.
+ */
+const ZONE_ONLY_FUNCS: FuncDef[] = [
+  {
+    func: "BALANCE",
+    state: "sound.balance",
+    nameKey: "channelBalance",
+    descKey: "descChannelBalance",
+    spec: { kind: "number", min: -20, max: 20, step: 1, decimals: 0 },
+    write: true,
+    role: "level",
+  },
+  {
+    func: "VOLFIXVAR",
+    state: "volumeOutput",
+    nameKey: "volumeOutputMode",
+    descKey: "descVolumeOutputMode",
+    spec: { kind: "enum", states: selfMap(["Variable", "Fixed"]) },
+    write: true,
+    role: "state",
+  },
+  {
+    func: "BASS",
+    state: "sound.bass",
+    nameKey: "bass",
+    descKey: "descBass",
+    spec: { kind: "number", unit: "dB", min: -10, max: 10, step: 2, decimals: 1 },
+    write: true,
+    role: "level",
+  },
+  {
+    func: "TREBLE",
+    state: "sound.treble",
+    nameKey: "treble",
+    descKey: "descTreble",
+    spec: { kind: "number", unit: "dB", min: -10, max: 10, step: 2, decimals: 1 },
+    write: true,
+    role: "level",
+  },
+  {
+    func: "SCENE",
+    state: "scene.recall",
+    nameKey: "recallScene",
+    descKey: "descRecallScene",
+    spec: { kind: "number", min: 1, max: 4, step: 1 },
+    write: true,
+    role: "level",
+    readFunc: "SCENE1NAME",
+    readAliases: ["SCENE2NAME", "SCENE3NAME", "SCENE4NAME"],
+    writeOnly: true,
+    wireEncode: value => `Scene ${Math.round(Number(value))}`,
+  },
 ];
 
 /** Global (non-zone) functions: one subunit each. State id carries its own channel. */
@@ -1173,42 +1258,6 @@ const SYS_FUNCS: FuncDef[] = [
     write: true,
     role: "state",
   },
-  {
-    func: "SPPATTERN1SWFR1CNFG",
-    state: "advanced.speakers.pattern1Swfr1",
-    nameKey: "speakerPattern1Subwoofer1",
-    descKey: "descSpeakerPattern1Subwoofer1",
-    spec: { kind: "enum", states: SWFR_CNFG_STATES },
-    write: true,
-    role: "state",
-  },
-  {
-    func: "SPPATTERN1SWFR2CNFG",
-    state: "advanced.speakers.pattern1Swfr2",
-    nameKey: "speakerPattern1Subwoofer2",
-    descKey: "descSpeakerPattern1Subwoofer2",
-    spec: { kind: "enum", states: SWFR_CNFG_STATES },
-    write: true,
-    role: "state",
-  },
-  {
-    func: "SPPATTERN2SWFR1CNFG",
-    state: "advanced.speakers.pattern2Swfr1",
-    nameKey: "speakerPattern2Subwoofer1",
-    descKey: "descSpeakerPattern2Subwoofer1",
-    spec: { kind: "enum", states: SWFR_CNFG_STATES },
-    write: true,
-    role: "state",
-  },
-  {
-    func: "SPPATTERN2SWFR2CNFG",
-    state: "advanced.speakers.pattern2Swfr2",
-    nameKey: "speakerPattern2Subwoofer2",
-    descKey: "descSpeakerPattern2Subwoofer2",
-    spec: { kind: "enum", states: SWFR_CNFG_STATES },
-    write: true,
-    role: "state",
-  },
   // Amp-assign for speaker pattern 1 (official RX-V671 list: PUT+GET with the three
   // documented values; the RX-V6A answers "Basic").
   // --- Setup surface of the 2010 generation and later (audit 2026-09-06). Measured against the
@@ -1242,121 +1291,121 @@ const SYS_FUNCS: FuncDef[] = [
     write: true,
     role: "switch",
   },
+  // Party-mode volume (17 of the 21 official lists; PUT-only Up/Down): two keys, offered
+  // wherever the party mode itself is — its PARTY answer is the proof.
   {
-    func: "TRIG1TYPE",
-    state: "advanced.trigger1Type",
-    nameKey: "triggerOut1Type",
-    descKey: "descTriggerOut1Type",
-    spec: { kind: "enum", states: selfMap(["Manual", "Power", "Zone and Input"]) },
+    func: "PARTYVOL",
+    state: "multiroom.partyVolumeUp",
+    nameKey: "partyVolumeUp",
+    descKey: "descPartyVolumeUp",
+    spec: { kind: "button" },
+    write: true,
+    role: "button",
+    readFunc: "PARTY",
+    writeOnly: true,
+    wireEncode: () => "Up",
+  },
+  {
+    func: "PARTYVOL",
+    state: "multiroom.partyVolumeDown",
+    nameKey: "partyVolumeDown",
+    descKey: "descPartyVolumeDown",
+    spec: { kind: "button" },
+    write: true,
+    role: "button",
+    readFunc: "PARTY",
+    writeOnly: true,
+    wireEncode: () => "Down",
+  },
+  // HDMI video mode and the lip-sync block (9 lists, the 2012 Aventage class).
+  {
+    func: "HDMIVIDEOMODE",
+    state: "hdmi.videoMode",
+    nameKey: "hdmiVideoMode",
+    descKey: "descHdmiVideoMode",
+    spec: { kind: "enum", states: selfMap(["Direct", "Processing"]) },
     write: true,
     role: "state",
   },
   {
-    func: "TRIG1ZONE",
-    state: "advanced.trigger1Zone",
-    nameKey: "triggerOut1Zone",
-    descKey: "descTriggerOut1Zone",
-    // The static maximum; the controller derives the real list from the zones the device has.
-    spec: { kind: "enum", states: selfMap(["Main Zone", "Zone2", "Zone3", "Zone4", "All"]) },
+    func: "LIPSYNCMODE",
+    state: "hdmi.lipSyncMode",
+    nameKey: "lipSyncMode",
+    descKey: "descLipSyncMode",
+    spec: { kind: "enum", states: selfMap(["Manual", "Auto"]) },
     write: true,
     role: "state",
   },
   {
-    func: "SPPATTERN1FRNTCNFG",
-    state: "advanced.speakers.pattern1Front",
-    nameKey: "speakerPattern1Front",
-    descKey: "descSpeakerPattern1Front",
-    spec: { kind: "enum", states: selfMap(["Small", "Large"]) },
+    func: "LIPSYNCTOTALDELAY",
+    state: "hdmi.lipSyncTotalDelay",
+    nameKey: "lipSyncTotalDelay",
+    descKey: "descLipSyncTotalDelay",
+    spec: { kind: "number", unit: "ms", min: 0, max: 500, step: 1, decimals: 0 },
     write: true,
-    role: "state",
+    role: "level",
   },
   {
-    func: "SPPATTERN1CENTCNFG",
-    state: "advanced.speakers.pattern1Center",
-    nameKey: "speakerPattern1Center",
-    descKey: "descSpeakerPattern1Center",
-    spec: { kind: "enum", states: selfMap(["None", "Small", "Large"]) },
-    write: true,
-    role: "state",
+    func: "LIPSYNCTOTALDELAYINFO",
+    state: "hdmi.lipSyncTvOffset",
+    nameKey: "lipSyncTvOffset",
+    descKey: "descLipSyncTvOffset",
+    spec: { kind: "number", unit: "ms", min: 0, max: 500, decimals: 0 },
+    write: false,
+    role: "value",
   },
   {
-    func: "SPPATTERN1SURCNFG",
-    state: "advanced.speakers.pattern1Surround",
-    nameKey: "speakerPattern1Surround",
-    descKey: "descSpeakerPattern1Surround",
-    spec: { kind: "enum", states: selfMap(["None", "Small", "Large"]) },
-    write: true,
+    func: "LIPSYNCSELINFO",
+    state: "hdmi.lipSyncOutput",
+    nameKey: "lipSyncOutput",
+    descKey: "descLipSyncOutput",
+    spec: {
+      kind: "enum",
+      states: selfMap(["Disable", "Analog", "HDMI1 Auto", "HDMI1 Manual", "HDMI2 Auto", "HDMI2 Manual"]),
+    },
+    write: false,
     role: "state",
   },
+  // RS-232C standby (5 lists), the sales region and the tuner step it fixes (6 lists — GET
+  // only, plain codes), the update notice switch (RX-A850).
   {
-    func: "SPPATTERN1SURBCNFG",
-    state: "advanced.speakers.pattern1SurroundBack",
-    nameKey: "speakerPattern1SurroundBack",
-    descKey: "descSpeakerPattern1SurroundBack",
-    spec: { kind: "enum", states: selfMap(["None", "Small x1", "Large x1", "Small x2", "Large x2"]) },
-    write: true,
-    role: "state",
-  },
-  {
-    func: "SPPATTERN1FRNTPRES",
-    state: "advanced.speakers.pattern1FrontPresence",
-    nameKey: "speakerPattern1FrontPresence",
-    descKey: "descSpeakerPattern1FrontPresence",
-    spec: { kind: "enum", states: selfMap(["None", "Use"]) },
-    write: true,
-    role: "state",
-  },
-  {
-    func: "SPPATTERN1EXBASS",
-    state: "advanced.speakers.pattern1ExtraBass",
-    nameKey: "speakerPattern1ExtraBass",
-    descKey: "descSpeakerPattern1ExtraBass",
+    func: "RS232CSTANDBY",
+    state: "advanced.rs232Standby",
+    nameKey: "rs232Standby",
+    descKey: "descRs232Standby",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
     role: "switch",
   },
   {
-    func: "SPPATTERN1SWFR1PHASE",
-    state: "advanced.speakers.pattern1Subwoofer1Phase",
-    nameKey: "speakerPattern1Subwoofer1Phase",
-    descKey: "descSpeakerPattern1Subwoofer1Phase",
-    spec: { kind: "enum", states: selfMap(["Normal", "Reverse"]) },
-    write: true,
+    func: "DEST",
+    state: "info.region",
+    nameKey: "region",
+    descKey: "descRegion",
+    spec: { kind: "text" },
+    write: false,
+    role: "text",
+  },
+  {
+    func: "FREQSTEP",
+    state: "tuner.frequencyStep",
+    nameKey: "tunerFrequencyStep",
+    descKey: "descTunerFrequencyStep",
+    spec: { kind: "enum", states: selfMap(["FM50/AM9", "FM100/AM9", "FM100/AM10", "FM200/AM10"]) },
+    write: false,
     role: "state",
   },
   {
-    func: "SPPATTERN1SWFRCRSOVR",
-    state: "advanced.speakers.pattern1SubwooferCrossover",
-    nameKey: "speakerPattern1SubwooferCrossover",
-    descKey: "descSpeakerPattern1SubwooferCrossover",
-    spec: {
-      kind: "enum",
-      states: selfMap(["40 Hz", "60 Hz", "80 Hz", "90 Hz", "100 Hz", "110 Hz", "120 Hz", "160 Hz", "200 Hz"]),
-    },
+    func: "UPDTNOTICEMSG",
+    state: "advanced.updateNotice",
+    nameKey: "updateNotice",
+    descKey: "descUpdateNotice",
+    spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
-    role: "state",
+    role: "switch",
   },
-  {
-    func: "SPPATTERN1AMP",
-    state: "advanced.speakers.pattern1Amp",
-    nameKey: "speakerPattern1AmpAssign",
-    descKey: "descSpeakerPattern1AmpAssign",
-    // No candidates: the official lists carry 3 to 14 model-specific strings ("7ch +FPR",
-    // "5ch BI-AMP", "Basic", …) with no common core. The dropdown holds what this device reported.
-    spec: { kind: "enum", states: {} },
-    write: true,
-    role: "state",
-  },
-  // Trigger-out 1 manual level (official list: PUT+GET, Lo/Hi).
-  {
-    func: "TRIG1MANUAL",
-    state: "advanced.trigger1Manual",
-    nameKey: "triggerOut1ManualLevel",
-    descKey: "descTriggerOut1ManualLevel",
-    spec: { kind: "enum", states: selfMap(["Lo", "Hi"]) },
-    write: true,
-    role: "state",
-  },
+  // REMOTECODE (PUT-only IR code, every list) has no datapoint: nothing readable proves it on
+  // a device, and a blind claim is what #615 taught us not to make.
   // The control port itself (official list: PUT 50000-65535). Deliberately READ-ONLY:
   // writing it from ioBroker would cut this very connection and strand the adapter on
   // the old port until a rediscovery — a foot-gun, not a feature.
@@ -1411,20 +1460,26 @@ const INPUT_NAME_KEYS = [
  * ({@link INPUT_STATES}), so the name and the selectable value read alike.
  */
 /**
- * The inputs the official command list gives a `TRIG1INP<INPUT>` function. Not the same set as
- * {@link INPUT_NAME_KEYS}: a trigger can follow a NETWORK source (net radio, Napster, PC, USB)
- * that carries no renameable input name, while the renameable MULTI CH / DOCK inputs have no
- * trigger function.
+ * The inputs the 21 official command lists give a `TRIG1INP<INPUT>` / `TRIG2INP<INPUT>` function
+ * (their union, 2010–2015). Not the same set as {@link INPUT_NAME_KEYS}: a trigger can follow a
+ * NETWORK source that carries no renameable input name. Claim with proof keeps a device's tree
+ * to the inputs it answers for.
  */
 const TRIGGER_INPUT_KEYS = [
+  "airplay",
   "audio1",
   "audio2",
+  "audio3",
+  "audio4",
   "av1",
   "av2",
   "av3",
   "av4",
   "av5",
   "av6",
+  "av7",
+  "bt",
+  "dock",
   "hdmi1",
   "hdmi2",
   "hdmi3",
@@ -1432,11 +1487,23 @@ const TRIGGER_INPUT_KEYS = [
   "hdmi5",
   "hdmi6",
   "hdmi7",
+  "ipod",
+  "ipodusb",
+  "multich",
   "napster",
+  "net",
   "netradio",
+  "pandora",
   "pc",
   "phono",
+  "rhapsody",
+  "server",
+  "sirius",
+  "siriusir",
+  "siriusxm",
+  "spotify",
   "tuner",
+  "uaw",
   "usb",
   "vaux",
 ];
@@ -1447,7 +1514,266 @@ const INPUT_NAME_LABELS: Readonly<Record<string, string>> = {
   mclink: "MusicCast Link",
   netradio: "NET RADIO",
   bt: "Bluetooth",
+  airplay: "AirPlay",
+  ipod: "iPod",
+  ipodusb: "iPod (USB)",
+  napster: "Napster",
+  pandora: "Pandora",
+  rhapsody: "Rhapsody",
+  siriusir: "SIRIUS InternetRadio",
+  siriusxm: "SiriusXM",
+  spotify: "Spotify",
 };
+
+/**
+ * The trigger-output functions, once per socket (official lists: trigger 2 "Parameters are the
+ * same as `@SYS:TRIG1…`"; 9 of the 21 lists have a second socket).
+ *
+ * @param n the trigger socket (1 or 2)
+ * @returns the three per-socket functions
+ */
+function triggerFuncs(n: 1 | 2): FuncDef[] {
+  return [
+    {
+      func: `TRIG${n}TYPE`,
+      state: `advanced.trigger${n}Type`,
+      nameKey: "triggerOutType",
+      descKey: "descTriggerOutType",
+      nameArgs: [n],
+      spec: { kind: "enum", states: selfMap(["Manual", "Power", "Zone and Input"]) },
+      write: true,
+      role: "state",
+    },
+    {
+      func: `TRIG${n}ZONE`,
+      state: `advanced.trigger${n}Zone`,
+      nameKey: "triggerOutZone",
+      descKey: "descTriggerOutZone",
+      nameArgs: [n],
+      // The static maximum; the controller derives the real list from the zones the device has.
+      spec: { kind: "enum", states: selfMap(["Main Zone", "Zone2", "Zone3", "Zone4", "All"]) },
+      write: true,
+      role: "state",
+    },
+    {
+      func: `TRIG${n}MANUAL`,
+      state: `advanced.trigger${n}Manual`,
+      nameKey: "triggerOutManualLevel",
+      descKey: "descTriggerOutManualLevel",
+      nameArgs: [n],
+      spec: { kind: "enum", states: selfMap(["Lo", "Hi"]) },
+      write: true,
+      role: "state",
+    },
+  ];
+}
+
+const CROSSOVER_STATES = selfMap([
+  "40 Hz",
+  "60 Hz",
+  "80 Hz",
+  "90 Hz",
+  "100 Hz",
+  "110 Hz",
+  "120 Hz",
+  "160 Hz",
+  "200 Hz",
+]);
+
+/**
+ * The speaker-pattern functions, identical for pattern 1 and 2 (official lists: pattern 2
+ * "Parameters are the same as `@SYS:SPPATTERN1…`"). `suffix` follows `SPPATTERN<n>`, `state`
+ * follows `advanced.speakers.pattern<n>`. The 2012 Aventage class adds a crossover per speaker
+ * group, the rear presence pair, the second subwoofer's phase and the subwoofer layout; the
+ * RX-A850 (2015) the front-presence size, crossover and layout and the surround layout. Values
+ * from the lists, never guessed.
+ */
+const SPEAKER_PATTERN_FUNCS: ReadonlyArray<{
+  suffix: string;
+  state: string;
+  nameKey: I18nKey;
+  descKey: I18nKey;
+  spec: ValueSpec;
+  role?: string;
+}> = [
+  {
+    suffix: "FRNTCNFG",
+    state: "Front",
+    nameKey: "speakerPatternFront",
+    descKey: "descSpeakerPatternFront",
+    spec: { kind: "enum", states: selfMap(["Small", "Large"]) },
+  },
+  {
+    suffix: "CENTCNFG",
+    state: "Center",
+    nameKey: "speakerPatternCenter",
+    descKey: "descSpeakerPatternCenter",
+    spec: { kind: "enum", states: selfMap(["None", "Small", "Large"]) },
+  },
+  {
+    suffix: "SURCNFG",
+    state: "Surround",
+    nameKey: "speakerPatternSurround",
+    descKey: "descSpeakerPatternSurround",
+    spec: { kind: "enum", states: selfMap(["None", "Small", "Large"]) },
+  },
+  {
+    suffix: "SURBCNFG",
+    state: "SurroundBack",
+    nameKey: "speakerPatternSurroundBack",
+    descKey: "descSpeakerPatternSurroundBack",
+    spec: { kind: "enum", states: selfMap(["None", "Small x1", "Large x1", "Small x2", "Large x2"]) },
+  },
+  {
+    suffix: "FRNTPRES",
+    state: "FrontPresence",
+    nameKey: "speakerPatternFrontPresence",
+    descKey: "descSpeakerPatternFrontPresence",
+    spec: { kind: "enum", states: selfMap(["None", "Use"]) },
+  },
+  {
+    suffix: "REARPRES",
+    state: "RearPresence",
+    nameKey: "speakerPatternRearPresence",
+    descKey: "descSpeakerPatternRearPresence",
+    spec: { kind: "enum", states: selfMap(["None", "Use"]) },
+  },
+  {
+    suffix: "EXBASS",
+    state: "ExtraBass",
+    nameKey: "speakerPatternExtraBass",
+    descKey: "descSpeakerPatternExtraBass",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    role: "switch",
+  },
+  {
+    suffix: "SWFR1CNFG",
+    state: "Swfr1",
+    nameKey: "speakerPatternSubwoofer1",
+    descKey: "descSpeakerPatternSubwoofer1",
+    spec: { kind: "enum", states: SWFR_CNFG_STATES },
+  },
+  {
+    suffix: "SWFR2CNFG",
+    state: "Swfr2",
+    nameKey: "speakerPatternSubwoofer2",
+    descKey: "descSpeakerPatternSubwoofer2",
+    spec: { kind: "enum", states: SWFR_CNFG_STATES },
+  },
+  {
+    suffix: "SWFR1PHASE",
+    state: "Subwoofer1Phase",
+    nameKey: "speakerPatternSubwoofer1Phase",
+    descKey: "descSpeakerPatternSubwoofer1Phase",
+    spec: { kind: "enum", states: selfMap(["Normal", "Reverse"]) },
+  },
+  {
+    suffix: "SWFR2PHASE",
+    state: "Subwoofer2Phase",
+    nameKey: "speakerPatternSubwoofer2Phase",
+    descKey: "descSpeakerPatternSubwoofer2Phase",
+    spec: { kind: "enum", states: selfMap(["Normal", "Reverse"]) },
+  },
+  {
+    suffix: "SWFRCRSOVR",
+    state: "SubwooferCrossover",
+    nameKey: "speakerPatternSubwooferCrossover",
+    descKey: "descSpeakerPatternSubwooferCrossover",
+    spec: { kind: "enum", states: CROSSOVER_STATES },
+  },
+  {
+    suffix: "SWFRLAYOUT",
+    state: "SubwooferLayout",
+    nameKey: "speakerPatternSubwooferLayout",
+    descKey: "descSpeakerPatternSubwooferLayout",
+    spec: { kind: "enum", states: selfMap(["Left & Right", "Front & Rear", "Monaural x2"]) },
+  },
+  // No candidates: the official lists carry 3 to 14 model-specific strings ("7ch +FPR",
+  // "5ch BI-AMP", "Basic", …) with no common core. The dropdown holds what this device reported.
+  {
+    suffix: "AMP",
+    state: "Amp",
+    nameKey: "speakerPatternAmpAssign",
+    descKey: "descSpeakerPatternAmpAssign",
+    spec: { kind: "enum", states: {} },
+  },
+  {
+    suffix: "FRNTCRSOVR",
+    state: "FrontCrossover",
+    nameKey: "speakerPatternFrontCrossover",
+    descKey: "descSpeakerPatternFrontCrossover",
+    spec: { kind: "enum", states: CROSSOVER_STATES },
+  },
+  {
+    suffix: "CENTCRSOVR",
+    state: "CenterCrossover",
+    nameKey: "speakerPatternCenterCrossover",
+    descKey: "descSpeakerPatternCenterCrossover",
+    spec: { kind: "enum", states: CROSSOVER_STATES },
+  },
+  {
+    suffix: "SURCRSOVR",
+    state: "SurroundCrossover",
+    nameKey: "speakerPatternSurroundCrossover",
+    descKey: "descSpeakerPatternSurroundCrossover",
+    spec: { kind: "enum", states: CROSSOVER_STATES },
+  },
+  {
+    suffix: "SURBCRSOVR",
+    state: "SurroundBackCrossover",
+    nameKey: "speakerPatternSurroundBackCrossover",
+    descKey: "descSpeakerPatternSurroundBackCrossover",
+    spec: { kind: "enum", states: CROSSOVER_STATES },
+  },
+  {
+    suffix: "FPLAYOUT",
+    state: "FrontPresenceLayout",
+    nameKey: "speakerPatternFrontPresenceLayout",
+    descKey: "descSpeakerPatternFrontPresenceLayout",
+    spec: { kind: "enum", states: selfMap(["Front", "Overhead", "Dolby"]) },
+  },
+  {
+    suffix: "FPRESCNFG",
+    state: "FrontPresenceConfig",
+    nameKey: "speakerPatternFrontPresenceConfig",
+    descKey: "descSpeakerPatternFrontPresenceConfig",
+    spec: { kind: "enum", states: selfMap(["None", "Small", "Large"]) },
+  },
+  {
+    suffix: "FPRESCRSOVR",
+    state: "FrontPresenceCrossover",
+    nameKey: "speakerPatternFrontPresenceCrossover",
+    descKey: "descSpeakerPatternFrontPresenceCrossover",
+    spec: { kind: "enum", states: CROSSOVER_STATES },
+  },
+  {
+    suffix: "SURLAYOUT",
+    state: "SurroundLayout",
+    nameKey: "speakerPatternSurroundLayout",
+    descKey: "descSpeakerPatternSurroundLayout",
+    spec: { kind: "enum", states: selfMap(["Rear", "Front"]) },
+  },
+];
+
+/**
+ * The speaker-pattern entries of one pattern.
+ *
+ * @param pattern the pattern (1 or 2)
+ * @returns the entries, ids `advanced.speakers.pattern<n><State>`
+ */
+function speakerPatternEntries(pattern: 1 | 2): YncaEntry[] {
+  return SPEAKER_PATTERN_FUNCS.map(fn => ({
+    id: `advanced.speakers.pattern${pattern}${fn.state}`,
+    nameKey: fn.nameKey,
+    descKey: fn.descKey,
+    nameArgs: [pattern],
+    spec: fn.spec,
+    write: true,
+    role: fn.role ?? "state",
+    subunit: "SYS",
+    func: `SPPATTERN${pattern}${fn.suffix}`,
+  }));
+}
 
 /**
  * DAB tuner functions (the `@DAB` subunit on DAB+-capable receivers). Mapped under
@@ -1861,7 +2187,46 @@ function fnEntries(fns: readonly FuncDef[], subunit: string, prefix = ""): YncaE
     wireDecode: fn.wireDecode,
     readFunc: fn.readFunc,
     writeOnly: fn.writeOnly,
+    ...(fn.nameArgs ? { nameArgs: fn.nameArgs } : {}),
+    ...(fn.readAliases ? { readAliases: fn.readAliases } : {}),
   }));
+}
+
+/**
+ * The one-GET-answers-many functions of the official lists, for the subunits a device has: a
+ * zone's BASIC (15–25 amplifier functions) and SCENENAME (every scene name), the tuner's SIGINFO
+ * and RDSINFO, a player's METAINFO (artist, album, song, station …). Everything a bundle answers
+ * is proof and is not asked again individually; what it lacks is still asked, so a subunit
+ * without the bundle (`@UNDEFINED` carries no subunit) loses nothing. Never asked for an absent
+ * subunit.
+ *
+ * @param present the subunits that answered the AVAIL probe
+ * @returns the bundle GETs, one request list
+ */
+export function bundleGets(present: ReadonlySet<string>): Array<{ subunit: string; func: string }> {
+  const gets: Array<{ subunit: string; func: string }> = [];
+  for (const zone of ZONES) {
+    if (present.has(zone.subunit)) {
+      gets.push({ subunit: zone.subunit, func: "BASIC" }, { subunit: zone.subunit, func: "SCENENAME" });
+    }
+  }
+  if (present.has("TUN")) {
+    gets.push({ subunit: "TUN", func: "SIGINFO" }, { subunit: "TUN", func: "RDSINFO" });
+  }
+  for (const subunit of ["HDRADIO", "SIRIUS"]) {
+    if (present.has(subunit)) {
+      gets.push({ subunit, func: "SIGINFO" });
+    }
+  }
+  for (const source of PLAYER_SOURCES) {
+    if (present.has(source.subunit)) {
+      gets.push({ subunit: source.subunit, func: "METAINFO" });
+    }
+  }
+  if (present.has("HDRADIO")) {
+    gets.push({ subunit: "HDRADIO", func: "METAINFO" });
+  }
+  return gets;
 }
 
 /**
@@ -1875,6 +2240,9 @@ export function buildYncaCatalog(): YncaEntry[] {
   const entries: YncaEntry[] = [];
   for (const zone of ZONES) {
     entries.push(...fnEntries(AMP_FUNCS, zone.subunit, zone.prefix));
+    if (zone.subunit !== "MAIN") {
+      entries.push(...fnEntries(ZONE_ONLY_FUNCS, zone.subunit, zone.prefix));
+    }
   }
   // MAIN-only functions (Zone B sub-zone, speaker toggles).
   entries.push(...fnEntries(MAIN_ONLY_FUNCS, "MAIN"));
@@ -1903,21 +2271,28 @@ export function buildYncaCatalog(): YncaEntry[] {
     entries.push(...fnEntries([fn], fn.subunit));
   }
   entries.push(...fnEntries(SYS_FUNCS, "SYS"));
-  // Trigger-out 1, per input (official list `@SYS:TRIG1INP<INPUT>`, Lo/Hi). Answered by the
-  // 2010 generation and unmapped until the 2026-09-06 audit: the adapter carried the manual
-  // trigger level but not the per-input assignment that decides WHEN the trigger fires.
-  for (const key of TRIGGER_INPUT_KEYS) {
-    entries.push({
-      id: `advanced.trigger1Inputs.${key}`,
-      nameKey: "triggerOut1ForInput",
-      descKey: "descTriggerOut1ForInput",
-      nameArgs: [INPUT_NAME_LABELS[key] ?? key.toUpperCase()],
-      spec: { kind: "enum", states: selfMap(["Lo", "Hi"]) },
-      write: true,
-      role: "state",
-      subunit: "SYS",
-      func: `TRIG1INP${key.toUpperCase()}`,
-    });
+  for (const pattern of [1, 2] as const) {
+    entries.push(...speakerPatternEntries(pattern));
+  }
+  // Trigger-out 1 and 2: mode, zone, manual level, and the level per input (official lists
+  // `@SYS:TRIG<n>INP<INPUT>`, Lo/Hi). Answered by the 2010 generation and unmapped until the
+  // 2026-09-06 audit: the adapter carried the manual trigger level but not the per-input
+  // assignment that decides WHEN the trigger fires; the second socket followed on 2026-09-09.
+  for (const n of [1, 2] as const) {
+    entries.push(...fnEntries(triggerFuncs(n), "SYS"));
+    for (const key of TRIGGER_INPUT_KEYS) {
+      entries.push({
+        id: `advanced.trigger${n}Inputs.${key}`,
+        nameKey: "triggerOutForInput",
+        descKey: "descTriggerOutForInput",
+        nameArgs: [n, INPUT_NAME_LABELS[key] ?? key.toUpperCase()],
+        spec: { kind: "enum", states: selfMap(["Lo", "Hi"]) },
+        write: true,
+        role: "state",
+        subunit: "SYS",
+        func: `TRIG${n}INP${key.toUpperCase()}`,
+      });
+    }
   }
   for (const key of INPUT_NAME_KEYS) {
     const upper = key.toUpperCase();
