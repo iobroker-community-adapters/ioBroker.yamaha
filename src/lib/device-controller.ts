@@ -5,8 +5,11 @@ import type { ObjectDef } from "./catalog/types";
 import { tName } from "./i18n";
 import type { ConnectionHandle, ControllerLog } from "./controller";
 import {
+  SOURCE_INPUTS,
   YNCA_CATALOG,
   availGets,
+  deviceInputStates,
+  enumStatesFor,
   funcToEntry,
   idToEntry,
   presentYncaEntries,
@@ -14,8 +17,10 @@ import {
   yncaCommand,
   yncaObjectsFor,
   yncaStateUpdate,
+  type InputEvidence,
   type YncaEntry,
 } from "./ynca/catalog";
+import type { StatesResolver } from "./catalog/build-objects";
 import type { YncaSubunitCache } from "./ynca/subunit-cache";
 import type { CommandGate } from "./lifecycle/command-gate";
 import type { ProbeMemory } from "./lifecycle/probe-memory";
@@ -30,11 +35,13 @@ import { YNCA_BROWSE_SOURCES, YncaBrowseDriver } from "./browse/ynca-browse-driv
 const FUNC_MAP = funcToEntry(YNCA_CATALOG);
 const ID_MAP = idToEntry(YNCA_CATALOG);
 const AVAIL_PROBE = availGets(YNCA_CATALOG);
+/** The subunits the AVAIL probe asks — the set a silent subunit is judged absent against. */
+const PROBED_SUBUNITS: ReadonlySet<string> = new Set(AVAIL_PROBE.map(get => get.subunit));
 
 /**
- * Functions whose VALUE cannot change while the device runs: the 23 assignable input names
- * and the 12 scene names. They cost 35 of the ~187 paced reads of a targeted sweep (3.5 s
- * at the specification's mandatory 100 ms spacing) and answer the same thing every time, so
+ * Functions whose VALUE cannot change while the device runs: the 29 assignable input names
+ * and the 12 scene names. They cost 41 paced reads of a targeted sweep (4.1 s at the
+ * specification's mandatory 100 ms spacing) and answer the same thing every time, so
  * a reconnect reuses what the first connect learned.
  *
  * They live in the PERSISTED probe memory (the device object's `native.probeCache`), so the
@@ -54,30 +61,29 @@ const YNCA_ZONES: Array<{ key: string; subunit: string; prefix: string }> = [
 ];
 
 /**
- * INP value → the player subunit it selects (normalized: uppercase, alphanumerics only).
- * The wire values come from the RX-V6A INPNAME/INP capture and ynca-python's input map;
- * inputs that are no media player (HDMI, AV, TUNER, …) deliberately map to nothing.
+ * The normalised form an INP value is looked up by: uppercase, alphanumerics only
+ * ("NET RADIO" → NETRADIO, "iPod (USB)" → IPODUSB, "SIRIUS InternetRadio" → SIRIUSINTERNETRADIO).
+ *
+ * @param input the wire value
+ * @returns the lookup key
  */
-const INPUT_SUBUNITS: Record<string, string> = {
-  NETRADIO: "NETRADIO",
-  SERVER: "SERVER",
-  USB: "USB",
-  SPOTIFY: "SPOTIFY",
-  DEEZER: "DEEZER",
-  TIDAL: "TIDAL",
-  NAPSTER: "NAPSTER",
-  PANDORA: "PANDORA",
-  RHAPSODY: "RHAP",
-  SIRIUS: "SIRIUS",
-  SIRIUSXM: "SIRIUS",
-  SIRIUSIR: "SIRIUS",
-  AIRPLAY: "AIRPLAY",
-  BLUETOOTH: "BT",
-  PC: "PC",
-  MUSICCASTLINK: "MCLINK",
-  IPOD: "IPOD",
-  IPODUSB: "IPODUSB",
-};
+function normalizeInput(input: string): string {
+  return input.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+/**
+ * INP value → the player subunit it selects. Derived from the catalog's source table — ONE
+ * list serves the dropdown, the presence proof and the player routing; inputs that are no
+ * media player (HDMI, AV, TUNER, …) map to nothing. The hand-written table this replaces
+ * routed "SiriusXM" and "SIRIUS InternetRadio" to the SIRIUS subunit (ynca-python: each has
+ * its own) and carried a key (`SIRIUSIR`) no wire value ever normalised to.
+ */
+const INPUT_SUBUNITS: Record<string, string> = Object.fromEntries(
+  SOURCE_INPUTS.filter(source => source.value !== "TUNER" && source.subunits.length > 0).map(source => [
+    normalizeInput(source.value),
+    source.subunits[0],
+  ]),
+);
 
 /**
  * The player subunit an input selection feeds, or undefined when the input is no
@@ -90,7 +96,7 @@ function playerSubunitForInput(input: string | undefined): string | undefined {
   if (typeof input !== "string" || input.length === 0) {
     return undefined;
   }
-  return INPUT_SUBUNITS[input.toUpperCase().replace(/[^A-Z0-9]/g, "")];
+  return INPUT_SUBUNITS[normalizeInput(input)];
 }
 
 /**
@@ -127,6 +133,74 @@ const STATIC_KEY = "yncaStaticValues";
 
 /** Memory key for the persisted capability shape (the fast-restart layer). */
 const CAPS_KEY = "yncaCapabilities";
+
+/**
+ * Memory key for the enum values this device ever reported: subunit → function → values, in
+ * the order first seen. YNCA declares no value lists, so a device's own spelling is learned
+ * by observation and offered on the dropdown from then on (see `enumStatesFor`).
+ */
+const OBSERVED_KEY = "yncaObserved";
+
+/**
+ * The ceiling per function of the observed store. A real enum has a dozen values at most;
+ * the cap only keeps a misbehaving device from growing the device object without bound.
+ */
+const MAX_OBSERVED_VALUES = 64;
+
+/** The observed-values store, as persisted. */
+type ObservedValues = Record<string, Record<string, string[]>>;
+
+/**
+ * Whether a remembered value carries the observed-values shape (API boundary — the
+ * persisted probe memory is untrusted storage).
+ *
+ * @param value the remembered value
+ * @returns true when usable
+ */
+function isObservedValues(value: unknown): value is ObservedValues {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  return Object.values(value).every(
+    funcs =>
+      typeof funcs === "object" &&
+      funcs !== null &&
+      !Array.isArray(funcs) &&
+      Object.values(funcs).every(list => Array.isArray(list) && list.every(item => typeof item === "string")),
+  );
+}
+
+/**
+ * A remembered string→T record, or undefined when the memory holds something else.
+ *
+ * @param value the remembered value
+ * @param type the expected value type of every field
+ * @returns the record, or undefined
+ */
+function recordOf<T>(value: unknown, type: "boolean" | "string"): Record<string, T> | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  return Object.values(value).every(item => typeof item === type) ? (value as Record<string, T>) : undefined;
+}
+
+/**
+ * The XML `System>Config` declaration as input evidence, when the XML transport remembered
+ * one for this device (the probe memory is shared by the three transports): the source
+ * flags prove a source absent, the input names add an input. Absent or malformed → nothing.
+ *
+ * @param remembered the remembered `xmlConfig` value
+ * @returns the XML half of the input evidence
+ */
+function xmlInputEvidence(remembered: unknown): Pick<InputEvidence, "xmlFeatures" | "xmlInputNames"> {
+  const config = remembered as { features?: unknown; inputNames?: unknown } | null | undefined;
+  if (typeof config !== "object" || config === null) {
+    return {};
+  }
+  const xmlFeatures = recordOf<boolean>(config.features, "boolean");
+  const xmlInputNames = recordOf<string>(config.inputNames, "string");
+  return { ...(xmlFeatures ? { xmlFeatures } : {}), ...(xmlInputNames ? { xmlInputNames } : {}) };
+}
 
 /** The persisted capability shape, keyed by the device identity that validated it. */
 interface CachedCapabilities {
@@ -265,6 +339,16 @@ export class YncaDeviceController implements ConnectionHandle {
   private readonly zoneInputs = new Map<string, string>();
   /** The zones that got a player block (main plus every present ZONEn, when sources exist). */
   private playerZones: string[] = [];
+  /**
+   * The subunits the AVAIL probe asked THIS device — the set a silent source is judged absent
+   * against. Empty when the device ignored the probe (blind sweep) or when the remembered
+   * snapshot came from another firmware: silence then proves nothing and no source is dropped.
+   */
+  private probedSubunits: ReadonlySet<string> = new Set();
+  /** The subunits that answered the AVAIL probe (or were remembered as answering, same identity). */
+  private presentSubunits = new Set<string>();
+  /** The enum values this device ever reported (see OBSERVED_KEY), persisted on every addition. */
+  private observed: ObservedValues = {};
 
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
@@ -306,7 +390,11 @@ export class YncaDeviceController implements ConnectionHandle {
         this.zoneInputs.set(zone.key, input);
       }
     }
-    const objects = yncaObjectsFor(capabilities, catalog);
+    // Every enum value the sweep (or the remembered shape) carries is an observation.
+    this.recordObservedAll(capabilities);
+    this.recordObservedAll(live);
+    const evidence = this.inputEvidence(capabilities);
+    const objects = yncaObjectsFor(capabilities, catalog, this.statesResolver(live, evidence));
     if (objects.length === 0) {
       this.deps.log.warn(`${this.deviceId}: no capabilities reported — creating no objects`);
       return false;
@@ -372,6 +460,9 @@ export class YncaDeviceController implements ConnectionHandle {
       // The browse driver sees every line first: list lines (LINE1TXT…, LISTINFO
       // bursts, auto-feedback) are not catalogued and would otherwise be dropped.
       this.browseDriver?.handleMessage(message);
+      // A value never seen before joins the observed store now and the dropdown on the next
+      // start (the tree is coordinated once per connect); the state gets the value at once.
+      this.recordObserved(message.subunit, message.func, message.value);
       if (message.func === "BAND" && (message.subunit === "TUN" || message.subunit === "DAB")) {
         this.tunerBand = message.value.toUpperCase();
       }
@@ -428,13 +519,22 @@ export class YncaDeviceController implements ConnectionHandle {
     const firmware = identity.subunits.SYS?.VERSION ?? "";
     const remembered = this.deps.probeMemory?.remembered(CAPS_KEY);
     if (model && isCachedCapabilities(remembered) && remembered.model === model && remembered.firmware === firmware) {
+      // The remembered subunit snapshot is proof for narrowing ONLY from the same identity: a
+      // snapshot of another firmware says nothing about which sources this device has now.
+      const cached = this.deps.subunitCache?.get();
+      if (cached && cached.model === model && cached.firmware === firmware) {
+        this.probedSubunits = PROBED_SUBUNITS;
+        this.presentSubunits = new Set(cached.subunits);
+      }
+      this.loadObserved();
       return { capabilities: { model, subunits: remembered.subunits }, fromCache: true };
     }
     if (remembered !== undefined) {
       // A different (or updated) device behind this address: its remembered YNCA
-      // answers are void. The other transports guard their own portions.
-      this.deps.probeMemory?.drop(key => key === CAPS_KEY || key === STATIC_KEY);
+      // answers are void — the observed values too. The other transports guard their own portions.
+      this.deps.probeMemory?.drop(key => key === CAPS_KEY || key === STATIC_KEY || key === OBSERVED_KEY);
     }
+    this.loadObserved();
     const capabilities = await this.sweepDevice(catalog, model, firmware);
     if (capabilities.model) {
       this.deps.probeMemory?.set(CAPS_KEY, {
@@ -587,6 +687,8 @@ export class YncaDeviceController implements ConnectionHandle {
       // ~0.2 s) — checking it BEFORE sweeping is what keeps a stale cache from costing
       // a full targeted sweep, then the probe, then a second sweep (~40 s).
       if (model === cached.model && firmware === cached.firmware) {
+        this.probedSubunits = PROBED_SUBUNITS;
+        this.presentSubunits = new Set(cached.subunits);
         return await this.targetedSweep(catalog, new Set(cached.subunits));
       }
       // The device behind this IP changed (swap or firmware update) — re-probe.
@@ -596,9 +698,12 @@ export class YncaDeviceController implements ConnectionHandle {
     const probe = await this.deps.client.readCapabilities(AVAIL_PROBE);
     const present = new Set(Object.keys(probe.subunits));
     if (present.size === 0) {
-      // Device ignores AVAIL — sweep blind so no function is lost.
+      // Device ignores AVAIL — sweep blind so no function is lost. And silence is no proof:
+      // `probedSubunits` stays empty, so no source is judged absent (advisor round 2026-09-09).
       return await this.deps.client.readCapabilities(sweepGets(catalog));
     }
+    this.probedSubunits = PROBED_SUBUNITS;
+    this.presentSubunits = present;
     const capabilities = await this.targetedSweep(catalog, present);
     if (capabilities.model) {
       this.deps.subunitCache?.set({
@@ -619,13 +724,31 @@ export class YncaDeviceController implements ConnectionHandle {
    * @returns the assembled capabilities
    */
   private async targetedSweep(catalog: readonly YncaEntry[], present: ReadonlySet<string>): Promise<YncaCapabilities> {
-    const gets = sweepGets(catalog).filter(get => get.subunit === "SYS" || present.has(get.subunit));
+    // The BASIC bundle of every present zone first: one GET answers 15–25 functions at once
+    // (the official lists; ynca-python reads it the same way). Every function it answered is
+    // proof and is not asked again individually; a function it lacks is still asked — BASIC
+    // is additive, never a filter (the RX-V1067 leaves functions out of it that it does answer
+    // on their own, ynca-python: "Not in BASIC on RX-V1067"). A zone without BASIC answers
+    // nothing (`@UNDEFINED` carries no subunit) and loses nothing.
+    const basic = await this.readBasicBundles(present);
+    const answered = new Set(
+      Object.entries(basic.subunits).flatMap(([subunit, funcs]) =>
+        Object.keys(funcs).map(func => `${subunit}:${func}`),
+      ),
+    );
+    const gets = sweepGets(catalog).filter(
+      get => (get.subunit === "SYS" || present.has(get.subunit)) && !answered.has(`${get.subunit}:${get.func}`),
+    );
     const remembered = this.deps.probeMemory?.remembered<Record<string, Record<string, string>>>(STATIC_KEY);
     // Second connect onwards: skip those reads and put the remembered answers back in, so
     // the objects are built exactly as if the device had answered them again.
-    const capabilities = await this.deps.client.readCapabilities(
+    const swept = await this.deps.client.readCapabilities(
       remembered ? gets.filter(get => !STATIC_FUNC.test(get.func)) : gets,
     );
+    const capabilities: YncaCapabilities = {
+      model: swept.model || basic.model,
+      subunits: mergeYncaSubunits(basic.subunits, swept.subunits),
+    };
     if (remembered) {
       for (const [subunit, funcs] of Object.entries(remembered)) {
         capabilities.subunits[subunit] = { ...funcs, ...capabilities.subunits[subunit] };
@@ -642,6 +765,122 @@ export class YncaDeviceController implements ConnectionHandle {
     }
     this.deps.probeMemory?.set(STATIC_KEY, statics);
     return capabilities;
+  }
+
+  /**
+   * Read the BASIC bundle of every present zone (MAIN, ZONE2–4) in one paced request list —
+   * the answers are ordinary `@ZONE:FUNC=value` lines the collector absorbs. Nothing to ask
+   * (no zone present, e.g. a blind sweep) → an empty report without a wire round trip.
+   *
+   * @param present the subunits that answered the AVAIL probe
+   * @returns the bundled answers
+   */
+  private async readBasicBundles(present: ReadonlySet<string>): Promise<YncaCapabilities> {
+    const gets = YNCA_ZONES.filter(zone => present.has(zone.subunit)).map(zone => ({
+      subunit: zone.subunit,
+      func: "BASIC",
+    }));
+    if (gets.length === 0) {
+      return { model: "", subunits: {} };
+    }
+    return await this.deps.client.readCapabilities(gets);
+  }
+
+  /**
+   * Load the observed-values store from the memory (after the identity guard ran, so a
+   * dropped store is not read back).
+   */
+  private loadObserved(): void {
+    const remembered = this.deps.probeMemory?.remembered(OBSERVED_KEY);
+    this.observed = isObservedValues(remembered) ? remembered : {};
+  }
+
+  /**
+   * Record every enum value a capability report carries.
+   *
+   * @param capabilities the report (a sweep, the remembered shape, the decisive reads)
+   */
+  private recordObservedAll(capabilities: YncaCapabilities): void {
+    for (const [subunit, funcs] of Object.entries(capabilities.subunits)) {
+      for (const [func, value] of Object.entries(funcs)) {
+        this.recordObserved(subunit, func, value);
+      }
+    }
+  }
+
+  /**
+   * Add a value the device reported for an enum function to the observed store, persisting
+   * on every addition. Non-enum functions and empty values are not observations.
+   *
+   * @param subunit the reporting subunit
+   * @param func the function
+   * @param value the wire value
+   */
+  private recordObserved(subunit: string, func: string, value: string): void {
+    const entry = FUNC_MAP.get(`${subunit}:${func}`);
+    if (!entry || entry.spec.kind !== "enum" || value.length === 0) {
+      return;
+    }
+    const list = ((this.observed[subunit] ??= {})[func] ??= []);
+    if (list.includes(value) || list.length >= MAX_OBSERVED_VALUES) {
+      return;
+    }
+    list.push(value);
+    this.deps.probeMemory?.set(OBSERVED_KEY, this.observed);
+  }
+
+  /**
+   * What this connect learned about the device's inputs: the probe's verdicts (present /
+   * asked), every subunit that answered anything, and the XML declaration when remembered.
+   *
+   * @param capabilities the capability report of this connect
+   * @returns the evidence the per-zone input lists are derived from
+   */
+  private inputEvidence(capabilities: YncaCapabilities): InputEvidence {
+    const present = new Set([...this.presentSubunits, ...Object.keys(capabilities.subunits)]);
+    return {
+      present,
+      probed: this.probedSubunits,
+      ...xmlInputEvidence(this.deps.probeMemory?.remembered("xmlConfig")),
+    };
+  }
+
+  /**
+   * The per-entry resolver of the selectable values on THIS device: the input list of each
+   * zone derived from the evidence, the trigger zone list from the zones the device has, and
+   * every other enum from the generation's candidates plus what this device reported.
+   *
+   * @param live the capability report with the decisive values read live
+   * @param evidence the input evidence of this connect
+   * @returns the resolver handed to the object builder
+   */
+  private statesResolver(live: YncaCapabilities, evidence: InputEvidence): StatesResolver {
+    return entry => {
+      if (entry.spec.kind !== "enum") {
+        return undefined;
+      }
+      const yncaEntry = entry as YncaEntry;
+      const readFunc = yncaEntry.readFunc ?? yncaEntry.func;
+      const current = live.subunits[yncaEntry.subunit]?.[readFunc];
+      if (yncaEntry.func === "INP") {
+        const zone = YNCA_ZONES.find(z => z.subunit === yncaEntry.subunit);
+        if (zone) {
+          return { states: deviceInputStates(evidence, zone.key, current), origin: "derived" };
+        }
+      }
+      if (yncaEntry.func === "TRIG1ZONE") {
+        const zones = YNCA_ZONES.filter(zone => zone.key !== "main" && evidence.present.has(zone.subunit)).map(
+          zone => `Zone${zone.key.slice(4)}`,
+        );
+        const values = ["Main Zone", ...zones, "All"];
+        if (current && !values.includes(current)) {
+          values.push(current);
+        }
+        return { states: Object.fromEntries(values.map(value => [value, value])), origin: "derived" };
+      }
+      const observed = this.observed[yncaEntry.subunit]?.[readFunc] ?? [];
+      return { states: enumStatesFor(yncaEntry, observed, current), origin: "candidates" };
+    };
   }
 
   /**

@@ -72,6 +72,15 @@ export interface ObjectDef {
    * `STATES_VOCABULARY`. Never written to the object, like `unproven`.
    */
   declaredStates?: boolean;
+  /**
+   * Where a `common.states` map came from, for the tests and the coordinator's tie-breaks:
+   * `declared` = the device's own list (see {@link declaredStates}), `derived` = a rule over
+   * proven facts (the YNCA input list narrowed by the AVAIL probe and the XML source flags, the
+   * trigger zone list from the zones the device has), `candidates` = the documented values of
+   * the generation that has the function plus every value this device ever reported. Absent on
+   * a static catalog list. Never written to the object, like `unproven`.
+   */
+  statesOrigin?: "declared" | "derived" | "candidates";
   /** Object id relative to the device. */
   id: string;
   /** Object kind. */

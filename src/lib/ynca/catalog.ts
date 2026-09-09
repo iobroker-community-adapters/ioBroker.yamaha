@@ -1,4 +1,4 @@
-import { catalogToObjects } from "../catalog/build-objects";
+import { catalogToObjects, type StatesResolver } from "../catalog/build-objects";
 import type { CatalogEntry, ObjectDef } from "../catalog/types";
 import { decode, encode, formatWireNumber, isWritableValue, type ValueSpec } from "../catalog/value-coerce";
 import type { StateValue } from "../types";
@@ -90,15 +90,22 @@ function selfMap(values: string[]): Record<string, string> {
   return Object.fromEntries(values.map(value => [value, value]));
 }
 
-// The full device-agnostic input list (every input any Yamaha may report); a
-// device shows only the ones it has, but the dropdown offers all valid values.
-const INPUT_STATES = selfMap([
+/**
+ * The physical inputs a Yamaha may have — the union of the 21 official YNCA command lists
+ * (2010–2015), the XML `Input_Sel_Item` lists of the 2015–2020 generation and the reference
+ * protocols. YNCA proves NONE of them absent (a jack answers no function), so every one stays
+ * a candidate on every device; wherever XML is live its declared `Input_Sel_Item` list replaces
+ * this one on the dropdown (coordinator, #619), and an XML `Name/Input` entry may ADD one — that
+ * block is the renameable set, never the complete one (the RX-V6A names 20 of its 27 inputs).
+ */
+export const PHYSICAL_INPUTS: readonly string[] = [
   "AUDIO",
   "AUDIO1",
   "AUDIO2",
   "AUDIO3",
   "AUDIO4",
   "AUDIO5",
+  "AUX",
   "AV1",
   "AV2",
   "AV3",
@@ -120,59 +127,168 @@ const INPUT_STATES = selfMap([
   "LINE1",
   "LINE2",
   "LINE3",
-  "Main Zone Sync",
   "MULTI CH",
+  "NET",
   "OPTICAL1",
   "OPTICAL2",
   "PHONO",
   "TV",
+  "USB/NET",
   "V-AUX",
-  "AirPlay",
-  "Bluetooth",
-  "Deezer",
-  "iPod",
-  "iPod (USB)",
-  "MusicCast Link",
-  "Napster",
-  "NET RADIO",
-  "Pandora",
-  "PC",
-  "Rhapsody",
-  "SERVER",
-  "SIRIUS",
-  "SIRIUS InternetRadio",
-  "SiriusXM",
-  "Spotify",
-  "TIDAL",
-  "TUNER",
-  "UAW",
-  "USB",
-]);
+];
 
+/**
+ * The source inputs, each with the YNCA subunit(s) that prove it present and the XML
+ * `Feature_Existence` flag(s) that prove it absent. `subunits: []` = not judgeable over YNCA
+ * (the 2015+ streaming services have no YNCA subunit); `xmlFlags: []` = not judgeable over XML.
+ * A source is absent when its subunits were ALL probed and none answered, or when ALL its XML
+ * flags are 0 — the tuner input covers three flags, and `Tuner=0` next to `DAB=1` keeps TUNER
+ * (RX-V6A, measured). Wire values and subunit names follow ynca-python's `Input` enum.
+ */
+export const SOURCE_INPUTS: ReadonlyArray<{ value: string; subunits: readonly string[]; xmlFlags: readonly string[] }> =
+  [
+    { value: "AirPlay", subunits: ["AIRPLAY"], xmlFlags: ["AirPlay"] },
+    { value: "Alexa", subunits: [], xmlFlags: ["Alexa"] },
+    { value: "Amazon Music", subunits: [], xmlFlags: ["Amazon_Music"] },
+    { value: "Bluetooth", subunits: ["BT"], xmlFlags: ["Bluetooth"] },
+    { value: "Deezer", subunits: ["DEEZER"], xmlFlags: ["Deezer"] },
+    { value: "JUKE", subunits: [], xmlFlags: ["JUKE"] },
+    { value: "MusicCast Link", subunits: ["MCLINK"], xmlFlags: ["MusicCast_Link"] },
+    { value: "NET RADIO", subunits: ["NETRADIO"], xmlFlags: ["NET_RADIO"] },
+    { value: "Napster", subunits: ["NAPSTER"], xmlFlags: ["Napster"] },
+    { value: "PC", subunits: ["PC"], xmlFlags: [] },
+    { value: "Pandora", subunits: ["PANDORA"], xmlFlags: ["Pandora"] },
+    { value: "Qobuz", subunits: [], xmlFlags: ["Qobuz"] },
+    { value: "Rhapsody", subunits: ["RHAP"], xmlFlags: ["Rhapsody"] },
+    { value: "SERVER", subunits: ["SERVER"], xmlFlags: ["SERVER"] },
+    { value: "SIRIUS", subunits: ["SIRIUS"], xmlFlags: [] },
+    { value: "SIRIUS InternetRadio", subunits: ["SIRIUSIR"], xmlFlags: [] },
+    { value: "SiriusXM", subunits: ["SIRIUSXM"], xmlFlags: ["SiriusXM"] },
+    { value: "Spotify", subunits: ["SPOTIFY"], xmlFlags: ["Spotify"] },
+    { value: "TIDAL", subunits: ["TIDAL"], xmlFlags: ["TIDAL"] },
+    { value: "TUNER", subunits: ["TUN", "DAB"], xmlFlags: ["Tuner", "DAB", "HD_Radio"] },
+    { value: "UAW", subunits: [], xmlFlags: [] },
+    { value: "USB", subunits: ["USB"], xmlFlags: ["USB"] },
+    { value: "iPod", subunits: ["IPOD"], xmlFlags: [] },
+    { value: "iPod (USB)", subunits: ["IPODUSB"], xmlFlags: ["iPod_USB"] },
+  ];
+
+/** Inputs that exist on zones only (a zone follows the main zone's source). */
+export const ZONE_ONLY_INPUTS: readonly string[] = ["Main Zone Sync"];
+
+/**
+ * The subunits that carry a media player — derived from the source table, not a second list.
+ * The tuner subunits are no player (their surface is `tuner.*`).
+ */
+export const PLAYER_SUBUNITS: ReadonlySet<string> = new Set(
+  SOURCE_INPUTS.filter(source => source.value !== "TUNER").flatMap(source => source.subunits),
+);
+
+/** What the controller learned about one device's inputs — the evidence {@link deviceInputStates} judges by. */
+export interface InputEvidence {
+  /** Subunits that answered AVAIL (or any function) this run. */
+  present: ReadonlySet<string>;
+  /** Subunits the AVAIL probe ASKED — empty when the device ignored the probe (blind sweep). */
+  probed: ReadonlySet<string>;
+  /** XML `Feature_Existence` flags, when remembered (System>Config). */
+  xmlFeatures?: Record<string, boolean>;
+  /** XML `Name/Input` entries, when remembered — presence only. */
+  xmlInputNames?: Record<string, string>;
+}
+
+/**
+ * The classic (YNCA) spelling of an XML input key: `HDMI_1` → `HDMI1`, `AUDIO_3` → `AUDIO3`,
+ * `AV_1` → `AV1`, `V_AUX` → `V-AUX`, `MusicCast_Link` → `MusicCast Link`, `NET_RADIO` →
+ * `NET RADIO` — measured against the three System>Config captures.
+ *
+ * @param key the XML input key
+ * @returns the classic spelling
+ */
+export function classicInputName(key: string): string {
+  if (key.replace(/_/g, "") === "VAUX") {
+    return "V-AUX";
+  }
+  return key.replace(/_(\d)/g, "$1").replace(/_/g, " ");
+}
+
+/**
+ * The input dropdown of one zone, from PROOF: physical inputs always (YNCA cannot judge them),
+ * a source only while nothing proved it absent, the zone-only inputs on zones, and whatever the
+ * zone reports right now. Silence is not proof — a device that ignored the AVAIL probe keeps
+ * every source; a snapshot from another firmware is never handed in here (the controller checks
+ * the identity first). (#619: the union of every input any Yamaha ever had stood on every zone.)
+ *
+ * @param evidence what the controller learned about this device
+ * @param zone the zone key (`main`, `zone2`, …)
+ * @param current the value the zone reports right now, if known
+ * @returns the states map for the zone's input dropdown
+ */
+export function deviceInputStates(evidence: InputEvidence, zone: string, current?: string): Record<string, string> {
+  const values: string[] = [...PHYSICAL_INPUTS];
+  for (const source of SOURCE_INPUTS) {
+    const judgedByYnca =
+      source.subunits.length > 0 &&
+      source.subunits.every(subunit => evidence.probed.has(subunit)) &&
+      !source.subunits.some(subunit => evidence.present.has(subunit));
+    const flags = source.xmlFlags
+      .map(flag => evidence.xmlFeatures?.[flag])
+      .filter((flag): flag is boolean => flag !== undefined);
+    const judgedByXml =
+      source.xmlFlags.length > 0 && flags.length === source.xmlFlags.length && flags.every(flag => !flag);
+    if (!judgedByYnca && !judgedByXml) {
+      values.push(source.value);
+    }
+  }
+  if (zone !== "main") {
+    values.push(...ZONE_ONLY_INPUTS);
+  }
+  for (const key of Object.keys(evidence.xmlInputNames ?? {})) {
+    const classic = classicInputName(key);
+    if (!values.includes(classic)) {
+      // An XML input name ADDS an input the tables did not know; it never removes one.
+      values.push(classic);
+    }
+  }
+  if (current && !values.includes(current)) {
+    values.push(current);
+  }
+  return selfMap(values);
+}
+
+/**
+ * The device-agnostic input list of the static catalog: every physical input, every source and
+ * the zone-only inputs — what a device shows before any evidence narrows it. The controller
+ * resolves the real list per zone through {@link deviceInputStates}.
+ */
+const INPUT_STATES = deviceInputStates({ present: new Set(), probed: new Set() }, "zone");
+
+/**
+ * The sound programs of the classic (YNCA) generation — the union of the 21 official command
+ * lists 2010–2015 (26 names; the entry class carries 19 of them, the Aventage class all 26) plus
+ * `5ch Stereo`, which the entry class declares in its `desc.xml`. A device's own additions
+ * (`Enhanced`, `All-Ch Stereo`, `9ch Stereo` and the 2015+ MusicCast generation's names) reach
+ * the dropdown as OBSERVED values — every program the device ever reported is offered — or as
+ * the declared `sound_program_list` through the MusicCast dictionary. The fifteen names the
+ * list used to carry beyond these (`Disco`, `Pavilion`, `Hall in USA A`, …) were never on any
+ * official list; a device that has one reports it and gets it that way.
+ */
 const SOUNDPRG_STATES = selfMap([
+  "2ch Stereo",
+  "5ch Stereo",
+  "7ch Stereo",
+  "9ch Stereo",
   "Action Game",
   "Adventure",
-  "Arena",
   "Cellar Club",
   "Chamber",
   "Church in Freiburg",
   "Church in Royaumont",
-  "Church in Tokyo",
-  "Disco",
   "Drama",
-  "Enhanced",
   "Hall in Amsterdam",
-  "Hall in Frankfurt",
   "Hall in Munich",
-  "Hall in Munich A",
-  "Hall in Munich B",
-  "Hall in Stuttgart",
-  "Hall in USA A",
-  "Hall in USA B",
   "Hall in Vienna",
   "Mono Movie",
   "Music Video",
-  "Pavilion",
   "Recital/Opera",
   "Roleplaying Game",
   "Sci-Fi",
@@ -182,22 +298,22 @@ const SOUNDPRG_STATES = selfMap([
   "Surround Decoder",
   "The Bottom Line",
   "The Roxy Theatre",
-  "Village Gate",
   "Village Vanguard",
   "Warehouse Loft",
-  "2ch Stereo",
-  "5ch Stereo",
-  "7ch Stereo",
-  "9ch Stereo",
-  "11ch Stereo",
-  "All-Ch Stereo",
 ]);
 
 const SLEEP_STATES = selfMap(["Off", "30 min", "60 min", "90 min", "120 min"]);
-const HDMIOUT_STATES = selfMap(["Off", "OUT1", "OUT2", "OUT1 + 2"]);
+// `OUT` is the single-output spelling of the RX-A700/RX-V671 class (official lists), the
+// OUT1/OUT2 pair the two-output class.
+const HDMIOUT_STATES = selfMap(["Off", "OUT", "OUT1", "OUT2", "OUT1 + 2"]);
 const ADAPTIVEDRC_STATES = selfMap(["Off", "Auto"]);
+/**
+ * The surround decoders identical on all 21 official command lists 2010–2015 — the nine-value
+ * core. `Auto`, `Dolby Surround`, `DTS Neural:X` and `AURO-3D` are 2015+ values (RX-A2070,
+ * RX-V6A) that the device reports itself and reaches the dropdown as OBSERVED values; the
+ * MusicCast generation declares its `surr_decoder_type_list` outright.
+ */
 const DECODER_STATES = selfMap([
-  "Auto",
   "Dolby PL",
   "Dolby PLII Movie",
   "Dolby PLII Music",
@@ -205,11 +321,8 @@ const DECODER_STATES = selfMap([
   "Dolby PLIIx Movie",
   "Dolby PLIIx Music",
   "Dolby PLIIx Game",
-  "Dolby Surround",
   "DTS NEO:6 Cinema",
   "DTS NEO:6 Music",
-  "DTS Neural:X",
-  "AURO-3D",
 ]);
 
 /** Amplifier functions shared by MAIN and each zone: state id + YNCA func + value spec. */
@@ -603,7 +716,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     state: "hdmi.resolution",
     nameKey: "hdmiVideoResolution",
     descKey: "descHdmiVideoResolution",
-    spec: { kind: "enum", states: selfMap(["Auto", "480p / 576p", "720p", "1080i", "1080p", "Through"]) },
+    spec: { kind: "enum", states: selfMap(["Auto", "480p / 576p", "720p", "1080i", "1080p", "4K", "Through"]) },
     write: true,
     role: "state",
   },
@@ -612,7 +725,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     state: "hdmi.aspect",
     nameKey: "hdmiVideoAspect",
     descKey: "descHdmiVideoAspect",
-    spec: { kind: "enum", states: selfMap(["Through", "16:9 Normal"]) },
+    spec: { kind: "enum", states: selfMap(["Through", "16:9 Normal", "Smart Zoom"]) },
     write: true,
     role: "state",
   },
@@ -992,7 +1105,7 @@ const SWFR_CNFG_STATES = selfMap(["None", "Use"]);
 /**
  * SYS (system-wide) functions beyond party: model/version info, the system power
  * (all zones), the party mute, the HDMI-output toggles and the speaker patterns.
- * The 23 assignable input names are generated separately from {@link INPUT_NAME_KEYS}.
+ * The 29 assignable input names are generated separately from {@link INPUT_NAME_KEYS}.
  */
 const SYS_FUNCS: FuncDef[] = [
   // Device metadata lives under the info channel (like govee's info.model/info.firmware),
@@ -1143,7 +1256,8 @@ const SYS_FUNCS: FuncDef[] = [
     state: "advanced.trigger1Zone",
     nameKey: "triggerOut1Zone",
     descKey: "descTriggerOut1Zone",
-    spec: { kind: "enum", states: selfMap(["Main Zone", "Zone2", "All"]) },
+    // The static maximum; the controller derives the real list from the zones the device has.
+    spec: { kind: "enum", states: selfMap(["Main Zone", "Zone2", "Zone3", "Zone4", "All"]) },
     write: true,
     role: "state",
   },
@@ -1227,7 +1341,9 @@ const SYS_FUNCS: FuncDef[] = [
     state: "advanced.speakers.pattern1Amp",
     nameKey: "speakerPattern1AmpAssign",
     descKey: "descSpeakerPattern1AmpAssign",
-    spec: { kind: "enum", states: selfMap(["Basic", "7ch +1ZONE", "5ch BI-AMP"]) },
+    // No candidates: the official lists carry 3 to 14 model-specific strings ("7ch +FPR",
+    // "5ch BI-AMP", "Basic", …) with no common core. The dropdown holds what this device reported.
+    spec: { kind: "enum", states: {} },
     write: true,
     role: "state",
   },
@@ -1255,7 +1371,7 @@ const SYS_FUNCS: FuncDef[] = [
   },
 ];
 
-// The 23 assignable input names (SYS INPNAME<KEY>, read-only text). The wire
+// The 29 assignable input names (SYS INPNAME<KEY>, read-only text). The wire
 // function is INPNAME + the upper-cased key (audio1 → INPNAMEAUDIO1).
 const INPUT_NAME_KEYS = [
   "audio1",
@@ -2064,13 +2180,37 @@ export function idToEntry(entries: readonly YncaEntry[]): Map<string, YncaEntry>
  *
  * @param capabilities the device's YNCA capabilities from the init sweep
  * @param catalog the (possibly group-filtered) catalog to build from
+ * @param resolve optional resolver of the selectable values on this device (see `StatesResolver`)
  * @returns the object definitions to create
  */
 export function yncaObjectsFor(
   capabilities: YncaCapabilities,
   catalog: readonly YncaEntry[] = YNCA_CATALOG,
+  resolve?: StatesResolver,
 ): ObjectDef[] {
-  return catalogToObjects(presentYncaEntries(capabilities, catalog));
+  return catalogToObjects(presentYncaEntries(capabilities, catalog), resolve);
+}
+
+/**
+ * The dropdown of a YNCA enum on one device: the candidates of the generation that has the
+ * function (the entry's static list) plus every value THIS device ever reported, plus what it
+ * reports right now. YNCA declares no value lists, so a device's own spelling (RX-V1067
+ * `Dolby ProLogicII(Movie)`, RX-A700 `OUT`) is learned by observation and never lost — and an
+ * entry without candidates offers exactly what was observed.
+ *
+ * @param entry the catalog entry (an enum)
+ * @param observed the values this device reported for the function so far
+ * @param current the value it reports right now, if known
+ * @returns the states map, in candidate order, observed and current values appended
+ */
+export function enumStatesFor(entry: YncaEntry, observed: readonly string[], current?: string): Record<string, string> {
+  const values = entry.spec.kind === "enum" ? Object.keys(entry.spec.states) : [];
+  for (const value of [...observed, ...(current ? [current] : [])]) {
+    if (!values.includes(value)) {
+      values.push(value);
+    }
+  }
+  return selfMap(values);
 }
 
 /**

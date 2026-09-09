@@ -38,6 +38,8 @@ class FakeClient implements YncaClientLike {
   public listSubunits?: string[];
   /** Every readCapabilities request list, for asserting what was actually swept. */
   public requests: Array<Array<{ subunit: string; func: string }>> = [];
+  /** The zones a BASIC bundle was asked for, in order. */
+  public basicAsked: string[] = [];
   private handler?: (message: Msg) => void;
 
   public async connect(): Promise<void> {}
@@ -48,6 +50,19 @@ class FakeClient implements YncaClientLike {
       for (const subunit of this.availableSubunits) {
         subunits[subunit] = { AVAIL: "Ready" };
       }
+      return Promise.resolve({ model: "", subunits });
+    }
+    if (gets.length > 0 && gets.every(get => get.func === "BASIC")) {
+      // A BASIC bundle answers with the functions the zone has — on a fake, whatever the
+      // capabilities carry for that zone (a real receiver lists 15–25 of them).
+      const subunits: Record<string, Record<string, string>> = {};
+      for (const get of gets) {
+        const zone = this.capabilities.subunits[get.subunit];
+        if (zone) {
+          subunits[get.subunit] = { ...zone };
+        }
+      }
+      this.basicAsked.push(...gets.map(get => get.subunit));
       return Promise.resolve({ model: "", subunits });
     }
     if (this.listSubunits && gets.length > 0 && gets.every(get => get.func === "LISTINFO")) {
@@ -203,14 +218,16 @@ describe("YncaDeviceController two-pass sweep", () => {
     client.capabilities = { model: "RX", subunits: { MAIN: { PWR: "On" }, TUN: { BAND: "FM" } } };
     await new YncaDeviceController("living", makeDeps(client).deps).start();
     // Request 0 is the identity read (model + firmware) that keys every cached layer
-    // and doubles as the fast path's liveness proof; then the probe, then the sweep.
-    expect(client.requests).toHaveLength(3);
+    // and doubles as the fast path's liveness proof; then the probe, then the BASIC bundle
+    // of every present zone (2026-09-09), then the sweep.
+    expect(client.requests).toHaveLength(4);
     expect(client.requests[0].map(get => get.func)).toEqual(["MODELNAME", "VERSION"]);
     expect(client.requests[1].every(get => get.func === "AVAIL")).toBe(true);
     // SYS answers no AVAIL and must never be probed…
     expect(client.requests[1].some(get => get.subunit === "SYS")).toBe(false);
+    expect(client.requests[2].map(get => `${get.subunit}:${get.func}`)).toEqual(["MAIN:BASIC"]);
     // …but is always part of the sweep; absent subunits (ZONE2, player sources) are not.
-    const sweptSubunits = new Set(client.requests[2].map(get => get.subunit));
+    const sweptSubunits = new Set(client.requests[3].map(get => get.subunit));
     expect(sweptSubunits.has("SYS")).toBe(true);
     expect(sweptSubunits.has("MAIN")).toBe(true);
     expect(sweptSubunits.has("TUN")).toBe(true);
@@ -240,12 +257,18 @@ describe("YncaDeviceController two-pass sweep", () => {
     const cache = createSubunitCache({ subunits: ["MAIN"], model: "RX-V6A", firmware: "1.80" }, s => persisted.push(s));
     const { deps } = makeDeps(client);
     await new YncaDeviceController("living", { ...deps, subunitCache: cache }).start();
-    // Two requests: the cheap identity check (model + firmware, ~0.2 s) and then the
-    // targeted sweep. No AVAIL probe, no cache rewrite. Checking identity FIRST is what
-    // keeps a stale cache from costing a wasted full sweep before the mismatch shows.
-    expect(client.requests).toHaveLength(2);
+    // Three requests: the cheap identity check (model + firmware, ~0.2 s), the BASIC bundle
+    // of the cached zones, then the targeted sweep. No AVAIL probe, no cache rewrite. Checking
+    // identity FIRST is what keeps a stale cache from costing a wasted full sweep before the
+    // mismatch shows.
+    expect(client.requests).toHaveLength(3);
     expect(client.requests[0].map(get => get.func)).toEqual(["MODELNAME", "VERSION"]);
-    expect(client.requests[1].every(get => get.func !== "AVAIL")).toBe(true);
+    expect(
+      client.requests
+        .slice(1)
+        .flat()
+        .every(get => get.func !== "AVAIL"),
+    ).toBe(true);
     expect(persisted).toEqual([]);
   });
 
@@ -260,8 +283,8 @@ describe("YncaDeviceController two-pass sweep", () => {
     const cache = createSubunitCache({ subunits: ["MAIN"], model: "RX-V6A", firmware: "1.80" }, s => persisted.push(s));
     const { deps } = makeDeps(client);
     await new YncaDeviceController("living", { ...deps, subunitCache: cache }).start();
-    // Stale targeted sweep, then probe, then fresh targeted sweep.
-    expect(client.requests).toHaveLength(3);
+    // Identity (mismatch → cache cleared), probe, BASIC bundles, fresh targeted sweep.
+    expect(client.requests).toHaveLength(4);
     expect(client.requests[1].every(get => get.func === "AVAIL")).toBe(true);
     // clear() persisted undefined, then set() persisted the fresh snapshot.
     expect(persisted).toEqual([undefined, { subunits: ["MAIN", "ZONE2"], model: "RX-A4A", firmware: "2.10" }]);
@@ -280,8 +303,8 @@ describe("YncaDeviceController two-pass sweep", () => {
       isEntryEnabled: id => !id.startsWith("player."),
     }).start();
     // SPOTIFY answered AVAIL, but with the player group off none of its functions are fetched…
-    // (request 0 = identity, 1 = AVAIL probe, 2 = the sweep)
-    const sweptSubunits = new Set(client.requests[2].map(get => get.subunit));
+    // (request 0 = identity, 1 = AVAIL probe, 2 = the BASIC bundles, 3 = the sweep)
+    const sweptSubunits = new Set(client.requests[3].map(get => get.subunit));
     expect(sweptSubunits.has("SPOTIFY")).toBe(false);
     // …and no player object is created.
     expect(created.some(id => id.includes("player"))).toBe(false);
@@ -1022,5 +1045,130 @@ describe("YncaDeviceController — the standby menu claim is marked unproven (au
     const browse = objects.filter(entry => entry.id.startsWith("living.player.browse."));
     expect(browse.length).toBeGreaterThan(0);
     expect(browse.some(entry => entry.def.unproven)).toBe(false);
+  });
+});
+
+describe("YNCA dropdowns from proof — inputs narrowed by evidence, observed values, BASIC (2026-09-09)", () => {
+  const identity = { MODELNAME: "RX-V473", VERSION: "1.0" };
+  const statesOf = (objects: Array<{ id: string; def: ObjectDef }>, id: string): Record<string, string> =>
+    objects.find(o => o.id === id)?.def.common.states ?? {};
+
+  test("the input dropdown per zone follows the probe: absent sources gone, Main Zone Sync on the zone only", async () => {
+    const client = new FakeClient();
+    client.availableSubunits = ["MAIN", "ZONE2", "NETRADIO", "TUN"];
+    client.capabilities = {
+      model: "RX-V473",
+      subunits: {
+        SYS: identity,
+        MAIN: { PWR: "On", INP: "HDMI1" },
+        ZONE2: { PWR: "On", INP: "Main Zone Sync" },
+        NETRADIO: { AVAIL: "Ready" },
+        TUN: { AVAIL: "Ready" },
+      },
+    };
+    const { objects, deps } = makeDeps(client);
+    await new YncaDeviceController("living", deps).start();
+    expect(statesOf(objects, "living.input")).not.toHaveProperty("Spotify");
+    expect(statesOf(objects, "living.input")).toHaveProperty("NET RADIO");
+    expect(statesOf(objects, "living.input")).toHaveProperty("HDMI1");
+    expect(statesOf(objects, "living.input")).not.toHaveProperty("Main Zone Sync");
+    expect(statesOf(objects, "living.multiroom.zone2.input")).toHaveProperty("Main Zone Sync");
+    expect(objects.find(o => o.id === "living.input")?.def.statesOrigin).toBe("derived");
+  });
+
+  test("a blind sweep (no AVAIL answer) narrows nothing", async () => {
+    const client = new FakeClient();
+    client.availableSubunits = []; // the device ignores AVAIL — the probe answers nothing
+    client.capabilities = {
+      model: "RX-V473",
+      subunits: { SYS: identity, MAIN: { PWR: "On", INP: "HDMI1" }, NETRADIO: { AVAIL: "Ready" } },
+    };
+    const { objects, deps } = makeDeps(client);
+    await new YncaDeviceController("living", deps).start();
+    expect(statesOf(objects, "living.input")).toHaveProperty("Spotify");
+  });
+
+  test("a remembered subunit snapshot of another firmware is not used for narrowing", async () => {
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX-V473",
+      subunits: { SYS: { MODELNAME: "RX-V473", VERSION: "2.0" }, MAIN: { PWR: "On", INP: "HDMI1" } },
+    };
+    const memory = new ProbeMemory({
+      yncaCapabilities: { model: "RX-V473", firmware: "2.0", subunits: client.capabilities.subunits },
+    });
+    const cache = createSubunitCache({ subunits: ["MAIN"], model: "RX-V473", firmware: "1.0" }, () => {});
+    const { objects, deps } = makeDeps(client);
+    await new YncaDeviceController("living", { ...deps, probeMemory: memory, subunitCache: cache }).start();
+    // The stale snapshot says "MAIN only" — trusting it would strip every source. It is ignored.
+    expect(statesOf(objects, "living.input")).toHaveProperty("Spotify");
+  });
+
+  test("a value the device reports joins the persisted observed list, and the next start's dropdown", async () => {
+    const client = new FakeClient();
+    client.availableSubunits = ["MAIN"];
+    client.capabilities = {
+      model: "RX-A700",
+      subunits: { SYS: { MODELNAME: "RX-A700", VERSION: "1.0" }, MAIN: { PWR: "On", HDMIOUT: "OUT" } },
+    };
+    const memory = new ProbeMemory();
+    const first = makeDeps(client);
+    await new YncaDeviceController("living", { ...first.deps, probeMemory: memory }).start();
+    // The sweep value is offered at once …
+    expect(statesOf(first.objects, "living.hdmi.output")).toHaveProperty("OUT");
+    // … a value pushed later is remembered for the next start.
+    client.emit({ subunit: "MAIN", func: "HDMIOUT", value: "OUT1 + 2" });
+    const observed = memory.remembered<Record<string, Record<string, string[]>>>("yncaObserved");
+    expect(observed?.MAIN?.HDMIOUT).toEqual(expect.arrayContaining(["OUT", "OUT1 + 2"]));
+  });
+
+  test("BASIC is asked once per present zone before the sweep, and its answers count as proof", async () => {
+    const client = new FakeClient();
+    client.availableSubunits = ["MAIN", "ZONE2"];
+    client.capabilities = {
+      model: "X",
+      subunits: { SYS: { MODELNAME: "X", VERSION: "1" }, MAIN: { PWR: "On" }, ZONE2: { PWR: "On" } },
+    };
+    const { deps, created } = makeDeps(client);
+    await new YncaDeviceController("living", deps).start();
+    expect(client.basicAsked).toEqual(["MAIN", "ZONE2"]);
+    expect(created).toContain("living.multiroom.zone2.power");
+    // A function BASIC answered is not asked again individually.
+    const individual = client.requests.flat().filter(get => get.subunit === "ZONE2" && get.func === "PWR");
+    expect(individual).toHaveLength(0);
+  });
+
+  test("the trigger zone list is derived from the zones the device has", async () => {
+    const client = new FakeClient();
+    client.availableSubunits = ["MAIN", "ZONE2", "ZONE3"];
+    client.capabilities = {
+      model: "RX-A2000",
+      subunits: {
+        SYS: { MODELNAME: "RX-A2000", VERSION: "1", TRIG1ZONE: "All" },
+        MAIN: { PWR: "On" },
+        ZONE2: { PWR: "On" },
+        ZONE3: { PWR: "On" },
+      },
+    };
+    const { objects, deps } = makeDeps(client);
+    await new YncaDeviceController("living", deps).start();
+    expect(Object.keys(statesOf(objects, "living.advanced.trigger1Zone"))).toEqual([
+      "Main Zone",
+      "Zone2",
+      "Zone3",
+      "All",
+    ]);
+  });
+
+  test("an enum with no candidates and no observation is a plain string, not an empty dropdown", async () => {
+    const client = new FakeClient();
+    client.availableSubunits = ["MAIN"];
+    client.capabilities = {
+      model: "X",
+      subunits: { SYS: { MODELNAME: "X", VERSION: "1", SPPATTERN1AMP: "" }, MAIN: { PWR: "On" } },
+    };
+    const { objects, deps } = makeDeps(client);
+    await new YncaDeviceController("living", deps).start();
+    expect(objects.find(o => o.id === "living.advanced.speakers.pattern1Amp")?.def.common.states).toBeUndefined();
   });
 });

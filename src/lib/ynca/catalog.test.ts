@@ -1,5 +1,8 @@
 import {
+  availGets,
   buildYncaCatalog,
+  deviceInputStates,
+  enumStatesFor,
   funcToEntry,
   idToEntry,
   presentYncaEntries,
@@ -674,5 +677,167 @@ describe("official-command-list additions (2026-08-25)", () => {
       func: "TRIG1MANUAL",
       value: "Lo",
     });
+  });
+});
+
+describe("deviceInputStates — the YNCA input list narrowed by PROOF, never by silence (#619)", () => {
+  const probed = new Set(availGets(buildYncaCatalog()).map(get => get.subunit));
+
+  test("drops the sources whose subunit the AVAIL probe proved absent (RX-V473 answers)", () => {
+    const present = new Set(["MAIN", "AIRPLAY", "IPODUSB", "NETRADIO", "SERVER", "TUN", "USB"]);
+    const states = deviceInputStates({ present, probed }, "main", "HDMI1");
+    for (const kept of [
+      "HDMI1",
+      "AV6",
+      "V-AUX",
+      "AUDIO",
+      "AirPlay",
+      "iPod (USB)",
+      "NET RADIO",
+      "SERVER",
+      "TUNER",
+      "USB",
+    ]) {
+      expect(states, kept).toHaveProperty(kept);
+    }
+    for (const gone of [
+      "Spotify",
+      "Deezer",
+      "TIDAL",
+      "Napster",
+      "Pandora",
+      "Bluetooth",
+      "PC",
+      "MusicCast Link",
+      "iPod",
+      "Rhapsody",
+      "SIRIUS",
+    ]) {
+      expect(states, gone).not.toHaveProperty(gone);
+    }
+  });
+
+  test("a device that ignored the AVAIL probe is not judged — nothing is dropped", () => {
+    // Subunits that answered SOME function in a blind sweep are not a proof of the others' absence.
+    const states = deviceInputStates({ present: new Set(["MAIN", "NETRADIO"]), probed: new Set() }, "main");
+    expect(states).toHaveProperty("Spotify");
+    expect(states).toHaveProperty("Bluetooth");
+  });
+
+  test("keeps a source whose subunit the probe does not cover — it cannot be judged", () => {
+    const states = deviceInputStates({ present: new Set(["MAIN"]), probed }, "main");
+    for (const unjudged of ["SiriusXM", "UAW", "JUKE", "Qobuz", "Amazon Music", "Alexa"]) {
+      expect(states, unjudged).toHaveProperty(unjudged);
+    }
+  });
+
+  test("an XML source flag 0 drops a source the AVAIL probe could not judge; flag 1 keeps it", () => {
+    const evidence = { present: new Set(["MAIN"]), probed, xmlFeatures: { JUKE: false, Qobuz: true, Alexa: false } };
+    const states = deviceInputStates(evidence, "main");
+    expect(states).not.toHaveProperty("JUKE");
+    expect(states).not.toHaveProperty("Alexa");
+    expect(states).toHaveProperty("Qobuz");
+  });
+
+  test("the tuner input is absent only when Tuner, DAB and HD_Radio are ALL flagged 0 (RX-V6A: Tuner=0, DAB=1)", () => {
+    const base = { present: new Set(["MAIN"]), probed: new Set<string>() };
+    expect(
+      deviceInputStates({ ...base, xmlFeatures: { Tuner: false, DAB: true, HD_Radio: false } }, "main"),
+    ).toHaveProperty("TUNER");
+    expect(
+      deviceInputStates({ ...base, xmlFeatures: { Tuner: false, DAB: false, HD_Radio: false } }, "main"),
+    ).not.toHaveProperty("TUNER");
+    // A partial flag set judges nothing.
+    expect(deviceInputStates({ ...base, xmlFeatures: { Tuner: false } }, "main")).toHaveProperty("TUNER");
+  });
+
+  test("physical inputs are never dropped by YNCA evidence alone; an XML input name ADDS one, never removes", () => {
+    const states = deviceInputStates(
+      {
+        present: new Set(["MAIN"]),
+        probed,
+        xmlInputNames: { HDMI_1: "Apple TV", AUX: "AUX", V_AUX: "V-AUX", X_Y: "?" },
+      },
+      "main",
+    );
+    for (const physical of [
+      "AUDIO",
+      "AUDIO1",
+      "AUX",
+      "NET",
+      "USB/NET",
+      "AV7",
+      "CD",
+      "HDMI7",
+      "LINE1",
+      "OPTICAL1",
+      "PHONO",
+      "TV",
+    ]) {
+      expect(states, physical).toHaveProperty(physical);
+    }
+    // An unknown name key adds its classic form; nothing is removed.
+    expect(states).toHaveProperty("X Y");
+  });
+
+  test("offers Main Zone Sync on a zone, not on the main zone", () => {
+    expect(deviceInputStates({ present: new Set(["MAIN"]), probed }, "main")).not.toHaveProperty("Main Zone Sync");
+    expect(deviceInputStates({ present: new Set(["MAIN", "ZONE2"]), probed }, "zone2")).toHaveProperty(
+      "Main Zone Sync",
+    );
+  });
+
+  test("always offers the value the zone currently reports", () => {
+    expect(deviceInputStates({ present: new Set(["MAIN"]), probed }, "main", "Qobuz")).toHaveProperty("Qobuz");
+    expect(
+      deviceInputStates({ present: new Set(["MAIN"]), probed, xmlFeatures: { Spotify: false } }, "main", "Spotify"),
+    ).toHaveProperty("Spotify");
+  });
+});
+
+describe("enumStatesFor — the candidates of the generation plus everything the device reported", () => {
+  const entry = (func: string): ReturnType<typeof buildYncaCatalog>[number] =>
+    buildYncaCatalog().find(e => e.subunit === "MAIN" && e.func === func) ??
+    buildYncaCatalog().find(e => e.subunit === "SYS" && e.func === func)!;
+
+  test("hdmi.output: the documented four plus the single-output OUT the RX-A700 reports", () => {
+    const states = enumStatesFor(entry("HDMIOUT"), ["OUT"], "OUT");
+    expect(states).toMatchObject({ Off: "Off", OUT: "OUT", OUT1: "OUT1", "OUT1 + 2": "OUT1 + 2" });
+  });
+
+  test("sound.surroundDecoder: the nine-value core of the classic generation; Auto and AURO-3D only when reported", () => {
+    const core = enumStatesFor(entry("2CHDECODER"), []);
+    expect(Object.keys(core)).toHaveLength(9);
+    expect(core).not.toHaveProperty("Auto");
+    expect(enumStatesFor(entry("2CHDECODER"), ["Auto", "AURO-3D"], "Auto")).toMatchObject({
+      Auto: "Auto",
+      "AURO-3D": "AURO-3D",
+    });
+  });
+
+  test("a spelling only one device uses is offered on that device (RX-V1067: 'Dolby ProLogicII(Movie)')", () => {
+    expect(enumStatesFor(entry("2CHDECODER"), ["Dolby ProLogicII(Movie)"])).toHaveProperty("Dolby ProLogicII(Movie)");
+  });
+
+  test("speakers.pattern1Amp has no candidates — only what the device reported", () => {
+    expect(enumStatesFor(entry("SPPATTERN1AMP"), [])).toEqual({});
+    expect(enumStatesFor(entry("SPPATTERN1AMP"), ["7ch +FPR"], "7ch +FPR")).toEqual({ "7ch +FPR": "7ch +FPR" });
+  });
+
+  test("hdmi.aspect and hdmi.resolution carry the documented values incl. Smart Zoom and 4K", () => {
+    expect(enumStatesFor(entry("HDMIASPECT"), [])).toHaveProperty("Smart Zoom");
+    expect(enumStatesFor(entry("HDMIRESOL"), [])).toHaveProperty("4K");
+  });
+
+  test("soundProgram candidates are the 27 documented names of the classic generation, not the 41-entry union", () => {
+    const states = enumStatesFor(entry("SOUNDPRG"), []);
+    expect(Object.keys(states)).toHaveLength(27);
+    expect(states).toHaveProperty("5ch Stereo");
+    expect(states).not.toHaveProperty("Disco");
+    expect(enumStatesFor(entry("SOUNDPRG"), ["Disco"], "Disco")).toHaveProperty("Disco");
+  });
+
+  test("the current value is offered even when it was never observed before", () => {
+    expect(enumStatesFor(entry("HDMIASPECT"), [], "Whatever")).toHaveProperty("Whatever");
   });
 });

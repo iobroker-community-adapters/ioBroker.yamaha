@@ -6,7 +6,8 @@ import ysp1600 from "../yxc/__fixtures__/YSP1600_312_208.json";
 /**
  * The main zone's getFeatures lists of a bundled capture.
  *
- * @param fixture
+ * @param fixture the parsed getFeatures capture
+ * @returns the main zone's input and sound program lists
  */
 const mainZone = (fixture: unknown): { input_list: string[]; sound_program_list: string[] } =>
   (fixture as { zone: Array<{ input_list: string[]; sound_program_list: string[] }> }).zone[0];
