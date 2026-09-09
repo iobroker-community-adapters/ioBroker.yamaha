@@ -29,7 +29,11 @@ export const YNCA_BROWSE_SOURCES: ReadonlyArray<{ subunit: string; key: string; 
   { subunit: "NAPSTER", key: "napster", label: "Napster", input: "Napster" },
   { subunit: "PANDORA", key: "pandora", label: "Pandora", input: "Pandora" },
   { subunit: "RHAP", key: "rhapsody", label: "Rhapsody", input: "Rhapsody" },
-  { subunit: "SIRIUS", key: "sirius", label: "SiriusXM", input: "SIRIUS" },
+  { subunit: "SIRIUS", key: "sirius", label: "SIRIUS", input: "SIRIUS" },
+  // The official 2010–2011 lists give SIRIUS Internet Radio the full list vocabulary, the
+  // RX-A850 list SiriusXM.
+  { subunit: "SIRIUSIR", key: "siriusInternetRadio", label: "SIRIUS Internet Radio", input: "SIRIUS InternetRadio" },
+  { subunit: "SIRIUSXM", key: "siriusXm", label: "SiriusXM", input: "SiriusXM" },
 ];
 
 /** The client surface the driver needs (a slice of the YNCA client). */

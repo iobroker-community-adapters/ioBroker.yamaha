@@ -213,6 +213,11 @@ const V2_SLIMMED_SOURCES = [
   "pc",
   "airplay",
   "bluetooth",
+  // Folders that came back with own content after the 2.0.0 cut (iPod/iPod USB: MODE, 2026-09-06;
+  // Spotify: the RX-A850 presets, 2026-09-09) — their 1.x playback copies still have to go.
+  "ipod",
+  "ipodUsb",
+  "spotify",
 ];
 
 export const RENAMED_STATE_IDS = [
@@ -360,8 +365,8 @@ export const RENAMED_CHANNELS = [
   // `player.ipod`/`player.ipodUsb` came BACK on 2026-09-06: the official command list gives
   // both sources an own `MODE` (Normal/Extended), so the folders carry genuine content again
   // and must not be deleted on every start — the migration-table guard in pure-helpers.test.ts
-  // is what caught the contradiction.
-  "player.spotify",
+  // is what caught the contradiction. `player.spotify` followed on 2026-09-09: the RX-A850 list
+  // gives Spotify a preset recall and store, so its folder carries content again.
   "player.deezer",
   "player.tidal",
   "player.musicCastLink",

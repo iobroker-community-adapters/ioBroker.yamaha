@@ -19,6 +19,7 @@ import type { EnumSpec } from "../catalog/value-coerce";
 import type { YncaCapabilities } from "./capability";
 import { capabilitiesFromLines as parseCapabilities } from "./__fixtures__/capabilities-from-lines";
 import rxA810 from "./__fixtures__/RX-A810.json";
+import { YNCA_BROWSE_SOURCES } from "../browse/ynca-browse-driver";
 
 describe("YNCA catalog", () => {
   test("a MAIN amplifier function becomes a top-level state carrying its YNCA function", () => {
@@ -460,12 +461,16 @@ describe("YNCA catalog", () => {
       func: "PRESET",
       value: "7",
     });
-    expect(yncaCommand("tuner.presetUp", true, map)).toEqual({ subunit: "TUN", func: "PRESET", value: "Up" });
-    expect(yncaCommand("tuner.presetDown", true, map)).toEqual({ subunit: "TUN", func: "PRESET", value: "Down" });
+    // The up/down keys share their ids with DAB and HD Radio; the per-device map of a classic
+    // receiver hands them to TUN (the static map's last entry is the HD Radio one since 2026-09-09).
+    const classic = idToEntry(presentYncaEntries({ model: "RX-V473", subunits: { TUN: { PRESET: "1" } } }));
+    expect(yncaCommand("tuner.presetUp", true, classic)).toEqual({ subunit: "TUN", func: "PRESET", value: "Up" });
+    expect(yncaCommand("tuner.presetDown", true, classic)).toEqual({ subunit: "TUN", func: "PRESET", value: "Down" });
     // Favourite recall exists on the preset-capable sources only (ynca spec mixins).
     expect(yncaCommand("player.netRadio.preset", 3, map)).toEqual({ subunit: "NETRADIO", func: "PRESET", value: "3" });
     expect(yncaCommand("player.usb.preset", 12, map)).toEqual({ subunit: "USB", func: "PRESET", value: "12" });
-    expect(yncaCommand("player.spotify.preset", 3, map)).toBeUndefined();
+    expect(yncaCommand("player.spotify.preset", 3, map)).toEqual({ subunit: "SPOTIFY", func: "PRESET", value: "3" });
+    expect(yncaCommand("player.deezer.preset", 3, map)).toBeUndefined();
     // DAB recalls live on the SAME unified tuner.preset id (v2.0.0) — DABPRESET and
     // FMPRESET are both writable; the band-dependent pick is controller-routed.
     const cat = buildYncaCatalog();
@@ -548,8 +553,10 @@ describe("official-command-list additions (2026-08-25)", () => {
   const ids = idToEntry(cat);
 
   test("tuner preset store: a slot number goes out verbatim, 0 becomes Auto", () => {
-    expect(yncaCommand("tuner.presetSave", 7, ids)).toEqual({ subunit: "TUN", func: "MEM", value: "7" });
-    expect(yncaCommand("tuner.presetSave", 0, ids)).toEqual({ subunit: "TUN", func: "MEM", value: "Auto" });
+    // A classic receiver's per-device map (TUN answered PRESET) — the static map ends on HD Radio.
+    const classic = idToEntry(presentYncaEntries({ model: "RX-V473", subunits: { TUN: { PRESET: "1" } } }));
+    expect(yncaCommand("tuner.presetSave", 7, classic)).toEqual({ subunit: "TUN", func: "MEM", value: "7" });
+    expect(yncaCommand("tuner.presetSave", 0, classic)).toEqual({ subunit: "TUN", func: "MEM", value: "Auto" });
   });
 
   test("player preset store exists on the MEM-capable sources only", () => {
@@ -559,7 +566,10 @@ describe("official-command-list additions (2026-08-25)", () => {
       value: "3",
     });
     expect(ids.get("player.usb.presetSave")).toBeDefined();
-    expect(ids.get("player.spotify.presetSave")).toBeUndefined();
+    // Spotify stores presets on the RX-A850 (official 2015 list); Deezer and TIDAL on no list.
+    expect(ids.get("player.spotify.presetSave")).toBeDefined();
+    expect(ids.get("player.deezer.presetSave")).toBeUndefined();
+    expect(ids.get("player.tidal.presetSave")).toBeUndefined();
   });
 
   test("net-radio bookmark writes On/Off and never reads back", () => {
@@ -728,9 +738,12 @@ describe("deviceInputStates — the YNCA input list narrowed by PROOF, never by 
 
   test("keeps a source whose subunit the probe does not cover — it cannot be judged", () => {
     const states = deviceInputStates({ present: new Set(["MAIN"]), probed }, "main");
-    for (const unjudged of ["SiriusXM", "UAW", "JUKE", "Qobuz", "Amazon Music", "Alexa"]) {
+    for (const unjudged of ["UAW", "JUKE", "Qobuz", "Amazon Music", "Alexa"]) {
       expect(states, unjudged).toHaveProperty(unjudged);
     }
+    // SiriusXM and SIRIUS Internet Radio have subunits since 2026-09-09 — the probe judges them.
+    expect(states).not.toHaveProperty("SiriusXM");
+    expect(states).not.toHaveProperty("SIRIUS InternetRadio");
   });
 
   test("an XML source flag 0 drops a source the AVAIL probe could not judge; flag 1 keeps it", () => {
@@ -1022,5 +1035,135 @@ describe("the 2010–2015 command lists, completed (coverage audit 2026-09-09)",
     expect(bundleGets(new Set())).toEqual([]);
     // A bundle function is never a catalog function of its own.
     expect(cat.some(e => ["BASIC", "SCENENAME", "SIGINFO", "RDSINFO", "METAINFO"].includes(e.func))).toBe(false);
+  });
+});
+
+describe("HD Radio and the Sirius subunits (coverage audit 2026-09-09, 7 + 6/4/1 official lists)", () => {
+  const cat = buildYncaCatalog();
+  const find = (subunit: string, func: string, id?: string): YncaEntry | undefined =>
+    cat.find(e => e.subunit === subunit && e.func === func && (id === undefined || e.id === id));
+
+  test("HD Radio is a tuner: band, frequency, presets, search mode and the signal flags land on the flat tuner ids", () => {
+    expect(find("HDRADIO", "BAND")).toMatchObject({ id: "tuner.band" });
+    expect(Object.keys((find("HDRADIO", "BAND")?.spec as EnumSpec).states).sort()).toEqual(["AM", "FM"]);
+    expect(find("HDRADIO", "AMFREQ")).toMatchObject({ id: "tuner.frequency" });
+    expect(find("HDRADIO", "FMFREQ")?.wireDecode?.("98.10")).toBe("98100");
+    expect(find("HDRADIO", "PRESET", "tuner.preset")?.wireDecode?.("No Preset")).toBe("0");
+    expect(find("HDRADIO", "PRESET", "tuner.presetUp")?.wireEncode?.(true)).toBe("Up");
+    expect(find("HDRADIO", "MEM")).toMatchObject({ id: "tuner.presetSave", writeOnly: true });
+    expect(find("HDRADIO", "SEARCHMODE")).toMatchObject({ id: "tuner.searchMode" });
+    expect(find("HDRADIO", "TUNED")).toMatchObject({ id: "tuner.tuned" });
+    expect(find("HDRADIO", "SIGSTEREOMONO")).toMatchObject({ id: "tuner.stereo" });
+  });
+
+  test("HD Radio's own: audio mode, programme (with PRGNUM as read alias), programme type, digital flag, eight availabilities, tags, metadata", () => {
+    expect(find("HDRADIO", "AUDIOMODE")).toMatchObject({ id: "tuner.hdRadio.audioMode" });
+    expect(Object.keys((find("HDRADIO", "AUDIOMODE")?.spec as EnumSpec).states)).toEqual(["Auto", "Mono"]);
+    const program = find("HDRADIO", "PRGSEL");
+    expect(program).toMatchObject({ id: "tuner.hdRadio.program", write: true, readAliases: ["PRGNUM"] });
+    expect(Object.keys((program?.spec as EnumSpec).states)).toEqual([
+      "---",
+      "HD1",
+      "HD2",
+      "HD3",
+      "HD4",
+      "HD5",
+      "HD6",
+      "HD7",
+      "HD8",
+    ]);
+    expect(find("HDRADIO", "PRGTYPE")).toMatchObject({
+      id: "tuner.hdRadio.programType",
+      write: false,
+      readAliases: ["CATEGORY"],
+    });
+    expect(find("HDRADIO", "HDSIGINFO")?.spec).toEqual({ kind: "onoff", on: "Assert", off: "Negate" });
+    for (let n = 1; n <= 8; n++) {
+      const avail = find("HDRADIO", `AVAILPRG${n}`);
+      expect(avail, `AVAILPRG${n}`).toMatchObject({
+        id: `tuner.hdRadio.program${n}Available`,
+        nameArgs: [n],
+        write: false,
+      });
+      expect(avail?.spec).toEqual({ kind: "onoff", on: "Available", off: "Unavailable" });
+    }
+    expect(find("HDRADIO", "TAGINFO")).toMatchObject({ id: "tuner.hdRadio.tagAvailable", write: false });
+    expect(find("HDRADIO", "TAGSET")).toMatchObject({
+      id: "tuner.hdRadio.tagSave",
+      writeOnly: true,
+      readFunc: "TAGINFO",
+    });
+    expect(find("HDRADIO", "TAGSET")?.wireEncode?.(true)).toBe("Add");
+    for (const [func, id] of [
+      ["STATION", "station"],
+      ["ARTIST", "artist"],
+      ["SONG", "track"],
+      ["ALBUM", "album"],
+    ]) {
+      expect(find("HDRADIO", func), func).toMatchObject({ id: `tuner.hdRadio.${id}`, write: false });
+    }
+    // The bundles cover it, and it is no catalog function of its own.
+    expect(cat.some(e => e.subunit === "HDRADIO" && (e.func === "SIGINFO" || e.func === "METAINFO"))).toBe(false);
+    expect(
+      bundleGets(new Set(["HDRADIO"]))
+        .map(get => get.func)
+        .sort(),
+    ).toEqual(["METAINFO", "SIGINFO"]);
+  });
+
+  test("a device whose only tuner is HD Radio keeps TUNER in its input list; the probe judges all three tuner subunits", () => {
+    const probed = new Set(availGets(cat).map(get => get.subunit));
+    expect(probed.has("HDRADIO")).toBe(true);
+    expect(deviceInputStates({ present: new Set(["MAIN", "HDRADIO"]), probed }, "main")).toHaveProperty("TUNER");
+    expect(deviceInputStates({ present: new Set(["MAIN"]), probed }, "main")).not.toHaveProperty("TUNER");
+  });
+
+  test("the SIRIUS satellite tuner's own: channel, category keys, search mode, antenna level, names, parental lock", () => {
+    expect(find("SIRIUS", "CHSEL")).toMatchObject({ id: "player.sirius.channel", write: true });
+    expect(find("SIRIUS", "CHSEL")?.spec).toMatchObject({ kind: "number", min: 0, max: 255, step: 1 });
+    expect(find("SIRIUS", "CHNUM")).toMatchObject({ id: "player.sirius.channelNumber", write: false });
+    expect(find("SIRIUS", "CATSEL", "player.sirius.categoryUp")).toMatchObject({
+      writeOnly: true,
+      readFunc: "CATNAME",
+    });
+    expect(find("SIRIUS", "CATSEL", "player.sirius.categoryDown")?.wireEncode?.(true)).toBe("Down");
+    expect(Object.keys((find("SIRIUS", "SEARCHMODE")?.spec as EnumSpec).states)).toEqual([
+      "All Ch",
+      "Category",
+      "Preset",
+    ]);
+    expect(find("SIRIUS", "ANTLVL")).toMatchObject({ id: "player.sirius.antennaLevel", write: false });
+    expect(Object.keys((find("SIRIUS", "ANTLVL")?.spec as EnumSpec).states)).toEqual([
+      "No Signal",
+      "Weak",
+      "Good",
+      "Excellent",
+    ]);
+    expect(find("SIRIUS", "CATNAME")).toMatchObject({ id: "player.sirius.categoryName" });
+    expect(find("SIRIUS", "COMPOSER")).toMatchObject({ id: "player.sirius.composer" });
+    expect(find("SIRIUS", "PLOCK")?.spec).toEqual({ kind: "onoff", on: "Locked", off: "Unlocked" });
+  });
+
+  test("SIRIUS Internet Radio and SiriusXM are player sources with presets, a store and a menu", () => {
+    for (const [subunit, channel] of [
+      ["SIRIUSIR", "siriusInternetRadio"],
+      ["SIRIUSXM", "siriusXm"],
+    ]) {
+      expect(find(subunit, "PLAYBACK"), subunit).toMatchObject({ id: "player.playback" });
+      expect(find(subunit, "PRESET"), subunit).toMatchObject({ id: `player.${channel}.preset` });
+      expect(find(subunit, "MEM"), subunit).toMatchObject({ id: `player.${channel}.presetSave` });
+    }
+    expect(YNCA_BROWSE_SOURCES.map(source => source.subunit)).toEqual(expect.arrayContaining(["SIRIUSIR", "SIRIUSXM"]));
+    expect(bundleGets(new Set(["SIRIUSIR", "SIRIUSXM"])).map(get => `${get.subunit}:${get.func}`)).toEqual([
+      "SIRIUSIR:METAINFO",
+      "SIRIUSXM:METAINFO",
+    ]);
+  });
+
+  test("the RX-A850 presets on AirPlay, Bluetooth, Spotify, Server and Pandora are offered where the source is", () => {
+    for (const subunit of ["AIRPLAY", "BT", "SPOTIFY", "SERVER", "PANDORA"]) {
+      expect(find(subunit, "PRESET"), subunit).toBeDefined();
+      expect(find(subunit, "MEM"), subunit).toBeDefined();
+    }
   });
 });

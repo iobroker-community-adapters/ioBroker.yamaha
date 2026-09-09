@@ -341,6 +341,8 @@ export class YncaDeviceController implements ConnectionHandle {
   private tunerBand = "";
   /** Whether the device carries the DAB subunit (its FM half shares the flat tuner ids). */
   private hasDab = false;
+  /** Whether the device carries the HD Radio subunit (US models; its AM/FM half shares the flat tuner ids). */
+  private hasHdRadio = false;
   /** The entries THIS device reported — the per-subunit lookup behind the player routing. */
   private presentEntries: YncaEntry[] = [];
   /** Each zone's currently selected input (INP), for the player routing (v2.0.0). */
@@ -475,7 +477,13 @@ export class YncaDeviceController implements ConnectionHandle {
     // (v2.0.0 unification) — read live above, kept fresh from the live pushes. Whether
     // the device HAS a DAB subunit is shape, so that half may come from the memory.
     this.hasDab = capabilities.subunits.DAB !== undefined;
-    this.tunerBand = (live.subunits.DAB?.BAND ?? live.subunits.TUN?.BAND ?? "").toUpperCase();
+    this.hasHdRadio = capabilities.subunits.HDRADIO !== undefined;
+    this.tunerBand = (
+      live.subunits.HDRADIO?.BAND ??
+      live.subunits.DAB?.BAND ??
+      live.subunits.TUN?.BAND ??
+      ""
+    ).toUpperCase();
     await this.setupBrowse(live);
     this.deps.client.onMessage(message => {
       // The browse driver sees every line first: list lines (LINE1TXT…, LISTINFO
@@ -484,7 +492,7 @@ export class YncaDeviceController implements ConnectionHandle {
       // A value never seen before joins the observed store now and the dropdown on the next
       // start (the tree is coordinated once per connect); the state gets the value at once.
       this.recordObserved(message.subunit, message.func, message.value);
-      if (message.func === "BAND" && (message.subunit === "TUN" || message.subunit === "DAB")) {
+      if (message.func === "BAND" && ["TUN", "DAB", "HDRADIO"].includes(message.subunit)) {
         this.tunerBand = message.value.toUpperCase();
       }
       if (message.func === "INP") {
@@ -604,7 +612,7 @@ export class YncaDeviceController implements ConnectionHandle {
         gets.push({ subunit: zone.subunit, func: "INP" });
       }
     }
-    for (const subunit of ["TUN", "DAB"]) {
+    for (const subunit of ["TUN", "DAB", "HDRADIO"]) {
       if (remembered.subunits[subunit] !== undefined) {
         gets.push({ subunit, func: "BAND" });
       }
@@ -1193,10 +1201,13 @@ export class YncaDeviceController implements ConnectionHandle {
         }
         return true;
       }
+      // The HD Radio subunit carries the AM/FM tuner of the US models — with TUN beside it or
+      // (four of the seven official lists) alone.
+      const amFm = this.hasHdRadio ? "HDRADIO" : "TUN";
       if (this.tunerBand === "AM") {
-        this.sendProven("TUN", "AMFREQ", String(Math.round(khz)));
+        this.sendProven(amFm, "AMFREQ", String(Math.round(khz)));
       } else {
-        this.sendProven("TUN", "FMFREQ", formatWireNumber(khz / 1000, 2));
+        this.sendProven(amFm, "FMFREQ", formatWireNumber(khz / 1000, 2));
       }
       return true;
     }
@@ -1206,7 +1217,13 @@ export class YncaDeviceController implements ConnectionHandle {
       // frequency and presets are). Routing by the written VALUE keeps a dual-subunit device
       // honest instead of sending every band to whichever entry happened to be mapped last.
       const band = typeof value === "string" ? value : "";
-      const subunit = band === "AM" ? "TUN" : band === "DAB" || this.hasDab ? "DAB" : "TUN";
+      const subunit = this.hasHdRadio
+        ? "HDRADIO"
+        : band === "AM"
+          ? "TUN"
+          : band === "DAB" || this.hasDab
+            ? "DAB"
+            : "TUN";
       const entry = this.presentEntries.find(
         candidate => candidate.id === "tuner.band" && candidate.subunit === subunit,
       );
@@ -1222,6 +1239,13 @@ export class YncaDeviceController implements ConnectionHandle {
       const slot = Math.round(Number(value));
       if (Number.isFinite(slot) && slot >= 1) {
         this.sendProven("DAB", this.tunerBand === "DAB" ? "DABPRESET" : "FMPRESET", String(slot));
+      }
+      return true;
+    }
+    if (stateId === "tuner.preset" && this.hasHdRadio) {
+      const slot = Math.round(Number(value));
+      if (Number.isFinite(slot) && slot >= 1) {
+        this.sendProven("HDRADIO", "PRESET", String(slot));
       }
       return true;
     }

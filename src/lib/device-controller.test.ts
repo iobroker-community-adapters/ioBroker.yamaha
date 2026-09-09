@@ -1273,3 +1273,55 @@ describe("the completed command lists in the controller (coverage audit 2026-09-
     ]);
   });
 });
+
+describe("HD Radio in the tuner router (coverage audit 2026-09-09)", () => {
+  async function hdSetup(
+    subunits: YncaCapabilities["subunits"],
+  ): Promise<{ controller: YncaDeviceController; client: FakeClient }> {
+    const client = new FakeClient();
+    client.availableSubunits = Object.keys(subunits).filter(subunit => subunit !== "SYS");
+    client.capabilities = { model: "RX-A3020", subunits };
+    const { deps } = makeDeps(client);
+    const controller = new YncaDeviceController("living", deps);
+    await controller.start();
+    client.sent.length = 0;
+    return { controller, client };
+  }
+
+  test("on a receiver whose tuner is HD Radio, frequency, band and preset writes go to HDRADIO", async () => {
+    const s = await hdSetup({
+      SYS: { MODELNAME: "RX-A3020", VERSION: "1" },
+      MAIN: { PWR: "On" },
+      HDRADIO: { BAND: "FM", FMFREQ: "98.10", AMFREQ: "1440", PRESET: "3", SEARCHMODE: "Preset", PRGSEL: "HD1" },
+    });
+    s.controller.handleStateChange("living.tuner.frequency", false, 101300);
+    expect(s.client.sent).toEqual([{ subunit: "HDRADIO", func: "FMFREQ", value: "101.30" }]);
+    s.client.sent.length = 0;
+    s.controller.handleStateChange("living.tuner.band", false, "AM");
+    expect(s.client.sent).toEqual([{ subunit: "HDRADIO", func: "BAND", value: "AM" }]);
+    s.client.emit({ subunit: "HDRADIO", func: "BAND", value: "AM" });
+    s.client.sent.length = 0;
+    s.controller.handleStateChange("living.tuner.frequency", false, 1440);
+    expect(s.client.sent).toEqual([{ subunit: "HDRADIO", func: "AMFREQ", value: "1440" }]);
+    s.client.sent.length = 0;
+    s.controller.handleStateChange("living.tuner.preset", false, 7);
+    expect(s.client.sent).toEqual([{ subunit: "HDRADIO", func: "PRESET", value: "7" }]);
+    s.client.sent.length = 0;
+    s.controller.handleStateChange("living.tuner.hdRadio.program", false, "HD2");
+    expect(s.client.sent).toEqual([{ subunit: "HDRADIO", func: "PRGSEL", value: "HD2" }]);
+  });
+
+  test("with TUN and HDRADIO both present the HD-capable subunit gets the writes", async () => {
+    const s = await hdSetup({
+      SYS: { MODELNAME: "RX-A3020", VERSION: "1" },
+      MAIN: { PWR: "On" },
+      TUN: { BAND: "FM", FMFREQ: "98.10" },
+      HDRADIO: { BAND: "FM", FMFREQ: "98.10", PRESET: "3" },
+    });
+    s.controller.handleStateChange("living.tuner.frequency", false, 101300);
+    expect(s.client.sent).toEqual([{ subunit: "HDRADIO", func: "FMFREQ", value: "101.30" }]);
+    s.client.sent.length = 0;
+    s.controller.handleStateChange("living.tuner.preset", false, 2);
+    expect(s.client.sent).toEqual([{ subunit: "HDRADIO", func: "PRESET", value: "2" }]);
+  });
+});

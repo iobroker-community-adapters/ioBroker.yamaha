@@ -141,6 +141,8 @@ export const PHYSICAL_INPUTS: readonly string[] = [
  * The source inputs, each with the YNCA subunit(s) that prove it present and the XML
  * `Feature_Existence` flag(s) that prove it absent. `subunits: []` = not judgeable over YNCA
  * (the 2015+ streaming services have no YNCA subunit); `xmlFlags: []` = not judgeable over XML.
+ * The tuner input has three subunits: the AM/FM `TUN`, the `DAB` of the European DAB+ models and
+ * the `HDRADIO` of the US models (7 of the 21 official lists, 4 of them WITHOUT `TUN`).
  * A source is absent when its subunits were ALL probed and none answered, or when ALL its XML
  * flags are 0 — the tuner input covers three flags, and `Tuner=0` next to `DAB=1` keeps TUNER
  * (RX-V6A, measured). Wire values and subunit names follow ynca-python's `Input` enum.
@@ -166,7 +168,7 @@ export const SOURCE_INPUTS: ReadonlyArray<{ value: string; subunits: readonly st
     { value: "SiriusXM", subunits: ["SIRIUSXM"], xmlFlags: ["SiriusXM"] },
     { value: "Spotify", subunits: ["SPOTIFY"], xmlFlags: ["Spotify"] },
     { value: "TIDAL", subunits: ["TIDAL"], xmlFlags: ["TIDAL"] },
-    { value: "TUNER", subunits: ["TUN", "DAB"], xmlFlags: ["Tuner", "DAB", "HD_Radio"] },
+    { value: "TUNER", subunits: ["TUN", "DAB", "HDRADIO"], xmlFlags: ["Tuner", "DAB", "HD_Radio"] },
     { value: "UAW", subunits: [], xmlFlags: [] },
     { value: "USB", subunits: ["USB"], xmlFlags: ["USB"] },
     { value: "iPod", subunits: ["IPOD"], xmlFlags: [] },
@@ -1987,6 +1989,222 @@ const DAB_FUNCS: FuncDef[] = [
 ];
 
 /**
+ * The HD Radio tuner of the US models (`@HDRADIO`, 7 of the 21 official lists 2010–2012, four of
+ * them without `TUN` — those receivers had NO tuner in the adapter before 2026-09-09). Like DAB,
+ * its AM/FM half lands on the flat `tuner.*` ids (band, frequency, presets, search mode, tuned,
+ * stereo); what is HD Radio's own lives under `tuner.hdRadio`. Values from the lists.
+ */
+const HDRADIO_FUNCS: FuncDef[] = [
+  {
+    func: "BAND",
+    state: "band",
+    nameKey: "band",
+    spec: { kind: "enum", states: BAND_STATES },
+    write: true,
+    role: "state",
+  },
+  {
+    func: "AMFREQ",
+    state: "frequency",
+    nameKey: "frequency",
+    spec: { kind: "number", unit: "kHz", decimals: 0 },
+    write: true,
+    role: "level",
+  },
+  {
+    func: "FMFREQ",
+    state: "frequency",
+    nameKey: "frequency",
+    spec: { kind: "number", unit: "kHz", decimals: 0 },
+    write: true,
+    role: "level",
+    wireDecode: wire => String(Math.round(Number.parseFloat(wire) * 1000)),
+  },
+  {
+    func: "PRESET",
+    state: "preset",
+    nameKey: "presetRecallByNumber",
+    descKey: "descPresetRecallByNumber",
+    spec: { kind: "number", min: 0, max: 40, step: 1, decimals: 0 },
+    write: true,
+    role: "level",
+    wireDecode: wire => (wire === "No Preset" ? "0" : wire),
+  },
+  {
+    func: "PRESET",
+    state: "presetUp",
+    nameKey: "nextPreset",
+    spec: { kind: "button" },
+    write: true,
+    role: "button",
+    readFunc: "PRESET",
+    writeOnly: true,
+    wireEncode: () => "Up",
+  },
+  {
+    func: "PRESET",
+    state: "presetDown",
+    nameKey: "previousPreset",
+    spec: { kind: "button" },
+    write: true,
+    role: "button",
+    readFunc: "PRESET",
+    writeOnly: true,
+    wireEncode: () => "Down",
+  },
+  {
+    func: "MEM",
+    state: "presetSave",
+    nameKey: "saveToPreset0FirstFreeSlot",
+    descKey: "descSaveToPreset0FirstFreeSlot",
+    spec: { kind: "number", min: 0, max: 40, step: 1 },
+    write: true,
+    role: "level",
+    readFunc: "PRESET",
+    writeOnly: true,
+    wireEncode: value => (Number(value) === 0 ? "Auto" : String(Math.round(Number(value)))),
+  },
+  {
+    func: "SEARCHMODE",
+    state: "searchMode",
+    nameKey: "searchMode",
+    descKey: "descSearchMode",
+    spec: { kind: "enum", states: TUN_SEARCHMODE_STATES },
+    write: true,
+    role: "state",
+  },
+  {
+    func: "TUNED",
+    state: "tuned",
+    nameKey: "tunedToAStation",
+    descKey: "descTunedToAStation",
+    spec: { kind: "onoff", on: "Assert", off: "Negate" },
+    write: false,
+    role: "indicator",
+  },
+  {
+    func: "SIGSTEREOMONO",
+    state: "stereo",
+    nameKey: "stereoReception",
+    descKey: "descStereoReception",
+    spec: { kind: "onoff", on: "Assert", off: "Negate" },
+    write: false,
+    role: "indicator",
+  },
+  {
+    func: "AUDIOMODE",
+    state: "hdRadio.audioMode",
+    nameKey: "hdRadioAudioMode",
+    descKey: "descHdRadioAudioMode",
+    spec: { kind: "enum", states: selfMap(["Auto", "Mono"]) },
+    write: true,
+    role: "state",
+  },
+  // PRGSEL selects and reports the programme; PRGNUM reports the same thing (GET only) — one
+  // datapoint, both answers feed it.
+  {
+    func: "PRGSEL",
+    state: "hdRadio.program",
+    nameKey: "hdRadioProgram",
+    descKey: "descHdRadioProgram",
+    spec: { kind: "enum", states: selfMap(["---", "HD1", "HD2", "HD3", "HD4", "HD5", "HD6", "HD7", "HD8"]) },
+    write: true,
+    role: "state",
+    readAliases: ["PRGNUM"],
+  },
+  // The programme type: PRGTYPE on the 2010 lists, CATEGORY on the 2012 lists — same text.
+  {
+    func: "PRGTYPE",
+    state: "hdRadio.programType",
+    nameKey: "hdRadioProgramType",
+    descKey: "descHdRadioProgramType",
+    spec: { kind: "text" },
+    write: false,
+    role: "text",
+    readAliases: ["CATEGORY"],
+  },
+  {
+    func: "HDSIGINFO",
+    state: "hdRadio.digitalSignal",
+    nameKey: "hdRadioDigitalSignal",
+    descKey: "descHdRadioDigitalSignal",
+    spec: { kind: "onoff", on: "Assert", off: "Negate" },
+    write: false,
+    role: "indicator",
+  },
+  ...Array.from({ length: 8 }, (_, i): FuncDef => {
+    const n = i + 1;
+    return {
+      func: `AVAILPRG${n}`,
+      state: `hdRadio.program${n}Available`,
+      nameKey: "hdRadioProgramAvailable",
+      descKey: "descHdRadioProgramAvailable",
+      nameArgs: [n],
+      spec: { kind: "onoff", on: "Available", off: "Unavailable" },
+      write: false,
+      role: "indicator",
+    };
+  }),
+  {
+    func: "TAGINFO",
+    state: "hdRadio.tagAvailable",
+    nameKey: "hdRadioTagAvailable",
+    descKey: "descHdRadioTagAvailable",
+    spec: { kind: "onoff", on: "Available", off: "Unavailable" },
+    write: false,
+    role: "indicator",
+  },
+  {
+    func: "TAGSET",
+    state: "hdRadio.tagSave",
+    nameKey: "hdRadioTagSave",
+    descKey: "descHdRadioTagSave",
+    spec: { kind: "button" },
+    write: true,
+    role: "button",
+    readFunc: "TAGINFO",
+    writeOnly: true,
+    wireEncode: () => "Add",
+  },
+  {
+    func: "STATION",
+    state: "hdRadio.station",
+    nameKey: "station",
+    descKey: "descHdRadioMetadata",
+    spec: { kind: "text" },
+    write: false,
+    role: "text",
+  },
+  {
+    func: "ARTIST",
+    state: "hdRadio.artist",
+    nameKey: "artist",
+    descKey: "descHdRadioMetadata",
+    spec: { kind: "text" },
+    write: false,
+    role: "text",
+  },
+  {
+    func: "SONG",
+    state: "hdRadio.track",
+    nameKey: "track",
+    descKey: "descHdRadioMetadata",
+    spec: { kind: "text" },
+    write: false,
+    role: "text",
+  },
+  {
+    func: "ALBUM",
+    state: "hdRadio.album",
+    nameKey: "album",
+    descKey: "descHdRadioMetadata",
+    spec: { kind: "text" },
+    write: false,
+    role: "text",
+  },
+];
+
+/**
  * Network/media player sources — each a subunit, mapped under its own channel. Only
  * the entries a device reports are created, so listing every source is safe.
  */
@@ -2001,6 +2219,8 @@ const PLAYER_SOURCES: Array<{ subunit: string; channel: string }> = [
   { subunit: "PANDORA", channel: "pandora" },
   { subunit: "RHAP", channel: "rhapsody" },
   { subunit: "SIRIUS", channel: "sirius" },
+  { subunit: "SIRIUSIR", channel: "siriusInternetRadio" },
+  { subunit: "SIRIUSXM", channel: "siriusXm" },
   { subunit: "AIRPLAY", channel: "airplay" },
   { subunit: "BT", channel: "bluetooth" },
   { subunit: "PC", channel: "pc" },
@@ -2010,18 +2230,46 @@ const PLAYER_SOURCES: Array<{ subunit: string; channel: string }> = [
 ];
 
 /**
- * The player-source subunits whose spec class carries the preset mixin (verified in
- * ynca-python `subunits/*.py`) — only these accept a PRESET recall write.
+ * The player-source subunits with a PRESET recall: the preset mixin in ynca-python's
+ * `subunits/*.py` (NETRADIO/NAPSTER/PANDORA/PC/RHAP/SIRIUS/USB), the official 2010–2011 lists
+ * (SIRIUSIR) and the RX-A850 list of 2015 (AIRPLAY, BT, SPOTIFY, SERVER, SIRIUSXM).
  */
-const PRESET_SUBUNITS = ["NETRADIO", "NAPSTER", "PANDORA", "PC", "RHAP", "SIRIUS", "USB"];
+const PRESET_SUBUNITS = [
+  "NETRADIO",
+  "NAPSTER",
+  "PANDORA",
+  "PC",
+  "RHAP",
+  "SIRIUS",
+  "SIRIUSIR",
+  "SIRIUSXM",
+  "USB",
+  "AIRPLAY",
+  "BT",
+  "SPOTIFY",
+  "SERVER",
+];
 
 /**
- * The player-source subunits with a preset STORE command (@<SUB>:MEM — official
- * RX-V671 command list, NETRADIO/NAPSTER/PC/USB; attested in the all-commands
- * corpus). A slot number stores the current station/item there, 0 stores to the
- * first free slot ("Auto").
+ * The player-source subunits with a preset STORE command (`@<SUB>:MEM` — official RX-V671
+ * list NETRADIO/NAPSTER/PC/USB, the 2010–2011 lists SIRIUSIR/RHAP, the RX-A850 list AIRPLAY/BT/
+ * SPOTIFY/SERVER/PANDORA/SIRIUSXM). A slot number stores the current station/item there, 0
+ * stores to the first free slot ("Auto").
  */
-const MEM_SUBUNITS = ["NETRADIO", "NAPSTER", "PC", "USB"];
+const MEM_SUBUNITS = [
+  "NETRADIO",
+  "NAPSTER",
+  "PC",
+  "USB",
+  "RHAP",
+  "SIRIUSIR",
+  "SIRIUSXM",
+  "AIRPLAY",
+  "BT",
+  "SPOTIFY",
+  "SERVER",
+  "PANDORA",
+];
 
 /** The playback functions shared by every player source (the __init__ mixin in the lib). */
 const PLAYER_FUNCS: Array<{
@@ -2312,6 +2560,9 @@ export function buildYncaCatalog(): YncaEntry[] {
     });
   }
   entries.push(...fnEntries(DAB_FUNCS, "DAB", "tuner."));
+  // After DAB and TUN on purpose: on a receiver with TUN and HDRADIO the per-device write map
+  // (last entry per id wins) hands the shared tuner ids to the HD-capable subunit.
+  entries.push(...fnEntries(HDRADIO_FUNCS, "HDRADIO", "tuner."));
   for (const source of PLAYER_SOURCES) {
     // v2.0.0 player unification: every source's playback functions land on the ONE
     // flat player block — the controller routes reads and writes by which source
@@ -2387,6 +2638,107 @@ export function buildYncaCatalog(): YncaEntry[] {
       func: "MODE",
     });
   }
+  // The SIRIUS satellite tuner's own surface (6 of the 21 official lists, 2010–2011 US models):
+  // channel selection and number, category stepping, search mode, antenna level, category and
+  // composer names, parental lock. 255 on the channel = no adapter / no station (the list).
+  entries.push(
+    {
+      id: "player.sirius.channel",
+      nameKey: "siriusChannel",
+      descKey: "descSiriusChannel",
+      spec: { kind: "number", min: 0, max: 255, step: 1, decimals: 0 },
+      write: true,
+      role: "level",
+      subunit: "SIRIUS",
+      func: "CHSEL",
+    },
+    {
+      id: "player.sirius.channelNumber",
+      nameKey: "siriusChannelNumber",
+      descKey: "descSiriusChannelNumber",
+      spec: { kind: "number", min: 0, max: 255, decimals: 0 },
+      write: false,
+      role: "value",
+      subunit: "SIRIUS",
+      func: "CHNUM",
+    },
+    {
+      id: "player.sirius.categoryUp",
+      nameKey: "siriusCategoryUp",
+      descKey: "descSiriusCategoryUp",
+      spec: { kind: "button" },
+      write: true,
+      role: "button",
+      subunit: "SIRIUS",
+      func: "CATSEL",
+      readFunc: "CATNAME",
+      writeOnly: true,
+      wireEncode: () => "Up",
+    },
+    {
+      id: "player.sirius.categoryDown",
+      nameKey: "siriusCategoryDown",
+      descKey: "descSiriusCategoryDown",
+      spec: { kind: "button" },
+      write: true,
+      role: "button",
+      subunit: "SIRIUS",
+      func: "CATSEL",
+      readFunc: "CATNAME",
+      writeOnly: true,
+      wireEncode: () => "Down",
+    },
+    {
+      id: "player.sirius.searchMode",
+      nameKey: "siriusSearchMode",
+      descKey: "descSiriusSearchMode",
+      spec: { kind: "enum", states: selfMap(["All Ch", "Category", "Preset"]) },
+      write: true,
+      role: "state",
+      subunit: "SIRIUS",
+      func: "SEARCHMODE",
+    },
+    {
+      id: "player.sirius.antennaLevel",
+      nameKey: "siriusAntennaLevel",
+      descKey: "descSiriusAntennaLevel",
+      spec: { kind: "enum", states: selfMap(["No Signal", "Weak", "Good", "Excellent"]) },
+      write: false,
+      role: "state",
+      subunit: "SIRIUS",
+      func: "ANTLVL",
+    },
+    {
+      id: "player.sirius.categoryName",
+      nameKey: "siriusCategoryName",
+      descKey: "descSiriusCategoryName",
+      spec: { kind: "text" },
+      write: false,
+      role: "text",
+      subunit: "SIRIUS",
+      func: "CATNAME",
+    },
+    {
+      id: "player.sirius.composer",
+      nameKey: "composer",
+      descKey: "descComposer",
+      spec: { kind: "text" },
+      write: false,
+      role: "text",
+      subunit: "SIRIUS",
+      func: "COMPOSER",
+    },
+    {
+      id: "player.sirius.parentalLock",
+      nameKey: "siriusParentalLock",
+      descKey: "descSiriusParentalLock",
+      spec: { kind: "onoff", on: "Locked", off: "Unlocked" },
+      write: false,
+      role: "indicator",
+      subunit: "SIRIUS",
+      func: "PLOCK",
+    },
+  );
   // Net-radio bookmark (@NETRADIO:BOOKMARK, official list + attested): true bookmarks
   // the currently playing station, false removes the bookmark — the "save a favourite
   // from ioBroker" path the #613 workflow asked for.
