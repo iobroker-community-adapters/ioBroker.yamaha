@@ -109,11 +109,10 @@ On the very first contact the adapter asks the receiver which functions it suppo
     ### **WORK IN PROGRESS**
 -->
 
-### 2.7.0 (2026-09-09)
+### **WORK IN PROGRESS**
 
 - (krobipd) Improved: The first connection asks a receiver only what its generation can answer, so zones, trigger sockets and per-input settings follow the device, not a catalogue.
 - (krobipd) New: A datapoint the receiver reveals later now appears at once — a function it starts answering, a value it reports for the first time, a status field it begins delivering.
-- (krobipd) Improved: Everything the adapter remembers about a device lives in one entry on the device object now, and the update carries it over without asking the receiver again.
 - (krobipd) Changed: A datapoint that never carried a value is removed only after two starts confirm it, so a receiver left in standby no longer loses datapoints it still has.
 
 ### 2.6.0 (2026-09-09)

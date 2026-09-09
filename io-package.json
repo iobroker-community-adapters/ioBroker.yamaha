@@ -4,7 +4,7 @@
     "version": "2.7.0",
     "nogit": true,
     "news": {
-      "2.7.0": {
+      "NEXT": {
         "en": "The first connection asks a receiver only what its generation can answer, and a datapoint the device reveals later now appears at once instead of after a restart.",
         "de": "Die erste Verbindung fragt einen Receiver nur noch, was seine Generation beantworten kann, und ein später gemeldeter Datenpunkt erscheint sofort statt erst nach einem Neustart.",
         "ru": "Первое подключение спрашивает ресивер только о том, что умеет его поколение, а точка данных, о которой устройство сообщает позже, появляется сразу, а не после перезапуска.",
@@ -81,19 +81,6 @@
         "pl": "Pilot ekranowy działa teraz we wszystkich trzech protokołach: krzyżak i klawisze menu także w amplitunerach YNCA i XML, z tymi samymi słowami co w MusicCast.",
         "uk": "Екранний пульт тепер працює в усіх трьох протоколах: хрестовина та кнопки меню також на ресиверах YNCA і XML, з тими самими значеннями, що й на MusicCast.",
         "zh-cn": "屏幕遥控现已支持全部三种协议：YNCA 和 2010 年前的 XML 功放同样具备方向键和菜单键，用词与 MusicCast 一致。"
-      },
-      "2.3.3": {
-        "en": "New: menu browser, MusicCast group, clock alarm and disc drive now explain their datapoints too",
-        "de": "Neu: Menü-Browser, MusicCast-Gruppe, Weckruf und Laufwerk erklären jetzt ebenfalls ihre Datenpunkte",
-        "ru": "Новое: обзор меню, группа MusicCast, будильник и дисковод теперь тоже поясняют свои датапоинты",
-        "pt": "Novo: navegador de menu, grupo MusicCast, despertador e leitor de disco explicam agora os seus pontos de dados",
-        "nl": "Nieuw: menubrowser, MusicCast-groep, wekalarm en discspeler leggen nu ook hun datapunten uit",
-        "fr": "Nouveau : navigateur de menu, groupe MusicCast, réveil et lecteur de disque expliquent aussi leurs points de données",
-        "it": "Nuovo: browser dei menu, gruppo MusicCast, sveglia e lettore dischi spiegano ora anche i loro datapoint",
-        "es": "Nuevo: navegador de menú, grupo MusicCast, despertador y unidad de disco explican ahora sus puntos de datos",
-        "pl": "Nowość: przeglądarka menu, grupa MusicCast, budzik i napęd płyt też objaśniają swoje punkty danych",
-        "uk": "Нове: оглядач меню, група MusicCast, будильник і дисковод тепер теж пояснюють свої датапоінти",
-        "zh-cn": "新增：菜单浏览、MusicCast 组、闹钟与光驱的数据点现在也有说明"
       }
     },
     "titleLang": {
