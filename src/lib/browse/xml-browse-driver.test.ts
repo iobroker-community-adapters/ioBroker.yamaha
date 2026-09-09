@@ -256,3 +256,45 @@ describe("XmlBrowseDriver — a cursor press with no open menu says so (audit 20
     expect(warnings[0]).toContain("player.browse.source");
   });
 });
+
+describe("XmlBrowseDriver with the zone-wide pad desc.xml declares (coverage audit 2026-09-09)", () => {
+  function zoneWideSetup(zoneWide: { cursor: boolean; menu: boolean }): {
+    driver: XmlBrowseDriver;
+    sent: Array<{ element: string; inner: string }>;
+  } {
+    const sent: Array<{ element: string; inner: string }> = [];
+    const driver = new XmlBrowseDriver(
+      {
+        send: (element, inner) => {
+          sent.push({ element, inner });
+          return Promise.resolve();
+        },
+        getXml: () => Promise.resolve(listBody({})),
+      },
+      new Set(["netRadio"]),
+      instantDelay,
+      undefined,
+      zoneWide,
+    );
+    driver.attach({ onWindow: (): void => {} } as unknown as BrowseEngine);
+    return { driver, sent };
+  }
+
+  it("sends the cursor to the main zone's Cursor_Control, menu open or not, and offers the menu keys", async () => {
+    const { driver, sent } = zoneWideSetup({ cursor: true, menu: true });
+    expect(driver.menuValues).toEqual(["on_screen", "top_menu", "menu", "option", "display"]);
+    await driver.cursor("up");
+    await driver.menu?.("top_menu");
+    expect(sent).toEqual([
+      { element: "Main_Zone", inner: "<Cursor_Control><Cursor>Up</Cursor></Cursor_Control>" },
+      { element: "Main_Zone", inner: "<Cursor_Control><Menu_Control>Top Menu</Menu_Control></Cursor_Control>" },
+    ]);
+  });
+
+  it("without the declaration the pad stays bound to the open menu and offers no menu key", async () => {
+    const { driver, sent } = zoneWideSetup({ cursor: false, menu: false });
+    expect(driver.menuValues).toBeUndefined();
+    await driver.cursor("up"); // no menu open → nowhere to send
+    expect(sent).toEqual([]);
+  });
+});

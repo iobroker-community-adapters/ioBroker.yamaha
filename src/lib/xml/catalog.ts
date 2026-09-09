@@ -28,6 +28,8 @@ export interface XmlAmpEntry {
   toInner?: (value: unknown, dialect?: XmlDialect) => string;
   /** Only exists on the main zone (a system/main-wide feature like scenes, HDMI outputs, party). */
   mainOnly?: boolean;
+  /** Only exists on zones 2–4 (the pre-out level mode). */
+  zonesOnly?: boolean;
   /** Override the write target element (e.g. `System` for HDMI outputs and party); default is the zone element. */
   writeZone?: string;
 }
@@ -260,6 +262,121 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     statusField: "dialogueLift",
     toInner: value =>
       `<Sound_Video><Dialogue_Adjust><Dialogue_Lift>${Number(value)}</Dialogue_Lift></Dialogue_Adjust></Sound_Video>`,
+  },
+  // The zone commands desc.xml declares and Basic_Status reports on the 2012–2017 generation
+  // (coverage audit 2026-09-09): the enhancer and CINEMA DSP 3D (9 of 10 descriptors), the
+  // speaker terminals A/B and Zone B (HTR-4069 class), the pre-out level mode of zones 2–4.
+  // Same ids as the YNCA entries, so one datapoint serves both transports.
+  {
+    state: "sound.enhancer",
+    common: { nameKey: "enhancer", descKey: "descEnhancer", type: "boolean", role: "switch", read: true, write: true },
+    statusField: "enhancer",
+    toInner: value =>
+      `<Surround><Program_Sel><Current><Enhancer>${value ? "On" : "Off"}</Enhancer></Current></Program_Sel></Surround>`,
+  },
+  {
+    state: "sound.cinemaDsp3d",
+    common: {
+      nameKey: "cinemaDSP3D",
+      descKey: "descCinemaDSP3D",
+      type: "boolean",
+      role: "switch",
+      read: true,
+      write: true,
+    },
+    statusField: "cinemaDsp3d",
+    toInner: value => `<Surround><_3D_Cinema_DSP>${value ? "Auto" : "Off"}</_3D_Cinema_DSP></Surround>`,
+  },
+  {
+    state: "advanced.speakers.speakerA",
+    common: { nameKey: "speakerA", type: "boolean", role: "switch", read: true, write: true },
+    statusField: "speakerA",
+    mainOnly: true,
+    toInner: value =>
+      `<Speaker_Preout><Speaker_AB><Speaker_A>${value ? "On" : "Off"}</Speaker_A></Speaker_AB></Speaker_Preout>`,
+  },
+  {
+    state: "advanced.speakers.speakerB",
+    common: { nameKey: "speakerB", type: "boolean", role: "switch", read: true, write: true },
+    statusField: "speakerB",
+    mainOnly: true,
+    toInner: value =>
+      `<Speaker_Preout><Speaker_AB><Speaker_B>${value ? "On" : "Off"}</Speaker_B></Speaker_AB></Speaker_Preout>`,
+  },
+  {
+    state: "multiroom.zoneB.power",
+    common: { nameKey: "zoneBPower", type: "boolean", role: "switch.power", read: true, write: true },
+    statusField: "zoneBPower",
+    mainOnly: true,
+    toInner: value => `<Power_Control><Zone_B_Power>${value ? "On" : "Standby"}</Zone_B_Power></Power_Control>`,
+  },
+  {
+    state: "multiroom.zoneB.available",
+    common: {
+      nameKey: "zoneBAvailability",
+      descKey: "descZoneBAvailability",
+      type: "string",
+      role: "state",
+      read: true,
+      write: false,
+      states: { Ready: "Ready", "Not Ready": "Not Ready" },
+    },
+    statusField: "zoneBAvailable",
+    mainOnly: true,
+  },
+  {
+    state: "multiroom.zoneB.interlock",
+    common: {
+      nameKey: "zoneBInterlock",
+      descKey: "descZoneBInterlock",
+      type: "boolean",
+      role: "switch",
+      read: true,
+      write: true,
+    },
+    statusField: "zoneBInterlock",
+    mainOnly: true,
+    toInner: value => `<Volume><Zone_B><Interlock>${value ? "On" : "Off"}</Interlock></Zone_B></Volume>`,
+  },
+  {
+    state: "multiroom.zoneB.volume",
+    common: {
+      nameKey: "zoneBVolume",
+      type: "number",
+      role: "level.volume",
+      read: true,
+      write: true,
+      unit: "dB",
+      min: -80.5,
+      max: 16.5,
+      step: 0.5,
+    },
+    statusField: "zoneBVolume",
+    mainOnly: true,
+    toInner: value =>
+      `<Volume><Zone_B><Lvl><Val>${Math.round(Number(value) * 10)}</Val><Exp>1</Exp><Unit>dB</Unit></Lvl></Zone_B></Volume>`,
+  },
+  {
+    state: "multiroom.zoneB.mute",
+    common: { nameKey: "zoneBMute", type: "boolean", role: "media.mute", read: true, write: true },
+    statusField: "zoneBMute",
+    mainOnly: true,
+    toInner: value => `<Volume><Zone_B><Mute>${value ? "On" : "Off"}</Mute></Zone_B></Volume>`,
+  },
+  {
+    state: "volumeOutput",
+    common: {
+      nameKey: "volumeOutputMode",
+      descKey: "descVolumeOutputMode",
+      type: "string",
+      role: "state",
+      read: true,
+      write: true,
+      states: { Variable: "Variable", Fixed: "Fixed" },
+    },
+    statusField: "volumeOutput",
+    zonesOnly: true,
+    toInner: value => `<Volume><Output>${escapeXmlText(value)}</Output></Volume>`,
   },
   // HDMI outputs and party — the predecessor's setHDMIOutput / partyMode.
   // Main-zone-only; both are written on the System element (writeZone).

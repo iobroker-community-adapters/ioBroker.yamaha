@@ -273,7 +273,15 @@ describe("parseDescriptor — the enumerations a classic receiver carries in des
   });
 
   test("a body without any of the blocks yields the empty declaration", () => {
-    expect(parseDescriptor("<Unit/>")).toEqual({ programs: [], sleep: [], adaptiveDrc: [] });
+    expect(parseDescriptor("<Unit/>")).toEqual({
+      programs: [],
+      sleep: [],
+      adaptiveDrc: [],
+      cursorZones: [],
+      menuZones: [],
+      playbackZones: [],
+      volumeOutputZones: [],
+    });
   });
 });
 
@@ -307,5 +315,72 @@ describe("parseBasicStatus — the 2008 dialect (RX-V3900: Vol, Surr, Pgm)", () 
     expect(
       parseBasicStatus("<Basic_Status><Power_Control><Power>On</Power></Power_Control></Basic_Status>").dialect,
     ).toBeUndefined();
+  });
+});
+
+describe("parseBasicStatus — the zone commands desc.xml declares (coverage audit 2026-09-09)", () => {
+  test("enhancer, 3D Cinema DSP, speaker A/B, Zone B and the pre-out mode come out of the main zone's status", () => {
+    const status = parseBasicStatus(`<YAMAHA_AV rsp="GET" RC="0"><Main_Zone><Basic_Status>
+      <Power_Control><Power>On</Power></Power_Control>
+      <Volume><Lvl><Val>-300</Val><Exp>1</Exp><Unit>dB</Unit></Lvl><Mute>Off</Mute>
+        <Zone_B><Feature_Availability>Ready</Feature_Availability><Interlock>Off</Interlock>
+          <Lvl><Val>-345</Val><Exp>1</Exp><Unit>dB</Unit></Lvl><Mute>On</Mute></Zone_B>
+        <Output_Info>Variable</Output_Info>
+      </Volume>
+      <Surround><Program_Sel><Current><Straight>Off</Straight><Enhancer>On</Enhancer>
+        <Sound_Program>5ch Stereo</Sound_Program></Current></Program_Sel><_3D_Cinema_DSP>Auto</_3D_Cinema_DSP></Surround>
+      <Speaker_Preout><Speaker_AB><Speaker_A>On</Speaker_A><Speaker_B>Off</Speaker_B></Speaker_AB></Speaker_Preout>
+    </Basic_Status></Main_Zone></YAMAHA_AV>`);
+    expect(status).toMatchObject({
+      volume: -30,
+      mute: false,
+      enhancer: true,
+      cinemaDsp3d: true,
+      speakerA: true,
+      speakerB: false,
+      zoneBAvailable: "Ready",
+      zoneBInterlock: false,
+      zoneBVolume: -34.5,
+      zoneBMute: true,
+      volumeOutput: "Variable",
+    });
+  });
+
+  test("the Zone B power comes from Power_Control, and Unavailable is no power state", () => {
+    expect(
+      parseBasicStatus(
+        "<Basic_Status><Power_Control><Power>On</Power><Zone_B_Power_Info>Standby</Zone_B_Power_Info></Power_Control></Basic_Status>",
+      ),
+    ).toMatchObject({ power: true, zoneBPower: false });
+    expect(
+      parseBasicStatus(
+        "<Basic_Status><Power_Control><Zone_B_Power_Info>Unavailable</Zone_B_Power_Info></Power_Control></Basic_Status>",
+      ).zoneBPower,
+    ).toBeUndefined();
+  });
+
+  test("the Zone B volume is not mistaken for the main volume and vice versa", () => {
+    const status = parseBasicStatus(
+      "<Basic_Status><Volume><Zone_B><Lvl><Val>-200</Val></Lvl><Mute>Off</Mute></Zone_B><Lvl><Val>-300</Val></Lvl><Mute>On</Mute></Volume></Basic_Status>",
+    );
+    expect(status).toMatchObject({ volume: -30, mute: true, zoneBVolume: -20, zoneBMute: false });
+  });
+});
+
+describe("parseDescriptor — the zone commands and the pad a receiver declares", () => {
+  test("the RX-V675 declares the zone-wide cursor and menu keys, playback and the pre-out mode per zone", () => {
+    const descriptor = parseDescriptor(readFixture("desc-rx-v675.xml"));
+    expect(descriptor.cursorZones).toEqual(["Main_Zone", "Zone_2"]);
+    expect(descriptor.menuZones).toEqual(["Main_Zone", "Zone_2"]);
+    expect(descriptor.playbackZones).toEqual(["Main_Zone", "Zone_2"]);
+    expect(descriptor.volumeOutputZones).toEqual(["Zone_2"]);
+  });
+
+  test("the 2012 entry class (RX-V473) declares no zone-wide pad — the menu-bound List_Control is all it has (#613) — but main-zone playback", () => {
+    const descriptor = parseDescriptor(readFixture("desc-rx-v473.xml"));
+    expect(descriptor.cursorZones).toEqual([]);
+    expect(descriptor.menuZones).toEqual([]);
+    expect(descriptor.playbackZones).toEqual(["Main_Zone"]);
+    expect(descriptor.volumeOutputZones).toEqual([]);
   });
 });

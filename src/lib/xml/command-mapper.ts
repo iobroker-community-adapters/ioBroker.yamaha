@@ -40,6 +40,7 @@ export function stateToXml(stateId: string, value: unknown, dialect?: XmlDialect
   if (
     !entry?.toInner ||
     (entry.mainOnly && zoneKey !== "main") ||
+    (entry.zonesOnly && zoneKey === "main") ||
     !isWritableValue(value, entry.common.type === "number")
   ) {
     return undefined;
@@ -69,6 +70,9 @@ export function parseXmlStatus(status: BasicStatus, zone: string): StateValue[] 
   }
   const updates: StateValue[] = [];
   for (const entry of XML_AMP_CATALOG) {
+    if ((entry.mainOnly && zone !== "main") || (entry.zonesOnly && zone === "main")) {
+      continue;
+    }
     const value = entry.statusField ? status[entry.statusField] : undefined;
     if (value !== undefined) {
       updates.push({ id: `${prefix}${entry.state}`, value });

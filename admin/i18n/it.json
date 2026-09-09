@@ -589,5 +589,7 @@
   "descComposer": "Il compositore del brano in riproduzione, come lo invia il canale.",
   "siriusParentalLock": "Blocco genitori",
   "descSiriusParentalLock": "Vero finché il canale in riproduzione è bloccato dal controllo genitori.",
-  "siriusSearchMode": "Modalità di ricerca"
+  "siriusSearchMode": "Modalità di ricerca",
+  "zoneBInterlock": "Aggancio volume Zona B",
+  "descZoneBInterlock": "Lega il volume della Zona B a quello della zona principale, una manopola per entrambe."
 }

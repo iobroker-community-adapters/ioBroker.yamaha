@@ -589,5 +589,7 @@
   "descComposer": "Der Komponist des laufenden Stücks, wie der Kanal ihn sendet.",
   "siriusParentalLock": "Kindersicherung",
   "descSiriusParentalLock": "Wahr, solange der laufende Kanal durch die Kindersicherung gesperrt ist.",
-  "siriusSearchMode": "Suchmodus"
+  "siriusSearchMode": "Suchmodus",
+  "zoneBInterlock": "Zone-B-Lautstärkekopplung",
+  "descZoneBInterlock": "Koppelt die Lautstärke von Zone B an die Hauptzone, sodass ein Regler beide bewegt."
 }

@@ -589,5 +589,7 @@
   "descComposer": "频道发送的当前乐曲作曲者。",
   "siriusParentalLock": "家长锁",
   "descSiriusParentalLock": "当前播放频道被家长控制锁定时为真。",
-  "siriusSearchMode": "搜索模式"
+  "siriusSearchMode": "搜索模式",
+  "zoneBInterlock": "B 区音量联动",
+  "descZoneBInterlock": "将 B 区音量与主区联动，一个旋钮同时控制两者。"
 }

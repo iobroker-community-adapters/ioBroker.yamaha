@@ -295,6 +295,33 @@ export interface XmlDescriptor {
   hdmiOut2?: string[];
   /** `Sound_Video,Dialogue_Adjust,Dialogue_Lvl` range, when declared. */
   dialogueLevel?: { min: number; max: number; step: number };
+  /** The zone elements whose `Cmd_List` defines `Cursor_Control,Cursor` — the zone-wide cursor pad. */
+  cursorZones?: string[];
+  /** The zone elements with `Cursor_Control,Menu_Control` — the zone-wide menu keys. */
+  menuZones?: string[];
+  /** The zone elements with `Play_Control,Playback` — transport keys per zone. */
+  playbackZones?: string[];
+  /** The zone elements with `Volume,Output` — the pre-out level mode (zones 2–4). */
+  volumeOutputZones?: string[];
+}
+
+/**
+ * The zone elements whose `Cmd_List` defines the given command path (`<Define ID="P18">
+ * Main_Zone,Cursor_Control,Cursor</Define>`), in document order, each once.
+ *
+ * @param xml the desc.xml body
+ * @param path the command path after the zone element
+ * @returns the zone elements declaring it
+ */
+function definingZones(xml: string, path: string): string[] {
+  const zones: string[] = [];
+  const pattern = new RegExp(`<Define ID="[PG]\\d+">(Main_Zone|Zone_[234]),${path.replace(/,/g, ",")}</Define>`, "g");
+  for (const match of xml.matchAll(pattern)) {
+    if (!zones.includes(match[1])) {
+      zones.push(match[1]);
+    }
+  }
+  return zones;
 }
 
 /**
@@ -349,6 +376,10 @@ export function parseDescriptor(xml: string): XmlDescriptor {
   if (hdmiOut2.length > 0) {
     descriptor.hdmiOut2 = hdmiOut2;
   }
+  descriptor.cursorZones = definingZones(xml, "Cursor_Control,Cursor");
+  descriptor.menuZones = definingZones(xml, "Cursor_Control,Menu_Control");
+  descriptor.playbackZones = definingZones(xml, "Play_Control,Playback");
+  descriptor.volumeOutputZones = definingZones(xml, "Volume,Output");
   const dialogue = descriptorParam(xml, "Sound_Video,Dialogue_Adjust,Dialogue_Lvl").range;
   if (dialogue) {
     descriptor.dialogueLevel = dialogue;
@@ -409,6 +440,26 @@ export interface BasicStatus {
   party?: boolean;
   /** Dialogue lift. */
   dialogueLift?: number;
+  /** Compressed Music Enhancer (`Surround,Program_Sel,Current,Enhancer`, 9 of 10 descriptors). */
+  enhancer?: boolean;
+  /** CINEMA DSP 3D (`Surround,_3D_Cinema_DSP` Auto/Off, mapped to a boolean like YNCA's 3DCINEMA). */
+  cinemaDsp3d?: boolean;
+  /** Speaker terminal A on/off (`Speaker_Preout,Speaker_AB,Speaker_A`). */
+  speakerA?: boolean;
+  /** Speaker terminal B on/off. */
+  speakerB?: boolean;
+  /** Zone B availability (`Volume,Zone_B,Feature_Availability` Ready / Not Ready). */
+  zoneBAvailable?: string;
+  /** Zone B volume interlock with the main zone. */
+  zoneBInterlock?: boolean;
+  /** Zone B volume in decibels. */
+  zoneBVolume?: number;
+  /** Zone B mute. */
+  zoneBMute?: boolean;
+  /** Zone B power (`Power_Control,Zone_B_Power_Info` On / Standby; Unavailable is no state). */
+  zoneBPower?: boolean;
+  /** A zone's pre-out level mode (`Volume,Output_Info` Fixed / Variable — zones 2–4 only). */
+  volumeOutput?: string;
 }
 
 /**
@@ -416,14 +467,41 @@ export interface BasicStatus {
  * the response actually contains are returned; a malformed response yields an
  * empty object. Volume comes as tenths of a decibel (`<Val>-300</Val>` = -30 dB).
  *
- * @param xml the Basic_Status response body
+ * @param body the Basic_Status response body
  * @returns the parsed fields
  */
-export function parseBasicStatus(xml: string): BasicStatus {
+export function parseBasicStatus(body: string): BasicStatus {
   const status: BasicStatus = {};
+  // Zone B (the HTR-4069 class) nests its own Lvl/Mute inside <Volume>: read that block first
+  // and take it OUT before the main zone's fields are matched, so neither side reads the other's.
+  const zoneB = /<Zone_B>([\s\S]*?)<\/Zone_B>/.exec(body);
+  const xml = zoneB ? body.replace(zoneB[0], "") : body;
+  if (zoneB) {
+    const inner = zoneB[1];
+    const availability = /<Feature_Availability>([^<]+)<\/Feature_Availability>/.exec(inner);
+    if (availability) {
+      status.zoneBAvailable = decodeXmlText(availability[1]);
+    }
+    const interlock = /<Interlock>(On|Off)<\/Interlock>/.exec(inner);
+    if (interlock) {
+      status.zoneBInterlock = interlock[1] === "On";
+    }
+    const level = /<Lvl>\s*<Val>(-?\d+)<\/Val>/.exec(inner);
+    if (level) {
+      status.zoneBVolume = Number(level[1]) / 10;
+    }
+    const zoneBMute = /<Mute>(On|Off)<\/Mute>/.exec(inner);
+    if (zoneBMute) {
+      status.zoneBMute = zoneBMute[1] === "On";
+    }
+  }
   const power = /<Power>(On|Standby)<\/Power>/.exec(xml);
   if (power) {
     status.power = power[1] === "On";
+  }
+  const zoneBPower = /<Zone_B_Power_Info>(On|Standby)<\/Zone_B_Power_Info>/.exec(xml);
+  if (zoneBPower) {
+    status.zoneBPower = zoneBPower[1] === "On";
   }
   // Both dialects are read (see XmlDialect): the 2008 generation had NO volume, mute or
   // program on this transport until 2.6.0 — the very generation the transport exists for.
@@ -514,6 +592,28 @@ export function parseBasicStatus(xml: string): BasicStatus {
   const party = /<Party_Info>([^<]+)<\/Party_Info>/.exec(xml);
   if (party) {
     status.party = party[1] === "On";
+  }
+  // The zone commands desc.xml declares on 2012–2017 receivers, read from the same status
+  // (coverage audit 2026-09-09; measured on the HTR-4069 and RX-S601D captures).
+  const enhancer = /<Enhancer>(On|Off)<\/Enhancer>/.exec(xml);
+  if (enhancer) {
+    status.enhancer = enhancer[1] === "On";
+  }
+  const cinema = /<_3D_Cinema_DSP>(Auto|Off)<\/_3D_Cinema_DSP>/.exec(xml);
+  if (cinema) {
+    status.cinemaDsp3d = cinema[1] === "Auto";
+  }
+  const speakerA = /<Speaker_A>(On|Off)<\/Speaker_A>/.exec(xml);
+  if (speakerA) {
+    status.speakerA = speakerA[1] === "On";
+  }
+  const speakerB = /<Speaker_B>(On|Off)<\/Speaker_B>/.exec(xml);
+  if (speakerB) {
+    status.speakerB = speakerB[1] === "On";
+  }
+  const output = /<Output_Info>(Fixed|Variable)<\/Output_Info>/.exec(xml);
+  if (output) {
+    status.volumeOutput = output[1];
   }
   const dialogueLift = /<Dialogue_Lift>(-?\d+)<\/Dialogue_Lift>/.exec(xml);
   if (dialogueLift) {

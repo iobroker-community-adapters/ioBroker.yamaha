@@ -589,5 +589,7 @@
   "descComposer": "Le compositeur du morceau en cours, tel que le canal l'envoie.",
   "siriusParentalLock": "Verrouillage parental",
   "descSiriusParentalLock": "Vrai tant que le canal en cours est verrouillé par le contrôle parental.",
-  "siriusSearchMode": "Mode de recherche"
+  "siriusSearchMode": "Mode de recherche",
+  "zoneBInterlock": "Couplage du volume de la zone B",
+  "descZoneBInterlock": "Lie le volume de la zone B à celui de la zone principale, un seul bouton pour les deux."
 }

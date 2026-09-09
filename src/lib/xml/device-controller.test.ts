@@ -922,3 +922,104 @@ describe("the 2008 dialect drives every write and is remembered (RX-V3900)", () 
     expect(memory.remembered("xmlDialect")).toBe("classic");
   });
 });
+
+describe("the zone commands desc.xml declares: pads, transport keys, zone names (coverage audit 2026-09-09)", () => {
+  const DECLARES = `<Unit><Menu><Cmd_List>
+    <Define ID="P18">Main_Zone,Cursor_Control,Cursor</Define>
+    <Define ID="P19">Main_Zone,Cursor_Control,Menu_Control</Define>
+    <Define ID="P24">Main_Zone,Play_Control,Playback</Define>
+    <Define ID="P18">Zone_2,Cursor_Control,Cursor</Define>
+    <Define ID="P24">Zone_2,Play_Control,Playback</Define>
+    <Define ID="P20">Zone_2,Volume,Output</Define>
+  </Cmd_List></Menu></Unit>`;
+  const statuses = { Main_Zone: { power: true, volume: -30 }, Zone_2: { power: true, volume: -20 } };
+  const sent = (s: ReturnType<typeof setup>): Array<{ zone: string; inner?: string }> =>
+    s.client.calls.filter(c => c.method === "send").map(c => ({ zone: c.zone, inner: c.inner }));
+  const tick = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
+
+  test("a zone with the zone-wide cursor gets a pad under the zone; a key press goes to the zone element", async () => {
+    const s = setup(statuses);
+    s.client.descriptor = DECLARES;
+    await s.controller.start();
+    const pad = s.defs.get("living.multiroom.zone2.remote.cursor") as { common?: { states?: Record<string, string> } };
+    expect(Object.keys(pad?.common?.states ?? {})).toEqual(["up", "down", "left", "right", "select", "return", "home"]);
+    // Zone 2 declares no Menu_Control — no menu key there; the main zone has both.
+    expect(s.defs.has("living.multiroom.zone2.remote.menu")).toBe(false);
+    expect(s.defs.has("living.remote.cursor")).toBe(true);
+    const menu = s.defs.get("living.remote.menu") as { common?: { states?: Record<string, string> } };
+    expect(Object.keys(menu?.common?.states ?? {})).toEqual(["on_screen", "top_menu", "menu", "option", "display"]);
+    s.controller.handleStateChange("living.multiroom.zone2.remote.cursor", false, "up");
+    s.controller.handleStateChange("living.remote.menu", false, "on_screen");
+    s.controller.handleStateChange("living.remote.cursor", false, "sideways"); // no such key
+    await tick();
+    expect(sent(s)).toEqual([
+      { zone: "Zone_2", inner: "<Cursor_Control><Cursor>Up</Cursor></Cursor_Control>" },
+      { zone: "Main_Zone", inner: "<Cursor_Control><Menu_Control>On Screen</Menu_Control></Cursor_Control>" },
+    ]);
+  });
+
+  test("with a menu source and the zone-wide pad declared, a main-zone key press goes zone-wide even with no menu open", async () => {
+    const s = setup(statuses);
+    // The browse surface needs the command gate (no gate = no menus, as in the older tests).
+    (s.controller as unknown as { deps: { gate?: CommandGate } }).deps.gate = testGate();
+    s.client.descriptor = DECLARES;
+    s.client.xmlAnswers["NET_RADIO|<List_Info>GetParam</List_Info>"] =
+      '<YAMAHA_AV rsp="GET" RC="0"><NET_RADIO><List_Info><Menu_Status>Ready</Menu_Status><Menu_Layer>1</Menu_Layer><Menu_Name>NET RADIO</Menu_Name><Current_List><Line_1><Txt>Bookmarks</Txt><Attribute>Container</Attribute></Line_1></Current_List><Cursor_Position><Current_Line>1</Current_Line><Max_Line>1</Max_Line></Cursor_Position></List_Info></NET_RADIO></YAMAHA_AV>';
+    await s.controller.start();
+    expect(s.defs.has("living.player.browse.source")).toBe(true);
+    expect(s.defs.has("living.remote.menu")).toBe(true);
+    s.controller.handleStateChange("living.remote.cursor", false, "up");
+    await tick();
+    expect(sent(s)).toEqual([{ zone: "Main_Zone", inner: "<Cursor_Control><Cursor>Up</Cursor></Cursor_Control>" }]);
+  });
+
+  test("a receiver without the declaration keeps the menu-bound pad and no zone pads", async () => {
+    const s = setup(statuses);
+    await s.controller.start();
+    expect(s.defs.has("living.remote.cursor")).toBe(false);
+    expect(s.defs.has("living.multiroom.zone2.remote.cursor")).toBe(false);
+    expect(s.defs.has("living.player.play")).toBe(false);
+  });
+
+  test("transport keys exist per declared zone and write the declared Playback words", async () => {
+    const s = setup(statuses);
+    s.client.descriptor = DECLARES;
+    await s.controller.start();
+    for (const key of ["play", "pause", "stop", "next", "prev"]) {
+      expect(s.defs.has(`living.player.${key}`), key).toBe(true);
+      expect(s.defs.has(`living.multiroom.zone2.player.${key}`), key).toBe(true);
+    }
+    s.controller.handleStateChange("living.multiroom.zone2.player.next", false, true);
+    s.controller.handleStateChange("living.player.pause", false, true);
+    await tick();
+    expect(sent(s)).toEqual([
+      { zone: "Zone_2", inner: "<Play_Control><Playback>Skip Fwd</Playback></Play_Control>" },
+      { zone: "Main_Zone", inner: "<Play_Control><Playback>Pause</Playback></Play_Control>" },
+    ]);
+  });
+
+  test("the zone names come from each zone's Config, are remembered, and a write renames the zone on the device", async () => {
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
+    const s = setup(statuses);
+    (s.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
+    s.client.xmlAnswers["Main_Zone|<Config>GetParam</Config>"] =
+      '<YAMAHA_AV rsp="GET" RC="0"><Main_Zone><Config><Name><Zone>Living</Zone></Name></Config></Main_Zone></YAMAHA_AV>';
+    s.client.xmlAnswers["Zone_2|<Config>GetParam</Config>"] =
+      '<YAMAHA_AV rsp="GET" RC="0"><Zone_2><Config><Name><Zone>Kitchen</Zone></Name></Config></Zone_2></YAMAHA_AV>';
+    await s.controller.start();
+    expect(s.acks).toContainEqual({ id: "living.zoneName", value: "Living" });
+    expect(s.acks).toContainEqual({ id: "living.multiroom.zone2.zoneName", value: "Kitchen" });
+    expect(memory.remembered("xmlZoneName:zone2")).toBe("Kitchen");
+    s.controller.handleStateChange("living.multiroom.zone2.zoneName", false, "Küche");
+    await tick();
+    expect(sent(s)).toEqual([{ zone: "Zone_2", inner: "<Config><Name><Zone>Küche</Zone></Name></Config>" }]);
+  });
+
+  test("a zone whose Config carries no name gets no name datapoint", async () => {
+    const s = setup(statuses);
+    s.client.xmlAnswers["Main_Zone|<Config>GetParam</Config>"] = '<YAMAHA_AV rsp="GET" RC="2"></YAMAHA_AV>';
+    await s.controller.start();
+    expect(s.defs.has("living.zoneName")).toBe(false);
+    expect(s.defs.has("living.multiroom.zone2.zoneName")).toBe(false);
+  });
+});

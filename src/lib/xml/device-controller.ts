@@ -22,7 +22,9 @@ import type { ProbeMemory } from "../lifecycle/probe-memory";
 import type { CommandGate } from "../lifecycle/command-gate";
 import type { BrowseEngine } from "../browse/browse-engine";
 import { createBrowseSurface } from "../browse/surface";
-import { XML_BROWSE_SOURCES, XmlBrowseDriver } from "../browse/xml-browse-driver";
+import { XML_BROWSE_SOURCES, XML_CURSOR_WIRE, XML_MENU_WIRE, XmlBrowseDriver } from "../browse/xml-browse-driver";
+import { wireFor } from "../browse/types";
+import { decodeXmlText, escapeXmlText } from "./entities";
 
 /** XML/YNC has no push channel, so the state is polled at this interval by default. */
 const DEFAULT_POLL_INTERVAL_MS = 60 * 1000;
@@ -35,6 +37,24 @@ interface XmlZone {
   /** State-id prefix for the zone. */
   prefix: string;
 }
+
+/** The transport keys of `Play_Control,Playback` and their wire words (desc.xml, RX-V675 & co). */
+const XML_TRANSPORT_WIRE: Record<string, string> = {
+  play: "Play",
+  pause: "Pause",
+  stop: "Stop",
+  next: "Skip Fwd",
+  prev: "Skip Rev",
+};
+
+/** The transport keys' display names (the player block's own keys). */
+const XML_TRANSPORT_NAME_KEYS: Record<string, "play" | "pause" | "stop" | "next" | "previous"> = {
+  play: "play",
+  pause: "pause",
+  stop: "stop",
+  next: "next",
+  prev: "previous",
+};
 
 const XML_ZONES: XmlZone[] = [
   { key: "main", element: "Main_Zone", prefix: "" },
@@ -103,6 +123,16 @@ export class XmlDeviceController implements ConnectionHandle {
   private dialect: XmlDialect | undefined;
   /** Per zone: the Basic_Status fields this device is known to deliver (persisted union). */
   private readonly zoneFields = new Map<string, Set<string>>();
+  /**
+   * The zone commands desc.xml declares (zone elements): the zone-wide cursor pad and menu keys,
+   * the transport keys. Read from the device description, so a receiver that declares none
+   * (the 2012 entry class) offers none.
+   */
+  private zoneCommands: { cursor: Set<string>; menu: Set<string>; playback: Set<string> } = {
+    cursor: new Set(),
+    menu: new Set(),
+    playback: new Set(),
+  };
 
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
@@ -190,6 +220,11 @@ export class XmlDeviceController implements ConnectionHandle {
     // The device description — the classic generation's own enumeration of programs, sleep
     // steps, Adaptive DRC values and the dialogue range (2012–2017; the 2020 generation has none).
     const descriptor = await this.probeDescriptor();
+    this.zoneCommands = {
+      cursor: new Set(descriptor.cursorZones ?? []),
+      menu: new Set(descriptor.menuZones ?? []),
+      playback: new Set(descriptor.playbackZones ?? []),
+    };
     // Claim with proof, XML edition (2.0.1): only the states whose Basic_Status field
     // this device DELIVERS are created — a blind full-catalog rollout left valueless
     // objects (hdmi.out2, sound.direct, …) standing on devices without the feature.
@@ -211,8 +246,9 @@ export class XmlDeviceController implements ConnectionHandle {
     const createdChannels = new Set<string>();
     for (const zone of this.zones) {
       for (const entry of XML_AMP_CATALOG) {
-        // Main/system-wide features (scenes, HDMI outputs, party) exist only on the main zone.
-        if (entry.mainOnly && zone.key !== "main") {
+        // Main/system-wide features (scenes, HDMI outputs, party) exist only on the main zone;
+        // the pre-out level mode only on the zones.
+        if ((entry.mainOnly && zone.key !== "main") || (entry.zonesOnly && zone.key === "main")) {
           continue;
         }
         // Claim with proof: skip what this device's status never delivered.
@@ -269,6 +305,8 @@ export class XmlDeviceController implements ConnectionHandle {
     }
     await this.setupScenes(createdChannels);
     await this.setupTuner(createdChannels);
+    await this.setupTransportKeys(createdChannels);
+    await this.setupZoneNames(createdChannels);
     // Seed from the statuses already fetched during the probe — no second round-trip.
     for (const { zone, status } of answered) {
       if (status) {
@@ -283,6 +321,10 @@ export class XmlDeviceController implements ConnectionHandle {
       this.emit("info.model", model);
     }
     await this.setupBrowse();
+    // The zone pads AFTER the browse surface: where a menu source exists the surface owns the
+    // main zone's pad (zone-wide through the driver where declared), the controller adds the
+    // zones' — and the main zone's on a receiver without a menu source.
+    await this.setupZonePads();
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), this.pollIntervalMs);
     // The adapter logs one combined "ready" line across all transports; this stays at debug.
     this.deps.log.debug(`${this.deviceId}: Yamaha (XML) device ready (XML)`);
@@ -691,7 +733,10 @@ export class XmlDeviceController implements ConnectionHandle {
     if (available.size === 0) {
       return;
     }
-    const driver = new XmlBrowseDriver(this.deps.client, available, delay, this.deps.log);
+    const driver = new XmlBrowseDriver(this.deps.client, available, delay, this.deps.log, {
+      cursor: this.zoneCommands.cursor.has("Main_Zone"),
+      menu: this.zoneCommands.menu.has("Main_Zone"),
+    });
     this.browseEngine = await createBrowseSurface(driver, this.deviceId, {
       upsertObject: this.deps.upsertObject,
       emit: (id, value) => this.emit(id, value),
@@ -732,8 +777,11 @@ export class XmlDeviceController implements ConnectionHandle {
       return;
     }
     const stateId = fullStateId.slice(prefix.length);
-    if (stateId.startsWith("remote.")) {
-      this.browseEngine?.handleRemoteWrite(stateId, value);
+    if (stateId.startsWith("remote.") && this.browseEngine) {
+      this.browseEngine.handleRemoteWrite(stateId, value);
+      return;
+    }
+    if (this.handleZoneCommandWrite(stateId, value)) {
       return;
     }
     if (stateId.startsWith("player.browse.")) {
@@ -879,6 +927,214 @@ export class XmlDeviceController implements ConnectionHandle {
    *
    * @param command the XML command to apply
    */
+  /**
+   * The zone-wide pads desc.xml declares: `remote.cursor` / `remote.menu` under every zone whose
+   * `Cmd_List` defines `Cursor_Control,Cursor` / `Menu_Control` — the main zone's only when no
+   * browse surface owns it already (then the surface's pad goes zone-wide through the driver).
+   */
+  private async setupZonePads(): Promise<void> {
+    for (const zone of this.zones) {
+      if (zone.key === "main" && this.browseEngine) {
+        continue;
+      }
+      const cursor = this.zoneCommands.cursor.has(zone.element);
+      const menu = this.zoneCommands.menu.has(zone.element);
+      if (!cursor && !menu) {
+        continue;
+      }
+      await this.deps.upsertObject(`${this.deviceId}.${zone.prefix}remote`, {
+        id: `${zone.prefix}remote`,
+        type: "channel",
+        common: channelCommon("remote"),
+      });
+      const pads: Array<[string, string, readonly string[]]> = [];
+      if (cursor) {
+        pads.push(["cursor", "cursorPad", Object.keys(XML_CURSOR_WIRE)]);
+      }
+      if (menu) {
+        pads.push(["menu", "menuKey", Object.keys(XML_MENU_WIRE)]);
+      }
+      for (const [suffix, nameKey, words] of pads) {
+        const stateId = `${zone.prefix}remote.${suffix}`;
+        await this.deps.upsertObject(`${this.deviceId}.${stateId}`, {
+          id: stateId,
+          type: "state",
+          common: {
+            name: tName(nameKey === "cursorPad" ? "cursorPad" : "menuKey"),
+            desc: tName(nameKey === "cursorPad" ? "descCursorPad" : "descMenuKey"),
+            type: "string",
+            role: "state",
+            read: false,
+            write: true,
+            states: Object.fromEntries(words.map(word => [word, word])),
+          },
+        });
+        this.createdStates.add(stateId);
+      }
+    }
+  }
+
+  /**
+   * The transport keys desc.xml declares per zone (`Play_Control,Playback`: Play, Pause, Stop,
+   * Skip Fwd, Skip Rev — 8 of the 10 captured descriptors, per zone on the 2013+ models): five
+   * keys on the flat player block of the zone, the same ids YNCA and MusicCast use, so on a
+   * receiver with a richer transport the owner policy hands them over.
+   *
+   * @param createdChannels the channels created so far (parents once)
+   */
+  private async setupTransportKeys(createdChannels: Set<string>): Promise<void> {
+    for (const zone of this.zones) {
+      if (!this.zoneCommands.playback.has(zone.element)) {
+        continue;
+      }
+      const channelId = `${zone.prefix}player`;
+      if (!createdChannels.has(channelId)) {
+        createdChannels.add(channelId);
+        await this.deps.upsertObject(`${this.deviceId}.${channelId}`, {
+          id: channelId,
+          type: "channel",
+          common: channelCommon("player"),
+        });
+      }
+      for (const [key, nameKey] of Object.entries(XML_TRANSPORT_NAME_KEYS)) {
+        const stateId = `${zone.prefix}player.${key}`;
+        await this.deps.upsertObject(`${this.deviceId}.${stateId}`, {
+          id: stateId,
+          type: "state",
+          common: { name: tName(nameKey), type: "boolean", role: "button", read: false, write: true },
+        });
+        this.createdStates.add(stateId);
+      }
+    }
+  }
+
+  /**
+   * Every zone's own name from `<Config><Name><Zone>` (desc.xml `Config,Name,Zone`, 5+4+1+1
+   * zones over the captured descriptors) — a property of the model, asked once per device and
+   * remembered as `xmlZoneName:<zone>`; a zone that declares none gets no datapoint. Same id as
+   * YNCA's ZONENAME, so an XML-only receiver finally shows the names its owner gave the zones.
+   *
+   * @param createdChannels the channels created so far (parents once)
+   */
+  private async setupZoneNames(createdChannels: Set<string>): Promise<void> {
+    for (const zone of this.zones) {
+      const name = await this.probeZoneName(zone);
+      if (!name) {
+        continue;
+      }
+      const stateId = `${zone.prefix}zoneName`;
+      const channelId = zone.prefix.replace(/\.$/, "");
+      if (channelId && !createdChannels.has(channelId)) {
+        // Cannot happen for a zone that answered its status (its channel exists), kept for
+        // the zone whose only answer is its name.
+        createdChannels.add(channelId);
+        await this.deps.upsertObject(`${this.deviceId}.${channelId}`, {
+          id: channelId,
+          type: "channel",
+          common: channelCommon(channelId.split(".").pop() ?? channelId),
+        });
+      }
+      await this.deps.upsertObject(`${this.deviceId}.${stateId}`, {
+        id: stateId,
+        type: "state",
+        common: {
+          name: tName("zoneName"),
+          desc: tName("descZoneName"),
+          type: "string",
+          role: "text",
+          read: true,
+          write: true,
+        },
+      });
+      this.createdStates.add(stateId);
+      this.emit(stateId, name);
+    }
+  }
+
+  /**
+   * A zone's name from its Config, remembered per device. Only a definite answer is
+   * remembered (a name, or the model's own "no such node" as none); a transient failure asks
+   * again on the next connect.
+   *
+   * @param zone the zone
+   * @returns the name, or "" when the zone declares none
+   */
+  private async probeZoneName(zone: XmlZone): Promise<string> {
+    const probe = async (): Promise<string> => {
+      let body: string;
+      try {
+        body = await this.deps.client.getXml(zone.element, "<Config>GetParam</Config>");
+      } catch (e) {
+        if (isPermanentXmlRefusal(e)) {
+          return "";
+        }
+        throw e;
+      }
+      const rc = parseReturnCode(body);
+      if (rc !== undefined && rc !== 0) {
+        if (rc === 2) {
+          return "";
+        }
+        throw new Error(`device refused ${zone.element} Config probe (RC=${rc})`);
+      }
+      const name = /<Name>\s*<Zone>([^<]*)<\/Zone>/.exec(body);
+      return name ? decodeXmlText(name[1]).trim() : "";
+    };
+    try {
+      return this.deps.probeMemory ? await this.deps.probeMemory.once(`xmlZoneName:${zone.key}`, probe) : await probe();
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: ${zone.element} name probe failed (${errorMessage(e)})`);
+      return "";
+    }
+  }
+
+  /**
+   * A write to one of the zone commands desc.xml declares — a pad key, a transport key or the
+   * zone name — goes out on the zone element in the declared form. Only for datapoints this
+   * connect created (the declaration is the proof); an unknown word sends nothing and says so.
+   *
+   * @param stateId the state id relative to the device
+   * @param value the written value
+   * @returns true when the id was a zone command (handled here, sent or refused)
+   */
+  private handleZoneCommandWrite(stateId: string, value: unknown): boolean {
+    const match =
+      /^(?:multiroom\.(zone[234])\.)?(remote\.(?:cursor|menu)|player\.(?:play|pause|stop|next|prev)|zoneName)$/.exec(
+        stateId,
+      );
+    if (!match || !this.createdStates.has(stateId)) {
+      return false;
+    }
+    const zone = this.zones.find(candidate => candidate.key === (match[1] ?? "main"));
+    if (!zone) {
+      return false;
+    }
+    const command = match[2];
+    let inner: string | undefined;
+    if (command === "remote.cursor" || command === "remote.menu") {
+      const word = typeof value === "string" ? value : "";
+      const wire = command === "remote.cursor" ? wireFor(XML_CURSOR_WIRE, word) : wireFor(XML_MENU_WIRE, word);
+      if (wire === undefined) {
+        this.deps.log.debug(`${this.deviceId}: ${stateId} "${word}" is no key this receiver declares — write dropped`);
+        return true;
+      }
+      inner =
+        command === "remote.cursor"
+          ? `<Cursor_Control><Cursor>${wire}</Cursor></Cursor_Control>`
+          : `<Cursor_Control><Menu_Control>${wire}</Menu_Control></Cursor_Control>`;
+    } else if (command === "zoneName") {
+      if (typeof value !== "string") {
+        return true;
+      }
+      inner = `<Config><Name><Zone>${escapeXmlText(value)}</Zone></Name></Config>`;
+    } else {
+      const word = XML_TRANSPORT_WIRE[command.slice("player.".length)];
+      inner = `<Play_Control><Playback>${word}</Playback></Play_Control>`;
+    }
+    void this.applyCommand({ zone: zone.element, inner });
+    return true;
+  }
+
   private async applyCommand(command: XmlCommand): Promise<void> {
     try {
       await this.deps.client.send(command.zone, command.inner);

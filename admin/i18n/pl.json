@@ -589,5 +589,7 @@
   "descComposer": "Kompozytor odtwarzanego utworu, tak jak wysyła go kanał.",
   "siriusParentalLock": "Blokada rodzicielska",
   "descSiriusParentalLock": "Prawda, gdy odtwarzany kanał jest zablokowany blokadą rodzicielską.",
-  "siriusSearchMode": "Tryb wyszukiwania"
+  "siriusSearchMode": "Tryb wyszukiwania",
+  "zoneBInterlock": "Sprzężenie głośności strefy B",
+  "descZoneBInterlock": "Wiąże głośność strefy B z głośnością strefy głównej, jedno pokrętło steruje obiema."
 }

@@ -4,6 +4,7 @@ import {
   type BrowseDriver,
   type BrowseRow,
   type CursorValue,
+  type MenuValue,
   type WireTable,
 } from "./types";
 import type { BrowseEngine } from "./browse-engine";
@@ -81,10 +82,12 @@ export function parseXmlListInfo(xml: string): XmlListInfo {
 
 /**
  * The pad in XML wire words. Same seven keys as YNCA's main zone, two of them spelled
- * differently (`Return`, `Return to Home`). There is no documented menu-key command on this
- * generation, so the driver offers no `remote.menu`.
+ * differently (`Return`, `Return to Home`). Used inside `List_Control` (the menu-bound pad of
+ * the 2012 entry class) and, where desc.xml declares `Cursor_Control,Cursor` for the zone
+ * (RX-V479/V579/V675/V775, TSR-5810, RX-A2060, RX-S601D, HTR-4069 — 7 of the 10 captured
+ * descriptors), inside the zone-wide `Cursor_Control`.
  */
-const XML_CURSOR_WIRE: WireTable<CursorValue> = {
+export const XML_CURSOR_WIRE: WireTable<CursorValue> = {
   up: "Up",
   down: "Down",
   left: "Left",
@@ -93,6 +96,26 @@ const XML_CURSOR_WIRE: WireTable<CursorValue> = {
   return: "Return",
   home: "Return to Home",
 };
+
+/**
+ * The menu keys of the zone-wide `Cursor_Control,Menu_Control` (desc.xml, same 7 descriptors):
+ * `On Screen`, `Top Menu`, `Menu`, `Option`, `Display` — no `home` here, that is a cursor key.
+ */
+export const XML_MENU_WIRE: WireTable<MenuValue> = {
+  on_screen: "On Screen",
+  top_menu: "Top Menu",
+  menu: "Menu",
+  option: "Option",
+  display: "Display",
+};
+
+/** Which zone-wide pad commands the receiver's desc.xml declares for the main zone. */
+export interface XmlZoneWidePad {
+  /** `Main_Zone,Cursor_Control,Cursor` declared. */
+  cursor: boolean;
+  /** `Main_Zone,Cursor_Control,Menu_Control` declared. */
+  menu: boolean;
+}
 
 /**
  * The XML/YNC list driver over `<List_Info>` + `<List_Control>` (the predecessor
@@ -109,13 +132,34 @@ export class XmlBrowseDriver implements BrowseDriver {
    * @param available the source keys whose List_Info the start-up probe answered
    * @param delay adapter-managed delay
    * @param log adapter log — a cursor press with no open menu has to say so
+   * @param zoneWide the zone-wide pad commands desc.xml declares for the main zone (none = the
+   *   menu-bound List_Control pad of the 2012 entry class)
    */
   public constructor(
     private readonly client: XmlBrowseClient,
     private readonly available: ReadonlySet<string>,
     private readonly delay: (ms: number) => Promise<void>,
     private readonly log?: ControllerLog,
-  ) {}
+    private readonly zoneWide: XmlZoneWidePad = { cursor: false, menu: false },
+  ) {
+    this.menuValues = zoneWide.menu ? Object.keys(XML_MENU_WIRE) : undefined;
+  }
+
+  /** The menu keys — only where desc.xml declares the zone-wide `Menu_Control`. */
+  public readonly menuValues: readonly string[] | undefined;
+
+  /**
+   * Press a menu key on the zone-wide `Cursor_Control` (declared models only).
+   *
+   * @param value one of {@link menuValues}
+   */
+  public async menu(value: string): Promise<void> {
+    const wire = wireFor(XML_MENU_WIRE, value);
+    if (wire === undefined || !this.zoneWide.menu) {
+      return;
+    }
+    await this.client.send("Main_Zone", `<Cursor_Control><Menu_Control>${wire}</Menu_Control></Cursor_Control>`);
+  }
 
   /**
    * Attach the engine that renders the windows (set after both are constructed).
@@ -187,18 +231,22 @@ export class XmlBrowseDriver implements BrowseDriver {
   public readonly cursorValues = Object.keys(XML_CURSOR_WIRE);
 
   /**
-   * Press a cursor key on the open list.
-   *
-   * XML/YNC knows the cursor ONLY inside `List_Control`, addressed to the source whose menu
-   * is open (`PUT <NET_RADIO><List_Control>…`) — this generation has no zone-wide remote
-   * endpoint, and inventing one would put a blind command on the wire. With no menu open the
-   * press therefore goes nowhere, which `send()` already handles.
+   * Press a cursor key: on the zone-wide `Cursor_Control` where desc.xml declares it (menu open
+   * or not — that is the remote's own cross), else inside `List_Control`, addressed to the
+   * source whose menu is open (`PUT <NET_RADIO><List_Control>…`). The 2012 entry class (RX-V473,
+   * #613) has only the latter, so there a press with no menu open goes nowhere — which is said
+   * out loud rather than swallowed. Until 2026-09-09 this comment claimed the whole generation
+   * had no zone-wide endpoint; desc.xml declares one on 7 of the 10 captured descriptors.
    *
    * @param value one of {@link cursorValues}
    */
   public async cursor(value: string): Promise<void> {
     const wire = wireFor(XML_CURSOR_WIRE, value);
     if (wire === undefined) {
+      return;
+    }
+    if (this.zoneWide.cursor) {
+      await this.client.send("Main_Zone", `<Cursor_Control><Cursor>${wire}</Cursor></Cursor_Control>`);
       return;
     }
     if (!this.active) {

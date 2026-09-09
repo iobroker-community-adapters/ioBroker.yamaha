@@ -192,3 +192,45 @@ describe("stateToXml — the 2008 dialect writes the elements the device itself 
     });
   });
 });
+
+describe("stateToXml — the zone commands desc.xml declares (coverage audit 2026-09-09)", () => {
+  test("enhancer, 3D Cinema DSP, speaker A/B, Zone B and the pre-out mode write the declared elements", () => {
+    expect(stateToXml("sound.enhancer", true)?.inner).toBe(
+      "<Surround><Program_Sel><Current><Enhancer>On</Enhancer></Current></Program_Sel></Surround>",
+    );
+    expect(stateToXml("sound.cinemaDsp3d", false)?.inner).toBe(
+      "<Surround><_3D_Cinema_DSP>Off</_3D_Cinema_DSP></Surround>",
+    );
+    expect(stateToXml("sound.cinemaDsp3d", true)?.inner).toBe(
+      "<Surround><_3D_Cinema_DSP>Auto</_3D_Cinema_DSP></Surround>",
+    );
+    expect(stateToXml("advanced.speakers.speakerA", false)?.inner).toBe(
+      "<Speaker_Preout><Speaker_AB><Speaker_A>Off</Speaker_A></Speaker_AB></Speaker_Preout>",
+    );
+    expect(stateToXml("advanced.speakers.speakerB", true)?.inner).toBe(
+      "<Speaker_Preout><Speaker_AB><Speaker_B>On</Speaker_B></Speaker_AB></Speaker_Preout>",
+    );
+    expect(stateToXml("multiroom.zoneB.volume", -34.5)?.inner).toBe(
+      "<Volume><Zone_B><Lvl><Val>-345</Val><Exp>1</Exp><Unit>dB</Unit></Lvl></Zone_B></Volume>",
+    );
+    expect(stateToXml("multiroom.zoneB.mute", true)?.inner).toBe("<Volume><Zone_B><Mute>On</Mute></Zone_B></Volume>");
+    expect(stateToXml("multiroom.zoneB.interlock", true)?.inner).toBe(
+      "<Volume><Zone_B><Interlock>On</Interlock></Zone_B></Volume>",
+    );
+    expect(stateToXml("multiroom.zone2.volumeOutput", "Fixed")).toEqual({
+      zone: "Zone_2",
+      inner: "<Volume><Output>Fixed</Output></Volume>",
+    });
+  });
+
+  test("Zone B and the speakers live on the main zone only, the pre-out mode on zones only; availability is read-only", () => {
+    expect(stateToXml("multiroom.zone2.multiroom.zoneB.volume", -20)).toBeUndefined();
+    expect(stateToXml("multiroom.zone2.advanced.speakers.speakerA", true)).toBeUndefined();
+    expect(stateToXml("multiroom.zoneB.available", "Ready")).toBeUndefined();
+    expect(stateToXml("volumeOutput", "Fixed")).toBeUndefined();
+    // Zone B power writes the declared Zone_B_Power (HTR-4069 desc.xml, P34).
+    expect(stateToXml("multiroom.zoneB.power", false)?.inner).toBe(
+      "<Power_Control><Zone_B_Power>Standby</Zone_B_Power></Power_Control>",
+    );
+  });
+});

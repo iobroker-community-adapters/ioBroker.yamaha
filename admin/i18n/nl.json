@@ -589,5 +589,7 @@
   "descComposer": "De componist van het spelende stuk, zoals het kanaal het stuurt.",
   "siriusParentalLock": "Kinderslot",
   "descSiriusParentalLock": "Waar zolang het spelende kanaal door het kinderslot is vergrendeld.",
-  "siriusSearchMode": "Zoekmodus"
+  "siriusSearchMode": "Zoekmodus",
+  "zoneBInterlock": "Zone B-volumekoppeling",
+  "descZoneBInterlock": "Koppelt het volume van zone B aan de hoofdzone, zodat één knop beide beweegt."
 }
