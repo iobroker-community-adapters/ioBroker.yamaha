@@ -1403,3 +1403,148 @@ describe("the observed-values store is bounded", () => {
     expect(observed?.MAIN?.HDMIOUT).toHaveLength(MAX_OBSERVED_VALUES);
   });
 });
+
+describe("YncaDeviceController sweep plan (2.7.0 — zone table, SYS families, absent sources)", () => {
+  const asked = (client: FakeClient): string[] =>
+    client.requests
+      .filter(list => !list.every(get => get.func === "AVAIL") && !list.every(get => BUNDLE_FUNCS.has(get.func)))
+      .flatMap(list => list.map(get => `${get.subunit}:${get.func}`));
+
+  test("the skip is invisible: BASIC answered ZONE4:VOL, its object exists, the individual GET was never sent", async () => {
+    const client = new FakeClient();
+    client.availableSubunits = ["MAIN", "ZONE4"];
+    // A zone 4 that — against every list and capture — carries a volume: its BASIC says so.
+    client.capabilities = {
+      model: "RX",
+      subunits: { MAIN: { PWR: "On" }, ZONE4: { PWR: "On", INP: "AUDIO1", SLEEP: "Off", VOL: "-40.0", MUTE: "Off" } },
+    };
+    const { objects, deps } = makeDeps(client);
+    await new YncaDeviceController("living", deps).start();
+    const volume = objects.find(o => o.id === "living.multiroom.zone4.volume");
+    expect(volume?.def.common).toMatchObject({ type: "number", min: -80.5, max: 16.5 });
+    expect(objects.some(o => o.id === "living.multiroom.zone4.mute")).toBe(true);
+    expect(client.bundlesAsked).toContain("ZONE4:BASIC");
+    const gets = asked(client);
+    expect(gets).not.toContain("ZONE4:VOL");
+    expect(gets).not.toContain("ZONE4:MUTE");
+    expect(gets).not.toContain("ZONE4:MAXVOL");
+    expect(gets).toContain("ZONE4:ZONENAME");
+  });
+
+  test("a zone is asked only what the evidence ever showed there; the main zone everything", async () => {
+    const client = new FakeClient();
+    client.availableSubunits = ["MAIN", "ZONE2"];
+    client.capabilities = { model: "RX", subunits: { MAIN: { PWR: "On" }, ZONE2: { PWR: "On" } } };
+    await new YncaDeviceController("living", makeDeps(client).deps).start();
+    const gets = asked(client);
+    expect(gets).not.toContain("ZONE2:SOUNDPRG");
+    expect(gets).not.toContain("ZONE2:PUREDIRMODE");
+    expect(gets).not.toContain("ZONE2:HDMIOUT");
+    expect(gets).toContain("ZONE2:ENHANCER");
+    expect(gets).toContain("ZONE2:MAXVOL");
+    expect(gets).toContain("MAIN:SOUNDPRG");
+    expect(gets).toContain("MAIN:PUREDIRMODE");
+  });
+
+  test("a SYS family is asked in a second pass only when its head answered", async () => {
+    const client = new FakeClient();
+    client.availableSubunits = ["MAIN"];
+    client.capabilities = {
+      model: "RX-A3020",
+      subunits: { SYS: { MODELNAME: "RX-A3020", TRIG2ZONE: "Main Zone" }, MAIN: { PWR: "On" } },
+    };
+    await new YncaDeviceController("living", makeDeps(client).deps).start();
+    // identity, AVAIL, bundles, first pass, second pass
+    expect(client.requests).toHaveLength(5);
+    const first = client.requests[3].map(get => `${get.subunit}:${get.func}`);
+    const second = client.requests[4].map(get => `${get.subunit}:${get.func}`);
+    expect(first).toContain("SYS:TRIG2ZONE");
+    expect(first).toContain("SYS:SPPATTERN2AMP");
+    expect(first).not.toContain("SYS:TRIG2MANUAL");
+    expect(first).not.toContain("SYS:SPPATTERN2CENTCNFG");
+    expect(second).toContain("SYS:TRIG2MANUAL");
+    expect(second).toContain("SYS:TRIG2INPHDMI1");
+    // The second speaker pattern's head did not answer — its family is not asked at all.
+    expect(second.every(key => key.startsWith("SYS:TRIG2"))).toBe(true);
+  });
+
+  test("no family head answered → no second pass", async () => {
+    const client = new FakeClient();
+    client.availableSubunits = ["MAIN"];
+    client.capabilities = { model: "RX-V473", subunits: { SYS: { MODELNAME: "RX-V473" }, MAIN: { PWR: "On" } } };
+    await new YncaDeviceController("living", makeDeps(client).deps).start();
+    expect(client.requests).toHaveLength(4);
+    expect(asked(client).some(key => key.startsWith("SYS:TRIG2") && key !== "SYS:TRIG2ZONE")).toBe(false);
+  });
+
+  test("per-input functions of a source proved absent are not asked; physical inputs always are", async () => {
+    const client = new FakeClient();
+    // AIRPLAY and USB answered the probe; SPOTIFY and BT were probed and stayed silent — proof
+    // of absence (a subunit never probed would keep its source: silence is no proof).
+    client.availableSubunits = ["MAIN", "AIRPLAY", "USB"];
+    client.capabilities = {
+      model: "RX",
+      subunits: { MAIN: { PWR: "On" }, AIRPLAY: { AVAIL: "Ready" }, USB: { AVAIL: "Ready" } },
+    };
+    await new YncaDeviceController("living", makeDeps(client).deps).start();
+    const gets = asked(client);
+    expect(gets).toContain("SYS:TRIG1INPAIRPLAY");
+    expect(gets).toContain("SYS:INPNAMEUSB");
+    expect(gets).toContain("SYS:TRIG1INPHDMI1");
+    expect(gets).toContain("SYS:INPNAMEAUDIO1");
+    expect(gets).not.toContain("SYS:TRIG1INPSPOTIFY");
+    expect(gets).not.toContain("SYS:INPNAMEBT");
+    expect(gets).not.toContain("SYS:TRIG1INPBT");
+  });
+
+  test("the blind sweep (device ignores AVAIL) is not filtered — it loses speed, never features", async () => {
+    const client = new FakeClient();
+    // An empty AVAIL answer: the device ignored the probe → blind sweep.
+    client.availableSubunits = [];
+    client.capabilities = { model: "RX", subunits: { MAIN: { PWR: "On" } } };
+    await new YncaDeviceController("living", makeDeps(client).deps).start();
+    const gets = asked(client);
+    expect(gets).toContain("ZONE4:VOL");
+    expect(gets).toContain("ZONE2:SOUNDPRG");
+    expect(gets).toContain("SYS:TRIG1INPSPOTIFY");
+    expect(gets).toContain("SYS:TRIG2MANUAL");
+  });
+});
+
+describe("YncaDeviceController sweep plan on the fast path", () => {
+  const flushAsync = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
+
+  test("the background refresh follows the same plan — and the union keeps what a fuller sweep proved", async () => {
+    const memory = new ProbeMemory({
+      __schema: DISCOVERY_SCHEMA,
+      yncaCapabilities: {
+        model: "RX",
+        firmware: "1.0",
+        // A shape a fuller (blind) sweep once proved: zone 2 answered a program — the table
+        // would never ask it, the union must keep it anyway.
+        subunits: {
+          SYS: { MODELNAME: "RX", VERSION: "1.0" },
+          MAIN: { PWR: "On" },
+          ZONE2: { PWR: "On", SOUNDPRG: "Standard" },
+        },
+      },
+    });
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX",
+      subunits: { SYS: { MODELNAME: "RX", VERSION: "1.0" }, MAIN: { PWR: "On" }, ZONE2: { PWR: "Standby" } },
+    };
+    const { deps } = makeDeps(client);
+    await new YncaDeviceController("living", { ...deps, probeMemory: memory }).start();
+    await flushAsync();
+    const background = client.requests[client.requests.length - 1].map(get => `${get.subunit}:${get.func}`);
+    expect(background).toContain("MAIN:SOUNDPRG");
+    expect(background).toContain("ZONE2:ENHANCER");
+    expect(background).not.toContain("ZONE2:SOUNDPRG");
+    expect(background).not.toContain("ZONE4:VOL");
+    expect(background).not.toContain("SYS:TRIG2MANUAL");
+    expect(background).toContain("SYS:TRIG2ZONE");
+    const stored = memory.remembered<{ subunits: Record<string, Record<string, string>> }>("yncaCapabilities");
+    expect(stored?.subunits.ZONE2.SOUNDPRG).toBe("Standard");
+  });
+});

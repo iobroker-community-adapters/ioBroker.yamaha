@@ -6,11 +6,15 @@ import {
   enumStatesFor,
   funcToEntry,
   idToEntry,
+  perInputSource,
+  planSweep,
   presentYncaEntries,
   sweepGets,
+  sysFamilyMemberOf,
   yncaCommand,
   yncaObjectsFor,
   yncaStateUpdate,
+  zoneFunctionAsked,
   type YncaEntry,
 } from "./catalog";
 import { CHANNEL_NAME_KEYS } from "../catalog/types";
@@ -19,6 +23,7 @@ import type { EnumSpec } from "../catalog/value-coerce";
 import type { YncaCapabilities } from "./capability";
 import { capabilitiesFromLines as parseCapabilities } from "./__fixtures__/capabilities-from-lines";
 import rxA810 from "./__fixtures__/RX-A810.json";
+import zoneEvidence from "./__fixtures__/zone-function-evidence.json";
 import { YNCA_BROWSE_SOURCES } from "../browse/ynca-browse-driver";
 
 describe("YNCA catalog", () => {
@@ -1175,5 +1180,91 @@ describe("the resolver hands the reported value to the object (for the coordinat
       entry.id === "input" ? { states: { TV: "TV", HDMI1: "HDMI1" }, origin: "derived", reported: "TV" } : undefined,
     );
     expect(objects.find(o => o.id === "input")).toMatchObject({ reportedValue: "TV", statesOrigin: "derived" });
+  });
+});
+
+describe("YNCA zone function table (2.7.0 — the sweep asks a zone only what any evidence ever showed there)", () => {
+  const evidenced = (subunit: string): Set<string> =>
+    new Set(Object.keys((zoneEvidence.zones as Record<string, Record<string, string[]>>)[subunit] ?? {}));
+
+  test("rot guard: every catalogued zone function is asked exactly when the evidence carries it", () => {
+    // The table is hand-written in the catalog (the runtime does not read the fixture); this
+    // holds it to the generated evidence (21 official lists, 16 protocol logs, the adapter's own
+    // captures, 27 MusicCast declarations). Editing one side without the other fails here.
+    const gets = sweepGets(buildYncaCatalog());
+    for (const subunit of ["ZONE2", "ZONE3", "ZONE4"]) {
+      const funcs = gets.filter(get => get.subunit === subunit).map(get => get.func);
+      expect(funcs.length).toBeGreaterThan(20);
+      const wrong = funcs.filter(func => zoneFunctionAsked(subunit, func) !== evidenced(subunit).has(func));
+      expect(wrong, `${subunit}: asked ≠ evidenced for ${wrong.join(", ")}`).toEqual([]);
+    }
+  });
+
+  test("the main zone and every non-zone subunit are never filtered", () => {
+    for (const get of sweepGets(buildYncaCatalog())) {
+      if (!/^ZONE[234]$/.test(get.subunit)) {
+        expect(zoneFunctionAsked(get.subunit, get.func)).toBe(true);
+      }
+    }
+    expect(zoneFunctionAsked("ZONE4", "VOL")).toBe(false);
+    expect(zoneFunctionAsked("ZONE2", "SOUNDPRG")).toBe(false);
+    expect(zoneFunctionAsked("ZONE2", "ENHANCER")).toBe(true);
+    expect(zoneFunctionAsked("ZONE4", "SLEEP")).toBe(true);
+  });
+
+  test("a SYS family (trigger 2, speaker pattern 2) is asked only after its head answered", () => {
+    expect(sysFamilyMemberOf("TRIG2INPHDMI1")?.head).toBe("TRIG2ZONE");
+    expect(sysFamilyMemberOf("TRIG2MANUAL")?.head).toBe("TRIG2ZONE");
+    expect(sysFamilyMemberOf("SPPATTERN2CENTCNFG")?.head).toBe("SPPATTERN2AMP");
+    // The heads themselves and everything outside the two families stay in the first pass.
+    expect(sysFamilyMemberOf("TRIG2ZONE")).toBeUndefined();
+    expect(sysFamilyMemberOf("SPPATTERN2AMP")).toBeUndefined();
+    expect(sysFamilyMemberOf("TRIG1INPHDMI1")).toBeUndefined();
+    expect(sysFamilyMemberOf("SPPATTERN1AMP")).toBeUndefined();
+    expect(sysFamilyMemberOf("PWR")).toBeUndefined();
+  });
+
+  test("a per-input SYS function names the SOURCE it belongs to; physical inputs are never judged", () => {
+    expect(perInputSource("TRIG1INPAIRPLAY")).toBe("AirPlay");
+    expect(perInputSource("TRIG2INPNETRADIO")).toBe("NET RADIO");
+    expect(perInputSource("INPNAMEBT")).toBe("Bluetooth");
+    expect(perInputSource("INPNAMESERVER")).toBe("SERVER");
+    expect(perInputSource("TRIG1INPSPOTIFY")).toBe("Spotify");
+    expect(perInputSource("TRIG1INPHDMI1")).toBeUndefined();
+    expect(perInputSource("INPNAMEAUDIO1")).toBeUndefined();
+    expect(perInputSource("TRIG1INPDOCK")).toBeUndefined();
+    expect(perInputSource("TRIG1TYPE")).toBeUndefined();
+    expect(perInputSource("PWR")).toBeUndefined();
+  });
+
+  test("planSweep: zone table, absent sources and family members — the blind sweep is not planned", () => {
+    const gets = sweepGets(buildYncaCatalog()).filter(get => ["SYS", "MAIN", "ZONE2", "ZONE4"].includes(get.subunit));
+    // AirPlay present, Spotify probed and absent, Bluetooth never probed (silence is no proof).
+    const plan = planSweep(gets, {
+      present: new Set(["MAIN", "ZONE2", "ZONE4", "AIRPLAY"]),
+      probed: new Set(["AIRPLAY", "SPOTIFY"]),
+    });
+    const first = plan.first.map(get => `${get.subunit}:${get.func}`);
+    const families = plan.families.map(get => `${get.subunit}:${get.func}`);
+    expect(first).not.toContain("ZONE4:VOL");
+    expect(first).not.toContain("ZONE2:SOUNDPRG");
+    expect(first).toContain("ZONE2:ENHANCER");
+    expect(first).toContain("ZONE4:SLEEP");
+    expect(first).toContain("MAIN:SOUNDPRG");
+    expect(first).toContain("SYS:TRIG1INPAIRPLAY");
+    expect(first).toContain("SYS:TRIG1INPBT");
+    expect(first).toContain("SYS:TRIG1INPHDMI1");
+    expect(first).not.toContain("SYS:TRIG1INPSPOTIFY");
+    expect(first).not.toContain("SYS:INPNAMESPOTIFY");
+    expect(first).toContain("SYS:TRIG2ZONE");
+    expect(first).toContain("SYS:SPPATTERN2AMP");
+    expect(first).not.toContain("SYS:TRIG2MANUAL");
+    expect(families).toContain("SYS:TRIG2MANUAL");
+    expect(families).toContain("SYS:TRIG2INPHDMI1");
+    expect(families).not.toContain("SYS:TRIG2INPSPOTIFY");
+    expect(families).toContain("SYS:SPPATTERN2CENTCNFG");
+    // Nothing is asked twice and nothing outside the two families lands in the second pass.
+    expect(new Set([...first, ...families]).size).toBe(first.length + families.length);
+    expect(families.every(key => /^SYS:(TRIG2|SPPATTERN2)/.test(key))).toBe(true);
   });
 });

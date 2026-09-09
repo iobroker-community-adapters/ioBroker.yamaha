@@ -265,6 +265,90 @@ export function deviceInputStates(evidence: InputEvidence, zone: string, current
 const INPUT_STATES = deviceInputStates({ present: new Set(), probed: new Set() }, "zone");
 
 /**
+ * What any evidence ever showed a ZONE answering — the functions the sweep asks a zone for
+ * (2.7.0). ZONE2 and ZONE3 share one class, ZONE4 is the small one (power, input, sleep, its
+ * name and its scene names — no volume, no mute on any model, list or capture). Sources: the 21
+ * official YNCA lists 2010–2015, 16 ynca-python protocol logs 2010–2020, the adapter's own device
+ * captures and 27 MusicCast `getFeatures` declarations, generated into
+ * `__fixtures__/zone-function-evidence.json` by `Ressourcen/yamaha/device-data-2026-09-08/
+ * build-zone-evidence.py`; the catalog test holds this table to that file in both directions.
+ *
+ * The table decides what is ASKED, never what is CREATED: a function that answers anyway (a
+ * BASIC bundle, a push, a later sweep) becomes an object like any other. The blind sweep of a
+ * device that ignores the AVAIL probe is not filtered at all — it runs exactly on the devices
+ * this evidence does not cover, and its promise is "loses speed, never features".
+ */
+const ZONE_FUNCTIONS: Readonly<Record<"zone23" | "zone4", ReadonlySet<string>>> = {
+  zone23: new Set([
+    "PWR",
+    "VOL",
+    "MUTE",
+    "INP",
+    "SLEEP",
+    "MAXVOL",
+    "INITVOLLVL",
+    "INITVOLMODE",
+    "ZONENAME",
+    "ENHANCER",
+    "EXBASS",
+    "TONEBASS",
+    "TONETREBLE",
+    "TONEMODE",
+    "CONTENTSDISP",
+    "BALANCE",
+    "VOLFIXVAR",
+    "BASS",
+    "TREBLE",
+    "SCENE1NAME",
+    "SCENE2NAME",
+    "SCENE3NAME",
+    "SCENE4NAME",
+  ]),
+  zone4: new Set(["PWR", "INP", "SLEEP", "ZONENAME", "SCENE1NAME", "SCENE2NAME", "SCENE3NAME", "SCENE4NAME"]),
+};
+
+/**
+ * Whether the sweep asks a subunit for a function. MAIN and every non-zone subunit: always; a
+ * zone: only what {@link ZONE_FUNCTIONS} carries for its class.
+ *
+ * @param subunit the subunit
+ * @param func the function
+ * @returns true when the GET is worth sending
+ */
+export function zoneFunctionAsked(subunit: string, func: string): boolean {
+  if (subunit === "ZONE2" || subunit === "ZONE3") {
+    return ZONE_FUNCTIONS.zone23.has(func);
+  }
+  if (subunit === "ZONE4") {
+    return ZONE_FUNCTIONS.zone4.has(func);
+  }
+  return true;
+}
+
+/**
+ * The SYS function families a device has as a whole or not at all: the second trigger socket
+ * (`TRIG2*`, 43 functions) and the second speaker pattern (`SPPATTERN2*`, 22) exist on 9 of the
+ * 21 official lists, always together with their head. The head is asked in the first pass; the
+ * members follow in a second pass only when the head answered — claim with proof at family level
+ * (one GET decides up to 43). A head answering `@RESTRICTED` (standby) keeps the family unasked
+ * this connect; the next awake sweep or refresh asks it again.
+ */
+export const SYS_FUNCTION_FAMILIES: ReadonlyArray<{ head: string; prefix: string }> = [
+  { head: "TRIG2ZONE", prefix: "TRIG2" },
+  { head: "SPPATTERN2AMP", prefix: "SPPATTERN2" },
+];
+
+/**
+ * The family a SYS function is a MEMBER of (not its head), if any.
+ *
+ * @param func the SYS function
+ * @returns the family, or undefined for a head or a function outside the families
+ */
+export function sysFamilyMemberOf(func: string): { head: string; prefix: string } | undefined {
+  return SYS_FUNCTION_FAMILIES.find(family => func.startsWith(family.prefix) && func !== family.head);
+}
+
+/**
  * The sound programs of the classic (YNCA) generation — the union of the 21 official command
  * lists 2010–2015 (26 names; the entry class carries 19 of them, the Aventage class all 26) plus
  * `5ch Stereo`, which the entry class declares in its `desc.xml`. A device's own additions
@@ -1526,6 +1610,63 @@ const INPUT_NAME_LABELS: Readonly<Record<string, string>> = {
   siriusxm: "SiriusXM",
   spotify: "Spotify",
 };
+
+/**
+ * The SOURCE input a per-input SYS function (`TRIG<n>INP<KEY>`, `INPNAME<KEY>`) belongs to, in the
+ * spelling of {@link SOURCE_INPUTS}. Undefined for a physical input (YNCA cannot judge those, so
+ * they are always asked) and for any other function.
+ *
+ * @param func the SYS function
+ * @returns the source value, or undefined
+ */
+export function perInputSource(func: string): string | undefined {
+  const match = /^(?:TRIG[12]INP|INPNAME)([A-Z0-9]+)$/.exec(func);
+  if (!match) {
+    return undefined;
+  }
+  const key = match[1].toLowerCase();
+  if (!TRIGGER_INPUT_KEYS.includes(key) && !INPUT_NAME_KEYS.includes(key)) {
+    return undefined;
+  }
+  const label = INPUT_NAME_LABELS[key] ?? key.toUpperCase();
+  return SOURCE_INPUTS.some(source => source.value === label) ? label : undefined;
+}
+
+/**
+ * Plan a targeted sweep's paced GET lists from the evidence at hand: drop what the zone table
+ * never showed on that zone, drop the per-input functions of a source the evidence proved absent
+ * (the same rule the input dropdown follows — silence is no proof), and split the SYS family
+ * members off into a second pass that runs only for the families whose head answered.
+ *
+ * @param gets the candidate GETs (already reduced to present subunits and bundle leftovers)
+ * @param evidence what this connect learned about the device's inputs
+ * @returns the first pass and the family members for the second pass
+ */
+export function planSweep(
+  gets: ReadonlyArray<{ subunit: string; func: string }>,
+  evidence: InputEvidence,
+): { first: Array<{ subunit: string; func: string }>; families: Array<{ subunit: string; func: string }> } {
+  const inputs = deviceInputStates(evidence, "main");
+  const first: Array<{ subunit: string; func: string }> = [];
+  const families: Array<{ subunit: string; func: string }> = [];
+  for (const get of gets) {
+    if (!zoneFunctionAsked(get.subunit, get.func)) {
+      continue;
+    }
+    if (get.subunit === "SYS") {
+      const source = perInputSource(get.func);
+      if (source !== undefined && !(source in inputs)) {
+        continue;
+      }
+      if (sysFamilyMemberOf(get.func)) {
+        families.push(get);
+        continue;
+      }
+    }
+    first.push(get);
+  }
+  return { first, families };
+}
 
 /**
  * The trigger-output functions, once per socket (official lists: trigger 2 "Parameters are the

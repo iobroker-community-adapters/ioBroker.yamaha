@@ -9,6 +9,8 @@ import {
   YNCA_CATALOG,
   availGets,
   bundleGets,
+  planSweep,
+  SYS_FUNCTION_FAMILIES,
   deviceInputStates,
   enumStatesFor,
   funcToEntry,
@@ -661,7 +663,9 @@ export class YncaDeviceController implements ConnectionHandle {
       const gets = sweepGets(catalog).filter(
         get => get.subunit === "SYS" || !cached || cached.subunits.includes(get.subunit),
       );
-      const fresh = await this.deps.client.readCapabilities(gets);
+      // The same plan as the targeted sweep: the union with the remembered shape below keeps
+      // every function a fuller sweep ever answered, so a skipped GET shrinks nothing here.
+      const fresh = await this.sweepInPasses(planSweep(gets, this.inputEvidence({ model: "", subunits: {} })));
       if (!fresh.model) {
         // The refresh ran into a drop — the supervisor handles the reconnect.
         return;
@@ -803,11 +807,15 @@ export class YncaDeviceController implements ConnectionHandle {
       get => (get.subunit === "SYS" || present.has(get.subunit)) && !answered.has(`${get.subunit}:${get.func}`),
     );
     const remembered = this.deps.probeMemory?.remembered<Record<string, Record<string, string>>>(STATIC_KEY);
-    // Second connect onwards: skip those reads and put the remembered answers back in, so
-    // the objects are built exactly as if the device had answered them again.
-    const swept = await this.deps.client.readCapabilities(
+    // The zone table, the absent sources and the SYS families decide what is worth sending
+    // (2.7.0, `planSweep`); a function a bundle answered is proof already, whatever the table
+    // says. Second connect onwards the statics are skipped too and the remembered answers put
+    // back in, so the objects are built exactly as if the device had answered them again.
+    const plan = planSweep(
       remembered ? gets.filter(get => !STATIC_FUNC.test(get.func)) : gets,
+      this.inputEvidence(basic),
     );
+    const swept = await this.sweepInPasses(plan);
     const capabilities: YncaCapabilities = {
       model: swept.model || basic.model,
       subunits: mergeYncaSubunits(basic.subunits, swept.subunits),
@@ -828,6 +836,25 @@ export class YncaDeviceController implements ConnectionHandle {
     }
     this.deps.probeMemory?.set(STATIC_KEY, statics);
     return capabilities;
+  }
+
+  /**
+   * Send a planned sweep: the first pass, then — only for the SYS families whose head answered
+   * in it — the family members (`planSweep`, `SYS_FUNCTION_FAMILIES`). One GET on the head
+   * decides up to 43 GETs of a family a device has as a whole or not at all.
+   *
+   * @param plan the planned GET lists
+   * @returns the merged answers of both passes
+   */
+  private async sweepInPasses(plan: ReturnType<typeof planSweep>): Promise<YncaCapabilities> {
+    const first = await this.deps.client.readCapabilities(plan.first);
+    const answeredHeads = SYS_FUNCTION_FAMILIES.filter(family => first.subunits.SYS?.[family.head] !== undefined);
+    const second = plan.families.filter(get => answeredHeads.some(family => get.func.startsWith(family.prefix)));
+    if (second.length === 0) {
+      return first;
+    }
+    const members = await this.deps.client.readCapabilities(second);
+    return { model: first.model || members.model, subunits: mergeYncaSubunits(first.subunits, members.subunits) };
   }
 
   /**

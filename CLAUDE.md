@@ -707,6 +707,39 @@ Wortschätze standen statisch, Deklarationen der Geräte blieben ungelesen, Spei
   Dropdown bietet, was das Gerät nicht deklariert" (Gerät über `info.ip`, erlaubt = deklariert ∪ übersetzt ∪
   Live-Wert — RX-A2070 meldet `auto` bei `tone_control_mode_list: [manual]`).
 
+## Phase 2 des Fähigkeits-Plans (v2.7.0): ein Profil, schnellerer Erst-Sweep, Baum folgt dem Gerät
+
+- **Ein Fähigkeits-Profil je Gerät** (`lib/lifecycle/capability-profile.ts`, `DeviceProfileStore` in `main.ts`):
+  `native.capabilityProfile` ist EIN JSON-String — `schema` (= `DISCOVERY_SCHEMA`), `adapterVersion`/`learnedAt`
+  (nur Herkunft, nie Ungültigkeit), `identity` je Transport (aus `yncaCapabilities`/`yxcIdentity`/`xmlIdentity`
+  abgeleitet), `memory` (die ProbeMemory-Einträge ohne `__schema`), `yncaAvail`, `purgeVersion`, `pendingPurge`.
+  String statt Objekt, weil `extendObject` verschachtelte Objekte Schlüssel für Schlüssel merged (ein gelöschter
+  Eintrag stünde wieder auf). Die drei Altschlüssel `probeCache`/`yncaAvail`/`purgeVersion` (2.5.2/2.6.0) werden
+  beim Laden übernommen und mit dem ersten Persist per `null` gelöscht — ohne Geräteverkehr; die Schema-/
+  Identitäts-Wächter bleiben, wo sie waren (ProbeMemory, `isAvailSnapshot`, die Controller). Ein Serialisierer,
+  gemeinsame Felder: der letzte String im 250-ms-Fenster ist immer vollständig. Das Inventar sichert ein Profil je
+  Gerät unter 40 kB (RX-V6A-Fixture 17 kB) und keinen Altschlüssel daneben; `yncaCapabilities` trägt `complete`.
+- **Zonen-Tabelle aus Beweis** (`ZONE_FUNCTIONS`, `zoneFunctionAsked`): eine Zone wird nur gefragt, was irgendeine
+  Quelle je auf ihr zeigte — 21 offizielle Listen, 16 ynca-python-Mitschnitte, eigene Captures, 27 MusicCast-
+  Deklarationen, erzeugt in `src/lib/ynca/__fixtures__/zone-function-evidence.json` durch
+  `Ressourcen/yamaha/device-data-2026-09-08/build-zone-evidence.py`; `catalog.test.ts` hält die Tabelle in beide
+  Richtungen an die Datei. ZONE2/ZONE3 = Kern + MAXVOL/INITVOL\* + ENHANCER/EXBASS/TONE\*/CONTENTSDISP +
+  BALANCE/VOLFIXVAR/BASS/TREBLE + Szenennamen; ZONE4 = PWR INP SLEEP ZONENAME + Szenennamen. Die Tabelle
+  entscheidet, was GEFRAGT wird, nie was ENTSTEHT: was ein Bündel (BASIC), ein Push oder ein späterer Sweep
+  beantwortet, wird Objekt (Unit-Test: BASIC meldet `ZONE4:VOL` → `multiroom.zone4.volume` mit Grenzen, der
+  Einzel-GET wurde nie gesendet). Der BLINDE Sweep (Gerät ignoriert AVAIL) bleibt ungefiltert — er läuft genau auf
+  den Geräten ohne Beleg und verspricht „verliert Tempo, nie Funktionen". Gemessen am 2.6.0-Katalog (713 Einträge)
+  spart die Zonen-Tabelle nur 4–13 % je Modell — der Kostentreiber ist SYS (181 GETs, 64–130 davon `@UNDEFINED`).
+- **SYS-Familien mit Kopf-Beweis** (`SYS_FUNCTION_FAMILIES`, `sweepInPasses`): `TRIG2*` (43) und `SPPATTERN2*` (22)
+  gibt es auf 9 der 21 Listen — immer ganz, immer mit `TRIG2ZONE`/`SPPATTERN2AMP`. Der Kopf läuft im ersten Pass,
+  die Mitglieder nur im zweiten, wenn der Kopf antwortete (ein GET entscheidet bis zu 43). `@RESTRICTED` am Kopf
+  (Standby) lässt die Familie diesmal aus; der nächste wache Sweep/Refresh fragt erneut.
+- **Per-Eingang-Funktionen** (`perInputSource`): `TRIG<n>INP<X>`/`INPNAME<X>` einer QUELLE werden nur gefragt, wenn
+  die Eingangs-Ableitung (`deviceInputStates`, dieselbe Regel wie das Dropdown) die Quelle nicht als abwesend
+  bewiesen hat; physische Eingänge immer (YNCA kann sie nicht beurteilen). Alles in `planSweep`, das auch der
+  Hintergrund-Refresh des Fast Path nutzt (die Union mit der gemerkten Form schrumpft dort nichts).
+- Mutationswelle 12 (`mutations_yamaha_2026-09-09-w12.py`, P1–P7) hält jede dieser Regeln.
+
 ## Portierungs-Referenz (`../../Ressourcen/yamaha/legacy/`, NICHT im Adapter-Repo)
 
 Alt-Code der Übernahme als Portierungs-Quelle — 2026-08-01 aus dem publizierten Adapter ausgelagert
