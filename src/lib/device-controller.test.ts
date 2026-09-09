@@ -1,4 +1,4 @@
-import { YncaDeviceController } from "./device-controller";
+import { MAX_OBSERVED_VALUES, YncaDeviceController } from "./device-controller";
 import type { YncaClientLike } from "./device-controller";
 import type { YncaCapabilities } from "./ynca/capability";
 import type { ObjectDef } from "./catalog/types";
@@ -1382,5 +1382,24 @@ describe("the YNCA pad dialect of the 2015 generation (RX-A850: @MAIN:CURSOR/MEN
     const second = await padSetup(new ProbeMemory({ __schema: DISCOVERY_SCHEMA, yncaPadDialect: "zone" }));
     second.controller.handleStateChange("living.remote.cursor", false, "return");
     expect(second.client.sent).toEqual([{ subunit: "MAIN", func: "CURSOR", value: "Return" }]);
+  });
+});
+
+describe("the observed-values store is bounded", () => {
+  test("a misbehaving device cannot grow one function's observed list past the ceiling", async () => {
+    const client = new FakeClient();
+    client.availableSubunits = ["MAIN"];
+    client.capabilities = {
+      model: "RX-A700",
+      subunits: { SYS: { MODELNAME: "RX-A700", VERSION: "1.0" }, MAIN: { PWR: "On", HDMIOUT: "OUT" } },
+    };
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
+    const { deps } = makeDeps(client);
+    await new YncaDeviceController("living", { ...deps, probeMemory: memory }).start();
+    for (let i = 0; i < MAX_OBSERVED_VALUES + 20; i++) {
+      client.emit({ subunit: "MAIN", func: "HDMIOUT", value: `Value ${i}` });
+    }
+    const observed = memory.remembered<Record<string, Record<string, string[]>>>("yncaObserved");
+    expect(observed?.MAIN?.HDMIOUT).toHaveLength(MAX_OBSERVED_VALUES);
   });
 });

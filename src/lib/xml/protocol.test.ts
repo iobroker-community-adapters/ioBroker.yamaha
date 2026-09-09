@@ -384,3 +384,12 @@ describe("parseDescriptor — the zone commands and the pad a receiver declares"
     expect(descriptor.volumeOutputZones).toEqual([]);
   });
 });
+
+describe("descriptorParam anchors the command path at the Cmd element", () => {
+  test("a command whose path merely ENDS with the wanted one is not mistaken for it", () => {
+    const xml =
+      '<Unit><Menu><Put_1><Cmd ID="P1">Zone_B_Power_Control,Sleep=Param_1</Cmd><Param_1><Direct>Wrong</Direct></Param_1></Put_1>' +
+      '<Put_1><Cmd ID="P23">Power_Control,Sleep=Param_1</Cmd><Param_1><Direct>120 min</Direct><Direct>Off</Direct></Param_1></Put_1></Menu></Unit>';
+    expect(parseDescriptor(xml).sleep).toEqual(["120 min", "Off"]);
+  });
+});

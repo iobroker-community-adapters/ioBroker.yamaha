@@ -149,7 +149,7 @@ const OBSERVED_KEY = "yncaObserved";
  * The ceiling per function of the observed store. A real enum has a dozen values at most;
  * the cap only keeps a misbehaving device from growing the device object without bound.
  */
-const MAX_OBSERVED_VALUES = 64;
+export const MAX_OBSERVED_VALUES = 64;
 
 /** The observed-values store, as persisted. */
 type ObservedValues = Record<string, Record<string, string[]>>;
