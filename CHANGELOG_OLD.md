@@ -1,4 +1,8 @@
 # Older changes
+## 2.4.0 (2026-09-03)
+
+- (krobipd) New: the on-screen remote reaches every protocol now — the cursor pad and the menu keys work on YNCA and pre-2010 XML receivers, not just on MusicCast
+- (krobipd) Changed: stepping one menu level back no longer switches to a substitute key on a receiver that rejects it — on those models the new cursor pad does it
 
 ## 2.3.3 (2026-09-03)
 

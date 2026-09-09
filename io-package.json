@@ -1,9 +1,22 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "2.6.0",
+    "version": "2.7.0",
     "nogit": true,
     "news": {
+      "2.7.0": {
+        "en": "The first connection asks a receiver only what its generation can answer, and a datapoint the device reveals later now appears at once instead of after a restart.",
+        "de": "Die erste Verbindung fragt einen Receiver nur noch, was seine Generation beantworten kann, und ein später gemeldeter Datenpunkt erscheint sofort statt erst nach einem Neustart.",
+        "ru": "Первое подключение спрашивает ресивер только о том, что умеет его поколение, а точка данных, о которой устройство сообщает позже, появляется сразу, а не после перезапуска.",
+        "pt": "A primeira ligação pergunta ao recetor apenas o que a sua geração sabe responder, e um ponto de dados revelado mais tarde aparece de imediato em vez de só após reiniciar.",
+        "nl": "De eerste verbinding vraagt een receiver alleen wat zijn generatie kan beantwoorden, en een datapunt dat het apparaat later meldt verschijnt meteen in plaats van na een herstart.",
+        "fr": "La première connexion ne demande à l'ampli que ce que sa génération sait répondre, et un point de données révélé plus tard apparaît aussitôt au lieu d'attendre un redémarrage.",
+        "it": "La prima connessione chiede al ricevitore solo ciò che la sua generazione sa rispondere, e un datapoint rivelato più tardi compare subito invece che dopo un riavvio.",
+        "es": "La primera conexión pregunta al receptor solo lo que su generación sabe responder, y un punto de datos revelado más tarde aparece al instante en lugar de tras reiniciar.",
+        "pl": "Pierwsze połączenie pyta amplituner tylko o to, na co odpowiada jego generacja, a punkt danych ujawniony później pojawia się od razu, a nie dopiero po restarcie.",
+        "uk": "Перше підключення запитує ресивер лише про те, на що відповідає його покоління, а точка даних, про яку пристрій повідомляє пізніше, з'являється одразу, а не після перезапуску.",
+        "zh-cn": "首次连接只询问功放这一代能够回答的内容；设备稍后才报告的数据点现在会立刻出现，而不必等到重启之后。"
+      },
       "2.6.0": {
         "en": "Dropdowns offer only what the receiver declares or proves it has (#619); 2008 receivers get volume and programs back; HD Radio, Sirius, Zone B and many setup datapoints added.",
         "de": "Auswahllisten bieten nur, was der Receiver selbst meldet oder nachweislich hat (#619); 2008er-Geräte haben Lautstärke und Programme zurück; HD Radio, Sirius, Zone B und viele Setup-Datenpunkte neu.",
@@ -81,19 +94,6 @@
         "pl": "Nowość: przeglądarka menu, grupa MusicCast, budzik i napęd płyt też objaśniają swoje punkty danych",
         "uk": "Нове: оглядач меню, група MusicCast, будильник і дисковод тепер теж пояснюють свої датапоінти",
         "zh-cn": "新增：菜单浏览、MusicCast 组、闹钟与光驱的数据点现在也有说明"
-      },
-      "2.3.2": {
-        "en": "Fixed: eight tuner and scene datapoints still showed no explanation on MusicCast and XML receivers",
-        "de": "Behoben: acht Tuner- und Szenen-Datenpunkte zeigten auf MusicCast- und XML-Receivern noch keine Erklärung",
-        "ru": "Исправлено: восемь датапоинтов тюнера и сцен не имели пояснения на MusicCast- и XML-ресиверах",
-        "pt": "Corrigido: oito pontos de dados de sintonizador e cenas ainda não mostravam explicação em recetores MusicCast e XML",
-        "nl": "Opgelost: acht tuner- en scènedatapunten toonden op MusicCast- en XML-receivers nog geen uitleg",
-        "fr": "Corrigé : huit points de données tuner et scène n'affichaient encore aucune explication sur les amplis MusicCast et XML",
-        "it": "Corretto: otto datapoint di sintonizzatore e scene non mostravano ancora spiegazioni su ricevitori MusicCast e XML",
-        "es": "Corregido: ocho puntos de datos de sintonizador y escenas aún no mostraban explicación en receptores MusicCast y XML",
-        "pl": "Naprawiono: osiem punktów danych tunera i scen nadal nie miało objaśnienia na amplitunerach MusicCast i XML",
-        "uk": "Виправлено: вісім датапоінтів тюнера й сцен ще не мали пояснення на ресиверах MusicCast та XML",
-        "zh-cn": "修复：MusicCast 与 XML 功放上仍有八个调谐器与场景数据点没有说明"
       }
     },
     "titleLang": {

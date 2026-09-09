@@ -108,6 +108,12 @@ On the very first contact the adapter asks the receiver which functions it suppo
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+### 2.7.0 (2026-09-09)
+
+- (krobipd) Improved: The first connection asks a receiver only what its generation can answer, so zones, trigger sockets and per-input settings follow the device, not a catalogue.
+- (krobipd) New: A datapoint the receiver reveals later now appears at once — a function it starts answering, a value it reports for the first time, a status field it begins delivering.
+- (krobipd) Improved: Everything the adapter remembers about a device lives in one entry on the device object now, and the update carries it over without asking the receiver again.
+- (krobipd) Changed: A datapoint that never carried a value is removed only after two starts confirm it, so a receiver left in standby no longer loses datapoints it still has.
 
 ### 2.6.0 (2026-09-09)
 
@@ -136,11 +142,6 @@ On the very first contact the adapter asks the receiver which functions it suppo
 - (krobipd) New: the device-wide MusicCast settings are readable and writable — automatic standby, display brightness and the two HDMI outputs, created only where the device really offers them
 - (krobipd) Fixed: bass, treble and subwoofer trim showed doubled values on MusicCast receivers — that scale counts in half decibels and was labelled as decibels
 - (krobipd) Fixed: a receiver that was in standby when the adapter started could end up with an empty media menu until the next restart
-
-### 2.4.0 (2026-09-03)
-
-- (krobipd) New: the on-screen remote reaches every protocol now — the cursor pad and the menu keys work on YNCA and pre-2010 XML receivers, not just on MusicCast
-- (krobipd) Changed: stepping one menu level back no longer switches to a substitute key on a receiver that rejects it — on those models the new cursor pad does it
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 
