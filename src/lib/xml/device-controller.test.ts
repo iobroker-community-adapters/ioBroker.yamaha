@@ -1,6 +1,6 @@
 import { XmlDeviceController } from "./device-controller";
 import type { XmlClientLike } from "./device-controller";
-import { XmlHttpError, type BasicStatus } from "./protocol";
+import { XmlHttpError, type BasicStatus, type XmlSystemConfig } from "./protocol";
 import { CommandGate } from "../lifecycle/command-gate";
 import { ProbeMemory } from "../lifecycle/probe-memory";
 
@@ -25,10 +25,13 @@ class FakeClient implements XmlClientLike {
     this.calls.push({ method: "getStatus", zone });
     return Promise.resolve(this.statuses[zone] ?? {});
   }
-  public modelName: string | undefined = undefined;
-  public getModelName(): Promise<string | undefined> {
-    this.calls.push({ method: "getModelName", zone: "" });
-    return Promise.resolve(this.modelName);
+  /** The device's own declaration of itself (System/Config); empty = the device answers nothing about itself. */
+  public config: XmlSystemConfig = {};
+  /** A rejection to answer the config read with instead (transient failure). */
+  public configError: Error | undefined = undefined;
+  public getSystemConfig(): Promise<XmlSystemConfig> {
+    this.calls.push({ method: "getSystemConfig", zone: "" });
+    return this.configError ? Promise.reject(this.configError) : Promise.resolve(this.config);
   }
   public send(zone: string, inner: string): Promise<void> {
     this.calls.push({ method: "send", zone, inner });
@@ -122,11 +125,103 @@ describe("XmlDeviceController", () => {
 
   test("reports the model from System/Config into the adapter-created info.model", async () => {
     const s = setup({ Main_Zone: { power: true } });
-    s.client.modelName = "RX-V1900";
+    s.client.config = { model: "RX-V1900" };
     await s.controller.start();
     // The object itself is created once by the adapter (ensureDeviceHeader) for every
     // device, offline ones included — the transport only fills in the value.
     expect(s.acks).toContainEqual({ id: "living.info.model", value: "RX-V1900" });
+  });
+
+  describe("System/Config is the receiver's own declaration (2026-09-09)", () => {
+    const withMemory = (s: ReturnType<typeof setup>, memory: ProbeMemory): void => {
+      (s.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
+    };
+
+    test("zones the device declares absent are never probed (Feature_Existence)", async () => {
+      const s = setup({ Main_Zone: { power: true }, Zone_2: { power: true } });
+      s.client.config = { model: "HTR-4069", zones: { Main_Zone: true, Zone_2: false, Zone_3: false, Zone_4: false } };
+      await s.controller.start();
+      const probed = s.client.calls.filter(c => c.method === "getStatus").map(c => c.zone);
+      expect(probed).toEqual(["Main_Zone"]);
+      expect(s.objects.some(id => id.startsWith("living.multiroom.zone2"))).toBe(false);
+    });
+
+    test("the config is read BEFORE the zone probes — it decides which zones to ask", async () => {
+      const s = setup({ Main_Zone: { power: true } });
+      s.client.config = { model: "HTR-4069", zones: { Main_Zone: true, Zone_2: false, Zone_3: false, Zone_4: false } };
+      await s.controller.start();
+      expect(s.client.calls[0]?.method).toBe("getSystemConfig");
+    });
+
+    test("a block that flags the main zone 0 is not trusted — every zone is probed", async () => {
+      const s = setup({ Main_Zone: { power: true } });
+      s.client.config = { model: "X", zones: { Main_Zone: false, Zone_2: false, Zone_3: false, Zone_4: false } };
+      await s.controller.start();
+      expect(s.client.calls.filter(c => c.method === "getStatus")).toHaveLength(4);
+    });
+
+    test("without the block (2008 generation, or a failed config read) every zone is probed as before", async () => {
+      const s = setup({ Main_Zone: { power: true }, Zone_2: { power: true } });
+      s.client.config = { model: "RX-V3900" };
+      await s.controller.start();
+      expect(s.client.calls.filter(c => c.method === "getStatus").map(c => c.zone)).toEqual([
+        "Main_Zone",
+        "Zone_2",
+        "Zone_3",
+        "Zone_4",
+      ]);
+      const failing = setup({ Main_Zone: { power: true } });
+      failing.client.configError = new Error("XML request timeout");
+      expect(await failing.controller.start()).toBe(true);
+      expect(failing.client.calls.filter(c => c.method === "getStatus")).toHaveLength(4);
+    });
+
+    test("a zone flagged 1 that does not answer is absent, nothing more", async () => {
+      const s = setup({ Main_Zone: { power: true } }); // Zone_2 answers nothing
+      s.client.config = { model: "X", zones: { Main_Zone: true, Zone_2: true, Zone_3: false, Zone_4: false } };
+      await s.controller.start();
+      expect(s.client.calls.filter(c => c.method === "getStatus").map(c => c.zone)).toEqual(["Main_Zone", "Zone_2"]);
+      expect(s.objects.some(id => id.startsWith("living.multiroom.zone2"))).toBe(false);
+    });
+
+    test("the identity key is model + system id + version: a firmware update drops the XML memory", async () => {
+      const memory = new ProbeMemory({
+        xmlIdentity: "RX-V6A|057CCF73|1.79/3.14",
+        "xmlInputs:main": "<Input_Sel_Item/>",
+      });
+      const s = setup({ Main_Zone: { power: true, input: "HDMI1" } });
+      withMemory(s, memory);
+      s.client.config = { model: "RX-V6A", systemId: "057CCF73", version: "1.80/3.14" };
+      await s.controller.start();
+      expect(memory.remembered("xmlIdentity")).toBe("RX-V6A|057CCF73|1.80/3.14");
+      // The remembered input list was dropped and re-read (the probe went to the device).
+      expect(s.client.calls.some(c => c.method === "getXml" && (c.inner ?? "").includes("Input_Sel_Item"))).toBe(true);
+    });
+
+    test("the same identity keeps the XML memory — no re-read", async () => {
+      const memory = new ProbeMemory({
+        xmlIdentity: "RX-V6A|057CCF73|1.80/3.14",
+        "xmlInputs:main": "<Input_Sel_Item/>",
+      });
+      const s = setup({ Main_Zone: { power: true, input: "HDMI1" } });
+      withMemory(s, memory);
+      s.client.config = { model: "RX-V6A", systemId: "057CCF73", version: "1.80/3.14" };
+      await s.controller.start();
+      expect(s.client.calls.some(c => c.method === "getXml" && (c.inner ?? "").includes("Input_Sel_Item"))).toBe(false);
+    });
+
+    test("the declaration is remembered for the other transports", async () => {
+      const memory = new ProbeMemory();
+      const s = setup({ Main_Zone: { power: true } });
+      withMemory(s, memory);
+      s.client.config = {
+        model: "HTR-4069",
+        features: { Spotify: true, JUKE: true },
+        inputNames: { HDMI_1: "HDMI1", AUX: "AUX" },
+      };
+      await s.controller.start();
+      expect(memory.remembered("xmlConfig")).toMatchObject({ features: { Spotify: true }, inputNames: { AUX: "AUX" } });
+    });
   });
 
   test("builds the amp tree for the main zone and seeds its state", async () => {
@@ -278,14 +373,14 @@ describe("XmlDeviceController", () => {
     const memory = new ProbeMemory();
     const first = setup({ Main_Zone: { power: true } });
     (first.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
-    first.client.modelName = "RX-V773";
+    first.client.config = { model: "RX-V773" };
     first.client.xmlAnswers["Tuner|<Play_Info>GetParam</Play_Info>"] = playInfo(3, 9810, "Radio X");
     await first.controller.start();
 
     // Second connect, same device — but it plays a different station now.
     const second = setup({ Main_Zone: { power: true } });
     (second.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
-    second.client.modelName = "RX-V773";
+    second.client.config = { model: "RX-V773" };
     second.client.xmlAnswers["Tuner|<Play_Info>GetParam</Play_Info>"] = playInfo(7, 10430, "Radio Y");
     await second.controller.start();
     expect(second.acks).toContainEqual({ id: "living.tuner.rdsService", value: "Radio Y" });
@@ -491,14 +586,14 @@ describe("XmlDeviceController freshness guard (persisted memory)", () => {
     const memory = new ProbeMemory();
     const first = setup({ Main_Zone: { power: true } });
     (first.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
-    first.client.modelName = "RX-V773";
+    first.client.config = { model: "RX-V773" };
     first.client.xmlAnswers[sceneRequest] = sceneDeclaration([{ num: 1, title: "Movie" }]);
     await first.controller.start();
 
     // Same model again: the scene declaration comes from the memory, not the wire.
     const second = setup({ Main_Zone: { power: true } });
     (second.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
-    second.client.modelName = "RX-V773";
+    second.client.config = { model: "RX-V773" };
     await second.controller.start();
     expect(second.client.calls.some(c => c.inner?.includes("Scene_Sel_Item"))).toBe(false);
     expect(second.objects).toContain("living.scene.recall");
@@ -506,7 +601,7 @@ describe("XmlDeviceController freshness guard (persisted memory)", () => {
     // A different model behind the address: the old declarations are void — re-asked.
     const third = setup({ Main_Zone: { power: true } });
     (third.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
-    third.client.modelName = "RX-V575";
+    third.client.config = { model: "RX-V575" };
     await third.controller.start();
     expect(third.client.calls.some(c => c.inner?.includes("Scene_Sel_Item"))).toBe(true);
     // The new device declared no scenes — none appear.
@@ -593,7 +688,7 @@ describe("XmlDeviceController probe memory verdicts (audit 2026-09-02)", () => {
     const memory = new ProbeMemory();
     const first = setup({ Main_Zone: { power: true } });
     withMemory(first, memory);
-    first.client.modelName = "RX-V773";
+    first.client.config = { model: "RX-V773" };
     // A busy receiver: the scene probe times out while the zone status answered fine.
     first.client.xmlErrors[sceneRequest] = new Error("XML request timeout");
     expect(await first.controller.start()).toBe(true);
@@ -603,7 +698,7 @@ describe("XmlDeviceController probe memory verdicts (audit 2026-09-02)", () => {
 
     const second = setup({ Main_Zone: { power: true } });
     withMemory(second, memory);
-    second.client.modelName = "RX-V773";
+    second.client.config = { model: "RX-V773" };
     second.client.xmlAnswers[sceneRequest] = sceneDeclaration([{ num: 1, title: "Movie" }]);
     await second.controller.start();
     expect(second.client.calls.some(c => c.inner?.includes("Scene_Sel_Item"))).toBe(true);
@@ -614,14 +709,14 @@ describe("XmlDeviceController probe memory verdicts (audit 2026-09-02)", () => {
     const memory = new ProbeMemory();
     const first = setup({ Main_Zone: { power: true } });
     withMemory(first, memory);
-    first.client.modelName = "RX-V773";
+    first.client.config = { model: "RX-V773" };
     first.client.xmlErrors[sceneRequest] = new XmlHttpError("device refused the request (HTTP 400)", 400);
     await first.controller.start();
     expect(memory.remembered("xmlScenes:main")).toBe("");
 
     const second = setup({ Main_Zone: { power: true } });
     withMemory(second, memory);
-    second.client.modelName = "RX-V773";
+    second.client.config = { model: "RX-V773" };
     await second.controller.start();
     expect(second.client.calls.some(c => c.inner?.includes("Scene_Sel_Item"))).toBe(false);
   });
@@ -630,7 +725,7 @@ describe("XmlDeviceController probe memory verdicts (audit 2026-09-02)", () => {
     const memory = new ProbeMemory();
     const rc2 = setup({ Main_Zone: { power: true } });
     withMemory(rc2, memory);
-    rc2.client.modelName = "RX-V773";
+    rc2.client.config = { model: "RX-V773" };
     rc2.client.xmlAnswers[sceneRequest] = '<YAMAHA_AV rsp="GET" RC="2"><Main_Zone></Main_Zone></YAMAHA_AV>';
     await rc2.controller.start();
     expect(memory.remembered("xmlScenes:main")).toBe("");
@@ -638,7 +733,7 @@ describe("XmlDeviceController probe memory verdicts (audit 2026-09-02)", () => {
     const memory2 = new ProbeMemory();
     const rc3 = setup({ Main_Zone: { power: true } });
     withMemory(rc3, memory2);
-    rc3.client.modelName = "RX-V773";
+    rc3.client.config = { model: "RX-V773" };
     rc3.client.xmlAnswers[sceneRequest] = '<YAMAHA_AV rsp="GET" RC="3"><Main_Zone></Main_Zone></YAMAHA_AV>';
     await rc3.controller.start();
     expect(rc3.objects).not.toContain("living.scene.recall");

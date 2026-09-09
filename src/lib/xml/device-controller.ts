@@ -8,6 +8,7 @@ import {
   parseTunerInfo,
   type BasicStatus,
   type XmlScene,
+  type XmlSystemConfig,
 } from "./protocol";
 import { parseXmlStatus, stateToXml, type XmlCommand } from "./command-mapper";
 import { XML_AMP_CATALOG } from "./catalog";
@@ -26,8 +27,8 @@ const DEFAULT_POLL_INTERVAL_MS = 60 * 1000;
 interface XmlZone {
   /** Unified zone key (`main`, `zone2`, …). */
   key: string;
-  /** XML zone element (`Main_Zone`, `Zone_2`, …). */
-  element: string;
+  /** XML zone element — also the key of its `Feature_Existence` flag in System/Config. */
+  element: "Main_Zone" | "Zone_2" | "Zone_3" | "Zone_4";
   /** State-id prefix for the zone. */
   prefix: string;
 }
@@ -43,8 +44,8 @@ const XML_ZONES: XmlZone[] = [
 export interface XmlClientLike {
   /** Read a zone's Basic_Status. */
   getStatus(zone: string): Promise<BasicStatus>;
-  /** Read the device's model name (System > Config). */
-  getModelName(): Promise<string | undefined>;
+  /** Read the device's declaration of itself (System > Config): model, identity, zones, sources, input names. */
+  getSystemConfig(): Promise<XmlSystemConfig>;
   /** Send an inner command to a zone. */
   send(zone: string, inner: string): Promise<void>;
   /** Read an element's inner GET request and return the raw response body. */
@@ -110,10 +111,47 @@ export class XmlDeviceController implements ConnectionHandle {
    * @returns true if the main zone answered and the tree was created
    */
   public async start(): Promise<boolean> {
-    // Probe all zones in parallel and keep each answering zone's status, so a zone is
-    // fetched once (for the probe) and seeded from that same response — not twice.
+    // The receiver's own declaration of itself comes FIRST — one request the adapter used to
+    // make for the model name alone. `Feature_Existence` says which zones exist (2012+), so
+    // absent zones are not probed; System_ID + Version identify the unit, so a firmware update
+    // re-reads what the memory holds. A failed read (transient, or the 2008 generation without
+    // the block) falls back to probing every zone, exactly as before.
+    let config: XmlSystemConfig = {};
+    try {
+      config = await this.deps.client.getSystemConfig();
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: System/Config failed (${errorMessage(e)})`);
+    }
+    // Freshness guard for the (persisted) probe memory: model + system id + firmware are the
+    // identity this transport can read. A different (or updated) device behind the address
+    // drops the remembered XML declarations (scenes, inputs, descriptor, tuner, browse
+    // sources); a device that reports no model keeps them — the YNCA/YXC guards catch a swap.
+    if (this.deps.probeMemory && config.model !== undefined) {
+      const identity = `${config.model}|${config.systemId ?? ""}|${config.version ?? ""}`;
+      if (this.deps.probeMemory.remembered("xmlIdentity") !== identity) {
+        // Every XML-owned memory key carries the xml prefix (xmlBrowseSources, xmlScenes:*,
+        // xmlInputs:*, xmlTuner, xmlConfig, xmlIdentity).
+        this.deps.probeMemory.drop(key => key.startsWith("xml"));
+        this.deps.probeMemory.set("xmlIdentity", identity);
+      }
+      if (config.zones || config.features || config.inputNames) {
+        // Remembered for the other transports: the YNCA input list reads the source flags and
+        // the input names as evidence (a flag 0 proves a source absent, a name adds an input).
+        this.deps.probeMemory.set("xmlConfig", config);
+      }
+    }
+    // Zones flagged 0 are not probed. Guards (advisor round 2026-09-09): a block that flags the
+    // MAIN zone 0, or no block at all (2008 generation), probes every zone as before; a zone
+    // flagged 1 whose Basic_Status then fails is simply absent — no contradiction to log.
+    const declaredZones = config.zones;
+    const candidates =
+      declaredZones && declaredZones.Main_Zone !== false
+        ? XML_ZONES.filter(zone => declaredZones[zone.element] !== false)
+        : XML_ZONES;
+    // Probe the candidate zones in parallel and keep each answering zone's status, so a zone
+    // is fetched once (for the probe) and seeded from that same response — not twice.
     const probes = await Promise.all(
-      XML_ZONES.map(async zone => ({ zone, status: await this.tryGetStatus(zone.element) })),
+      candidates.map(async zone => ({ zone, status: await this.tryGetStatus(zone.element) })),
     );
     const answered = probes.filter(probe => probe.status && Object.keys(probe.status).length > 0);
     if (!answered.some(probe => probe.zone.key === "main")) {
@@ -121,24 +159,7 @@ export class XmlDeviceController implements ConnectionHandle {
       return false;
     }
     this.zones = answered.map(probe => probe.zone);
-    // Freshness guard for the (persisted) probe memory: the model name is the identity
-    // this transport can read. A different device behind the address drops the
-    // remembered XML declarations (scenes, inputs, tuner, browse sources); a device
-    // that reports no model keeps them — the YNCA/YXC guards catch a swap there.
-    let model: string | undefined;
-    try {
-      model = await this.deps.client.getModelName();
-      if (model !== undefined && this.deps.probeMemory) {
-        if (this.deps.probeMemory.remembered("xmlModel") !== model) {
-          // Every XML-owned memory key carries the xml prefix (xmlBrowseSources,
-          // xmlScenes:*, xmlInputs:*, xmlTuner, xmlModel).
-          this.deps.probeMemory.drop(key => key.startsWith("xml"));
-          this.deps.probeMemory.set("xmlModel", model);
-        }
-      }
-    } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: getModelName failed (${errorMessage(e)})`);
-    }
+    const model = config.model;
     // The zone's own input list (`Input_Sel_Item`, per zone — Main and Zone 2 differ on
     // real hardware): the device says which inputs it accepts, so the input state gets a
     // dropdown instead of a free string. Constant per model — remembered per device.

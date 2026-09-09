@@ -1,14 +1,77 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   assertXmlOk,
   encodeGet,
   encodePut,
   parseBasicStatus,
   parseInputList,
-  parseModelName,
   parseReturnCode,
   parseSceneList,
+  parseSystemConfig,
   parseTunerInfo,
 } from "./protocol";
+
+/**
+ * A real device answer from `__fixtures__` (System/Config captures of four generations).
+ *
+ * @param name the fixture file name
+ * @returns the body
+ */
+const readFixture = (name: string): string => readFileSync(join(__dirname, "__fixtures__", name), "utf8");
+
+describe("parseSystemConfig — what a classic receiver declares about itself", () => {
+  test("a 2020 receiver: identity, two zones, 23 feature flags, 20 named inputs", () => {
+    const config = parseSystemConfig(readFixture("system-config-rx-v6a.xml"));
+    expect(config).toMatchObject({ model: "RX-V6A", systemId: "00000000", version: "1.80/3.14" });
+    expect(config.zones).toEqual({ Main_Zone: true, Zone_2: true, Zone_3: false, Zone_4: false });
+    expect(config.features).toMatchObject({
+      Tuner: false,
+      DAB: true,
+      Spotify: true,
+      JUKE: false,
+      Alexa: false,
+      USB: true,
+    });
+    expect(Object.keys(config.features ?? {})).toHaveLength(19);
+    expect(Object.keys(config.inputNames ?? {})).toHaveLength(20);
+    expect(config.inputNames).toMatchObject({
+      HDMI_1: "HDMI1",
+      AUDIO_5: "AUDIO5",
+      NET_RADIO: "NET RADIO",
+      MusicCast_Link: "MusicCast Link",
+    });
+  });
+
+  test("a 2017 single-zone receiver declares no second zone and 13 inputs incl. AUX", () => {
+    const config = parseSystemConfig(readFixture("system-config-htr-4069.xml"));
+    expect(config.zones).toEqual({ Main_Zone: true, Zone_2: false, Zone_3: false, Zone_4: false });
+    expect(config.inputNames).toMatchObject({ AUX: "AUX", AV_4: "AV4" });
+    expect(Object.keys(config.inputNames ?? {})).toHaveLength(13);
+    expect(config.version).toBe("1.23/2.40");
+  });
+
+  test("a 2015 receiver carries the user's own input names, not the factory ones", () => {
+    const config = parseSystemConfig(readFixture("system-config-rx-s601d.xml"));
+    expect(config.inputNames?.HDMI_1).toBe("Kodi");
+    expect(config.features).toMatchObject({ DAB: true, Tuner: false, MusicCast_Link: true });
+  });
+
+  test("the 2008 generation declares only the model and its two-part firmware — no zones, no features, no names", () => {
+    const config = parseSystemConfig(readFixture("system-config-rx-v3900.xml"));
+    expect(config.model).toBe("RX-V3900");
+    expect(config.systemId).toBe("0CE4E483");
+    expect(config.version).toBe("Y.0125.0205/V119");
+    expect(config.zones).toBeUndefined();
+    expect(config.features).toBeUndefined();
+    expect(config.inputNames).toBeUndefined();
+  });
+
+  test("a malformed body yields an empty declaration, never a throw", () => {
+    expect(parseSystemConfig('<YAMAHA_AV rsp="GET" RC="0"><System><Config></Config></System></YAMAHA_AV>')).toEqual({});
+    expect(parseSystemConfig("")).toEqual({});
+  });
+});
 
 describe("encodePut / encodeGet", () => {
   test("wraps an inner command in the YAMAHA_AV PUT envelope for a zone", () => {
@@ -92,16 +155,6 @@ describe("parseBasicStatus", () => {
 
   test("returns nothing for a malformed response", () => {
     expect(parseBasicStatus("not xml")).toEqual({});
-  });
-});
-
-describe("parseModelName", () => {
-  it("treats an empty element as no model at all", () => {
-    // An empty <Model_Name/> would become an empty model string, which drives the
-    // device-class icon and the card's model line into a blank.
-    expect(parseModelName("<Model_Name></Model_Name>")).toBeUndefined();
-    expect(parseModelName("<YAMAHA_AV/>")).toBeUndefined();
-    expect(parseModelName("<Model_Name>RX-V771</Model_Name>")).toBe("RX-V771");
   });
 });
 

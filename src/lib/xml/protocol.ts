@@ -198,15 +198,87 @@ export function encodeGet(zone: string, inner: string): string {
   return `<YAMAHA_AV cmd="GET"><${zone}>${inner}</${zone}></YAMAHA_AV>`;
 }
 
+/** What a classic receiver declares about itself in `<System><Config>`. */
+export interface XmlSystemConfig {
+  /** `<Model_Name>`, when reported. */
+  model?: string;
+  /** `<System_ID>`, when reported (2008+). */
+  systemId?: string;
+  /**
+   * The firmware as the device prints it — `<Version>1.80/3.14</Version>` from 2012 on; the 2008
+   * generation nests it as `<Version><Main>…</Main><Sub>…</Sub></Version>`, joined here as `Main/Sub`.
+   */
+  version?: string;
+  /** The zone flags of `<Feature_Existence>` — absent when the block is missing (2008 generation). */
+  zones?: Partial<Record<"Main_Zone" | "Zone_2" | "Zone_3" | "Zone_4", boolean>>;
+  /** Every other `<Feature_Existence>` flag by its XML key (Tuner, DAB, Spotify, JUKE, …). */
+  features?: Record<string, boolean>;
+  /** The inputs of `<Name><Input>` by XML key (HDMI_1 → the name the user gave it). */
+  inputNames?: Record<string, string>;
+}
+
+const ZONE_FLAGS = new Set(["Main_Zone", "Zone_2", "Zone_3", "Zone_4"]);
+
 /**
- * Extract the model name from a `<System><Config>` response, if it carries one.
+ * Parse a `<System><Config>` answer into the device's own declaration of itself.
  *
- * @param xml the System>Config response body
- * @returns the model name, or undefined
+ * The block is the receiver's feature list, not a status: `<Feature_Existence>` names every zone
+ * and every source as 0/1, `<Name><Input>` every renameable input with its (user-given) name,
+ * and `<System_ID>` + `<Version>` identify the unit. Measured on three generations (RX-S601D 2015,
+ * HTR-4069 2017, RX-V6A 2020 — all with the block; the 2008 RX-V3900 without). The predecessor
+ * adapter read exactly this block for its input list; the rewrite had reduced it to `Model_Name`.
+ *
+ * @param xml the System/Config response body
+ * @returns the declaration (an empty object for a malformed body)
  */
-export function parseModelName(xml: string): string | undefined {
-  const match = /<Model_Name>([^<]*)<\/Model_Name>/.exec(xml);
-  return match && match[1].length > 0 ? decodeXmlText(match[1]) : undefined;
+export function parseSystemConfig(xml: string): XmlSystemConfig {
+  const config: XmlSystemConfig = {};
+  const text = (tag: string): string | undefined => {
+    const match = new RegExp(`<${tag}>([^<]*)</${tag}>`).exec(xml);
+    return match && match[1].length > 0 ? decodeXmlText(match[1]) : undefined;
+  };
+  const model = text("Model_Name");
+  if (model !== undefined) {
+    config.model = model;
+  }
+  const systemId = text("System_ID");
+  if (systemId !== undefined) {
+    config.systemId = systemId;
+  }
+  const version = text("Version");
+  if (version !== undefined) {
+    config.version = version.trim();
+  } else {
+    const nested = /<Version>\s*<Main>([^<]*)<\/Main>\s*<Sub>([^<]*)<\/Sub>\s*<\/Version>/.exec(xml);
+    if (nested) {
+      config.version = `${decodeXmlText(nested[1]).trim()}/${decodeXmlText(nested[2]).trim()}`;
+    }
+  }
+  const existence = /<Feature_Existence>([\s\S]*?)<\/Feature_Existence>/.exec(xml);
+  if (existence) {
+    const zones: NonNullable<XmlSystemConfig["zones"]> = {};
+    const features: Record<string, boolean> = {};
+    const flag = /<([A-Za-z0-9_]+)>([01])<\/\1>/g;
+    for (let match = flag.exec(existence[1]); match; match = flag.exec(existence[1])) {
+      if (ZONE_FLAGS.has(match[1])) {
+        zones[match[1] as keyof typeof zones] = match[2] === "1";
+      } else {
+        features[match[1]] = match[2] === "1";
+      }
+    }
+    config.zones = zones;
+    config.features = features;
+  }
+  const names = /<Name>\s*<Input>([\s\S]*?)<\/Input>/.exec(xml);
+  if (names) {
+    const inputNames: Record<string, string> = {};
+    const entry = /<([A-Za-z0-9_]+)>([^<]*)<\/\1>/g;
+    for (let match = entry.exec(names[1]); match; match = entry.exec(names[1])) {
+      inputNames[match[1]] = decodeXmlText(match[2]);
+    }
+    config.inputNames = inputNames;
+  }
+  return config;
 }
 
 /** The amplifier fields a Basic_Status response can carry. */

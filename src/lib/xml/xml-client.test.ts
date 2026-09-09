@@ -109,6 +109,33 @@ describe("XmlClient", () => {
     const client = new XmlClient("1.2.3.4", () => Promise.resolve('<YAMAHA_AV rsp="GET" RC="4"></YAMAHA_AV>'));
     await expect(client.getStatus("Zone_2")).rejects.toThrow("RC=4");
   });
+
+  test("getSystemConfig posts the System/Config GET and returns the device's declaration", async () => {
+    const posts: string[] = [];
+    const client = new XmlClient("1.2.3.4", (_ip, body) => {
+      posts.push(body);
+      return Promise.resolve(
+        '<YAMAHA_AV rsp="GET" RC="0"><System><Config><Model_Name>HTR-4069</Model_Name><System_ID>054E5023</System_ID>' +
+          "<Version>1.23/2.40</Version><Feature_Existence><Main_Zone>1</Main_Zone><Zone_2>0</Zone_2><Tuner>1</Tuner>" +
+          "</Feature_Existence><Name><Input><HDMI_1>HDMI1</HDMI_1><AUX>AUX</AUX></Input></Name></Config></System></YAMAHA_AV>",
+      );
+    });
+    const config = await client.getSystemConfig();
+    expect(posts).toEqual(['<YAMAHA_AV cmd="GET"><System><Config>GetParam</Config></System></YAMAHA_AV>']);
+    expect(config).toEqual({
+      model: "HTR-4069",
+      systemId: "054E5023",
+      version: "1.23/2.40",
+      zones: { Main_Zone: true, Zone_2: false },
+      features: { Tuner: true },
+      inputNames: { HDMI_1: "HDMI1", AUX: "AUX" },
+    });
+  });
+
+  test("getSystemConfig on a refusing device throws like every other read", async () => {
+    const client = new XmlClient("1.2.3.4", () => Promise.resolve('<YAMAHA_AV rsp="GET" RC="3"></YAMAHA_AV>'));
+    await expect(client.getSystemConfig()).rejects.toThrow("RC=3");
+  });
 });
 
 describe("XmlClient default HTTP poster", () => {
@@ -121,7 +148,7 @@ describe("XmlClient default HTTP poster", () => {
 
   test("POSTs the body to the receiver's control endpoint on port 80", async () => {
     httpMock.body = "<Model_Name>RX-V771</Model_Name>";
-    await expect(new XmlClient("192.168.1.10").getModelName()).resolves.toBe("RX-V771");
+    await expect(new XmlClient("192.168.1.10").getSystemConfig()).resolves.toEqual({ model: "RX-V771" });
     const req = httpMock.requests[0];
     // The path and the method ARE the protocol — a GET, or the wrong path, gets a
     // 404 from every receiver and the transport looks simply absent.
@@ -152,13 +179,13 @@ describe("XmlClient default HTTP poster", () => {
     httpMock.mode = "timeout";
     // The poll runs on a timer: a request that never settles stacks up one pending
     // socket per interval for as long as the device is unplugged.
-    await expect(new XmlClient("192.168.1.99").getModelName()).rejects.toThrow("XML request timeout");
+    await expect(new XmlClient("192.168.1.99").getSystemConfig()).rejects.toThrow("XML request timeout");
     expect(httpMock.requests[0].destroyed?.message).toBe("XML request timeout");
   });
 
   test("rejects on a transport error", async () => {
     httpMock.mode = "error";
-    await expect(new XmlClient("192.168.1.99").getModelName()).rejects.toThrow("ECONNREFUSED");
+    await expect(new XmlClient("192.168.1.99").getSystemConfig()).rejects.toThrow("ECONNREFUSED");
   });
 });
 
@@ -187,6 +214,6 @@ describe("XmlClient default poster — verdicts and limits (audit 2026-09-02)", 
 
   test("rejects a body that streams past the size cap instead of buffering it", async () => {
     httpMock.body = "x".repeat(MAX_HTTP_BODY_BYTES + 1);
-    await expect(new XmlClient("192.168.1.10").getModelName()).rejects.toThrow(/too large/);
+    await expect(new XmlClient("192.168.1.10").getSystemConfig()).rejects.toThrow(/too large/);
   });
 });

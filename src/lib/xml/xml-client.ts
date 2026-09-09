@@ -4,9 +4,10 @@ import {
   encodeGet,
   encodePut,
   parseBasicStatus,
-  parseModelName,
+  parseSystemConfig,
   XmlHttpError,
   type BasicStatus,
+  type XmlSystemConfig,
 } from "./protocol";
 import type { CommandGate } from "../lifecycle/command-gate";
 import { MAX_HTTP_BODY_BYTES } from "../util";
@@ -123,13 +124,15 @@ export class XmlClient {
   }
 
   /**
-   * Read the device's model name (System > Config).
+   * Read the device's declaration of itself (System > Config): model, system id, firmware, the
+   * zones and sources it has (`Feature_Existence`) and its input names. A refusal throws like
+   * every other read.
    *
-   * @returns the model name, or undefined when the device does not report one
+   * @returns the parsed declaration (empty when the device answers nothing about itself)
    */
-  public async getModelName(): Promise<string | undefined> {
+  public async getSystemConfig(): Promise<XmlSystemConfig> {
     const response = await this.request(this.ip, encodeGet("System", "<Config>GetParam</Config>"));
-    return parseModelName(response);
+    return parseSystemConfig(assertXmlOk(response, "<System> Config"));
   }
 
   /**
