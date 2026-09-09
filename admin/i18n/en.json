@@ -591,5 +591,11 @@
   "descSiriusParentalLock": "True while the playing channel is locked by the parental control.",
   "siriusSearchMode": "Search mode",
   "zoneBInterlock": "Zone B volume interlock",
-  "descZoneBInterlock": "Ties Zone B's volume to the main zone's, so one knob moves both."
+  "descZoneBInterlock": "Ties Zone B's volume to the main zone's, so one knob moves both.",
+  "headphone": "Headphones plugged in",
+  "descHeadphone": "True while a headphone plug sits in the socket and the speakers are muted for it.",
+  "hdmiStandbyThrough": "HDMI standby through",
+  "descHdmiStandbyThrough": "Whether the HDMI signal is passed to the TV while the receiver stands by: off, on, or automatic.",
+  "hdmiVideoPreset": "HDMI video preset",
+  "descHdmiVideoPreset": "Which of the stored video-processing presets is in use."
 }

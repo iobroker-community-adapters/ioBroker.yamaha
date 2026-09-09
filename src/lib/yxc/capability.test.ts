@@ -167,3 +167,26 @@ describe("parseYxcFeatures — a malformed range entry is skipped, not half-read
     expect(caps.zones[0]?.ranges).toEqual({});
   });
 });
+
+describe("the system block's declarations (coverage audit 2026-09-09)", () => {
+  test("hdmi_standby_through_list, speaker_pattern_num and video_preset_num are read from the system block", () => {
+    const caps = parseYxcFeatures({
+      system: {
+        func_list: ["hdmi_standby_through", "speaker_pattern", "video_preset"],
+        hdmi_standby_through_list: ["off", "on", "auto"],
+        speaker_pattern_num: 2,
+        video_preset_num: 6,
+        range_step: [],
+      },
+      zone: [{ id: "main", func_list: ["power"], input_list: ["hdmi1"] }],
+    });
+    expect(caps.systemLists).toEqual({ hdmi_standby_through_list: ["off", "on", "auto"] });
+    expect(caps.systemCounts).toEqual({ speaker_pattern_num: 2, video_preset_num: 6 });
+  });
+
+  test("a system block without them declares none", () => {
+    const caps = parseYxcFeatures({ system: { func_list: [] }, zone: [] });
+    expect(caps.systemLists).toBeUndefined();
+    expect(caps.systemCounts).toBeUndefined();
+  });
+});

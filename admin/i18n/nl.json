@@ -591,5 +591,11 @@
   "descSiriusParentalLock": "Waar zolang het spelende kanaal door het kinderslot is vergrendeld.",
   "siriusSearchMode": "Zoekmodus",
   "zoneBInterlock": "Zone B-volumekoppeling",
-  "descZoneBInterlock": "Koppelt het volume van zone B aan de hoofdzone, zodat één knop beide beweegt."
+  "descZoneBInterlock": "Koppelt het volume van zone B aan de hoofdzone, zodat één knop beide beweegt.",
+  "headphone": "Hoofdtelefoon aangesloten",
+  "descHeadphone": "Waar zolang er een hoofdtelefoonstekker in de aansluiting zit en de luidsprekers daarvoor stil zijn.",
+  "hdmiStandbyThrough": "HDMI-doorvoer in stand-by",
+  "descHdmiStandbyThrough": "Of het HDMI-signaal naar de tv wordt doorgegeven terwijl de receiver in stand-by staat: uit, aan of automatisch.",
+  "hdmiVideoPreset": "HDMI-videovoorinstelling",
+  "descHdmiVideoPreset": "Welke van de opgeslagen videoverwerkingsvoorinstellingen in gebruik is."
 }

@@ -591,5 +591,11 @@
   "descSiriusParentalLock": "Vero finché il canale in riproduzione è bloccato dal controllo genitori.",
   "siriusSearchMode": "Modalità di ricerca",
   "zoneBInterlock": "Aggancio volume Zona B",
-  "descZoneBInterlock": "Lega il volume della Zona B a quello della zona principale, una manopola per entrambe."
+  "descZoneBInterlock": "Lega il volume della Zona B a quello della zona principale, una manopola per entrambe.",
+  "headphone": "Cuffie collegate",
+  "descHeadphone": "Vero finché uno spinotto cuffie è nella presa e i diffusori sono muti per questo.",
+  "hdmiStandbyThrough": "Passaggio HDMI in standby",
+  "descHdmiStandbyThrough": "Se il segnale HDMI passa al televisore mentre il sintoamplificatore è in standby: spento, acceso o automatico.",
+  "hdmiVideoPreset": "Preset video HDMI",
+  "descHdmiVideoPreset": "Quale dei preset di elaborazione video memorizzati è in uso."
 }

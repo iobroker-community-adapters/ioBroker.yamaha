@@ -46,6 +46,8 @@ interface FakeClient extends YxcClientLike {
   /** Make the zone status / name lookup fail, as an unreachable device would. */
   failStatus: boolean;
   failNameText: boolean;
+  /** The getFuncStatus answer (default: an empty success — no device-wide settings). */
+  funcStatus: unknown;
 }
 
 /**
@@ -72,10 +74,12 @@ function makeFakeClient(features: unknown, status: unknown): FakeClient {
     distRole: "server",
     failStatus: false,
     failNameText: false,
+    funcStatus: {},
   };
   // The answers that are more than "an empty success".
   const replies: Record<string, (args: unknown[]) => unknown> = {
     getFeatures: () => state.features,
+    getFuncStatus: () => state.funcStatus,
     getStatus: ([zone]) => {
       if (state.failStatus) {
         throw new Error("device offline");
@@ -1249,5 +1253,57 @@ describe("YxcDeviceController equalizer cache seeding (audit 2026-09-02)", () =>
     s.controller.handleStateChange("living.sound.equalizer.low", false, 7);
     await flush();
     expect(s.client.calls).toContainEqual({ method: "setEqualizer", args: [7, 2, 5, "main"] });
+  });
+});
+
+describe("the device-wide settings with their declarations (coverage audit 2026-09-09)", () => {
+  const features = {
+    system: {
+      func_list: ["hdmi_standby_through", "speaker_pattern", "video_preset", "party_mode", "headphone"],
+      hdmi_standby_through_list: ["off", "on", "auto"],
+      speaker_pattern_num: 2,
+      video_preset_num: 6,
+    },
+    zone: [{ id: "main", func_list: ["power"], input_list: ["hdmi1"] }],
+  };
+  const status = { power: "on", input: "hdmi1" };
+
+  test("the declared list, the pattern count and the preset count become the datapoints' own value lists and bounds", async () => {
+    const s = setup(features, status);
+    s.client.funcStatus = {
+      response_code: 0,
+      hdmi_out_1: true,
+      hdmi_out_3: false,
+      hdmi_standby_through: "auto",
+      headphone: true,
+      party_mode: false,
+      speaker_pattern: 2,
+      video_preset: 3,
+    };
+    await s.controller.start();
+    const through = s.defs.get("living.hdmi.standbyThrough");
+    expect(through?.common.states).toEqual({ off: "off", on: "on", auto: "auto" });
+    expect(through?.declaredStates).toBe(true);
+    const pattern = s.defs.get("living.advanced.speakers.pattern");
+    expect(pattern?.common.states).toEqual({ "Pattern 1": "Pattern 1", "Pattern 2": "Pattern 2" });
+    expect(pattern?.declaredStates).toBe(true);
+    const preset = s.defs.get("living.hdmi.videoPreset");
+    expect(preset?.common).toMatchObject({ type: "number", min: 1, max: 6, step: 1 });
+    expect(s.acks).toContainEqual({ id: "living.advanced.speakers.pattern", value: "Pattern 2" });
+    expect(s.acks).toContainEqual({ id: "living.hdmi.standbyThrough", value: "auto" });
+    expect(s.acks).toContainEqual({ id: "living.advanced.headphone", value: true });
+    expect(s.acks).toContainEqual({ id: "living.hdmi.videoPreset", value: 3 });
+    expect(s.acks).toContainEqual({ id: "living.hdmi.out3", value: false });
+  });
+
+  test("party mode writes through setPartyMode; a field the device did not answer builds nothing", async () => {
+    const s = setup(features, status);
+    s.client.funcStatus = { response_code: 0, party_mode: false };
+    await s.controller.start();
+    expect(s.defs.has("living.multiroom.party")).toBe(true);
+    expect(s.defs.has("living.hdmi.standbyThrough")).toBe(false);
+    s.controller.handleStateChange("living.multiroom.party", false, true);
+    await new Promise(resolve => setImmediate(resolve));
+    expect(s.client.calls).toContainEqual({ method: "setPartyMode", args: [true] });
   });
 });

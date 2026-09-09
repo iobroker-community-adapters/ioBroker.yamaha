@@ -65,6 +65,10 @@ export interface YxcCapabilities {
    * zone's {@link YxcZone.ranges}, for the states that belong to the device, not to a zone.
    */
   systemRanges?: Record<string, { min: number; max: number; step: number }>;
+  /** The value lists the SYSTEM block declares (`hdmi_standby_through_list`), keyed by their id. */
+  systemLists?: Record<string, string[]>;
+  /** The counts the SYSTEM block declares (`speaker_pattern_num`, `video_preset_num`), keyed by their id. */
+  systemCounts?: Record<string, number>;
 }
 
 // Only true media-player sources — subsystems that report play info and
@@ -257,8 +261,25 @@ export function parseYxcFeatures(response: unknown): YxcCapabilities {
   const media = MEDIA_BLOCKS.filter(block => block in obj);
   const netusb = obj.netusb;
   const system = typeof obj.system === "object" && obj.system !== null ? (obj.system as Record<string, unknown>) : {};
+  const systemLists: Record<string, string[]> = {};
+  const systemCounts: Record<string, number> = {};
+  for (const [key, value] of Object.entries(system)) {
+    // `func_list` names functions, not values — every other `*_list` is a value list.
+    if (
+      key !== "func_list" &&
+      key.endsWith("_list") &&
+      Array.isArray(value) &&
+      value.every(item => typeof item === "string")
+    ) {
+      systemLists[key] = value;
+    } else if (key.endsWith("_num") && typeof value === "number") {
+      systemCounts[key] = value;
+    }
+  }
   return {
     systemRanges: parseRanges(system.range_step),
+    ...(Object.keys(systemLists).length > 0 ? { systemLists } : {}),
+    ...(Object.keys(systemCounts).length > 0 ? { systemCounts } : {}),
     zones,
     media,
     netusbFuncs:

@@ -591,5 +591,11 @@
   "descSiriusParentalLock": "Prawda, gdy odtwarzany kanał jest zablokowany blokadą rodzicielską.",
   "siriusSearchMode": "Tryb wyszukiwania",
   "zoneBInterlock": "Sprzężenie głośności strefy B",
-  "descZoneBInterlock": "Wiąże głośność strefy B z głośnością strefy głównej, jedno pokrętło steruje obiema."
+  "descZoneBInterlock": "Wiąże głośność strefy B z głośnością strefy głównej, jedno pokrętło steruje obiema.",
+  "headphone": "Słuchawki podłączone",
+  "descHeadphone": "Prawda, gdy wtyczka słuchawek jest w gnieździe i głośniki są przez to wyciszone.",
+  "hdmiStandbyThrough": "Przelot HDMI w trybie czuwania",
+  "descHdmiStandbyThrough": "Czy sygnał HDMI jest przekazywany do telewizora, gdy amplituner jest w trybie czuwania: wył., wł. lub automatycznie.",
+  "hdmiVideoPreset": "Ustawienie wstępne wideo HDMI",
+  "descHdmiVideoPreset": "Które z zapisanych ustawień wstępnych przetwarzania wideo jest używane."
 }

@@ -382,7 +382,33 @@ export class YxcDeviceController implements ConnectionHandle {
         common.max = range.max;
         common.step = range.step;
       }
-      await this.deps.upsertObject(`${this.deviceId}.${entry.state}`, { id: entry.state, type: "state", common });
+      // The device's own declaration of the selectable values (the system block's `*_list`,
+      // or 1..n from its `*_num`) becomes the dropdown — DECLARED, like a zone's lists.
+      let declared = false;
+      const list = entry.listId ? capabilities.systemLists?.[entry.listId] : undefined;
+      const count = entry.countId ? capabilities.systemCounts?.[entry.countId] : undefined;
+      if (list && list.length > 0) {
+        common.states = Object.fromEntries(
+          list.map(item => [entry.toValue?.(item) ?? item, entry.toValue?.(item) ?? item]),
+        );
+        declared = true;
+      } else if (count !== undefined && count > 0) {
+        if (common.type === "number") {
+          common.min = 1;
+          common.max = count;
+          common.step = 1;
+        } else {
+          const slots = Array.from({ length: count }, (_, i) => entry.toValue?.(i + 1) ?? String(i + 1));
+          common.states = Object.fromEntries(slots.map(slot => [slot, slot]));
+        }
+        declared = true;
+      }
+      await this.deps.upsertObject(`${this.deviceId}.${entry.state}`, {
+        id: entry.state,
+        type: "state",
+        common,
+        ...(declared ? { declaredStates: true } : {}),
+      });
     }
     this.applySystemStatus(status);
   }

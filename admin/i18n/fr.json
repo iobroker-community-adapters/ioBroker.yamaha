@@ -591,5 +591,11 @@
   "descSiriusParentalLock": "Vrai tant que le canal en cours est verrouillé par le contrôle parental.",
   "siriusSearchMode": "Mode de recherche",
   "zoneBInterlock": "Couplage du volume de la zone B",
-  "descZoneBInterlock": "Lie le volume de la zone B à celui de la zone principale, un seul bouton pour les deux."
+  "descZoneBInterlock": "Lie le volume de la zone B à celui de la zone principale, un seul bouton pour les deux.",
+  "headphone": "Casque branché",
+  "descHeadphone": "Vrai tant qu'une fiche de casque est dans la prise et que les enceintes sont coupées pour cela.",
+  "hdmiStandbyThrough": "Passage HDMI en veille",
+  "descHdmiStandbyThrough": "Si le signal HDMI est transmis au téléviseur pendant la veille du récepteur : arrêt, marche ou automatique.",
+  "hdmiVideoPreset": "Préréglage vidéo HDMI",
+  "descHdmiVideoPreset": "Lequel des préréglages de traitement vidéo enregistrés est utilisé."
 }

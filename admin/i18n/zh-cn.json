@@ -591,5 +591,11 @@
   "descSiriusParentalLock": "当前播放频道被家长控制锁定时为真。",
   "siriusSearchMode": "搜索模式",
   "zoneBInterlock": "B 区音量联动",
-  "descZoneBInterlock": "将 B 区音量与主区联动，一个旋钮同时控制两者。"
+  "descZoneBInterlock": "将 B 区音量与主区联动，一个旋钮同时控制两者。",
+  "headphone": "已插入耳机",
+  "descHeadphone": "耳机插头插入插孔且扬声器因此静音时为真。",
+  "hdmiStandbyThrough": "待机 HDMI 直通",
+  "descHdmiStandbyThrough": "功放待机时是否将 HDMI 信号直通至电视：关、开或自动。",
+  "hdmiVideoPreset": "HDMI 视频预设",
+  "descHdmiVideoPreset": "当前使用的是哪个已存视频处理预设。"
 }

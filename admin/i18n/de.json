@@ -591,5 +591,11 @@
   "descSiriusParentalLock": "Wahr, solange der laufende Kanal durch die Kindersicherung gesperrt ist.",
   "siriusSearchMode": "Suchmodus",
   "zoneBInterlock": "Zone-B-Lautstärkekopplung",
-  "descZoneBInterlock": "Koppelt die Lautstärke von Zone B an die Hauptzone, sodass ein Regler beide bewegt."
+  "descZoneBInterlock": "Koppelt die Lautstärke von Zone B an die Hauptzone, sodass ein Regler beide bewegt.",
+  "headphone": "Kopfhörer eingesteckt",
+  "descHeadphone": "Wahr, solange ein Kopfhörerstecker in der Buchse steckt und die Lautsprecher dafür stumm sind.",
+  "hdmiStandbyThrough": "HDMI-Durchleitung im Standby",
+  "descHdmiStandbyThrough": "Ob das HDMI-Signal im Bereitschaftszustand zum Fernseher durchgeleitet wird: aus, ein oder automatisch.",
+  "hdmiVideoPreset": "HDMI-Video-Voreinstellung",
+  "descHdmiVideoPreset": "Welche der gespeicherten Videoverarbeitungs-Voreinstellungen in Gebrauch ist."
 }
