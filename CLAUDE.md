@@ -235,7 +235,7 @@ Antwort des Geräts wird gelesen. Belege: `Ressourcen/yamaha/device-captures/rx-
   SOFORT, es wird NICHT mit alten Werten geseedet (die States tragen sie ohnehin), und
   die volle Fragerunde läuft als Hintergrund-Werte-Auffrischung durch den Live-Handler —
   inkl. Statics (Umbenennungen heilen in Sekunden statt beim Neustart). FORM-Änderungen werden
-  persistiert UND veröffentlicht: seit 2.7.0 baut der Controller die Objekte aus der gewachsenen
+  persistiert UND veröffentlicht: seit 2.7.1 baut der Controller die Objekte aus der gewachsenen
   Form neu und das Handle koordiniert erneut, der Datenpunkt erscheint in DERSELBEN Sitzung.
 - **Netzsuche blockiert Bekannte nicht mehr:** `autoDiscover` gibt gemerkte Geräte
   sofort zurück; `discoverAdditionalDevices` sucht im Hintergrund und startet NUR
@@ -638,7 +638,7 @@ und Ruheform"); Bericht `../../Ressourcen/yamaha/bugplan-2026-09-02.md`.
 ## Fähigkeiten kommen vom Gerät (v2.6.0, Audit + Plan 2026-09-09)
 
 Bericht `../../Ressourcen/yamaha/audit-faehigkeiten-2026-09-09.md`, Plan
-`docs/superpowers/plans/2026-09-09-device-capability-profile.md` (Phase 1 = 2.6.0, Phase 2 = 2.7.0). Wurzel von
+`docs/superpowers/plans/2026-09-09-device-capability-profile.md` (Phase 1 = 2.6.0, Phase 2 = 2.7.1). Wurzel von
 #619: **Bibliothekswissen als Geräte-Wahrheit** — Vorhandensein war bewiesen, aber Werte, Zonen-Sätze und
 Wortschätze standen statisch, Deklarationen der Geräte blieben ungelesen, Speicher kannten keinen Logik-Stand.
 
@@ -670,7 +670,7 @@ Wortschätze standen statisch, Deklarationen der Geräte blieben ungelesen, Spei
   `previousShapeHash`); Form geändert bei released Schema → Bump verlangt, bei unreleased Schema → nur der
   Stempel wird nachgezogen, Bump ohne Formänderung → rot. Die Adapter-VERSION als Auslöser war verworfen: der
   Baum wird einmal je Verbindung koordiniert, jedes Patch-Release hätte alle Geräte umsonst neu gesweept.
-- **Beobachtete Werte wirken sofort** (seit 2.7.0; bis 2.6.0 einen Start später): ein neuer Wert wird in den State
+- **Beobachtete Werte wirken sofort** (seit 2.7.1; bis 2.6.0 einen Start später): ein neuer Wert wird in den State
   geschrieben, in `yncaObserved` gemerkt und die Dropdown-Liste noch in derselben Sitzung nachgezogen (der
   Controller veröffentlicht die geänderten Objekte, das Handle koordiniert erneut). Ein Enum ohne Kandidaten und ohne Beobachtung ist ein Text-State, kein leeres Dropdown
   (SPPATTERN1AMP: 3–14 modellspezifische Strings, kein gemeinsamer Kern).
@@ -707,7 +707,11 @@ Wortschätze standen statisch, Deklarationen der Geräte blieben ungelesen, Spei
   Dropdown bietet, was das Gerät nicht deklariert" (Gerät über `info.ip`, erlaubt = deklariert ∪ übersetzt ∪
   Live-Wert — RX-A2070 meldet `auto` bei `tone_control_mode_list: [manual]`).
 
-## Phase 2 des Fähigkeits-Plans (v2.7.0): ein Profil, schnellerer Erst-Sweep, Baum folgt dem Gerät
+## Phase 2 des Fähigkeits-Plans (v2.7.1): ein Profil, schnellerer Erst-Sweep, Baum folgt dem Gerät
+
+> Der Tag v2.7.0 ist tot: sein CI-Lauf scheiterte an einem unvollständigen `package-lock.json`, npm hat die
+> Version nie bekommen. Ausgeliefert wird derselbe Stand als **2.7.1** (Community-Regel: ein Tag wandert nicht,
+> `reference_recovery_broken_tag_pattern`). Details im internen `.claude/dev-history.md`.
 
 - **Ein Fähigkeits-Profil je Gerät** (`lib/lifecycle/capability-profile.ts`, `DeviceProfileStore` in `main.ts`):
   `native.capabilityProfile` ist EIN JSON-String — `schema` (= `DISCOVERY_SCHEMA`), `adapterVersion`/`learnedAt`
