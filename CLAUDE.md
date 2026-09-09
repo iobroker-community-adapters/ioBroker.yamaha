@@ -635,6 +635,78 @@ Tasten, die sein Protokoll wirklich deklariert.
 Übersetzungsobjekte"). Im selben Durchgang die Funde des Fehler-Audits nach #617/#618 (s. „Aufräumen, Identität
 und Ruheform"); Bericht `../../Ressourcen/yamaha/bugplan-2026-09-02.md`.
 
+## Fähigkeiten kommen vom Gerät (v2.6.0, Audit + Plan 2026-09-09)
+
+Bericht `../../Ressourcen/yamaha/audit-faehigkeiten-2026-09-09.md`, Plan
+`docs/superpowers/plans/2026-09-09-device-capability-profile.md` (Phase 1 = 2.6.0, Phase 2 = 2.7.0). Wurzel von
+#619: **Bibliothekswissen als Geräte-Wahrheit** — Vorhandensein war bewiesen, aber Werte, Zonen-Sätze und
+Wortschätze standen statisch, Deklarationen der Geräte blieben ungelesen, Speicher kannten keinen Logik-Stand.
+
+- **Drei Herkunftsklassen für jede Werteliste** (`ObjectDef.statesOrigin`): **deklariert** (die Liste des Geräts:
+  XML `Input_Sel_Item`, `desc.xml`-Aufzählungen, MusicCast `input_list`/`sound_program_list`/`menu_list`/
+  `cursor_list`/`hdmi_standby_through_list`, `speaker_pattern_num`) > **abgeleitet** (eine Regel über bewiesene
+  Tatsachen: die YNCA-Eingangsliste je Zone aus `deviceInputStates` — physische Eingänge immer, eine Quelle nur,
+  solange nichts sie als abwesend bewiesen hat, `Main Zone Sync` nur auf Zonen; die Trigger-Zonenliste aus den
+  vorhandenen Zonen) > **Kandidaten ∪ beobachtet** (`enumStatesFor`: die dokumentierten Werte der Generation plus
+  jeder Wert, den DIESES Gerät je gemeldet hat — persistiert als `yncaObserved`, mit der Identität verworfen).
+  Der Koordinator lässt eine deklarierte Liste eine Vereinigung ersetzen, aber nur im selben Wortschatz
+  (`STATES_VOCABULARY`: ynca/xml klassisch, yxc MusicCast); eine MusicCast-Liste erreicht einen YNCA-Datenpunkt
+  nur über die Wörterbücher in `catalog/musiccast-vocabulary.ts` (Eingänge, Klangprogramme, seit 2.6.0 auch die
+  Surround-Decoder — Task 17 des Plans vorgezogen, weil das Inventar-Gate sonst neun nicht deklarierte Decoder auf
+  RX-A2070/RX-V6A maß) — alles oder nichts, nie halb übersetzt; `DTS Neural:X`/`AURO-3D` nach ynca-python `enums.py`.
+- **Stille beweist nichts** (Advisor-Runde): ein Gerät, das die AVAIL-Probe ignoriert, wird blind gesweept und
+  verliert keine Quelle; eine gemerkte Subunit-Momentaufnahme zählt nur bei gleicher Modell+Firmware; `@RESTRICTED`
+  entfernt nie; eine XML-Quellenflagge 0 beweist Abwesenheit nur, wenn ALLE Flaggen der Quelle 0 sind (Tuner =
+  Tuner|DAB|HD_Radio — RX-V6A: Tuner=0, DAB=1 → TUNER bleibt).
+- **Ein Sweep fragt zuerst die Bündel** (`bundleGets`): BASIC + SCENENAME je Zone, SIGINFO + RDSINFO am Tuner,
+  METAINFO je Player — was ein Bündel beantwortet, wird nicht einzeln gefragt; was es nicht kennt, schon (additiv,
+  nie Filter; ynca-python: „Not in BASIC on RX-V1067").
+- **`DISCOVERY_SCHEMA`** (`lib/lifecycle/discovery-schema.ts`): jede persistierte Gerätememory trägt den Stand der
+  Ermittlungslogik (`__schema` im `probeCache`, `schema` im `yncaAvail`); ein anderer Stand wird beim Laden
+  verworfen und das Gerät im selben Start neu gelernt (kalter Pfad ≤ 32 s). Bump NUR, wenn ein Release ändert, was
+  die Ermittlung PRODUZIERT — und nur, wenn das aktuelle Schema schon released ist: der Rost-Wächter
+  `discovery-schema.test.ts` hält den Inventar-Hash gegen den Stempel `test/discovery-schema.json`
+  (`schema`, `since` = die Version, mit der das Schema erstmals ausgeliefert wird, `shapeHash`,
+  `previousShapeHash`); Form geändert bei released Schema → Bump verlangt, bei unreleased Schema → nur der
+  Stempel wird nachgezogen, Bump ohne Formänderung → rot. Die Adapter-VERSION als Auslöser war verworfen: der
+  Baum wird einmal je Verbindung koordiniert, jedes Patch-Release hätte alle Geräte umsonst neu gesweept.
+- **Beobachtete Werte kommen einen Start später** (Advisor A1): ein neuer Wert wird sofort in den State
+  geschrieben und in `yncaObserved` gemerkt; die Dropdown-Liste folgt beim nächsten Start (der Baum wird nur beim
+  Verbinden koordiniert). Ein Enum ohne Kandidaten und ohne Beobachtung ist ein Text-State, kein leeres Dropdown
+  (SPPATTERN1AMP: 3–14 modellspezifische Strings, kein gemeinsamer Kern).
+- **Ein schrumpfendes Dropdown schrumpft wirklich**: `extendObject` merged `common.states` Schlüssel für Schlüssel,
+  deshalb schreibt `upsertObject` erst `states: null`, wenn die gespeicherte Karte einen Schlüssel trägt, den die
+  neue nicht hat (`storedStates`-Schnappschuss beim Start).
+- **XML liest seine Deklarationen**: `System>Config` (Zonen-Flaggen → nicht deklarierte Zonen werden nicht geprobt;
+  `Feature_Existence`-Quellen und `Name/Input` als Beweis für die YNCA-Eingangsliste; Identität
+  Modell|System_ID|Version verwirft die `xml*`-Memory bei Firmware-Wechsel), `desc.xml` (Programme, Sleep,
+  Adaptive DRC, Dialog-Bereich, und aus der `Cmd_List` je Zone: zonenweites `Cursor_Control`/`Menu_Control`,
+  `Play_Control,Playback`, `Volume,Output`), der **2008er Dialekt** (`<Vol><Lvl>`, `<Vol><Mute>`,
+  `<Surr><Pgm_Sel><Pgm>` — gemerkt als `xmlDialect`, jeder Schreibweg folgt der Schreibung des Geräts), Zone B,
+  Lautsprecher A/B, Enhancer, 3D-Cinema, Pre-out-Modus, Zonenname aus `Config`. Der zonenweite Pad läuft über den
+  Browse-Treiber (Main) bzw. den Controller (Zonen); die 2012er Einstiegsklasse (RX-V473) hat nur den
+  menügebundenen `List_Control`-Pad — der frühere Treiberkommentar „diese Generation hat keinen zonenweiten
+  Endpunkt" war falsch (7 von 10 Beschreibungen deklarieren ihn).
+- **YNCA-Katalog = die 21 offiziellen Listen** (2010–2015, `Ressourcen/yamaha/device-data-2026-09-08/`): jede
+  lesbare Funktion hat einen Datenpunkt — HDRADIO als Tuner (flache `tuner.*`-Ids + `tuner.hdRadio.*`, Router
+  sendet an HDRADIO, vier der sieben US-Listen haben kein TUN), SIRIUS-Oberfläche + SIRIUSIR/SIRIUSXM als Quellen,
+  Zonen-BALANCE/VOLFIXVAR/BASS/TREBLE/SCENE, TVAUDIN2, AUDSEL, PARTYVOL, HDMIVIDEOMODE, LIPSYNC×4, RS232CSTANDBY,
+  DEST, FREQSTEP, UPDTNOTICEMSG, Trigger 2 + 40 Trigger-Eingänge, Lautsprechermuster 2 + 11 weitere Funktionen.
+  Trigger und Muster werden aus je EINER Tabelle für 1 und 2 erzeugt (`%s`-Namensschlüssel). REMOTECODE bleibt
+  draußen: PUT-only, nichts Lesbares beweist es. Der 2015er Pad-Dialekt (`@MAIN:CURSOR/MENU` statt
+  LISTCURSOR/LISTMENU, RX-A850) wird aus einem `@UNDEFINED` gelernt, die Taste sofort erneut gesendet, gemerkt
+  als `yncaPadDialect`. Kandidatenlisten gegen die Listen korrigiert: 27 Klangprogramme (statt 41), Decoder-
+  Neunerkern, HDMIOUT +OUT, HDMIASPECT +Smart Zoom, HDMIRESOL +4K.
+- **MusicCast getFuncStatus**: nur Felder mit Capture-Beweis (hdmi_out_1/2/3, hdmi_standby_through, headphone,
+  party_mode, speaker_pattern, video_preset, auto_power_standby, dimmer); Deklarationen des System-Blocks
+  (`*_list`, `*_num`) werden Dropdown/Grenzen; nur `setPartyMode` schreibt. ypao_volume, zone_b_volume_sync,
+  network_standby … bleiben ohne Datenpunkt, bis ein Capture ihr Antwortfeld zeigt.
+- **Harness** (`test/inventory-fixtures.cjs`): der Fixture-Server bedient alle drei Transporte je Gerät (RX-V6A:
+  YNCA+YXC+XML; RX-V3900: XML 2008; `desc.xml` per GET, 404 für die 2020er), `declaredListsOf(fixture)` liefert
+  die deklarierten Listen; `test/inventory.js` sichert „jedes Dropdown enthält den aktuellen Wert" und „kein
+  Dropdown bietet, was das Gerät nicht deklariert" (Gerät über `info.ip`, erlaubt = deklariert ∪ übersetzt ∪
+  Live-Wert — RX-A2070 meldet `auto` bei `tone_control_mode_list: [manual]`).
+
 ## Portierungs-Referenz (`../../Ressourcen/yamaha/legacy/`, NICHT im Adapter-Repo)
 
 Alt-Code der Übernahme als Portierungs-Quelle — 2026-08-01 aus dem publizierten Adapter ausgelagert

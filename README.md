@@ -25,6 +25,7 @@ legacy XML protocol of the oldest pre-2010 models — behind one object tree.
 - **Scenes with their names** — recall a scene by number or by its title from a dropdown that shows the names the receiver reports, per zone — plus a scene list for visualizations
 - **On-screen remote** — cursor pad and menu keys as datapoints, on **all three protocols**: the same words drive a 2024 MusicCast device, a YNCA receiver and a pre-2010 XML model
 - **Setup datapoints of the 2010 receiver generation** — speaker configuration, HDMI and lip-sync settings, trigger assignment per input, subwoofer trim, YPAO volume and the RDS clock, on the models that report them
+- **What the receiver declares** — dropdowns show the receiver's own lists where it has them (the XML input list, the `desc.xml` programs, the MusicCast input, program and menu lists), a list derived from proof where it has none (the YNCA inputs a receiver answers for), and the documented values of its generation plus every value it ever reported for the rest. The per-device memory carries the version of that discovery logic and is re-learned after a release that changes it
 - **Device-wide MusicCast settings** — automatic standby, display brightness and the HDMI outputs, readable and writable where the device offers them
 - **Clock & alarm view** — MusicCast desk-audio devices show their clock and alarm settings
 - **Capability-driven** — states are generated from what each device reports, no hardcoded model list
@@ -107,6 +108,15 @@ On the very first contact the adapter asks the receiver which functions it suppo
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+
+### **WORK IN PROGRESS**
+
+- (krobipd) Fixed: input and sound program dropdowns show only what the receiver declares or proves — its own XML, desc.xml or MusicCast lists, or the YNCA sources it answers for — not every Yamaha value (#619)
+- (krobipd) Fixed: the 2008 generation gets volume, mute and sound program back over XML; HDMI output, aspect, resolution and decoder dropdowns carry the values the receiver itself reports
+- (krobipd) New: HD Radio and the SIRIUS subunits of the US models, zone balance, pre-out mode and scenes, party volume keys, HDMI video mode, lip sync, trigger output 2, speaker pattern 2 and more setup functions
+- (krobipd) New: over XML the enhancer, CINEMA DSP 3D, speaker A/B, Zone B, a zone-wide cursor pad, transport keys and zone names; over MusicCast HDMI standby-through, headphone, speaker pattern and video preset
+- (krobipd) Improved: the receiver's own declaration (zones, sources, inputs) is read first, absent zones are not probed, and the per-device memory is re-learned whenever the adapter's discovery logic changes
+- (krobipd) Improved: the first YNCA sweep asks each zone's BASIC bundle and the players' METAINFO first, so a cold start asks fewer questions and the object tree stands sooner
 
 ### 2.5.2 (2026-09-07)
 
