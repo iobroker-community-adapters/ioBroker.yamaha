@@ -1,4 +1,7 @@
 # Older changes
+## 2.3.3 (2026-09-03)
+
+- (krobipd) New: the menu browser, the MusicCast group, the clock alarm and the disc drive now explain their datapoints too, in eleven languages
 
 ## 2.3.2 (2026-09-03)
 

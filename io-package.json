@@ -1,10 +1,10 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "2.5.2",
+    "version": "2.6.0",
     "nogit": true,
     "news": {
-      "NEXT": {
+      "2.6.0": {
         "en": "Dropdowns offer only what the receiver declares or proves it has (#619); 2008 receivers get volume and programs back; HD Radio, Sirius, Zone B and many setup datapoints added.",
         "de": "Auswahllisten bieten nur, was der Receiver selbst meldet oder nachweislich hat (#619); 2008er-Geräte haben Lautstärke und Programme zurück; HD Radio, Sirius, Zone B und viele Setup-Datenpunkte neu.",
         "ru": "Списки выбора содержат только то, что ресивер сам сообщает или подтверждает (#619); модели 2008 г. снова с громкостью и программами; добавлены HD Radio, Sirius, зона B и много точек настройки.",
