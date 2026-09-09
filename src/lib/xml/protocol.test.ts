@@ -5,6 +5,7 @@ import {
   encodeGet,
   encodePut,
   parseBasicStatus,
+  parseDescriptor,
   parseInputList,
   parseReturnCode,
   parseSceneList,
@@ -230,5 +231,42 @@ describe("parseTunerInfo (classic <Tuner> Play_Info)", () => {
   test("an empty preset slot ('No Preset') reads as 0; absent fields stay absent", () => {
     expect(parseTunerInfo("<Preset><Preset_Sel>No Preset</Preset_Sel></Preset>")).toEqual({ preset: 0 });
     expect(parseTunerInfo("")).toEqual({});
+  });
+});
+
+describe("parseDescriptor — the enumerations a classic receiver carries in desc.xml", () => {
+  test("a 2012 entry receiver: 19 programs in the device's order, 5 sleep steps, Adaptive DRC Auto/Off", () => {
+    const d = parseDescriptor(readFixture("desc-rx-v473.xml"));
+    expect(d.programs).toHaveLength(19);
+    expect(d.programs[0]).toBe("Hall in Munich");
+    expect(d.programs).toContain("5ch Stereo");
+    expect(d.programs).toContain("Surround Decoder");
+    expect(d.sleep).toEqual(["120 min", "90 min", "60 min", "30 min", "Off"]);
+    expect(d.adaptiveDrc).toEqual(["Auto", "Off"]);
+    expect(d.hdmiOut2).toBeUndefined();
+    expect(d.dialogueLevel).toBeUndefined();
+  });
+
+  test("a 2016 Aventage: 25 programs, the second HDMI output with its Unavailable state, the dialogue range", () => {
+    const d = parseDescriptor(readFixture("desc-rx-a2060.xml"));
+    expect(d.programs).toHaveLength(25);
+    expect(d.programs).toContain("9ch Stereo");
+    expect(d.hdmiOut2).toEqual(["Unavailable", "On", "Off"]);
+    expect(d.dialogueLevel).toEqual({ min: 0, max: 3, step: 1 });
+  });
+
+  test("the 2008 generation enumerates its own sleep words and no programs", () => {
+    const d = parseDescriptor(readFixture("desc-rx-v3900.xml"));
+    expect(d.programs).toEqual([]);
+    expect(d.adaptiveDrc).toEqual([]);
+    expect(d.sleep).toEqual(["120", "90", "60", "30", "Off"]);
+  });
+
+  test("the Straight and Enhancer switches beside the program list are not programs", () => {
+    expect(parseDescriptor(readFixture("desc-rx-v473.xml")).programs).not.toContain("On");
+  });
+
+  test("a body without any of the blocks yields the empty declaration", () => {
+    expect(parseDescriptor("<Unit/>")).toEqual({ programs: [], sleep: [], adaptiveDrc: [] });
   });
 });

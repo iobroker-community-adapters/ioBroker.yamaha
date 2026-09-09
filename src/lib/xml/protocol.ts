@@ -66,7 +66,9 @@ export class XmlHttpError extends Error {
  * @returns true when the refusal is permanent for this model
  */
 export function isPermanentXmlRefusal(e: unknown): boolean {
-  return e instanceof XmlHttpError && e.statusCode === 400;
+  // 400 without a body: an unknown control node. 404: no device description on this model — the
+  // 2020 generation answers exactly that for /YamahaRemoteControl/desc.xml (RX-V6A harvest).
+  return e instanceof XmlHttpError && (e.statusCode === 400 || e.statusCode === 404);
 }
 
 /** One scene as the device declares it in `<Scene_Sel_Item>`. */
@@ -279,6 +281,79 @@ export function parseSystemConfig(xml: string): XmlSystemConfig {
     config.inputNames = inputNames;
   }
   return config;
+}
+
+/** The enumerations and ranges a classic receiver declares in its device description (`desc.xml`). */
+export interface XmlDescriptor {
+  /** `Surround,Program_Sel,Current,Sound_Program` — the SOUNDPRG spelling of Yamaha's lists. */
+  programs: string[];
+  /** `Power_Control,Sleep` — "120 min" … "Off" (the 2008 generation says "120" … "Off"). */
+  sleep: string[];
+  /** `Sound_Video,Adaptive_DRC` — Auto/Off. */
+  adaptiveDrc: string[];
+  /** `Sound_Video,HDMI,Output,OUT_2` — may carry "Unavailable" where the second output is optional. */
+  hdmiOut2?: string[];
+  /** `Sound_Video,Dialogue_Adjust,Dialogue_Lvl` range, when declared. */
+  dialogueLevel?: { min: number; max: number; step: number };
+}
+
+/**
+ * The `<Direct>` values or the `<Range>` of one command's first parameter in desc.xml. The
+ * command text is matched as the whole `<Cmd>` content (`…=Param_1`); the zone lives in the
+ * `Cmd_List` defines, not in the command text, so the first block found is the main zone's.
+ *
+ * @param xml the device description
+ * @param command the command path (`Power_Control,Sleep`)
+ * @returns the values and, for a numeric parameter, its range
+ */
+function descriptorParam(
+  xml: string,
+  command: string,
+): { values: string[]; range?: { min: number; max: number; step: number } } {
+  const escaped = command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const block = new RegExp(`<Cmd[^>]*>${escaped}=Param_1</Cmd>\\s*<Param_1>([\\s\\S]*?)</Param_1>`).exec(xml);
+  if (!block) {
+    return { values: [] };
+  }
+  const values: string[] = [];
+  const direct = /<Direct(?:\s[^>]*)?>([^<]+)<\/Direct>/g;
+  for (let match = direct.exec(block[1]); match; match = direct.exec(block[1])) {
+    values.push(decodeXmlText(match[1]));
+  }
+  const range = /<Range>(-?\d+),(-?\d+),(\d+)/.exec(block[1]);
+  return range
+    ? { values, range: { min: Number(range[1]), max: Number(range[2]), step: Number(range[3]) } }
+    : { values };
+}
+
+/**
+ * Parse the enumerations the adapter uses out of `/YamahaRemoteControl/desc.xml`.
+ *
+ * Measured on nine models 2012–2017 (RX-V473 … RX-A2060, HTR-4069, RX-S601D): 19 or 25 programs
+ * spelled exactly like the YNCA SOUNDPRG values of Yamaha's official lists, five sleep steps,
+ * Adaptive DRC Auto/Off, the second HDMI output with an `Unavailable` state on the models whose
+ * second output is optional, and the dialogue-level range. The 2008 generation (RX-V3900)
+ * carries only its own sleep words and the volume range; the 2020 generation no desc.xml at
+ * all (HTTP 404). The predecessor adapter read the programs from this very file.
+ *
+ * @param xml the device description
+ * @returns the enumerations (empty lists where the description carries none)
+ */
+export function parseDescriptor(xml: string): XmlDescriptor {
+  const descriptor: XmlDescriptor = {
+    programs: descriptorParam(xml, "Surround,Program_Sel,Current,Sound_Program").values,
+    sleep: descriptorParam(xml, "Power_Control,Sleep").values,
+    adaptiveDrc: descriptorParam(xml, "Sound_Video,Adaptive_DRC").values,
+  };
+  const hdmiOut2 = descriptorParam(xml, "Sound_Video,HDMI,Output,OUT_2").values;
+  if (hdmiOut2.length > 0) {
+    descriptor.hdmiOut2 = hdmiOut2;
+  }
+  const dialogue = descriptorParam(xml, "Sound_Video,Dialogue_Adjust,Dialogue_Lvl").range;
+  if (dialogue) {
+    descriptor.dialogueLevel = dialogue;
+  }
+  return descriptor;
 }
 
 /** The amplifier fields a Basic_Status response can carry. */

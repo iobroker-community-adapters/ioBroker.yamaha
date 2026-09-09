@@ -1,0 +1,60 @@
+<!-- Excerpt of the real device description: only the enumerated commands the adapter reads. -->
+<Unit>
+<Cmd ID="G1">Surround,Program_Sel,Current,Sound_Program=Param_1</Cmd>
+            <Param_1>
+              <Direct Icon_on="/YamahaRemoteControl/Icons/icon018.png">Hall in Munich</Direct>
+              <Direct Icon_on="/YamahaRemoteControl/Icons/icon019.png">Hall in Vienna</Direct>
+              <Direct Icon_on="/YamahaRemoteControl/Icons/icon017.png">Hall in Amsterdam</Direct>
+              <Direct Icon_on="/YamahaRemoteControl/Icons/icon015.png">Church in Freiburg</Direct>
+              <Direct Icon_on="/YamahaRemoteControl/Icons/icon016.png">Church in Royaumont</Direct>
+              <Direct Icon_on="/YamahaRemoteControl/Icons/icon014.png">Chamber</Direct>
+              <Direct Icon_on="/YamahaRemoteControl/Icons/icon022.png">Village Vanguard</Direct>
+              <Direct Icon_on="/YamahaRemoteControl/Icons/icon023.png">Warehouse Loft</Direct>
+              <Direct Icon_on="/YamahaRemoteControl/Icons/icon013.png">Cellar Club</Direct>
+              <Direct Icon_on="/YamahaRemoteControl/Icons/icon020.png">The Roxy Theatre</Direct>
+              <Direct Icon_on="/YamahaRemoteControl/Icons/icon021.png">The Bottom Line</Direct>
+              <Direct Icon_on="/YamahaRemoteControl/Icons/icon037.png">Sports</Direct>
+              <Direct Icon_on="/YamahaRemoteControl/Icons/icon027.png">Action Game</Direct>
+              <Direct Icon_on="/YamahaRemoteControl/Icons/icon032.png">Roleplaying Game</Direct>
+              <Direct Icon_on="/YamahaRemoteControl/Icons/icon030.png">Music Video</Direct>
+              <Direct Icon_on="/YamahaRemoteControl/Icons/icon031.png">Recital/Opera</Direct>
+              <Direct Icon_on="/YamahaRemoteControl/Icons/icon033.png">Standard</Direct>
+              <Direct Icon_on="/YamahaRemoteControl/Icons/icon036.png">Spectacle</Direct>
+              <Direct Icon_on="/YamahaRemoteControl/Icons/icon029.png">Sci-Fi</Direct>
+              <Direct Icon_on="/YamahaRemoteControl/Icons/icon028.png">Adventure</Direct>
+              <Direct Icon_on="/YamahaRemoteControl/Icons/icon034.png">Drama</Direct>
+              <Direct Icon_on="/YamahaRemoteControl/Icons/icon035.png">Mono Movie</Direct>
+              <Direct Icon_on="/YamahaRemoteControl/Icons/icon039.png">Surround Decoder</Direct>
+              <Direct Icon_on="/YamahaRemoteControl/Icons/icon024.png">2ch Stereo</Direct>
+              <Direct Icon_on="/YamahaRemoteControl/Icons/icon026.png">9ch Stereo</Direct>
+            </Param_1>
+<Cmd ID="G1">Power_Control,Sleep=Param_1</Cmd>
+          <Param_1>
+            <Direct Func="Sleep_1">120 min</Direct>
+            <Direct Func="Sleep_2">90 min</Direct>
+            <Direct Func="Sleep_3">60 min</Direct>
+            <Direct Func="Sleep_4">30 min</Direct>
+            <Direct Func="Sleep_Off">Off</Direct>
+          </Param_1>
+<Cmd ID="G1">Sound_Video,Adaptive_DRC=Param_1</Cmd>
+          <Param_1>
+            <Direct Func_Ex="Adaptive_DRC_Auto">Auto</Direct>
+            <Direct Func_Ex="Adaptive_DRC_Off">Off</Direct>
+          </Param_1>
+<Cmd ID="G1">Sound_Video,Dialogue_Adjust,Dialogue_Lvl=Param_1</Cmd>
+          <Param_1>
+            <Range>0,3,1</Range>
+          </Param_1>
+<Cmd ID="G1">Sound_Video,HDMI,Output,OUT_2_Info=Param_1</Cmd>
+            <Param_1>
+              <Direct Func_Ex="HDMI_Out_Unavailable">Unavailable</Direct>
+              <Direct Func_Ex="HDMI_Out_On">On</Direct>
+              <Direct Func_Ex="HDMI_Out_Off">Off</Direct>
+            </Param_1>
+<Cmd ID="G1">Sound_Video,HDMI,Output,OUT_2=Param_1</Cmd>
+            <Param_1>
+              <Direct Func_Ex="HDMI_Out_Unavailable">Unavailable</Direct>
+              <Direct Func_Ex="HDMI_Out_On">On</Direct>
+              <Direct Func_Ex="HDMI_Out_Off">Off</Direct>
+            </Param_1>
+</Unit>

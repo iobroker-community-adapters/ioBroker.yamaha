@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { XmlDeviceController } from "./device-controller";
 import type { XmlClientLike } from "./device-controller";
 import { XmlHttpError, type BasicStatus, type XmlSystemConfig } from "./protocol";
@@ -32,6 +34,14 @@ class FakeClient implements XmlClientLike {
   public getSystemConfig(): Promise<XmlSystemConfig> {
     this.calls.push({ method: "getSystemConfig", zone: "" });
     return this.configError ? Promise.reject(this.configError) : Promise.resolve(this.config);
+  }
+  /** The raw device description; undefined = an empty body (declares none). */
+  public descriptor: string | undefined = undefined;
+  /** A rejection to answer the description read with (a 404, or a transient failure). */
+  public descriptorError: Error | undefined = undefined;
+  public getDescriptor(): Promise<string> {
+    this.calls.push({ method: "getDescriptor", zone: "" });
+    return this.descriptorError ? Promise.reject(this.descriptorError) : Promise.resolve(this.descriptor ?? "");
   }
   public send(zone: string, inner: string): Promise<void> {
     this.calls.push({ method: "send", zone, inner });
@@ -437,6 +447,74 @@ describe("XmlDeviceController", () => {
     const input = s.defs.get("living.input") as { declaredStates?: boolean; common?: { states?: unknown } } | undefined;
     expect(input?.common?.states).toBeUndefined();
     expect(input?.declaredStates).toBeUndefined();
+  });
+});
+
+describe("desc.xml — the classic generation's own enumerations (2026-09-09)", () => {
+  const readFixture = (name: string): string => readFileSync(join(__dirname, "__fixtures__", name), "utf8");
+  const withMemory = (s: ReturnType<typeof setup>, memory: ProbeMemory): void => {
+    (s.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
+  };
+  type Def = { declaredStates?: boolean; common?: { states?: Record<string, string>; min?: number; max?: number } };
+
+  test("program, sleep and Adaptive DRC dropdowns are the receiver's own desc.xml enumerations, declared", async () => {
+    const memory = new ProbeMemory();
+    const s = setup({ Main_Zone: { power: true, soundProgram: "Standard", sleep: "Off", adaptiveDrc: "Auto" } });
+    withMemory(s, memory);
+    s.client.descriptor = readFixture("desc-rx-v473.xml");
+    await s.controller.start();
+    const def = (id: string): Def | undefined => s.defs.get(id) as Def | undefined;
+    expect(Object.keys(def("living.soundProgram")?.common?.states ?? {})).toHaveLength(19);
+    expect(def("living.soundProgram")?.declaredStates).toBe(true);
+    expect(Object.keys(def("living.sleep")?.common?.states ?? {})).toEqual([
+      "120 min",
+      "90 min",
+      "60 min",
+      "30 min",
+      "Off",
+    ]);
+    expect(def("living.sleep")?.declaredStates).toBe(true);
+    expect(def("living.sound.adaptiveDrc")?.common?.states).toEqual({ Auto: "Auto", Off: "Off" });
+    expect(memory.remembered("xmlDescriptor")).toMatchObject({ programs: expect.any(Array) });
+    // The description is read once per device, not once per zone.
+    expect(s.client.calls.filter(c => c.method === "getDescriptor")).toHaveLength(1);
+  });
+
+  test("the dialogue level takes the range the description declares", async () => {
+    const s = setup({ Main_Zone: { power: true, dialogueLevel: 1 } });
+    s.client.descriptor = readFixture("desc-rx-a2060.xml");
+    await s.controller.start();
+    const def = s.defs.get("living.sound.dialogueLevel") as Def | undefined;
+    expect(def?.common?.min).toBe(0);
+    expect(def?.common?.max).toBe(3);
+  });
+
+  test("a receiver without desc.xml keeps plain states, and the 404 is remembered as definite", async () => {
+    const memory = new ProbeMemory();
+    const s = setup({ Main_Zone: { power: true, soundProgram: "Standard" } });
+    withMemory(s, memory);
+    s.client.descriptorError = new XmlHttpError("device refused the request (HTTP 404)", 404);
+    await s.controller.start();
+    expect((s.defs.get("living.soundProgram") as Def | undefined)?.common?.states).toBeUndefined();
+    expect(memory.remembered("xmlDescriptor")).toEqual({ programs: [], sleep: [], adaptiveDrc: [] });
+  });
+
+  test("a transient descriptor failure is not remembered — the next connect asks again", async () => {
+    const memory = new ProbeMemory();
+    const s = setup({ Main_Zone: { power: true } });
+    withMemory(s, memory);
+    s.client.descriptorError = new Error("XML request timeout");
+    await s.controller.start();
+    expect(memory.remembered("xmlDescriptor")).toBeUndefined();
+  });
+
+  test("a remembered description is not read again", async () => {
+    const memory = new ProbeMemory({ xmlDescriptor: { programs: ["Standard"], sleep: [], adaptiveDrc: [] } });
+    const s = setup({ Main_Zone: { power: true, soundProgram: "Standard" } });
+    withMemory(s, memory);
+    await s.controller.start();
+    expect(s.client.calls.filter(c => c.method === "getDescriptor")).toHaveLength(0);
+    expect((s.defs.get("living.soundProgram") as Def | undefined)?.common?.states).toEqual({ Standard: "Standard" });
   });
 });
 

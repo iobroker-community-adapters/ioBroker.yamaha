@@ -1,4 +1,4 @@
-import { request } from "node:http";
+import { request, type IncomingMessage } from "node:http";
 import {
   assertXmlOk,
   encodeGet,
@@ -19,6 +19,47 @@ const REQUEST_TIMEOUT_MS = 5000;
 
 /** Posts an XML body to a device and resolves with the response body (a seam for testing). */
 export type XmlPoster = (ip: string, body: string) => Promise<string>;
+
+/** GETs a plain path from a device (the device description) and resolves with the body (a seam for testing). */
+export type XmlGetter = (ip: string, path: string) => Promise<string>;
+
+/** The receiver's device description — a plain file next to the control endpoint. */
+const DESCRIPTOR_PATH = "/YamahaRemoteControl/desc.xml";
+
+/**
+ * Collect a response body under the size cap and turn the status into the caller's verdict.
+ *
+ * @param res the incoming response
+ * @param resolve resolves the caller's promise with the body
+ * @param reject rejects it with a transport error or the device's HTTP verdict
+ */
+function readResponse(res: IncomingMessage, resolve: (body: string) => void, reject: (e: Error) => void): void {
+  let data = "";
+  let bytes = 0;
+  res.on("data", chunk => {
+    bytes += (chunk as Buffer).length;
+    if (bytes > MAX_HTTP_BODY_BYTES) {
+      // A Basic_Status or a menu window is a few KB, a device description at most ~160 KB —
+      // past the cap this is no receiver answer but a stream that would grow memory without bound.
+      res.destroy(new Error("XML response too large"));
+      return;
+    }
+    data += String(chunk);
+  });
+  res.on("error", reject);
+  res.on("end", () => {
+    // The firmware answers a request for an unknown node with a BODYLESS HTTP 400 and a
+    // missing device description with a 404 (captured RX-V6A behaviour) — device verdicts,
+    // not transport noise, and they must reach the caller instead of masquerading as an
+    // empty success. The status travels with the error so a per-device probe can tell the
+    // permanent "no such node" from a transient failure.
+    if (res.statusCode !== undefined && (res.statusCode < 200 || res.statusCode >= 300)) {
+      reject(new XmlHttpError(`device refused the request (HTTP ${res.statusCode})`, res.statusCode));
+      return;
+    }
+    resolve(data);
+  });
+}
 
 /**
  * Default poster backed by node:http — POSTs to the device's control endpoint on port 80.
@@ -44,33 +85,7 @@ function defaultPoster(ip: string, payload: string): Promise<string> {
         timeout: REQUEST_TIMEOUT_MS,
         headers: { "Content-Type": "text/xml; charset=utf-8", "Content-Length": body.length },
       },
-      res => {
-        let data = "";
-        let bytes = 0;
-        res.on("data", chunk => {
-          bytes += (chunk as Buffer).length;
-          if (bytes > MAX_HTTP_BODY_BYTES) {
-            // A Basic_Status or a menu window is a few KB — past the cap this is no
-            // receiver answer but a stream that would grow memory without bound.
-            res.destroy(new Error("XML response too large"));
-            return;
-          }
-          data += String(chunk);
-        });
-        res.on("error", reject);
-        res.on("end", () => {
-          // The firmware answers a request for an unknown node with a BODYLESS HTTP 400
-          // (captured RX-V6A behaviour) — that is a device verdict, not transport noise,
-          // and must reach the caller instead of masquerading as an empty success. The
-          // status travels with the error so a per-device probe can tell this permanent
-          // "no such node" from a transient failure.
-          if (res.statusCode !== undefined && (res.statusCode < 200 || res.statusCode >= 300)) {
-            reject(new XmlHttpError(`device refused the request (HTTP ${res.statusCode})`, res.statusCode));
-            return;
-          }
-          resolve(data);
-        });
-      },
+      res => readResponse(res, resolve, reject),
     );
     req.on("error", reject);
     req.on("timeout", () => req.destroy(new Error("XML request timeout")));
@@ -78,9 +93,28 @@ function defaultPoster(ip: string, payload: string): Promise<string> {
   });
 }
 
+/**
+ * Default getter backed by node:http — a plain GET of a file on the device's port 80.
+ *
+ * @param ip the device IP
+ * @param path the path to fetch
+ * @returns the response body
+ */
+function defaultGetter(ip: string, path: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const req = request({ host: ip, port: 80, path, method: "GET", timeout: REQUEST_TIMEOUT_MS }, res =>
+      readResponse(res, resolve, reject),
+    );
+    req.on("error", reject);
+    req.on("timeout", () => req.destroy(new Error("XML request timeout")));
+    req.end();
+  });
+}
+
 /** An XML/YNC transport client for one receiver over HTTP (port 80). */
 export class XmlClient {
   private readonly request: XmlPoster;
+  private readonly fetch: XmlGetter;
 
   /**
    * @param ip the receiver IP
@@ -88,15 +122,29 @@ export class XmlClient {
    * @param gate the device's command gate — when given, every request runs through it, so
    *   these 1990s-era HTTP stacks never face parallel requests and a stopped adapter
    *   cancels what is still queued
+   * @param get the plain-file getter for the device description (defaults to a node:http GET)
    */
   public constructor(
     private readonly ip: string,
     post: XmlPoster = defaultPoster,
     gate?: CommandGate,
+    get: XmlGetter = defaultGetter,
   ) {
     this.request = gate
       ? (ip_, body) => gate.run(() => post(ip_, body), body.includes('cmd="PUT"') ? "user" : "background")
       : post;
+    this.fetch = gate ? (ip_, path) => gate.run(() => get(ip_, path), "background") : get;
+  }
+
+  /**
+   * Read the device description (`/YamahaRemoteControl/desc.xml`) — the classic generation's
+   * own enumeration of programs, sleep steps, value lists and ranges (2012–2017). A model without
+   * one answers HTTP 404, which travels as a permanent {@link XmlHttpError}.
+   *
+   * @returns the raw description body
+   */
+  public getDescriptor(): Promise<string> {
+    return this.fetch(this.ip, DESCRIPTOR_PATH);
   }
 
   /**

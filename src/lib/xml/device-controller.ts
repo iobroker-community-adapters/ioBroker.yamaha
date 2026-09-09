@@ -2,11 +2,13 @@ import { channelCommon, type ObjectDef } from "../catalog/types";
 import { tName } from "../i18n";
 import {
   isPermanentXmlRefusal,
+  parseDescriptor,
   parseInputList,
   parseReturnCode,
   parseSceneList,
   parseTunerInfo,
   type BasicStatus,
+  type XmlDescriptor,
   type XmlScene,
   type XmlSystemConfig,
 } from "./protocol";
@@ -46,6 +48,8 @@ export interface XmlClientLike {
   getStatus(zone: string): Promise<BasicStatus>;
   /** Read the device's declaration of itself (System > Config): model, identity, zones, sources, input names. */
   getSystemConfig(): Promise<XmlSystemConfig>;
+  /** Read the raw device description (`desc.xml`); absent on older fakes → no description is read. */
+  getDescriptor?(): Promise<string>;
   /** Send an inner command to a zone. */
   send(zone: string, inner: string): Promise<void>;
   /** Read an element's inner GET request and return the raw response body. */
@@ -172,6 +176,9 @@ export class XmlDeviceController implements ConnectionHandle {
       );
       inputsByZone.set(zone.key, parseInputList(body));
     }
+    // The device description — the classic generation's own enumeration of programs, sleep
+    // steps, Adaptive DRC values and the dialogue range (2012–2017; the 2020 generation has none).
+    const descriptor = await this.probeDescriptor();
     // Claim with proof, XML edition (2.0.1): only the states whose Basic_Status field
     // this device DELIVERS are created — a blind full-catalog rollout left valueless
     // objects (hdmi.out2, sound.direct, …) standing on devices without the feature.
@@ -225,13 +232,20 @@ export class XmlDeviceController implements ConnectionHandle {
           // field empty there rather than filled with invented prose.
           ...(descKey ? { desc: tName(descKey) } : {}),
         };
-        // The device's own input list becomes the dropdown — DECLARED, so the coordinator puts
-        // it on the YNCA-owned datapoint too (#619). Until 2026-09-09 the comment here said the
-        // YNCA union would win where YNCA is present; that is exactly what the reporter saw.
-        const inputs = entry.state === "input" ? inputsByZone.get(zone.key) : undefined;
-        const declared = inputs !== undefined && inputs.length > 0;
+        // The device's own lists become the dropdowns — DECLARED, so the coordinator puts them on
+        // the YNCA-owned datapoint too (#619): the zone's `Input_Sel_Item` list, and from the
+        // device description the sound programs (main zone), the sleep steps and the Adaptive
+        // DRC values. Until 2026-09-09 the comment here said the YNCA union would win where YNCA
+        // is present; that is exactly what the reporter saw.
+        const declaredList = this.declaredListFor(entry.state, zone.key, inputsByZone, descriptor);
+        const declared = declaredList !== undefined && declaredList.length > 0;
         if (declared) {
-          common.states = Object.fromEntries(inputs.map(input => [input, input]));
+          common.states = Object.fromEntries(declaredList.map(value => [value, value]));
+        }
+        if (entry.state === "sound.dialogueLevel" && descriptor.dialogueLevel) {
+          common.min = descriptor.dialogueLevel.min;
+          common.max = descriptor.dialogueLevel.max;
+          common.step = descriptor.dialogueLevel.step;
         }
         await this.deps.upsertObject(`${this.deviceId}.${stateId}`, {
           id: stateId,
@@ -280,6 +294,71 @@ export class XmlDeviceController implements ConnectionHandle {
    * @param inner the inner GET request
    * @returns the raw response body, or "" when the device (definitely or for now) has none
    */
+  /**
+   * The list the device declares for a state, if any: the zone's `Input_Sel_Item` inputs, the
+   * description's programs (main zone — the classic generation runs one program), its sleep
+   * steps (every zone, same words) and its Adaptive DRC values.
+   *
+   * @param state the unified state id (without the zone prefix)
+   * @param zoneKey the zone (`main`, `zone2`, …)
+   * @param inputsByZone the per-zone input lists read from `Input_Sel_Item`
+   * @param descriptor the parsed device description
+   * @returns the declared values, or undefined where the device declares none
+   */
+  private declaredListFor(
+    state: string,
+    zoneKey: string,
+    inputsByZone: ReadonlyMap<string, string[]>,
+    descriptor: XmlDescriptor,
+  ): string[] | undefined {
+    switch (state) {
+      case "input":
+        return inputsByZone.get(zoneKey);
+      case "soundProgram":
+        return zoneKey === "main" ? descriptor.programs : undefined;
+      case "sleep":
+        return descriptor.sleep;
+      case "sound.adaptiveDrc":
+        return descriptor.adaptiveDrc;
+      default:
+        return undefined;
+    }
+  }
+
+  /**
+   * Read the device description once per device — a model property, remembered like the
+   * other declarations. A 404 (the 2020 generation) is the definite "declares none" and is
+   * remembered as the empty declaration; a transient failure is not remembered, so the next
+   * connect asks again. A client without the read (older fakes) declares none.
+   *
+   * @returns the parsed description (empty lists where the device carries none)
+   */
+  private async probeDescriptor(): Promise<XmlDescriptor> {
+    const empty: XmlDescriptor = { programs: [], sleep: [], adaptiveDrc: [] };
+    const client = this.deps.client;
+    if (!client.getDescriptor) {
+      return empty;
+    }
+    const probe = async (): Promise<XmlDescriptor> => {
+      try {
+        return parseDescriptor(await client.getDescriptor!());
+      } catch (e) {
+        if (isPermanentXmlRefusal(e)) {
+          return empty; // this generation has no description — definite
+        }
+        throw e; // transient — not remembered
+      }
+    };
+    try {
+      return this.deps.probeMemory ? await this.deps.probeMemory.once("xmlDescriptor", probe) : await probe();
+    } catch (e) {
+      this.deps.log.debug(
+        `${this.deviceId}: desc.xml probe failed, asking again on the next connect (${errorMessage(e)})`,
+      );
+      return empty;
+    }
+  }
+
   private async probeXml(key: string, element: string, inner: string): Promise<string> {
     const probe = async (): Promise<string> => {
       let body: string;

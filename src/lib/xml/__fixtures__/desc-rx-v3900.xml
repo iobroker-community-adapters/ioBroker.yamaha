@@ -1,0 +1,15 @@
+<!-- Excerpt of the real device description: only the enumerated commands the adapter reads. -->
+<Unit>
+<Cmd ID="G1">Power_Control,Sleep=Param_1</Cmd>
+					<Param_1>
+						<Direct Func="Sleep_1">120</Direct>
+						<Direct Func="Sleep_2">90</Direct>
+						<Direct Func="Sleep_3">60</Direct>
+						<Direct Func="Sleep_4">30</Direct>
+						<Direct Func="Sleep_Off">Off</Direct>
+					</Param_1>
+<Cmd ID="G1" Type="Number">Vol,Lvl,Val=Param_1:Vol,Lvl,Exp=Param_2:Vol,Lvl,Unit=Param_3</Cmd>
+					<Param_1>
+						<Range>-805,165,5</Range>
+					</Param_1>
+</Unit>

@@ -138,6 +138,41 @@ describe("XmlClient", () => {
   });
 });
 
+describe("XmlClient default poster — the device description", () => {
+  beforeEach(() => {
+    httpMock.requests.length = 0;
+    httpMock.body = "<YAMAHA_AV/>";
+    httpMock.mode = "ok";
+    httpMock.status = 200;
+  });
+
+  test("getDescriptor GETs /YamahaRemoteControl/desc.xml — not the control endpoint, not a POST", async () => {
+    httpMock.body = "<Unit><Cmd>x</Cmd></Unit>";
+    await expect(new XmlClient("192.168.1.10").getDescriptor()).resolves.toBe("<Unit><Cmd>x</Cmd></Unit>");
+    const req = httpMock.requests[0];
+    expect(req.options).toMatchObject({
+      host: "192.168.1.10",
+      port: 80,
+      path: "/YamahaRemoteControl/desc.xml",
+      method: "GET",
+      timeout: 5000,
+    });
+    expect(req.written).toEqual([]);
+  });
+
+  test("a device without a description answers 404 — a typed, PERMANENT refusal (the RX-V6A's behaviour)", async () => {
+    httpMock.status = 404;
+    httpMock.body = "";
+    const failure = await new XmlClient("192.168.1.10").getDescriptor().then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(failure).toBeInstanceOf(XmlHttpError);
+    expect((failure as XmlHttpError).statusCode).toBe(404);
+    expect(isPermanentXmlRefusal(failure)).toBe(true);
+  });
+});
+
 describe("XmlClient default HTTP poster", () => {
   beforeEach(() => {
     httpMock.requests.length = 0;
