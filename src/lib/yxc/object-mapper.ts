@@ -2,7 +2,7 @@ import { channelCommon, type ObjectDef } from "../catalog/types";
 import { YXC_CURSOR_VALUES, YXC_MENU_VALUES } from "./remote";
 import { tName, type I18nKey } from "../i18n";
 import { YXC_ZONE_IDS, zonePrefix } from "./zones";
-import type { YxcCapabilities } from "./capability";
+import type { YxcCapabilities, YxcZone } from "./capability";
 import { YXC_AMP_CATALOG } from "./catalog";
 import { ALARM_DAYS, DAB_FIELDS } from "./command-mapper";
 
@@ -207,8 +207,58 @@ const RANGE_BY_STATE: Readonly<Record<string, string>> = {
   "sound.equalizer.low": "equalizer",
   "sound.equalizer.mid": "equalizer",
   "sound.equalizer.high": "equalizer",
-  actualVolume: "actual_volume_db",
 };
+
+/** One `range_step` entry as a zone declares it. */
+type DeclaredRange = NonNullable<YxcZone["ranges"]>[string];
+
+/**
+ * The presentation of `actualVolume` for the scale the device says it is DISPLAYING.
+ *
+ * `actual_volume.value` arrives in the form named by `actual_volume.mode` — a device set to its
+ * numeric scale reports 36 where the decibel scale would read -44.5. Declaring the datapoint as dB
+ * regardless was wrong on both counts: the unit lied, and js-controller warned on every poll because
+ * the value sat outside the decibel bounds (measured on an RX-V6A, 2026-09-09).
+ *
+ * Without a reported mode nothing is assumed: no bounds until one arrives, never a fallback to dB.
+ *
+ * @param zone the zone whose declared ranges are read
+ * @param mode the display mode the zone reports right now, if any
+ * @returns unit, name keys and the matching bounds
+ */
+export function actualVolumePresentation(
+  zone: YxcZone,
+  mode: string | undefined,
+): { unit: string; nameKey: I18nKey; descKey: I18nKey; range: DeclaredRange | undefined } {
+  const db = zone.ranges?.actual_volume_db;
+  const numeric = zone.ranges?.actual_volume_numeric;
+  // A zone that declares ONE scale can only display that one — its status does not have to say so
+  // (the RX-A2070 declares `actual_volume_db` for every zone and answers a status for main only).
+  const onlyScale = db && !numeric ? "db" : numeric && !db ? "numeric" : undefined;
+  const shown = mode === "db" || mode === "numeric" ? mode : onlyScale;
+  if (shown === "db") {
+    return { unit: "dB", nameKey: "volumeDB", descKey: "descVolumeDB", range: db };
+  }
+  if (shown === "numeric") {
+    return { unit: "", nameKey: "volumeDisplay", descKey: "descVolumeDisplay", range: numeric };
+  }
+  // Both scales declared and none reported: the envelope of the two. Every value the device can
+  // send lies inside it, and — unlike leaving the bounds out — it REPLACES what an existing
+  // installation stored, because `extendObject` merges and a field the new picture drops survives.
+  return {
+    unit: "",
+    nameKey: "volumeDisplay",
+    descKey: "descVolumeDisplay",
+    range:
+      db && numeric
+        ? {
+            min: Math.min(db.min, numeric.min),
+            max: Math.max(db.max, numeric.max),
+            step: Math.min(db.step, numeric.step),
+          }
+        : undefined,
+  };
+}
 
 /**
  * Turn YXC capabilities into the unified object tree: main's functions as
@@ -279,8 +329,17 @@ export function mapYxcToObjects(
       // it says wins over anything the catalog could guess. Only `volume` used to be read
       // (audit 2026-09-06) — bass, treble, subwoofer trim, dialogue level/lift, DTS dialogue
       // control, balance and the equalizer bands stood there as numbers without a slider.
-      const rangeId = RANGE_BY_STATE[entry.state];
-      const range = rangeId ? zone.ranges?.[rangeId] : undefined;
+      let range: DeclaredRange | undefined;
+      if (entry.state === "actualVolume") {
+        const shown = actualVolumePresentation(zone, current?.[zone.id]?.actualVolumeMode);
+        common.unit = shown.unit;
+        common.name = tName(shown.nameKey);
+        common.desc = tName(shown.descKey);
+        range = shown.range;
+      } else {
+        const rangeId = RANGE_BY_STATE[entry.state];
+        range = rangeId ? zone.ranges?.[rangeId] : undefined;
+      }
       if (range) {
         common.min = range.min;
         common.max = range.max;

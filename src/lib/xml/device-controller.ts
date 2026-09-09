@@ -4,6 +4,7 @@ import {
   isPermanentXmlRefusal,
   parseDescriptor,
   parseInputList,
+  parseInputLabels,
   parseReturnCode,
   parseSceneList,
   parseTunerInfo,
@@ -119,6 +120,11 @@ export class XmlDeviceController implements ConnectionHandle {
   private readonly createdChannels = new Set<string>();
   /** The per-zone `Input_Sel_Item` lists and the device description, kept for a mid-session build. */
   private inputsByZone: ReadonlyMap<string, string[]> = new Map();
+  /**
+   * Per zone: the label the device carries for each input value (`<Title>`, e.g. HDMI1 → "Apple
+   * TV"). The dropdown shows these, the value written to the device stays the protocol's own.
+   */
+  private inputLabelsByZone: ReadonlyMap<string, Record<string, string>> = new Map();
   private deviceDescriptor: XmlDescriptor = { programs: [], sleep: [], adaptiveDrc: [] };
   /**
    * The spelling this device answers its amplifier block with (see XmlDialect) — learned from
@@ -214,6 +220,7 @@ export class XmlDeviceController implements ConnectionHandle {
     // real hardware): the device says which inputs it accepts, so the input state gets a
     // dropdown instead of a free string. Constant per model — remembered per device.
     const inputsByZone = new Map<string, string[]>();
+    const inputLabels = new Map<string, Record<string, string>>();
     for (const zone of this.zones) {
       const body = await this.probeXml(
         `xmlInputs:${zone.key}`,
@@ -221,6 +228,7 @@ export class XmlDeviceController implements ConnectionHandle {
         "<Input><Input_Sel_Item>GetParam</Input_Sel_Item></Input>",
       );
       inputsByZone.set(zone.key, parseInputList(body));
+      inputLabels.set(zone.key, parseInputLabels(body));
     }
     // The device description — the classic generation's own enumeration of programs, sleep
     // steps, Adaptive DRC values and the dialogue range (2012–2017; the 2020 generation has none).
@@ -249,6 +257,7 @@ export class XmlDeviceController implements ConnectionHandle {
     // and named from the shared channel table (a zone that answered has at least
     // its power state, so its channel always comes into being this way).
     this.inputsByZone = inputsByZone;
+    this.inputLabelsByZone = inputLabels;
     this.deviceDescriptor = descriptor;
     const createdChannels = this.createdChannels;
     for (const zone of this.zones) {
@@ -877,7 +886,9 @@ export class XmlDeviceController implements ConnectionHandle {
       const declaredList = this.declaredListFor(entry.state, zone.key, inputsByZone, descriptor);
       const declared = declaredList !== undefined && declaredList.length > 0;
       if (declared) {
-        common.states = Object.fromEntries(declaredList.map(value => [value, value]));
+        // The device's label where it carries one — the key stays the value that switches.
+        const labels = entry.state === "input" ? this.inputLabelsByZone.get(zone.key) : undefined;
+        common.states = Object.fromEntries(declaredList.map(value => [value, labels?.[value] ?? value]));
       }
       if (entry.state === "sound.dialogueLevel" && descriptor.dialogueLevel) {
         common.min = descriptor.dialogueLevel.min;

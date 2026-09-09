@@ -7,6 +7,7 @@ import {
   parseBasicStatus,
   parseDescriptor,
   parseInputList,
+  parseInputLabels,
   parseReturnCode,
   parseSceneList,
   parseSystemConfig,
@@ -212,6 +213,25 @@ describe("parseInputList (the zone's own input vocabulary)", () => {
       "<Input_Sel_Item><Item_1><Param>HDMI1</Param></Item_1><Item_2><Param>NET RADIO</Param></Item_2></Input_Sel_Item>";
     expect(parseInputList(body)).toEqual(["HDMI1", "NET RADIO"]);
     expect(parseInputList("")).toEqual([]);
+  });
+
+  // The device carries the name the OWNER gave a socket in <Title> ("Apple TV" on HDMI1). The
+  // value that switches the input stays <Param> — only the label a user reads changes.
+  test("labels an input with the name the device carries for it, entities decoded", () => {
+    const body =
+      "<Input_Sel_Item><Item_1><Param>HDMI1</Param><Title>Apple TV</Title></Item_1>" +
+      "<Item_2><Param>HDMI2</Param><Title>Rock &amp; Roll</Title></Item_2>" +
+      "<Item_3><Param>NET RADIO</Param><Title>NET RADIO</Title></Item_3>" +
+      "<Item_4><Param>PHONO</Param></Item_4>" +
+      "<Item_5><Param>USB</Param><Title>   </Title></Item_5></Input_Sel_Item>";
+    expect(parseInputLabels(body)).toEqual({
+      HDMI1: "Apple TV",
+      HDMI2: "Rock & Roll",
+      "NET RADIO": "NET RADIO",
+      PHONO: "PHONO",
+      USB: "USB",
+    });
+    expect(parseInputLabels("")).toEqual({});
   });
 });
 

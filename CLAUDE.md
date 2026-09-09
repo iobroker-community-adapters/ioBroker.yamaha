@@ -398,6 +398,20 @@ entscheidet etwas ([[feedback_user_hardware_ist_sample]]). Alle Funde sind umges
   `range_step` (Zone und System), `object-mapper.ts RANGE_BY_STATE` hängt ihn an den Datenpunkt.
   Vorher wurden 10 von 11 deklarierten Bereichen gelesen und weggeworfen; Zahlen-Datenpunkte mit
   Grenzen: 41 → 238.
+- **`actualVolume` steht in der Skala, die das Gerät gerade ANZEIGT** — die einzige Ausnahme von
+  `RANGE_BY_STATE` (`actualVolumePresentation`, seit 2.7.2): `actual_volume.value` kommt in der Form,
+  die `actual_volume.mode` nennt, also je nach Einstellung in Dezibel ODER in der Zählskala des
+  Geräts. Bis 2.7.1 war der Datenpunkt fest als dB deklariert — ein RX-V6A auf `numeric` meldete 36
+  gegen −80,5…16,5, der js-controller warnte bei jedem Abruf, und die Einheit log. Einheit, Namens-
+  schlüssel und Grenzen folgen deshalb dem gemeldeten Modus. Deklariert eine Zone nur EINE Skala,
+  gilt sie auch ohne Statusmeldung (der RX-A2070 deklariert `actual_volume_db` für jede Zone und
+  beantwortet den Status nur für `main`); sind BEIDE deklariert und meldet das Gerät keinen Modus,
+  steht die Hülle beider Bereiche — Grenzen WEGLASSEN geht nicht, weil `extendObject` mischt und
+  eine ausgelassene Grenze in einer bestehenden Anlage für immer überlebt. Da dieser Controller
+  seine Objekte nur beim Verbinden baut,
+  zieht `reshapeActualVolume()` aus `applyZoneStatus` genau diese eine Definition nach, sobald das
+  Gerät die Anzeigeart wechselt — und weil `upsertObject` ein `extendObject` ist, überschreibt die
+  numerische Fassung die gespeicherte Einheit mit `unit: ""` statt zu löschen.
 - **MusicCast zählt die Tonregelung in HALBEN Dezibel**, nicht in dB: 19 Mitschnitte deklarieren
   `tone_control` als −12…+12 in 25 Schritten — dieselben 25 Schritte, die die YNCA-Spec −6…+6 dB
   in 0,5er-Schritten nennt. Das `dB`-Etikett an den MusicCast-Einträgen ist deshalb weg, und

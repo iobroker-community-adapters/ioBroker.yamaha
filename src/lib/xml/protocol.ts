@@ -118,6 +118,33 @@ export function parseInputList(xml: string): string[] {
   return inputs;
 }
 
+/**
+ * Parse an `<Input_Sel_Item>` response into the LABEL of every input: the `<Title>` the device
+ * carries for a socket, keyed by the `<Param>` that switches it.
+ *
+ * A receiver stores the name its owner gave a socket ("Apple TV" on HDMI1) and hands it out here,
+ * while the switching value stays the protocol's own (`HDMI1`). An item without a title — or with
+ * a blank one — is labelled with its value, so a dropdown never shows an empty entry.
+ *
+ * @param xml the Input_Sel_Item response body
+ * @returns value → label for every item the zone lists, empty when it lists none
+ */
+export function parseInputLabels(xml: string): Record<string, string> {
+  const labels: Record<string, string> = {};
+  const item = /<Item_\d+>([\s\S]*?)<\/Item_\d+>/g;
+  for (let match = item.exec(xml); match; match = item.exec(xml)) {
+    const value = /<Param>([^<]*)<\/Param>/.exec(match[1]);
+    if (!value) {
+      continue;
+    }
+    const param = decodeXmlText(value[1]);
+    const title = /<Title>([^<]*)<\/Title>/.exec(match[1]);
+    const label = title ? decodeXmlText(title[1]).trim() : "";
+    labels[param] = label.length > 0 ? label : param;
+  }
+  return labels;
+}
+
 /** The tuner fields a classic `<Tuner><Play_Info>` response can carry. */
 export interface XmlTunerInfo {
   /** The active preset slot (0 = none). */

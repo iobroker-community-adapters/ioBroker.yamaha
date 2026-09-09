@@ -1,9 +1,22 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "2.7.1",
+    "version": "2.7.2",
     "nogit": true,
     "news": {
+      "2.7.2": {
+        "en": "The volume readout follows the scale the receiver shows, and inputs appear under the receiver's own names. The first start after this update takes a little longer than usual.",
+        "de": "Die Lautstärke-Anzeige folgt der Skala des Receivers, und Eingänge tragen dessen eigene Namen. Der erste Start nach diesem Update dauert etwas länger als sonst.",
+        "ru": "Громкость показывается в той же шкале, что и на ресивере, а входы получают его собственные имена. Первый запуск после обновления длится немного дольше.",
+        "pt": "O volume segue a escala mostrada pelo recetor e as entradas usam os nomes do próprio recetor. O primeiro arranque após esta atualização demora um pouco mais.",
+        "nl": "Het volume volgt de schaal die de receiver toont en ingangen krijgen zijn eigen namen. De eerste start na deze update duurt iets langer dan gewoonlijk.",
+        "fr": "Le volume suit l'échelle affichée par l'ampli et les entrées portent ses propres noms. Le premier démarrage après cette mise à jour dure un peu plus longtemps.",
+        "it": "Il volume segue la scala mostrata dal ricevitore e gli ingressi usano i suoi nomi. Il primo avvio dopo questo aggiornamento dura un po' più del solito.",
+        "es": "El volumen sigue la escala que muestra el receptor y las entradas usan sus propios nombres. El primer arranque tras esta actualización tarda algo más de lo habitual.",
+        "pl": "Głośność podąża za skalą pokazywaną przez amplituner, a wejścia noszą jego własne nazwy. Pierwszy start po tej aktualizacji trwa nieco dłużej niż zwykle.",
+        "uk": "Гучність показується в тій самій шкалі, що й на ресивері, а входи мають його власні назви. Перший запуск після оновлення триває трохи довше, ніж зазвичай.",
+        "zh-cn": "音量按功放当前显示的刻度呈现，输入源使用功放自己的名称。此次更新后的首次启动会比平时稍慢一些。"
+      },
       "2.7.1": {
         "en": "The first connection asks a receiver only what its generation can answer, and a datapoint the device reveals later now appears at once instead of after a restart.",
         "de": "Die erste Verbindung fragt einen Receiver nur noch, was seine Generation beantworten kann, und ein später gemeldeter Datenpunkt erscheint sofort statt erst nach einem Neustart.",

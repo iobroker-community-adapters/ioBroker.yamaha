@@ -141,6 +141,14 @@ export class YxcDeviceController implements ConnectionHandle {
   private readonly lastZoneInput = new Map<string, string>();
   /** Each zone's declared value lists (getFeatures), for the on-screen remote's write guard. */
   private readonly zoneValueLists = new Map<string, Readonly<Record<string, string[]>>>();
+  /**
+   * The capability report of this connect and the display scale each zone reported when its
+   * objects were built. `actualVolume` declares the bounds of the scale the device is SHOWING
+   * (`actual_volume.mode`); switching that at the device has to reshape the datapoint, and this
+   * controller writes its objects only once, at connect.
+   */
+  private capabilities: YxcCapabilities | undefined;
+  private readonly zoneVolumeMode = new Map<string, string | undefined>();
   /** The source the network player is currently on (netusb `input`, e.g. "net_radio"). */
   private lastNetusbInput = "";
   /** Which source currently feeds each zone's "now playing" block (v2.0.0 routing). */
@@ -246,6 +254,10 @@ export class YxcDeviceController implements ConnectionHandle {
       }
       reported[zone] = values;
     });
+    this.capabilities = capabilities;
+    for (const zone of this.zones) {
+      this.zoneVolumeMode.set(zone, reported[zone]?.actualVolumeMode);
+    }
     const objects = mapYxcToObjects(capabilities, reported);
     if (objects.length === 0) {
       this.deps.log.warn(`${this.deviceId}: no capabilities reported — creating no objects`);
@@ -1101,6 +1113,12 @@ export class YxcDeviceController implements ConnectionHandle {
       // The EXACT id, not a suffix: this value decides which source a zone's player block
       // and its transport buttons follow. A future status field ending in "input" would
       // have bent that routing silently.
+      if (update.id === `${zonePrefix(zone)}actualVolumeMode` && typeof update.value === "string") {
+        if (this.zoneVolumeMode.get(zone) !== update.value) {
+          this.zoneVolumeMode.set(zone, update.value);
+          void this.reshapeActualVolume(zone, update.value);
+        }
+      }
       if (update.id === `${zonePrefix(zone)}input` && typeof update.value === "string") {
         const previous = this.lastZoneInput.get(zone);
         this.lastZoneInput.set(zone, update.value);
@@ -1114,6 +1132,32 @@ export class YxcDeviceController implements ConnectionHandle {
       }
     }
     this.cacheEqualizer(zone, updates);
+  }
+
+  /**
+   * Rewrite a zone's `actualVolume` for the display scale the device now reports.
+   *
+   * The object is rebuilt through the same mapper the connect uses, so name, unit and bounds stay
+   * one decision in one place; only that single definition is written.
+   *
+   * @param zone the zone whose display scale changed
+   * @param mode the scale the zone reports now (`db` / `numeric`)
+   */
+  private async reshapeActualVolume(zone: string, mode: string): Promise<void> {
+    if (!this.capabilities) {
+      return;
+    }
+    const id = `${zonePrefix(zone)}actualVolume`;
+    const def = mapYxcToObjects(this.capabilities, { [zone]: { actualVolumeMode: mode } }).find(o => o.id === id);
+    if (!def) {
+      return;
+    }
+    try {
+      await this.deps.upsertObject(`${this.deviceId}.${id}`, def);
+      this.deps.log.debug(`${this.deviceId}: ${zone} now displays its volume as ${mode}`);
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: could not reshape ${id}: ${String(e)}`);
+    }
   }
 
   /**

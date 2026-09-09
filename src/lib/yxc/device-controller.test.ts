@@ -2,6 +2,7 @@ import { YxcDeviceController, zoneNameFrom } from "./device-controller";
 import type { YxcClientLike } from "./device-controller";
 import type { ObjectDef } from "../catalog/types";
 import wx10 from "./__fixtures__/WX10_216_208.json";
+import rxV481 from "./__fixtures__/RX_V481_285_208.json";
 import ysp from "./__fixtures__/status/YSP1600_main.json";
 import { CommandGate } from "../lifecycle/command-gate";
 import { ProbeMemory } from "../lifecycle/probe-memory";
@@ -316,6 +317,25 @@ describe("YxcDeviceController", () => {
     await flush();
     expect(s.client.calls).toContainEqual({ method: "getStatus", args: ["main"] });
     expect(s.acks).toContainEqual({ id: "living.power", value: false });
+  });
+
+  // The RX-V481 declares BOTH display scales; `actual_volume.value` arrives in the one named by
+  // `mode`. Switching the receiver's display must reshape the datapoint at once — the MusicCast
+  // controller built its objects only at connect, so before 2.7.2 the bounds stayed on the scale
+  // that happened to be active while connecting, and js-controller warned on every poll.
+  test("a change of display scale reshapes actualVolume without a reconnect", async () => {
+    const s = setup(rxV481, { power: "on", actual_volume: { mode: "db", value: -47.5 } });
+    expect(await s.controller.start()).toBe(true);
+    expect(s.defs.get("living.actualVolume")?.common.max).toBe(16.5);
+    expect(s.defs.get("living.actualVolume")?.common.unit).toBe("dB");
+
+    s.client.status = { power: "on", actual_volume: { mode: "numeric", value: 36 } };
+    s.fire.push?.({ main: { volume: 36 } });
+    await flush();
+
+    expect(s.defs.get("living.actualVolume")?.common.max).toBe(97);
+    expect(s.defs.get("living.actualVolume")?.common.min).toBe(0);
+    expect(s.defs.get("living.actualVolume")?.common.unit).toBe("");
   });
 
   test("keepalive polls main to renew the push registration", async () => {

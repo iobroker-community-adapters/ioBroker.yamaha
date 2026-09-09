@@ -158,6 +158,18 @@ describe("declared value lists beat a catalog union (#619)", () => {
     expect(resolved?.declaredStates).toBe(true);
   });
 
+  // The names a receiver carries for its sockets live in the XML declaration; the datapoint itself
+  // usually belongs to YNCA. If the coordinator kept only the values, a renamed socket would still
+  // read "HDMI1" on exactly the devices that have names to show (2026-09-09).
+  test("the labels of the XML declaration survive onto the YNCA-owned input", () => {
+    const { objects } = coordinateObjectTree([
+      { transport: "ynca", objects: [input(union)] },
+      { transport: "xml", objects: [input({ HDMI1: "Apple TV", "NET RADIO": "NET RADIO" }, { declared: true })] },
+    ]);
+    const resolved = objects.find(o => o.id === "input");
+    expect(resolved?.common.states).toEqual({ HDMI1: "Apple TV", "NET RADIO": "NET RADIO" });
+  });
+
   test("a MusicCast list with a soundbar id is never adopted by a YNCA-owned input — different wire vocabulary", () => {
     const { objects } = coordinateObjectTree([
       { transport: "ynca", objects: [input(union)] },

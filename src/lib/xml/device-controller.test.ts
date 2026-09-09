@@ -444,6 +444,24 @@ describe("XmlDeviceController", () => {
     expect(input?.declaredStates).toBe(true);
   });
 
+  // The receiver carries the name its owner gave a socket. Showing "HDMI1" where the device itself
+  // says "Apple TV" makes the dropdown unreadable for exactly the sockets a user renamed; the
+  // switching value stays the protocol's own (2026-09-09, krobi).
+  test("an input the device has named shows that name, and still switches by its protocol value", async () => {
+    const s = setup({ Main_Zone: { power: true, input: "HDMI1" } });
+    s.client.xmlAnswers["Main_Zone|<Input><Input_Sel_Item>GetParam</Input_Sel_Item></Input>"] =
+      `<YAMAHA_AV rsp="GET" RC="0"><Main_Zone><Input><Input_Sel_Item>` +
+      `<Item_1><Param>HDMI1</Param><Title>Apple TV</Title></Item_1>` +
+      `<Item_2><Param>NET RADIO</Param><Title>NET RADIO</Title></Item_2>` +
+      `<Item_3><Param>PHONO</Param></Item_3>` +
+      `</Input_Sel_Item></Input></Main_Zone></YAMAHA_AV>`;
+    await s.controller.start();
+    const input = s.defs.get("living.input") as
+      { declaredStates?: boolean; common?: { states?: Record<string, string> } } | undefined;
+    expect(input?.common?.states).toEqual({ HDMI1: "Apple TV", "NET RADIO": "NET RADIO", PHONO: "PHONO" });
+    expect(input?.declaredStates).toBe(true);
+  });
+
   test("a zone that declares no inputs gets a plain input state, not a declared empty list", async () => {
     const s = setup({ Main_Zone: { power: true, input: "HDMI1" } });
     await s.controller.start();
