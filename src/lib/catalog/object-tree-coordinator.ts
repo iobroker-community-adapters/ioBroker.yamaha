@@ -1,5 +1,6 @@
 import { channelCommon, type ObjectDef } from "./types";
 import { canonicalIdOf, capabilityKeyOf, pickOwner, STATES_VOCABULARY, type Transport } from "./owner-policy";
+import { translateDeclaredStates } from "./musiccast-vocabulary";
 
 /** One transport's contribution: the objects its catalog builds for this device. */
 export interface TransportObjects {
@@ -68,6 +69,22 @@ export function coordinateObjectTree(contributions: readonly TransportObjects[])
           resolvedDef.common = { ...resolvedDef.common, states: def.common.states };
           resolvedDef.declaredStates = true;
           break;
+        }
+      }
+      // (c) No declaration in the owner's own vocabulary: a MusicCast declaration reaches a classic
+      // owner through the evidenced dictionary — all or nothing, so no dropdown is ever half
+      // translated. The XML list, when present, was taken above: the device's own spelling beats
+      // the dictionary.
+      if (!resolvedDef.declaredStates && STATES_VOCABULARY[owner] === "classic") {
+        for (const [transport, def] of entry.defs) {
+          if (def.declaredStates && def.common.states && STATES_VOCABULARY[transport] === "musiccast") {
+            const translated = translateDeclaredStates(entry.key, def.common.states);
+            if (translated) {
+              resolvedDef.common = { ...resolvedDef.common, states: translated };
+              resolvedDef.declaredStates = true;
+              break;
+            }
+          }
         }
       }
     }

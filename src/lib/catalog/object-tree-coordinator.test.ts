@@ -204,3 +204,68 @@ describe("declared value lists beat a catalog union (#619)", () => {
     });
   });
 });
+
+describe("a MusicCast list reaches a YNCA-owned datapoint through the dictionary (#619)", () => {
+  const input = (states: Record<string, string>, declared = false): ObjectDef => ({
+    id: "input",
+    type: "state",
+    ...(declared ? { declaredStates: true } : {}),
+    common: { name: "Input", type: "string", role: "media.input", read: true, write: true, states },
+  });
+  const program = (states: Record<string, string>, declared = false): ObjectDef => ({
+    id: "soundProgram",
+    type: "state",
+    ...(declared ? { declaredStates: true } : {}),
+    common: { name: "Program", type: "string", role: "state", read: true, write: true, states },
+  });
+
+  test("adopted in the classic spelling when no XML list exists", () => {
+    const { objects, ownerByCanonicalId } = coordinateObjectTree([
+      { transport: "ynca", objects: [input({ HDMI1: "HDMI1", AV1: "AV1", Spotify: "Spotify" })] },
+      { transport: "yxc", objects: [input({ hdmi1: "hdmi1", net_radio: "net_radio", juke: "juke" }, true)] },
+    ]);
+    expect(ownerByCanonicalId.get("input")).toBe("ynca");
+    const resolved = objects.find(o => o.id === "input");
+    expect(resolved?.common.states).toEqual({ HDMI1: "HDMI1", "NET RADIO": "NET RADIO", JUKE: "JUKE" });
+    expect(resolved?.declaredStates).toBe(true);
+  });
+
+  test("the XML list wins over the translated MusicCast list — the device's own spelling beats the dictionary", () => {
+    const { objects } = coordinateObjectTree([
+      { transport: "ynca", objects: [input({ HDMI1: "HDMI1", AV1: "AV1" })] },
+      { transport: "yxc", objects: [input({ hdmi1: "hdmi1", net_radio: "net_radio" }, true)] },
+      { transport: "xml", objects: [input({ HDMI1: "HDMI1" }, true)] },
+    ]);
+    expect(objects.find(o => o.id === "input")?.common.states).toEqual({ HDMI1: "HDMI1" });
+  });
+
+  test("a MusicCast list with an untranslatable id leaves the union standing", () => {
+    const union = { HDMI1: "HDMI1", AV1: "AV1" };
+    const { objects } = coordinateObjectTree([
+      { transport: "ynca", objects: [input(union)] },
+      { transport: "yxc", objects: [input({ hdmi: "hdmi", analog: "analog" }, true)] },
+    ]);
+    expect(objects.find(o => o.id === "input")?.common.states).toEqual(union);
+  });
+
+  test("a MusicCast program list lands on the YNCA-owned soundProgram, translated, straight skipped", () => {
+    const { objects } = coordinateObjectTree([
+      {
+        transport: "ynca",
+        objects: [program({ "Hall in Munich": "Hall in Munich", Disco: "Disco", Standard: "Standard" })],
+      },
+      { transport: "yxc", objects: [program({ munich: "munich", standard: "standard", straight: "straight" }, true)] },
+    ]);
+    expect(objects.find(o => o.id === "soundProgram")?.common.states).toEqual({
+      "Hall in Munich": "Hall in Munich",
+      Standard: "Standard",
+    });
+  });
+
+  test("a MusicCast-owned datapoint keeps its own ids — the dictionary only serves the classic owner", () => {
+    const { objects } = coordinateObjectTree([
+      { transport: "yxc", objects: [input({ hdmi1: "hdmi1", net_radio: "net_radio" }, true)] },
+    ]);
+    expect(objects.find(o => o.id === "input")?.common.states).toEqual({ hdmi1: "hdmi1", net_radio: "net_radio" });
+  });
+});
