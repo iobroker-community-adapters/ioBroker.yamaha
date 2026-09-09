@@ -597,5 +597,6 @@
   "hdmiStandbyThrough": "Passage HDMI en veille",
   "descHdmiStandbyThrough": "Si le signal HDMI est transmis au téléviseur pendant la veille du récepteur : arrêt, marche ou automatique.",
   "hdmiVideoPreset": "Préréglage vidéo HDMI",
-  "descHdmiVideoPreset": "Lequel des préréglages de traitement vidéo enregistrés est utilisé."
+  "descHdmiVideoPreset": "Lequel des préréglages de traitement vidéo enregistrés est utilisé.",
+  "descMonaural": "Si la zone joue en mono ; les deux enceintes reproduisent alors le même signal."
 }

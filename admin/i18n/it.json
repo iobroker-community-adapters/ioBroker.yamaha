@@ -597,5 +597,6 @@
   "hdmiStandbyThrough": "Passaggio HDMI in standby",
   "descHdmiStandbyThrough": "Se il segnale HDMI passa al televisore mentre il sintoamplificatore è in standby: spento, acceso o automatico.",
   "hdmiVideoPreset": "Preset video HDMI",
-  "descHdmiVideoPreset": "Quale dei preset di elaborazione video memorizzati è in uso."
+  "descHdmiVideoPreset": "Quale dei preset di elaborazione video memorizzati è in uso.",
+  "descMonaural": "Se la zona suona in mono; entrambi i diffusori riproducono allora lo stesso segnale."
 }

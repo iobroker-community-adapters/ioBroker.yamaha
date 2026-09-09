@@ -362,7 +362,14 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
   },
   {
     state: "sound.balance",
-    common: { nameKey: "balance", type: "number", role: "level", read: true, write: true },
+    common: {
+      nameKey: "balance",
+      descKey: "descChannelBalance",
+      type: "number",
+      role: "level",
+      read: true,
+      write: true,
+    },
     create: { kind: "func", func: "balance" },
     read: { field: "balance" },
     fromStatus: num,
@@ -412,7 +419,14 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
   },
   {
     state: "sound.monaural",
-    common: { nameKey: "monaural", type: "boolean", role: "indicator", read: true, write: false },
+    common: {
+      nameKey: "monaural",
+      descKey: "descMonaural",
+      type: "boolean",
+      role: "indicator",
+      read: true,
+      write: false,
+    },
     create: { kind: "func", func: "mono" },
     read: { field: "mono" },
     fromStatus: bool,

@@ -15154,6 +15154,19 @@
         "uk": "Баланс",
         "zh-cn": "声道平衡"
       },
+      "desc": {
+        "en": "Shifts the sound between the left and right speaker; 0 is the centre.",
+        "de": "Verschiebt den Klang zwischen linkem und rechtem Lautsprecher; 0 ist die Mitte.",
+        "ru": "Смещает звук между левой и правой колонкой; 0 — центр.",
+        "pt": "Desloca o som entre a coluna esquerda e a direita; 0 é o centro.",
+        "nl": "Verschuift het geluid tussen de linker- en rechterluidspreker; 0 is het midden.",
+        "fr": "Déplace le son entre l'enceinte gauche et la droite ; 0 est le centre.",
+        "it": "Sposta il suono tra il diffusore sinistro e quello destro; 0 è il centro.",
+        "es": "Desplaza el sonido entre el altavoz izquierdo y el derecho; 0 es el centro.",
+        "pl": "Przesuwa dźwięk między lewym a prawym głośnikiem; 0 to środek.",
+        "uk": "Зміщує звук між лівою та правою колонкою; 0 — центр.",
+        "zh-cn": "在左右扬声器之间偏移声音；0 为居中。"
+      },
       "min": -20,
       "max": 20,
       "step": 1
@@ -15337,6 +15350,19 @@
         "pl": "Mono",
         "uk": "Моно",
         "zh-cn": "单声道"
+      },
+      "desc": {
+        "en": "Whether the zone plays in mono; both speakers then carry the same signal.",
+        "de": "Ob die Zone in Mono spielt; beide Lautsprecher geben dann dasselbe Signal wieder.",
+        "ru": "Играет ли зона в моно; оба динамика тогда воспроизводят один и тот же сигнал.",
+        "pt": "Se a zona toca em mono; ambas as colunas reproduzem então o mesmo sinal.",
+        "nl": "Of de zone in mono speelt; beide luidsprekers geven dan hetzelfde signaal weer.",
+        "fr": "Si la zone joue en mono ; les deux enceintes reproduisent alors le même signal.",
+        "it": "Se la zona suona in mono; entrambi i diffusori riproducono allora lo stesso segnale.",
+        "es": "Si la zona suena en mono; ambos altavoces reproducen entonces la misma señal.",
+        "pl": "Czy strefa gra w mono; oba głośniki odtwarzają wtedy ten sam sygnał.",
+        "uk": "Чи грає зона в моно; обидва динаміки тоді відтворюють той самий сигнал.",
+        "zh-cn": "该区域是否以单声道播放；此时两个扬声器输出相同的信号。"
       }
     },
     "native": {},

@@ -597,5 +597,6 @@
   "hdmiStandbyThrough": "待机 HDMI 直通",
   "descHdmiStandbyThrough": "功放待机时是否将 HDMI 信号直通至电视：关、开或自动。",
   "hdmiVideoPreset": "HDMI 视频预设",
-  "descHdmiVideoPreset": "当前使用的是哪个已存视频处理预设。"
+  "descHdmiVideoPreset": "当前使用的是哪个已存视频处理预设。",
+  "descMonaural": "该区域是否以单声道播放；此时两个扬声器输出相同的信号。"
 }

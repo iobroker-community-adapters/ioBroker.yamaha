@@ -597,5 +597,6 @@
   "hdmiStandbyThrough": "HDMI standby through",
   "descHdmiStandbyThrough": "Whether the HDMI signal is passed to the TV while the receiver stands by: off, on, or automatic.",
   "hdmiVideoPreset": "HDMI video preset",
-  "descHdmiVideoPreset": "Which of the stored video-processing presets is in use."
+  "descHdmiVideoPreset": "Which of the stored video-processing presets is in use.",
+  "descMonaural": "Whether the zone plays in mono; both speakers then carry the same signal."
 }

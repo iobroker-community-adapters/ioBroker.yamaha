@@ -597,5 +597,6 @@
   "hdmiStandbyThrough": "Passagem HDMI em espera",
   "descHdmiStandbyThrough": "Se o sinal HDMI passa para o televisor enquanto o receptor está em espera: desligado, ligado ou automático.",
   "hdmiVideoPreset": "Predefinição de vídeo HDMI",
-  "descHdmiVideoPreset": "Qual das predefinições de processamento de vídeo guardadas está em uso."
+  "descHdmiVideoPreset": "Qual das predefinições de processamento de vídeo guardadas está em uso.",
+  "descMonaural": "Se a zona toca em mono; ambas as colunas reproduzem então o mesmo sinal."
 }

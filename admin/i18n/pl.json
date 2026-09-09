@@ -597,5 +597,6 @@
   "hdmiStandbyThrough": "Przelot HDMI w trybie czuwania",
   "descHdmiStandbyThrough": "Czy sygnał HDMI jest przekazywany do telewizora, gdy amplituner jest w trybie czuwania: wył., wł. lub automatycznie.",
   "hdmiVideoPreset": "Ustawienie wstępne wideo HDMI",
-  "descHdmiVideoPreset": "Które z zapisanych ustawień wstępnych przetwarzania wideo jest używane."
+  "descHdmiVideoPreset": "Które z zapisanych ustawień wstępnych przetwarzania wideo jest używane.",
+  "descMonaural": "Czy strefa gra w mono; oba głośniki odtwarzają wtedy ten sam sygnał."
 }
