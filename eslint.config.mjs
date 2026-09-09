@@ -17,6 +17,9 @@ export default [
   },
   {
     ignores: [
+      // Session files of the note-taking hook: its cooldown marker
+      // tmp/last-ndc.ts is a timestamp, not TypeScript — never lint them.
+      ".remember/**",
       ".dev-server/",
       ".vscode/",
       "*.test.js",

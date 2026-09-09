@@ -94,19 +94,6 @@
         "pl": "Naprawiono: osiem punktów danych tunera i scen nadal nie miało objaśnienia na amplitunerach MusicCast i XML",
         "uk": "Виправлено: вісім датапоінтів тюнера й сцен ще не мали пояснення на ресиверах MusicCast та XML",
         "zh-cn": "修复：MusicCast 与 XML 功放上仍有八个调谐器与场景数据点没有说明"
-      },
-      "2.3.1": {
-        "en": "Fixed: the new datapoint explanations were missing on MusicCast and older XML devices",
-        "de": "Behoben: die neuen Datenpunkt-Erklärungen fehlten auf MusicCast- und älteren XML-Geräten",
-        "ru": "Исправлено: новые пояснения к датапоинтам отсутствовали на MusicCast и старых XML-устройствах",
-        "pt": "Corrigido: as novas explicações dos pontos de dados faltavam em aparelhos MusicCast e XML antigos",
-        "nl": "Opgelost: de nieuwe uitleg bij datapunten ontbrak op MusicCast- en oudere XML-apparaten",
-        "fr": "Corrigé : les nouvelles explications des points de données manquaient sur MusicCast et anciens appareils XML",
-        "it": "Corretto: le nuove spiegazioni dei datapoint mancavano su apparecchi MusicCast e XML più vecchi",
-        "es": "Corregido: las nuevas explicaciones de los puntos de datos faltaban en aparatos MusicCast y XML antiguos",
-        "pl": "Naprawiono: nowe objaśnienia punktów danych brakowały na urządzeniach MusicCast i starszych XML",
-        "uk": "Виправлено: нові пояснення датапоінтів були відсутні на MusicCast та старих XML-пристроях",
-        "zh-cn": "修复：新的数据点说明在 MusicCast 与较旧的 XML 设备上缺失"
       }
     },
     "titleLang": {

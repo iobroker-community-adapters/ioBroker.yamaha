@@ -107,6 +107,9 @@ On the very first contact the adapter asks the receiver which functions it suppo
 <!--
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
+-->
+
+### **WORK IN PROGRESS**
 
 - (krobipd) Fixed: input and sound program lists now offer only what the receiver itself declares or proves it has, instead of every value any Yamaha may have (#619)
 - (krobipd) Fixed: the 2008 receiver generation gets volume, mute and sound program back; HDMI output, aspect, resolution and decoder lists carry the values the receiver reports
