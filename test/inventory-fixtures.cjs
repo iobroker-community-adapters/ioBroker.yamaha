@@ -1,13 +1,16 @@
 "use strict";
-// The fake devices behind the object inventory: one YNCA (TCP), one MusicCast (HTTP) and one
-// XML/YNC (HTTP) server, answering from the captures in test/fixtures/inventory/.
+// The fake devices behind the object inventory: one YNCA (TCP) server and one HTTP server per
+// device — the latter serving MusicCast, the XML control endpoint and the XML device
+// description by path, like a receiver's port 80 — answering from the captures in
+// test/fixtures/inventory/.
 //
 // The captures are real device answers, taken from the bundled reference material — 16 YNCA
 // protocols recorded by the `ynca` Python tool, the MusicCast endpoint collections of
-// `yamaha-yxc-nodejs`, and the 2026-09-01 XML harvest (scrubbed of the owner's own
-// configuration). No device answers what the model it stands for cannot answer: an unknown
-// YNCA function gets `@UNDEFINED` and an unknown MusicCast endpoint gets response_code 5,
-// exactly as a real device does. That is what keeps the inventory honest.
+// `yamaha-yxc-nodejs`, the 2026-09-01 three-protocol harvest of an RX-V6A and the openHAB
+// captures of a 2008 RX-V3900 (all scrubbed of their owners' configuration). No device answers
+// what the model it stands for cannot answer: an unknown YNCA function gets `@UNDEFINED`, an
+// unknown MusicCast endpoint response_code 5, an unknown XML node `RC="2"`, a missing device
+// description HTTP 404 — exactly as a real device does. That is what keeps the inventory honest.
 const fs = require("node:fs");
 const path = require("node:path");
 const net = require("node:net");
@@ -85,61 +88,138 @@ function yxcAnswers(yxc) {
     };
   }
   // Every zone the device declares must answer getStatus — a MusicCast transport whose zones
-  // all stay silent is a dead transport, and the adapter is right to treat it as one.
-  for (const zone of zones.length ? zones : ["main"]) {
-    if (!answers[`${zone}/getStatus`]) {
-      answers[`${zone}/getStatus`] = { response_code: 0, power: "standby", volume: 0, mute: false, input: "net_radio" };
+  // all stay silent is a dead transport, and the adapter is right to treat it as one. The
+  // filler reports an input the zone DECLARES (its first), never an invented one: a zone-4
+  // status saying "net_radio" on an HDMI-only zone was a harness artefact, not a device fact.
+  for (const entry of features.zone ?? []) {
+    const zone = entry?.id;
+    if (typeof zone === "string" && !answers[`${zone}/getStatus`]) {
+      const input = Array.isArray(entry.input_list) && entry.input_list.length > 0 ? entry.input_list[0] : "net_radio";
+      answers[`${zone}/getStatus`] = { response_code: 0, power: "standby", volume: 0, mute: false, input };
     }
+  }
+  if (zones.length === 0 && !answers["main/getStatus"]) {
+    answers["main/getStatus"] = { response_code: 0, power: "standby", volume: 0, mute: false, input: "net_radio" };
   }
   return answers;
 }
 
 /**
- * A MusicCast device over HTTP. Serves `/YamahaExtendedControl/v1/<endpoint>` from the capture.
+ * The device's ONE web server: a real receiver serves MusicCast (`/YamahaExtendedControl/…`),
+ * the XML control endpoint (`/YamahaRemoteControl/ctrl`) and its device description
+ * (`/YamahaRemoteControl/desc.xml`) on the same port 80 — so does the fixture, dispatching by
+ * path. Before 2026-09-09 one port served EITHER protocol, so a device speaking both (the
+ * common case for every 2015+ receiver) could not be expressed, and the description could not
+ * be served at all — a plain GET fell through to the XML handler's `RC="2"`.
  *
- * @param {any} yxc the fixture's yxc block
+ * @param {any} fixture the device fixture (its yxc and/or xml block)
  * @returns {Promise<{port: number, close: () => Promise<void>}>} the listening server
  */
-function startYxc(yxc) {
-  const answers = yxcAnswers(yxc);
+function startHttp(fixture) {
+  const yxc = fixture.yxc ? yxcAnswers(fixture.yxc) : undefined;
+  const xml = fixture.xml;
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, "http://device");
-    const endpoint = url.pathname.replace(/^\/YamahaExtendedControl\/v\d+\//, "");
-    // A setter the device declares is accepted; the inventory only needs the object to exist,
-    // and a refusal here would be a device verdict the capture does not support.
-    const body =
-      answers[endpoint] ??
-      (/^[a-z]+\/(set|toggle|recall|start|stop|manage|prepare)/.test(endpoint)
-        ? { response_code: 0 }
-        : YXC_UNSUPPORTED);
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify(body));
+    if (yxc && url.pathname.startsWith("/YamahaExtendedControl/")) {
+      const endpoint = url.pathname.replace(/^\/YamahaExtendedControl\/v\d+\//, "");
+      // A setter the device declares is accepted; the inventory only needs the object to exist,
+      // and a refusal here would be a device verdict the capture does not support.
+      const body =
+        yxc[endpoint] ??
+        (/^[a-z]+\/(set|toggle|recall|start|stop|manage|prepare)/.test(endpoint)
+          ? { response_code: 0 }
+          : YXC_UNSUPPORTED);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(body));
+      return;
+    }
+    if (xml && url.pathname === "/YamahaRemoteControl/desc.xml") {
+      // The device description is a plain GET. A device without one answers 404 — the adapter
+      // takes that as the definite "declares none" (the RX-V6A's own behaviour).
+      if (typeof xml.descriptor === "string") {
+        res.writeHead(200, { "Content-Type": "text/xml" });
+        res.end(xml.descriptor);
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+      return;
+    }
+    if (xml && url.pathname === "/YamahaRemoteControl/ctrl") {
+      // The request names a node path (`<Main_Zone><Basic_Status>`); the capture is indexed
+      // by exactly that path.
+      let body = "";
+      req.on("data", chunk => (body += chunk));
+      req.on("end", () => {
+        const match = /<YAMAHA_AV[^>]*>\s*<([A-Za-z0-9_]+)>\s*<([A-Za-z0-9_]+)>/.exec(body);
+        const key = match ? `${match[1]}/${match[2]}` : "";
+        const answer = xml.answers[key] ?? xml.answers[match?.[1] ?? ""];
+        res.writeHead(200, { "Content-Type": "text/xml" });
+        // RC=2 is the device's own "I do not have that node" — the adapter treats it as a final
+        // refusal and remembers it, which is precisely the behaviour under test.
+        res.end(answer ?? `<YAMAHA_AV rsp="GET" RC="2"></YAMAHA_AV>`);
+      });
+      return;
+    }
+    // A host with a web server, but not this API on this path.
+    res.writeHead(404);
+    res.end();
   });
   return listen(server);
 }
 
 /**
- * An XML/YNC device over HTTP. The request names a node path (`<Main_Zone><Basic_Status>`);
- * the capture is indexed by exactly that path.
+ * The value lists a fixture device DECLARES, by state id relative to the device — what the
+ * adapter's dropdowns may at most contain. XML: the `Input_Sel_Item` Params per zone and the
+ * desc.xml program enumeration; MusicCast: the zone's input_list, sound_program_list,
+ * surr_decoder_type_list, menu_list and cursor_list. A YNCA-only fixture declares nothing
+ * (its dropdowns are candidates the device cannot confirm).
  *
- * @param {any} xml the fixture's xml block
- * @returns {Promise<{port: number, close: () => Promise<void>}>} the listening server
+ * @param {any} fixture one device fixture
+ * @returns {Record<string, string[]>} state id → declared values (in the transport's own spelling)
  */
-function startXml(xml) {
-  const server = http.createServer((req, res) => {
-    let body = "";
-    req.on("data", chunk => (body += chunk));
-    req.on("end", () => {
-      const match = /<YAMAHA_AV[^>]*>\s*<([A-Za-z0-9_]+)>\s*<([A-Za-z0-9_]+)>/.exec(body);
-      const key = match ? `${match[1]}/${match[2]}` : "";
-      const answer = xml.answers[key] ?? xml.answers[match?.[1] ?? ""];
-      res.writeHead(200, { "Content-Type": "text/xml" });
-      // RC=2 is the device's own "I do not have that node" — the adapter treats it as a final
-      // refusal and remembers it, which is precisely the behaviour under test.
-      res.end(answer ?? `<YAMAHA_AV rsp="GET" RC="2"></YAMAHA_AV>`);
-    });
-  });
-  return listen(server);
+function declaredListsOf(fixture) {
+  const lists = /** @type {Record<string, string[]>} */ ({});
+  const zonePrefix = zone => (zone === "main" ? "" : `multiroom.${zone}.`);
+  if (fixture.xml) {
+    const zones = [
+      ["Main_Zone", "main"],
+      ["Zone_2", "zone2"],
+      ["Zone_3", "zone3"],
+      ["Zone_4", "zone4"],
+    ];
+    for (const [element, zone] of zones) {
+      const body = fixture.xml.answers[`${element}/Input`];
+      if (body) {
+        lists[`${zonePrefix(zone)}input`] = [...body.matchAll(/<Item_\d+>\s*<Param>([^<]+)<\/Param>/g)].map(m => m[1]);
+      }
+    }
+    if (typeof fixture.xml.descriptor === "string") {
+      const block = /Program_Sel,Current,Sound_Program=Param_1<\/Cmd>\s*<Param_1>([\s\S]*?)<\/Param_1>/.exec(
+        fixture.xml.descriptor,
+      );
+      if (block) {
+        lists.soundProgram = [...block[1].matchAll(/<Direct(?:\s[^>]*)?>([^<]+)<\/Direct>/g)].map(m => m[1]);
+      }
+    }
+  }
+  if (fixture.yxc) {
+    const features = fixture.yxc.answers["system/getFeatures"];
+    for (const zone of features?.zone ?? []) {
+      const prefix = zonePrefix(zone.id);
+      const put = (id, list) => {
+        if (Array.isArray(list) && list.length > 0) {
+          lists[prefix + id] = list;
+        }
+      };
+      put("input", zone.input_list);
+      put("soundProgram", zone.sound_program_list);
+      put("sound.surroundDecoder", zone.surr_decoder_type_list);
+      put("remote.menu", zone.menu_list);
+      put("remote.cursor", zone.cursor_list);
+    }
+  }
+  return lists;
 }
 
 /**
@@ -176,12 +256,11 @@ async function startFixtureDevices() {
   const routes = {};
   for (const fixture of fixtures) {
     const ynca = fixture.ynca ? await startYnca({ ...fixture.ynca.answers }) : undefined;
-    // One HTTP port per device serves whichever of the two HTTP protocols it speaks; a device
-    // that speaks neither still needs a listener that refuses, or an XML probe would hang.
-    const httpServer = fixture.yxc
-      ? await startYxc(fixture.yxc)
-      : fixture.xml
-        ? await startXml(fixture.xml)
+    // One HTTP port per device serves BOTH HTTP protocols by path, like the real port 80; a
+    // device that speaks neither still needs a listener that refuses, or an XML probe would hang.
+    const httpServer =
+      fixture.yxc || fixture.xml
+        ? await startHttp(fixture)
         : await listen(http.createServer((_req, res) => res.destroy()));
     servers.push(ynca, httpServer);
     routes[fixture.ip] = { http: httpServer.port, ynca: ynca ? ynca.port : null };
@@ -199,4 +278,4 @@ async function startFixtureDevices() {
   };
 }
 
-module.exports = { startFixtureDevices, loadFixtures };
+module.exports = { startFixtureDevices, loadFixtures, declaredListsOf };

@@ -2,9 +2,1920 @@
   "id": "rxv6a",
   "ip": "10.10.0.13",
   "class": "avReceiver",
-  "why": "XML/YNC only — the pre-2010 control path, from the 2026-09-01 harvest",
+  "why": "MusicCast AV receiver of the 2020 generation speaking all three protocols — YNCA, MusicCast and XML on one tree; the device the 2026-09-01 harvest came from (scrubbed)",
+  "ynca": {
+    "source": "device-captures/rx-v6a-2026-09-01/ynca-full-sweep.txt (scrubbed: factory input and zone names)",
+    "answers": {
+      "AIRPLAY:ALBUM": "",
+      "AIRPLAY:ARTIST": "",
+      "AIRPLAY:AVAIL": "Not Ready",
+      "AIRPLAY:ELAPSEDTIME": "",
+      "AIRPLAY:PLAYBACKINFO": "Pause",
+      "AIRPLAY:SONG": "",
+      "AIRPLAY:TOTALTIME": "",
+      "AIRPLAY:VOLINTERLOCK": "Limited",
+      "BT:ALBUM": "",
+      "BT:ARTIST": "",
+      "BT:AVAIL": "Not Ready",
+      "BT:CONNECTINFO": "Disconnected",
+      "BT:DEVICENAME": "",
+      "BT:PLAYBACKINFO": "Stop",
+      "BT:SONG": "",
+      "DAB:AVAIL": "Not Ready",
+      "DAB:BAND": "FM",
+      "DAB:DABAUDIOMODE": "Mono",
+      "DAB:DABBITRATE": "",
+      "DAB:DABCHLABEL": "",
+      "DAB:DABDATETIME": "     '00 00:00",
+      "DAB:DABDLSLABEL": "",
+      "DAB:DABENSEMBLELABEL": "",
+      "DAB:DABOFFAIR": "Negate",
+      "DAB:DABPRESET": "No Preset",
+      "DAB:DABPRGTYPE": "",
+      "DAB:DABSERVICELABEL": "",
+      "DAB:FMFREQ": "98.10",
+      "DAB:FMPRESET": "No Preset",
+      "DAB:FMRDSCLOCK": "",
+      "DAB:FMRDSPRGSERVICE": "",
+      "DAB:FMRDSPRGTYPE": "",
+      "DAB:FMRDSTXT": "",
+      "DAB:FMSIGSTEREOMONO": "Negate",
+      "DAB:FMTUNED": "Negate",
+      "MAIN:2CHDECODER": "Auto",
+      "MAIN:ADAPTIVEDRC": "Off",
+      "MAIN:AVAIL": "Ready",
+      "MAIN:CONTENTSDISP": "On",
+      "MAIN:DIALOGUELVL": "0",
+      "MAIN:DTSDIALOGUECONTROL": "0",
+      "MAIN:ENHANCER": "On",
+      "MAIN:EXBASS": "Off",
+      "MAIN:INP": "HDMI1",
+      "MAIN:MUTE": "Off",
+      "MAIN:PUREDIRMODE": "Off",
+      "MAIN:PWR": "Standby",
+      "MAIN:SLEEP": "Off",
+      "MAIN:SOUNDPRG": "Standard",
+      "MAIN:STRAIGHT": "On",
+      "MAIN:TONEBASS": "0.0",
+      "MAIN:TONETREBLE": "0.0",
+      "MAIN:VOL": "-50.5",
+      "NAPSTER:ALBUM": "",
+      "NAPSTER:ARTIST": "",
+      "NAPSTER:AVAIL": "Not Ready",
+      "NAPSTER:PLAYBACKINFO": "Stop",
+      "NAPSTER:REPEAT": "Off",
+      "NAPSTER:SHUFFLE": "Off",
+      "NAPSTER:SONG": "",
+      "NETRADIO:ALBUM": "",
+      "NETRADIO:AVAIL": "Not Ready",
+      "NETRADIO:ELAPSEDTIME": "",
+      "NETRADIO:PLAYBACKINFO": "Stop",
+      "NETRADIO:SONG": "",
+      "NETRADIO:STATION": "",
+      "SERVER:ALBUM": "",
+      "SERVER:ARTIST": "",
+      "SERVER:AVAIL": "Not Ready",
+      "SERVER:ELAPSEDTIME": "",
+      "SERVER:PLAYBACKINFO": "Stop",
+      "SERVER:REPEAT": "Off",
+      "SERVER:SHUFFLE": "Off",
+      "SERVER:SONG": "",
+      "SPOTIFY:ALBUM": "",
+      "SPOTIFY:ARTIST": "",
+      "SPOTIFY:AVAIL": "Not Ready",
+      "SPOTIFY:PLAYBACKINFO": "Stop",
+      "SPOTIFY:REPEAT": "Off",
+      "SPOTIFY:SHUFFLE": "Off",
+      "SPOTIFY:TRACK": "",
+      "SYS:HDMIOUT1": "On",
+      "SYS:MODELNAME": "RX-V6A",
+      "SYS:PARTY": "Off",
+      "SYS:PWR": "Standby",
+      "SYS:SPPATTERN1AMP": "Basic",
+      "SYS:TRIG1MANUAL": "Hi",
+      "SYS:VERSION": "1.80/3.14",
+      "SYS:YNCAPORT": "50000",
+      "USB:ALBUM": "",
+      "USB:ARTIST": "",
+      "USB:AVAIL": "Not Ready",
+      "USB:ELAPSEDTIME": "",
+      "USB:PLAYBACKINFO": "Stop",
+      "USB:REPEAT": "Off",
+      "USB:SHUFFLE": "Off",
+      "USB:SONG": "",
+      "ZONE2:AVAIL": "Ready",
+      "ZONE2:ENHANCER": "On",
+      "ZONE2:EXBASS": "Off",
+      "ZONE2:INP": "AUDIO1",
+      "ZONE2:MUTE": "Off",
+      "ZONE2:PWR": "Standby",
+      "ZONE2:SLEEP": "Off",
+      "ZONE2:TONEBASS": "0.0",
+      "ZONE2:TONEMODE": "Auto",
+      "ZONE2:TONETREBLE": "0.0",
+      "ZONE2:VOL": "-40.0"
+    }
+  },
+  "yxc": {
+    "source": "device-captures/rx-v6a-2026-09-01/yxc-*.json (scrubbed: neutral device id/serial, factory names, generic list entries)",
+    "model": "RX-V6A",
+    "answers": {
+      "system/getFeatures": {
+        "response_code": 0,
+        "system": {
+          "func_list": [
+            "wired_lan",
+            "wireless_lan",
+            "network_standby",
+            "network_standby_auto",
+            "bluetooth_standby",
+            "bluetooth_tx_setting",
+            "bluetooth_tx_connectivity_type",
+            "dfs_option",
+            "headphone",
+            "hdmi_out_1",
+            "airplay",
+            "disklavier_settings",
+            "background_download",
+            "remote_info",
+            "network_reboot",
+            "system_reboot",
+            "ypao_volume",
+            "party_mode",
+            "party_volume",
+            "party_mute",
+            "name_text_avr",
+            "hdmi_standby_through",
+            "analytics",
+            "terms_of_use"
+          ],
+          "zone_num": 2,
+          "input_list": [
+            {
+              "id": "napster",
+              "distribution_enable": true,
+              "rename_enable": false,
+              "account_enable": true,
+              "play_info_type": "netusb"
+            },
+            {
+              "id": "spotify",
+              "distribution_enable": true,
+              "rename_enable": false,
+              "account_enable": false,
+              "play_info_type": "netusb"
+            },
+            {
+              "id": "qobuz",
+              "distribution_enable": true,
+              "rename_enable": false,
+              "account_enable": true,
+              "play_info_type": "netusb"
+            },
+            {
+              "id": "tidal",
+              "distribution_enable": true,
+              "rename_enable": false,
+              "account_enable": true,
+              "play_info_type": "netusb"
+            },
+            {
+              "id": "deezer",
+              "distribution_enable": true,
+              "rename_enable": false,
+              "account_enable": true,
+              "play_info_type": "netusb"
+            },
+            {
+              "id": "amazon_music",
+              "distribution_enable": true,
+              "rename_enable": false,
+              "account_enable": true,
+              "play_info_type": "netusb"
+            },
+            {
+              "id": "airplay",
+              "distribution_enable": false,
+              "rename_enable": false,
+              "account_enable": false,
+              "play_info_type": "netusb"
+            },
+            {
+              "id": "mc_link",
+              "distribution_enable": false,
+              "rename_enable": true,
+              "account_enable": false,
+              "play_info_type": "netusb"
+            },
+            {
+              "id": "server",
+              "distribution_enable": true,
+              "rename_enable": true,
+              "account_enable": false,
+              "play_info_type": "netusb"
+            },
+            {
+              "id": "net_radio",
+              "distribution_enable": true,
+              "rename_enable": true,
+              "account_enable": false,
+              "play_info_type": "netusb"
+            },
+            {
+              "id": "bluetooth",
+              "distribution_enable": true,
+              "rename_enable": false,
+              "account_enable": false,
+              "play_info_type": "netusb"
+            },
+            {
+              "id": "usb",
+              "distribution_enable": true,
+              "rename_enable": true,
+              "account_enable": false,
+              "play_info_type": "netusb"
+            },
+            {
+              "id": "tuner",
+              "distribution_enable": true,
+              "rename_enable": true,
+              "account_enable": false,
+              "play_info_type": "tuner"
+            },
+            {
+              "id": "hdmi1",
+              "distribution_enable": true,
+              "rename_enable": true,
+              "account_enable": false,
+              "play_info_type": "none"
+            },
+            {
+              "id": "hdmi2",
+              "distribution_enable": true,
+              "rename_enable": true,
+              "account_enable": false,
+              "play_info_type": "none"
+            },
+            {
+              "id": "hdmi3",
+              "distribution_enable": true,
+              "rename_enable": true,
+              "account_enable": false,
+              "play_info_type": "none"
+            },
+            {
+              "id": "hdmi4",
+              "distribution_enable": true,
+              "rename_enable": true,
+              "account_enable": false,
+              "play_info_type": "none"
+            },
+            {
+              "id": "hdmi5",
+              "distribution_enable": true,
+              "rename_enable": true,
+              "account_enable": false,
+              "play_info_type": "none"
+            },
+            {
+              "id": "hdmi6",
+              "distribution_enable": true,
+              "rename_enable": true,
+              "account_enable": false,
+              "play_info_type": "none"
+            },
+            {
+              "id": "hdmi7",
+              "distribution_enable": true,
+              "rename_enable": true,
+              "account_enable": false,
+              "play_info_type": "none"
+            },
+            {
+              "id": "tv",
+              "distribution_enable": true,
+              "rename_enable": true,
+              "account_enable": false,
+              "play_info_type": "none"
+            },
+            {
+              "id": "audio1",
+              "distribution_enable": true,
+              "rename_enable": true,
+              "account_enable": false,
+              "play_info_type": "none"
+            },
+            {
+              "id": "audio2",
+              "distribution_enable": true,
+              "rename_enable": true,
+              "account_enable": false,
+              "play_info_type": "none"
+            },
+            {
+              "id": "audio3",
+              "distribution_enable": true,
+              "rename_enable": true,
+              "account_enable": false,
+              "play_info_type": "none"
+            },
+            {
+              "id": "audio4",
+              "distribution_enable": true,
+              "rename_enable": true,
+              "account_enable": false,
+              "play_info_type": "none"
+            },
+            {
+              "id": "audio5",
+              "distribution_enable": true,
+              "rename_enable": true,
+              "account_enable": false,
+              "play_info_type": "none"
+            },
+            {
+              "id": "phono",
+              "distribution_enable": true,
+              "rename_enable": true,
+              "account_enable": false,
+              "play_info_type": "none"
+            },
+            {
+              "id": "main_sync",
+              "distribution_enable": true,
+              "rename_enable": true,
+              "account_enable": false,
+              "play_info_type": "none"
+            }
+          ],
+          "bluetooth": {
+            "update_cancelable": true,
+            "tx_connectivity_type_max": 3
+          },
+          "web_control_url": "/AdvancedSettings.html?mc=true",
+          "party_volume_list": [
+            "up",
+            "down"
+          ],
+          "hdmi_standby_through_list": [
+            "off",
+            "on",
+            "auto"
+          ]
+        },
+        "zone": [
+          {
+            "id": "main",
+            "func_list": [
+              "power",
+              "sleep",
+              "volume",
+              "mute",
+              "sound_program",
+              "pure_direct",
+              "enhancer",
+              "tone_control",
+              "dialogue_level",
+              "dialogue_lift",
+              "subwoofer_volume",
+              "signal_info",
+              "prepare_input_change",
+              "link_control",
+              "link_audio_delay",
+              "scene",
+              "contents_display",
+              "cursor",
+              "menu",
+              "actual_volume",
+              "surr_decoder_type",
+              "extra_bass",
+              "adaptive_drc",
+              "dts_dialogue_control",
+              "adaptive_dsp_level"
+            ],
+            "input_list": [
+              "napster",
+              "spotify",
+              "qobuz",
+              "tidal",
+              "deezer",
+              "amazon_music",
+              "airplay",
+              "mc_link",
+              "server",
+              "net_radio",
+              "bluetooth",
+              "usb",
+              "tuner",
+              "hdmi1",
+              "hdmi2",
+              "hdmi3",
+              "hdmi4",
+              "hdmi5",
+              "hdmi6",
+              "hdmi7",
+              "tv",
+              "audio1",
+              "audio2",
+              "audio3",
+              "audio4",
+              "audio5",
+              "phono"
+            ],
+            "sound_program_list": [
+              "munich",
+              "vienna",
+              "chamber",
+              "cellar_club",
+              "roxy_theatre",
+              "bottom_line",
+              "sports",
+              "action_game",
+              "roleplaying_game",
+              "music_video",
+              "standard",
+              "spectacle",
+              "sci-fi",
+              "adventure",
+              "drama",
+              "mono_movie",
+              "2ch_stereo",
+              "all_ch_stereo",
+              "surr_decoder",
+              "straight"
+            ],
+            "surr_decoder_type_list": [
+              "toggle",
+              "auto",
+              "dolby_surround",
+              "dts_neural_x",
+              "dts_neo6_cinema",
+              "dts_neo6_music"
+            ],
+            "tone_control_mode_list": [
+              "manual"
+            ],
+            "link_control_list": [
+              "speed",
+              "standard",
+              "stability"
+            ],
+            "link_audio_delay_list": [
+              "audio_sync",
+              "balanced",
+              "lip_sync"
+            ],
+            "range_step": [
+              {
+                "id": "volume",
+                "min": 0,
+                "max": 161,
+                "step": 1
+              },
+              {
+                "id": "tone_control",
+                "min": -12,
+                "max": 12,
+                "step": 1
+              },
+              {
+                "id": "dialogue_level",
+                "min": 0,
+                "max": 3,
+                "step": 1
+              },
+              {
+                "id": "dialogue_lift",
+                "min": 0,
+                "max": 5,
+                "step": 1
+              },
+              {
+                "id": "subwoofer_volume",
+                "min": -12,
+                "max": 12,
+                "step": 1
+              },
+              {
+                "id": "actual_volume_db",
+                "min": -80.5,
+                "max": 16.5,
+                "step": 0.5
+              },
+              {
+                "id": "actual_volume_numeric",
+                "min": 0.0,
+                "max": 97.0,
+                "step": 0.5
+              },
+              {
+                "id": "dts_dialogue_control",
+                "min": 0,
+                "max": 6,
+                "step": 1
+              }
+            ],
+            "scene_num": 8,
+            "cursor_list": [
+              "up",
+              "down",
+              "left",
+              "right",
+              "select",
+              "return"
+            ],
+            "menu_list": [
+              "on_screen",
+              "top_menu",
+              "menu",
+              "option",
+              "display",
+              "help",
+              "home",
+              "mode",
+              "red",
+              "green",
+              "yellow",
+              "blue"
+            ],
+            "actual_volume_mode_list": [
+              "db",
+              "numeric"
+            ]
+          },
+          {
+            "id": "zone2",
+            "zone_b": false,
+            "func_list": [
+              "power",
+              "sleep",
+              "volume",
+              "mute",
+              "enhancer",
+              "tone_control",
+              "balance",
+              "prepare_input_change",
+              "link_control",
+              "scene",
+              "actual_volume",
+              "extra_bass",
+              "mono"
+            ],
+            "input_list": [
+              "napster",
+              "spotify",
+              "qobuz",
+              "tidal",
+              "deezer",
+              "amazon_music",
+              "airplay",
+              "mc_link",
+              "server",
+              "net_radio",
+              "bluetooth",
+              "usb",
+              "tuner",
+              "audio1",
+              "audio2",
+              "audio3",
+              "audio4",
+              "audio5",
+              "phono",
+              "main_sync"
+            ],
+            "tone_control_mode_list": [
+              "manual",
+              "auto",
+              "bypass"
+            ],
+            "link_control_list": [
+              "speed",
+              "standard",
+              "stability"
+            ],
+            "range_step": [
+              {
+                "id": "volume",
+                "min": 0,
+                "max": 161,
+                "step": 1
+              },
+              {
+                "id": "tone_control",
+                "min": -12,
+                "max": 12,
+                "step": 1
+              },
+              {
+                "id": "balance",
+                "min": -20,
+                "max": 20,
+                "step": 1
+              },
+              {
+                "id": "actual_volume_db",
+                "min": -80.5,
+                "max": 10.0,
+                "step": 0.5
+              },
+              {
+                "id": "actual_volume_numeric",
+                "min": 0.0,
+                "max": 90.5,
+                "step": 0.5
+              }
+            ],
+            "scene_num": 8,
+            "actual_volume_mode_list": [
+              "db",
+              "numeric"
+            ]
+          }
+        ],
+        "tuner": {
+          "func_list": [
+            "fm",
+            "rds",
+            "dab"
+          ],
+          "range_step": [
+            {
+              "id": "fm",
+              "min": 87500,
+              "max": 108000,
+              "step": 50
+            }
+          ],
+          "preset": {
+            "type": "separate",
+            "num": 40
+          }
+        },
+        "netusb": {
+          "func_list": [
+            "recent_info",
+            "play_queue",
+            "mc_playlist",
+            "streaming_service_use",
+            "previous_force"
+          ],
+          "preset": {
+            "num": 40
+          },
+          "recent_info": {
+            "num": 40
+          },
+          "play_queue": {
+            "size": 200
+          },
+          "mc_playlist": {
+            "size": 200,
+            "num": 5
+          },
+          "net_radio_type": "airable",
+          "tidal": {
+            "mode": "airable"
+          },
+          "qobuz": {
+            "login_type": "oauth"
+          }
+        },
+        "distribution": {
+          "version": 2.0,
+          "compatible_client": [
+            2
+          ],
+          "client_max": 19,
+          "server_zone_list": [
+            "main",
+            "zone2"
+          ],
+          "mc_surround": {
+            "version": 1.0,
+            "func_list": [
+              "mcss_error_info"
+            ],
+            "master_role": {
+              "surround_pair": true,
+              "stereo_pair": false,
+              "subwoofer_pair": true
+            },
+            "slave_role": {
+              "surround_pair_l_or_r": false,
+              "surround_pair_lr": false,
+              "subwoofer_pair": false
+            }
+          }
+        }
+      },
+      "system/getDeviceInfo": {
+        "response_code": 0,
+        "model_name": "RX-V6A",
+        "destination": "G",
+        "device_id": "RXV6A0000",
+        "system_id": "00000000",
+        "system_version": 1.8,
+        "api_version": 2.17,
+        "netmodule_generation": 2,
+        "netmodule_version": "2415    ",
+        "netmodule_checksum": "8411E30E",
+        "serial_number": "",
+        "category_code": 1,
+        "operation_mode": "normal",
+        "update_error_code": "00000000",
+        "net_module_num": 1,
+        "update_data_type": 0,
+        "analytics_info": {
+          "uuid": "00000000-0000-0000-0000-000000000000"
+        }
+      },
+      "system/getNameText": {
+        "response_code": 0,
+        "zone_list": [
+          {
+            "id": "main",
+            "text": "Main"
+          },
+          {
+            "id": "zone2",
+            "text": "Zone2"
+          }
+        ],
+        "input_list": [
+          {
+            "id": "tuner",
+            "text": "TUNER"
+          },
+          {
+            "id": "phono",
+            "text": "PHONO"
+          },
+          {
+            "id": "hdmi1",
+            "text": "HDMI1"
+          },
+          {
+            "id": "hdmi2",
+            "text": "HDMI2"
+          },
+          {
+            "id": "hdmi3",
+            "text": "HDMI3"
+          },
+          {
+            "id": "hdmi4",
+            "text": "HDMI4"
+          },
+          {
+            "id": "hdmi5",
+            "text": "HDMI5"
+          },
+          {
+            "id": "hdmi6",
+            "text": "HDMI6"
+          },
+          {
+            "id": "hdmi7",
+            "text": "HDMI7"
+          },
+          {
+            "id": "audio1",
+            "text": "AUDIO1"
+          },
+          {
+            "id": "audio2",
+            "text": "AUDIO2"
+          },
+          {
+            "id": "audio3",
+            "text": "AUDIO3"
+          },
+          {
+            "id": "audio4",
+            "text": "AUDIO4"
+          },
+          {
+            "id": "audio5",
+            "text": "AUDIO5"
+          },
+          {
+            "id": "tv",
+            "text": "TV"
+          },
+          {
+            "id": "main_sync",
+            "text": "MAIN SYNC"
+          },
+          {
+            "id": "usb",
+            "text": "USB"
+          },
+          {
+            "id": "bluetooth",
+            "text": "BLUETOOTH"
+          },
+          {
+            "id": "server",
+            "text": "SERVER"
+          },
+          {
+            "id": "net_radio",
+            "text": "NET RADIO"
+          },
+          {
+            "id": "napster",
+            "text": "NAPSTER"
+          },
+          {
+            "id": "spotify",
+            "text": "SPOTIFY"
+          },
+          {
+            "id": "airplay",
+            "text": "AIRPLAY"
+          },
+          {
+            "id": "qobuz",
+            "text": "QOBUZ"
+          },
+          {
+            "id": "mc_link",
+            "text": "MusicCast Link"
+          },
+          {
+            "id": "tidal",
+            "text": "TIDAL"
+          },
+          {
+            "id": "deezer",
+            "text": "DEEZER"
+          },
+          {
+            "id": "amazon_music",
+            "text": "AMAZON MUSIC"
+          }
+        ],
+        "sound_program_list": [
+          {
+            "id": "munich",
+            "text": "Hall in Munich"
+          },
+          {
+            "id": "vienna",
+            "text": "Hall in Vienna"
+          },
+          {
+            "id": "chamber",
+            "text": "Chamber"
+          },
+          {
+            "id": "cellar_club",
+            "text": "Cellar Club"
+          },
+          {
+            "id": "roxy_theatre",
+            "text": "The Roxy Theatre"
+          },
+          {
+            "id": "bottom_line",
+            "text": "The Bottom Line"
+          },
+          {
+            "id": "sports",
+            "text": "Sports"
+          },
+          {
+            "id": "action_game",
+            "text": "Action Game"
+          },
+          {
+            "id": "roleplaying_game",
+            "text": "Roleplaying Game"
+          },
+          {
+            "id": "music_video",
+            "text": "Music Video"
+          },
+          {
+            "id": "standard",
+            "text": "Standard"
+          },
+          {
+            "id": "spectacle",
+            "text": "Spectacle"
+          },
+          {
+            "id": "sci-fi",
+            "text": "Sci-Fi"
+          },
+          {
+            "id": "adventure",
+            "text": "Adventure"
+          },
+          {
+            "id": "drama",
+            "text": "Drama"
+          },
+          {
+            "id": "mono_movie",
+            "text": "Mono Movie"
+          },
+          {
+            "id": "2ch_stereo",
+            "text": "2ch Stereo"
+          },
+          {
+            "id": "all_ch_stereo",
+            "text": "All Ch Stereo"
+          },
+          {
+            "id": "surr_decoder",
+            "text": "Surround Decoder"
+          },
+          {
+            "id": "straight",
+            "text": "Straight"
+          }
+        ]
+      },
+      "system/getFuncStatus": {
+        "response_code": 0,
+        "headphone": false,
+        "hdmi_out_1": true,
+        "party_mode": false,
+        "hdmi_standby_through": "auto"
+      },
+      "main/getStatus": {
+        "response_code": 0,
+        "power": "on",
+        "sleep": 0,
+        "volume": 60,
+        "mute": false,
+        "max_volume": 161,
+        "input": "hdmi1",
+        "input_text": "HDMI1",
+        "distribution_enable": true,
+        "sound_program": "straight",
+        "surr_decoder_type": "auto",
+        "pure_direct": false,
+        "enhancer": true,
+        "tone_control": {
+          "mode": "manual",
+          "bass": 0,
+          "treble": 0
+        },
+        "dialogue_level": 0,
+        "dialogue_lift": 2,
+        "subwoofer_volume": 0,
+        "link_control": "standard",
+        "link_audio_delay": "audio_sync",
+        "disable_flags": 0,
+        "contents_display": true,
+        "actual_volume": {
+          "mode": "numeric",
+          "value": 30.0,
+          "unit": ""
+        },
+        "party_enable": false,
+        "extra_bass": false,
+        "adaptive_drc": false,
+        "dts_dialogue_control": 0,
+        "adaptive_dsp_level": true
+      },
+      "zone2/getStatus": {
+        "response_code": 0,
+        "power": "standby",
+        "sleep": 0,
+        "volume": 81,
+        "mute": false,
+        "max_volume": 161,
+        "input": "audio1",
+        "input_text": "AUDIO1",
+        "distribution_enable": true,
+        "enhancer": true,
+        "tone_control": {
+          "mode": "auto",
+          "bass": 0,
+          "treble": 0
+        },
+        "balance": 0,
+        "link_control": "standard",
+        "disable_flags": 0,
+        "actual_volume": {
+          "mode": "numeric",
+          "value": 40.5,
+          "unit": ""
+        },
+        "party_enable": false,
+        "extra_bass": false,
+        "mono": false
+      },
+      "main/getSignalInfo": {
+        "response_code": 0,
+        "audio": {
+          "error": 0,
+          "format": "---",
+          "fs": "---",
+          "bit": "",
+          "bitrate": 0
+        }
+      },
+      "zone2/getSignalInfo": {
+        "response_code": 0,
+        "audio": {
+          "error": 0,
+          "format": "",
+          "fs": "",
+          "bit": "",
+          "bitrate": 0
+        }
+      },
+      "main/getSoundProgramList": {
+        "response_code": 0,
+        "sound_program_list": [
+          "straight",
+          "surr_decoder",
+          "2ch_stereo",
+          "all_ch_stereo",
+          "standard",
+          "sci-fi",
+          "adventure",
+          "drama",
+          "spectacle",
+          "mono_movie",
+          "music_video",
+          "sports",
+          "action_game",
+          "roleplaying_game",
+          "munich",
+          "vienna",
+          "chamber",
+          "cellar_club",
+          "roxy_theatre",
+          "bottom_line"
+        ]
+      },
+      "zone2/getSoundProgramList": {
+        "response_code": 0,
+        "sound_program_list": []
+      },
+      "netusb/getPlayInfo": {
+        "response_code": 0,
+        "input": "net_radio",
+        "play_queue_type": "system",
+        "playback": "stop",
+        "repeat": "off",
+        "shuffle": "off",
+        "play_time": 0,
+        "total_time": 0,
+        "artist": "",
+        "album": "",
+        "track": "",
+        "albumart_url": "",
+        "albumart_id": 6300,
+        "usb_devicetype": "unknown",
+        "auto_stopped": false,
+        "attribute": 16777219,
+        "repeat_available": [],
+        "shuffle_available": []
+      },
+      "netusb/getPresetInfo": {
+        "response_code": 0,
+        "preset_info": [
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          },
+          {
+            "input": "unknown",
+            "text": ""
+          }
+        ],
+        "func_list": [
+          "clear",
+          "move"
+        ]
+      },
+      "netusb/getRecentInfo": {
+        "response_code": 0,
+        "recent_info": [
+          {
+            "input": "net_radio",
+            "text": "Entry",
+            "albumart_url": "http://static.airable.io:80/40/41/719590.png",
+            "play_count": 1,
+            "attribute": 0
+          },
+          {
+            "input": "net_radio",
+            "text": "Entry",
+            "albumart_url": "http://static.airable.io:80/75/72/353871.png",
+            "play_count": 1,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          },
+          {
+            "input": "unknown",
+            "text": "",
+            "albumart_url": "",
+            "play_count": 0,
+            "attribute": 0
+          }
+        ]
+      },
+      "netusb/getPlayQueue": {
+        "response_code": 0,
+        "type": "system",
+        "max_line": 0,
+        "playing_index": -1,
+        "index": 0,
+        "track_info": []
+      },
+      "netusb/getMcPlaylistName": {
+        "response_code": 0,
+        "name_list": [
+          "Playlist 1",
+          "Playlist 2",
+          "Playlist 3",
+          "Playlist 4",
+          "Playlist 5"
+        ]
+      },
+      "netusb/getMcPlaylist": {
+        "response_code": 0,
+        "max_line": 0,
+        "bank": 1,
+        "index": 0,
+        "track_info": []
+      },
+      "netusb/getListInfo": {
+        "response_code": 0,
+        "input": "net_radio",
+        "menu_layer": 0,
+        "max_line": 2,
+        "index": 0,
+        "playing_index": -1,
+        "menu_name": "NET RADIO",
+        "list_info": [
+          {
+            "text": "Entry",
+            "subtexts": [],
+            "thumbnail": "",
+            "logo": "",
+            "attribute": 2
+          },
+          {
+            "text": "Entry",
+            "subtexts": [],
+            "thumbnail": "",
+            "logo": "",
+            "attribute": 2
+          }
+        ]
+      },
+      "netusb/getSettings": {
+        "response_code": 0,
+        "qobuz": {
+          "quality": {
+            "value": "hr_192_24",
+            "value_list": [
+              {
+                "value": "mp3_320",
+                "attribute": 1
+              },
+              {
+                "value": "cd_44_16",
+                "attribute": 1
+              },
+              {
+                "value": "hr_96_24",
+                "attribute": 1
+              },
+              {
+                "value": "hr_192_24",
+                "attribute": 1
+              }
+            ]
+          }
+        }
+      },
+      "tuner/getPlayInfo": {
+        "response_code": 0,
+        "band": "fm",
+        "auto_scan": false,
+        "fm": {
+          "preset": 0,
+          "freq": 98100,
+          "tuned": false,
+          "audio_mode": "mono"
+        },
+        "rds": {
+          "program_type": "",
+          "program_service": "",
+          "radio_text_a": "",
+          "radio_text_b": ""
+        },
+        "dab": {
+          "preset": 0,
+          "id": 0,
+          "status": "not_ready",
+          "freq": 0,
+          "category": "primary",
+          "audio_mode": "mono",
+          "bit_rate": 0,
+          "quality": 0,
+          "tune_aid": 0,
+          "off_air": false,
+          "dab_plus": false,
+          "program_type": "",
+          "ch_label": "",
+          "service_label": "",
+          "dls": "",
+          "ensemble_label": ""
+        }
+      },
+      "tuner/getPresetInfo": {
+        "response_code": 0,
+        "preset_info": [
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          },
+          {
+            "band": "unknown",
+            "number": 0,
+            "hd_program": 0,
+            "text": ""
+          }
+        ],
+        "func_list": [
+          "clear",
+          "move"
+        ]
+      },
+      "dist/getDistributionInfo": {
+        "response_code": 0,
+        "group_id": "",
+        "group_name": "",
+        "role": "none",
+        "server_zone": "main",
+        "client_list": [],
+        "build_disable": [],
+        "audio_dropout": false,
+        "mc_surround": {
+          "id": 0,
+          "role": "none",
+          "status": "none",
+          "build_disable": []
+        }
+      },
+      "clock/getSettings": {
+        "response_code": 0
+      }
+    }
+  },
   "xml": {
-    "source": "device-captures/rx-v6a-2026-09-01 (scrubbed)",
+    "source": "device-captures/rx-v6a-2026-09-01 (scrubbed: factory input names, neutral ids)",
     "answers": {
       "AirPlay/Config": "<YAMAHA_AV rsp=\"GET\" RC=\"0\"><AirPlay><Config><Feature_Availability>Not Ready</Feature_Availability><Volume_Interlock>Limited</Volume_Interlock></Config></AirPlay></YAMAHA_AV>",
       "AirPlay/Play_Info": "<YAMAHA_AV rsp=\"GET\" RC=\"0\"><AirPlay><Play_Info><Feature_Availability>Not Ready</Feature_Availability><Playback_Info>Pause</Playback_Info><Time><Elapsed></Elapsed><Total></Total></Time><Meta_Info><Artist></Artist><Album></Album><Song></Song></Meta_Info><Album_ART><URL></URL><ID></ID><Format>YMF</Format></Album_ART><Input_Logo><URL_S>/YamahaRemoteControl/Logos/logo004.png</URL_S><URL_M></URL_M><URL_L></URL_L></Input_Logo></Play_Info></AirPlay></YAMAHA_AV>",
@@ -15,7 +1926,7 @@
       "Deezer/Config": "<YAMAHA_AV rsp=\"GET\" RC=\"0\"><Deezer><Config><Feature_Availability>Not Ready</Feature_Availability></Config></Deezer></YAMAHA_AV>",
       "Deezer/Play_Info": "<YAMAHA_AV rsp=\"GET\" RC=\"0\"><Deezer><Play_Info><Feature_Availability>Not Ready</Feature_Availability><Playback_Info>Stop</Playback_Info><Play_Mode><Repeat>Off</Repeat><Shuffle>Off</Shuffle></Play_Mode><Time><Elapsed></Elapsed><Total></Total></Time><Meta_Info><Artist></Artist><Album></Album><Track></Track></Meta_Info><Album_ART><URL></URL><ID></ID><Format>YMF</Format></Album_ART><Input_Logo><URL_S>/YamahaRemoteControl/Logos/logo012.png</URL_S><URL_M></URL_M><URL_L></URL_L></Input_Logo></Play_Info></Deezer></YAMAHA_AV>",
       "Main_Zone/Basic_Status": "<YAMAHA_AV rsp=\"GET\" RC=\"0\"><Main_Zone><Basic_Status><Power_Control><Power>On</Power><Sleep>Off</Sleep></Power_Control><Volume><Lvl><Val>-505</Val><Exp>1</Exp><Unit>dB</Unit></Lvl><Mute>Off</Mute><Subwoofer_Trim><Val>0</Val><Exp>1</Exp><Unit>dB</Unit></Subwoofer_Trim><Scale>0-97</Scale></Volume><Input><Input_Sel>HDMI1</Input_Sel><Input_Sel_Item_Info><Param>HDMI1</Param><RW>RW</RW><Title></Title><Icon><On>1</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number>1</Src_Number></Input_Sel_Item_Info></Input><Surround><Program_Sel><Current><Straight>On</Straight><Enhancer>On</Enhancer><Sound_Program>Standard</Sound_Program></Current></Program_Sel></Surround><Party_Info>Off</Party_Info><Sound_Video><Tone><Bass><Val>0</Val><Exp>1</Exp><Unit>dB</Unit></Bass><Treble><Val>0</Val><Exp>1</Exp><Unit>dB</Unit></Treble></Tone><Pure_Direct><Mode>Off</Mode></Pure_Direct><HDMI><Standby_Through_Info>On</Standby_Through_Info><Output><OUT_1>On</OUT_1></Output></HDMI><YPAO_Volume>Auto</YPAO_Volume><Extra_Bass>Off</Extra_Bass><Adaptive_DRC>Off</Adaptive_DRC><Dialogue_Adjust><Dialogue_Lift>2</Dialogue_Lift><Dialogue_Lvl>0</Dialogue_Lvl><DTS_Dialogue_Control>0</DTS_Dialogue_Control></Dialogue_Adjust></Sound_Video></Basic_Status></Main_Zone></YAMAHA_AV>",
-      "Main_Zone/Config": "<YAMAHA_AV rsp=\"GET\" RC=\"0\"><Main_Zone><Config><Feature_Availability>Ready</Feature_Availability><Name><Zone>Main</Zone><Room_for_YXC>Wohnzimmer</Room_for_YXC><Scene><Scene_1>Movie Viewing</Scene_1><Scene_2>Radio Listening</Scene_2><Scene_3>Music Listening</Scene_3><Scene_4>NET Audio Listening</Scene_4><Scene_5>STB Viewing</Scene_5><Scene_6>Game Playing</Scene_6><Scene_7>TV Viewing</Scene_7><Scene_8>Media Server Listening</Scene_8></Scene><Scene_for_YXC><Scene_1>Movie Viewing</Scene_1><Scene_2>Radio Listening</Scene_2><Scene_3>Music Listening</Scene_3><Scene_4>NET Audio Listening</Scene_4><Scene_5>STB Viewing</Scene_5><Scene_6>Game Playing</Scene_6><Scene_7>TV Viewing</Scene_7><Scene_8>Media Server Listening</Scene_8></Scene_for_YXC></Name><Icon><Scene_for_YXC><Scene_1>1</Scene_1><Scene_2>2</Scene_2><Scene_3>3</Scene_3><Scene_4>4</Scene_4><Scene_5>5</Scene_5><Scene_6>6</Scene_6><Scene_7>7</Scene_7><Scene_8>8</Scene_8></Scene_for_YXC></Icon><Volume_Existence>Exist</Volume_Existence></Config></Main_Zone></YAMAHA_AV>",
+      "Main_Zone/Config": "<YAMAHA_AV rsp=\"GET\" RC=\"0\"><Main_Zone><Config><Feature_Availability>Ready</Feature_Availability><Name><Zone>Main</Zone><Room_for_YXC>Main</Room_for_YXC><Scene><Scene_1>Movie Viewing</Scene_1><Scene_2>Radio Listening</Scene_2><Scene_3>Music Listening</Scene_3><Scene_4>NET Audio Listening</Scene_4><Scene_5>STB Viewing</Scene_5><Scene_6>Game Playing</Scene_6><Scene_7>TV Viewing</Scene_7><Scene_8>Media Server Listening</Scene_8></Scene><Scene_for_YXC><Scene_1>Movie Viewing</Scene_1><Scene_2>Radio Listening</Scene_2><Scene_3>Music Listening</Scene_3><Scene_4>NET Audio Listening</Scene_4><Scene_5>STB Viewing</Scene_5><Scene_6>Game Playing</Scene_6><Scene_7>TV Viewing</Scene_7><Scene_8>Media Server Listening</Scene_8></Scene_for_YXC></Name><Icon><Scene_for_YXC><Scene_1>1</Scene_1><Scene_2>2</Scene_2><Scene_3>3</Scene_3><Scene_4>4</Scene_4><Scene_5>5</Scene_5><Scene_6>6</Scene_6><Scene_7>7</Scene_7><Scene_8>8</Scene_8></Scene_for_YXC></Icon><Volume_Existence>Exist</Volume_Existence></Config></Main_Zone></YAMAHA_AV>",
       "Main_Zone/Input": "<YAMAHA_AV rsp=\"GET\" RC=\"0\"><Main_Zone><Input><Input_Sel_Item><Item_1><Param>Napster</Param><RW>RW</RW><Title></Title><Icon><On>130</On><Off>0</Off></Icon><Src_Name>Napster</Src_Name><Src_Number>1</Src_Number></Item_1><Item_2><Param>Spotify</Param><RW>RW</RW><Title></Title><Icon><On>133</On><Off>0</Off></Icon><Src_Name>Spotify</Src_Name><Src_Number>1</Src_Number></Item_2><Item_3><Param>Qobuz</Param><RW>RW</RW><Title></Title><Icon><On>135</On><Off>0</Off></Icon><Src_Name>Qobuz</Src_Name><Src_Number>1</Src_Number></Item_3><Item_4><Param>TIDAL</Param><RW>RW</RW><Title></Title><Icon><On>137</On><Off>0</Off></Icon><Src_Name>TIDAL</Src_Name><Src_Number>1</Src_Number></Item_4><Item_5><Param>Deezer</Param><RW>RW</RW><Title></Title><Icon><On>138</On><Off>0</Off></Icon><Src_Name>Deezer</Src_Name><Src_Number>1</Src_Number></Item_5><Item_6><Param>Amazon Music</Param><RW>RW</RW><Title></Title><Icon><On>139</On><Off>0</Off></Icon><Src_Name>Amazon_Music</Src_Name><Src_Number>1</Src_Number></Item_6><Item_7><Param>AirPlay</Param><RW>RW</RW><Title></Title><Icon><On>128</On><Off>0</Off></Icon><Src_Name>AirPlay</Src_Name><Src_Number>1</Src_Number></Item_7><Item_8><Param>MusicCast Link</Param><RW>RW</RW><Title></Title><Icon><On>2</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number>1</Src_Number></Item_8><Item_9><Param>SERVER</Param><RW>RW</RW><Title></Title><Icon><On>3</On><Off>0</Off></Icon><Src_Name>SERVER</Src_Name><Src_Number>1</Src_Number></Item_9><Item_10><Param>NET RADIO</Param><RW>RW</RW><Title></Title><Icon><On>4</On><Off>0</Off></Icon><Src_Name>NET_RADIO</Src_Name><Src_Number>1</Src_Number></Item_10><Item_11><Param>Bluetooth</Param><RW>RW</RW><Title></Title><Icon><On>129</On><Off>0</Off></Icon><Src_Name>Bluetooth</Src_Name><Src_Number>1</Src_Number></Item_11><Item_12><Param>USB</Param><RW>R</RW><Title></Title><Icon><On>5</On><Off>0</Off></Icon><Src_Name>USB</Src_Name><Src_Number>1</Src_Number></Item_12><Item_13><Param>TUNER</Param><RW>R</RW><Title></Title><Icon><On>6</On><Off>0</Off></Icon><Src_Name>DAB</Src_Name><Src_Number>1</Src_Number></Item_13><Item_14><Param>HDMI1</Param><RW>RW</RW><Title></Title><Icon><On>1</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number>1</Src_Number></Item_14><Item_15><Param>HDMI2</Param><RW>RW</RW><Title></Title><Icon><On>1</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number>1</Src_Number></Item_15><Item_16><Param>HDMI3</Param><RW>RW</RW><Title></Title><Icon><On>1</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number>1</Src_Number></Item_16><Item_17><Param>HDMI4</Param><RW>RW</RW><Title></Title><Icon><On>1</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number>1</Src_Number></Item_17><Item_18><Param>HDMI5</Param><RW>RW</RW><Title></Title><Icon><On>1</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number>1</Src_Number></Item_18><Item_19><Param>HDMI6</Param><RW>RW</RW><Title></Title><Icon><On>1</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number>1</Src_Number></Item_19><Item_20><Param>HDMI7</Param><RW>RW</RW><Title></Title><Icon><On>1</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number>1</Src_Number></Item_20><Item_21><Param>AUDIO1</Param><RW>R</RW><Title></Title><Icon><On>2</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number>1</Src_Number></Item_21><Item_22><Param>AUDIO2</Param><RW>R</RW><Title></Title><Icon><On>2</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number>1</Src_Number></Item_22><Item_23><Param>AUDIO3</Param><RW>R</RW><Title></Title><Icon><On>2</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number>1</Src_Number></Item_23><Item_24><Param>AUDIO4</Param><RW>R</RW><Title></Title><Icon><On>2</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number>1</Src_Number></Item_24><Item_25><Param>AUDIO5</Param><RW>R</RW><Title></Title><Icon><On>2</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number>1</Src_Number></Item_25><Item_26><Param>PHONO</Param><RW>R</RW><Title></Title><Icon><On>9</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number>1</Src_Number></Item_26><Item_27><Param>TV</Param><RW>R</RW><Title></Title><Icon><On>0</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number>1</Src_Number></Item_27></Input_Sel_Item></Input></Main_Zone></YAMAHA_AV>",
       "Main_Zone/Scene": "<YAMAHA_AV rsp=\"GET\" RC=\"0\"><Main_Zone><Scene><Scene_Sel_Item><Item_1><Param>Scene 1</Param><RW>W</RW><Title></Title><Icon><On>1</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number>1</Src_Number></Item_1><Item_2><Param>Scene 2</Param><RW>W</RW><Title></Title><Icon><On>2</On><Off>0</Off></Icon><Src_Name>DAB</Src_Name><Src_Number>1</Src_Number></Item_2><Item_3><Param>Scene 3</Param><RW>W</RW><Title></Title><Icon><On>3</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number></Src_Number></Item_3><Item_4><Param>Scene 4</Param><RW>W</RW><Title></Title><Icon><On>4</On><Off>0</Off></Icon><Src_Name>NET_RADIO</Src_Name><Src_Number>1</Src_Number></Item_4><Item_5><Param>Scene 5</Param><RW>W</RW><Title></Title><Icon><On>5</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number>1</Src_Number></Item_5><Item_6><Param>Scene 6</Param><RW>W</RW><Title></Title><Icon><On>6</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number>1</Src_Number></Item_6><Item_7><Param>Scene 7</Param><RW>W</RW><Title></Title><Icon><On>7</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number></Src_Number></Item_7><Item_8><Param>Scene 8</Param><RW>W</RW><Title></Title><Icon><On>8</On><Off>0</Off></Icon><Src_Name>SERVER</Src_Name><Src_Number>1</Src_Number></Item_8></Scene_Sel_Item></Scene></Main_Zone></YAMAHA_AV>",
       "NET_RADIO/Config": "<YAMAHA_AV rsp=\"GET\" RC=\"0\"><NET_RADIO><Config><Feature_Availability>Not Ready</Feature_Availability></Config></NET_RADIO></YAMAHA_AV>",
@@ -29,7 +1940,7 @@
       "Spotify/Config": "<YAMAHA_AV rsp=\"GET\" RC=\"0\"><Spotify><Config><Feature_Availability>Not Ready</Feature_Availability></Config></Spotify></YAMAHA_AV>",
       "Spotify/Play_Info": "<YAMAHA_AV rsp=\"GET\" RC=\"0\"><Spotify><Play_Info><Feature_Availability>Not Ready</Feature_Availability><Playback_Info>Stop</Playback_Info><Play_Mode><Repeat>Off</Repeat><Shuffle>Off</Shuffle></Play_Mode><Meta_Info><Artist></Artist><Album></Album><Track></Track></Meta_Info><Album_ART><URL></URL><ID></ID><Format>YMF</Format></Album_ART><Input_Logo><URL_S>/YamahaRemoteControl/Logos/logo005.png</URL_S><URL_M></URL_M><URL_L></URL_L></Input_Logo></Play_Info></Spotify></YAMAHA_AV>",
       "System/Config": "<YAMAHA_AV rsp=\"GET\" RC=\"0\"><System><Config><Model_Name>RX-V6A</Model_Name><System_ID>00000000</System_ID><Version>1.80/3.14</Version><Feature_Existence><Main_Zone>1</Main_Zone><Zone_2>1</Zone_2><Zone_3>0</Zone_3><Zone_4>0</Zone_4><Tuner>0</Tuner><DAB>1</DAB><Napster>1</Napster><SiriusXM>0</SiriusXM><Pandora>0</Pandora><Spotify>1</Spotify><JUKE>0</JUKE><Qobuz>1</Qobuz><radiko_jp>0</radiko_jp><TIDAL>1</TIDAL><Deezer>1</Deezer><Amazon_Music>1</Amazon_Music><Alexa>0</Alexa><QQMusic>0</QQMusic><AirPlay>1</AirPlay><SERVER>1</SERVER><NET_RADIO>1</NET_RADIO><Bluetooth>1</Bluetooth><USB>1</USB></Feature_Existence><Name><Input><TUNER>TUNER</TUNER><PHONO>PHONO</PHONO><HDMI_1>HDMI1</HDMI_1><HDMI_2>HDMI2</HDMI_2><HDMI_3>HDMI3</HDMI_3><HDMI_4>HDMI4</HDMI_4><HDMI_5>HDMI5</HDMI_5><HDMI_6>HDMI6</HDMI_6><HDMI_7>HDMI7</HDMI_7><AUDIO_1>AUDIO1</AUDIO_1><AUDIO_2>AUDIO2</AUDIO_2><AUDIO_3>AUDIO3</AUDIO_3><AUDIO_4>AUDIO4</AUDIO_4><AUDIO_5>AUDIO5</AUDIO_5><TV>TV</TV><MusicCast_Link>MusicCast Link</MusicCast_Link><SERVER>SERVER</SERVER><NET_RADIO>NET RADIO</NET_RADIO><Bluetooth>Bluetooth</Bluetooth><USB>USB</USB></Input></Name></Config></System></YAMAHA_AV>",
-      "System/Misc": "<YAMAHA_AV rsp=\"GET\" RC=\"0\"><System><Misc><Network><Info><IP_Address>10.47.88.7</IP_Address><Subnet_Mask>255.255.255.0</Subnet_Mask><Default_Gateway>10.47.88.1</Default_Gateway><DNS_Server_1>10.47.88.1</DNS_Server_1><DNS_Server_2>0.0.0.0</DNS_Server_2><MAC_Address><Wired_LAN>CCD42ECF0223</Wired_LAN><Wireless_LAN>CCD42ECF0224</Wireless_LAN></MAC_Address></Info></Network></Misc></System></YAMAHA_AV>",
+      "System/Misc": "<YAMAHA_AV rsp=\"GET\" RC=\"0\"><System><Misc><Network><Info><IP_Address>192.0.2.10</IP_Address><Subnet_Mask>255.255.255.0</Subnet_Mask><Default_Gateway>192.0.2.1</Default_Gateway><DNS_Server_1>192.0.2.1</DNS_Server_1><DNS_Server_2>0.0.0.0</DNS_Server_2><MAC_Address><Wired_LAN>000000000000</Wired_LAN><Wireless_LAN>000000000001</Wireless_LAN></MAC_Address></Info></Network></Misc></System></YAMAHA_AV>",
       "System/Party_Mode": "<YAMAHA_AV rsp=\"GET\" RC=\"0\"><System><Party_Mode><Mode>Off</Mode></Party_Mode></System></YAMAHA_AV>",
       "System/Power_Control": "<YAMAHA_AV rsp=\"GET\" RC=\"0\"><System><Power_Control><Power>On</Power></Power_Control></System></YAMAHA_AV>",
       "System/Unit_Desc": "<YAMAHA_AV rsp=\"GET\" RC=\"0\"><System><Unit_Desc><Version>1.10</Version><URL>/YamahaRemoteControl/desc.xml</URL></Unit_Desc></System></YAMAHA_AV>",
@@ -43,6 +1954,7 @@
       "Zone_2/Config": "<YAMAHA_AV rsp=\"GET\" RC=\"0\"><Zone_2><Config><Feature_Availability>Ready</Feature_Availability><Name><Zone>Zone2</Zone><Room_for_YXC>Room</Room_for_YXC><Scene><Scene_1>SCENE1</Scene_1><Scene_2>SCENE2</Scene_2><Scene_3>SCENE3</Scene_3><Scene_4>SCENE4</Scene_4><Scene_5>SCENE5</Scene_5><Scene_6>SCENE6</Scene_6><Scene_7>SCENE7</Scene_7><Scene_8>SCENE8</Scene_8></Scene><Scene_for_YXC><Scene_1>SCENE1</Scene_1><Scene_2>SCENE2</Scene_2><Scene_3>SCENE3</Scene_3><Scene_4>SCENE4</Scene_4><Scene_5>SCENE5</Scene_5><Scene_6>SCENE6</Scene_6><Scene_7>SCENE7</Scene_7><Scene_8>SCENE8</Scene_8></Scene_for_YXC></Name><Icon><Scene_for_YXC><Scene_1>0</Scene_1><Scene_2>0</Scene_2><Scene_3>0</Scene_3><Scene_4>0</Scene_4><Scene_5>0</Scene_5><Scene_6>0</Scene_6><Scene_7>0</Scene_7><Scene_8>0</Scene_8></Scene_for_YXC></Icon><Volume_Existence>Exist</Volume_Existence></Config></Zone_2></YAMAHA_AV>",
       "Zone_2/Input": "<YAMAHA_AV rsp=\"GET\" RC=\"0\"><Zone_2><Input><Input_Sel_Item><Item_1><Param>Napster</Param><RW>RW</RW><Title></Title><Icon><On>130</On><Off>0</Off></Icon><Src_Name>Napster</Src_Name><Src_Number>1</Src_Number></Item_1><Item_2><Param>Spotify</Param><RW>RW</RW><Title></Title><Icon><On>133</On><Off>0</Off></Icon><Src_Name>Spotify</Src_Name><Src_Number>1</Src_Number></Item_2><Item_3><Param>Qobuz</Param><RW>RW</RW><Title></Title><Icon><On>135</On><Off>0</Off></Icon><Src_Name>Qobuz</Src_Name><Src_Number>1</Src_Number></Item_3><Item_4><Param>TIDAL</Param><RW>RW</RW><Title></Title><Icon><On>137</On><Off>0</Off></Icon><Src_Name>TIDAL</Src_Name><Src_Number>1</Src_Number></Item_4><Item_5><Param>Deezer</Param><RW>RW</RW><Title></Title><Icon><On>138</On><Off>0</Off></Icon><Src_Name>Deezer</Src_Name><Src_Number>1</Src_Number></Item_5><Item_6><Param>Amazon Music</Param><RW>RW</RW><Title></Title><Icon><On>139</On><Off>0</Off></Icon><Src_Name>Amazon_Music</Src_Name><Src_Number>1</Src_Number></Item_6><Item_7><Param>AirPlay</Param><RW>RW</RW><Title></Title><Icon><On>128</On><Off>0</Off></Icon><Src_Name>AirPlay</Src_Name><Src_Number>1</Src_Number></Item_7><Item_8><Param>MusicCast Link</Param><RW>RW</RW><Title></Title><Icon><On>2</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number>1</Src_Number></Item_8><Item_9><Param>SERVER</Param><RW>RW</RW><Title></Title><Icon><On>3</On><Off>0</Off></Icon><Src_Name>SERVER</Src_Name><Src_Number>1</Src_Number></Item_9><Item_10><Param>NET RADIO</Param><RW>RW</RW><Title></Title><Icon><On>4</On><Off>0</Off></Icon><Src_Name>NET_RADIO</Src_Name><Src_Number>1</Src_Number></Item_10><Item_11><Param>Bluetooth</Param><RW>RW</RW><Title></Title><Icon><On>129</On><Off>0</Off></Icon><Src_Name>Bluetooth</Src_Name><Src_Number>1</Src_Number></Item_11><Item_12><Param>USB</Param><RW>R</RW><Title></Title><Icon><On>5</On><Off>0</Off></Icon><Src_Name>USB</Src_Name><Src_Number>1</Src_Number></Item_12><Item_13><Param>TUNER</Param><RW>R</RW><Title></Title><Icon><On>6</On><Off>0</Off></Icon><Src_Name>DAB</Src_Name><Src_Number>1</Src_Number></Item_13><Item_14><Param>AUDIO1</Param><RW>R</RW><Title></Title><Icon><On>2</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number>1</Src_Number></Item_14><Item_15><Param>AUDIO2</Param><RW>R</RW><Title></Title><Icon><On>2</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number>1</Src_Number></Item_15><Item_16><Param>AUDIO3</Param><RW>R</RW><Title></Title><Icon><On>2</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number>1</Src_Number></Item_16><Item_17><Param>AUDIO4</Param><RW>R</RW><Title></Title><Icon><On>2</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number>1</Src_Number></Item_17><Item_18><Param>AUDIO5</Param><RW>R</RW><Title></Title><Icon><On>2</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number>1</Src_Number></Item_18><Item_19><Param>PHONO</Param><RW>R</RW><Title></Title><Icon><On>9</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number>1</Src_Number></Item_19><Item_20><Param>Main Zone Sync</Param><RW>RW</RW><Title></Title><Icon><On>2</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number>1</Src_Number></Item_20></Input_Sel_Item></Input></Zone_2></YAMAHA_AV>",
       "Zone_2/Scene": "<YAMAHA_AV rsp=\"GET\" RC=\"0\"><Zone_2><Scene><Scene_Sel_Item><Item_1><Param>Scene 1</Param><RW>W</RW><Title></Title><Icon><On>0</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number></Src_Number></Item_1><Item_2><Param>Scene 2</Param><RW>W</RW><Title></Title><Icon><On>0</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number></Src_Number></Item_2><Item_3><Param>Scene 3</Param><RW>W</RW><Title></Title><Icon><On>0</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number></Src_Number></Item_3><Item_4><Param>Scene 4</Param><RW>W</RW><Title></Title><Icon><On>0</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number></Src_Number></Item_4><Item_5><Param>Scene 5</Param><RW>W</RW><Title></Title><Icon><On>0</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number></Src_Number></Item_5><Item_6><Param>Scene 6</Param><RW>W</RW><Title></Title><Icon><On>0</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number></Src_Number></Item_6><Item_7><Param>Scene 7</Param><RW>W</RW><Title></Title><Icon><On>0</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number></Src_Number></Item_7><Item_8><Param>Scene 8</Param><RW>W</RW><Title></Title><Icon><On>0</On><Off>0</Off></Icon><Src_Name></Src_Name><Src_Number></Src_Number></Item_8></Scene_Sel_Item></Scene></Zone_2></YAMAHA_AV>"
-    }
+    },
+    "descriptor": null
   }
 }

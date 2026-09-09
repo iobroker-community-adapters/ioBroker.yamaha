@@ -2,11 +2,13 @@
 // Generates the adapter's complete object inventory from fixtures and proves that
 // an update reaches every object of an existing installation.
 //
-// Suite 1 "object inventory": start the adapter in the throwaway js-controller against seven
+// Suite 1 "object inventory": start the adapter in the throwaway js-controller against eight
 //   fake devices covering every device class the adapter distinguishes (AV receiver, stereo
-//   receiver, speaker, soundbar, CD system) and all three transports — YNCA-only, MusicCast-only,
-//   XML-only and the mixed MusicCast+YNCA case — then dump every yamaha.0.* object to
-//   test/objects.inventory.json in the ioBroker object-structure bot's format.
+//   receiver, speaker, soundbar, CD system) and every transport combination — YNCA-only,
+//   MusicCast-only, XML-only (the 2008 dialect), MusicCast+YNCA and all three on one receiver —
+//   then dump every yamaha.0.* object to test/objects.inventory.json in the ioBroker
+//   object-structure bot's format, and prove two dropdown rules on it: every dropdown carries the
+//   value the device reports, and none offers a value the device did not declare.
 // Suite 2 "upgrade from the previous release" (only when INVENTORY_PREVIOUS is set — pre-release.py
 //   exports the last tag's inventory): seed the previous objects BEFORE start, start, feed, then
 //   assert that every object carries the current name/desc/role/type and that removed ones are gone.
@@ -14,14 +16,22 @@ const fs = require("node:fs");
 const path = require("node:path");
 const assert = require("node:assert");
 const { tests } = require("@iobroker/testing");
-const { startFixtureDevices } = require("./inventory-fixtures.cjs");
+const { startFixtureDevices, loadFixtures, declaredListsOf } = require("./inventory-fixtures.cjs");
 
 const ADAPTER_DIR = path.join(__dirname, "..");
 const ADAPTER = require(path.join(ADAPTER_DIR, "io-package.json")).common.name;
 const NS = `${ADAPTER}.0.`;
 const INVENTORY = path.join(__dirname, "objects.inventory.json");
 const VOLATILE = ["ts", "from", "user", "acl"];
-const COMPARED = ["name", "desc", "role", "type", "unit"];
+/**
+ * The fields an update must bring to EVERY existing object. `states`, `min`, `max` and `step`
+ * joined on 2026-09-09: a dropdown or a bound that stays stale on an existing installation is
+ * exactly the defect of #619 (54 catalog inputs kept although the receiver declares 21), and
+ * without them the upgrade suite could not fail on it.
+ */
+const COMPARED = ["name", "desc", "role", "type", "unit", "states", "min", "max", "step"];
+/** How many fixture devices devices.json lists — every one of them must build a tree. */
+const FIXTURE_DEVICES = loadFixtures().length;
 
 /**
  * Device `native` fields that record what THIS run learned (probe answers, the sweep's
@@ -176,7 +186,88 @@ tests.integration(ADAPTER_DIR, {
         this.timeout(60000);
         const objects = await dumpObjects(harness);
         const devices = Object.values(objects).filter(o => o.type === "device");
-        assert.ok(devices.length >= 7, `only ${devices.length} devices reached the tree, expected 7`);
+        assert.ok(
+          devices.length >= FIXTURE_DEVICES,
+          `only ${devices.length} devices reached the tree, expected ${FIXTURE_DEVICES}`,
+        );
+      });
+
+      it("every dropdown contains the value the device currently reports", async function () {
+        this.timeout(60000);
+        // A dropdown that lacks the value the receiver reports right now is the worst form of
+        // the #619 class: the admin shows a raw value nobody can select back. Measured over
+        // every string datapoint with a `states` map, against the live state the fixture seeded.
+        const objects = await dumpObjects(harness);
+        const misses = [];
+        for (const [id, obj] of Object.entries(objects)) {
+          const states = obj.common?.states;
+          if (obj.type !== "state" || !states || typeof states !== "object" || obj.common.type !== "string") {
+            continue;
+          }
+          const state = await harness.states.getStateAsync(id);
+          const value = state?.val;
+          if (typeof value === "string" && value.length > 0 && !(value in states)) {
+            misses.push(`${id}: reports ${JSON.stringify(value)}, dropdown lacks it`);
+          }
+        }
+        assert.deepStrictEqual(misses, [], `dropdowns that miss the live value:\n${misses.join("\n")}`);
+      });
+
+      it("no dropdown offers a value the device did not declare (where it declares one)", async function () {
+        this.timeout(60000);
+        // Where a fixture declares a list (XML Input_Sel_Item, desc.xml programs, MusicCast
+        // getFeatures lists), the built dropdown must be a subset of it. A MusicCast list reaches
+        // a YNCA-owned datapoint in the classic spelling, through the SAME dictionary the adapter
+        // uses — an id the dictionary refuses fails here loudly instead of passing by vacuity.
+        const objects = await dumpObjects(harness);
+        // The dictionary module exists from 2.6.0 on; a build without it (the RED run before the
+        // dictionary landed) translates nothing, so a MusicCast list on a YNCA-owned datapoint
+        // fails as undeclared — which is the truth of that build.
+        let translateDeclaredStates = (_key, _states) => undefined;
+        try {
+          ({ translateDeclaredStates } = require(path.join(ADAPTER_DIR, "build/lib/catalog/musiccast-vocabulary.js")));
+        } catch {
+          // no dictionary in this build
+        }
+        // The device object's id derives from the configured address (10.10.0.13 → 10_10_0_13),
+        // not from the fixture's name — map fixtures to devices through the `info.ip` datapoint
+        // the adapter writes for every device, and refuse to pass on a device that was not found.
+        const deviceIdByIp = new Map();
+        for (const [id, obj] of Object.entries(objects)) {
+          if (obj.type === "device") {
+            const ip = await harness.states.getStateAsync(`${id}.info.ip`);
+            if (typeof ip?.val === "string") {
+              deviceIdByIp.set(ip.val, id);
+            }
+          }
+        }
+        const violations = [];
+        for (const fixture of loadFixtures()) {
+          const deviceId = deviceIdByIp.get(fixture.ip);
+          assert.ok(deviceId, `no device object reports info.ip ${fixture.ip} (fixture ${fixture.id})`);
+          for (const [relativeId, list] of Object.entries(declaredListsOf(fixture))) {
+            const states = objects[`${deviceId}.${relativeId}`]?.common?.states;
+            if (!states) {
+              continue; // the datapoint does not exist on this device — not this assertion's question
+            }
+            const key = relativeId.replace(/^multiroom\.zone[234]\./, "");
+            const translated = translateDeclaredStates(key, Object.fromEntries(list.map(v => [v, v]))) ?? {};
+            const allowed = new Set([...list, ...Object.keys(translated)]);
+            // What the device REPORTS is as good as declared: a receiver that lists only
+            // "manual" as tone-control mode and answers "auto" (RX-A2070 capture) contradicts
+            // itself, and the value it reports must stay selectable.
+            const live = await harness.states.getStateAsync(`${deviceId}.${relativeId}`);
+            if (typeof live?.val === "string") {
+              allowed.add(live.val);
+            }
+            for (const value of Object.keys(states)) {
+              if (!allowed.has(value)) {
+                violations.push(`${fixture.id}.${relativeId}: offers ${JSON.stringify(value)}, not declared`);
+              }
+            }
+          }
+        }
+        assert.deepStrictEqual(violations, [], `undeclared dropdown values:\n${violations.join("\n")}`);
       });
     });
 

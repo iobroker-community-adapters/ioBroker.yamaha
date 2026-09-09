@@ -15,7 +15,7 @@
     "id": "rxv6a",
     "ip": "10.10.0.13",
     "class": "avReceiver",
-    "why": "XML/YNC only — the pre-2010 control path, from the 2026-09-01 harvest"
+    "why": "MusicCast AV receiver of the 2020 generation speaking all three protocols — YNCA, MusicCast and XML on one tree; the device the 2026-09-01 harvest came from (scrubbed)"
   },
   {
     "id": "rn500",
@@ -40,5 +40,11 @@
     "ip": "10.10.0.17",
     "class": "cdSystem",
     "why": "CD receiver: the cd.* block and the fifth device class"
+  },
+  {
+    "id": "rxv3900",
+    "ip": "10.10.0.18",
+    "class": "avReceiver",
+    "why": "2008 generation, XML/YNC only — the pre-2010 control path in its own dialect (Vol/Surr/Pgm), from the openHAB captures"
   }
 ]
