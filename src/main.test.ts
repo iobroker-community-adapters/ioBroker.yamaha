@@ -41,12 +41,21 @@ vi.mock("@iobroker/adapter-core", () => {
       }
       const k = this.key(id);
       const prev = this.objects.get(k) ?? {};
-      this.objects.set(k, {
-        ...prev,
-        ...obj,
-        common: { ...(prev.common ?? {}), ...(obj.common ?? {}) },
-        native: { ...(prev.native ?? {}), ...(obj.native ?? {}) },
-      });
+      // js-controller merges `common` deeply (`node.extend(true, …)`): a states map is merged KEY
+      // BY KEY, `null` empties it, a map written over `null` replaces it. A shallow merge here would
+      // let a dropdown-shrink test pass while production keeps every stale entry (#619).
+      const prevCommon = (prev.common ?? {}) as Record<string, unknown>;
+      const nextCommon = (obj.common ?? {}) as Record<string, unknown>;
+      const common: Record<string, unknown> = { ...prevCommon, ...nextCommon };
+      if ("states" in nextCommon) {
+        const prevStates = prevCommon.states;
+        const nextStates = nextCommon.states;
+        common.states =
+          nextStates !== null && typeof nextStates === "object" && prevStates !== null && typeof prevStates === "object"
+            ? { ...prevStates, ...nextStates }
+            : nextStates;
+      }
+      this.objects.set(k, { ...prev, ...obj, common, native: { ...(prev.native ?? {}), ...(obj.native ?? {}) } });
       return Promise.resolve();
     });
     public setObjectNotExistsAsync = vi.fn((id: string, obj: Record<string, unknown>) => {
@@ -876,6 +885,64 @@ describe("Yamaha datapoint balance in the log", () => {
     await settle(ctx);
     // Three objects go and one arrives, but the user only ever counts datapoints.
     expect(ctx.i.log.info).toHaveBeenCalledWith("Object tree updated: removed 1 datapoint(s)");
+  });
+
+  it("a shrinking dropdown loses its stale entries on an existing object (#619)", async () => {
+    const ctx = setup();
+    // The object exists from an earlier version with the old, wider list — read at start.
+    ctx.i.objects.set("Living_room.input", {
+      type: "state",
+      common: { name: "i", type: "string", states: { HDMI1: "HDMI1", Spotify: "Spotify" } },
+      native: {},
+    });
+    await ctx.i.onReady();
+    await flush();
+    await upsertOf(ctx)("Living_room.input", {
+      type: "state",
+      common: { name: "i", type: "string", states: { HDMI1: "HDMI1" } },
+    });
+    const states = (ctx.i.objects.get("Living_room.input")?.common as { states: Record<string, string> }).states;
+    expect(states).toEqual({ HDMI1: "HDMI1" });
+  });
+
+  it("an unchanged or growing dropdown is written once, without the clearing write", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room.input", {
+      type: "state",
+      common: { name: "i", type: "string", states: { HDMI1: "HDMI1" } },
+      native: {},
+    });
+    await ctx.i.onReady();
+    await flush();
+    const extend = (ctx.i as unknown as { extendObject: ReturnType<typeof vi.fn> }).extendObject;
+    const before = extend.mock.calls.length;
+    await upsertOf(ctx)("Living_room.input", {
+      type: "state",
+      common: { name: "i", type: "string", states: { HDMI1: "HDMI1", AV1: "AV1" } },
+    });
+    expect(extend.mock.calls.length - before).toBe(1);
+    expect((ctx.i.objects.get("Living_room.input")?.common as { states: Record<string, string> }).states).toEqual({
+      HDMI1: "HDMI1",
+      AV1: "AV1",
+    });
+  });
+
+  it("a dropdown shrunk twice in one run clears against what was last written, not against the start", async () => {
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    const upsert = upsertOf(ctx);
+    await upsert("Living_room.input", {
+      type: "state",
+      common: { name: "i", type: "string", states: { HDMI1: "HDMI1", AV1: "AV1", Spotify: "Spotify" } },
+    });
+    await upsert("Living_room.input", {
+      type: "state",
+      common: { name: "i", type: "string", states: { HDMI1: "HDMI1" } },
+    });
+    expect((ctx.i.objects.get("Living_room.input")?.common as { states: Record<string, string> }).states).toEqual({
+      HDMI1: "HDMI1",
+    });
   });
 });
 

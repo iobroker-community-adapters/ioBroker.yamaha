@@ -104,6 +104,12 @@ export class Yamaha extends utils.Adapter {
    * datapoint new?".
    */
   private readonly knownDatapoints = new Set<string>();
+  /**
+   * The `common.states` map every existing datapoint carried when this run started, then the
+   * map last written by this run — what a clearing write has to be judged against (#619).
+   * Filled from the same start-up read as {@link knownDatapoints}; no per-state database read.
+   */
+  private readonly storedStates = new Map<string, Record<string, string>>();
   /** State ids (namespace-relative) some transport upserted in THIS run — live claims. */
   private readonly touchedThisRun = new Set<string>();
   /** Devices that reported connected at least once in this run (gates the orphan purge). */
@@ -629,6 +635,24 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
+   * Empty an object's stored `common.states` when it holds a key the new map lacks, so the
+   * following merge-write results in exactly the new map (memory
+   * `reference_iobroker_objekt_aendern_ohne_loeschen`: never delete an object to change it,
+   * write `null` for the key instead). Judged against the start-up snapshot, then against what
+   * this run last wrote — never a database read per state.
+   *
+   * @param id the object id (namespace-relative)
+   * @param next the map about to be written
+   */
+  private async clearStaleStates(id: string, next: Record<string, string>): Promise<void> {
+    const stored = this.storedStates.get(id);
+    if (stored && Object.keys(stored).some(key => !(key in next))) {
+      await this.extendObject(id, { common: { states: null } });
+    }
+    this.storedStates.set(id, next);
+  }
+
+  /**
    * Remember every datapoint that already exists, ONCE per adapter run.
    *
    * @see knownDatapoints for why the create path alone cannot answer "is this new?"
@@ -637,7 +661,12 @@ export class Yamaha extends utils.Adapter {
     try {
       for (const [fullId, object] of Object.entries(await this.getAdapterObjectsAsync())) {
         if (object?.type === "state") {
-          this.knownDatapoints.add(stripNamespace(fullId, this.namespace));
+          const id = stripNamespace(fullId, this.namespace);
+          this.knownDatapoints.add(id);
+          const states = (object.common as { states?: unknown } | undefined)?.states;
+          if (states !== null && typeof states === "object") {
+            this.storedStates.set(id, states as Record<string, string>);
+          }
         }
       }
     } catch (e) {
@@ -1039,6 +1068,13 @@ export class Yamaha extends utils.Adapter {
         // "<deviceId>.<relativeId>"; groupOf reads the relative part.
         if (!isGroupEnabled(id.slice(id.indexOf(".") + 1), this.config as unknown as Record<string, unknown>)) {
           return;
+        }
+        // A SHRINKING dropdown needs a clearing write first: extendObject merges `common.states`
+        // key by key, so the old entries would survive every update (#619 — the reporter would
+        // have seen no change at all). Only when the stored map carries a key the new one lacks;
+        // an unchanged or growing map is one write, as before.
+        if (def.type === "state" && def.common.states) {
+          await this.clearStaleStates(id, def.common.states);
         }
         await this.extendObject(id, { type: def.type, common: def.common, native: {} });
         if (def.type === "state") {
