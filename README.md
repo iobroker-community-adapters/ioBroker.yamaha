@@ -107,16 +107,13 @@ On the very first contact the adapter asks the receiver which functions it suppo
 <!--
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
--->
 
-### **WORK IN PROGRESS**
-
-- (krobipd) Fixed: input and sound program dropdowns show only what the receiver declares or proves — its own XML, desc.xml or MusicCast lists, or the YNCA sources it answers for — not every Yamaha value (#619)
-- (krobipd) Fixed: the 2008 generation gets volume, mute and sound program back over XML; HDMI output, aspect, resolution and decoder dropdowns carry the values the receiver itself reports
-- (krobipd) New: HD Radio and the SIRIUS subunits of the US models, zone balance, pre-out mode and scenes, party volume keys, HDMI video mode, lip sync, trigger output 2, speaker pattern 2 and more setup functions
-- (krobipd) New: over XML the enhancer, CINEMA DSP 3D, speaker A/B, Zone B, a zone-wide cursor pad, transport keys and zone names; over MusicCast HDMI standby-through, headphone, speaker pattern and video preset
-- (krobipd) Improved: the receiver's own declaration (zones, sources, inputs) is read first, absent zones are not probed, and the per-device memory is re-learned whenever the adapter's discovery logic changes
-- (krobipd) Improved: the first YNCA sweep asks each zone's BASIC bundle and the players' METAINFO first, so a cold start asks fewer questions and the object tree stands sooner
+- (krobipd) Fixed: input and sound program lists now offer only what the receiver itself declares or proves it has, instead of every value any Yamaha may have (#619)
+- (krobipd) Fixed: the 2008 receiver generation gets volume, mute and sound program back; HDMI output, aspect, resolution and decoder lists carry the values the receiver reports
+- (krobipd) New: HD Radio and Sirius on the US models, zone balance, pre-out mode and zone scenes, party volume keys, HDMI video mode, lip sync, a second trigger output and speaker pattern
+- (krobipd) New: on older XML receivers the enhancer, CINEMA DSP 3D, speaker A/B, Zone B, a zone-wide cursor pad, transport keys and zone names; MusicCast gains standby-through and speaker pattern
+- (krobipd) Improved: a receiver is set up from its own declaration of zones and inputs, so it comes online faster and is learned again by itself after an update that changes how it is read
+- (krobipd) Improved: the first connection to a YNCA receiver asks fewer questions, so its datapoints appear sooner
 
 ### 2.5.2 (2026-09-07)
 

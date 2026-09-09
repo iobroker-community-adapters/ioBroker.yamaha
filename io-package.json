@@ -5,17 +5,17 @@
     "nogit": true,
     "news": {
       "NEXT": {
-        "en": "Dropdowns show only what the receiver itself declares or proves (#619); 2008 receivers get volume and programs back; HD Radio, Sirius, Zone B, zone pads and more setup datapoints; memory re-learned when discovery changes.",
-        "de": "Auswahllisten zeigen nur, was der Receiver selbst meldet oder beweist (#619); 2008er-Geräte haben Lautstärke und Programme zurück; HD Radio, Sirius, Zone B, Zonen-Tastenkreuz und mehr Setup-Datenpunkte; Speicher wird nach Änderung der Ermittlung neu gelernt.",
-        "ru": "Списки выбора показывают только то, что ресивер сам сообщает или доказывает (#619); модели 2008 г. снова с громкостью и программами; HD Radio, Sirius, зона B, зонные кнопки и новые точки настройки; память переучивается при изменении логики.",
-        "pt": "As listas mostram apenas o que o receptor declara ou prova (#619); os modelos de 2008 recuperam volume e programas; HD Radio, Sirius, Zona B, teclas por zona e mais pontos de configuração; a memória é reaprendida quando a deteção muda.",
-        "nl": "Keuzelijsten tonen alleen wat de receiver zelf meldt of bewijst (#619); modellen uit 2008 hebben volume en programma's terug; HD Radio, Sirius, zone B, zonetoetsen en meer setup-datapunten; geheugen wordt opnieuw geleerd als de detectie verandert.",
-        "fr": "Les listes n'affichent que ce que le récepteur déclare ou prouve (#619) ; les modèles 2008 retrouvent volume et programmes ; HD Radio, Sirius, zone B, pavé par zone et d'autres points de réglage ; la mémoire est réapprise quand la détection change.",
-        "it": "Gli elenchi mostrano solo ciò che il sintoamplificatore dichiara o prova (#619); i modelli 2008 riavranno volume e programmi; HD Radio, Sirius, Zona B, tasti per zona e altri datapoint di setup; la memoria viene riappresa quando cambia il rilevamento.",
-        "es": "Las listas muestran solo lo que el receptor declara o demuestra (#619); los modelos de 2008 recuperan volumen y programas; HD Radio, Sirius, zona B, teclas por zona y más puntos de ajuste; la memoria se reaprende cuando cambia la detección.",
-        "pl": "Listy pokazują tylko to, co amplituner sam zgłasza lub udowadnia (#619); modele z 2008 r. odzyskują głośność i programy; HD Radio, Sirius, strefa B, klawisze stref i więcej punktów konfiguracji; pamięć uczy się na nowo po zmianie wykrywania.",
-        "uk": "Списки показують лише те, що ресивер сам повідомляє або доводить (#619); моделі 2008 р. знову мають гучність і програми; HD Radio, Sirius, зона B, зонні кнопки та нові точки налаштування; пам'ять перевчається при зміні логіки.",
-        "zh-cn": "下拉列表只显示功放自身声明或证实的内容（#619）；2008 年机型恢复音量与音场程序；新增 HD Radio、Sirius、B 区、分区按键和更多设置数据点；检测逻辑变化时重新学习记忆。"
+        "en": "Dropdowns offer only what the receiver declares or proves it has (#619); 2008 receivers get volume and programs back; HD Radio, Sirius, Zone B and many setup datapoints added.",
+        "de": "Auswahllisten bieten nur, was der Receiver selbst meldet oder nachweislich hat (#619); 2008er-Geräte haben Lautstärke und Programme zurück; HD Radio, Sirius, Zone B und viele Setup-Datenpunkte neu.",
+        "ru": "Списки выбора содержат только то, что ресивер сам сообщает или подтверждает (#619); модели 2008 г. снова с громкостью и программами; добавлены HD Radio, Sirius, зона B и много точек настройки.",
+        "pt": "As listas só mostram o que o receptor declara ou comprova (#619); os modelos de 2008 recuperam volume e programas; HD Radio, Sirius, Zona B e muitos pontos de configuração novos.",
+        "nl": "Keuzelijsten bieden alleen wat de receiver zelf meldt of aantoonbaar heeft (#619); modellen uit 2008 hebben volume en programma's terug; HD Radio, Sirius, zone B en veel setup-datapunten nieuw.",
+        "fr": "Les listes n'offrent que ce que le récepteur déclare ou prouve avoir (#619) ; les modèles 2008 retrouvent volume et programmes ; HD Radio, Sirius, zone B et de nombreux points de réglage ajoutés.",
+        "it": "Gli elenchi offrono solo ciò che il sintoamplificatore dichiara o dimostra di avere (#619); i modelli 2008 riavranno volume e programmi; aggiunti HD Radio, Sirius, Zona B e molti datapoint di setup.",
+        "es": "Las listas solo ofrecen lo que el receptor declara o demuestra tener (#619); los modelos de 2008 recuperan volumen y programas; se añaden HD Radio, Sirius, zona B y muchos puntos de ajuste.",
+        "pl": "Listy oferują tylko to, co amplituner sam zgłasza lub udowadnia (#619); modele z 2008 r. odzyskują głośność i programy; dodano HD Radio, Sirius, strefę B i wiele punktów konfiguracji.",
+        "uk": "Списки містять лише те, що ресивер сам повідомляє або підтверджує (#619); моделі 2008 р. знову мають гучність і програми; додано HD Radio, Sirius, зону B і багато точок налаштування.",
+        "zh-cn": "下拉列表只提供功放自身声明或证实拥有的项（#619）；2008 年机型恢复音量与音场程序；新增 HD Radio、Sirius、B 区和许多设置数据点。"
       },
       "2.5.2": {
         "en": "174 more datapoints now explain themselves — volume and tone say which scale they use, the stored lists say what is inside them, and Connected means reachable, not switched on.",
