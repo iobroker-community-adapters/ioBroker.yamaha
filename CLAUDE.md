@@ -429,6 +429,25 @@ entscheidet etwas ([[feedback_user_hardware_ist_sample]]). Alle Funde sind umges
   bei raw 194, jenseits des Deklarierten. Deklariert eine Zone eine Anzeigeskala und liefert im
   Status kein `actual_volume`, wird der raw-Wert mit demselben Schritt umgerechnet — sonst stünde 66
   in einem Datenpunkt mit Obergrenze 0,0 (dieselbe js-controller-Warnung, eine Zone weiter).
+- **Ein Schalter macht aus JEDER Lautstärke Prozent** (`volumeAsPercent`, Instanz-Einstellung, Vorgabe AUS,
+  seit 2.8.0 — krobi: „ein schalter für ALLE. ich will das nicht komplizierter machen als es sein muss"):
+  Grund ist #623 und das menschliche Maß — ein fertiges VIS-Widget an `volume` trifft sonst eine Zahl, die
+  es nicht darstellen kann, und wer eine Lautstärke wählt, denkt von null aufwärts, nicht in negativen
+  Dezibel. Der Aufsatz (`catalog/volume-percent.ts`) sitzt in den DREI adapterweiten Trichtern der
+  `main.ts` — die fertige Objektdefinition, der Wert auf dem Weg hinein, der Nutzer-Schreibvorgang auf dem
+  Weg hinaus. Damit gilt EINE Regel für alle drei Transporte und jede Zone, und es gibt je Richtung genau
+  eine Umrechnungsstelle. Fünf Eigenschaften, die im Code stehen müssen: (a) 0 %/100 % sind die
+  Wahrheits-Grenzen DESSELBEN Datenpunkts, also decken beide Modi dieselbe erreichbare Menge ab —
+  `advanced.maxVolume` wird NICHT befragt, das ist eine eigene Einstellung auf eigener Skala; (b) das
+  Prozentraster ist 0,5, feiner als die feinste Geräteskala der Mitschnitte (161 raw-Schritte, 195
+  YNCA-Halbdezibel), sonst würde ein Drittel der Lautstärken unerreichbar; (c) betroffen sind NUR `volume`
+  und `multiroom.zoneN.volume` (`isAmpVolumeId` streift den Zonen-Präfix ab) — `advanced.maxVolume`,
+  `sound.ypaoVolume`, `subwooferVolume`, `volumeOutput`, `partyVolumeUp/Down` und
+  `player.airplay.volumeInterlock` sind andere Größen auf anderen Skalen; (d) ein Datenpunkt, dessen Gerät
+  keinen Bereich deklariert, behält die Geräteskala — Prozent gegen unbekannte Enden wäre eine Zahl ohne
+  Bedeutung, und verliert eine spätere Definition ihre Grenzen, wird die gemerkte Skala mitgelöscht;
+  (e) das EIGENE bestätigte Echo wird nie umgerechnet — der Adapter abonniert seinen ganzen Namensraum,
+  eine zweite Umrechnung liefe die Skala bei jedem Abruf hinunter.
 - **Das Eingangs-Dropdown trägt die Namen, die der BESITZER am Gerät vergeben hat** (seit 2.7.2):
   die klassische XML-Auskunft `Input_Sel_Item` liefert je Eintrag ein `<Param>` (den Schaltwert,
   `HDMI1`) UND ein `<Title>` (den vergebenen Namen, „Apple TV"). `parseInputLabels()` in
@@ -896,7 +915,7 @@ in ein öffentliches Repo.
   bis 2.1.1 lief er lokal nie mit, obwohl die CI ihn fährt (`testing-action-adapter` ruft
   `test:unit` UND `test:integration`). `passWithNoTests` ist raus — ein nicht mehr greifendes
   `include` muss rot melden, nicht grün.
-- **Mutationstabellen** (`../../Ressourcen/iobroker-entwicklung/mutation-testing/`) — **ELF Dateien, und das
+- **Mutationstabellen** (`../../Ressourcen/iobroker-entwicklung/mutation-testing/`) — **VIERZEHN Dateien, und das
   Gate prüft ALLE.** ⚠️ Die fünf Wellen-Originale `mutations_yamaha.py` · `…2.py` · `…3.py` · `…4.py` ·
   `…5.py` (36/32/26/11/11 Nadeln) leben NEBEN der Sammeltabelle `mutations_yamaha_all.py`, die dieselben
   Regeln zusammenfasst — sie sind kein Altbestand. Wer nur die datierten Tabellen nachzieht, lässt fünf
@@ -910,11 +929,15 @@ in ein öffentliches Repo.
   immer das Protokoll-Wort) + `mutations_yamaha_2026-09-04-w9.py` (Welle 9 = die Bildschirm-Fernbedienung, IDs B1–B3;
   3/3 gefangen) + `mutations_yamaha_2026-09-06-w10.py` (Welle 10 = das Voll-Audit vom 06./07.09., IDs C1–C13;
   13/13 gefangen — darunter C10 der Override, den der eigene Katalog-Zuwachs aushebelte, und C12/C13 die
-  beiden Funde des Objekt-Inventars). Läufer `mutation-test.py`. Nadeln sind
-  exakte Quellzeilen — nach Prettier-Umbrüchen oder Refactorings ZUERST den Nadel-Vorab-Check (jede Nadel
-  genau 1×), sonst misst der Lauf nichts. Zwei äquivalente Mutanten (X2, X4 — unerreichbare
-  Invarianten-Wächter, im Quelltext begründet); die vier anderen vom 22.08. (M9, X1, Y1, Y13) waren toter
-  bzw. doppelter Code und sind am 02.09. samt Zwillingen entfernt — ein Überlebender außerhalb X2/X4 ist eine Testlücke.
+  beiden Funde des Objekt-Inventars) + `mutations_yamaha_2026-09-09-w11.py` (Welle 11 = Phase 1 des
+  Fähigkeits-Plans, IDs D1–D24) + `mutations_yamaha_2026-09-09-w12.py` (Welle 12 = Phase 2, IDs P1–P14)
+  - `mutations_yamaha_2026-09-11-w13.py` (Welle 13 = die Lautstärke auf
+    der Geräteskala und der Prozent-Schalter, IDs Q1–Q20; im ersten Lauf 16/20, die vier Überlebenden waren
+    echte Testlücken und sind geschlossen → 20/20). Läufer `mutation-test.py`. Nadeln sind
+    exakte Quellzeilen — nach Prettier-Umbrüchen oder Refactorings ZUERST den Nadel-Vorab-Check (jede Nadel
+    genau 1×), sonst misst der Lauf nichts. Zwei äquivalente Mutanten (X2, X4 — unerreichbare
+    Invarianten-Wächter, im Quelltext begründet); die vier anderen vom 22.08. (M9, X1, Y1, Y13) waren toter
+    bzw. doppelter Code und sind am 02.09. samt Zwillingen entfernt — ein Überlebender außerhalb X2/X4 ist eine Testlücke.
 - **HW-freies Testen:** `ynca`-Python bringt debug-server + echte Geräte-Logs → YNCA-Client dagegen testbar.
 
 ## Befehle
