@@ -123,19 +123,10 @@
       "zh-cn": "通过网络控制 Yamaha AV 接收器和 MusicCast 设备"
     },
     "docs": {
-      "en": [
-        "docs/en/README.md"
-      ],
-      "de": [
-        "docs/de/README.md"
-      ]
+      "en": ["docs/en/README.md"],
+      "de": ["docs/de/README.md"]
     },
-    "keywords": [
-      "yamaha",
-      "avr",
-      "receiver",
-      "musiccast"
-    ],
+    "keywords": ["yamaha", "avr", "receiver", "musiccast"],
     "plugins": {
       "sentry": {
         "dsn": "https://66f27ceff38c1ce1e6cdcc3095ba06d3@o4511524771266560.ingest.de.sentry.io/4511524773560400"
@@ -183,10 +174,7 @@
       {
         "condition": {
           "operand": "and",
-          "rules": [
-            "oldVersion<1.0.0",
-            "newVersion>=1.0.0"
-          ]
+          "rules": ["oldVersion<1.0.0", "newVersion>=1.0.0"]
         },
         "title": {
           "en": "Complete rebuild — new object tree",
@@ -215,18 +203,12 @@
           "zh-cn": "适配器已完全重建，现在将 YNCA、MusicCast 和旧的 XML 协议合而为一。对象树是全新的：旧的数据点（volume、power、Commands、Realtime 等）会被自动删除，功放会作为带类型数据点的设备重新创建。已配置的 IP 地址会被保留。请将脚本和可视化更新到新的数据点路径。"
         },
         "level": "warn",
-        "buttons": [
-          "agree",
-          "cancel"
-        ]
+        "buttons": ["agree", "cancel"]
       },
       {
         "condition": {
           "operand": "and",
-          "rules": [
-            "oldVersion<2.0.0",
-            "newVersion>=2.0.0"
-          ]
+          "rules": ["oldVersion<2.0.0", "newVersion>=2.0.0"]
         },
         "title": {
           "en": "Reworked object tree — one player per zone",
@@ -255,18 +237,12 @@
           "zh-cn": "2.0.0 版重构了对象树：每个区域一个播放器块显示当前播放内容（不再在每个音源下重复相同的块），场景变为带设备自带标题的下拉菜单外加 scene.list 数据点，调谐器对所有波段统一为一个波段/频率/预设，均衡器和信号信息移至 sound 下，唇音同步移至 hdmi 下。适配器首次启动时会自动删除旧数据点并创建新数据点。请将脚本和可视化更新到新路径。"
         },
         "level": "warn",
-        "buttons": [
-          "agree",
-          "cancel"
-        ]
+        "buttons": ["agree", "cancel"]
       },
       {
         "condition": {
           "operand": "and",
-          "rules": [
-            "oldVersion<2.2.0",
-            "newVersion>=2.2.0"
-          ]
+          "rules": ["oldVersion<2.2.0", "newVersion>=2.2.0"]
         },
         "title": {
           "en": "Playback times are now seconds",
@@ -295,10 +271,41 @@
           "zh-cn": "player.elapsedTime 和 player.totalTime 由文本改为以秒为单位的数字，这样媒体播放器组件、Alexa 和 Google 在所有设备上都能使用它们。易读形式（“1:23”）移到新的数据点 player.elapsedTimeText 和 player.totalTimeText。请将绑定旧文本的脚本、记录和可视化改到新的文本数据点。"
         },
         "level": "warn",
-        "buttons": [
-          "agree",
-          "cancel"
-        ]
+        "buttons": ["agree", "cancel"]
+      },
+      {
+        "condition": {
+          "operand": "and",
+          "rules": ["oldVersion<2.8.0", "newVersion>=2.8.0"]
+        },
+        "title": {
+          "en": "Volume now shows what the receiver shows",
+          "de": "Die Lautstärke zeigt jetzt, was der Receiver zeigt",
+          "ru": "Громкость теперь показывает то же, что и ресивер",
+          "pt": "O volume mostra agora o que o receptor mostra",
+          "nl": "Volume toont nu wat de receiver toont",
+          "fr": "Le volume affiche désormais ce qu'affiche l'ampli",
+          "it": "Il volume mostra ora ciò che mostra il ricevitore",
+          "es": "El volumen ahora muestra lo que muestra el receptor",
+          "pl": "Głośność pokazuje teraz to, co pokazuje amplituner",
+          "uk": "Гучність тепер показує те саме, що й ресивер",
+          "zh-cn": "音量现在显示功放所显示的数值"
+        },
+        "text": {
+          "en": "The volume datapoint now carries the scale the receiver itself displays, and its bounds are what the receiver accepts. On a MusicCast receiver set to its number display this changes the value: where a script wrote -39 it now writes 41.5. The datapoints actualVolume, actualVolumeMode and inputText are removed - volume and input carry the same information. New setting \"Volume as 0-100 %\": with it on, every volume datapoint, in every zone, is a percentage instead - the range most VIS widgets expect.",
+          "de": "Der Lautstärke-Datenpunkt trägt jetzt die Skala, die der Receiver selbst anzeigt, und seine Grenzen sind das, was der Receiver annimmt. Auf einem MusicCast-Receiver mit Zahlen-Anzeige ändert das den Wert: wo ein Skript bisher -39 geschrieben hat, schreibt es jetzt 41,5. Die Datenpunkte actualVolume, actualVolumeMode und inputText fallen weg - volume und input tragen dieselbe Auskunft. Neue Einstellung „Lautstärke als 0-100 %\": damit trägt jeder Lautstärke-Datenpunkt, in jeder Zone, stattdessen einen Prozentwert - der Bereich, den die meisten VIS-Widgets erwarten.",
+          "ru": "Датапоинт громкости теперь использует шкалу, которую показывает сам ресивер, а его границы - то, что ресивер принимает. На ресивере MusicCast с числовой индикацией это меняет значение: где скрипт писал -39, теперь он пишет 41.5. Датапоинты actualVolume, actualVolumeMode и inputText удалены - volume и input несут ту же информацию. Новая настройка «Громкость как 0-100 %»: с ней каждый датапоинт громкости в каждой зоне вместо этого хранит проценты - диапазон, который ожидает большинство виджетов VIS.",
+          "pt": "O ponto de dados do volume usa agora a escala que o próprio receptor mostra, e os seus limites são o que o receptor aceita. Num receptor MusicCast com indicação numérica isto muda o valor: onde um script escrevia -39, escreve agora 41,5. Os pontos de dados actualVolume, actualVolumeMode e inputText foram removidos - volume e input dão a mesma informação. Nova definição \"Volume como 0-100 %\": com ela, cada ponto de dados de volume, em cada zona, passa a ser uma percentagem - o intervalo que a maioria dos widgets VIS espera.",
+          "nl": "Het volume-datapunt gebruikt nu de schaal die de receiver zelf toont, en zijn grenzen zijn wat de receiver accepteert. Op een MusicCast-receiver met getalweergave verandert dat de waarde: waar een script -39 schreef, schrijft het nu 41,5. De datapunten actualVolume, actualVolumeMode en inputText vervallen - volume en input geven dezelfde informatie. Nieuwe instelling \"Volume als 0-100 %\": daarmee draagt elk volume-datapunt, in elke zone, in plaats daarvan een percentage - het bereik dat de meeste VIS-widgets verwachten.",
+          "fr": "Le point de données du volume utilise désormais l'échelle que l'ampli affiche lui-même, et ses bornes sont ce que l'ampli accepte. Sur un ampli MusicCast en affichage numérique, cela change la valeur : là où un script écrivait -39, il écrit maintenant 41,5. Les points de données actualVolume, actualVolumeMode et inputText sont supprimés - volume et input donnent la même information. Nouveau réglage « Volume en 0-100 % » : avec lui, chaque point de données de volume, dans chaque zone, porte un pourcentage - la plage attendue par la plupart des widgets VIS.",
+          "it": "Il datapoint del volume usa ora la scala che il ricevitore stesso mostra, e i suoi limiti sono ciò che il ricevitore accetta. Su un ricevitore MusicCast con indicazione numerica questo cambia il valore: dove uno script scriveva -39 ora scrive 41,5. I datapoint actualVolume, actualVolumeMode e inputText sono rimossi - volume e input danno la stessa informazione. Nuova impostazione \"Volume come 0-100 %\": con essa ogni datapoint del volume, in ogni zona, porta invece una percentuale - l'intervallo che la maggior parte dei widget VIS si aspetta.",
+          "es": "El punto de datos del volumen usa ahora la escala que el propio receptor muestra, y sus límites son lo que el receptor acepta. En un receptor MusicCast con indicación numérica esto cambia el valor: donde un script escribía -39, ahora escribe 41,5. Los puntos de datos actualVolume, actualVolumeMode e inputText se eliminan - volume e input dan la misma información. Nuevo ajuste \"Volumen como 0-100 %\": con él, cada punto de datos de volumen, en cada zona, lleva en su lugar un porcentaje - el rango que esperan la mayoría de los widgets VIS.",
+          "pl": "Punkt danych głośności używa teraz skali, którą pokazuje sam amplituner, a jego granice to zakres, który amplituner przyjmuje. Na amplitunerze MusicCast ze wskazaniem liczbowym zmienia to wartość: tam, gdzie skrypt zapisywał -39, zapisuje teraz 41,5. Punkty danych actualVolume, actualVolumeMode i inputText zostały usunięte - volume i input dają tę samą informację. Nowe ustawienie „Głośność jako 0-100 %\": po jego włączeniu każdy punkt danych głośności, w każdej strefie, zawiera zamiast tego procent - zakres oczekiwany przez większość widżetów VIS.",
+          "uk": "Датапоінт гучності тепер використовує шкалу, яку показує сам ресивер, а його межі - те, що ресивер приймає. На ресивері MusicCast із числовою індикацією це змінює значення: там, де скрипт писав -39, тепер він пише 41,5. Датапоінти actualVolume, actualVolumeMode та inputText вилучено - volume та input дають ту саму інформацію. Нове налаштування «Гучність як 0-100 %»: з ним кожен датапоінт гучності в кожній зоні натомість містить відсоток - діапазон, який очікує більшість віджетів VIS.",
+          "zh-cn": "音量数据点现在使用功放自身显示的刻度，其上下限即功放可接受的范围。在采用数字显示的 MusicCast 功放上，这会改变数值：脚本原先写入 -39，现在写入 41.5。数据点 actualVolume、actualVolumeMode 和 inputText 已移除——volume 和 input 提供相同的信息。新增设置“音量显示为 0-100 %”：启用后，每个区域的每个音量数据点改为百分比——这是大多数 VIS 控件所期望的范围。"
+        },
+        "level": "warn",
+        "buttons": ["agree", "cancel"]
       }
     ]
   },

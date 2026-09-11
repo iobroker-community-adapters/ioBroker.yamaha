@@ -1,6 +1,6 @@
 {
-  "schema": 2,
-  "since": "2.7.2",
-  "shapeHash": "aa64e2aaa80abd8651b8d31b24154c558e449aa66adf957cd2ffd0617ce0357f",
-  "previousShapeHash": "00232f63462610c73866a8fdc9e5a59e15e39bcae0877f59c2aa7e8ff7e70699"
+  "schema": 3,
+  "since": "2.8.0",
+  "shapeHash": "203a6b086281b7c6ae25637ec880c33a708aa7b23c2d1a36496746bb03fdeff8",
+  "previousShapeHash": "aa64e2aaa80abd8651b8d31b24154c558e449aa66adf957cd2ffd0617ce0357f"
 }
