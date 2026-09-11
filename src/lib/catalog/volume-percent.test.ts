@@ -87,12 +87,16 @@ describe("volume percent mode", () => {
       }
     });
 
-    // -50.5 + 30.0 in floating point is -50.50000000000001; the datapoint would carry the tail for
-    // ever and never compare equal to what the device reports.
-    test("lands on the device's own grid, without a floating-point tail", () => {
-      for (let percent = 0; percent <= 100; percent += 0.5) {
-        const value = fromPercent(percent, musicCastDb);
-        expect(Number.isInteger(value * 2), `${percent} % gave ${value}`).toBe(true);
+    // Every volume scale in the captures moves on halves or whole steps, and those are exact in
+    // binary. A grid of tenths is not: 0.1 x 3 is 0.30000000000000004, and the datapoint would
+    // carry that tail for ever and never compare equal to what the device reports. The bounds come
+    // from the DEVICE's own declaration, so the grid is not the adapter's to assume.
+    test("lands on the device's own grid, whatever that grid is", () => {
+      for (const bounds of [musicCastDb, { min: 0, max: 10, step: 0.1 }]) {
+        for (let percent = 0; percent <= 100; percent += 0.5) {
+          const value = fromPercent(percent, bounds);
+          expect(value, `${percent} % on step ${bounds.step}`).toBe(Number(value.toFixed(1)));
+        }
       }
     });
 

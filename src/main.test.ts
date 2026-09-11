@@ -1042,6 +1042,27 @@ describe("Yamaha volume as 0…100 % (the one switch)", () => {
     expect(ctx.i.states.get("Living_room.advanced.maxVolume")).toEqual({ val: -40, ack: true });
   });
 
+  // A re-coordination can hand the same datapoint a definition WITHOUT bounds — a transport
+  // dropping out, a device answering less than it did. The remembered scale has to go with it:
+  // converting against ends the current definition no longer carries would be a number the
+  // datapoint does not claim.
+  it("forgets a scale the datapoint no longer declares", async () => {
+    const ctx = setup({ volumeAsPercent: true });
+    await ctx.i.onReady();
+    await flush();
+    const deps = ctx.calls[0].deps;
+    const upsert = deps.upsertObject as (id: string, def: unknown) => Promise<void>;
+    const setStateAck = deps.setStateAck as (id: string, value: unknown) => void;
+
+    await upsert("Living_room.volume", dbVolume);
+    setStateAck("Living_room.volume", -40);
+    expect(ctx.i.states.get("Living_room.volume")).toEqual({ val: 50.5, ack: true });
+
+    await upsert("Living_room.volume", { type: "state", common: { type: "number", role: "level.volume" } });
+    setStateAck("Living_room.volume", -40);
+    expect(ctx.i.states.get("Living_room.volume")).toEqual({ val: -40, ack: true });
+  });
+
   // A range the device never declared gives percent nothing to mean. The datapoint keeps the
   // device's own scale rather than carrying a number derived from invented ends.
   it("keeps the device's scale where no range is declared", async () => {

@@ -162,6 +162,8 @@ function setup(
   acks: Array<{ id: string; value: unknown }>;
   /** Object writes and value writes on ONE timeline, so a test can assert their ORDER. */
   trace: Array<{ kind: "object" | "value"; id: string }>;
+  /** Set `fn` to hold one id's object write open, proving what waits for it to FINISH. */
+  hold: { fn?: (id: string) => Promise<void> | undefined };
   fire: { push?: (event: unknown) => void; keepalive?: () => void };
   names: string[];
   cancelled: () => boolean;
@@ -172,6 +174,8 @@ function setup(
   const defs = new Map<string, ObjectDef>();
   const acks: Array<{ id: string; value: unknown }> = [];
   const trace: Array<{ kind: "object" | "value"; id: string }> = [];
+  /** Set by a test to hold one upsert open; see `holdUpsert` on the returned setup. */
+  const hold: { fn?: (id: string) => Promise<void> | undefined } = {};
   const names: string[] = [];
   const fire: { push?: (event: unknown) => void; keepalive?: () => void } = {};
   let cancelled = false;
@@ -196,7 +200,9 @@ function setup(
       objects.push(id);
       defs.set(id, def);
       trace.push({ kind: "object", id });
-      return Promise.resolve();
+      // A test can hold one id's write open, to prove what waits for it to FINISH rather than
+      // for it to be called (an async function runs synchronously up to its first await).
+      return hold.fn?.(id) ?? Promise.resolve();
     },
     setStateAck: (id, value) => {
       acks.push({ id, value });
@@ -208,6 +214,7 @@ function setup(
     log: silentLog,
   });
   return {
+    hold,
     controller,
     client,
     objects,
@@ -371,6 +378,29 @@ describe("YxcDeviceController", () => {
     expect(object).toBeLessThan(value);
   });
 
+  // `void` instead of `await` keeps the trace order — an async function runs synchronously up to
+  // its first await, so the upsert is still CALLED first. What it loses is the guarantee that the
+  // object write FINISHED: with a slow objects database the value reaches js-controller while the
+  // old definition still stands, which is the warning this release removes. So the upsert is held
+  // open here and the value must not appear until it resolves.
+  test("the new value waits for the object write to COMPLETE, not just to start", async () => {
+    const s = setup(rxV481, { power: "on", actual_volume: { mode: "db", value: -47.5 } });
+    expect(await s.controller.start()).toBe(true);
+
+    let release = (): void => {};
+    const held = new Promise<void>(resolve => (release = resolve));
+    s.hold.fn = id => (id === "living.volume" ? held : undefined);
+    s.trace.length = 0;
+    s.client.status = { power: "on", actual_volume: { mode: "numeric", value: 90 } };
+    s.fire.push?.({ main: { volume: 90 } });
+    await flush();
+
+    expect(s.trace.filter(e => e.kind === "value" && e.id === "living.volume")).toEqual([]);
+    release();
+    await flush();
+    expect(s.trace.filter(e => e.kind === "value" && e.id === "living.volume")).toHaveLength(1);
+  });
+
   test("a status without a scale change reshapes nothing", async () => {
     const s = setup(rxV481, { power: "on", actual_volume: { mode: "db", value: -47.5 } });
     await s.controller.start();
@@ -441,6 +471,19 @@ describe("YxcDeviceController", () => {
     await flush();
 
     expect(s.client.calls).toContainEqual({ method: "setVolumeTo", args: [161, "main"] });
+  });
+
+  // The scale is exact, so a computed value normally EQUALS the reported one — which is why this
+  // needs a device contradicting its own declaration to show at all. The adapter already meets
+  // that (the RX-A2070 answers `auto` for a tone mode it declared as `manual`-only): where the
+  // device says a number, that number is the datapoint, and no derivation overrules it.
+  test("a reported display value wins over the one the declaration would compute", async () => {
+    const s = setup(rxA2070, { power: "on", volume: 66, actual_volume: { mode: "db", value: -30 } });
+    expect(await s.controller.start()).toBe(true);
+
+    // raw 66 reads as -47.5 dB on the declared scale; the device says -30.
+    expect(s.acks).toContainEqual({ id: "living.volume", value: -30 });
+    expect(s.acks).not.toContainEqual({ id: "living.volume", value: -47.5 });
   });
 
   // The RX-A2070 declares `actual_volume_db` for EVERY zone but answers a status carrying
