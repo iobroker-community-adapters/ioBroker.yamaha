@@ -988,7 +988,7 @@ Drei Flächen, jede Aussage lebt an genau EINER Stelle:
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | `README.md`                                | Schaufenster: was ist das, Voraussetzungen, Konfiguration in Kurzform, Wiki-Tabelle                                       | Konsistenz-Audit (Pflicht-Abschnitte + Reihenfolge), Prüfbot E6006 |
 | `docs/en/README.md` · `docs/de/README.md`  | der Kurzweg, den ioBroker über `common.docs` ausliefert und der Admin anzeigt — kanonisch für Einrichtung und Fehlersuche | `audit_common_docs`, Konsistenz-Stufe 2                            |
-| Wiki (`Entwicklung/iobroker.yamaha.wiki/`) | die Tiefe: Umstieg, Protokolle, Datenpunkte, Geräte, Fehlersuche — 16 Seiten EN+DE, handgeschrieben                       | **KEINS**                                                          |
+| Wiki (`Entwicklung/iobroker.yamaha.wiki/`) | die Tiefe: Umstieg, Protokolle, Datenpunkte, Geräte, Fehlersuche — 14 Inhaltsseiten = 7 Paare EN+DE, handgeschrieben      | **KEINS**                                                          |
 
 ⚠️ **Das Wiki sieht kein Gate.** Es ist ein eigenes git-Repo (`…/ioBroker.yamaha.wiki.git`), der
 Release-Commit fasst es nicht an, und es gibt hier keinen Generator, der die Drift auffinge. Nach
