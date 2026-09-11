@@ -18,6 +18,7 @@ import type { YxcClientLike } from "./client-contract";
 export type YxcCommand =
   | { kind: "run"; run: (client: YxcClientLike) => Promise<unknown> }
   | { kind: "equalizer"; zone: string; band: "low" | "mid" | "high"; value: number }
+  | { kind: "volume"; zone: string; value: number }
   | { kind: "tunerFreq"; value: number }
   | { kind: "tunerPreset"; value: number }
   | { kind: "tunerBand"; band: string }
@@ -193,6 +194,12 @@ export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefi
     if ((PLAYER_TRANSPORTS as readonly string[]).includes(action)) {
       return { kind: "playerTransport", zone, action: action as PlayerTransport };
     }
+  }
+  // Volume is declarative because the datapoint carries what the receiver DISPLAYS while
+  // setVolume takes only the raw step count. Converting between the two needs the ratio of the
+  // pair the device reports in one status answer, and that lives in the controller.
+  if (name === "volume" && isWritableValue(value, true)) {
+    return { kind: "volume", zone, value: Number(value) };
   }
   const eqBand = EQ_CHANNELS[name];
   if (eqBand && isWritableValue(value, true)) {

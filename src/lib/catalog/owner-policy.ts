@@ -29,8 +29,13 @@ export const STATES_VOCABULARY: Readonly<Record<Transport, "classic" | "musiccas
  * is the preferred owner order for that key; the first present transport wins.
  */
 const OWNER_OVERRIDES: Record<string, readonly Transport[]> = {
-  // §3a scale conflict — YXC volume is the raw 0..161 device scale, YNCA/XML are dB. Keep dB.
-  volume: ["ynca", "xml", "yxc"],
+  // `volume` deliberately has NO override any more (2026-09-11). The census §3a entry read
+  // MusicCast's raw 0..161 step count and concluded YNCA/XML were the better owners because they
+  // speak decibels. That measured the wrong thing: MusicCast is the ONLY transport that can report
+  // what the receiver actually DISPLAYS (`actual_volume`), so for this datapoint it is the richer
+  // one, not the poorer. The old override also failed at its own goal — where YNCA does not serve
+  // a zone it fell through to MusicCast anyway, leaving one device carrying decibels in main and
+  // a raw step count in zone 3 (measured on the RX-A2070 fixture). Plain modernity is correct here.
   // §3c write loss — YXC is read-only for these, YNCA (and often XML) is writable.
   "advanced.maxVolume": ["ynca", "xml", "yxc"],
   // §3c write loss on the unified player block (v2.0.0): YXC reads playback/repeat/

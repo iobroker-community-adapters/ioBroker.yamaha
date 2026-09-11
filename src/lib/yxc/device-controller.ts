@@ -170,6 +170,14 @@ export class YxcDeviceController implements ConnectionHandle {
    */
   private capabilities: YxcCapabilities | undefined;
   private readonly zoneVolumeMode = new Map<string, string | undefined>();
+  /**
+   * Displayed units per raw step, per zone — READ from the device, never computed from the
+   * declared ranges. `volume` (raw step count) and `actual_volume.value` (what the display
+   * shows) arrive in the SAME status answer, so their ratio is a measurement: the RX-V6A
+   * reports 60 / 30.0 in main and 81 / 40.5 in zone 2, both exactly 0.5. The declared ranges
+   * do NOT divide cleanly (0…161 raw against 0…97 displayed), which is why they are not used.
+   */
+  private readonly displayPerRawStep = new Map<string, number>();
   /** The source the network player is currently on (netusb `input`, e.g. "net_radio"). */
   private lastNetusbInput = "";
   /** Which source currently feeds each zone's "now playing" block (v2.0.0 routing). */
@@ -1143,6 +1151,7 @@ export class YxcDeviceController implements ConnectionHandle {
     // that loop (and as a fire-and-forget promise) let a numeric value land in an object still
     // declaring decibels, which is the js-controller warning 2.7.2 set out to end. So the mode is
     // read from the RAW answer first and the reshape is awaited.
+    this.rememberVolumeScale(zone, status);
     const mode = actualVolumeModeOf(status);
     if (mode !== undefined && this.zoneVolumeMode.get(zone) !== mode) {
       this.zoneVolumeMode.set(zone, mode);
@@ -1193,6 +1202,48 @@ export class YxcDeviceController implements ConnectionHandle {
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: could not reshape ${id}: ${String(e)}`);
     }
+  }
+
+  /**
+   * Remember the ratio between the displayed volume and the raw step count of a zone.
+   *
+   * Both numbers stand in the same status answer, so the ratio is measured rather than derived
+   * from the declared ranges — those do not divide cleanly (0…161 raw against 0…97 displayed).
+   *
+   * @param zone the zone the status belongs to
+   * @param status the raw getStatus answer
+   */
+  private rememberVolumeScale(zone: string, status: unknown): void {
+    if (typeof status !== "object" || status === null) {
+      return;
+    }
+    const raw = (status as { volume?: unknown }).volume;
+    const actual = (status as { actual_volume?: { value?: unknown } }).actual_volume;
+    const shown = actual?.value;
+    if (typeof raw !== "number" || typeof shown !== "number" || raw === 0) {
+      return;
+    }
+    this.displayPerRawStep.set(zone, shown / raw);
+  }
+
+  /**
+   * Translate a displayed volume into the raw step count `setVolume` expects.
+   *
+   * @param zone the zone being written to
+   * @param shown the value as the datapoint carries it
+   * @returns the raw step count, or undefined while the zone has not reported both numbers
+   *   (a device without a display scale writes its raw value straight through)
+   */
+  private rawVolumeFor(zone: string, shown: number): number | undefined {
+    if (this.zoneVolumeMode.get(zone) === undefined && !this.displayPerRawStep.has(zone)) {
+      // No display scale anywhere: the datapoint already holds the device's own step count.
+      return shown;
+    }
+    const factor = this.displayPerRawStep.get(zone);
+    if (factor === undefined || factor === 0) {
+      return undefined;
+    }
+    return Math.round(shown / factor);
   }
 
   /**
@@ -1291,6 +1342,20 @@ export class YxcDeviceController implements ConnectionHandle {
         case "netusbRecent":
           await this.deps.client.recallRecentItem(command.value, this.zoneListeningTo(this.lastNetusbInput));
           break;
+        case "volume": {
+          const raw = this.rawVolumeFor(command.zone, command.value);
+          if (raw === undefined) {
+            // Never guess. Sending the displayed number as a raw step count would set a
+            // completely different loudness; the next status brings the pair and the write
+            // works from then on.
+            this.deps.log.warn(
+              `${this.deviceId}: not writing ${stateId} — ${command.zone} has not reported both its raw and displayed volume yet`,
+            );
+            break;
+          }
+          await this.deps.client.setVolumeTo(raw, command.zone);
+          break;
+        }
         case "playerTransport": {
           // The unified block's buttons act on whatever the ZONE is playing (v2.0.0) —
           // derived FRESH from the zone's input, never from the routing map: a stale

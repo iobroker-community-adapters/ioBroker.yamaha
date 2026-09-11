@@ -13,11 +13,13 @@ describe("pickOwner — which transport owns a shared capability", () => {
     expect(pickOwner("power", ["xml", "yxc"])).toBe("yxc");
     expect(pickOwner("power", ["yxc", "ynca", "xml"])).toBe("yxc");
   });
-
-  test("volume stays on a dB transport (YNCA/XML), never YXC's raw device scale", () => {
-    expect(pickOwner("volume", ["yxc", "ynca"])).toBe("ynca");
-    expect(pickOwner("volume", ["yxc", "xml"])).toBe("xml");
-    expect(pickOwner("volume", ["yxc"])).toBe("yxc");
+  // Until 2.8.0 an override kept `volume` on YNCA/XML because MusicCast reports a raw 0..161
+  // step count. That judged the wrong thing: MusicCast is the only transport that can report
+  // what the receiver DISPLAYS, so it is the richer owner here and plain modernity applies.
+  it("volume follows plain modernity — MusicCast owns it where it answers", () => {
+    expect(pickOwner("volume", ["ynca", "yxc"])).toBe("yxc");
+    expect(pickOwner("volume", ["ynca", "xml"])).toBe("ynca");
+    expect(pickOwner("volume", ["xml"])).toBe("xml");
   });
 
   test("write-loss keys stay with YNCA/XML where YXC is read-only (census §3c)", () => {

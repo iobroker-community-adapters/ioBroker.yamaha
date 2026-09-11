@@ -85,7 +85,8 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     // step count. The object's unit and bounds follow in `volumePresentation`.
     read: { path: ["actual_volume", "value"], fallbackField: "volume" },
     fromStatus: num,
-    write: { apply: (c, v, z) => c.setVolumeTo(Number(v), z) },
+    // No `write` here: the controller owns the write path, because the value has to be
+    // translated from the displayed scale into the raw step count setVolume expects.
   },
   {
     state: "mute",

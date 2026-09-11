@@ -84,9 +84,9 @@ describe("MultiTransportHandle", () => {
     expect(objects).toEqual(expect.arrayContaining(["living.volume", "living.power", "living.dist.role"]));
     expect(objects.filter(id => id === "living.volume").length).toBe(1);
     // volume owned by YNCA (dB), power + dist.role by YXC (modern / exclusive)
-    expect(ynca.seeded).toContain("volume");
+    expect(yxc.seeded).toContain("volume");
     expect(yxc.seeded).toEqual(expect.arrayContaining(["power", "dist.role"]));
-    expect(yxc.seeded).not.toContain("volume");
+    expect(ynca.seeded).not.toContain("volume");
   });
 
   test("routes a user write to the owning connection", async () => {
@@ -96,9 +96,9 @@ describe("MultiTransportHandle", () => {
     await handle.start();
     handle.handleStateChange("living.volume", false, -30);
     handle.handleStateChange("living.dist.role", false, "server");
-    expect(ynca.writes).toContainEqual({ id: "volume", value: -30 }); // volume → YNCA owner
+    expect(yxc.writes).toContainEqual({ id: "volume", value: -30 }); // volume → MusicCast owner
     expect(yxc.writes).toContainEqual({ id: "dist.role", value: "server" }); // dist.role → YXC owner
-    expect(yxc.writes).not.toContainEqual({ id: "volume", value: -30 });
+    expect(ynca.writes).not.toContainEqual({ id: "volume", value: -30 });
   });
 
   test("close closes every connection", () => {
@@ -181,10 +181,13 @@ function reconnectSetup(
 }
 
 describe("MultiTransportHandle per-transport reconnect", () => {
+  // `sound.bass` is the YNCA-owned capability here (documented-decibel override), so the drop and
+  // the rebuild are visible in ownership. `volume` would not show it: MusicCast owns that one
+  // whenever it answers, so nothing would change hands.
   test("a single transport's drop keeps the device alive and reconnects just that transport", async () => {
-    const ynca = fakeConn("ynca", [state("volume", "Volume dB", { unit: "dB" })]);
-    const yxc = fakeConn("yxc", [state("volume", "Volume raw"), state("dist.role", "Role")]);
-    const freshYnca = fakeConn("ynca", [state("volume", "Volume dB", { unit: "dB" })]);
+    const ynca = fakeConn("ynca", [state("sound.bass", "Bass dB", { unit: "dB" })]);
+    const yxc = fakeConn("yxc", [state("sound.bass", "Bass raw"), state("dist.role", "Role")]);
+    const freshYnca = fakeConn("ynca", [state("sound.bass", "Bass dB", { unit: "dB" })]);
     const supervisorDrop = vi.fn();
     const { handle, transportsReports, fireTimers } = reconnectSetup([ynca, yxc], { ynca: () => freshYnca });
     await handle.start();
@@ -198,20 +201,20 @@ describe("MultiTransportHandle per-transport reconnect", () => {
     expect(transportsReports.at(-1)).toEqual(["yxc"]);
 
     await fireTimers();
-    // the fresh YNCA is live again and owns volume again (re-coordinated)
+    // the fresh YNCA is live again and owns the decibel capability again (re-coordinated)
     expect(transportsReports.at(-1)).toEqual(["yxc", "ynca"]);
-    expect(freshYnca.seeded).toContain("volume");
-    handle.handleStateChange("living.volume", false, -30);
-    expect(freshYnca.writes).toContainEqual({ id: "volume", value: -30 });
+    expect(freshYnca.seeded).toContain("sound.bass");
+    handle.handleStateChange("living.sound.bass", false, -3);
+    expect(freshYnca.writes).toContainEqual({ id: "sound.bass", value: -3 });
   });
 
   test("while the owner is offline its write is dropped, not sent to the dead connection", async () => {
-    const ynca = fakeConn("ynca", [state("volume", "Volume dB", { unit: "dB" })]);
-    const yxc = fakeConn("yxc", [state("volume", "Volume raw"), state("dist.role", "Role")]);
+    const ynca = fakeConn("ynca", [state("sound.bass", "Bass dB", { unit: "dB" })]);
+    const yxc = fakeConn("yxc", [state("sound.bass", "Bass raw"), state("dist.role", "Role")]);
     const { handle } = reconnectSetup([ynca, yxc], { ynca: () => fakeConn("ynca", []) });
     await handle.start();
     ynca.drop();
-    handle.handleStateChange("living.volume", false, -30);
+    handle.handleStateChange("living.sound.bass", false, -3);
     expect(ynca.writes).toEqual([]);
     expect(yxc.writes).toEqual([]); // not re-routed either — ownership stands
   });

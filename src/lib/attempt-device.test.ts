@@ -70,10 +70,10 @@ describe("connectTransports", () => {
     // one node per capability, under the device id — volume appears exactly once
     expect(d.objects).toEqual(expect.arrayContaining(["living.volume", "living.power", "living.dist.role"]));
     expect(d.objects.filter(id => id === "living.volume").length).toBe(1);
-    // volume owned by YNCA (dB, lossless override), dist.role exclusive to YXC
-    expect(ynca.seeded).toContain("volume");
+    // volume owned by MusicCast (it alone reports the displayed scale), dist.role exclusive to YXC
+    expect(yxc.seeded).toContain("volume");
     expect(yxc.seeded).toContain("dist.role");
-    expect(yxc.seeded).not.toContain("volume");
+    expect(ynca.seeded).not.toContain("volume");
   });
 
   test("a transport that does not answer is closed and left out of the tree", async () => {

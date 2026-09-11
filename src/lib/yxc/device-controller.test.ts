@@ -377,6 +377,47 @@ describe("YxcDeviceController", () => {
     expect(s.trace.filter(e => e.kind === "object" && e.id === "living.volume")).toEqual([]);
   });
 
+  // The datapoint carries what the receiver DISPLAYS, `setVolume` takes the raw step count. The
+  // ratio is READ from the pair the device reports in one status answer — measured on the RX-V6A:
+  // raw 60 against display 30.0 in main, raw 81 against 40.5 in zone 2, both exactly 0.5. The
+  // declared ranges do NOT divide cleanly (0…161 raw against 0…97 displayed), so they are not used.
+  test("a volume write is converted with the ratio the device itself reported", async () => {
+    const s = setup(rxV481, { power: "on", volume: 60, actual_volume: { mode: "numeric", value: 30 } });
+    expect(await s.controller.start()).toBe(true);
+    s.client.calls.length = 0;
+
+    s.controller.handleStateChange("living.volume", false, 41.5);
+    await flush();
+
+    expect(s.client.calls).toContainEqual({ method: "setVolumeTo", args: [83, "main"] });
+  });
+
+  // Without both numbers the factor is unknown, and sending the displayed value as a raw step
+  // count would set a completely different loudness. Refusing is the honest answer.
+  test("a volume write is refused while the device has not reported both numbers", async () => {
+    const s = setup(rxV481, { power: "on", actual_volume: { mode: "numeric", value: 30 } });
+    await s.controller.start();
+    s.client.calls.length = 0;
+
+    s.controller.handleStateChange("living.volume", false, 41.5);
+    await flush();
+
+    expect(s.client.calls.filter(c => c.method === "setVolumeTo")).toEqual([]);
+  });
+
+  // A speaker reports no display scale at all — its datapoint already holds the device's own step
+  // count, so the value goes out untouched, exactly as before this rebuild.
+  test("a device without a display scale writes its raw value straight through", async () => {
+    const s = setup(wx10, ysp);
+    await s.controller.start();
+    s.client.calls.length = 0;
+
+    s.controller.handleStateChange("living.volume", false, 42);
+    await flush();
+
+    expect(s.client.calls).toContainEqual({ method: "setVolumeTo", args: [42, "main"] });
+  });
+
   test("keepalive polls main to renew the push registration", async () => {
     const s = setup(wx10, ysp);
     await s.controller.start();

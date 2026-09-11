@@ -340,8 +340,12 @@ describe("stateToYxc", () => {
     expect(await ranCall("power", true)).toEqual(["power", [true, "main"]]);
   });
 
-  test("runs a zoned volume write through setVolumeTo with the zone", async () => {
-    expect(await ranCall("multiroom.zone2.volume", 40)).toEqual(["setVolumeTo", [40, "zone2"]]);
+  // Volume is declarative: the datapoint holds the DISPLAYED value while setVolume takes the raw
+  // step count, so only the controller — which measured the ratio from the device's own status —
+  // can complete the call. The mapper just names the zone and the value.
+  test("maps a zoned volume write to the declarative volume command", () => {
+    expect(stateToYxc("multiroom.zone2.volume", 40)).toEqual({ kind: "volume", zone: "zone2", value: 40 });
+    expect(stateToYxc("volume", -30)).toEqual({ kind: "volume", zone: "main", value: -30 });
   });
 
   test("runs soundProgram through setSound (not setSoundProgram)", async () => {

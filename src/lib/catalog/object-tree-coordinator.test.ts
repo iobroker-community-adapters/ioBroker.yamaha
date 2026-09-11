@@ -16,10 +16,11 @@ describe("coordinateObjectTree — one unified tree from the transports' catalog
     ]);
     const ids = objects.map(o => o.id);
     expect(ids).toEqual(expect.arrayContaining(["volume", "sound.bass", "dist.role"]));
-    // volume shared → YNCA owner (dB, not YXC's raw scale)
+    // volume shared → MusicCast owner: it is the only transport that can report the scale
+    // the receiver DISPLAYS, so plain modernity applies (the old §3a override is gone).
     expect(objects.filter(o => o.id === "volume").length).toBe(1);
-    expect(objects.find(o => o.id === "volume")?.common.name).toBe("Volume dB");
-    expect(ownerByCanonicalId.get("volume")).toBe("ynca");
+    expect(objects.find(o => o.id === "volume")?.common.name).toBe("Volume raw");
+    expect(ownerByCanonicalId.get("volume")).toBe("yxc");
     // sound.bass is YNCA's own id already — no drift needed since the catalog rename
     expect(objects.some(o => o.id === "bass")).toBe(false);
     // dist.role is YXC-exclusive
@@ -41,7 +42,7 @@ describe("coordinateObjectTree — one unified tree from the transports' catalog
       { transport: "yxc", objects: [state("multiroom.zone2.volume", "Z2 raw")] },
     ]);
     expect(objects.filter(o => o.id === "multiroom.zone2.volume").length).toBe(1);
-    expect(objects.find(o => o.id === "multiroom.zone2.volume")?.common.name).toBe("Z2 dB");
+    expect(objects.find(o => o.id === "multiroom.zone2.volume")?.common.name).toBe("Z2 raw");
   });
 
   test("parents come before children (channels before their states)", () => {
