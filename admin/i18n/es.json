@@ -4,6 +4,8 @@
   "columnIp": "Dirección IP",
   "label_xmlPollInterval": "Intervalo de consulta XML (segundos)",
   "tooltip_xmlPollInterval": "Con qué frecuencia el adaptador consulta receptores con el antiguo protocolo XML (modelos anteriores a ~2010). Estos equipos no comunican cambios por sí mismos. Sin efecto en YNCA o MusicCast.",
+  "volumeAsPercent": "Volumen como 0–100 %",
+  "volumeAsPercent_help": "Desactivado: cada punto de datos de volumen usa la escala que el propio receptor muestra — decibelios o su propio recuento de pasos. Activado: todos ellos, la zona principal y cada zona adicional, usan 0–100 %, el rango que esperan la mayoría de los widgets VIS. El adaptador convierte en ambos sentidos, así que el receptor siempre recibe el valor que espera.",
   "supportHeader": "Apoyar el desarrollo",
   "aboutInfo": "Si este adaptador te resulta útil, puedes apoyar su desarrollo:",
   "donateKofi": "Ko-fi",
@@ -597,5 +599,6 @@
   "docLinkLabelDe": "Wiki (Deutsch)",
   "docLinkLabelEn": "Wiki (English)",
   "descVolumeDb": "Lo alto que suena la zona, en la escala de decibelios que muestra el propio receptor.",
-  "descVolumeNumeric": "Lo alto que suena la zona, en la escala numérica que muestra el propio receptor."
+  "descVolumeNumeric": "Lo alto que suena la zona, en la escala numérica que muestra el propio receptor.",
+  "descVolumePercent": "Qué tan alto suena la zona, como porcentaje del rango que acepta el receptor — 0 % es su ajuste más bajo, 100 % el más alto."
 }

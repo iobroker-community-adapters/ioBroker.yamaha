@@ -947,6 +947,119 @@ describe("Yamaha datapoint balance in the log", () => {
   });
 });
 
+describe("Yamaha volume as 0…100 % (the one switch)", () => {
+  /** The scale a MusicCast receiver's main zone declares once the raw range is read on it. */
+  const dbVolume = {
+    type: "state",
+    common: { type: "number", role: "level.volume", write: true, min: -80.5, max: 0, step: 0.5, unit: "dB" },
+  };
+
+  // krobi 2026-09-11: "ein schalter für ALLE. ich will das nicht komplizierter machen als es sein
+  // muss." One instance setting, every device on it, every zone of every device — a switch that
+  // reached only the main zone would rebuild the mixed tree this release removes.
+  it("reaches every zone of every device", async () => {
+    const ctx = setup({
+      volumeAsPercent: true,
+      devices: [
+        { name: "Living room", ip: "192.168.1.10" },
+        { name: "Kitchen", ip: "192.168.1.11" },
+      ],
+    });
+    await ctx.i.onReady();
+    await flush();
+
+    for (const [index, device] of ["Living_room", "Kitchen"].entries()) {
+      const upsert = ctx.calls[index].deps.upsertObject as (id: string, def: unknown) => Promise<void>;
+      for (const id of ["volume", "multiroom.zone2.volume", "multiroom.zone3.volume", "multiroom.zone4.volume"]) {
+        await upsert(`${device}.${id}`, dbVolume);
+        const common = ctx.i.objects.get(`${device}.${id}`)?.common as Record<string, unknown>;
+        expect(common.min, `${device}.${id}`).toBe(0);
+        expect(common.max, `${device}.${id}`).toBe(100);
+        expect(common.unit, `${device}.${id}`).toBe("%");
+      }
+    }
+  });
+
+  // Off is the default and the honest setting: the datapoint carries what the device shows.
+  it("leaves the device's own scale alone while the switch is off", async () => {
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    const upsert = ctx.calls[0].deps.upsertObject as (id: string, def: unknown) => Promise<void>;
+
+    await upsert("Living_room.volume", dbVolume);
+    const common = ctx.i.objects.get("Living_room.volume")?.common as Record<string, unknown>;
+    expect(common.max).toBe(0);
+    expect(common.unit).toBe("dB");
+  });
+
+  it("converts a device report into percent and a user write back", async () => {
+    const ctx = setup({ volumeAsPercent: true });
+    await ctx.i.onReady();
+    await flush();
+    const deps = ctx.calls[0].deps;
+    const upsert = deps.upsertObject as (id: string, def: unknown) => Promise<void>;
+    const setStateAck = deps.setStateAck as (id: string, value: unknown) => void;
+    await upsert("Living_room.volume", dbVolume);
+
+    // -40 dB sits 40.5 of the 80.5 dB the receiver accepts above its floor: 50.31 %, which the
+    // percent grid carries as 50.5. Writing that back lands on -39.85 and snaps to the receiver's
+    // own half-decibel grid at -40 — the value it reported, which is what makes the mode usable.
+    setStateAck("Living_room.volume", -40);
+    expect(ctx.i.states.get("Living_room.volume")).toEqual({ val: 50.5, ack: true });
+
+    ctx.i.onStateChange("yamaha.0.Living_room.volume", { val: 50.5, ack: false });
+    expect(ctx.handles[0].changes).toEqual([{ id: "Living_room.volume", ack: false, value: -40 }]);
+  });
+
+  // The adapter subscribes to its own namespace, so every value it acks comes straight back as an
+  // ACKED change. Converting that one too would read the percent as decibels and walk the value
+  // down the scale on every single poll.
+  it("does not convert its own acked echo", async () => {
+    const ctx = setup({ volumeAsPercent: true });
+    await ctx.i.onReady();
+    await flush();
+    const upsert = ctx.calls[0].deps.upsertObject as (id: string, def: unknown) => Promise<void>;
+    await upsert("Living_room.volume", dbVolume);
+
+    ctx.i.onStateChange("yamaha.0.Living_room.volume", { val: 50.5, ack: true });
+    expect(ctx.handles[0].changes).toEqual([{ id: "Living_room.volume", ack: true, value: 50.5 }]);
+  });
+
+  // Every other datapoint carrying "volume" is a different quantity on a different scale.
+  it("touches no other volume-named datapoint", async () => {
+    const ctx = setup({ volumeAsPercent: true });
+    await ctx.i.onReady();
+    await flush();
+    const deps = ctx.calls[0].deps;
+    const upsert = deps.upsertObject as (id: string, def: unknown) => Promise<void>;
+    const setStateAck = deps.setStateAck as (id: string, value: unknown) => void;
+
+    await upsert("Living_room.advanced.maxVolume", dbVolume);
+    setStateAck("Living_room.advanced.maxVolume", -40);
+    const common = ctx.i.objects.get("Living_room.advanced.maxVolume")?.common as Record<string, unknown>;
+    expect(common.unit).toBe("dB");
+    expect(ctx.i.states.get("Living_room.advanced.maxVolume")).toEqual({ val: -40, ack: true });
+  });
+
+  // A range the device never declared gives percent nothing to mean. The datapoint keeps the
+  // device's own scale rather than carrying a number derived from invented ends.
+  it("keeps the device's scale where no range is declared", async () => {
+    const ctx = setup({ volumeAsPercent: true });
+    await ctx.i.onReady();
+    await flush();
+    const deps = ctx.calls[0].deps;
+    const upsert = deps.upsertObject as (id: string, def: unknown) => Promise<void>;
+    const setStateAck = deps.setStateAck as (id: string, value: unknown) => void;
+
+    await upsert("Living_room.volume", { type: "state", common: { type: "number", role: "level.volume" } });
+    setStateAck("Living_room.volume", 42);
+    const common = ctx.i.objects.get("Living_room.volume")?.common as Record<string, unknown>;
+    expect(common.max).toBeUndefined();
+    expect(ctx.i.states.get("Living_room.volume")).toEqual({ val: 42, ack: true });
+  });
+});
+
 describe("Yamaha transport plumbing", () => {
   it("gates object creation and values on the datapoint group", async () => {
     const ctx = setup({ group_multiroom: false });

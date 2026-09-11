@@ -4,6 +4,8 @@
   "columnIp": "IP-Adresse",
   "label_xmlPollInterval": "XML-Abfrageintervall (Sekunden)",
   "tooltip_xmlPollInterval": "Wie oft der Adapter Receiver mit dem alten XML-Protokoll abfragt (Modelle vor ~2010). Diese Geräte melden Änderungen nicht von selbst. Ohne Wirkung auf YNCA- oder MusicCast-Geräte.",
+  "volumeAsPercent": "Lautstärke als 0–100 %",
+  "volumeAsPercent_help": "Aus: Jeder Lautstärke-Datenpunkt trägt die Skala, die der Receiver selbst anzeigt — Dezibel oder seine eigene Schrittzahl. Ein: Alle tragen stattdessen 0–100 %, Hauptzone wie jede weitere Zone — der Bereich, den die meisten VIS-Widgets erwarten. Der Adapter rechnet in beide Richtungen um, der Receiver bekommt also immer den Wert, den er erwartet.",
   "supportHeader": "Entwicklung unterstützen",
   "aboutInfo": "Wenn dir dieser Adapter nützt, kannst du seine Entwicklung unterstützen:",
   "donateKofi": "Ko-fi",
@@ -597,5 +599,6 @@
   "docLinkLabelDe": "Wiki (Deutsch)",
   "docLinkLabelEn": "Wiki (English)",
   "descVolumeDb": "Wie laut die Zone spielt, in der Dezibel-Skala, die der Receiver selbst anzeigt.",
-  "descVolumeNumeric": "Wie laut die Zone spielt, in der Zahlen-Skala, die der Receiver selbst anzeigt."
+  "descVolumeNumeric": "Wie laut die Zone spielt, in der Zahlen-Skala, die der Receiver selbst anzeigt.",
+  "descVolumePercent": "Wie laut die Zone spielt, als Prozentsatz des Bereichs, den der Receiver annimmt — 0 % ist seine leiseste, 100 % seine lauteste Einstellung."
 }

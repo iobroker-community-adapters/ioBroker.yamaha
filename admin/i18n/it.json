@@ -4,6 +4,8 @@
   "columnIp": "Indirizzo IP",
   "label_xmlPollInterval": "Intervallo di interrogazione XML (secondi)",
   "tooltip_xmlPollInterval": "Con quale frequenza l'adattatore interroga i ricevitori con il vecchio protocollo XML (modelli prima del ~2010). Questi dispositivi non segnalano da soli le modifiche. Nessun effetto su YNCA o MusicCast.",
+  "volumeAsPercent": "Volume come 0–100 %",
+  "volumeAsPercent_help": "Disattivato: ogni datapoint del volume usa la scala che il ricevitore stesso mostra — decibel o il suo conteggio di passi. Attivato: tutti, la zona principale e ogni altra zona, usano 0–100 %, l'intervallo che la maggior parte dei widget VIS si aspetta. L'adattatore converte in entrambe le direzioni, quindi il ricevitore riceve sempre il valore che si aspetta.",
   "supportHeader": "Sostieni lo sviluppo",
   "aboutInfo": "Se questo adattatore ti è utile, puoi sostenere il suo sviluppo:",
   "donateKofi": "Ko-fi",
@@ -597,5 +599,6 @@
   "docLinkLabelDe": "Wiki (Deutsch)",
   "docLinkLabelEn": "Wiki (English)",
   "descVolumeDb": "Quanto forte suona la zona, nella scala in decibel che il ricevitore stesso mostra.",
-  "descVolumeNumeric": "Quanto forte suona la zona, nella scala numerica che il ricevitore stesso mostra."
+  "descVolumeNumeric": "Quanto forte suona la zona, nella scala numerica che il ricevitore stesso mostra.",
+  "descVolumePercent": "Quanto forte suona la zona, come percentuale dell'intervallo che il ricevitore accetta — 0 % è l'impostazione più bassa, 100 % la più alta."
 }

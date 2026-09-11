@@ -4,6 +4,8 @@
   "columnIp": "Adresse IP",
   "label_xmlPollInterval": "Intervalle d'interrogation XML (secondes)",
   "tooltip_xmlPollInterval": "Fréquence d'interrogation des amplis utilisant l'ancien protocole XML (modèles avant ~2010). Ces appareils ne signalent pas les changements d'eux-mêmes. Sans effet sur YNCA ou MusicCast.",
+  "volumeAsPercent": "Volume en 0–100 %",
+  "volumeAsPercent_help": "Désactivé : chaque point de données de volume utilise l'échelle que l'ampli affiche lui-même — décibels ou son propre nombre de pas. Activé : tous, la zone principale comme chaque autre zone, utilisent 0–100 %, la plage attendue par la plupart des widgets VIS. L'adaptateur convertit dans les deux sens, l'ampli reçoit donc toujours la valeur qu'il attend.",
   "supportHeader": "Soutenir le développement",
   "aboutInfo": "Si cet adaptateur vous est utile, vous pouvez soutenir son développement :",
   "donateKofi": "Ko-fi",
@@ -597,5 +599,6 @@
   "docLinkLabelDe": "Wiki (Deutsch)",
   "docLinkLabelEn": "Wiki (English)",
   "descVolumeDb": "Le niveau sonore de la zone, dans l'échelle en décibels affichée par l'ampli lui-même.",
-  "descVolumeNumeric": "Le niveau sonore de la zone, dans l'échelle numérique affichée par l'ampli lui-même."
+  "descVolumeNumeric": "Le niveau sonore de la zone, dans l'échelle numérique affichée par l'ampli lui-même.",
+  "descVolumePercent": "Le volume de la zone, en pourcentage de la plage que l'ampli accepte — 0 % est son réglage le plus bas, 100 % le plus fort."
 }

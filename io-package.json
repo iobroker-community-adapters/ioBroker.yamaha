@@ -306,6 +306,7 @@
     "networkInterface": "0.0.0.0",
     "devices": [],
     "xmlPollInterval": 60,
+    "volumeAsPercent": false,
     "group_player": true,
     "group_tuner": true,
     "group_multiroom": true,

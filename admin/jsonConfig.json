@@ -69,6 +69,17 @@
       "lg": 4,
       "xl": 4
     },
+    "volumeAsPercent": {
+      "newLine": true,
+      "type": "checkbox",
+      "label": "volumeAsPercent",
+      "help": "volumeAsPercent_help",
+      "xs": 12,
+      "sm": 12,
+      "md": 8,
+      "lg": 6,
+      "xl": 6
+    },
     "_datapointsHeader": {
       "newLine": true,
       "type": "header",
