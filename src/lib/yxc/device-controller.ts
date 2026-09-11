@@ -123,6 +123,27 @@ export interface YxcControllerDeps {
 }
 
 /**
+ * The display scale a zone status reports, if it reports one.
+ *
+ * Read from the RAW answer rather than from the parsed updates, because the object definition
+ * has to be corrected before the parsed value is written (see `applyZoneStatus`).
+ *
+ * @param status the raw getStatus answer
+ * @returns "db" / "numeric", or undefined when the device does not report a mode
+ */
+function actualVolumeModeOf(status: unknown): string | undefined {
+  if (typeof status !== "object" || status === null) {
+    return undefined;
+  }
+  const actual = (status as { actual_volume?: unknown }).actual_volume;
+  if (typeof actual !== "object" || actual === null) {
+    return undefined;
+  }
+  const mode = (actual as { mode?: unknown }).mode;
+  return typeof mode === "string" ? mode : undefined;
+}
+
+/**
  * Drives one MusicCast (YXC) device: read capabilities, build the object tree,
  * seed state from getStatus, and route commands both ways. Device pushes arrive
  * via the shared receiver as re-fetch signals; a keepalive poll renews the push
@@ -294,13 +315,15 @@ export class YxcDeviceController implements ConnectionHandle {
       }
     }
     // Seed every zone from the status fetched above — the same answer, not a second request.
-    const zonesAnswered = statuses.map((status, index) => {
+    const zonesAnswered: boolean[] = [];
+    for (const [index, status] of statuses.entries()) {
       if (status === undefined) {
-        return false;
+        zonesAnswered.push(false);
+        continue;
       }
-      this.applyZoneStatus(this.zones[index], status);
-      return true;
-    });
+      await this.applyZoneStatus(this.zones[index], status);
+      zonesAnswered.push(true);
+    }
     // The zone status is the one request of this start that ALWAYS goes to the device: the
     // capabilities above come from the probe memory on every reconnect, and model/name are
     // best-effort, so nothing before this point can tell a live device from a dead one. Without
@@ -1081,7 +1104,7 @@ export class YxcDeviceController implements ConnectionHandle {
     if (status === undefined) {
       return false;
     }
-    this.applyZoneStatus(zone, status);
+    await this.applyZoneStatus(zone, status);
     return true;
   }
 
@@ -1106,19 +1129,24 @@ export class YxcDeviceController implements ConnectionHandle {
    * @param zone the zone the status belongs to
    * @param status the raw getStatus answer
    */
-  private applyZoneStatus(zone: string, status: unknown): void {
+  private async applyZoneStatus(zone: string, status: unknown): Promise<void> {
+    // The display scale decides the BOUNDS and the unit of the volume datapoint, so the object
+    // has to carry the new scale BEFORE the new value is written. The status updates are emitted
+    // in catalog order, which puts the value ahead of `actualVolumeMode` — reshaping from inside
+    // that loop (and as a fire-and-forget promise) let a numeric value land in an object still
+    // declaring decibels, which is the js-controller warning 2.7.2 set out to end. So the mode is
+    // read from the RAW answer first and the reshape is awaited.
+    const mode = actualVolumeModeOf(status);
+    if (mode !== undefined && this.zoneVolumeMode.get(zone) !== mode) {
+      this.zoneVolumeMode.set(zone, mode);
+      await this.reshapeActualVolume(zone, mode);
+    }
     const updates = parseYxcStatus(status, zone);
     for (const update of updates) {
       this.emit(update.id, update.value);
       // The EXACT id, not a suffix: this value decides which source a zone's player block
       // and its transport buttons follow. A future status field ending in "input" would
       // have bent that routing silently.
-      if (update.id === `${zonePrefix(zone)}actualVolumeMode` && typeof update.value === "string") {
-        if (this.zoneVolumeMode.get(zone) !== update.value) {
-          this.zoneVolumeMode.set(zone, update.value);
-          void this.reshapeActualVolume(zone, update.value);
-        }
-      }
       if (update.id === `${zonePrefix(zone)}input` && typeof update.value === "string") {
         const previous = this.lastZoneInput.get(zone);
         this.lastZoneInput.set(zone, update.value);

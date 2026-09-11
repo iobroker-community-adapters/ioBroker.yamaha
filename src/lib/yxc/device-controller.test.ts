@@ -159,6 +159,8 @@ function setup(
   objects: string[];
   defs: Map<string, ObjectDef>;
   acks: Array<{ id: string; value: unknown }>;
+  /** Object writes and value writes on ONE timeline, so a test can assert their ORDER. */
+  trace: Array<{ kind: "object" | "value"; id: string }>;
   fire: { push?: (event: unknown) => void; keepalive?: () => void };
   names: string[];
   cancelled: () => boolean;
@@ -168,6 +170,7 @@ function setup(
   const objects: string[] = [];
   const defs = new Map<string, ObjectDef>();
   const acks: Array<{ id: string; value: unknown }> = [];
+  const trace: Array<{ kind: "object" | "value"; id: string }> = [];
   const names: string[] = [];
   const fire: { push?: (event: unknown) => void; keepalive?: () => void } = {};
   let cancelled = false;
@@ -191,10 +194,12 @@ function setup(
     upsertObject: (id, def) => {
       objects.push(id);
       defs.set(id, def);
+      trace.push({ kind: "object", id });
       return Promise.resolve();
     },
     setStateAck: (id, value) => {
       acks.push({ id, value });
+      trace.push({ kind: "value", id });
     },
     reportDeviceName: name => {
       names.push(name);
@@ -207,6 +212,7 @@ function setup(
     objects,
     defs,
     acks,
+    trace,
     names,
     fire,
     cancelled: () => cancelled,
@@ -336,6 +342,39 @@ describe("YxcDeviceController", () => {
     expect(s.defs.get("living.actualVolume")?.common.max).toBe(97);
     expect(s.defs.get("living.actualVolume")?.common.min).toBe(0);
     expect(s.defs.get("living.actualVolume")?.common.unit).toBe("");
+  });
+
+  // The ORDER matters, not just the fact that a reshape happens. The status updates are emitted
+  // in catalog order, and the catalog lists the volume value BEFORE `actualVolumeMode` — so the
+  // new value used to land in an object still declaring the OLD scale, and the reshape followed
+  // afterwards as a fire-and-forget promise. A numeric→db switch then wrote a value like 90 into
+  // an object with `max: 16.5`, which is exactly the js-controller warning 2.7.2 set out to end.
+  test("a display-scale switch writes the new object definition BEFORE the new value", async () => {
+    const s = setup(rxV481, { power: "on", actual_volume: { mode: "db", value: -47.5 } });
+    expect(await s.controller.start()).toBe(true);
+
+    s.trace.length = 0;
+    s.client.status = { power: "on", actual_volume: { mode: "numeric", value: 90 } };
+    s.fire.push?.({ main: { volume: 90 } });
+    await flush();
+
+    const object = s.trace.findIndex(e => e.kind === "object" && e.id === "living.actualVolume");
+    const value = s.trace.findIndex(e => e.kind === "value" && e.id === "living.actualVolume");
+    expect(object).toBeGreaterThanOrEqual(0);
+    expect(value).toBeGreaterThanOrEqual(0);
+    expect(object).toBeLessThan(value);
+  });
+
+  test("a status without a scale change reshapes nothing", async () => {
+    const s = setup(rxV481, { power: "on", actual_volume: { mode: "db", value: -47.5 } });
+    await s.controller.start();
+
+    s.trace.length = 0;
+    s.client.status = { power: "on", actual_volume: { mode: "db", value: -40 } };
+    s.fire.push?.({ main: { volume: 40 } });
+    await flush();
+
+    expect(s.trace.filter(e => e.kind === "object" && e.id === "living.actualVolume")).toEqual([]);
   });
 
   test("keepalive polls main to renew the push registration", async () => {
