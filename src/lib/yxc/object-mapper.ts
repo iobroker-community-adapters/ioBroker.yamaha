@@ -214,6 +214,131 @@ const RANGE_BY_STATE: Readonly<Record<string, string>> = {
 type DeclaredRange = NonNullable<YxcZone["ranges"]>[string];
 
 /**
+ * How a zone's DISPLAYED volume relates to the raw step count `setVolume` takes.
+ *
+ * The relation is affine, never a plain ratio: `shown = displayMin + (raw − rawMin) · slope`,
+ * with the slope read from the two DECLARED STEPS. The declared ENDS do not describe the same
+ * thing — every capture declares raw 0…161 in steps of 1 against a display span of 97 in steps
+ * of 0.5, and a slope taken from those ends (0.6025) puts raw 66 at −40.7 dB while the device
+ * reports −47.5. The step slope (0.5) is exact on all ten distinct raw/displayed pairs in the
+ * bundled captures — seven models, raw 1…121, −80.0…−20.0 dB — and reproduces the declared
+ * display MINIMUM at `rawMin` (raw 1 → −80.0, so raw 0 → −80.5, the declared floor).
+ *
+ * @param zone the zone whose declared ranges are read
+ * @param mode the display mode the zone reports right now, if any
+ * @returns the scale, or undefined while the zone declares no raw range, no display scale, or
+ *   declares both and has not said which one it is on
+ */
+export function volumeScaleOf(zone: YxcZone, mode: string | undefined): VolumeScale | undefined {
+  const raw = zone.ranges?.volume;
+  const display = declaredDisplayRange(zone, mode);
+  if (!raw || !display || raw.step === 0) {
+    return undefined;
+  }
+  return {
+    rawMin: raw.min,
+    rawMax: raw.max,
+    rawStep: raw.step,
+    displayMin: display.range.min,
+    displayStep: display.range.step,
+    displayPerRawStep: display.range.step / raw.step,
+  };
+}
+
+/** A zone's volume scale: the raw steps the device takes, and what they read as on its display. */
+export interface VolumeScale {
+  /** The quietest raw step count `setVolume` accepts, as the zone declares it. */
+  rawMin: number;
+  /** The loudest raw step count `setVolume` accepts, as the zone declares it. */
+  rawMax: number;
+  /** The grid the raw step count moves on. */
+  rawStep: number;
+  /** The displayed value at `rawMin`. */
+  displayMin: number;
+  /** The grid the displayed value moves on. */
+  displayStep: number;
+  /** How far one raw step moves the displayed value. */
+  displayPerRawStep: number;
+}
+
+/**
+ * The displayed value a raw step count reads as on a zone's scale.
+ *
+ * @param scale the zone's scale
+ * @param raw the raw step count the device reported
+ * @returns the value as the receiver displays it
+ */
+export function shownVolumeFor(scale: VolumeScale, raw: number): number {
+  const shown = scale.displayMin + (raw - scale.rawMin) * scale.displayPerRawStep;
+  // The device's own grid, so a floating-point remainder never reaches the datapoint.
+  return Math.round(shown / scale.displayStep) * scale.displayStep;
+}
+
+/**
+ * The raw step count a displayed value has to be sent as.
+ *
+ * Held inside the range the device declares: writing past it would be a step count the receiver
+ * never offered. The datapoint's own bounds are that same range (see {@link volumeBounds}), so
+ * this only catches a write that ignored them.
+ *
+ * @param scale the zone's scale
+ * @param shown the value as the datapoint carries it
+ * @returns the raw step count to send
+ */
+export function rawVolumeFor(scale: VolumeScale, shown: number): number {
+  const steps = Math.round((shown - scale.displayMin) / scale.displayPerRawStep);
+  const raw = scale.rawMin + steps * scale.rawStep;
+  return Math.min(scale.rawMax, Math.max(scale.rawMin, raw));
+}
+
+/**
+ * The bounds of a volume scale: what the device ACCEPTS, expressed on its display scale.
+ *
+ * `min`/`max` on a writable datapoint is a promise about writes, so the range is the raw one the
+ * device declares — twice, in `range_step` and in the live `max_volume` status field, agreeing on
+ * every one of the 40 captures (161 on each AVR, 100 on each soundbar, 60 on each speaker). The
+ * declared `actual_volume_db` span (−80.5…16.5) describes the SCALE, not what `setVolume` takes:
+ * its floor matches the raw floor exactly, its ceiling sits at raw 194, past the declared 161.
+ * Taking the scale's ceiling would leave a datapoint whose top third no write can reach.
+ *
+ * @param scale the zone's scale
+ * @returns the bounds to declare on the datapoint
+ */
+export function volumeBounds(scale: VolumeScale): DeclaredRange {
+  return {
+    min: shownVolumeFor(scale, scale.rawMin),
+    max: shownVolumeFor(scale, scale.rawMax),
+    step: scale.displayStep,
+  };
+}
+
+/**
+ * The display scale a zone is on: the one it reports, or the only one it declares.
+ *
+ * @param zone the zone whose declared ranges are read
+ * @param mode the display mode the zone reports right now, if any
+ * @returns the settled scale, or undefined when the zone declares both and reports neither
+ */
+function declaredDisplayRange(
+  zone: YxcZone,
+  mode: string | undefined,
+): { kind: "db" | "numeric"; range: DeclaredRange } | undefined {
+  const db = zone.ranges?.actual_volume_db;
+  const numeric = zone.ranges?.actual_volume_numeric;
+  // A zone that declares ONE scale can only display that one — its status does not have to say so
+  // (the RX-A2070 declares `actual_volume_db` for every zone and answers a status for main only).
+  const onlyScale = db && !numeric ? "db" : numeric && !db ? "numeric" : undefined;
+  const shown = mode === "db" || mode === "numeric" ? mode : onlyScale;
+  if (shown === "db" && db) {
+    return { kind: "db", range: db };
+  }
+  if (shown === "numeric" && numeric) {
+    return { kind: "numeric", range: numeric };
+  }
+  return undefined;
+}
+
+/**
  * The presentation of `volume` for the scale the device says it is DISPLAYING.
  *
  * `actual_volume.value` arrives in the form named by `actual_volume.mode` — a device set to its
@@ -225,7 +350,7 @@ type DeclaredRange = NonNullable<YxcZone["ranges"]>[string];
  *
  * @param zone the zone whose declared ranges are read
  * @param mode the display mode the zone reports right now, if any
- * @returns unit, name keys and the matching bounds
+ * @returns unit, explanation key and the matching bounds
  */
 export function volumePresentation(
   zone: YxcZone,
@@ -238,31 +363,47 @@ export function volumePresentation(
   if (!db && !numeric) {
     return undefined;
   }
-  // A zone that declares ONE scale can only display that one — its status does not have to say so
-  // (the RX-A2070 declares `actual_volume_db` for every zone and answers a status for main only).
-  const onlyScale = db && !numeric ? "db" : numeric && !db ? "numeric" : undefined;
-  const shown = mode === "db" || mode === "numeric" ? mode : onlyScale;
-  if (shown === "db") {
-    return { unit: "dB", descKey: "descVolumeDb", range: db };
-  }
-  if (shown === "numeric") {
-    return { unit: "", descKey: "descVolumeNumeric", range: numeric };
+  const settled = declaredDisplayRange(zone, mode);
+  const scale = volumeScaleOf(zone, mode);
+  if (settled) {
+    // Without a declared raw range there is nothing to reconcile the scale against, so its own
+    // declared span stands. Every captured device declares both, but a partial `range_step` must
+    // not cost the datapoint its bounds: `extendObject` merges, and bounds the new picture drops
+    // survive in an existing installation for ever.
+    const bounds = scale ? volumeBounds(scale) : settled.range;
+    return settled.kind === "db"
+      ? { unit: "dB", descKey: "descVolumeDb", range: bounds }
+      : { unit: "", descKey: "descVolumeNumeric", range: bounds };
   }
   // Both scales declared and none reported: the envelope of the two. Every value the device can
   // send lies inside it, and — unlike leaving the bounds out — it REPLACES what an existing
   // installation stored, because `extendObject` merges and a field the new picture drops survives.
+  const dbBounds = boundsForScale(zone, "db") ?? db;
+  const numericBounds = boundsForScale(zone, "numeric") ?? numeric;
   return {
     unit: "",
     descKey: "descVolumeNumeric",
     range:
-      db && numeric
+      dbBounds && numericBounds
         ? {
-            min: Math.min(db.min, numeric.min),
-            max: Math.max(db.max, numeric.max),
-            step: Math.min(db.step, numeric.step),
+            min: Math.min(dbBounds.min, numericBounds.min),
+            max: Math.max(dbBounds.max, numericBounds.max),
+            step: Math.min(dbBounds.step, numericBounds.step),
           }
         : undefined,
   };
+}
+
+/**
+ * The bounds one of a zone's declared scales would carry.
+ *
+ * @param zone the zone whose declared ranges are read
+ * @param mode the scale to measure
+ * @returns the bounds, or undefined while the zone does not declare that scale
+ */
+function boundsForScale(zone: YxcZone, mode: "db" | "numeric"): DeclaredRange | undefined {
+  const scale = volumeScaleOf(zone, mode);
+  return scale ? volumeBounds(scale) : undefined;
 }
 
 /**

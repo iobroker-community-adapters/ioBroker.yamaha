@@ -254,10 +254,14 @@ describe("mapYxcToObjects", () => {
   // The RX-A2070 declares `actual_volume_db`, so its volume datapoint carries the scale the
   // receiver itself shows — decibels — rather than the raw 0…161 step count MusicCast uses on
   // the wire. The raw scale is a protocol detail; what the device displays is the truth.
+  //
+  // The bounds are the raw range READ ON that scale: 161 steps of 0.5 dB above the declared floor
+  // is 0.0 dB, not the 16.5 the scale's span names — that would sit at raw 194, which the zone
+  // declares (and its live `max_volume` reports) as out of reach.
   test("the volume state carries the display scale on a device that declares one", () => {
     const vol = mapYxcToObjects(parseYxcFeatures(rxA2070)).find(o => o.id === "volume");
     expect(vol?.common.min).toBe(-80.5);
-    expect(vol?.common.max).toBe(16.5);
+    expect(vol?.common.max).toBe(0);
     expect(vol?.common.step).toBe(0.5);
     expect(vol?.common.unit).toBe("dB");
   });
@@ -578,6 +582,7 @@ describe("the device's own lists are DECLARED, and the words it reports are alwa
     funcs: ["power", "volume", "actual_volume"],
     inputs: [],
     ranges: {
+      volume: { min: 0, max: 161, step: 1 },
       actual_volume_db: { min: -80.5, max: 16.5, step: 0.5 },
       actual_volume_numeric: { min: 0, max: 97, step: 0.5 },
     },
@@ -587,7 +592,7 @@ describe("the device's own lists are DECLARED, and the words it reports are alwa
     const objs = mapYxcToObjects({ zones: [volumeZone], media: [] }, { main: { actualVolumeMode: "numeric" } });
     const vol = objs.find(o => o.id === "volume")?.common;
     expect(vol?.min).toBe(0);
-    expect(vol?.max).toBe(97);
+    expect(vol?.max).toBe(80.5);
     expect(vol?.step).toBe(0.5);
     expect(vol?.unit).toBe("");
   });
@@ -596,7 +601,7 @@ describe("the device's own lists are DECLARED, and the words it reports are alwa
     const objs = mapYxcToObjects({ zones: [volumeZone], media: [] }, { main: { actualVolumeMode: "db" } });
     const vol = objs.find(o => o.id === "volume")?.common;
     expect(vol?.min).toBe(-80.5);
-    expect(vol?.max).toBe(16.5);
+    expect(vol?.max).toBe(0);
     expect(vol?.unit).toBe("dB");
   });
 
@@ -607,19 +612,34 @@ describe("the device's own lists are DECLARED, and the words it reports are alwa
     const objs = mapYxcToObjects({ zones: [volumeZone], media: [] });
     const vol = objs.find(o => o.id === "volume")?.common;
     expect(vol?.min).toBe(-80.5);
-    expect(vol?.max).toBe(97);
+    expect(vol?.max).toBe(80.5);
     expect(vol?.unit).toBe("");
   });
 
   // A zone that declares only one scale cannot display any other — its status need not say so.
   test("a zone that declares only decibels keeps them, reported mode or not", () => {
-    const dbOnly = { ...volumeZone, ranges: { actual_volume_db: { min: -80.5, max: 16.5, step: 0.5 } } };
+    const dbOnly = {
+      ...volumeZone,
+      ranges: { volume: { min: 0, max: 161, step: 1 }, actual_volume_db: { min: -80.5, max: 16.5, step: 0.5 } },
+    };
     for (const current of [undefined, { main: { actualVolumeMode: "db" } }]) {
       const objs = mapYxcToObjects({ zones: [dbOnly], media: [] }, current);
       const vol = objs.find(o => o.id === "volume")?.common;
       expect(vol?.min).toBe(-80.5);
-      expect(vol?.max).toBe(16.5);
+      expect(vol?.max).toBe(0);
       expect(vol?.unit).toBe("dB");
     }
+  });
+
+  // Every captured device declares its raw range beside the display scale, but a partial
+  // `range_step` must not cost the datapoint its bounds — a dropped bound survives for ever in an
+  // existing installation, because `extendObject` merges. Without a raw range there is nothing to
+  // reconcile against, so the declared span stands as it is.
+  test("a zone declaring a scale but no raw range keeps the span it declares", () => {
+    const noRaw = { ...volumeZone, ranges: { actual_volume_db: { min: -80.5, max: 16.5, step: 0.5 } } };
+    const objs = mapYxcToObjects({ zones: [noRaw], media: [] }, { main: { actualVolumeMode: "db" } });
+    const vol = objs.find(o => o.id === "volume")?.common;
+    expect(vol?.min).toBe(-80.5);
+    expect(vol?.max).toBe(16.5);
   });
 });

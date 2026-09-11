@@ -3,6 +3,7 @@ import type { YxcClientLike } from "./device-controller";
 import type { ObjectDef } from "../catalog/types";
 import wx10 from "./__fixtures__/WX10_216_208.json";
 import rxV481 from "./__fixtures__/RX_V481_285_208.json";
+import rxA2070 from "./__fixtures__/RX_A2070_285_208.json";
 import ysp from "./__fixtures__/status/YSP1600_main.json";
 import { CommandGate } from "../lifecycle/command-gate";
 import { ProbeMemory } from "../lifecycle/probe-memory";
@@ -329,17 +330,22 @@ describe("YxcDeviceController", () => {
   // `mode`, and that value IS the volume datapoint. Switching the receiver's display must reshape
   // the datapoint at once — the MusicCast controller builds its objects only at connect, so the
   // bounds would otherwise stay on whichever scale was active while connecting.
+  //
+  // The bounds are what the device ACCEPTS on the active scale: raw 0…161 in steps of 1 reads as
+  // -80.5…0.0 dB, or 0…80.5 on the numeric scale. Not the declared scale SPAN (…16.5 / …97),
+  // whose top sits at raw 194 — past the 161 the zone declares and its status reports.
   test("a change of display scale reshapes volume without a reconnect", async () => {
     const s = setup(rxV481, { power: "on", actual_volume: { mode: "db", value: -47.5 } });
     expect(await s.controller.start()).toBe(true);
-    expect(s.defs.get("living.volume")?.common.max).toBe(16.5);
+    expect(s.defs.get("living.volume")?.common.min).toBe(-80.5);
+    expect(s.defs.get("living.volume")?.common.max).toBe(0);
     expect(s.defs.get("living.volume")?.common.unit).toBe("dB");
 
     s.client.status = { power: "on", actual_volume: { mode: "numeric", value: 36 } };
     s.fire.push?.({ main: { volume: 36 } });
     await flush();
 
-    expect(s.defs.get("living.volume")?.common.max).toBe(97);
+    expect(s.defs.get("living.volume")?.common.max).toBe(80.5);
     expect(s.defs.get("living.volume")?.common.min).toBe(0);
     expect(s.defs.get("living.volume")?.common.unit).toBe("");
   });
@@ -378,10 +384,10 @@ describe("YxcDeviceController", () => {
   });
 
   // The datapoint carries what the receiver DISPLAYS, `setVolume` takes the raw step count. The
-  // ratio is READ from the pair the device reports in one status answer — measured on the RX-V6A:
-  // raw 60 against display 30.0 in main, raw 81 against 40.5 in zone 2, both exactly 0.5. The
-  // declared ranges do NOT divide cleanly (0…161 raw against 0…97 displayed), so they are not used.
-  test("a volume write is converted with the ratio the device itself reported", async () => {
+  // relation comes from the zone's two DECLARED steps (0.5 displayed per 1 raw), anchored at the
+  // declared floor — exact on all ten raw/displayed pairs in the bundled captures. On the numeric
+  // scale the floor is 0, which is why a plain ratio happened to fit here and nowhere else.
+  test("a volume write is converted with the step the device declares", async () => {
     const s = setup(rxV481, { power: "on", volume: 60, actual_volume: { mode: "numeric", value: 30 } });
     expect(await s.controller.start()).toBe(true);
     s.client.calls.length = 0;
@@ -392,9 +398,10 @@ describe("YxcDeviceController", () => {
     expect(s.client.calls).toContainEqual({ method: "setVolumeTo", args: [83, "main"] });
   });
 
-  // Without both numbers the factor is unknown, and sending the displayed value as a raw step
-  // count would set a completely different loudness. Refusing is the honest answer.
-  test("a volume write is refused while the device has not reported both numbers", async () => {
+  // The scale is DECLARED, so a write never has to wait for the device to report a raw/displayed
+  // pair first: a status carrying only the displayed value converts just as exactly. The earlier
+  // build measured the pair instead and had to refuse until one arrived.
+  test("a volume write works before the device has reported a raw step count", async () => {
     const s = setup(rxV481, { power: "on", actual_volume: { mode: "numeric", value: 30 } });
     await s.controller.start();
     s.client.calls.length = 0;
@@ -402,7 +409,52 @@ describe("YxcDeviceController", () => {
     s.controller.handleStateChange("living.volume", false, 41.5);
     await flush();
 
-    expect(s.client.calls.filter(c => c.method === "setVolumeTo")).toEqual([]);
+    expect(s.client.calls).toContainEqual({ method: "setVolumeTo", args: [83, "main"] });
+  });
+
+  // The decibel scale does NOT start at zero, so the relation between the displayed value and the
+  // raw step count is affine, never a plain ratio. The RX-A2070 declares raw 0…161 in steps of 1
+  // against -80.5…16.5 dB in steps of 0.5, and reports raw 66 as -47.5 dB — that is
+  // `-80.5 + raw · 0.5`, exact on every raw/displayed pair in the bundled captures (6 of 6, four
+  // models). A ratio learned from that one reading (-47.5 / 66) reproduces the reading it came
+  // from and nothing else: it would send raw 56 for -40 dB, and raw 0 — silence — for 0 dB.
+  test("a decibel volume write follows the device's declared step, not the ratio of one reading", async () => {
+    const s = setup(rxA2070, { power: "on", volume: 66, actual_volume: { mode: "db", value: -47.5 } });
+    expect(await s.controller.start()).toBe(true);
+    s.client.calls.length = 0;
+
+    s.controller.handleStateChange("living.volume", false, -40);
+    await flush();
+
+    expect(s.client.calls).toContainEqual({ method: "setVolumeTo", args: [81, "main"] });
+  });
+
+  // What the device accepts is the raw range it declares. Writing past it would be a value the
+  // receiver never offered, so the ends hold instead of travelling to the device unchecked.
+  test("a volume write beyond the declared raw range is held at the end the device declares", async () => {
+    const s = setup(rxA2070, { power: "on", volume: 66, actual_volume: { mode: "db", value: -47.5 } });
+    await s.controller.start();
+    s.client.calls.length = 0;
+
+    // +16.5 dB is DECLARED as the top of the scale but sits at raw 194, past the declared 161.
+    s.controller.handleStateChange("living.volume", false, 16.5);
+    await flush();
+
+    expect(s.client.calls).toContainEqual({ method: "setVolumeTo", args: [161, "main"] });
+  });
+
+  // The RX-A2070 declares `actual_volume_db` for EVERY zone but answers a status carrying
+  // `actual_volume` for main only. The zone datapoint is therefore bounded -80.5…0.0 dB while the
+  // raw step count is all that arrives — 66 against a maximum of 0.0 is exactly the js-controller
+  // warning on every poll that this rebuild set out to end. The zone's own declared step says what
+  // 66 means on the scale it declares, so the datapoint carries that.
+  test("a zone that declares a scale but reports no actual_volume still carries that scale", async () => {
+    const s = setup(rxA2070, { power: "on", volume: 66, actual_volume: { mode: "db", value: -47.5 } });
+    s.client.statusByZone = { zone2: { power: "on", volume: 66 } };
+    expect(await s.controller.start()).toBe(true);
+
+    expect(s.defs.get("living.multiroom.zone2.volume")?.common.max).toBe(0);
+    expect(s.acks).toContainEqual({ id: "living.multiroom.zone2.volume", value: -47.5 });
   });
 
   // A speaker reports no display scale at all — its datapoint already holds the device's own step

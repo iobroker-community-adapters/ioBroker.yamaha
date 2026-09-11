@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { parseYxcFeatures, type YxcCapabilities, type YxcTunerFeatures } from "./capability";
-import { mapYxcToObjects } from "./object-mapper";
+import { mapYxcToObjects, rawVolumeFor, shownVolumeFor, volumeScaleOf, type VolumeScale } from "./object-mapper";
 import {
   parseYxcClock,
   parseYxcDistribution,
@@ -177,7 +177,6 @@ export class YxcDeviceController implements ConnectionHandle {
    * reports 60 / 30.0 in main and 81 / 40.5 in zone 2, both exactly 0.5. The declared ranges
    * do NOT divide cleanly (0…161 raw against 0…97 displayed), which is why they are not used.
    */
-  private readonly displayPerRawStep = new Map<string, number>();
   /** The source the network player is currently on (netusb `input`, e.g. "net_radio"). */
   private lastNetusbInput = "";
   /** Which source currently feeds each zone's "now playing" block (v2.0.0 routing). */
@@ -1151,14 +1150,23 @@ export class YxcDeviceController implements ConnectionHandle {
     // that loop (and as a fire-and-forget promise) let a numeric value land in an object still
     // declaring decibels, which is the js-controller warning 2.7.2 set out to end. So the mode is
     // read from the RAW answer first and the reshape is awaited.
-    this.rememberVolumeScale(zone, status);
     const mode = actualVolumeModeOf(status);
     if (mode !== undefined && this.zoneVolumeMode.get(zone) !== mode) {
       this.zoneVolumeMode.set(zone, mode);
       await this.reshapeVolume(zone, mode);
     }
     const updates = parseYxcStatus(status, zone);
+    const asShown = this.displayedVolumeIn(zone, status);
     for (const update of updates) {
+      // A zone can declare a display scale and still answer a status without `actual_volume` —
+      // the RX-A2070 declares decibels for all three zones and reports them for main only. The
+      // catalog then falls back to the raw step count, which would put 66 into a datapoint
+      // bounded -80.5…0.0 dB: the js-controller warning on every poll, one zone over. The zone's
+      // own declared step says what 66 reads as on the scale it declares.
+      if (asShown !== undefined && update.id === `${zonePrefix(zone)}volume`) {
+        this.emit(update.id, asShown);
+        continue;
+      }
       this.emit(update.id, update.value);
       // The EXACT id, not a suffix: this value decides which source a zone's player block
       // and its transport buttons follow. A future status field ending in "input" would
@@ -1205,45 +1213,42 @@ export class YxcDeviceController implements ConnectionHandle {
   }
 
   /**
-   * Remember the ratio between the displayed volume and the raw step count of a zone.
+   * A zone's raw step count expressed on the scale it declares, for a status that omits
+   * `actual_volume`.
    *
-   * Both numbers stand in the same status answer, so the ratio is measured rather than derived
-   * from the declared ranges — those do not divide cleanly (0…161 raw against 0…97 displayed).
+   * Only where the zone declares exactly ONE scale: a zone declaring both and reporting neither
+   * is not on a settled scale, so its datapoint keeps the raw step count and the envelope bounds
+   * that go with it.
    *
    * @param zone the zone the status belongs to
    * @param status the raw getStatus answer
+   * @returns the displayed value, or undefined when the device already reported one (its own word
+   *   comes first) or no scale is settled
    */
-  private rememberVolumeScale(zone: string, status: unknown): void {
+  private displayedVolumeIn(zone: string, status: unknown): number | undefined {
     if (typeof status !== "object" || status === null) {
-      return;
+      return undefined;
     }
-    const raw = (status as { volume?: unknown }).volume;
-    const actual = (status as { actual_volume?: { value?: unknown } }).actual_volume;
-    const shown = actual?.value;
-    if (typeof raw !== "number" || typeof shown !== "number" || raw === 0) {
-      return;
+    const answer = status as { volume?: unknown; actual_volume?: unknown };
+    if (typeof answer.volume !== "number" || typeof answer.actual_volume === "object") {
+      return undefined;
     }
-    this.displayPerRawStep.set(zone, shown / raw);
+    const scale = this.volumeScale(zone);
+    return scale ? shownVolumeFor(scale, answer.volume) : undefined;
   }
 
   /**
-   * Translate a displayed volume into the raw step count `setVolume` expects.
+   * The scale a zone's volume datapoint is on right now.
    *
-   * @param zone the zone being written to
-   * @param shown the value as the datapoint carries it
-   * @returns the raw step count, or undefined while the zone has not reported both numbers
-   *   (a device without a display scale writes its raw value straight through)
+   * Read from the zone's own declarations, not measured: both ends and both steps stand in
+   * `getFeatures`, and the relation between them is affine (see {@link volumeScaleOf}).
+   *
+   * @param zone the zone being read or written
+   * @returns the scale, or undefined while the zone declares none the adapter can settle
    */
-  private rawVolumeFor(zone: string, shown: number): number | undefined {
-    if (this.zoneVolumeMode.get(zone) === undefined && !this.displayPerRawStep.has(zone)) {
-      // No display scale anywhere: the datapoint already holds the device's own step count.
-      return shown;
-    }
-    const factor = this.displayPerRawStep.get(zone);
-    if (factor === undefined || factor === 0) {
-      return undefined;
-    }
-    return Math.round(shown / factor);
+  private volumeScale(zone: string): VolumeScale | undefined {
+    const declared = this.capabilities?.zones.find(z => z.id === zone);
+    return declared ? volumeScaleOf(declared, this.zoneVolumeMode.get(zone)) : undefined;
   }
 
   /**
@@ -1343,16 +1348,11 @@ export class YxcDeviceController implements ConnectionHandle {
           await this.deps.client.recallRecentItem(command.value, this.zoneListeningTo(this.lastNetusbInput));
           break;
         case "volume": {
-          const raw = this.rawVolumeFor(command.zone, command.value);
-          if (raw === undefined) {
-            // Never guess. Sending the displayed number as a raw step count would set a
-            // completely different loudness; the next status brings the pair and the write
-            // works from then on.
-            this.deps.log.warn(
-              `${this.deviceId}: not writing ${stateId} — ${command.zone} has not reported both its raw and displayed volume yet`,
-            );
-            break;
-          }
+          // A zone without a settled display scale carries the device's own step count already
+          // (speakers, soundbars, and a receiver declaring both scales while reporting neither),
+          // so the value goes out as it stands.
+          const scale = this.volumeScale(command.zone);
+          const raw = scale ? rawVolumeFor(scale, command.value) : command.value;
           await this.deps.client.setVolumeTo(raw, command.zone);
           break;
         }

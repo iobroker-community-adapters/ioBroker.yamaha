@@ -398,20 +398,37 @@ entscheidet etwas ([[feedback_user_hardware_ist_sample]]). Alle Funde sind umges
   `range_step` (Zone und System), `object-mapper.ts RANGE_BY_STATE` hängt ihn an den Datenpunkt.
   Vorher wurden 10 von 11 deklarierten Bereichen gelesen und weggeworfen; Zahlen-Datenpunkte mit
   Grenzen: 41 → 238.
-- **`actualVolume` steht in der Skala, die das Gerät gerade ANZEIGT** — die einzige Ausnahme von
-  `RANGE_BY_STATE` (`actualVolumePresentation`, seit 2.7.2): `actual_volume.value` kommt in der Form,
-  die `actual_volume.mode` nennt, also je nach Einstellung in Dezibel ODER in der Zählskala des
-  Geräts. Bis 2.7.1 war der Datenpunkt fest als dB deklariert — ein RX-V6A auf `numeric` meldete 36
-  gegen −80,5…16,5, der js-controller warnte bei jedem Abruf, und die Einheit log. Einheit, Namens-
-  schlüssel und Grenzen folgen deshalb dem gemeldeten Modus. Deklariert eine Zone nur EINE Skala,
-  gilt sie auch ohne Statusmeldung (der RX-A2070 deklariert `actual_volume_db` für jede Zone und
-  beantwortet den Status nur für `main`); sind BEIDE deklariert und meldet das Gerät keinen Modus,
-  steht die Hülle beider Bereiche — Grenzen WEGLASSEN geht nicht, weil `extendObject` mischt und
-  eine ausgelassene Grenze in einer bestehenden Anlage für immer überlebt. Da dieser Controller
-  seine Objekte nur beim Verbinden baut,
-  zieht `reshapeActualVolume()` aus `applyZoneStatus` genau diese eine Definition nach, sobald das
-  Gerät die Anzeigeart wechselt — und weil `upsertObject` ein `extendObject` ist, überschreibt die
-  numerische Fassung die gespeicherte Einheit mit `unit: ""` statt zu löschen.
+- **`volume` steht in der Skala, die das Gerät gerade ANZEIGT** — die einzige Ausnahme von
+  `RANGE_BY_STATE` (`volumePresentation`; seit 2.8.0 am `volume`-Datenpunkt selbst, davor 2.7.2 am
+  eigenen `actualVolume`): `actual_volume.value` kommt in der Form, die `actual_volume.mode` nennt,
+  also je nach Einstellung in Dezibel ODER in der Zählskala des Geräts. Bis 2.7.1 war der Datenpunkt
+  fest als dB deklariert — ein RX-V6A auf `numeric` meldete 36 gegen −80,5…16,5, der js-controller
+  warnte bei jedem Abruf, und die Einheit log. Einheit, Erklärung und Grenzen folgen deshalb dem
+  gemeldeten Modus. Deklariert eine Zone nur EINE Skala, gilt sie auch ohne Statusmeldung (der
+  RX-A2070 deklariert `actual_volume_db` für jede Zone und beantwortet den Status nur für `main`);
+  sind BEIDE deklariert und meldet das Gerät keinen Modus, steht die Hülle beider Bereiche — Grenzen
+  WEGLASSEN geht nicht, weil `extendObject` mischt und eine ausgelassene Grenze in einer bestehenden
+  Anlage für immer überlebt. Da dieser Controller seine Objekte nur beim Verbinden baut, zieht
+  `reshapeVolume()` aus `applyZoneStatus` genau diese eine Definition nach, sobald das Gerät die
+  Anzeigeart wechselt — VOR dem neuen Wert und abgewartet, sonst landet er im Objekt der alten Skala
+  (der Defekt, den 2.8.0 behoben hat) — und weil `upsertObject` ein `extendObject` ist, überschreibt
+  die numerische Fassung die gespeicherte Einheit mit `unit: ""` statt zu löschen.
+- **Anzeigewert und Draht-Schrittzahl hängen AFFIN zusammen, nie über einen Faktor** (`volumeScaleOf`,
+  2.8.0): `angezeigt = displayMin + (raw − rawMin) · displayStep / rawStep`. Die Steigung kommt aus
+  den zwei DEKLARIERTEN Schritten, der Anker aus dem deklarierten Boden. Ein aus EINEM
+  Status-Paar gelesener Faktor trifft genau dieses Paar: am RX-A2070 (−47,5 dB bei raw 66) hätte ein
+  Schreibvorgang „−40 dB" raw 56 gesendet (12,5 dB zu leise) und „0 dB" raw 0 — Stille. Das
+  Schritt-Modell stimmt auf allen zehn verschiedenen Paaren der gebündelten Mitschnitte exakt
+  (sieben Modelle, raw 1…121). Auf der numerischen Skala ist der Boden 0 — nur deshalb sah ein
+  Faktor dort je richtig aus.
+- **Die Grenzen sind, was das Gerät ANNIMMT, ausgedrückt auf der Anzeigeskala.** `min`/`max` an einem
+  SCHREIBBAREN Datenpunkt ist eine Zusage über Schreibvorgänge, also gilt der raw-Bereich: `0…161`
+  auf jedem AVR, `0…60` auf den Lautsprechern, `0…100` auf den Soundbars, `0…63` am CD-Receiver — und
+  das Status-Feld `max_volume` wiederholt dieselbe Zahl in allen 40 Mitschnitten. 161 Schritte à
+  0,5 dB über dem Boden sind **0,0 dB**, nicht die 16,5, die die Spanne der dB-Skala nennt: die lägen
+  bei raw 194, jenseits des Deklarierten. Deklariert eine Zone eine Anzeigeskala und liefert im
+  Status kein `actual_volume`, wird der raw-Wert mit demselben Schritt umgerechnet — sonst stünde 66
+  in einem Datenpunkt mit Obergrenze 0,0 (dieselbe js-controller-Warnung, eine Zone weiter).
 - **Das Eingangs-Dropdown trägt die Namen, die der BESITZER am Gerät vergeben hat** (seit 2.7.2):
   die klassische XML-Auskunft `Input_Sel_Item` liefert je Eintrag ein `<Param>` (den Schaltwert,
   `HDMI1`) UND ein `<Title>` (den vergebenen Namen, „Apple TV"). `parseInputLabels()` in
