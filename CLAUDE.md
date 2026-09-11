@@ -449,8 +449,8 @@ entscheidet etwas ([[feedback_user_hardware_ist_sample]]). Alle Funde sind umges
   bei einem Dropdown (`clearStaleStates`, dort ist die leere Karte der neutrale Wert) gibt es für eine
   Grenze keinen neutralen Wert, also lesen → `delObjectAsync(id, {recursive: false})` → `extendObject`
   mit dem gelesenen `common` ohne das Feld (`reference_attribut_entfernen_ohne_setobject`; `setObject`
-  ist S5054). Das gelesene `common` fährt mit, damit `common.custom` — die Aufzeichnung des Nutzers —
-  die Reparatur überlebt. Welche Grenzen ein Datenpunkt VORHER trug, steht aus dem einen Start-Abzug
+  ist S5054). Das gelesene `common` fährt mit, damit der Objekt-Inhalt die Reparatur unverändert
+  übersteht. Welche Grenzen ein Datenpunkt VORHER trug, steht aus dem einen Start-Abzug
   in `storedBounds`; es gibt keinen Lesevorgang je Datenpunkt, und gelesen wird nur im seltenen Fall.
 - **Ein Schalter macht aus JEDER Lautstärke Prozent** (`volumeAsPercent`, Instanz-Einstellung, Vorgabe AUS,
   seit 2.8.0 — krobi: „ein schalter für ALLE. ich will das nicht komplizierter machen als es sein muss"):

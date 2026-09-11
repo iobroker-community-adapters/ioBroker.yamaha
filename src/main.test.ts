@@ -952,18 +952,13 @@ describe("Yamaha bounds an update no longer declares", () => {
   // put it there — and unlike a dropdown a bound has no neutral value to overwrite it with: a
   // written `null` stays in the object and js-controller's range check reads it as 0. Measured on
   // `tuner.frequency`, whose FM-only envelope had to go once a DAB receiver reported 180064 kHz.
-  it("drops a bound the new definition no longer carries, keeping the user's history settings", async () => {
+  it("drops a bound the new definition no longer carries, keeping the rest of the object", async () => {
     const ctx = setup();
     ctx.i.objects.set("Living_room.tuner.frequency", {
       type: "state",
-      common: {
-        name: "f",
-        type: "number",
-        unit: "kHz",
-        min: 87500,
-        max: 108000,
-        custom: { "history.0": { enabled: true } },
-      },
+      // `smartName` stands for everything only the STORED object carries — the repair deletes and
+      // re-creates, so a field the new definition does not mention must come through it untouched.
+      common: { name: "f", type: "number", unit: "kHz", min: 87500, max: 108000, smartName: "Radio" },
       native: {},
     });
     await ctx.i.onReady();
@@ -978,9 +973,8 @@ describe("Yamaha bounds an update no longer declares", () => {
     const common = ctx.i.objects.get("Living_room.tuner.frequency")?.common as Record<string, unknown>;
     expect("min" in common, "min still declared").toBe(false);
     expect("max" in common, "max still declared").toBe(false);
-    // The point of read → delete → re-create rather than a plain rewrite: the recording the user
-    // configured on this datapoint has to survive the repair.
-    expect(common.custom).toEqual({ "history.0": { enabled: true } });
+    // The point of read → delete → re-create rather than a plain rewrite.
+    expect(common.smartName).toBe("Radio");
     expect(common.unit).toBe("kHz");
   });
 

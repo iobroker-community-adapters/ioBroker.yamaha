@@ -777,7 +777,7 @@ export class Yamaha extends utils.Adapter {
     if (object?.type !== "state") {
       return;
     }
-    // The READ common rides along, so `common.custom` — the user's history/chart settings — survives.
+    // The READ common rides along, so nothing the object already carries is lost in the rewrite.
     const common = { ...object.common } as ioBroker.StateCommon & Record<string, unknown>;
     for (const field of gone) {
       delete common[field];
