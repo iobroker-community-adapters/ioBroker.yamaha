@@ -61,12 +61,21 @@ describe("parseYxcStatus", () => {
     );
   });
 
-  test("maps power=on to true and reads the raw volume", () => {
-    // RX-A2070: power=on, volume=66, input=server
+  // `volume` carries what the receiver DISPLAYS, so the RX-A2070 (raw 66, actual_volume -47.5 dB)
+  // reports the decibel value. The raw step count is the wire form and stays out of the tree.
+  test("maps power=on to true and reads the displayed volume", () => {
+    // RX-A2070: power=on, volume=66 raw / -47.5 dB displayed, input=server
     const updates = parseYxcStatus(rx, "main");
     expect(updates).toContainEqual({ id: "power", value: true });
-    expect(updates).toContainEqual({ id: "volume", value: 66 });
+    expect(updates).toContainEqual({ id: "volume", value: -47.5 });
     expect(updates).toContainEqual({ id: "input", value: "server" });
+  });
+
+  // A device without `actual_volume` has no display scale to report — its raw step count is all
+  // there is, and it must still reach the datapoint (speakers, soundbars, CD receivers).
+  test("falls back to the raw step count where the device reports no display scale", () => {
+    const updates = parseYxcStatus({ power: "on", volume: 30 }, "main");
+    expect(updates).toContainEqual({ id: "volume", value: 30 });
   });
 
   test("prefixes the state id for non-main zones", () => {
@@ -78,7 +87,7 @@ describe("parseYxcStatus", () => {
     expect(parseYxcStatus({ response_code: 0 }, "main")).toEqual([]);
   });
 
-  test("reads nested tone control and flat sleep/dialogue/actual-volume", () => {
+  test("reads nested tone control and flat sleep/dialogue/volume", () => {
     const status = {
       tone_control: { mode: "manual", bass: 3, treble: -2 },
       sleep: 60,
@@ -92,15 +101,14 @@ describe("parseYxcStatus", () => {
     expect(u).toContainEqual({ id: "sound.treble", value: -2 });
     expect(u).toContainEqual({ id: "sleep", value: 60 });
     expect(u).toContainEqual({ id: "sound.dialogueLevel", value: 2 });
-    expect(u).toContainEqual({ id: "actualVolume", value: -47.5 });
+    expect(u).toContainEqual({ id: "volume", value: -47.5 });
     expect(u).toContainEqual({ id: "sound.contentsDisplay", value: true });
   });
 
-  test("reads the always-present getStatus fields (max volume, input text, distribution, party)", () => {
-    const status = { max_volume: 161, input_text: "HDMI-Laptop", distribution_enable: true, party_enable: false };
+  test("reads the always-present getStatus fields (max volume, distribution, party)", () => {
+    const status = { max_volume: 161, distribution_enable: true, party_enable: false };
     const u = parseYxcStatus(status, "main");
     expect(u).toContainEqual({ id: "advanced.maxVolume", value: 161 });
-    expect(u).toContainEqual({ id: "inputText", value: "HDMI-Laptop" });
     expect(u).toContainEqual({ id: "multiroom.group.streamingEnabled", value: true });
     expect(u).toContainEqual({ id: "multiroom.partyEnable", value: false });
   });

@@ -133,7 +133,6 @@
   "initialVolumeLevel": "Poziom głośności początkowej",
   "initialVolumeMode": "Tryb głośności początkowej",
   "input": "Wejście",
-  "inputNameDisplay": "Nazwa wejścia (wyświetlacz)",
   "inputName": "Nazwa wejścia (%s)",
   "inputNames": "Nazwy wejść",
   "leaveGroup": "Opuść grupę",
@@ -255,9 +254,6 @@
   "usb": "USB",
   "volume": "Głośność",
   "descVolume": "Jak głośno gra strefa: dwa protokoły tekstowe podają decybele, MusicCast własne kroki — jednostka mówi, który z nich.",
-  "volumeDB": "Głośność (dB)",
-  "volumeDisplay": "Głośność (wyświetlacz)",
-  "volumeDisplayMode": "Tryb wyświetlania głośności",
   "volumeInterlock": "Sprzężenie głośności",
   "yncaControlPort": "Port sterowania YNCA",
   "ypaoVolume": "Głośność YPAO",
@@ -384,9 +380,6 @@
   "descVolumeInterlock": "Czy urządzenie AirPlay może zmieniać głośność tego amplitunera.",
   "descElapsedTime": "W sekundach, by dało się liczyć; czytelna forma obok.",
   "descTotalTime": "W sekundach, by dało się liczyć; czytelna forma obok.",
-  "descVolumeDB": "Ta sama głośność co na wyświetlaczu amplitunera, w decybelach.",
-  "descVolumeDisplay": "Ta sama głośność co na wyświetlaczu amplitunera, w aktualnie ustawionej skali.",
-  "descVolumeDisplayMode": "Czy amplituner pokazuje głośność w decybelach, czy jako liczbę.",
   "descAudioSelect": "Z którego gniazda bieżące wejście pobiera dźwięk: automatycznie, HDMI, koncentryczne/optyczne lub analogowe.",
   "descLinkControl": "Równoważy stabilność i opóźnienie przy przesyłaniu do połączonych urządzeń.",
   "descLinkAudioDelay": "Czy połączone urządzenia stawiają na synchronizację z obrazem, czy równy dźwięk.",
@@ -602,5 +595,7 @@
   "descHdmiVideoPreset": "Które z zapisanych ustawień wstępnych przetwarzania wideo jest używane.",
   "descMonaural": "Czy strefa gra w mono; oba głośniki odtwarzają wtedy ten sam sygnał.",
   "docLinkLabelDe": "Wiki (Deutsch)",
-  "docLinkLabelEn": "Wiki (English)"
+  "docLinkLabelEn": "Wiki (English)",
+  "descVolumeDb": "Jak głośno gra strefa, w skali decybelowej pokazywanej przez sam amplituner.",
+  "descVolumeNumeric": "Jak głośno gra strefa, w skali liczbowej pokazywanej przez sam amplituner."
 }

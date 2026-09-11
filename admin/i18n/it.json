@@ -133,7 +133,6 @@
   "initialVolumeLevel": "Livello volume iniziale",
   "initialVolumeMode": "Modalità volume iniziale",
   "input": "Ingresso",
-  "inputNameDisplay": "Nome ingresso (display)",
   "inputName": "Nome dell'ingresso (%s)",
   "inputNames": "Nomi ingressi",
   "leaveGroup": "Esci dal gruppo",
@@ -255,9 +254,6 @@
   "usb": "USB",
   "volume": "Volume",
   "descVolume": "Quanto forte suona la zona: i due protocolli testuali danno decibel, MusicCast i propri passi — l'unità dice quale.",
-  "volumeDB": "Volume (dB)",
-  "volumeDisplay": "Volume (display)",
-  "volumeDisplayMode": "Modalità di visualizzazione del volume",
   "volumeInterlock": "Blocco volume",
   "yncaControlPort": "Porta di controllo YNCA",
   "ypaoVolume": "Volume YPAO",
@@ -384,9 +380,6 @@
   "descVolumeInterlock": "Se un apparecchio AirPlay può cambiare il volume di questo ricevitore.",
   "descElapsedTime": "In secondi, così è calcolabile; la forma leggibile è accanto.",
   "descTotalTime": "In secondi, così è calcolabile; la forma leggibile è accanto.",
-  "descVolumeDB": "Lo stesso volume mostrato dal display del ricevitore, in decibel.",
-  "descVolumeDisplay": "Lo stesso volume mostrato dal display del ricevitore, nella scala attualmente impostata.",
-  "descVolumeDisplayMode": "Se il ricevitore mostra il volume in decibel o come numero.",
   "descAudioSelect": "Da quale terminale l'ingresso corrente prende l'audio: automatico, HDMI, coassiale/ottico o analogico.",
   "descLinkControl": "Bilancia stabilità e ritardo nello streaming verso apparecchi collegati.",
   "descLinkAudioDelay": "Se gli apparecchi collegati privilegiano il sincronismo labiale o l'audio allineato.",
@@ -602,5 +595,7 @@
   "descHdmiVideoPreset": "Quale dei preset di elaborazione video memorizzati è in uso.",
   "descMonaural": "Se la zona suona in mono; entrambi i diffusori riproducono allora lo stesso segnale.",
   "docLinkLabelDe": "Wiki (Deutsch)",
-  "docLinkLabelEn": "Wiki (English)"
+  "docLinkLabelEn": "Wiki (English)",
+  "descVolumeDb": "Quanto forte suona la zona, nella scala in decibel che il ricevitore stesso mostra.",
+  "descVolumeNumeric": "Quanto forte suona la zona, nella scala numerica che il ricevitore stesso mostra."
 }

@@ -188,11 +188,10 @@ describe("mapYxcToObjects", () => {
     expect(ids(rxA2070)).toEqual(expect.arrayContaining(["power", "volume", "mute", "soundProgram", "input"]));
   });
 
-  test("always-present amp fields (max volume, input text) are created for an active zone", () => {
+  test("always-present amp fields (max volume) are created for an active zone", () => {
     const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: [] });
     const ids = objs.map(o => o.id);
     expect(ids).toContain("advanced.maxVolume");
-    expect(ids).toContain("inputText");
     expect(ids).toContain("multiroom.group.streamingEnabled");
   });
 
@@ -252,11 +251,25 @@ describe("mapYxcToObjects", () => {
     expect(power?.common.write).toBe(true);
   });
 
-  test("the volume state carries min/max/step from the device range", () => {
+  // The RX-A2070 declares `actual_volume_db`, so its volume datapoint carries the scale the
+  // receiver itself shows — decibels — rather than the raw 0…161 step count MusicCast uses on
+  // the wire. The raw scale is a protocol detail; what the device displays is the truth.
+  test("the volume state carries the display scale on a device that declares one", () => {
     const vol = mapYxcToObjects(parseYxcFeatures(rxA2070)).find(o => o.id === "volume");
+    expect(vol?.common.min).toBe(-80.5);
+    expect(vol?.common.max).toBe(16.5);
+    expect(vol?.common.step).toBe(0.5);
+    expect(vol?.common.unit).toBe("dB");
+  });
+
+  // A speaker reports no display scale at all — there is nothing to follow, so the device's own
+  // step range stands, exactly as before, and without a unit the adapter cannot justify.
+  test("the volume state keeps the raw device range where no display scale is declared", () => {
+    const vol = mapYxcToObjects(parseYxcFeatures(wx10)).find(o => o.id === "volume");
     expect(vol?.common.min).toBe(0);
-    expect(vol?.common.max).toBe(161);
+    expect(vol?.common.max).toBe(60);
     expect(vol?.common.step).toBe(1);
+    expect(vol?.common.unit).toBeUndefined();
   });
 });
 
@@ -555,13 +568,14 @@ describe("the device's own lists are DECLARED, and the words it reports are alwa
     ).not.toContain("sound.surroundAI");
   });
 
-  // actualVolume carries the scale the device is CURRENTLY displaying — `actual_volume.value` is
+  // `volume` carries the scale the device is CURRENTLY displaying — `actual_volume.value` is
   // reported in the form named by `actual_volume.mode`, not always in dB (measured on an RX-V6A
   // 2026-09-09: mode "numeric", value 36 against a datapoint declared -80.5…16.5 dB, which made
-  // js-controller warn on every poll). Name, unit and bounds therefore follow the reported mode.
+  // js-controller warn on every poll). Unit and bounds therefore follow the reported mode; the
+  // NAME stays "Volume" in both, only the explanation says which scale is on screen.
   const volumeZone = {
     id: "main",
-    funcs: ["power", "actual_volume"],
+    funcs: ["power", "volume", "actual_volume"],
     inputs: [],
     ranges: {
       actual_volume_db: { min: -80.5, max: 16.5, step: 0.5 },
@@ -569,23 +583,21 @@ describe("the device's own lists are DECLARED, and the words it reports are alwa
     },
   };
 
-  test("actualVolume follows the numeric scale while the device displays numbers", () => {
+  test("volume follows the numeric scale while the device displays numbers", () => {
     const objs = mapYxcToObjects({ zones: [volumeZone], media: [] }, { main: { actualVolumeMode: "numeric" } });
-    const vol = objs.find(o => o.id === "actualVolume")?.common;
+    const vol = objs.find(o => o.id === "volume")?.common;
     expect(vol?.min).toBe(0);
     expect(vol?.max).toBe(97);
     expect(vol?.step).toBe(0.5);
     expect(vol?.unit).toBe("");
-    expect(englishName(objs.find(o => o.id === "actualVolume"))).toBe("Volume (display)");
   });
 
-  test("actualVolume keeps decibels while the device displays dB", () => {
+  test("volume keeps decibels while the device displays dB", () => {
     const objs = mapYxcToObjects({ zones: [volumeZone], media: [] }, { main: { actualVolumeMode: "db" } });
-    const vol = objs.find(o => o.id === "actualVolume")?.common;
+    const vol = objs.find(o => o.id === "volume")?.common;
     expect(vol?.min).toBe(-80.5);
     expect(vol?.max).toBe(16.5);
     expect(vol?.unit).toBe("dB");
-    expect(englishName(objs.find(o => o.id === "actualVolume"))).toBe("Volume (dB)");
   });
 
   // Both scales declared, none reported: the envelope of the two. Leaving the bounds out instead
@@ -593,11 +605,10 @@ describe("the device's own lists are DECLARED, and the words it reports are alwa
   // and a field the new picture no longer carries survives (measured by the upgrade suite).
   test("an unreported mode spans both scales rather than guessing decibels", () => {
     const objs = mapYxcToObjects({ zones: [volumeZone], media: [] });
-    const vol = objs.find(o => o.id === "actualVolume")?.common;
+    const vol = objs.find(o => o.id === "volume")?.common;
     expect(vol?.min).toBe(-80.5);
     expect(vol?.max).toBe(97);
     expect(vol?.unit).toBe("");
-    expect(englishName(objs.find(o => o.id === "actualVolume"))).toBe("Volume (display)");
   });
 
   // A zone that declares only one scale cannot display any other — its status need not say so.
@@ -605,11 +616,10 @@ describe("the device's own lists are DECLARED, and the words it reports are alwa
     const dbOnly = { ...volumeZone, ranges: { actual_volume_db: { min: -80.5, max: 16.5, step: 0.5 } } };
     for (const current of [undefined, { main: { actualVolumeMode: "db" } }]) {
       const objs = mapYxcToObjects({ zones: [dbOnly], media: [] }, current);
-      const vol = objs.find(o => o.id === "actualVolume")?.common;
+      const vol = objs.find(o => o.id === "volume")?.common;
       expect(vol?.min).toBe(-80.5);
       expect(vol?.max).toBe(16.5);
       expect(vol?.unit).toBe("dB");
-      expect(englishName(objs.find(o => o.id === "actualVolume"))).toBe("Volume (dB)");
     }
   });
 });

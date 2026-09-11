@@ -5,8 +5,6 @@
   "*.multiroom.*.mute": "The same mute once per zone, Zone B included; the name carries it there too.",
   "*.input": "The source the zone listens to, from the receiver's own input list where it declares one, else from the inputs it proves it has.",
   "*.multiroom.*.input": "The same source selection once per zone, from the same declared or proven list.",
-  "*.inputText": "The label the receiver prints for the selected input; the name marks it as the display form beside input.",
-  "*.multiroom.*.inputText": "The same display label once per zone.",
   "info.devicesTotal": "How many devices are configured — a plain count, and the name is the count's name.",
   "info.devicesOnline": "How many of them answer right now — the same plain count.",
   "info.devicesAllOnline": "True when the two counts above are equal, which is exactly what the name says.",

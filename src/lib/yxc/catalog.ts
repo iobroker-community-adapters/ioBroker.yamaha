@@ -27,8 +27,12 @@ export interface YxcAmpEntry {
    * `input` = only if the zone offers inputs (from input_list, not func_list).
    */
   create: { kind: "func"; func: string } | { kind: "always" } | { kind: "input" };
-  /** Where to read the value in a getStatus response: a flat field or a nested path. */
-  read: { field: string } | { path: string[] };
+  /**
+   * Where to read the value in a getStatus response: a flat field, or a nested path with an
+   * optional flat fallback for devices that do not report the nested one (`volume` reads the
+   * displayed value where the device has one and its raw step count otherwise).
+   */
+  read: { field: string } | { path: string[]; fallbackField?: string };
   /** Convert a raw getStatus value into the typed state value. */
   fromStatus: (value: unknown) => boolean | number | string;
   /**
@@ -75,7 +79,11 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
       write: true,
     },
     create: { kind: "func", func: "volume" },
-    read: { field: "volume" },
+    // The displayed value where the device reports one (`actual_volume`), the raw step count
+    // otherwise. A receiver shows its own scale — decibels or plain numbers — and that is what
+    // belongs in the datapoint; speakers and soundbars report no display scale and keep their
+    // step count. The object's unit and bounds follow in `volumePresentation`.
+    read: { path: ["actual_volume", "value"], fallbackField: "volume" },
     fromStatus: num,
     write: { apply: (c, v, z) => c.setVolumeTo(Number(v), z) },
   },
@@ -208,35 +216,6 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     create: { kind: "func", func: "dialogue_level" },
     read: { field: "dialogue_level" },
     fromStatus: num,
-  },
-  {
-    state: "actualVolume",
-    common: {
-      nameKey: "volumeDB",
-      descKey: "descVolumeDB",
-      type: "number",
-      unit: "dB",
-      role: "value",
-      read: true,
-      write: false,
-    },
-    create: { kind: "func", func: "actual_volume" },
-    read: { path: ["actual_volume", "value"] },
-    fromStatus: num,
-  },
-  {
-    state: "actualVolumeMode",
-    common: {
-      nameKey: "volumeDisplayMode",
-      descKey: "descVolumeDisplayMode",
-      type: "string",
-      role: "state",
-      read: true,
-      write: false,
-    },
-    create: { kind: "func", func: "actual_volume" },
-    read: { path: ["actual_volume", "mode"] },
-    fromStatus: str,
   },
   {
     state: "sound.contentsDisplay",
@@ -543,13 +522,6 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     create: { kind: "always" },
     read: { field: "max_volume" },
     fromStatus: num,
-  },
-  {
-    state: "inputText",
-    common: { nameKey: "inputNameDisplay", type: "string", role: "text", read: true, write: false },
-    create: { kind: "always" },
-    read: { field: "input_text" },
-    fromStatus: str,
   },
   // The two device-global entries: their id starts with "multiroom." (no zone prefix ever
   // applies), so the mapper and the status parser emit them for the main zone only.

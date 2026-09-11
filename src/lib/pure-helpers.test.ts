@@ -347,6 +347,39 @@ describe("stripNamespace", () => {
 });
 
 describe("renamedObjectIds", () => {
+  // The three datapoints v2.8.0 removes exist per zone as well (measured in the fixture
+  // inventory: actualVolume 2 bare + 3 zoned, actualVolumeMode likewise, inputText 5 + 4).
+  // One list entry has to catch both forms — otherwise the zoned copies survive the update
+  // and only the two-start purge would eventually notice them.
+  test("one entry removes the state in the main zone AND in every zone folder", () => {
+    const existing = [
+      "yamaha.0.living.actualVolume",
+      "yamaha.0.living.multiroom.zone2.actualVolume",
+      "yamaha.0.living.multiroom.zone3.actualVolumeMode",
+      "yamaha.0.living.inputText",
+      "yamaha.0.living.multiroom.zone2.inputText",
+      "yamaha.0.living.zone2.inputText", // the pre-2.0.0 flat zone form
+      "yamaha.0.living.volume",
+      "yamaha.0.living.multiroom.zone2.volume",
+      "yamaha.0.living.input",
+    ];
+    const result = renamedObjectIds(existing, new Set(["living"]), "yamaha.0");
+    expect(result).toEqual(
+      expect.arrayContaining([
+        "yamaha.0.living.actualVolume",
+        "yamaha.0.living.multiroom.zone2.actualVolume",
+        "yamaha.0.living.multiroom.zone3.actualVolumeMode",
+        "yamaha.0.living.inputText",
+        "yamaha.0.living.multiroom.zone2.inputText",
+        "yamaha.0.living.zone2.inputText",
+      ]),
+    );
+    // The datapoints that STAY must not be caught by the same entries.
+    expect(result).not.toContain("yamaha.0.living.volume");
+    expect(result).not.toContain("yamaha.0.living.multiroom.zone2.volume");
+    expect(result).not.toContain("yamaha.0.living.input");
+  });
+
   test("returns the old renamed states present under a configured device", () => {
     const existing = [
       "yamaha.0.living.system.model",

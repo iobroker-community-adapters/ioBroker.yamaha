@@ -133,7 +133,6 @@
   "initialVolumeLevel": "Initial volume level",
   "initialVolumeMode": "Initial volume mode",
   "input": "Input",
-  "inputNameDisplay": "Input name (display)",
   "inputName": "Input name (%s)",
   "inputNames": "Input names",
   "leaveGroup": "Leave group",
@@ -255,9 +254,6 @@
   "usb": "USB",
   "volume": "Volume",
   "descVolume": "How loud the zone plays: the two text protocols report decibels, MusicCast its own step count — the unit tells you which.",
-  "volumeDB": "Volume (dB)",
-  "volumeDisplay": "Volume (display)",
-  "volumeDisplayMode": "Volume display mode",
   "volumeInterlock": "Volume interlock",
   "yncaControlPort": "YNCA control port",
   "ypaoVolume": "YPAO Volume",
@@ -384,9 +380,6 @@
   "descVolumeInterlock": "Whether an AirPlay device may change this receiver's volume.",
   "descElapsedTime": "In seconds, so it can be calculated with; a readable form sits next to it.",
   "descTotalTime": "In seconds, so it can be calculated with; a readable form sits next to it.",
-  "descVolumeDB": "The same volume as the receiver's own display shows it, in decibels.",
-  "descVolumeDisplay": "The same volume the receiver's display shows, in whichever scale it is set to.",
-  "descVolumeDisplayMode": "Whether the receiver shows volume in decibels or as a plain number.",
   "descAudioSelect": "Which terminal's sound the current input uses: automatic, HDMI, coaxial/optical or analogue.",
   "descLinkControl": "Trades stability against delay when streaming to linked devices.",
   "descLinkAudioDelay": "Whether linked devices favour lip sync or perfectly aligned audio.",
@@ -602,5 +595,7 @@
   "descHdmiVideoPreset": "Which of the stored video-processing presets is in use.",
   "descMonaural": "Whether the zone plays in mono; both speakers then carry the same signal.",
   "docLinkLabelDe": "Wiki (Deutsch)",
-  "docLinkLabelEn": "Wiki (English)"
+  "docLinkLabelEn": "Wiki (English)",
+  "descVolumeDb": "How loud the zone plays, in the decibel scale the receiver itself shows.",
+  "descVolumeNumeric": "How loud the zone plays, in the plain number scale the receiver itself shows."
 }

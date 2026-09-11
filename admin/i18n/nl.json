@@ -133,7 +133,6 @@
   "initialVolumeLevel": "Startvolumeniveau",
   "initialVolumeMode": "Startvolumemodus",
   "input": "Ingang",
-  "inputNameDisplay": "Ingangsnaam (display)",
   "inputName": "Ingangsnaam (%s)",
   "inputNames": "Ingangsnamen",
   "leaveGroup": "Groep verlaten",
@@ -255,9 +254,6 @@
   "usb": "USB",
   "volume": "Volume",
   "descVolume": "Hoe hard de zone speelt: de twee tekstprotocollen geven decibel, MusicCast zijn eigen stappen — de eenheid zegt welke.",
-  "volumeDB": "Volume (dB)",
-  "volumeDisplay": "Volume (display)",
-  "volumeDisplayMode": "Weergavemodus volume",
   "volumeInterlock": "Volumekoppeling",
   "yncaControlPort": "YNCA-besturingspoort",
   "ypaoVolume": "YPAO-volume",
@@ -384,9 +380,6 @@
   "descVolumeInterlock": "Of een AirPlay-apparaat het volume van deze receiver mag wijzigen.",
   "descElapsedTime": "In seconden, zodat ermee gerekend kan worden; de leesbare vorm staat ernaast.",
   "descTotalTime": "In seconden, zodat ermee gerekend kan worden; de leesbare vorm staat ernaast.",
-  "descVolumeDB": "Hetzelfde volume als op het display van de receiver, in decibel.",
-  "descVolumeDisplay": "Hetzelfde volume als op het display van de receiver, in de nu ingestelde schaal.",
-  "descVolumeDisplayMode": "Of de receiver het volume in decibel of als getal toont.",
   "descAudioSelect": "Van welke aansluiting de huidige ingang zijn geluid neemt: automatisch, HDMI, coaxiaal/optisch of analoog.",
   "descLinkControl": "Weegt stabiliteit tegen vertraging af bij streamen naar gekoppelde apparaten.",
   "descLinkAudioDelay": "Of gekoppelde apparaten lipsynchroon of gelijk geluid verkiezen.",
@@ -602,5 +595,7 @@
   "descHdmiVideoPreset": "Welke van de opgeslagen videoverwerkingsvoorinstellingen in gebruik is.",
   "descMonaural": "Of de zone in mono speelt; beide luidsprekers geven dan hetzelfde signaal weer.",
   "docLinkLabelDe": "Wiki (Deutsch)",
-  "docLinkLabelEn": "Wiki (English)"
+  "docLinkLabelEn": "Wiki (English)",
+  "descVolumeDb": "Hoe hard de zone speelt, in de decibelschaal die de receiver zelf toont.",
+  "descVolumeNumeric": "Hoe hard de zone speelt, in de getalschaal die de receiver zelf toont."
 }

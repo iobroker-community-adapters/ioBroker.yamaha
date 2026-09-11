@@ -152,7 +152,6 @@ const ZONE_VALUE_LISTS: Readonly<Record<string, string>> = {
   tone_control_mode_list: "sound.toneMode",
   equalizer_mode_list: "sound.equalizer.mode",
   audio_select_list: "sound.audioSelect",
-  actual_volume_mode_list: "actualVolumeMode",
   link_control_list: "sound.linkControl",
   link_audio_delay_list: "sound.linkAudioDelay",
   link_audio_quality_list: "sound.linkAudioQuality",

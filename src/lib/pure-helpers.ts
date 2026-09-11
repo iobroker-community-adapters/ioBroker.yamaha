@@ -221,6 +221,13 @@ const V2_SLIMMED_SOURCES = [
 ];
 
 export const RENAMED_STATE_IDS = [
+  // v2.8.0: the volume datapoint now carries the scale the receiver itself displays, so the two
+  // derived states are gone — `actualVolume` was an exact duplicate of `volume` on every device
+  // declaring a single scale, and `actualVolumeMode` a dropdown with one entry there. `inputText`
+  // repeated the label the `input` dropdown carries since 2.7.2, and only on MusicCast devices.
+  "actualVolume",
+  "actualVolumeMode",
+  "inputText",
   "hdmiOut",
   "directMode",
   "masterPower",

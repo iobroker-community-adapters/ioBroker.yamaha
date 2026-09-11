@@ -133,7 +133,6 @@
   "initialVolumeLevel": "Einschalt-Lautstärkepegel",
   "initialVolumeMode": "Einschalt-Lautstärkemodus",
   "input": "Eingang",
-  "inputNameDisplay": "Eingangsname (Anzeige)",
   "inputName": "Eingangsname (%s)",
   "inputNames": "Eingangsnamen",
   "leaveGroup": "Gruppe verlassen",
@@ -255,9 +254,6 @@
   "usb": "USB",
   "volume": "Lautstärke",
   "descVolume": "Wie laut die Zone spielt: die beiden Text-Protokolle melden Dezibel, MusicCast seine eigene Schrittzahl — die Einheit sagt, welche.",
-  "volumeDB": "Lautstärke (dB)",
-  "volumeDisplay": "Lautstärke (Anzeige)",
-  "volumeDisplayMode": "Lautstärke-Anzeigeart",
   "volumeInterlock": "Lautstärke-Kopplung",
   "yncaControlPort": "YNCA-Steuerport",
   "ypaoVolume": "YPAO-Lautstärke",
@@ -384,9 +380,6 @@
   "descVolumeInterlock": "Ob ein AirPlay-Gerät die Lautstärke dieses Receivers ändern darf.",
   "descElapsedTime": "In Sekunden, damit man damit rechnen kann; die lesbare Form steht daneben.",
   "descTotalTime": "In Sekunden, damit man damit rechnen kann; die lesbare Form steht daneben.",
-  "descVolumeDB": "Dieselbe Lautstärke, wie sie das Display des Receivers zeigt, in Dezibel.",
-  "descVolumeDisplay": "Dieselbe Lautstärke, wie sie das Display des Receivers zeigt, in der gerade eingestellten Skala.",
-  "descVolumeDisplayMode": "Ob der Receiver die Lautstärke in Dezibel oder als schlichte Zahl anzeigt.",
   "descAudioSelect": "Von welcher Buchse der aktuelle Eingang seinen Ton nimmt: automatisch, HDMI, koaxial/optisch oder analog.",
   "descLinkControl": "Wägt Stabilität gegen Verzögerung ab, wenn an verbundene Geräte gestreamt wird.",
   "descLinkAudioDelay": "Ob verbundene Geräte auf Lippensynchronität oder gleichen Ton achten.",
@@ -602,5 +595,7 @@
   "descHdmiVideoPreset": "Welche der gespeicherten Videoverarbeitungs-Voreinstellungen in Gebrauch ist.",
   "descMonaural": "Ob die Zone in Mono spielt; beide Lautsprecher geben dann dasselbe Signal wieder.",
   "docLinkLabelDe": "Wiki (Deutsch)",
-  "docLinkLabelEn": "Wiki (English)"
+  "docLinkLabelEn": "Wiki (English)",
+  "descVolumeDb": "Wie laut die Zone spielt, in der Dezibel-Skala, die der Receiver selbst anzeigt.",
+  "descVolumeNumeric": "Wie laut die Zone spielt, in der Zahlen-Skala, die der Receiver selbst anzeigt."
 }

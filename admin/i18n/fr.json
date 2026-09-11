@@ -133,7 +133,6 @@
   "initialVolumeLevel": "Niveau du volume initial",
   "initialVolumeMode": "Mode du volume initial",
   "input": "Entrée",
-  "inputNameDisplay": "Nom de l'entrée (afficheur)",
   "inputName": "Nom de l'entrée (%s)",
   "inputNames": "Noms des entrées",
   "leaveGroup": "Quitter le groupe",
@@ -255,9 +254,6 @@
   "usb": "USB",
   "volume": "Volume",
   "descVolume": "Le niveau sonore de la zone : les deux protocoles texte donnent des décibels, MusicCast ses propres pas — l'unité indique lequel.",
-  "volumeDB": "Volume (dB)",
-  "volumeDisplay": "Volume (afficheur)",
-  "volumeDisplayMode": "Mode d'affichage du volume",
   "volumeInterlock": "Verrouillage du volume",
   "yncaControlPort": "Port de commande YNCA",
   "ypaoVolume": "Volume YPAO",
@@ -384,9 +380,6 @@
   "descVolumeInterlock": "Si un appareil AirPlay peut modifier le volume de cet ampli.",
   "descElapsedTime": "En secondes, pour pouvoir calculer ; la forme lisible est à côté.",
   "descTotalTime": "En secondes, pour pouvoir calculer ; la forme lisible est à côté.",
-  "descVolumeDB": "Le même volume que l'afficheur de l'ampli, en décibels.",
-  "descVolumeDisplay": "Le même volume que l'afficheur de l'ampli, dans l'échelle actuellement réglée.",
-  "descVolumeDisplayMode": "Si l'ampli affiche le volume en décibels ou en nombre simple.",
   "descAudioSelect": "De quelle prise l'entrée actuelle tire son son : automatique, HDMI, coaxiale/optique ou analogique.",
   "descLinkControl": "Arbitre entre stabilité et latence lors de la diffusion vers les appareils liés.",
   "descLinkAudioDelay": "Si les appareils liés privilégient la synchro labiale ou l'audio aligné.",
@@ -602,5 +595,7 @@
   "descHdmiVideoPreset": "Lequel des préréglages de traitement vidéo enregistrés est utilisé.",
   "descMonaural": "Si la zone joue en mono ; les deux enceintes reproduisent alors le même signal.",
   "docLinkLabelDe": "Wiki (Deutsch)",
-  "docLinkLabelEn": "Wiki (English)"
+  "docLinkLabelEn": "Wiki (English)",
+  "descVolumeDb": "Le niveau sonore de la zone, dans l'échelle en décibels affichée par l'ampli lui-même.",
+  "descVolumeNumeric": "Le niveau sonore de la zone, dans l'échelle numérique affichée par l'ampli lui-même."
 }

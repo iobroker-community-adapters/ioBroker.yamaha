@@ -164,7 +164,7 @@ export class YxcDeviceController implements ConnectionHandle {
   private readonly zoneValueLists = new Map<string, Readonly<Record<string, string[]>>>();
   /**
    * The capability report of this connect and the display scale each zone reported when its
-   * objects were built. `actualVolume` declares the bounds of the scale the device is SHOWING
+   * objects were built. `volume` declares the bounds of the scale the device is SHOWING
    * (`actual_volume.mode`); switching that at the device has to reshape the datapoint, and this
    * controller writes its objects only once, at connect.
    */
@@ -272,6 +272,13 @@ export class YxcDeviceController implements ConnectionHandle {
         if (typeof update.value === "string" && update.id.startsWith(prefix)) {
           values[update.id.slice(prefix.length)] = update.value;
         }
+      }
+      // The display scale is no datapoint of its own — it is a property OF the volume datapoint,
+      // so it is read straight from the raw answer and handed to the mapper as the mode the
+      // objects are built for.
+      const mode = actualVolumeModeOf(status);
+      if (mode !== undefined) {
+        values.actualVolumeMode = mode;
       }
       reported[zone] = values;
     });
@@ -1132,14 +1139,14 @@ export class YxcDeviceController implements ConnectionHandle {
   private async applyZoneStatus(zone: string, status: unknown): Promise<void> {
     // The display scale decides the BOUNDS and the unit of the volume datapoint, so the object
     // has to carry the new scale BEFORE the new value is written. The status updates are emitted
-    // in catalog order, which puts the value ahead of `actualVolumeMode` — reshaping from inside
+    // in catalog order, which puts the value ahead of any mode information — reshaping from inside
     // that loop (and as a fire-and-forget promise) let a numeric value land in an object still
     // declaring decibels, which is the js-controller warning 2.7.2 set out to end. So the mode is
     // read from the RAW answer first and the reshape is awaited.
     const mode = actualVolumeModeOf(status);
     if (mode !== undefined && this.zoneVolumeMode.get(zone) !== mode) {
       this.zoneVolumeMode.set(zone, mode);
-      await this.reshapeActualVolume(zone, mode);
+      await this.reshapeVolume(zone, mode);
     }
     const updates = parseYxcStatus(status, zone);
     for (const update of updates) {
@@ -1163,7 +1170,7 @@ export class YxcDeviceController implements ConnectionHandle {
   }
 
   /**
-   * Rewrite a zone's `actualVolume` for the display scale the device now reports.
+   * Rewrite a zone's `volume` object for the display scale the device now reports.
    *
    * The object is rebuilt through the same mapper the connect uses, so name, unit and bounds stay
    * one decision in one place; only that single definition is written.
@@ -1171,11 +1178,11 @@ export class YxcDeviceController implements ConnectionHandle {
    * @param zone the zone whose display scale changed
    * @param mode the scale the zone reports now (`db` / `numeric`)
    */
-  private async reshapeActualVolume(zone: string, mode: string): Promise<void> {
+  private async reshapeVolume(zone: string, mode: string): Promise<void> {
     if (!this.capabilities) {
       return;
     }
-    const id = `${zonePrefix(zone)}actualVolume`;
+    const id = `${zonePrefix(zone)}volume`;
     const def = mapYxcToObjects(this.capabilities, { [zone]: { actualVolumeMode: mode } }).find(o => o.id === id);
     if (!def) {
       return;

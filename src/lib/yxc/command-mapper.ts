@@ -32,14 +32,23 @@ export type YxcCommand =
  * @param read the entry's read location
  * @returns the raw value, or undefined if the field is absent
  */
-function readStatusField(status: Record<string, unknown>, read: { field: string } | { path: string[] }): unknown {
+function readStatusField(
+  status: Record<string, unknown>,
+  read: { field: string } | { path: string[]; fallbackField?: string },
+): unknown {
   if ("path" in read) {
     let value: unknown = status;
     for (const key of read.path) {
       if (typeof value !== "object" || value === null) {
-        return undefined;
+        value = undefined;
+        break;
       }
       value = (value as Record<string, unknown>)[key];
+    }
+    // A device that does not report the nested form falls back to the flat field, so a speaker
+    // without `actual_volume` keeps answering on `volume` exactly as before.
+    if (value === undefined && read.fallbackField !== undefined) {
+      return status[read.fallbackField];
     }
     return value;
   }

@@ -133,7 +133,6 @@
   "initialVolumeLevel": "Nível do volume inicial",
   "initialVolumeMode": "Modo do volume inicial",
   "input": "Entrada",
-  "inputNameDisplay": "Nome da entrada (visor)",
   "inputName": "Nome da entrada (%s)",
   "inputNames": "Nomes das entradas",
   "leaveGroup": "Sair do grupo",
@@ -255,9 +254,6 @@
   "usb": "USB",
   "volume": "Volume",
   "descVolume": "Quão alto a zona toca: os dois protocolos de texto dão decibéis, o MusicCast os seus próprios passos — a unidade indica qual.",
-  "volumeDB": "Volume (dB)",
-  "volumeDisplay": "Volume (visor)",
-  "volumeDisplayMode": "Modo de exibição do volume",
   "volumeInterlock": "Bloqueio de volume",
   "yncaControlPort": "Porta de controlo YNCA",
   "ypaoVolume": "Volume YPAO",
@@ -384,9 +380,6 @@
   "descVolumeInterlock": "Se um aparelho AirPlay pode alterar o volume deste recetor.",
   "descElapsedTime": "Em segundos, para poder calcular; a forma legível está ao lado.",
   "descTotalTime": "Em segundos, para poder calcular; a forma legível está ao lado.",
-  "descVolumeDB": "O mesmo volume que o visor do recetor mostra, em decibéis.",
-  "descVolumeDisplay": "O mesmo volume que o visor do recetor mostra, na escala atualmente selecionada.",
-  "descVolumeDisplayMode": "Se o recetor mostra o volume em decibéis ou como número simples.",
   "descAudioSelect": "De que terminal o som da entrada atual vem: automático, HDMI, coaxial/ótico ou analógico.",
   "descLinkControl": "Equilibra estabilidade e atraso ao transmitir para aparelhos ligados.",
   "descLinkAudioDelay": "Se os aparelhos ligados privilegiam o sincronismo labial ou o áudio alinhado.",
@@ -602,5 +595,7 @@
   "descHdmiVideoPreset": "Qual das predefinições de processamento de vídeo guardadas está em uso.",
   "descMonaural": "Se a zona toca em mono; ambas as colunas reproduzem então o mesmo sinal.",
   "docLinkLabelDe": "Wiki (Deutsch)",
-  "docLinkLabelEn": "Wiki (English)"
+  "docLinkLabelEn": "Wiki (English)",
+  "descVolumeDb": "Quão alto a zona toca, na escala de decibéis que o próprio recetor mostra.",
+  "descVolumeNumeric": "Quão alto a zona toca, na escala numérica que o próprio recetor mostra."
 }

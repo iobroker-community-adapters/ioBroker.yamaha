@@ -326,22 +326,22 @@ describe("YxcDeviceController", () => {
   });
 
   // The RX-V481 declares BOTH display scales; `actual_volume.value` arrives in the one named by
-  // `mode`. Switching the receiver's display must reshape the datapoint at once — the MusicCast
-  // controller built its objects only at connect, so before 2.7.2 the bounds stayed on the scale
-  // that happened to be active while connecting, and js-controller warned on every poll.
-  test("a change of display scale reshapes actualVolume without a reconnect", async () => {
+  // `mode`, and that value IS the volume datapoint. Switching the receiver's display must reshape
+  // the datapoint at once — the MusicCast controller builds its objects only at connect, so the
+  // bounds would otherwise stay on whichever scale was active while connecting.
+  test("a change of display scale reshapes volume without a reconnect", async () => {
     const s = setup(rxV481, { power: "on", actual_volume: { mode: "db", value: -47.5 } });
     expect(await s.controller.start()).toBe(true);
-    expect(s.defs.get("living.actualVolume")?.common.max).toBe(16.5);
-    expect(s.defs.get("living.actualVolume")?.common.unit).toBe("dB");
+    expect(s.defs.get("living.volume")?.common.max).toBe(16.5);
+    expect(s.defs.get("living.volume")?.common.unit).toBe("dB");
 
     s.client.status = { power: "on", actual_volume: { mode: "numeric", value: 36 } };
     s.fire.push?.({ main: { volume: 36 } });
     await flush();
 
-    expect(s.defs.get("living.actualVolume")?.common.max).toBe(97);
-    expect(s.defs.get("living.actualVolume")?.common.min).toBe(0);
-    expect(s.defs.get("living.actualVolume")?.common.unit).toBe("");
+    expect(s.defs.get("living.volume")?.common.max).toBe(97);
+    expect(s.defs.get("living.volume")?.common.min).toBe(0);
+    expect(s.defs.get("living.volume")?.common.unit).toBe("");
   });
 
   // The ORDER matters, not just the fact that a reshape happens. The status updates are emitted
@@ -358,8 +358,8 @@ describe("YxcDeviceController", () => {
     s.fire.push?.({ main: { volume: 90 } });
     await flush();
 
-    const object = s.trace.findIndex(e => e.kind === "object" && e.id === "living.actualVolume");
-    const value = s.trace.findIndex(e => e.kind === "value" && e.id === "living.actualVolume");
+    const object = s.trace.findIndex(e => e.kind === "object" && e.id === "living.volume");
+    const value = s.trace.findIndex(e => e.kind === "value" && e.id === "living.volume");
     expect(object).toBeGreaterThanOrEqual(0);
     expect(value).toBeGreaterThanOrEqual(0);
     expect(object).toBeLessThan(value);
@@ -374,7 +374,7 @@ describe("YxcDeviceController", () => {
     s.fire.push?.({ main: { volume: 40 } });
     await flush();
 
-    expect(s.trace.filter(e => e.kind === "object" && e.id === "living.actualVolume")).toEqual([]);
+    expect(s.trace.filter(e => e.kind === "object" && e.id === "living.volume")).toEqual([]);
   });
 
   test("keepalive polls main to renew the push registration", async () => {

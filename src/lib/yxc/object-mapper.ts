@@ -191,9 +191,10 @@ function pushPlayerBlock(objects: ObjectDef[], prefix: string, channelName: ioBr
  * The `range_step` id that carries a state's bounds. The names are the device's own
  * (capture-verified across 25 models); a state not listed here declares no range.
  *
- * `actualVolume` is deliberately ABSENT here: its bounds follow the scale the device says it is
- * DISPLAYING, which no single `range_step` id can express (measured on an RX-V6A, 2026-09-09 —
- * see `actualVolumePresentation`).
+ * `volume` is listed, but the entry is the FALLBACK: on a device that declares a display scale,
+ * `volumePresentation` overrides it, because the bounds then follow the scale the receiver is
+ * showing and no single `range_step` id can express that. A speaker, soundbar or CD receiver
+ * declares no display scale and keeps the raw step range read from here.
  */
 const RANGE_BY_STATE: Readonly<Record<string, string>> = {
   volume: "volume",
@@ -213,7 +214,7 @@ const RANGE_BY_STATE: Readonly<Record<string, string>> = {
 type DeclaredRange = NonNullable<YxcZone["ranges"]>[string];
 
 /**
- * The presentation of `actualVolume` for the scale the device says it is DISPLAYING.
+ * The presentation of `volume` for the scale the device says it is DISPLAYING.
  *
  * `actual_volume.value` arrives in the form named by `actual_volume.mode` — a device set to its
  * numeric scale reports 36 where the decibel scale would read -44.5. Declaring the datapoint as dB
@@ -226,29 +227,33 @@ type DeclaredRange = NonNullable<YxcZone["ranges"]>[string];
  * @param mode the display mode the zone reports right now, if any
  * @returns unit, name keys and the matching bounds
  */
-export function actualVolumePresentation(
+export function volumePresentation(
   zone: YxcZone,
   mode: string | undefined,
-): { unit: string; nameKey: I18nKey; descKey: I18nKey; range: DeclaredRange | undefined } {
+): { unit: string; descKey: I18nKey; range: DeclaredRange | undefined } | undefined {
   const db = zone.ranges?.actual_volume_db;
   const numeric = zone.ranges?.actual_volume_numeric;
+  // A device that declares no display scale at all (speakers, soundbars, CD receivers) keeps its
+  // own step scale and the bounds RANGE_BY_STATE reads for it — there is nothing to follow here.
+  if (!db && !numeric) {
+    return undefined;
+  }
   // A zone that declares ONE scale can only display that one — its status does not have to say so
   // (the RX-A2070 declares `actual_volume_db` for every zone and answers a status for main only).
   const onlyScale = db && !numeric ? "db" : numeric && !db ? "numeric" : undefined;
   const shown = mode === "db" || mode === "numeric" ? mode : onlyScale;
   if (shown === "db") {
-    return { unit: "dB", nameKey: "volumeDB", descKey: "descVolumeDB", range: db };
+    return { unit: "dB", descKey: "descVolumeDb", range: db };
   }
   if (shown === "numeric") {
-    return { unit: "", nameKey: "volumeDisplay", descKey: "descVolumeDisplay", range: numeric };
+    return { unit: "", descKey: "descVolumeNumeric", range: numeric };
   }
   // Both scales declared and none reported: the envelope of the two. Every value the device can
   // send lies inside it, and — unlike leaving the bounds out — it REPLACES what an existing
   // installation stored, because `extendObject` merges and a field the new picture drops survives.
   return {
     unit: "",
-    nameKey: "volumeDisplay",
-    descKey: "descVolumeDisplay",
+    descKey: "descVolumeNumeric",
     range:
       db && numeric
         ? {
@@ -330,10 +335,14 @@ export function mapYxcToObjects(
       // (audit 2026-09-06) — bass, treble, subwoofer trim, dialogue level/lift, DTS dialogue
       // control, balance and the equalizer bands stood there as numbers without a slider.
       let range: DeclaredRange | undefined;
-      if (entry.state === "actualVolume") {
-        const shown = actualVolumePresentation(zone, current?.[zone.id]?.actualVolumeMode);
+      // `volume` shows what the receiver's own display shows. `actual_volume.value` arrives in the
+      // form named by `actual_volume.mode`, so unit and bounds follow that mode; the NAME stays
+      // "Volume" either way. A device without a declared display scale falls through to its own
+      // step scale below, unchanged.
+      const shown =
+        entry.state === "volume" ? volumePresentation(zone, current?.[zone.id]?.actualVolumeMode) : undefined;
+      if (shown) {
         common.unit = shown.unit;
-        common.name = tName(shown.nameKey);
         common.desc = tName(shown.descKey);
         range = shown.range;
       } else {
