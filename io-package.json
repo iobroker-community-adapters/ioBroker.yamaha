@@ -1,10 +1,10 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "2.7.2",
+    "version": "2.8.0",
     "nogit": true,
     "news": {
-      "NEXT": {
+      "2.8.0": {
         "en": "Volume now carries the scale the receiver itself shows, and its range is what the receiver accepts. A new setting shows every zone's volume as 0-100 % instead. Three datapoints are gone.",
         "de": "Die Lautstärke trägt jetzt die Skala, die der Receiver selbst anzeigt, und ihr Bereich ist das, was er annimmt. Eine neue Einstellung zeigt jede Zone als 0-100 %. Drei Datenpunkte fallen weg.",
         "ru": "Громкость теперь использует шкалу, которую показывает сам ресивер, а её диапазон — то, что он принимает. Новая настройка показывает каждую зону как 0-100 %. Три датапоинта удалены.",

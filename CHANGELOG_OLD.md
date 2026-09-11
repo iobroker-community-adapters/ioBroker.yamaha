@@ -1,4 +1,8 @@
 # Older changes
+## 2.5.1 (2026-09-07)
+
+- (krobipd) Changed: installing straight from GitHub is no longer offered — the adapter is built before publishing, so it is installed from the ioBroker repository instead
+
 ## 2.5.0 (2026-09-07)
 
 - (krobipd) Fixed: switching off a datapoint group now clears it in every zone — turning off "Sound" used to leave the zone 2/3/4 sound datapoints standing, and "Playback" left 304 of them
