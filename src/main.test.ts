@@ -994,7 +994,7 @@ describe("Yamaha bounds an update no longer declares", () => {
     await ctx.i.onReady();
     await flush();
     const upsert = ctx.calls[0].deps.upsertObject as (id: string, def: unknown) => Promise<void>;
-    const deleted = ctx.i.delObjectAsync as unknown as { mock: { calls: unknown[][] } };
+    const deleted = (ctx.i as unknown as { delObjectAsync: ReturnType<typeof vi.fn> }).delObjectAsync;
     const before = deleted.mock.calls.length;
 
     await upsert("Living_room.volume", {

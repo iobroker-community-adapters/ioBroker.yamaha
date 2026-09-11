@@ -442,7 +442,10 @@ entscheidet etwas ([[feedback_user_hardware_ist_sample]]). Alle Funde sind umges
   selbst widerspricht.
 - **Eine WEGGEFALLENE Grenze braucht einen Löschvorgang, kein `null`** (`clearStaleBounds` in
   `main.ts`): `extendObject` verschmilzt, ein geschriebenes `null` SETZT den Schlüssel auf `null`, und
-  die Bereichsprüfung liest `null` numerisch als 0 — jeder Messwert wäre „greater than max". Anders als
+  die Bereichsprüfung liest `null` numerisch als 0 — jeder Messwert wäre „greater than max". Quelle
+  gelesen (`@iobroker/js-controller-adapter`, `lib/adapter/validator.js:83`):
+  `if (obj.common.max !== undefined && state.val > obj.common.max)` — `null !== undefined` ist wahr,
+  und `val > null` ist `val > 0`. Anders als
   bei einem Dropdown (`clearStaleStates`, dort ist die leere Karte der neutrale Wert) gibt es für eine
   Grenze keinen neutralen Wert, also lesen → `delObjectAsync(id, {recursive: false})` → `extendObject`
   mit dem gelesenen `common` ohne das Feld (`reference_attribut_entfernen_ohne_setobject`; `setObject`
