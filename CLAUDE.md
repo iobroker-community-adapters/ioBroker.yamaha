@@ -980,6 +980,22 @@ in ein öffentliches Repo.
 
 - `npm run build` · `npm test` · `npm run lint` · `npm run check` · `npm run format:check` (muss 0 melden) · `npm run release`.
 
+## Doku-Flächen (seit 2026-09-11)
+
+Drei Flächen, jede Aussage lebt an genau EINER Stelle:
+
+| Fläche                                     | Rolle                                                                                                                     | Gate                                                               |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `README.md`                                | Schaufenster: was ist das, Voraussetzungen, Konfiguration in Kurzform, Wiki-Tabelle                                       | Konsistenz-Audit (Pflicht-Abschnitte + Reihenfolge), Prüfbot E6006 |
+| `docs/en/README.md` · `docs/de/README.md`  | der Kurzweg, den ioBroker über `common.docs` ausliefert und der Admin anzeigt — kanonisch für Einrichtung und Fehlersuche | `audit_common_docs`, Konsistenz-Stufe 2                            |
+| Wiki (`Entwicklung/iobroker.yamaha.wiki/`) | die Tiefe: Umstieg, Protokolle, Datenpunkte, Geräte, Fehlersuche — 16 Seiten EN+DE, handgeschrieben                       | **KEINS**                                                          |
+
+⚠️ **Das Wiki sieht kein Gate.** Es ist ein eigenes git-Repo (`…/ioBroker.yamaha.wiki.git`), der
+Release-Commit fasst es nicht an, und es gibt hier keinen Generator, der die Drift auffinge. Nach
+jedem Release, das Datenpunkte, Verhalten oder die Admin-Oberfläche ändert, gehören die betroffenen
+Wiki-Seiten von Hand nachgezogen — besonders `Datapoints`/`Datenpunkte` und `Upgrade`/`Umstieg`.
+Das Wiki trägt bewusst KEIN Einrichtungs-Kapitel; das steht in `docs/` und stünde sonst doppelt.
+
 ## Versionshistorie
 
 Changelog im README (`## Changelog`) + `CHANGELOG_OLD.md` + `io-package.json` `news`, nicht hier dupliziert.
