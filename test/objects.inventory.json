@@ -11,87 +11,6 @@
     "native": {},
     "_id": "yamaha.0.10_10_0_11"
   },
-  "yamaha.0.10_10_0_11.actualVolume": {
-    "type": "state",
-    "common": {
-      "type": "number",
-      "unit": "dB",
-      "role": "value",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Volume (dB)",
-        "de": "Lautstärke (dB)",
-        "ru": "Громкость (дБ)",
-        "pt": "Volume (dB)",
-        "nl": "Volume (dB)",
-        "fr": "Volume (dB)",
-        "it": "Volume (dB)",
-        "es": "Volumen (dB)",
-        "pl": "Głośność (dB)",
-        "uk": "Гучність (дБ)",
-        "zh-cn": "音量 (dB)"
-      },
-      "desc": {
-        "en": "The same volume as the receiver's own display shows it, in decibels.",
-        "de": "Dieselbe Lautstärke, wie sie das Display des Receivers zeigt, in Dezibel.",
-        "ru": "Та же громкость, что показывает дисплей ресивера, в децибелах.",
-        "pt": "O mesmo volume que o visor do recetor mostra, em decibéis.",
-        "nl": "Hetzelfde volume als op het display van de receiver, in decibel.",
-        "fr": "Le même volume que l'afficheur de l'ampli, en décibels.",
-        "it": "Lo stesso volume mostrato dal display del ricevitore, in decibel.",
-        "es": "El mismo volumen que muestra la pantalla del receptor, en decibelios.",
-        "pl": "Ta sama głośność co na wyświetlaczu amplitunera, w decybelach.",
-        "uk": "Та сама гучність, що на дисплеї ресивера, у децибелах.",
-        "zh-cn": "与功放显示屏一致的音量，单位分贝。"
-      },
-      "min": -80.5,
-      "max": 16.5,
-      "step": 0.5
-    },
-    "native": {},
-    "_id": "yamaha.0.10_10_0_11.actualVolume"
-  },
-  "yamaha.0.10_10_0_11.actualVolumeMode": {
-    "type": "state",
-    "common": {
-      "type": "string",
-      "role": "state",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Volume display mode",
-        "de": "Lautstärke-Anzeigeart",
-        "ru": "Режим отображения громкости",
-        "pt": "Modo de exibição do volume",
-        "nl": "Weergavemodus volume",
-        "fr": "Mode d'affichage du volume",
-        "it": "Modalità di visualizzazione del volume",
-        "es": "Modo de visualización del volumen",
-        "pl": "Tryb wyświetlania głośności",
-        "uk": "Режим показу гучності",
-        "zh-cn": "音量显示方式"
-      },
-      "desc": {
-        "en": "Whether the receiver shows volume in decibels or as a plain number.",
-        "de": "Ob der Receiver die Lautstärke in Dezibel oder als schlichte Zahl anzeigt.",
-        "ru": "Показывает ли ресивер громкость в децибелах или простым числом.",
-        "pt": "Se o recetor mostra o volume em decibéis ou como número simples.",
-        "nl": "Of de receiver het volume in decibel of als getal toont.",
-        "fr": "Si l'ampli affiche le volume en décibels ou en nombre simple.",
-        "it": "Se il ricevitore mostra il volume in decibel o come numero.",
-        "es": "Si el receptor muestra el volumen en decibelios o como número.",
-        "pl": "Czy amplituner pokazuje głośność w decybelach, czy jako liczbę.",
-        "uk": "Чи показує ресивер гучність у децибелах, чи простим числом.",
-        "zh-cn": "功放以分贝还是普通数字显示音量。"
-      },
-      "states": {
-        "db": "db"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.10_10_0_11.actualVolumeMode"
-  },
   "yamaha.0.10_10_0_11.advanced": {
     "type": "channel",
     "common": {
@@ -523,30 +442,6 @@
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_11.input"
-  },
-  "yamaha.0.10_10_0_11.inputText": {
-    "type": "state",
-    "common": {
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Input name (display)",
-        "de": "Eingangsname (Anzeige)",
-        "ru": "Название входа (на дисплее)",
-        "pt": "Nome da entrada (visor)",
-        "nl": "Ingangsnaam (display)",
-        "fr": "Nom de l'entrée (afficheur)",
-        "it": "Nome ingresso (display)",
-        "es": "Nombre de la entrada (pantalla)",
-        "pl": "Nazwa wejścia (wyświetlacz)",
-        "uk": "Назва входу (дисплей)",
-        "zh-cn": "输入名称（显示）"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.10_10_0_11.inputText"
   },
   "yamaha.0.10_10_0_11.multiroom": {
     "type": "channel",
@@ -1052,87 +947,6 @@
     "native": {},
     "_id": "yamaha.0.10_10_0_11.multiroom.zone2"
   },
-  "yamaha.0.10_10_0_11.multiroom.zone2.actualVolume": {
-    "type": "state",
-    "common": {
-      "type": "number",
-      "unit": "dB",
-      "role": "value",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Volume (dB)",
-        "de": "Lautstärke (dB)",
-        "ru": "Громкость (дБ)",
-        "pt": "Volume (dB)",
-        "nl": "Volume (dB)",
-        "fr": "Volume (dB)",
-        "it": "Volume (dB)",
-        "es": "Volumen (dB)",
-        "pl": "Głośność (dB)",
-        "uk": "Гучність (дБ)",
-        "zh-cn": "音量 (dB)"
-      },
-      "desc": {
-        "en": "The same volume as the receiver's own display shows it, in decibels.",
-        "de": "Dieselbe Lautstärke, wie sie das Display des Receivers zeigt, in Dezibel.",
-        "ru": "Та же громкость, что показывает дисплей ресивера, в децибелах.",
-        "pt": "O mesmo volume que o visor do recetor mostra, em decibéis.",
-        "nl": "Hetzelfde volume als op het display van de receiver, in decibel.",
-        "fr": "Le même volume que l'afficheur de l'ampli, en décibels.",
-        "it": "Lo stesso volume mostrato dal display del ricevitore, in decibel.",
-        "es": "El mismo volumen que muestra la pantalla del receptor, en decibelios.",
-        "pl": "Ta sama głośność co na wyświetlaczu amplitunera, w decybelach.",
-        "uk": "Та сама гучність, що на дисплеї ресивера, у децибелах.",
-        "zh-cn": "与功放显示屏一致的音量，单位分贝。"
-      },
-      "min": -80.5,
-      "max": 16.5,
-      "step": 0.5
-    },
-    "native": {},
-    "_id": "yamaha.0.10_10_0_11.multiroom.zone2.actualVolume"
-  },
-  "yamaha.0.10_10_0_11.multiroom.zone2.actualVolumeMode": {
-    "type": "state",
-    "common": {
-      "type": "string",
-      "role": "state",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Volume display mode",
-        "de": "Lautstärke-Anzeigeart",
-        "ru": "Режим отображения громкости",
-        "pt": "Modo de exibição do volume",
-        "nl": "Weergavemodus volume",
-        "fr": "Mode d'affichage du volume",
-        "it": "Modalità di visualizzazione del volume",
-        "es": "Modo de visualización del volumen",
-        "pl": "Tryb wyświetlania głośności",
-        "uk": "Режим показу гучності",
-        "zh-cn": "音量显示方式"
-      },
-      "desc": {
-        "en": "Whether the receiver shows volume in decibels or as a plain number.",
-        "de": "Ob der Receiver die Lautstärke in Dezibel oder als schlichte Zahl anzeigt.",
-        "ru": "Показывает ли ресивер громкость в децибелах или простым числом.",
-        "pt": "Se o recetor mostra o volume em decibéis ou como número simples.",
-        "nl": "Of de receiver het volume in decibel of als getal toont.",
-        "fr": "Si l'ampli affiche le volume en décibels ou en nombre simple.",
-        "it": "Se il ricevitore mostra il volume in decibel o come numero.",
-        "es": "Si el receptor muestra el volumen en decibelios o como número.",
-        "pl": "Czy amplituner pokazuje głośność w decybelach, czy jako liczbę.",
-        "uk": "Чи показує ресивер гучність у децибелах, чи простим числом.",
-        "zh-cn": "功放以分贝还是普通数字显示音量。"
-      },
-      "states": {
-        "db": "db"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.10_10_0_11.multiroom.zone2.actualVolumeMode"
-  },
   "yamaha.0.10_10_0_11.multiroom.zone2.advanced": {
     "type": "channel",
     "common": {
@@ -1254,30 +1068,6 @@
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_11.multiroom.zone2.input"
-  },
-  "yamaha.0.10_10_0_11.multiroom.zone2.inputText": {
-    "type": "state",
-    "common": {
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Input name (display)",
-        "de": "Eingangsname (Anzeige)",
-        "ru": "Название входа (на дисплее)",
-        "pt": "Nome da entrada (visor)",
-        "nl": "Ingangsnaam (display)",
-        "fr": "Nom de l'entrée (afficheur)",
-        "it": "Nome ingresso (display)",
-        "es": "Nombre de la entrada (pantalla)",
-        "pl": "Nazwa wejścia (wyświetlacz)",
-        "uk": "Назва входу (дисплей)",
-        "zh-cn": "输入名称（显示）"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.10_10_0_11.multiroom.zone2.inputText"
   },
   "yamaha.0.10_10_0_11.multiroom.zone2.mute": {
     "type": "state",
@@ -2516,6 +2306,10 @@
   "yamaha.0.10_10_0_11.multiroom.zone2.volume": {
     "type": "state",
     "common": {
+      "type": "number",
+      "role": "level.volume",
+      "read": true,
+      "write": true,
       "name": {
         "en": "Volume",
         "de": "Lautstärke",
@@ -2530,25 +2324,21 @@
         "zh-cn": "音量"
       },
       "desc": {
-        "en": "How loud the zone plays: the two text protocols report decibels, MusicCast its own step count — the unit tells you which.",
-        "de": "Wie laut die Zone spielt: die beiden Text-Protokolle melden Dezibel, MusicCast seine eigene Schrittzahl — die Einheit sagt, welche.",
-        "ru": "Насколько громко играет зона: два текстовых протокола дают децибелы, MusicCast — свои шаги; единица измерения показывает, что именно.",
-        "pt": "Quão alto a zona toca: os dois protocolos de texto dão decibéis, o MusicCast os seus próprios passos — a unidade indica qual.",
-        "nl": "Hoe hard de zone speelt: de twee tekstprotocollen geven decibel, MusicCast zijn eigen stappen — de eenheid zegt welke.",
-        "fr": "Le niveau sonore de la zone : les deux protocoles texte donnent des décibels, MusicCast ses propres pas — l'unité indique lequel.",
-        "it": "Quanto forte suona la zona: i due protocolli testuali danno decibel, MusicCast i propri passi — l'unità dice quale.",
-        "es": "Lo alto que suena la zona: los dos protocolos de texto dan decibelios, MusicCast sus propios pasos — la unidad indica cuál.",
-        "pl": "Jak głośno gra strefa: dwa protokoły tekstowe podają decybele, MusicCast własne kroki — jednostka mówi, który z nich.",
-        "uk": "Наскільки гучно грає зона: два текстові протоколи дають децибели, MusicCast — власні кроки; одиниця показує, що саме.",
-        "zh-cn": "该区域的音量：两种文本协议给出分贝，MusicCast 给出自身的步进值，单位标明是哪一种。"
+        "en": "How loud the zone plays, in the decibel scale the receiver itself shows.",
+        "de": "Wie laut die Zone spielt, in der Dezibel-Skala, die der Receiver selbst anzeigt.",
+        "ru": "Насколько громко играет зона, в шкале децибел, которую показывает сам ресивер.",
+        "pt": "Quão alto a zona toca, na escala de decibéis que o próprio recetor mostra.",
+        "nl": "Hoe hard de zone speelt, in de decibelschaal die de receiver zelf toont.",
+        "fr": "Le niveau sonore de la zone, dans l'échelle en décibels affichée par l'ampli lui-même.",
+        "it": "Quanto forte suona la zona, nella scala in decibel che il ricevitore stesso mostra.",
+        "es": "Lo alto que suena la zona, en la escala de decibelios que muestra el propio receptor.",
+        "pl": "Jak głośno gra strefa, w skali decybelowej pokazywanej przez sam amplituner.",
+        "uk": "Наскільки гучно грає зона, у шкалі децибел, яку показує сам ресивер.",
+        "zh-cn": "该区域的音量，采用功放自身显示的分贝刻度。"
       },
-      "type": "number",
-      "role": "level.volume",
-      "read": true,
-      "write": true,
       "unit": "dB",
       "min": -80.5,
-      "max": 16.5,
+      "max": 0,
       "step": 0.5
     },
     "native": {},
@@ -2573,87 +2363,6 @@
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_11.multiroom.zone3"
-  },
-  "yamaha.0.10_10_0_11.multiroom.zone3.actualVolume": {
-    "type": "state",
-    "common": {
-      "type": "number",
-      "unit": "dB",
-      "role": "value",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Volume (dB)",
-        "de": "Lautstärke (dB)",
-        "ru": "Громкость (дБ)",
-        "pt": "Volume (dB)",
-        "nl": "Volume (dB)",
-        "fr": "Volume (dB)",
-        "it": "Volume (dB)",
-        "es": "Volumen (dB)",
-        "pl": "Głośność (dB)",
-        "uk": "Гучність (дБ)",
-        "zh-cn": "音量 (dB)"
-      },
-      "desc": {
-        "en": "The same volume as the receiver's own display shows it, in decibels.",
-        "de": "Dieselbe Lautstärke, wie sie das Display des Receivers zeigt, in Dezibel.",
-        "ru": "Та же громкость, что показывает дисплей ресивера, в децибелах.",
-        "pt": "O mesmo volume que o visor do recetor mostra, em decibéis.",
-        "nl": "Hetzelfde volume als op het display van de receiver, in decibel.",
-        "fr": "Le même volume que l'afficheur de l'ampli, en décibels.",
-        "it": "Lo stesso volume mostrato dal display del ricevitore, in decibel.",
-        "es": "El mismo volumen que muestra la pantalla del receptor, en decibelios.",
-        "pl": "Ta sama głośność co na wyświetlaczu amplitunera, w decybelach.",
-        "uk": "Та сама гучність, що на дисплеї ресивера, у децибелах.",
-        "zh-cn": "与功放显示屏一致的音量，单位分贝。"
-      },
-      "min": -80.5,
-      "max": 16.5,
-      "step": 0.5
-    },
-    "native": {},
-    "_id": "yamaha.0.10_10_0_11.multiroom.zone3.actualVolume"
-  },
-  "yamaha.0.10_10_0_11.multiroom.zone3.actualVolumeMode": {
-    "type": "state",
-    "common": {
-      "type": "string",
-      "role": "state",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Volume display mode",
-        "de": "Lautstärke-Anzeigeart",
-        "ru": "Режим отображения громкости",
-        "pt": "Modo de exibição do volume",
-        "nl": "Weergavemodus volume",
-        "fr": "Mode d'affichage du volume",
-        "it": "Modalità di visualizzazione del volume",
-        "es": "Modo de visualización del volumen",
-        "pl": "Tryb wyświetlania głośności",
-        "uk": "Режим показу гучності",
-        "zh-cn": "音量显示方式"
-      },
-      "desc": {
-        "en": "Whether the receiver shows volume in decibels or as a plain number.",
-        "de": "Ob der Receiver die Lautstärke in Dezibel oder als schlichte Zahl anzeigt.",
-        "ru": "Показывает ли ресивер громкость в децибелах или простым числом.",
-        "pt": "Se o recetor mostra o volume em decibéis ou como número simples.",
-        "nl": "Of de receiver het volume in decibel of als getal toont.",
-        "fr": "Si l'ampli affiche le volume en décibels ou en nombre simple.",
-        "it": "Se il ricevitore mostra il volume in decibel o come numero.",
-        "es": "Si el receptor muestra el volumen en decibelios o como número.",
-        "pl": "Czy amplituner pokazuje głośność w decybelach, czy jako liczbę.",
-        "uk": "Чи показує ресивер гучність у децибелах, чи простим числом.",
-        "zh-cn": "功放以分贝还是普通数字显示音量。"
-      },
-      "states": {
-        "db": "db"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.10_10_0_11.multiroom.zone3.actualVolumeMode"
   },
   "yamaha.0.10_10_0_11.multiroom.zone3.advanced": {
     "type": "channel",
@@ -2773,30 +2482,6 @@
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_11.multiroom.zone3.input"
-  },
-  "yamaha.0.10_10_0_11.multiroom.zone3.inputText": {
-    "type": "state",
-    "common": {
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Input name (display)",
-        "de": "Eingangsname (Anzeige)",
-        "ru": "Название входа (на дисплее)",
-        "pt": "Nome da entrada (visor)",
-        "nl": "Ingangsnaam (display)",
-        "fr": "Nom de l'entrée (afficheur)",
-        "it": "Nome ingresso (display)",
-        "es": "Nombre de la entrada (pantalla)",
-        "pl": "Nazwa wejścia (wyświetlacz)",
-        "uk": "Назва входу (дисплей)",
-        "zh-cn": "输入名称（显示）"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.10_10_0_11.multiroom.zone3.inputText"
   },
   "yamaha.0.10_10_0_11.multiroom.zone3.mute": {
     "type": "state",
@@ -3786,21 +3471,22 @@
         "zh-cn": "音量"
       },
       "desc": {
-        "en": "How loud the zone plays: the two text protocols report decibels, MusicCast its own step count — the unit tells you which.",
-        "de": "Wie laut die Zone spielt: die beiden Text-Protokolle melden Dezibel, MusicCast seine eigene Schrittzahl — die Einheit sagt, welche.",
-        "ru": "Насколько громко играет зона: два текстовых протокола дают децибелы, MusicCast — свои шаги; единица измерения показывает, что именно.",
-        "pt": "Quão alto a zona toca: os dois protocolos de texto dão decibéis, o MusicCast os seus próprios passos — a unidade indica qual.",
-        "nl": "Hoe hard de zone speelt: de twee tekstprotocollen geven decibel, MusicCast zijn eigen stappen — de eenheid zegt welke.",
-        "fr": "Le niveau sonore de la zone : les deux protocoles texte donnent des décibels, MusicCast ses propres pas — l'unité indique lequel.",
-        "it": "Quanto forte suona la zona: i due protocolli testuali danno decibel, MusicCast i propri passi — l'unità dice quale.",
-        "es": "Lo alto que suena la zona: los dos protocolos de texto dan decibelios, MusicCast sus propios pasos — la unidad indica cuál.",
-        "pl": "Jak głośno gra strefa: dwa protokoły tekstowe podają decybele, MusicCast własne kroki — jednostka mówi, który z nich.",
-        "uk": "Наскільки гучно грає зона: два текстові протоколи дають децибели, MusicCast — власні кроки; одиниця показує, що саме.",
-        "zh-cn": "该区域的音量：两种文本协议给出分贝，MusicCast 给出自身的步进值，单位标明是哪一种。"
+        "en": "How loud the zone plays, in the decibel scale the receiver itself shows.",
+        "de": "Wie laut die Zone spielt, in der Dezibel-Skala, die der Receiver selbst anzeigt.",
+        "ru": "Насколько громко играет зона, в шкале децибел, которую показывает сам ресивер.",
+        "pt": "Quão alto a zona toca, na escala de decibéis que o próprio recetor mostra.",
+        "nl": "Hoe hard de zone speelt, in de decibelschaal die de receiver zelf toont.",
+        "fr": "Le niveau sonore de la zone, dans l'échelle en décibels affichée par l'ampli lui-même.",
+        "it": "Quanto forte suona la zona, nella scala in decibel che il ricevitore stesso mostra.",
+        "es": "Lo alto que suena la zona, en la escala de decibelios que muestra el propio receptor.",
+        "pl": "Jak głośno gra strefa, w skali decybelowej pokazywanej przez sam amplituner.",
+        "uk": "Наскільки гучно грає зона, у шкалі децибел, яку показує сам ресивер.",
+        "zh-cn": "该区域的音量，采用功放自身显示的分贝刻度。"
       },
-      "min": 0,
-      "max": 161,
-      "step": 1
+      "unit": "dB",
+      "min": -80.5,
+      "max": 0,
+      "step": 0.5
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_11.multiroom.zone3.volume"
@@ -3928,30 +3614,6 @@
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_11.multiroom.zone4.input"
-  },
-  "yamaha.0.10_10_0_11.multiroom.zone4.inputText": {
-    "type": "state",
-    "common": {
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Input name (display)",
-        "de": "Eingangsname (Anzeige)",
-        "ru": "Название входа (на дисплее)",
-        "pt": "Nome da entrada (visor)",
-        "nl": "Ingangsnaam (display)",
-        "fr": "Nom de l'entrée (afficheur)",
-        "it": "Nome ingresso (display)",
-        "es": "Nombre de la entrada (pantalla)",
-        "pl": "Nazwa wejścia (wyświetlacz)",
-        "uk": "Назва входу (дисплей)",
-        "zh-cn": "输入名称（显示）"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.10_10_0_11.multiroom.zone4.inputText"
   },
   "yamaha.0.10_10_0_11.multiroom.zone4.player": {
     "type": "channel",
@@ -9215,6 +8877,10 @@
   "yamaha.0.10_10_0_11.volume": {
     "type": "state",
     "common": {
+      "type": "number",
+      "role": "level.volume",
+      "read": true,
+      "write": true,
       "name": {
         "en": "Volume",
         "de": "Lautstärke",
@@ -9229,25 +8895,21 @@
         "zh-cn": "音量"
       },
       "desc": {
-        "en": "How loud the zone plays: the two text protocols report decibels, MusicCast its own step count — the unit tells you which.",
-        "de": "Wie laut die Zone spielt: die beiden Text-Protokolle melden Dezibel, MusicCast seine eigene Schrittzahl — die Einheit sagt, welche.",
-        "ru": "Насколько громко играет зона: два текстовых протокола дают децибелы, MusicCast — свои шаги; единица измерения показывает, что именно.",
-        "pt": "Quão alto a zona toca: os dois protocolos de texto dão decibéis, o MusicCast os seus próprios passos — a unidade indica qual.",
-        "nl": "Hoe hard de zone speelt: de twee tekstprotocollen geven decibel, MusicCast zijn eigen stappen — de eenheid zegt welke.",
-        "fr": "Le niveau sonore de la zone : les deux protocoles texte donnent des décibels, MusicCast ses propres pas — l'unité indique lequel.",
-        "it": "Quanto forte suona la zona: i due protocolli testuali danno decibel, MusicCast i propri passi — l'unità dice quale.",
-        "es": "Lo alto que suena la zona: los dos protocolos de texto dan decibelios, MusicCast sus propios pasos — la unidad indica cuál.",
-        "pl": "Jak głośno gra strefa: dwa protokoły tekstowe podają decybele, MusicCast własne kroki — jednostka mówi, który z nich.",
-        "uk": "Наскільки гучно грає зона: два текстові протоколи дають децибели, MusicCast — власні кроки; одиниця показує, що саме.",
-        "zh-cn": "该区域的音量：两种文本协议给出分贝，MusicCast 给出自身的步进值，单位标明是哪一种。"
+        "en": "How loud the zone plays, in the decibel scale the receiver itself shows.",
+        "de": "Wie laut die Zone spielt, in der Dezibel-Skala, die der Receiver selbst anzeigt.",
+        "ru": "Насколько громко играет зона, в шкале децибел, которую показывает сам ресивер.",
+        "pt": "Quão alto a zona toca, na escala de decibéis que o próprio recetor mostra.",
+        "nl": "Hoe hard de zone speelt, in de decibelschaal die de receiver zelf toont.",
+        "fr": "Le niveau sonore de la zone, dans l'échelle en décibels affichée par l'ampli lui-même.",
+        "it": "Quanto forte suona la zona, nella scala in decibel che il ricevitore stesso mostra.",
+        "es": "Lo alto que suena la zona, en la escala de decibelios que muestra el propio receptor.",
+        "pl": "Jak głośno gra strefa, w skali decybelowej pokazywanej przez sam amplituner.",
+        "uk": "Наскільки гучно грає зона, у шкалі децибел, яку показує сам ресивер.",
+        "zh-cn": "该区域的音量，采用功放自身显示的分贝刻度。"
       },
-      "type": "number",
-      "role": "level.volume",
-      "read": true,
-      "write": true,
       "unit": "dB",
       "min": -80.5,
-      "max": 16.5,
+      "max": 0,
       "step": 0.5
     },
     "native": {},
@@ -12791,88 +12453,6 @@
     "native": {},
     "_id": "yamaha.0.10_10_0_13"
   },
-  "yamaha.0.10_10_0_13.actualVolume": {
-    "type": "state",
-    "common": {
-      "type": "number",
-      "unit": "",
-      "role": "value",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Volume (display)",
-        "de": "Lautstärke (Anzeige)",
-        "ru": "Громкость (дисплей)",
-        "pt": "Volume (visor)",
-        "nl": "Volume (display)",
-        "fr": "Volume (afficheur)",
-        "it": "Volume (display)",
-        "es": "Volumen (pantalla)",
-        "pl": "Głośność (wyświetlacz)",
-        "uk": "Гучність (дисплей)",
-        "zh-cn": "音量（显示）"
-      },
-      "desc": {
-        "en": "The same volume the receiver's display shows, in whichever scale it is set to.",
-        "de": "Dieselbe Lautstärke, wie sie das Display des Receivers zeigt, in der gerade eingestellten Skala.",
-        "ru": "Та же громкость, что показывает дисплей ресивера, в текущей выбранной шкале.",
-        "pt": "O mesmo volume que o visor do recetor mostra, na escala atualmente selecionada.",
-        "nl": "Hetzelfde volume als op het display van de receiver, in de nu ingestelde schaal.",
-        "fr": "Le même volume que l'afficheur de l'ampli, dans l'échelle actuellement réglée.",
-        "it": "Lo stesso volume mostrato dal display del ricevitore, nella scala attualmente impostata.",
-        "es": "El mismo volumen que muestra la pantalla del receptor, en la escala seleccionada actualmente.",
-        "pl": "Ta sama głośność co na wyświetlaczu amplitunera, w aktualnie ustawionej skali.",
-        "uk": "Та сама гучність, що на дисплеї ресивера, у поточно вибраній шкалі.",
-        "zh-cn": "与功放显示屏一致的音量，采用当前设置的刻度。"
-      },
-      "min": 0,
-      "max": 97,
-      "step": 0.5
-    },
-    "native": {},
-    "_id": "yamaha.0.10_10_0_13.actualVolume"
-  },
-  "yamaha.0.10_10_0_13.actualVolumeMode": {
-    "type": "state",
-    "common": {
-      "type": "string",
-      "role": "state",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Volume display mode",
-        "de": "Lautstärke-Anzeigeart",
-        "ru": "Режим отображения громкости",
-        "pt": "Modo de exibição do volume",
-        "nl": "Weergavemodus volume",
-        "fr": "Mode d'affichage du volume",
-        "it": "Modalità di visualizzazione del volume",
-        "es": "Modo de visualización del volumen",
-        "pl": "Tryb wyświetlania głośności",
-        "uk": "Режим показу гучності",
-        "zh-cn": "音量显示方式"
-      },
-      "desc": {
-        "en": "Whether the receiver shows volume in decibels or as a plain number.",
-        "de": "Ob der Receiver die Lautstärke in Dezibel oder als schlichte Zahl anzeigt.",
-        "ru": "Показывает ли ресивер громкость в децибелах или простым числом.",
-        "pt": "Se o recetor mostra o volume em decibéis ou como número simples.",
-        "nl": "Of de receiver het volume in decibel of als getal toont.",
-        "fr": "Si l'ampli affiche le volume en décibels ou en nombre simple.",
-        "it": "Se il ricevitore mostra il volume in decibel o come numero.",
-        "es": "Si el receptor muestra el volumen en decibelios o como número.",
-        "pl": "Czy amplituner pokazuje głośność w decybelach, czy jako liczbę.",
-        "uk": "Чи показує ресивер гучність у децибелах, чи простим числом.",
-        "zh-cn": "功放以分贝还是普通数字显示音量。"
-      },
-      "states": {
-        "db": "db",
-        "numeric": "numeric"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.10_10_0_13.actualVolumeMode"
-  },
   "yamaha.0.10_10_0_13.advanced": {
     "type": "channel",
     "common": {
@@ -13536,30 +13116,6 @@
     "native": {},
     "_id": "yamaha.0.10_10_0_13.input"
   },
-  "yamaha.0.10_10_0_13.inputText": {
-    "type": "state",
-    "common": {
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Input name (display)",
-        "de": "Eingangsname (Anzeige)",
-        "ru": "Название входа (на дисплее)",
-        "pt": "Nome da entrada (visor)",
-        "nl": "Ingangsnaam (display)",
-        "fr": "Nom de l'entrée (afficheur)",
-        "it": "Nome ingresso (display)",
-        "es": "Nombre de la entrada (pantalla)",
-        "pl": "Nazwa wejścia (wyświetlacz)",
-        "uk": "Назва входу (дисплей)",
-        "zh-cn": "输入名称（显示）"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.10_10_0_13.inputText"
-  },
   "yamaha.0.10_10_0_13.multiroom": {
     "type": "channel",
     "common": {
@@ -14064,88 +13620,6 @@
     "native": {},
     "_id": "yamaha.0.10_10_0_13.multiroom.zone2"
   },
-  "yamaha.0.10_10_0_13.multiroom.zone2.actualVolume": {
-    "type": "state",
-    "common": {
-      "type": "number",
-      "unit": "",
-      "role": "value",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Volume (display)",
-        "de": "Lautstärke (Anzeige)",
-        "ru": "Громкость (дисплей)",
-        "pt": "Volume (visor)",
-        "nl": "Volume (display)",
-        "fr": "Volume (afficheur)",
-        "it": "Volume (display)",
-        "es": "Volumen (pantalla)",
-        "pl": "Głośność (wyświetlacz)",
-        "uk": "Гучність (дисплей)",
-        "zh-cn": "音量（显示）"
-      },
-      "desc": {
-        "en": "The same volume the receiver's display shows, in whichever scale it is set to.",
-        "de": "Dieselbe Lautstärke, wie sie das Display des Receivers zeigt, in der gerade eingestellten Skala.",
-        "ru": "Та же громкость, что показывает дисплей ресивера, в текущей выбранной шкале.",
-        "pt": "O mesmo volume que o visor do recetor mostra, na escala atualmente selecionada.",
-        "nl": "Hetzelfde volume als op het display van de receiver, in de nu ingestelde schaal.",
-        "fr": "Le même volume que l'afficheur de l'ampli, dans l'échelle actuellement réglée.",
-        "it": "Lo stesso volume mostrato dal display del ricevitore, nella scala attualmente impostata.",
-        "es": "El mismo volumen que muestra la pantalla del receptor, en la escala seleccionada actualmente.",
-        "pl": "Ta sama głośność co na wyświetlaczu amplitunera, w aktualnie ustawionej skali.",
-        "uk": "Та сама гучність, що на дисплеї ресивера, у поточно вибраній шкалі.",
-        "zh-cn": "与功放显示屏一致的音量，采用当前设置的刻度。"
-      },
-      "min": 0,
-      "max": 90.5,
-      "step": 0.5
-    },
-    "native": {},
-    "_id": "yamaha.0.10_10_0_13.multiroom.zone2.actualVolume"
-  },
-  "yamaha.0.10_10_0_13.multiroom.zone2.actualVolumeMode": {
-    "type": "state",
-    "common": {
-      "type": "string",
-      "role": "state",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Volume display mode",
-        "de": "Lautstärke-Anzeigeart",
-        "ru": "Режим отображения громкости",
-        "pt": "Modo de exibição do volume",
-        "nl": "Weergavemodus volume",
-        "fr": "Mode d'affichage du volume",
-        "it": "Modalità di visualizzazione del volume",
-        "es": "Modo de visualización del volumen",
-        "pl": "Tryb wyświetlania głośności",
-        "uk": "Режим показу гучності",
-        "zh-cn": "音量显示方式"
-      },
-      "desc": {
-        "en": "Whether the receiver shows volume in decibels or as a plain number.",
-        "de": "Ob der Receiver die Lautstärke in Dezibel oder als schlichte Zahl anzeigt.",
-        "ru": "Показывает ли ресивер громкость в децибелах или простым числом.",
-        "pt": "Se o recetor mostra o volume em decibéis ou como número simples.",
-        "nl": "Of de receiver het volume in decibel of als getal toont.",
-        "fr": "Si l'ampli affiche le volume en décibels ou en nombre simple.",
-        "it": "Se il ricevitore mostra il volume in decibel o come numero.",
-        "es": "Si el receptor muestra el volumen en decibelios o como número.",
-        "pl": "Czy amplituner pokazuje głośność w decybelach, czy jako liczbę.",
-        "uk": "Чи показує ресивер гучність у децибелах, чи простим числом.",
-        "zh-cn": "功放以分贝还是普通数字显示音量。"
-      },
-      "states": {
-        "db": "db",
-        "numeric": "numeric"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.10_10_0_13.multiroom.zone2.actualVolumeMode"
-  },
   "yamaha.0.10_10_0_13.multiroom.zone2.advanced": {
     "type": "channel",
     "common": {
@@ -14261,30 +13735,6 @@
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_13.multiroom.zone2.input"
-  },
-  "yamaha.0.10_10_0_13.multiroom.zone2.inputText": {
-    "type": "state",
-    "common": {
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Input name (display)",
-        "de": "Eingangsname (Anzeige)",
-        "ru": "Название входа (на дисплее)",
-        "pt": "Nome da entrada (visor)",
-        "nl": "Ingangsnaam (display)",
-        "fr": "Nom de l'entrée (afficheur)",
-        "it": "Nome ingresso (display)",
-        "es": "Nombre de la entrada (pantalla)",
-        "pl": "Nazwa wejścia (wyświetlacz)",
-        "uk": "Назва входу (дисплей)",
-        "zh-cn": "输入名称（显示）"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.10_10_0_13.multiroom.zone2.inputText"
   },
   "yamaha.0.10_10_0_13.multiroom.zone2.mute": {
     "type": "state",
@@ -15491,6 +14941,10 @@
   "yamaha.0.10_10_0_13.multiroom.zone2.volume": {
     "type": "state",
     "common": {
+      "type": "number",
+      "role": "level.volume",
+      "read": true,
+      "write": true,
       "name": {
         "en": "Volume",
         "de": "Lautstärke",
@@ -15505,25 +14959,21 @@
         "zh-cn": "音量"
       },
       "desc": {
-        "en": "How loud the zone plays: the two text protocols report decibels, MusicCast its own step count — the unit tells you which.",
-        "de": "Wie laut die Zone spielt: die beiden Text-Protokolle melden Dezibel, MusicCast seine eigene Schrittzahl — die Einheit sagt, welche.",
-        "ru": "Насколько громко играет зона: два текстовых протокола дают децибелы, MusicCast — свои шаги; единица измерения показывает, что именно.",
-        "pt": "Quão alto a zona toca: os dois protocolos de texto dão decibéis, o MusicCast os seus próprios passos — a unidade indica qual.",
-        "nl": "Hoe hard de zone speelt: de twee tekstprotocollen geven decibel, MusicCast zijn eigen stappen — de eenheid zegt welke.",
-        "fr": "Le niveau sonore de la zone : les deux protocoles texte donnent des décibels, MusicCast ses propres pas — l'unité indique lequel.",
-        "it": "Quanto forte suona la zona: i due protocolli testuali danno decibel, MusicCast i propri passi — l'unità dice quale.",
-        "es": "Lo alto que suena la zona: los dos protocolos de texto dan decibelios, MusicCast sus propios pasos — la unidad indica cuál.",
-        "pl": "Jak głośno gra strefa: dwa protokoły tekstowe podają decybele, MusicCast własne kroki — jednostka mówi, który z nich.",
-        "uk": "Наскільки гучно грає зона: два текстові протоколи дають децибели, MusicCast — власні кроки; одиниця показує, що саме.",
-        "zh-cn": "该区域的音量：两种文本协议给出分贝，MusicCast 给出自身的步进值，单位标明是哪一种。"
+        "en": "How loud the zone plays, in the plain number scale the receiver itself shows.",
+        "de": "Wie laut die Zone spielt, in der Zahlen-Skala, die der Receiver selbst anzeigt.",
+        "ru": "Насколько громко играет зона, в числовой шкале, которую показывает сам ресивер.",
+        "pt": "Quão alto a zona toca, na escala numérica que o próprio recetor mostra.",
+        "nl": "Hoe hard de zone speelt, in de getalschaal die de receiver zelf toont.",
+        "fr": "Le niveau sonore de la zone, dans l'échelle numérique affichée par l'ampli lui-même.",
+        "it": "Quanto forte suona la zona, nella scala numerica che il ricevitore stesso mostra.",
+        "es": "Lo alto que suena la zona, en la escala numérica que muestra el propio receptor.",
+        "pl": "Jak głośno gra strefa, w skali liczbowej pokazywanej przez sam amplituner.",
+        "uk": "Наскільки гучно грає зона, у числовій шкалі, яку показує сам ресивер.",
+        "zh-cn": "该区域的音量，采用功放自身显示的数字刻度。"
       },
-      "type": "number",
-      "role": "level.volume",
-      "read": true,
-      "write": true,
-      "unit": "dB",
-      "min": -80.5,
-      "max": 16.5,
+      "unit": "",
+      "min": 0,
+      "max": 80.5,
       "step": 0.5
     },
     "native": {},
@@ -20515,6 +19965,10 @@
   "yamaha.0.10_10_0_13.volume": {
     "type": "state",
     "common": {
+      "type": "number",
+      "role": "level.volume",
+      "read": true,
+      "write": true,
       "name": {
         "en": "Volume",
         "de": "Lautstärke",
@@ -20529,25 +19983,21 @@
         "zh-cn": "音量"
       },
       "desc": {
-        "en": "How loud the zone plays: the two text protocols report decibels, MusicCast its own step count — the unit tells you which.",
-        "de": "Wie laut die Zone spielt: die beiden Text-Protokolle melden Dezibel, MusicCast seine eigene Schrittzahl — die Einheit sagt, welche.",
-        "ru": "Насколько громко играет зона: два текстовых протокола дают децибелы, MusicCast — свои шаги; единица измерения показывает, что именно.",
-        "pt": "Quão alto a zona toca: os dois protocolos de texto dão decibéis, o MusicCast os seus próprios passos — a unidade indica qual.",
-        "nl": "Hoe hard de zone speelt: de twee tekstprotocollen geven decibel, MusicCast zijn eigen stappen — de eenheid zegt welke.",
-        "fr": "Le niveau sonore de la zone : les deux protocoles texte donnent des décibels, MusicCast ses propres pas — l'unité indique lequel.",
-        "it": "Quanto forte suona la zona: i due protocolli testuali danno decibel, MusicCast i propri passi — l'unità dice quale.",
-        "es": "Lo alto que suena la zona: los dos protocolos de texto dan decibelios, MusicCast sus propios pasos — la unidad indica cuál.",
-        "pl": "Jak głośno gra strefa: dwa protokoły tekstowe podają decybele, MusicCast własne kroki — jednostka mówi, który z nich.",
-        "uk": "Наскільки гучно грає зона: два текстові протоколи дають децибели, MusicCast — власні кроки; одиниця показує, що саме.",
-        "zh-cn": "该区域的音量：两种文本协议给出分贝，MusicCast 给出自身的步进值，单位标明是哪一种。"
+        "en": "How loud the zone plays, in the plain number scale the receiver itself shows.",
+        "de": "Wie laut die Zone spielt, in der Zahlen-Skala, die der Receiver selbst anzeigt.",
+        "ru": "Насколько громко играет зона, в числовой шкале, которую показывает сам ресивер.",
+        "pt": "Quão alto a zona toca, na escala numérica que o próprio recetor mostra.",
+        "nl": "Hoe hard de zone speelt, in de getalschaal die de receiver zelf toont.",
+        "fr": "Le niveau sonore de la zone, dans l'échelle numérique affichée par l'ampli lui-même.",
+        "it": "Quanto forte suona la zona, nella scala numerica che il ricevitore stesso mostra.",
+        "es": "Lo alto que suena la zona, en la escala numérica que muestra el propio receptor.",
+        "pl": "Jak głośno gra strefa, w skali liczbowej pokazywanej przez sam amplituner.",
+        "uk": "Наскільки гучно грає зона, у числовій шкалі, яку показує сам ресивер.",
+        "zh-cn": "该区域的音量，采用功放自身显示的数字刻度。"
       },
-      "type": "number",
-      "role": "level.volume",
-      "read": true,
-      "write": true,
-      "unit": "dB",
-      "min": -80.5,
-      "max": 16.5,
+      "unit": "",
+      "min": 0,
+      "max": 80.5,
       "step": 0.5
     },
     "native": {},
@@ -23791,30 +23241,6 @@
     "native": {},
     "_id": "yamaha.0.10_10_0_15.input"
   },
-  "yamaha.0.10_10_0_15.inputText": {
-    "type": "state",
-    "common": {
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Input name (display)",
-        "de": "Eingangsname (Anzeige)",
-        "ru": "Название входа (на дисплее)",
-        "pt": "Nome da entrada (visor)",
-        "nl": "Ingangsnaam (display)",
-        "fr": "Nom de l'entrée (afficheur)",
-        "it": "Nome ingresso (display)",
-        "es": "Nombre de la entrada (pantalla)",
-        "pl": "Nazwa wejścia (wyświetlacz)",
-        "uk": "Назва входу (дисплей)",
-        "zh-cn": "输入名称（显示）"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.10_10_0_15.inputText"
-  },
   "yamaha.0.10_10_0_15.multiroom": {
     "type": "channel",
     "common": {
@@ -26730,30 +26156,6 @@
     "native": {},
     "_id": "yamaha.0.10_10_0_16.input"
   },
-  "yamaha.0.10_10_0_16.inputText": {
-    "type": "state",
-    "common": {
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Input name (display)",
-        "de": "Eingangsname (Anzeige)",
-        "ru": "Название входа (на дисплее)",
-        "pt": "Nome da entrada (visor)",
-        "nl": "Ingangsnaam (display)",
-        "fr": "Nom de l'entrée (afficheur)",
-        "it": "Nome ingresso (display)",
-        "es": "Nombre de la entrada (pantalla)",
-        "pl": "Nazwa wejścia (wyświetlacz)",
-        "uk": "Назва входу (дисплей)",
-        "zh-cn": "输入名称（显示）"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.10_10_0_16.inputText"
-  },
   "yamaha.0.10_10_0_16.multiroom": {
     "type": "channel",
     "common": {
@@ -29606,30 +29008,6 @@
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_17.input"
-  },
-  "yamaha.0.10_10_0_17.inputText": {
-    "type": "state",
-    "common": {
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Input name (display)",
-        "de": "Eingangsname (Anzeige)",
-        "ru": "Название входа (на дисплее)",
-        "pt": "Nome da entrada (visor)",
-        "nl": "Ingangsnaam (display)",
-        "fr": "Nom de l'entrée (afficheur)",
-        "it": "Nome ingresso (display)",
-        "es": "Nombre de la entrada (pantalla)",
-        "pl": "Nazwa wejścia (wyświetlacz)",
-        "uk": "Назва входу (дисплей)",
-        "zh-cn": "输入名称（显示）"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.10_10_0_17.inputText"
   },
   "yamaha.0.10_10_0_17.multiroom": {
     "type": "channel",
