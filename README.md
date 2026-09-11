@@ -111,11 +111,11 @@ On the very first contact the adapter asks the receiver which functions it suppo
 
 ### **WORK IN PROGRESS**
 
-- (krobipd) Fixed: A volume written to a MusicCast receiver now reaches it exactly — the adapter reads the receiver's own step declaration instead of a ratio, which was up to 12.5 dB off away from the value it was learnt at (#623)
+- (krobipd) Fixed: A volume written to a MusicCast receiver now arrives exactly — the adapter reads the receiver's own step declaration instead of guessing a ratio (#623)
 - (krobipd) Fixed: Every zone of a receiver now carries the same volume scale — a third zone used to show a raw 0…161 count next to decibels in the other two
-- (krobipd) Changed: The volume datapoint's range is now what the receiver accepts, so a value you can enter is a value it takes
+- (krobipd) Changed: The volume datapoint now carries the minimum, maximum and step the receiver reports for that zone — a receiver whose zones differ gets a different range per zone
 - (krobipd) New: Setting "Volume as 0–100 %" turns every volume datapoint, in every zone, into a percentage — what most VIS widgets expect. Off by default; the receiver's own scale stays the truth
-- (krobipd) Removed: actualVolume, actualVolumeMode and inputText — volume and input carry the same information
+- (krobipd) Changed: The datapoints actualVolume, actualVolumeMode and inputText are gone — volume and input carry the same information
 - (krobipd) Changed: After this update every receiver is asked about its abilities once more, so the first start takes a little longer than usual
 
 ### 2.7.2 (2026-09-09)

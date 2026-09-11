@@ -338,21 +338,19 @@ describe("YxcDeviceController", () => {
   // the datapoint at once — the MusicCast controller builds its objects only at connect, so the
   // bounds would otherwise stay on whichever scale was active while connecting.
   //
-  // The bounds are what the device ACCEPTS on the active scale: raw 0…161 in steps of 1 reads as
-  // -80.5…0.0 dB, or 0…80.5 on the numeric scale. Not the declared scale SPAN (…16.5 / …97),
-  // whose top sits at raw 194 — past the 161 the zone declares and its status reports.
+  // The bounds are the zone's own declared min and max for the active scale.
   test("a change of display scale reshapes volume without a reconnect", async () => {
     const s = setup(rxV481, { power: "on", actual_volume: { mode: "db", value: -47.5 } });
     expect(await s.controller.start()).toBe(true);
     expect(s.defs.get("living.volume")?.common.min).toBe(-80.5);
-    expect(s.defs.get("living.volume")?.common.max).toBe(0);
+    expect(s.defs.get("living.volume")?.common.max).toBe(16.5);
     expect(s.defs.get("living.volume")?.common.unit).toBe("dB");
 
     s.client.status = { power: "on", actual_volume: { mode: "numeric", value: 36 } };
     s.fire.push?.({ main: { volume: 36 } });
     await flush();
 
-    expect(s.defs.get("living.volume")?.common.max).toBe(80.5);
+    expect(s.defs.get("living.volume")?.common.max).toBe(97);
     expect(s.defs.get("living.volume")?.common.min).toBe(0);
     expect(s.defs.get("living.volume")?.common.unit).toBe("");
   });
@@ -459,18 +457,18 @@ describe("YxcDeviceController", () => {
     expect(s.client.calls).toContainEqual({ method: "setVolumeTo", args: [81, "main"] });
   });
 
-  // What the device accepts is the raw range it declares. Writing past it would be a value the
-  // receiver never offered, so the ends hold instead of travelling to the device unchecked.
-  test("a volume write beyond the declared raw range is held at the end the device declares", async () => {
+  // The top of the declared scale is sent as the scale says, even though the separately declared
+  // raw range stops earlier — the two declarations disagree and no capture settles which is real,
+  // so the value the datapoint allows travels to the device and the device answers for itself.
+  test("the top of the declared scale is sent as that scale says", async () => {
     const s = setup(rxA2070, { power: "on", volume: 66, actual_volume: { mode: "db", value: -47.5 } });
     await s.controller.start();
     s.client.calls.length = 0;
 
-    // +16.5 dB is DECLARED as the top of the scale but sits at raw 194, past the declared 161.
     s.controller.handleStateChange("living.volume", false, 16.5);
     await flush();
 
-    expect(s.client.calls).toContainEqual({ method: "setVolumeTo", args: [161, "main"] });
+    expect(s.client.calls).toContainEqual({ method: "setVolumeTo", args: [194, "main"] });
   });
 
   // The scale is exact, so a computed value normally EQUALS the reported one — which is why this
@@ -487,8 +485,8 @@ describe("YxcDeviceController", () => {
   });
 
   // The RX-A2070 declares `actual_volume_db` for EVERY zone but answers a status carrying
-  // `actual_volume` for main only. The zone datapoint is therefore bounded -80.5…0.0 dB while the
-  // raw step count is all that arrives — 66 against a maximum of 0.0 is exactly the js-controller
+  // `actual_volume` for main only. The zone datapoint is therefore bounded -80.5…16.5 dB while the
+  // raw step count is all that arrives — 66 against a maximum of 16.5 is exactly the js-controller
   // warning on every poll that this rebuild set out to end. The zone's own declared step says what
   // 66 means on the scale it declares, so the datapoint carries that.
   test("a zone that declares a scale but reports no actual_volume still carries that scale", async () => {
@@ -496,7 +494,7 @@ describe("YxcDeviceController", () => {
     s.client.statusByZone = { zone2: { power: "on", volume: 66 } };
     expect(await s.controller.start()).toBe(true);
 
-    expect(s.defs.get("living.multiroom.zone2.volume")?.common.max).toBe(0);
+    expect(s.defs.get("living.multiroom.zone2.volume")?.common.max).toBe(16.5);
     expect(s.acks).toContainEqual({ id: "living.multiroom.zone2.volume", value: -47.5 });
   });
 

@@ -421,14 +421,18 @@ entscheidet etwas ([[feedback_user_hardware_ist_sample]]). Alle Funde sind umges
   Schritt-Modell stimmt auf allen zehn verschiedenen Paaren der gebündelten Mitschnitte exakt
   (sieben Modelle, raw 1…121). Auf der numerischen Skala ist der Boden 0 — nur deshalb sah ein
   Faktor dort je richtig aus.
-- **Die Grenzen sind, was das Gerät ANNIMMT, ausgedrückt auf der Anzeigeskala.** `min`/`max` an einem
-  SCHREIBBAREN Datenpunkt ist eine Zusage über Schreibvorgänge, also gilt der raw-Bereich: `0…161`
-  auf jedem AVR, `0…60` auf den Lautsprechern, `0…100` auf den Soundbars, `0…63` am CD-Receiver — und
-  das Status-Feld `max_volume` wiederholt dieselbe Zahl in allen 40 Mitschnitten. 161 Schritte à
-  0,5 dB über dem Boden sind **0,0 dB**, nicht die 16,5, die die Spanne der dB-Skala nennt: die lägen
-  bei raw 194, jenseits des Deklarierten. Deklariert eine Zone eine Anzeigeskala und liefert im
-  Status kein `actual_volume`, wird der raw-Wert mit demselben Schritt umgerechnet — sonst stünde 66
-  in einem Datenpunkt mit Obergrenze 0,0 (dieselbe js-controller-Warnung, eine Zone weiter).
+- **Die Grenzen sind, was die ZONE deklariert — genommen, nicht gerechnet.** `min`/`max`/`step` des
+  Datenpunkts sind die des `range_step`-Eintrags der aktiven Anzeigeskala, je Zone: ein RX-V685
+  meldet für main 16,5 dB und für zone2 10,0 dB, ein RX-V6A numerisch 0…97 für main und 0…90,5 für
+  zone2. Die Obergrenze aus dem raw-Bereich abzuleiten (161 Schritte à 0,5 dB über dem Boden = 0,0 dB)
+  wäre eine dritte Zahl, die kein Gerät je genannt hat, und verengte den Datenpunkt unter das
+  Gemeldete — 2.8.0 hatte das kurz so und es ist zurückgenommen. Aus demselben Grund kappt der
+  Schreibweg NICHT am raw-Bereich: die beiden Deklarationen widersprechen sich am oberen Ende
+  (161 → 0,0 dB gegen deklarierte 16,5 = raw 194), kein Mitschnitt kommt einem Ende nahe (lautester
+  Wert raw 121), also entscheidet das Gerät selbst — seine Ablehnung steht ohnehin im Log
+  (`assertOk`). Deklariert eine Zone eine Anzeigeskala und liefert im Status kein `actual_volume`,
+  wird der raw-Wert mit demselben Schritt umgerechnet — sonst stünde 66 in einem dB-Datenpunkt
+  (dieselbe js-controller-Warnung, eine Zone weiter).
 - **Ein Schalter macht aus JEDER Lautstärke Prozent** (`volumeAsPercent`, Instanz-Einstellung, Vorgabe AUS,
   seit 2.8.0 — krobi: „ein schalter für ALLE. ich will das nicht komplizierter machen als es sein muss"):
   Grund ist #623 und das menschliche Maß — ein fertiges VIS-Widget an `volume` trifft sonst eine Zahl, die

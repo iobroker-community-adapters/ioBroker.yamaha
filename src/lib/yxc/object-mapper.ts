@@ -277,39 +277,23 @@ export function shownVolumeFor(scale: VolumeScale, raw: number): number {
 /**
  * The raw step count a displayed value has to be sent as.
  *
- * Held inside the range the device declares: writing past it would be a step count the receiver
- * never offered. The datapoint's own bounds are that same range (see {@link volumeBounds}), so
- * this only catches a write that ignored them.
+ * NOT held inside the declared raw range. The zone declares two things that disagree about the
+ * top — raw `0…161` in steps of 1 reaches 0.0 dB, while the decibel scale declares `…16.5`, which
+ * would sit at raw 194 — and no capture in the bundle comes near either end (the loudest is raw
+ * 121), so which is the real ceiling is not something the adapter knows. The datapoint's bounds
+ * are the scale's own declared min and max; a value inside them is sent as asked, and if the
+ * receiver will not take it, its refusal is already logged (`assertOk`).
  *
  * @param scale the zone's scale
  * @param shown the value as the datapoint carries it
  * @returns the raw step count to send
  */
 export function rawVolumeFor(scale: VolumeScale, shown: number): number {
-  const steps = Math.round((shown - scale.displayMin) / scale.displayPerRawStep);
-  const raw = scale.rawMin + steps * scale.rawStep;
-  return Math.min(scale.rawMax, Math.max(scale.rawMin, raw));
-}
-
-/**
- * The bounds of a volume scale: what the device ACCEPTS, expressed on its display scale.
- *
- * `min`/`max` on a writable datapoint is a promise about writes, so the range is the raw one the
- * device declares — twice, in `range_step` and in the live `max_volume` status field, agreeing on
- * every one of the 40 captures (161 on each AVR, 100 on each soundbar, 60 on each speaker). The
- * declared `actual_volume_db` span (−80.5…16.5) describes the SCALE, not what `setVolume` takes:
- * its floor matches the raw floor exactly, its ceiling sits at raw 194, past the declared 161.
- * Taking the scale's ceiling would leave a datapoint whose top third no write can reach.
- *
- * @param scale the zone's scale
- * @returns the bounds to declare on the datapoint
- */
-export function volumeBounds(scale: VolumeScale): DeclaredRange {
-  return {
-    min: shownVolumeFor(scale, scale.rawMin),
-    max: shownVolumeFor(scale, scale.rawMax),
-    step: scale.displayStep,
-  };
+  // `displayPerRawStep` is per raw UNIT, so the division already yields raw units — snapping them
+  // onto the declared grid is a rounding, not a second multiplication. Multiplying by `rawStep`
+  // here counted it twice and was invisible on every captured device, all of which count in ones.
+  const units = (shown - scale.displayMin) / scale.displayPerRawStep;
+  return scale.rawMin + Math.round(units / scale.rawStep) * scale.rawStep;
 }
 
 /**
@@ -364,22 +348,20 @@ export function volumePresentation(
     return undefined;
   }
   const settled = declaredDisplayRange(zone, mode);
-  const scale = volumeScaleOf(zone, mode);
   if (settled) {
-    // Without a declared raw range there is nothing to reconcile the scale against, so its own
-    // declared span stands. Every captured device declares both, but a partial `range_step` must
-    // not cost the datapoint its bounds: `extendObject` merges, and bounds the new picture drops
-    // survive in an existing installation for ever.
-    const bounds = scale ? volumeBounds(scale) : settled.range;
+    // The zone's OWN declared min, max and step, as it sent them — per zone, because zones differ
+    // (an RX-V685 declares 16.5 dB for main and 10.0 for zone 2). Deriving the top from the
+    // declared RAW range instead would narrow the datapoint below what the device says its scale
+    // reaches, on evidence that does not exist. See {@link rawVolumeFor} for the send path.
     return settled.kind === "db"
-      ? { unit: "dB", descKey: "descVolumeDb", range: bounds }
-      : { unit: "", descKey: "descVolumeNumeric", range: bounds };
+      ? { unit: "dB", descKey: "descVolumeDb", range: settled.range }
+      : { unit: "", descKey: "descVolumeNumeric", range: settled.range };
   }
   // Both scales declared and none reported: the envelope of the two. Every value the device can
   // send lies inside it, and — unlike leaving the bounds out — it REPLACES what an existing
   // installation stored, because `extendObject` merges and a field the new picture drops survives.
-  const dbBounds = boundsForScale(zone, "db") ?? db;
-  const numericBounds = boundsForScale(zone, "numeric") ?? numeric;
+  const dbBounds = db;
+  const numericBounds = numeric;
   return {
     unit: "",
     descKey: "descVolumeNumeric",
@@ -392,18 +374,6 @@ export function volumePresentation(
           }
         : undefined,
   };
-}
-
-/**
- * The bounds one of a zone's declared scales would carry.
- *
- * @param zone the zone whose declared ranges are read
- * @param mode the scale to measure
- * @returns the bounds, or undefined while the zone does not declare that scale
- */
-function boundsForScale(zone: YxcZone, mode: "db" | "numeric"): DeclaredRange | undefined {
-  const scale = volumeScaleOf(zone, mode);
-  return scale ? volumeBounds(scale) : undefined;
 }
 
 /**

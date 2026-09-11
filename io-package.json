@@ -4,6 +4,19 @@
     "version": "2.7.2",
     "nogit": true,
     "news": {
+      "NEXT": {
+        "en": "Volume now carries the scale the receiver itself shows, and its range is what the receiver accepts. A new setting shows every zone's volume as 0-100 % instead. Three datapoints are gone.",
+        "de": "Die Lautstärke trägt jetzt die Skala, die der Receiver selbst anzeigt, und ihr Bereich ist das, was er annimmt. Eine neue Einstellung zeigt jede Zone als 0-100 %. Drei Datenpunkte fallen weg.",
+        "ru": "Громкость теперь использует шкалу, которую показывает сам ресивер, а её диапазон — то, что он принимает. Новая настройка показывает каждую зону как 0-100 %. Три датапоинта удалены.",
+        "pt": "O volume usa agora a escala que o próprio receptor mostra, e o seu intervalo é o que ele aceita. Uma nova definição mostra cada zona como 0-100 %. Três pontos de dados foram removidos.",
+        "nl": "Het volume gebruikt nu de schaal die de receiver zelf toont, en het bereik is wat hij accepteert. Een nieuwe instelling toont elke zone als 0-100 %. Drie datapunten vervallen.",
+        "fr": "Le volume utilise désormais l'échelle que l'ampli affiche lui-même, et sa plage est ce qu'il accepte. Un nouveau réglage affiche chaque zone en 0-100 %. Trois points de données disparaissent.",
+        "it": "Il volume usa ora la scala che il ricevitore stesso mostra, e il suo intervallo è ciò che accetta. Una nuova impostazione mostra ogni zona come 0-100 %. Tre datapoint sono stati rimossi.",
+        "es": "El volumen usa ahora la escala que el propio receptor muestra, y su rango es lo que acepta. Un nuevo ajuste muestra cada zona como 0-100 %. Tres puntos de datos se eliminan.",
+        "pl": "Głośność używa teraz skali, którą pokazuje sam amplituner, a jej zakres to zakres, który on przyjmuje. Nowe ustawienie pokazuje każdą strefę jako 0-100 %. Trzy punkty danych zniknęły.",
+        "uk": "Гучність тепер використовує шкалу, яку показує сам ресивер, а її діапазон — те, що він приймає. Нове налаштування показує кожну зону як 0-100 %. Три датапоінти вилучено.",
+        "zh-cn": "音量现在使用功放自身显示的刻度，其范围即功放可接受的范围。新增设置可将每个区域显示为 0-100 %。三个数据点已移除。"
+      },
       "2.7.2": {
         "en": "The volume readout follows the scale the receiver shows, and inputs appear under the receiver's own names. The first start after this update takes a little longer than usual.",
         "de": "Die Lautstärke-Anzeige folgt der Skala des Receivers, und Eingänge tragen dessen eigene Namen. Der erste Start nach diesem Update dauert etwas länger als sonst.",
@@ -81,19 +94,6 @@
         "pl": "Grupy punktów danych wyłączają się teraz w każdej strefie, suwaki znają granice urządzenia, a regulacja barwy nie pokazuje już podwojonych decybeli na MusicCast.",
         "uk": "Групи точок даних тепер вимикаються в кожній зоні, повзунки знають межі пристрою, а регулятори тембру більше не показують подвоєні децибели на MusicCast.",
         "zh-cn": "数据点分组现在可在每个区域关闭，滑块知晓设备自身的取值范围，音调控制在 MusicCast 上不再显示翻倍的分贝值。"
-      },
-      "2.4.0": {
-        "en": "The on-screen remote now works on all three protocols: cursor pad and menu keys on YNCA and pre-2010 XML receivers too, with the same words as on MusicCast.",
-        "de": "Die Bildschirm-Fernbedienung gibt es jetzt auf allen drei Protokollen: Steuerkreuz und Menütasten auch auf YNCA- und XML-Receivern, mit denselben Wörtern wie auf MusicCast.",
-        "ru": "Экранный пульт теперь работает во всех трёх протоколах: крестовина и кнопки меню также на ресиверах YNCA и XML, с теми же значениями, что и на MusicCast.",
-        "pt": "O comando no ecrã funciona agora nos três protocolos: cursor e teclas de menu também em receptores YNCA e XML, com as mesmas palavras do MusicCast.",
-        "nl": "De schermafstandsbediening werkt nu op alle drie protocollen: cursorpad en menutoetsen ook op YNCA- en XML-receivers, met dezelfde woorden als op MusicCast.",
-        "fr": "La télécommande à l'écran fonctionne sur les trois protocoles : pavé directionnel et touches de menu aussi sur les amplis YNCA et XML, avec les mots de MusicCast.",
-        "it": "Il telecomando a schermo funziona su tutti e tre i protocolli: pad direzionale e tasti menu anche su sintoamplificatori YNCA e XML, con le stesse parole di MusicCast.",
-        "es": "El mando en pantalla funciona ya en los tres protocolos: cruceta y teclas de menú también en receptores YNCA y XML, con las mismas palabras que en MusicCast.",
-        "pl": "Pilot ekranowy działa teraz we wszystkich trzech protokołach: krzyżak i klawisze menu także w amplitunerach YNCA i XML, z tymi samymi słowami co w MusicCast.",
-        "uk": "Екранний пульт тепер працює в усіх трьох протоколах: хрестовина та кнопки меню також на ресиверах YNCA і XML, з тими самими значеннями, що й на MusicCast.",
-        "zh-cn": "屏幕遥控现已支持全部三种协议：YNCA 和 2010 年前的 XML 功放同样具备方向键和菜单键，用词与 MusicCast 一致。"
       }
     },
     "titleLang": {
@@ -123,10 +123,19 @@
       "zh-cn": "通过网络控制 Yamaha AV 接收器和 MusicCast 设备"
     },
     "docs": {
-      "en": ["docs/en/README.md"],
-      "de": ["docs/de/README.md"]
+      "en": [
+        "docs/en/README.md"
+      ],
+      "de": [
+        "docs/de/README.md"
+      ]
     },
-    "keywords": ["yamaha", "avr", "receiver", "musiccast"],
+    "keywords": [
+      "yamaha",
+      "avr",
+      "receiver",
+      "musiccast"
+    ],
     "plugins": {
       "sentry": {
         "dsn": "https://66f27ceff38c1ce1e6cdcc3095ba06d3@o4511524771266560.ingest.de.sentry.io/4511524773560400"
@@ -174,7 +183,10 @@
       {
         "condition": {
           "operand": "and",
-          "rules": ["oldVersion<1.0.0", "newVersion>=1.0.0"]
+          "rules": [
+            "oldVersion<1.0.0",
+            "newVersion>=1.0.0"
+          ]
         },
         "title": {
           "en": "Complete rebuild — new object tree",
@@ -203,12 +215,18 @@
           "zh-cn": "适配器已完全重建，现在将 YNCA、MusicCast 和旧的 XML 协议合而为一。对象树是全新的：旧的数据点（volume、power、Commands、Realtime 等）会被自动删除，功放会作为带类型数据点的设备重新创建。已配置的 IP 地址会被保留。请将脚本和可视化更新到新的数据点路径。"
         },
         "level": "warn",
-        "buttons": ["agree", "cancel"]
+        "buttons": [
+          "agree",
+          "cancel"
+        ]
       },
       {
         "condition": {
           "operand": "and",
-          "rules": ["oldVersion<2.0.0", "newVersion>=2.0.0"]
+          "rules": [
+            "oldVersion<2.0.0",
+            "newVersion>=2.0.0"
+          ]
         },
         "title": {
           "en": "Reworked object tree — one player per zone",
@@ -237,12 +255,18 @@
           "zh-cn": "2.0.0 版重构了对象树：每个区域一个播放器块显示当前播放内容（不再在每个音源下重复相同的块），场景变为带设备自带标题的下拉菜单外加 scene.list 数据点，调谐器对所有波段统一为一个波段/频率/预设，均衡器和信号信息移至 sound 下，唇音同步移至 hdmi 下。适配器首次启动时会自动删除旧数据点并创建新数据点。请将脚本和可视化更新到新路径。"
         },
         "level": "warn",
-        "buttons": ["agree", "cancel"]
+        "buttons": [
+          "agree",
+          "cancel"
+        ]
       },
       {
         "condition": {
           "operand": "and",
-          "rules": ["oldVersion<2.2.0", "newVersion>=2.2.0"]
+          "rules": [
+            "oldVersion<2.2.0",
+            "newVersion>=2.2.0"
+          ]
         },
         "title": {
           "en": "Playback times are now seconds",
@@ -271,12 +295,18 @@
           "zh-cn": "player.elapsedTime 和 player.totalTime 由文本改为以秒为单位的数字，这样媒体播放器组件、Alexa 和 Google 在所有设备上都能使用它们。易读形式（“1:23”）移到新的数据点 player.elapsedTimeText 和 player.totalTimeText。请将绑定旧文本的脚本、记录和可视化改到新的文本数据点。"
         },
         "level": "warn",
-        "buttons": ["agree", "cancel"]
+        "buttons": [
+          "agree",
+          "cancel"
+        ]
       },
       {
         "condition": {
           "operand": "and",
-          "rules": ["oldVersion<2.8.0", "newVersion>=2.8.0"]
+          "rules": [
+            "oldVersion<2.8.0",
+            "newVersion>=2.8.0"
+          ]
         },
         "title": {
           "en": "Volume now shows what the receiver shows",
@@ -305,7 +335,10 @@
           "zh-cn": "音量数据点现在使用功放自身显示的刻度，其上下限即功放可接受的范围。在采用数字显示的 MusicCast 功放上，这会改变数值：脚本原先写入 -39，现在写入 41.5。数据点 actualVolume、actualVolumeMode 和 inputText 已移除——volume 和 input 提供相同的信息。新增设置“音量显示为 0-100 %”：启用后，每个区域的每个音量数据点改为百分比——这是大多数 VIS 控件所期望的范围。"
         },
         "level": "warn",
-        "buttons": ["agree", "cancel"]
+        "buttons": [
+          "agree",
+          "cancel"
+        ]
       }
     ]
   },

@@ -1,4 +1,4 @@
-import { mapYxcToObjects } from "./object-mapper";
+import { mapYxcToObjects, rawVolumeFor, shownVolumeFor, volumeScaleOf } from "./object-mapper";
 import { parseYxcFeatures } from "./capability";
 import { YXC_MENU_VALUES } from "./remote";
 import rxA2070 from "./__fixtures__/RX_A2070_v1.json";
@@ -255,13 +255,11 @@ describe("mapYxcToObjects", () => {
   // receiver itself shows — decibels — rather than the raw 0…161 step count MusicCast uses on
   // the wire. The raw scale is a protocol detail; what the device displays is the truth.
   //
-  // The bounds are the raw range READ ON that scale: 161 steps of 0.5 dB above the declared floor
-  // is 0.0 dB, not the 16.5 the scale's span names — that would sit at raw 194, which the zone
-  // declares (and its live `max_volume` reports) as out of reach.
+  // The bounds are the zone's OWN declared min and max for that scale, as it sent them.
   test("the volume state carries the display scale on a device that declares one", () => {
     const vol = mapYxcToObjects(parseYxcFeatures(rxA2070)).find(o => o.id === "volume");
     expect(vol?.common.min).toBe(-80.5);
-    expect(vol?.common.max).toBe(0);
+    expect(vol?.common.max).toBe(16.5);
     expect(vol?.common.step).toBe(0.5);
     expect(vol?.common.unit).toBe("dB");
   });
@@ -592,7 +590,7 @@ describe("the device's own lists are DECLARED, and the words it reports are alwa
     const objs = mapYxcToObjects({ zones: [volumeZone], media: [] }, { main: { actualVolumeMode: "numeric" } });
     const vol = objs.find(o => o.id === "volume")?.common;
     expect(vol?.min).toBe(0);
-    expect(vol?.max).toBe(80.5);
+    expect(vol?.max).toBe(97);
     expect(vol?.step).toBe(0.5);
     expect(vol?.unit).toBe("");
   });
@@ -601,7 +599,7 @@ describe("the device's own lists are DECLARED, and the words it reports are alwa
     const objs = mapYxcToObjects({ zones: [volumeZone], media: [] }, { main: { actualVolumeMode: "db" } });
     const vol = objs.find(o => o.id === "volume")?.common;
     expect(vol?.min).toBe(-80.5);
-    expect(vol?.max).toBe(0);
+    expect(vol?.max).toBe(16.5);
     expect(vol?.unit).toBe("dB");
   });
 
@@ -612,7 +610,7 @@ describe("the device's own lists are DECLARED, and the words it reports are alwa
     const objs = mapYxcToObjects({ zones: [volumeZone], media: [] });
     const vol = objs.find(o => o.id === "volume")?.common;
     expect(vol?.min).toBe(-80.5);
-    expect(vol?.max).toBe(80.5);
+    expect(vol?.max).toBe(97);
     expect(vol?.unit).toBe("");
   });
 
@@ -626,20 +624,50 @@ describe("the device's own lists are DECLARED, and the words it reports are alwa
       const objs = mapYxcToObjects({ zones: [dbOnly], media: [] }, current);
       const vol = objs.find(o => o.id === "volume")?.common;
       expect(vol?.min).toBe(-80.5);
-      expect(vol?.max).toBe(0);
+      expect(vol?.max).toBe(16.5);
       expect(vol?.unit).toBe("dB");
     }
   });
 
-  // Every captured device declares its raw range beside the display scale, but a partial
-  // `range_step` must not cost the datapoint its bounds — a dropped bound survives for ever in an
-  // existing installation, because `extendObject` merges. Without a raw range there is nothing to
-  // reconcile against, so the declared span stands as it is.
-  test("a zone declaring a scale but no raw range keeps the span it declares", () => {
-    const noRaw = { ...volumeZone, ranges: { actual_volume_db: { min: -80.5, max: 16.5, step: 0.5 } } };
-    const objs = mapYxcToObjects({ zones: [noRaw], media: [] }, { main: { actualVolumeMode: "db" } });
-    const vol = objs.find(o => o.id === "volume")?.common;
-    expect(vol?.min).toBe(-80.5);
-    expect(vol?.max).toBe(16.5);
+  // The two steps are the DEVICE'S, so the conversion has to use both. Every captured receiver
+  // counts its raw scale in ones, which makes a dropped `rawStep` invisible on the fixtures — but
+  // the number comes from the zone's own `range_step`, and nothing says the next generation keeps
+  // it. Round-tripping every step of a coarser scale measures it.
+  test("the conversion uses the raw step the zone declares, not an assumed one", () => {
+    const coarse = {
+      id: "main",
+      funcs: ["volume"],
+      inputs: [],
+      ranges: { volume: { min: 0, max: 80, step: 2 }, actual_volume_db: { min: -80.5, max: 16.5, step: 0.5 } },
+    };
+    const scale = volumeScaleOf(coarse, "db");
+    expect(scale).toBeDefined();
+    for (let raw = 0; raw <= 80; raw += 2) {
+      expect(rawVolumeFor(scale!, shownVolumeFor(scale!, raw)), `raw ${raw}`).toBe(raw);
+    }
+    // And a value BETWEEN two of the device's steps lands on one of them, never in between:
+    // on this scale one step is 0.5 dB, so -80.3 and -80.2 sit either side of the midpoint.
+    expect(rawVolumeFor(scale!, -80.3)).toBe(0);
+    expect(rawVolumeFor(scale!, -80.2)).toBe(2);
+  });
+
+  // Zones differ, and each carries its own declaration: an RX-V685 declares 16.5 dB for main and
+  // 10.0 for zone 2 against the same raw range. The bounds follow the zone, never a device-wide
+  // assumption.
+  test("each zone carries the bounds IT declares", () => {
+    const quieterZone2 = {
+      zones: [
+        volumeZone,
+        {
+          ...volumeZone,
+          id: "zone2",
+          ranges: { ...volumeZone.ranges, actual_volume_db: { min: -80.5, max: 10, step: 0.5 } },
+        },
+      ],
+      media: [],
+    };
+    const objs = mapYxcToObjects(quieterZone2, { main: { actualVolumeMode: "db" }, zone2: { actualVolumeMode: "db" } });
+    expect(objs.find(o => o.id === "volume")?.common.max).toBe(16.5);
+    expect(objs.find(o => o.id === "multiroom.zone2.volume")?.common.max).toBe(10);
   });
 });

@@ -3,7 +3,7 @@ import type { ObjectDef } from "./types";
 
 describe("volume percent mode", () => {
   /** The two scales the fleet actually meets: MusicCast decibels and the YNCA catalog's. */
-  const musicCastDb = { min: -80.5, max: 0, step: 0.5 };
+  const musicCastDb = { min: -80.5, max: 16.5, step: 0.5 };
   const speaker = { min: 0, max: 60, step: 1 };
 
   describe("isAmpVolumeId", () => {
@@ -33,13 +33,13 @@ describe("volume percent mode", () => {
       ({ id: "volume", type: "state", common }) as unknown as ObjectDef;
 
     test("are read from the finished object definition", () => {
-      expect(volumeBoundsOf(def({ min: -80.5, max: 0, step: 0.5 }))).toEqual(musicCastDb);
+      expect(volumeBoundsOf(def({ min: -80.5, max: 16.5, step: 0.5 }))).toEqual(musicCastDb);
     });
 
     // Percent against an unknown range would be a number with no meaning. The caller keeps the
     // device's own scale instead of inventing ends for it.
     test("are undefined when the device declared none", () => {
-      expect(volumeBoundsOf(def({ min: -80.5, max: 0 }))).toBeUndefined();
+      expect(volumeBoundsOf(def({ min: -80.5, max: 16.5 }))).toBeUndefined();
       expect(volumeBoundsOf(def({}))).toBeUndefined();
       expect(volumeBoundsOf(def({ min: 5, max: 5, step: 1 }))).toBeUndefined();
     });
@@ -69,9 +69,9 @@ describe("volume percent mode", () => {
   describe("the conversion", () => {
     test("puts the ends of the device's range at 0 % and 100 %", () => {
       expect(toPercent(-80.5, musicCastDb)).toBe(0);
-      expect(toPercent(0, musicCastDb)).toBe(100);
+      expect(toPercent(16.5, musicCastDb)).toBe(100);
       expect(fromPercent(0, musicCastDb)).toBe(-80.5);
-      expect(fromPercent(100, musicCastDb)).toBe(0);
+      expect(fromPercent(100, musicCastDb)).toBe(16.5);
     });
 
     // The whole point of percent mode: a value the user writes has to come back as the value they
@@ -102,9 +102,9 @@ describe("volume percent mode", () => {
 
     // A script writing 120 or -5 must not send the device a value outside what it declared.
     test("holds a value past either end at that end", () => {
-      expect(fromPercent(140, musicCastDb)).toBe(0);
+      expect(fromPercent(140, musicCastDb)).toBe(16.5);
       expect(fromPercent(-20, musicCastDb)).toBe(-80.5);
-      expect(toPercent(20, musicCastDb)).toBe(100);
+      expect(toPercent(40, musicCastDb)).toBe(100);
       expect(toPercent(-200, musicCastDb)).toBe(0);
     });
   });
