@@ -191,9 +191,9 @@ function pushPlayerBlock(objects: ObjectDef[], prefix: string, channelName: ioBr
  * The `range_step` id that carries a state's bounds. The names are the device's own
  * (capture-verified across 25 models); a state not listed here declares no range.
  *
- * `actualVolume` deliberately takes the dB range, not the numeric one: the datapoint is
- * declared in dB, and a device that reports both would otherwise get the union of two
- * different scales.
+ * `actualVolume` is deliberately ABSENT here: its bounds follow the scale the device says it is
+ * DISPLAYING, which no single `range_step` id can express (measured on an RX-V6A, 2026-09-09 —
+ * see `actualVolumePresentation`).
  */
 const RANGE_BY_STATE: Readonly<Record<string, string>> = {
   volume: "volume",

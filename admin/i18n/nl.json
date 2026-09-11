@@ -600,5 +600,7 @@
   "descHdmiStandbyThrough": "Of het HDMI-signaal naar de tv wordt doorgegeven terwijl de receiver in stand-by staat: uit, aan of automatisch.",
   "hdmiVideoPreset": "HDMI-videovoorinstelling",
   "descHdmiVideoPreset": "Welke van de opgeslagen videoverwerkingsvoorinstellingen in gebruik is.",
-  "descMonaural": "Of de zone in mono speelt; beide luidsprekers geven dan hetzelfde signaal weer."
+  "descMonaural": "Of de zone in mono speelt; beide luidsprekers geven dan hetzelfde signaal weer.",
+  "docLinkLabelDe": "Wiki (Deutsch)",
+  "docLinkLabelEn": "Wiki (English)"
 }

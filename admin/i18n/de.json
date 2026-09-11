@@ -600,5 +600,7 @@
   "descHdmiStandbyThrough": "Ob das HDMI-Signal im Bereitschaftszustand zum Fernseher durchgeleitet wird: aus, ein oder automatisch.",
   "hdmiVideoPreset": "HDMI-Video-Voreinstellung",
   "descHdmiVideoPreset": "Welche der gespeicherten Videoverarbeitungs-Voreinstellungen in Gebrauch ist.",
-  "descMonaural": "Ob die Zone in Mono spielt; beide Lautsprecher geben dann dasselbe Signal wieder."
+  "descMonaural": "Ob die Zone in Mono spielt; beide Lautsprecher geben dann dasselbe Signal wieder.",
+  "docLinkLabelDe": "Wiki (Deutsch)",
+  "docLinkLabelEn": "Wiki (English)"
 }

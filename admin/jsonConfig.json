@@ -2,6 +2,32 @@
   "i18n": true,
   "type": "panel",
   "items": {
+    "_docLinkDe": {
+      "type": "staticLink",
+      "href": "https://github.com/iobroker-community-adapters/ioBroker.yamaha/wiki/Startseite",
+      "label": "docLinkLabelDe",
+      "button": true,
+      "variant": "outlined",
+      "color": "primary",
+      "xs": 12,
+      "sm": 6,
+      "md": 4,
+      "lg": 4,
+      "xl": 4
+    },
+    "_docLinkEn": {
+      "type": "staticLink",
+      "href": "https://github.com/iobroker-community-adapters/ioBroker.yamaha/wiki/Home",
+      "label": "docLinkLabelEn",
+      "button": true,
+      "variant": "outlined",
+      "color": "primary",
+      "xs": 12,
+      "sm": 6,
+      "md": 4,
+      "lg": 4,
+      "xl": 4
+    },
     "_devicesHeader": {
       "type": "header",
       "text": "header_devices",
@@ -57,7 +83,10 @@
       "md": 12,
       "lg": 12,
       "xl": 12,
-      "style": { "fontSize": 13, "marginBottom": 8 }
+      "style": {
+        "fontSize": 13,
+        "marginBottom": 8
+      }
     },
     "group_player": {
       "newLine": true,

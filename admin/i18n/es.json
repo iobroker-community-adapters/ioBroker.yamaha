@@ -600,5 +600,7 @@
   "descHdmiStandbyThrough": "Si la señal HDMI pasa al televisor mientras el receptor está en reposo: apagado, encendido o automático.",
   "hdmiVideoPreset": "Preajuste de vídeo HDMI",
   "descHdmiVideoPreset": "Cuál de los preajustes de procesado de vídeo guardados está en uso.",
-  "descMonaural": "Si la zona suena en mono; ambos altavoces reproducen entonces la misma señal."
+  "descMonaural": "Si la zona suena en mono; ambos altavoces reproducen entonces la misma señal.",
+  "docLinkLabelDe": "Wiki (Deutsch)",
+  "docLinkLabelEn": "Wiki (English)"
 }
