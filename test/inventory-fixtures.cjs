@@ -223,6 +223,38 @@ function declaredListsOf(fixture) {
 }
 
 /**
+ * What a MusicCast fixture DECLARES about its volume, per zone. `range_step` carries the raw
+ * wire range under `volume` and, where the receiver has a display of its own, that display's
+ * range under `actual_volume_db` / `actual_volume_numeric`. Those declarations are what the
+ * built datapoint must carry — taken, never derived (krobi 2026-09-11: "der receiver schickt
+ * min und max und das ist dann eben min und max fertig"), and per zone, because a receiver
+ * declares them per zone (RX-V6A: main 0…97, zone 2 0…90.5).
+ *
+ * A fixture that speaks no MusicCast declares nothing here; its `volume` comes from the YNCA
+ * or XML catalog instead and is not this reader's business.
+ *
+ * @param {any} fixture one device fixture
+ * @returns {Record<string, {raw?: {min: number, max: number, step: number}, db?: {min: number, max: number, step: number}, numeric?: {min: number, max: number, step: number}}>}
+ *   zone-prefixed `volume` id → the ranges that zone declares
+ */
+function declaredVolumeRangesOf(fixture) {
+  const out = /** @type {Record<string, any>} */ ({});
+  const features = fixture.yxc?.answers?.["system/getFeatures"];
+  for (const zone of features?.zone ?? []) {
+    const prefix = zone.id === "main" ? "" : `multiroom.${zone.id}.`;
+    const by = /** @type {Record<string, any>} */ ({});
+    for (const entry of zone.range_step ?? []) {
+      by[entry.id] = { min: entry.min, max: entry.max, step: entry.step };
+    }
+    const ranges = { raw: by.volume, db: by.actual_volume_db, numeric: by.actual_volume_numeric };
+    if (ranges.raw || ranges.db || ranges.numeric) {
+      out[`${prefix}volume`] = ranges;
+    }
+  }
+  return out;
+}
+
+/**
  * @param {any} server a net or http server
  * @returns {Promise<{port: number, close: () => Promise<void>}>} resolved once it listens
  */
@@ -278,4 +310,4 @@ async function startFixtureDevices() {
   };
 }
 
-module.exports = { startFixtureDevices, loadFixtures, declaredListsOf };
+module.exports = { startFixtureDevices, loadFixtures, declaredListsOf, declaredVolumeRangesOf };

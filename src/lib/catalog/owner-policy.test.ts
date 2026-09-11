@@ -1,4 +1,4 @@
-import { canonicalIdOf, capabilityKeyOf, pickOwner } from "./owner-policy";
+import { canonicalIdOf, capabilityKeyOf, OWNER_OVERRIDES, pickOwner } from "./owner-policy";
 
 describe("pickOwner — which transport owns a shared capability", () => {
   test("a capability only one transport offers is owned by that transport", () => {
@@ -45,6 +45,35 @@ describe("pickOwner — which transport owns a shared capability", () => {
   test("an override falls back to modernity when none of its preferred transports are present", () => {
     expect(pickOwner("volume", ["yxc"])).toBe("yxc");
     expect(pickOwner("input", ["yxc", "xml"])).toBe("yxc");
+  });
+
+  // The 2.8.0 change was to remove EXACTLY ONE override. Without this guard a later edit could
+  // drop or add a second one and every behavioural test above would still pass — each of them
+  // asks about one key. Pinning the whole table makes any further change a visible, deliberate
+  // edit of this list.
+  it("removes exactly one override and leaves the other eighteen in place", () => {
+    expect(Object.keys(OWNER_OVERRIDES).sort()).toEqual([
+      "advanced.maxVolume",
+      "input",
+      "player.playback",
+      "player.repeat",
+      "player.shuffle",
+      "scene.list",
+      "scene.recall",
+      "sleep",
+      "sound.adaptiveDrc",
+      "sound.bass",
+      "sound.dialogueLift",
+      "sound.extraBass",
+      "sound.subwooferTrim",
+      "sound.surroundAI",
+      "sound.surroundDecoder",
+      "sound.treble",
+      "soundProgram",
+      "tuner.band",
+    ]);
+    expect(Object.keys(OWNER_OVERRIDES)).toHaveLength(18);
+    expect(OWNER_OVERRIDES).not.toHaveProperty("volume");
   });
 });
 

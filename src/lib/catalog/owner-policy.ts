@@ -27,8 +27,12 @@ export const STATES_VOCABULARY: Readonly<Record<Transport, "classic" | "musiccas
  * census (`Ressourcen/yamaha/capability-census-2026-08-11.md` §3). These are the shared keys
  * where YXC is present but NOT equivalent: wrong scale, read-only, or a poorer type. Each list
  * is the preferred owner order for that key; the first present transport wins.
+ *
+ * Exported for the guard test that pins the table's SIZE and keys: removing one override
+ * (2.8.0 removed `volume`) must be a deliberate, visible edit, not a silent side effect of
+ * a neighbouring change.
  */
-const OWNER_OVERRIDES: Record<string, readonly Transport[]> = {
+export const OWNER_OVERRIDES: Record<string, readonly Transport[]> = {
   // `volume` deliberately has NO override any more (2026-09-11). The census §3a entry read
   // MusicCast's raw 0..161 step count and concluded YNCA/XML were the better owners because they
   // speak decibels. That measured the wrong thing: MusicCast is the ONLY transport that can report

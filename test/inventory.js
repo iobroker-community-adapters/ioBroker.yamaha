@@ -16,7 +16,12 @@ const fs = require("node:fs");
 const path = require("node:path");
 const assert = require("node:assert");
 const { tests } = require("@iobroker/testing");
-const { startFixtureDevices, loadFixtures, declaredListsOf } = require("./inventory-fixtures.cjs");
+const {
+  startFixtureDevices,
+  loadFixtures,
+  declaredListsOf,
+  declaredVolumeRangesOf,
+} = require("./inventory-fixtures.cjs");
 
 const ADAPTER_DIR = path.join(__dirname, "..");
 const ADAPTER = require(path.join(ADAPTER_DIR, "io-package.json")).common.name;
@@ -32,6 +37,12 @@ const VOLATILE = ["ts", "from", "user", "acl"];
 const COMPARED = ["name", "desc", "role", "type", "unit", "states", "min", "max", "step"];
 /** How many fixture devices devices.json lists — every one of them must build a tree. */
 const FIXTURE_DEVICES = loadFixtures().length;
+/** The English texts, to prove a datapoint carries the explanation its MODE deserves. */
+const EN = JSON.parse(fs.readFileSync(path.join(ADAPTER_DIR, "admin", "i18n", "en.json"), "utf8"));
+/** The ids removed in 2.8.0 — none of them may exist anywhere, in main or in any zone. */
+const REMOVED_IN_2_8_0 = ["actualVolume", "actualVolumeMode", "inputText"];
+/** A device-relative `volume` id: the main zone's, or one of zones 2-4. */
+const VOLUME_ID = /^(?:multiroom\.zone[234]\.)?volume$/;
 
 /**
  * Device `native` fields that record what THIS run learned (probe answers, the sweep's
@@ -47,10 +58,11 @@ let fixtures;
  * Bring up the fake devices and point the adapter at them.
  *
  * @param {import("@iobroker/testing").TestHarness} harness the running harness
+ * @param {Record<string, unknown>} [extraNative] instance settings on top of the manifest defaults
  */
-async function startWithFixtures(harness) {
+async function startWithFixtures(harness, extraNative = {}) {
   fixtures = await startFixtureDevices();
-  await harness.changeAdapterConfig(ADAPTER, { native: { devices: fixtures.devices } });
+  await harness.changeAdapterConfig(ADAPTER, { native: { devices: fixtures.devices, ...extraNative } });
   // The routing table reaches the adapter process through its environment; the require hook
   // rewrites the device addresses to the fixture servers there. The adapter has no test seam.
   await harness.startAdapterAndWait(false, {
@@ -156,6 +168,49 @@ async function dumpObjects(harness) {
   return out;
 }
 
+/**
+ * Join the fixtures to the device objects the adapter built for them. The device id derives from
+ * the CONFIGURED address (10.10.0.13 → 10_10_0_13), not from the fixture's name, so the `info.ip`
+ * datapoint the adapter writes for every device is the only reliable join.
+ *
+ * @param {import("@iobroker/testing").TestHarness} harness the running harness
+ * @param {Record<string, any>} objects a dump of the object tree
+ * @returns {Promise<Map<string, string>>} configured address → device object id
+ */
+async function deviceIdByIp(harness, objects) {
+  const map = new Map();
+  for (const [id, obj] of Object.entries(objects)) {
+    if (obj.type === "device") {
+      const ip = await harness.states.getStateAsync(`${id}.info.ip`);
+      if (typeof ip?.val === "string") {
+        map.set(ip.val, id);
+      }
+    }
+  }
+  return map;
+}
+
+/**
+ * Every amplifier `volume` state in a dump, grouped by the device it belongs to — the main
+ * zone's and zones 2–4. `advanced.maxVolume`, `sound.subwooferVolume` and the rest are other
+ * datapoints on other scales and are none of this grouping's business.
+ *
+ * @param {Record<string, any>} objects a dump of the object tree
+ * @returns {Map<string, {id: string, common: any}[]>} device object id → its volume states
+ */
+function volumeStatesOf(objects) {
+  const byDevice = new Map();
+  for (const [id, obj] of Object.entries(objects)) {
+    const device = id.split(".").slice(0, 3).join(".");
+    const relative = id.slice(device.length + 1);
+    if (obj.type !== "state" || !VOLUME_ID.test(relative)) {
+      continue;
+    }
+    byDevice.set(device, [...(byDevice.get(device) ?? []), { id, common: obj.common ?? {} }]);
+  }
+  return byDevice;
+}
+
 tests.integration(ADAPTER_DIR, {
   defineAdditionalTests({ suite }) {
     suite("object inventory", getHarness => {
@@ -257,18 +312,10 @@ tests.integration(ADAPTER_DIR, {
         // The device object's id derives from the configured address (10.10.0.13 → 10_10_0_13),
         // not from the fixture's name — map fixtures to devices through the `info.ip` datapoint
         // the adapter writes for every device, and refuse to pass on a device that was not found.
-        const deviceIdByIp = new Map();
-        for (const [id, obj] of Object.entries(objects)) {
-          if (obj.type === "device") {
-            const ip = await harness.states.getStateAsync(`${id}.info.ip`);
-            if (typeof ip?.val === "string") {
-              deviceIdByIp.set(ip.val, id);
-            }
-          }
-        }
+        const byIp = await deviceIdByIp(harness, objects);
         const violations = [];
         for (const fixture of loadFixtures()) {
-          const deviceId = deviceIdByIp.get(fixture.ip);
+          const deviceId = byIp.get(fixture.ip);
           assert.ok(deviceId, `no device object reports info.ip ${fixture.ip} (fixture ${fixture.id})`);
           for (const [relativeId, list] of Object.entries(declaredListsOf(fixture))) {
             const states = objects[`${deviceId}.${relativeId}`]?.common?.states;
@@ -293,6 +340,159 @@ tests.integration(ADAPTER_DIR, {
           }
         }
         assert.deepStrictEqual(violations, [], `undeclared dropdown values:\n${violations.join("\n")}`);
+      });
+
+      it("no device mixes two volume scales across its zones", async function () {
+        this.timeout(60000);
+        // The BOUNDS may differ from zone to zone — a receiver declares its range per zone and
+        // the RX-V6A really does say main 0…97 and zone 2 0…90.5 (krobi 2026-09-11: "wenn die
+        // zonen das anders haben/schicken dann musst du eben zonen einzeln rechnen"). What must
+        // NOT differ is the SCALE the numbers are in, and until 2.8.0 the RX-A2070 carried
+        // decibels in main and zone 2 and a raw step count in zone 3 — one device, two scales.
+        const objects = await dumpObjects(harness);
+        const mixed = [];
+        for (const [device, states] of volumeStatesOf(objects)) {
+          const scales = new Set(states.map(s => `${s.common.unit || "(none)"} step ${s.common.step}`));
+          if (scales.size > 1) {
+            mixed.push(`${device}: ${[...scales].join(" vs ")}`);
+          }
+        }
+        assert.deepStrictEqual(mixed, [], `devices carrying two volume scales:\n${mixed.join("\n")}`);
+      });
+
+      it("every volume datapoint carries the bounds its zone declares", async function () {
+        this.timeout(60000);
+        const objects = await dumpObjects(harness);
+        const bare = [];
+        for (const states of volumeStatesOf(objects).values()) {
+          for (const { id, common } of states) {
+            const usable =
+              typeof common.min === "number" &&
+              typeof common.max === "number" &&
+              typeof common.step === "number" &&
+              common.max > common.min;
+            if (!usable) {
+              bare.push(`${id}: min=${common.min} max=${common.max} step=${common.step}`);
+            }
+          }
+        }
+        assert.deepStrictEqual(bare, [], `volume datapoints without usable bounds:\n${bare.join("\n")}`);
+
+        // And those bounds are the DECLARED ones — taken, never derived: the display range where
+        // the zone declares a display of its own (decibels, or the plain number scale), the raw
+        // wire range where it declares none. A fixture that speaks no MusicCast declares nothing
+        // here; its volume comes from the YNCA or XML catalog and is not this assertion's question.
+        const byIp = await deviceIdByIp(harness, objects);
+        const wrong = [];
+        for (const fixture of loadFixtures()) {
+          const deviceId = byIp.get(fixture.ip);
+          assert.ok(deviceId, `no device object reports info.ip ${fixture.ip} (fixture ${fixture.id})`);
+          for (const [relative, ranges] of Object.entries(declaredVolumeRangesOf(fixture))) {
+            const common = objects[`${deviceId}.${relative}`]?.common;
+            if (!common) {
+              continue; // the zone builds no volume datapoint at all
+            }
+            const want = common.unit === "dB" ? ranges.db : (ranges.numeric ?? ranges.raw);
+            const got = { min: common.min, max: common.max, step: common.step };
+            if (!want || JSON.stringify(got) !== JSON.stringify(want)) {
+              wrong.push(`${fixture.id}.${relative}: carries ${JSON.stringify(got)}, declares ${JSON.stringify(want)}`);
+            }
+          }
+        }
+        assert.deepStrictEqual(wrong, [], `volume bounds that are not the declared ones:\n${wrong.join("\n")}`);
+      });
+
+      it("the datapoints 2.8.0 removed are gone from the whole tree", async function () {
+        this.timeout(60000);
+        // Removal by attrition would leave them here on the FIRST start after the update, which
+        // reads like a failure; they go through the explicit removal path instead.
+        const objects = await dumpObjects(harness);
+        const leftovers = Object.keys(objects).filter(id => REMOVED_IN_2_8_0.includes(id.split(".").pop()));
+        assert.deepStrictEqual(leftovers, [], `removed datapoints still in the tree:\n${leftovers.join("\n")}`);
+      });
+
+      it("input survived the removal of inputText, with its labels", async function () {
+        this.timeout(60000);
+        // `inputText` carried the plain-text source name. It went because `input` has carried the
+        // same names as its dropdown LABELS since 2.7.2 — so a regression that took the labels
+        // away would turn this removal into a loss of information.
+        const objects = await dumpObjects(harness);
+        const devices = Object.keys(objects).filter(id => objects[id].type === "device");
+        assert.strictEqual(devices.length, FIXTURE_DEVICES, `only ${devices.length} devices in the dump`);
+        const bare = [];
+        for (const device of devices) {
+          const states = objects[`${device}.input`]?.common?.states;
+          const labelled = states && typeof states === "object" && Object.keys(states).length > 0;
+          if (!labelled) {
+            bare.push(`${device}.input: ${states ? "no labels" : "missing"}`);
+          }
+        }
+        assert.deepStrictEqual(bare, [], `input datapoints without labels:\n${bare.join("\n")}`);
+      });
+    });
+
+    // The second switch position, on the same eight fixtures. Unit tests cover the mapping; only
+    // a full run proves that EVERY device class — dB receiver, numeric receiver, speaker,
+    // soundbar, CD system, and the YNCA-only and XML-only receivers — actually reaches the
+    // percent presentation, in every zone.
+    suite("volume as percent", getHarness => {
+      let harness;
+      before(async function () {
+        this.timeout(240000);
+        harness = getHarness();
+        await startWithFixtures(harness, { volumeAsPercent: true });
+        await waitForSettledTree(harness, fixtures.devices.length);
+      });
+
+      after(async function () {
+        this.timeout(60000);
+        await harness?.stopAdapter();
+        await fixtures?.stop();
+      });
+
+      it("turns every volume datapoint of every device into 0-100 %", async function () {
+        this.timeout(60000);
+        const objects = await dumpObjects(harness);
+        const want = {
+          role: "level.volume",
+          unit: "%",
+          min: 0,
+          max: 100,
+          step: 0.5,
+          desc: EN.descVolumePercent,
+        };
+        const wrong = [];
+        for (const states of volumeStatesOf(objects).values()) {
+          for (const { id, common } of states) {
+            const got = {
+              role: common.role,
+              unit: common.unit,
+              min: common.min,
+              max: common.max,
+              step: common.step,
+              desc: common.desc?.en,
+            };
+            if (JSON.stringify(got) !== JSON.stringify(want)) {
+              wrong.push(`${id}: ${JSON.stringify(got)}`);
+            }
+          }
+        }
+        assert.deepStrictEqual(wrong, [], `volume datapoints not presented as percent:\n${wrong.join("\n")}`);
+      });
+
+      it("covers exactly the datapoints the default mode builds", async function () {
+        this.timeout(60000);
+        // Without this the assertion above could pass by vacuity: a device class that silently
+        // stopped building `volume` in percent mode would simply not be checked.
+        const ids = tree =>
+          [...volumeStatesOf(tree).values()]
+            .flat()
+            .map(state => state.id)
+            .sort();
+        const truth = ids(JSON.parse(fs.readFileSync(INVENTORY, "utf8")));
+        const percent = ids(await dumpObjects(harness));
+        assert.ok(truth.length > 0, "the default-mode inventory carries no volume datapoint");
+        assert.deepStrictEqual(percent, truth, "the percent tree carries other volume datapoints than the default one");
       });
     });
 
