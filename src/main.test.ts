@@ -947,6 +947,77 @@ describe("Yamaha datapoint balance in the log", () => {
   });
 });
 
+describe("Yamaha bounds an update no longer declares", () => {
+  // `extendObject` MERGES, so a `min`/`max` an older version wrote outlives the definition that
+  // put it there — and unlike a dropdown a bound has no neutral value to overwrite it with: a
+  // written `null` stays in the object and js-controller's range check reads it as 0. Measured on
+  // `tuner.frequency`, whose FM-only envelope had to go once a DAB receiver reported 180064 kHz.
+  it("drops a bound the new definition no longer carries, keeping the user's history settings", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room.tuner.frequency", {
+      type: "state",
+      common: {
+        name: "f",
+        type: "number",
+        unit: "kHz",
+        min: 87500,
+        max: 108000,
+        custom: { "history.0": { enabled: true } },
+      },
+      native: {},
+    });
+    await ctx.i.onReady();
+    await flush();
+    const upsert = ctx.calls[0].deps.upsertObject as (id: string, def: unknown) => Promise<void>;
+
+    await upsert("Living_room.tuner.frequency", {
+      type: "state",
+      common: { name: "f", type: "number", unit: "kHz", role: "level", read: true, write: true },
+    });
+
+    const common = ctx.i.objects.get("Living_room.tuner.frequency")?.common as Record<string, unknown>;
+    expect("min" in common, "min still declared").toBe(false);
+    expect("max" in common, "max still declared").toBe(false);
+    // The point of read → delete → re-create rather than a plain rewrite: the recording the user
+    // configured on this datapoint has to survive the repair.
+    expect(common.custom).toEqual({ "history.0": { enabled: true } });
+    expect(common.unit).toBe("kHz");
+  });
+
+  it("leaves an object alone when the new definition still declares its bounds", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room.volume", {
+      type: "state",
+      common: { name: "v", type: "number", min: -80.5, max: 0, step: 0.5, unit: "dB" },
+      native: {},
+    });
+    await ctx.i.onReady();
+    await flush();
+    const upsert = ctx.calls[0].deps.upsertObject as (id: string, def: unknown) => Promise<void>;
+    const deleted = ctx.i.delObjectAsync as unknown as { mock: { calls: unknown[][] } };
+    const before = deleted.mock.calls.length;
+
+    await upsert("Living_room.volume", {
+      type: "state",
+      common: {
+        name: "v",
+        type: "number",
+        role: "level.volume",
+        write: true,
+        min: -80.5,
+        max: 0,
+        step: 0.5,
+        unit: "dB",
+      },
+    });
+
+    // No delete, no churn: the repair costs a read and a rewrite and must only ever run when a
+    // bound REALLY disappeared.
+    expect(deleted.mock.calls.length).toBe(before);
+    expect((ctx.i.objects.get("Living_room.volume")?.common as Record<string, unknown>).max).toBe(0);
+  });
+});
+
 describe("Yamaha volume as 0…100 % (the one switch)", () => {
   /** The scale a MusicCast receiver's main zone declares once the raw range is read on it. */
   const dbVolume = {

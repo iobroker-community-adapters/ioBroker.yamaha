@@ -255,7 +255,7 @@
   "tuner": "Tuner",
   "usb": "USB",
   "volume": "Lautstärke",
-  "descVolume": "Wie laut die Zone spielt: die beiden Text-Protokolle melden Dezibel, MusicCast seine eigene Schrittzahl — die Einheit sagt, welche.",
+  "descVolume": "Wie laut die Zone spielt, in der Skala, die der Receiver selbst anzeigt — Dezibel, wenn er eine Dezibel-Anzeige hat, sonst seine eigene Schrittzahl.",
   "volumeInterlock": "Lautstärke-Kopplung",
   "yncaControlPort": "YNCA-Steuerport",
   "ypaoVolume": "YPAO-Lautstärke",

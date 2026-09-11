@@ -6,6 +6,7 @@ import { XML_AMP_CATALOG } from "./xml/catalog";
 import { parseYxcFeatures } from "./yxc/capability";
 import { mapYxcToObjects } from "./yxc/object-mapper";
 import {
+  boundsOfCommon,
   isUsefulDeviceName,
   LABEL_RANK,
   legacyDeviceRow,
@@ -850,5 +851,23 @@ describe("the migration tables never touch a datapoint that is still alive", () 
       [...live].some(id => id === channel || id.startsWith(`${channel}.`)),
     );
     expect(shadowed).toEqual([]);
+  });
+});
+
+describe("boundsOfCommon — what a stored object declares as its bounds", () => {
+  it("reads the three numeric bounds and nothing else", () => {
+    expect(boundsOfCommon({ min: 0, max: 100, step: 0.5 })).toEqual({ min: 0, max: 100, step: 0.5 });
+    expect(boundsOfCommon({ min: -80.5, max: 16.5 })).toEqual({ min: -80.5, max: 16.5 });
+  });
+
+  it("treats a missing object and an absent bound the same way", () => {
+    expect(boundsOfCommon(undefined)).toEqual({});
+    expect(boundsOfCommon({})).toEqual({});
+  });
+
+  it("ignores a bound that is not a number", () => {
+    // An object written by an older version or edited by hand in the admin can hold a string or a
+    // `null` there. Counting that as a declared bound would make the clearing write fire forever.
+    expect(boundsOfCommon({ min: "0" as unknown as number, max: null as unknown as number })).toEqual({});
   });
 });

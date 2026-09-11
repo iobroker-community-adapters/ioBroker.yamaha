@@ -255,7 +255,7 @@
   "tuner": "Tuner",
   "usb": "USB",
   "volume": "Volume",
-  "descVolume": "How loud the zone plays: the two text protocols report decibels, MusicCast its own step count — the unit tells you which.",
+  "descVolume": "How loud the zone plays, in the scale the receiver itself shows — decibels where it has a decibel display, its own step count where it has none.",
   "volumeInterlock": "Volume interlock",
   "yncaControlPort": "YNCA control port",
   "ypaoVolume": "YPAO Volume",

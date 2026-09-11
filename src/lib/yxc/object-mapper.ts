@@ -746,6 +746,14 @@ export function mapYxcToObjects(
     // the ENVELOPE of the ranges the device declares per band (AM 531 kHz … FM 108000 kHz):
     // one datapoint serves every band, so it can carry the outer limits but no single step
     // (FM steps 50 kHz, 200 in the US; AM 9 or 10).
+    //
+    // ⚠️ The envelope needs a range for EVERY band the device says it has. A DAB receiver
+    // declares `func_list: [fm, rds, dab]` and a `range_step` for `fm` alone — measured on all
+    // three DAB captures (RX-A2070, RX-V6A, CD-NT670D) — and then reports 180064 kHz from the
+    // DAB band into this one datapoint. Taking the FM envelope there narrowed the datapoint
+    // below what the device itself sends, and js-controller warned on every poll. An incomplete
+    // declaration is no declaration: the datapoint stays unbounded rather than carry a limit the
+    // device contradicts (same rule as `volume` — the declared range is taken, never derived).
     const frequencyCommon: ObjectDef["common"] = {
       name: tName("frequency"),
       type: "number",
@@ -754,8 +762,9 @@ export function mapYxcToObjects(
       read: true,
       write: true,
     };
-    const bandRanges = Object.values(capabilities.tuner?.ranges ?? {});
-    if (bandRanges.length > 0) {
+    const declaredRanges = capabilities.tuner?.ranges ?? {};
+    const bandRanges = bands.map(band => declaredRanges[band]);
+    if (bands.length > 0 && bandRanges.every(range => range !== undefined)) {
       frequencyCommon.min = Math.min(...bandRanges.map(range => range.min));
       frequencyCommon.max = Math.max(...bandRanges.map(range => range.max));
     }

@@ -16,6 +16,9 @@ import {
 } from "./lib/catalog/volume-percent";
 import { iconForModel } from "./lib/device-type";
 import {
+  BOUND_FIELDS,
+  type BoundFields,
+  boundsOfCommon,
   childlessChannelIds,
   LABEL_RANK,
   type LabelRank,
@@ -142,6 +145,17 @@ export class Yamaha extends utils.Adapter {
    * Filled from the same start-up read as {@link knownDatapoints}; no per-state database read.
    */
   private readonly storedStates = new Map<string, Record<string, string>>();
+  /**
+   * The numeric bounds every existing datapoint carried when this run started, then the ones
+   * last written by this run — judged the same way {@link storedStates} is, from the one
+   * start-up read, never a database read per state.
+   *
+   * A bound the new definition DROPS has to be cleared explicitly: `extendObject` merges, so an
+   * old `min`/`max` outlives the definition that put it there forever. Measured on
+   * `tuner.frequency`, whose FM-only envelope had to go once a DAB receiver reported 180064 kHz
+   * into it — without a clearing write exactly the installations with the problem would keep it.
+   */
+  private readonly storedBounds = new Map<string, BoundFields>();
   /** State ids (namespace-relative) some transport upserted in THIS run — live claims. */
   private readonly touchedThisRun = new Set<string>();
   /** Devices that reported connected at least once in this run (gates the orphan purge). */
@@ -737,6 +751,50 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
+   * Clear a bound the new definition no longer declares, so the following merge-write leaves
+   * exactly the new bounds behind — the same rule {@link clearStaleStates} applies to a
+   * shrinking dropdown (`reference_iobroker_objekt_aendern_ohne_loeschen`: write `null` for the
+   * key, never delete the object). Judged against the start-up snapshot and then against what
+   * this run wrote, so it costs no read per state.
+   *
+   * @param id the object id (namespace-relative)
+   * @param next the common part about to be written
+   */
+  private async clearStaleBounds(id: string, next: ObjectDef["common"]): Promise<void> {
+    const stored = this.storedBounds.get(id);
+    const gone = BOUND_FIELDS.filter(field => stored?.[field] !== undefined && next[field] === undefined);
+    this.storedBounds.set(id, { min: next.min, max: next.max, step: next.step });
+    if (gone.length === 0) {
+      return;
+    }
+    // ⚠️ NOT the `null` write `clearStaleStates` uses. A dropdown has a neutral value — an empty
+    // map — and `null` reaches it. A bound has none: the merge writes `common.max = null`, and
+    // js-controller's range check then compares against it numerically, where `null` counts as 0
+    // and every reading is "greater than max" (`reference_attribut_entfernen_ohne_setobject`, and
+    // the merge semantics measured in `reference_iobroker_objekt_aendern_ohne_loeschen`). The key
+    // has to GO, which is read → delete → re-create; `setObject` is the checker's S5054.
+    const object = await this.getObjectAsync(id);
+    if (object?.type !== "state") {
+      return;
+    }
+    // The READ common rides along, so `common.custom` — the user's history/chart settings — survives.
+    const common = { ...object.common } as ioBroker.StateCommon & Record<string, unknown>;
+    for (const field of gone) {
+      delete common[field];
+    }
+    try {
+      // Explicitly non-recursive: a state has no children, and this must never take a tree with it.
+      await this.delObjectAsync(id, { recursive: false });
+    } catch (e) {
+      // The merge that follows would only put the object back as it was — nothing is lost, but the
+      // stale bound stays, so it belongs in the log rather than passing silently.
+      this.log.debug(`${id}: could not drop the stale bound(s) ${gone.join(", ")} (${errorMessage(e)})`);
+      return;
+    }
+    await this.extendObject(id, { type: "state", common, native: object.native });
+  }
+
+  /**
    * Remember every datapoint that already exists, ONCE per adapter run.
    *
    * @see knownDatapoints for why the create path alone cannot answer "is this new?"
@@ -747,10 +805,13 @@ export class Yamaha extends utils.Adapter {
         if (object?.type === "state") {
           const id = stripNamespace(fullId, this.namespace);
           this.knownDatapoints.add(id);
-          const states = (object.common as { states?: unknown } | undefined)?.states;
+          const common = object.common as
+            { states?: unknown; min?: unknown; max?: unknown; step?: unknown } | undefined;
+          const states = common?.states;
           if (states !== null && typeof states === "object") {
             this.storedStates.set(id, states as Record<string, string>);
           }
+          this.storedBounds.set(id, boundsOfCommon(common));
         }
       }
     } catch (e) {
@@ -1161,6 +1222,9 @@ export class Yamaha extends utils.Adapter {
           await this.clearStaleStates(id, def.common.states);
         }
         const written = this.presentVolume(id, def);
+        if (written.type === "state") {
+          await this.clearStaleBounds(id, written.common);
+        }
         await this.extendObject(id, { type: written.type, common: written.common, native: {} });
         if (def.type === "state") {
           this.noteDatapointCreated(id);

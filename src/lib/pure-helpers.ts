@@ -611,3 +611,37 @@ export function nextDeviceLabel(
   }
   return wanted;
 }
+
+/** The numeric bounds an ioBroker state object can carry. */
+export interface BoundFields {
+  /** The smallest value the datapoint declares. */
+  min?: number;
+  /** The largest value the datapoint declares. */
+  max?: number;
+  /** The grid the datapoint's values sit on. */
+  step?: number;
+}
+
+/**
+ * The bound fields, in the order a clearing write lists them. Kept as one list so the snapshot,
+ * the comparison and the clearing write can never drift apart.
+ */
+export const BOUND_FIELDS = ["min", "max", "step"] as const;
+
+/**
+ * The bounds a stored object carries, with anything that is not a number treated as absent — an
+ * object written by an older version, or by hand in the admin, can hold a string there.
+ *
+ * @param common the stored object's `common` part
+ * @returns its numeric bounds
+ */
+export function boundsOfCommon(common: { min?: unknown; max?: unknown; step?: unknown } | undefined): BoundFields {
+  const bounds: BoundFields = {};
+  for (const field of BOUND_FIELDS) {
+    const value = common?.[field];
+    if (typeof value === "number") {
+      bounds[field] = value;
+    }
+  }
+  return bounds;
+}

@@ -255,7 +255,7 @@
   "tuner": "Tuner",
   "usb": "USB",
   "volume": "Volume",
-  "descVolume": "Le niveau sonore de la zone : les deux protocoles texte donnent des décibels, MusicCast ses propres pas — l'unité indique lequel.",
+  "descVolume": "Le niveau sonore de la zone, dans l'échelle que l'ampli affiche lui-même : des décibels s'il a un affichage en décibels, sinon ses propres pas.",
   "volumeInterlock": "Verrouillage du volume",
   "yncaControlPort": "Port de commande YNCA",
   "ypaoVolume": "Volume YPAO",

@@ -255,7 +255,7 @@
   "tuner": "Tuner",
   "usb": "USB",
   "volume": "Głośność",
-  "descVolume": "Jak głośno gra strefa: dwa protokoły tekstowe podają decybele, MusicCast własne kroki — jednostka mówi, który z nich.",
+  "descVolume": "Jak głośno gra strefa, w skali, którą pokazuje sam amplituner: decybele, jeśli ma wskazanie w decybelach, w przeciwnym razie własne kroki.",
   "volumeInterlock": "Sprzężenie głośności",
   "yncaControlPort": "Port sterowania YNCA",
   "ypaoVolume": "Głośność YPAO",

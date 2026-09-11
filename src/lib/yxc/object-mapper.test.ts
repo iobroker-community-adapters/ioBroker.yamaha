@@ -549,6 +549,24 @@ describe("the device's own lists are DECLARED, and the words it reports are alwa
     expect(freq?.step).toBeUndefined();
   });
 
+  test("a band the device declares without a range leaves the frequency unbounded", () => {
+    // What every DAB receiver in the captures does: `func_list` lists dab, `range_step` covers
+    // fm alone — and getPlayInfo then reports 180064 kHz from the DAB band into this datapoint.
+    // Taking the FM envelope there put the device's own value outside its own bounds.
+    const objs = mapYxcToObjects({
+      zones: [{ id: "main", funcs: ["power"], inputs: [] }],
+      media: ["tuner"],
+      tuner: {
+        bands: ["fm", "dab"],
+        presetType: "separate",
+        ranges: { fm: { min: 87500, max: 108000, step: 50 } },
+      },
+    });
+    const freq = objs.find(o => o.id === "tuner.frequency")?.common;
+    expect(freq?.min).toBeUndefined();
+    expect(freq?.max).toBeUndefined();
+  });
+
   test("a tuner without declared ranges keeps an unbounded frequency", () => {
     const objs = mapYxcToObjects({
       zones: [{ id: "main", funcs: ["power"], inputs: [] }],

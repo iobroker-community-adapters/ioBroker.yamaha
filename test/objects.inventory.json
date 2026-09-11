@@ -8521,9 +8521,7 @@
       "unit": "kHz",
       "role": "level",
       "read": true,
-      "write": true,
-      "min": 87500,
-      "max": 108000
+      "write": true
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_11.tuner.frequency"
@@ -12380,17 +12378,17 @@
         "zh-cn": "音量"
       },
       "desc": {
-        "en": "How loud the zone plays: the two text protocols report decibels, MusicCast its own step count — the unit tells you which.",
-        "de": "Wie laut die Zone spielt: die beiden Text-Protokolle melden Dezibel, MusicCast seine eigene Schrittzahl — die Einheit sagt, welche.",
-        "ru": "Насколько громко играет зона: два текстовых протокола дают децибелы, MusicCast — свои шаги; единица измерения показывает, что именно.",
-        "pt": "Quão alto a zona toca: os dois protocolos de texto dão decibéis, o MusicCast os seus próprios passos — a unidade indica qual.",
-        "nl": "Hoe hard de zone speelt: de twee tekstprotocollen geven decibel, MusicCast zijn eigen stappen — de eenheid zegt welke.",
-        "fr": "Le niveau sonore de la zone : les deux protocoles texte donnent des décibels, MusicCast ses propres pas — l'unité indique lequel.",
-        "it": "Quanto forte suona la zona: i due protocolli testuali danno decibel, MusicCast i propri passi — l'unità dice quale.",
-        "es": "Lo alto que suena la zona: los dos protocolos de texto dan decibelios, MusicCast sus propios pasos — la unidad indica cuál.",
-        "pl": "Jak głośno gra strefa: dwa protokoły tekstowe podają decybele, MusicCast własne kroki — jednostka mówi, który z nich.",
-        "uk": "Наскільки гучно грає зона: два текстові протоколи дають децибели, MusicCast — власні кроки; одиниця показує, що саме.",
-        "zh-cn": "该区域的音量：两种文本协议给出分贝，MusicCast 给出自身的步进值，单位标明是哪一种。"
+        "en": "How loud the zone plays, in the scale the receiver itself shows — decibels where it has a decibel display, its own step count where it has none.",
+        "de": "Wie laut die Zone spielt, in der Skala, die der Receiver selbst anzeigt — Dezibel, wenn er eine Dezibel-Anzeige hat, sonst seine eigene Schrittzahl.",
+        "ru": "Насколько громко играет зона — в той шкале, которую показывает сам ресивер: децибелы, если у него есть индикация в децибелах, иначе его собственные шаги.",
+        "pt": "Quão alto a zona toca, na escala que o próprio recetor mostra: decibéis se tiver indicação em decibéis, caso contrário os seus próprios passos.",
+        "nl": "Hoe hard de zone speelt, in de schaal die de receiver zelf toont: decibel als hij een decibelweergave heeft, anders zijn eigen stappen.",
+        "fr": "Le niveau sonore de la zone, dans l'échelle que l'ampli affiche lui-même : des décibels s'il a un affichage en décibels, sinon ses propres pas.",
+        "it": "Quanto forte suona la zona, nella scala che il ricevitore stesso mostra: decibel se ha un display in decibel, altrimenti i propri passi.",
+        "es": "Lo alto que suena la zona, en la escala que el propio receptor muestra: decibelios si tiene indicación en decibelios, y si no sus propios pasos.",
+        "pl": "Jak głośno gra strefa, w skali, którą pokazuje sam amplituner: decybele, jeśli ma wskazanie w decybelach, w przeciwnym razie własne kroki.",
+        "uk": "Наскільки гучно грає зона — у тій шкалі, яку показує сам ресивер: децибели, якщо він має індикацію в децибелах, інакше власні кроки.",
+        "zh-cn": "该区域的音量，采用接收机自身显示的刻度：有分贝显示时为分贝，没有时为它自己的步进值。"
       },
       "type": "number",
       "role": "level.volume",
@@ -19572,9 +19570,7 @@
       "unit": "kHz",
       "role": "level",
       "read": true,
-      "write": true,
-      "min": 87500,
-      "max": 108000
+      "write": true
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_13.tuner.frequency"
@@ -22809,17 +22805,17 @@
         "zh-cn": "音量"
       },
       "desc": {
-        "en": "How loud the zone plays: the two text protocols report decibels, MusicCast its own step count — the unit tells you which.",
-        "de": "Wie laut die Zone spielt: die beiden Text-Protokolle melden Dezibel, MusicCast seine eigene Schrittzahl — die Einheit sagt, welche.",
-        "ru": "Насколько громко играет зона: два текстовых протокола дают децибелы, MusicCast — свои шаги; единица измерения показывает, что именно.",
-        "pt": "Quão alto a zona toca: os dois protocolos de texto dão decibéis, o MusicCast os seus próprios passos — a unidade indica qual.",
-        "nl": "Hoe hard de zone speelt: de twee tekstprotocollen geven decibel, MusicCast zijn eigen stappen — de eenheid zegt welke.",
-        "fr": "Le niveau sonore de la zone : les deux protocoles texte donnent des décibels, MusicCast ses propres pas — l'unité indique lequel.",
-        "it": "Quanto forte suona la zona: i due protocolli testuali danno decibel, MusicCast i propri passi — l'unità dice quale.",
-        "es": "Lo alto que suena la zona: los dos protocolos de texto dan decibelios, MusicCast sus propios pasos — la unidad indica cuál.",
-        "pl": "Jak głośno gra strefa: dwa protokoły tekstowe podają decybele, MusicCast własne kroki — jednostka mówi, który z nich.",
-        "uk": "Наскільки гучно грає зона: два текстові протоколи дають децибели, MusicCast — власні кроки; одиниця показує, що саме.",
-        "zh-cn": "该区域的音量：两种文本协议给出分贝，MusicCast 给出自身的步进值，单位标明是哪一种。"
+        "en": "How loud the zone plays, in the scale the receiver itself shows — decibels where it has a decibel display, its own step count where it has none.",
+        "de": "Wie laut die Zone spielt, in der Skala, die der Receiver selbst anzeigt — Dezibel, wenn er eine Dezibel-Anzeige hat, sonst seine eigene Schrittzahl.",
+        "ru": "Насколько громко играет зона — в той шкале, которую показывает сам ресивер: децибелы, если у него есть индикация в децибелах, иначе его собственные шаги.",
+        "pt": "Quão alto a zona toca, na escala que o próprio recetor mostra: decibéis se tiver indicação em decibéis, caso contrário os seus próprios passos.",
+        "nl": "Hoe hard de zone speelt, in de schaal die de receiver zelf toont: decibel als hij een decibelweergave heeft, anders zijn eigen stappen.",
+        "fr": "Le niveau sonore de la zone, dans l'échelle que l'ampli affiche lui-même : des décibels s'il a un affichage en décibels, sinon ses propres pas.",
+        "it": "Quanto forte suona la zona, nella scala che il ricevitore stesso mostra: decibel se ha un display in decibel, altrimenti i propri passi.",
+        "es": "Lo alto que suena la zona, en la escala que el propio receptor muestra: decibelios si tiene indicación en decibelios, y si no sus propios pasos.",
+        "pl": "Jak głośno gra strefa, w skali, którą pokazuje sam amplituner: decybele, jeśli ma wskazanie w decybelach, w przeciwnym razie własne kroki.",
+        "uk": "Наскільки гучно грає зона — у тій шкалі, яку показує сам ресивер: децибели, якщо він має індикацію в децибелах, інакше власні кроки.",
+        "zh-cn": "该区域的音量，采用接收机自身显示的刻度：有分贝显示时为分贝，没有时为它自己的步进值。"
       },
       "type": "number",
       "role": "level.volume",
@@ -25763,17 +25759,17 @@
         "zh-cn": "音量"
       },
       "desc": {
-        "en": "How loud the zone plays: the two text protocols report decibels, MusicCast its own step count — the unit tells you which.",
-        "de": "Wie laut die Zone spielt: die beiden Text-Protokolle melden Dezibel, MusicCast seine eigene Schrittzahl — die Einheit sagt, welche.",
-        "ru": "Насколько громко играет зона: два текстовых протокола дают децибелы, MusicCast — свои шаги; единица измерения показывает, что именно.",
-        "pt": "Quão alto a zona toca: os dois protocolos de texto dão decibéis, o MusicCast os seus próprios passos — a unidade indica qual.",
-        "nl": "Hoe hard de zone speelt: de twee tekstprotocollen geven decibel, MusicCast zijn eigen stappen — de eenheid zegt welke.",
-        "fr": "Le niveau sonore de la zone : les deux protocoles texte donnent des décibels, MusicCast ses propres pas — l'unité indique lequel.",
-        "it": "Quanto forte suona la zona: i due protocolli testuali danno decibel, MusicCast i propri passi — l'unità dice quale.",
-        "es": "Lo alto que suena la zona: los dos protocolos de texto dan decibelios, MusicCast sus propios pasos — la unidad indica cuál.",
-        "pl": "Jak głośno gra strefa: dwa protokoły tekstowe podają decybele, MusicCast własne kroki — jednostka mówi, który z nich.",
-        "uk": "Наскільки гучно грає зона: два текстові протоколи дають децибели, MusicCast — власні кроки; одиниця показує, що саме.",
-        "zh-cn": "该区域的音量：两种文本协议给出分贝，MusicCast 给出自身的步进值，单位标明是哪一种。"
+        "en": "How loud the zone plays, in the scale the receiver itself shows — decibels where it has a decibel display, its own step count where it has none.",
+        "de": "Wie laut die Zone spielt, in der Skala, die der Receiver selbst anzeigt — Dezibel, wenn er eine Dezibel-Anzeige hat, sonst seine eigene Schrittzahl.",
+        "ru": "Насколько громко играет зона — в той шкале, которую показывает сам ресивер: децибелы, если у него есть индикация в децибелах, иначе его собственные шаги.",
+        "pt": "Quão alto a zona toca, na escala que o próprio recetor mostra: decibéis se tiver indicação em decibéis, caso contrário os seus próprios passos.",
+        "nl": "Hoe hard de zone speelt, in de schaal die de receiver zelf toont: decibel als hij een decibelweergave heeft, anders zijn eigen stappen.",
+        "fr": "Le niveau sonore de la zone, dans l'échelle que l'ampli affiche lui-même : des décibels s'il a un affichage en décibels, sinon ses propres pas.",
+        "it": "Quanto forte suona la zona, nella scala che il ricevitore stesso mostra: decibel se ha un display in decibel, altrimenti i propri passi.",
+        "es": "Lo alto que suena la zona, en la escala que el propio receptor muestra: decibelios si tiene indicación en decibelios, y si no sus propios pasos.",
+        "pl": "Jak głośno gra strefa, w skali, którą pokazuje sam amplituner: decybele, jeśli ma wskazanie w decybelach, w przeciwnym razie własne kroki.",
+        "uk": "Наскільки гучно грає зона — у тій шкалі, яку показує сам ресивер: децибели, якщо він має індикацію в децибелах, інакше власні кроки.",
+        "zh-cn": "该区域的音量，采用接收机自身显示的刻度：有分贝显示时为分贝，没有时为它自己的步进值。"
       },
       "min": 0,
       "max": 60,
@@ -28650,17 +28646,17 @@
         "zh-cn": "音量"
       },
       "desc": {
-        "en": "How loud the zone plays: the two text protocols report decibels, MusicCast its own step count — the unit tells you which.",
-        "de": "Wie laut die Zone spielt: die beiden Text-Protokolle melden Dezibel, MusicCast seine eigene Schrittzahl — die Einheit sagt, welche.",
-        "ru": "Насколько громко играет зона: два текстовых протокола дают децибелы, MusicCast — свои шаги; единица измерения показывает, что именно.",
-        "pt": "Quão alto a zona toca: os dois protocolos de texto dão decibéis, o MusicCast os seus próprios passos — a unidade indica qual.",
-        "nl": "Hoe hard de zone speelt: de twee tekstprotocollen geven decibel, MusicCast zijn eigen stappen — de eenheid zegt welke.",
-        "fr": "Le niveau sonore de la zone : les deux protocoles texte donnent des décibels, MusicCast ses propres pas — l'unité indique lequel.",
-        "it": "Quanto forte suona la zona: i due protocolli testuali danno decibel, MusicCast i propri passi — l'unità dice quale.",
-        "es": "Lo alto que suena la zona: los dos protocolos de texto dan decibelios, MusicCast sus propios pasos — la unidad indica cuál.",
-        "pl": "Jak głośno gra strefa: dwa protokoły tekstowe podają decybele, MusicCast własne kroki — jednostka mówi, który z nich.",
-        "uk": "Наскільки гучно грає зона: два текстові протоколи дають децибели, MusicCast — власні кроки; одиниця показує, що саме.",
-        "zh-cn": "该区域的音量：两种文本协议给出分贝，MusicCast 给出自身的步进值，单位标明是哪一种。"
+        "en": "How loud the zone plays, in the scale the receiver itself shows — decibels where it has a decibel display, its own step count where it has none.",
+        "de": "Wie laut die Zone spielt, in der Skala, die der Receiver selbst anzeigt — Dezibel, wenn er eine Dezibel-Anzeige hat, sonst seine eigene Schrittzahl.",
+        "ru": "Насколько громко играет зона — в той шкале, которую показывает сам ресивер: децибелы, если у него есть индикация в децибелах, иначе его собственные шаги.",
+        "pt": "Quão alto a zona toca, na escala que o próprio recetor mostra: decibéis se tiver indicação em decibéis, caso contrário os seus próprios passos.",
+        "nl": "Hoe hard de zone speelt, in de schaal die de receiver zelf toont: decibel als hij een decibelweergave heeft, anders zijn eigen stappen.",
+        "fr": "Le niveau sonore de la zone, dans l'échelle que l'ampli affiche lui-même : des décibels s'il a un affichage en décibels, sinon ses propres pas.",
+        "it": "Quanto forte suona la zona, nella scala che il ricevitore stesso mostra: decibel se ha un display in decibel, altrimenti i propri passi.",
+        "es": "Lo alto que suena la zona, en la escala que el propio receptor muestra: decibelios si tiene indicación en decibelios, y si no sus propios pasos.",
+        "pl": "Jak głośno gra strefa, w skali, którą pokazuje sam amplituner: decybele, jeśli ma wskazanie w decybelach, w przeciwnym razie własne kroki.",
+        "uk": "Наскільки гучно грає зона — у тій шкалі, яку показує сам ресивер: децибели, якщо він має індикацію в децибелах, інакше власні кроки.",
+        "zh-cn": "该区域的音量，采用接收机自身显示的刻度：有分贝显示时为分贝，没有时为它自己的步进值。"
       },
       "min": 0,
       "max": 100,
@@ -31960,9 +31956,7 @@
       "unit": "kHz",
       "role": "level",
       "read": true,
-      "write": true,
-      "min": 87500,
-      "max": 108000
+      "write": true
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_17.tuner.frequency"
@@ -32297,17 +32291,17 @@
         "zh-cn": "音量"
       },
       "desc": {
-        "en": "How loud the zone plays: the two text protocols report decibels, MusicCast its own step count — the unit tells you which.",
-        "de": "Wie laut die Zone spielt: die beiden Text-Protokolle melden Dezibel, MusicCast seine eigene Schrittzahl — die Einheit sagt, welche.",
-        "ru": "Насколько громко играет зона: два текстовых протокола дают децибелы, MusicCast — свои шаги; единица измерения показывает, что именно.",
-        "pt": "Quão alto a zona toca: os dois protocolos de texto dão decibéis, o MusicCast os seus próprios passos — a unidade indica qual.",
-        "nl": "Hoe hard de zone speelt: de twee tekstprotocollen geven decibel, MusicCast zijn eigen stappen — de eenheid zegt welke.",
-        "fr": "Le niveau sonore de la zone : les deux protocoles texte donnent des décibels, MusicCast ses propres pas — l'unité indique lequel.",
-        "it": "Quanto forte suona la zona: i due protocolli testuali danno decibel, MusicCast i propri passi — l'unità dice quale.",
-        "es": "Lo alto que suena la zona: los dos protocolos de texto dan decibelios, MusicCast sus propios pasos — la unidad indica cuál.",
-        "pl": "Jak głośno gra strefa: dwa protokoły tekstowe podają decybele, MusicCast własne kroki — jednostka mówi, który z nich.",
-        "uk": "Наскільки гучно грає зона: два текстові протоколи дають децибели, MusicCast — власні кроки; одиниця показує, що саме.",
-        "zh-cn": "该区域的音量：两种文本协议给出分贝，MusicCast 给出自身的步进值，单位标明是哪一种。"
+        "en": "How loud the zone plays, in the scale the receiver itself shows — decibels where it has a decibel display, its own step count where it has none.",
+        "de": "Wie laut die Zone spielt, in der Skala, die der Receiver selbst anzeigt — Dezibel, wenn er eine Dezibel-Anzeige hat, sonst seine eigene Schrittzahl.",
+        "ru": "Насколько громко играет зона — в той шкале, которую показывает сам ресивер: децибелы, если у него есть индикация в децибелах, иначе его собственные шаги.",
+        "pt": "Quão alto a zona toca, na escala que o próprio recetor mostra: decibéis se tiver indicação em decibéis, caso contrário os seus próprios passos.",
+        "nl": "Hoe hard de zone speelt, in de schaal die de receiver zelf toont: decibel als hij een decibelweergave heeft, anders zijn eigen stappen.",
+        "fr": "Le niveau sonore de la zone, dans l'échelle que l'ampli affiche lui-même : des décibels s'il a un affichage en décibels, sinon ses propres pas.",
+        "it": "Quanto forte suona la zona, nella scala che il ricevitore stesso mostra: decibel se ha un display in decibel, altrimenti i propri passi.",
+        "es": "Lo alto que suena la zona, en la escala que el propio receptor muestra: decibelios si tiene indicación en decibelios, y si no sus propios pasos.",
+        "pl": "Jak głośno gra strefa, w skali, którą pokazuje sam amplituner: decybele, jeśli ma wskazanie w decybelach, w przeciwnym razie własne kroki.",
+        "uk": "Наскільки гучно грає зона — у тій шкалі, яку показує сам ресивер: децибели, якщо він має індикацію в децибелах, інакше власні кроки.",
+        "zh-cn": "该区域的音量，采用接收机自身显示的刻度：有分贝显示时为分贝，没有时为它自己的步进值。"
       },
       "min": 0,
       "max": 63,
@@ -32799,17 +32793,17 @@
         "zh-cn": "音量"
       },
       "desc": {
-        "en": "How loud the zone plays: the two text protocols report decibels, MusicCast its own step count — the unit tells you which.",
-        "de": "Wie laut die Zone spielt: die beiden Text-Protokolle melden Dezibel, MusicCast seine eigene Schrittzahl — die Einheit sagt, welche.",
-        "ru": "Насколько громко играет зона: два текстовых протокола дают децибелы, MusicCast — свои шаги; единица измерения показывает, что именно.",
-        "pt": "Quão alto a zona toca: os dois protocolos de texto dão decibéis, o MusicCast os seus próprios passos — a unidade indica qual.",
-        "nl": "Hoe hard de zone speelt: de twee tekstprotocollen geven decibel, MusicCast zijn eigen stappen — de eenheid zegt welke.",
-        "fr": "Le niveau sonore de la zone : les deux protocoles texte donnent des décibels, MusicCast ses propres pas — l'unité indique lequel.",
-        "it": "Quanto forte suona la zona: i due protocolli testuali danno decibel, MusicCast i propri passi — l'unità dice quale.",
-        "es": "Lo alto que suena la zona: los dos protocolos de texto dan decibelios, MusicCast sus propios pasos — la unidad indica cuál.",
-        "pl": "Jak głośno gra strefa: dwa protokoły tekstowe podają decybele, MusicCast własne kroki — jednostka mówi, który z nich.",
-        "uk": "Наскільки гучно грає зона: два текстові протоколи дають децибели, MusicCast — власні кроки; одиниця показує, що саме.",
-        "zh-cn": "该区域的音量：两种文本协议给出分贝，MusicCast 给出自身的步进值，单位标明是哪一种。"
+        "en": "How loud the zone plays, in the scale the receiver itself shows — decibels where it has a decibel display, its own step count where it has none.",
+        "de": "Wie laut die Zone spielt, in der Skala, die der Receiver selbst anzeigt — Dezibel, wenn er eine Dezibel-Anzeige hat, sonst seine eigene Schrittzahl.",
+        "ru": "Насколько громко играет зона — в той шкале, которую показывает сам ресивер: децибелы, если у него есть индикация в децибелах, иначе его собственные шаги.",
+        "pt": "Quão alto a zona toca, na escala que o próprio recetor mostra: decibéis se tiver indicação em decibéis, caso contrário os seus próprios passos.",
+        "nl": "Hoe hard de zone speelt, in de schaal die de receiver zelf toont: decibel als hij een decibelweergave heeft, anders zijn eigen stappen.",
+        "fr": "Le niveau sonore de la zone, dans l'échelle que l'ampli affiche lui-même : des décibels s'il a un affichage en décibels, sinon ses propres pas.",
+        "it": "Quanto forte suona la zona, nella scala che il ricevitore stesso mostra: decibel se ha un display in decibel, altrimenti i propri passi.",
+        "es": "Lo alto que suena la zona, en la escala que el propio receptor muestra: decibelios si tiene indicación en decibelios, y si no sus propios pasos.",
+        "pl": "Jak głośno gra strefa, w skali, którą pokazuje sam amplituner: decybele, jeśli ma wskazanie w decybelach, w przeciwnym razie własne kroki.",
+        "uk": "Наскільки гучно грає зона — у тій шкалі, яку показує сам ресивер: децибели, якщо він має індикацію в децибелах, інакше власні кроки.",
+        "zh-cn": "该区域的音量，采用接收机自身显示的刻度：有分贝显示时为分贝，没有时为它自己的步进值。"
       }
     },
     "native": {},

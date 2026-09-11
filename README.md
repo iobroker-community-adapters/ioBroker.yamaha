@@ -59,6 +59,8 @@ Devices are managed in the admin as cards. **Leave the list empty** and the adap
 
 Older Yamaha receivers (before ~2010, the XML protocol) do not announce themselves on the network and must be added manually. The **XML query interval** sets how often they are polled (default 60 seconds).
 
+The **Volume as 0–100 %** switch decides what the `volume` datapoints mean. Off (the default) each one carries the scale the receiver itself shows: decibels where the receiver has a decibel display, its own step count where it has none — the datapoint's unit and range say which, and they can differ from zone to zone because the receiver declares them per zone. On, every volume datapoint, in every zone and on every device, carries 0–100 % instead — the range most VIS widgets expect. The adapter converts in both directions, so the receiver is always sent the value it expects.
+
 The **Data points** section switches whole groups of datapoints on or off — **Playback & browsing**, **Tuner**, **Multiroom**, **HDMI**, **Scenes**, **Sound**, **Advanced** and **Clock & alarm**. A switched-off group is removed from the tree and not even queried, which also speeds up the startup; the amplifier core (power, volume, mute, input, sound program, sleep) always stays on.
 
 ## State Tree
@@ -117,6 +119,7 @@ On the very first contact the adapter asks the receiver which functions it suppo
 - (krobipd) New: Setting "Volume as 0–100 %" turns every volume datapoint, in every zone, into a percentage — what most VIS widgets expect. Off by default; the receiver's own scale stays the truth
 - (krobipd) Changed: The datapoints actualVolume, actualVolumeMode and inputText are gone — volume and input carry the same information
 - (krobipd) Changed: After this update every receiver is asked about its abilities once more, so the first start takes a little longer than usual
+- (krobipd) Fixed: A DAB receiver no longer logs a warning on every tuner poll — the frequency datapoint was limited to the FM band while the receiver reported DAB frequencies
 
 ### 2.7.2 (2026-09-09)
 

@@ -255,7 +255,7 @@
   "tuner": "调谐器",
   "usb": "USB",
   "volume": "音量",
-  "descVolume": "该区域的音量：两种文本协议给出分贝，MusicCast 给出自身的步进值，单位标明是哪一种。",
+  "descVolume": "该区域的音量，采用接收机自身显示的刻度：有分贝显示时为分贝，没有时为它自己的步进值。",
   "volumeInterlock": "音量联动",
   "yncaControlPort": "YNCA 控制端口",
   "ypaoVolume": "YPAO 音量",

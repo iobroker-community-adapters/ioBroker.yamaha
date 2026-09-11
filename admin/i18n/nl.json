@@ -255,7 +255,7 @@
   "tuner": "Tuner",
   "usb": "USB",
   "volume": "Volume",
-  "descVolume": "Hoe hard de zone speelt: de twee tekstprotocollen geven decibel, MusicCast zijn eigen stappen — de eenheid zegt welke.",
+  "descVolume": "Hoe hard de zone speelt, in de schaal die de receiver zelf toont: decibel als hij een decibelweergave heeft, anders zijn eigen stappen.",
   "volumeInterlock": "Volumekoppeling",
   "yncaControlPort": "YNCA-besturingspoort",
   "ypaoVolume": "YPAO-volume",

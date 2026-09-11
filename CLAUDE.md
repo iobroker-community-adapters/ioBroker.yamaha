@@ -433,6 +433,22 @@ entscheidet etwas ([[feedback_user_hardware_ist_sample]]). Alle Funde sind umges
   (`assertOk`). Deklariert eine Zone eine Anzeigeskala und liefert im Status kein `actual_volume`,
   wird der raw-Wert mit demselben Schritt umgerechnet — sonst stünde 66 in einem dB-Datenpunkt
   (dieselbe js-controller-Warnung, eine Zone weiter).
+- **Eine unvollständige Deklaration ist KEINE Deklaration** (seit 2.8.0, `tuner.frequency`): die
+  Hüllkurve über die deklarierten Bandbereiche wird nur gesetzt, wenn JEDES Band aus `func_list` auch
+  einen `range_step`-Eintrag hat. Ein DAB-Receiver deklariert `[fm, rds, dab]` und einen Bereich für
+  `fm` allein — auf allen drei DAB-Mitschnitten (RX-A2070, RX-V6A, CD-NT670D) — und meldet dann
+  180064 kHz aus dem DAB-Band in denselben Datenpunkt: js-controller warnte bei jedem Abruf. Dieselbe
+  Regel wie bei `volume`: genommen, nie abgeleitet, und lieber keine Grenze als eine, der das Gerät
+  selbst widerspricht.
+- **Eine WEGGEFALLENE Grenze braucht einen Löschvorgang, kein `null`** (`clearStaleBounds` in
+  `main.ts`): `extendObject` verschmilzt, ein geschriebenes `null` SETZT den Schlüssel auf `null`, und
+  die Bereichsprüfung liest `null` numerisch als 0 — jeder Messwert wäre „greater than max". Anders als
+  bei einem Dropdown (`clearStaleStates`, dort ist die leere Karte der neutrale Wert) gibt es für eine
+  Grenze keinen neutralen Wert, also lesen → `delObjectAsync(id, {recursive: false})` → `extendObject`
+  mit dem gelesenen `common` ohne das Feld (`reference_attribut_entfernen_ohne_setobject`; `setObject`
+  ist S5054). Das gelesene `common` fährt mit, damit `common.custom` — die Aufzeichnung des Nutzers —
+  die Reparatur überlebt. Welche Grenzen ein Datenpunkt VORHER trug, steht aus dem einen Start-Abzug
+  in `storedBounds`; es gibt keinen Lesevorgang je Datenpunkt, und gelesen wird nur im seltenen Fall.
 - **Ein Schalter macht aus JEDER Lautstärke Prozent** (`volumeAsPercent`, Instanz-Einstellung, Vorgabe AUS,
   seit 2.8.0 — krobi: „ein schalter für ALLE. ich will das nicht komplizierter machen als es sein muss"):
   Grund ist #623 und das menschliche Maß — ein fertiges VIS-Widget an `volume` trifft sonst eine Zahl, die
@@ -466,7 +482,9 @@ entscheidet etwas ([[feedback_user_hardware_ist_sample]]). Alle Funde sind umges
   `tone_control` als −12…+12 in 25 Schritten — dieselben 25 Schritte, die die YNCA-Spec −6…+6 dB
   in 0,5er-Schritten nennt. Das `dB`-Etikett an den MusicCast-Einträgen ist deshalb weg, und
   `sound.bass`/`sound.treble`/`sound.subwooferTrim` gehören per Override dem Transport, dessen
-  Skala als Dezibel dokumentiert ist (wie `volume`). Ein reines MusicCast-Gerät behält seine
+  Skala als Dezibel dokumentiert ist. `volume` trug bis 2.7.2 denselben Override; seit 2.8.0 ist er
+  weg, weil MusicCast dort als EINZIGER Transport meldet, was das Gerät anzeigt — bei der Tonregelung
+  meldet es nur seine eigene Zählweise. Ein reines MusicCast-Gerät behält seine
   eigene Skala mit seinen eigenen Grenzen — ohne Einheiten-Behauptung.
 - **Ein BEWEIS schlägt den Rang.** `ObjectDef.unproven` markiert einen Anspruch ohne Nachweis,
   `pickOwner` zieht einen bewiesenen Kandidaten vor. Der Fall: im Bereitschaftszustand antworten
@@ -860,10 +878,11 @@ räumt den KOMPLETTEN Alt-Baum (47 Instanz-Objekte + dynamische `Realtime.*`/`Sy
 ## Objekt-Inventar aus Fixtures (`npm run test:inventory`)
 
 Der Nachweis, dass ein Update JEDEN Datenpunkt einer bestehenden Installation erreicht — ohne
-Server, für alle Gerätetypen (Flottenstandard, `Entwicklung/CLAUDE_TEMPLATES.md`). Sieben
+Server, für alle Gerätetypen (Flottenstandard, `Entwicklung/CLAUDE_TEMPLATES.md`). Acht
 Fixture-Geräte decken die fünf Geräteklassen aus `device-type.ts` UND alle Transport-Kombinationen
-ab: MusicCast+YNCA (RX-A2070), YNCA allein (RX-V473, R-N500), XML allein (RX-V6A), MusicCast allein
-(WX-030, YSP-1600, CD-NT670D). Die Antworten sind echte Geräteantworten aus den gebündelten
+ab: MusicCast+YNCA (RX-A2070), alle drei auf EINEM Receiver (RX-V6A), YNCA allein (RX-V473, R-N500),
+XML allein (RX-V3900, der 2008er Dialekt), MusicCast allein (WX-030, YSP-1600, CD-NT670D).
+Die Antworten sind echte Geräteantworten aus den gebündelten
 Mitschnitten, destilliert nach `test/fixtures/inventory/` — die XML-Hälfte ist von krobis eigener
 Konfiguration bereinigt (Eingangsnamen auf Werkseinstellung, System-ID genullt), sie gehört nicht
 in ein öffentliches Repo.
@@ -882,6 +901,15 @@ in ein öffentliches Repo.
   Geräteaufruf erkennt, geht UNVERÄNDERT durch — der Adapter spricht über dieselben APIs mit der
   Zustands-/Objektdatenbank, und ein „normalisierendes" Argument dort beendet die Instanz vor dem
   ersten Gerätekontakt.
+- **Der Lautstärke-Schalter wird in BEIDEN Stellungen inventarisiert** (seit 2.8.0): der Lauf fährt
+  die acht Fixtures ein zweites Mal mit `volumeAsPercent: true` und sichert, dass JEDER
+  `volume`-Datenpunkt jedes Geräts und jeder Zone dann 0…100 %, Schritt 0,5, Rolle `level.volume` und
+  die Prozent-Erklärung trägt — und dass die Prozent-Stellung GENAU dieselben Datenpunkte baut wie die
+  Vorgabe-Stellung. Ohne den zweiten Vergleich ginge die erste Zusicherung leer durch, sobald eine
+  Geräteklasse in der Prozent-Stellung gar kein `volume` mehr bauen würde. In der Vorgabe-Stellung
+  sichert derselbe Lauf: kein Gerät trägt zwei Lautstärke-SKALEN über seine Zonen (Einheit + Schritt;
+  die GRENZEN dürfen je Zone abweichen, der RX-V6A meldet main 0…97 und Zone 2 0…90,5), jede Grenze
+  ist die DEKLARIERTE der Zone, und die drei mit 2.8.0 entfernten Ids stehen nirgends mehr im Baum.
 - **Gewartet wird auf einen BAUM, nicht auf eine Zahl.** Der Gerätekopf (`info.*`) existiert lange
   vor der ersten Transportantwort, also sieht ein Baum aus lauter Köpfen „stabil" aus und das
   Inventar käme leer heraus. Erst wenn jedes Gerät mehr als seine Kopfobjekte trägt, wird auf Ruhe
@@ -936,8 +964,9 @@ in ein öffentliches Repo.
   beiden Funde des Objekt-Inventars) + `mutations_yamaha_2026-09-09-w11.py` (Welle 11 = Phase 1 des
   Fähigkeits-Plans, IDs D1–D24) + `mutations_yamaha_2026-09-09-w12.py` (Welle 12 = Phase 2, IDs P1–P14)
   - `mutations_yamaha_2026-09-11-w13.py` (Welle 13 = die Lautstärke auf
-    der Geräteskala und der Prozent-Schalter, IDs Q1–Q20; im ersten Lauf 16/20, die vier Überlebenden waren
-    echte Testlücken und sind geschlossen → 20/20). Läufer `mutation-test.py`. Nadeln sind
+    der Geräteskala und der Prozent-Schalter, IDs Q1–Q22; im ersten Lauf 16/20, die vier Überlebenden waren
+    echte Testlücken und sind geschlossen → 20/20, dann Q21/Q22 für die zwei Regeln nachgezogen, die der
+    Inventar-Lauf beider Schalterstellungen noch aufdeckte → 22/22). Läufer `mutation-test.py`. Nadeln sind
     exakte Quellzeilen — nach Prettier-Umbrüchen oder Refactorings ZUERST den Nadel-Vorab-Check (jede Nadel
     genau 1×), sonst misst der Lauf nichts. Zwei äquivalente Mutanten (X2, X4 — unerreichbare
     Invarianten-Wächter, im Quelltext begründet); die vier anderen vom 22.08. (M9, X1, Y1, Y13) waren toter

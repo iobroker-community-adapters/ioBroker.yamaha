@@ -255,7 +255,7 @@
   "tuner": "Sintonizzatore",
   "usb": "USB",
   "volume": "Volume",
-  "descVolume": "Quanto forte suona la zona: i due protocolli testuali danno decibel, MusicCast i propri passi — l'unità dice quale.",
+  "descVolume": "Quanto forte suona la zona, nella scala che il ricevitore stesso mostra: decibel se ha un display in decibel, altrimenti i propri passi.",
   "volumeInterlock": "Blocco volume",
   "yncaControlPort": "Porta di controllo YNCA",
   "ypaoVolume": "Volume YPAO",
