@@ -178,14 +178,6 @@ export const SOURCE_INPUTS: ReadonlyArray<{ value: string; subunits: readonly st
 /** Inputs that exist on zones only (a zone follows the main zone's source). */
 export const ZONE_ONLY_INPUTS: readonly string[] = ["Main Zone Sync"];
 
-/**
- * The subunits that carry a media player — derived from the source table, not a second list.
- * The tuner subunits are no player (their surface is `tuner.*`).
- */
-export const PLAYER_SUBUNITS: ReadonlySet<string> = new Set(
-  SOURCE_INPUTS.filter(source => source.value !== "TUNER").flatMap(source => source.subunits),
-);
-
 /** What the controller learned about one device's inputs — the evidence {@link deviceInputStates} judges by. */
 export interface InputEvidence {
   /** Subunits that answered AVAIL (or any function) this run. */
