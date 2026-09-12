@@ -80,6 +80,15 @@ const REDISCOVER_MIN_INTERVAL_MS = 300000;
  */
 const NATIVE_PERSIST_WINDOW_MS = 250;
 
+/**
+ * A map or set keyed by namespace-relative state ids — the shape {@link YamahaAdapter.forgetUnder}
+ * prunes when a device goes. Structural on purpose: `Map<string, T>` and `Set<string>` both fit.
+ */
+interface StateKeyedCache {
+  keys(): IterableIterator<string>;
+  delete(key: string): boolean;
+}
+
 /** A device's native patch waiting for its coalescing window to end. */
 interface PendingNative {
   /** The merged patch (latest value per key wins). */
@@ -400,6 +409,24 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
+   * Drop every entry of a state-id-keyed cache that belongs to one device.
+   *
+   * The caches are keyed by namespace-relative state ids (`stripNamespace` in
+   * {@link snapshotExistingDatapoints}), so a device owns exactly the keys under its own prefix.
+   *
+   * @param cache a map or set keyed by namespace-relative state ids
+   * @param deviceId the id-safe device id
+   */
+  private forgetUnder(cache: StateKeyedCache, deviceId: string): void {
+    const prefix = `${deviceId}.`;
+    for (const key of [...cache.keys()]) {
+      if (key.startsWith(prefix)) {
+        cache.delete(key);
+      }
+    }
+  }
+
+  /**
    * Remove one device for good: stop talking to it and delete its object tree.
    *
    * Driven by the device manager's delete action. Deleting a discovered device used to only
@@ -411,6 +438,13 @@ export class Yamaha extends utils.Adapter {
    */
   public async removeDevice(deviceId: string): Promise<void> {
     this.stopDevice(deviceId);
+    // A native patch still inside its coalescing window would fire AFTER the delete below and
+    // recreate the device object as a bare orphan — cancel it before anything else.
+    const pendingNative = this.pendingNative.get(deviceId);
+    if (pendingNative) {
+      this.clearTimeout(pendingNative.timer);
+      this.pendingNative.delete(deviceId);
+    }
     const record = this.deviceRecords.get(deviceId);
     if (record) {
       this.knownDeviceIps.delete(record.ip);
@@ -418,6 +452,18 @@ export class Yamaha extends utils.Adapter {
     this.deviceRecords.delete(deviceId);
     this.deviceConnected.delete(deviceId);
     this.readyDevices.delete(deviceId);
+    // Everything else this device left behind goes with it. A cache that survives makes the
+    // adapter believe it already did the work: re-adding the SAME id finds the icon cache
+    // intact, `updateDeviceIcon` bails on the identity check, and the card keeps the default
+    // silhouette `ensureDeviceHeader` seeds — a soundbar shows a receiver until the next start.
+    this.deviceIcons.delete(deviceId);
+    this.deviceLabels.delete(deviceId);
+    this.profiles.delete(deviceId);
+    this.forgetUnder(this.knownDatapoints, deviceId);
+    this.forgetUnder(this.storedStates, deviceId);
+    this.forgetUnder(this.storedBounds, deviceId);
+    this.forgetUnder(this.touchedThisRun, deviceId);
+    this.forgetUnder(this.volumeScales, deviceId);
     try {
       await this.delObjectAsync(deviceId, { recursive: true });
     } catch (e) {
