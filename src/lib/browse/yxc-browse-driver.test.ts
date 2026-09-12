@@ -136,3 +136,61 @@ describe("YxcBrowseDriver", () => {
     ]);
   });
 });
+
+// The second branch of each type guard in `fetch`. A MusicCast device that answers with a field
+// missing or in another shape must still produce a usable window — branch coverage sat at 71.7%
+// because every test fed a well-formed response.
+describe("YxcBrowseDriver survives a mangled list response", () => {
+  it("reads a neutral window when every field has the wrong type", async () => {
+    const { driver, windows, respond } = setup(["net_radio"]);
+    respond({
+      response_code: 0,
+      menu_name: 7,
+      menu_layer: null,
+      max_line: "many",
+      list_info: [{ text: 42, attribute: "2" }, {}],
+    });
+    await driver.open("netRadio");
+    expect(windows.at(-1)).toEqual({
+      menuName: "",
+      layer: 0,
+      // No usable max_line, so the window says what it actually holds.
+      totalItems: 2,
+      currentLine: 1,
+      rows: [
+        { line: 1, text: "", kind: "unselectable" },
+        { line: 2, text: "", kind: "unselectable" },
+      ],
+    });
+  });
+
+  it("reads an empty window when the list is not a list", async () => {
+    const { driver, windows, respond } = setup(["net_radio"]);
+    respond({ response_code: 0, menu_name: "Root", menu_layer: 1, list_info: "nothing here" });
+    await driver.open("netRadio");
+    expect(windows.at(-1)).toEqual({
+      menuName: "Root",
+      layer: 1,
+      totalItems: 0,
+      currentLine: 1,
+      rows: [],
+    });
+  });
+
+  it("ignores a thumbnail that is empty or not a string", async () => {
+    const { driver, windows, respond } = setup(["net_radio"]);
+    respond(
+      listResponse({
+        list_info: [
+          { text: "No art", attribute: 0b100, thumbnail: "" },
+          { text: "Bad art", attribute: 0b100, thumbnail: 5 },
+        ],
+      }),
+    );
+    await driver.open("netRadio");
+    expect(windows.at(-1)?.rows).toEqual([
+      { line: 1, text: "No art", kind: "item" },
+      { line: 2, text: "Bad art", kind: "item" },
+    ]);
+  });
+});

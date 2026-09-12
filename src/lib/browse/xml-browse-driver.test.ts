@@ -298,3 +298,84 @@ describe("XmlBrowseDriver with the zone-wide pad desc.xml declares (coverage aud
     expect(sent).toEqual([]);
   });
 });
+
+// The second branch of every type guard at the protocol boundary: what happens when a device
+// leaves a field out or sends it in another shape. Branch coverage sat at 62.8% because only
+// well-formed answers were ever parsed — a receiver that answers differently is the whole point
+// of having the guards.
+describe("parseXmlListInfo survives a mangled answer", () => {
+  test.each([
+    ["an empty body", ""],
+    ["a body with no list fields at all", '<YAMAHA_AV rsp="GET" RC="0"><NET_RADIO></NET_RADIO></YAMAHA_AV>'],
+    ["a non-numeric layer and max line", "<Menu_Layer>top</Menu_Layer><Max_Line>many</Max_Line>"],
+  ])("falls back to the neutral window for %s", (_label, xml) => {
+    expect(parseXmlListInfo(xml)).toEqual({
+      ready: true,
+      menuName: "",
+      layer: 0,
+      currentLine: 1,
+      totalItems: 0,
+      rows: [],
+    });
+  });
+
+  test("keeps the lines that carry text and drops the empty ones", () => {
+    const xml =
+      "<Menu_Name>NET RADIO</Menu_Name><Menu_Layer>2</Menu_Layer><Current_Line>1</Current_Line>" +
+      "<Max_Line>2</Max_Line>" +
+      "<Line_1><Txt>Bookmarks</Txt><Attribute>Container</Attribute></Line_1>" +
+      "<Line_2><Txt></Txt><Attribute>Unselectable</Attribute></Line_2>" +
+      "<Line_3><Txt>Odd</Txt><Attribute>Something the device invented</Attribute></Line_3>";
+    const parsed = parseXmlListInfo(xml);
+    // An empty line is a padding slot, not a row; an attribute we do not know is a plain item.
+    expect(parsed.rows).toEqual([
+      { line: 1, text: "Bookmarks", kind: "folder" },
+      { line: 3, text: "Odd", kind: "item" },
+    ]);
+  });
+});
+
+// Paging had no test at all, and neither had the guards that keep every command quiet while no
+// source is open — the path a user takes when the menu is closed.
+describe("XmlBrowseDriver paging and its guards", () => {
+  /** A 20-item list: the window shows eight lines, the cursor block reports the real total. */
+  const twentyItems = listBody({ lines: Array.from({ length: 20 }, (_, i) => [`Item ${i + 1}`, "Item"]) });
+
+  it("jumps a page forward from the current line", async () => {
+    const { driver, calls } = setup([twentyItems]);
+    await driver.open("netRadio");
+    calls.length = 0;
+    await driver.pageDown();
+    expect(calls.filter(call => call.method === "send").map(call => call.inner)).toEqual([
+      "<List_Control><Jump_Line>9</Jump_Line></List_Control>",
+    ]);
+  });
+
+  it("stops at the first line instead of jumping before the list", async () => {
+    const { driver, calls } = setup([twentyItems]);
+    await driver.open("netRadio");
+    calls.length = 0;
+    await driver.pageUp();
+    expect(calls.filter(call => call.method === "send").map(call => call.inner)).toEqual([
+      "<List_Control><Jump_Line>1</Jump_Line></List_Control>",
+    ]);
+  });
+
+  it("sends nothing while no source is open", async () => {
+    const { driver, calls, windows } = setup([twentyItems]);
+    await driver.open("bluetooth"); // not among the probed sources
+    await driver.select(1);
+    await driver.back();
+    await driver.pageDown();
+    expect(calls).toEqual([]);
+    expect(windows).toEqual([]);
+  });
+
+  it("gives up after the busy polls run out instead of rendering a half-built window", async () => {
+    // One body, handed out again and again: the receiver never leaves Busy.
+    const { driver, calls, windows } = setup([listBody({ busy: true })]);
+    await driver.open("netRadio");
+    expect(windows).toEqual([]);
+    expect(calls.filter(call => call.method === "getXml")).toHaveLength(10);
+  });
+});
