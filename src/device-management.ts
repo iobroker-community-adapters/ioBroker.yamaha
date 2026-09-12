@@ -2,6 +2,7 @@ import {
   DeviceManagement,
   type ActionContext,
   type DeviceInfo,
+  type ControlState,
   type DeviceLoadContext,
   type InstanceDetails,
 } from "@iobroker/dm-utils";
@@ -24,6 +25,8 @@ import {
 interface DeviceOwner {
   /** Stop supervising a device and delete its object tree. */
   removeDevice(deviceId: string): Promise<void>;
+  /** Switch one device's volume datapoints to percent (or back) and rebuild them at once. */
+  setVolumePercent(deviceId: string, on: boolean): Promise<void>;
 }
 
 /**
@@ -42,7 +45,9 @@ export class YamahaDeviceManagement extends DeviceManagement {
   /** The running adapter, for the one action that has to reach into it (delete a device). */
   private get owner(): DeviceOwner | undefined {
     const candidate = this.adapter as unknown as Partial<DeviceOwner>;
-    return typeof candidate.removeDevice === "function" ? (candidate as DeviceOwner) : undefined;
+    return typeof candidate.removeDevice === "function" && typeof candidate.setVolumePercent === "function"
+      ? (candidate as DeviceOwner)
+      : undefined;
   }
 
   /** Read the manual device table (`native.devices`) as raw rows, keeping the name. */
@@ -64,6 +69,46 @@ export class YamahaDeviceManagement extends DeviceManagement {
    */
   private async writeManual(rows: ManualRow[]): Promise<void> {
     await this.adapter.extendForeignObjectAsync(this.objId, { native: { devices: rows } });
+  }
+
+  /**
+   * One device's percent switch as a state, for the card control to show.
+   *
+   * @param deviceId the id-safe device id
+   * @returns the switch position as an ioBroker state
+   */
+  private async volumePercentState(deviceId: string): Promise<ioBroker.State> {
+    const node = await this.adapter.getForeignObjectAsync(`${this.adapter.namespace}.${deviceId}`);
+    const on = (node?.native as { volumeAsPercent?: unknown } | undefined)?.volumeAsPercent === true;
+    const now = Date.now();
+    return { val: on, ack: true, ts: now, lc: now, from: `system.adapter.${this.adapter.namespace}` };
+  }
+
+  /**
+   * Set one device's percent switch. The value lives at the DEVICE object — one place the card,
+   * the dialog and the running adapter all read, and writing it restarts nothing (an instance
+   * object's native would).
+   *
+   * @param deviceId the id-safe device id
+   * @param on whether its volume datapoints should read 0–100 %
+   */
+  private async applyVolumePercent(deviceId: string, on: boolean): Promise<void> {
+    const id = `${this.adapter.namespace}.${deviceId}`;
+    const existing = await this.adapter.getForeignObjectAsync(id);
+    const owner = this.owner;
+    if (existing && owner) {
+      // The adapter is running this device: it writes the value AND rebuilds the volume
+      // datapoints on the spot, so the change is visible without a restart.
+      await owner.setVolumePercent(deviceId, on);
+      return;
+    }
+    // A device just added through the dialog has no object yet — seed the shape
+    // `ensureDeviceHeader` completes on the next start, so the answer has somewhere to live.
+    await this.adapter.extendForeignObjectAsync(id, {
+      type: "device",
+      common: { name: deviceId },
+      native: { volumeAsPercent: on },
+    });
   }
 
   /**
@@ -179,6 +224,22 @@ export class YamahaDeviceManagement extends DeviceManagement {
       // Edit on every card: a device the search found can be given the fixed address the user
       // just assigned it, which makes it a manual device (see editDevice).
       actions: [edit, del],
+      // The percent switch, per device. It is a decision, not something switched around, so it
+      // sits in the admin next to the device rather than in the object tree — but it belongs to
+      // THIS device, which is what 2.8.0's single instance checkbox could not express.
+      controls: [
+        {
+          id: "volumeAsPercent",
+          type: "switch",
+          label: t("volumeAsPercent"),
+          description: t("volumeAsPercent_help"),
+          getStateHandler: async (deviceId: string): Promise<ioBroker.State> => this.volumePercentState(deviceId),
+          handler: async (deviceId: string, _controlId: string, state: ControlState): Promise<ioBroker.State> => {
+            await this.applyVolumePercent(deviceId, state === true);
+            return this.volumePercentState(deviceId);
+          },
+        },
+      ],
     };
   }
 
@@ -225,6 +286,9 @@ export class YamahaDeviceManagement extends DeviceManagement {
         );
       }
       await this.writeManual(manual);
+      // Written down right away, so the device starts with the answer the user gave instead of
+      // inheriting whatever the instance-wide switch of 2.8.0 was left on.
+      await this.applyVolumePercent(id, data.volumeAsPercent === true);
     }
     return { refresh: true };
   }
@@ -259,9 +323,10 @@ export class YamahaDeviceManagement extends DeviceManagement {
     const node = await this.adapter.getForeignObjectAsync(`${this.adapter.namespace}.${cardId}`);
     const shownName =
       typeof node?.common?.name === "string" && node.common.name !== cardId ? node.common.name : card.name;
+    const percent = (await this.volumePercentState(cardId)).val === true;
     const data = await context.showForm(
       buildDeviceForm(cards.filter(entry => entry.id !== cardId).map(entry => entry.ip)),
-      { title: t("dmEditTitle"), data: { name: shownName, ip: card.ip } },
+      { title: t("dmEditTitle"), data: { name: shownName, ip: card.ip, volumeAsPercent: percent } },
     );
     if (!data || typeof data.ip !== "string" || !data.ip.trim()) {
       return { refresh: "devices" };
@@ -293,6 +358,9 @@ export class YamahaDeviceManagement extends DeviceManagement {
       await this.adapter.extendForeignObjectAsync(`${this.adapter.namespace}.${cardId}`, {
         common: { name: name || cardId },
       });
+    }
+    if ((data.volumeAsPercent === true) !== percent) {
+      await this.applyVolumePercent(cardId, data.volumeAsPercent === true);
     }
     return { refresh: "devices" };
   }

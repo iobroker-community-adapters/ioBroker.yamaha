@@ -124,8 +124,15 @@ function mockAdapter(
     getForeignStateAsync: vi.fn((id: string) =>
       Promise.resolve(id in states ? ({ val: states[id], ack: true } as ioBroker.State) : null),
     ),
-    // The one adapter method the backend reaches for: stop the device and drop its tree.
+    // The adapter methods the backend reaches for: stop a device and drop its tree, and switch
+    // one device's volume presentation while it runs.
     removeDevice: vi.fn(() => Promise.resolve()),
+    setVolumePercent: vi.fn((id: string, on: boolean) => {
+      const full = `yamaha.0.${id}`;
+      const previous = (objects[full] ?? {}) as Record<string, any>;
+      objects[full] = { ...previous, native: { ...(previous.native ?? {}), volumeAsPercent: on } };
+      return Promise.resolve();
+    }),
     _stored: () => stored as Array<{ name?: string; ip: string }>,
   };
 }
@@ -162,9 +169,37 @@ interface Card {
   icon: string;
   model: { stateId: string };
   status: { connection: { stateId: string } };
-  indicators: Array<{ id: string; value: { stateId: string }; hideIfEmpty?: boolean }>;
+  indicators: Array<{
+    id: string;
+    value: { stateId: string };
+    hideIfEmpty?: boolean;
+    icon?: string;
+    tooltip?: unknown;
+  }>;
   actions: DmAction[];
+  controls: Array<{
+    id: string;
+    type: string;
+    label: unknown;
+    getStateHandler(deviceId: string): Promise<{ val: unknown; ack: boolean }>;
+    handler(deviceId: string, controlId: string, state: unknown): Promise<{ val: unknown }>;
+  }>;
 }
+/**
+ * The percent control of a card, asserted present — a card without it is the failure, not a
+ * type error at every use.
+ *
+ * @param card the card to read
+ * @returns the control
+ */
+function percentControl(card: Card): Card["controls"][number] {
+  const control = card.controls.find(entry => entry.id === "volumeAsPercent");
+  if (!control) {
+    throw new Error("the card carries no volumeAsPercent control");
+  }
+  return control;
+}
+
 interface DmInternals {
   loadDevices(ctx: { addDevice: (info: unknown) => void }): Promise<void>;
   getInstanceInfo(): { apiVersion: string; identifierLabel: unknown; actions: DmAction[] };
@@ -542,5 +577,57 @@ describe("YamahaDeviceManagement", () => {
   it("keeps the table name when the object carries nothing better", async () => {
     const [card] = await cards([living]);
     expect(card.name).toBe("Living room");
+  });
+  // 2.8.0 shipped this as ONE instance checkbox, so it hit every receiver on the instance at once.
+  // It is a per-device decision now, reachable from the card and from the add/edit dialog — one
+  // value at the device object, two places to set it.
+  describe("volume in percent, per device", () => {
+    it("the card carries the switch and reads it from the device object", async () => {
+      const on = await cards([living], {}, { "yamaha.0.Living_room": { native: { volumeAsPercent: true } } });
+      const control = percentControl(on[0]);
+      expect(control).toMatchObject({ type: "switch", label: "volumeAsPercent" });
+      await expect(control.getStateHandler("Living_room")).resolves.toMatchObject({ val: true, ack: true });
+
+      const off = await cards([living]);
+      const fresh = percentControl(off[0]);
+      await expect(fresh.getStateHandler("Living_room")).resolves.toMatchObject({ val: false });
+    });
+
+    it("flipping the card switch goes through the running adapter, so the datapoints follow at once", async () => {
+      const out = await cards([living], {}, { "yamaha.0.Living_room": { native: {} } });
+      const control = percentControl(out[0]);
+      await expect(control.handler("Living_room", "volumeAsPercent", true)).resolves.toMatchObject({ val: true });
+      expect(adapter.setVolumePercent).toHaveBeenCalledWith("Living_room", true);
+    });
+
+    it("a device added through the dialog starts with the answer the user gave", async () => {
+      const i = make([]);
+      const ctx = mockContext({ form: { name: "Bedroom", ip: "192.168.1.50", volumeAsPercent: true } });
+      await i.addDevice(ctx);
+      // No object exists yet, so the dialog seeds one instead of asking the adapter to rebuild
+      // datapoints that are not there.
+      expect(adapter.extendForeignObjectAsync).toHaveBeenCalledWith("yamaha.0.Bedroom", {
+        type: "device",
+        common: { name: "Bedroom" },
+        native: { volumeAsPercent: true },
+      });
+    });
+
+    it("the edit dialog shows the current setting and applies a change", async () => {
+      const i = make([living], {}, { "yamaha.0.Living_room": { native: { volumeAsPercent: true } } });
+      const ctx = mockContext({ form: { name: "Living room", ip: "192.168.1.10", volumeAsPercent: false } });
+      await i.editDevice("Living_room", ctx);
+      expect(ctx.showForm.mock.calls[0][1]).toMatchObject({ data: { volumeAsPercent: true } });
+      expect(adapter.setVolumePercent).toHaveBeenCalledWith("Living_room", false);
+    });
+
+    it("an unchanged switch is not written again", async () => {
+      const i = make([living], {}, { "yamaha.0.Living_room": { native: { volumeAsPercent: false } } });
+      await i.editDevice(
+        "Living_room",
+        mockContext({ form: { name: "", ip: "192.168.1.10", volumeAsPercent: false } }),
+      );
+      expect(adapter.setVolumePercent).not.toHaveBeenCalled();
+    });
   });
 });

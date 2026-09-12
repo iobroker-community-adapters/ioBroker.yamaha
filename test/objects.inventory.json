@@ -8,7 +8,10 @@
         "onlineId": "yamaha.0.10_10_0_11.info.connection"
       }
     },
-    "native": {},
+    "native": {
+      "source": "manual",
+      "volumeAsPercent": false
+    },
     "_id": "yamaha.0.10_10_0_11"
   },
   "yamaha.0.10_10_0_11.advanced": {
@@ -8922,7 +8925,10 @@
         "onlineId": "yamaha.0.10_10_0_12.info.connection"
       }
     },
-    "native": {},
+    "native": {
+      "source": "manual",
+      "volumeAsPercent": false
+    },
     "_id": "yamaha.0.10_10_0_12"
   },
   "yamaha.0.10_10_0_12.advanced": {
@@ -12448,7 +12454,10 @@
         "onlineId": "yamaha.0.10_10_0_13.info.connection"
       }
     },
-    "native": {},
+    "native": {
+      "source": "manual",
+      "volumeAsPercent": false
+    },
     "_id": "yamaha.0.10_10_0_13"
   },
   "yamaha.0.10_10_0_13.advanced": {
@@ -20045,7 +20054,10 @@
         "onlineId": "yamaha.0.10_10_0_14.info.connection"
       }
     },
-    "native": {},
+    "native": {
+      "source": "manual",
+      "volumeAsPercent": false
+    },
     "_id": "yamaha.0.10_10_0_14"
   },
   "yamaha.0.10_10_0_14.info": {
@@ -22875,7 +22887,10 @@
         "onlineId": "yamaha.0.10_10_0_15.info.connection"
       }
     },
-    "native": {},
+    "native": {
+      "source": "manual",
+      "volumeAsPercent": false
+    },
     "_id": "yamaha.0.10_10_0_15"
   },
   "yamaha.0.10_10_0_15.advanced": {
@@ -25787,7 +25802,10 @@
         "onlineId": "yamaha.0.10_10_0_16.info.connection"
       }
     },
-    "native": {},
+    "native": {
+      "source": "manual",
+      "volumeAsPercent": false
+    },
     "_id": "yamaha.0.10_10_0_16"
   },
   "yamaha.0.10_10_0_16.advanced": {
@@ -28674,7 +28692,10 @@
         "onlineId": "yamaha.0.10_10_0_17.info.connection"
       }
     },
-    "native": {},
+    "native": {
+      "source": "manual",
+      "volumeAsPercent": false
+    },
     "_id": "yamaha.0.10_10_0_17"
   },
   "yamaha.0.10_10_0_17.advanced": {
@@ -32319,7 +32340,10 @@
         "onlineId": "yamaha.0.10_10_0_18.info.connection"
       }
     },
-    "native": {},
+    "native": {
+      "source": "manual",
+      "volumeAsPercent": false
+    },
     "_id": "yamaha.0.10_10_0_18"
   },
   "yamaha.0.10_10_0_18.info": {

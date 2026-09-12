@@ -42,7 +42,8 @@ export function rowId(row: ManualRow): string {
 }
 
 /**
- * The add/edit form for one receiver: a display name and the IP address. The IP field
+ * The add/edit form for one receiver: a display name, the IP address and whether its volume
+ * datapoints read 0–100 %. The IP field
  * carries a live validator against a valid dotted-quad that is not already in use (the OK
  * button greys out on a clash). Labels are resolved translation objects so the embedded
  * form is language-correct.
@@ -69,6 +70,17 @@ export function buildDeviceForm(usedIps: readonly string[]): JsonFormSchema {
         validatorNoSaveOnError: true,
         sm: 12,
         md: 6,
+      },
+      // Per device, not per instance: the adapter serves several receivers, and one of them
+      // wanting percent says nothing about the others. Same switch as on the card — one value,
+      // two places to reach it.
+      volumeAsPercent: {
+        newLine: true,
+        type: "checkbox",
+        label: t("volumeAsPercent"),
+        help: t("volumeAsPercent_help"),
+        sm: 12,
+        md: 12,
       },
     },
   } as unknown as JsonFormSchema;

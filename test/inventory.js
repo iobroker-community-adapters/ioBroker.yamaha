@@ -435,6 +435,10 @@ tests.integration(ADAPTER_DIR, {
     // a full run proves that EVERY device class — dB receiver, numeric receiver, speaker,
     // soundbar, CD system, and the YNCA-only and XML-only receivers — actually reaches the
     // percent presentation, in every zone.
+    //
+    // Since 2.9.0 the switch is a DEVICE setting; the instance-wide one this suite writes is the
+    // UPGRADE path, inherited once by a device that has no answer of its own. So the run proves
+    // both at once: the inheritance, and the presentation on every device class.
     suite("volume as percent", getHarness => {
       let harness;
       before(async function () {
@@ -448,6 +452,18 @@ tests.integration(ADAPTER_DIR, {
         this.timeout(60000);
         await harness?.stopAdapter();
         await fixtures?.stop();
+      });
+
+      it("every device took the inherited switch down as its own answer", async function () {
+        this.timeout(60000);
+        // Written down, not merely inherited: turning ONE device back later must not be undone
+        // by the instance value still sitting in the instance object.
+        const objects = await dumpObjects(harness);
+        const devices = Object.entries(objects).filter(([, obj]) => obj.type === "device");
+        assert.ok(devices.length > 0, "no device objects in the dump");
+        for (const [id, obj] of devices) {
+          assert.strictEqual(obj.native?.volumeAsPercent, true, `${id} did not record the switch`);
+        }
       });
 
       it("turns every volume datapoint of every device into 0-100 %", async function () {

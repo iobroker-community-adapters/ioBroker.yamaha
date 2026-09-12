@@ -118,6 +118,21 @@ export class Yamaha extends utils.Adapter {
    * source. Keyed by the full state id, so zones and devices never mix.
    */
   private readonly volumeScales = new Map<string, VolumeBounds>();
+  /**
+   * Per volume datapoint, the definition the coordinator produced BEFORE percent had its say —
+   * what the live switch rebuilds from, so turning it changes the object without a restart.
+   */
+  private readonly volumeDefs = new Map<string, ObjectDef>();
+  /**
+   * Per device, whether its volume datapoints read 0…100 %. A device setting, not an instance
+   * one: the adapter serves several receivers and 2.8.0's single checkbox hit all of them.
+   */
+  private readonly volumePercent = new Map<string, boolean>();
+  /**
+   * The instance-wide percent switch of 2.8.0, read once per start. It decides what a device
+   * that has not been asked yet inherits — see {@link ensureDeviceHeader}.
+   */
+  private legacyVolumePercent = false;
 
   private readonly supervisorById = new Map<string, DeviceSupervisor>();
   private readonly deviceConnected = new Map<string, boolean>();
@@ -223,6 +238,12 @@ export class Yamaha extends utils.Adapter {
       const configured = parseDevices(this.config.devices, (dropped, takenId) =>
         this.log.warn(`device "${dropped}" skipped — its object id "${takenId}" is already used by another device`),
       );
+      // The 2.8.0 instance-wide percent switch: read from the instance OBJECT, not from
+      // `this.config`. The key is out of the config schema now, so `this.config` is no longer a
+      // source to build on — the object still carries what the user chose.
+      const instance = await this.getForeignObjectAsync(`system.adapter.${this.namespace}`);
+      this.legacyVolumePercent =
+        (instance?.native as { volumeAsPercent?: unknown } | undefined)?.volumeAsPercent === true;
       this.discovering = this.searchesTheNetwork(configured.length);
       const devices = unionDevices(configured, this.discovering ? await this.autoDiscover() : []);
       if (this.unloading) {
@@ -493,6 +514,8 @@ export class Yamaha extends utils.Adapter {
     this.forgetUnder(this.storedBounds, deviceId);
     this.forgetUnder(this.touchedThisRun, deviceId);
     this.forgetUnder(this.volumeScales, deviceId);
+    this.forgetUnder(this.volumeDefs, deviceId);
+    this.volumePercent.delete(deviceId);
     try {
       await this.delObjectAsync(deviceId, { recursive: true });
     } catch (e) {
@@ -1048,12 +1071,21 @@ export class Yamaha extends utils.Adapter {
     // but only when there is none: overwriting would flip a soundbar back to the
     // receiver default for the seconds until its model arrives.
     let icon: string | undefined;
+    // Percent is a DEVICE setting since 2.9.0. A device that carries no answer yet inherits the
+    // instance-wide switch 2.8.0 had, so an upgrade keeps every receiver exactly as it was, and
+    // the answer is written down here so it never has to be inherited again.
+    let percent = this.legacyVolumePercent;
     try {
       const existing = await this.getObjectAsync(deviceId);
       icon = existing?.common?.icon ? undefined : iconForModel(undefined);
+      const own = (existing?.native as { volumeAsPercent?: unknown } | undefined)?.volumeAsPercent;
+      if (typeof own === "boolean") {
+        percent = own;
+      }
     } catch {
       icon = undefined;
     }
+    this.volumePercent.set(deviceId, percent);
     await this.extendObject(
       deviceId,
       {
@@ -1063,7 +1095,7 @@ export class Yamaha extends utils.Adapter {
           ...(icon ? { icon } : {}),
           statusStates: { onlineId: `${this.namespace}.${deviceId}.info.connection` },
         },
-        native: { source },
+        native: { source, volumeAsPercent: percent },
       },
       { preserve: { common: ["name"] } },
     );
@@ -1299,11 +1331,7 @@ export class Yamaha extends utils.Adapter {
         if (def.type === "state" && def.common.states) {
           await this.clearStaleStates(id, def.common.states);
         }
-        const written = this.presentVolume(id, def);
-        if (written.type === "state") {
-          await this.clearStaleBounds(id, written.common);
-        }
-        await this.extendObject(id, { type: written.type, common: written.common, native: {} });
+        await this.writePresented(id, def);
         if (def.type === "state") {
           this.noteDatapointCreated(id);
           this.touchedThisRun.add(id);
@@ -1511,6 +1539,64 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
+   * Whether the device that owns a datapoint presents its volume in percent.
+   *
+   * @param id a `<deviceId>.<relativeId>` state or object id
+   * @returns true when that device's volume datapoints read 0…100 %
+   */
+  private percentFor(id: string): boolean {
+    return this.volumePercent.get(id.slice(0, id.indexOf("."))) === true;
+  }
+
+  /**
+   * Turn percent presentation on or off for ONE device, at once.
+   *
+   * Called from the device manager, which runs inside this process. The datapoint is rebuilt
+   * before its value follows — the same order `reshapeVolume` keeps when a receiver changes the
+   * scale it displays, and for the same reason: a value written against the old definition is
+   * out of range and the js-controller logs it on every refresh.
+   *
+   * @param deviceId the id-safe device id
+   * @param on whether its volume datapoints should read 0…100 %
+   */
+  public async setVolumePercent(deviceId: string, on: boolean): Promise<void> {
+    if (this.volumePercent.get(deviceId) === on) {
+      return;
+    }
+    this.volumePercent.set(deviceId, on);
+    await this.extendObject(deviceId, { native: { volumeAsPercent: on } });
+    for (const [id, def] of [...this.volumeDefs]) {
+      if (!id.startsWith(`${deviceId}.`)) {
+        continue;
+      }
+      const bounds = this.volumeScales.get(id);
+      await this.writePresented(id, def);
+      if (!bounds) {
+        continue;
+      }
+      const state = await this.getStateAsync(id);
+      if (typeof state?.val === "number") {
+        this.writeState(id, on ? toPercent(state.val, bounds) : fromPercent(state.val, bounds));
+      }
+    }
+  }
+
+  /**
+   * Write one object definition through the percent presentation — shared by the upsert funnel
+   * and the live switch, so both produce exactly the same object.
+   *
+   * @param id the full object id
+   * @param def the definition the coordinator produced
+   */
+  private async writePresented(id: string, def: ObjectDef): Promise<void> {
+    const written = this.presentVolume(id, def);
+    if (written.type === "state") {
+      await this.clearStaleBounds(id, written.common);
+    }
+    await this.extendObject(id, { type: written.type, common: written.common, native: {} });
+  }
+
+  /**
    * The object definition to write for a datapoint, once percent mode has had its say.
    *
    * Applied to the FINISHED definition, after the coordinator picked the owner, so one rule covers
@@ -1531,13 +1617,15 @@ export class Yamaha extends utils.Adapter {
       // Nothing declared to convert against. Percent would be a number with no meaning, so the
       // datapoint keeps the device's own scale even with the switch on, and says so once.
       this.volumeScales.delete(id);
-      if (this.config.volumeAsPercent) {
+      this.volumeDefs.delete(id);
+      if (this.percentFor(id)) {
         this.log.debug(`${id}: no declared range — keeping the device's own scale instead of percent`);
       }
       return def;
     }
     this.volumeScales.set(id, bounds);
-    return this.config.volumeAsPercent ? asPercentObject(def) : def;
+    this.volumeDefs.set(id, def);
+    return this.percentFor(id) ? asPercentObject(def) : def;
   }
 
   /**
@@ -1548,7 +1636,7 @@ export class Yamaha extends utils.Adapter {
    * @returns the value to store
    */
   private volumeAsShown(id: string, value: boolean | number | string): boolean | number | string {
-    const bounds = this.config.volumeAsPercent ? this.volumeScales.get(id) : undefined;
+    const bounds = this.percentFor(id) ? this.volumeScales.get(id) : undefined;
     return bounds && typeof value === "number" ? toPercent(value, bounds) : value;
   }
 
@@ -1563,7 +1651,7 @@ export class Yamaha extends utils.Adapter {
    * @returns the value to hand to the device's supervisor
    */
   private volumeAsDeviceScale(relativeId: string, value: ioBroker.StateValue): ioBroker.StateValue {
-    const bounds = this.config.volumeAsPercent ? this.volumeScales.get(relativeId) : undefined;
+    const bounds = this.percentFor(relativeId) ? this.volumeScales.get(relativeId) : undefined;
     return bounds && typeof value === "number" ? fromPercent(value, bounds) : value;
   }
 

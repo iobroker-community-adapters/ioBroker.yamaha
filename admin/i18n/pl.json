@@ -5,7 +5,7 @@
   "label_xmlPollInterval": "Interwał odpytywania XML (sekundy)",
   "tooltip_xmlPollInterval": "Jak często adapter odpytuje amplitunery ze starym protokołem XML (modele sprzed ~2010). Te urządzenia nie zgłaszają zmian samodzielnie. Bez wpływu na urządzenia YNCA i MusicCast.",
   "volumeAsPercent": "Głośność jako 0–100 %",
-  "volumeAsPercent_help": "Wyłączone: każdy punkt danych głośności używa skali, którą pokazuje sam amplituner — decybeli albo własnej liczby kroków. Włączone: wszystkie, strefa główna i każda inna strefa, używają 0–100 %, czyli zakresu oczekiwanego przez większość widżetów VIS. Adapter przelicza w obie strony, więc amplituner zawsze dostaje wartość, której oczekuje.",
+  "volumeAsPercent_help": "Wyłączone: punkty danych głośności tego urządzenia używają skali pokazywanej przez amplituner — decybeli lub własnej liczby kroków. Włączone: używają 0–100 %, strefa główna i każda inna strefa tego urządzenia — zakres oczekiwany przez większość widżetów VIS. Adapter przelicza w obie strony.",
   "supportHeader": "Wesprzyj rozwój",
   "aboutInfo": "Jeśli ten adapter jest dla Ciebie przydatny, możesz wesprzeć jego rozwój:",
   "donateKofi": "Ko-fi",

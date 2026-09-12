@@ -5,7 +5,7 @@
   "label_xmlPollInterval": "XML query interval (seconds)",
   "tooltip_xmlPollInterval": "How often the adapter polls receivers that use the old XML protocol (models before ~2010). These devices do not report changes on their own. Has no effect on YNCA or MusicCast devices.",
   "volumeAsPercent": "Volume as 0–100 %",
-  "volumeAsPercent_help": "Off: every volume datapoint carries the scale the receiver itself shows — decibels, or its own step count. On: all of them, the main zone and every other zone, carry 0–100 % instead, the range most VIS widgets expect. The adapter converts both ways, so the receiver is always sent the value it expects.",
+  "volumeAsPercent_help": "Off: this device's volume datapoints carry the scale the receiver itself shows — decibels, or its own step count. On: they carry 0–100 % instead, the main zone and every other zone of this device, the range most VIS widgets expect. The adapter converts both ways, so the receiver is always sent the value it expects.",
   "supportHeader": "Support development",
   "aboutInfo": "If this adapter is useful to you, you can support its development:",
   "donateKofi": "Ko-fi",

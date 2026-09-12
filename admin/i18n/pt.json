@@ -5,7 +5,7 @@
   "label_xmlPollInterval": "Intervalo de consulta XML (segundos)",
   "tooltip_xmlPollInterval": "Com que frequência o adaptador consulta recetores com o antigo protocolo XML (modelos anteriores a ~2010). Estes aparelhos não comunicam alterações por si. Sem efeito em YNCA ou MusicCast.",
   "volumeAsPercent": "Volume como 0–100 %",
-  "volumeAsPercent_help": "Desligado: cada ponto de dados de volume usa a escala que o próprio receptor mostra — decibéis ou a sua própria contagem de passos. Ligado: todos eles, a zona principal e todas as outras zonas, usam 0–100 %, o intervalo que a maioria dos widgets VIS espera. O adaptador converte nos dois sentidos, por isso o receptor recebe sempre o valor que espera.",
+  "volumeAsPercent_help": "Desligado: os datapoints de volume deste dispositivo usam a escala que o receptor mostra — decibéis ou a sua própria contagem de passos. Ligado: usam 0–100 %, a zona principal e todas as outras zonas deste dispositivo, o intervalo que a maioria dos widgets VIS espera. O adaptador converte nos dois sentidos.",
   "supportHeader": "Apoiar o desenvolvimento",
   "aboutInfo": "Se este adaptador lhe é útil, pode apoiar o seu desenvolvimento:",
   "donateKofi": "Ko-fi",

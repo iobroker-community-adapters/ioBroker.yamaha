@@ -35,6 +35,7 @@ vi.mock("@iobroker/adapter-core", () => {
       this.states.set(this.key(id), { val: s?.val, ack: s?.ack === true });
       return Promise.resolve();
     });
+    public getStateAsync = vi.fn((id: string) => Promise.resolve(this.states.get(this.key(id)) ?? null));
     public extendObject = vi.fn((id: string, obj: Record<string, unknown>) => {
       if (this.extendObjectFail) {
         return Promise.reject(this.extendObjectFail);
@@ -334,6 +335,7 @@ function internalOf(adapter: Yamaha): {
   reportConnection(deviceId: string, connected: boolean): void;
   removeDevice(deviceId: string): Promise<void>;
   persistDeviceNative(deviceId: string, native: Record<string, unknown>): void;
+  setVolumePercent(deviceId: string, on: boolean): Promise<void>;
   pendingNative: Map<string, { timer?: unknown }>;
   xmlPollIntervalMs(): number;
   objects: Map<string, Record<string, unknown>>;
@@ -1061,11 +1063,23 @@ describe("Yamaha volume as 0…100 % (the one switch)", () => {
     common: { type: "number", role: "level.volume", write: true, min: -80.5, max: 0, step: 0.5, unit: "dB" },
   };
 
-  // One instance setting covers every device and every zone of every device — a switch that
-  // reached only the main zone would rebuild the mixed tree this release removes.
+  /**
+   * Percent on for every device, the way an instance upgraded from 2.8.0 arrives: the switch is
+   * on the INSTANCE object, and each device inherits it the first time it is set up.
+   *
+   * @param config extra native config fields for this run
+   * @returns the prepared context
+   */
+  function percentFromUpgrade(config: Record<string, unknown> = {}): Ctx {
+    const ctx = setup(config);
+    ctx.i.foreignObjects.set("system.adapter.yamaha.0", { native: { volumeAsPercent: true } });
+    return ctx;
+  }
+
+  // The switch is per DEVICE since 2.9.0, and it reaches every zone of that device — one that
+  // reached only the main zone would rebuild the mixed tree 2.8.0 removed.
   it("reaches every zone of every device", async () => {
-    const ctx = setup({
-      volumeAsPercent: true,
+    const ctx = percentFromUpgrade({
       devices: [
         { name: "Living room", ip: "192.168.1.10" },
         { name: "Kitchen", ip: "192.168.1.11" },
@@ -1100,7 +1114,8 @@ describe("Yamaha volume as 0…100 % (the one switch)", () => {
   });
 
   it("converts a device report into percent and a user write back", async () => {
-    const ctx = setup({ volumeAsPercent: true });
+    const ctx = setup();
+    ctx.i.foreignObjects.set("system.adapter.yamaha.0", { native: { volumeAsPercent: true } });
     await ctx.i.onReady();
     await flush();
     const deps = ctx.calls[0].deps;
@@ -1122,7 +1137,7 @@ describe("Yamaha volume as 0…100 % (the one switch)", () => {
   // ACKED change. Converting that one too would read the percent as decibels and walk the value
   // down the scale on every single poll.
   it("does not convert its own acked echo", async () => {
-    const ctx = setup({ volumeAsPercent: true });
+    const ctx = percentFromUpgrade();
     await ctx.i.onReady();
     await flush();
     const upsert = ctx.calls[0].deps.upsertObject as (id: string, def: unknown) => Promise<void>;
@@ -1134,7 +1149,7 @@ describe("Yamaha volume as 0…100 % (the one switch)", () => {
 
   // Every other datapoint carrying "volume" is a different quantity on a different scale.
   it("touches no other volume-named datapoint", async () => {
-    const ctx = setup({ volumeAsPercent: true });
+    const ctx = percentFromUpgrade();
     await ctx.i.onReady();
     await flush();
     const deps = ctx.calls[0].deps;
@@ -1153,7 +1168,7 @@ describe("Yamaha volume as 0…100 % (the one switch)", () => {
   // converting against ends the current definition no longer carries would be a number the
   // datapoint does not claim.
   it("forgets a scale the datapoint no longer declares", async () => {
-    const ctx = setup({ volumeAsPercent: true });
+    const ctx = percentFromUpgrade();
     await ctx.i.onReady();
     await flush();
     const deps = ctx.calls[0].deps;
@@ -1172,7 +1187,7 @@ describe("Yamaha volume as 0…100 % (the one switch)", () => {
   // A range the device never declared gives percent nothing to mean. The datapoint keeps the
   // device's own scale rather than carrying a number derived from invented ends.
   it("keeps the device's scale where no range is declared", async () => {
-    const ctx = setup({ volumeAsPercent: true });
+    const ctx = percentFromUpgrade();
     await ctx.i.onReady();
     await flush();
     const deps = ctx.calls[0].deps;
@@ -2353,5 +2368,65 @@ describe("the device table and the network search side by side", () => {
     expect(armed()).toHaveLength(before);
     ctx.i.reportConnection("Found", false);
     expect(armed().length).toBeGreaterThan(before);
+  });
+});
+
+// The switch is a DEVICE setting now, and turning it has to reach the object AND the value on it
+// — in that order. A value written against the old definition is out of range, and the
+// js-controller says so on every refresh (the defect 2.8.0 fixed for the device's own scale
+// change; the same trap is here).
+describe("switching one device to percent while the adapter runs", () => {
+  const dbVolume = {
+    type: "state",
+    common: { type: "number", role: "level.volume", write: true, min: -80.5, max: 0, step: 0.5, unit: "dB" },
+  };
+
+  it("rebuilds the datapoint and converts the value that stands on it, both ways", async () => {
+    const ctx = setup({
+      devices: [
+        { name: "Living room", ip: "192.168.1.10" },
+        { name: "Kitchen", ip: "192.168.1.11" },
+      ],
+    });
+    await ctx.i.onReady();
+    await flush();
+    for (const call of ctx.calls) {
+      const upsert = call.deps.upsertObject as (id: string, def: unknown) => Promise<void>;
+      const ack = call.deps.setStateAck as (id: string, value: unknown) => void;
+      await upsert(`${call.device.id}.volume`, dbVolume);
+      ack(`${call.device.id}.volume`, -40);
+    }
+    expect(ctx.i.states.get("Living_room.volume")).toEqual({ val: -40, ack: true });
+
+    await ctx.i.setVolumePercent("Living_room", true);
+
+    expect(ctx.i.objects.get("Living_room.volume")?.common).toMatchObject({ min: 0, max: 100, unit: "%" });
+    // -40 dB sits 40.5 of the 80.5 dB above the floor: 50.31 %, on the half-percent grid 50.5.
+    expect(ctx.i.states.get("Living_room.volume")).toEqual({ val: 50.5, ack: true });
+    // The other device on the same instance is untouched — that is the whole point.
+    expect(ctx.i.objects.get("Kitchen.volume")?.common).toMatchObject({ unit: "dB" });
+    expect(ctx.i.states.get("Kitchen.volume")).toEqual({ val: -40, ack: true });
+
+    await ctx.i.setVolumePercent("Living_room", false);
+    expect(ctx.i.objects.get("Living_room.volume")?.common).toMatchObject({ unit: "dB" });
+    expect(ctx.i.states.get("Living_room.volume")?.val).toBe(-40);
+  });
+
+  it("writes the answer to the device object, so a restart keeps it", async () => {
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    await ctx.i.setVolumePercent("Living_room", true);
+    expect((ctx.i.objects.get("Living_room")?.native as { volumeAsPercent?: boolean }).volumeAsPercent).toBe(true);
+  });
+
+  it("an upgraded instance hands its old instance-wide switch to every device, once", async () => {
+    const ctx = setup();
+    ctx.i.foreignObjects.set("system.adapter.yamaha.0", { native: { volumeAsPercent: true } });
+    await ctx.i.onReady();
+    await flush();
+    // Inherited AND written down: the next start reads the device's own answer, so turning one
+    // device back does not get undone by the instance value still sitting there.
+    expect((ctx.i.objects.get("Living_room")?.native as { volumeAsPercent?: boolean }).volumeAsPercent).toBe(true);
   });
 });

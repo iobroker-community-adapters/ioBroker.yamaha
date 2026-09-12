@@ -5,7 +5,7 @@
   "label_xmlPollInterval": "XML-Abfrageintervall (Sekunden)",
   "tooltip_xmlPollInterval": "Wie oft der Adapter Receiver mit dem alten XML-Protokoll abfragt (Modelle vor ~2010). Diese Geräte melden Änderungen nicht von selbst. Ohne Wirkung auf YNCA- oder MusicCast-Geräte.",
   "volumeAsPercent": "Lautstärke als 0–100 %",
-  "volumeAsPercent_help": "Aus: Jeder Lautstärke-Datenpunkt trägt die Skala, die der Receiver selbst anzeigt — Dezibel oder seine eigene Schrittzahl. Ein: Alle tragen stattdessen 0–100 %, Hauptzone wie jede weitere Zone — der Bereich, den die meisten VIS-Widgets erwarten. Der Adapter rechnet in beide Richtungen um, der Receiver bekommt also immer den Wert, den er erwartet.",
+  "volumeAsPercent_help": "Aus: Die Lautstärke-Datenpunkte dieses Geräts tragen die Skala, die der Receiver selbst anzeigt — Dezibel oder seine eigene Schrittzahl. Ein: Sie tragen stattdessen 0–100 %, Hauptzone wie jede weitere Zone dieses Geräts — der Bereich, den die meisten VIS-Widgets erwarten. Der Adapter rechnet in beide Richtungen um, der Receiver bekommt also immer den Wert, den er erwartet.",
   "supportHeader": "Entwicklung unterstützen",
   "aboutInfo": "Wenn dir dieser Adapter nützt, kannst du seine Entwicklung unterstützen:",
   "donateKofi": "Ko-fi",

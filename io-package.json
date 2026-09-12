@@ -347,7 +347,6 @@
     "devices": [],
     "discovery": "auto",
     "xmlPollInterval": 60,
-    "volumeAsPercent": false,
     "group_player": true,
     "group_tuner": true,
     "group_multiroom": true,

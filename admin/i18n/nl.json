@@ -5,7 +5,7 @@
   "label_xmlPollInterval": "XML-opvraaginterval (seconden)",
   "tooltip_xmlPollInterval": "Hoe vaak de adapter receivers met het oude XML-protocol opvraagt (modellen van vóór ~2010). Deze apparaten melden wijzigingen niet zelf. Geen effect op YNCA- of MusicCast-apparaten.",
   "volumeAsPercent": "Volume als 0–100 %",
-  "volumeAsPercent_help": "Uit: elk volume-datapunt gebruikt de schaal die de receiver zelf toont — decibel of zijn eigen stappen. Aan: allemaal, de hoofdzone en elke andere zone, gebruiken 0–100 %, het bereik dat de meeste VIS-widgets verwachten. De adapter rekent beide kanten op, dus de receiver krijgt altijd de waarde die hij verwacht.",
+  "volumeAsPercent_help": "Uit: de volume-datapunten van dit apparaat gebruiken de schaal die de receiver zelf toont — decibel of zijn eigen stappen. Aan: ze gebruiken 0–100 %, de hoofdzone en elke andere zone van dit apparaat, het bereik dat de meeste VIS-widgets verwachten. De adapter rekent beide kanten op om.",
   "supportHeader": "Ontwikkeling steunen",
   "aboutInfo": "Als deze adapter nuttig voor je is, kun je de ontwikkeling steunen:",
   "donateKofi": "Ko-fi",

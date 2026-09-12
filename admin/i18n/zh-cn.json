@@ -5,7 +5,7 @@
   "label_xmlPollInterval": "XML 查询间隔（秒）",
   "tooltip_xmlPollInterval": "适配器轮询使用旧 XML 协议的功放（约 2010 年前的型号）的频率。这些设备不会自行报告更改。对 YNCA 或 MusicCast 设备无影响。",
   "volumeAsPercent": "音量显示为 0–100 %",
-  "volumeAsPercent_help": "关闭：每个音量数据点使用功放自己显示的刻度——分贝或它自己的步进数。开启：所有数据点，主区域和每个其他区域，都改用 0–100 %，这是大多数 VIS 控件所期望的范围。适配器双向换算，因此功放始终收到它期望的数值。",
+  "volumeAsPercent_help": "关闭：本设备的音量数据点使用功放自身显示的刻度——分贝或其步进计数。开启：改用 0–100 %，主区与本设备的每个分区都一样，这是多数 VIS 控件所期望的范围。适配器双向换算。",
   "supportHeader": "支持开发",
   "aboutInfo": "如果此适配器对你有用，你可以支持它的开发：",
   "donateKofi": "Ko-fi",
