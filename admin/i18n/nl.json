@@ -602,5 +602,10 @@
   "descVolumeNumeric": "Hoe hard de zone speelt, in de getalschaal die de receiver zelf toont.",
   "descVolumePercent": "Hoe hard de zone speelt, als percentage van het bereik dat de receiver accepteert — 0 % is de zachtste stand, 100 % de hardste.",
   "trackRating": "Nummerbeoordeling",
-  "descTrackRating": "Beoordeelt het spelende nummer met duim omhoog of omlaag."
+  "descTrackRating": "Beoordeelt het spelende nummer met duim omhoog of omlaag.",
+  "label_discovery": "Zoek apparaten in het netwerk",
+  "tooltip_discovery": "Automatisch zoekt zolang er geen apparaat is ingevoerd, zoals tot nu toe. Altijd zoekt naast de ingevoerde apparaten. Nooit laat alleen de lijst het werk doen.",
+  "discoveryAuto": "Automatisch (zolang de lijst leeg is)",
+  "discoveryAlways": "Altijd",
+  "discoveryNever": "Nooit"
 }

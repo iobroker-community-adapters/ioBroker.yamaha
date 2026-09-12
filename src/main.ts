@@ -27,6 +27,7 @@ import {
   neverWrittenStateIds,
   nextDeviceLabel,
   parseDevices,
+  unionDevices,
   renamedObjectIds,
   staleObjects,
   stripNamespace,
@@ -38,7 +39,7 @@ import { readDiscovered, readIgnored, writeDiscovered } from "./lib/discovered-s
 import { discoveredStoreDeps, ignoredStoreDeps } from "./lib/discovered-store-deps";
 import { YxcPushReceiver } from "./lib/yxc/push-receiver";
 import { YamahaDeviceManagement } from "./device-management";
-import type { DeviceRecord } from "./lib/types";
+import type { DeviceSource, DeviceRecord } from "./lib/types";
 import { DeviceSupervisor, type ConnectionHandle } from "./lib/lifecycle/device-supervisor";
 import { ReconnectStrategy } from "./lib/lifecycle/reconnect-strategy";
 import { ReachabilityDedup } from "./lib/lifecycle/reachability-dedup";
@@ -124,8 +125,8 @@ export class Yamaha extends utils.Adapter {
   private readonly deviceRecords = new Map<string, DeviceRecord>();
   /** The addresses of all supervised devices — a multiroom group resolves its clients through it. */
   private readonly knownDeviceIps = new Set<string>();
-  /** True while the instance runs whatever the network search finds (empty device table). */
-  private autoMode = false;
+  /** Whether the network search runs in this instance — see {@link searchesTheNetwork}. */
+  private discovering = false;
   /** Armed while an auto-found device is offline: the search that can bring it back. */
   private rediscoverTimer: ioBroker.Timeout | undefined;
   /** When the last background search ran, so the retry cannot become a scan loop. */
@@ -213,20 +214,23 @@ export class Yamaha extends utils.Adapter {
       await this.setState("info.connection", { val: false, ack: true });
       await this.migrateLegacyDevice();
       await this.migrateGroupZones();
-      // The device list is the switch: filled → use exactly those (manual); empty
-      // → discover on the network and run what is found (auto). XML/pre-2010 devices
-      // never answer SSDP, so they are always added manually.
+      // The running set is the UNION of the device table and the discovery store, and whether
+      // the network search runs at all is its own setting. Until 2.9.0 the table WAS the switch
+      // — filled meant manual, empty meant auto — so the two could never be combined, and
+      // turning a single discovered device into a manual one dropped every other one from the
+      // run (their trees went with them). XML/pre-2010 devices never answer SSDP, so they are
+      // always added by hand; that is exactly the case the mixed mode exists for.
       const configured = parseDevices(this.config.devices, (dropped, takenId) =>
         this.log.warn(`device "${dropped}" skipped — its object id "${takenId}" is already used by another device`),
       );
-      const devices = configured.length > 0 ? configured : await this.autoDiscover();
+      this.discovering = this.searchesTheNetwork(configured.length);
+      const devices = unionDevices(configured, this.discovering ? await this.autoDiscover() : []);
       if (this.unloading) {
         // Stopped during the initial network search: it resolves on its own clock, and
         // everything below — push socket, subscriptions, device sockets and timers —
         // would come up on an instance that is already gone, with nothing left to close it.
         return;
       }
-      this.autoMode = configured.length === 0;
       // The start-up search (blocking first setup, or the background one below) is the first
       // search of this run — an offline device must not fire another one right behind it.
       this.lastRediscovery = Date.now();
@@ -262,7 +266,7 @@ export class Yamaha extends utils.Adapter {
       this.writeDeviceOverview();
       // Auto mode with remembered devices: they started WITHOUT waiting for the network
       // search — it runs behind them, adds newcomers and moves a device that changed address.
-      if (this.autoMode && devices.length > 0) {
+      if (this.discovering && devices.length > 0) {
         void this.discoverAdditionalDevices(pushReceiver);
       }
     } catch (e) {
@@ -284,7 +288,7 @@ export class Yamaha extends utils.Adapter {
     this.deviceConnected.set(device.id, false);
     this.deviceRecords.set(device.id, { ...device });
     this.knownDeviceIps.add(device.ip);
-    await this.ensureDeviceHeader(device.id, device.ip);
+    await this.ensureDeviceHeader(device.id, device.ip, device.source ?? "discovered");
     // Stamp it disconnected BEFORE the first attempt: ioBroker keeps a state's last value
     // forever, so a crash or a power cut would otherwise leave the device green until it
     // reports again — and a device that never answers would stay green for good.
@@ -366,13 +370,38 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
+   * Whether this instance searches the network at all.
+   *
+   * Three operating modes out of two independent things — this setting and the device table:
+   * `auto` searches while the table is empty (what every installation did before 2.9.0, so an
+   * update changes nothing by itself), `always` searches next to a filled table (mixed mode),
+   * `never` runs the table alone. The setting is three-valued on purpose: a checkbox would need
+   * a default in `io-package.json`, and either value would be wrong for half the existing
+   * installations — `auto` is right for all of them without writing anything.
+   *
+   * @param manualCount how many devices the instance's table holds
+   * @returns whether the network search runs
+   */
+  private searchesTheNetwork(manualCount: number): boolean {
+    const mode = this.config.discovery ?? "auto";
+    return mode === "always" || (mode === "auto" && manualCount === 0);
+  }
+
+  /**
    * Arm a background search because an auto-found device is offline — the only way back to a
    * receiver that moved to another address, since it answers at the remembered one no more.
    * Throttled: a device that is merely switched off must not turn this into a scan loop, and
    * one timer covers however many devices are down.
+   *
+   * @param deviceId the device that just went offline
    */
-  private scheduleRediscovery(): void {
-    if (!this.autoMode || this.unloading || this.rediscoverTimer !== undefined) {
+  private scheduleRediscovery(deviceId: string): void {
+    // Per device, not per instance: a manual device sits at an address the user typed, so there
+    // is nothing to search for — it is simply off. Only a discovered one can have moved.
+    if (this.deviceRecords.get(deviceId)?.source !== "discovered") {
+      return;
+    }
+    if (!this.discovering || this.unloading || this.rediscoverTimer !== undefined) {
       return;
     }
     const receiver = this.pushReceiver;
@@ -516,8 +545,8 @@ export class Yamaha extends utils.Adapter {
     // A drop clears the per-transport flags; a (re)connect sets them again via onTransports.
     if (!connected) {
       this.setTransports(deviceId, []);
-      // In auto mode the device may simply have moved — only a search can find it again.
-      this.scheduleRediscovery();
+      // A discovered device may simply have moved — only a search can find it again.
+      this.scheduleRediscovery(deviceId);
     }
     const anyConnected = [...this.deviceConnected.values()].some(Boolean);
     this.writeState("info.connection", anyConnected);
@@ -1004,8 +1033,11 @@ export class Yamaha extends utils.Adapter {
    *
    * @param deviceId the id-safe device id
    * @param ip the device's current address (from config or discovery)
+   * @param source where the address came from — kept at the device object so the adapter, the
+   *   card and the edit path all know it without re-deriving it from which table happens to be
+   *   filled (which said the same thing about every device on the instance)
    */
-  private async ensureDeviceHeader(deviceId: string, ip: string): Promise<void> {
+  private async ensureDeviceHeader(deviceId: string, ip: string, source: DeviceSource): Promise<void> {
     // statusStates.onlineId lets the admin paint a green/red reachability symbol on the
     // device object itself (as govee does), fed by the per-device connection state.
     // extendObject with preserve:name so an upgrade adds the symbol without overwriting
@@ -1031,7 +1063,7 @@ export class Yamaha extends utils.Adapter {
           ...(icon ? { icon } : {}),
           statusStates: { onlineId: `${this.namespace}.${deviceId}.info.connection` },
         },
-        native: {},
+        native: { source },
       },
       { preserve: { common: ["name"] } },
     );

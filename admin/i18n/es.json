@@ -602,5 +602,10 @@
   "descVolumeNumeric": "Lo alto que suena la zona, en la escala numérica que muestra el propio receptor.",
   "descVolumePercent": "Qué tan alto suena la zona, como porcentaje del rango que acepta el receptor — 0 % es su ajuste más bajo, 100 % el más alto.",
   "trackRating": "Valoración de la pista",
-  "descTrackRating": "Valora la pista en reproducción con un pulgar arriba o abajo."
+  "descTrackRating": "Valora la pista en reproducción con un pulgar arriba o abajo.",
+  "label_discovery": "Buscar dispositivos en la red",
+  "tooltip_discovery": "Automático busca mientras no haya ningún dispositivo en la lista, como hasta ahora. Siempre busca además de los dispositivos indicados. Nunca deja solo la lista.",
+  "discoveryAuto": "Automático (mientras la lista esté vacía)",
+  "discoveryAlways": "Siempre",
+  "discoveryNever": "Nunca"
 }

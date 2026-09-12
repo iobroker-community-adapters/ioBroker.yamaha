@@ -7,6 +7,13 @@ declare global {
       networkInterface: string;
       /** Configured Yamaha devices: a display name and the device IP address. */
       devices: { name: string; ip: string }[];
+      /**
+       * Whether the network search runs: `auto` while the device table is empty (the behaviour
+       * of every installation before 2.9.0), `always` next to a filled table (mixed operation),
+       * `never` not at all. Three-valued so an upgrade needs no written value to keep behaving
+       * exactly as it did.
+       */
+      discovery: "auto" | "always" | "never";
       /** Poll interval in seconds for XML/pre-2010 devices. */
       xmlPollInterval: number;
       /**

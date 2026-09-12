@@ -602,5 +602,10 @@
   "descVolumeNumeric": "Le niveau sonore de la zone, dans l'échelle numérique affichée par l'ampli lui-même.",
   "descVolumePercent": "Le volume de la zone, en pourcentage de la plage que l'ampli accepte — 0 % est son réglage le plus bas, 100 % le plus fort.",
   "trackRating": "Note du morceau",
-  "descTrackRating": "Note le morceau en cours avec un pouce levé ou baissé."
+  "descTrackRating": "Note le morceau en cours avec un pouce levé ou baissé.",
+  "label_discovery": "Rechercher les appareils sur le réseau",
+  "tooltip_discovery": "Automatique cherche tant qu'aucun appareil n'est saisi ci-dessous, comme jusqu'ici. Toujours cherche en plus des appareils saisis. Jamais laisse la liste seule.",
+  "discoveryAuto": "Automatique (tant que la liste est vide)",
+  "discoveryAlways": "Toujours",
+  "discoveryNever": "Jamais"
 }

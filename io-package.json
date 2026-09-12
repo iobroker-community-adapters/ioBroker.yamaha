@@ -345,6 +345,7 @@
   "native": {
     "networkInterface": "0.0.0.0",
     "devices": [],
+    "discovery": "auto",
     "xmlPollInterval": 60,
     "volumeAsPercent": false,
     "group_player": true,

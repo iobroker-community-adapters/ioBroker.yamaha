@@ -2284,3 +2284,74 @@ describe("per-device memory and the discovery schema (2.6.0)", () => {
     expect(cb).toHaveBeenCalledTimes(1);
   });
 });
+
+// Three operating modes out of two independent things: the device table and the `discovery`
+// setting. Before 2.9.0 the table WAS the switch, so mixed operation did not exist and making
+// one discovered device manual took every other one down with it.
+describe("the device table and the network search side by side", () => {
+  const started = (ctx: Ctx): string[] => ctx.calls.map(call => call.device.id).sort();
+
+  it("auto: searches while the table is empty — what every installation did before", async () => {
+    mocks.discoveredStore.devices = [{ id: "Found", ip: "192.168.1.20" }];
+    const ctx = setup({ devices: [], discovery: "auto" });
+    await ctx.i.onReady();
+    await flush();
+    expect(started(ctx)).toEqual(["Found"]);
+  });
+
+  it("auto: a filled table turns the search off — the upgrade keeps behaving as it did", async () => {
+    mocks.discoveredStore.devices = [{ id: "Found", ip: "192.168.1.20" }];
+    const ctx = setup({ devices: [{ name: "Typed", ip: "192.168.1.10" }], discovery: "auto" });
+    await ctx.i.onReady();
+    await flush();
+    expect(started(ctx)).toEqual(["Typed"]);
+  });
+
+  it("always: mixed operation — the typed device and the found ones run together", async () => {
+    mocks.discoveredStore.devices = [{ id: "Found", ip: "192.168.1.20" }];
+    const ctx = setup({ devices: [{ name: "Typed", ip: "192.168.1.10" }], discovery: "always" });
+    await ctx.i.onReady();
+    await flush();
+    expect(started(ctx)).toEqual(["Found", "Typed"]);
+  });
+
+  it("never: the table alone, even with devices remembered from an earlier search", async () => {
+    mocks.discoveredStore.devices = [{ id: "Found", ip: "192.168.1.20" }];
+    const ctx = setup({ devices: [{ name: "Typed", ip: "192.168.1.10" }], discovery: "never" });
+    await ctx.i.onReady();
+    await flush();
+    expect(started(ctx)).toEqual(["Typed"]);
+  });
+
+  it("a missing setting reads as auto — an upgraded instance has no value written", async () => {
+    mocks.discoveredStore.devices = [{ id: "Found", ip: "192.168.1.20" }];
+    const ctx = setup({ devices: [] });
+    delete ctx.i.config.discovery;
+    await ctx.i.onReady();
+    await flush();
+    expect(started(ctx)).toEqual(["Found"]);
+  });
+
+  it("records where each device came from, at the device object", async () => {
+    mocks.discoveredStore.devices = [{ id: "Found", ip: "192.168.1.20" }];
+    const ctx = setup({ devices: [{ name: "Typed", ip: "192.168.1.10" }], discovery: "always" });
+    await ctx.i.onReady();
+    await flush();
+    expect((ctx.i.objects.get("Typed")?.native as { source?: string }).source).toBe("manual");
+    expect((ctx.i.objects.get("Found")?.native as { source?: string }).source).toBe("discovered");
+  });
+
+  it("only a discovered device arms the search that can find it again", async () => {
+    mocks.discoveredStore.devices = [{ id: "Found", ip: "192.168.1.20" }];
+    const ctx = setup({ devices: [{ name: "Typed", ip: "192.168.1.10" }], discovery: "always" });
+    await ctx.i.onReady();
+    await flush();
+    const armed = (): unknown[] => ctx.i.setTimeout.mock.calls.filter(c => Number(c[1]) > 200000);
+    const before = armed().length;
+    // A device whose address the user typed cannot have "moved" — it is simply off.
+    ctx.i.reportConnection("Typed", false);
+    expect(armed()).toHaveLength(before);
+    ctx.i.reportConnection("Found", false);
+    expect(armed().length).toBeGreaterThan(before);
+  });
+});

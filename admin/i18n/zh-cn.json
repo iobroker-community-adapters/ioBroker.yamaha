@@ -602,5 +602,10 @@
   "descVolumeNumeric": "该区域的音量，采用功放自身显示的数字刻度。",
   "descVolumePercent": "该区域的播放音量，以功放可接受范围的百分比表示——0 % 为最小，100 % 为最大。",
   "trackRating": "曲目评分",
-  "descTrackRating": "为正在播放的曲目点赞或点踩。"
+  "descTrackRating": "为正在播放的曲目点赞或点踩。",
+  "label_discovery": "在网络中搜索设备",
+  "tooltip_discovery": "自动：列表为空时搜索，与以往一致。始终：在已填写设备之外继续搜索。从不：只使用下方列表。",
+  "discoveryAuto": "自动（列表为空时）",
+  "discoveryAlways": "始终",
+  "discoveryNever": "从不"
 }

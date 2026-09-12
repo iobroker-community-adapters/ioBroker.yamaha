@@ -602,5 +602,10 @@
   "descVolumeNumeric": "Quão alto a zona toca, na escala numérica que o próprio recetor mostra.",
   "descVolumePercent": "Quão alto a zona toca, como percentagem do intervalo que o receptor aceita — 0 % é a definição mais baixa, 100 % a mais alta.",
   "trackRating": "Avaliação da faixa",
-  "descTrackRating": "Avalia a faixa em reprodução com polegar para cima ou para baixo."
+  "descTrackRating": "Avalia a faixa em reprodução com polegar para cima ou para baixo.",
+  "label_discovery": "Procurar dispositivos na rede",
+  "tooltip_discovery": "Automático procura enquanto não houver dispositivo na lista, como até agora. Sempre procura além dos dispositivos indicados. Nunca deixa só a lista.",
+  "discoveryAuto": "Automático (enquanto a lista estiver vazia)",
+  "discoveryAlways": "Sempre",
+  "discoveryNever": "Nunca"
 }

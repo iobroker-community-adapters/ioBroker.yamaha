@@ -41,6 +41,32 @@
       "lg": 12,
       "xl": 12
     },
+    "discovery": {
+      "newLine": true,
+      "type": "select",
+      "label": "label_discovery",
+      "tooltip": "tooltip_discovery",
+      "options": [
+        {
+          "label": "discoveryAuto",
+          "value": "auto"
+        },
+        {
+          "label": "discoveryAlways",
+          "value": "always"
+        },
+        {
+          "label": "discoveryNever",
+          "value": "never"
+        }
+      ],
+      "default": "auto",
+      "xs": 12,
+      "sm": 12,
+      "md": 6,
+      "lg": 6,
+      "xl": 6
+    },
     "networkInterface": {
       "newLine": true,
       "type": "ip",

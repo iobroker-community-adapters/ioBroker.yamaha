@@ -602,5 +602,10 @@
   "descVolumeNumeric": "Wie laut die Zone spielt, in der Zahlen-Skala, die der Receiver selbst anzeigt.",
   "descVolumePercent": "Wie laut die Zone spielt, als Prozentsatz des Bereichs, den der Receiver annimmt — 0 % ist seine leiseste, 100 % seine lauteste Einstellung.",
   "trackRating": "Titelbewertung",
-  "descTrackRating": "Bewertet den laufenden Titel mit Daumen hoch oder Daumen runter."
+  "descTrackRating": "Bewertet den laufenden Titel mit Daumen hoch oder Daumen runter.",
+  "label_discovery": "Netzsuche nach Geräten",
+  "tooltip_discovery": "Automatisch sucht, solange unten kein Gerät eingetragen ist — so war es bisher. Immer sucht zusätzlich zu den eingetragenen Geräten. Nie überlässt der Liste unten das Feld.",
+  "discoveryAuto": "Automatisch (solange die Liste leer ist)",
+  "discoveryAlways": "Immer",
+  "discoveryNever": "Nie"
 }

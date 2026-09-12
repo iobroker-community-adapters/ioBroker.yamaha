@@ -15,6 +15,7 @@ import {
   neverWrittenStateIds,
   nextDeviceLabel,
   parseDevices,
+  unionDevices,
   RENAMED_CHANNELS,
   RENAMED_STATE_IDS,
   renamedObjectIds,
@@ -130,7 +131,7 @@ describe("upgrade path from the original 0.5.4 adapter (the ~800 existing instal
     const row = legacyDeviceRow({ ip: "192.168.1.50", intervall: 120, useRealtime: true });
     expect(row).toEqual({ name: "192.168.1.50", ip: "192.168.1.50" });
     const devices = parseDevices([row]);
-    expect(devices).toEqual([{ id: "192_168_1_50", ip: "192.168.1.50" }]);
+    expect(devices).toEqual([{ id: "192_168_1_50", ip: "192.168.1.50", source: "manual" }]);
 
     // Step 2: start-up cleanup sees the full legacy tree plus our own info objects.
     const existing = [`${NS}.info`, `${NS}.info.connection`, ...legacyRelativeIds.map(id => `${NS}.${id}`)];
@@ -283,7 +284,9 @@ describe("staleObjects", () => {
 
 describe("parseDevices", () => {
   test("maps a configured entry to a device record", () => {
-    expect(parseDevices([{ name: "Living", ip: "1.2.3.4" }])).toEqual([{ id: "Living", ip: "1.2.3.4" }]);
+    expect(parseDevices([{ name: "Living", ip: "1.2.3.4" }])).toEqual([
+      { id: "Living", ip: "1.2.3.4", source: "manual" },
+    ]);
   });
 
   test("drops a duplicate id and the reserved 'info' name (would share one object tree) — and reports them", () => {
@@ -296,7 +299,7 @@ describe("parseDevices", () => {
       ],
       (dropped, takenId) => collisions.push([dropped, takenId]),
     );
-    expect(result).toEqual([{ id: "Living_Room", ip: "1.1.1.1" }]);
+    expect(result).toEqual([{ id: "Living_Room", ip: "1.1.1.1", source: "manual" }]);
     expect(collisions).toEqual([
       ["Living.Room", "Living_Room"],
       ["info", "info"],
@@ -869,5 +872,48 @@ describe("boundsOfCommon — what a stored object declares as its bounds", () =>
     // An object written by an older version or edited by hand in the admin can hold a string or a
     // `null` there. Counting that as a declared bound would make the clearing write fire forever.
     expect(boundsOfCommon({ min: "0" as unknown as number, max: null as unknown as number })).toEqual({});
+  });
+});
+
+// Until 2.9.0 the device table and the discovery store were mutually exclusive: a filled table
+// meant the search never ran, so turning ONE discovered device into a manual one dropped every
+// other one from the run and cleanupStaleObjects deleted their trees.
+describe("unionDevices", () => {
+  const manual = { id: "Living", ip: "1.1.1.1", source: "manual" as const };
+  const found = { id: "Kitchen", ip: "2.2.2.2" };
+
+  test("runs the table and the store side by side", () => {
+    expect(unionDevices([manual], [found])).toEqual([
+      { id: "Living", ip: "1.1.1.1", source: "manual" },
+      { id: "Kitchen", ip: "2.2.2.2", source: "discovered" },
+    ]);
+  });
+
+  test("tags where every record came from, whichever list it was in", () => {
+    expect(unionDevices([{ id: "Living", ip: "1.1.1.1" }], [found]).map(d => d.source)).toEqual([
+      "manual",
+      "discovered",
+    ]);
+  });
+
+  test("the typed address wins over the found one for the same device", () => {
+    // The user moved the receiver to a fixed address and entered it; the store still remembers
+    // where the search last saw it. Letting the store win would undo the user's own edit.
+    expect(unionDevices([manual], [{ id: "Living", ip: "9.9.9.9" }])).toEqual([
+      { id: "Living", ip: "1.1.1.1", source: "manual" },
+    ]);
+  });
+
+  test("a found device on an address a manual device already holds is not a second card", () => {
+    // Same receiver, different id (the search reads the name off the device, the user typed
+    // their own) — two records would talk to one device over one connection each.
+    expect(unionDevices([manual], [{ id: "RX-V685", ip: "1.1.1.1" }])).toEqual([
+      { id: "Living", ip: "1.1.1.1", source: "manual" },
+    ]);
+  });
+
+  test("either side alone is the whole set", () => {
+    expect(unionDevices([], [found])).toEqual([{ id: "Kitchen", ip: "2.2.2.2", source: "discovered" }]);
+    expect(unionDevices([manual], [])).toEqual([manual]);
   });
 });

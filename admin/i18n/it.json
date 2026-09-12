@@ -602,5 +602,10 @@
   "descVolumeNumeric": "Quanto forte suona la zona, nella scala numerica che il ricevitore stesso mostra.",
   "descVolumePercent": "Quanto forte suona la zona, come percentuale dell'intervallo che il ricevitore accetta — 0 % è l'impostazione più bassa, 100 % la più alta.",
   "trackRating": "Valutazione del brano",
-  "descTrackRating": "Valuta il brano in riproduzione con pollice su o pollice giù."
+  "descTrackRating": "Valuta il brano in riproduzione con pollice su o pollice giù.",
+  "label_discovery": "Cerca i dispositivi in rete",
+  "tooltip_discovery": "Automatico cerca finché non è indicato alcun dispositivo, come finora. Sempre cerca anche accanto ai dispositivi indicati. Mai lascia fare al solo elenco.",
+  "discoveryAuto": "Automatico (finché l'elenco è vuoto)",
+  "discoveryAlways": "Sempre",
+  "discoveryNever": "Mai"
 }

@@ -602,5 +602,10 @@
   "descVolumeNumeric": "How loud the zone plays, in the plain number scale the receiver itself shows.",
   "descVolumePercent": "How loud the zone plays, as a percentage of the range the receiver accepts — 0 % is its quietest setting, 100 % its loudest.",
   "trackRating": "Track rating",
-  "descTrackRating": "Rates the track now playing with a thumb up or a thumb down."
+  "descTrackRating": "Rates the track now playing with a thumb up or a thumb down.",
+  "label_discovery": "Search the network for devices",
+  "tooltip_discovery": "Auto searches while no device is entered below - what the adapter always did. Always searches next to the devices you entered. Never leaves the list below in charge.",
+  "discoveryAuto": "Automatically (while the list is empty)",
+  "discoveryAlways": "Always",
+  "discoveryNever": "Never"
 }

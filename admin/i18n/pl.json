@@ -602,5 +602,10 @@
   "descVolumeNumeric": "Jak głośno gra strefa, w skali liczbowej pokazywanej przez sam amplituner.",
   "descVolumePercent": "Jak głośno gra strefa, jako procent zakresu, który przyjmuje amplituner — 0 % to ustawienie najcichsze, 100 % najgłośniejsze.",
   "trackRating": "Ocena utworu",
-  "descTrackRating": "Ocenia odtwarzany utwór kciukiem w górę lub w dół."
+  "descTrackRating": "Ocenia odtwarzany utwór kciukiem w górę lub w dół.",
+  "label_discovery": "Wyszukiwanie urządzeń w sieci",
+  "tooltip_discovery": "Automatycznie szuka, dopóki lista jest pusta — tak było dotychczas. Zawsze szuka obok wpisanych urządzeń. Nigdy pozostawia samą listę.",
+  "discoveryAuto": "Automatycznie (dopóki lista jest pusta)",
+  "discoveryAlways": "Zawsze",
+  "discoveryNever": "Nigdy"
 }

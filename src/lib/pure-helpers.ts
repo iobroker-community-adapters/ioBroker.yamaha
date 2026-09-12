@@ -78,9 +78,40 @@ export function parseDevices(raw: unknown, onCollision?: (dropped: string, taken
       continue;
     }
     taken.add(id);
-    records.push({ id, ip: entry.ip });
+    records.push({ id, ip: entry.ip, source: "manual" });
   }
   return records;
+}
+
+/**
+ * The set of devices the adapter runs: the manual table plus the discovered store, keyed by id.
+ *
+ * A manual entry WINS over a discovered one of the same id — the user typed that address, and
+ * the network search must not overwrite it. Before 2.9.0 the two were mutually exclusive (a
+ * filled table turned the search off entirely), so making one discovered device manual dropped
+ * every other one from the run and `cleanupStaleObjects` deleted their trees.
+ *
+ * @param manual the rows from the instance's device table
+ * @param discovered the records remembered from the network search
+ * @returns one record per id, manual first, each tagged with where it came from
+ */
+export function unionDevices(manual: readonly DeviceRecord[], discovered: readonly DeviceRecord[]): DeviceRecord[] {
+  const byId = new Map<string, DeviceRecord>();
+  for (const device of manual) {
+    byId.set(device.id, { ...device, source: "manual" });
+  }
+  for (const device of discovered) {
+    if (byId.has(device.id)) {
+      continue;
+    }
+    // An address a manual device already occupies would mean two records talking to one
+    // receiver — the manual one owns it.
+    if ([...byId.values()].some(known => known.ip === device.ip)) {
+      continue;
+    }
+    byId.set(device.id, { ...device, source: "discovered" });
+  }
+  return [...byId.values()];
 }
 
 /**
