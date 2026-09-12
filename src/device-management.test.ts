@@ -255,6 +255,17 @@ describe("YamahaDeviceManagement", () => {
     expect(out.map(c => c.identifier)).toEqual(["192.168.1.10", "192.168.1.11", "192.168.1.20"]);
   });
 
+  it("two table rows that sanitise to one id give one card, not two", async () => {
+    // Both become "Living_Room", and the object tree has exactly one of those — a second card
+    // would offer to edit and delete a device that shares its whole tree with the first.
+    const out = await cards([
+      { name: "Living Room", ip: "192.168.1.10" },
+      { name: "Living.Room", ip: "192.168.1.11" },
+    ]);
+    expect(out.map(c => c.id)).toEqual(["Living_Room"]);
+    expect(out[0].identifier).toBe("192.168.1.10");
+  });
+
   it("the typed address wins when both stores know the same device", async () => {
     store.devices = [{ id: "Living_room", ip: "192.168.1.99" }];
     const out = await cards([living]);

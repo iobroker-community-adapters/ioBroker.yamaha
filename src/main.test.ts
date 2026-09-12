@@ -2420,6 +2420,20 @@ describe("switching one device to percent while the adapter runs", () => {
     expect((ctx.i.objects.get("Living_room")?.native as { volumeAsPercent?: boolean }).volumeAsPercent).toBe(true);
   });
 
+  it("a device's own answer beats the instance switch it once inherited", async () => {
+    const ctx = setup();
+    ctx.i.foreignObjects.set("system.adapter.yamaha.0", { native: { volumeAsPercent: true } });
+    // The user turned THIS device back to the scale its receiver shows. The instance value from
+    // 2.8.0 is still sitting in the instance object and must not undo that on every start.
+    ctx.i.objects.set("Living_room", { type: "device", common: {}, native: { volumeAsPercent: false } });
+    await ctx.i.onReady();
+    await flush();
+    const upsert = ctx.calls[0].deps.upsertObject as (id: string, def: unknown) => Promise<void>;
+    await upsert("Living_room.volume", dbVolume);
+    expect(ctx.i.objects.get("Living_room.volume")?.common).toMatchObject({ unit: "dB" });
+    expect((ctx.i.objects.get("Living_room")?.native as { volumeAsPercent?: boolean }).volumeAsPercent).toBe(false);
+  });
+
   it("an upgraded instance hands its old instance-wide switch to every device, once", async () => {
     const ctx = setup();
     ctx.i.foreignObjects.set("system.adapter.yamaha.0", { native: { volumeAsPercent: true } });
