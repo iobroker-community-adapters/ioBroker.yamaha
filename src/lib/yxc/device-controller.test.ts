@@ -330,7 +330,6 @@ describe("YxcDeviceController", () => {
     s.fire.push?.({ main: { power: "on" } });
     await flush();
     expect(s.client.calls).toContainEqual({ method: "getStatus", args: ["main"] });
-    expect(s.acks).toContainEqual({ id: "living.power", value: false });
   });
 
   // The RX-V481 declares BOTH display scales; `actual_volume.value` arrives in the one named by
@@ -678,7 +677,46 @@ describe("YxcDeviceController", () => {
     await flush();
     expect(s.client.calls).toContainEqual({ method: "getPlayInfo", args: ["tuner"] });
     expect(s.client.calls).not.toContainEqual({ method: "getPlayInfo", args: ["cd"] });
-    expect(s.acks).toContainEqual({ id: "living.tuner.band", value: "fm" });
+  });
+
+  // MusicCast answers a push by re-reading the WHOLE zone status, so all ~25 of its fields were
+  // written for one button press — 50 on a two-zone receiver, where YNCA writes exactly one
+  // datapoint per protocol line. The re-read stays: a push is partial, and one without
+  // `actual_volume_mode` would hit the scale bug 2.8.0 fixed. Only the unchanged values stop.
+  describe("a push writes what changed, not the whole zone", () => {
+    test("a status that repeats the current values writes nothing", async () => {
+      const s = setup(wx10, ysp);
+      await s.controller.start();
+      s.acks.length = 0;
+      s.fire.push?.({ main: { power: "on" } });
+      await flush();
+      // The re-read still happens — it is the only way to learn what a partial push left out.
+      expect(s.client.calls).toContainEqual({ method: "getStatus", args: ["main"] });
+      expect(s.acks).toEqual([]);
+    });
+
+    test("a changed field is written, and only that one", async () => {
+      const s = setup(wx10, ysp);
+      await s.controller.start();
+      s.acks.length = 0;
+      s.client.status = { ...(ysp as Record<string, unknown>), power: "on" };
+      s.fire.push?.({ main: { power: "on" } });
+      await flush();
+      expect(s.acks).toEqual([{ id: "living.power", value: true }]);
+    });
+
+    test("writing the value the device already has still gets its acknowledgement", async () => {
+      const s = setup(wx10, ysp);
+      await s.controller.start();
+      s.acks.length = 0;
+      // A scene recalling a fixed level, a script with a fixed volume: the write produces no
+      // CHANGE, so without forgetting the remembered value the echo would be skipped and the
+      // datapoint would stay unacknowledged for good.
+      s.controller.handleStateChange("living.power", false, false);
+      s.fire.push?.({ main: { power: "standby" } });
+      await flush();
+      expect(s.acks).toContainEqual({ id: "living.power", value: false });
+    });
   });
 
   test("keepalive also refreshes tuner and cd when present", async () => {

@@ -543,8 +543,23 @@ export class YxcDeviceController implements ConnectionHandle {
     if (this.deps.gate?.closed) {
       return;
     }
+    // A push carries only what changed, but the answer to it is a full zone status, and every
+    // one of its ~25 fields used to be written — 50 on a two-zone receiver, for one button
+    // press, where YNCA writes exactly one datapoint per protocol line. The re-read stays (a
+    // partial push without `actual_volume_mode` would hit the scale bug 2.8.0 fixed); only the
+    // unchanged values stop being written.
+    if (this.lastEmitted.get(relativeId) === value) {
+      return;
+    }
+    this.lastEmitted.set(relativeId, value);
     this.deps.setStateAck(`${this.deviceId}.${relativeId}`, value);
   }
+
+  /**
+   * Per state id, the value last handed to the adapter on THIS connection. The controller is
+   * rebuilt on every connection attempt, so a reconnect always re-seeds the whole tree.
+   */
+  private readonly lastEmitted = new Map<string, boolean | number | string>();
 
   /**
    * Handle a state change: a user write (ack false) becomes a YXC command; an
@@ -563,6 +578,13 @@ export class YxcDeviceController implements ConnectionHandle {
       return;
     }
     const stateId = fullStateId.slice(prefix.length);
+    // Someone writing the value the device ALREADY has produces no change for the guard in
+    // `emit` to let through, so the confirming echo would be skipped and the datapoint would
+    // stay unacknowledged for good (a scene recalling a fixed volume, a script with a fixed
+    // level). Forgetting the remembered value here lets that one echo pass. It is not a race:
+    // this runs on the write itself, while the echo still has to travel through the command
+    // gate to the device and back.
+    this.lastEmitted.delete(stateId);
     if (stateId.startsWith("player.browse.")) {
       this.browseEngine?.handleWrite(stateId, value);
       return;
