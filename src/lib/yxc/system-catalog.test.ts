@@ -1,4 +1,5 @@
 import { YXC_SYSTEM_CATALOG, presentSystemEntries } from "./system-catalog";
+import type { YxcClientLike } from "./client-contract";
 
 /** The RX-A3080 answer (bundled capture RXA3080_213_215.json) — the richest getFuncStatus on record. */
 const RX_A3080 = {
@@ -73,5 +74,104 @@ describe("the device-wide MusicCast settings (coverage audit 2026-09-09)", () =>
     expect(byState.get("hdmi.standbyThrough")?.listId).toBe("hdmi_standby_through_list");
     expect(byState.get("hdmi.videoPreset")?.countId).toBe("video_preset_num");
     expect(byState.get("hdmi.videoPreset")?.fromStatus(3)).toBe(3);
+  });
+});
+
+/**
+ * A stand-in that records what a write called, so the table below can name the endpoint per
+ * entry. A proxy instead of 50 hand-written methods — the same move the controller test makes.
+ *
+ * @returns the client and the calls it collected
+ */
+function recordingClient(): { client: YxcClientLike; calls: Array<{ method: string; args: unknown[] }> } {
+  const calls: Array<{ method: string; args: unknown[] }> = [];
+  const client = new Proxy({} as YxcClientLike, {
+    get:
+      (_target, method: string) =>
+      (...args: unknown[]): Promise<void> => {
+        calls.push({ method, args });
+        return Promise.resolve();
+      },
+  });
+  return { client, calls };
+}
+
+// Every entry, both directions. Until this table existed a third of the catalog's functions were
+// never executed: `fromStatus` and `write.apply` of the automatic standby, the display brightness
+// and the two HDMI outputs. Swapping out1 and out2 would have gone unnoticed.
+describe("every system-catalog entry converts and writes what it claims", () => {
+  /** Raw field value → the value the datapoint must carry. */
+  const READS: Record<string, Array<[unknown, boolean | number | string]>> = {
+    "advanced.autoPowerStandby": [
+      [true, true],
+      [false, false],
+      [0, false],
+    ],
+    "advanced.displayBrightness": [
+      [3, 3],
+      ["-1", -1],
+    ],
+    "hdmi.out1": [
+      [true, true],
+      [false, false],
+    ],
+    "hdmi.out2": [
+      [true, true],
+      [false, false],
+    ],
+    "hdmi.out3": [
+      [true, true],
+      [false, false],
+    ],
+    "hdmi.standbyThrough": [
+      ["auto", "auto"],
+      ["off", "off"],
+    ],
+    "advanced.headphone": [
+      [true, true],
+      [false, false],
+    ],
+    "multiroom.party": [
+      [true, true],
+      [false, false],
+    ],
+    "advanced.speakers.pattern": [
+      [1, "Pattern 1"],
+      [2, "Pattern 2"],
+    ],
+    "hdmi.videoPreset": [
+      [1, 1],
+      ["2", 2],
+    ],
+  };
+
+  /** The endpoint each writable entry must reach, and with which argument. */
+  const WRITES: Record<string, { value: unknown; method: string; args: unknown[] }> = {
+    "advanced.autoPowerStandby": { value: 1, method: "setAutoPowerStandby", args: [true] },
+    "hdmi.out1": { value: false, method: "setHdmiOut1", args: [false] },
+    "hdmi.out2": { value: "on", method: "setHdmiOut2", args: [true] },
+    "multiroom.party": { value: 0, method: "setPartyMode", args: [false] },
+  };
+
+  test("the tables cover the catalog — a new entry without a case fails here", () => {
+    const states = YXC_SYSTEM_CATALOG.map(entry => entry.state).sort();
+    expect(Object.keys(READS).sort()).toEqual(states);
+    const writable = YXC_SYSTEM_CATALOG.filter(entry => entry.write)
+      .map(entry => entry.state)
+      .sort();
+    expect(Object.keys(WRITES).sort()).toEqual(writable);
+  });
+
+  test.each(YXC_SYSTEM_CATALOG.map(entry => [entry.state, entry] as const))("%s reads its field", (state, entry) => {
+    for (const [raw, expected] of READS[state]) {
+      expect(entry.fromStatus(raw), `${state} <- ${JSON.stringify(raw)}`).toBe(expected);
+    }
+  });
+
+  test.each(Object.entries(WRITES))("%s writes to its own endpoint", async (state, expected) => {
+    const entry = YXC_SYSTEM_CATALOG.find(candidate => candidate.state === state)!;
+    const { client, calls } = recordingClient();
+    await entry.write!.apply(client, expected.value);
+    expect(calls).toEqual([{ method: expected.method, args: expected.args }]);
   });
 });
