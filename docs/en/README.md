@@ -25,8 +25,13 @@ uses everything that answers.
 
 1. Install the adapter and create an instance.
 2. Open the instance settings. The **Devices** tab lists your receivers as cards.
-3. Either leave the list empty — then the adapter searches the network by itself and runs
-   whatever it finds — or press **+** and enter the IP address of a receiver.
+3. Leave the list empty and the adapter searches the network by itself and runs whatever it
+   finds — or press **+** and enter the IP address of a receiver. You can do both: devices you
+   entered and devices the search found run side by side.
+
+Every card carries a small icon for where its address came from: a pencil for one you entered,
+a magnifier for one the search found. A found device can be edited too — give it the fixed
+address you assigned the receiver, and it becomes one of your entered devices.
 
 A receiver from before 2010 does not answer a network search and always has to be added by
 hand. The same is true for any device your router keeps in a different network segment.
@@ -37,6 +42,9 @@ adapter is not running is only found again by the next network search.
 
 ### Settings
 
+- **Search the network for devices** — _Automatically_ searches while the device list is empty,
+  which is what the adapter has always done. _Always_ keeps searching next to the devices you
+  entered. _Never_ runs your list alone.
 - **Network interface** — leave it empty and the search leaves through every network card of
   your ioBroker machine. Only set it if your server sits in several networks and the search
   should use a particular one. It has no effect on the receivers themselves.
@@ -44,6 +52,16 @@ adapter is not running is only found again by the next network search.
   state. Those models cannot report changes by themselves. 60 seconds is a sensible default;
   a shorter interval means more network traffic for little gain.
 - **Datapoint groups** — see below.
+
+### On each device card
+
+- **Volume as 0–100 %** — off, that receiver's volume datapoints carry the scale it shows
+  itself: decibels, or its own step count. On, they carry 0–100 % instead, the main zone and
+  every other zone of that receiver — the range most VIS widgets expect. The adapter converts
+  in both directions, so the receiver always gets the value it expects.
+
+  It belongs to the device, not to the instance: one receiver wanting percent says nothing
+  about the others. Set it on the card, or in the add/edit dialog — it is the same switch.
 
 ## What you get in the object tree
 

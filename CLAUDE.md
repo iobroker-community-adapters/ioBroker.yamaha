@@ -452,8 +452,9 @@ entscheidet etwas ([[feedback_user_hardware_ist_sample]]). Alle Funde sind umges
   ist S5054). Das gelesene `common` fährt mit, damit der Objekt-Inhalt die Reparatur unverändert
   übersteht. Welche Grenzen ein Datenpunkt VORHER trug, steht aus dem einen Start-Abzug
   in `storedBounds`; es gibt keinen Lesevorgang je Datenpunkt, und gelesen wird nur im seltenen Fall.
-- **Ein Schalter macht aus JEDER Lautstärke Prozent** (`volumeAsPercent`, Instanz-Einstellung, Vorgabe AUS,
-  seit 2.8.0 — krobi: „ein schalter für ALLE. ich will das nicht komplizierter machen als es sein muss"):
+- **Ein Schalter macht aus der Lautstärke EINES GERÄTS Prozent** (`native.volumeAsPercent` am
+  Geräte-Objekt, Vorgabe AUS; 2.8.0 hatte ihn als EIN Instanz-Häkchen, seit 2.9.0 pro Gerät — der
+  Adapter bedient mehrere Receiver, und dass einer Prozent will, sagt nichts über die anderen):
   Grund ist #623 und das menschliche Maß — ein fertiges VIS-Widget an `volume` trifft sonst eine Zahl, die
   es nicht darstellen kann, und wer eine Lautstärke wählt, denkt von null aufwärts, nicht in negativen
   Dezibel. Der Aufsatz (`catalog/volume-percent.ts`) sitzt in den DREI adapterweiten Trichtern der
@@ -471,6 +472,17 @@ entscheidet etwas ([[feedback_user_hardware_ist_sample]]). Alle Funde sind umges
   Bedeutung, und verliert eine spätere Definition ihre Grenzen, wird die gemerkte Skala mitgelöscht;
   (e) das EIGENE bestätigte Echo wird nie umgerechnet — der Adapter abonniert seinen ganzen Namensraum,
   eine zweite Umrechnung liefe die Skala bei jedem Abruf hinunter.
+  **Seit 2.9.0 pro Gerät** (`percentFor(id)` liest die erste Id-Stufe = die Geräte-Id): der Wert liegt im
+  `native` des GERÄTE-Objekts, nicht im Instanz-Objekt — dessen `native` zu schreiben startet den Adapter
+  neu, das eines Geräte-Objekts nicht (dieselbe Begründung wie beim `capabilityProfile`). Erreichbar an
+  zwei Stellen, EIN Wert: als `controls`-Schalter auf der Gerätekachel und als Häkchen im
+  Anlegen-/Bearbeiten-Dialog. Umlegen baut die Lautstärke-Datenpunkte DIESES Geräts sofort neu und zieht
+  den anliegenden Wert nach — in dieser Reihenfolge, sonst steht ein Wert außerhalb der Grenzen seiner
+  gerade gewechselten Definition und der js-controller meldet es bei jedem Abruf (der Fehler, den 2.8.0
+  für den geräteeigenen Skalenwechsel behoben hat). **Umstieg:** der alte Instanz-Schalter wird aus dem
+  Instanz-OBJEKT gelesen (der Schlüssel ist aus dem Konfigurationsschema raus, `this.config` ist also
+  keine Quelle mehr) und von einem Gerät ohne eigene Antwort EINMAL geerbt — und sofort festgeschrieben,
+  damit ein einzeln zurückgestelltes Gerät nicht bei jedem Start wieder umspringt.
 - **Das Eingangs-Dropdown trägt die Namen, die der BESITZER am Gerät vergeben hat** (seit 2.7.2):
   die klassische XML-Auskunft `Input_Sel_Item` liefert je Eintrag ein `<Param>` (den Schaltwert,
   `HDMI1`) UND ein `<Title>` (den vergebenen Namen, „Apple TV"). `parseInputLabels()` in
@@ -655,6 +667,78 @@ Tippfehler zum Compile-Fehler.
   Sternchen-Zweig gibt im Fehlerfall ein abgelehntes Promise zurück, und eine unbehandelte
   Ablehnung stoppt die Instanz. Ein Fehler ist laut, aber nicht tödlich — der Baum füllt sich
   weiter, nur Schreibvorgänge greifen nicht mehr.
+
+## Audit-Umsetzung 2026-09-12 (v2.9.0) — Regeln, die im Code stehen müssen
+
+Bericht `docs/superpowers/specs/2026-09-12-audit-befund.md`, Plan `~/.claude/plans/`. Alle Funde umgesetzt;
+drei Plan-Aussagen wurden beim Bauen WIDERLEGT und sind hier in ihrer gemessenen Form festgehalten.
+
+- **Die Geräte-Tabelle und die Netzsuche laufen NEBENEINANDER** (die 2.9.0-Umkehr): bis dahin WAR die
+  Tabelle der Schalter — gefüllt hieß manuell, leer hieß automatisch, beides zusammen gab es nicht. Ein
+  einzelnes gefundenes Gerät manuell zu machen riss deshalb alle anderen aus dem Lauf, und
+  `cleanupStaleObjects` löschte ihre Bäume. Die laufende Menge ist jetzt die Vereinigung beider Speicher
+  (`unionDevices`, nach Id; die getippte Adresse gewinnt, und eine Adresse, die ein manuelles Gerät schon
+  hält, wird kein zweiter Datensatz). Ob gesucht wird, entscheidet die eigene Instanz-Einstellung
+  `discovery` mit DREI Werten: `auto` sucht, solange die Tabelle leer ist (exakt das Verhalten jeder
+  Anlage vor 2.9.0), `always` sucht daneben (Mischbetrieb), `never` gar nicht. **Dreiwertig mit Absicht:**
+  die Vorgaben liegen in `io-package.json native`, und ein boolescher Vorgabewert wäre für genau die
+  Bestandsanlagen mit manuellen Geräten falsch vorbelegt — `auto` braucht keinen Schreibvorgang.
+- **Jedes Gerät weiß, woher es kam** (`native.source`, krobis Vorschlag). Vorher war die Herkunft
+  ABGELEITET und GLOBAL („die Tabelle ist gefüllt, also sind alle Karten manuell"), also wusste kein
+  einzelnes Gerät etwas über sich. Daran hängen drei Dinge: das kleine Symbol auf der Kachel
+  (`fa-pencil` / `fa-search` — Indikator-Icons nehmen nur reservierte Namen, `fa-*`, `data:` oder URLs,
+  ein schlichtes Wort rendert als „?"), die Wiederfind-Suche (nur ein GEFUNDENES Gerät kann umgezogen
+  sein; ein manuelles ist an seiner getippten Adresse einfach aus) und der Bearbeiten-Pfad.
+- **Bearbeiten gibt es auf JEDER Karte, und es ändert nie die Objekt-Id.** Die Id kommt aus dem Namen der
+  Tabellenzeile, deshalb trägt die Zeile die Id, und was der Nutzer tippt wird der ANZEIGENAME am
+  Geräte-Objekt (`nextDeviceLabel` verteidigt ihn ohnehin gegen jede Gerätemeldung). Vorher benannte das
+  Umbenennen eines manuellen Geräts die Id um und ließ den ganzen Baum samt Historie und VIS-Bindungen
+  für `cleanupStaleObjects` stehen. Bekommt ein gefundenes Gerät eine feste Adresse, WANDERT sein
+  Datensatz aus `devices.json` in die Tabelle — kopiert würde ihn der nächste Fund wieder überschreiben
+  (`mergeDiscovered` zieht die gefundene Adresse auf eine bekannte Id), und stehen gelassen käme er als
+  zweite Karte zurück. Die Suche überspringt deshalb Ids UND Adressen der Tabelle.
+  ⚠️ Ein gefundenes Gerät OHNE gemeldeten Namen trägt seine alte Adresse als Id — die Id beim Verschieben
+  neu abzuleiten würde genau dort den Baum verlieren.
+- **Eine Koordination läuft NIE neben einer anderen.** `attemptTransport` rief `coordinate()` direkt, an
+  der `coordinating`-Kette vorbei; ein Transport, der die ganze Zeit lebte, behält seine Shape-Verdrahtung
+  über den Ausfall eines anderen hinweg (`handleTransportDrop` splict nur den einen), also konnte sein
+  Hintergrund-Refresh mitten in das `await` des Reconnects hineinkoordinieren. Beide berechnen ihre
+  Besitzkarte VOR den Awaits und setzen sie DANACH — wer zuletzt fertig wird, gewinnt, und der Reconnect
+  begann mit dem älteren Schnappschuss: ein Nutzer-Schreibvorgang ging an einen Transport, der die Id
+  nicht besitzt, und fiel spurlos aus. `queueCoordination()` hängt beide in dieselbe Kette und reicht
+  einen Fehlschlag an den Aufrufer zurück, statt die Kette zu vergiften. **Keine Verklemmung:**
+  `attemptTransport` hat genau EINE Aufrufstelle, und die liegt in einem Timer-Rückruf.
+- **`removeDevice` lässt nichts zurück.** Vier Caches wurden geräumt, neun standen; der gefährlichste war
+  `pendingNative` — sein 250-ms-Fenster feuerte NACH `delObjectAsync` und legte das gelöschte
+  Geräte-Objekt als nacktes Waisenobjekt wieder an. Präfix-gekeyte Karten räumt `forgetUnder`.
+- **Die HDMI-Videoeinstellungen liegen je Generation auf einer anderen Subunit.** Über die 21 offiziellen
+  Befehlslisten gemessen: `HDMIASPECT`/`HDMIRESOL` auf `MAIN` bei 12 Listen (2010/2011), auf `SYS` bei
+  9 (ab 2012, RX-A850 darunter); `TVAUDIN1` machte denselben Sprung. Vorher fragte der Sweep auf jedem
+  2012er Gerät `@MAIN:…`, bekam `@UNDEFINED`, und die Datenpunkte entstanden nicht — ohne Logzeile.
+  Zwei Einträge mit derselben State-Id, die Per-Gerät-Schreibkarte wählt (wie `SPBASS`/`TONEBASS`).
+  ⚠️ Die Wertelisten sind NICHT identisch: **4K gibt es erst ab 2012**, der gemeinsame Katalog bot es
+  Geräten von 2010/2011 an, die es ablehnen. Jede Generation trägt ihre eigene Liste.
+  ⚠️ **Kein `DISCOVERY_SCHEMA`-Bump:** `refreshInBackground` sweept gegen den AKTUELLEN Katalog und
+  behält jeden SYS-Get unabhängig vom Subunit-Cache, also wird eine Bestandsanlage beim nächsten Start
+  gefragt und veröffentlicht den Datenpunkt in derselben Sitzung (der 2.7.0-Weg). Der Rost-Wächter
+  bleibt grün, und ein erzwungener Bump wäre an seiner „kein Cache-Buster"-Regel gescheitert.
+- **Der Katalog wird gegen die offiziellen Listen GEMESSEN, nicht von Hand geprüft.** Der Handcheck hatte
+  eine ganze Gerätegeneration vier Releases lang übersehen. `__fixtures__/official-function-evidence.json`
+  (erzeugt von `Ressourcen/yamaha/device-data-2026-09-08/build-function-evidence.py`) trennt lesbare von
+  PUT-only Paaren je Subunit; `catalog.test.ts` verlangt für JEDE lesbare Funktion einen Datenpunkt oder
+  einen der fünf dokumentierten anderen Besitzer (Browse-Fenster, AVAIL-Sonde, Bündel-GETs, Szenentitel,
+  die Per-Eingang-Namen) — und ein zweiter Test wird rot, sobald eine Ausnahme nichts mehr trifft.
+  **Zwei Fallen beim Erzeugen:** die Listen zitieren Befehle im Fließtext (ein Zitat trägt sogar einen
+  Tippfehler), also zählt nur eine echte `[GET/PUT Command]`-Zeile; und `rx-a850.txt` ist ein roher Dump
+  ohne diese Marker — ein reiner Marker-Scan verliert still das einzige 2015er Modell.
+- **MusicCast schreibt, was sich geändert hat, nicht die ganze Zone.** Ein Push ist partiell, die Antwort
+  darauf ist der volle Zonenstatus, und alle ~25 Felder wurden geschrieben (50 bei zwei Zonen, für einen
+  Tastendruck). Der Neuabruf bleibt — ein Push ohne `actual_volume_mode` liefe in den Skalenfehler von
+  2.8.0. ⚠️ Der Wert-Wächter braucht seine Gegenseite: wer den Wert schreibt, den das Gerät schon hat,
+  bekäme sonst NIE ein Echo und der Datenpunkt bliebe für immer unbestätigt — `handleStateChange`
+  vergisst den gemerkten Wert. Kein Rennen: das läuft auf dem Schreibvorgang, das Echo muss erst durch
+  die Befehls-Schleuse zum Gerät und zurück. Der Cache hängt am Controller, der je Verbindungsversuch
+  neu gebaut wird — ein Reconnect sät also immer den ganzen Baum.
 
 ## Stand
 
@@ -905,7 +989,9 @@ in ein öffentliches Repo.
   Zustands-/Objektdatenbank, und ein „normalisierendes" Argument dort beendet die Instanz vor dem
   ersten Gerätekontakt.
 - **Der Lautstärke-Schalter wird in BEIDEN Stellungen inventarisiert** (seit 2.8.0): der Lauf fährt
-  die acht Fixtures ein zweites Mal mit `volumeAsPercent: true` und sichert, dass JEDER
+  die acht Fixtures ein zweites Mal mit `volumeAsPercent: true` am INSTANZ-Objekt — seit 2.9.0 ist das
+  der Umstiegs-Weg, den ein Gerät ohne eigene Antwort einmal erbt, und der Lauf sichert seit demselben
+  Release ausdrücklich, dass jedes Gerät ihn als EIGENE Antwort festgeschrieben hat. Er sichert, dass JEDER
   `volume`-Datenpunkt jedes Geräts und jeder Zone dann 0…100 %, Schritt 0,5, Rolle `level.volume` und
   die Prozent-Erklärung trägt — und dass die Prozent-Stellung GENAU dieselben Datenpunkte baut wie die
   Vorgabe-Stellung. Ohne den zweiten Vergleich ginge die erste Zusicherung leer durch, sobald eine
@@ -950,7 +1036,7 @@ in ein öffentliches Repo.
   bis 2.1.1 lief er lokal nie mit, obwohl die CI ihn fährt (`testing-action-adapter` ruft
   `test:unit` UND `test:integration`). `passWithNoTests` ist raus — ein nicht mehr greifendes
   `include` muss rot melden, nicht grün.
-- **Mutationstabellen** (`../../Ressourcen/iobroker-entwicklung/mutation-testing/`) — **VIERZEHN Dateien, und das
+- **Mutationstabellen** (`../../Ressourcen/iobroker-entwicklung/mutation-testing/`) — **FÜNFZEHN Dateien, und das
   Gate prüft ALLE.** ⚠️ Die fünf Wellen-Originale `mutations_yamaha.py` · `…2.py` · `…3.py` · `…4.py` ·
   `…5.py` (36/32/26/11/11 Nadeln) leben NEBEN der Sammeltabelle `mutations_yamaha_all.py`, die dieselben
   Regeln zusammenfasst — sie sind kein Altbestand. Wer nur die datierten Tabellen nachzieht, lässt fünf
@@ -969,7 +1055,11 @@ in ein öffentliches Repo.
   - `mutations_yamaha_2026-09-11-w13.py` (Welle 13 = die Lautstärke auf
     der Geräteskala und der Prozent-Schalter, IDs Q1–Q22; im ersten Lauf 16/20, die vier Überlebenden waren
     echte Testlücken und sind geschlossen → 20/20, dann Q21/Q22 für die zwei Regeln nachgezogen, die der
-    Inventar-Lauf beider Schalterstellungen noch aufdeckte → 22/22). Läufer `mutation-test.py`. Nadeln sind
+    Inventar-Lauf beider Schalterstellungen noch aufdeckte → 22/22)
+  - `mutations_yamaha_2026-09-12-w14.py` (Welle 14 = die Audit-Funde vom 12.09. und der Prozent-Schalter
+    pro Gerät, IDs R1–R16; 16/16 gefangen — zwei Überlebende im ersten Lauf waren echte Testlücken und
+    sind geschlossen: die Doppel-Id-Sperre der Kartenliste und „die eigene Antwort eines Geräts schlägt
+    den geerbten Instanz-Schalter"). Läufer `mutation-test.py`. Nadeln sind
     exakte Quellzeilen — nach Prettier-Umbrüchen oder Refactorings ZUERST den Nadel-Vorab-Check (jede Nadel
     genau 1×), sonst misst der Lauf nichts. Zwei äquivalente Mutanten (X2, X4 — unerreichbare
     Invarianten-Wächter, im Quelltext begründet); die vier anderen vom 22.08. (M9, X1, Y1, Y13) waren toter

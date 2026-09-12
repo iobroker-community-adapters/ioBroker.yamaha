@@ -74,6 +74,18 @@ Details on all settings, the object tree and the ports the adapter uses are in t
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+### **WORK IN PROGRESS**
+
+- (krobipd) New: Devices you enter by hand and devices the network search finds now run side by side — entering one receiver no longer takes every found one out of the instance
+- (krobipd) New: Setting "Search the network for devices" — automatically while your device list is empty (as before), always next to it, or never
+- (krobipd) New: Every device card can be edited. Give a found receiver the fixed address you assigned it and it becomes one of your entered devices, keeping its whole object tree
+- (krobipd) New: Each card shows where its address came from, and "Volume as 0–100 %" is now set per device instead of once for the whole instance — every receiver keeps what it had
+- (krobipd) Fixed: hdmi.aspect and hdmi.resolution were missing on every receiver from 2012 on — the models moved those settings to another subunit and the adapter only ever asked the old one
+- (krobipd) Fixed: Receivers from 2010/2011 were offered a 4K video resolution their model does not support
+- (krobipd) Fixed: A write to a receiver could be dropped without a trace while another of its protocols was reconnecting
+- (krobipd) Fixed: Deleting a device and adding the same one again left it with the wrong icon until the next restart, and a pending write could recreate the deleted device object
+- (krobipd) Changed: A MusicCast receiver no longer rewrites all 25 datapoints of a zone on every push — only what actually changed
+
 ### 2.8.0 (2026-09-11)
 
 - (krobipd) Fixed: A volume written to a MusicCast receiver now arrives exactly — the adapter reads the receiver's own step declaration instead of guessing a ratio (#623)

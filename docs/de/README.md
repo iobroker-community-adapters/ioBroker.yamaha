@@ -25,8 +25,14 @@ und nutzt alles, was antwortet.
 
 1. Adapter installieren und eine Instanz anlegen.
 2. Die Instanz-Einstellungen öffnen. Der Reiter **Geräte** zeigt Ihre Receiver als Karten.
-3. Entweder die Liste leer lassen — dann sucht der Adapter selbst im Netz und betreibt, was
-   er findet — oder auf **+** drücken und die IP-Adresse eines Receivers eintragen.
+3. Die Liste leer lassen — dann sucht der Adapter selbst im Netz und betreibt, was er findet —
+   oder auf **+** drücken und die IP-Adresse eines Receivers eintragen. Beides geht zusammen:
+   eingetragene und gefundene Geräte laufen nebeneinander.
+
+Jede Karte trägt ein kleines Symbol dafür, woher ihre Adresse kommt: ein Stift für ein
+eingetragenes Gerät, eine Lupe für ein gefundenes. Auch ein gefundenes Gerät lässt sich
+bearbeiten — geben Sie ihm die feste Adresse, die Sie dem Receiver vergeben haben, und es wird
+zu einem Ihrer eingetragenen Geräte.
 
 Ein Receiver von vor 2010 antwortet auf keine Netzwerksuche und muss immer von Hand
 eingetragen werden. Dasselbe gilt für jedes Gerät, das Ihr Router in einem anderen
@@ -38,6 +44,9 @@ umzieht, während der Adapter nicht läuft, findet aber erst die nächste Netzwe
 
 ### Einstellungen
 
+- **Netzsuche nach Geräten** — _Automatisch_ sucht, solange die Geräteliste leer ist; so hat
+  der Adapter es immer gemacht. _Immer_ sucht zusätzlich zu den eingetragenen Geräten.
+  _Nie_ überlässt Ihrer Liste allein das Feld.
 - **Netzwerk-Schnittstelle** — leer lassen, dann verlässt die Suche jede Netzwerkkarte Ihres
   ioBroker-Rechners. Nur setzen, wenn Ihr Server in mehreren Netzen hängt und die Suche eine
   bestimmte nehmen soll. Auf die Receiver selbst hat die Einstellung keine Wirkung.
@@ -45,6 +54,18 @@ umzieht, während der Adapter nicht läuft, findet aber erst die nächste Netzwe
   gefragt wird. Diese Modelle können Änderungen nicht von sich aus melden. 60 Sekunden sind
   sinnvoll; ein kürzeres Intervall erzeugt mehr Netzverkehr bei wenig Gewinn.
 - **Datenpunktgruppen** — siehe unten.
+
+### Auf jeder Gerätekarte
+
+- **Lautstärke als 0–100 %** — aus tragen die Lautstärke-Datenpunkte dieses Receivers die
+  Skala, die er selbst anzeigt: Dezibel oder seine eigene Schrittzahl. Ein tragen sie
+  stattdessen 0–100 %, Hauptzone wie jede weitere Zone dieses Receivers — der Bereich, den die
+  meisten VIS-Widgets erwarten. Der Adapter rechnet in beide Richtungen um, der Receiver
+  bekommt also immer den Wert, den er erwartet.
+
+  Die Einstellung gehört dem Gerät, nicht der Instanz: dass ein Receiver Prozent will, sagt
+  nichts über die anderen. Setzen lässt sie sich auf der Karte oder im Anlegen-/Bearbeiten-
+  Dialog — es ist derselbe Schalter.
 
 ## Was im Objektbaum entsteht
 
