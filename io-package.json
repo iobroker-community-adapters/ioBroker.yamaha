@@ -1,9 +1,22 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "2.9.1",
+    "version": "2.9.2",
     "nogit": true,
     "news": {
+      "2.9.2": {
+        "en": "The card now shows a 0–100 % badge while a receiver's volume is in percent. The setting itself moved back to one place: the device's edit dialog.",
+        "de": "Die Karte zeigt jetzt ein 0–100-%-Abzeichen, solange die Lautstärke eines Receivers in Prozent läuft. Gesetzt wird die Einstellung nur noch im Bearbeiten-Dialog.",
+        "ru": "На карточке теперь есть значок 0–100 %, пока громкость ресивера в процентах. Сама настройка задаётся только в диалоге редактирования устройства.",
+        "pt": "O cartão mostra agora um emblema 0–100 % enquanto o volume de um recetor estiver em percentagem. A definição passa a ser feita só no diálogo de edição.",
+        "nl": "De kaart toont nu een 0–100 %-badge zolang het volume van een receiver in procenten staat. De instelling zelf zet u alleen nog in het bewerkvenster.",
+        "fr": "La carte affiche désormais un badge 0–100 % tant que le volume d'un ampli est en pourcentage. Le réglage se fait uniquement dans la boîte de dialogue de l'appareil.",
+        "it": "La scheda mostra ora un distintivo 0–100 % finché il volume di un ricevitore è in percentuale. L'impostazione si cambia solo nella finestra di modifica.",
+        "es": "La tarjeta muestra ahora una insignia 0–100 % mientras el volumen de un receptor esté en porcentaje. El ajuste se cambia solo en el diálogo de edición.",
+        "pl": "Kafelek pokazuje teraz odznakę 0–100 %, dopóki głośność amplitunera jest w procentach. Samo ustawienie zmienia się już tylko w oknie edycji.",
+        "uk": "Картка тепер показує позначку 0–100 %, поки гучність ресивера у відсотках. Саме налаштування задається лише в діалозі редагування пристрою.",
+        "zh-cn": "当功放音量以百分比显示时，卡片现在会显示一个 0–100 % 标记。该设置本身只在设备的编辑对话框中更改。"
+      },
       "2.9.1": {
         "en": "A receiver the network search found keeps its datapoints when you add a device by hand: they stay with their history and are marked offline instead of being deleted.",
         "de": "Ein per Netzsuche gefundener Receiver behält seine Datenpunkte, wenn Sie ein Gerät von Hand eintragen: Sie bleiben samt Historie und werden nur als offline gekennzeichnet.",
@@ -81,19 +94,6 @@
         "pl": "Listy oferują tylko to, co amplituner sam zgłasza lub udowadnia (#619); modele z 2008 r. odzyskują głośność i programy; dodano HD Radio, Sirius, strefę B i wiele punktów konfiguracji.",
         "uk": "Списки містять лише те, що ресивер сам повідомляє або підтверджує (#619); моделі 2008 р. знову мають гучність і програми; додано HD Radio, Sirius, зону B і багато точок налаштування.",
         "zh-cn": "下拉列表只提供功放自身声明或证实拥有的项（#619）；2008 年机型恢复音量与音场程序；新增 HD Radio、Sirius、B 区和许多设置数据点。"
-      },
-      "2.5.2": {
-        "en": "174 more datapoints now explain themselves — volume and tone say which scale they use, the stored lists say what is inside them, and Connected means reachable, not switched on.",
-        "de": "174 weitere Datenpunkte erklären sich jetzt selbst — Lautstärke und Klang nennen ihre Skala, die gespeicherten Listen sagen, was drinsteht, und Verbunden heißt erreichbar, nicht eingeschaltet.",
-        "ru": "Ещё 174 датапоинта теперь объясняют себя: громкость и тембр называют свою шкалу, сохранённые списки говорят, что внутри, а «Подключено» значит доступен, а не включён.",
-        "pt": "Mais 174 pontos de dados explicam-se agora: volume e tom indicam a sua escala, as listas guardadas dizem o que contêm, e Ligado significa alcançável, não em funcionamento.",
-        "nl": "174 datapunten meer leggen zichzelf nu uit: volume en toon noemen hun schaal, de opgeslagen lijsten zeggen wat erin staat, en Verbonden betekent bereikbaar, niet ingeschakeld.",
-        "fr": "174 points de données de plus s’expliquent désormais : volume et tonalité indiquent leur échelle, les listes mémorisées disent ce qu’elles contiennent, et Connecté signifie joignable, pas allumé.",
-        "it": "Altri 174 datapoint ora si spiegano da sé: volume e toni indicano la loro scala, gli elenchi memorizzati dicono cosa contengono, e Connesso significa raggiungibile, non acceso.",
-        "es": "174 puntos de datos más se explican ahora: volumen y tono indican su escala, las listas guardadas dicen qué contienen, y Conectado significa accesible, no encendido.",
-        "pl": "Kolejne 174 punkty danych same się objaśniają: głośność i barwa podają swoją skalę, zapisane listy mówią, co zawierają, a Połączono znaczy osiągalny, nie włączony.",
-        "uk": "Ще 174 датапоінти тепер пояснюють себе: гучність і тембр називають свою шкалу, збережені списки кажуть, що всередині, а «З'єднано» означає доступний, а не ввімкнений.",
-        "zh-cn": "另有 174 个数据点现在会自我说明：音量和音调标明所用刻度，已存列表说明其内容，“已连接”表示可达，而非已开机。"
       }
     },
     "titleLang": {

@@ -66,8 +66,9 @@ umzieht, während der Adapter nicht läuft, findet aber erst die nächste Netzwe
   bekommt also immer den Wert, den er erwartet.
 
   Die Einstellung gehört dem Gerät, nicht der Instanz: dass ein Receiver Prozent will, sagt
-  nichts über die anderen. Setzen lässt sie sich auf der Karte oder im Anlegen-/Bearbeiten-
-  Dialog — es ist derselbe Schalter.
+  nichts über die anderen. Gesetzt wird sie dort, wo auch Name und Adresse des Geräts stehen:
+  im Anlegen-/Bearbeiten-Dialog seiner Karte — und solange sie an ist, trägt die Karte neben den
+  Protokoll-Kürzeln ein kleines **0–100 %**-Abzeichen, man sieht es also ohne etwas zu öffnen.
 
 ## Was im Objektbaum entsteht
 

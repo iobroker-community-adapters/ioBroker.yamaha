@@ -171,33 +171,29 @@ interface Card {
   status: { connection: { stateId: string } };
   indicators: Array<{
     id: string;
-    value: { stateId: string };
+    value: { stateId: string } | boolean;
+    text?: unknown;
     hideIfEmpty?: boolean;
     icon?: string;
     tooltip?: unknown;
   }>;
   actions: DmAction[];
-  controls: Array<{
-    id: string;
-    type: string;
-    label: unknown;
-    getStateHandler(deviceId: string): Promise<{ val: unknown; ack: boolean }>;
-    handler(deviceId: string, controlId: string, state: unknown): Promise<{ val: unknown }>;
-  }>;
+  controls?: unknown[];
 }
 /**
- * The percent control of a card, asserted present — a card without it is the failure, not a
- * type error at every use.
+ * The state a state-bound indicator follows. Asserted, not assumed: since the percent badge
+ * carries a literal value, the type is a union — and an indicator that lost its binding must
+ * fail here instead of comparing `undefined` with `undefined`.
  *
- * @param card the card to read
- * @returns the control
+ * @param indicator the indicator to read
+ * @returns the bound state id
  */
-function percentControl(card: Card): Card["controls"][number] {
-  const control = card.controls.find(entry => entry.id === "volumeAsPercent");
-  if (!control) {
-    throw new Error("the card carries no volumeAsPercent control");
+function stateIdOf(indicator: Card["indicators"][number]): string {
+  const value = indicator.value;
+  if (typeof value !== "object" || typeof value.stateId !== "string") {
+    throw new Error(`indicator ${indicator.id} is not bound to a state`);
   }
-  return control;
+  return value.stateId;
 }
 
 interface DmInternals {
@@ -321,7 +317,7 @@ describe("YamahaDeviceManagement", () => {
     // hideIfEmpty is what makes the card show only the protocols this device is
     // connected over instead of three permanent grey badges.
     const transports = out[0].indicators.filter(i => i.id.startsWith("transport-"));
-    expect(transports.map(i => i.value.stateId)).toEqual([
+    expect(transports.map(stateIdOf)).toEqual([
       "yamaha.0.Living_room.info.transports.ynca",
       "yamaha.0.Living_room.info.transports.yxc",
       "yamaha.0.Living_room.info.transports.xml",
@@ -590,25 +586,27 @@ describe("YamahaDeviceManagement", () => {
     expect(card.name).toBe("Living room");
   });
   // 2.8.0 shipped this as ONE instance checkbox, so it hit every receiver on the instance at once.
-  // It is a per-device decision now, reachable from the card and from the add/edit dialog — one
-  // value at the device object, two places to set it.
+  // It is a per-device decision now, and it lives in ONE place: the add/edit dialog. 2.9.1 also
+  // put a switch control on the card itself; that one showed the wrong position while the dialog
+  // showed the right one, and two ways to set one value is one too many.
   describe("volume in percent, per device", () => {
-    it("the card carries the switch and reads it from the device object", async () => {
+    it("the card carries no switch control of its own", async () => {
       const on = await cards([living], {}, { "yamaha.0.Living_room": { native: { volumeAsPercent: true } } });
-      const control = percentControl(on[0]);
-      expect(control).toMatchObject({ type: "switch", label: "volumeAsPercent" });
-      await expect(control.getStateHandler("Living_room")).resolves.toMatchObject({ val: true, ack: true });
-
-      const off = await cards([living]);
-      const fresh = percentControl(off[0]);
-      await expect(fresh.getStateHandler("Living_room")).resolves.toMatchObject({ val: false });
+      // The switch is set where name and address are set. A control here would be a second,
+      // independently-read copy of the same value — exactly what went wrong in 2.9.1.
+      expect(on[0].controls ?? []).toEqual([]);
     });
 
-    it("flipping the card switch goes through the running adapter, so the datapoints follow at once", async () => {
-      const out = await cards([living], {}, { "yamaha.0.Living_room": { native: {} } });
-      const control = percentControl(out[0]);
-      await expect(control.handler("Living_room", "volumeAsPercent", true)).resolves.toMatchObject({ val: true });
-      expect(adapter.setVolumePercent).toHaveBeenCalledWith("Living_room", true);
+    it("but the card SHOWS the setting, so nobody has to open a dialog to find out", async () => {
+      const on = await cards([living], {}, { "yamaha.0.Living_room": { native: { volumeAsPercent: true } } });
+      expect(on[0].indicators.find(i => i.id === "volume-percent")).toMatchObject({ value: true, text: "0–100 %" });
+    });
+
+    it("and stays quiet about it in the default state", async () => {
+      const off = await cards([living], {}, { "yamaha.0.Living_room": { native: {} } });
+      // `hideIfEmpty` does the hiding in the GUI; the value is what decides it, so that is what
+      // this pins — a badge that is always `true` would show on every card.
+      expect(off[0].indicators.find(i => i.id === "volume-percent")).toMatchObject({ value: false });
     });
 
     it("a device added through the dialog starts with the answer the user gave", async () => {

@@ -475,8 +475,16 @@ entscheidet etwas ([[feedback_user_hardware_ist_sample]]). Alle Funde sind umges
   **Seit 2.9.0 pro Gerät** (`percentFor(id)` liest die erste Id-Stufe = die Geräte-Id): der Wert liegt im
   `native` des GERÄTE-Objekts, nicht im Instanz-Objekt — dessen `native` zu schreiben startet den Adapter
   neu, das eines Geräte-Objekts nicht (dieselbe Begründung wie beim `capabilityProfile`). Erreichbar an
-  zwei Stellen, EIN Wert: als `controls`-Schalter auf der Gerätekachel und als Häkchen im
-  Anlegen-/Bearbeiten-Dialog. Umlegen baut die Lautstärke-Datenpunkte DIESES Geräts sofort neu und zieht
+  EINER Stelle: als Häkchen im Anlegen-/Bearbeiten-Dialog der Gerätekarte, neben Name und
+  Adresse. 2.9.1 hatte ihn zusätzlich als `controls`-Schalter auf der Kachel — der zeigte seine
+  Stellung falsch (aus, während der Dialog ein gesetztes Häkchen zeigte), und zwei Wege zu EINEM
+  Wert sind einer zu viel; mit 2.9.2 ist der Kachel-Schalter ersatzlos weg (krobi: „für was hast
+  du den das doppelt gemoppelt?"). Der Umweg über den laufenden Adapter (`setVolumePercent`)
+  bleibt — er gehört dem Dialog. **Gesetzt an einer Stelle, ABLESBAR auf der Kachel:** ein
+  Indikator `volume-percent` in der Statuszeile (`fa-percent` + „0–100 %"), der nur erscheint,
+  solange die Einstellung an ist (`hideIfEmpty`) und bewusst NICHT klickbar ist — sonst wäre er
+  wieder ein zweiter Setz-Weg. Sein Wert kommt aus dem Geräte-Objekt, das `loadDevices` für den
+  Anzeigenamen ohnehin liest (kein zusätzlicher Abruf). Umlegen baut die Lautstärke-Datenpunkte DIESES Geräts sofort neu und zieht
   den anliegenden Wert nach — in dieser Reihenfolge, sonst steht ein Wert außerhalb der Grenzen seiner
   gerade gewechselten Definition und der js-controller meldet es bei jedem Abruf (der Fehler, den 2.8.0
   für den geräteeigenen Skalenwechsel behoben hat). **Umstieg:** der alte Instanz-Schalter wird aus dem
@@ -1063,7 +1071,7 @@ in ein öffentliches Repo.
   bis 2.1.1 lief er lokal nie mit, obwohl die CI ihn fährt (`testing-action-adapter` ruft
   `test:unit` UND `test:integration`). `passWithNoTests` ist raus — ein nicht mehr greifendes
   `include` muss rot melden, nicht grün.
-- **Mutationstabellen** (`../../Ressourcen/iobroker-entwicklung/mutation-testing/`) — **SECHZEHN Dateien, und das
+- **Mutationstabellen** (`../../Ressourcen/iobroker-entwicklung/mutation-testing/`) — **SIEBZEHN Dateien, und das
   Gate prüft ALLE.** ⚠️ Die fünf Wellen-Originale `mutations_yamaha.py` · `…2.py` · `…3.py` · `…4.py` ·
   `…5.py` (36/32/26/11/11 Nadeln) leben NEBEN der Sammeltabelle `mutations_yamaha_all.py`, die dieselben
   Regeln zusammenfasst — sie sind kein Altbestand. Wer nur die datierten Tabellen nachzieht, lässt fünf
@@ -1088,7 +1096,9 @@ in ein öffentliches Repo.
     sind geschlossen: die Doppel-Id-Sperre der Kartenliste und „die eigene Antwort eines Geräts schlägt
     den geerbten Instanz-Schalter")
   - `mutations_yamaha_2026-09-12-w15.py` (Welle 15 = der Bugfix 2.9.1 „die Netzsuche abzuschalten ist
-    kein Löschbefehl", IDs R17–R22; 6/6 gefangen im ersten Lauf). Läufer `mutation-test.py`. Nadeln sind
+    kein Löschbefehl", IDs R17–R22; 6/6 gefangen im ersten Lauf)
+  - `mutations_yamaha_2026-09-12-w16.py` (Welle 16 = 2.9.2: EINE Setz-Stelle für den Prozent-Schalter
+    plus die Kachel-Anzeige, IDs R23–R24; 2/2 gefangen). Läufer `mutation-test.py`. Nadeln sind
     exakte Quellzeilen — nach Prettier-Umbrüchen oder Refactorings ZUERST den Nadel-Vorab-Check (jede Nadel
     genau 1×), sonst misst der Lauf nichts. Zwei äquivalente Mutanten (X2, X4 — unerreichbare
     Invarianten-Wächter, im Quelltext begründet); die vier anderen vom 22.08. (M9, X1, Y1, Y13) waren toter

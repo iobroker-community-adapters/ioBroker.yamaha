@@ -63,7 +63,9 @@ adapter is not running is only found again by the next network search.
   in both directions, so the receiver always gets the value it expects.
 
   It belongs to the device, not to the instance: one receiver wanting percent says nothing
-  about the others. Set it on the card, or in the add/edit dialog — it is the same switch.
+  about the others. You set it where you set the device's name and address: in the add/edit
+  dialog on its card — and while it is on, the card shows a small **0–100 %** badge next to the
+  protocol labels, so you can see what a receiver's volume carries without opening anything.
 
 ## What you get in the object tree
 

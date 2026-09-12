@@ -2,7 +2,6 @@ import {
   DeviceManagement,
   type ActionContext,
   type DeviceInfo,
-  type ControlState,
   type DeviceLoadContext,
   type InstanceDetails,
 } from "@iobroker/dm-utils";
@@ -72,16 +71,14 @@ export class YamahaDeviceManagement extends DeviceManagement {
   }
 
   /**
-   * One device's percent switch as a state, for the card control to show.
+   * Whether one device's volume datapoints read 0–100 %, for the edit dialog to prefill.
    *
    * @param deviceId the id-safe device id
-   * @returns the switch position as an ioBroker state
+   * @returns true when this device is set to percent
    */
-  private async volumePercentState(deviceId: string): Promise<ioBroker.State> {
+  private async volumeAsPercentOf(deviceId: string): Promise<boolean> {
     const node = await this.adapter.getForeignObjectAsync(`${this.adapter.namespace}.${deviceId}`);
-    const on = (node?.native as { volumeAsPercent?: unknown } | undefined)?.volumeAsPercent === true;
-    const now = Date.now();
-    return { val: on, ack: true, ts: now, lc: now, from: `system.adapter.${this.adapter.namespace}` };
+    return (node?.native as { volumeAsPercent?: unknown } | undefined)?.volumeAsPercent === true;
   }
 
   /**
@@ -157,10 +154,13 @@ export class YamahaDeviceManagement extends DeviceManagement {
       // The table entry itself must stay put: the object id is derived from it, and
       // changing that would move the whole tree.
       const label = typeof node?.common?.name === "string" ? node.common.name : undefined;
+      // The percent answer comes from the object read above — no extra round-trip for the badge.
+      const percent = (node?.native as { volumeAsPercent?: unknown } | undefined)?.volumeAsPercent === true;
       context.addDevice(
         this.toDeviceInfo(
           label && label !== card.id ? { ...card, name: label } : card,
           typeof model?.val === "string" ? model.val : undefined,
+          percent,
         ),
       );
     }
@@ -169,14 +169,16 @@ export class YamahaDeviceManagement extends DeviceManagement {
   /**
    * Build one device card: the live model, the IP as the identifier line, a connection
    * status, and one indicator per connected protocol (hidden while that protocol is not
-   * connected). All live values read from the device's own `info.*` states. A discovered
-   * card has no edit action — it is auto-found and re-found; it can only be removed.
+   * connected). The live values read from the device's own `info.*` states. Every card can be
+   * edited, a discovered one included: that is how a found receiver is given the fixed address
+   * the user just assigned it (see {@link editDevice}).
    *
    * @param card the running device
    * @param model the device's reported model name, for the device-class icon
+   * @param percent whether this device's volume datapoints read 0–100 %, for the badge
    * @returns the card descriptor
    */
-  private toDeviceInfo(card: CardDevice, model?: string): DeviceInfo<string> {
+  private toDeviceInfo(card: CardDevice, model?: string, percent = false): DeviceInfo<string> {
     const base = `${this.adapter.namespace}.${card.id}`;
     const del = {
       id: "delete",
@@ -220,26 +222,30 @@ export class YamahaDeviceManagement extends DeviceManagement {
           colorOn: "ok" as const,
           hideIfEmpty: true,
         })),
+        // The percent setting is SET in the edit dialog, but it has to be READABLE at a glance —
+        // otherwise the only way to find out what a receiver's volume datapoints carry is to open
+        // a dialog. Shown only while it is on (`hideIfEmpty`), so a card in the default state
+        // stays as quiet as before; deliberately not clickable, the dialog stays the one place
+        // that sets it.
+        {
+          id: "volume-percent",
+          value: percent,
+          icon: "fa-percent",
+          text: "0–100 %",
+          colorOn: "primary" as const,
+          tooltip: t("volumeAsPercent"),
+          hideIfEmpty: true,
+          order: 20,
+        },
       ],
       // Edit on every card: a device the search found can be given the fixed address the user
       // just assigned it, which makes it a manual device (see editDevice).
+      // The percent switch is NOT a second control on the card: it lives in the edit dialog,
+      // next to name and address, because it is a decision about the device and not something
+      // flipped in passing. 2.9.1 had it in both places — the card control showed the wrong
+      // position while the dialog showed the right one, and two ways to set one value is one
+      // too many (krobi 2026-09-12: "für was hast du den das doppelt gemoppelt?").
       actions: [edit, del],
-      // The percent switch, per device. It is a decision, not something switched around, so it
-      // sits in the admin next to the device rather than in the object tree — but it belongs to
-      // THIS device, which is what 2.8.0's single instance checkbox could not express.
-      controls: [
-        {
-          id: "volumeAsPercent",
-          type: "switch",
-          label: t("volumeAsPercent"),
-          description: t("volumeAsPercent_help"),
-          getStateHandler: async (deviceId: string): Promise<ioBroker.State> => this.volumePercentState(deviceId),
-          handler: async (deviceId: string, _controlId: string, state: ControlState): Promise<ioBroker.State> => {
-            await this.applyVolumePercent(deviceId, state === true);
-            return this.volumePercentState(deviceId);
-          },
-        },
-      ],
     };
   }
 
@@ -323,7 +329,7 @@ export class YamahaDeviceManagement extends DeviceManagement {
     const node = await this.adapter.getForeignObjectAsync(`${this.adapter.namespace}.${cardId}`);
     const shownName =
       typeof node?.common?.name === "string" && node.common.name !== cardId ? node.common.name : card.name;
-    const percent = (await this.volumePercentState(cardId)).val === true;
+    const percent = await this.volumeAsPercentOf(cardId);
     const data = await context.showForm(
       buildDeviceForm(cards.filter(entry => entry.id !== cardId).map(entry => entry.ip)),
       { title: t("dmEditTitle"), data: { name: shownName, ip: card.ip, volumeAsPercent: percent } },

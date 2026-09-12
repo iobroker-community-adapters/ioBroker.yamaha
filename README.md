@@ -74,6 +74,11 @@ Details on all settings, the object tree and the ports the adapter uses are in t
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+### 2.9.2 (2026-09-12)
+
+- (krobipd) New: The device card shows a 0–100 % badge while that receiver's volume is in percent, so you can tell the two scales apart at a glance
+- (krobipd) Fixed: The percent setting is made in one place again — the device's edit dialog; the extra switch on the card showed the wrong position and is gone
+
 ### 2.9.1 (2026-09-12)
 
 - (krobipd) Fixed: A receiver the network search found keeps its datapoints when you add a device by hand — they stay with their history and are marked offline instead of deleted
@@ -105,12 +110,6 @@ Details on all settings, the object tree and the ports the adapter uses are in t
 - (krobipd) Fixed: The volume readout now follows the scale the receiver is actually showing, so a receiver set to numbers no longer reports them as decibels.
 - (krobipd) New: Inputs now appear under the names the receiver carries for them, so a socket named “Apple TV” reads that way instead of HDMI1.
 - (krobipd) Changed: After this update every receiver is asked about its abilities once more, so the first start takes a little longer than usual.
-
-### 2.7.1 (2026-09-09)
-
-- (krobipd) Improved: The first connection asks a receiver only what its generation can answer, so zones, trigger sockets and per-input settings follow the device, not a catalogue.
-- (krobipd) New: A datapoint the receiver reveals later now appears at once — a function it starts answering, a value it reports for the first time, a status field it begins delivering.
-- (krobipd) Changed: A datapoint that never carried a value is removed only after two starts confirm it, so a receiver left in standby no longer loses datapoints it still has.
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 

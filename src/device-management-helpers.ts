@@ -72,8 +72,9 @@ export function buildDeviceForm(usedIps: readonly string[]): JsonFormSchema {
         md: 6,
       },
       // Per device, not per instance: the adapter serves several receivers, and one of them
-      // wanting percent says nothing about the others. Same switch as on the card — one value,
-      // two places to reach it.
+      // wanting percent says nothing about the others. THE place to set it — 2.9.1 also had a
+      // switch control on the card itself, and one value reachable from two independently-read
+      // places is how the card came to show "off" while this checkbox showed "on".
       volumeAsPercent: {
         newLine: true,
         type: "checkbox",
