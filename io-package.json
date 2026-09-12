@@ -4,6 +4,19 @@
     "version": "2.9.0",
     "nogit": true,
     "news": {
+      "NEXT": {
+        "en": "A receiver the network search found keeps its datapoints when you add a device by hand: they stay with their history and are marked offline instead of being deleted.",
+        "de": "Ein per Netzsuche gefundener Receiver behält seine Datenpunkte, wenn Sie ein Gerät von Hand eintragen: Sie bleiben samt Historie und werden nur als offline gekennzeichnet.",
+        "ru": "Ресивер, найденный поиском в сети, сохраняет свои точки данных при добавлении устройства вручную: они остаются вместе с историей и просто помечаются как офлайн.",
+        "pt": "Um recetor encontrado pela pesquisa de rede mantém os seus pontos de dados quando adiciona um aparelho à mão: ficam com o histórico e são apenas marcados como offline.",
+        "nl": "Een receiver die de netwerkzoekactie vond behoudt zijn datapunten als u een apparaat handmatig toevoegt: ze blijven met hun historie en worden alleen offline gemarkeerd.",
+        "fr": "Un ampli trouvé par la recherche réseau conserve ses points de données quand vous ajoutez un appareil à la main : ils restent avec leur historique et sont marqués hors ligne.",
+        "it": "Un ricevitore trovato dalla ricerca di rete mantiene i suoi datapoint quando aggiungete un dispositivo a mano: restano con la loro cronologia e vengono solo segnati offline.",
+        "es": "Un receptor encontrado por la búsqueda de red conserva sus puntos de datos al añadir un equipo a mano: permanecen con su histórico y solo se marcan como desconectados.",
+        "pl": "Amplituner znaleziony przez wyszukiwanie w sieci zachowuje swoje punkty danych po ręcznym dodaniu urządzenia: zostają wraz z historią i są tylko oznaczane jako offline.",
+        "uk": "Ресивер, знайдений мережевим пошуком, зберігає свої точки даних, коли ви додаєте пристрій вручну: вони лишаються з історією і лише позначаються як офлайн.",
+        "zh-cn": "网络搜索找到的功放在您手动添加设备时会保留其数据点：它们连同历史记录一起保留，只是被标记为离线，而不再被删除。"
+      },
       "2.9.0": {
         "en": "Entered and found devices now run side by side, every card can be edited, and \"Volume as 0-100 %\" is set per device.",
         "de": "Eingetragene und gefundene Geräte laufen jetzt nebeneinander, jede Karte ist bearbeitbar, und \"Lautstärke als 0-100 %\" gilt pro Gerät.",
@@ -81,19 +94,6 @@
         "pl": "Kolejne 174 punkty danych same się objaśniają: głośność i barwa podają swoją skalę, zapisane listy mówią, co zawierają, a Połączono znaczy osiągalny, nie włączony.",
         "uk": "Ще 174 датапоінти тепер пояснюють себе: гучність і тембр називають свою шкалу, збережені списки кажуть, що всередині, а «З'єднано» означає доступний, а не ввімкнений.",
         "zh-cn": "另有 174 个数据点现在会自我说明：音量和音调标明所用刻度，已存列表说明其内容，“已连接”表示可达，而非已开机。"
-      },
-      "2.5.1": {
-        "en": "Installing straight from GitHub is no longer offered: the adapter is built before publishing, so it is installed from the ioBroker repository instead.",
-        "de": "Die Installation direkt von GitHub wird nicht mehr angeboten: Der Adapter wird vor der Veröffentlichung gebaut und kommt daher aus dem ioBroker-Repository.",
-        "ru": "Установка напрямую с GitHub больше не предлагается: адаптер собирается перед публикацией и поэтому устанавливается из репозитория ioBroker.",
-        "pt": "A instalação diretamente do GitHub deixou de ser oferecida: o adaptador é compilado antes da publicação e por isso é instalado a partir do repositório ioBroker.",
-        "nl": "Installeren rechtstreeks vanaf GitHub wordt niet meer aangeboden: de adapter wordt vóór publicatie gebouwd en komt daarom uit de ioBroker-repository.",
-        "fr": "L’installation directe depuis GitHub n’est plus proposée : l’adaptateur est compilé avant publication et s’installe donc depuis le dépôt ioBroker.",
-        "it": "L’installazione diretta da GitHub non è più proposta: l’adattatore viene compilato prima della pubblicazione e quindi si installa dal repository ioBroker.",
-        "es": "La instalación directa desde GitHub ya no se ofrece: el adaptador se compila antes de publicarse y por eso se instala desde el repositorio de ioBroker.",
-        "pl": "Instalacja bezpośrednio z GitHuba nie jest już oferowana: adapter jest budowany przed publikacją, dlatego instaluje się go z repozytorium ioBroker.",
-        "uk": "Встановлення безпосередньо з GitHub більше не пропонується: адаптер збирається перед публікацією, тому встановлюється з репозиторію ioBroker.",
-        "zh-cn": "不再提供直接从 GitHub 安装：适配器在发布前完成构建，因此请从 ioBroker 仓库安装。"
       }
     },
     "titleLang": {
