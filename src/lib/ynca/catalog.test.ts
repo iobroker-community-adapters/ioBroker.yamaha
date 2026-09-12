@@ -1,4 +1,5 @@
 import {
+  YNCA_CATALOG,
   availGets,
   buildYncaCatalog,
   bundleGets,
@@ -24,6 +25,7 @@ import type { YncaCapabilities } from "./capability";
 import { capabilitiesFromLines as parseCapabilities } from "./__fixtures__/capabilities-from-lines";
 import rxA810 from "./__fixtures__/RX-A810.json";
 import zoneEvidence from "./__fixtures__/zone-function-evidence.json";
+import functionEvidence from "./__fixtures__/official-function-evidence.json";
 import { YNCA_BROWSE_SOURCES } from "../browse/ynca-browse-driver";
 
 describe("YNCA catalog", () => {
@@ -844,9 +846,15 @@ describe("enumStatesFor — the candidates of the generation plus everything the
     expect(enumStatesFor(entry("SPPATTERN1AMP"), ["7ch +FPR"], "7ch +FPR")).toEqual({ "7ch +FPR": "7ch +FPR" });
   });
 
-  test("hdmi.aspect and hdmi.resolution carry the documented values incl. Smart Zoom and 4K", () => {
+  test("hdmi.aspect offers Smart Zoom; 4K is offered from the 2012 class on, not before", () => {
     expect(enumStatesFor(entry("HDMIASPECT"), [])).toHaveProperty("Smart Zoom");
-    expect(enumStatesFor(entry("HDMIRESOL"), [])).toHaveProperty("4K");
+    // Measured over the 21 official lists: `@MAIN:HDMIRESOL` (12 lists, 2010/2011) declares six
+    // values, `@SYS:HDMIRESOL` (9 lists, 2012 and later) the same six plus 4K. One shared list
+    // would put a value in the older class's dropdown that its receiver refuses to take.
+    const classic = YNCA_CATALOG.find(e => e.func === "HDMIRESOL" && e.subunit === "MAIN");
+    const modern = YNCA_CATALOG.find(e => e.func === "HDMIRESOL" && e.subunit === "SYS");
+    expect(enumStatesFor(classic!, [])).not.toHaveProperty("4K");
+    expect(enumStatesFor(modern!, [])).toHaveProperty("4K");
   });
 
   test("soundProgram candidates are the 27 documented names of the classic generation, not the 41-entry union", () => {
@@ -1266,5 +1274,84 @@ describe("YNCA zone function table (2.7.0 — the sweep asks a zone only what an
     // Nothing is asked twice and nothing outside the two families lands in the second pass.
     expect(new Set([...first, ...families]).size).toBe(first.length + families.length);
     expect(families.every(key => /^SYS:(TRIG2|SPPATTERN2)/.test(key))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Rot guard: every READABLE function the 21 official command lists declare has a datapoint.
+//
+// This used to be a hand check, and the hand check missed a whole generation: HDMIASPECT and
+// HDMIRESOL moved from MAIN to SYS in 2012, the catalog only ever asked MAIN, and on every
+// 2012-and-later receiver the sweep got `@UNDEFINED` and dropped the entry — no datapoint, no
+// log line, nothing to notice. The fixture is generated from the lists themselves
+// (`build-function-evidence.py`), so the question is answered by the source, not by memory.
+// ---------------------------------------------------------------------------------------------
+describe("the catalog answers every readable function the official lists declare", () => {
+  /** Every YNCA function name a catalog entry reads, under the subunit it reads it on. */
+  function readablePairsOfCatalog(): Set<string> {
+    const covered = new Set<string>();
+    for (const entry of YNCA_CATALOG) {
+      covered.add(`${entry.subunit}:${entry.func}`);
+      // A read alias is the same datapoint under the name another generation uses.
+      for (const alias of entry.readAliases ?? []) {
+        covered.add(`${entry.subunit}:${alias}`);
+      }
+      // A write-only entry names the function whose answer proves it.
+      if (entry.readFunc) {
+        covered.add(`${entry.subunit}:${entry.readFunc}`);
+      }
+    }
+    return covered;
+  }
+
+  /**
+   * Readable functions that deliberately have NO catalog entry, each with the place that owns it
+   * instead. Everything here is a decision, not an omission — a pair that matches nothing below
+   * and nothing in the catalog is a datapoint the adapter promises and does not deliver.
+   */
+  const OWNED_ELSEWHERE: ReadonlyArray<{ pattern: RegExp; why: string }> = [
+    {
+      pattern: /^[A-Z0-9]+:(LINE[1-8](TXT|ATRIB)|LIST(INFO|LAYER|LAYERNAME)|CURRLINE|MAXLINE)$/,
+      why: "the browse window — lib/browse owns it; a catalog entry would build eight dead states",
+    },
+    { pattern: /^[A-Z0-9]+:AVAIL$/, why: "the presence probe of the 2-pass sweep, not a value" },
+    {
+      pattern: /^[A-Z0-9]+:(BASIC|METAINFO|SIGINFO|RDSINFO)$/,
+      why: "a bundle GET — answers many functions at once, each of which HAS its own entry",
+    },
+    {
+      pattern: /^(MAIN|ZONE[234]):SCENENAME$/,
+      why: "the scene titles — catalog/scene-titles.ts turns them into the recall dropdown labels",
+    },
+    {
+      pattern: /^SYS:INPNAME$/,
+      why: "the generic spelling of the per-input names; the catalog builds INPNAME<KEY> per input",
+    },
+  ];
+
+  test("no readable function is left without a datapoint or a documented owner", () => {
+    const covered = readablePairsOfCatalog();
+    const orphans = functionEvidence.readable.filter(
+      pair => !covered.has(pair) && !OWNED_ELSEWHERE.some(rule => rule.pattern.test(pair)),
+    );
+    expect(orphans).toEqual([]);
+  });
+
+  test("every exemption still matches something — a dead rule hides the next gap", () => {
+    const readable = functionEvidence.readable;
+    for (const rule of OWNED_ELSEWHERE) {
+      expect(
+        readable.some(pair => rule.pattern.test(pair)),
+        `${rule.pattern} (${rule.why})`,
+      ).toBe(true);
+    }
+  });
+
+  test("the generation split of the HDMI video settings is in the catalog, both halves", () => {
+    const covered = readablePairsOfCatalog();
+    // The bug this guard was written for: MAIN on the 2010/2011 class, SYS from 2012 on.
+    for (const pair of ["MAIN:HDMIASPECT", "SYS:HDMIASPECT", "MAIN:HDMIRESOL", "SYS:HDMIRESOL"]) {
+      expect(covered.has(pair), pair).toBe(true);
+    }
   });
 });

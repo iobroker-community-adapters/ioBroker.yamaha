@@ -600,5 +600,7 @@
   "docLinkLabelEn": "Wiki (English)",
   "descVolumeDb": "Jak głośno gra strefa, w skali decybelowej pokazywanej przez sam amplituner.",
   "descVolumeNumeric": "Jak głośno gra strefa, w skali liczbowej pokazywanej przez sam amplituner.",
-  "descVolumePercent": "Jak głośno gra strefa, jako procent zakresu, który przyjmuje amplituner — 0 % to ustawienie najcichsze, 100 % najgłośniejsze."
+  "descVolumePercent": "Jak głośno gra strefa, jako procent zakresu, który przyjmuje amplituner — 0 % to ustawienie najcichsze, 100 % najgłośniejsze.",
+  "trackRating": "Ocena utworu",
+  "descTrackRating": "Ocenia odtwarzany utwór kciukiem w górę lub w dół."
 }

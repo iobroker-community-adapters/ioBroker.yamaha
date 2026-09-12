@@ -382,6 +382,15 @@ const SOUNDPRG_STATES = selfMap([
 
 const SLEEP_STATES = selfMap(["Off", "30 min", "60 min", "90 min", "120 min"]);
 const TVAUDIN_STATES = selfMap(["AV1", "AV2", "AV3", "AV4", "AV5", "AV6", "AUDIO1", "AUDIO2"]);
+// The HDMI video resolutions, per generation and measured from the 21 official lists: the
+// 2010/2011 class (12 lists, `@MAIN:HDMIRESOL`) declares six values, the 2012-and-later class
+// (8 lists, `@SYS:HDMIRESOL`) the same six plus 4K. One shared list would offer 4K on receivers
+// that predate it — the device would refuse the write, and the dropdown would lie.
+const HDMIRESOL_CLASSIC_STATES = selfMap(["Auto", "480p / 576p", "720p", "1080i", "1080p", "Through"]);
+const HDMIRESOL_STATES = selfMap(["Auto", "480p / 576p", "720p", "1080i", "1080p", "4K", "Through"]);
+// The aspect values are the same on both generations (a two-value and a three-value variant
+// exist in each), so one list covers them.
+const HDMIASPECT_STATES = selfMap(["Through", "16:9 Normal", "Smart Zoom"]);
 // `OUT` is the single-output spelling of the RX-A700/RX-V671 class (official lists), the
 // OUT1/OUT2 pair the two-output class.
 const HDMIOUT_STATES = selfMap(["Off", "OUT", "OUT1", "OUT2", "OUT1 + 2"]);
@@ -794,12 +803,13 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     write: true,
     role: "switch",
   },
+  // Both carry a SYS twin in GLOBAL_FUNCS: the 2012 generation moved them off MAIN. See there.
   {
     func: "HDMIRESOL",
     state: "hdmi.resolution",
     nameKey: "hdmiVideoResolution",
     descKey: "descHdmiVideoResolution",
-    spec: { kind: "enum", states: selfMap(["Auto", "480p / 576p", "720p", "1080i", "1080p", "4K", "Through"]) },
+    spec: { kind: "enum", states: HDMIRESOL_CLASSIC_STATES },
     write: true,
     role: "state",
   },
@@ -808,7 +818,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     state: "hdmi.aspect",
     nameKey: "hdmiVideoAspect",
     descKey: "descHdmiVideoAspect",
-    spec: { kind: "enum", states: selfMap(["Through", "16:9 Normal", "Smart Zoom"]) },
+    spec: { kind: "enum", states: HDMIASPECT_STATES },
     write: true,
     role: "state",
   },
@@ -1259,6 +1269,44 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     readFunc: "PRESET",
     writeOnly: true,
     wireEncode: value => (Number(value) === 0 ? "Auto" : String(Math.round(Number(value)))),
+  },
+  // The 2012 generation moved the HDMI video settings and the TV audio return input from MAIN to
+  // SYS. Measured over the 21 official command lists: HDMIASPECT and HDMIRESOL sit on MAIN in 12
+  // of them (2010/2011) and on SYS in the other 9 (2012 and later, RX-A850 among them). Until
+  // these twins existed the sweep asked `@MAIN:HDMIRESOL` on a 2012 receiver, got `@UNDEFINED`,
+  // and `presentYncaEntries` dropped the entry — the datapoints simply never appeared, with no
+  // line in the log. Same id as the MAIN variant: the per-device write map picks whichever
+  // function THIS device answered, exactly like the SPBASS/TONEBASS tone dialect.
+  {
+    subunit: "SYS",
+    func: "HDMIRESOL",
+    state: "hdmi.resolution",
+    nameKey: "hdmiVideoResolution",
+    descKey: "descHdmiVideoResolution",
+    spec: { kind: "enum", states: HDMIRESOL_STATES },
+    write: true,
+    role: "state",
+  },
+  {
+    subunit: "SYS",
+    func: "HDMIASPECT",
+    state: "hdmi.aspect",
+    nameKey: "hdmiVideoAspect",
+    descKey: "descHdmiVideoAspect",
+    spec: { kind: "enum", states: HDMIASPECT_STATES },
+    write: true,
+    role: "state",
+  },
+  // TVAUDIN1 made the same move; the RX-A850 list is the one that declares it on SYS.
+  {
+    subunit: "SYS",
+    func: "TVAUDIN1",
+    state: "advanced.tvAudioIn1",
+    nameKey: "tvAudioReturnInput",
+    descKey: "descTvAudioReturnInput",
+    spec: { kind: "enum", states: TVAUDIN_STATES },
+    write: true,
+    role: "state",
   },
 ];
 
@@ -2886,6 +2934,19 @@ export function buildYncaCatalog(): YncaEntry[] {
     func: "BOOKMARK",
     readFunc: "PLAYBACKINFO",
     writeOnly: true,
+  });
+  // Pandora's thumb rating (@PANDORA:FEEDBACK, RX-A850 list): readable AND writable, unlike the
+  // net-radio bookmark above. The rot guard over the official lists found it — the hand-written
+  // audit did not.
+  entries.push({
+    id: "player.pandora.feedback",
+    nameKey: "trackRating",
+    descKey: "descTrackRating",
+    spec: { kind: "enum", states: selfMap(["Thumb Up", "Thumb Down"]) },
+    write: true,
+    role: "state",
+    subunit: "PANDORA",
+    func: "FEEDBACK",
   });
   // Bluetooth connection control (@BT:CONNECT/PAIRING/CONNECTINFO, official list):
   // the connected indicator is readable; connect and pairing are write-only actions

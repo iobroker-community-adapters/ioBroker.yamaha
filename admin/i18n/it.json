@@ -600,5 +600,7 @@
   "docLinkLabelEn": "Wiki (English)",
   "descVolumeDb": "Quanto forte suona la zona, nella scala in decibel che il ricevitore stesso mostra.",
   "descVolumeNumeric": "Quanto forte suona la zona, nella scala numerica che il ricevitore stesso mostra.",
-  "descVolumePercent": "Quanto forte suona la zona, come percentuale dell'intervallo che il ricevitore accetta — 0 % è l'impostazione più bassa, 100 % la più alta."
+  "descVolumePercent": "Quanto forte suona la zona, come percentuale dell'intervallo che il ricevitore accetta — 0 % è l'impostazione più bassa, 100 % la più alta.",
+  "trackRating": "Valutazione del brano",
+  "descTrackRating": "Valuta il brano in riproduzione con pollice su o pollice giù."
 }

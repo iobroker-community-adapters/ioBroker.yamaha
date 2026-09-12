@@ -600,5 +600,7 @@
   "docLinkLabelEn": "Wiki (English)",
   "descVolumeDb": "Le niveau sonore de la zone, dans l'échelle en décibels affichée par l'ampli lui-même.",
   "descVolumeNumeric": "Le niveau sonore de la zone, dans l'échelle numérique affichée par l'ampli lui-même.",
-  "descVolumePercent": "Le volume de la zone, en pourcentage de la plage que l'ampli accepte — 0 % est son réglage le plus bas, 100 % le plus fort."
+  "descVolumePercent": "Le volume de la zone, en pourcentage de la plage que l'ampli accepte — 0 % est son réglage le plus bas, 100 % le plus fort.",
+  "trackRating": "Note du morceau",
+  "descTrackRating": "Note le morceau en cours avec un pouce levé ou baissé."
 }

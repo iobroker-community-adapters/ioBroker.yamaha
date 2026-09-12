@@ -600,5 +600,7 @@
   "docLinkLabelEn": "Wiki (English)",
   "descVolumeDb": "Hoe hard de zone speelt, in de decibelschaal die de receiver zelf toont.",
   "descVolumeNumeric": "Hoe hard de zone speelt, in de getalschaal die de receiver zelf toont.",
-  "descVolumePercent": "Hoe hard de zone speelt, als percentage van het bereik dat de receiver accepteert — 0 % is de zachtste stand, 100 % de hardste."
+  "descVolumePercent": "Hoe hard de zone speelt, als percentage van het bereik dat de receiver accepteert — 0 % is de zachtste stand, 100 % de hardste.",
+  "trackRating": "Nummerbeoordeling",
+  "descTrackRating": "Beoordeelt het spelende nummer met duim omhoog of omlaag."
 }

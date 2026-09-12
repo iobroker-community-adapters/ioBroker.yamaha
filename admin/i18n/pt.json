@@ -600,5 +600,7 @@
   "docLinkLabelEn": "Wiki (English)",
   "descVolumeDb": "Quão alto a zona toca, na escala de decibéis que o próprio recetor mostra.",
   "descVolumeNumeric": "Quão alto a zona toca, na escala numérica que o próprio recetor mostra.",
-  "descVolumePercent": "Quão alto a zona toca, como percentagem do intervalo que o receptor aceita — 0 % é a definição mais baixa, 100 % a mais alta."
+  "descVolumePercent": "Quão alto a zona toca, como percentagem do intervalo que o receptor aceita — 0 % é a definição mais baixa, 100 % a mais alta.",
+  "trackRating": "Avaliação da faixa",
+  "descTrackRating": "Avalia a faixa em reprodução com polegar para cima ou para baixo."
 }
