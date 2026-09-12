@@ -507,3 +507,68 @@ describe("MultiTransportHandle — a tree that follows the device within a sessi
     expect(objects).toEqual([]);
   });
 });
+
+describe("MultiTransportHandle — coordination is serialized against a reconnect", () => {
+  const flush = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
+
+  // A transport's reconnect coordinates the tree. A transport that was live all along keeps its
+  // shape-change wiring armed across that drop — `handleTransportDrop` splices only the one that
+  // went — so its background refresh can signal a re-coordination straight into the reconnect's
+  // upsert await. Both runs compute their ownership map BEFORE the awaits and install it AFTER,
+  // so whichever finishes last wins. The reconnect started first with the older snapshot: let it
+  // finish last and the newly learned id belongs to nobody, and every write to it is dropped
+  // without a trace.
+  test("a live transport's shape change during a reconnect keeps the LATER ownership", async () => {
+    const yncaObjects = [state("sound.bass", "Bass dB", { unit: "dB" })];
+    const ynca = fakeConn("ynca", yncaObjects);
+    const xml = fakeConn("xml", [state("power", "Power")]);
+    // The returning connection contributes one id the tree did not have — `coordinate()` writes
+    // only CHANGED definitions, so without it the reconnect's coordination has no await to park in.
+    const freshXml = fakeConn("xml", [state("power", "Power"), state("input", "Input")]);
+
+    const timers: Array<() => void> = [];
+    let releaseUpsert: (() => void) | undefined;
+    let stallNextUpsert = false;
+
+    const handle = new MultiTransportHandle("living", [ynca, xml], {
+      upsertObject: () => {
+        if (stallNextUpsert) {
+          stallNextUpsert = false;
+          return new Promise<void>(resolve => {
+            releaseUpsert = resolve;
+          });
+        }
+        return Promise.resolve();
+      },
+      log: silentLog,
+      rebuild: () => freshXml,
+      schedule: cb => {
+        timers.push(cb);
+        return timers.length;
+      },
+      cancel: () => {},
+      backoffFactory: () => ({ nextDelay: () => 1000, reset: () => {} }),
+    });
+    await handle.start();
+
+    xml.drop(new Error("socket reset"));
+    stallNextUpsert = true;
+    for (const cb of timers.splice(0)) {
+      cb();
+    }
+    await flush();
+    expect(releaseUpsert).toBeDefined(); // parked inside the reconnect's coordination
+
+    // The receiver answered a function it had not answered before, while that coordination runs.
+    yncaObjects.push(state("mute", "Mute"));
+    ynca.changeShape();
+    await flush();
+
+    releaseUpsert?.();
+    await flush();
+    await flush();
+
+    handle.handleStateChange("living.mute", false, true);
+    expect(ynca.writes).toContainEqual({ id: "mute", value: true });
+  });
+});

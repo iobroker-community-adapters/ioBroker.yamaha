@@ -141,6 +141,39 @@ export class MultiTransportHandle implements ConnectionHandle {
   }
 
   /**
+   * Run a coordination SERIALIZED behind whatever is already in flight.
+   *
+   * Two concurrent `coordinate()` runs read the same live set but different `buildObjects()`
+   * snapshots, and the one that finishes LAST installs its ownership map — a user write is then
+   * routed to a transport that does not own the id and is dropped without a trace. The same
+   * overlap can hand an object its OLD definition back, because `writtenObjects.set` runs after
+   * the upsert await.
+   *
+   * The chain itself never rejects: a failure is handed back to the caller instead, so one failed
+   * coordination cannot poison every later one.
+   *
+   * @returns the queued coordination, rejecting with its error for the caller to handle
+   */
+  private queueCoordination(): Promise<void> {
+    let failure: unknown;
+    let failed = false;
+    const queued = this.coordinating.then(async () => {
+      try {
+        await this.coordinate();
+      } catch (e) {
+        failure = e;
+        failed = true;
+      }
+    });
+    this.coordinating = queued;
+    return queued.then(() => {
+      if (failed) {
+        throw failure;
+      }
+    });
+  }
+
+  /**
    * (Re-)coordinate the unified tree over the currently live transports: recompute
    * ownership, upsert the objects (idempotent), and re-arm every transport's owned set.
    */
@@ -276,7 +309,10 @@ export class MultiTransportHandle implements ConnectionHandle {
         this.live.push(connection);
         connection.onDrop(reason => this.handleTransportDrop(connection, reason));
         this.armShapeChanges(connection);
-        await this.coordinate();
+        // Queued, not direct: an ALREADY live transport keeps its shape-change wiring armed
+        // across another transport's drop (handleTransportDrop only splices the one that went),
+        // so a background refresh can fire a re-coordination right into this one's await.
+        await this.queueCoordination();
         this.retries.delete(transport);
         this.reportTransports();
         this.deps.log.debug(`${this.deviceId}/${transport}: transport reconnected`);
