@@ -607,5 +607,7 @@
   "tooltip_discovery": "Automatycznie szuka, dopóki lista jest pusta — tak było dotychczas. Zawsze szuka obok wpisanych urządzeń. Nigdy pozostawia samą listę.",
   "discoveryAuto": "Automatycznie (dopóki lista jest pusta)",
   "discoveryAlways": "Zawsze",
-  "discoveryNever": "Nigdy"
+  "discoveryNever": "Nigdy",
+  "sourceManual": "Wpisane ręcznie",
+  "sourceDiscovered": "Znalezione w sieci"
 }

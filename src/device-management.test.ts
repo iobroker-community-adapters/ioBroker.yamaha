@@ -23,9 +23,9 @@ vi.mock("./lib/discovered-store-deps", () => ({
   ignoredStoreDeps: () => ({}),
 }));
 
-import { buildDeviceForm, findClash } from "./device-management-helpers";
+import { buildDeviceForm, findClash, rowId } from "./device-management-helpers";
 import { YamahaDeviceManagement } from "./device-management";
-import { readDiscovered, writeDiscovered, writeIgnored } from "./lib/discovered-store";
+import { writeDiscovered, writeIgnored } from "./lib/discovered-store";
 
 describe("findClash", () => {
   const rows = [
@@ -106,8 +106,19 @@ function mockAdapter(
     getForeignObjectAsync: vi.fn((id: string) =>
       Promise.resolve(id === "system.adapter.yamaha.0" ? { native: { devices: stored } } : (objects[id] ?? null)),
     ),
-    extendForeignObjectAsync: vi.fn((_id: string, patch: { native: { devices: unknown } }) => {
-      stored = patch.native.devices;
+    extendForeignObjectAsync: vi.fn((id: string, patch: Record<string, any>) => {
+      // Two kinds of write reach this: the device TABLE on the instance object, and a device
+      // object's own common (the display name the edit dialog sets).
+      if (patch.native && "devices" in patch.native) {
+        stored = patch.native.devices;
+      } else {
+        const previous = (objects[id] ?? {}) as Record<string, any>;
+        objects[id] = {
+          ...previous,
+          ...patch,
+          common: { ...(previous.common ?? {}), ...(patch.common ?? {}) },
+        };
+      }
       return Promise.resolve();
     }),
     getForeignStateAsync: vi.fn((id: string) =>
@@ -200,11 +211,20 @@ describe("YamahaDeviceManagement", () => {
   const living = { name: "Living room", ip: "192.168.1.10" };
   const kitchen = { name: "Kitchen", ip: "192.168.1.11" };
 
-  it("shows the manual table when it is filled", async () => {
+  it("shows the manual table and the discovered devices together", async () => {
+    store.devices = [{ id: "rx-v685", ip: "192.168.1.20" }];
     const out = await cards([living, kitchen]);
-    expect(out.map(c => c.id)).toEqual(["Living_room", "Kitchen"]);
-    expect(out.map(c => c.identifier)).toEqual(["192.168.1.10", "192.168.1.11"]);
-    expect(readDiscovered).not.toHaveBeenCalled();
+    // The list follows what the adapter RUNS, and since 2.9.0 that is the union of both —
+    // a filled table no longer turns the network search off.
+    expect(out.map(c => c.id)).toEqual(["Living_room", "Kitchen", "rx-v685"]);
+    expect(out.map(c => c.identifier)).toEqual(["192.168.1.10", "192.168.1.11", "192.168.1.20"]);
+  });
+
+  it("the typed address wins when both stores know the same device", async () => {
+    store.devices = [{ id: "Living_room", ip: "192.168.1.99" }];
+    const out = await cards([living]);
+    expect(out).toHaveLength(1);
+    expect(out[0].identifier).toBe("192.168.1.10");
   });
 
   it("shows the discovered devices when the table is empty", async () => {
@@ -254,12 +274,13 @@ describe("YamahaDeviceManagement", () => {
     expect(out[0].status.connection.stateId).toBe("yamaha.0.Living_room.info.connection");
     // hideIfEmpty is what makes the card show only the protocols this device is
     // connected over instead of three permanent grey badges.
-    expect(out[0].indicators.map(i => i.value.stateId)).toEqual([
+    const transports = out[0].indicators.filter(i => i.id.startsWith("transport-"));
+    expect(transports.map(i => i.value.stateId)).toEqual([
       "yamaha.0.Living_room.info.transports.ynca",
       "yamaha.0.Living_room.info.transports.yxc",
       "yamaha.0.Living_room.info.transports.xml",
     ]);
-    expect(out[0].indicators.every(i => i.hideIfEmpty)).toBe(true);
+    expect(transports.every(i => i.hideIfEmpty)).toBe(true);
   });
 
   it("paints the device-class silhouette from the reported model", async () => {
@@ -268,11 +289,20 @@ describe("YamahaDeviceManagement", () => {
     expect(withModel[0].icon).not.toBe(plain[0].icon);
   });
 
-  it("offers edit only on a manual card, delete on both", async () => {
+  it("offers edit and delete on every card, whichever store it came from", async () => {
     expect((await cards([living]))[0].actions.map(a => a.id)).toEqual(["edit", "delete"]);
     store.devices = [{ id: "rx-v685", ip: "192.168.1.20" }];
-    // A discovered device is re-found on the next scan — editing it would be undone.
-    expect((await cards([]))[0].actions.map(a => a.id)).toEqual(["delete"]);
+    // A found device can be given the fixed address the user just assigned it — that is what
+    // makes it a manual device (editDevice moves the record).
+    expect((await cards([]))[0].actions.map(a => a.id)).toEqual(["edit", "delete"]);
+  });
+
+  it("says on the card where the address came from", async () => {
+    const manual = (await cards([living]))[0].indicators.find(i => i.id === "device-source");
+    expect(manual).toMatchObject({ icon: "fa-pencil", tooltip: "sourceManual" });
+    store.devices = [{ id: "rx-v685", ip: "192.168.1.20" }];
+    const found = (await cards([]))[0].indicators.find(i => i.id === "device-source");
+    expect(found).toMatchObject({ icon: "fa-search", tooltip: "sourceDiscovered" });
   });
 
   it("declares the v3 API and a single add action", () => {
@@ -357,6 +387,56 @@ describe("YamahaDeviceManagement", () => {
       await clash.editDevice("Kitchen", ctx);
       expect(ctx.showMessage).toHaveBeenCalledWith("duplicateDevice");
       expect(adapter.extendForeignObjectAsync).not.toHaveBeenCalled();
+    });
+
+    it("a found device given a fixed address MOVES into the table and keeps its id", async () => {
+      store.devices = [{ id: "rx-v685", ip: "192.168.1.20" }];
+      const i = make([]);
+      const ctx = mockContext({ form: { name: "Living room", ip: "192.168.1.99" } });
+      await expect(i.editDevice("rx-v685", ctx)).resolves.toEqual({ refresh: "devices" });
+      // Moved, not copied: left in both stores the next search would carry the found address
+      // back over the typed one.
+      expect(store.devices).toEqual([]);
+      // The row's name IS the id, so the object tree stays where it is; what the user typed
+      // becomes the display name at the device object.
+      expect(adapter._stored()).toEqual([{ name: "rx-v685", ip: "192.168.1.99" }]);
+      expect(adapter.extendForeignObjectAsync).toHaveBeenCalledWith("yamaha.0.rx-v685", {
+        common: { name: "Living room" },
+      });
+    });
+
+    it("a found device WITHOUT a name keeps its id — the id is its old address", async () => {
+      // The search reads the name off the device; a receiver that reports none gets its id from
+      // the address it had then. Re-deriving the id on an address change would move the whole
+      // object tree, and cleanupStaleObjects would delete the one left behind.
+      store.devices = [{ id: "192_168_1_20", ip: "192.168.1.20" }];
+      const i = make([]);
+      await i.editDevice("192_168_1_20", mockContext({ form: { name: "", ip: "192.168.1.99" } }));
+      expect(adapter._stored()).toEqual([{ name: "192_168_1_20", ip: "192.168.1.99" }]);
+      expect(rowId(adapter._stored()[0])).toBe("192_168_1_20");
+    });
+
+    it("a found device whose name alone changes stays discovered", async () => {
+      store.devices = [{ id: "rx-v685", ip: "192.168.1.20" }];
+      const i = make([]);
+      await i.editDevice("rx-v685", mockContext({ form: { name: "Kitchen", ip: "192.168.1.20" } }));
+      // Nothing about the address changed, so there is nothing to pin — only the label moves.
+      expect(store.devices).toEqual([{ id: "rx-v685", ip: "192.168.1.20" }]);
+      expect(adapter._stored()).toEqual([]);
+      expect(adapter.extendForeignObjectAsync).toHaveBeenCalledWith("yamaha.0.rx-v685", {
+        common: { name: "Kitchen" },
+      });
+    });
+
+    it("renaming a manual device does not move its object tree", async () => {
+      const i = make([living]);
+      await i.editDevice("Living_room", mockContext({ form: { name: "Lounge", ip: "192.168.1.10" } }));
+      // The id comes from the row's name, so the row keeps the id and the new label goes to the
+      // device object — before 2.9.0 this renamed the id and left the whole tree behind.
+      expect(rowId(adapter._stored()[0])).toBe("Living_room");
+      expect(adapter.extendForeignObjectAsync).toHaveBeenCalledWith("yamaha.0.Living_room", {
+        common: { name: "Lounge" },
+      });
     });
 
     it("does nothing for a card that is no longer in the table", async () => {

@@ -607,5 +607,7 @@
   "tooltip_discovery": "自动：列表为空时搜索，与以往一致。始终：在已填写设备之外继续搜索。从不：只使用下方列表。",
   "discoveryAuto": "自动（列表为空时）",
   "discoveryAlways": "始终",
-  "discoveryNever": "从不"
+  "discoveryNever": "从不",
+  "sourceManual": "手动添加",
+  "sourceDiscovered": "网络中发现"
 }

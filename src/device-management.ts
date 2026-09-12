@@ -10,6 +10,7 @@ import { iconForModel } from "./lib/device-type";
 import { readDiscovered, readIgnored, writeDiscovered, writeIgnored } from "./lib/discovered-store";
 import { discoveredStoreDeps, ignoredStoreDeps } from "./lib/discovered-store-deps";
 import type { DeviceRecord } from "./lib/types";
+import { unionDevices } from "./lib/pure-helpers";
 import {
   TRANSPORTS,
   buildDeviceForm,
@@ -66,28 +67,30 @@ export class YamahaDeviceManagement extends DeviceManagement {
   }
 
   /**
-   * The running device set as cards: the manual table when filled (manual mode), otherwise
-   * the auto-discovered devices (auto mode) — the same either/or the adapter itself runs.
+   * The running device set as cards: the manual table AND the discovery store, exactly the
+   * union the adapter itself runs (`unionDevices`), so the list matches what is live.
    *
-   * @returns the cards with their source
+   * @returns the cards, each tagged with where its address came from
    */
   private async cards(): Promise<CardDevice[]> {
-    const manual = await this.readManual();
-    if (manual.length > 0) {
-      const taken = new Set<string>(["info"]);
-      const cards: CardDevice[] = [];
-      for (const row of manual) {
-        const id = rowId(row);
-        if (taken.has(id)) {
-          continue;
-        }
-        taken.add(id);
-        cards.push({ id, ip: row.ip, name: row.name && row.name.length > 0 ? row.name : row.ip, source: "manual" });
+    const names = new Map<string, string>();
+    const manualRecords: DeviceRecord[] = [];
+    for (const row of await this.readManual()) {
+      const id = rowId(row);
+      // "info" is the adapter's own channel — a device may never claim it.
+      if (id === "info" || names.has(id)) {
+        continue;
       }
-      return cards;
+      names.set(id, row.name && row.name.length > 0 ? row.name : row.ip);
+      manualRecords.push({ id, ip: row.ip });
     }
     const discovered = await readDiscovered(discoveredStoreDeps(this.adapter));
-    return discovered.map(d => ({ id: d.id, ip: d.ip, name: d.id, source: "discovered" as const }));
+    return unionDevices(manualRecords, discovered).map(device => ({
+      id: device.id,
+      ip: device.ip,
+      name: names.get(device.id) ?? device.id,
+      source: device.source ?? "discovered",
+    }));
   }
 
   /**
@@ -151,17 +154,31 @@ export class YamahaDeviceManagement extends DeviceManagement {
       status: {
         connection: { stateId: `${base}.info.connection`, mapping: { true: "connected", false: "disconnected" } },
       },
-      // No icon: the indicator icon accepts only a reserved/`fa-*`/`data:`/URL name, so a plain
-      // "wifi" rendered as a "?". The transport label as text plus a green "on" colour carries it;
-      // `hideIfEmpty` shows only the protocols this device is actually connected over.
-      indicators: TRANSPORTS.map(tr => ({
-        id: `transport-${tr.id}`,
-        value: { stateId: `${base}.info.transports.${tr.id}` },
-        text: tr.label,
-        colorOn: "ok",
-        hideIfEmpty: true,
-      })),
-      actions: card.source === "manual" ? [edit, del] : [del],
+      // No icon on the transports: the indicator icon accepts only a reserved/`fa-*`/`data:`/URL
+      // name, so a plain "wifi" rendered as a "?". The transport label as text plus a green "on"
+      // colour carries it; `hideIfEmpty` shows only the protocols this device is connected over.
+      indicators: [
+        // Where the address came from. The adapter treats the two differently — only a device
+        // the search found is looked for again when it drops off — so the card says which it is.
+        {
+          id: "device-source",
+          value: true,
+          icon: card.source === "manual" ? "fa-pencil" : "fa-search",
+          tooltip: t(card.source === "manual" ? "sourceManual" : "sourceDiscovered"),
+          color: "primary",
+          order: 10,
+        },
+        ...TRANSPORTS.map(tr => ({
+          id: `transport-${tr.id}`,
+          value: { stateId: `${base}.info.transports.${tr.id}` },
+          text: tr.label,
+          colorOn: "ok" as const,
+          hideIfEmpty: true,
+        })),
+      ],
+      // Edit on every card: a device the search found can be given the fixed address the user
+      // just assigned it, which makes it a manual device (see editDevice).
+      actions: [edit, del],
     };
   }
 
@@ -213,33 +230,69 @@ export class YamahaDeviceManagement extends DeviceManagement {
   }
 
   /**
-   * Edit a manual device via the pre-filled form (edit is offered on manual cards only).
+   * Edit one device: its display name and its address. Offered on every card.
+   *
+   * Two rules make this safe, and both were learned from what the adapter does elsewhere:
+   *
+   * 1. **The object id never changes.** It is derived from the table row's name, and a changed
+   *    id would leave the whole object tree behind for `cleanupStaleObjects` to delete —
+   *    history and VIS bindings with it. The row therefore carries the id as its name, and what
+   *    the user typed becomes the DISPLAY name at the device object, where `nextDeviceLabel`
+   *    already defends a user's own name against every name the device reports.
+   * 2. **A discovered device whose address changes MOVES into the table.** The user gave the
+   *    receiver a fixed address and entered it; that is what a manual device is. Copying it
+   *    instead would lose the edit at the next search — `mergeDiscovered` carries the found
+   *    address onto a known id.
    *
    * @param cardId the card id (= the object-tree device id)
    * @param context the action context
    * @returns a directive to reload the list
    */
   private async editDevice(cardId: string, context: ActionContext): Promise<{ refresh: "devices" }> {
-    const manual = await this.readManual();
-    const index = manual.findIndex(r => rowId(r) === cardId);
-    if (index < 0) {
+    const cards = await this.cards();
+    const card = cards.find(entry => entry.id === cardId);
+    if (!card) {
       return { refresh: "devices" };
     }
-    const current = manual[index];
-    const usedIps = manual.filter((_, i) => i !== index).map(r => r.ip);
-    const data = await context.showForm(buildDeviceForm(usedIps), {
-      title: t("dmEditTitle"),
-      data: { name: current.name ?? "", ip: current.ip },
-    });
-    if (data && typeof data.ip === "string" && data.ip.trim()) {
-      const row: ManualRow = { name: typeof data.name === "string" ? data.name.trim() : "", ip: data.ip.trim() };
-      const clash = findClash(manual, row, index);
-      if (clash) {
-        await context.showMessage(clash);
-        return { refresh: "devices" };
-      }
+    // Prefill what the CARD shows, by the same rule loadDevices titles it: the device object's
+    // name when it carries one, otherwise the table entry.
+    const node = await this.adapter.getForeignObjectAsync(`${this.adapter.namespace}.${cardId}`);
+    const shownName =
+      typeof node?.common?.name === "string" && node.common.name !== cardId ? node.common.name : card.name;
+    const data = await context.showForm(
+      buildDeviceForm(cards.filter(entry => entry.id !== cardId).map(entry => entry.ip)),
+      { title: t("dmEditTitle"), data: { name: shownName, ip: card.ip } },
+    );
+    if (!data || typeof data.ip !== "string" || !data.ip.trim()) {
+      return { refresh: "devices" };
+    }
+    const ip = data.ip.trim();
+    const name = typeof data.name === "string" ? data.name.trim() : "";
+    const manual = await this.readManual();
+    const index = manual.findIndex(entry => rowId(entry) === cardId);
+    const row: ManualRow = { name: cardId, ip };
+    const clash = findClash(manual, row, index);
+    if (clash) {
+      await context.showMessage(clash);
+      return { refresh: "devices" };
+    }
+    if (index >= 0) {
       manual[index] = row;
       await this.writeManual(manual);
+    } else if (ip !== card.ip) {
+      const store = discoveredStoreDeps(this.adapter);
+      const discovered = await readDiscovered(store);
+      await writeDiscovered(
+        store,
+        discovered.filter((entry: DeviceRecord) => entry.id !== cardId),
+      );
+      manual.push(row);
+      await this.writeManual(manual);
+    }
+    if (name !== shownName) {
+      await this.adapter.extendForeignObjectAsync(`${this.adapter.namespace}.${cardId}`, {
+        common: { name: name || cardId },
+      });
     }
     return { refresh: "devices" };
   }
@@ -255,11 +308,11 @@ export class YamahaDeviceManagement extends DeviceManagement {
    */
   private async deleteDevice(cardId: string, context: ActionContext): Promise<{ refresh: "devices" }> {
     const manual = await this.readManual();
-    if (manual.length > 0) {
-      const index = manual.findIndex(r => rowId(r) === cardId);
-      if (index < 0) {
-        return { refresh: "devices" };
-      }
+    // Which store this card lives in, not which store is non-empty: with a mixed set a filled
+    // table no longer means every card is manual, and the old shape silently did nothing when a
+    // discovered card was deleted next to a typed one.
+    const index = manual.findIndex(r => rowId(r) === cardId);
+    if (index >= 0) {
       const confirmed = await context.showConfirmation(t("dmDeleteConfirm", manual[index].name || manual[index].ip));
       if (confirmed) {
         manual.splice(index, 1);

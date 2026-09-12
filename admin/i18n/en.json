@@ -607,5 +607,7 @@
   "tooltip_discovery": "Auto searches while no device is entered below - what the adapter always did. Always searches next to the devices you entered. Never leaves the list below in charge.",
   "discoveryAuto": "Automatically (while the list is empty)",
   "discoveryAlways": "Always",
-  "discoveryNever": "Never"
+  "discoveryNever": "Never",
+  "sourceManual": "Entered by hand",
+  "sourceDiscovered": "Found on the network"
 }

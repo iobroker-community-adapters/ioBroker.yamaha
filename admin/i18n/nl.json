@@ -607,5 +607,7 @@
   "tooltip_discovery": "Automatisch zoekt zolang er geen apparaat is ingevoerd, zoals tot nu toe. Altijd zoekt naast de ingevoerde apparaten. Nooit laat alleen de lijst het werk doen.",
   "discoveryAuto": "Automatisch (zolang de lijst leeg is)",
   "discoveryAlways": "Altijd",
-  "discoveryNever": "Nooit"
+  "discoveryNever": "Nooit",
+  "sourceManual": "Handmatig ingevoerd",
+  "sourceDiscovered": "Gevonden in het netwerk"
 }

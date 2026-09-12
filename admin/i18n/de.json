@@ -607,5 +607,7 @@
   "tooltip_discovery": "Automatisch sucht, solange unten kein Gerät eingetragen ist — so war es bisher. Immer sucht zusätzlich zu den eingetragenen Geräten. Nie überlässt der Liste unten das Feld.",
   "discoveryAuto": "Automatisch (solange die Liste leer ist)",
   "discoveryAlways": "Immer",
-  "discoveryNever": "Nie"
+  "discoveryNever": "Nie",
+  "sourceManual": "Von Hand eingetragen",
+  "sourceDiscovered": "Im Netzwerk gefunden"
 }

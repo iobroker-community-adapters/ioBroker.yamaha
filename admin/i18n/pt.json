@@ -607,5 +607,7 @@
   "tooltip_discovery": "Automático procura enquanto não houver dispositivo na lista, como até agora. Sempre procura além dos dispositivos indicados. Nunca deixa só a lista.",
   "discoveryAuto": "Automático (enquanto a lista estiver vazia)",
   "discoveryAlways": "Sempre",
-  "discoveryNever": "Nunca"
+  "discoveryNever": "Nunca",
+  "sourceManual": "Introduzido manualmente",
+  "sourceDiscovered": "Encontrado na rede"
 }

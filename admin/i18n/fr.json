@@ -607,5 +607,7 @@
   "tooltip_discovery": "Automatique cherche tant qu'aucun appareil n'est saisi ci-dessous, comme jusqu'ici. Toujours cherche en plus des appareils saisis. Jamais laisse la liste seule.",
   "discoveryAuto": "Automatique (tant que la liste est vide)",
   "discoveryAlways": "Toujours",
-  "discoveryNever": "Jamais"
+  "discoveryNever": "Jamais",
+  "sourceManual": "Saisi à la main",
+  "sourceDiscovered": "Trouvé sur le réseau"
 }

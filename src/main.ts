@@ -1467,9 +1467,18 @@ export class Yamaha extends utils.Adapter {
       this.log.warn(`discovered device "${dropped}" skipped — its object id "${takenId}" is already taken`),
     );
     // Devices the user deleted from the card list stay out — otherwise the next search simply
-    // undoes the delete.
+    // undoes the delete. So do the ones that live in the device table: a receiver the user gave
+    // a fixed address and entered by hand would otherwise come back as a SECOND card, and the
+    // store would carry the found address back over the typed one (`mergeDiscovered` updates a
+    // known id's address). Both the id and the address are matched — the search reads the name
+    // off the device, the user typed their own, so the same receiver can carry two ids.
     const ignored = new Set(await readIgnored(ignoredStoreDeps(this)));
-    const kept = ignored.size > 0 ? merged.filter(device => !ignored.has(device.id)) : merged;
+    const manual = parseDevices(this.config.devices);
+    const manualIds = new Set(manual.map(device => device.id));
+    const manualIps = new Set(manual.map(device => device.ip));
+    const kept = merged.filter(
+      device => !ignored.has(device.id) && !manualIds.has(device.id) && !manualIps.has(device.ip),
+    );
     await writeDiscovered(store, kept);
     return kept;
   }
