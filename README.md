@@ -74,8 +74,7 @@ Details on all settings, the object tree and the ports the adapter uses are in t
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
-
-### **WORK IN PROGRESS**
+### 2.9.0 (2026-09-12)
 
 - (krobipd) New: Devices you enter by hand and devices the network search finds now run side by side — entering one receiver no longer takes every found one out of the instance
 - (krobipd) New: Setting "Search the network for devices" — automatically while your device list is empty (as before), always next to it, or never
@@ -117,11 +116,6 @@ Details on all settings, the object tree and the ports the adapter uses are in t
 - (krobipd) New: on older XML receivers the enhancer, CINEMA DSP 3D, speaker A/B, Zone B, a zone-wide cursor pad, transport keys and zone names; MusicCast gains standby-through and speaker pattern
 - (krobipd) Improved: a receiver is set up from its own declaration of zones and inputs, so it comes online faster and is learned again by itself after an update that changes how it is read
 - (krobipd) Improved: the first connection to a YNCA receiver asks fewer questions, so its datapoints appear sooner
-
-### 2.5.2 (2026-09-07)
-
-- (krobipd) Improved: 174 more datapoints explain themselves — volume and tone now say which scale they use, the stored lists say what is inside them, and the menu rows say what they are for
-- (krobipd) Improved: a receiver's "Connected" now says what it means — a device on network standby answers as well, so it is not the same as being switched on
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 
