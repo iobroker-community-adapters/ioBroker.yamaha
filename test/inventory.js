@@ -345,10 +345,10 @@ tests.integration(ADAPTER_DIR, {
       it("no device mixes two volume scales across its zones", async function () {
         this.timeout(60000);
         // The BOUNDS may differ from zone to zone — a receiver declares its range per zone and
-        // the RX-V6A really does say main 0…97 and zone 2 0…90.5 (krobi 2026-09-11: "wenn die
-        // zonen das anders haben/schicken dann musst du eben zonen einzeln rechnen"). What must
-        // NOT differ is the SCALE the numbers are in, and until 2.8.0 the RX-A2070 carried
-        // decibels in main and zone 2 and a raw step count in zone 3 — one device, two scales.
+        // the RX-V6A really does say main 0…97 and zone 2 0…90.5, so a zone that reports its
+        // own range is computed on that range. What must NOT differ is the SCALE the numbers
+        // are in, and until 2.8.0 the RX-A2070 carried decibels in main and zone 2 and a raw
+        // step count in zone 3 — one device, two scales.
         const objects = await dumpObjects(harness);
         const mixed = [];
         for (const [device, states] of volumeStatesOf(objects)) {

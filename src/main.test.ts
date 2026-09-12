@@ -333,6 +333,8 @@ function internalOf(adapter: Yamaha): {
   onStateChange(id: string, state: unknown): void;
   reportConnection(deviceId: string, connected: boolean): void;
   removeDevice(deviceId: string): Promise<void>;
+  persistDeviceNative(deviceId: string, native: Record<string, unknown>): void;
+  pendingNative: Map<string, { timer?: unknown }>;
   xmlPollIntervalMs(): number;
   objects: Map<string, Record<string, unknown>>;
   states: Map<string, { val: unknown; ack: boolean }>;
@@ -626,6 +628,46 @@ describe("Yamaha auto-discovery", () => {
     expect(ctx.i.objects.has("RX-V685.player.track")).toBe(false);
     expect(ctx.i.states.get("info.devicesTotal")).toEqual({ val: 0, ack: true });
     expect(ctx.i.states.get("info.connection")).toEqual({ val: false, ack: true });
+  });
+
+  it("removeDevice forgets what it cached, so the same id starts clean", async () => {
+    mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+    const ctx = setup({ devices: [] });
+    await ctx.i.onReady();
+    await flush();
+    const setStateAck = ctx.calls[0].deps.setStateAck as (id: string, value: unknown) => void;
+    setStateAck("RX-V685.info.model", "YSP-1600");
+    await flush();
+    const soundbar = (ctx.i.objects.get("RX-V685")?.common as { icon?: string }).icon;
+    expect(soundbar).toBe(iconForModel("YSP-1600"));
+
+    await ctx.i.removeDevice("RX-V685");
+    // The user adds the same device back. `ensureDeviceHeader` seeds the default silhouette;
+    // if the icon cache survived the removal, `updateDeviceIcon` would see the model as
+    // unchanged and the soundbar would keep showing a receiver until the next restart.
+    ctx.i.objects.set("RX-V685", { type: "device", common: { icon: iconForModel(undefined) }, native: {} });
+    setStateAck("RX-V685.info.model", "YSP-1600");
+    await flush();
+    expect((ctx.i.objects.get("RX-V685")?.common as { icon?: string }).icon).toBe(soundbar);
+  });
+
+  it("removeDevice cancels a pending native write, so the deleted device stays deleted", async () => {
+    mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+    const ctx = setup({ devices: [] });
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.i.objects.has("RX-V685")).toBe(true);
+
+    // The capability profile persists through a 250 ms coalescing window. Its timer would fire
+    // AFTER the delete and recreate the device object as a bare orphan nothing owns.
+    ctx.i.persistDeviceNative("RX-V685", { capabilityProfile: "{}" });
+    const timer = ctx.i.pendingNative.get("RX-V685")?.timer;
+    expect(timer).toBeDefined();
+
+    await ctx.i.removeDevice("RX-V685");
+    expect(ctx.i.pendingNative.has("RX-V685")).toBe(false);
+    expect(ctx.i.clearTimeout).toHaveBeenCalledWith(timer);
+    expect(ctx.i.objects.has("RX-V685")).toBe(false);
   });
 
   it("arms one throttled search while an auto-found device is offline", async () => {
@@ -1019,8 +1061,7 @@ describe("Yamaha volume as 0…100 % (the one switch)", () => {
     common: { type: "number", role: "level.volume", write: true, min: -80.5, max: 0, step: 0.5, unit: "dB" },
   };
 
-  // krobi 2026-09-11: "ein schalter für ALLE. ich will das nicht komplizierter machen als es sein
-  // muss." One instance setting, every device on it, every zone of every device — a switch that
+  // One instance setting covers every device and every zone of every device — a switch that
   // reached only the main zone would rebuild the mixed tree this release removes.
   it("reaches every zone of every device", async () => {
     const ctx = setup({

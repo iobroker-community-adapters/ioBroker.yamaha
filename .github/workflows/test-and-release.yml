@@ -16,14 +16,13 @@ on:
       - "v[0-9]+.[0-9]+.[0-9]+"
       # pre-releases
       - "v[0-9]+.[0-9]+.[0-9]+-**"
-    # Reine Doku-Pushes lösen keinen Lauf aus: an einer Textzeile kann kein
-    # Test fallen. Laut GitHub-Doku gilt "Path filters are not evaluated for
-    # pushes of tags" — der Release-Lauf am Tag bleibt also unberührt. Bewusst
-    # NUR unter `push`, nicht unter `pull_request`: dort liefert der Lauf den
-    # Pflicht-Prüfauftrag der Branch-Sperre (Dependabot-Zusammenführung).
-    # Der Filter greift auf die DATEIEN des Pushes — anders als ein `[skip ci]`
-    # in der Nachricht, das den ganzen Push verschluckt, auch wenn Quellcode
-    # mitfährt (fleet-weit 47-mal passiert, Stand 2026-09-03).
+    # Documentation-only pushes start no run: no test can fail on a line of prose.
+    # Per GitHub's docs, "Path filters are not evaluated for pushes of tags", so the
+    # release run on a tag is unaffected. Deliberately only under `push`, never under
+    # `pull_request`: there the run supplies the required status check of the branch
+    # protection (Dependabot merges).
+    # The filter looks at the FILES of the push — unlike a `[skip ci]` in the commit
+    # message, which swallows the whole push even when source code rides along.
     paths-ignore:
       - "**.md"
       - "docs/**"
