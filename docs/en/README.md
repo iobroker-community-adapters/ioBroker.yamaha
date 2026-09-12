@@ -44,7 +44,9 @@ adapter is not running is only found again by the next network search.
 
 - **Search the network for devices** — _Automatically_ searches while the device list is empty,
   which is what the adapter has always done. _Always_ keeps searching next to the devices you
-  entered. _Never_ runs your list alone.
+  entered. _Never_ runs your list alone. A device that was found earlier and is not searched for
+  any more keeps its datapoints — they are simply marked offline. Only the delete button on its
+  card removes a device for good.
 - **Network interface** — leave it empty and the search leaves through every network card of
   your ioBroker machine. Only set it if your server sits in several networks and the search
   should use a particular one. It has no effect on the receivers themselves.

@@ -1,10 +1,10 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "2.9.0",
+    "version": "2.9.1",
     "nogit": true,
     "news": {
-      "NEXT": {
+      "2.9.1": {
         "en": "A receiver the network search found keeps its datapoints when you add a device by hand: they stay with their history and are marked offline instead of being deleted.",
         "de": "Ein per Netzsuche gefundener Receiver behält seine Datenpunkte, wenn Sie ein Gerät von Hand eintragen: Sie bleiben samt Historie und werden nur als offline gekennzeichnet.",
         "ru": "Ресивер, найденный поиском в сети, сохраняет свои точки данных при добавлении устройства вручную: они остаются вместе с историей и просто помечаются как офлайн.",

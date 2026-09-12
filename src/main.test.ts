@@ -797,6 +797,79 @@ describe("Yamaha stale-object cleanup", () => {
     expect(ctx.i.log.debug).toHaveBeenCalledWith(expect.stringContaining("from a previous configuration"));
   });
 
+  // 2.9.1: the device list and the discovery store are two stores, and only one of them was
+  // consulted when the run decided what to delete. With the default search setting the first
+  // hand-entered receiver silently took every found device's tree with it.
+  it("keeps the tree of a remembered device that this run does not start, and says why", async () => {
+    mocks.discoveredStore.devices = [{ id: "Found_one", ip: "192.168.1.99" }];
+    const ctx = setup(); // one typed device + search "Automatic" => the search does not run
+    ctx.i.objects.set("Found_one", { type: "device", common: {}, native: {} });
+    ctx.i.objects.set("Found_one.volume", { type: "state", common: {}, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.i.objects.has("Found_one.volume")).toBe(true);
+    expect(ctx.i.log.warn).toHaveBeenCalledWith(expect.stringContaining("Found_one"));
+    expect(ctx.i.log.warn).toHaveBeenCalledWith(expect.stringContaining("set to Automatic"));
+  });
+
+  it("stamps the idle device disconnected instead of leaving last run's green", async () => {
+    mocks.discoveredStore.devices = [{ id: "Found_one", ip: "192.168.1.99" }];
+    const ctx = setup();
+    for (const id of ["Found_one.info.connection", "Found_one.info.transports.ynca"]) {
+      ctx.i.objects.set(id, { type: "state", common: {}, native: {} });
+      ctx.i.states.set(id, { val: true, ack: true });
+    }
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.i.states.get("Found_one.info.connection")?.val).toBe(false);
+    expect(ctx.i.states.get("Found_one.info.transports.ynca")?.val).toBe(false);
+  });
+
+  it("creates nothing for an idle device whose tree is already gone", async () => {
+    mocks.discoveredStore.devices = [{ id: "Found_one", ip: "192.168.1.99" }];
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    // No header, no orphan state: a device nobody starts must not be half-built by the stamp.
+    expect(ctx.i.states.has("Found_one.info.connection")).toBe(false);
+    expect(ctx.i.objects.has("Found_one.info.connection")).toBe(false);
+  });
+
+  it("reports the idle devices as a fact, not a problem, when the search is off on purpose", async () => {
+    mocks.discoveredStore.devices = [{ id: "Found_one", ip: "192.168.1.99" }];
+    const ctx = setup({ discovery: "never" });
+    ctx.i.objects.set("Found_one.volume", { type: "state", common: {}, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.i.objects.has("Found_one.volume")).toBe(true);
+    expect(ctx.i.log.info).toHaveBeenCalledWith(expect.stringContaining("stay idle"));
+    expect(ctx.i.log.warn).not.toHaveBeenCalledWith(expect.stringContaining("Found_one"));
+  });
+
+  // The protection widens the DELETION only. An idle device is not written to at all this run,
+  // so neither the rename cleanup nor a switched-off datapoint group may reach into its tree —
+  // whatever is in there is settled the next time the device actually runs.
+  it("leaves an idle device's tree completely untouched, renamed leftovers included", async () => {
+    mocks.discoveredStore.devices = [{ id: "Found_one", ip: "192.168.1.99" }];
+    const ctx = setup({ group_multiroom: false });
+    ctx.i.objects.set("Found_one.actualVolume", { type: "state", common: {}, native: {} });
+    ctx.i.objects.set("Found_one.multiroom.group.name", { type: "state", common: {}, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.i.objects.has("Found_one.actualVolume")).toBe(true);
+    expect(ctx.i.objects.has("Found_one.multiroom.group.name")).toBe(true);
+  });
+
+  it("deletes the tree of a device the user removed on its card", async () => {
+    mocks.discoveredStore.devices = []; // the delete took the record out of the store
+    const ctx = setup();
+    ctx.i.objects.set("Found_one", { type: "device", common: {}, native: {} });
+    ctx.i.objects.set("Found_one.volume", { type: "state", common: {}, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.i.objects.has("Found_one.volume")).toBe(false);
+  });
+
   it("keeps a configured device's tree even before it connects", async () => {
     const ctx = setup({ devices: [{ name: "Living room", ip: "192.168.1.10" }] }, { failIds: ["Living room"] });
     ctx.i.objects.set("Living_room.main.power", { type: "state", common: {}, native: {} });

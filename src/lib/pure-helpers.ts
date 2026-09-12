@@ -178,20 +178,33 @@ export function mergeDiscovered(
  * regardless of whether it has connected yet. Deepest first, so children go
  * before their parents.
  *
+ * A device the discovery store still remembers is kept too, even when it is not part of
+ * this run: switching the network search off is not a delete. Only the card's delete
+ * button removes a device — it takes the record out of the store, and the id stops being
+ * remembered here at the same moment. Without that a single hand-entered receiver used to
+ * take every found one's tree with it, history and VIS bindings included.
+ *
  * @param existing all object ids currently under the instance
  * @param deviceIds the ids of the currently configured devices
  * @param namespace the adapter namespace (e.g. `yamaha.0`)
+ * @param remembered ids the discovery store still holds that are not running this time
  * @returns the stale ids to delete, deepest first
  */
-export function staleObjects(existing: string[], deviceIds: Set<string>, namespace: string): string[] {
+export function staleObjects(
+  existing: string[],
+  deviceIds: Set<string>,
+  namespace: string,
+  remembered: ReadonlySet<string> = new Set(),
+): string[] {
   // No configured devices → never wipe the whole tree (a user who cleared the
   // device table by accident would otherwise lose every object in one pass).
+  // Anchored on the RUNNING set: a run with nothing to run deletes nothing at all.
   if (deviceIds.size === 0) {
     return [];
   }
   const isKept = (fullId: string): boolean => {
     const top = stripNamespace(fullId, namespace).split(".")[0];
-    return top === "info" || deviceIds.has(top);
+    return top === "info" || deviceIds.has(top) || remembered.has(top);
   };
   return existing.filter(id => !isKept(id)).sort((a, b) => b.length - a.length);
 }

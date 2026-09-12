@@ -280,6 +280,35 @@ describe("staleObjects", () => {
     const existing = ["yamaha.0.info", "yamaha.0.living.power", "yamaha.0.old.state"];
     expect(staleObjects(existing, new Set(), "yamaha.0")).toEqual([]);
   });
+
+  // Switching the network search off is a configuration change, not a delete. Before 2.9.1 the
+  // first hand-entered receiver took every found one's tree with it — history and VIS bindings
+  // included — because the run only ever knew the devices it was starting.
+  test("keeps the tree of a device the discovery store still remembers, even though it is idle", () => {
+    const existing = [
+      "yamaha.0.info",
+      "yamaha.0.living",
+      "yamaha.0.living.power",
+      "yamaha.0.found",
+      "yamaha.0.found.volume",
+      "yamaha.0.gone",
+      "yamaha.0.gone.volume",
+    ];
+    expect(staleObjects(existing, new Set(["living"]), "yamaha.0", new Set(["found"]))).toEqual([
+      "yamaha.0.gone.volume",
+      "yamaha.0.gone",
+    ]);
+  });
+
+  // The other half of the same rule: deleting a device on its card takes the record out of the
+  // discovery store, so the id stops being remembered and the next start clears the tree.
+  test("a device the store no longer holds is stale again", () => {
+    const existing = ["yamaha.0.living", "yamaha.0.found", "yamaha.0.found.volume"];
+    expect(staleObjects(existing, new Set(["living"]), "yamaha.0", new Set())).toEqual([
+      "yamaha.0.found.volume",
+      "yamaha.0.found",
+    ]);
+  });
 });
 
 describe("parseDevices", () => {

@@ -258,10 +258,16 @@ export class Yamaha extends utils.Adapter {
       for (const device of devices) {
         this.knownDeviceIps.add(device.ip);
       }
+      // Devices the discovery store still remembers while the search is off. They do not run
+      // this time, but the user never deleted them — so their trees stay and they are stamped
+      // offline instead. Until 2.9.1 the first hand-entered receiver silently took every found
+      // one's object tree with it, recordings and VIS bindings included.
+      const idle = this.discovering ? [] : await this.rememberedButIdle(devices);
       // Before the cleanup and before any device connects — see knownDatapoints.
       await this.snapshotExistingDatapoints();
-      await this.cleanupStaleObjects(new Set(devices.map(device => device.id)));
+      await this.cleanupStaleObjects(new Set(devices.map(device => device.id)), new Set(idle.map(device => device.id)));
       await this.ensureInstanceInfoObjects();
+      await this.markIdleDevicesOffline(idle);
       await this.subscribeToStates();
       const pushReceiver = new YxcPushReceiver({
         log: { debug: message => this.log.debug(message), warn: message => this.log.warn(message) },
@@ -406,6 +412,64 @@ export class Yamaha extends utils.Adapter {
   private searchesTheNetwork(manualCount: number): boolean {
     const mode = this.config.discovery ?? "auto";
     return mode === "always" || (mode === "auto" && manualCount === 0);
+  }
+
+  /**
+   * The devices the discovery store still remembers that are NOT part of this run: the network
+   * search is off, so nothing looked for them. They keep their objects — switching the search
+   * off is a configuration change, not a delete, and only the card's delete button removes a
+   * device (it takes the record out of the store in the same step).
+   *
+   * @param running the devices this run does start
+   * @returns the remembered records that stay idle
+   */
+  private async rememberedButIdle(running: readonly DeviceRecord[]): Promise<DeviceRecord[]> {
+    const runningIds = new Set(running.map(device => device.id));
+    const remembered = await readDiscovered(discoveredStoreDeps(this));
+    return remembered.filter(device => !runningIds.has(device.id));
+  }
+
+  /**
+   * Stamp the idle devices disconnected and say once why they are idle. ioBroker keeps a
+   * state's last value forever, so a kept tree would otherwise still claim "connected,
+   * YNCA ✓" while nothing is talking to the device — the same lie the disconnected stamp in
+   * {@link startDevice} prevents for a device that does run.
+   *
+   * Every write is guarded on the object being there: nothing starts these devices, so
+   * nothing creates their header either, and a blind write would leave bare orphan states
+   * behind for a device whose tree is already gone.
+   *
+   * @param idle the remembered devices that do not run this time
+   */
+  private async markIdleDevicesOffline(idle: readonly DeviceRecord[]): Promise<void> {
+    if (idle.length === 0) {
+      return;
+    }
+    for (const device of idle) {
+      const ids = [
+        `${device.id}.info.connection`,
+        ...TRANSPORT_IDS.map(protocol => `${device.id}.info.transports.${protocol}`),
+      ];
+      for (const id of ids) {
+        if (await this.getObjectAsync(id)) {
+          await this.setState(id, { val: false, ack: true });
+        }
+      }
+    }
+    const names = idle.map(device => device.id).join(", ");
+    // Two levels for two situations. "Never" is what the user asked for, so it is a fact, not
+    // a problem. With "Automatic" the SETTING stopped the search the moment the first device
+    // was typed in — the user did not choose that, and without this line nothing tells them
+    // why half their receivers went quiet.
+    if ((this.config.discovery ?? "auto") === "never") {
+      this.log.info(
+        `${idle.length} remembered device(s) stay idle — the network search is off (${names}); their objects are kept, use the delete button on a card to remove one`,
+      );
+    } else {
+      this.log.warn(
+        `${idle.length} remembered device(s) are not running: the device list is filled and the network search is set to Automatic (${names}) — their objects are kept; set the search to Always to run them next to the devices you entered`,
+      );
+    }
   }
 
   /**
@@ -702,11 +766,15 @@ export class Yamaha extends utils.Adapter {
    * subtree is kept whether or not it has connected yet.
    *
    * @param deviceIds the ids of the currently configured devices
+   * @param remembered ids the discovery store still holds that are idle this run
    */
-  private async cleanupStaleObjects(deviceIds: Set<string>): Promise<void> {
+  private async cleanupStaleObjects(deviceIds: Set<string>, remembered: ReadonlySet<string>): Promise<void> {
     const allObjects = await this.getAdapterObjectsAsync();
     const existing = Object.keys(allObjects);
-    const stale = staleObjects(existing, deviceIds, this.namespace);
+    // Only the DELETION widens to the remembered ids. The two passes below stay on the
+    // running set on purpose: an idle device is not being written to at all this run, so
+    // neither a rename nor a switched-off group has any business reaching into its tree.
+    const stale = staleObjects(existing, deviceIds, this.namespace, remembered);
     // Old states this version renamed/moved (e.g. system.model -> info.model): delete the
     // old object so it does not linger orphaned beside the new one under a kept device.
     const renamed = renamedObjectIds(existing, deviceIds, this.namespace);

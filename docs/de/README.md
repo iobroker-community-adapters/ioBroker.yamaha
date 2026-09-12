@@ -46,7 +46,9 @@ umzieht, während der Adapter nicht läuft, findet aber erst die nächste Netzwe
 
 - **Netzsuche nach Geräten** — _Automatisch_ sucht, solange die Geräteliste leer ist; so hat
   der Adapter es immer gemacht. _Immer_ sucht zusätzlich zu den eingetragenen Geräten.
-  _Nie_ überlässt Ihrer Liste allein das Feld.
+  _Nie_ überlässt Ihrer Liste allein das Feld. Ein früher gefundenes Gerät, nach dem nicht mehr
+  gesucht wird, behält seine Datenpunkte — sie werden nur als offline gekennzeichnet. Endgültig
+  entfernt es allein der Löschknopf auf seiner Karte.
 - **Netzwerk-Schnittstelle** — leer lassen, dann verlässt die Suche jede Netzwerkkarte Ihres
   ioBroker-Rechners. Nur setzen, wenn Ihr Server in mehreren Netzen hängt und die Suche eine
   bestimmte nehmen soll. Auf die Receiver selbst hat die Einstellung keine Wirkung.

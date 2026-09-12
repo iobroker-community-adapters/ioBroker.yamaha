@@ -679,8 +679,9 @@ drei Plan-Aussagen wurden beim Bauen WIDERLEGT und sind hier in ihrer gemessenen
   `cleanupStaleObjects` löschte ihre Bäume. Die laufende Menge ist jetzt die Vereinigung beider Speicher
   (`unionDevices`, nach Id; die getippte Adresse gewinnt, und eine Adresse, die ein manuelles Gerät schon
   hält, wird kein zweiter Datensatz). Ob gesucht wird, entscheidet die eigene Instanz-Einstellung
-  `discovery` mit DREI Werten: `auto` sucht, solange die Tabelle leer ist (exakt das Verhalten jeder
-  Anlage vor 2.9.0), `always` sucht daneben (Mischbetrieb), `never` gar nicht. **Dreiwertig mit Absicht:**
+  `discovery` mit DREI Werten: `auto` sucht, solange die Tabelle leer ist (das Such-Verhalten jeder
+  Anlage vor 2.9.0 — was 2.9.1 daran geändert hat, steht unten), `always` sucht daneben
+  (Mischbetrieb), `never` gar nicht. **Dreiwertig mit Absicht:**
   die Vorgaben liegen in `io-package.json native`, und ein boolescher Vorgabewert wäre für genau die
   Bestandsanlagen mit manuellen Geräten falsch vorbelegt — `auto` braucht keinen Schreibvorgang.
 - **Jedes Gerät weiß, woher es kam** (`native.source`, krobis Vorschlag). Vorher war die Herkunft
@@ -739,6 +740,32 @@ drei Plan-Aussagen wurden beim Bauen WIDERLEGT und sind hier in ihrer gemessenen
   vergisst den gemerkten Wert. Kein Rennen: das läuft auf dem Schreibvorgang, das Echo muss erst durch
   die Befehls-Schleuse zum Gerät und zurück. Der Cache hängt am Controller, der je Verbindungsversuch
   neu gebaut wird — ein Reconnect sät also immer den ganzen Baum.
+
+## Bugfix 2.9.1 — die Netzsuche abzuschalten ist KEIN Löschbefehl
+
+- **Ein Gerätebaum verschwindet nur, wenn der Nutzer das Gerät löscht.** `cleanupStaleObjects`
+  entschied allein an der LAUFENDEN Menge — und mit `discovery: "auto"` (der Vorgabe) schaltet schon
+  der erste Tabelleneintrag die Suche ab, also fielen sämtliche gefundenen Geräte aus dieser Menge:
+  `staleObjects` löschte ihre kompletten Bäume samt Historie, Aufzeichnungs-Einstellungen und
+  VIS-Bindungen, ohne eine einzige Logzeile. Seit 2.9.1 liest der Start den Fund-Speicher IMMER, auch
+  wenn nicht gesucht wird, und reicht dessen Ids als „gemerkt" an `staleObjects` weiter — gemerkt =
+  behalten. Ein Schlupfloch gibt es nicht: die Löschung auf der Karte nimmt den Datensatz im selben
+  Schritt aus `devices.json`, der Baum ist beim nächsten Start also wieder fällig.
+  ⚠️ Nur die LÖSCHUNG weitet sich. `renamedObjectIds` und das Aufräumen abgeschalteter Gruppen
+  bleiben auf der laufenden Menge — in einen Ruhe-Baum greift dieser Lauf gar nicht hinein, was dort
+  liegt, entscheidet der nächste Lauf, in dem das Gerät wirklich läuft.
+  ⚠️ Der Null-Wächter (`deviceIds.size === 0` → nichts löschen) bleibt an der LAUFENDEN Menge
+  verankert, sonst wäre der ältere Schutz „eine versehentlich geleerte Tabelle löscht nicht alles"
+  aufgeweicht.
+- **Ein behaltener Baum darf nicht „verbunden" behaupten.** Die Ruhe-Geräte bekommen beim Start
+  `info.connection` und `info.transports.*` auf false — dieselbe Ehrlichkeitsregel wie der
+  Abgemeldet-Stempel in `startDevice`, denn ioBroker hält den letzten Wert für immer. Jeder dieser
+  Schreibvorgänge ist am VORHANDENSEIN des Objekts gewächtert: diese Geräte werden nie gestartet,
+  also legt auch nichts ihren Kopf an, und ein blinder Schreibvorgang hinterließe nackte
+  Waisen-States für ein Gerät, dessen Baum längst weg ist (dieselbe Falle wie `pendingNative` in A2).
+- **Eine Zeile sagt, warum sie still sind** — `warn`, wenn die EINSTELLUNG es entschieden hat
+  (`auto` + gefüllte Tabelle; der Nutzer hat das nicht gewählt, und ohne die Zeile erklärt ihm nichts,
+  warum die Hälfte seiner Receiver verstummt ist), `info` bei `never`, denn das hat er gewählt.
 
 ## Stand
 
@@ -1036,7 +1063,7 @@ in ein öffentliches Repo.
   bis 2.1.1 lief er lokal nie mit, obwohl die CI ihn fährt (`testing-action-adapter` ruft
   `test:unit` UND `test:integration`). `passWithNoTests` ist raus — ein nicht mehr greifendes
   `include` muss rot melden, nicht grün.
-- **Mutationstabellen** (`../../Ressourcen/iobroker-entwicklung/mutation-testing/`) — **FÜNFZEHN Dateien, und das
+- **Mutationstabellen** (`../../Ressourcen/iobroker-entwicklung/mutation-testing/`) — **SECHZEHN Dateien, und das
   Gate prüft ALLE.** ⚠️ Die fünf Wellen-Originale `mutations_yamaha.py` · `…2.py` · `…3.py` · `…4.py` ·
   `…5.py` (36/32/26/11/11 Nadeln) leben NEBEN der Sammeltabelle `mutations_yamaha_all.py`, die dieselben
   Regeln zusammenfasst — sie sind kein Altbestand. Wer nur die datierten Tabellen nachzieht, lässt fünf
@@ -1059,7 +1086,9 @@ in ein öffentliches Repo.
   - `mutations_yamaha_2026-09-12-w14.py` (Welle 14 = die Audit-Funde vom 12.09. und der Prozent-Schalter
     pro Gerät, IDs R1–R16; 16/16 gefangen — zwei Überlebende im ersten Lauf waren echte Testlücken und
     sind geschlossen: die Doppel-Id-Sperre der Kartenliste und „die eigene Antwort eines Geräts schlägt
-    den geerbten Instanz-Schalter"). Läufer `mutation-test.py`. Nadeln sind
+    den geerbten Instanz-Schalter")
+  - `mutations_yamaha_2026-09-12-w15.py` (Welle 15 = der Bugfix 2.9.1 „die Netzsuche abzuschalten ist
+    kein Löschbefehl", IDs R17–R22; 6/6 gefangen im ersten Lauf). Läufer `mutation-test.py`. Nadeln sind
     exakte Quellzeilen — nach Prettier-Umbrüchen oder Refactorings ZUERST den Nadel-Vorab-Check (jede Nadel
     genau 1×), sonst misst der Lauf nichts. Zwei äquivalente Mutanten (X2, X4 — unerreichbare
     Invarianten-Wächter, im Quelltext begründet); die vier anderen vom 22.08. (M9, X1, Y1, Y13) waren toter

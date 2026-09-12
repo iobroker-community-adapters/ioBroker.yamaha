@@ -74,6 +74,10 @@ Details on all settings, the object tree and the ports the adapter uses are in t
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+### 2.9.1 (2026-09-12)
+
+- (krobipd) Fixed: A receiver the network search found keeps its datapoints when you add a device by hand — they stay with their history and are marked offline instead of deleted
+
 ### 2.9.0 (2026-09-12)
 
 - (krobipd) New: Devices you enter by hand and devices the network search finds now run side by side — entering one receiver no longer takes every found one out of the instance
@@ -107,15 +111,6 @@ Details on all settings, the object tree and the ports the adapter uses are in t
 - (krobipd) Improved: The first connection asks a receiver only what its generation can answer, so zones, trigger sockets and per-input settings follow the device, not a catalogue.
 - (krobipd) New: A datapoint the receiver reveals later now appears at once — a function it starts answering, a value it reports for the first time, a status field it begins delivering.
 - (krobipd) Changed: A datapoint that never carried a value is removed only after two starts confirm it, so a receiver left in standby no longer loses datapoints it still has.
-
-### 2.6.0 (2026-09-09)
-
-- (krobipd) Fixed: input and sound program lists now offer only what the receiver itself declares or proves it has, instead of every value any Yamaha may have (#619)
-- (krobipd) Fixed: the 2008 receiver generation gets volume, mute and sound program back; HDMI output, aspect, resolution and decoder lists carry the values the receiver reports
-- (krobipd) New: HD Radio and Sirius on the US models, zone balance, pre-out mode and zone scenes, party volume keys, HDMI video mode, lip sync, a second trigger output and speaker pattern
-- (krobipd) New: on older XML receivers the enhancer, CINEMA DSP 3D, speaker A/B, Zone B, a zone-wide cursor pad, transport keys and zone names; MusicCast gains standby-through and speaker pattern
-- (krobipd) Improved: a receiver is set up from its own declaration of zones and inputs, so it comes online faster and is learned again by itself after an update that changes how it is read
-- (krobipd) Improved: the first connection to a YNCA receiver asks fewer questions, so its datapoints appear sooner
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 
