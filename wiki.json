@@ -1,0 +1,16 @@
+{
+  "_comment": "Read by gate A13 (Entwicklung/scripts/check-wiki.py). The wiki address is derived from package.json, not declared here.",
+  "clone": "../iobroker.yamaha.wiki",
+  "meta": ["_Footer", "_Sidebar"],
+  "pairs": {
+    "Home": "Startseite",
+    "Setup": "Einrichtung",
+    "Devices": "Geraete",
+    "Datapoints": "Datenpunkte",
+    "Protocols": "Protokolle",
+    "Troubleshooting": "Fehlersuche",
+    "Upgrade": "Umstieg"
+  },
+  "generated": [],
+  "undocumented": {}
+}
