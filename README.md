@@ -84,7 +84,7 @@ Details on all settings, the object tree and the ports the adapter uses are in t
 - (krobipd) Fixed: Receivers from 2010/2011 were offered a 4K video resolution their model does not support
 - (krobipd) Fixed: A write to a receiver could be dropped without a trace while another of its protocols was reconnecting
 - (krobipd) Fixed: Deleting a device and adding the same one again left it with the wrong icon until the next restart, and a pending write could recreate the deleted device object
-- (krobipd) Changed: A MusicCast receiver no longer rewrites all 25 datapoints of a zone on every push — only what actually changed
+- (krobipd) Changed: A MusicCast receiver's datapoints now update only when their value really changed — automations tied to them stop firing for no reason
 
 ### 2.8.0 (2026-09-11)
 

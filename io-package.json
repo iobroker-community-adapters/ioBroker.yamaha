@@ -4,6 +4,19 @@
     "version": "2.8.0",
     "nogit": true,
     "news": {
+      "NEXT": {
+        "en": "Entered and found devices now run side by side, every card can be edited, and \"Volume as 0-100 %\" is set per device.",
+        "de": "Eingetragene und gefundene Geräte laufen jetzt nebeneinander, jede Karte ist bearbeitbar, und \"Lautstärke als 0-100 %\" gilt pro Gerät.",
+        "ru": "Введённые и найденные устройства теперь работают вместе, каждую карточку можно изменить, а \"Громкость 0-100 %\" задаётся для каждого устройства.",
+        "pt": "Dispositivos introduzidos e encontrados funcionam agora lado a lado, cada cartão é editável e \"Volume 0-100 %\" é por dispositivo.",
+        "nl": "Ingevoerde en gevonden apparaten draaien nu naast elkaar, elke kaart is te bewerken en \"Volume als 0-100 %\" geldt per apparaat.",
+        "fr": "Les appareils saisis et trouvés fonctionnent côte à côte, chaque carte est modifiable et \"Volume 0-100 %\" se règle par appareil.",
+        "it": "I dispositivi inseriti e trovati funzionano fianco a fianco, ogni scheda è modificabile e \"Volume 0-100 %\" è per dispositivo.",
+        "es": "Los dispositivos introducidos y los encontrados funcionan a la vez, cada tarjeta es editable y \"Volumen 0-100 %\" es por dispositivo.",
+        "pl": "Wpisane i znalezione urządzenia działają obok siebie, każdą kartę można edytować, a \"Głośność 0-100 %\" ustawiasz per urządzenie.",
+        "uk": "Введені та знайдені пристрої тепер працюють поруч, кожну картку можна редагувати, а \"Гучність 0-100 %\" задається для кожного пристрою.",
+        "zh-cn": "手动添加与搜索到的设备现在并行运行，每张卡片都可编辑，“音量 0-100 %”按设备设置。"
+      },
       "2.8.0": {
         "en": "Volume now carries the scale the receiver itself shows, and its range is what the receiver accepts. A new setting shows every zone's volume as 0-100 % instead. Three datapoints are gone.",
         "de": "Die Lautstärke trägt jetzt die Skala, die der Receiver selbst anzeigt, und ihr Bereich ist das, was er annimmt. Eine neue Einstellung zeigt jede Zone als 0-100 %. Drei Datenpunkte fallen weg.",
@@ -81,19 +94,6 @@
         "pl": "Instalacja bezpośrednio z GitHuba nie jest już oferowana: adapter jest budowany przed publikacją, dlatego instaluje się go z repozytorium ioBroker.",
         "uk": "Встановлення безпосередньо з GitHub більше не пропонується: адаптер збирається перед публікацією, тому встановлюється з репозиторію ioBroker.",
         "zh-cn": "不再提供直接从 GitHub 安装：适配器在发布前完成构建，因此请从 ioBroker 仓库安装。"
-      },
-      "2.5.0": {
-        "en": "Datapoint groups now switch off in every zone, sliders know the device's own limits, and the tone controls no longer show doubled decibels on MusicCast.",
-        "de": "Datenpunktgruppen schalten jetzt in jeder Zone ab, Schieberegler kennen die Gerätegrenzen, und die Tonregelung zeigt auf MusicCast keine doppelten Dezibel mehr.",
-        "ru": "Группы точек данных теперь отключаются во всех зонах, ползунки знают пределы устройства, а регуляторы тембра больше не показывают удвоенные децибелы на MusicCast.",
-        "pt": "Os grupos de pontos de dados desligam-se agora em todas as zonas, os cursores conhecem os limites do aparelho e os controlos de tom já não mostram decibéis duplicados no MusicCast.",
-        "nl": "Datapuntgroepen schakelen nu in elke zone uit, schuifregelaars kennen de grenzen van het apparaat en de toonregeling toont op MusicCast geen dubbele decibels meer.",
-        "fr": "Les groupes de points de données se désactivent dans chaque zone, les curseurs connaissent les limites de l'appareil et les réglages de tonalité n'affichent plus de décibels doublés sur MusicCast.",
-        "it": "I gruppi di datapoint ora si disattivano in ogni zona, i cursori conoscono i limiti dell'apparecchio e i controlli di tono non mostrano più decibel raddoppiati su MusicCast.",
-        "es": "Los grupos de puntos de datos ahora se desactivan en todas las zonas, los deslizadores conocen los límites del aparato y los controles de tono ya no muestran decibelios duplicados en MusicCast.",
-        "pl": "Grupy punktów danych wyłączają się teraz w każdej strefie, suwaki znają granice urządzenia, a regulacja barwy nie pokazuje już podwojonych decybeli na MusicCast.",
-        "uk": "Групи точок даних тепер вимикаються в кожній зоні, повзунки знають межі пристрою, а регулятори тембру більше не показують подвоєні децибели на MusicCast.",
-        "zh-cn": "数据点分组现在可在每个区域关闭，滑块知晓设备自身的取值范围，音调控制在 MusicCast 上不再显示翻倍的分贝值。"
       }
     },
     "titleLang": {
