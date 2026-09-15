@@ -1,0 +1,16 @@
+{
+  "_comment": "Adapter-specific declarations for the fleet tooling (Entwicklung/scripts). They live HERE so that a change in this adapter never touches the locked tooling. Readers: sync-iopackage-from-i18n.py (manifestI18n, release gate B03) and submit-stable.py (forumThread). Keys starting with an underscore are comments.",
+  "manifestI18n": {
+    "_comment": "instanceObjects id -> key in admin/i18n/<lang>.json. Every manifest object needs a `name` entry (an object without one is a structural error, and so is an entry whose object no longer exists); `desc` only where the name does not already say it - an empty desc beats an invented sentence.",
+    "_note": "The five instance objects carry translation objects (name migration 2026-09-02). Since 2026-09-03 the keys are IDENTIFIERS like in the whole fleet (gate `audit_i18n_keys`) - before, the key was literally the English text.",
+    "name": {
+      "info": "information",
+      "info.connection": "deviceOrServiceConnected",
+      "info.devicesTotal": "devicesTotal",
+      "info.devicesOnline": "devicesOnline",
+      "info.devicesAllOnline": "allDevicesOnline"
+    },
+    "desc": {}
+  },
+  "forumThread": null
+}
