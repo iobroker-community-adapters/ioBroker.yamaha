@@ -74,8 +74,7 @@ Details on all settings, the object tree and the ports the adapter uses are in t
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
-
-### **WORK IN PROGRESS**
+### 2.10.0 (2026-09-15)
 
 - (krobipd) Fixed: A receiver the search found is searched for again after it moved to another address — until now that only worked for receivers found at start-up
 - (krobipd) Fixed: A receiver that is unplugged or switched off at the mains now shows as disconnected within about 90 seconds instead of staying green for many minutes
@@ -121,12 +120,6 @@ Details on all settings, the object tree and the ports the adapter uses are in t
 - (krobipd) Changed: The datapoints actualVolume, actualVolumeMode and inputText are gone — volume and input carry the same information
 - (krobipd) Changed: After this update every receiver is asked about its abilities once more, so the first start takes a little longer than usual
 - (krobipd) Fixed: A DAB receiver no longer logs a warning on every tuner poll — the frequency datapoint was limited to the FM band while the receiver reported DAB frequencies
-
-### 2.7.2 (2026-09-09)
-
-- (krobipd) Fixed: The volume readout now follows the scale the receiver is actually showing, so a receiver set to numbers no longer reports them as decibels.
-- (krobipd) New: Inputs now appear under the names the receiver carries for them, so a socket named “Apple TV” reads that way instead of HDMI1.
-- (krobipd) Changed: After this update every receiver is asked about its abilities once more, so the first start takes a little longer than usual.
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 

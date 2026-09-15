@@ -1,4 +1,10 @@
 # Older changes
+## 2.7.2 (2026-09-09)
+
+- (krobipd) Fixed: The volume readout now follows the scale the receiver is actually showing, so a receiver set to numbers no longer reports them as decibels.
+- (krobipd) New: Inputs now appear under the names the receiver carries for them, so a socket named “Apple TV” reads that way instead of HDMI1.
+- (krobipd) Changed: After this update every receiver is asked about its abilities once more, so the first start takes a little longer than usual.
+
 ## 2.7.1 (2026-09-09)
 
 - (krobipd) Improved: The first connection asks a receiver only what its generation can answer, so zones, trigger sockets and per-input settings follow the device, not a catalogue.

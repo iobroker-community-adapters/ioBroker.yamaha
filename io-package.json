@@ -1,10 +1,10 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "2.9.2",
+    "version": "2.10.0",
     "nogit": true,
     "news": {
-      "NEXT": {
+      "2.10.0": {
         "en": "A receiver that is unplugged or stops answering now shows as disconnected within seconds instead of many minutes, and a written value is confirmed as soon as the receiver took it.",
         "de": "Ein ausgesteckter oder verstummter Receiver gilt jetzt nach Sekunden statt nach vielen Minuten als getrennt, und ein geschriebener Wert wird bestätigt, sobald der Receiver ihn übernommen hat.",
         "ru": "Отключённый или переставший отвечать ресивер теперь считается отсоединённым через секунды, а не минуты, а записанное значение подтверждается, как только ресивер его принял.",
