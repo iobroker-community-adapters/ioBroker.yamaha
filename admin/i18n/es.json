@@ -15,6 +15,8 @@
   "invalidName": "Este nombre no se puede utilizar",
   "networkInterfaceLabel": "Interfaz de red",
   "networkInterfaceTooltip": "Selecciona la interfaz de red para el descubrimiento y control LAN. Mantén el valor predeterminado (0.0.0.0 = todas) salvo que este host tenga varias interfaces.",
+  "pushPortLabel": "Puerto de eventos MusicCast",
+  "pushPortTooltip": "Puerto UDP en el que los dispositivos MusicCast envían sus cambios. Fijado por el protocolo; una segunda instancia en este host no puede compartirlo.",
   "dmAdd": "Añadir dispositivo Yamaha",
   "dmEdit": "Editar",
   "dmDelete": "Eliminar",
@@ -608,6 +610,5 @@
   "discoveryAuto": "Automático (mientras la lista esté vacía)",
   "discoveryAlways": "Siempre",
   "discoveryNever": "Nunca",
-  "sourceManual": "Introducido a mano",
-  "sourceDiscovered": "Encontrado en la red"
+  "volumeDeviceScale": "Volumen en la escala propia del receptor"
 }

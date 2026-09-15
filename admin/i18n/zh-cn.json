@@ -15,6 +15,8 @@
   "invalidName": "此名称不可用",
   "networkInterfaceLabel": "网络接口",
   "networkInterfaceTooltip": "选择用于局域网发现和控制的网络接口。除非此主机有多个网络接口，否则请保留默认值（0.0.0.0 = 所有接口）。",
+  "pushPortLabel": "MusicCast 事件端口",
+  "pushPortTooltip": "MusicCast 设备向此 UDP 端口推送其变化。由协议固定；同一主机上的第二个实例无法共用。",
   "dmAdd": "添加 Yamaha 设备",
   "dmEdit": "编辑",
   "dmDelete": "删除",
@@ -608,6 +610,5 @@
   "discoveryAuto": "自动（列表为空时）",
   "discoveryAlways": "始终",
   "discoveryNever": "从不",
-  "sourceManual": "手动添加",
-  "sourceDiscovered": "网络中发现"
+  "volumeDeviceScale": "音量采用接收机自身的刻度"
 }

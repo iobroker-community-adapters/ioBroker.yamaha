@@ -15,6 +15,8 @@
   "invalidName": "This name cannot be used",
   "networkInterfaceLabel": "Network Interface",
   "networkInterfaceTooltip": "Select the network interface for LAN discovery and control. Keep the default (0.0.0.0 = all interfaces) unless this host has multiple network interfaces.",
+  "pushPortLabel": "MusicCast event port",
+  "pushPortTooltip": "UDP port on which MusicCast devices push their changes. Fixed by the protocol; a second instance on this host cannot share it.",
   "dmAdd": "Add Yamaha device",
   "dmEdit": "Edit",
   "dmDelete": "Delete",
@@ -608,6 +610,5 @@
   "discoveryAuto": "Automatically (while the list is empty)",
   "discoveryAlways": "Always",
   "discoveryNever": "Never",
-  "sourceManual": "Entered by hand",
-  "sourceDiscovered": "Found on the network"
+  "volumeDeviceScale": "Volume in the receiver's own scale"
 }

@@ -15,6 +15,8 @@
   "invalidName": "Dieser Name kann nicht verwendet werden",
   "networkInterfaceLabel": "Netzwerk-Interface",
   "networkInterfaceTooltip": "Netzwerk-Interface für LAN-Discovery und -Steuerung. Standard (0.0.0.0 = alle Interfaces) beibehalten, außer dieser Host hat mehrere Netzwerk-Interfaces.",
+  "pushPortLabel": "MusicCast-Ereignisport",
+  "pushPortTooltip": "UDP-Port, an den MusicCast-Geräte ihre Änderungen melden. Vom Protokoll festgelegt; eine zweite Instanz auf diesem Host kann ihn nicht mitbenutzen.",
   "dmAdd": "Yamaha-Gerät hinzufügen",
   "dmEdit": "Bearbeiten",
   "dmDelete": "Löschen",
@@ -608,6 +610,5 @@
   "discoveryAuto": "Automatisch (solange die Liste leer ist)",
   "discoveryAlways": "Immer",
   "discoveryNever": "Nie",
-  "sourceManual": "Von Hand eingetragen",
-  "sourceDiscovered": "Im Netzwerk gefunden"
+  "volumeDeviceScale": "Lautstärke in der Skala des Receivers"
 }

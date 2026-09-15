@@ -6,7 +6,7 @@ import {
   type InstanceDetails,
 } from "@iobroker/dm-utils";
 import { t } from "./lib/i18n";
-import { iconForModel } from "./lib/device-type";
+import { iconForModel, volumeIndicatorIcon } from "./lib/device-type";
 import { readDiscovered, readIgnored, writeDiscovered, writeIgnored } from "./lib/discovered-store";
 import { discoveredStoreDeps, ignoredStoreDeps } from "./lib/discovered-store-deps";
 import type { DeviceRecord } from "./lib/types";
@@ -201,20 +201,12 @@ export class YamahaDeviceManagement extends DeviceManagement {
       status: {
         connection: { stateId: `${base}.info.connection`, mapping: { true: "connected", false: "disconnected" } },
       },
-      // No icon on the transports: the indicator icon accepts only a reserved/`fa-*`/`data:`/URL
-      // name, so a plain "wifi" rendered as a "?". The transport label as text plus a green "on"
-      // colour carries it; `hideIfEmpty` shows only the protocols this device is connected over.
+      // No icon on the transports: dm-gui-components renders exactly 17 `fa-*` names (its own
+      // whitelist, `getFaIcon`) and inline `data:image/svg+xml` URLs — anything else is a "?".
+      // The transport label as text plus a green "on" colour carries it; `hideIfEmpty` shows
+      // only the protocols this device is connected over. Own glyphs go in as data URLs, drawn
+      // with `currentColor` so they take the indicator's colour (see device-type.ts).
       indicators: [
-        // Where the address came from. The adapter treats the two differently — only a device
-        // the search found is looked for again when it drops off — so the card says which it is.
-        {
-          id: "device-source",
-          value: true,
-          icon: card.source === "manual" ? "fa-pencil" : "fa-search",
-          tooltip: t(card.source === "manual" ? "sourceManual" : "sourceDiscovered"),
-          color: "primary",
-          order: 10,
-        },
         ...TRANSPORTS.map(tr => ({
           id: `transport-${tr.id}`,
           value: { stateId: `${base}.info.transports.${tr.id}` },
@@ -224,17 +216,20 @@ export class YamahaDeviceManagement extends DeviceManagement {
         })),
         // The percent setting is SET in the edit dialog, but it has to be READABLE at a glance —
         // otherwise the only way to find out what a receiver's volume datapoints carry is to open
-        // a dialog. Shown only while it is on (`hideIfEmpty`), so a card in the default state
-        // stays as quiet as before; deliberately not clickable, the dialog stays the one place
-        // that sets it.
+        // a dialog. With percent on, the glyph is a speaker with a percent sign and the main
+        // zone's live volume stands under it as "42 %"; in the device's own scale the plain
+        // speaker stands alone. Always shown (`hideIfEmpty: false` — 0 % is a value), and given
+        // a colour for BOTH states so the glyph does not grey out at the bottom of the scale.
+        // Deliberately not clickable: the dialog stays the one place that sets it.
         {
-          id: "volume-percent",
-          value: percent,
-          icon: "fa-percent",
-          text: "0–100 %",
+          id: "volume",
+          icon: volumeIndicatorIcon(percent),
+          value: percent ? { stateId: `${base}.volume` } : true,
+          ...(percent ? { showValue: true, unit: "%" } : {}),
+          hideIfEmpty: false,
+          color: "primary" as const,
           colorOn: "primary" as const,
-          tooltip: t("volumeAsPercent"),
-          hideIfEmpty: true,
+          tooltip: t(percent ? "volumeAsPercent" : "volumeDeviceScale"),
           order: 20,
         },
       ],

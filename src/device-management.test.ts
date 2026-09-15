@@ -1,3 +1,4 @@
+import { volumeIndicatorIcon } from "./lib/device-type";
 import type { Mock } from "vitest";
 // t() returns the key (with its arguments when it has any) so the tests assert on
 // the message CHOICE, not on wording.
@@ -339,12 +340,11 @@ describe("YamahaDeviceManagement", () => {
     expect((await cards([]))[0].actions.map(a => a.id)).toEqual(["edit", "delete"]);
   });
 
-  it("says on the card where the address came from", async () => {
-    const manual = (await cards([living]))[0].indicators.find(i => i.id === "device-source");
-    expect(manual).toMatchObject({ icon: "fa-pencil", tooltip: "sourceManual" });
+  it("carries no marker for where the address came from — the card is about the device, not the table", async () => {
+    // 2.9.x showed a pencil or a magnifier; removed on request 2026-09-15.
+    expect((await cards([living]))[0].indicators.map(i => i.id)).not.toContain("device-source");
     store.devices = [{ id: "rx-v685", ip: "192.168.1.20" }];
-    const found = (await cards([]))[0].indicators.find(i => i.id === "device-source");
-    expect(found).toMatchObject({ icon: "fa-search", tooltip: "sourceDiscovered" });
+    expect((await cards([]))[0].indicators.map(i => i.id)).not.toContain("device-source");
   });
 
   it("declares the v3 API and a single add action", () => {
@@ -597,16 +597,30 @@ describe("YamahaDeviceManagement", () => {
       expect(on[0].controls ?? []).toEqual([]);
     });
 
-    it("but the card SHOWS the setting, so nobody has to open a dialog to find out", async () => {
+    it("but the card SHOWS the setting: a speaker with a percent sign and the live volume as 'NN %'", async () => {
       const on = await cards([living], {}, { "yamaha.0.Living_room": { native: { volumeAsPercent: true } } });
-      expect(on[0].indicators.find(i => i.id === "volume-percent")).toMatchObject({ value: true, text: "0–100 %" });
+      const volume = on[0].indicators.find(i => i.id === "volume");
+      expect(volume).toMatchObject({
+        value: { stateId: "yamaha.0.Living_room.volume" },
+        showValue: true,
+        unit: "%",
+        hideIfEmpty: false,
+        tooltip: "volumeAsPercent",
+      });
+      expect(volume?.icon).toBe(volumeIndicatorIcon(true));
+      expect(volume?.icon).toMatch(/^data:image\/svg\+xml;base64,/);
+      // 0 % is a value, not "nothing": the glyph must not grey out at the bottom of the scale.
+      expect(volume).toMatchObject({ color: "primary", colorOn: "primary" });
     });
 
-    it("and stays quiet about it in the default state", async () => {
+    it("and in the device's own scale it shows the plain speaker, without a number", async () => {
       const off = await cards([living], {}, { "yamaha.0.Living_room": { native: {} } });
-      // `hideIfEmpty` does the hiding in the GUI; the value is what decides it, so that is what
-      // this pins — a badge that is always `true` would show on every card.
-      expect(off[0].indicators.find(i => i.id === "volume-percent")).toMatchObject({ value: false });
+      const volume = off[0].indicators.find(i => i.id === "volume");
+      expect(volume).toMatchObject({ value: true, hideIfEmpty: false, tooltip: "volumeDeviceScale" });
+      expect(volume?.icon).toBe(volumeIndicatorIcon(false));
+      expect(volume).not.toHaveProperty("showValue");
+      expect(volume).not.toHaveProperty("unit");
+      expect(off[0].indicators.map(i => i.id)).not.toContain("volume-percent");
     });
 
     it("a device added through the dialog starts with the answer the user gave", async () => {

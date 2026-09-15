@@ -5,8 +5,8 @@
  * falls back to the AV-receiver silhouette (the by-far most common device class).
  *
  * The icons are original minimal silhouettes (no Yamaha trademarks), inlined as data
- * URLs so they render everywhere an object icon is shown (admin tree, device cards,
- * visualizations) without serving files.
+ * URLs so they render everywhere an object icon is shown (admin tree, device cards) without
+ * serving files — and in the row's own colour, see {@link pictogram}.
  */
 
 /** The five device classes the icons distinguish. */
@@ -55,50 +55,105 @@ function svgUrl(svg: string): string {
   return `data:image/svg+xml;base64,${Buffer.from(svg, "utf8").toString("base64")}`;
 }
 
-/** Shared stroke styling: a mid grey that stays readable on light and dark admin themes. */
-const S = 'fill="none" stroke="#8a8f98" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"';
+/**
+ * The root every pictogram shares, drawn for the 28 px the object tree renders it at. The
+ * admin inlines a `data:image/svg+xml` value into the row (adapter-react-v5 `Icon.tsx`), so
+ * `currentColor` inherits the row's text colour — the same file is dark on the light themes
+ * and light on the dark ones; a fixed colour was invisible in one family. The row's CSS zeroes
+ * the width of `rect`, `image` and `use` inside inlined markup (`cellId: '& *': width: initial`),
+ * so bodies are ROUNDED-RECTANGLE PATHS, and only `path` and `circle` are used.
+ *
+ * @param strokeWidth the stroke width for the 64-unit viewBox
+ * @param body the SVG elements inside the root
+ * @returns the SVG markup
+ */
+function pictogram(strokeWidth: number, body: string): string {
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" stroke="currentColor" ` +
+    `stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`
+  );
+}
 
-/** One minimal silhouette per device class (original artwork, 24x24 viewBox). */
+/**
+ * A rounded rectangle as a path (see {@link pictogram} for why not `<rect>`).
+ *
+ * @param x left edge
+ * @param y top edge
+ * @param w width
+ * @param h height
+ * @param r corner radius
+ * @returns the path element
+ */
+function roundedBox(x: number, y: number, w: number, h: number, r: number): string {
+  return (
+    `<path d="M${x + r} ${y}h${w - 2 * r}a${r} ${r} 0 0 1 ${r} ${r}v${h - 2 * r}a${r} ${r} 0 0 1 -${r} ${r}` +
+    `h-${w - 2 * r}a${r} ${r} 0 0 1 -${r} -${r}v-${h - 2 * r}a${r} ${r} 0 0 1 ${r} -${r}z"/>`
+  );
+}
+
+/** One minimal silhouette per device class (original artwork, 64x64 viewBox, approved 2026-09-15). */
 export const DEVICE_TYPE_ICONS: Readonly<Record<DeviceType, string>> = {
-  // Wide box, display slit left, one big volume knob right.
+  // Wide box, display window left, one big volume knob right, two feet.
   avReceiver: svgUrl(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g ${S}>` +
-      `<rect x="2" y="7" width="20" height="10" rx="1.5"/>` +
-      `<rect x="5" y="10" width="7" height="2.4"/>` +
-      `<circle cx="17.5" cy="12" r="2.4"/>` +
-      `<path d="M5 17v2M19 17v2"/></g></svg>`,
+    pictogram(
+      4,
+      `${roundedBox(4, 18, 56, 28, 5)}${roundedBox(12, 27, 18, 8, 2)}<circle cx="46" cy="32" r="7"/><path d="M14 46v6M50 46v6"/>`,
+    ),
   ),
-  // Box with two large knobs and a tuning scale line.
+  // Wide box with a tuning scale line and two equal knobs.
   stereoReceiver: svgUrl(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g ${S}>` +
-      `<rect x="2" y="7" width="20" height="10" rx="1.5"/>` +
-      `<path d="M5 10h14"/>` +
-      `<circle cx="8" cy="13.5" r="1.8"/>` +
-      `<circle cx="16" cy="13.5" r="1.8"/>` +
-      `<path d="M5 17v2M19 17v2"/></g></svg>`,
+    pictogram(
+      4,
+      `${roundedBox(4, 18, 56, 28, 5)}<path d="M12 26h40"/><circle cx="21" cy="37" r="5"/><circle cx="43" cy="37" r="5"/><path d="M14 46v6M50 46v6"/>`,
+    ),
   ),
   // Upright cabinet: small tweeter above a large woofer.
   speaker: svgUrl(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g ${S}>` +
-      `<rect x="7" y="3" width="10" height="18" rx="1.5"/>` +
-      `<circle cx="12" cy="8" r="1.3"/>` +
-      `<circle cx="12" cy="15" r="3"/></g></svg>`,
+    pictogram(4, `${roundedBox(17, 6, 30, 52, 5)}<circle cx="32" cy="19" r="4"/><circle cx="32" cy="40" r="9"/>`),
   ),
-  // Flat long bar with a speaker-grille dot row.
+  // Flat long bar with a row of grille dots.
   soundbar: svgUrl(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g ${S}>` +
-      `<rect x="2" y="10" width="20" height="5" rx="2.5"/>` +
-      `<path d="M6 12.5h.01M9.5 12.5h.01M13 12.5h.01M16.5 12.5h.01" stroke-width="2"/></g></svg>`,
+    pictogram(
+      4,
+      `${roundedBox(4, 24, 56, 16, 8)}<path d="M17 32h.01M27 32h.01M37 32h.01M47 32h.01" stroke-width="5"/>`,
+    ),
   ),
   // Box with a disc (ring + hub) and the tray slit.
   cdSystem: svgUrl(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g ${S}>` +
-      `<rect x="2" y="6" width="20" height="12" rx="1.5"/>` +
-      `<circle cx="12" cy="12" r="3.2"/>` +
-      `<circle cx="12" cy="12" r="0.8"/>` +
-      `<path d="M5 15.5h4"/></g></svg>`,
+    pictogram(
+      4,
+      `${roundedBox(4, 14, 56, 36, 5)}<circle cx="32" cy="32" r="10"/><circle cx="32" cy="32" r="2.5"/><path d="M11 44h8"/>`,
+    ),
   ),
 };
+
+/** The volume indicator on the device card: a speaker with a percent sign, or the speaker alone. */
+const VOLUME_INDICATOR_ICONS: Readonly<Record<"percent" | "device", string>> = {
+  percent: svgUrl(
+    pictogram(
+      5,
+      `<path d="M6 24h9l11-9v34l-11-9H6z"/><circle cx="41" cy="20" r="6"/><circle cx="55" cy="44" r="6"/><path d="M57 12L39 52"/>`,
+    ),
+  ),
+  device: svgUrl(
+    pictogram(
+      5,
+      `<path d="M12 24h9l11-9v34l-11-9h-9z"/><path d="M41 23a13 13 0 0 1 0 18"/><path d="M49 15a24 24 0 0 1 0 34"/>`,
+    ),
+  ),
+};
+
+/**
+ * The glyph of the card's volume indicator. The device manager renders a data URL inline with
+ * the indicator's colour (`react-inlinesvg`, `style={{ color }}`), so the same `currentColor`
+ * rule as for the object-tree pictograms applies.
+ *
+ * @param percent whether the device's volume datapoints carry 0–100 %
+ * @returns the data URL — speaker with a percent sign, or the speaker alone
+ */
+export function volumeIndicatorIcon(percent: boolean): string {
+  return VOLUME_INDICATOR_ICONS[percent ? "percent" : "device"];
+}
 
 /**
  * The icon data URL for a reported model name — the one-call form the adapter uses.

@@ -1,8 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none" stroke="#3b4046" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none" stroke="#78869a" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
   <title>ioBroker.yamaha</title>
-  <!-- Fixed theme-aware colours — never currentColor: embedded as <img> that falls back to
-       black and disappears on dark backgrounds. Dark strokes on light, light strokes on dark. -->
-  <style>@media (prefers-color-scheme: dark) { svg { stroke: #d6dade; } }</style>
+  <!-- ONE fixed colour, never currentColor: the logo is embedded as <img>, which inherits
+       nothing. A media query would follow the OPERATING SYSTEM's scheme, not the Admin's
+       theme (the two disagree all the time), so the colour has to read on both: #78869a is
+       3.7:1 on white and 3.6–5.1:1 on the Admin's dark backgrounds (#303030 … #121212). -->
   <circle cx="256" cy="256" r="234" />
   <path d="M236,104 L236,212 L256,246 L276,212 L276,104" transform="rotate(0 256 256)" />
   <path d="M236,104 L236,212 L256,246 L276,212 L276,104" transform="rotate(120 256 256)" />
