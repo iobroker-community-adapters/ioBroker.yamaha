@@ -12,5 +12,14 @@
     },
     "desc": {}
   },
-  "forumThread": null
+  "forumThread": null,
+  "_listenPorts": "The MusicCast event receiver: every MusicCast device pushes its changes to UDP 41100 of the client that subscribed (X-AppPort header) - the port is fixed by the protocol, and the adapter binds all interfaces. native.port/native.bind carry it so the Admin's port check sees the instance; the code binds the constant.",
+  "listenPorts": [
+    {
+      "key": "port",
+      "protocol": "udp",
+      "role": "primary",
+      "fixed": 41100
+    }
+  ]
 }

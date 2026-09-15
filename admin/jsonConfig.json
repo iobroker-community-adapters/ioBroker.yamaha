@@ -81,6 +81,19 @@
       "lg": 6,
       "xl": 6
     },
+    "port": {
+      "type": "port",
+      "label": "pushPortLabel",
+      "tooltip": "pushPortTooltip",
+      "disabled": true,
+      "min": 41100,
+      "max": 41100,
+      "xs": 12,
+      "sm": 12,
+      "md": 6,
+      "lg": 6,
+      "xl": 6
+    },
     "xmlPollInterval": {
       "newLine": true,
       "type": "number",

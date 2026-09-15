@@ -50,6 +50,9 @@ adapter is not running is only found again by the next network search.
 - **Network interface** — leave it empty and the search leaves through every network card of
   your ioBroker machine. Only set it if your server sits in several networks and the search
   should use a particular one. It has no effect on the receivers themselves.
+- **MusicCast event port** — shown, not editable: MusicCast devices push their changes to UDP
+  port 41100, the protocol fixes it. It is there so the Admin can warn you when a second
+  instance on the same host would take the port.
 - **Poll interval (older devices)** — how often a receiver from before 2010 is asked for its
   state. Those models cannot report changes by themselves. 60 seconds is a sensible default;
   a shorter interval means more network traffic for little gain.

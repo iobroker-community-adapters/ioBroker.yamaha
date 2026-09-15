@@ -775,13 +775,91 @@ drei Plan-Aussagen wurden beim Bauen WIDERLEGT und sind hier in ihrer gemessenen
   (`auto` + gefüllte Tabelle; der Nutzer hat das nicht gewählt, und ohne die Zeile erklärt ihm nichts,
   warum die Hälfte seiner Receiver verstummt ist), `info` bei `never`, denn das hat er gewählt.
 
+## Audit 2026-09-15 (v2.10.0) — Regeln, die im Code stehen müssen
+
+Bericht `../../Ressourcen/yamaha/audit-2026-09-15.md` (F1–F19, O1–O4, Icons), Plan-Kopie
+`docs/superpowers/plans/2026-09-15-audit-2-10-0.md`. Alle Funde umgesetzt; Mutationswelle 17
+(`mutations_yamaha_2026-09-15-w17.py`, 35 Nadeln) hält sie.
+
+- **Jeder Datenpunkt-Write geht über `setStateChangedAsync`** (`writeState`, main.ts). Der js-controller
+  vergleicht gegen die DATENBANK und schreibt nur, wenn `val` ODER `ack` sich unterscheidet (7.2.2
+  `_setStateChangedHelper`, am Quelltext gelesen). Der `ack`-Wechsel einer Benutzer-Schreibung IST die
+  Invalidierung: ein verlorener Befehl lässt den Datenpunkt bei `ack:false`, das nächste gleiche Echo mit
+  `ack:true` ist eine Änderung und korrigiert ihn. Deshalb KEINE eigene „zuletzt geschrieben"-Karte
+  (Flotten-Regel, `CLAUDE_PATTERNS.md` § Anzeigen nur bei Änderung) — die erste Fassung dieses Plans
+  hatte genau die gebaut. Preis: je Meldung eine Lesung statt eines Writes; Annahme: yamaha hat keinen
+  periodischen Messwert, jeder Datenpunkt spiegelt einen Gerätezustand, ein unveränderter behält über
+  einen Neustart seinen `ts`. Bedingungslos bleiben nur der Abgemeldet-Stempel in `startDevice`,
+  `markIdleDevicesOffline`, `info.ip` und die Abschalt-Writes in `onUnload`. ⚠️ Die Test-Attrappe in
+  `main.test.ts` VERGLEICHT wirklich (val + ack gegen ihren Speicher) und führt `writes` — niemals
+  `setStateChangedAsync` auf `setState` delegieren, sonst ist jede Schreibzahl-Zusicherung blind.
+- **`reportConnection` meldet JEDEN Fehlversuch weiter, nicht nur Übergänge.** Die Wiedersuche
+  (`scheduleRediscovery`) ist ein Ein-Schuss-Timer, den nur der nächste `reportConnection(false)` neu
+  scharf macht; ein „nur bei Übergang" dort tötet die Wiedersuche still. Die Schreibzahl regelt die DB.
+- **Die Modell-Updater (Icon, Name) laufen einmal je Lauf und bei Modellwechsel** (`lastModel`, im
+  `setStateAck`-Trichter). Per Lauf, nicht aus der DB: neue Piktogramme müssen jede Bestandsanlage
+  einmal erreichen; `removeDevice` vergisst den Eintrag mit.
+- **Die Wiedersuche kennt jedes gefundene Gerät.** `runDiscovery` stempelt sein Ergebnis selbst
+  (`source: "discovered"`) — bis 2.10.0 stempelte nur `onReady` über `unionDevices`, die
+  Hintergrundsuche startete ungestempelte Geräte, und `scheduleRediscovery` kehrte an der
+  Herkunftsprüfung um. Die Datei `discovered.json` wird nur bei ÄNDERUNG geschrieben (JSON-Vergleich vor
+  dem Stempeln).
+- **Löschen wartet auf den laufenden Verbindungsversuch.** `stopDevice` setzt nur `closed`; ein Versuch
+  jenseits seines `await` baut den Baum zu Ende. `removeDevice` greift den Supervisor VOR `stopDevice`
+  und wartet `settled()` (Deckel 30 s über `awaitSettled`); `persistDeviceNative` verwirft Patches für
+  ein Gerät ohne `deviceRecords`-Eintrag. Die Supervisor-Nadel Q8 sitzt auf `attemptOnce` — der Wrapper
+  heißt `runAttempt`, `attemptOnce` bleibt textgleich.
+- **YNCA: zwei unbeantwortete Keepalives = Drop** (`KEEPALIVE_MISSES_BEFORE_DROP`), Zähler-Reset auf JEDES
+  Byte in `handleData` — während ein getakteter Sweep das Gate belegt, halten dessen Antworten den Zähler
+  auf 0, ein falscher Drop bei beschäftigtem Gate ist damit ausgeschlossen. Der Drop läuft über
+  `socket.destroy()` → `close` → bestehender Drop-Pfad mit `lastError`. Dazu `setKeepAlive(true, 10 s)`
+  und `setNoDelay(true)` im `connect`-Handler der `defaultFactory`.
+- **YXC: ein Transportfehler prüft sofort, ob das Gerät lebt.** `YxcTransportError` (http-client) für
+  Request-Fehler und Timeout — eine Ablehnung (`response_code` ≠ 0) bleibt `Error` und ist Lebensbeweis.
+  `checkAliveAfter` im `catch` von `applyCommand` und `applySystemWrite`, einflugig (`aliveCheck`):
+  ein `refreshZone(zones[0])`, bei false `dropDetector.report()`.
+- **Ohne Push wird jede Schreibung sofort zurückgelesen** (`readBackAfter`, YXC nur bei
+  `!pushActive`; XML immer, `applyCommand(command, zone)` → `refreshZone`). Der XML-Zonenname liegt nicht
+  im Zonenstatus: er wird nach Erfolg selbst bestätigt UND in die Probe-Memory geschrieben
+  (`probeMemory.set("xmlZoneName:<zone>")`) — sonst bringt der nächste Start den alten Namen zurück.
+- **Der Sekunden-Push ist kein Refresh-Signal.** Ein `netusb`/`cd`-Block, der nur `play_time`/`total_time`
+  trägt (`isClockOnly`, push.ts), geht über `mediaTimeUpdates` → `routePlayerBlock(parseYxcPlayInfo)`
+  direkt in die Spieler-Datenpunkte; `mediaToRefresh` lässt ihn aus. Ein Block mit irgendeinem anderen
+  Feld ist weiter ein `getPlayInfo`.
+- **Push-Port belegt → alle 5 min neu probieren** (`BIND_RETRY_DELAY_MS`), Warnung einmal, danach debug,
+  eine Info-Zeile bei der Rückkehr; die Controller schalten von selbst um (`pushActive` je Keepalive).
+- **Schalter-Datenpunkte lesen Wörter** (`coerceBool`, value-coerce.ts): boolean durch, `true/on/1`,
+  `false/off/0` (getrimmt, klein), Zahl ≠ 0; alles andere → `undefined` → Schreibung verworfen. An den
+  vier Toren NACH `isWritableValue`: `yncaCommand` (`spec.kind === "onoff"`), `stateToXml`, `stateToYxc`,
+  `applySystemWrite` (`common.type === "boolean"`). `Boolean("false")` ist true — das schaltete EIN.
+- **Piktogramme nach Flotten-Rezept** (`CLAUDE_PATTERNS.md` § Geräte-Piktogramme, device-type.ts):
+  Inline-Data-URI, 64er viewBox, Strich 4, NUR `currentColor`/`none`, NUR `path`/`circle` (Körper als
+  Rundrechteck-Pfad `roundedBox` — die Zellen-CSS des Admin nullt die Breite von `rect`). Der Admin
+  invertiert NICHT; eine feste Farbe war in einer Theme-Familie unsichtbar. Karten-Indikatoren: die
+  dm-gui-components rendern genau 17 `fa-*`-Namen und Data-URIs (`react-inlinesvg`, `style={{color}}`),
+  alles andere ist ein „?". Der Lautstärke-Indikator `volume`: Glyphe `volumeIndicatorIcon(percent)`,
+  im Prozent-Modus `value: { stateId: <dev>.volume }` + `showValue` + `unit "%"`, sonst `value: true`;
+  `hideIfEmpty: false` (0 % ist ein Wert), `color` UND `colorOn` (0 % darf nicht ergrauen). Der
+  Herkunfts-Marker (Stift/Lupe) ist weg (krobi 2026-09-15). Logo `admin/yamaha.svg`: EINE feste Farbe
+  `#78869a` (≥ 3,4 : 1 auf jedem Admin-Hintergrund), kein `<style>` — eine Media-Query folgt dem OS,
+  nicht dem Admin-Theme.
+- **Listen-Port-Standard** (`CLAUDE_PATTERNS.md` § Listen-Port-Deklaration): `fleet.json listenPorts`
+  `port/udp/primary/fixed 41100`, `io-package native.port = 41100` + `native.bind = "0.0.0.0"`,
+  jsonConfig-Feld `port` (`type: port`, `disabled: true`, min = max). Der Code bindet weiter die
+  Konstante `YXC_PUSH_PORT` — `native.port`/`bind` sind der Marker für die Admin-Portprüfung. Keine
+  Umbenennung, also kein Migrationshelfer.
+- **Toter Code entfernt:** `ID_MAP`-Fallback im YNCA-Controller (`writeMap` ist leer bis `start()`;
+  Schreibungen erreichen einen Controller erst über ein verbundenes Handle). `partnerClient`
+  (attempt-device.ts) ist die testbare Form des Multiroom-Link-Ziels.
+
 ## Stand
 
 Alle sieben Aufbauphasen abgeschlossen, danach der Multi-Transport-Neubau (alle antwortenden Protokolle
 parallel auf einem Objektbaum statt „erster Transport gewinnt"), der thematisch gruppierte Objektbaum mit
 abschaltbaren Datenpunktgruppen und die Wiedergabe als Media-Player (Alexa/Google/VIS). Der Adapter ist
 funktional vollständig (3 Protokolle, Discovery, Migration, Härtung). Versionshistorie im README
-`## Changelog` (nicht hier dupliziert).
+`## Changelog` (nicht hier dupliziert). **Jüngster Stand: v2.10.0 (2026-09-15)** — Audit F1–F19/O1–O4
+umgesetzt, Piktogramme nach Flotten-Rezept, Listen-Port-Standard (s. Abschnitt „Audit 2026-09-15").
 
 **Erledigt mit v2.3.0–v2.3.3:** die Datenpunkt-Beschreibungen. Jeder Datenpunkt und jeder Ordner
 trägt eine Erklärung in elf Sprachen (`descKey` am Katalog-Eintrag, `CHANNEL_DESC_KEYS` an den

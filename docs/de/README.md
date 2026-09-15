@@ -52,6 +52,9 @@ umzieht, während der Adapter nicht läuft, findet aber erst die nächste Netzwe
 - **Netzwerk-Schnittstelle** — leer lassen, dann verlässt die Suche jede Netzwerkkarte Ihres
   ioBroker-Rechners. Nur setzen, wenn Ihr Server in mehreren Netzen hängt und die Suche eine
   bestimmte nehmen soll. Auf die Receiver selbst hat die Einstellung keine Wirkung.
+- **MusicCast-Ereignisport** — wird angezeigt, ist nicht änderbar: MusicCast-Geräte melden ihre
+  Änderungen an den UDP-Port 41100, das legt das Protokoll fest. Das Feld ist da, damit der Admin
+  warnen kann, wenn eine zweite Instanz auf demselben Rechner den Port belegen würde.
 - **Abfrageintervall (ältere Geräte)** — wie oft ein Receiver von vor 2010 nach seinem Zustand
   gefragt wird. Diese Modelle können Änderungen nicht von sich aus melden. 60 Sekunden sind
   sinnvoll; ein kürzeres Intervall erzeugt mehr Netzverkehr bei wenig Gewinn.
