@@ -146,6 +146,9 @@ Inline-SVG-Silhouetten (KEINE Yamaha-Marke); gesetzt am Device-Objekt über den 
 Geräte-Karte (`device-management.ts` liest das Modell in `loadDevices`). `ensureDeviceHeader`
 sät die Standard-Silhouette schon beim Anlegen — aber nur wenn noch KEINE gesetzt ist, sonst
 fiele eine Soundbar bei jedem Start bis zum ersten Modell-Report auf den Receiver zurück.
+**Seit 2.10.0** sind die Silhouetten Piktogramme nach Flotten-Rezept (`currentColor`, nur
+path/circle), und `ensureDeviceHeader` HEILT ein Icon, das keines der fünf aktuellen ist, aus
+dem im Profil gemerkten Modell — Details im Abschnitt „Audit 2026-09-15 (v2.10.0)".
 **Anzeigename am Device-Objekt** (`updateDeviceLabel` + `pure-helpers.nextDeviceLabel`): der
 Migrationspfad taufte das Gerät auf seine IP (der Alt-Adapter kannte nichts anderes), und aus
 dem Namen entsteht die Objekt-ID — die bleibt für immer, sonst löscht `staleObjects` den ganzen
@@ -156,8 +159,10 @@ selbst geschriebene Name — ein User-Name bleibt, deshalb dort bewusst OHNE `pr
 Vorbedingung prüft `nextDeviceLabel`. Die Geräte-Karte titelt nach dem Objektnamen, nicht nach dem
 Tabelleneintrag (der bleibt unangetastet, er bildet die ID). Das Adapter-Logo
 `admin/yamaha.svg` behält das etablierte Kreis-Stimmgabel-Motiv (krobi-Entscheidung — Ersatzmotiv
-abgelehnt) mit THEME-FESTEN Farben: dunkle Striche als Basis, helle via Medien-Abfrage im SVG —
-nie `currentColor` (rendert als `<img>` schwarz, unsichtbar im Dunkel-Modus; der Alt-Fehler).
+abgelehnt) mit THEME-FESTEN Farben — nie `currentColor` (rendert als `<img>` schwarz, unsichtbar
+im Dunkel-Modus; der Alt-Fehler). Bis 2.9.2 dunkle Striche plus helle via Medien-Abfrage im SVG;
+**seit 2.10.0 EINE feste Farbe `#78869a`** ohne `<style>`, weil die Media-Query dem OS folgt, nicht
+dem Admin-Theme (Abschnitt „Audit 2026-09-15").
 YXC-HTTP über den eigenen `yxc/http-client.ts`
 (keine externe Lib; die Command-URLs sind unit-verifiziert). **Jede YXC-Anfrage trägt die Kopfzeilen
 `X-AppName`/`X-AppPort` (`YXC_SUBSCRIPTION_HEADERS`) — DAS ist die UDP-Push-Anmeldung; ohne sie sendet kein
@@ -483,7 +488,9 @@ entscheidet etwas ([[feedback_user_hardware_ist_sample]]). Alle Funde sind umges
   bleibt — er gehört dem Dialog. **Gesetzt an einer Stelle, ABLESBAR auf der Kachel:** ein
   Indikator `volume-percent` in der Statuszeile (`fa-percent` + „0–100 %"), der nur erscheint,
   solange die Einstellung an ist (`hideIfEmpty`) und bewusst NICHT klickbar ist — sonst wäre er
-  wieder ein zweiter Setz-Weg. Sein Wert kommt aus dem Geräte-Objekt, das `loadDevices` für den
+  wieder ein zweiter Setz-Weg (Stand 2.9.2; **seit 2.10.0** heißt er `volume`, ist eine
+  Lautsprecher-Glyphe, die IMMER steht, und zeigt im Prozent-Modus den Live-Wert der Hauptzone —
+  Abschnitt „Audit 2026-09-15"). Sein Wert kommt aus dem Geräte-Objekt, das `loadDevices` für den
   Anzeigenamen ohnehin liest (kein zusätzlicher Abruf). Umlegen baut die Lautstärke-Datenpunkte DIESES Geräts sofort neu und zieht
   den anliegenden Wert nach — in dieser Reihenfolge, sonst steht ein Wert außerhalb der Grenzen seiner
   gerade gewechselten Definition und der js-controller meldet es bei jedem Abruf (der Fehler, den 2.8.0
@@ -696,7 +703,8 @@ drei Plan-Aussagen wurden beim Bauen WIDERLEGT und sind hier in ihrer gemessenen
   ABGELEITET und GLOBAL („die Tabelle ist gefüllt, also sind alle Karten manuell"), also wusste kein
   einzelnes Gerät etwas über sich. Daran hängen drei Dinge: das kleine Symbol auf der Kachel
   (`fa-pencil` / `fa-search` — Indikator-Icons nehmen nur reservierte Namen, `fa-*`, `data:` oder URLs,
-  ein schlichtes Wort rendert als „?"), die Wiederfind-Suche (nur ein GEFUNDENES Gerät kann umgezogen
+  ein schlichtes Wort rendert als „?"; **das Symbol ist seit 2.10.0 weg**, krobi 2026-09-15 — die
+  Herkunft lebt weiter in `native.source`), die Wiederfind-Suche (nur ein GEFUNDENES Gerät kann umgezogen
   sein; ein manuelles ist an seiner getippten Adresse einfach aus) und der Bearbeiten-Pfad.
 - **Bearbeiten gibt es auf JEDER Karte, und es ändert nie die Objekt-Id.** Die Id kommt aus dem Namen der
   Tabellenzeile, deshalb trägt die Zeile die Id, und was der Nutzer tippt wird der ANZEIGENAME am
@@ -779,7 +787,7 @@ drei Plan-Aussagen wurden beim Bauen WIDERLEGT und sind hier in ihrer gemessenen
 
 Bericht `../../Ressourcen/yamaha/audit-2026-09-15.md` (F1–F19, O1–O4, Icons), Plan-Kopie
 `docs/superpowers/plans/2026-09-15-audit-2-10-0.md`. Alle Funde umgesetzt; Mutationswelle 17
-(`mutations_yamaha_2026-09-15-w17.py`, 35 Nadeln) hält sie.
+(`mutations_yamaha_2026-09-15-w17.py`, 37 Nadeln W1–W37, alle gefangen) hält sie.
 
 - **Jeder Datenpunkt-Write geht über `setStateChangedAsync`** (`writeState`, main.ts). Der js-controller
   vergleicht gegen die DATENBANK und schreibt nur, wenn `val` ODER `ack` sich unterscheidet (7.2.2
@@ -1154,8 +1162,8 @@ in ein öffentliches Repo.
   bis 2.1.1 lief er lokal nie mit, obwohl die CI ihn fährt (`testing-action-adapter` ruft
   `test:unit` UND `test:integration`). `passWithNoTests` ist raus — ein nicht mehr greifendes
   `include` muss rot melden, nicht grün.
-- **Mutationstabellen** (`../../Ressourcen/iobroker-entwicklung/mutation-testing/`) — **SIEBZEHN Dateien, und das
-  Gate prüft ALLE.** ⚠️ Die fünf Wellen-Originale `mutations_yamaha.py` · `…2.py` · `…3.py` · `…4.py` ·
+- **Mutationstabellen** (`../../Ressourcen/iobroker-entwicklung/mutation-testing/`) — **ACHTZEHN Dateien (seit
+  Welle 17, 2026-09-15), und das Gate prüft ALLE.** ⚠️ Die fünf Wellen-Originale `mutations_yamaha.py` · `…2.py` · `…3.py` · `…4.py` ·
   `…5.py` (36/32/26/11/11 Nadeln) leben NEBEN der Sammeltabelle `mutations_yamaha_all.py`, die dieselben
   Regeln zusammenfasst — sie sind kein Altbestand. Wer nur die datierten Tabellen nachzieht, lässt fünf
   Nadeln ins Leere zeigen und merkt es erst, wenn D09 den Release stoppt (2026-09-07: R5, R7, V7, V8, X4 —
@@ -1181,7 +1189,10 @@ in ein öffentliches Repo.
   - `mutations_yamaha_2026-09-12-w15.py` (Welle 15 = der Bugfix 2.9.1 „die Netzsuche abzuschalten ist
     kein Löschbefehl", IDs R17–R22; 6/6 gefangen im ersten Lauf)
   - `mutations_yamaha_2026-09-12-w16.py` (Welle 16 = 2.9.2: EINE Setz-Stelle für den Prozent-Schalter
-    plus die Kachel-Anzeige, IDs R23–R24; 2/2 gefangen). Läufer `mutation-test.py`. Nadeln sind
+    plus die Kachel-Anzeige, IDs R23–R24; 2/2 gefangen)
+  - `mutations_yamaha_2026-09-15-w17.py` (Welle 17 = das Audit 2026-09-15 / 2.10.0, IDs W1–W37; 37/37
+    gefangen — W4 fällt nur, weil die Test-Attrappe `setStateChangedAsync` WIRKLICH vergleicht, W36/W37
+    halten die Icon-Heilung; vier Bestandsnadeln neu verankert: N7, V6, R23, Z3). Läufer `mutation-test.py`. Nadeln sind
     exakte Quellzeilen — nach Prettier-Umbrüchen oder Refactorings ZUERST den Nadel-Vorab-Check (jede Nadel
     genau 1×), sonst misst der Lauf nichts. Zwei äquivalente Mutanten (X2, X4 — unerreichbare
     Invarianten-Wächter, im Quelltext begründet); die vier anderen vom 22.08. (M9, X1, Y1, Y13) waren toter
