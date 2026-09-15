@@ -840,7 +840,12 @@ Bericht `../../Ressourcen/yamaha/audit-2026-09-15.md` (F1–F19, O1–O4, Icons)
   alles andere ist ein „?". Der Lautstärke-Indikator `volume`: Glyphe `volumeIndicatorIcon(percent)`,
   im Prozent-Modus `value: { stateId: <dev>.volume }` + `showValue` + `unit "%"`, sonst `value: true`;
   `hideIfEmpty: false` (0 % ist ein Wert), `color` UND `colorOn` (0 % darf nicht ergrauen). Der
-  Herkunfts-Marker (Stift/Lupe) ist weg (krobi 2026-09-15). Logo `admin/yamaha.svg`: EINE feste Farbe
+  Herkunfts-Marker (Stift/Lupe) ist weg (krobi 2026-09-15). **Heilung beim Start** (`ensureDeviceHeader`): trägt das
+  Geräteobjekt ein Icon, das keines der fünf aktuellen ist (die 2.9.x-Zeichnung), wird es durch das Piktogramm des im
+  Profil gemerkten Modells ersetzt (`rememberedModel` aus `profileIdentityOf`) — live gesehen: krobis Receiver war beim
+  Update aus, ohne Heilung hätte er die alte Zeichnung bis zum nächsten Modell-Report behalten. Ein aktuelles Icon
+  bleibt unangetastet und wird in `deviceIcons` gemerkt, damit der Modell-Report derselben Klasse nichts schreibt.
+  Logo `admin/yamaha.svg`: EINE feste Farbe
   `#78869a` (≥ 3,4 : 1 auf jedem Admin-Hintergrund), kein `<style>` — eine Media-Query folgt dem OS,
   nicht dem Admin-Theme.
 - **Listen-Port-Standard** (`CLAUDE_PATTERNS.md` § Listen-Port-Deklaration): `fleet.json listenPorts`

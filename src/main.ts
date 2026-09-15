@@ -14,7 +14,7 @@ import {
   volumeBoundsOf,
   type VolumeBounds,
 } from "./lib/catalog/volume-percent";
-import { iconForModel } from "./lib/device-type";
+import { DEVICE_TYPE_ICONS, iconForModel } from "./lib/device-type";
 import {
   BOUND_FIELDS,
   type BoundFields,
@@ -45,7 +45,7 @@ import { ReconnectStrategy } from "./lib/lifecycle/reconnect-strategy";
 import { ReachabilityDedup } from "./lib/lifecycle/reachability-dedup";
 import type { YncaSubunitCache } from "./lib/ynca/subunit-cache";
 import type { ProbeMemory } from "./lib/lifecycle/probe-memory";
-import { DeviceProfileStore } from "./lib/lifecycle/capability-profile";
+import { DeviceProfileStore, loadCapabilityProfile, profileIdentityOf } from "./lib/lifecycle/capability-profile";
 
 /** Supervisor reconnect backoff bounds (exponential: 1s, 2s … capped at 60s). */
 const RECONNECT_BASE_MS = 1000;
@@ -55,6 +55,25 @@ const REMOVE_SETTLE_CAP_MS = 30000;
 
 /** The adapter's own object tree as `getAdapterObjectsAsync` lists it. */
 type AdapterObjects = Awaited<ReturnType<ioBroker.Adapter["getAdapterObjectsAsync"]>>;
+
+/** The pictograms THIS version draws — anything else in `common.icon` is an older adapter's drawing. */
+const CURRENT_PICTOGRAMS: ReadonlySet<string> = new Set(Object.values(DEVICE_TYPE_ICONS));
+
+/**
+ * The model a device object's capability profile remembers, for a device that is off right now.
+ * Any transport's identity will do — the model name is the same on all three.
+ *
+ * @param native the device object's native part (untrusted storage)
+ * @returns the remembered model name, or undefined
+ */
+function rememberedModel(native: Record<string, unknown> | undefined): string | undefined {
+  try {
+    const identity = profileIdentityOf(loadCapabilityProfile(native).memory ?? {});
+    return identity.ynca?.model ?? identity.yxc?.model ?? identity.xml?.model;
+  } catch {
+    return undefined;
+  }
+}
 
 /** Abort a discovery description fetch after this long, so a dead device cannot hang it. */
 const FETCH_TIMEOUT_MS = 4000;
@@ -1202,9 +1221,13 @@ export class Yamaha extends utils.Adapter {
     // a name the user changed.
     // A device that has not reported its model yet would sit in the tree without any
     // symbol — an upgraded instance shows that on every start before the first report,
-    // and a device that never answers shows it for good. Seed the default silhouette,
-    // but only when there is none: overwriting would flip a soundbar back to the
-    // receiver default for the seconds until its model arrives.
+    // and a device that never answers shows it for good. Seed the pictogram of the model the
+    // capability profile remembers (the default silhouette without one) when there is none —
+    // and ALSO when the stored one is an older adapter's drawing: the 2.9.x icons had a fixed
+    // colour and a <rect> body, invisible in the dark themes, and a device that is off during
+    // the update would keep that drawing until it reports its model (2.10.0, seen live). A
+    // current pictogram is left alone: overwriting would flip a soundbar back to the receiver
+    // default for the seconds until its model arrives.
     let icon: string | undefined;
     // Percent is a DEVICE setting since 2.9.0. A device that carries no answer yet inherits the
     // instance-wide switch 2.8.0 had, so an upgrade keeps every receiver exactly as it was, and
@@ -1212,7 +1235,14 @@ export class Yamaha extends utils.Adapter {
     let percent = this.legacyVolumePercent;
     try {
       const existing = await this.getObjectAsync(deviceId);
-      icon = existing?.common?.icon ? undefined : iconForModel(undefined);
+      const stored = existing?.common?.icon;
+      if (typeof stored === "string" && CURRENT_PICTOGRAMS.has(stored)) {
+        // Remembered, so a later model report of the same class writes nothing.
+        this.deviceIcons.set(deviceId, stored);
+      } else {
+        icon = iconForModel(rememberedModel(existing?.native));
+        this.deviceIcons.set(deviceId, icon);
+      }
       const own = (existing?.native as { volumeAsPercent?: unknown } | undefined)?.volumeAsPercent;
       if (typeof own === "boolean") {
         percent = own;

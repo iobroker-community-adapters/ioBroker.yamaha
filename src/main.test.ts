@@ -318,7 +318,7 @@ vi.mock("./lib/yxc/push-receiver", () => ({
 
 import { Yamaha } from "./main";
 import { DISCOVERY_SCHEMA } from "./lib/lifecycle/discovery-schema";
-import { iconForModel } from "./lib/device-type";
+import { DEVICE_TYPE_ICONS, iconForModel } from "./lib/device-type";
 import { MAX_HTTP_BODY_BYTES } from "./lib/util";
 import { writeDiscovered } from "./lib/discovered-store";
 import type { ConnectionHandle } from "./lib/controller";
@@ -1534,6 +1534,52 @@ describe("Yamaha transport plumbing", () => {
     // Without this an upgraded instance shows a device with no symbol at all until the
     // first model report, and a device that never answers keeps showing none.
     expect((ctx.i.objects.get("Living_room")?.common as { icon?: string }).icon).toBe(iconForModel(undefined));
+  });
+
+  it("replaces an older adapter's drawing on an OFFLINE device with the pictogram of its remembered model", async () => {
+    // krobi's receiver was off during the 2.10.0 update: its device object carried the 2.9.x icon
+    // (fixed colour, <rect> body — invisible in the dark themes) and no model report was coming.
+    // The capability profile knows the model even so.
+    const oldIcon = `data:image/svg+xml;base64,${Buffer.from(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect x="2" y="7"/></svg>',
+    ).toString("base64")}`;
+    const ctx = setup({}, { failIds: ["Living_room"] });
+    ctx.i.objects.set("Living_room", {
+      type: "device",
+      common: { name: "Living room", icon: oldIcon },
+      native: {
+        capabilityProfile: JSON.stringify({
+          schema: 3,
+          adapterVersion: "2.9.2",
+          learnedAt: "2026-09-11T16:15:58.609Z",
+          identity: { ynca: { model: "YSP-1600", firmware: "1.0" } },
+          memory: { yncaCapabilities: { model: "YSP-1600", firmware: "1.0", subunits: {} } },
+        }),
+      },
+    });
+    await ctx.i.onReady();
+    await flush();
+    expect((ctx.i.objects.get("Living_room")?.common as { icon?: string }).icon).toBe(DEVICE_TYPE_ICONS.soundbar);
+  });
+
+  it("leaves a current pictogram alone at start and does not rewrite it on the model report", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room", {
+      type: "device",
+      common: { name: "Living room", icon: DEVICE_TYPE_ICONS.avReceiver },
+      native: {},
+    });
+    const extendObject = (ctx.i as unknown as { extendObject: ReturnType<typeof vi.fn> }).extendObject;
+    await ctx.i.onReady();
+    await flush();
+    const setStateAck = ctx.calls[0].deps.setStateAck as (id: string, value: unknown) => void;
+    setStateAck("Living_room.info.model", "RX-V6A");
+    await flush();
+    const iconWrites = extendObject.mock.calls.filter(
+      c => c[0] === "Living_room" && (c[1] as { common?: { icon?: unknown } }).common?.icon !== undefined,
+    );
+    expect(iconWrites).toEqual([]);
+    expect((ctx.i.objects.get("Living_room")?.common as { icon?: string }).icon).toBe(DEVICE_TYPE_ICONS.avReceiver);
   });
 
   it("hands the attempt the shared push receiver and the other devices' IPs", async () => {
