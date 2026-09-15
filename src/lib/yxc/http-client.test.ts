@@ -1,7 +1,7 @@
 import { createServer, type IncomingHttpHeaders } from "node:http";
 import { once } from "node:events";
 import type { AddressInfo } from "node:net";
-import { isWriteCommand, YamahaYxcClient, YXC_SUBSCRIPTION_HEADERS } from "./http-client";
+import { isWriteCommand, YamahaYxcClient, YxcTransportError, YXC_SUBSCRIPTION_HEADERS } from "./http-client";
 
 /**
  * Capture the command path each method builds, to verify URL construction against the
@@ -297,6 +297,42 @@ describe("gate priority classification", () => {
     }
     for (const path of ["/system/getFeatures", "/main/getStatus", "/netusb/getPlayInfo"]) {
       expect(isWriteCommand(path), path).toBe(false);
+    }
+  });
+});
+
+describe("YamahaYxcClient transport failures (audit 2026-09-15)", () => {
+  test("a connection nobody answers is a transport error, not a device refusal", async () => {
+    // Bind a port, then close it: whatever the OS hands out is refused from then on.
+    const server = createServer();
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const { port } = server.address() as AddressInfo;
+    server.close();
+    await once(server, "close");
+    const client = new YamahaYxcClient(`127.0.0.1:${port}`);
+    const failure = await client.getStatus("main").catch((e: unknown) => e);
+    expect(failure).toBeInstanceOf(YxcTransportError);
+    expect((failure as YxcTransportError).message).toContain("/main/getStatus");
+    expect((failure as YxcTransportError).cause).toBeInstanceOf(Error);
+  });
+
+  test("a device refusal stays an ordinary error — the device answered, it just said no", async () => {
+    const server = createServer((_req, res) => {
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ response_code: 3 }));
+    });
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const { port } = server.address() as AddressInfo;
+    try {
+      const client = new YamahaYxcClient(`127.0.0.1:${port}`);
+      const failure = await client.getStatus("main").catch((e: unknown) => e);
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure).not.toBeInstanceOf(YxcTransportError);
+      expect((failure as Error).message).toContain("response_code 3");
+    } finally {
+      server.close();
     }
   });
 });

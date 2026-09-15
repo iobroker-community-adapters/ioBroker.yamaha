@@ -250,6 +250,17 @@ describe("YNCA catalog", () => {
     expect(english).toContain("Input name (NET RADIO)");
   });
 
+  test("a switch reads the words and numbers a script writes — 'false' switches OFF, junk sends nothing", () => {
+    const map = idToEntry(buildYncaCatalog().filter(e => e.subunit === "MAIN"));
+    expect(yncaCommand("power", "false", map)).toMatchObject({ func: "PWR", value: "Standby" });
+    expect(yncaCommand("power", "off", map)).toMatchObject({ func: "PWR", value: "Standby" });
+    expect(yncaCommand("power", "0", map)).toMatchObject({ func: "PWR", value: "Standby" });
+    expect(yncaCommand("power", 0, map)).toMatchObject({ func: "PWR", value: "Standby" });
+    expect(yncaCommand("power", "on", map)).toMatchObject({ func: "PWR", value: "On" });
+    expect(yncaCommand("mute", "False", map)).toMatchObject({ func: "MUTE", value: "Off" });
+    expect(yncaCommand("power", "maybe", map)).toBeUndefined();
+  });
+
   test("a coded write accepts the number as text, and still refuses junk", () => {
     // ioBroker lets anything write a state: a VIS widget or a script may send "0" for a
     // numeric coded state. That has to reach the device as its command word, while a

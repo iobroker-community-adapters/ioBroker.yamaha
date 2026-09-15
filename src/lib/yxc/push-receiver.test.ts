@@ -74,24 +74,37 @@ class FakeSocket implements YxcPushSocket {
 function makeDeps(): {
   deps: ConstructorParameters<typeof YxcPushReceiver>[0];
   warnings: string[];
+  infos: string[];
+  /** The delays the receiver asked for, in order. */
+  delays: number[];
+  cancelled: number;
   fireScheduled: () => void;
   scheduledCount: () => number;
 } {
   const warnings: string[] = [];
+  const infos: string[] = [];
+  const delays: number[] = [];
   const scheduled: Array<() => void> = [];
-  return {
+  const out = {
     warnings,
+    infos,
+    delays,
+    cancelled: 0,
     fireScheduled: () => scheduled.shift()?.(),
     scheduledCount: () => scheduled.length,
     deps: {
-      log: { debug: () => {}, warn: m => warnings.push(m) },
-      schedule: cb => {
+      log: { debug: () => {}, info: (m: string) => infos.push(m), warn: (m: string) => warnings.push(m) },
+      schedule: (cb: () => void, ms: number) => {
         scheduled.push(cb);
+        delays.push(ms);
         return scheduled.length as unknown as ioBroker.Timeout;
       },
-      cancel: () => {},
+      cancel: () => {
+        out.cancelled++;
+      },
     },
   };
+  return out;
 }
 
 describe("YxcPushReceiver", () => {
@@ -146,16 +159,54 @@ describe("YxcPushReceiver", () => {
     expect(called).toBe(false);
   });
 
-  test("a bind-time error warns, closes the socket and runs poll-only without a rebind", () => {
+  test("a bind-time error warns once, runs poll-only and tries the port again every five minutes", () => {
+    // The other MusicCast consumer holding the port may stop later; until 2.10.0 only a
+    // restart of this adapter ever found the port free again.
+    const sockets: FakeSocket[] = [];
+    const d = makeDeps();
+    const receiver = new YxcPushReceiver(d.deps, () => {
+      const s = new FakeSocket();
+      sockets.push(s);
+      return s;
+    });
+    receiver.start(); // bind, but 'listening' never fires → bind failed
+    sockets[0].emitError(new Error("EADDRINUSE"));
+    expect(d.warnings).toHaveLength(1);
+    expect(d.warnings[0]).toMatch(/unavailable/);
+    expect(sockets[0].closed).toBe(true); // closed, not orphaned
+    expect(receiver.isListening()).toBe(false);
+    expect(d.delays).toEqual([300000]);
+    // Still taken: no second warning, the next try is armed again.
+    d.fireScheduled();
+    sockets[1].emitError(new Error("EADDRINUSE"));
+    expect(d.warnings).toHaveLength(1);
+    expect(d.delays).toEqual([300000, 300000]);
+    // Free at last: listening, and one line says so.
+    d.fireScheduled();
+    sockets[2].emitListening();
+    expect(receiver.isListening()).toBe(true);
+    expect(d.infos).toHaveLength(1);
+    expect(d.infos[0]).toMatch(/41100/);
+    expect(d.scheduledCount()).toBe(0);
+  });
+
+  test("closing while a bind retry is pending cancels it", () => {
     const fake = new FakeSocket();
     const d = makeDeps();
     const receiver = new YxcPushReceiver(d.deps, () => fake);
-    receiver.start(); // bind, but 'listening' never fires → bind failed
+    receiver.start();
     fake.emitError(new Error("EADDRINUSE"));
-    expect(d.warnings).toHaveLength(1);
-    expect(d.warnings[0]).toMatch(/unavailable/);
-    expect(fake.closed).toBe(true); // closed, not orphaned
-    expect(d.scheduledCount()).toBe(0); // a bind failure is not retried
+    expect(d.scheduledCount()).toBe(1);
+    receiver.close();
+    expect(d.cancelled).toBeGreaterThanOrEqual(1);
+  });
+
+  test("the first successful bind says nothing at info — only a recovery does", () => {
+    const fake = new FakeSocket();
+    const d = makeDeps();
+    new YxcPushReceiver(d.deps, () => fake).start();
+    fake.emitListening();
+    expect(d.infos).toEqual([]);
   });
 
   test("a runtime error after listening closes the socket and rebinds a fresh one", () => {
@@ -195,7 +246,7 @@ describe("YxcPushReceiver on a real dgram socket", () => {
     const seen: Array<{ ip: string; payload: string }> = [];
     const logs: string[] = [];
     const receiver = new YxcPushReceiver({
-      log: { debug: m => logs.push(m), warn: m => logs.push(m) },
+      log: { debug: m => logs.push(m), info: m => logs.push(m), warn: m => logs.push(m) },
       schedule: () => 1 as unknown as ioBroker.Timeout,
       cancel: () => {},
     });
@@ -221,7 +272,7 @@ describe("YxcPushReceiver on a real dgram socket", () => {
   test("keeps the adapter running when the push port is already taken", () => {
     const logs: string[] = [];
     const receiver = new YxcPushReceiver({
-      log: { debug: m => logs.push(m), warn: m => logs.push(m) },
+      log: { debug: m => logs.push(m), info: m => logs.push(m), warn: m => logs.push(m) },
       schedule: () => 1 as unknown as ioBroker.Timeout,
       cancel: () => {},
     });

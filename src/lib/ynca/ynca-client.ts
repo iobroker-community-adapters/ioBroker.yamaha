@@ -35,6 +35,17 @@ const REFUSAL_ATTRIBUTION_MS = 2000;
  */
 const KEEPALIVE_INTERVAL_MS = 30000;
 
+/**
+ * Keepalive polls that may go unanswered before the socket is torn down. A receiver cut from
+ * the mains sends no FIN: without this count the socket stays "connected" until the kernel's
+ * retransmit timeout gives up — many minutes — and every command written meanwhile vanishes
+ * into the send buffer. Two misses = a drop within 90 s of the last byte.
+ */
+const KEEPALIVE_MISSES_BEFORE_DROP = 2;
+
+/** TCP keepalive probe delay, so the kernel itself notices a vanished peer (Node default: off). */
+const TCP_KEEPALIVE_DELAY_MS = 10000;
+
 /** Adapter-managed timers so the client leaks no native timers past onUnload. */
 export interface YncaTimers {
   /** Schedule a one-shot timer; returns a handle to cancel it. */
@@ -80,7 +91,13 @@ function defaultFactory(host: string, port: number): YncaSocket {
   // instead of hanging onReady. Cleared on connect; reconnect covers later drops.
   socket.setTimeout(CONNECT_TIMEOUT_MS);
   socket.on("timeout", () => socket.destroy(new Error("connect timeout")));
-  socket.on("connect", () => socket.setTimeout(0));
+  socket.on("connect", () => {
+    socket.setTimeout(0);
+    socket.setKeepAlive(true, TCP_KEEPALIVE_DELAY_MS);
+    // Commands are one-line writes paced 100 ms apart; Nagle would hold a follow-up line
+    // back for up to 40 ms waiting for the previous one's ACK.
+    socket.setNoDelay(true);
+  });
   return {
     write: data => {
       socket.write(data);
@@ -120,6 +137,8 @@ export class YncaClient {
   private everReachable = false;
   private closed = false;
   private keepaliveTimer: ioBroker.Timeout | undefined;
+  /** Keepalive polls sent since the last byte arrived — any byte counts, not just the answer. */
+  private unansweredKeepalives = 0;
   private lastError: Error | undefined;
   /** A genuine drop that fired before onDrop was registered — delivered once it is. */
   private pendingDrop = false;
@@ -174,6 +193,9 @@ export class YncaClient {
   }
 
   private handleData(chunk: string): void {
+    // Every byte is proof of life: while a paced sweep or refresh keeps the gate busy, its
+    // answers hold the counter at zero, so a busy socket is never mistaken for a dead one.
+    this.unansweredKeepalives = 0;
     for (const line of this.lineBuffer.push(chunk)) {
       const response = decodeLine(line);
       if (response.status === "ok") {
@@ -235,6 +257,16 @@ export class YncaClient {
     // keeps re-scheduling itself — an un-cancellable 30 s poll for the rest of the process.
     this.stopKeepalive();
     this.keepaliveTimer = this.timers.schedule(() => {
+      if (this.unansweredKeepalives >= KEEPALIVE_MISSES_BEFORE_DROP) {
+        // Torn down, not re-armed: the socket's close travels the usual drop path, and the
+        // supervisor reconnects — or keeps trying — from there.
+        this.lastError = new Error(
+          `keepalive unanswered ${KEEPALIVE_MISSES_BEFORE_DROP} times — the receiver went silent`,
+        );
+        this.socket?.destroy();
+        return;
+      }
+      this.unansweredKeepalives++;
       this.get("SYS", "MODELNAME");
       this.startKeepalive();
     }, KEEPALIVE_INTERVAL_MS);

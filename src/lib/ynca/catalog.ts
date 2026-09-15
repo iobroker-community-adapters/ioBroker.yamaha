@@ -1,6 +1,6 @@
 import { catalogToObjects, type StatesResolver } from "../catalog/build-objects";
 import type { CatalogEntry, ObjectDef } from "../catalog/types";
-import { decode, encode, formatWireNumber, isWritableValue, type ValueSpec } from "../catalog/value-coerce";
+import { coerceBool, decode, encode, formatWireNumber, isWritableValue, type ValueSpec } from "../catalog/value-coerce";
 import type { StateValue } from "../types";
 import type { YncaCapabilities } from "./capability";
 import type { I18nKey } from "../i18n";
@@ -3243,8 +3243,14 @@ export function yncaCommand(
   if (!isWritableValue(value, entry.spec.kind === "number" || entry.spec.kind === "code")) {
     return undefined;
   }
+  // A switch reads the words a script writes ("false", "off", "0") for what they mean — the
+  // encoder's truthiness test would put every non-empty string on the wire as On.
+  const input = entry.spec.kind === "onoff" ? coerceBool(value) : value;
+  if (input === undefined) {
+    return undefined;
+  }
   const wire = entry.wireEncode
-    ? entry.wireEncode(value as boolean | number | string)
-    : encode(entry.spec, value as boolean | number | string);
+    ? entry.wireEncode(input as boolean | number | string)
+    : encode(entry.spec, input as boolean | number | string);
   return { subunit: entry.subunit, func: entry.func, value: wire };
 }

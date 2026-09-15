@@ -27,13 +27,36 @@ vi.mock("@iobroker/adapter-core", () => {
     private key(id: string): string {
       return id.replace(`${this.namespace}.`, "");
     }
+    /** Every state write that REACHED the store, in order — `setState` always, `setStateChangedAsync` on change. */
+    public writes: string[] = [];
     public setState = vi.fn((id: string, state: unknown) => {
       if (this.setStateFail) {
         return Promise.reject(this.setStateFail);
       }
       const s = state as { val?: unknown; ack?: boolean };
       this.states.set(this.key(id), { val: s?.val, ack: s?.ack === true });
+      this.writes.push(this.key(id));
       return Promise.resolve();
+    });
+    /**
+     * The js-controller compare (7.2.2 `_setStateChangedHelper`): written when there is no old
+     * state, when `val` differs, or when `ack` differs; otherwise nothing reaches the store. Never
+     * delegated to `setState` — a fake that maps both calls onto one path makes every write-count
+     * assertion blind to which one the adapter uses.
+     */
+    public setStateChangedAsync = vi.fn((id: string, state: unknown) => {
+      if (this.setStateFail) {
+        return Promise.reject(this.setStateFail);
+      }
+      const s = state as { val?: unknown; ack?: boolean };
+      const old = this.states.get(this.key(id));
+      const ack = s?.ack === true;
+      if (old && old.val === s?.val && old.ack === ack) {
+        return Promise.resolve({ id, notChanged: true });
+      }
+      this.states.set(this.key(id), { val: s?.val, ack });
+      this.writes.push(this.key(id));
+      return Promise.resolve({ id, notChanged: false });
     });
     public getStateAsync = vi.fn((id: string) => Promise.resolve(this.states.get(this.key(id)) ?? null));
     public extendObject = vi.fn((id: string, obj: Record<string, unknown>) => {
@@ -340,6 +363,7 @@ function internalOf(adapter: Yamaha): {
   xmlPollIntervalMs(): number;
   objects: Map<string, Record<string, unknown>>;
   states: Map<string, { val: unknown; ack: boolean }>;
+  writes: string[];
   foreignObjects: Map<string, Record<string, unknown>>;
   config: Record<string, unknown>;
   subscribed: string[];
@@ -672,6 +696,52 @@ describe("Yamaha auto-discovery", () => {
     expect(ctx.i.objects.has("RX-V685")).toBe(false);
   });
 
+  it("waits for a running connection attempt before deleting the device's tree", async () => {
+    // `stopDevice` only marks the supervisor closed; an attempt past its await still builds the
+    // tree to the end. Deleted underneath it, the objects it writes afterwards survive as orphans.
+    mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+    let finish: (h: null) => void = () => {};
+    let deps: AttemptCall["deps"] | undefined;
+    const ctx = setup({ devices: [] });
+    mocks.attemptDevice.mockImplementation((_device: AttemptCall["device"], d: AttemptCall["deps"]) => {
+      deps = d;
+      return new Promise<null>(resolve => (finish = resolve));
+    });
+    await ctx.i.onReady();
+    await flush();
+    expect(deps).toBeDefined();
+    const removal = ctx.i.removeDevice("RX-V685");
+    await flush();
+    // The attempt is still inside its build: it writes one more object, then gives up.
+    await (deps?.upsertObject as (id: string, def: unknown) => Promise<void>)("RX-V685.volume", {
+      type: "state",
+      common: { name: "Volume", type: "number", role: "level.volume", read: true, write: true },
+      native: {},
+    });
+    expect(ctx.i.objects.has("RX-V685.volume")).toBe(true);
+    finish(null);
+    await removal;
+    expect(ctx.i.objects.has("RX-V685")).toBe(false);
+    expect(ctx.i.objects.has("RX-V685.volume")).toBe(false);
+  });
+
+  it("drops a native patch that arrives after the device was removed", async () => {
+    mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+    const ctx = setup({ devices: [] });
+    await ctx.i.onReady();
+    await flush();
+    await ctx.i.removeDevice("RX-V685");
+    const extendObject = (ctx.i as unknown as { extendObject: ReturnType<typeof vi.fn> }).extendObject;
+    extendObject.mockClear();
+    ctx.i.setTimeout.mockClear();
+    ctx.i.persistDeviceNative("RX-V685", { capabilityProfile: "{}" });
+    expect(ctx.i.pendingNative.has("RX-V685")).toBe(false);
+    expect(ctx.i.setTimeout).not.toHaveBeenCalled();
+    await flush();
+    expect(extendObject).not.toHaveBeenCalled();
+    expect(ctx.i.objects.has("RX-V685")).toBe(false);
+  });
+
   it("arms one throttled search while an auto-found device is offline", async () => {
     mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
     const ctx = setup({ devices: [] }, { failIds: ["RX-V685"] });
@@ -683,6 +753,62 @@ describe("Yamaha auto-discovery", () => {
     // A second drop must not stack a second search on top of the armed one.
     ctx.i.reportConnection("RX-V685", false);
     expect(armed()).toHaveLength(1);
+  });
+
+  it("arms the search for a device the BACKGROUND search found once that one goes offline", async () => {
+    // Until 2.10.0 only the records from onReady carried `source: "discovered"`; a device the
+    // background search added ran without it, and the rediscovery bailed on the source check —
+    // a newcomer that later moved to another address was never searched for again.
+    mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+    mocks.discoverYamaha.mockResolvedValue([{ ip: "192.168.1.21", name: "WX-021" }]);
+    const ctx = setup({ devices: [] }, { failIds: ["WX-021"] });
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.calls.map(c => c.device.id)).toContain("WX-021");
+    const armed = (): unknown[] => ctx.i.setTimeout.mock.calls.filter(c => Number(c[1]) > 200000);
+    expect(armed()).toHaveLength(1);
+  });
+
+  it("arms the search again for a remembered device the background search moved to a new address", async () => {
+    mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+    mocks.discoverYamaha.mockResolvedValue([{ ip: "192.168.1.30", name: "RX-V685" }]);
+    const ctx = setup({ devices: [] });
+    await ctx.i.onReady();
+    await flush();
+    // The move restarted the device at the new address (second attempt for the same id).
+    expect(ctx.calls.filter(c => c.device.id === "RX-V685").map(c => c.device.ip)).toEqual([
+      "192.168.1.20",
+      "192.168.1.30",
+    ]);
+    ctx.i.setTimeout.mockClear();
+    ctx.i.reportConnection("RX-V685", false);
+    const armed = (): unknown[] => ctx.i.setTimeout.mock.calls.filter(c => Number(c[1]) > 200000);
+    expect(armed()).toHaveLength(1);
+  });
+
+  it("rewrites the discovery file only when a search changed something", async () => {
+    // While a device is offline the search repeats every five minutes; an unchanged result
+    // must not rewrite an identical file each round.
+    mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+    mocks.discoverYamaha.mockResolvedValue([{ ip: "192.168.1.20", name: "RX-V685" }]);
+    const ctx = setup({ devices: [] }, { failIds: ["RX-V685"] });
+    await ctx.i.onReady();
+    await flush();
+    const searches = (): Array<[() => void, number]> =>
+      ctx.i.setTimeout.mock.calls.filter(c => Number(c[1]) > 200000) as Array<[() => void, number]>;
+    expect(searches()).toHaveLength(1);
+    expect(writeDiscovered).not.toHaveBeenCalled();
+    searches()[0][0]();
+    await flush();
+    expect(writeDiscovered).not.toHaveBeenCalled();
+    // The device moved: that is a change, and the file follows.
+    mocks.discoverYamaha.mockResolvedValue([{ ip: "192.168.1.30", name: "RX-V685" }]);
+    ctx.i.setTimeout.mockClear();
+    ctx.i.reportConnection("RX-V685", false);
+    searches()[0][0]();
+    await flush();
+    expect(writeDiscovered).toHaveBeenCalledTimes(1);
+    expect(writeDiscovered).toHaveBeenCalledWith({}, [{ id: "RX-V685", ip: "192.168.1.30" }]);
   });
 
   it("keeps running the remembered devices when the scan itself fails", async () => {
@@ -1380,6 +1506,27 @@ describe("Yamaha transport plumbing", () => {
     expect((ctx.i.objects.get("Living_room")?.common as { name?: string }).name).toBe("AVR Küche");
   });
 
+  it("never overwrites a multilingual name the user gave the device object", async () => {
+    // A name edited in the Admin can be a translation object; until 2.10.0 anything that was
+    // not a string counted as the adapter's own placeholder and was replaced.
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    const node = ctx.i.objects.get("Living_room") as { common: { name?: unknown } };
+    node.common.name = { en: "Kitchen AVR", de: "AVR Küche" };
+    const deps = ctx.calls[0].deps as unknown as {
+      setStateAck: (id: string, value: unknown) => void;
+      onDeviceName?: (name: string) => void;
+    };
+    deps.setStateAck("Living_room.info.model", "RX-V481");
+    deps.onDeviceName?.("Wohnzimmer");
+    await flush();
+    expect((ctx.i.objects.get("Living_room")?.common as { name?: unknown }).name).toEqual({
+      en: "Kitchen AVR",
+      de: "AVR Küche",
+    });
+  });
+
   it("seeds a device node with the default silhouette before any model is known", async () => {
     const ctx = setup();
     await ctx.i.onReady();
@@ -1513,9 +1660,14 @@ describe("Yamaha state changes", () => {
     expect(ctx.handles[0].changes).toEqual([]);
   });
 
-  it("does not throw for a write before anything connected", () => {
+  it("does not throw for a write before anything connected — and routes it nowhere", () => {
     const ctx = setup({ devices: [] });
     expect(() => ctx.i.onStateChange("yamaha.0.x.y.z", { val: 1, ack: false })).not.toThrow();
+    // No supervisor exists for "x": nothing is dispatched, and nothing is logged about it either
+    // (the supervisor's own "device offline" line needs a supervisor to say it).
+    expect(ctx.handles).toEqual([]);
+    expect(ctx.i.log.warn).not.toHaveBeenCalled();
+    expect(ctx.i.log.debug).not.toHaveBeenCalledWith(expect.stringContaining("x.y.z"));
   });
 });
 
@@ -2420,6 +2572,26 @@ describe("the device table and the network search side by side", () => {
     expect(started(ctx)).toEqual(["Found"]);
   });
 
+  it("counts the configured devices in the start-up line — the found ones report themselves", async () => {
+    mocks.discoveredStore.devices = [
+      { id: "Found", ip: "192.168.1.20" },
+      { id: "Other", ip: "192.168.1.21" },
+    ];
+    const ctx = setup({ devices: [{ name: "Typed", ip: "192.168.1.10" }], discovery: "always" });
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.i.log.info).toHaveBeenCalledWith("setting up 1 configured device(s)...");
+  });
+
+  it("reads the object tree once at start — the snapshot and the cleanup share the listing", async () => {
+    const ctx = setup();
+    const objectsRead = (ctx.i as unknown as { getAdapterObjectsAsync: ReturnType<typeof vi.fn> })
+      .getAdapterObjectsAsync;
+    await ctx.i.onReady();
+    await flush();
+    expect(objectsRead).toHaveBeenCalledTimes(1);
+  });
+
   it("records where each device came from, at the device object", async () => {
     mocks.discoveredStore.devices = [{ id: "Found", ip: "192.168.1.20" }];
     const ctx = setup({ devices: [{ name: "Typed", ip: "192.168.1.10" }], discovery: "always" });
@@ -2515,5 +2687,128 @@ describe("switching one device to percent while the adapter runs", () => {
     // Inherited AND written down: the next start reads the device's own answer, so turning one
     // device back does not get undone by the instance value still sitting there.
     expect((ctx.i.objects.get("Living_room")?.native as { volumeAsPercent?: boolean }).volumeAsPercent).toBe(true);
+  });
+});
+
+describe("Yamaha writes only what changed (audit 2026-09-15 — setStateChangedAsync)", () => {
+  /**
+   * Fire every pending supervisor retry timer (jittered 1 s, 2 s, 4 s … backoff) once.
+   *
+   * @param ctx the adapter under test
+   */
+  const retry = async (ctx: Ctx): Promise<void> => {
+    const pending = ctx.i.setTimeout.mock.calls.filter(c => Number(c[1]) > 0 && Number(c[1]) <= 60000);
+    ctx.i.setTimeout.mockClear();
+    for (const call of pending) {
+      (call[0] as () => void)();
+    }
+    await flush();
+  };
+  const writesOf = (ctx: Ctx, id: string): number => ctx.i.writes.filter(w => w === id).length;
+
+  it("stamps a device that never answers once — three failed attempts add no write", async () => {
+    const ctx = setup({}, { failIds: ["Living_room"] });
+    await ctx.i.onReady();
+    await flush();
+    await retry(ctx);
+    await retry(ctx);
+    await retry(ctx);
+    expect(ctx.calls.length).toBeGreaterThanOrEqual(4);
+    // The disconnected stamp before the first attempt is the one write; every failed attempt
+    // reports the same false again and the database already holds it.
+    expect(writesOf(ctx, "Living_room.info.connection")).toBe(1);
+    for (const proto of ["ynca", "yxc", "xml"]) {
+      expect(writesOf(ctx, `Living_room.info.transports.${proto}`)).toBe(1);
+    }
+    expect(writesOf(ctx, "info.connection")).toBe(1);
+    expect(writesOf(ctx, "info.devicesOnline")).toBe(1);
+    expect(writesOf(ctx, "info.devicesAllOnline")).toBe(1);
+    // The rediscovery arming and the reporting itself still happen on every attempt.
+    expect(ctx.i.states.get("Living_room.info.connection")).toEqual({ val: false, ack: true });
+  });
+
+  it("writes a repeated identical report once, and a changed one again", async () => {
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    const setStateAck = ctx.calls[0].deps.setStateAck as (id: string, value: unknown) => void;
+    setStateAck("Living_room.volume", -30);
+    setStateAck("Living_room.volume", -30);
+    setStateAck("Living_room.volume", -30);
+    await flush();
+    expect(writesOf(ctx, "Living_room.volume")).toBe(1);
+    setStateAck("Living_room.volume", -29);
+    await flush();
+    expect(writesOf(ctx, "Living_room.volume")).toBe(2);
+  });
+
+  it("confirms a user's write even when the device echoes the value it already had", async () => {
+    // A lost command leaves the datapoint at ack:false with the wished value; the next report
+    // carries the device's real value — written even if it equals the last acked one, because
+    // the acknowledgement itself is the change (js-controller compares ack too).
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    const setStateAck = ctx.calls[0].deps.setStateAck as (id: string, value: unknown) => void;
+    setStateAck("Living_room.power", false);
+    await flush();
+    ctx.i.states.set("Living_room.power", { val: false, ack: false });
+    setStateAck("Living_room.power", false);
+    await flush();
+    expect(writesOf(ctx, "Living_room.power")).toBe(2);
+    expect(ctx.i.states.get("Living_room.power")).toEqual({ val: false, ack: true });
+  });
+
+  it("does not rewrite a value the database still holds from the previous run", async () => {
+    const ctx = setup();
+    ctx.i.states.set("Living_room.power", { val: true, ack: true });
+    await ctx.i.onReady();
+    await flush();
+    const setStateAck = ctx.calls[0].deps.setStateAck as (id: string, value: unknown) => void;
+    setStateAck("Living_room.power", true);
+    await flush();
+    expect(writesOf(ctx, "Living_room.power")).toBe(0);
+    setStateAck("Living_room.power", false);
+    await flush();
+    expect(writesOf(ctx, "Living_room.power")).toBe(1);
+  });
+
+  it("runs the icon and name updaters on the first model report of a run and on a model change only", async () => {
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    const setStateAck = ctx.calls[0].deps.setStateAck as (id: string, value: unknown) => void;
+    const objectReads = (ctx.i as unknown as { getObjectAsync: ReturnType<typeof vi.fn> }).getObjectAsync;
+    objectReads.mockClear();
+    setStateAck("Living_room.info.model", "RX-V6A");
+    await flush();
+    const readsAfterFirst = objectReads.mock.calls.filter(c => c[0] === "Living_room").length;
+    expect(readsAfterFirst).toBeGreaterThanOrEqual(1);
+    // The YNCA keepalive re-reports the same model every 30 s — nothing to look up again.
+    setStateAck("Living_room.info.model", "RX-V6A");
+    setStateAck("Living_room.info.model", "RX-V6A");
+    await flush();
+    expect(objectReads.mock.calls.filter(c => c[0] === "Living_room")).toHaveLength(readsAfterFirst);
+    setStateAck("Living_room.info.model", "YAS-209");
+    await flush();
+    expect(objectReads.mock.calls.filter(c => c[0] === "Living_room").length).toBeGreaterThan(readsAfterFirst);
+    expect(ctx.i.objects.get("Living_room")?.common).toMatchObject({
+      icon: expect.stringContaining("data:image/svg+xml"),
+    });
+  });
+
+  it("forgets the model gate with the device, so a re-added device gets its icon again", async () => {
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    const setStateAck = ctx.calls[0].deps.setStateAck as (id: string, value: unknown) => void;
+    setStateAck("Living_room.info.model", "RX-V6A");
+    await flush();
+    await ctx.i.removeDevice("Living_room");
+    const objectReads = (ctx.i as unknown as { getObjectAsync: ReturnType<typeof vi.fn> }).getObjectAsync;
+    objectReads.mockClear();
+    setStateAck("Living_room.info.model", "RX-V6A");
+    await flush();
+    expect(objectReads.mock.calls.filter(c => c[0] === "Living_room").length).toBeGreaterThanOrEqual(1);
   });
 });

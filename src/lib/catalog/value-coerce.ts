@@ -219,6 +219,32 @@ export function isWritableValue(value: unknown, numeric: boolean): boolean {
   return Number.isFinite(Number(value));
 }
 
+/** The words a switch datapoint accepts besides a real boolean — compared lower-cased and trimmed. */
+const BOOL_WORDS: Record<string, boolean> = { true: true, on: true, 1: true, false: false, off: false, 0: false };
+
+/**
+ * Read a value written to a SWITCH datapoint. ioBroker lets anything write a state: a
+ * script or a widget may send the word "false", "off" or "0" — and `Boolean("false")` is
+ * true, so every such write switched the receiver ON (audit 2026-09-15). A boolean passes,
+ * the six words and a number are read for what they mean, anything else is dropped rather
+ * than guessed.
+ *
+ * @param value the value written to the state
+ * @returns the boolean it means, or undefined when it means nothing
+ */
+export function coerceBool(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return Number.isNaN(value) ? undefined : value !== 0;
+  }
+  if (typeof value === "string") {
+    return BOOL_WORDS[value.trim().toLowerCase()];
+  }
+  return undefined;
+}
+
 /**
  * Format a number the way the YNCA wire demands it: snapped to the step grid (when a
  * step is given) and with a FIXED decimal count — the reference behaviour of

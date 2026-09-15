@@ -37,7 +37,34 @@ describe("DeviceSupervisor", () => {
     await tick(); // attempt 3 → connected
 
     expect(attempts).toBe(3);
-    expect(connChanges[connChanges.length - 1]).toBe(true);
+    // Every attempt reports its result — the adapter's rediscovery timer is re-armed by each
+    // false, and the write behind it is deduplicated by the database, not here.
+    expect(connChanges).toEqual([false, false, true]);
+  });
+
+  test("settled() resolves only once the running attempt has finished", async () => {
+    let finish: (h: null) => void = () => {};
+    const supervisor = new DeviceSupervisor({
+      attempt: () => new Promise<null>(resolve => (finish = resolve)),
+      schedule: () => 1,
+      cancel: () => {},
+      onConnectionChange: () => {},
+      backoff: fastBackoff(),
+      log: silentLog,
+    });
+    // Nothing running yet: nothing to wait for.
+    await expect(supervisor.settled()).resolves.toBeUndefined();
+    supervisor.start();
+    let done = false;
+    void supervisor.settled().then(() => (done = true));
+    await tick();
+    expect(done).toBe(false);
+    supervisor.close();
+    finish(null);
+    await tick();
+    expect(done).toBe(true);
+    // Finished and closed: settled again resolves at once.
+    await expect(supervisor.settled()).resolves.toBeUndefined();
   });
 
   test("reconnects after the connection drops, reporting the state change both ways", async () => {

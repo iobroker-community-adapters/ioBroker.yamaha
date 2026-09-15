@@ -48,6 +48,8 @@ export class DeviceSupervisor {
   private handle: ConnectionHandle | undefined;
   private timer: unknown;
   private closed = false;
+  /** The attempt currently running, so a caller can wait for it before tearing the device down. */
+  private inFlight: Promise<void> | undefined;
 
   /**
    * @param deps the injected attempt/timer/report callbacks
@@ -56,7 +58,29 @@ export class DeviceSupervisor {
 
   /** Begin supervising: attempt now, then retry/reconnect as needed. */
   public start(): void {
-    void this.attemptOnce();
+    this.runAttempt();
+  }
+
+  /**
+   * Resolves once the attempt in flight (if any) has finished — connected, failed or closed.
+   * `close()` only marks the supervisor; an attempt that is already past its `await` still
+   * builds the device's object tree to the end. Deleting that tree while it is being built
+   * leaves orphans behind, so `removeDevice` waits here first.
+   *
+   * @returns a promise that settles with the running attempt, or at once when none runs
+   */
+  public settled(): Promise<void> {
+    return this.inFlight ?? Promise.resolve();
+  }
+
+  private runAttempt(): void {
+    const attempt = this.attemptOnce();
+    this.inFlight = attempt;
+    void attempt.finally(() => {
+      if (this.inFlight === attempt) {
+        this.inFlight = undefined;
+      }
+    });
   }
 
   /**
@@ -125,7 +149,7 @@ export class DeviceSupervisor {
   }
 
   private scheduleRetry(): void {
-    this.timer = this.deps.schedule(() => void this.attemptOnce(), this.deps.backoff.nextDelay());
+    this.timer = this.deps.schedule(() => this.runAttempt(), this.deps.backoff.nextDelay());
   }
 
   /** Stop supervising and close the connection. Synchronous — safe from onUnload. */

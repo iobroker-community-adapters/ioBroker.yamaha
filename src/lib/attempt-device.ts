@@ -105,6 +105,25 @@ export interface ConnectDeps {
 }
 
 /**
+ * Resolve another configured device's client for a multiroom link — never this device
+ * itself, and only an address this instance runs. The partner's own gate belongs to its own
+ * connection, so this one-off client stays ungated (a single link call, not a stream of
+ * commands).
+ *
+ * @param ownIp the address of the device asking
+ * @param knownDeviceIps every address this instance runs
+ * @param ip the address the link names
+ * @returns a client for the partner, or undefined when the address is not a partner
+ */
+export function partnerClient(
+  ownIp: string,
+  knownDeviceIps: ReadonlySet<string>,
+  ip: string,
+): YamahaYxcClient | undefined {
+  return ip !== ownIp && knownDeviceIps.has(ip) ? new YamahaYxcClient(ip) : undefined;
+}
+
+/**
  * Bring every answering transport online on ONE object tree. All candidates connect IN
  * PARALLEL (a YNCA connect timeout or long sweep no longer delays YXC/XML); the ones that
  * answer are handed to a single {@link MultiTransportHandle}, which unifies their catalogs
@@ -236,10 +255,7 @@ export function attemptDevice(device: DeviceRecord, deps: AttemptDeps): Promise<
     yxc.bind(
       new YxcDeviceController(device.id, {
         client: new YamahaYxcClient(device.ip, undefined, gate),
-        // Resolve another configured device's client for a multiroom link — never this device
-        // itself. The partner's own gate belongs to its own connection, so this one-off client
-        // stays ungated (a single link call, not a stream of commands).
-        clientFor: ip => (ip !== device.ip && deps.knownDeviceIps.has(ip) ? new YamahaYxcClient(ip) : undefined),
+        clientFor: ip => partnerClient(device.ip, deps.knownDeviceIps, ip),
         registerPush: onPush => deps.registerPush(device.ip, onPush),
         pushActive: deps.pushActive,
         probeMemory: deps.probeMemory,

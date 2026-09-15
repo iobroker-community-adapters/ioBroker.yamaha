@@ -13,6 +13,18 @@ describe("stateToXml", () => {
     expect(stateToXml("mute", false)).toEqual({ zone: "Main_Zone", inner: "<Volume><Mute>Off</Mute></Volume>" });
   });
 
+  test("a switch reads the words and numbers a script writes — 'false' switches OFF, junk sends nothing", () => {
+    const off = { zone: "Main_Zone", inner: "<Power_Control><Power>Standby</Power></Power_Control>" };
+    const on = { zone: "Main_Zone", inner: "<Power_Control><Power>On</Power></Power_Control>" };
+    expect(stateToXml("power", "false")).toEqual(off);
+    expect(stateToXml("power", "off")).toEqual(off);
+    expect(stateToXml("power", "0")).toEqual(off);
+    expect(stateToXml("power", 0)).toEqual(off);
+    expect(stateToXml("power", "on")).toEqual(on);
+    expect(stateToXml("power", true)).toEqual(on);
+    expect(stateToXml("power", "maybe")).toBeUndefined();
+  });
+
   test("maps volume from decibels to tenths in Val", () => {
     expect(stateToXml("volume", -30)).toEqual({
       zone: "Main_Zone",

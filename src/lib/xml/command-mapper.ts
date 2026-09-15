@@ -1,6 +1,6 @@
 import type { StateValue } from "../types";
 import type { BasicStatus, XmlDialect } from "./protocol";
-import { isWritableValue } from "../catalog/value-coerce";
+import { coerceBool, isWritableValue } from "../catalog/value-coerce";
 import { XML_AMP_CATALOG } from "./catalog";
 
 /** A zone-scoped XML command: the zone element and the inner command XML. */
@@ -52,7 +52,13 @@ export function stateToXml(stateId: string, value: unknown, dialect?: XmlDialect
   if (!zone) {
     return undefined;
   }
-  return { zone, inner: entry.toInner(value, dialect) };
+  // A switch reads the words a script writes ("false", "off", "0") for what they mean — the
+  // entry's truthiness test would send every non-empty string as On.
+  const input = entry.common.type === "boolean" ? coerceBool(value) : value;
+  if (input === undefined) {
+    return undefined;
+  }
+  return { zone, inner: entry.toInner(input, dialect) };
 }
 
 /**

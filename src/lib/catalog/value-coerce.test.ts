@@ -1,4 +1,4 @@
-import { decode, encode, isWritableValue, specToCommon } from "./value-coerce";
+import { coerceBool, decode, encode, isWritableValue, specToCommon } from "./value-coerce";
 
 describe("specToCommon", () => {
   test("an on/off value becomes a boolean switch", () => {
@@ -216,5 +216,40 @@ describe("decode never reads a button back into a state", () => {
     // state and make the next press a no-op (the value did not change).
     expect(decode(spec as never, "On")).toBeUndefined();
     expect(decode(spec as never, "")).toBeUndefined();
+  });
+});
+
+describe("coerceBool — what a switch datapoint accepts (audit 2026-09-15)", () => {
+  test("passes a boolean through", () => {
+    expect(coerceBool(true)).toBe(true);
+    expect(coerceBool(false)).toBe(false);
+  });
+
+  test("reads the words a script or widget writes, in any case and with padding", () => {
+    // ioBroker lets anything write a state: "false" used to arrive as a non-empty string and
+    // switched the receiver ON.
+    expect(coerceBool("false")).toBe(false);
+    expect(coerceBool("off")).toBe(false);
+    expect(coerceBool("0")).toBe(false);
+    expect(coerceBool(" False ")).toBe(false);
+    expect(coerceBool("true")).toBe(true);
+    expect(coerceBool("on")).toBe(true);
+    expect(coerceBool("1")).toBe(true);
+    expect(coerceBool("ON")).toBe(true);
+  });
+
+  test("reads a number as zero/non-zero", () => {
+    expect(coerceBool(0)).toBe(false);
+    expect(coerceBool(1)).toBe(true);
+    expect(coerceBool(-2)).toBe(true);
+  });
+
+  test("answers undefined for anything it cannot read — the write is then dropped, never guessed", () => {
+    expect(coerceBool("maybe")).toBeUndefined();
+    expect(coerceBool("")).toBeUndefined();
+    expect(coerceBool(null)).toBeUndefined();
+    expect(coerceBool(undefined)).toBeUndefined();
+    expect(coerceBool({})).toBeUndefined();
+    expect(coerceBool(Number.NaN)).toBeUndefined();
   });
 });

@@ -36,7 +36,6 @@ import { YNCA_BROWSE_SOURCES, YncaBrowseDriver } from "./browse/ynca-browse-driv
 // The AVAIL probe always covers the FULL catalog (not the group-filtered one), so the
 // cached subunit set reflects the device, never the current group configuration.
 const FUNC_MAP = funcToEntry(YNCA_CATALOG);
-const ID_MAP = idToEntry(YNCA_CATALOG);
 const AVAIL_PROBE = availGets(YNCA_CATALOG);
 /** The subunits the AVAIL probe asks — the set a silent subunit is judged absent against. */
 const PROBED_SUBUNITS: ReadonlySet<string> = new Set(AVAIL_PROBE.map(get => get.subunit));
@@ -342,9 +341,11 @@ export class YncaDeviceController implements ConnectionHandle {
   /**
    * Write map filtered to the entries THIS device reported — claim-with-proof for
    * writes: a command is only sent with a wire function the device answered in the
-   * sweep. Until the sweep ran, the unfiltered static map answers.
+   * sweep. Empty until then: the adapter routes writes only through a connected handle,
+   * which exists after start(), so nothing can arrive earlier (the unfiltered static map
+   * that used to stand in was a dead fallback — audit 2026-09-15).
    */
-  private writeMap: Map<string, YncaEntry> | undefined;
+  private writeMap: Map<string, YncaEntry> = new Map();
   /** The device's scene titles (SCENExNAME), for the recall dropdown, the list state and title writes. */
   private sceneTitles: Array<{ num: number; title: string }> = [];
   /** The zones' own scene titles (ZONEn SCENE1–4NAME), keyed by zone (`zone2` …). */
@@ -1105,7 +1106,7 @@ export class YncaDeviceController implements ConnectionHandle {
     if (this.handleTunerWrite(stateId, value)) {
       return;
     }
-    const triple = yncaCommand(stateId, value, this.writeMap ?? ID_MAP);
+    const triple = yncaCommand(stateId, value, this.writeMap);
     if (!triple) {
       // The one write path that still dropped a user action without a word. Every special
       // route above (scene, player, tuner, sendProven) says why it did nothing; this is the

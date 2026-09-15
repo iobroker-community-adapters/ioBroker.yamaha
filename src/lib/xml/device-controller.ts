@@ -768,7 +768,12 @@ export class XmlDeviceController implements ConnectionHandle {
     }
     const command = stateToXml(stateId, value, this.dialect);
     if (command) {
-      void this.applyCommand(command);
+      // The zone to read back afterwards: the command's own element, or the main zone for a
+      // command that goes out on the System element (HDMI outputs, party mode).
+      const zone = this.zones.find(candidate => candidate.element === command.zone) ?? this.zones[0];
+      void this.applyCommand(command, zone);
+    } else {
+      this.deps.log.debug(`${this.deviceId}: ${stateId} is not writable on this device — write dropped`);
     }
   }
 
@@ -1174,20 +1179,44 @@ export class XmlDeviceController implements ConnectionHandle {
       if (typeof value !== "string") {
         return true;
       }
-      inner = `<Config><Name><Zone>${escapeXmlText(value)}</Zone></Name></Config>`;
+      // The name is not part of the zone status the read-back fetches: confirm it here, and
+      // remember it — the probe memory otherwise brings the OLD name back on the next start.
+      void this.applyCommand(
+        { zone: zone.element, inner: `<Config><Name><Zone>${escapeXmlText(value)}</Zone></Name></Config>` },
+        zone,
+      ).then(ok => {
+        if (ok) {
+          this.deps.probeMemory?.set(`xmlZoneName:${zone.key}`, value);
+          this.emit(stateId, value);
+        }
+      });
+      return true;
     } else {
       const word = XML_TRANSPORT_WIRE[command.slice("player.".length)];
       inner = `<Play_Control><Playback>${word}</Playback></Play_Control>`;
     }
-    void this.applyCommand({ zone: zone.element, inner });
+    void this.applyCommand({ zone: zone.element, inner }, zone);
     return true;
   }
 
-  private async applyCommand(command: XmlCommand): Promise<void> {
+  /**
+   * Send a command and, when the device took it, read the zone back at once — an older
+   * receiver reports nothing by itself, and the next poll is up to a minute away.
+   *
+   * @param command the zone element and the inner XML to send
+   * @param zone the zone whose status to read back afterwards
+   * @returns true when the device accepted the command
+   */
+  private async applyCommand(command: XmlCommand, zone?: XmlZone): Promise<boolean> {
     try {
       await this.deps.client.send(command.zone, command.inner);
     } catch (e) {
       this.deps.log.warn(`${this.deviceId}: XML command failed: ${errorMessage(e)}`);
+      return false;
     }
+    if (zone) {
+      await this.refreshZone(zone);
+    }
+    return true;
   }
 }

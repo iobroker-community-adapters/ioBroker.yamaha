@@ -1,3 +1,4 @@
+import { vi } from "vitest";
 import { MAX_OBSERVED_VALUES, YncaDeviceController } from "./device-controller";
 import type { YncaClientLike } from "./device-controller";
 import type { YncaCapabilities } from "./ynca/capability";
@@ -107,15 +108,18 @@ function makeDeps(client: FakeClient): {
   created: string[];
   objects: Array<{ id: string; def: ObjectDef }>;
   acked: Array<{ id: string; value: unknown }>;
+  log: { debug: ReturnType<typeof vi.fn>; info: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn> };
   deps: ConstructorParameters<typeof YncaDeviceController>[1];
 } {
   const created: string[] = [];
   const objects: Array<{ id: string; def: ObjectDef }> = [];
   const acked: Array<{ id: string; value: unknown }> = [];
+  const log = { debug: vi.fn(), info: vi.fn(), warn: vi.fn() };
   return {
     created,
     objects,
     acked,
+    log,
     deps: {
       client,
       upsertObject: (id: string, def: ObjectDef) => {
@@ -126,7 +130,7 @@ function makeDeps(client: FakeClient): {
       setStateAck: (id: string, value: boolean | number | string) => {
         acked.push({ id, value });
       },
-      log: { debug() {}, info() {}, warn() {} },
+      log,
     },
   };
 }
@@ -196,10 +200,26 @@ describe("YncaDeviceController", () => {
     expect(acked).toContainEqual({ id: "living.power", value: true });
   });
 
-  test("a user write (ack false) is sent to the device", () => {
+  test("a user write (ack false) is sent to the device", async () => {
     const client = new FakeClient();
-    new YncaDeviceController("living", makeDeps(client).deps).handleStateChange("living.power", false, true);
+    client.capabilities = { model: "RX-A810", subunits: { MAIN: { PWR: "On" } } };
+    const controller = new YncaDeviceController("living", makeDeps(client).deps);
+    await controller.start();
+    client.sent.length = 0;
+    controller.handleStateChange("living.power", false, true);
     expect(client.sent).toEqual([{ subunit: "MAIN", func: "PWR", value: "On" }]);
+  });
+
+  test("a write before the sweep finds no proven function and puts nothing on the wire", () => {
+    // The adapter routes writes only through a connected handle, which exists after start()
+    // — so nothing ever answered here in production. The unfiltered static map that used to
+    // stand in was a dead fallback (audit 2026-09-15); a write that beats the sweep is dropped
+    // with the same line as any unproven one.
+    const client = new FakeClient();
+    const { deps, log } = makeDeps(client);
+    new YncaDeviceController("living", deps).handleStateChange("living.power", false, true);
+    expect(client.sent).toEqual([]);
+    expect(log.debug).toHaveBeenCalledWith(expect.stringContaining("living: power is not writable on this device"));
   });
 
   test("an acked change (device echo) is not sent back", () => {

@@ -36,6 +36,23 @@ export const YXC_SUBSCRIPTION_HEADERS: Readonly<Record<string, string>> = {
   "X-AppPort": "41100",
 };
 
+/**
+ * A request that never reached a device answer: the connection was refused or reset, the
+ * host is unreachable, or the request timed out. Distinct from a device refusal
+ * (`response_code` ≠ 0) so the controller can tell "the device said no" from "nothing
+ * answered" — only the latter is a reason to check whether the device is still alive.
+ */
+export class YxcTransportError extends Error {
+  /**
+   * @param command the command path that failed
+   * @param cause the underlying socket or timeout error
+   */
+  public constructor(command: string, cause: Error) {
+    super(`${cause.message} (${command})`, { cause });
+    this.name = "YxcTransportError";
+  }
+}
+
 /** Sends a command path and resolves the parsed JSON body — the injectable transport seam. */
 export type YxcSend = (command: string, body?: string) => Promise<unknown>;
 
@@ -71,6 +88,7 @@ function defaultSend(ip: string): YxcSend {
   return (command, body) =>
     new Promise((resolve, reject) => {
       const url = `http://${ip}${API_BASE}${command}`;
+      const transportFailure = (e: Error): void => reject(new YxcTransportError(command, e));
       const onResponse = (res: IncomingMessage): void => {
         let data = "";
         let bytes = 0;
@@ -86,7 +104,7 @@ function defaultSend(ip: string): YxcSend {
         });
         // A connection dropped mid-body emits on the RESPONSE stream, not the request —
         // without this handler that is an unhandled error event, not a rejected promise.
-        res.on("error", reject);
+        res.on("error", transportFailure);
         res.on("end", () => {
           try {
             resolve(assertOk(JSON.parse(data), command));
@@ -103,7 +121,9 @@ function defaultSend(ip: string): YxcSend {
               { method: "POST", headers: { "Content-Type": "application/json", ...YXC_SUBSCRIPTION_HEADERS } },
               onResponse,
             );
-      req.on("error", reject);
+      // Refused, reset, unreachable — and the timeout below, which destroys the request with
+      // its own error and lands here too. All of them: no device answered.
+      req.on("error", transportFailure);
       req.setTimeout(REQUEST_TIMEOUT_MS, () => req.destroy(new Error(`YXC request timed out: ${command}`)));
       if (body !== undefined) {
         req.end(body);

@@ -340,6 +340,16 @@ describe("stateToYxc", () => {
     expect(await ranCall("power", true)).toEqual(["power", [true, "main"]]);
   });
 
+  test("a switch reads the words and numbers a script writes — 'false' switches OFF, junk sends nothing", async () => {
+    expect(await ranCall("power", "false")).toEqual(["power", [false, "main"]]);
+    expect(await ranCall("power", "off")).toEqual(["power", [false, "main"]]);
+    expect(await ranCall("power", "0")).toEqual(["power", [false, "main"]]);
+    expect(await ranCall("power", 0)).toEqual(["power", [false, "main"]]);
+    expect(await ranCall("power", "on")).toEqual(["power", [true, "main"]]);
+    expect(await ranCall("mute", "FALSE")).toEqual(["mute", [false, "main"]]);
+    expect(stateToYxc("power", "maybe")).toBeUndefined();
+  });
+
   // Volume is declarative: the datapoint holds the DISPLAYED value while setVolume takes the raw
   // step count, so only the controller — which measured the ratio from the device's own status —
   // can complete the call. The mapper just names the zone and the value.

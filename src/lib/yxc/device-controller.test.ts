@@ -1,3 +1,4 @@
+import { YxcTransportError } from "./http-client";
 import { YxcDeviceController, zoneNameFrom } from "./device-controller";
 import type { YxcClientLike } from "./device-controller";
 import type { ObjectDef } from "../catalog/types";
@@ -47,6 +48,7 @@ interface FakeClient extends YxcClientLike {
   distRole: string;
   /** Make the zone status / name lookup fail, as an unreachable device would. */
   failStatus: boolean;
+  failWrites: Error | undefined;
   failNameText: boolean;
   /** The getFuncStatus answer (default: an empty success — no device-wide settings). */
   funcStatus: unknown;
@@ -76,6 +78,8 @@ function makeFakeClient(features: unknown, status: unknown): FakeClient {
     distRole: "server",
     failStatus: false,
     failNameText: false,
+    /** When set, every command that is not a read answer rejects with it (a write that never reaches the device). */
+    failWrites: undefined as Error | undefined,
     funcStatus: {},
   };
   // The answers that are more than "an empty success".
@@ -135,6 +139,9 @@ function makeFakeClient(features: unknown, status: unknown): FakeClient {
           recorded.pop();
         }
         (target.calls as Array<{ method: string; args: unknown[] }>).push({ method: prop, args: recorded });
+        if (target.failWrites instanceof Error && !(prop in replies)) {
+          return Promise.reject(target.failWrites);
+        }
         try {
           return Promise.resolve(replies[prop]?.(args) ?? {});
         } catch (e) {
@@ -667,6 +674,57 @@ describe("YxcDeviceController", () => {
     expect(s.client.calls).toEqual([]);
   });
 
+  test("without push, a write is read back from its zone at once instead of five minutes later", async () => {
+    // Poll-only operation (the push port is taken): nothing reports the effect of a write
+    // until the next keepalive — five minutes.
+    const s = setup(wx10, ysp, {}, () => false);
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.power", false, false);
+    await flush();
+    const order = s.client.calls.map(c => c.method);
+    expect(order.indexOf("power")).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf("getStatus")).toBeGreaterThan(order.indexOf("power"));
+  });
+
+  test("with push working, a write is not read back — the device announces the change itself", async () => {
+    const s = setup(wx10, ysp, {}, () => true);
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.power", false, false);
+    await flush();
+    expect(s.client.calls.map(c => c.method)).toEqual(["power"]);
+  });
+
+  test("without push, a tuner write re-reads the tuner, not the zone", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], tuner: { func_list: ["preset"] } };
+    const s = setup(features, { power: "on", input: "tuner" }, {}, () => false);
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.tuner.preset", false, 3);
+    await flush();
+    const order = s.client.calls.map(c => `${c.method}:${typeof c.args[0] === "string" ? c.args[0] : ""}`);
+    expect(order.some(call => call.startsWith("recallTunerPreset"))).toBe(true);
+    expect(order).toContain("getPlayInfo:tuner");
+    expect(order).not.toContain("getStatus:main");
+  });
+
+  test("a clock tick from the playing source updates the elapsed time without asking the device", async () => {
+    const s = setup({ zone: [{ id: "main", func_list: ["power"] }], netusb: {} }, { power: "on", input: "net_radio" });
+    s.client.playInfo = { input: "net_radio", playback: "play", play_time: 0 };
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.acks.length = 0;
+    s.fire.push?.({ netusb: { play_time: 12 } });
+    await flush();
+    expect(s.client.calls.filter(c => c.method === "getPlayInfo")).toEqual([]);
+    expect(s.acks).toContainEqual({ id: "living.player.elapsedTime", value: 12 });
+    // A push that says the metadata changed still re-reads the block, as before.
+    s.fire.push?.({ netusb: { play_time: 13, play_info_updated: true } });
+    await flush();
+    expect(s.client.calls.filter(c => c.method === "getPlayInfo")).toHaveLength(1);
+  });
+
   test("a media push refreshes only the named player source, not every zone", async () => {
     const features = { zone: [{ id: "main", func_list: ["power"] }], cd: {}, tuner: {} };
     const s = setup(features, ysp);
@@ -778,6 +836,83 @@ describe("YxcDeviceController", () => {
     s.fire.keepalive?.();
     await flush();
     expect(dropped).toBe(0); // never three in a row
+  });
+
+  test("a write nobody answered checks the device at once — and reports the drop when the zone is silent too", async () => {
+    // Until 2.10.0 only the 5-minute keepalive fed the drop detector: a device switched off
+    // right after a poll stayed "connected" for up to 15 minutes, every write in between
+    // merely warned.
+    const s = setup(wx10, ysp);
+    await s.controller.start();
+    const drops: Array<Error | undefined> = [];
+    s.controller.onDrop(reason => drops.push(reason));
+    s.client.failWrites = new YxcTransportError("main/setPower?power=standby", new Error("connect ECONNREFUSED"));
+    s.client.failStatus = true;
+    s.controller.handleStateChange("living.power", false, false);
+    await flush();
+    expect(drops).toHaveLength(1);
+    expect(s.client.calls.filter(c => c.method === "getStatus").length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("a device that refuses a write is alive — no liveness check, no drop", async () => {
+    const s = setup(wx10, ysp);
+    await s.controller.start();
+    let dropped = 0;
+    s.controller.onDrop(() => dropped++);
+    const statusReads = (): number => s.client.calls.filter(c => c.method === "getStatus").length;
+    const before = statusReads();
+    s.client.failWrites = new Error("device refused main/setPower (response_code 3)");
+    s.client.failStatus = true;
+    s.controller.handleStateChange("living.power", false, false);
+    await flush();
+    expect(statusReads()).toBe(before);
+    expect(dropped).toBe(0);
+  });
+
+  test("a transport failure on a device whose zone still answers is no drop", async () => {
+    const s = setup(wx10, ysp);
+    await s.controller.start();
+    let dropped = 0;
+    s.controller.onDrop(() => dropped++);
+    s.client.failWrites = new YxcTransportError("main/setPower?power=standby", new Error("socket hang up"));
+    s.controller.handleStateChange("living.power", false, false);
+    await flush();
+    expect(dropped).toBe(0);
+    // Several failed writes in a row share ONE check — not one probe per write.
+    const before = s.client.calls.filter(c => c.method === "getStatus").length;
+    s.controller.handleStateChange("living.power", false, false);
+    s.controller.handleStateChange("living.mute", false, true);
+    s.controller.handleStateChange("living.volume", false, 10);
+    await flush();
+    expect(s.client.calls.filter(c => c.method === "getStatus").length - before).toBeLessThanOrEqual(1);
+  });
+
+  test("a device-wide switch reads the words a script writes — 'false' switches it off", async () => {
+    const s = setup(wx10, ysp);
+    s.client.funcStatus = { response_code: 0, auto_power_standby: true };
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.advanced.autoPowerStandby", false, "false");
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "setAutoPowerStandby", args: [false] });
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.advanced.autoPowerStandby", false, "maybe");
+    await flush();
+    expect(s.client.calls.filter(c => c.method === "setAutoPowerStandby")).toEqual([]);
+  });
+
+  test("a device-wide setting whose write never arrived is checked the same way", async () => {
+    const s = setup(wx10, ysp);
+    // The setting exists only once the device reported it in getFuncStatus.
+    s.client.funcStatus = { response_code: 0, auto_power_standby: true };
+    await s.controller.start();
+    let dropped = 0;
+    s.controller.onDrop(() => dropped++);
+    s.client.failWrites = new YxcTransportError("system/setAutoPowerStandby", new Error("EHOSTUNREACH"));
+    s.client.failStatus = true;
+    s.controller.handleStateChange("living.advanced.autoPowerStandby", false, true);
+    await flush();
+    expect(dropped).toBe(1);
   });
 
   test("close unregisters from the shared push receiver", async () => {

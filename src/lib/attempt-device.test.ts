@@ -1,5 +1,6 @@
 import { vi } from "vitest";
-import { connectTransports, type ConnectableTransport } from "./attempt-device";
+import { connectTransports, partnerClient, type ConnectableTransport } from "./attempt-device";
+import { YamahaYxcClient } from "./yxc/http-client";
 import { ReachabilityDedup } from "./lifecycle/reachability-dedup";
 import type { ObjectDef } from "./catalog/types";
 import type { Transport } from "./catalog/owner-policy";
@@ -149,6 +150,53 @@ describe("connectTransports", () => {
     expect(debug).toHaveBeenCalledTimes(2);
   });
 
+  test("hands the handle a rebuild that builds the SAME transport afresh after it drops", async () => {
+    // The per-transport reconnect: a dropped YNCA socket must come back as a new YNCA client
+    // for the same device while YXC keeps running — wired here, exercised in the handle.
+    let builds = 0;
+    let drop: (reason?: Error) => void = () => {};
+    const yncaConn = (): ConnectableTransport => {
+      builds++;
+      const conn = fakeConn("ynca", [state("power", "Power")]);
+      conn.onDrop = cb => {
+        drop = cb;
+      };
+      return conn;
+    };
+    const scheduled: Array<() => void> = [];
+    const cancelled: unknown[] = [];
+    const d = {
+      ...deps(),
+      timers: {
+        schedule: (cb: () => void, _ms: number) => {
+          scheduled.push(cb);
+          return scheduled.length as unknown as ioBroker.Timeout;
+        },
+        cancel: (handle: unknown) => {
+          cancelled.push(handle);
+        },
+      },
+    };
+    const handle = await connectTransports(
+      "living",
+      [
+        { transport: "ynca", build: yncaConn },
+        { transport: "yxc", build: () => fakeConn("yxc", [state("volume", "Volume")]) },
+      ],
+      d,
+    );
+    expect(handle).not.toBeNull();
+    expect(builds).toBe(1);
+    drop(new Error("socket closed"));
+    // The retry was scheduled through the adapter's timers (never a native one) …
+    expect(scheduled).toHaveLength(1);
+    scheduled[0]();
+    await new Promise(resolve => setImmediate(resolve));
+    // … and it rebuilt exactly the YNCA transport, not the whole device.
+    expect(builds).toBe(2);
+    handle?.close();
+  });
+
   test("a reconnect after failures re-arms the warn for the next drop", async () => {
     const dead = fakeConn("ynca", [], false);
     const alive = fakeConn("ynca", [state("power", "Power")], true);
@@ -233,6 +281,15 @@ vi.mock("node:dgram", () => ({
     return { on: () => undefined, bind: () => undefined, close: () => undefined, send: () => undefined };
   },
 }));
+
+describe("partnerClient — the multiroom link target", () => {
+  test("another device this instance runs gets a client; the device itself and strangers do not", () => {
+    const known = new Set(["192.168.1.10", "192.168.1.11"]);
+    expect(partnerClient("192.168.1.10", known, "192.168.1.11")).toBeInstanceOf(YamahaYxcClient);
+    expect(partnerClient("192.168.1.10", known, "192.168.1.10")).toBeUndefined();
+    expect(partnerClient("192.168.1.10", known, "192.168.1.99")).toBeUndefined();
+  });
+});
 
 describe("attemptDevice builders", () => {
   test("tries all three protocols at their own endpoints and gives up cleanly", async () => {

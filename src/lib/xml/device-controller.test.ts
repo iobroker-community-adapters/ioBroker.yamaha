@@ -44,9 +44,11 @@ class FakeClient implements XmlClientLike {
     this.calls.push({ method: "getDescriptor", zone: "" });
     return this.descriptorError ? Promise.reject(this.descriptorError) : Promise.resolve(this.descriptor ?? "");
   }
+  /** A rejection every send answers with — the device refusing, or not answering at all. */
+  public sendError: Error | undefined = undefined;
   public send(zone: string, inner: string): Promise<void> {
     this.calls.push({ method: "send", zone, inner });
-    return Promise.resolve();
+    return this.sendError ? Promise.reject(this.sendError) : Promise.resolve();
   }
   /**
    * Probes (browse List_Info, scenes, inputs, tuner) — an empty body means "declares none".
@@ -903,6 +905,37 @@ describe("the 2008 dialect drives every write and is remembered (RX-V3900)", () 
     dialect: "legacy",
   };
 
+  test("a write is read back from the zone at once — the datapoint is confirmed before the next poll", async () => {
+    // Older receivers report nothing by themselves; until 2.10.0 a written value stayed
+    // unacknowledged for up to a whole poll interval (60 s by default).
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
+    const s = setup({ Main_Zone: legacyMain, Zone_2: { power: true, volume: -30 } });
+    withMemory(s, memory);
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.acks.length = 0;
+    s.client.statuses.Zone_2 = { power: true, volume: -25 };
+    s.controller.handleStateChange("living.multiroom.zone2.volume", false, -25);
+    await new Promise(resolve => setImmediate(resolve));
+    const order = s.client.calls.map(c => `${c.method}:${c.zone}`);
+    expect(order.indexOf("send:Zone_2")).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf("getStatus:Zone_2")).toBeGreaterThan(order.indexOf("send:Zone_2"));
+    expect(order).not.toContain("getStatus:Main_Zone");
+    expect(s.acks).toContainEqual({ id: "living.multiroom.zone2.volume", value: -25 });
+  });
+
+  test("a write the device refuses is not read back", async () => {
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
+    const s = setup({ Main_Zone: legacyMain });
+    withMemory(s, memory);
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.client.sendError = new Error("device refused Main_Zone (RC=3)");
+    s.controller.handleStateChange("living.volume", false, -40);
+    await new Promise(resolve => setImmediate(resolve));
+    expect(s.client.calls.map(c => c.method)).toEqual(["send"]);
+  });
+
   test("a volume write after a legacy status goes out as Vol, a program write as Surr>Pgm_Sel", async () => {
     const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
     const s = setup({ Main_Zone: legacyMain });
@@ -1033,6 +1066,30 @@ describe("the zone commands desc.xml declares: pads, transport keys, zone names 
     s.controller.handleStateChange("living.multiroom.zone2.zoneName", false, "Küche");
     await tick();
     expect(sent(s)).toEqual([{ zone: "Zone_2", inner: "<Config><Name><Zone>Küche</Zone></Name></Config>" }]);
+    // The new name is confirmed on the datapoint and remembered — the next start must not
+    // bring the old one back from the probe memory (until 2.10.0 it did).
+    expect(s.acks).toContainEqual({ id: "living.multiroom.zone2.zoneName", value: "Küche" });
+    expect(memory.remembered("xmlZoneName:zone2")).toBe("Küche");
+    const second = setup(statuses);
+    (second.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
+    await second.controller.start();
+    expect(second.acks).toContainEqual({ id: "living.multiroom.zone2.zoneName", value: "Küche" });
+    expect(second.acks).not.toContainEqual({ id: "living.multiroom.zone2.zoneName", value: "Kitchen" });
+  });
+
+  test("a rejected zone-name write neither confirms nor remembers the name", async () => {
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
+    const s = setup(statuses);
+    (s.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
+    s.client.xmlAnswers["Zone_2|<Config>GetParam</Config>"] =
+      '<YAMAHA_AV rsp="GET" RC="0"><Zone_2><Config><Name><Zone>Kitchen</Zone></Name></Config></Zone_2></YAMAHA_AV>';
+    await s.controller.start();
+    s.acks.length = 0;
+    s.client.sendError = new Error("device refused Zone_2 (RC=3)");
+    s.controller.handleStateChange("living.multiroom.zone2.zoneName", false, "Küche");
+    await tick();
+    expect(s.acks.filter(ack => ack.id === "living.multiroom.zone2.zoneName")).toEqual([]);
+    expect(memory.remembered("xmlZoneName:zone2")).toBe("Kitchen");
   });
 
   test("a zone whose Config carries no name gets no name datapoint", async () => {

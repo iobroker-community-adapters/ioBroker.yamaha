@@ -18,13 +18,15 @@ import {
   type PlayerTransport,
   type YxcCommand,
 } from "./command-mapper";
-import { mediaToRefresh, netusbListsToRefresh, zonesToRefresh } from "./push";
+import { mediaTimeUpdates, mediaToRefresh, netusbListsToRefresh, zonesToRefresh } from "./push";
 import type { ObjectDef } from "../catalog/types";
 import { tName } from "../i18n";
 import type { StateValue } from "../types";
 import type { ConnectionHandle, ControllerLog } from "../controller";
 import { errorMessage } from "../util";
+import { coerceBool } from "../catalog/value-coerce";
 import { PollDropDetector } from "../lifecycle/poll-drop-detector";
+import { YxcTransportError } from "./http-client";
 import type { ProbeMemory } from "../lifecycle/probe-memory";
 import { zonePrefix } from "./zones";
 import { presentSystemEntries, type YxcSystemEntry } from "./system-catalog";
@@ -156,6 +158,8 @@ export class YxcDeviceController implements ConnectionHandle {
   private cancelKeepalive: (() => void) | undefined;
   private cancelPush: (() => void) | undefined;
   private readonly dropDetector = new PollDropDetector();
+  /** The liveness probe in flight, so a burst of failed writes shares one instead of stacking probes. */
+  private aliveCheck: Promise<void> | undefined;
   /** The tuner's current band, cached so a frequency write can supply it (setFreq needs band + freq). */
   private lastTunerBand = "fm";
   /** Each zone's currently selected input, from its status — see {@link zoneListeningTo}. */
@@ -659,11 +663,44 @@ export class YxcDeviceController implements ConnectionHandle {
    * @param value the written value
    */
   private async applySystemWrite(entry: YxcSystemEntry, value: unknown): Promise<void> {
+    // A switch reads the words a script writes ("false", "off", "0") for what they mean — the
+    // entry's Boolean() would send every non-empty string as on.
+    const input = entry.common.type === "boolean" ? coerceBool(value) : value;
+    if (input === undefined) {
+      this.deps.log.debug(`${this.deviceId}: ${entry.state} — "${String(value)}" is no switch value, write dropped`);
+      return;
+    }
     try {
-      await entry.write?.apply(this.deps.client, value);
+      await entry.write?.apply(this.deps.client, input);
       this.applySystemStatus(await this.deps.client.getFuncStatus());
     } catch (e) {
       this.deps.log.warn(`${this.deviceId}: ${entry.state} could not be set (${errorMessage(e)})`);
+      this.checkAliveAfter(e);
+    }
+  }
+
+  /**
+   * After a write that no device answered, find out at once whether the device is still there.
+   * Only the keepalive used to feed the drop detector: a device switched off right after a poll
+   * stayed "connected" for up to three polls — 15 minutes — while every write merely warned.
+   * A refusal (the device answered, and said no) is proof of life and checks nothing.
+   *
+   * @param failure the error the write ended with
+   */
+  private checkAliveAfter(failure: unknown): void {
+    if (!(failure instanceof YxcTransportError)) {
+      return;
+    }
+    // One probe for a burst of failed writes: the second and later ones ride on the first.
+    this.aliveCheck ??= this.verifyAlive().finally(() => {
+      this.aliveCheck = undefined;
+    });
+  }
+
+  private async verifyAlive(): Promise<void> {
+    const alive = await this.refreshZone(this.zones[0] ?? "main");
+    if (!alive) {
+      this.dropDetector.report();
     }
   }
 
@@ -730,6 +767,13 @@ export class YxcDeviceController implements ConnectionHandle {
     for (const block of mediaToRefresh(event)) {
       if (this.mediaBlocks.includes(block)) {
         void this.refreshMediaSource(block);
+      }
+    }
+    // The playback clock ticks every second while a source plays: its values go to the player
+    // states of the zone listening to that source, and nothing is asked of the device.
+    for (const { block, info } of mediaTimeUpdates(event)) {
+      if (this.mediaBlocks.includes(block)) {
+        this.routePlayerBlock(block, parseYxcPlayInfo(info, block));
       }
     }
     // The favourites/recently-played lists announce their changes as flags in the push.
@@ -1393,6 +1437,56 @@ export class YxcDeviceController implements ConnectionHandle {
       }
     } catch (e) {
       this.deps.log.warn(`${this.deviceId}: write to ${stateId} failed: ${errorMessage(e)}`);
+      this.checkAliveAfter(e);
+      return;
+    }
+    await this.readBackAfter(stateId, command);
+  }
+
+  /**
+   * Without push, nothing reports the effect of a write until the next keepalive — five
+   * minutes away; the datapoint sat unconfirmed that long. Read the written area back at
+   * once. With push the device announces the change itself and nothing is asked.
+   *
+   * @param stateId the written state id, relative to the device (carries the zone prefix)
+   * @param command the command that was just applied
+   */
+  private async readBackAfter(stateId: string, command: YxcCommand): Promise<void> {
+    if (this.deps.pushActive?.()) {
+      return;
+    }
+    switch (command.kind) {
+      case "tunerFreq":
+      case "tunerPreset":
+      case "tunerBand":
+        if (this.mediaBlocks.includes("tuner")) {
+          await this.refreshMediaSource("tuner");
+        }
+        return;
+      case "netusbPreset":
+      case "netusbRecent":
+        if (this.mediaBlocks.includes("netusb")) {
+          await this.refreshMediaSource("netusb");
+        }
+        return;
+      case "playerTransport": {
+        const block = this.playerBlockFor(this.lastZoneInput.get(command.zone));
+        if (block !== undefined) {
+          await this.refreshMediaSource(block);
+        }
+        return;
+      }
+      case "volume":
+      case "equalizer":
+        await this.refreshZone(command.zone);
+        return;
+      case "run": {
+        const zone = /^multiroom\.(zone[234])\./.exec(stateId)?.[1] ?? "main";
+        if (this.zones.includes(zone)) {
+          await this.refreshZone(zone);
+        }
+        return;
+      }
     }
   }
 

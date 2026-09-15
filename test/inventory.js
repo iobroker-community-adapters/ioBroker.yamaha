@@ -237,6 +237,22 @@ tests.integration(ADAPTER_DIR, {
         fs.writeFileSync(INVENTORY, `${JSON.stringify(objects, null, 2)}\n`);
       });
 
+      it("gives every device object one of the five pictograms, as an inline data URL", async function () {
+        this.timeout(60000);
+        // The value the admin gets is the SVG itself (data URL) — a path would land in a bare
+        // <img> that keeps a fixed colour; the five constants are the only allowed values.
+        const { DEVICE_TYPE_ICONS } = require(path.join(ADAPTER_DIR, "build", "lib", "device-type.js"));
+        const allowed = new Set(Object.values(DEVICE_TYPE_ICONS));
+        const objects = await dumpObjects(harness);
+        const devices = Object.entries(objects).filter(([, object]) => object.type === "device");
+        assert.ok(devices.length > 0, "no device objects in the inventory");
+        for (const [id, object] of devices) {
+          const icon = object.common && object.common.icon;
+          assert.ok(typeof icon === "string" && icon.startsWith("data:image/svg+xml;base64,"), `${id}: no inline icon`);
+          assert.ok(allowed.has(icon), `${id}: common.icon is not one of the five pictograms`);
+        }
+      });
+
       it("keeps every device's capability profile small (one JSON string per device object)", async function () {
         this.timeout(60000);
         // The profile is the one persisted memory per device (2.7.0): parsed declarations only,

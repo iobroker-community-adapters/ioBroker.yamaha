@@ -12,7 +12,8 @@ export interface DeviceRecord {
   ip: string;
   /**
    * Where this record came from. Absent in the stored discovery file (everything in it is
-   * discovered by definition) and filled when the running set is assembled.
+   * discovered by definition), present on every record the search returns and on every
+   * record a running device was started from.
    */
   source?: DeviceSource;
 }

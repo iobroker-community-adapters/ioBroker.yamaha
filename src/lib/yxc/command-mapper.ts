@@ -1,7 +1,7 @@
 import type { StateValue } from "../types";
 import { YXC_ZONE_IDS, zonePrefix } from "./zones";
 import type { I18nKey } from "../i18n";
-import { isWritableValue } from "../catalog/value-coerce";
+import { coerceBool, isWritableValue } from "../catalog/value-coerce";
 import { formatPlayTime } from "../catalog/play-time";
 import { YXC_AMP_CATALOG } from "./catalog";
 import { isRemoteWord, YXC_CURSOR_VALUES, YXC_MENU_VALUES } from "./remote";
@@ -210,8 +210,14 @@ export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefi
   if (!entry?.write || !isWritableValue(value, entry.common.type === "number")) {
     return undefined;
   }
+  // A switch reads the words a script writes ("false", "off", "0") for what they mean — the
+  // entry's Boolean() would send every non-empty string as on.
+  const input = entry.common.type === "boolean" ? coerceBool(value) : value;
+  if (input === undefined) {
+    return undefined;
+  }
   const { apply } = entry.write;
-  return { kind: "run", run: client => apply(client, value, zone) };
+  return { kind: "run", run: client => apply(client, input, zone) };
 }
 
 /**

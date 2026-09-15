@@ -3,8 +3,14 @@ import { createSocket } from "node:dgram";
 /** The UDP port MusicCast devices push unsolicited events to. */
 const YXC_PUSH_PORT = 41100;
 
-/** Rebind this long after a runtime socket error (a bind-time failure is not retried). */
+/** Rebind this long after a runtime socket error. */
 const REBIND_DELAY_MS = 10000;
+
+/**
+ * Try the port again this often while another program holds it. The other MusicCast consumer
+ * may stop later; without the retry only a restart of this adapter ever found the port free.
+ */
+const BIND_RETRY_DELAY_MS = 5 * 60 * 1000;
 
 /** The parts of a UDP socket the push receiver uses (a seam for testing). */
 export interface YxcPushSocket {
@@ -52,7 +58,7 @@ function defaultFactory(): YxcPushSocket {
 /** The callbacks the push receiver needs from the adapter. */
 export interface YxcPushReceiverDeps {
   /** Diagnostics. */
-  log: { debug: (message: string) => void; warn: (message: string) => void };
+  log: { debug: (message: string) => void; info: (message: string) => void; warn: (message: string) => void };
   /** Schedule the rebind after a runtime socket error; returns a cancellable handle. */
   schedule(handler: () => void, ms: number): ioBroker.Timeout | undefined;
   /** Cancel a scheduled rebind. */
@@ -65,10 +71,12 @@ export interface YxcPushReceiverDeps {
  * routes each event to the handler registered for its source IP.
  *
  * Error handling separates the two failure modes: a bind-time failure (the port is
- * already taken by another MusicCast consumer) is expected — it warns and runs
- * poll-only, no retry. A runtime error on an already-listening socket closes the
- * socket and rebinds after a delay, so a transient fault does not silently drop all
- * devices to poll-only forever. Registrations survive a rebind.
+ * already taken by another MusicCast consumer) is expected — it warns once, runs
+ * poll-only and tries the port again every few minutes. A runtime error on an
+ * already-listening socket closes the socket and rebinds after a short delay, so a
+ * transient fault does not silently drop all devices to poll-only forever.
+ * Registrations survive a rebind; the controllers notice a late bind by themselves
+ * (they ask `isListening()` at every keepalive).
  */
 export class YxcPushReceiver {
   private socket: YxcPushSocket | undefined;
@@ -76,6 +84,8 @@ export class YxcPushReceiver {
   private listening = false;
   private closed = false;
   private retryTimer: ioBroker.Timeout | undefined;
+  /** Whether a bind failed since the last successful listen — the warning is given once, the recovery once. */
+  private bindFailed = false;
 
   /**
    * @param deps adapter logger and timer callbacks
@@ -108,6 +118,10 @@ export class YxcPushReceiver {
     socket.onMessage((payload, address) => this.dispatch(payload, address));
     socket.onListening(() => {
       this.listening = true;
+      if (this.bindFailed) {
+        this.bindFailed = false;
+        this.deps.log.info(`YXC push port :${YXC_PUSH_PORT} became available — MusicCast devices are pushed again`);
+      }
       this.deps.log.debug(`YXC push receiver listening on :${YXC_PUSH_PORT}`);
     });
     socket.bind(YXC_PUSH_PORT);
@@ -122,10 +136,16 @@ export class YxcPushReceiver {
       return;
     }
     if (!this.listening) {
-      // Bind-time failure: another MusicCast consumer holds the port. Expected.
-      this.deps.log.warn(
-        `YXC push port :${YXC_PUSH_PORT} unavailable — MusicCast devices are polled, not pushed: ${err.message}`,
-      );
+      // Bind-time failure: another MusicCast consumer holds the port. Expected — said once,
+      // then tried again quietly until the port is free.
+      const line = `YXC push port :${YXC_PUSH_PORT} unavailable — MusicCast devices are polled, not pushed: ${err.message}`;
+      if (this.bindFailed) {
+        this.deps.log.debug(line);
+      } else {
+        this.bindFailed = true;
+        this.deps.log.warn(line);
+      }
+      this.retryTimer = this.deps.schedule(() => this.start(), BIND_RETRY_DELAY_MS);
       return;
     }
     // Runtime error on a socket that was listening — not normal; rebind after a delay

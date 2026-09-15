@@ -6,6 +6,8 @@ const netMock = vi.hoisted(() => ({
   sockets: [] as Array<{
     options: Record<string, unknown>;
     timeouts: number[];
+    keepAlive: Array<[boolean, number | undefined]>;
+    noDelay: boolean[];
     written: string[];
     destroyed: Error | undefined | true;
     handlers: Record<string, Array<(...a: unknown[]) => void>>;
@@ -17,6 +19,8 @@ vi.mock("node:net", () => ({
     const s = {
       options,
       timeouts: [] as number[],
+      keepAlive: [] as Array<[boolean, number | undefined]>,
+      noDelay: [] as boolean[],
       written: [] as string[],
       destroyed: undefined as Error | undefined | true,
       handlers: {} as Record<string, Array<(...a: unknown[]) => void>>,
@@ -26,6 +30,12 @@ vi.mock("node:net", () => ({
       },
       setTimeout(ms: number) {
         s.timeouts.push(ms);
+      },
+      setKeepAlive(enable: boolean, initialDelay?: number) {
+        s.keepAlive.push([enable, initialDelay]);
+      },
+      setNoDelay(enable: boolean) {
+        s.noDelay.push(enable);
       },
       write(data: string) {
         s.written.push(data);
@@ -294,6 +304,56 @@ describe("YncaClient", () => {
     }
   });
 
+  test("tears the socket down after two unanswered keepalives — a dead receiver drops within 90 s", async () => {
+    // A receiver cut from the mains sends no FIN: without this the socket stays "connected"
+    // until the kernel's retransmit timeout gives up, many minutes later, and every command
+    // written meanwhile vanishes into the send buffer.
+    vi.useFakeTimers();
+    try {
+      const { factory, sockets } = fixtureFactory();
+      const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
+      const drops: Array<Error | undefined> = [];
+      client.onDrop(reason => drops.push(reason));
+      void client.connect();
+      sockets[0].emitConnect();
+      client.startKeepalive();
+      await vi.advanceTimersByTimeAsync(30000); // first poll, unanswered
+      await vi.advanceTimersByTimeAsync(30000); // second poll, unanswered
+      expect(sockets[0].destroyed).toBe(false);
+      await vi.advanceTimersByTimeAsync(30000); // two misses on the counter: torn down
+      expect(sockets[0].destroyed).toBe(true);
+      expect(sockets[0].written.filter(line => line === "@SYS:MODELNAME=?\r\n")).toHaveLength(2);
+      // The socket's close then travels the usual drop path, carrying the reason.
+      sockets[0].emitClose();
+      expect(drops).toHaveLength(1);
+      expect(drops[0]?.message).toContain("keepalive");
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("any byte from the receiver counts as an answer — a busy socket is never torn down", async () => {
+    vi.useFakeTimers();
+    try {
+      const { factory, sockets } = fixtureFactory();
+      const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
+      void client.connect();
+      sockets[0].emitConnect();
+      client.startKeepalive();
+      for (let tick = 0; tick < 5; tick++) {
+        await vi.advanceTimersByTimeAsync(30000);
+        // Not the MODELNAME answer — a volume report is proof of life just the same.
+        sockets[0].emitData("@MAIN:VOL=-20.0\r\n");
+      }
+      expect(sockets[0].destroyed).toBe(false);
+      expect(sockets[0].written.filter(line => line === "@SYS:MODELNAME=?\r\n")).toHaveLength(5);
+      client.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("cancels the keepalive on drop and on close, so no timer outlives the connection", () => {
     vi.useFakeTimers();
     try {
@@ -406,6 +466,20 @@ describe("YncaClient on a real TCP socket", () => {
     await connecting;
     client.close();
     expect(socket.destroyed).toBeTruthy();
+  });
+
+  test("turns on TCP keepalive and switches Nagle off once connected", async () => {
+    const client = new YncaClient("192.168.1.10", testTimers, testGate());
+    const connecting = client.connect();
+    const socket = netMock.sockets[0];
+    expect(socket.keepAlive).toEqual([]);
+    socket.emit("connect");
+    await connecting;
+    // Keepalive probes let the kernel notice a vanished peer; commands are one-line writes
+    // paced 100 ms apart, and Nagle would hold a follow-up line back for up to 40 ms.
+    expect(socket.keepAlive).toEqual([[true, 10000]]);
+    expect(socket.noDelay).toEqual([true]);
+    client.close();
   });
 
   test("tears the socket down when the device never answers", async () => {

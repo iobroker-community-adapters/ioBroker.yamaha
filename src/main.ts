@@ -50,6 +50,11 @@ import { DeviceProfileStore } from "./lib/lifecycle/capability-profile";
 /** Supervisor reconnect backoff bounds (exponential: 1s, 2s … capped at 60s). */
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 60000;
+/** Longest a delete waits for a device's running connection attempt (every transport times out sooner). */
+const REMOVE_SETTLE_CAP_MS = 30000;
+
+/** The adapter's own object tree as `getAdapterObjectsAsync` lists it. */
+type AdapterObjects = Awaited<ReturnType<ioBroker.Adapter["getAdapterObjectsAsync"]>>;
 
 /** Abort a discovery description fetch after this long, so a dead device cannot hang it. */
 const FETCH_TIMEOUT_MS = 4000;
@@ -263,21 +268,31 @@ export class Yamaha extends utils.Adapter {
       // offline instead. Until 2.9.1 the first hand-entered receiver silently took every found
       // one's object tree with it, recordings and VIS bindings included.
       const idle = this.discovering ? [] : await this.rememberedButIdle(devices);
-      // Before the cleanup and before any device connects — see knownDatapoints.
-      await this.snapshotExistingDatapoints();
-      await this.cleanupStaleObjects(new Set(devices.map(device => device.id)), new Set(idle.map(device => device.id)));
+      // Before the cleanup and before any device connects — see knownDatapoints. The listing
+      // is read once and handed on: the cleanup runs on the very same tree.
+      const listing = await this.snapshotExistingDatapoints();
+      await this.cleanupStaleObjects(
+        new Set(devices.map(device => device.id)),
+        new Set(idle.map(device => device.id)),
+        listing,
+      );
       await this.ensureInstanceInfoObjects();
       await this.markIdleDevicesOffline(idle);
       await this.subscribeToStates();
       const pushReceiver = new YxcPushReceiver({
-        log: { debug: message => this.log.debug(message), warn: message => this.log.warn(message) },
+        log: {
+          debug: message => this.log.debug(message),
+          info: message => this.log.info(message),
+          warn: message => this.log.warn(message),
+        },
         schedule: (cb, ms) => this.setTimeout(cb, ms),
         cancel: handle => this.clearTimeout(handle),
       });
       pushReceiver.start();
       this.pushReceiver = pushReceiver;
       if (configured.length > 0) {
-        this.log.info(`setting up ${devices.length} configured device(s)...`);
+        // The table's count: the found devices announce themselves in autoDiscover.
+        this.log.info(`setting up ${configured.length} configured device(s)...`);
       }
       for (const device of devices) {
         // Per device, so one failure does not cost the rest of the run: startDevice writes
@@ -551,7 +566,13 @@ export class Yamaha extends utils.Adapter {
    * @param deviceId the id-safe device id
    */
   public async removeDevice(deviceId: string): Promise<void> {
+    const supervisor = this.supervisorById.get(deviceId);
     this.stopDevice(deviceId);
+    // `stopDevice` marks the supervisor closed, but an attempt already past its await keeps
+    // building the object tree — deleted underneath it, everything it writes afterwards
+    // survives as an orphan. Wait for it; the cap is a safety net, every transport attempt ends
+    // by its own timeout well within it.
+    await this.awaitSettled(supervisor);
     // A native patch still inside its coalescing window would fire AFTER the delete below and
     // recreate the device object as a bare orphan — cancel it before anything else.
     const pendingNative = this.pendingNative.get(deviceId);
@@ -572,6 +593,7 @@ export class Yamaha extends utils.Adapter {
     // silhouette `ensureDeviceHeader` seeds — a soundbar shows a receiver until the next start.
     this.deviceIcons.delete(deviceId);
     this.deviceLabels.delete(deviceId);
+    this.lastModel.delete(deviceId);
     this.profiles.delete(deviceId);
     this.forgetUnder(this.knownDatapoints, deviceId);
     this.forgetUnder(this.storedStates, deviceId);
@@ -587,6 +609,29 @@ export class Yamaha extends utils.Adapter {
     }
     this.writeState("info.connection", [...this.deviceConnected.values()].some(Boolean));
     this.writeDeviceOverview();
+  }
+
+  /**
+   * Wait for a supervisor's running connection attempt, capped so an unforeseen hang can
+   * never block a delete for good.
+   *
+   * @param supervisor the device's supervisor, if it still had one
+   */
+  private async awaitSettled(supervisor: DeviceSupervisor | undefined): Promise<void> {
+    if (!supervisor) {
+      return;
+    }
+    let cap: ioBroker.Timeout | undefined;
+    const capped = new Promise<void>(resolve => {
+      cap = this.setTimeout(resolve, REMOVE_SETTLE_CAP_MS);
+    });
+    try {
+      await Promise.race([supervisor.settled(), capped]);
+    } catch {
+      // The attempt's own failure is reported where it happened; the delete goes on.
+    } finally {
+      this.clearTimeout(cap);
+    }
   }
 
   /**
@@ -680,11 +725,19 @@ export class Yamaha extends utils.Adapter {
    * instance. The failure lands in the log instead — once per outage at warn, then at
    * debug until a write succeeds again; during teardown it is expected and stays silent.
    *
+   * Written through `setStateChangedAsync`: js-controller compares against the database and
+   * writes only when the value or the ack flag differs. That is what keeps a failed reconnect
+   * attempt (eight identical markers every minute), a 60-s XML poll, the ~200-value YNCA
+   * refresh after a reconnect and the 30-s model keepalive out of the history — and it still
+   * confirms a user's write, because that one sits at ack:false and the echo's ack:true IS the
+   * difference (audit 2026-09-15). Every datapoint here mirrors a device state; none is a
+   * periodic measurement whose fresh timestamp would be the information.
+   *
    * @param id the state id (namespace-relative)
    * @param value the value to write
    */
   private writeState(id: string, value: ioBroker.StateValue): void {
-    this.setState(id, { val: value, ack: true }).then(
+    this.setStateChangedAsync(id, { val: value, ack: true }).then(
       () => {
         this.stateWritesFailing = false;
       },
@@ -700,6 +753,11 @@ export class Yamaha extends utils.Adapter {
    * @param native the native fields to merge into the object
    */
   private persistDeviceNative(deviceId: string, native: Record<string, unknown>): void {
+    // A device that was removed has no object to patch any more — a late write from its last
+    // attempt would recreate the device object as a bare orphan.
+    if (!this.deviceRecords.has(deviceId)) {
+      return;
+    }
     // Coalesced per device: the probe memory persists on EVERY change, and a first connect
     // changes it dozens of times within a second (every observed enum value, every declared
     // list) — each was one extendObject on the device object. Latest wins, one write per window.
@@ -767,9 +825,14 @@ export class Yamaha extends utils.Adapter {
    *
    * @param deviceIds the ids of the currently configured devices
    * @param remembered ids the discovery store still holds that are idle this run
+   * @param listing the object tree as the datapoint snapshot just read it; read here when absent
    */
-  private async cleanupStaleObjects(deviceIds: Set<string>, remembered: ReadonlySet<string>): Promise<void> {
-    const allObjects = await this.getAdapterObjectsAsync();
+  private async cleanupStaleObjects(
+    deviceIds: Set<string>,
+    remembered: ReadonlySet<string>,
+    listing?: AdapterObjects,
+  ): Promise<void> {
+    const allObjects = listing ?? (await this.getAdapterObjectsAsync());
     const existing = Object.keys(allObjects);
     // Only the DELETION widens to the remembered ids. The two passes below stay on the
     // running set on purpose: an idle device is not being written to at all this run, so
@@ -964,10 +1027,12 @@ export class Yamaha extends utils.Adapter {
    * Remember every datapoint that already exists, ONCE per adapter run.
    *
    * @see knownDatapoints for why the create path alone cannot answer "is this new?"
+   * @returns the object listing it read, for the cleanup that follows — undefined when the read failed
    */
-  private async snapshotExistingDatapoints(): Promise<void> {
+  private async snapshotExistingDatapoints(): Promise<AdapterObjects | undefined> {
     try {
-      for (const [fullId, object] of Object.entries(await this.getAdapterObjectsAsync())) {
+      const listing = await this.getAdapterObjectsAsync();
+      for (const [fullId, object] of Object.entries(listing)) {
         if (object?.type === "state") {
           const id = stripNamespace(fullId, this.namespace);
           this.knownDatapoints.add(id);
@@ -980,11 +1045,13 @@ export class Yamaha extends utils.Adapter {
           this.storedBounds.set(id, boundsOfCommon(common));
         }
       }
+      return listing;
     } catch (e) {
       // Without the snapshot the balance would call every datapoint new; better to stay
       // silent about it than to log a wrong number.
       this.log.debug(`could not read the existing datapoints (${errorMessage(e)}); balance line disabled`);
       this.balanceDisabled = true;
+      return undefined;
     }
   }
 
@@ -1231,6 +1298,14 @@ export class Yamaha extends utils.Adapter {
   /** The icon last written per device, so repeated model reports do not re-write the object. */
   private readonly deviceIcons = new Map<string, string>();
 
+  /**
+   * The model last reported per device in THIS run. The YNCA keepalive reports the model every
+   * 30 s; the icon and name updaters behind it read the device object each time, so they run on
+   * the first report of a run and on a model change only. Per run, not from the database: a new
+   * adapter version with new pictograms must reach every existing device once.
+   */
+  private readonly lastModel = new Map<string, string>();
+
   /** The label this adapter wrote per device, with the rank of the source behind it. */
   private readonly deviceLabels = new Map<string, { name: string; rank: LabelRank }>();
 
@@ -1253,14 +1328,12 @@ export class Yamaha extends utils.Adapter {
     const own = this.deviceLabels.get(deviceId);
     try {
       const current = (await this.getObjectAsync(deviceId))?.common?.name;
-      const label = nextDeviceLabel(
-        typeof current === "string" ? current : undefined,
-        deviceId,
-        candidate,
-        rank,
-        own?.name,
-        own?.rank,
-      );
+      // A translation object is a name somebody gave the device on purpose — the adapter only
+      // ever writes plain strings, so it cannot be one of its own placeholders.
+      if (current !== undefined && typeof current !== "string") {
+        return;
+      }
+      const label = nextDeviceLabel(current, deviceId, candidate, rank, own?.name, own?.rank);
       if (label === undefined) {
         return;
       }
@@ -1415,8 +1488,11 @@ export class Yamaha extends utils.Adapter {
         // device still carrying the ip it was migrated with, its readable name.
         if (id.endsWith(".info.model") && typeof value === "string" && value.length > 0) {
           const reporting = id.slice(0, id.indexOf("."));
-          void this.updateDeviceIcon(reporting, value);
-          void this.updateDeviceLabel(reporting, value, LABEL_RANK.model);
+          if (this.lastModel.get(reporting) !== value) {
+            this.lastModel.set(reporting, value);
+            void this.updateDeviceIcon(reporting, value);
+            void this.updateDeviceLabel(reporting, value, LABEL_RANK.model);
+          }
         }
       },
       onDeviceName: name => void this.updateDeviceLabel(device.id, name, LABEL_RANK.deviceName),
@@ -1541,7 +1617,7 @@ export class Yamaha extends utils.Adapter {
    * Search the network, merge with the remembered devices, and persist the result.
    * Shared by the blocking first-setup path and the background search.
    *
-   * @returns the merged device records
+   * @returns the merged device records, every one stamped `source: "discovered"`
    */
   private async runDiscovery(): Promise<DeviceRecord[]> {
     // Every search counts against the throttle, whoever asked for it — otherwise the first
@@ -1575,8 +1651,16 @@ export class Yamaha extends utils.Adapter {
     const kept = merged.filter(
       device => !ignored.has(device.id) && !manualIds.has(device.id) && !manualIps.has(device.ip),
     );
-    await writeDiscovered(store, kept);
-    return kept;
+    // The file only changes when a device appeared, vanished or moved — while a device is
+    // offline the search runs every five minutes, and it must not rewrite an identical file each
+    // time. Compared on the stored form, before the records are stamped below.
+    if (JSON.stringify(kept) !== JSON.stringify(known)) {
+      await writeDiscovered(store, kept);
+    }
+    // Stamped HERE, for both callers: onReady unions the result with the device table and stamps
+    // again (harmless), the background search hands its result straight to startDevice — and a
+    // record without the stamp is one the rediscovery never searches for after it moved.
+    return kept.map(device => ({ ...device, source: "discovered" as const }));
   }
 
   /**
