@@ -68,8 +68,8 @@ net.Socket.prototype.connect = function connect(...args) {
  * The fixture port for an HTTP call's destination, or undefined when the call does not
  * address one of the fixture devices.
  *
- * @param {any} first the first argument of http.request/http.get
- * @returns {{options: any, port: number}|undefined} the rewritten options and the fixture port
+ * @param {unknown} first the first argument of http.request/http.get
+ * @returns {{options: Record<string, unknown>, port: number}|undefined} the rewritten options and the fixture port
  */
 function deviceTarget(first) {
   // The MusicCast client addresses the device with a URL string, the XML client with an options

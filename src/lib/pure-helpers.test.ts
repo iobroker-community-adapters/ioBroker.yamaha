@@ -13,6 +13,7 @@ import {
   mergeDiscovered,
   childlessChannelIds,
   neverWrittenStateIds,
+  labelRankOf,
   nextDeviceLabel,
   parseDevices,
   unionDevices,
@@ -705,6 +706,34 @@ describe("nextDeviceLabel", () => {
   it("ignores a useless candidate", () => {
     expect(nextDeviceLabel(id, id, "Main Zone", LABEL_RANK.deviceName)).toBeUndefined();
     expect(nextDeviceLabel(id, id, "", LABEL_RANK.deviceName)).toBeUndefined();
+  });
+
+  it("lets no device report take back the name a user typed in the edit dialog", () => {
+    // The dialog writes at the user rank. Both a model and a MusicCast zone name rank below it,
+    // so neither can rename the device behind the user's back on the next model report.
+    expect(nextDeviceLabel("Cinema", id, "RX-V481", LABEL_RANK.model, "Cinema", LABEL_RANK.user)).toBeUndefined();
+    expect(
+      nextDeviceLabel("Cinema", id, "Wohnzimmer", LABEL_RANK.deviceName, "Cinema", LABEL_RANK.user),
+    ).toBeUndefined();
+  });
+});
+
+describe("labelRankOf (the rank a stored marker carries)", () => {
+  it("takes a rank it recognises", () => {
+    expect(labelRankOf(LABEL_RANK.model)).toBe(LABEL_RANK.model);
+    expect(labelRankOf(LABEL_RANK.deviceName)).toBe(LABEL_RANK.deviceName);
+    expect(labelRankOf(LABEL_RANK.user)).toBe(LABEL_RANK.user);
+  });
+
+  it("reads anything else as the WEAKEST rank", () => {
+    // A device object written before 2.11.0 carries a name without a rank beside it, and the
+    // admin lets anything be typed into `native` by hand. Reading that as the strongest rank
+    // would freeze the name against every later report — the weakest one only means the adapter
+    // may improve on it.
+    expect(labelRankOf(undefined)).toBe(LABEL_RANK.model);
+    expect(labelRankOf("user")).toBe(LABEL_RANK.model);
+    expect(labelRankOf(99)).toBe(LABEL_RANK.model);
+    expect(labelRankOf(null)).toBe(LABEL_RANK.model);
   });
 });
 

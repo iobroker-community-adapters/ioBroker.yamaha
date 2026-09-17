@@ -23,7 +23,10 @@ export default [
       ".dev-server/",
       ".vscode/",
       "*.test.js",
-      "test/**",
+      // Only the ioBroker TEMPLATE files under test/ are excluded — the synchronised standards
+      // suite (test/standards/*.test.ts) is linted like every other test file (fleet rule
+      // since 2026-09-02); "test/**" took it out of the lint entirely.
+      "test/*.js",
       "*.config.mjs",
       "build",
       // Generated coverage report (npm run coverage) — never lint it.

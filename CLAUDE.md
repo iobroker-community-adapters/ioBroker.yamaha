@@ -783,6 +783,60 @@ drei Plan-Aussagen wurden beim Bauen WIDERLEGT und sind hier in ihrer gemessenen
   (`auto` + gefüllte Tabelle; der Nutzer hat das nicht gewählt, und ohne die Zeile erklärt ihm nichts,
   warum die Hälfte seiner Receiver verstummt ist), `info` bei `never`, denn das hat er gewählt.
 
+## In-depth 2026-09-17 (v2.11.0) — Regeln, die im Code stehen müssen
+
+Auslöser: der Flotten-Sweep `Entwicklung/specs/2026-09-16-fleet-fix-verification-sweep.md`, Abschnitt 4
+yamaha (F1 + vier offene Lesungen). Mutationswelle 18 (`mutations_yamaha_2026-09-17-w18.py`, X1–X22 ohne
+X4/X19, 20/20 gefangen) hält die Regeln.
+
+- **Ein gefangener Wert wird NUR über `errorMessage` zu Text** (`lib/util.ts`) — Error → `message`,
+  Nicht-Objekt → `String()` (auch ein Symbol, wo ein Template-Literal wirft), Objekt →
+  `JSON.stringify` in einem try DERSELBEN Funktion mit `Object.prototype.toString.call` als Rückfall
+  (auch für den `undefined`-Rückgabewert, den ein `toJSON: () => undefined` erzeugt). Vorher stand
+  überall `e instanceof Error ? e.message : String(e)`: ein abgelehntes `{ code: "ECONNRESET" }` stand
+  als `[object Object]` im Log. **Kein eigener String-Zweig** — `String("EPERM")` IST `"EPERM"`, der
+  Zweig wäre doppelter Code (im ersten Mutationslauf als Überlebender X4 aufgefallen und entfernt).
+  Die drei Stellen, die einen gefangenen Wert zu einem echten `Error` machen (`command-gate`,
+  `ynca-client`, `yxc/http-client`), nehmen `new Error(errorMessage(e))`, nie `String(e)`.
+  Mechanisch: Prüfpaket-Check `caught-value-text` (`iobroker-adapter-checks` ≥ 0.11.2).
+- **Ein Schlüssel verlässt ein State-Objekt durch EINEN Schreibvorgang einer Kopie** (`clearStaleBounds`
+  in `main.ts`): `getObject` → Kopie ohne die weggefallene Grenze → `setForeignObject(<volle Id>, kopie)`.
+  Das frühere Löschpaar `delObjectAsync` + `extendObject` nahm den WERT des Datenpunkts mit und strich
+  die Id aus jedem Enum — die Raum- und Gewerkzuordnung des Nutzers, die kein Neuanlegen zurückbringt
+  (Flottenregel krobi 2026-09-12, `reference_attribut_entfernen_ohne_setobject`). `setObject` bleibt
+  S5054, `setForeignObject` ist es nicht. **Der Abzug wandert ERST nach dem Schreibvorgang weiter**
+  (`storedBounds`): gemerkte Grenzen, die nie in der Datenbank ankamen, hielten jeden späteren Lauf
+  davon ab, die Reparatur zu wiederholen. Mechanisch: Prüfpaket-Check `object-rewrite` (≥ 0.9.0).
+- **Der Anzeigename des Geräts hat ein GEDÄCHTNIS am Objekt** (`native.label` + `native.labelRank`,
+  Ränge `model < deviceName < user`). `preserve: { common: ["name"] }` ist raus — der Adapter besitzt
+  Namen (krobi 2026-09-02) und Verschonen verbirgt nur, wer geschrieben hat. Drei Regeln hängen daran:
+  `ensureDeviceHeader` schreibt den zuletzt ESTABLISHTEN Namen zurück statt des nackten Bezeichners (ein
+  beim Neustart ausgeschaltetes Gerät verlor ihn sonst); der Merker sät `deviceLabels`, damit
+  `nextDeviceLabel` den eigenen Namen des Vorlaufs als EIGENEN erkennt (vorher las er ihn als fremden —
+  „der Nutzer hat benannt, seiner gewinnt" — und eine Umbenennung in der MusicCast-App erreichte den
+  Baum nie wieder: dieselbe Klasse wie der parcelapp-Fund, bei dem `preserve` die EIGENE Änderung des
+  Nutzers blockierte); und der Bearbeiten-Dialog der Gerätekarte schreibt Name UND Merker im selben
+  Vorgang, auf Rang `user`, den keine Gerätemeldung erreicht. Ein von Hand eingetragener Rang wird
+  als SCHWÄCHSTER gelesen (`labelRankOf`), sonst friert er den Namen für immer ein. Sperre gegen den
+  Rückfall: `main.test.ts` sammelt JEDEN `extendObject`-Aufruf mit `preserve.common` — die Liste ist leer.
+  **⚠️ Der Merker ist NEU, also hat ihn KEINE Bestandsanlage** — ohne Übernahme schriebe der erste Start
+  nach dem Update den nackten Bezeichner, und ein ausgeschaltetes Gerät behielte ihn. `ensureDeviceHeader`
+  übernimmt deshalb einmalig einen vorhandenen `common.name` ≠ Bezeichner als `label`, auf Rang `user`:
+  der Baum kann einen MusicCast-Zonennamen nicht mehr von einem im Dialog getippten unterscheiden, und
+  den zweiten still zu ersetzen ist der schlimmere Fehler. Ein Name, der KEIN einfacher String ist
+  (Übersetzungsobjekt aus dem Admin), wird gar nicht angefasst — der Adapter schreibt nur einfache
+  Strings, hat dort also nichts Besseres hinzusetzen.
+- **Fünf Fire-and-forget-Stellen hatten keinen Empfänger** (der Sweep hatte sie nie gelesen; seine
+  Heuristik „ein `try` in Reichweite" sieht nicht, ob die WERFENDE Anweisung darin liegt): `yxc`- und
+  `xml`-`refreshZone` schützen jetzt ihren Anwende-Schritt (Push-Handler bzw. Rücklesen nach einer
+  Nutzer-Schreibung rufen sie ohne `await`), `attemptTransport` holt den Fabrik-Aufruf in den Wächter
+  (Timer-Rückruf), und die zwei Ketten `void x().then(cb)` ohne `.catch` (XML-Zonenname,
+  YNCA-Browse-Render) haben ihren eigenen bekommen. **Der Rückgabewert von `refreshZone` beantwortet
+  „hat das GERÄT geantwortet"** — ein misslungener Baum-Schreibvorgang darf kein Drop melden, sonst
+  trennt ein Datenbank-Schluckauf einen erreichbaren Receiver. Der Wächter im `.catch` des
+  Browse-Renders setzt die Rendersperre NICHT zurück: sie fällt schon in der ersten Anweisung des
+  `.then`, davor kann nichts werfen (Überlebender X19, entfernt statt dokumentiert).
+
 ## Audit 2026-09-15 (v2.10.0) — Regeln, die im Code stehen müssen
 
 Bericht `../../Ressourcen/yamaha/audit-2026-09-15.md` (F1–F19, O1–O4, Icons), Plan-Kopie

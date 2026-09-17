@@ -1,4 +1,5 @@
 import type { ConnectionHandle } from "../controller";
+import { errorMessage } from "../util";
 
 // Re-exported so existing importers (main.ts) keep resolving it from here.
 export type { ConnectionHandle };
@@ -113,7 +114,7 @@ export class DeviceSupervisor {
     } catch (e) {
       // Never let an attempt failure vanish silently — without this line a repeatable
       // error (e.g. object creation failing) becomes an invisible endless retry loop.
-      this.deps.log.debug(`connection attempt failed, retrying: ${e instanceof Error ? e.message : String(e)}`);
+      this.deps.log.debug(`connection attempt failed, retrying: ${errorMessage(e)}`);
       handle = null;
     }
     if (this.closed) {

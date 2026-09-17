@@ -234,6 +234,38 @@ describe("MultiTransportHandle per-transport reconnect", () => {
     expect(timers).toHaveLength(1);
   });
 
+  // The retry runs from a timer callback as `void this.attemptTransport(...)`, so nothing holds
+  // its promise. Everything inside already sat in a try — except the factory call itself, which
+  // is the one statement that can throw before it: a rejection there would reach no handler, and
+  // js-controller stops the instance for an unhandled rejection.
+  test("a THROWING rebuild factory neither escapes nor ends the retry loop", async () => {
+    const ynca = fakeConn("ynca", [state("power", "Power")]);
+    const yxc = fakeConn("yxc", [state("dist.role", "Role")]);
+    const { handle, timers, fireTimers, logs } = reconnectSetup([ynca, yxc], {
+      ynca: () => {
+        throw new Error("no factory for this transport");
+      },
+    });
+    await handle.start();
+    ynca.drop();
+    expect(timers).toHaveLength(1);
+    const rejections: unknown[] = [];
+    const onRejection = (reason: unknown): void => {
+      rejections.push(reason);
+    };
+    process.on("unhandledRejection", onRejection);
+    try {
+      await fireTimers();
+      await Promise.resolve();
+    } finally {
+      process.off("unhandledRejection", onRejection);
+    }
+    expect(rejections).toEqual([]);
+    expect(logs.some(line => line.includes("could not rebuild the transport"))).toBe(true);
+    // And the loop survives it: a transport that cannot be rebuilt right now gets another turn.
+    expect(timers).toHaveLength(1);
+  });
+
   test("when the LAST live transport drops, the supervisor's drop fires once", async () => {
     const ynca = fakeConn("ynca", [state("power", "Power")]);
     const yxc = fakeConn("yxc", [state("dist.role", "Role")]);

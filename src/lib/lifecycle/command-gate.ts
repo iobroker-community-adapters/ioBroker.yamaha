@@ -20,6 +20,7 @@
  * - **The timeout budget belongs to the running operation**, never to queue-waiting — the
  *   nut2 client's queue makes the same distinction for the same reason.
  */
+import { errorMessage } from "../util";
 
 /** What a queued operation is worth: a user write outranks background polling. */
 export type CommandPriority = "user" | "background";
@@ -202,7 +203,7 @@ export class CommandGate {
       const result = await entry.run();
       entry.resolve(result);
     } catch (e) {
-      entry.reject(e instanceof Error ? e : new Error(String(e)));
+      entry.reject(e instanceof Error ? e : new Error(errorMessage(e)));
     } finally {
       this.running = false;
       this.pump();

@@ -58,7 +58,10 @@ vi.mock("@iobroker/adapter-core", () => {
       this.writes.push(this.key(id));
       return Promise.resolve({ id, notChanged: false });
     });
-    public getStateAsync = vi.fn((id: string) => Promise.resolve(this.states.get(this.key(id)) ?? null));
+    // A COPY, never the stored object: with a shared reference a change the adapter makes on what
+    // it read would already sit in the store, and no assertion could tell a missing write from a
+    // done one (fleet rule, `read-stub-copy`).
+    public getStateAsync = vi.fn((id: string) => Promise.resolve(copyOf(this.states.get(this.key(id)))));
     public extendObject = vi.fn((id: string, obj: Record<string, unknown>) => {
       if (this.extendObjectFail) {
         return Promise.reject(this.extendObjectFail);
@@ -88,7 +91,7 @@ vi.mock("@iobroker/adapter-core", () => {
       }
       return Promise.resolve();
     });
-    public getObjectAsync = vi.fn((id: string) => Promise.resolve(this.objects.get(this.key(id)) ?? null));
+    public getObjectAsync = vi.fn((id: string) => Promise.resolve(copyOf(this.objects.get(this.key(id)))));
     public getAdapterObjectsAsync = vi.fn(() => {
       const out: Record<string, unknown> = {};
       for (const [k, v] of this.objects) {
@@ -115,9 +118,25 @@ vi.mock("@iobroker/adapter-core", () => {
       }
       return Promise.resolve(out);
     });
-    public getForeignObjectAsync = vi.fn((id: string) => Promise.resolve(this.foreignObjects.get(id) ?? null));
+    public getForeignObjectAsync = vi.fn((id: string) => Promise.resolve(copyOf(this.foreignObjects.get(id))));
     public setForeignObjectAsync = vi.fn((id: string, obj: Record<string, unknown>) => {
       this.foreignObjects.set(id, obj);
+      return Promise.resolve();
+    });
+    /**
+     * ⚠️ REPLACES, it does not merge — that is the whole reason the adapter uses it to drop a
+     * key from an object. A merging double here would let a rewrite that keeps the stale bound
+     * pass green, which is exactly the assertion the bounds test makes. An id inside this
+     * instance's namespace lands in the ordinary object store, so the tests read it back the
+     * same way they read every other object.
+     */
+    public setForeignObject = vi.fn((id: string, obj: Record<string, unknown>) => {
+      const prefix = `${this.namespace}.`;
+      if (id.startsWith(prefix)) {
+        this.objects.set(id.slice(prefix.length), obj);
+      } else {
+        this.foreignObjects.set(id, obj);
+      }
       return Promise.resolve();
     });
     public extendForeignObjectAsync = vi.fn((id: string, patch: Record<string, unknown>) => {
@@ -320,6 +339,22 @@ import { Yamaha } from "./main";
 import { DISCOVERY_SCHEMA } from "./lib/lifecycle/discovery-schema";
 import { DEVICE_TYPE_ICONS, iconForModel } from "./lib/device-type";
 import { MAX_HTTP_BODY_BYTES } from "./lib/util";
+import { LABEL_RANK } from "./lib/pure-helpers";
+
+/**
+ * What a read stub answers with: a COPY of the stored value, never the stored object itself.
+ *
+ * With a shared reference, a change the adapter makes on what it just read would already sit in
+ * the store — and no assertion could then tell a missing write from a done one (fleet rule
+ * `read-stub-copy`, measured on hassemu 2026-09-17). Absent stays `null`, as the real API answers.
+ *
+ * @param value the stored value, if any
+ * @returns a detached copy, or null
+ */
+function copyOf<T>(value: T | undefined): T | null {
+  return value === undefined || value === null ? null : structuredClone(value);
+}
+
 import { writeDiscovered } from "./lib/discovered-store";
 import type { ConnectionHandle } from "./lib/controller";
 
@@ -483,13 +518,116 @@ describe("Yamaha onReady — configured devices", () => {
     expect(ctx.calls).toHaveLength(1);
   });
 
-  it("does not overwrite a name the user changed on the device object", async () => {
+  it("spares no name anywhere — the adapter owns them", async () => {
+    // The fleet rule since 2026-09-02: names belong to the adapter, `preserve` is the opposite
+    // of owning one. This list is the guard against the option creeping back in on ANY write —
+    // it must stay empty, and it is deliberately not scoped to the device object.
     const ctx = setup();
     await ctx.i.onReady();
-    const call = (ctx.i as unknown as { extendObject: ReturnType<typeof vi.fn> }).extendObject.mock.calls.find(
-      c => c[0] === "Living_room",
-    );
-    expect(call?.[2]).toEqual({ preserve: { common: ["name"] } });
+    await flush();
+    const spared = (ctx.i as unknown as { extendObject: ReturnType<typeof vi.fn> }).extendObject.mock.calls
+      .filter(c => (c[2] as { preserve?: { common?: string[] } } | undefined)?.preserve?.common)
+      .map(c => String(c[0]));
+    expect(spared).toEqual([]);
+  });
+
+  it("writes the display name it established last, not the bare id, on every start", async () => {
+    // Without the record the header write falls back to the object id, so a receiver that is
+    // OFF during a restart loses the name it reported for itself — and `nextDeviceLabel` reads
+    // its own earlier label as a stranger's, so it never follows a device-side rename again.
+    const ctx = setup();
+    ctx.i.objects.set("Living_room", {
+      type: "device",
+      common: { name: "Kitchen speaker" },
+      native: { label: "Kitchen speaker", labelRank: LABEL_RANK.deviceName },
+    });
+    await ctx.i.onReady();
+    await flush();
+    const common = ctx.i.objects.get("Living_room")?.common as Record<string, unknown>;
+    expect(common.name).toBe("Kitchen speaker");
+  });
+
+  it("adopts the name of an instance upgraded from a version without the record", async () => {
+    // The record is new in 2.11.0, so EVERY existing installation reaches this start with a
+    // display name and no marker beside it. Without adopting it the first start after the update
+    // would write the bare object id — and a receiver that is switched off would keep the id.
+    const ctx = setup();
+    ctx.i.objects.set("Living_room", { type: "device", common: { name: "Wohnzimmer" }, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    const stored = ctx.i.objects.get("Living_room") as Record<string, unknown>;
+    expect((stored.common as Record<string, unknown>).name).toBe("Wohnzimmer");
+    // Adopted at the user rank: the tree cannot tell a name the owner typed from one the device
+    // reported, and replacing the owner's is the worse of the two mistakes.
+    expect(stored.native).toMatchObject({ label: "Wohnzimmer", labelRank: LABEL_RANK.user });
+  });
+
+  it("leaves a name that is not a plain string completely alone", async () => {
+    // A translation object in common.name was typed into the admin on purpose. The adapter only
+    // ever writes plain strings, so it has nothing better to put there — and overwriting it with
+    // the object id would destroy it.
+    const ctx = setup();
+    ctx.i.objects.set("Living_room", {
+      type: "device",
+      common: { name: { en: "Living room", de: "Wohnzimmer" } },
+      native: {},
+    });
+    await ctx.i.onReady();
+    await flush();
+    const stored = ctx.i.objects.get("Living_room") as Record<string, unknown>;
+    expect((stored.common as Record<string, unknown>).name).toEqual({ en: "Living room", de: "Wohnzimmer" });
+    expect(stored.native).not.toHaveProperty("label");
+  });
+
+  it("seeds the id as the name for a device that never carried one", async () => {
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    const common = ctx.i.objects.get("Living_room")?.common as Record<string, unknown>;
+    expect(common.name).toBe("Living_room");
+  });
+
+  it("follows a device that renamed itself, across a restart", async () => {
+    // The in-memory record is empty at process start, so WITHOUT seeding it from the device
+    // object the adapter's own earlier label reads as a stranger's ("the user named this
+    // device — theirs wins") and a receiver renamed in the MusicCast app is never followed
+    // again. This is the parcelapp finding in another shape: the guard against overwriting
+    // blocked the user's OWN change.
+    const ctx = setup();
+    ctx.i.objects.set("Living_room", {
+      type: "device",
+      common: { name: "Kitchen speaker" },
+      native: { label: "Kitchen speaker", labelRank: LABEL_RANK.deviceName },
+    });
+    await ctx.i.onReady();
+    await flush();
+    await (
+      ctx.i as unknown as { updateDeviceLabel(id: string, name: string, rank: number): Promise<void> }
+    ).updateDeviceLabel("Living_room", "Wohnzimmer", LABEL_RANK.deviceName);
+
+    const stored = ctx.i.objects.get("Living_room") as Record<string, unknown>;
+    expect((stored.common as Record<string, unknown>).name).toBe("Wohnzimmer");
+    // The marker moves with the name, in the same write — a name without it would read as a
+    // stranger's again on the next start and the header write would put the bare id back.
+    expect(stored.native).toMatchObject({ label: "Wohnzimmer", labelRank: LABEL_RANK.deviceName });
+  });
+
+  it("keeps the name a user typed in the edit dialog against a device's own report", async () => {
+    // The dialog writes at the user rank, which no device report reaches — so a MusicCast zone
+    // name arriving after the rename cannot take the name back.
+    const ctx = setup();
+    ctx.i.objects.set("Living_room", {
+      type: "device",
+      common: { name: "Cinema" },
+      native: { label: "Cinema", labelRank: LABEL_RANK.user },
+    });
+    await ctx.i.onReady();
+    await flush();
+    await (
+      ctx.i as unknown as { updateDeviceLabel(id: string, name: string, rank: number): Promise<void> }
+    ).updateDeviceLabel("Living_room", "Main Room", LABEL_RANK.deviceName);
+    const common = ctx.i.objects.get("Living_room")?.common as Record<string, unknown>;
+    expect(common.name).toBe("Cinema");
   });
 
   it("skips a configured row whose object id is already taken", async () => {
@@ -905,7 +1043,7 @@ describe("Yamaha migrations", () => {
     // Writing an instance object's native RESTARTS the adapter. Running the
     // migration unconditionally would restart the instance on every single start.
     expect(
-      (ctx.i as unknown as { setForeignObjectAsync: ReturnType<typeof vi.fn> }).setForeignObjectAsync,
+      (ctx.i as unknown as { setForeignObject: ReturnType<typeof vi.fn> }).setForeignObject,
     ).not.toHaveBeenCalled();
     expect(ctx.i.log.info).not.toHaveBeenCalledWith(expect.stringContaining("migrated group_zones"));
   });
@@ -1195,30 +1333,79 @@ describe("Yamaha bounds an update no longer declares", () => {
   // put it there — and unlike a dropdown a bound has no neutral value to overwrite it with: a
   // written `null` stays in the object and js-controller's range check reads it as 0. Measured on
   // `tuner.frequency`, whose FM-only envelope had to go once a DAB receiver reported 180064 kHz.
+  // The key therefore leaves by ONE `setForeignObject` write of a copy without it.
   it("drops a bound the new definition no longer carries, keeping the rest of the object", async () => {
     const ctx = setup();
     ctx.i.objects.set("Living_room.tuner.frequency", {
       type: "state",
-      // `smartName` stands for everything only the STORED object carries — the repair deletes and
-      // re-creates, so a field the new definition does not mention must come through it untouched.
+      // `smartName` stands for everything only the STORED object carries — the repair writes a
+      // COPY of what it read, so a field the new definition does not mention rides along.
       common: { name: "f", type: "number", unit: "kHz", min: 87500, max: 108000, smartName: "Radio" },
-      native: {},
+      native: { learned: true },
     });
     await ctx.i.onReady();
     await flush();
     const upsert = ctx.calls[0].deps.upsertObject as (id: string, def: unknown) => Promise<void>;
+    const deleted = (ctx.i as unknown as { delObjectAsync: ReturnType<typeof vi.fn> }).delObjectAsync;
+    const before = deleted.mock.calls.filter(c => String(c[0]).includes("tuner.frequency")).length;
 
     await upsert("Living_room.tuner.frequency", {
       type: "state",
       common: { name: "f", type: "number", unit: "kHz", role: "level", read: true, write: true },
     });
 
-    const common = ctx.i.objects.get("Living_room.tuner.frequency")?.common as Record<string, unknown>;
+    const stored = ctx.i.objects.get("Living_room.tuner.frequency") as Record<string, unknown>;
+    const common = stored.common as Record<string, unknown>;
     expect("min" in common, "min still declared").toBe(false);
     expect("max" in common, "max still declared").toBe(false);
-    // The point of read → delete → re-create rather than a plain rewrite.
+    // ONE write of a copy, never a delete: `delObject` would drop the state's value and strip the
+    // id out of every enum — the user's room and function assignments — and nothing a re-create
+    // writes brings those back (fleet rule, krobi 2026-09-12).
+    expect(
+      deleted.mock.calls.filter(c => String(c[0]).includes("tuner.frequency")).length,
+      "the object was deleted instead of rewritten",
+    ).toBe(before);
     expect(common.smartName).toBe("Radio");
     expect(common.unit).toBe("kHz");
+    expect(stored.native).toEqual({ learned: true });
+
+    // And the snapshot moves on with the WRITE: a second upsert of the same definition must
+    // find nothing left to drop. Without that the repair reads and rewrites the object on
+    // every single upsert of that datapoint, for the life of the instance.
+    const wrote = (ctx.i as unknown as { setForeignObject: ReturnType<typeof vi.fn> }).setForeignObject;
+    const calls = wrote.mock.calls.length;
+    await upsert("Living_room.tuner.frequency", {
+      type: "state",
+      common: { name: "f", type: "number", unit: "kHz", role: "level", read: true, write: true },
+    });
+    expect(wrote.mock.calls.length, "the bound repair ran a second time").toBe(calls);
+  });
+
+  it("leaves the snapshot on the OLD bounds when the rewrite fails", async () => {
+    // Remembering bounds that never reached the database would make the next run believe the
+    // removal happened — the stale bound would then sit in the object for good, and every
+    // value beyond it draws a js-controller warning.
+    const ctx = setup();
+    ctx.i.objects.set("Living_room.tuner.frequency", {
+      type: "state",
+      common: { name: "f", type: "number", unit: "kHz", min: 87500, max: 108000 },
+      native: {},
+    });
+    await ctx.i.onReady();
+    await flush();
+    const upsert = ctx.calls[0].deps.upsertObject as (id: string, def: unknown) => Promise<void>;
+    const wrote = (ctx.i as unknown as { setForeignObject: ReturnType<typeof vi.fn> }).setForeignObject;
+    wrote.mockRejectedValueOnce(new Error("objects db read-only"));
+    const shrunk = {
+      type: "state" as const,
+      common: { name: "f", type: "number", unit: "kHz", role: "level", read: true, write: true },
+    };
+
+    await upsert("Living_room.tuner.frequency", shrunk);
+    const after = wrote.mock.calls.length;
+    await upsert("Living_room.tuner.frequency", shrunk);
+
+    expect(wrote.mock.calls.length, "the failed repair was never retried").toBe(after + 1);
   });
 
   it("leaves an object alone when the new definition still declares its bounds", async () => {

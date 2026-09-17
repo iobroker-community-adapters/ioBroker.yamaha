@@ -10,7 +10,9 @@
     },
     "native": {
       "source": "manual",
-      "volumeAsPercent": false
+      "volumeAsPercent": false,
+      "label": "RX-A2A",
+      "labelRank": 1
     },
     "_id": "yamaha.0.10_10_0_11"
   },
@@ -8927,7 +8929,9 @@
     },
     "native": {
       "source": "manual",
-      "volumeAsPercent": false
+      "volumeAsPercent": false,
+      "label": "RX-V473",
+      "labelRank": 1
     },
     "_id": "yamaha.0.10_10_0_12"
   },
@@ -12456,7 +12460,9 @@
     },
     "native": {
       "source": "manual",
-      "volumeAsPercent": false
+      "volumeAsPercent": false,
+      "label": "RX-V6A",
+      "labelRank": 1
     },
     "_id": "yamaha.0.10_10_0_13"
   },
@@ -20056,7 +20062,9 @@
     },
     "native": {
       "source": "manual",
-      "volumeAsPercent": false
+      "volumeAsPercent": false,
+      "label": "R-N500",
+      "labelRank": 1
     },
     "_id": "yamaha.0.10_10_0_14"
   },
@@ -22889,7 +22897,9 @@
     },
     "native": {
       "source": "manual",
-      "volumeAsPercent": false
+      "volumeAsPercent": false,
+      "label": "Badezimmer",
+      "labelRank": 2
     },
     "_id": "yamaha.0.10_10_0_15"
   },
@@ -25804,7 +25814,9 @@
     },
     "native": {
       "source": "manual",
-      "volumeAsPercent": false
+      "volumeAsPercent": false,
+      "label": "Wohnzimmer",
+      "labelRank": 2
     },
     "_id": "yamaha.0.10_10_0_16"
   },

@@ -3,6 +3,7 @@ import { formatWireNumber } from "./catalog/value-coerce";
 import { playTimeTwin } from "./catalog/play-time";
 import type { ObjectDef } from "./catalog/types";
 import { tName } from "./i18n";
+import { errorMessage } from "./util";
 import type { ConnectionHandle, ControllerLog } from "./controller";
 import {
   SOURCE_INPUTS,
@@ -741,7 +742,7 @@ export class YncaDeviceController implements ConnectionHandle {
       }
       this.deps.log.debug(`${this.deviceId}: background value refresh done (YNCA)`);
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: background value refresh failed: ${String(e)}`);
+      this.deps.log.debug(`${this.deviceId}: background value refresh failed: ${errorMessage(e)}`);
     }
   }
 
@@ -974,7 +975,7 @@ export class YncaDeviceController implements ConnectionHandle {
         await this.upsertTracked(object);
       }
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: could not republish the object tree: ${String(e)}`);
+      this.deps.log.debug(`${this.deviceId}: could not republish the object tree: ${errorMessage(e)}`);
     }
   }
 

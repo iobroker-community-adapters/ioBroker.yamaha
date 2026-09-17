@@ -1,6 +1,6 @@
 import { get as httpGet, request as httpRequest, type IncomingMessage } from "node:http";
 import type { CommandGate } from "../lifecycle/command-gate";
-import { MAX_HTTP_BODY_BYTES } from "../util";
+import { errorMessage, MAX_HTTP_BODY_BYTES } from "../util";
 
 /**
  * Whether a command path changes something on the device (as opposed to reading). The
@@ -109,7 +109,7 @@ function defaultSend(ip: string): YxcSend {
           try {
             resolve(assertOk(JSON.parse(data), command));
           } catch (e) {
-            reject(e instanceof Error ? e : new Error(String(e)));
+            reject(e instanceof Error ? e : new Error(errorMessage(e)));
           }
         });
       };

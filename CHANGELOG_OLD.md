@@ -1,4 +1,14 @@
 # Older changes
+## 2.8.0 (2026-09-11)
+
+- (krobipd) Fixed: A volume written to a MusicCast receiver now arrives exactly — the adapter reads the receiver's own step declaration instead of guessing a ratio (#623)
+- (krobipd) Fixed: Every zone of a receiver now carries the same volume scale — a third zone used to show a raw 0…161 count next to decibels in the other two
+- (krobipd) Changed: The volume datapoint now carries the minimum, maximum and step the receiver reports for that zone — a receiver whose zones differ gets a different range per zone
+- (krobipd) New: Setting "Volume as 0–100 %" turns every volume datapoint, in every zone, into a percentage — what most VIS widgets expect. Off by default; the receiver's own scale stays the truth
+- (krobipd) Changed: The datapoints actualVolume, actualVolumeMode and inputText are gone — volume and input carry the same information
+- (krobipd) Changed: After this update every receiver is asked about its abilities once more, so the first start takes a little longer than usual
+- (krobipd) Fixed: A DAB receiver no longer logs a warning on every tuner poll — the frequency datapoint was limited to the FM band while the receiver reported DAB frequencies
+
 ## 2.7.2 (2026-09-09)
 
 - (krobipd) Fixed: The volume readout now follows the scale the receiver is actually showing, so a receiver set to numbers no longer reports them as decibels.

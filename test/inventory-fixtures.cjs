@@ -18,7 +18,7 @@ const http = require("node:http");
 
 const DIR = path.join(__dirname, "fixtures", "inventory");
 
-/** @returns {any[]} every device fixture, in the order devices.json lists them */
+/** @returns {unknown[]} every device fixture, in the order devices.json lists them */
 function loadFixtures() {
   const manifest = JSON.parse(fs.readFileSync(path.join(DIR, "devices.json"), "utf8"));
   return manifest.map(entry => JSON.parse(fs.readFileSync(path.join(DIR, `${entry.id}.json`), "utf8")));
@@ -71,8 +71,8 @@ const YXC_UNSUPPORTED = { response_code: 5 };
  * Build the answers a MusicCast device gives, filling the endpoints the capture does not carry
  * with ones derived from its own getFeatures — never with invented capabilities.
  *
- * @param {any} yxc the fixture's yxc block
- * @returns {Record<string, any>} endpoint -> response
+ * @param {unknown} yxc the fixture's yxc block
+ * @returns {Record<string, unknown>} endpoint -> response
  */
 function yxcAnswers(yxc) {
   const answers = { ...yxc.answers };
@@ -112,7 +112,7 @@ function yxcAnswers(yxc) {
  * common case for every 2015+ receiver) could not be expressed, and the description could not
  * be served at all — a plain GET fell through to the XML handler's `RC="2"`.
  *
- * @param {any} fixture the device fixture (its yxc and/or xml block)
+ * @param {unknown} fixture the device fixture (its yxc and/or xml block)
  * @returns {Promise<{port: number, close: () => Promise<void>}>} the listening server
  */
 function startHttp(fixture) {
@@ -175,11 +175,11 @@ function startHttp(fixture) {
  * surr_decoder_type_list, menu_list and cursor_list. A YNCA-only fixture declares nothing
  * (its dropdowns are candidates the device cannot confirm).
  *
- * @param {any} fixture one device fixture
+ * @param {unknown} fixture one device fixture
  * @returns {Record<string, string[]>} state id → declared values (in the transport's own spelling)
  */
 function declaredListsOf(fixture) {
-  const lists = /** @type {Record<string, string[]>} */ ({});
+  const lists = {};
   const zonePrefix = zone => (zone === "main" ? "" : `multiroom.${zone}.`);
   if (fixture.xml) {
     const zones = [
@@ -233,16 +233,16 @@ function declaredListsOf(fixture) {
  * A fixture that speaks no MusicCast declares nothing here; its `volume` comes from the YNCA
  * or XML catalog instead and is not this reader's business.
  *
- * @param {any} fixture one device fixture
+ * @param {unknown} fixture one device fixture
  * @returns {Record<string, {raw?: {min: number, max: number, step: number}, db?: {min: number, max: number, step: number}, numeric?: {min: number, max: number, step: number}}>}
  *   zone-prefixed `volume` id → the ranges that zone declares
  */
 function declaredVolumeRangesOf(fixture) {
-  const out = /** @type {Record<string, any>} */ ({});
+  const out = {};
   const features = fixture.yxc?.answers?.["system/getFeatures"];
   for (const zone of features?.zone ?? []) {
     const prefix = zone.id === "main" ? "" : `multiroom.${zone.id}.`;
-    const by = /** @type {Record<string, any>} */ ({});
+    const by = {};
     for (const entry of zone.range_step ?? []) {
       by[entry.id] = { min: entry.min, max: entry.max, step: entry.step };
     }
@@ -255,7 +255,7 @@ function declaredVolumeRangesOf(fixture) {
 }
 
 /**
- * @param {any} server a net or http server
+ * @param {unknown} server a net or http server
  * @returns {Promise<{port: number, close: () => Promise<void>}>} resolved once it listens
  */
 function listen(server) {

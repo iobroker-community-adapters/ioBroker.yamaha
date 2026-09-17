@@ -1,9 +1,22 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "2.10.0",
+    "version": "2.11.0",
     "nogit": true,
     "news": {
+      "2.11.0": {
+        "en": "A brief database hiccup no longer stops the adapter, and a receiver that is switched off keeps its name after a restart.",
+        "de": "Ein kurzer Datenbank-Aussetzer stoppt den Adapter nicht mehr, und ein ausgeschalteter Receiver behält nach einem Neustart seinen Namen.",
+        "ru": "Кратковременный сбой базы данных больше не останавливает адаптер, а выключенный ресивер сохраняет своё имя после перезапуска.",
+        "pt": "Uma falha breve da base de dados já não para o adaptador, e um recetor desligado mantém o seu nome após um reinício.",
+        "nl": "Een korte hapering van de database stopt de adapter niet meer, en een uitgeschakelde receiver behoudt zijn naam na een herstart.",
+        "fr": "Une brève interruption de la base de données n'arrête plus l'adaptateur, et un ampli-tuner éteint conserve son nom après un redémarrage.",
+        "it": "Una breve interruzione del database non arresta più l'adattatore e un sintoamplificatore spento mantiene il suo nome dopo un riavvio.",
+        "es": "Un breve fallo de la base de datos ya no detiene el adaptador, y un receptor apagado conserva su nombre tras un reinicio.",
+        "pl": "Krótka awaria bazy danych nie zatrzymuje już adaptera, a wyłączony amplituner zachowuje swoją nazwę po ponownym uruchomieniu.",
+        "uk": "Короткий збій бази даних більше не зупиняє адаптер, а вимкнений ресивер зберігає свою назву після перезапуску.",
+        "zh-cn": "数据库短暂故障不再停止适配器，已关闭的接收机在重启后保留其名称。"
+      },
       "2.10.0": {
         "en": "A receiver that is unplugged or stops answering now shows as disconnected within seconds instead of many minutes, and a written value is confirmed as soon as the receiver took it.",
         "de": "Ein ausgesteckter oder verstummter Receiver gilt jetzt nach Sekunden statt nach vielen Minuten als getrennt, und ein geschriebener Wert wird bestätigt, sobald der Receiver ihn übernommen hat.",
@@ -81,19 +94,6 @@
         "pl": "Głośność podąża za skalą pokazywaną przez amplituner, a wejścia noszą jego własne nazwy. Pierwszy start po tej aktualizacji trwa nieco dłużej niż zwykle.",
         "uk": "Гучність показується в тій самій шкалі, що й на ресивері, а входи мають його власні назви. Перший запуск після оновлення триває трохи довше, ніж зазвичай.",
         "zh-cn": "音量按功放当前显示的刻度呈现，输入源使用功放自己的名称。此次更新后的首次启动会比平时稍慢一些。"
-      },
-      "2.7.1": {
-        "en": "The first connection asks a receiver only what its generation can answer, and a datapoint the device reveals later now appears at once instead of after a restart.",
-        "de": "Die erste Verbindung fragt einen Receiver nur noch, was seine Generation beantworten kann, und ein später gemeldeter Datenpunkt erscheint sofort statt erst nach einem Neustart.",
-        "ru": "Первое подключение спрашивает ресивер только о том, что умеет его поколение, а точка данных, о которой устройство сообщает позже, появляется сразу, а не после перезапуска.",
-        "pt": "A primeira ligação pergunta ao recetor apenas o que a sua geração sabe responder, e um ponto de dados revelado mais tarde aparece de imediato em vez de só após reiniciar.",
-        "nl": "De eerste verbinding vraagt een receiver alleen wat zijn generatie kan beantwoorden, en een datapunt dat het apparaat later meldt verschijnt meteen in plaats van na een herstart.",
-        "fr": "La première connexion ne demande à l'ampli que ce que sa génération sait répondre, et un point de données révélé plus tard apparaît aussitôt au lieu d'attendre un redémarrage.",
-        "it": "La prima connessione chiede al ricevitore solo ciò che la sua generazione sa rispondere, e un datapoint rivelato più tardi compare subito invece che dopo un riavvio.",
-        "es": "La primera conexión pregunta al receptor solo lo que su generación sabe responder, y un punto de datos revelado más tarde aparece al instante en lugar de tras reiniciar.",
-        "pl": "Pierwsze połączenie pyta amplituner tylko o to, na co odpowiada jego generacja, a punkt danych ujawniony później pojawia się od razu, a nie dopiero po restarcie.",
-        "uk": "Перше підключення запитує ресивер лише про те, на що відповідає його покоління, а точка даних, про яку пристрій повідомляє пізніше, з'являється одразу, а не після перезапуску.",
-        "zh-cn": "首次连接只询问功放这一代能够回答的内容；设备稍后才报告的数据点现在会立刻出现，而不必等到重启之后。"
       }
     },
     "titleLang": {

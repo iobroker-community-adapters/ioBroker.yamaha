@@ -10,7 +10,7 @@ import { iconForModel, volumeIndicatorIcon } from "./lib/device-type";
 import { readDiscovered, readIgnored, writeDiscovered, writeIgnored } from "./lib/discovered-store";
 import { discoveredStoreDeps, ignoredStoreDeps } from "./lib/discovered-store-deps";
 import type { DeviceRecord } from "./lib/types";
-import { unionDevices } from "./lib/pure-helpers";
+import { LABEL_RANK, unionDevices } from "./lib/pure-helpers";
 import {
   TRANSPORTS,
   buildDeviceForm,
@@ -356,8 +356,13 @@ export class YamahaDeviceManagement extends DeviceManagement {
       await this.writeManual(manual);
     }
     if (name !== shownName) {
+      // The marker rides along with the name, at the rank only this dialog writes: it tells the
+      // next start that THIS name is the established one (`ensureDeviceHeader` writes it back
+      // instead of the bare id) and it outranks every name a device reports for itself, so a
+      // MusicCast zone name can no longer overwrite what the user typed here.
       await this.adapter.extendForeignObjectAsync(`${this.adapter.namespace}.${cardId}`, {
         common: { name: name || cardId },
+        native: { label: name || cardId, labelRank: LABEL_RANK.user },
       });
     }
     if ((data.volumeAsPercent === true) !== percent) {

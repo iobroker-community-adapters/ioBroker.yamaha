@@ -3,6 +3,7 @@ import { LineBuffer } from "./line-buffer";
 import { decodeLine, encodeCommand, encodeGet, type YncaMessage } from "./protocol";
 import { buildCapabilities, type YncaCapabilities } from "./capability";
 import { CommandGateClosedError, type CommandGate } from "../lifecycle/command-gate";
+import { errorMessage } from "../util";
 
 /** The YNCA control port (TCP). */
 export const YNCA_PORT = 50000;
@@ -336,7 +337,7 @@ export class YncaClient {
       }, priority)
       .catch((e: unknown) => {
         if (!(e instanceof CommandGateClosedError)) {
-          this.lastError = e instanceof Error ? e : new Error(String(e));
+          this.lastError = e instanceof Error ? e : new Error(errorMessage(e));
         }
       });
   }

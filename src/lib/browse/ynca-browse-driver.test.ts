@@ -5,11 +5,15 @@ import type { BrowseWindow } from "./types";
 const instantDelay = (): Promise<void> => Promise.resolve();
 const flush = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
 
-function setup(present: string[]): {
+function setup(
+  present: string[],
+  onWindowThrows = false,
+): {
   driver: YncaBrowseDriver;
   sent: Array<{ subunit: string; func: string; value: string }>;
   gets: Array<{ subunit: string; func: string }>;
   windows: BrowseWindow[];
+  debugLines: string[];
 } {
   const sent: Array<{ subunit: string; func: string; value: string }> = [];
   const gets: Array<{ subunit: string; func: string }> = [];
@@ -21,11 +25,33 @@ function setup(present: string[]): {
     new Set(present),
     instantDelay,
   );
-  // The driver only calls onWindow — a capture stub stands in for the engine.
+  // The driver calls onWindow and, when rendering fails, reports through the engine's log —
+  // the only logger it can reach (it is built before the adapter's callbacks exist).
   const windows: BrowseWindow[] = [];
-  driver.attach({ onWindow: (window: BrowseWindow) => windows.push(window) } as unknown as BrowseEngine);
-  return { driver, sent, gets, windows };
+  const debugLines: string[] = [];
+  driver.attach({
+    onWindow: (window: BrowseWindow) => {
+      if (onWindowThrows) {
+        throw new Error("states db unreachable");
+      }
+      windows.push(window);
+    },
+    log: { debug: (line: string) => debugLines.push(line), info: (): void => {}, warn: (): void => {} },
+  } as unknown as BrowseEngine);
+  return { driver, sent, gets, windows, debugLines };
 }
+
+/** One window as the receiver sends it: a burst of lines the driver renders once it settles. */
+const BURST: ReadonlyArray<readonly [string, string]> = [
+  ["LISTLAYER", "1"],
+  ["LISTLAYERNAME", "NET RADIO"],
+  ["CURRLINE", "1"],
+  ["MAXLINE", "2"],
+  ["LINE1TXT", "Radiobrowser"],
+  ["LINE1ATRIB", "Container"],
+  ["LINE2TXT", "Radio Paradise"],
+  ["LINE2ATRIB", "Item"],
+];
 
 describe("YncaBrowseDriver", () => {
   it("offers only the browsable subunits the device reported", () => {
@@ -63,16 +89,7 @@ describe("YncaBrowseDriver", () => {
   it("assembles a LISTINFO burst into one window (RX-A810 shape)", async () => {
     const { driver, windows } = setup(["NETRADIO"]);
     driver.open("netRadio");
-    for (const [func, value] of [
-      ["LISTLAYER", "1"],
-      ["LISTLAYERNAME", "NET RADIO"],
-      ["CURRLINE", "1"],
-      ["MAXLINE", "2"],
-      ["LINE1TXT", "Radiobrowser"],
-      ["LINE1ATRIB", "Container"],
-      ["LINE2TXT", "Radio Paradise"],
-      ["LINE2ATRIB", "Item"],
-    ]) {
+    for (const [func, value] of BURST) {
       driver.handleMessage({ subunit: "NETRADIO", func, value });
     }
     await flush();
@@ -228,5 +245,33 @@ describe("the 2015 generation's zone-wide pad (@MAIN:CURSOR / @MAIN:MENU, RX-A85
   it("the menu keys are the five of both generations — Display included (RX-A3020 2012 list, RX-A850 2015 list)", () => {
     const { driver } = setup(["NETRADIO"]);
     expect(driver.menuValues).toEqual(["on_screen", "top_menu", "menu", "option", "display"]);
+  });
+
+  // The settle delay renders on a promise nobody holds, so a throw out of the engine would be an
+  // unhandled rejection — and js-controller stops the instance for one. The pending flag has to
+  // fall either way, or ONE failure would silence the window for the rest of the connection.
+  it("a failing render is reported and does not silence the next burst", async () => {
+    const { driver, debugLines } = setup(["NETRADIO"], true);
+    driver.open("netRadio");
+    const rejections: unknown[] = [];
+    const onRejection = (reason: unknown): void => {
+      rejections.push(reason);
+    };
+    process.on("unhandledRejection", onRejection);
+    try {
+      for (const [func, value] of BURST) {
+        driver.handleMessage({ subunit: "NETRADIO", func, value });
+      }
+      await flush();
+      // A second burst has to reach the engine again — proof the pending flag was cleared.
+      for (const [func, value] of BURST) {
+        driver.handleMessage({ subunit: "NETRADIO", func, value });
+      }
+      await flush();
+    } finally {
+      process.off("unhandledRejection", onRejection);
+    }
+    expect(rejections).toEqual([]);
+    expect(debugLines.filter(line => line.includes("rendering the window failed"))).toHaveLength(2);
   });
 });

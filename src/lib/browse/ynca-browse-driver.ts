@@ -9,6 +9,7 @@ import {
   type WireTable,
 } from "./types";
 import type { BrowseEngine } from "./browse-engine";
+import { errorMessage } from "../util";
 
 /** Collect a burst of list lines for this long before rendering the window. */
 const BURST_SETTLE_MS = 200;
@@ -395,12 +396,19 @@ export class YncaBrowseDriver implements BrowseDriver {
       return;
     }
     this.renderPending = true;
-    void this.delay(BURST_SETTLE_MS).then(() => {
-      this.renderPending = false;
-      if (!this.closed) {
-        this.render();
-      }
-    });
+    void this.delay(BURST_SETTLE_MS)
+      .then(() => {
+        this.renderPending = false;
+        if (!this.closed) {
+          this.render();
+        }
+      })
+      .catch((e: unknown) => {
+        // Nobody awaits this chain, so a throw out of render() would be an unhandled rejection —
+        // and js-controller stops the instance for one. The pending flag needs no reset here:
+        // it falls in the first statement above, BEFORE render() can throw.
+        this.engine?.log.debug(`browse: rendering the window failed: ${errorMessage(e)}`);
+      });
   }
 
   /** Assemble the window from the collected fields and hand it to the engine. */

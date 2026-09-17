@@ -833,7 +833,14 @@ export class XmlDeviceController implements ConnectionHandle {
     if (!status) {
       return false;
     }
-    this.seedZone(zone, status);
+    try {
+      this.seedZone(zone, status);
+    } catch (e) {
+      // The read-back after a user write reaches this without an awaiting caller (see
+      // applyCommand), so a throw would be an unhandled rejection — and that stops the
+      // instance. Like the MusicCast twin, the answer stays "the device answered".
+      this.deps.log.warn(`${this.deviceId}: could not apply the ${zone.key} status (${errorMessage(e)})`);
+    }
     return true;
   }
 
@@ -1184,12 +1191,18 @@ export class XmlDeviceController implements ConnectionHandle {
       void this.applyCommand(
         { zone: zone.element, inner: `<Config><Name><Zone>${escapeXmlText(value)}</Zone></Name></Config>` },
         zone,
-      ).then(ok => {
-        if (ok) {
-          this.deps.probeMemory?.set(`xmlZoneName:${zone.key}`, value);
-          this.emit(stateId, value);
-        }
-      });
+      )
+        .then(ok => {
+          if (ok) {
+            this.deps.probeMemory?.set(`xmlZoneName:${zone.key}`, value);
+            this.emit(stateId, value);
+          }
+        })
+        .catch((e: unknown) => {
+          // Same rule as the object creation above: a fire-and-forget chain needs its own
+          // receiver, or the rejection ends the instance.
+          this.deps.log.debug(`${this.deviceId}: confirming the zone name failed: ${errorMessage(e)}`);
+        });
       return true;
     } else {
       const word = XML_TRANSPORT_WIRE[command.slice("player.".length)];

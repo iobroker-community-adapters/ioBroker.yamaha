@@ -61,6 +61,18 @@ export class BrowseEngine {
   ) {}
 
   /**
+   * The adapter log, for a driver that has to report a failure of its own. A driver is
+   * constructed before the adapter's callbacks exist (see {@link YncaBrowseDriver.attach}), so
+   * the engine it attaches to is its only way to a logger — and {@link run} already reports
+   * driver failures through the same one.
+   *
+   * @returns the adapter log
+   */
+  public get log(): ControllerLog {
+    return this.deps.log;
+  }
+
+  /**
    * Seed the surface into its resting form on every connect: no menu is open yet, so every
    * window state has to say so.
    *

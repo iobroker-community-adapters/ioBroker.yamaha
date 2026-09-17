@@ -27,6 +27,21 @@ vi.mock("./lib/discovered-store-deps", () => ({
 import { buildDeviceForm, findClash, rowId } from "./device-management-helpers";
 import { YamahaDeviceManagement } from "./device-management";
 import { writeDiscovered, writeIgnored } from "./lib/discovered-store";
+import { LABEL_RANK } from "./lib/pure-helpers";
+
+/**
+ * What a read stub answers with: a COPY of the stored value, never the stored object itself.
+ *
+ * With a shared reference, a change the adapter makes on what it just read would already sit in
+ * the store — and no assertion could then tell a missing write from a done one (fleet rule
+ * `read-stub-copy`, measured on hassemu 2026-09-17). Absent stays `null`, as the real API answers.
+ *
+ * @param value the stored value, if any
+ * @returns a detached copy, or null
+ */
+function copyOf<T>(value: T | undefined): T | null {
+  return value === undefined || value === null ? null : structuredClone(value);
+}
 
 describe("findClash", () => {
   const rows = [
@@ -105,7 +120,9 @@ function mockAdapter(
     log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
     on: vi.fn(),
     getForeignObjectAsync: vi.fn((id: string) =>
-      Promise.resolve(id === "system.adapter.yamaha.0" ? { native: { devices: stored } } : (objects[id] ?? null)),
+      // A COPY, never the stored object — see `read-stub-copy`: a shared reference would put a
+      // change the code makes on what it read into the store before any write happened.
+      Promise.resolve(id === "system.adapter.yamaha.0" ? { native: { devices: stored } } : copyOf(objects[id])),
     ),
     extendForeignObjectAsync: vi.fn((id: string, patch: Record<string, any>) => {
       // Two kinds of write reach this: the device TABLE on the instance object, and a device
@@ -442,8 +459,12 @@ describe("YamahaDeviceManagement", () => {
       // The row's name IS the id, so the object tree stays where it is; what the user typed
       // becomes the display name at the device object.
       expect(adapter._stored()).toEqual([{ name: "rx-v685", ip: "192.168.1.99" }]);
+      // The marker rides in the SAME write: it tells the next start that this is the
+      // established name (so the header write does not put the bare id back) and it carries the
+      // user rank, which no name a device reports for itself can outrank.
       expect(adapter.extendForeignObjectAsync).toHaveBeenCalledWith("yamaha.0.rx-v685", {
         common: { name: "Living room" },
+        native: { label: "Living room", labelRank: LABEL_RANK.user },
       });
     });
 
@@ -467,6 +488,7 @@ describe("YamahaDeviceManagement", () => {
       expect(adapter._stored()).toEqual([]);
       expect(adapter.extendForeignObjectAsync).toHaveBeenCalledWith("yamaha.0.rx-v685", {
         common: { name: "Kitchen" },
+        native: { label: "Kitchen", labelRank: LABEL_RANK.user },
       });
     });
 
@@ -478,6 +500,7 @@ describe("YamahaDeviceManagement", () => {
       expect(rowId(adapter._stored()[0])).toBe("Living_room");
       expect(adapter.extendForeignObjectAsync).toHaveBeenCalledWith("yamaha.0.Living_room", {
         common: { name: "Lounge" },
+        native: { label: "Lounge", labelRank: LABEL_RANK.user },
       });
     });
 

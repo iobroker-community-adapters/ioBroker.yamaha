@@ -1184,7 +1184,15 @@ export class YxcDeviceController implements ConnectionHandle {
     if (status === undefined) {
       return false;
     }
-    await this.applyZoneStatus(zone, status);
+    try {
+      await this.applyZoneStatus(zone, status);
+    } catch (e) {
+      // A push handler calls this without awaiting it, so a rejection here would have no
+      // receiver at all — js-controller turns an unhandled rejection into an adapter stop.
+      // The return value answers "did the DEVICE answer", and it did: writing its answer into
+      // the tree failing says nothing about the connection, so this must not report a drop.
+      this.deps.log.warn(`${this.deviceId}: could not apply the ${zone} status (${errorMessage(e)})`);
+    }
     return true;
   }
 
@@ -1274,7 +1282,7 @@ export class YxcDeviceController implements ConnectionHandle {
       await this.deps.upsertObject(`${this.deviceId}.${id}`, def);
       this.deps.log.debug(`${this.deviceId}: ${zone} now displays its volume as ${mode}`);
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: could not reshape ${id}: ${String(e)}`);
+      this.deps.log.debug(`${this.deviceId}: could not reshape ${id}: ${errorMessage(e)}`);
     }
   }
 

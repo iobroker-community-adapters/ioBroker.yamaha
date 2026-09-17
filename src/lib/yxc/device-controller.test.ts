@@ -162,6 +162,14 @@ function setup(
   linkTargets: Record<string, YxcClientLike> = {},
   pushActive?: () => boolean,
 ): {
+  /**
+   * Make value writes throw, to prove what a failing tree write may and may not cost. `only`
+   * narrows it to one state id, so a test can break exactly the zone-status path and leave the
+   * rest of the start-up intact.
+   */
+  breakAcks: { on: boolean; only?: string };
+  /** Every warn line the controller logged. */
+  warnings: string[];
   controller: YxcDeviceController;
   client: FakeClient;
   objects: string[];
@@ -185,6 +193,8 @@ function setup(
   const hold: { fn?: (id: string) => Promise<void> | undefined } = {};
   const names: string[] = [];
   const fire: { push?: (event: unknown) => void; keepalive?: () => void } = {};
+  const breakAcks: { on: boolean; only?: string } = { on: false };
+  const warnings: string[] = [];
   let cancelled = false;
   let unregistered = false;
   const controller = new YxcDeviceController("living", {
@@ -212,15 +222,25 @@ function setup(
       return hold.fn?.(id) ?? Promise.resolve();
     },
     setStateAck: (id, value) => {
+      if (breakAcks.on && (breakAcks.only === undefined || id.endsWith(breakAcks.only))) {
+        throw new Error("states db unreachable");
+      }
       acks.push({ id, value });
       trace.push({ kind: "value", id });
     },
     reportDeviceName: name => {
       names.push(name);
     },
-    log: silentLog,
+    log: {
+      ...silentLog,
+      warn: (line: string) => {
+        warnings.push(line);
+      },
+    },
   });
   return {
+    breakAcks,
+    warnings,
     hold,
     controller,
     client,
@@ -337,6 +357,56 @@ describe("YxcDeviceController", () => {
     s.fire.push?.({ main: { power: "on" } });
     await flush();
     expect(s.client.calls).toContainEqual({ method: "getStatus", args: ["main"] });
+  });
+
+  // The push handler calls refreshZone WITHOUT awaiting it, so a throw on the way into the tree
+  // has no receiver at all — and js-controller answers an unhandled rejection by stopping the
+  // instance. A failing state write must therefore cost a log line and nothing else.
+  test("a failing tree write during a push is reported, not thrown at nobody", async () => {
+    const s = setup(wx10, ysp);
+    await s.controller.start();
+    const rejections: unknown[] = [];
+    const onRejection = (reason: unknown): void => {
+      rejections.push(reason);
+    };
+    process.on("unhandledRejection", onRejection);
+    try {
+      // A CHANGED answer, or nothing is written at all: unchanged values never reach the tree
+      // (the 2.10.0 write guard), so an unchanged status could not provoke the failure.
+      s.client.statusByZone = { main: { power: "standby", volume: 17 } };
+      s.breakAcks.on = true;
+      s.fire.push?.({ main: { power: "standby" } });
+      await flush();
+      await flush();
+    } finally {
+      process.off("unhandledRejection", onRejection);
+      s.breakAcks.on = false;
+    }
+    expect(rejections).toEqual([]);
+    expect(s.warnings.some(line => line.includes("could not apply the main status"))).toBe(true);
+  });
+
+  // The return value answers "did the DEVICE answer", and it did — the zone status came back.
+  // `start()` reads exactly that to decide whether this transport is alive, so counting a
+  // failed tree write as "no zone answered" would drop a perfectly reachable receiver on a
+  // database hiccup (the 1.5.0 liveness rule turned on its head).
+  test("a failing tree write does not make the keepalive report the device gone", async () => {
+    const s = setup(wx10, ysp);
+    await s.controller.start();
+    const drops: unknown[] = [];
+    s.controller.onDrop(reason => drops.push(reason));
+    s.breakAcks.on = true;
+    s.breakAcks.only = "power";
+    // A CHANGED value every poll, or the write guard skips it and nothing can fail — and
+    // enough polls in a row to pass MAX_POLL_FAILURES, so a wrong verdict really would drop.
+    for (const power of ["standby", "on", "standby", "on"]) {
+      s.client.statusByZone = { main: { power } };
+      s.fire.keepalive?.();
+      await flush();
+    }
+    s.breakAcks.on = false;
+    expect(s.warnings.some(line => line.includes("could not apply the main status"))).toBe(true);
+    expect(drops, "a database hiccup disconnected a reachable receiver").toEqual([]);
   });
 
   // The RX-V481 declares BOTH display scales; `actual_volume.value` arrives in the one named by

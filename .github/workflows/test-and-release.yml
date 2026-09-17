@@ -30,6 +30,7 @@ on:
       - ".gitattributes"
       - ".editorconfig"
       - "LICENSE"
+      - ".github/dependabot.yml"
   pull_request: {}
 
 # Cancel previous PR/branch runs when a new commit is pushed

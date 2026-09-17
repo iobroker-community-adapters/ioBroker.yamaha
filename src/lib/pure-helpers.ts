@@ -587,12 +587,27 @@ export function legacyDeviceRow(config: Record<string, unknown>): { name: string
 
 /**
  * How trustworthy a display-name candidate is. A name the device carries for itself
- * (the MusicCast zone name a user typed in the app) beats its model designation.
+ * (the MusicCast zone name a user typed in the app) beats its model designation, and the
+ * name a user typed into the device card's edit dialog beats both — that one is a decision
+ * about THIS installation, not a report from the device.
  */
-export const LABEL_RANK = { model: 1, deviceName: 2 } as const;
+export const LABEL_RANK = { model: 1, deviceName: 2, user: 3 } as const;
 
 /** Rank of a display-name candidate — see {@link LABEL_RANK}. */
 export type LabelRank = (typeof LABEL_RANK)[keyof typeof LABEL_RANK];
+
+/**
+ * The rank a stored marker carries, with anything unusable read as the weakest one. A device
+ * object written by an older version has no rank beside its name, and the admin lets anything
+ * be typed into `native` by hand — treating that as the STRONGEST rank would freeze the name.
+ *
+ * @param stored the value found at the device object
+ * @returns a rank that is safe to compare
+ */
+export function labelRankOf(stored: unknown): LabelRank {
+  const ranks: readonly LabelRank[] = Object.values(LABEL_RANK);
+  return ranks.find(rank => rank === stored) ?? LABEL_RANK.model;
+}
 
 /**
  * Zone names that say nothing about the device — a receiver ships with these and a

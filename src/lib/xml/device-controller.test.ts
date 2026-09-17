@@ -90,12 +90,18 @@ function setup(
   acks: Array<{ id: string; value: unknown }>;
   fire: { keepalive?: () => void; keepaliveMs?: number };
   cancelled: () => boolean;
+  /** Make every value write throw, to prove what a failing tree write may and may not cost. */
+  breakAcks: { on: boolean };
+  /** Every warn line the controller logged. */
+  warnings: string[];
 } {
   const client = new FakeClient(statuses);
   const objects: string[] = [];
   const defs = new Map<string, { common?: { name?: unknown } }>();
   const acks: Array<{ id: string; value: unknown }> = [];
   const fire: { keepalive?: () => void; keepaliveMs?: number } = {};
+  const breakAcks = { on: false };
+  const warnings: string[] = [];
   let cancelled = false;
   const controller = new XmlDeviceController(
     "living",
@@ -114,13 +120,21 @@ function setup(
         return Promise.resolve();
       },
       setStateAck: (id, value) => {
+        if (breakAcks.on) {
+          throw new Error("states db unreachable");
+        }
         acks.push({ id, value });
       },
-      log: silentLog,
+      log: {
+        ...silentLog,
+        warn: (line: string) => {
+          warnings.push(line);
+        },
+      },
     },
     pollIntervalMs,
   );
-  return { controller, client, objects, defs, acks, fire, cancelled: () => cancelled };
+  return { controller, client, objects, defs, acks, fire, cancelled: () => cancelled, breakAcks, warnings };
 }
 
 describe("XmlDeviceController", () => {
@@ -271,6 +285,31 @@ describe("XmlDeviceController", () => {
       zone: "Main_Zone",
       inner: "<Power_Control><Power>On</Power></Power_Control>",
     });
+  });
+
+  // A user write fires `applyCommand` WITHOUT awaiting it, and that command reads the zone back.
+  // A throw anywhere in the read-back would therefore reject a promise nobody holds — and
+  // js-controller answers an unhandled rejection by stopping the instance.
+  test("a failing read-back after a user write is reported, not thrown at nobody", async () => {
+    const s = setup({ Main_Zone: { power: true } });
+    await s.controller.start();
+    const rejections: unknown[] = [];
+    const onRejection = (reason: unknown): void => {
+      rejections.push(reason);
+    };
+    process.on("unhandledRejection", onRejection);
+    try {
+      s.client.statuses.Main_Zone = { power: false, volume: 12 };
+      s.breakAcks.on = true;
+      s.controller.handleStateChange("living.power", false, true);
+      await flush();
+      await flush();
+    } finally {
+      process.off("unhandledRejection", onRejection);
+      s.breakAcks.on = false;
+    }
+    expect(rejections).toEqual([]);
+    expect(s.warnings.some(line => line.includes("could not apply the main status"))).toBe(true);
   });
 
   test("an acked change is ignored", async () => {
@@ -1075,6 +1114,30 @@ describe("the zone commands desc.xml declares: pads, transport keys, zone names 
     await second.controller.start();
     expect(second.acks).toContainEqual({ id: "living.multiroom.zone2.zoneName", value: "Küche" });
     expect(second.acks).not.toContainEqual({ id: "living.multiroom.zone2.zoneName", value: "Kitchen" });
+  });
+
+  // The zone-name confirmation hangs off a detached `.then`, so a throw inside it has nobody to
+  // report to — the chain needs its own receiver, exactly like the object creation in seedZone.
+  test("a failing zone-name confirmation is caught, not left as an unhandled rejection", async () => {
+    const s = setup(statuses);
+    s.client.xmlAnswers["Zone_2|<Config>GetParam</Config>"] =
+      '<YAMAHA_AV rsp="GET" RC="0"><Zone_2><Config><Name><Zone>Kitchen</Zone></Name></Config></Zone_2></YAMAHA_AV>';
+    await s.controller.start();
+    const rejections: unknown[] = [];
+    const onRejection = (reason: unknown): void => {
+      rejections.push(reason);
+    };
+    process.on("unhandledRejection", onRejection);
+    try {
+      s.breakAcks.on = true;
+      s.controller.handleStateChange("living.multiroom.zone2.zoneName", false, "Küche");
+      await tick();
+      await tick();
+    } finally {
+      process.off("unhandledRejection", onRejection);
+      s.breakAcks.on = false;
+    }
+    expect(rejections).toEqual([]);
   });
 
   test("a rejected zone-name write neither confirms nor remembers the name", async () => {

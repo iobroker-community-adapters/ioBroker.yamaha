@@ -22,6 +22,7 @@ import {
   childlessChannelIds,
   LABEL_RANK,
   type LabelRank,
+  labelRankOf,
   legacyDeviceRow,
   mergeDiscovered,
   neverWrittenStateIds,
@@ -1011,8 +1012,8 @@ export class Yamaha extends utils.Adapter {
   private async clearStaleBounds(id: string, next: ObjectDef["common"]): Promise<void> {
     const stored = this.storedBounds.get(id);
     const gone = BOUND_FIELDS.filter(field => stored?.[field] !== undefined && next[field] === undefined);
-    this.storedBounds.set(id, { min: next.min, max: next.max, step: next.step });
     if (gone.length === 0) {
+      this.storedBounds.set(id, { min: next.min, max: next.max, step: next.step });
       return;
     }
     // ⚠️ NOT the `null` write `clearStaleStates` uses. A dropdown has a neutral value — an empty
@@ -1020,26 +1021,32 @@ export class Yamaha extends utils.Adapter {
     // js-controller's range check then compares against it numerically, where `null` counts as 0
     // and every reading is "greater than max" (`reference_attribut_entfernen_ohne_setobject`, and
     // the merge semantics measured in `reference_iobroker_objekt_aendern_ohne_loeschen`). The key
-    // has to GO, which is read → delete → re-create; `setObject` is the checker's S5054.
+    // has to GO — and a key leaves an object by ONE write of a copy without it, never by deleting
+    // the object and creating it again: `delObject` drops the state's VALUE and removes the id
+    // from every enum, so the user's room and function assignments go with it and nothing the
+    // re-create writes brings them back (fleet rule, krobi 2026-09-12; `setObject` is the
+    // checker's S5054, `setForeignObject` is not).
     const object = await this.getObjectAsync(id);
     if (object?.type !== "state") {
       return;
     }
-    // The READ common rides along, so nothing the object already carries is lost in the rewrite.
+    // The READ object rides along whole — `common.custom` (the user's logging), `native` and the
+    // acl survive the rewrite because nothing but the dropped bounds is left out.
     const common = { ...object.common } as ioBroker.StateCommon & Record<string, unknown>;
     for (const field of gone) {
       delete common[field];
     }
     try {
-      // Explicitly non-recursive: a state has no children, and this must never take a tree with it.
-      await this.delObjectAsync(id, { recursive: false });
+      await this.setForeignObject(`${this.namespace}.${id}`, { ...object, common });
     } catch (e) {
-      // The merge that follows would only put the object back as it was — nothing is lost, but the
-      // stale bound stays, so it belongs in the log rather than passing silently.
+      // Nothing is lost — the object still stands as it was — but the stale bound stays, so it
+      // belongs in the log rather than passing silently.
       this.log.debug(`${id}: could not drop the stale bound(s) ${gone.join(", ")} (${errorMessage(e)})`);
       return;
     }
-    await this.extendObject(id, { type: "state", common, native: object.native });
+    // Only a written object may advance the snapshot: remembering bounds that never reached the
+    // database would keep every later run from retrying the removal.
+    this.storedBounds.set(id, { min: next.min, max: next.max, step: next.step });
   }
 
   /**
@@ -1217,8 +1224,6 @@ export class Yamaha extends utils.Adapter {
   private async ensureDeviceHeader(deviceId: string, ip: string, source: DeviceSource): Promise<void> {
     // statusStates.onlineId lets the admin paint a green/red reachability symbol on the
     // device object itself (as govee does), fed by the per-device connection state.
-    // extendObject with preserve:name so an upgrade adds the symbol without overwriting
-    // a name the user changed.
     // A device that has not reported its model yet would sit in the tree without any
     // symbol — an upgraded instance shows that on every start before the first report,
     // and a device that never answers shows it for good. Seed the pictogram of the model the
@@ -1233,6 +1238,17 @@ export class Yamaha extends utils.Adapter {
     // instance-wide switch 2.8.0 had, so an upgrade keeps every receiver exactly as it was, and
     // the answer is written down here so it never has to be inherited again.
     let percent = this.legacyVolumePercent;
+    // The display name the adapter established for this device, remembered AT the device object.
+    // Deliberately not `preserve: { common: ["name"] }`: the adapter owns names (fleet rule, krobi
+    // 2026-09-02) and sparing the field would only hide who wrote it. What it must not do is fall
+    // back to the bare id on every start, so the name it wrote LAST is carried in `native.label`
+    // and written again — by the adapter's own record, not by leaving the field out. Both writers
+    // of a display name keep that record: the label updater below and the card's edit dialog, and
+    // the rank says which of them may overrule the other.
+    let label: string | undefined;
+    let labelRank: LabelRank = LABEL_RANK.model;
+    /** A name set on purpose that the adapter cannot have written — it stays untouched. */
+    let foreignName = false;
     try {
       const existing = await this.getObjectAsync(deviceId);
       const stored = existing?.common?.icon;
@@ -1243,27 +1259,53 @@ export class Yamaha extends utils.Adapter {
         icon = iconForModel(rememberedModel(existing?.native));
         this.deviceIcons.set(deviceId, icon);
       }
-      const own = (existing?.native as { volumeAsPercent?: unknown } | undefined)?.volumeAsPercent;
+      const native = existing?.native as
+        { volumeAsPercent?: unknown; label?: unknown; labelRank?: unknown } | undefined;
+      const own = native?.volumeAsPercent;
       if (typeof own === "boolean") {
         percent = own;
+      }
+      const shown = existing?.common?.name;
+      if (typeof native?.label === "string" && native.label.length > 0) {
+        label = native.label;
+        labelRank = labelRankOf(native.labelRank);
+      } else if (typeof shown === "string" && shown.length > 0 && shown !== deviceId) {
+        // ADOPTION, once per device: an instance upgraded from 2.10.0 or earlier carries a display
+        // name with NO record behind it — writing `label ?? deviceId` without this would put the
+        // bare id back on the first start after the update, and a receiver that is switched off
+        // would keep the id until it next reports. The rank is `user` because the tree cannot tell
+        // the two sources apart any more: the stored name may be a MusicCast zone name the adapter
+        // wrote, or one the owner typed into the card's dialog — and silently replacing the second
+        // is the worse mistake. Every name established from here on carries its true rank.
+        label = shown;
+        labelRank = LABEL_RANK.user;
+      } else if (shown !== undefined && typeof shown !== "string") {
+        // A name that is not a plain string was set on purpose (a translation object typed into
+        // the admin). The adapter only ever writes plain strings, so this is none of its own and
+        // it has nothing better to put there — it writes no name at all. Same rule the label
+        // updater has always followed.
+        foreignName = true;
+      }
+      if (label !== undefined) {
+        // Seeding the in-memory record is what makes the decision survive a restart: without it
+        // the adapter's OWN label reads as a stranger's on the next start (neither the id nor
+        // anything it remembers writing), and a device that renames itself is never followed again.
+        this.deviceLabels.set(deviceId, { name: label, rank: labelRank });
       }
     } catch {
       icon = undefined;
     }
     this.volumePercent.set(deviceId, percent);
-    await this.extendObject(
-      deviceId,
-      {
-        type: "device",
-        common: {
-          name: deviceId,
-          ...(icon ? { icon } : {}),
-          statusStates: { onlineId: `${this.namespace}.${deviceId}.info.connection` },
-        },
-        native: { source, volumeAsPercent: percent },
+    await this.extendObject(deviceId, {
+      type: "device",
+      common: {
+        ...(foreignName ? {} : { name: label ?? deviceId }),
+        ...(icon ? { icon } : {}),
+        statusStates: { onlineId: `${this.namespace}.${deviceId}.info.connection` },
       },
-      { preserve: { common: ["name"] } },
-    );
+      // The record rides along with the name, so the adoption above happens once per device, ever.
+      native: { source, volumeAsPercent: percent, ...(label !== undefined ? { label, labelRank } : {}) },
+    });
     await this.extendObject(`${deviceId}.info`, {
       type: "channel",
       common: { name: tName("info") },
@@ -1367,9 +1409,10 @@ export class Yamaha extends utils.Adapter {
       if (label === undefined) {
         return;
       }
-      // Deliberately without `preserve: { common: ["name"] }`: nextDeviceLabel has just
-      // established that the present name is the adapter's own placeholder, not a user's.
-      await this.extendObject(deviceId, { common: { name: label } });
+      // The marker rides in the SAME write as the name: a name in the tree without the record
+      // behind it would read as a stranger's on the next start, and `ensureDeviceHeader` would
+      // put the bare id back (that is the defect the record exists to close).
+      await this.extendObject(deviceId, { common: { name: label }, native: { label, labelRank: rank } });
       this.deviceLabels.set(deviceId, { name: label, rank });
       this.log.debug(`${deviceId}: device name set to "${label}"`);
     } catch (e) {
@@ -1445,7 +1488,7 @@ export class Yamaha extends utils.Adapter {
           obj.native.group_multiroom = true;
         }
         delete obj.native.group_zones;
-        await this.setForeignObjectAsync(`system.adapter.${this.namespace}`, obj);
+        await this.setForeignObject(`system.adapter.${this.namespace}`, obj);
         this.log.info("migrated group_zones setting into group_multiroom");
       }
     } catch (e) {

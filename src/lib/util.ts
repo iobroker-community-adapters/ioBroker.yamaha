@@ -1,13 +1,31 @@
 /**
- * The message of an unknown thrown value — `Error.message` when it is an Error, else
- * its string form. One helper for the `e instanceof Error ? e.message : String(e)`
- * idiom the transports would otherwise repeat in every catch.
+ * A readable message for ANY thrown value — the one helper every catch in this adapter
+ * routes its caught value through, instead of repeating `e instanceof Error ? e.message :
+ * String(e)`. That idiom renders a thrown plain object (a rejected `{ code: "ECONNRESET" }`,
+ * an HTTP client's error object) as `[object Object]`, which says nothing about what failed;
+ * the object branch below is the whole point of the helper.
  *
  * @param e the caught value
  * @returns a human-readable message
  */
 export function errorMessage(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
+  if (e instanceof Error) {
+    return e.message;
+  }
+  // Everything that is not an object has a meaningful string form and is its OWN best text —
+  // a thrown string, a number, a boolean, a symbol (where `String()` is the only way: a
+  // template literal throws on one), null and undefined. A separate string branch above this
+  // would be dead code: `String("EPERM")` is "EPERM".
+  if (typeof e !== "object" || e === null) {
+    return String(e);
+  }
+  try {
+    // `JSON.stringify` returns undefined for a value it cannot represent, and throws on a
+    // circular structure — both end at the same fallback, which names at least the class.
+    return JSON.stringify(e) ?? Object.prototype.toString.call(e);
+  } catch {
+    return Object.prototype.toString.call(e);
+  }
 }
 
 /**

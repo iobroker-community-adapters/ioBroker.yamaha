@@ -2,6 +2,7 @@ import type { ObjectDef } from "../catalog/types";
 import { coordinateObjectTree, type TransportObjects } from "../catalog/object-tree-coordinator";
 import type { Transport } from "../catalog/owner-policy";
 import type { ConnectionHandle, ControllerLog } from "../controller";
+import { errorMessage } from "../util";
 
 /**
  * One transport's live connection, as the {@link MultiTransportHandle} drives it. The transport
@@ -131,9 +132,7 @@ export class MultiTransportHandle implements ConnectionHandle {
           await this.coordinate();
         } catch (e) {
           this.deps.log.debug(
-            `${this.deviceId}/${connection.transport}: re-coordination after a shape change failed (${
-              e instanceof Error ? e.message : String(e)
-            })`,
+            `${this.deviceId}/${connection.transport}: re-coordination after a shape change failed (${errorMessage(e)})`,
           );
         }
       });
@@ -301,7 +300,19 @@ export class MultiTransportHandle implements ConnectionHandle {
     if (this.closed || !this.deps.rebuild) {
       return;
     }
-    const connection = this.deps.rebuild(transport);
+    let connection: ConnectableTransport;
+    try {
+      // Inside the guard on purpose: this is a fire-and-forget call from a timer callback, so a
+      // throw out of the factory would be an unhandled rejection — and js-controller answers
+      // those by stopping the instance. Everything below already sat inside a try.
+      connection = this.deps.rebuild(transport);
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}/${transport}: could not rebuild the transport (${errorMessage(e)})`);
+      if (!this.closed) {
+        this.scheduleTransportRetry(transport);
+      }
+      return;
+    }
     let connected = false;
     try {
       connected = await connection.connect();
@@ -319,9 +330,7 @@ export class MultiTransportHandle implements ConnectionHandle {
         return;
       }
     } catch (e) {
-      this.deps.log.debug(
-        `${this.deviceId}/${transport}: reconnect attempt failed (${e instanceof Error ? e.message : String(e)})`,
-      );
+      this.deps.log.debug(`${this.deviceId}/${transport}: reconnect attempt failed (${errorMessage(e)})`);
       const index = this.live.indexOf(connection);
       if (index >= 0) {
         this.live.splice(index, 1);
