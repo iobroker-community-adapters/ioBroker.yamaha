@@ -74,6 +74,7 @@ Details on all settings, the object tree and the ports the adapter uses are in t
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+
 ### 2.11.0 (2026-09-17)
 
 - (krobipd) Fixed: The adapter no longer stops when the object database is briefly unavailable while a receiver reports a change
