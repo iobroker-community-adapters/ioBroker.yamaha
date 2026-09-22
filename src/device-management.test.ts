@@ -6,7 +6,12 @@ vi.mock("./lib/i18n", () => ({ t: (key: string, ...args: unknown[]) => (args.len
 
 // The discovered-devices store is a JSON file in the instance data dir — replaced
 // by an in-memory pair so the manager's auto-mode is testable without the disk.
-const store = vi.hoisted(() => ({ devices: [] as Array<{ id: string; ip: string }>, ignored: [] as string[] }));
+type ExcludedEntry = { id: string; ip?: string; identity?: { serial?: string; mac?: string } };
+const store = vi.hoisted(() => ({
+  devices: [] as Array<{ id: string; ip: string }>,
+  ignored: [] as string[],
+  excluded: [] as Array<{ id: string; ip?: string; identity?: { serial?: string; mac?: string } }>,
+}));
 vi.mock("./lib/discovered-store", () => ({
   readDiscovered: vi.fn(() => Promise.resolve(store.devices)),
   writeDiscovered: vi.fn((_deps: unknown, devices: Array<{ id: string; ip: string }>) => {
@@ -18,15 +23,21 @@ vi.mock("./lib/discovered-store", () => ({
     store.ignored = [...ids];
     return Promise.resolve();
   }),
+  readExcluded: vi.fn(() => Promise.resolve(store.excluded)),
+  writeExcluded: vi.fn((_deps: unknown, entries: ExcludedEntry[]) => {
+    store.excluded = [...entries];
+    return Promise.resolve();
+  }),
 }));
 vi.mock("./lib/discovered-store-deps", () => ({
   discoveredStoreDeps: () => ({}),
   ignoredStoreDeps: () => ({}),
+  excludedStoreDeps: () => ({}),
 }));
 
 import { buildDeviceForm, findClash, rowId } from "./device-management-helpers";
 import { YamahaDeviceManagement } from "./device-management";
-import { writeDiscovered, writeIgnored } from "./lib/discovered-store";
+import { writeDiscovered, writeExcluded, writeIgnored } from "./lib/discovered-store";
 import { LABEL_RANK } from "./lib/pure-helpers";
 
 /**
@@ -115,10 +126,22 @@ function mockAdapter(
   objects: Record<string, unknown> = {},
 ): any {
   let stored: unknown = devices;
+  // What the backend schedules on the adapter's timer — run by hand, so a test can prove
+  // what happened BEFORE the handler answered and what only after.
+  const deferred: Array<() => void> = [];
   return {
     namespace: "yamaha.0",
     log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
     on: vi.fn(),
+    setTimeout: vi.fn((cb: () => void, _ms: number) => {
+      deferred.push(cb);
+      return { kind: "timeout" };
+    }),
+    _runDeferred: () => {
+      for (const cb of deferred.splice(0)) {
+        cb();
+      }
+    },
     getForeignObjectAsync: vi.fn((id: string) =>
       // A COPY, never the stored object — see `read-stub-copy`: a shared reference would put a
       // change the code makes on what it read into the store before any write happened.
@@ -178,6 +201,7 @@ type MockCtx = ReturnType<typeof mockContext>;
 interface DmAction {
   id: string;
   icon: string;
+  confirmation?: unknown;
   handler: (...args: any[]) => Promise<unknown>;
 }
 interface Card {
@@ -219,7 +243,7 @@ interface DmInternals {
   getInstanceInfo(): { apiVersion: string; identifierLabel: unknown; actions: DmAction[] };
   addDevice(ctx: MockCtx): Promise<{ refresh: boolean }>;
   editDevice(cardId: string, ctx: MockCtx): Promise<{ refresh: "devices" }>;
-  deleteDevice(cardId: string, ctx: MockCtx): Promise<{ refresh: "devices" }>;
+  deleteDevice(cardId: string): Promise<{ delete: string }>;
 }
 /** Subset of the generated jsonConfig panel the tests inspect. */
 interface FormSchema {
@@ -254,8 +278,12 @@ describe("YamahaDeviceManagement", () => {
   beforeEach(() => {
     store.devices = [];
     store.ignored = [];
+    store.excluded = [];
     vi.clearAllMocks();
   });
+
+  /** Let every promise the handler left behind settle (the deferred table write chains one). */
+  const flushPromises = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
 
   const living = { name: "Living room", ip: "192.168.1.10" };
   const kitchen = { name: "Kitchen", ip: "192.168.1.11" };
@@ -522,72 +550,119 @@ describe("YamahaDeviceManagement", () => {
   });
 
   describe("delete", () => {
-    it("removes exactly the selected manual row after confirmation", async () => {
-      const i = make([living, kitchen]);
-      const ctx = mockContext({ confirm: true });
+    it("asks the UI for confirmation on the card itself, naming the datapoints", async () => {
+      // dm-utils `confirmation` on the descriptor: the UI asks BEFORE the handler runs. No
+      // message round-trip inside the handler — the one the restart of the manual branch
+      // used to cut off, leaving the progress bar spinning.
+      const out = await cards([living]);
+      const del = out[0].actions.find(a => a.id === "delete");
+      expect(del?.confirmation).toEqual({ key: "dmDeleteConfirm", args: ["Living room"] });
+    });
+
+    it("manual row: excludes first, removes the tree, answers, and only then rewrites the table", async () => {
+      const i = make([living, kitchen], {}, { "yamaha.0.Kitchen": { native: { identity: { serial: "0E897553" } } } });
+      const order: string[] = [];
+      (writeExcluded as Mock).mockImplementation(() => {
+        order.push("exclude");
+        return Promise.resolve();
+      });
+      adapter.removeDevice.mockImplementation(() => {
+        order.push("remove");
+        return Promise.resolve();
+      });
+      adapter.extendForeignObjectAsync.mockImplementation((_id: string, patch: Record<string, any>) => {
+        if (patch.native && "devices" in patch.native) {
+          order.push("table");
+        }
+        return Promise.resolve();
+      });
       // The SECOND row on purpose: deleting the first one cannot tell "the chosen
       // row" from "the first row" apart.
-      await expect(i.deleteDevice("Kitchen", ctx)).resolves.toEqual({ refresh: "devices" });
-      expect(ctx.showConfirmation).toHaveBeenCalledWith({ key: "dmDeleteConfirm", args: ["Kitchen"] });
-      expect(adapter._stored()).toEqual([living]);
+      await expect(i.deleteDevice("Kitchen")).resolves.toEqual({ delete: "Kitchen" });
+      // The table is NOT written inside the handler: that write restarts the instance, and a
+      // handler that awaits it never answers.
+      expect(order).toEqual(["exclude", "remove"]);
+      expect(writeExcluded).toHaveBeenCalledWith({}, [
+        { id: "Kitchen", ip: "192.168.1.11", identity: { serial: "0E897553" } },
+      ]);
+      adapter._runDeferred();
+      await flushPromises();
+      expect(order).toEqual(["exclude", "remove", "table"]);
+      expect(adapter.extendForeignObjectAsync).toHaveBeenCalledWith("system.adapter.yamaha.0", {
+        native: { devices: [living] },
+      });
     });
 
-    it("keeps the row when the user declines", async () => {
+    it("manual row without a known identity is excluded by its address", async () => {
       const i = make([living, kitchen]);
-      await i.deleteDevice("Living_room", mockContext({ confirm: false }));
-      expect(adapter.extendForeignObjectAsync).not.toHaveBeenCalled();
+      await i.deleteDevice("Kitchen");
+      expect(writeExcluded).toHaveBeenCalledWith({}, [{ id: "Kitchen", ip: "192.168.1.11" }]);
     });
 
-    it("does not even ask for a manual card that is gone", async () => {
-      const i = make([living]);
-      const ctx = mockContext({ confirm: true });
-      await i.deleteDevice("ghost", ctx);
-      expect(ctx.showConfirmation).not.toHaveBeenCalled();
-      expect(adapter.extendForeignObjectAsync).not.toHaveBeenCalled();
-    });
-
-    it("forgets a discovered device so the next scan does not resurrect it", async () => {
+    it("discovered card: excludes first, forgets the record, then removes the tree", async () => {
       store.devices = [
         { id: "rx-v685", ip: "192.168.1.20" },
         { id: "wx-021", ip: "192.168.1.21" },
       ];
       const i = make([]);
-      await expect(i.deleteDevice("rx-v685", mockContext({ confirm: true }))).resolves.toEqual({ refresh: "devices" });
-      // Deleting only the objects would let the standby-protection merge bring the
-      // device back on the next start — the user could never get rid of it.
-      expect(writeDiscovered).toHaveBeenCalledWith({}, [{ id: "wx-021", ip: "192.168.1.21" }]);
-      // Writing that file restarts nothing, so the delete itself has to stop the device and
-      // take its tree away — otherwise the card vanishes while the connection keeps running.
+      const order: string[] = [];
+      (writeExcluded as Mock).mockImplementation(() => {
+        order.push("exclude");
+        return Promise.resolve();
+      });
+      (writeDiscovered as Mock).mockImplementation((_deps: unknown, devices: Array<{ id: string; ip: string }>) => {
+        order.push("store");
+        store.devices = devices;
+        return Promise.resolve();
+      });
+      adapter.removeDevice.mockImplementation(() => {
+        order.push("remove");
+        return Promise.resolve();
+      });
+      await expect(i.deleteDevice("rx-v685")).resolves.toEqual({ delete: "rx-v685" });
+      // Exclusion before anything slow: a search running right now must read it.
+      expect(order).toEqual(["exclude", "store", "remove"]);
+      expect(store.devices).toEqual([{ id: "wx-021", ip: "192.168.1.21" }]);
       expect(adapter.removeDevice).toHaveBeenCalledWith("rx-v685");
-      // And it has to stay deleted: the next search would otherwise find the receiver again.
-      expect(writeIgnored).toHaveBeenCalledWith({}, ["rx-v685"]);
+      // No table write, no restart for a discovered card.
+      expect(adapter.setTimeout).not.toHaveBeenCalled();
     });
 
-    it("does not touch the device or the exclusion list when the user declines", async () => {
+    it("keeps the legacy id list in step so a rollback to 2.11.0 still excludes", async () => {
       store.devices = [{ id: "rx-v685", ip: "192.168.1.20" }];
+      store.ignored = ["Old"];
       const i = make([]);
-      await i.deleteDevice("rx-v685", mockContext({ confirm: false }));
-      expect(adapter.removeDevice).not.toHaveBeenCalled();
-      expect(writeIgnored).not.toHaveBeenCalled();
+      await i.deleteDevice("rx-v685");
+      expect(writeIgnored).toHaveBeenCalledWith({}, ["Old", "rx-v685"]);
     });
 
-    it("adding the same device by hand lifts an earlier exclusion", async () => {
+    it("an unknown card id changes nothing", async () => {
+      const i = make([living]);
+      await expect(i.deleteDevice("Ghost")).resolves.toEqual({ delete: "Ghost" });
+      expect(writeExcluded).not.toHaveBeenCalled();
+      expect(writeIgnored).not.toHaveBeenCalled();
+      expect(adapter.removeDevice).not.toHaveBeenCalled();
+      expect(adapter.extendForeignObjectAsync).not.toHaveBeenCalled();
+    });
+
+    it("adding the same device by hand lifts an earlier exclusion, by id or by address", async () => {
       store.ignored = ["Bedroom"];
+      store.excluded = [
+        { id: "Bedroom", ip: "192.168.1.30" },
+        { id: "Other", ip: "192.168.1.30" },
+        { id: "Keep", ip: "192.168.1.31" },
+      ];
       const i = make([]);
       await i.addDevice(mockContext({ form: { name: "Bedroom", ip: "192.168.1.30" } }));
       expect(writeIgnored).toHaveBeenCalledWith({}, []);
+      expect(writeExcluded).toHaveBeenCalledWith({}, [{ id: "Keep", ip: "192.168.1.31" }]);
     });
 
-    it("keeps a discovered device when the user declines, and asks nothing for an unknown one", async () => {
-      store.devices = [{ id: "rx-v685", ip: "192.168.1.20" }];
+    it("adding a device that was never excluded writes no exclusion file", async () => {
+      store.excluded = [{ id: "Keep", ip: "192.168.1.31" }];
       const i = make([]);
-      await i.deleteDevice("rx-v685", mockContext({ confirm: false }));
-      expect(writeDiscovered).not.toHaveBeenCalled();
-
-      const ctx = mockContext({ confirm: true });
-      await i.deleteDevice("ghost", ctx);
-      expect(ctx.showConfirmation).not.toHaveBeenCalled();
-      expect(writeDiscovered).not.toHaveBeenCalled();
+      await i.addDevice(mockContext({ form: { name: "Bedroom", ip: "192.168.1.30" } }));
+      expect(writeExcluded).not.toHaveBeenCalled();
     });
   });
 

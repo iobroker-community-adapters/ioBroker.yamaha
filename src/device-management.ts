@@ -7,9 +7,18 @@ import {
 } from "@iobroker/dm-utils";
 import { t } from "./lib/i18n";
 import { iconForModel, volumeIndicatorIcon } from "./lib/device-type";
-import { readDiscovered, readIgnored, writeDiscovered, writeIgnored } from "./lib/discovered-store";
-import { discoveredStoreDeps, ignoredStoreDeps } from "./lib/discovered-store-deps";
+import {
+  readDiscovered,
+  readExcluded,
+  readIgnored,
+  writeDiscovered,
+  writeExcluded,
+  writeIgnored,
+  type ExcludedEntry,
+} from "./lib/discovered-store";
+import { discoveredStoreDeps, excludedStoreDeps, ignoredStoreDeps } from "./lib/discovered-store-deps";
 import type { DeviceRecord } from "./lib/types";
+import { errorMessage } from "./lib/util";
 import { LABEL_RANK, unionDevices } from "./lib/pure-helpers";
 import {
   TRANSPORTS,
@@ -184,7 +193,12 @@ export class YamahaDeviceManagement extends DeviceManagement {
       id: "delete",
       icon: "delete",
       description: t("dmDelete"),
-      handler: async (id: string, ctx: ActionContext): Promise<{ refresh: "devices" }> => this.deleteDevice(id, ctx),
+      // The UI asks BEFORE the handler runs (dm-utils `confirmation`): no message round-trip,
+      // and the text names what goes with the device. `showConfirmation` inside the handler
+      // used to leave the reply hanging when the manual branch's table write restarted the
+      // instance — the progress bar span until the admin gave up.
+      confirmation: t("dmDeleteConfirm", card.name),
+      handler: async (id: string): Promise<{ delete: string }> => this.deleteDevice(id),
     };
     const edit = {
       id: "edit",
@@ -286,6 +300,14 @@ export class YamahaDeviceManagement extends DeviceManagement {
           ignored.filter(entry => entry !== id),
         );
       }
+      // The same for the exclusion entries — by id AND by address: the entry of a deleted
+      // manual device carries the address the user is typing again right now.
+      const excludedDeps = excludedStoreDeps(this.adapter);
+      const excluded = await readExcluded(excludedDeps);
+      const remaining = excluded.filter(entry => entry.id !== id && entry.ip !== row.ip);
+      if (remaining.length !== excluded.length) {
+        await writeExcluded(excludedDeps, remaining);
+      }
       await this.writeManual(manual);
       // Written down right away, so the device starts with the answer the user gave instead of
       // inheriting whatever the instance-wide switch of 2.8.0 was left on.
@@ -372,44 +394,57 @@ export class YamahaDeviceManagement extends DeviceManagement {
   }
 
   /**
-   * Delete a device after confirmation, from whichever source it came from: a manual card
-   * from `native.devices`, a discovered card from the discovery store — the latter so the
-   * standby-protection merge does not resurrect it on the next start.
+   * Delete a device for good. The UI confirmed already (see the action descriptor). The order
+   * is the fix for "I deleted it and it came back":
+   *
+   * 1. The exclusion is written FIRST — a search running right now must not put the device
+   *    back. Both stores: `excluded.json` with address and identity, and the plain id list a
+   *    rollback to 2.11.0 still reads.
+   * 2. A discovered record leaves the store; the running adapter stops the device and deletes
+   *    its tree (`removeDevice`) — for a manual card too, so nothing waits for the restart.
+   * 3. The reply `{ delete }` leaves BEFORE the table write: writing the instance's `native`
+   *    restarts the adapter, and a handler that awaits it never answers. The write is scheduled
+   *    right behind the return, on the adapter's own timer.
    *
    * @param cardId the card id (= the object-tree device id)
-   * @param context the action context
-   * @returns a directive to reload the list
+   * @returns the id the list removes
    */
-  private async deleteDevice(cardId: string, context: ActionContext): Promise<{ refresh: "devices" }> {
+  private async deleteDevice(cardId: string): Promise<{ delete: string }> {
     const manual = await this.readManual();
-    // Which store this card lives in, not which store is non-empty: with a mixed set a filled
-    // table no longer means every card is manual, and the old shape silently did nothing when a
-    // discovered card was deleted next to a typed one.
     const index = manual.findIndex(r => rowId(r) === cardId);
-    if (index >= 0) {
-      const confirmed = await context.showConfirmation(t("dmDeleteConfirm", manual[index].name || manual[index].ip));
-      if (confirmed) {
-        manual.splice(index, 1);
-        await this.writeManual(manual);
-      }
-      return { refresh: "devices" };
-    }
     const store = discoveredStoreDeps(this.adapter);
     const discovered = await readDiscovered(store);
-    const remaining = discovered.filter((d: DeviceRecord) => d.id !== cardId);
-    if (remaining.length !== discovered.length) {
-      const confirmed = await context.showConfirmation(t("dmDeleteConfirm", cardId));
-      if (confirmed) {
-        await writeDiscovered(store, remaining);
-        // Writing this file restarts nothing, so the delete has to do the two things a restart
-        // would otherwise do much later: stop talking to the device and take its tree away.
-        await this.owner?.removeDevice(cardId);
-        // And it has to STAY deleted — without this the next network search finds the receiver
-        // and puts the card straight back.
-        const ignoredDeps = ignoredStoreDeps(this.adapter);
-        await writeIgnored(ignoredDeps, [...(await readIgnored(ignoredDeps)), cardId]);
-      }
+    const record = discovered.find((d: DeviceRecord) => d.id === cardId);
+    if (index < 0 && !record) {
+      return { delete: cardId };
     }
-    return { refresh: "devices" };
+    const ip = index >= 0 ? manual[index].ip : record!.ip;
+    // The identity the transports learned lives at the device object — with it the exclusion
+    // survives a rename and a new address; without it the address has to do.
+    const node = await this.adapter.getForeignObjectAsync(`${this.adapter.namespace}.${cardId}`);
+    const identity = (node?.native as { identity?: ExcludedEntry["identity"] } | undefined)?.identity;
+    const excludedDeps = excludedStoreDeps(this.adapter);
+    await writeExcluded(excludedDeps, [
+      ...(await readExcluded(excludedDeps)),
+      { id: cardId, ip, ...(identity ? { identity } : {}) },
+    ]);
+    const ignoredDeps = ignoredStoreDeps(this.adapter);
+    await writeIgnored(ignoredDeps, [...(await readIgnored(ignoredDeps)), cardId]);
+    if (record) {
+      await writeDiscovered(
+        store,
+        discovered.filter((d: DeviceRecord) => d.id !== cardId),
+      );
+    }
+    await this.owner?.removeDevice(cardId);
+    if (index >= 0) {
+      manual.splice(index, 1);
+      this.adapter.setTimeout(() => {
+        this.writeManual(manual).catch((e: unknown) =>
+          this.adapter.log.warn(`could not update the device table after deleting "${cardId}": ${errorMessage(e)}`),
+        );
+      }, 0);
+    }
+    return { delete: cardId };
   }
 }

@@ -21,7 +21,7 @@
   "dmEdit": "Bearbeiten",
   "dmDelete": "Löschen",
   "dmEditTitle": "Yamaha-Gerät bearbeiten",
-  "dmDeleteConfirm": "Das Yamaha-Gerät „%s“ löschen?",
+  "dmDeleteConfirm": "„%s\" samt aller Datenpunkte löschen? Historie und Visualisierungs-Bindungen gehen verloren. Ein per Netzsuche gefundenes Gerät wird nicht wieder aufgenommen, bis du es von Hand hinzufügst.",
   "ipLabel": "IP",
   "datapointsHeader": "Datenpunkte",
   "datapointsHint": "Wähle, welche Funktionsgruppen als Datenpunkte angelegt werden. Eine ausgeschaltete Gruppe wird nicht erstellt und bestehende Objekte werden entfernt.",

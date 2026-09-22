@@ -21,7 +21,7 @@
   "dmEdit": "Modifica",
   "dmDelete": "Elimina",
   "dmEditTitle": "Modifica dispositivo Yamaha",
-  "dmDeleteConfirm": "Eliminare il dispositivo Yamaha «%s»?",
+  "dmDeleteConfirm": "Eliminare \"%s\" con tutti i suoi punti dati? La cronologia e i collegamenti di visualizzazione andranno persi. Un dispositivo trovato dalla ricerca in rete non viene aggiunto di nuovo finché non lo aggiungi a mano.",
   "ipLabel": "IP",
   "datapointsHeader": "Punti dati",
   "datapointsHint": "Scegli quali gruppi di funzioni vengono creati come punti dati. Un gruppo disattivato non viene creato e gli oggetti esistenti vengono rimossi.",
