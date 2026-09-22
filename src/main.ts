@@ -412,9 +412,25 @@ export class Yamaha extends utils.Adapter {
     const profile = await this.loadDeviceProfile(device.id);
     const subunitCache = profile.subunitCache;
     const probeMemory = profile.probeMemory;
+    // Narrowing (attempt-device.ts: only the transports the description advertises) applies
+    // INSIDE a streak of failed attempts. The first attempt after a success — the start, and the
+    // first reconnect after a drop — always tries all three: a firmware update that brings
+    // MusicCast reboots the receiver, drops the connection, and is seen right there. Without
+    // this a narrowed set could never widen again, silently.
+    let failedInARow = 0;
     const supervisor = new DeviceSupervisor({
-      attempt: () =>
-        this.attemptDevice(device, pushReceiver, this.knownDeviceIps, reachability, subunitCache, probeMemory),
+      attempt: async () => {
+        const handle = await this.attemptDevice(
+          { ...device, services: failedInARow > 0 ? device.services : undefined },
+          pushReceiver,
+          this.knownDeviceIps,
+          reachability,
+          subunitCache,
+          probeMemory,
+        );
+        failedInARow = handle ? 0 : failedInARow + 1;
+        return handle;
+      },
       schedule: (cb, ms) => this.setTimeout(cb, ms),
       cancel: handle => this.clearTimeout(handle as ioBroker.Timeout | undefined),
       onConnectionChange: connected => this.reportConnection(device.id, connected),

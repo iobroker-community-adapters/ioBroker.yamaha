@@ -188,7 +188,12 @@ const mocks = vi.hoisted(() => ({
     ),
   ),
   discoveredStore: {
-    devices: [] as Array<{ id: string; ip: string; identity?: { serial?: string; mac?: string } }>,
+    devices: [] as Array<{
+      id: string;
+      ip: string;
+      identity?: { serial?: string; mac?: string };
+      services?: { yxc: boolean; xml: boolean };
+    }>,
     ignored: [] as string[],
     excluded: [] as Array<{ id: string; ip?: string; identity?: { serial?: string; mac?: string } }>,
   },
@@ -1027,6 +1032,41 @@ describe("Yamaha auto-discovery", () => {
     ctx.i.rediscoverNow([]);
     await flush();
     expect(mocks.discoverYamaha).not.toHaveBeenCalled();
+  });
+
+  it("the first attempt tries every transport; a retry in the same failure streak narrows; the attempt after a success is full again", async () => {
+    mocks.discoveredStore.devices = [{ id: "WX", ip: "1.1.1.1", services: { yxc: true, xml: false } }];
+    const ctx = setup({ devices: [] }, { failIds: ["WX"] });
+    await ctx.i.onReady();
+    await flush();
+    const attempts = (): unknown[] =>
+      ctx.calls.filter(c => c.device.id === "WX").map(c => (c.device as { services?: unknown }).services);
+    expect(attempts()).toEqual([undefined]);
+    // The supervisor's retry: the newest timer in the backoff's range (1 s base, 20 % jitter,
+    // doubling) — fire it by hand.
+    const retry = (): void => {
+      const call = ctx.i.setTimeout.mock.calls.filter(c => Number(c[1]) >= 800 && Number(c[1]) <= 4000).at(-1)!;
+      (call[0] as () => void)();
+    };
+    retry();
+    await flush();
+    expect(attempts()).toEqual([undefined, { yxc: true, xml: false }]);
+    // Now the device answers …
+    mocks.attemptDevice.mockImplementation((device: AttemptCall["device"], deps: AttemptCall["deps"]) => {
+      ctx.calls.push({ device, deps });
+      const h = fakeHandle();
+      ctx.handles.push(h);
+      return Promise.resolve(h);
+    });
+    retry();
+    await flush();
+    expect(attempts()).toHaveLength(3);
+    // … its handle drops, and the FIRST attempt of the new streak is full again — a firmware
+    // update that brought MusicCast reboots the receiver, so it is seen right here.
+    ctx.handles.at(-1)!.drop(new Error("gone"));
+    retry();
+    await flush();
+    expect(attempts().at(-1)).toBeUndefined();
   });
 
   describe("NOTIFY ssdp:alive", () => {

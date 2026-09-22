@@ -292,12 +292,24 @@ export function attemptDevice(device: DeviceRecord, deps: AttemptDeps): Promise<
     return xml;
   };
 
+  // Which transports to try. Without a description (a typed or migrated row, or a record from
+  // before the description was kept) all three; with one, the two HTTP protocols it lists — the
+  // description is per firmware, so a listed service is there and an unlisted one is not. YNCA
+  // is raw TCP and never listed: always tried. The caller decides WHEN a narrowed set is used
+  // (main.ts `startDevice`: only inside a streak of failed attempts, never the first after a
+  // success) — a skipped transport is silent by nature, so the rule that lets the set widen
+  // again lives there, not here.
+  const services = device.services;
+  const skip = (transport: Transport): [] => {
+    log.debug(`${device.id}/${transport}: not advertised by the device — skipped`);
+    return [];
+  };
   return connectTransports(
     device.id,
     [
       { transport: "ynca", build: buildYnca },
-      { transport: "yxc", build: buildYxc },
-      { transport: "xml", build: buildXml },
+      ...(services === undefined || services.yxc ? [{ transport: "yxc" as const, build: buildYxc }] : skip("yxc")),
+      ...(services === undefined || services.xml ? [{ transport: "xml" as const, build: buildXml }] : skip("xml")),
     ],
     {
       upsertObject,

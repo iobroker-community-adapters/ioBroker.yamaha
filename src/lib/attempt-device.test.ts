@@ -292,6 +292,65 @@ describe("partnerClient — the multiroom link target", () => {
 });
 
 describe("attemptDevice builders", () => {
+  /**
+   * The deps of the builders test, with the debug lines recorded.
+   *
+   * @param debugs where debug lines land
+   * @param warns where warn lines land
+   * @returns the deps
+   */
+  function depsWith(debugs: string[], warns: string[] = []): Parameters<typeof attemptDevice>[1] {
+    return {
+      log: { debug: m => debugs.push(m), info: () => {}, warn: m => warns.push(m) },
+      upsertObject: async () => {},
+      setStateAck: () => {},
+      timers: { schedule: () => 1 as unknown as ioBroker.Timeout, cancel: () => {} },
+      registerPush: () => () => {},
+      scheduleKeepalive: () => () => {},
+      xmlPollIntervalMs: 60_000,
+      onTransports: () => {},
+      knownDeviceIps: new Set(["192.168.1.10"]),
+      isEntryEnabled: () => true,
+    };
+  }
+  // MusicCast requests by URL string, XML by an options object — the recorder keeps each as is.
+  const yxcTried = (): boolean => wire.http.some(o => String(o.url ?? o.path).includes("/YamahaExtendedControl"));
+  const xmlTried = (): boolean => wire.http.some(o => o.path === "/YamahaRemoteControl/ctrl");
+
+  test("skips the transports the description does not advertise — YNCA never", async () => {
+    wire.tcp.length = 0;
+    wire.http.length = 0;
+    const debugs: string[] = [];
+    await attemptDevice(
+      { id: "wx", ip: "192.168.1.10", source: "discovered", services: { yxc: true, xml: false } },
+      depsWith(debugs),
+    );
+    expect(wire.tcp).toContainEqual({ host: "192.168.1.10", port: 50000 }); // YNCA always
+    expect(yxcTried()).toBe(true);
+    expect(xmlTried()).toBe(false);
+    expect(debugs).toContainEqual(expect.stringContaining("wx/xml: not advertised by the device — skipped"));
+  });
+
+  test("without services every transport is tried", async () => {
+    wire.tcp.length = 0;
+    wire.http.length = 0;
+    await attemptDevice({ id: "rx", ip: "192.168.1.10", source: "manual" }, depsWith([]));
+    expect(wire.tcp).toContainEqual({ host: "192.168.1.10", port: 50000 });
+    expect(yxcTried()).toBe(true);
+    expect(xmlTried()).toBe(true);
+  });
+
+  test("a description that advertises neither service still tries YNCA", async () => {
+    wire.tcp.length = 0;
+    wire.http.length = 0;
+    await attemptDevice(
+      { id: "old", ip: "192.168.1.10", source: "discovered", services: { yxc: false, xml: false } },
+      depsWith([]),
+    );
+    expect(wire.tcp).toContainEqual({ host: "192.168.1.10", port: 50000 });
+    expect(wire.http).toEqual([]);
+  });
+
   test("tries all three protocols at their own endpoints and gives up cleanly", async () => {
     wire.tcp.length = 0;
     wire.http.length = 0;
