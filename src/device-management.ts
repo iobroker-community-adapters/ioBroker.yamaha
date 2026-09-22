@@ -23,18 +23,21 @@ import { LABEL_RANK, unionDevices } from "./lib/pure-helpers";
 import {
   TRANSPORTS,
   buildDeviceForm,
+  buildExcludedForm,
   findClash,
   rowId,
   type CardDevice,
   type ManualRow,
 } from "./device-management-helpers";
 
-/** The one adapter method this backend needs beyond the plain ioBroker surface. */
+/** The adapter methods this backend needs beyond the plain ioBroker surface. */
 interface DeviceOwner {
   /** Stop supervising a device and delete its object tree. */
   removeDevice(deviceId: string): Promise<void>;
   /** Switch one device's volume datapoints to percent (or back) and rebuild them at once. */
   setVolumePercent(deviceId: string, on: boolean): Promise<void>;
+  /** Forget the session's deletes of these ids and search the network now. */
+  rediscoverNow(lifted: readonly string[]): void;
 }
 
 /**
@@ -53,7 +56,9 @@ export class YamahaDeviceManagement extends DeviceManagement {
   /** The running adapter, for the one action that has to reach into it (delete a device). */
   private get owner(): DeviceOwner | undefined {
     const candidate = this.adapter as unknown as Partial<DeviceOwner>;
-    return typeof candidate.removeDevice === "function" && typeof candidate.setVolumePercent === "function"
+    return typeof candidate.removeDevice === "function" &&
+      typeof candidate.setVolumePercent === "function" &&
+      typeof candidate.rediscoverNow === "function"
       ? (candidate as DeviceOwner)
       : undefined;
   }
@@ -267,7 +272,16 @@ export class YamahaDeviceManagement extends DeviceManagement {
     return {
       apiVersion: "v3",
       identifierLabel: t("ipLabel"),
-      actions: [{ id: "add", icon: "add", description: t("dmAdd"), handler: async ctx => this.addDevice(ctx) }],
+      actions: [
+        { id: "add", icon: "add", description: t("dmAdd"), handler: async ctx => this.addDevice(ctx) },
+        // The way back for a deleted device: without it an exclusion is invisible and permanent.
+        {
+          id: "excluded",
+          icon: "lines",
+          description: t("dmExcluded"),
+          handler: async ctx => this.excludedDevices(ctx),
+        },
+      ],
     };
   }
 
@@ -313,6 +327,52 @@ export class YamahaDeviceManagement extends DeviceManagement {
       // inheriting whatever the instance-wide switch of 2.8.0 was left on.
       await this.applyVolumePercent(id, data.volumeAsPercent === true);
     }
+    return { refresh: true };
+  }
+
+  /**
+   * The devices the network search skips because the user deleted them, as a checkbox list —
+   * ticked ones are admitted again: they leave both stores (`excluded.json` and the plain id
+   * list), the running adapter forgets the session's delete and searches at once.
+   *
+   * @param context the action context
+   * @returns a directive to reload the manager
+   */
+  private async excludedDevices(context: ActionContext): Promise<{ refresh: boolean }> {
+    const excludedDeps = excludedStoreDeps(this.adapter);
+    const ignoredDeps = ignoredStoreDeps(this.adapter);
+    const excluded = await readExcluded(excludedDeps);
+    const ignored = await readIgnored(ignoredDeps);
+    // One row per id: the entry with address and identity where there is one, the bare id from
+    // the plain list otherwise (an exclusion written before there were entries).
+    const entries = [
+      ...excluded,
+      ...ignored.filter(id => !excluded.some(entry => entry.id === id)).map(id => ({ id })),
+    ];
+    if (entries.length === 0) {
+      await context.showMessage(t("dmExcludedNone"));
+      return { refresh: false };
+    }
+    const data = await context.showForm(buildExcludedForm(entries), {
+      title: t("dmExcludedTitle"),
+      buttons: ["apply", "cancel"],
+    });
+    if (!data) {
+      return { refresh: false };
+    }
+    const lifted = entries.map(entry => entry.id).filter(id => data[id] === true);
+    if (lifted.length === 0) {
+      return { refresh: false };
+    }
+    await writeExcluded(
+      excludedDeps,
+      excluded.filter(entry => !lifted.includes(entry.id)),
+    );
+    await writeIgnored(
+      ignoredDeps,
+      ignored.filter(id => !lifted.includes(id)),
+    );
+    this.owner?.rediscoverNow(lifted);
     return { refresh: true };
   }
 

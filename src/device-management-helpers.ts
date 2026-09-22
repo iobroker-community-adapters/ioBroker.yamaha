@@ -123,3 +123,23 @@ export function findClash(
   }
   return null;
 }
+
+/**
+ * The "excluded devices" dialog: one checkbox per excluded device — ticked means "the search may
+ * add it again". Labelled with the id and the address it was deleted at, when known.
+ *
+ * @param entries the excluded devices, id first
+ * @returns the jsonConfig panel
+ */
+export function buildExcludedForm(entries: ReadonlyArray<{ id: string; ip?: string }>): JsonFormSchema {
+  const items: Record<string, unknown> = {};
+  entries.forEach((entry, index) => {
+    items[entry.id] = {
+      type: "checkbox",
+      label: entry.ip ? `${entry.id} (${entry.ip})` : entry.id,
+      ...(index === 0 ? { help: t("dmExcludedHelp") } : {}),
+      sm: 12,
+    };
+  });
+  return { type: "panel", items } as unknown as JsonFormSchema;
+}

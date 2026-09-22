@@ -879,6 +879,24 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
+   * The device manager admitted deleted devices again: forget the session's deletes for them
+   * (`removed` would otherwise keep them out until the restart) and search now — with `always`
+   * and every device online no search would run by itself before the next restart.
+   *
+   * @param lifted the ids the user ticked
+   */
+  public rediscoverNow(lifted: readonly string[]): void {
+    for (const id of lifted) {
+      this.removed.delete(id);
+    }
+    const receiver = this.pushReceiver;
+    if (!this.discovering || !receiver || this.unloading) {
+      return;
+    }
+    void this.discoverAdditionalDevices(receiver);
+  }
+
+  /**
    * Wait for a supervisor's running connection attempt, capped so an unforeseen hang can
    * never block a delete for good.
    *

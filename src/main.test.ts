@@ -450,6 +450,7 @@ function internalOf(adapter: Yamaha): {
   knownDeviceIps: Set<string>;
   setTransports(deviceId: string, names: string[]): void;
   onSsdpAlive(notify: { nts: "alive"; location?: string }, address: string): void;
+  rediscoverNow(lifted: readonly string[]): void;
   deviceRecords: Map<string, { id: string; ip: string; source?: string; identity?: { serial?: string; mac?: string } }>;
   xmlPollIntervalMs(): number;
   objects: Map<string, Record<string, unknown>>;
@@ -1004,6 +1005,28 @@ describe("Yamaha auto-discovery", () => {
       // The row answers at its own address: a second RX-V6A is simply a second device.
       expect(mocks.discoveredStore.devices).toEqual([{ id: "Yamaha_RX-V6a", ip: "192.168.1.20", identity: v6a }]);
     });
+  });
+
+  it("a device deleted and re-admitted in the same session is started by the next search", async () => {
+    mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+    const ctx = setup({ devices: [] });
+    await ctx.i.onReady();
+    await flush();
+    await ctx.i.removeDevice("RX-V685");
+    mocks.discoverYamaha.mockResolvedValue([{ ip: "192.168.1.20", name: "RX-V685" }]);
+    ctx.i.rediscoverNow(["RX-V685"]);
+    await flush();
+    expect(ctx.calls.filter(c => c.device.id === "RX-V685")).toHaveLength(2); // the start, and the re-admission
+  });
+
+  it("rediscoverNow searches nothing while the search is off", async () => {
+    const ctx = setup({ devices: [{ name: "Living", ip: "192.168.1.10" }] });
+    await ctx.i.onReady();
+    await flush();
+    mocks.discoverYamaha.mockClear();
+    ctx.i.rediscoverNow([]);
+    await flush();
+    expect(mocks.discoverYamaha).not.toHaveBeenCalled();
   });
 
   describe("NOTIFY ssdp:alive", () => {

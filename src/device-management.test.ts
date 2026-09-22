@@ -168,6 +168,7 @@ function mockAdapter(
     // The adapter methods the backend reaches for: stop a device and drop its tree, and switch
     // one device's volume presentation while it runs.
     removeDevice: vi.fn(() => Promise.resolve()),
+    rediscoverNow: vi.fn(),
     setVolumePercent: vi.fn((id: string, on: boolean) => {
       const full = `yamaha.0.${id}`;
       const previous = (objects[full] ?? {}) as Record<string, any>;
@@ -244,6 +245,7 @@ interface DmInternals {
   addDevice(ctx: MockCtx): Promise<{ refresh: boolean }>;
   editDevice(cardId: string, ctx: MockCtx): Promise<{ refresh: "devices" }>;
   deleteDevice(cardId: string): Promise<{ delete: string }>;
+  excludedDevices(ctx: MockCtx): Promise<{ refresh: boolean }>;
 }
 /** Subset of the generated jsonConfig panel the tests inspect. */
 interface FormSchema {
@@ -396,7 +398,7 @@ describe("YamahaDeviceManagement", () => {
     const info = make([]).getInstanceInfo();
     expect(info.apiVersion).toBe("v3");
     expect(info.identifierLabel).toBe("ipLabel");
-    expect(info.actions.map(a => a.id)).toEqual(["add"]);
+    expect(info.actions.map(a => a.id)).toEqual(["add", "excluded"]);
   });
 
   describe("add", () => {
@@ -663,6 +665,44 @@ describe("YamahaDeviceManagement", () => {
       const i = make([]);
       await i.addDevice(mockContext({ form: { name: "Bedroom", ip: "192.168.1.30" } }));
       expect(writeExcluded).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("excluded devices", () => {
+    it("lists every exclusion, lifts the ticked ones from both stores, and searches again", async () => {
+      store.excluded = [{ id: "Kitchen", ip: "192.168.1.11" }];
+      store.ignored = ["Kitchen", "Old"];
+      const i = make([]);
+      const ctx = mockContext({ form: { Kitchen: true, Old: false } });
+      await expect(i.excludedDevices(ctx)).resolves.toEqual({ refresh: true });
+      const schema = ctx.showForm.mock.calls[0][0] as { items: Record<string, { type: string; label: string }> };
+      expect(Object.keys(schema.items)).toEqual(["Kitchen", "Old"]);
+      expect(schema.items.Kitchen).toMatchObject({ type: "checkbox", label: "Kitchen (192.168.1.11)" });
+      expect(schema.items.Old).toMatchObject({ type: "checkbox", label: "Old" });
+      expect(ctx.showForm.mock.calls[0][1]).toMatchObject({ title: "dmExcludedTitle" });
+      expect(writeExcluded).toHaveBeenCalledWith({}, []);
+      expect(writeIgnored).toHaveBeenCalledWith({}, ["Old"]);
+      // The running adapter forgets the session's delete and searches at once — otherwise the
+      // device came back only at the next restart (or never, with `always` and every device online).
+      expect(adapter.rediscoverNow).toHaveBeenCalledWith(["Kitchen"]);
+    });
+
+    it("says so when nothing is excluded", async () => {
+      const i = make([]);
+      const ctx = mockContext({});
+      await expect(i.excludedDevices(ctx)).resolves.toEqual({ refresh: false });
+      expect(ctx.showMessage).toHaveBeenCalledWith("dmExcludedNone");
+      expect(ctx.showForm).not.toHaveBeenCalled();
+    });
+
+    it("cancel, and a form with nothing ticked, change nothing", async () => {
+      store.ignored = ["Old"];
+      const i = make([]);
+      await i.excludedDevices(mockContext({ form: undefined }));
+      await i.excludedDevices(mockContext({ form: { Old: false } }));
+      expect(writeIgnored).not.toHaveBeenCalled();
+      expect(writeExcluded).not.toHaveBeenCalled();
+      expect(adapter.rediscoverNow).not.toHaveBeenCalled();
     });
   });
 
