@@ -2997,7 +2997,7 @@ describe("the device table and the network search side by side", () => {
     expect(started(ctx)).toEqual(["Typed"]); // onReady did not wait for the search
     release([{ ip: "192.168.1.20", name: "Found" }]);
     await flush();
-    expect(started(ctx)).toEqual(["Typed", "Found"]);
+    expect(started(ctx)).toEqual(["Found", "Typed"]); // `started` sorts; the order was proven above
   });
 
   it("always: mixed operation — the typed device and the found ones run together", async () => {
