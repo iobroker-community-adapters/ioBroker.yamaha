@@ -28,6 +28,7 @@ import {
   neverWrittenStateIds,
   nextDeviceLabel,
   parseDevices,
+  sanitizeId,
   unionDevices,
   renamedObjectIds,
   staleObjects,
@@ -35,9 +36,9 @@ import {
 } from "./lib/pure-helpers";
 import { errorMessage, MAX_HTTP_BODY_BYTES } from "./lib/util";
 import { tName } from "./lib/i18n";
-import { discoverYamaha } from "./lib/discovery";
+import { discoverYamaha, type DiscoveredDevice } from "./lib/discovery";
 import { isExcluded, readDiscovered, readExcluded, readIgnored, writeDiscovered } from "./lib/discovered-store";
-import { identityFrom, mergeIdentity, type DeviceIdentity } from "./lib/device-identity";
+import { identityFrom, mergeIdentity, sameDevice, type DeviceIdentity } from "./lib/device-identity";
 import { discoveredStoreDeps, excludedStoreDeps, ignoredStoreDeps } from "./lib/discovered-store-deps";
 import { YxcPushReceiver } from "./lib/yxc/push-receiver";
 import { YamahaDeviceManagement } from "./device-management";
@@ -174,6 +175,13 @@ export class Yamaha extends utils.Adapter {
    * remember and start the device again a few seconds after the user removed it.
    */
   private readonly removed = new Set<string>();
+  /**
+   * deviceId → the address a MANUAL device was last seen answering at, away from its typed one.
+   * The warning is said once per new address, not on every search.
+   */
+  private readonly warnedElsewhere = new Map<string, string>();
+  /** The devices whose connection attempt failed at least once in this session — "offline" proven, not assumed. */
+  private readonly failedOnce = new Set<string>();
   /** Armed while an auto-found device is offline: the search that can bring it back. */
   private rediscoverTimer: ioBroker.Timeout | undefined;
   /** When the last background search ran, so the retry cannot become a scan loop. */
@@ -277,7 +285,7 @@ export class Yamaha extends utils.Adapter {
       this.legacyVolumePercent =
         (instance?.native as { volumeAsPercent?: unknown } | undefined)?.volumeAsPercent === true;
       this.discovering = this.searchesTheNetwork(configured.length);
-      const devices = unionDevices(configured, this.discovering ? await this.autoDiscover() : []);
+      const devices = unionDevices(configured, this.discovering ? await this.autoDiscover(configured.length) : []);
       if (this.unloading) {
         // Stopped during the initial network search: it resolves on its own clock, and
         // everything below — push socket, subscriptions, device sockets and timers —
@@ -414,35 +422,81 @@ export class Yamaha extends utils.Adapter {
       if (this.unloading) {
         return; // the search outlived the adapter — nothing may start now
       }
-      let changed = false;
-      for (const device of merged) {
-        if (this.removed.has(device.id)) {
-          continue; // deleted while this search was running — see `removed`
-        }
-        const running = this.deviceRecords.get(device.id);
-        try {
-          if (!running) {
-            this.log.info(`discovery found ${device.id} — setting up`);
-            await this.startDevice(device, pushReceiver);
-            changed = true;
-          } else if (running.ip !== device.ip) {
-            this.log.info(`${device.id}: address changed from ${running.ip} to ${device.ip} — reconnecting it there`);
-            this.knownDeviceIps.delete(running.ip);
-            this.stopDevice(device.id);
-            await this.startDevice(device, pushReceiver);
-            changed = true;
-          }
-        } catch (e) {
-          // Same rule as the start-up loop: one device must not end the round for the others.
-          this.log.error(`${device.id}: could not be set up (${errorMessage(e)}) — the other devices continue`);
-        }
-      }
-      if (changed) {
-        this.writeDeviceOverview();
-      }
+      await this.reconcileDiscovered(merged, pushReceiver);
     } catch (e) {
       this.log.warn(`background discovery failed: ${errorMessage(e)}`);
     }
+  }
+
+  /**
+   * Bring the running set in line with what a search (or a NOTIFY probe) established: start a
+   * device that is not supervised yet, move one that answers at a NEW address — and for a
+   * migrated table row, write the new address into the table (the instance restarts on it; the
+   * supervisor already runs at the new address until then).
+   *
+   * @param merged the records the search established (`absorbFinds`)
+   * @param pushReceiver the shared YXC push receiver
+   * @returns whether the running set changed
+   */
+  private async reconcileDiscovered(merged: readonly DeviceRecord[], pushReceiver: YxcPushReceiver): Promise<boolean> {
+    let changed = false;
+    for (const device of merged) {
+      if (this.removed.has(device.id)) {
+        continue; // deleted while this search was running — see `removed`
+      }
+      const running = this.deviceRecords.get(device.id);
+      try {
+        if (!running) {
+          this.log.info(`discovery found ${device.id} — setting up`);
+          await this.startDevice(device, pushReceiver);
+          changed = true;
+        } else if (running.ip !== device.ip) {
+          const migrated = device.source === "migrated";
+          const tableNote = migrated ? "; updated the device table, the instance restarts on it" : "";
+          this.log.info(
+            `${device.id}: address changed from ${running.ip} to ${device.ip} — reconnecting it there${tableNote}`,
+          );
+          this.knownDeviceIps.delete(running.ip);
+          this.stopDevice(device.id);
+          await this.startDevice(device, pushReceiver);
+          changed = true;
+          if (migrated) {
+            await this.updateTableAddress(device.id, device.ip);
+          }
+        }
+      } catch (e) {
+        // Same rule as the start-up loop: one device must not end the round for the others.
+        this.log.error(`${device.id}: could not be set up (${errorMessage(e)}) — the other devices continue`);
+      }
+    }
+    if (changed) {
+      this.writeDeviceOverview();
+    }
+    return changed;
+  }
+
+  /**
+   * Write a migrated row's new address into the device table. The row's NAME stays (it is the
+   * old address, and the object id derives from it — see `parseDevices`); only `ip` moves.
+   * Writing the instance's native restarts the adapter — a rare event, once per DHCP change.
+   *
+   * @param deviceId the row's id
+   * @param ip the address the search proved
+   */
+  private async updateTableAddress(deviceId: string, ip: string): Promise<void> {
+    const instanceId = `system.adapter.${this.namespace}`;
+    const instance = await this.getForeignObjectAsync(instanceId);
+    const rows = (instance?.native as { devices?: unknown } | undefined)?.devices;
+    if (!Array.isArray(rows)) {
+      return;
+    }
+    const devices = rows.map(row => {
+      const entry = row as { name?: unknown; ip?: unknown };
+      const name = typeof entry.name === "string" && entry.name.length > 0 ? entry.name : undefined;
+      const rowIp = typeof entry.ip === "string" ? entry.ip : "";
+      return name !== undefined && sanitizeId(name) === deviceId ? { ...entry, ip } : { ...entry, ip: rowIp };
+    });
+    await this.extendForeignObjectAsync(instanceId, { native: { devices } });
   }
 
   /**
@@ -666,6 +720,8 @@ export class Yamaha extends utils.Adapter {
     this.deviceRecords.delete(deviceId);
     this.deviceConnected.delete(deviceId);
     this.readyDevices.delete(deviceId);
+    this.failedOnce.delete(deviceId);
+    this.warnedElsewhere.delete(deviceId);
     // Everything else this device left behind goes with it. A cache that survives makes the
     // adapter believe it already did the work: re-adding the SAME id finds the icon cache
     // intact, `updateDeviceIcon` bails on the identity check, and the card keeps the default
@@ -752,9 +808,12 @@ export class Yamaha extends utils.Adapter {
       this.scheduleDatapointBalance();
     }
     if (connected) {
+      this.failedOnce.delete(deviceId);
       // On EVERY connect, not only the first: a reconnect over another transport can bring
       // the first serial this device ever reported.
       this.learnIdentity(deviceId, this.profiles.get(deviceId)?.identity());
+    } else {
+      this.failedOnce.add(deviceId);
     }
     this.deviceConnected.set(deviceId, connected);
     this.writeState(`${deviceId}.info.connection`, connected);
@@ -1734,20 +1793,29 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
-   * Auto-discovery for an empty device table: scan the network, merge the finds with
-   * the devices remembered from earlier runs (standby protection), persist the merged
-   * set and return it. XML/pre-2010 receivers do not answer SSDP and never appear here.
+   * Auto-discovery at start: with nothing to run yet, scan the network now and return the finds;
+   * with remembered devices or table rows, return the remembered ones and leave the search to
+   * the background (see discoverAdditionalDevices). XML/pre-2010 receivers do not answer SSDP
+   * and never appear here.
    *
+   * @param configuredCount how many rows the device table holds
    * @returns the device records to run this session
    */
-  private async autoDiscover(): Promise<DeviceRecord[]> {
+  private async autoDiscover(configuredCount: number): Promise<DeviceRecord[]> {
     const store = discoveredStoreDeps(this);
     const known = await readDiscovered(store);
-    if (known.length > 0) {
-      // Remembered devices start NOW — the network search used to gate every restart
-      // by its collect window although the devices were already known. It still runs,
-      // in the background, to pick up newcomers (see discoverAdditionalDevices).
-      this.log.info(`setting up ${known.length} remembered device(s); the network search runs in the background`);
+    if (known.length > 0 || configuredCount > 0) {
+      // Remembered devices — and the table's rows — start NOW: the network search used to gate
+      // every restart by its collect window although the devices were already known. It still
+      // runs, in the background, to pick up newcomers and moved devices. Behind the running
+      // rows on purpose: a find is read against the RUNNING set (a table row's identity, its
+      // offline state), and a search that ran before the rows would take a moved row for a
+      // stranger and start it a second time.
+      this.log.info(
+        known.length > 0
+          ? `setting up ${known.length} remembered device(s); the network search runs in the background`
+          : "the network search runs in the background, behind the configured devices",
+      );
       return known;
     }
     this.log.info("auto-discovery via SSDP (older XML-only devices must be added manually)");
@@ -1757,18 +1825,16 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
-   * Search the network, merge with the remembered devices, and persist the result.
-   * Shared by the blocking first-setup path and the background search.
+   * Search the network and absorb what it found (`absorbFinds`). Shared by the blocking
+   * first-setup path and the background search.
    *
-   * @returns the merged device records, every one stamped `source: "discovered"`
+   * @returns the device records the search established
    */
   private async runDiscovery(): Promise<DeviceRecord[]> {
     // Every search counts against the throttle, whoever asked for it — otherwise the first
     // offline device would fire another one right behind the start-up search.
     this.lastRediscovery = Date.now();
-    const store = discoveredStoreDeps(this);
-    const known = await readDiscovered(store);
-    let found: Array<{ ip: string; name: string }> = [];
+    let found: DiscoveredDevice[] = [];
     try {
       found = await discoverYamaha({
         search: (target, ms) => this.ssdpSearch(target, ms),
@@ -1778,29 +1844,137 @@ export class Yamaha extends utils.Adapter {
     } catch (e) {
       this.log.warn(`auto-discovery scan failed, using the remembered devices: ${errorMessage(e)}`);
     }
-    const merged = mergeDiscovered(known, found, (dropped, takenId) =>
+    return this.absorbFinds(found);
+  }
+
+  /**
+   * The model the profile remembers for a running device — a seam for the tests.
+   *
+   * @param deviceId the id-safe device id
+   * @returns the model name, or undefined
+   */
+  private rememberedModelOf(deviceId: string): string | undefined {
+    return this.profiles.get(deviceId)?.model();
+  }
+
+  /**
+   * The one migrated device a stranger of this model may be: proven offline, without a learned
+   * identity, and the only such one. A migrated row is the single device of the previous adapter — the
+   * model is proof enough there. Two of them are none (nothing says which one moved), and a
+   * discovered device never qualifies: it carries its identity from its first search on.
+   *
+   * @param model the model the find advertises
+   * @returns the orphan, or undefined
+   */
+  private orphanOfModel(model: string | undefined): DeviceRecord | undefined {
+    if (!model) {
+      return undefined;
+    }
+    const orphans = [...this.deviceRecords.values()].filter(
+      record =>
+        record.source === "migrated" &&
+        !record.identity &&
+        // Proven offline: an attempt failed and none succeeded since — a row still on its first
+        // attempt is not offline, it is slow.
+        this.failedOnce.has(record.id) &&
+        this.deviceConnected.get(record.id) === false &&
+        this.rememberedModelOf(record.id) === model,
+    );
+    if (orphans.length !== 1) {
+      if (orphans.length > 1) {
+        this.log.debug(
+          `${orphans.length} migrated ${model} devices are offline without identity — a find cannot be assigned to one of them`,
+        );
+      }
+      return undefined;
+    }
+    return orphans[0];
+  }
+
+  /**
+   * Merge what a search (or a single NOTIFY probe) found with the remembered devices, keep the
+   * user's decisions in force, persist the result, and hand back what the running set has to
+   * be reconciled with. The one path for every find, however it arrived.
+   *
+   * Against the RUNNING set the finds are read three ways: a find at a table row's own address
+   * teaches that row its identity; a find whose identity is a MIGRATED row's, at another
+   * address, is that row moved (it follows the device — nobody typed its address); a find whose
+   * identity is a MANUAL row's, elsewhere, is said once and left alone (the typed address is
+   * what the user wants). A stranger of a model an offline, identity-less migrated row remembers
+   * is that row too, when it is the only such row (`orphanOfModel`).
+   *
+   * @param found what the network answered
+   * @returns the records to reconcile: new/remembered discovered devices, plus moved table rows
+   */
+  private async absorbFinds(found: readonly DiscoveredDevice[]): Promise<DeviceRecord[]> {
+    const store = discoveredStoreDeps(this);
+    const known = await readDiscovered(store);
+    const merged = mergeDiscovered(known, [...found], (dropped, takenId) =>
       this.log.warn(`discovered device "${dropped}" skipped — its object id "${takenId}" is already taken`),
     );
+    const running = [...this.deviceRecords.values()];
+    for (const device of found) {
+      const own = running.find(record => record.source !== "discovered" && record.ip === device.ip);
+      if (own && device.identity) {
+        this.learnIdentity(own.id, device.identity);
+      }
+    }
     // Devices the user deleted from the card list stay out — otherwise the next search simply
     // undoes the delete: by id (the plain list), by identity or by the address they were deleted
     // at (`excluded.json`), and — for a delete that happened while THIS search was running — by
-    // the session's `removed` set. So do the ones that live in the device table: a receiver the user gave
-    // a fixed address and entered by hand would otherwise come back as a SECOND card, and the
-    // store would carry the found address back over the typed one (`mergeDiscovered` updates a
-    // known id's address). Both the id and the address are matched — the search reads the name
-    // off the device, the user typed their own, so the same receiver can carry two ids.
+    // the session's `removed` set. So do the ones that live in the device table: a receiver the
+    // user gave a fixed address and entered by hand would otherwise come back as a SECOND card,
+    // and the store would carry the found address back over the typed one (`mergeDiscovered`
+    // updates a known id's address). Both the id and the address are matched — the search reads
+    // the name off the device, the user typed their own, so the same receiver can carry two ids.
     const ignored = await readIgnored(ignoredStoreDeps(this));
     const excluded = await readExcluded(excludedStoreDeps(this));
     const manual = parseDevices(this.config.devices);
     const manualIds = new Set(manual.map(device => device.id));
     const manualIps = new Set(manual.map(device => device.ip));
-    const kept = merged.filter(
-      device =>
-        !this.removed.has(device.id) &&
-        !isExcluded(ignored, excluded, device) &&
-        !manualIds.has(device.id) &&
-        !manualIps.has(device.ip),
-    );
+    const moved: DeviceRecord[] = [];
+    const kept = merged.filter(device => {
+      if (
+        this.removed.has(device.id) ||
+        isExcluded(ignored, excluded, device) ||
+        manualIds.has(device.id) ||
+        manualIps.has(device.ip)
+      ) {
+        return false;
+      }
+      const twin = running.find(
+        record => record.source !== "discovered" && sameDevice(record.identity, device.identity),
+      );
+      if (twin) {
+        if (twin.ip === device.ip) {
+          return false;
+        }
+        if (twin.source === "migrated") {
+          moved.push({
+            ...twin,
+            ip: device.ip,
+            identity: mergeIdentity(twin.identity, device.identity),
+            services: device.services,
+          });
+          return false;
+        }
+        if (this.warnedElsewhere.get(twin.id) !== device.ip) {
+          this.warnedElsewhere.set(twin.id, device.ip);
+          this.log.warn(
+            `${twin.id}: the device answers at ${device.ip} now, the device table says ${twin.ip} — it stays at the typed address; edit the card to move it`,
+          );
+        }
+        return false;
+      }
+      if (!known.some(record => record.id === device.id)) {
+        const orphan = this.orphanOfModel(found.find(find => find.ip === device.ip)?.model);
+        if (orphan) {
+          moved.push({ ...orphan, ip: device.ip, identity: device.identity, services: device.services });
+          return false;
+        }
+      }
+      return true;
+    });
     // The file only changes when a device appeared, vanished or moved — while a device is
     // offline the search runs every five minutes, and it must not rewrite an identical file each
     // time. Compared on the stored form, before the records are stamped below.
@@ -1810,7 +1984,7 @@ export class Yamaha extends utils.Adapter {
     // Stamped HERE, for both callers: onReady unions the result with the device table and stamps
     // again (harmless), the background search hands its result straight to startDevice — and a
     // record without the stamp is one the rediscovery never searches for after it moved.
-    return kept.map(device => ({ ...device, source: "discovered" as const }));
+    return [...kept.map(device => ({ ...device, source: "discovered" as const })), ...moved];
   }
 
   /**

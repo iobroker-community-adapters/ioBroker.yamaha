@@ -317,6 +317,16 @@ export class DeviceProfileStore {
   }
 
   /**
+   * The model the transports reported — the same name on all three, so any half will do.
+   *
+   * @returns the model name, or undefined while no transport ever answered
+   */
+  public model(): string | undefined {
+    const identity = profileIdentityOf(this.memory);
+    return identity.ynca?.model || identity.yxc?.model || identity.xml?.model || undefined;
+  }
+
+  /**
    * The device's identity as the transports learned it — XML `System_ID` and MusicCast
    * `system_id` are the same serial (measured on the RX-V6A), `device_id` is the MAC. Undefined
    * until a transport reported one, and for a scrubbed value (see `identityFrom`).

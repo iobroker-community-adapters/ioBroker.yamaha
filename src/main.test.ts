@@ -176,7 +176,17 @@ vi.mock("@iobroker/adapter-core", () => {
 
 const mocks = vi.hoisted(() => ({
   attemptDevice: vi.fn(),
-  discoverYamaha: vi.fn((_deps?: unknown) => Promise.resolve([] as Array<{ ip: string; name: string }>)),
+  discoverYamaha: vi.fn((_deps?: unknown) =>
+    Promise.resolve(
+      [] as Array<{
+        ip: string;
+        name: string;
+        model?: string;
+        identity?: { serial?: string; mac?: string };
+        services?: { yxc: boolean; xml: boolean };
+      }>,
+    ),
+  ),
   discoveredStore: {
     devices: [] as Array<{ id: string; ip: string; identity?: { serial?: string; mac?: string } }>,
     ignored: [] as string[],
@@ -412,6 +422,10 @@ function internalOf(adapter: Yamaha): {
   setVolumePercent(deviceId: string, on: boolean): Promise<void>;
   pendingNative: Map<string, { timer?: unknown; native: Record<string, unknown> }>;
   profiles: Map<string, { identity: () => { serial?: string; mac?: string } | undefined }>;
+  rememberedModelOf: (deviceId: string) => string | undefined;
+  discoverAdditionalDevices(pushReceiver: unknown): Promise<void>;
+  pushReceiver: unknown;
+  knownDeviceIps: Set<string>;
   deviceRecords: Map<string, { id: string; ip: string; source?: string; identity?: { serial?: string; mac?: string } }>;
   xmlPollIntervalMs(): number;
   objects: Map<string, Record<string, unknown>>;
@@ -852,6 +866,117 @@ describe("Yamaha auto-discovery", () => {
     await ctx.i.onReady();
     await flush();
     expect(ctx.i.deviceRecords.get("RX-V685")?.identity).toEqual({ serial: "0E897553", mac: "00A0DED4F504" });
+  });
+
+  describe("a find and the table rows", () => {
+    const v6a = { serial: "057CCF73", mac: "CCD42ECF0223" };
+    let ctxTable: Ctx | undefined;
+    const table = (): unknown[] | undefined =>
+      (ctxTable?.i.foreignObjects.get("system.adapter.yamaha.0")?.native as { devices?: unknown[] } | undefined)
+        ?.devices;
+    /**
+     * The instance object as js-controller keeps it — the table lives in its native.
+     *
+     * @param ctx the adapter under test
+     */
+    const seedTable = (ctx: Ctx): void => {
+      ctxTable = ctx;
+      ctx.i.foreignObjects.set("system.adapter.yamaha.0", { native: { devices: ctx.i.config.devices } });
+    };
+
+    it("moves a migrated row to the address the search proves and updates the table", async () => {
+      // The row the 0.5.4 upgrade wrote (name = address); its identity was learned in an earlier
+      // run and sits at the device object. The receiver now answers at .20.
+      const ctx = setup({ devices: [{ name: "192.168.1.10", ip: "192.168.1.10" }], discovery: "always" });
+      seedTable(ctx);
+      ctx.i.objects.set("192_168_1_10", { type: "device", common: {}, native: { identity: v6a } });
+      mocks.discoverYamaha.mockResolvedValue([{ ip: "192.168.1.20", name: "Yamaha RX-V6a", identity: v6a }]);
+      await ctx.i.onReady();
+      await flush();
+      expect(ctx.calls.at(-1)?.device).toMatchObject({ id: "192_168_1_10", ip: "192.168.1.20" });
+      expect(ctx.i.knownDeviceIps.has("192.168.1.10")).toBe(false);
+      expect(table()).toEqual([{ name: "192.168.1.10", ip: "192.168.1.20" }]);
+      expect(ctx.i.log.info).toHaveBeenCalledWith(expect.stringContaining("updated the device table"));
+      // Not a second card: the find was the row itself.
+      expect(mocks.discoveredStore.devices).toEqual([]);
+    });
+
+    it("a manual row is warned about, once, and stays where it was typed", async () => {
+      const ctx = setup({ devices: [{ name: "Living", ip: "192.168.1.10" }], discovery: "always" });
+      seedTable(ctx);
+      ctx.i.objects.set("Living", { type: "device", common: {}, native: { identity: v6a } });
+      mocks.discoverYamaha.mockResolvedValue([{ ip: "192.168.1.20", name: "Yamaha RX-V6a", identity: v6a }]);
+      await ctx.i.onReady();
+      await flush();
+      await ctx.i.discoverAdditionalDevices(ctx.i.pushReceiver);
+      await flush();
+      const warns = ctx.i.log.warn.mock.calls.filter(c => String(c[0]).includes("stays at the typed address"));
+      expect(warns).toHaveLength(1);
+      expect(String(warns[0][0])).toContain("192.168.1.20");
+      expect(mocks.discoveredStore.devices).toEqual([]);
+      expect(ctx.calls.every(c => c.device.ip === "192.168.1.10")).toBe(true);
+      expect(table()).toEqual([{ name: "Living", ip: "192.168.1.10" }]);
+    });
+
+    it("a find at a manual row's own address teaches that row its identity", async () => {
+      const ctx = setup({ devices: [{ name: "Living", ip: "192.168.1.10" }], discovery: "always" });
+      mocks.discoverYamaha.mockResolvedValue([{ ip: "192.168.1.10", name: "Yamaha RX-V6a", identity: v6a }]);
+      await ctx.i.onReady();
+      await flush();
+      expect(ctx.i.deviceRecords.get("Living")?.identity).toEqual(v6a);
+      expect(mocks.discoveredStore.devices).toEqual([]);
+    });
+
+    it("an offline migrated row without identity adopts the only find of its model, at the new address", async () => {
+      // The device moved BEFORE this version ever learned its serial (e.g. during the update):
+      // the row is offline, the find is a stranger by id — the remembered model is the proof.
+      const ctx = setup(
+        { devices: [{ name: "192.168.1.10", ip: "192.168.1.10" }], discovery: "always" },
+        { failIds: ["192_168_1_10"] },
+      );
+      seedTable(ctx);
+      ctx.i.rememberedModelOf = () => "RX-V6A";
+      mocks.discoverYamaha.mockResolvedValue([
+        { ip: "192.168.1.20", name: "Yamaha RX-V6a", model: "RX-V6A", identity: v6a },
+      ]);
+      await ctx.i.onReady();
+      await flush();
+      expect(ctx.calls.at(-1)?.device).toMatchObject({ id: "192_168_1_10", ip: "192.168.1.20", identity: v6a });
+      expect(mocks.discoveredStore.devices).toEqual([]); // no second card
+      expect(table()).toEqual([{ name: "192.168.1.10", ip: "192.168.1.20" }]);
+    });
+
+    it("two offline migrated rows of the same model are no proof — the find becomes a new device", async () => {
+      const ctx = setup(
+        {
+          devices: [
+            { name: "192.168.1.10", ip: "192.168.1.10" },
+            { name: "192.168.1.11", ip: "192.168.1.11" },
+          ],
+          discovery: "always",
+        },
+        { failIds: ["192_168_1_10", "192_168_1_11"] },
+      );
+      ctx.i.rememberedModelOf = () => "RX-V6A";
+      mocks.discoverYamaha.mockResolvedValue([
+        { ip: "192.168.1.20", name: "Yamaha RX-V6a", model: "RX-V6A", identity: v6a },
+      ]);
+      await ctx.i.onReady();
+      await flush();
+      expect(mocks.discoveredStore.devices).toEqual([{ id: "Yamaha_RX-V6a", ip: "192.168.1.20", identity: v6a }]);
+    });
+
+    it("a migrated row that is online and without identity does not adopt a stranger of its model", async () => {
+      const ctx = setup({ devices: [{ name: "192.168.1.10", ip: "192.168.1.10" }], discovery: "always" });
+      ctx.i.rememberedModelOf = () => "RX-V6A";
+      mocks.discoverYamaha.mockResolvedValue([
+        { ip: "192.168.1.20", name: "Yamaha RX-V6a", model: "RX-V6A", identity: v6a },
+      ]);
+      await ctx.i.onReady();
+      await flush();
+      // The row answers at its own address: a second RX-V6A is simply a second device.
+      expect(mocks.discoveredStore.devices).toEqual([{ id: "Yamaha_RX-V6a", ip: "192.168.1.20", identity: v6a }]);
+    });
   });
 
   it("removeDevice stops the supervisor, drops the tree and updates the overview", async () => {
@@ -2856,6 +2981,23 @@ describe("the device table and the network search side by side", () => {
     await ctx.i.onReady();
     await flush();
     expect(started(ctx)).toEqual(["Typed"]);
+  });
+
+  it("always, with rows and nothing remembered: the rows start at once, the search runs behind them", async () => {
+    // A find is read against the RUNNING rows (their identity, their offline state) — a search
+    // that ran before the rows would take a moved row for a stranger and start it twice.
+    let release: (found: Array<{ ip: string; name: string }>) => void = () => undefined;
+    mocks.discoverYamaha.mockReturnValueOnce(
+      new Promise<Array<{ ip: string; name: string }>>(resolve => {
+        release = resolve;
+      }),
+    );
+    const ctx = setup({ devices: [{ name: "Typed", ip: "192.168.1.10" }], discovery: "always" });
+    await ctx.i.onReady();
+    expect(started(ctx)).toEqual(["Typed"]); // onReady did not wait for the search
+    release([{ ip: "192.168.1.20", name: "Found" }]);
+    await flush();
+    expect(started(ctx)).toEqual(["Typed", "Found"]);
   });
 
   it("always: mixed operation — the typed device and the found ones run together", async () => {
