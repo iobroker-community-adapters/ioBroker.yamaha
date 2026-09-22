@@ -273,7 +273,7 @@ stehen — ohne den Filter liefe es beim nächsten Start wieder, Löschen per Ne
 2.11.0 …"), keine Zahlen ohne Nutzen (Anfragen/s, Datenpunkt-Zahl, „90 % der Skripte"), keine Port-/Hörer-Mechanik
 (41100, 1900, `SSDP listener unavailable`). Das Wiki beschreibt den heutigen Stand; die Historie ist der Changelog.
 
-Beleg: Chat-Analyse 2026-09-22 + drei Advisor-Runden + Server-Test, Mutationswelle 19 (Y1–Y39), Chronik in `.claude/dev-history.md`.
+Beleg: Chat-Analyse 2026-09-22 + vier Advisor-Runden + Server-Test, Mutationswelle 19 (Y1–Y50), Chronik in `.claude/dev-history.md`.
 
 ## Erreichbarkeit + Anspruch: zwei Regeln, die v1.5.0 eingezogen hat
 
@@ -492,9 +492,11 @@ in ein öffentliches Repo.
     Tabelle — das Präfix X ist dort NICHT das der Äquivalenz-Vermerke X2/X4 aus Welle 1; 24/24, zwei
     Überlebende des ersten Laufs waren toter Code und sind entfernt)
   - `mutations_yamaha_2026-09-22-w19.py` (Welle 19 = Identität/Löschen/Wiederfinden auf `developing`, IDs
-    Y1–Y39 in eigener Tabelle; 39/39 gefangen — die zwei Überlebenden des ersten Laufs, Y24 „Zeile auf dem
+    Y1–Y50 in eigener Tabelle; 50/50 gefangen — die zwei Überlebenden des ersten Laufs, Y24 „Zeile auf dem
     ersten Versuch ist nicht offline" und Y19 „XML belegt, MusicCast nicht", waren Testlücken und sind
-    geschlossen). Läufer `mutation-test.py`. Nadeln sind
+    geschlossen. Die Tabelle wuchs in drei Schüben: Y1–Y29 beim Bau, Y30–Y39 mit der Liveness-Abfrage und
+    der Log-Regel, Y40–Y50 auf die D09-Deckungsforderung des Release-Laufs — wer nur den Bau-Stand zitiert,
+    nennt eine zu kleine Zahl). Läufer `mutation-test.py`. Nadeln sind
     exakte Quellzeilen — nach Prettier-Umbrüchen oder Refactorings ZUERST den Nadel-Vorab-Check (jede Nadel
     genau 1×), sonst misst der Lauf nichts. Zwei äquivalente Mutanten (X2, X4 — unerreichbare
     Invarianten-Wächter, im Quelltext begründet); die vier anderen vom 22.08. (M9, X1, Y1, Y13) waren toter
