@@ -331,6 +331,19 @@ describe("attemptDevice builders", () => {
     expect(debugs).toContainEqual(expect.stringContaining("wx/xml: not advertised by the device — skipped"));
   });
 
+  test("advertised XML without MusicCast: XML is tried, MusicCast skipped", async () => {
+    wire.tcp.length = 0;
+    wire.http.length = 0;
+    const debugs: string[] = [];
+    await attemptDevice(
+      { id: "old", ip: "192.168.1.10", source: "discovered", services: { yxc: false, xml: true } },
+      depsWith(debugs),
+    );
+    expect(xmlTried()).toBe(true);
+    expect(yxcTried()).toBe(false);
+    expect(debugs).toContainEqual(expect.stringContaining("old/yxc: not advertised by the device — skipped"));
+  });
+
   test("without services every transport is tried", async () => {
     wire.tcp.length = 0;
     wire.http.length = 0;

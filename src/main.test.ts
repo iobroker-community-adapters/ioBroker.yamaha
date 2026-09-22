@@ -999,6 +999,25 @@ describe("Yamaha auto-discovery", () => {
       expect(mocks.discoveredStore.devices).toEqual([{ id: "Yamaha_RX-V6a", ip: "192.168.1.20", identity: v6a }]);
     });
 
+    it("a migrated row still on its first attempt is not offline — it does not adopt a stranger of its model", async () => {
+      // Offline is proven by a failed attempt, not assumed from "not connected yet": a slow row
+      // must not swallow a second receiver of the same model that the search sees first.
+      const ctx = setup(
+        { devices: [{ name: "192.168.1.10", ip: "192.168.1.10" }], discovery: "always" },
+        { hangIds: ["192_168_1_10"] },
+      );
+      ctx.i.rememberedModelOf = () => "RX-V6A";
+      mocks.discoverYamaha.mockResolvedValue([
+        { ip: "192.168.1.20", name: "Yamaha RX-V6a", model: "RX-V6A", identity: v6a },
+      ]);
+      await ctx.i.onReady();
+      await flush();
+      expect(mocks.discoveredStore.devices).toEqual([{ id: "Yamaha_RX-V6a", ip: "192.168.1.20", identity: v6a }]);
+      expect(ctx.calls.filter(c => c.device.id === "192_168_1_10").every(c => c.device.ip === "192.168.1.10")).toBe(
+        true,
+      );
+    });
+
     it("a migrated row that is online and without identity does not adopt a stranger of its model", async () => {
       const ctx = setup({ devices: [{ name: "192.168.1.10", ip: "192.168.1.10" }], discovery: "always" });
       ctx.i.rememberedModelOf = () => "RX-V6A";
