@@ -426,6 +426,7 @@ function internalOf(adapter: Yamaha): {
   discoverAdditionalDevices(pushReceiver: unknown): Promise<void>;
   pushReceiver: unknown;
   knownDeviceIps: Set<string>;
+  setTransports(deviceId: string, names: string[]): void;
   deviceRecords: Map<string, { id: string; ip: string; source?: string; identity?: { serial?: string; mac?: string } }>;
   xmlPollIntervalMs(): number;
   objects: Map<string, Record<string, unknown>>;
@@ -1096,6 +1097,74 @@ describe("Yamaha auto-discovery", () => {
     expect(armed()).toHaveLength(1);
   });
 
+  it("arms a QUICK search the moment a discovered device loses one transport", async () => {
+    // A receiver that moved answers nowhere at its old address: the first transport to notice
+    // (YNCA, within ~90 s) is the signal — waiting for the last one (MusicCast, ~15 min) and
+    // then five more minutes of throttle is what made an address change take twenty minutes.
+    mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+    const ctx = setup({ devices: [] });
+    await ctx.i.onReady();
+    await flush();
+    // Relative to the last search, so a little under the 20 s constant — and clear of every other
+    // delay the adapter schedules (250 ms native window, 1–5 s SSDP/balance, 30 s keepalive).
+    const quick = (): unknown[] =>
+      ctx.i.setTimeout.mock.calls.filter(c => Number(c[1]) > 5000 && Number(c[1]) <= 20000);
+    ctx.i.setTransports("RX-V685", ["ynca", "yxc", "xml"]);
+    expect(quick()).toHaveLength(0);
+    ctx.i.setTransports("RX-V685", ["yxc", "xml"]);
+    expect(quick()).toHaveLength(1);
+    // The loss of a second transport rides on the armed search — no stacking.
+    ctx.i.setTransports("RX-V685", ["xml"]);
+    expect(quick()).toHaveLength(1);
+  });
+
+  it("a migrated row loses a transport: the quick search is armed for it too", async () => {
+    const ctx = setup({ devices: [{ name: "192.168.1.10", ip: "192.168.1.10" }], discovery: "always" });
+    await ctx.i.onReady();
+    await flush();
+    ctx.i.setTransports("192_168_1_10", ["xml"]);
+    ctx.i.setTransports("192_168_1_10", []);
+    expect(ctx.i.setTimeout.mock.calls.filter(c => Number(c[1]) > 5000 && Number(c[1]) <= 20000)).toHaveLength(1);
+  });
+
+  it("a manual device never arms the quick search — it is off, not moved", async () => {
+    const ctx = setup({ devices: [{ name: "Living", ip: "192.168.1.10" }], discovery: "always" });
+    await ctx.i.onReady();
+    await flush();
+    ctx.i.setTransports("Living", ["ynca"]);
+    ctx.i.setTransports("Living", []);
+    expect(ctx.i.setTimeout.mock.calls.filter(c => Number(c[1]) > 5000 && Number(c[1]) <= 20000)).toHaveLength(0);
+  });
+
+  it("says once that an offline device was not found anywhere, and keeps retrying its address", async () => {
+    mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+    const ctx = setup({ devices: [] }, { failIds: ["RX-V685"] });
+    await ctx.i.onReady();
+    await flush();
+    await ctx.i.discoverAdditionalDevices(ctx.i.pushReceiver);
+    await ctx.i.discoverAdditionalDevices(ctx.i.pushReceiver);
+    const lines = ctx.i.log.info.mock.calls.filter(c => String(c[0]).includes("not found on the network"));
+    expect(lines).toHaveLength(1);
+    expect(String(lines[0][0])).toContain("192.168.1.20");
+    // Nothing changed: the record, its address and its objects stay; the supervisor retries.
+    expect(mocks.discoveredStore.devices).toEqual([{ id: "RX-V685", ip: "192.168.1.20" }]);
+    expect(ctx.i.objects.has("RX-V685")).toBe(true);
+  });
+
+  it("the not-found line is said again after the device came back and went away once more", async () => {
+    mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+    const ctx = setup({ devices: [] }, { failIds: ["RX-V685"] });
+    await ctx.i.onReady();
+    await flush();
+    const lines = (): unknown[] =>
+      ctx.i.log.info.mock.calls.filter(c => String(c[0]).includes("not found on the network"));
+    expect(lines()).toHaveLength(1);
+    ctx.i.reportConnection("RX-V685", true);
+    ctx.i.reportConnection("RX-V685", false);
+    await ctx.i.discoverAdditionalDevices(ctx.i.pushReceiver);
+    expect(lines()).toHaveLength(2);
+  });
+
   it("arms the search for a device the BACKGROUND search found once that one goes offline", async () => {
     // Until 2.10.0 only the records from onReady carried `source: "discovered"`; a device the
     // background search added ran without it, and the rediscovery bailed on the source check —
@@ -1199,7 +1268,9 @@ describe("Yamaha migrations", () => {
     expect(
       (ctx.i.foreignObjects.get("system.adapter.yamaha.0")?.native as { devices?: unknown[] }).devices,
     ).toHaveLength(1);
-    expect(mocks.discoverYamaha).not.toHaveBeenCalled();
+    // The migrated row is not a typed one: the search stays on (in the background, behind the
+    // row) — it is what follows the receiver to a new address.
+    expect(mocks.discoverYamaha).toHaveBeenCalledTimes(1);
   });
 
   it("runs the migrated device even when the table cannot be persisted", async () => {
@@ -2981,6 +3052,30 @@ describe("the device table and the network search side by side", () => {
     await ctx.i.onReady();
     await flush();
     expect(started(ctx)).toEqual(["Typed"]);
+  });
+
+  it("auto: a table holding only migrated rows keeps the search on — nobody typed those addresses", async () => {
+    // The 0.5.4 upgrade writes `{ name: ip, ip }`; under `auto` that row used to switch the
+    // search off, and a migrated device that moved was never found again.
+    mocks.discoveredStore.devices = [{ id: "Found", ip: "192.168.1.20" }];
+    const ctx = setup({ devices: [{ name: "192.168.1.10", ip: "192.168.1.10" }], discovery: "auto" });
+    await ctx.i.onReady();
+    await flush();
+    expect(started(ctx)).toEqual(["192_168_1_10", "Found"]);
+  });
+
+  it("auto: one typed row next to a migrated one turns the search off, as before", async () => {
+    mocks.discoveredStore.devices = [{ id: "Found", ip: "192.168.1.20" }];
+    const ctx = setup({
+      devices: [
+        { name: "192.168.1.10", ip: "192.168.1.10" },
+        { name: "Typed", ip: "192.168.1.11" },
+      ],
+      discovery: "auto",
+    });
+    await ctx.i.onReady();
+    await flush();
+    expect(started(ctx)).toEqual(["192_168_1_10", "Typed"]);
   });
 
   it("always, with rows and nothing remembered: the rows start at once, the search runs behind them", async () => {

@@ -103,6 +103,14 @@ const DATAPOINT_BALANCE_SETTLE_MS = 5000;
 const REDISCOVER_MIN_INTERVAL_MS = 300000;
 
 /**
+ * The gap before the FIRST search after a device lost a transport. A receiver that moved answers
+ * nowhere at its old address, so the first transport to notice is the signal — waiting for the
+ * last one (MusicCast: three five-minute polls) and then the throttle above made an address
+ * change take twenty minutes. A device that stays off falls back to the throttle above.
+ */
+const REDISCOVER_QUICK_INTERVAL_MS = 20000;
+
+/**
  * How long a device object's native writes are collected before ONE extendObject carries them
  * (the probe memory persists on every change — dozens within a first connect's first second).
  */
@@ -182,6 +190,10 @@ export class Yamaha extends utils.Adapter {
   private readonly warnedElsewhere = new Map<string, string>();
   /** The devices whose connection attempt failed at least once in this session — "offline" proven, not assumed. */
   private readonly failedOnce = new Set<string>();
+  /** deviceId → how many transports it had live at the last report, so a LOSS is visible. */
+  private readonly liveTransportCount = new Map<string, number>();
+  /** The offline devices a search already said it could not find — said once per outage. */
+  private readonly reportedMissing = new Set<string>();
   /** Armed while an auto-found device is offline: the search that can bring it back. */
   private rediscoverTimer: ioBroker.Timeout | undefined;
   /** When the last background search ran, so the retry cannot become a scan loop. */
@@ -284,7 +296,7 @@ export class Yamaha extends utils.Adapter {
       const instance = await this.getForeignObjectAsync(`system.adapter.${this.namespace}`);
       this.legacyVolumePercent =
         (instance?.native as { volumeAsPercent?: unknown } | undefined)?.volumeAsPercent === true;
-      this.discovering = this.searchesTheNetwork(configured.length);
+      this.discovering = this.searchesTheNetwork(configured);
       const devices = unionDevices(configured, this.discovering ? await this.autoDiscover(configured.length) : []);
       if (this.unloading) {
         // Stopped during the initial network search: it resolves on its own clock, and
@@ -422,7 +434,20 @@ export class Yamaha extends utils.Adapter {
       if (this.unloading) {
         return; // the search outlived the adapter — nothing may start now
       }
-      await this.reconcileDiscovered(merged, pushReceiver);
+      const touched = await this.reconcileDiscovered(merged, pushReceiver);
+      // "Off, not moved": an offline device the whole network did not answer for keeps its
+      // objects and its address — the supervisor retries there. Said once per outage, so the
+      // five-minute cadence does not fill the log with the same line.
+      for (const [deviceId, connected] of this.deviceConnected) {
+        const record = this.deviceRecords.get(deviceId);
+        if (connected || !record || record.source === "manual" || touched.has(deviceId)) {
+          continue;
+        }
+        if (!this.reportedMissing.has(deviceId)) {
+          this.reportedMissing.add(deviceId);
+          this.log.info(`${deviceId}: not found on the network — keeping its objects and retrying at ${record.ip}`);
+        }
+      }
     } catch (e) {
       this.log.warn(`background discovery failed: ${errorMessage(e)}`);
     }
@@ -436,10 +461,13 @@ export class Yamaha extends utils.Adapter {
    *
    * @param merged the records the search established (`absorbFinds`)
    * @param pushReceiver the shared YXC push receiver
-   * @returns whether the running set changed
+   * @returns the ids this round started or moved
    */
-  private async reconcileDiscovered(merged: readonly DeviceRecord[], pushReceiver: YxcPushReceiver): Promise<boolean> {
-    let changed = false;
+  private async reconcileDiscovered(
+    merged: readonly DeviceRecord[],
+    pushReceiver: YxcPushReceiver,
+  ): Promise<Set<string>> {
+    const touched = new Set<string>();
     for (const device of merged) {
       if (this.removed.has(device.id)) {
         continue; // deleted while this search was running — see `removed`
@@ -449,7 +477,7 @@ export class Yamaha extends utils.Adapter {
         if (!running) {
           this.log.info(`discovery found ${device.id} — setting up`);
           await this.startDevice(device, pushReceiver);
-          changed = true;
+          touched.add(device.id);
         } else if (running.ip !== device.ip) {
           const migrated = device.source === "migrated";
           const tableNote = migrated ? "; updated the device table, the instance restarts on it" : "";
@@ -459,7 +487,7 @@ export class Yamaha extends utils.Adapter {
           this.knownDeviceIps.delete(running.ip);
           this.stopDevice(device.id);
           await this.startDevice(device, pushReceiver);
-          changed = true;
+          touched.add(device.id);
           if (migrated) {
             await this.updateTableAddress(device.id, device.ip);
           }
@@ -469,10 +497,10 @@ export class Yamaha extends utils.Adapter {
         this.log.error(`${device.id}: could not be set up (${errorMessage(e)}) — the other devices continue`);
       }
     }
-    if (changed) {
+    if (touched.size > 0) {
       this.writeDeviceOverview();
     }
-    return changed;
+    return touched;
   }
 
   /**
@@ -509,12 +537,16 @@ export class Yamaha extends utils.Adapter {
    * a default in `io-package.json`, and either value would be wrong for half the existing
    * installations — `auto` is right for all of them without writing anything.
    *
-   * @param manualCount how many devices the instance's table holds
+   * "Empty" means: no row the user TYPED. A migrated row (`{ name: ip, ip }`, written by the
+   * 0.5.4 upgrade) is not the user's decision to run the table alone — and it follows the
+   * device to a new address only through the search, so the search must stay on for it.
+   *
+   * @param configured the records the instance's table holds
    * @returns whether the network search runs
    */
-  private searchesTheNetwork(manualCount: number): boolean {
+  private searchesTheNetwork(configured: readonly DeviceRecord[]): boolean {
     const mode = this.config.discovery ?? "auto";
-    return mode === "always" || (mode === "auto" && manualCount === 0);
+    return mode === "always" || (mode === "auto" && configured.every(device => device.source === "migrated"));
   }
 
   /**
@@ -581,12 +613,18 @@ export class Yamaha extends utils.Adapter {
    * Throttled: a device that is merely switched off must not turn this into a scan loop, and
    * one timer covers however many devices are down.
    *
-   * @param deviceId the device that just went offline
+   * Two gaps: the first search after a device lost a transport comes quickly (a move is the one
+   * cause a search heals); every further one while it stays gone waits the long throttle. An
+   * armed timer is never shortened — the search it carries covers every device that is down.
+   *
+   * @param deviceId the device that just went offline (or lost a transport)
+   * @param quick whether this is the first sign of an outage
    */
-  private scheduleRediscovery(deviceId: string): void {
+  private scheduleRediscovery(deviceId: string, quick = false): void {
     // Per device, not per instance: a manual device sits at an address the user typed, so there
-    // is nothing to search for — it is simply off. Only a discovered one can have moved.
-    if (this.deviceRecords.get(deviceId)?.source !== "discovered") {
+    // is nothing to search for — it is simply off. A discovered device may have moved, and so
+    // may a migrated row (nobody typed its address).
+    if (this.deviceRecords.get(deviceId)?.source === "manual") {
       return;
     }
     if (!this.discovering || this.unloading || this.rediscoverTimer !== undefined) {
@@ -596,7 +634,10 @@ export class Yamaha extends utils.Adapter {
     if (!receiver) {
       return;
     }
-    const due = Math.max(0, REDISCOVER_MIN_INTERVAL_MS - (Date.now() - this.lastRediscovery));
+    const due = Math.max(
+      0,
+      (quick ? REDISCOVER_QUICK_INTERVAL_MS : REDISCOVER_MIN_INTERVAL_MS) - (Date.now() - this.lastRediscovery),
+    );
     this.rediscoverTimer = this.setTimeout(() => {
       this.rediscoverTimer = undefined;
       this.lastRediscovery = Date.now();
@@ -722,6 +763,8 @@ export class Yamaha extends utils.Adapter {
     this.readyDevices.delete(deviceId);
     this.failedOnce.delete(deviceId);
     this.warnedElsewhere.delete(deviceId);
+    this.liveTransportCount.delete(deviceId);
+    this.reportedMissing.delete(deviceId);
     // Everything else this device left behind goes with it. A cache that survives makes the
     // adapter believe it already did the work: re-adding the SAME id finds the icon cache
     // intact, `updateDeviceIcon` bails on the identity check, and the card keeps the default
@@ -809,6 +852,7 @@ export class Yamaha extends utils.Adapter {
     }
     if (connected) {
       this.failedOnce.delete(deviceId);
+      this.reportedMissing.delete(deviceId);
       // On EVERY connect, not only the first: a reconnect over another transport can bring
       // the first serial this device ever reported.
       this.learnIdentity(deviceId, this.profiles.get(deviceId)?.identity());
@@ -855,6 +899,13 @@ export class Yamaha extends utils.Adapter {
     const live = new Set(names);
     for (const proto of TRANSPORT_IDS) {
       this.writeState(`${deviceId}.info.transports.${proto}`, live.has(proto));
+    }
+    // A transport LOST is the first sign the device may have moved — the quick search, now,
+    // instead of after the last transport gave up and the long throttle ran out.
+    const before = this.liveTransportCount.get(deviceId) ?? 0;
+    this.liveTransportCount.set(deviceId, live.size);
+    if (live.size < before) {
+      this.scheduleRediscovery(deviceId, true);
     }
   }
 
