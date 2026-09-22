@@ -616,6 +616,26 @@ describe("XmlDeviceController object tree and drop handling", () => {
     expect(s.client.calls.some(c => c.method === "send")).toBe(true);
   });
 
+  test("verifyAlive asks the first zone once: no answer is a drop right away, an answer is nothing", async () => {
+    // Called by the multi-transport handle when ANOTHER transport of the device dropped: a run
+    // of three missed minute-polls is the right bar for a busy receiver, not for one whose YNCA
+    // socket just went silent.
+    const s = setup({ Main_Zone: { power: true } });
+    await s.controller.start();
+    const drops: Array<Error | undefined> = [];
+    s.controller.onDrop(reason => drops.push(reason));
+    await s.controller.verifyAlive();
+    expect(drops).toHaveLength(0);
+    let asked = 0;
+    s.client.getStatus = (): Promise<BasicStatus> => {
+      asked++;
+      return Promise.reject(new Error("EHOSTUNREACH"));
+    };
+    await Promise.all([s.controller.verifyAlive(), s.controller.verifyAlive()]); // two askers, one question
+    expect(asked).toBe(1);
+    expect(drops).toHaveLength(1);
+  });
+
   test("reports the device gone only after a RUN of failed polls, and only once", async () => {
     const s = setup({ Main_Zone: { power: true } });
     await s.controller.start();

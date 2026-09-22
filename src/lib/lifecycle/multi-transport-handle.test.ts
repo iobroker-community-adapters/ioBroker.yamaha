@@ -281,6 +281,38 @@ describe("MultiTransportHandle per-transport reconnect", () => {
     expect(supervisorDrop).toHaveBeenCalledTimes(1);
   });
 
+  test("when one transport drops, the others are asked to verify at once — a dead device is judged in seconds, not at the next poll", async () => {
+    // Power cut: YNCA notices within 90 s, but MusicCast polls every five minutes and needs
+    // three misses — the device stayed "connected" for a quarter of an hour on one transport
+    // nobody asked. The first drop is the question to the others.
+    const ynca = fakeConn("ynca", [state("power", "Power")]);
+    const yxc = fakeConn("yxc", [state("dist.role", "Role")]);
+    const xml = fakeConn("xml", [state("sleep", "Sleep")]);
+    const yxcVerify = vi.fn(() => Promise.resolve());
+    const xmlVerify = vi.fn(() => Promise.resolve());
+    Object.assign(yxc, { verifyAlive: yxcVerify });
+    Object.assign(xml, { verifyAlive: xmlVerify });
+    const { handle } = reconnectSetup([ynca, yxc, xml], {});
+    await handle.start();
+    ynca.drop(new Error("keepalive unanswered"));
+    expect(yxcVerify).toHaveBeenCalledTimes(1);
+    expect(xmlVerify).toHaveBeenCalledTimes(1);
+  });
+
+  test("a transport without verifyAlive is left to its own drop detection, and a failing verify does not end the handle", async () => {
+    const ynca = fakeConn("ynca", [state("power", "Power")]);
+    const yxc = fakeConn("yxc", [state("dist.role", "Role")]);
+    Object.assign(yxc, { verifyAlive: () => Promise.reject(new Error("probe exploded")) });
+    const { handle, logs } = reconnectSetup([ynca, yxc], {});
+    await handle.start();
+    const supervisorDrop = vi.fn();
+    handle.onDrop(supervisorDrop);
+    ynca.drop();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(supervisorDrop).not.toHaveBeenCalled();
+    expect(logs.some(line => line.includes("probe exploded"))).toBe(true);
+  });
+
   test("an all-down before the supervisor registers is latched and delivered on registration", async () => {
     const ynca = fakeConn("ynca", [state("power", "Power")]);
     const { handle } = reconnectSetup([ynca], {});

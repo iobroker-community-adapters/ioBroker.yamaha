@@ -26,6 +26,13 @@ export interface TransportConnection {
    * session simply does not offer it.
    */
   onShapeChanged?(cb: () => void): void;
+  /**
+   * Ask the device once, now, and report a drop if it does not answer. Called when ANOTHER
+   * transport of the same device dropped: a polled transport would otherwise keep the device
+   * "connected" until its own run of missed polls (MusicCast: three five-minute polls).
+   * Optional — a transport with a socket judges itself.
+   */
+  verifyAlive?(): Promise<void>;
   /** Close this transport's connection. Synchronous — safe from onUnload. */
   close(): void;
 }
@@ -269,6 +276,14 @@ export class MultiTransportHandle implements ConnectionHandle {
       `${this.deviceId}/${connection.transport}: transport dropped, reconnecting it` +
         `${reason ? ` (${reason.message})` : ""} — other transports keep running`,
     );
+    // The first drop is the question to the others: a device that lost power has every
+    // transport dead, but a polled one notices only at its own cadence. Asked now, it reports
+    // its drop through the same path and the device is judged gone within seconds.
+    for (const other of [...this.live]) {
+      other.verifyAlive?.().catch((e: unknown) => {
+        this.deps.log.debug(`${this.deviceId}/${other.transport}: liveness check failed (${errorMessage(e)})`);
+      });
+    }
     this.scheduleTransportRetry(connection.transport);
   }
 

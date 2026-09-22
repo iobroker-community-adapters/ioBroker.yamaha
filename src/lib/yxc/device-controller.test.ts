@@ -1095,6 +1095,32 @@ describe("YxcDeviceController reachability (a remembered device must still answe
     expect(memory.remembered("yxcDeviceIds")).toBeUndefined();
   });
 
+  test("verifyAlive asks the main zone once: no answer is a drop, an answer is not", async () => {
+    // Called by the multi-transport handle when ANOTHER transport of the device just dropped —
+    // a device that lost power must not stay "connected" on MusicCast until the third missed
+    // five-minute poll.
+    const client = makeFakeClient(oneZone, { power: "on" });
+    const controller = new YxcDeviceController("living", {
+      client,
+      registerPush: () => () => {},
+      scheduleKeepalive: () => () => {},
+      upsertObject: async () => {},
+      setStateAck: () => {},
+      log: silentLog,
+      gate: testGate(),
+    });
+    expect(await controller.start()).toBe(true);
+    const drop = vi.fn();
+    controller.onDrop(drop);
+    await controller.verifyAlive();
+    expect(drop).not.toHaveBeenCalled();
+    client.failStatus = true;
+    const before = client.calls.length;
+    await Promise.all([controller.verifyAlive(), controller.verifyAlive()]); // two askers, one question
+    expect(client.calls.slice(before).filter(call => call.method === "getStatus")).toHaveLength(1);
+    expect(drop).toHaveBeenCalledTimes(1);
+  });
+
   test("a reconnect to a device that lost power fails even though its capabilities are remembered", async () => {
     const memory = new ProbeMemory();
     const build = (client: FakeClient): YxcDeviceController =>

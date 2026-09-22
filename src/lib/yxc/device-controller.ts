@@ -702,13 +702,23 @@ export class YxcDeviceController implements ConnectionHandle {
     if (!(failure instanceof YxcTransportError)) {
       return;
     }
-    // One probe for a burst of failed writes: the second and later ones ride on the first.
-    this.aliveCheck ??= this.verifyAlive().finally(() => {
-      this.aliveCheck = undefined;
-    });
+    void this.verifyAlive();
   }
 
-  private async verifyAlive(): Promise<void> {
+  /**
+   * Ask the device once, now: the main zone's status. No answer is a drop — reported at once,
+   * not after the third missed five-minute poll. One probe for a burst of askers (failed
+   * writes, the multi-transport handle after another transport dropped): the second and later
+   * ones ride on the first.
+   */
+  public verifyAlive(): Promise<void> {
+    this.aliveCheck ??= this.probeAlive().finally(() => {
+      this.aliveCheck = undefined;
+    });
+    return this.aliveCheck;
+  }
+
+  private async probeAlive(): Promise<void> {
     const alive = await this.refreshZone(this.zones[0] ?? "main");
     if (!alive) {
       this.dropDetector.report();

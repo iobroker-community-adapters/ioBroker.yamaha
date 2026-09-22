@@ -219,6 +219,14 @@ die Identität; Fund mit der Identität einer migrierten Zeile woanders = Umzug;
 die BEWIESEN offline ist (`failedOnce` — ein Versuch scheiterte, keiner gelang seither; „noch nicht
 verbunden" ist nicht offline) und deren gemerktes Modell (`DeviceProfileStore.model()`) passt.
 
+**Offline in Sekunden, nicht Minuten** (Server-Test 2026-09-22 10:41, stromloser RX-V6A stand 2 min später noch
+„verbunden"): `info.connection` fällt erst mit dem LETZTEN Transport, und MusicCast urteilt nach drei
+Fünf-Minuten-Polls — bis 15 min. Seit demselben Tag fragt `MultiTransportHandle.handleTransportDrop` beim ersten
+Abriss die übrigen Transporte sofort (`TransportConnection.verifyAlive?()`, optional; YXC + XML: EINE Statusabfrage
+der ersten Zone, Fehlschlag = `dropDetector.report()`, gleichzeitige Frager teilen eine Frage; YNCA urteilt selbst
+über sein Keepalive) — ein stromloses Gerät ist damit ~95 s nach dem Stecker offline (YNCA 90 s + eine Abfrage),
+und die schnelle Suche hängt sich dahinter. Nadeln Y30–Y32.
+
 **Umgezogen oder aus:** Der Verlust EINES Transports (`setTransports` schrumpft) stellt die Suche mit kurzer
 Drossel scharf (`REDISCOVER_QUICK_INTERVAL_MS` 20 s, danach die 5 Minuten) — vorher meldete das Handle „weg"
 erst nach dem LETZTEN Transport (YXC: 15 min). Der passive Hörer `lib/ssdp-listener.ts` (Port 1900,
@@ -256,7 +264,7 @@ stehen — ohne den Filter liefe es beim nächsten Start wieder, Löschen per Ne
 `Troubleshooting.md`/`Fehlersuche.md` enden auf „(from the version after 2.11.0)" / „(ab der Version nach 2.11.0)"
 (Löschen endgültig, neue IP-Adresse) — beim Release des Standes streichen; kein Gate sieht das.
 
-Beleg: Chat-Analyse 2026-09-22 + drei Advisor-Runden, Mutationswelle 19 (Y1–Y29), Chronik in `.claude/dev-history.md`.
+Beleg: Chat-Analyse 2026-09-22 + drei Advisor-Runden + Server-Test, Mutationswelle 19 (Y1–Y32), Chronik in `.claude/dev-history.md`.
 
 ## Erreichbarkeit + Anspruch: zwei Regeln, die v1.5.0 eingezogen hat
 
@@ -475,7 +483,7 @@ in ein öffentliches Repo.
     Tabelle — das Präfix X ist dort NICHT das der Äquivalenz-Vermerke X2/X4 aus Welle 1; 24/24, zwei
     Überlebende des ersten Laufs waren toter Code und sind entfernt)
   - `mutations_yamaha_2026-09-22-w19.py` (Welle 19 = Identität/Löschen/Wiederfinden auf `developing`, IDs
-    Y1–Y28 in eigener Tabelle; 28/28 gefangen — die zwei Überlebenden des ersten Laufs, Y24 „Zeile auf dem
+    Y1–Y32 in eigener Tabelle; 32/32 gefangen — die zwei Überlebenden des ersten Laufs, Y24 „Zeile auf dem
     ersten Versuch ist nicht offline" und Y19 „XML belegt, MusicCast nicht", waren Testlücken und sind
     geschlossen). Läufer `mutation-test.py`. Nadeln sind
     exakte Quellzeilen — nach Prettier-Umbrüchen oder Refactorings ZUERST den Nadel-Vorab-Check (jede Nadel

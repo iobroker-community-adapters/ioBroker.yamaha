@@ -16,6 +16,8 @@ export interface AdaptedController {
   handleStateChange(fullStateId: string, ack: boolean, value: unknown): void;
   /** Register a drop handler. */
   onDrop(cb: (reason?: Error) => void): void;
+  /** Ask the device once, now; report a drop if it does not answer (the polled transports). */
+  verifyAlive?(): Promise<void>;
   /** Close the connection. */
   close(): void;
 }
@@ -159,6 +161,11 @@ export class TransportConnectionAdapter implements TransportConnection {
    */
   public onDrop(cb: (reason?: Error) => void): void {
     this.controller?.onDrop(cb);
+  }
+
+  /** Forward the handle's liveness question to a controller that can answer it. */
+  public async verifyAlive(): Promise<void> {
+    await this.controller?.verifyAlive?.();
   }
 
   /** Close the controller (synchronous — safe from onUnload). */

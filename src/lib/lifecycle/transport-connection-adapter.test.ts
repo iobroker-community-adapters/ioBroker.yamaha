@@ -148,3 +148,29 @@ describe("TransportConnectionAdapter within a session (2.7.0 re-collect)", () =>
     expect(acks).toEqual([]);
   });
 });
+
+describe("TransportConnectionAdapter — verifyAlive", () => {
+  test("forwards verifyAlive to a controller that has one, and is a no-op for one that has not", async () => {
+    const verify = vi.fn(() => Promise.resolve());
+    const withProbe = new TransportConnectionAdapter("yxc", "living", () => {});
+    withProbe.bind({
+      start: () => Promise.resolve(true),
+      handleStateChange: () => {},
+      onDrop: () => {},
+      close: () => {},
+      verifyAlive: verify,
+    });
+    await withProbe.verifyAlive();
+    expect(verify).toHaveBeenCalledTimes(1);
+
+    // YNCA judges itself through its own keepalive — its controller offers no probe.
+    const without = new TransportConnectionAdapter("ynca", "living", () => {});
+    without.bind({
+      start: () => Promise.resolve(true),
+      handleStateChange: () => {},
+      onDrop: () => {},
+      close: () => {},
+    });
+    await expect(without.verifyAlive()).resolves.toBeUndefined();
+  });
+});

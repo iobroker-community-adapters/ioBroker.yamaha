@@ -109,6 +109,8 @@ export class XmlDeviceController implements ConnectionHandle {
   private zones: XmlZone[] = [];
   private cancelKeepalive: (() => void) | undefined;
   private readonly dropDetector = new PollDropDetector();
+  /** The liveness probe in flight, so concurrent askers share one question. */
+  private aliveCheck: Promise<void> | undefined;
   private browseEngine: BrowseEngine | undefined;
   /** The scenes each zone DECLARES (`Scene_Sel_Item`), for the recall write path. */
   private readonly scenesByZone = new Map<string, XmlScene[]>();
@@ -795,6 +797,34 @@ export class XmlDeviceController implements ConnectionHandle {
     this.deps.gate?.close();
     this.cancelKeepalive?.();
     this.cancelKeepalive = undefined;
+  }
+
+  /**
+   * Ask the device once, now: the first zone's status. No answer is a drop — reported at once.
+   * Called by the multi-transport handle when another transport of the device dropped: three
+   * missed minute-polls are the right bar for a busy receiver, not for one that just went
+   * silent on its socket. One probe for concurrent askers.
+   */
+  public verifyAlive(): Promise<void> {
+    this.aliveCheck ??= this.probeAlive().finally(() => {
+      this.aliveCheck = undefined;
+    });
+    return this.aliveCheck;
+  }
+
+  private async probeAlive(): Promise<void> {
+    const zone = this.zones[0];
+    if (!zone) {
+      return; // never started — nothing to ask, nothing to judge
+    }
+    try {
+      if (!(await this.refreshZone(zone))) {
+        this.dropDetector.report();
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: liveness probe failed: ${errorMessage(e)}`);
+      this.dropDetector.report();
+    }
   }
 
   /**
