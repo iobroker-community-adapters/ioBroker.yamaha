@@ -2,6 +2,7 @@ import type { JsonFormSchema } from "@iobroker/dm-utils";
 import { t } from "./lib/i18n";
 import { sanitizeId } from "./lib/pure-helpers";
 import { TRANSPORT_LABELS } from "./lib/ready-line";
+import type { DeviceSource } from "./lib/types";
 
 /** Object-id segments the adapter reserves for its own tree — a device may not take them. */
 const RESERVED_IDS = new Set(["info"]);
@@ -28,7 +29,7 @@ export interface CardDevice {
   /** The card header name. */
   name: string;
   /** Where it lives: the manual `native.devices` table, or the auto-discovery store. */
-  source: "manual" | "discovered";
+  source: DeviceSource;
 }
 
 /**
