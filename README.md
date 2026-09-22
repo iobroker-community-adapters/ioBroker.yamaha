@@ -75,7 +75,7 @@ Details on all settings, the object tree and the ports the adapter uses are in t
     ### **WORK IN PROGRESS**
 -->
 
-### 2.11.0 (2026-09-17)
+### 2.11.0 (2026-09-17) — stable
 
 - (krobipd) Fixed: The adapter no longer stops when the object database is briefly unavailable while a receiver reports a change
 - (krobipd) Fixed: A datapoint whose value range a receiver no longer reports keeps its value, its history and its room and function assignments
