@@ -268,8 +268,10 @@ wird genau dort gesehen. Ohne Beschreibung (getippt, migriert) immer alle drei.
 Nadel Y29): `writeDiscovered` schluckt Fehler, ein als ausgeschlossen vermerktes Gerät kann also noch im Fund-Speicher
 stehen — ohne den Filter liefe es beim nächsten Start wieder, Löschen per Neustart rückgängig.
 
-Die vier Wiki-Überschriften in `Troubleshooting.md`/`Fehlersuche.md` (Löschen endgültig, neue IP-Adresse) tragen den
-Vermerk „(from 2.12.0)" / „(ab 2.12.0)" — mit dem Release gesetzt, kein Gate sieht das Wiki.
+**Wiki-Stil (krobi 2026-09-22, govee als Maß):** Startseite = Begrüßung, Themen, Issue-Link — keine Protokoll-Tabelle
+(die steht auf Protocols); im Fließtext keine Versions-Marker („seit 2.x", „(ab 2.12.0)") und keine Rückblicke („bis
+2.11.0 …"), keine Zahlen ohne Nutzen (Anfragen/s, Datenpunkt-Zahl, „90 % der Skripte"), keine Port-/Hörer-Mechanik
+(41100, 1900, `SSDP listener unavailable`). Das Wiki beschreibt den heutigen Stand; die Historie ist der Changelog.
 
 Beleg: Chat-Analyse 2026-09-22 + drei Advisor-Runden + Server-Test, Mutationswelle 19 (Y1–Y39), Chronik in `.claude/dev-history.md`.
 
