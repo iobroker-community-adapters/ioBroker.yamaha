@@ -453,6 +453,8 @@ function internalOf(adapter: Yamaha): {
   discoverAdditionalDevices(pushReceiver: unknown): Promise<void>;
   pushReceiver: unknown;
   knownDeviceIps: Set<string>;
+  supervisorById: Map<string, unknown>;
+  notifyProbed: Map<string, number>;
   setTransports(deviceId: string, names: string[]): void;
   onSsdpAlive(notify: { nts: "alive"; location?: string }, address: string): void;
   rediscoverNow(lifted: readonly string[]): void;
@@ -1221,6 +1223,62 @@ describe("Yamaha auto-discovery", () => {
         expect.stringContaining("address changed from 192.168.1.10 to 192.168.1.20"),
       );
       expect(ctx.calls.at(-1)?.device).toMatchObject({ id: "Yamaha_RX-V6a", ip: "192.168.1.20" });
+      // After the move: ONE supervisor for the id, only the new address known, the card's ip
+      // state on the new address — no trace of the old supervisor's attempt.
+      expect(ctx.i.supervisorById.size).toBe(1);
+      expect([...ctx.i.knownDeviceIps]).toEqual(["192.168.1.20"]);
+      expect(ctx.i.states.get("Yamaha_RX-V6a.info.ip")).toEqual({ val: "192.168.1.20", ack: true });
+      expect(ctx.i.deviceRecords.get("Yamaha_RX-V6a")).toMatchObject({ ip: "192.168.1.20", source: "discovered" });
+    });
+
+    it("a move waits for the old address's attempt in flight before the new supervisor starts", async () => {
+      // Without the wait two supervisors overlap for one id: the old attempt (still timing out
+      // on the dead address) writes info.* next to the new one — the delete path waits for
+      // exactly this reason (`awaitSettled`), the move has to as well.
+      mocks.discoveredStore.devices = [{ id: "Yamaha_RX-V6a", ip: "192.168.1.10", identity: v6a }];
+      let releaseOld: () => void = () => undefined;
+      const ctx = setup({ devices: [] });
+      mocks.attemptDevice.mockImplementation((device: AttemptCall["device"], deps: AttemptCall["deps"]) => {
+        ctx.calls.push({ device, deps });
+        if (device.ip === "192.168.1.10") {
+          return new Promise<null>(resolve => {
+            releaseOld = () => resolve(null); // the attempt on the old address hangs until released
+          });
+        }
+        const h = fakeHandle();
+        ctx.handles.push(h);
+        return Promise.resolve(h);
+      });
+      await ctx.i.onReady();
+      await flush();
+      mocks.probeDescription.mockResolvedValue({ ip: "192.168.1.20", name: "Yamaha RX-V6a", identity: v6a });
+      ctx.i.onSsdpAlive({ nts: "alive", location: "http://192.168.1.20:49154/desc.xml" }, "192.168.1.20");
+      await flush();
+      // The old attempt is still in flight: the new supervisor has not started yet.
+      expect(ctx.calls.filter(c => c.device.ip === "192.168.1.20")).toHaveLength(0);
+      releaseOld();
+      await flush();
+      expect(ctx.calls.filter(c => c.device.ip === "192.168.1.20")).toHaveLength(1);
+      expect(ctx.i.supervisorById.size).toBe(1);
+    });
+
+    it("an alive whose description could not be read is asked again after seconds, not after a minute", async () => {
+      // A receiver announces itself early in its boot, before its HTTP server answers — the
+      // first probe fails. The boot burst must not be locked out for a minute on that.
+      mocks.probeDescription.mockResolvedValueOnce(undefined);
+      const ctx = setup({ devices: [] });
+      await ctx.i.onReady();
+      await flush();
+      const now = vi.spyOn(Date, "now");
+      now.mockReturnValue(2_000_000);
+      ctx.i.onSsdpAlive({ nts: "alive", location: "http://10.0.0.9/d.xml" }, "10.0.0.9");
+      await flush();
+      expect(mocks.probeDescription).toHaveBeenCalledTimes(1);
+      now.mockReturnValue(2_000_000 + 6_000);
+      ctx.i.onSsdpAlive({ nts: "alive", location: "http://10.0.0.9/d.xml" }, "10.0.0.9");
+      await flush();
+      now.mockRestore();
+      expect(mocks.probeDescription).toHaveBeenCalledTimes(2);
     });
 
     it("a NOTIFY from an unknown address that names a newcomer starts it", async () => {

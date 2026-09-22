@@ -232,7 +232,9 @@ Drossel scharf (`REDISCOVER_QUICK_INTERVAL_MS` 20 s, danach die 5 Minuten) — v
 erst nach dem LETZTEN Transport (YXC: 15 min). Der passive Hörer `lib/ssdp-listener.ts` (Port 1900,
 `reuseAddr`, Membership je Such-Interface, Muster fakeroku) hört `NOTIFY ssdp:alive`: bekannte Adresse →
 nichts; unbekannte → höchstens einmal je Minute (`NOTIFY_PROBE_THROTTLE_MS`) `probeDescription` → derselbe
-Merge-Pfad. Bind-Fehler = eine `warn`-Zeile, weiter mit periodischer Suche. Findet eine Suche ein offlines
+Merge-Pfad — scheitert der Abruf (Boot-Alive vor dem HTTP-Server), nach 5 s erneut (`NOTIFY_RETRY_MS`). **Der Umzug
+wartet auf den laufenden Versuch der alten Adresse** (`awaitSettled`, wie das Löschen) — sonst schreiben zwei
+Supervisoren dasselbe `info.*`. Code-Nachweis des IP-Pfads mit dem Advisor 2026-09-22 (kein Hardware-Test). Bind-Fehler = eine `warn`-Zeile, weiter mit periodischer Suche. Findet eine Suche ein offlines
 Gerät nirgends, sagt EINE `debug`-Zeile je Ausfall „not found on the network — keeping its objects"
 (`reportedMissing`), nichts ändert sich. **Läuft KEIN Gerät, sucht der Adapter alle 5 min weiter** (`scheduleIdleSearch`,
 derselbe Timer wie die Wiedersuche) — sonst hinge ein später eingeschaltetes oder gerade wieder zugelassenes Gerät allein
@@ -270,7 +272,7 @@ stehen — ohne den Filter liefe es beim nächsten Start wieder, Löschen per Ne
 `Troubleshooting.md`/`Fehlersuche.md` enden auf „(from the version after 2.11.0)" / „(ab der Version nach 2.11.0)"
 (Löschen endgültig, neue IP-Adresse) — beim Release des Standes streichen; kein Gate sieht das.
 
-Beleg: Chat-Analyse 2026-09-22 + drei Advisor-Runden + Server-Test, Mutationswelle 19 (Y1–Y37), Chronik in `.claude/dev-history.md`.
+Beleg: Chat-Analyse 2026-09-22 + drei Advisor-Runden + Server-Test, Mutationswelle 19 (Y1–Y39), Chronik in `.claude/dev-history.md`.
 
 ## Erreichbarkeit + Anspruch: zwei Regeln, die v1.5.0 eingezogen hat
 
@@ -489,7 +491,7 @@ in ein öffentliches Repo.
     Tabelle — das Präfix X ist dort NICHT das der Äquivalenz-Vermerke X2/X4 aus Welle 1; 24/24, zwei
     Überlebende des ersten Laufs waren toter Code und sind entfernt)
   - `mutations_yamaha_2026-09-22-w19.py` (Welle 19 = Identität/Löschen/Wiederfinden auf `developing`, IDs
-    Y1–Y37 in eigener Tabelle; 37/37 gefangen — die zwei Überlebenden des ersten Laufs, Y24 „Zeile auf dem
+    Y1–Y39 in eigener Tabelle; 39/39 gefangen — die zwei Überlebenden des ersten Laufs, Y24 „Zeile auf dem
     ersten Versuch ist nicht offline" und Y19 „XML belegt, MusicCast nicht", waren Testlücken und sind
     geschlossen). Läufer `mutation-test.py`. Nadeln sind
     exakte Quellzeilen — nach Prettier-Umbrüchen oder Refactorings ZUERST den Nadel-Vorab-Check (jede Nadel

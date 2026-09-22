@@ -116,6 +116,12 @@ const REDISCOVER_QUICK_INTERVAL_MS = 20000;
  * per minute is plenty, and a non-Yamaha device on the network costs one fetch a minute at most.
  */
 const NOTIFY_PROBE_THROTTLE_MS = 60000;
+/**
+ * …unless the description could not be read: a receiver announces itself early in its boot,
+ * before its HTTP server answers, and repeats the announcement within seconds — the boot burst
+ * must not be locked out for a minute on the first miss.
+ */
+const NOTIFY_RETRY_MS = 5000;
 
 /**
  * How long a device object's native writes are collected before ONE extendObject carries them
@@ -518,7 +524,12 @@ export class Yamaha extends utils.Adapter {
             `${device.id}: address changed from ${running.ip} to ${device.ip} — reconnecting it there${tableNote}`,
           );
           this.knownDeviceIps.delete(running.ip);
+          // Wait for the old address's attempt in flight, as the delete does: a second
+          // supervisor started next to a still-connecting one would have both writing info.*
+          // and coordinating the tree for the same id.
+          const old = this.supervisorById.get(device.id);
           this.stopDevice(device.id);
+          await this.awaitSettled(old);
           await this.startDevice(device, pushReceiver);
           touched.add(device.id);
           if (migrated) {
@@ -625,8 +636,13 @@ export class Yamaha extends utils.Adapter {
       location,
       address,
     );
+    if (!found) {
+      // Ask again after seconds, not after the full throttle — see NOTIFY_RETRY_MS.
+      this.notifyProbed.set(address, Date.now() - NOTIFY_PROBE_THROTTLE_MS + NOTIFY_RETRY_MS);
+      return;
+    }
     const receiver = this.pushReceiver;
-    if (!found || !receiver || this.unloading) {
+    if (!receiver || this.unloading) {
       return;
     }
     this.log.debug(`SSDP alive from ${address}: ${found.name || found.model || "a Yamaha device"} announced itself`);
