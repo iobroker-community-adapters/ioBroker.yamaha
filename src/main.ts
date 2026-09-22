@@ -36,7 +36,8 @@ import {
 } from "./lib/pure-helpers";
 import { errorMessage, MAX_HTTP_BODY_BYTES } from "./lib/util";
 import { tName } from "./lib/i18n";
-import { discoverYamaha, type DiscoveredDevice } from "./lib/discovery";
+import { discoverYamaha, probeDescription, type DiscoveredDevice } from "./lib/discovery";
+import { SsdpListener, type SsdpNotify } from "./lib/ssdp-listener";
 import { isExcluded, readDiscovered, readExcluded, readIgnored, writeDiscovered } from "./lib/discovered-store";
 import { identityFrom, mergeIdentity, sameDevice, type DeviceIdentity } from "./lib/device-identity";
 import { discoveredStoreDeps, excludedStoreDeps, ignoredStoreDeps } from "./lib/discovered-store-deps";
@@ -109,6 +110,13 @@ const REDISCOVER_MIN_INTERVAL_MS = 300000;
  * change take twenty minutes. A device that stays off falls back to the throttle above.
  */
 const REDISCOVER_QUICK_INTERVAL_MS = 20000;
+
+/**
+ * How long one unknown address is left alone after its description was probed on a NOTIFY. A
+ * device repeats its alive every few minutes for every service it has; one probe per address
+ * per minute is plenty, and a non-Yamaha device on the network costs one fetch a minute at most.
+ */
+const NOTIFY_PROBE_THROTTLE_MS = 60000;
 
 /**
  * How long a device object's native writes are collected before ONE extendObject carries them
@@ -199,6 +207,10 @@ export class Yamaha extends utils.Adapter {
   /** When the last background search ran, so the retry cannot become a scan loop. */
   private lastRediscovery = 0;
   private pushReceiver: YxcPushReceiver | undefined;
+  /** The passive SSDP listener — only while the search is on; undefined when port 1900 could not be bound. */
+  private ssdpListener: SsdpListener | undefined;
+  /** address → when its description was last probed on a NOTIFY (the per-address throttle). */
+  private readonly notifyProbed = new Map<string, number>();
   /**
    * Set the moment teardown begins: a connect attempt still in flight then resolves into
    * a closing adapter and must not arm keepalives/timers any more — the framework would
@@ -337,6 +349,9 @@ export class Yamaha extends utils.Adapter {
       });
       pushReceiver.start();
       this.pushReceiver = pushReceiver;
+      if (this.discovering) {
+        await this.startSsdpListener();
+      }
       if (configured.length > 0) {
         // The table's count: the found devices announce themselves in autoDiscover.
         this.log.info(`setting up ${configured.length} configured device(s)...`);
@@ -525,6 +540,80 @@ export class Yamaha extends utils.Adapter {
       return name !== undefined && sanitizeId(name) === deviceId ? { ...entry, ip } : { ...entry, ip: rowIp };
     });
     await this.extendForeignObjectAsync(instanceId, { native: { devices } });
+  }
+
+  /**
+   * Start the passive listener on the interfaces the active search leaves from. A bind failure
+   * (port 1900 held by a service without `reuseAddr`) is said once; the adapter then finds an
+   * address change through its periodic search only, as it did before.
+   */
+  private async startSsdpListener(): Promise<void> {
+    const listener = new SsdpListener({
+      interfaces: searchInterfaces(this.config.networkInterface, networkInterfaces()),
+      log: {
+        debug: message => this.log.debug(message),
+        info: message => this.log.info(message),
+        warn: message => this.log.warn(message),
+      },
+      onAlive: (notify, address) => this.onSsdpAlive(notify, address),
+    });
+    try {
+      await listener.start();
+      this.ssdpListener = listener;
+    } catch (e) {
+      listener.close();
+      this.log.warn(
+        `SSDP listener unavailable (${errorMessage(e)}) — address changes are found by the periodic search only`,
+      );
+    }
+  }
+
+  /**
+   * A device announced itself. Three cases, cheapest first: the address is a running device's
+   * (its periodic alive — nothing to do), the address was probed within the minute (leave it),
+   * else fetch its description and absorb it exactly as a search result — a known device at a
+   * new address is moved, a newcomer is started, a stranger is dropped.
+   *
+   * @param notify what the device said
+   * @param address where it said it from
+   */
+  private onSsdpAlive(notify: SsdpNotify, address: string): void {
+    if (this.unloading || !notify.location || this.knownDeviceIps.has(address)) {
+      return;
+    }
+    const now = Date.now();
+    const last = this.notifyProbed.get(address);
+    if (last !== undefined && now - last < NOTIFY_PROBE_THROTTLE_MS) {
+      return;
+    }
+    this.notifyProbed.set(address, now);
+    this.absorbNotify(notify.location, address).catch((e: unknown) =>
+      this.log.debug(`SSDP alive from ${address}: not absorbed (${errorMessage(e)})`),
+    );
+  }
+
+  /**
+   * Fetch the announcing device's description and run it through the one merge path.
+   *
+   * @param location the description URL it announced
+   * @param address its address
+   */
+  private async absorbNotify(location: string, address: string): Promise<void> {
+    const found = await probeDescription(
+      {
+        fetch: url => this.fetchUrl(url),
+        log: { debug: message => this.log.debug(message), warn: message => this.log.warn(message) },
+      },
+      location,
+      address,
+    );
+    const receiver = this.pushReceiver;
+    if (!found || !receiver || this.unloading) {
+      return;
+    }
+    this.log.debug(`SSDP alive from ${address}: ${found.name || found.model || "a Yamaha device"} announced itself`);
+    const merged = await this.absorbFinds([found]);
+    await this.reconcileDiscovered(merged, receiver);
   }
 
   /**
@@ -1802,6 +1891,8 @@ export class Yamaha extends utils.Adapter {
       this.unloading = true;
       this.clearTimeout(this.balanceTimer);
       this.clearTimeout(this.rediscoverTimer);
+      this.ssdpListener?.close();
+      this.ssdpListener = undefined;
       this.pushReceiver?.close();
       for (const supervisor of this.supervisors) {
         supervisor.close();

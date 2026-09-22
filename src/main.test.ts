@@ -197,9 +197,31 @@ const mocks = vi.hoisted(() => ({
     close: ReturnType<typeof vi.fn>;
     registered: string[];
   }>,
+  probeDescription: vi.fn(
+    (_deps: unknown, _location: string, _address: string) =>
+      Promise.resolve(undefined) as Promise<
+        { ip: string; name: string; model?: string; identity?: { serial?: string; mac?: string } } | undefined
+      >,
+  ),
+  listeners: [] as Array<{
+    deps: { interfaces: readonly string[]; onAlive: (notify: unknown, address: string) => void };
+    start: ReturnType<typeof vi.fn>;
+    close: ReturnType<typeof vi.fn>;
+  }>,
+  /** Whether the next listener's start() rejects (port 1900 taken without reuseAddr on the host). */
+  listenerBindFails: false,
 }));
 vi.mock("./lib/attempt-device", () => ({ attemptDevice: mocks.attemptDevice }));
-vi.mock("./lib/discovery", () => ({ discoverYamaha: mocks.discoverYamaha }));
+vi.mock("./lib/discovery", () => ({ discoverYamaha: mocks.discoverYamaha, probeDescription: mocks.probeDescription }));
+vi.mock("./lib/ssdp-listener", () => ({
+  SsdpListener: class {
+    public start = vi.fn(() => (mocks.listenerBindFails ? Promise.reject(new Error("EADDRINUSE")) : Promise.resolve()));
+    public close = vi.fn();
+    constructor(public deps: { interfaces: readonly string[]; onAlive: (notify: unknown, address: string) => void }) {
+      mocks.listeners.push(this);
+    }
+  },
+}));
 vi.mock("./lib/discovered-store", async importOriginal => {
   // The pure matcher stays real: the tests prove the adapter's use of it, not a copy.
   const actual = await importOriginal<typeof DiscoveredStoreModule>();
@@ -427,6 +449,7 @@ function internalOf(adapter: Yamaha): {
   pushReceiver: unknown;
   knownDeviceIps: Set<string>;
   setTransports(deviceId: string, names: string[]): void;
+  onSsdpAlive(notify: { nts: "alive"; location?: string }, address: string): void;
   deviceRecords: Map<string, { id: string; ip: string; source?: string; identity?: { serial?: string; mac?: string } }>;
   xmlPollIntervalMs(): number;
   objects: Map<string, Record<string, unknown>>;
@@ -496,6 +519,9 @@ beforeEach(() => {
   mocks.discoveredStore.ignored = [];
   mocks.discoveredStore.excluded = [];
   mocks.pushReceivers.length = 0;
+  mocks.listeners.length = 0;
+  mocks.listenerBindFails = false;
+  mocks.probeDescription.mockResolvedValue(undefined);
   mocks.discoverYamaha.mockResolvedValue([]);
   net.sockets.length = 0;
   net.httpCalls.length = 0;
@@ -977,6 +1003,124 @@ describe("Yamaha auto-discovery", () => {
       await flush();
       // The row answers at its own address: a second RX-V6A is simply a second device.
       expect(mocks.discoveredStore.devices).toEqual([{ id: "Yamaha_RX-V6a", ip: "192.168.1.20", identity: v6a }]);
+    });
+  });
+
+  describe("NOTIFY ssdp:alive", () => {
+    const v6a = { serial: "057CCF73", mac: "CCD42ECF0223" };
+
+    it("a NOTIFY from an unknown address probes it and moves the device it names", async () => {
+      mocks.discoveredStore.devices = [{ id: "Yamaha_RX-V6a", ip: "192.168.1.10", identity: v6a }];
+      mocks.probeDescription.mockResolvedValue({ ip: "192.168.1.20", name: "Yamaha RX-V6a", identity: v6a });
+      const ctx = setup({ devices: [] });
+      await ctx.i.onReady();
+      await flush();
+      ctx.i.onSsdpAlive({ nts: "alive", location: "http://192.168.1.20:49154/desc.xml" }, "192.168.1.20");
+      await flush();
+      expect(mocks.probeDescription).toHaveBeenCalledWith(
+        expect.anything(),
+        "http://192.168.1.20:49154/desc.xml",
+        "192.168.1.20",
+      );
+      expect(ctx.i.log.info).toHaveBeenCalledWith(
+        expect.stringContaining("address changed from 192.168.1.10 to 192.168.1.20"),
+      );
+      expect(ctx.calls.at(-1)?.device).toMatchObject({ id: "Yamaha_RX-V6a", ip: "192.168.1.20" });
+    });
+
+    it("a NOTIFY from an unknown address that names a newcomer starts it", async () => {
+      mocks.probeDescription.mockResolvedValue({
+        ip: "192.168.1.30",
+        name: "WX-030",
+        identity: { serial: "0E897553" },
+      });
+      const ctx = setup({ devices: [] });
+      await ctx.i.onReady();
+      await flush();
+      ctx.i.onSsdpAlive({ nts: "alive", location: "http://192.168.1.30/d.xml" }, "192.168.1.30");
+      await flush();
+      expect(ctx.calls.map(c => c.device.id)).toContain("WX-030");
+      expect(mocks.discoveredStore.devices).toEqual([
+        { id: "WX-030", ip: "192.168.1.30", identity: { serial: "0E897553" } },
+      ]);
+    });
+
+    it("a NOTIFY from a running device's own address is not probed — that is its periodic alive", async () => {
+      mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+      const ctx = setup({ devices: [] });
+      await ctx.i.onReady();
+      await flush();
+      ctx.i.onSsdpAlive({ nts: "alive", location: "http://192.168.1.20/d.xml" }, "192.168.1.20");
+      await flush();
+      expect(mocks.probeDescription).not.toHaveBeenCalled();
+    });
+
+    it("a NOTIFY without a location, or from a non-Yamaha device, changes nothing", async () => {
+      const ctx = setup({ devices: [] });
+      await ctx.i.onReady();
+      await flush();
+      ctx.i.onSsdpAlive({ nts: "alive" }, "10.0.0.9");
+      ctx.i.onSsdpAlive({ nts: "alive", location: "http://10.0.0.8/d.xml" }, "10.0.0.8"); // probe → undefined
+      await flush();
+      expect(mocks.probeDescription).toHaveBeenCalledTimes(1);
+      expect(ctx.calls).toHaveLength(0);
+      expect(mocks.discoveredStore.devices).toEqual([]);
+    });
+
+    it("the same unknown address is probed at most once a minute", async () => {
+      const ctx = setup({ devices: [] });
+      await ctx.i.onReady();
+      await flush();
+      const now = vi.spyOn(Date, "now");
+      now.mockReturnValue(1_000_000);
+      ctx.i.onSsdpAlive({ nts: "alive", location: "http://10.0.0.9/d.xml" }, "10.0.0.9");
+      now.mockReturnValue(1_000_000 + 30_000);
+      ctx.i.onSsdpAlive({ nts: "alive", location: "http://10.0.0.9/d.xml" }, "10.0.0.9");
+      now.mockReturnValue(1_000_000 + 61_000);
+      ctx.i.onSsdpAlive({ nts: "alive", location: "http://10.0.0.9/d.xml" }, "10.0.0.9");
+      await flush();
+      now.mockRestore();
+      expect(mocks.probeDescription).toHaveBeenCalledTimes(2);
+    });
+
+    it("starts the listener on the search's interfaces when the search is on, and closes it on unload", async () => {
+      const ctx = setup({ devices: [], networkInterface: "10.0.0.5" });
+      await ctx.i.onReady();
+      await flush();
+      expect(mocks.listeners).toHaveLength(1);
+      expect(mocks.listeners[0].deps.interfaces).toEqual(["10.0.0.5"]);
+      expect(mocks.listeners[0].start).toHaveBeenCalledTimes(1);
+      await new Promise<void>(resolve => ctx.i.onUnload(resolve));
+      expect(mocks.listeners[0].close).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not start the listener while the search is off", async () => {
+      const ctx = setup({ devices: [{ name: "Living", ip: "192.168.1.10" }] }); // auto + a typed row
+      await ctx.i.onReady();
+      await flush();
+      expect(mocks.listeners).toHaveLength(0);
+    });
+
+    it("runs on without the listener when port 1900 cannot be bound, and says so once", async () => {
+      mocks.listenerBindFails = true;
+      const ctx = setup({ devices: [] });
+      await ctx.i.onReady();
+      await flush();
+      expect(ctx.i.log.warn).toHaveBeenCalledWith(expect.stringContaining("SSDP listener unavailable"));
+      expect(ctx.i.log.error).not.toHaveBeenCalled();
+      // The listener's alive feed is gone; the search itself still runs.
+      expect(mocks.discoverYamaha).toHaveBeenCalled();
+    });
+
+    it("an alive arriving while the adapter unloads is ignored", async () => {
+      mocks.probeDescription.mockResolvedValue({ ip: "192.168.1.30", name: "WX-030" });
+      const ctx = setup({ devices: [] });
+      await ctx.i.onReady();
+      await flush();
+      await new Promise<void>(resolve => ctx.i.onUnload(resolve));
+      ctx.i.onSsdpAlive({ nts: "alive", location: "http://192.168.1.30/d.xml" }, "192.168.1.30");
+      await flush();
+      expect(mocks.probeDescription).not.toHaveBeenCalled();
     });
   });
 
