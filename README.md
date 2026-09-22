@@ -79,7 +79,7 @@ Details on all settings, the object tree and the ports the adapter uses are in t
 
 - (krobipd) Deleting a device on its card is final: the admin asks first and names the datapoints, the device is excluded from the network search until you add it by hand, the list answers before the instance restarts, and one log line says how many datapoints went with it
 - (krobipd) A device is recognised by its serial number: a receiver that gets a new IP address or a new name keeps its objects, a lost connection triggers a search within seconds instead of minutes, and the adapter hears devices announcing themselves on the network
-- (krobipd) New "Excluded devices" action in the device list to let the search add a deleted device again
+- (krobipd) New "Excluded devices" action in the device list to let the search add a deleted device again; that search says what it looks for and whether it found it, the start-up search reports its result, and while no device runs the adapter keeps searching every five minutes
 - (krobipd) A row carried over from the previous adapter (name = IP) follows the receiver to a new address and keeps the network search on; a device you entered by hand stays at the typed address, and the log says when it answers elsewhere
 - (krobipd) While a device stays unreachable, the retries try only the protocols it advertises; the first attempt after every connection tries all of them
 - (krobipd) An offline device is no longer reported in the log — its `info.connection` says so; the "no reachable transport" warning is gone, and the start no longer announces "setting up N device(s)" before anything answered

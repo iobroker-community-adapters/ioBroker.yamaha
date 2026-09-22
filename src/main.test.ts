@@ -1126,6 +1126,81 @@ describe("Yamaha auto-discovery", () => {
     expect(attempts().at(-1)).toBeUndefined();
   });
 
+  describe("what the log says about a search", () => {
+    it("the start-up search closes the line it opened: found N, or nobody answered", async () => {
+      // "auto-discovery via SSDP …" at info with no result line read as "still searching"
+      // (krobi 2026-09-22) — an announced action reports its outcome at the same level.
+      mocks.discoverYamaha.mockResolvedValue([{ ip: "192.168.1.20", name: "RX-V685" }]);
+      const ctx = setup({ devices: [] });
+      await ctx.i.onReady();
+      await flush();
+      expect(ctx.i.log.info).toHaveBeenCalledWith("network search finished — found 1 device(s)");
+
+      mocks.discoverYamaha.mockResolvedValue([]);
+      mocks.discoveredStore.devices = []; // the first search remembered RX-V685 — start from nothing again
+      const empty = setup({ devices: [] });
+      await empty.i.onReady();
+      await flush();
+      expect(empty.i.log.info).toHaveBeenCalledWith(
+        "network search finished — no Yamaha device answered (older XML-only devices must be added by hand)",
+      );
+    });
+
+    it("a search the user asked for says what it looks for and what it did not find", async () => {
+      const ctx = setup({ devices: [] });
+      await ctx.i.onReady();
+      await flush();
+      mocks.discoverYamaha.mockResolvedValue([]);
+      ctx.i.rediscoverNow(["Yamaha_RX-V6a"]);
+      await flush();
+      expect(ctx.i.log.info).toHaveBeenCalledWith("searching the network for Yamaha_RX-V6a");
+      expect(ctx.i.log.info).toHaveBeenCalledWith(
+        "Yamaha_RX-V6a: not on the network right now — admitted again; it is added when it announces itself or the next search sees it",
+      );
+    });
+
+    it("a search the user asked for that finds the device says only that", async () => {
+      const ctx = setup({ devices: [] });
+      await ctx.i.onReady();
+      await flush();
+      mocks.discoverYamaha.mockResolvedValue([{ ip: "192.168.1.20", name: "Yamaha RX-V6a" }]);
+      ctx.i.rediscoverNow(["Yamaha_RX-V6a"]);
+      await flush();
+      expect(ctx.i.log.info).toHaveBeenCalledWith("discovery found Yamaha_RX-V6a — setting up");
+      expect(ctx.i.log.info.mock.calls.some(c => String(c[0]).includes("not on the network right now"))).toBe(false);
+    });
+  });
+
+  describe("searching while no device runs", () => {
+    const idle = (ctx: Ctx): unknown[] => ctx.i.setTimeout.mock.calls.filter(c => Number(c[1]) > 200000);
+
+    it("with nothing running the search is armed again every five minutes — a device switched on later is found without a restart", async () => {
+      const ctx = setup({ devices: [] });
+      await ctx.i.onReady();
+      await flush();
+      expect(idle(ctx)).toHaveLength(1);
+      // The armed search finds nothing — and arms the next one.
+      (idle(ctx)[0] as [() => void])[0]();
+      await flush();
+      expect(idle(ctx)).toHaveLength(2);
+    });
+
+    it("once a device runs, the idle search is not armed", async () => {
+      mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+      const ctx = setup({ devices: [] });
+      await ctx.i.onReady();
+      await flush();
+      expect(idle(ctx)).toHaveLength(0);
+    });
+
+    it("with the search off, nothing is armed", async () => {
+      const ctx = setup({ devices: [], discovery: "never" });
+      await ctx.i.onReady();
+      await flush();
+      expect(idle(ctx)).toHaveLength(0);
+    });
+  });
+
   describe("NOTIFY ssdp:alive", () => {
     const v6a = { serial: "057CCF73", mac: "CCD42ECF0223" };
 

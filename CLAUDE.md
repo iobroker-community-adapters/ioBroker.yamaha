@@ -234,7 +234,12 @@ erst nach dem LETZTEN Transport (YXC: 15 min). Der passive Hörer `lib/ssdp-list
 nichts; unbekannte → höchstens einmal je Minute (`NOTIFY_PROBE_THROTTLE_MS`) `probeDescription` → derselbe
 Merge-Pfad. Bind-Fehler = eine `warn`-Zeile, weiter mit periodischer Suche. Findet eine Suche ein offlines
 Gerät nirgends, sagt EINE `debug`-Zeile je Ausfall „not found on the network — keeping its objects"
-(`reportedMissing`), nichts ändert sich. **Ein Gerät, das aus ist, ist aus** (krobi 2026-09-22: kein Adapter der Flotte
+(`reportedMissing`), nichts ändert sich. **Läuft KEIN Gerät, sucht der Adapter alle 5 min weiter** (`scheduleIdleSearch`,
+derselbe Timer wie die Wiedersuche) — sonst hinge ein später eingeschaltetes oder gerade wieder zugelassenes Gerät allein
+am NOTIFY. **Log-Regel für Suchen:** was auf `info` angekündigt wird, meldet auf `info` sein Ergebnis — die Startsuche
+schließt mit „network search finished — found N / no Yamaha device answered", eine vom Nutzer ausgelöste Suche
+(`rediscoverNow`) sagt „searching the network for X" und „X: not on the network right now — admitted again …"; die
+Hintergrund-Polls bleiben `debug`. **Ein Gerät, das aus ist, ist aus** (krobi 2026-09-22: kein Adapter der Flotte
 meldet ein offlines Gerät im Log): „no reachable transport" ist seit demselben Tag `debug` statt `warn`, die
 Dedup-Klasse `ReachabilityDedup` (warn einmal, dann debug) ist mit ihrer Nadel W8 (Welle 3 + Sammeltabelle)
 entfernt — `info.connection` trägt den Zustand.
@@ -265,7 +270,7 @@ stehen — ohne den Filter liefe es beim nächsten Start wieder, Löschen per Ne
 `Troubleshooting.md`/`Fehlersuche.md` enden auf „(from the version after 2.11.0)" / „(ab der Version nach 2.11.0)"
 (Löschen endgültig, neue IP-Adresse) — beim Release des Standes streichen; kein Gate sieht das.
 
-Beleg: Chat-Analyse 2026-09-22 + drei Advisor-Runden + Server-Test, Mutationswelle 19 (Y1–Y34), Chronik in `.claude/dev-history.md`.
+Beleg: Chat-Analyse 2026-09-22 + drei Advisor-Runden + Server-Test, Mutationswelle 19 (Y1–Y37), Chronik in `.claude/dev-history.md`.
 
 ## Erreichbarkeit + Anspruch: zwei Regeln, die v1.5.0 eingezogen hat
 
@@ -484,7 +489,7 @@ in ein öffentliches Repo.
     Tabelle — das Präfix X ist dort NICHT das der Äquivalenz-Vermerke X2/X4 aus Welle 1; 24/24, zwei
     Überlebende des ersten Laufs waren toter Code und sind entfernt)
   - `mutations_yamaha_2026-09-22-w19.py` (Welle 19 = Identität/Löschen/Wiederfinden auf `developing`, IDs
-    Y1–Y34 in eigener Tabelle; 34/34 gefangen — die zwei Überlebenden des ersten Laufs, Y24 „Zeile auf dem
+    Y1–Y37 in eigener Tabelle; 37/37 gefangen — die zwei Überlebenden des ersten Laufs, Y24 „Zeile auf dem
     ersten Versuch ist nicht offline" und Y19 „XML belegt, MusicCast nicht", waren Testlücken und sind
     geschlossen). Läufer `mutation-test.py`. Nadeln sind
     exakte Quellzeilen — nach Prettier-Umbrüchen oder Refactorings ZUERST den Nadel-Vorab-Check (jede Nadel

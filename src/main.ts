@@ -374,6 +374,7 @@ export class Yamaha extends utils.Adapter {
       if (this.discovering && devices.length > 0) {
         void this.discoverAdditionalDevices(pushReceiver);
       }
+      this.scheduleIdleSearch();
     } catch (e) {
       this.log.error(`onReady failed: ${errorMessage(e)}`);
     }
@@ -482,6 +483,7 @@ export class Yamaha extends utils.Adapter {
     } catch (e) {
       this.log.warn(`background discovery failed: ${errorMessage(e)}`);
     }
+    this.scheduleIdleSearch();
   }
 
   /**
@@ -920,7 +922,41 @@ export class Yamaha extends utils.Adapter {
     if (!this.discovering || !receiver || this.unloading) {
       return;
     }
-    void this.discoverAdditionalDevices(receiver);
+    // A search the user asked for is an event, not a poll: say what it looks for, and — when
+    // that device is not there — that the admission holds and what brings it back.
+    this.log.info(`searching the network for ${lifted.join(", ")}`);
+    void this.discoverAdditionalDevices(receiver).then(() => {
+      for (const id of lifted) {
+        if (!this.deviceRecords.has(id)) {
+          this.log.info(
+            `${id}: not on the network right now — admitted again; it is added when it announces itself or the next search sees it`,
+          );
+        }
+      }
+    });
+  }
+
+  /**
+   * While NO device runs, keep searching on the long throttle. Nothing else would: the
+   * rediscovery is armed by a device that went offline, and with none running only the NOTIFY
+   * listener is left — a device switched on after the start, or admitted again while it was
+   * off, would wait for the next restart if its announcement was missed.
+   */
+  private scheduleIdleSearch(): void {
+    if (this.deviceRecords.size > 0 || !this.discovering || this.unloading || this.rediscoverTimer !== undefined) {
+      return;
+    }
+    const receiver = this.pushReceiver;
+    if (!receiver) {
+      return;
+    }
+    this.rediscoverTimer = this.setTimeout(() => {
+      this.rediscoverTimer = undefined;
+      this.lastRediscovery = Date.now();
+      if (!this.unloading) {
+        void this.discoverAdditionalDevices(receiver);
+      }
+    }, REDISCOVER_MIN_INTERVAL_MS);
   }
 
   /**
@@ -2014,7 +2050,13 @@ export class Yamaha extends utils.Adapter {
     }
     this.log.info("auto-discovery via SSDP (older XML-only devices must be added manually)");
     const merged = await this.runDiscovery();
-    this.log.debug(`the search found ${merged.length} device(s)`);
+    // The line above announced the search at info — its result belongs at the same level, or
+    // the log reads "still searching" for good (krobi 2026-09-22).
+    this.log.info(
+      merged.length > 0
+        ? `network search finished — found ${merged.length} device(s)`
+        : "network search finished — no Yamaha device answered (older XML-only devices must be added by hand)",
+    );
     return merged;
   }
 
