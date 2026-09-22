@@ -1,7 +1,6 @@
 import { vi } from "vitest";
 import { connectTransports, partnerClient, type ConnectableTransport } from "./attempt-device";
 import { YamahaYxcClient } from "./yxc/http-client";
-import { ReachabilityDedup } from "./lifecycle/reachability-dedup";
 import type { ObjectDef } from "./catalog/types";
 import type { Transport } from "./catalog/owner-policy";
 
@@ -128,26 +127,15 @@ describe("connectTransports", () => {
     expect(d.objects).toContain("living.dist.role"); // yxc still made it into the tree
   });
 
-  test("without a reachability dep, every failed attempt still warns (unchanged default)", async () => {
-    const ynca = fakeConn("ynca", [], false);
-    const warn = vi.fn();
-    const d = { ...deps(), log: { ...silentLog, warn } };
-    await connectTransports("living", [{ transport: ynca.transport, build: () => ynca }], d);
-    await connectTransports("living", [{ transport: ynca.transport, build: () => ynca }], d);
-    expect(warn).toHaveBeenCalledTimes(2);
-  });
-
-  test("with a reachability dep, only the first attempt in a row warns — repeats drop to debug", async () => {
+  test("an unreachable device is a debug line, never a warning — its state says offline", async () => {
     const ynca = fakeConn("ynca", [], false);
     const warn = vi.fn();
     const debug = vi.fn();
-    const d = { ...deps(), log: { ...silentLog, warn, debug }, reachability: new ReachabilityDedup() };
+    const d = { ...deps(), log: { ...silentLog, warn, debug } };
     await connectTransports("living", [{ transport: ynca.transport, build: () => ynca }], d);
     await connectTransports("living", [{ transport: ynca.transport, build: () => ynca }], d);
-    await connectTransports("living", [{ transport: ynca.transport, build: () => ynca }], d);
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn).toHaveBeenCalledWith("living: no reachable transport (YNCA/YXC/XML)");
-    expect(debug).toHaveBeenCalledTimes(2);
+    expect(warn).not.toHaveBeenCalled();
+    expect(debug).toHaveBeenCalledWith("living: no reachable transport (YNCA/YXC/XML)");
   });
 
   test("hands the handle a rebuild that builds the SAME transport afresh after it drops", async () => {
@@ -195,18 +183,6 @@ describe("connectTransports", () => {
     // … and it rebuilt exactly the YNCA transport, not the whole device.
     expect(builds).toBe(2);
     handle?.close();
-  });
-
-  test("a reconnect after failures re-arms the warn for the next drop", async () => {
-    const dead = fakeConn("ynca", [], false);
-    const alive = fakeConn("ynca", [state("power", "Power")], true);
-    const warn = vi.fn();
-    const d = { ...deps(), log: { ...silentLog, warn }, reachability: new ReachabilityDedup() };
-    await connectTransports("living", [{ transport: dead.transport, build: () => dead }], d); // 1st failure — warns
-    await connectTransports("living", [{ transport: dead.transport, build: () => dead }], d); // repeat — debug, no extra warn
-    await connectTransports("living", [{ transport: alive.transport, build: () => alive }], d); // reconnects — clears the dedup
-    await connectTransports("living", [{ transport: dead.transport, build: () => dead }], d); // dropped again — warns again
-    expect(warn).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -384,9 +360,9 @@ describe("attemptDevice builders", () => {
       },
     );
 
-    // Nothing answered — the device is simply not reachable this attempt.
+    // Nothing answered — the device is simply not reachable this attempt. Not a warning.
     expect(result).toBeNull();
-    expect(warns.some(w => w.includes("no reachable transport"))).toBe(true);
+    expect(warns).toEqual([]);
     // YNCA is a held TCP connection on 50000 …
     expect(wire.tcp).toContainEqual({ host: "192.168.1.10", port: 50000 });
     // … while YXC and XML both speak HTTP on 80, XML on the control endpoint.

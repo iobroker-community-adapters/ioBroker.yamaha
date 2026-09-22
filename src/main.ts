@@ -46,7 +46,6 @@ import { YamahaDeviceManagement } from "./device-management";
 import type { DeviceSource, DeviceRecord } from "./lib/types";
 import { DeviceSupervisor, type ConnectionHandle } from "./lib/lifecycle/device-supervisor";
 import { ReconnectStrategy } from "./lib/lifecycle/reconnect-strategy";
-import { ReachabilityDedup } from "./lib/lifecycle/reachability-dedup";
 import type { YncaSubunitCache } from "./lib/ynca/subunit-cache";
 import type { ProbeMemory } from "./lib/lifecycle/probe-memory";
 import { DeviceProfileStore, loadCapabilityProfile, profileIdentityOf } from "./lib/lifecycle/capability-profile";
@@ -405,7 +404,6 @@ export class Yamaha extends utils.Adapter {
     // would show "YNCA connected" on the card next to a red connection dot — for good, if
     // the device never answers again.
     this.setTransports(device.id, []);
-    const reachability = new ReachabilityDedup();
     // Held here, not in the controllers: those are rebuilt on every connection attempt;
     // persisted at the device object (one capability profile), so a restart starts from the
     // remembered answers.
@@ -424,7 +422,6 @@ export class Yamaha extends utils.Adapter {
           { ...device, services: failedInARow > 0 ? device.services : undefined },
           pushReceiver,
           this.knownDeviceIps,
-          reachability,
           subunitCache,
           probeMemory,
         );
@@ -467,8 +464,8 @@ export class Yamaha extends utils.Adapter {
       }
       const touched = await this.reconcileDiscovered(merged, pushReceiver);
       // "Off, not moved": an offline device the whole network did not answer for keeps its
-      // objects and its address — the supervisor retries there. Said once per outage, so the
-      // five-minute cadence does not fill the log with the same line.
+      // objects and its address — the supervisor retries there. A debug line, once per outage:
+      // being off is a state the datapoints show, not an event for the log.
       for (const [deviceId, connected] of this.deviceConnected) {
         const record = this.deviceRecords.get(deviceId);
         if (connected || !record || record.source === "manual" || touched.has(deviceId)) {
@@ -476,7 +473,8 @@ export class Yamaha extends utils.Adapter {
         }
         if (!this.reportedMissing.has(deviceId)) {
           this.reportedMissing.add(deviceId);
-          this.log.info(`${deviceId}: not found on the network — keeping its objects and retrying at ${record.ip}`);
+          // debug, not info: an offline device is a state (`info.connection`), not an event.
+          this.log.debug(`${deviceId}: not found on the network — keeping its objects and retrying at ${record.ip}`);
         }
       }
     } catch (e) {
@@ -1810,8 +1808,6 @@ export class Yamaha extends utils.Adapter {
    * @param device the configured device record
    * @param pushReceiver the shared YXC push receiver
    * @param knownDeviceIps IPs of all configured devices, for resolving a multiroom client
-   * @param reachability dedup for the "no reachable transport" warning (one instance per device,
-   *   held by the caller across retries — see {@link ReachabilityDedup})
    * @param yncaSubunitCache per-device cache of the YNCA AVAIL probe (skips the probe on reconnects)
    * @param probeMemory per-device memory for constant device answers (skips re-asking on reconnects)
    * @returns a connection handle, or null when no transport connected
@@ -1820,12 +1816,10 @@ export class Yamaha extends utils.Adapter {
     device: DeviceRecord,
     pushReceiver: YxcPushReceiver,
     knownDeviceIps: Set<string>,
-    reachability: ReachabilityDedup,
     yncaSubunitCache: YncaSubunitCache,
     probeMemory: ProbeMemory,
   ): Promise<ConnectionHandle | null> {
     return attemptDevice(device, {
-      reachability,
       yncaSubunitCache,
       probeMemory,
       // Group gate for the YNCA sweep: a disabled group's functions are never even fetched.

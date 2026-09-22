@@ -82,6 +82,7 @@ Details on all settings, the object tree and the ports the adapter uses are in t
 - (krobipd) New "Excluded devices" action in the device list to let the search add a deleted device again
 - (krobipd) A row carried over from the previous adapter (name = IP) follows the receiver to a new address and keeps the network search on; a device you entered by hand stays at the typed address, and the log says when it answers elsewhere
 - (krobipd) While a device stays unreachable, the retries try only the protocols it advertises; the first attempt after every connection tries all of them
+- (krobipd) An offline device is no longer reported in the log — its `info.connection` says so; the "no reachable transport" warning is gone
 
 ### 2.11.0 (2026-09-17) — stable
 

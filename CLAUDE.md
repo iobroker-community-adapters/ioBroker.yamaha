@@ -53,7 +53,7 @@ zugeteilten Datenpunkte. Owner je Datenpunkt = das modernste ANWESENDE, aber ver
 (`lib/catalog/owner-policy.ts`: Rang YXC > YNCA > XML, überstimmt vom reicheren/schreibbaren/korrekt-skalierten
 Transport laut Zensus); `lib/catalog/object-tree-coordinator.ts` berechnet daraus EINEN Baum, jeder State genau
 einmal, jeder Write an den Owner. **Wiederkehrende Antworten werden pro Gerät gemerkt** (`lib/lifecycle/probe-memory.ts`, gehalten in
-`main.ts` neben Subunit-Cache und Reachability-Dedup, seit 2.0.0 PERSISTIERT im Geräteobjekt `native.probeCache` —
+`main.ts` neben dem Subunit-Cache, seit 2.0.0 PERSISTIERT im Geräteobjekt `native.probeCache` —
 s. „Schnellstart" unten): YXC-`getFeatures`/Modell/Name
 und die XML-Browse-Quellen-Probe sind über die Gerätelaufzeit konstant — ein Reconnect fragt sie nicht
 erneut. Der YNCA-Subunit-Cache prüft die Identität jetzt ZUERST (2 Abrufe Modell+Firmware, ~0,2 s) und
@@ -225,8 +225,11 @@ erst nach dem LETZTEN Transport (YXC: 15 min). Der passive Hörer `lib/ssdp-list
 `reuseAddr`, Membership je Such-Interface, Muster fakeroku) hört `NOTIFY ssdp:alive`: bekannte Adresse →
 nichts; unbekannte → höchstens einmal je Minute (`NOTIFY_PROBE_THROTTLE_MS`) `probeDescription` → derselbe
 Merge-Pfad. Bind-Fehler = eine `warn`-Zeile, weiter mit periodischer Suche. Findet eine Suche ein offlines
-Gerät nirgends, sagt EINE `info`-Zeile je Ausfall „not found on the network — keeping its objects"
-(`reportedMissing`), nichts ändert sich.
+Gerät nirgends, sagt EINE `debug`-Zeile je Ausfall „not found on the network — keeping its objects"
+(`reportedMissing`), nichts ändert sich. **Ein Gerät, das aus ist, ist aus** (krobi 2026-09-22: kein Adapter der Flotte
+meldet ein offlines Gerät im Log): „no reachable transport" ist seit demselben Tag `debug` statt `warn`, die
+Dedup-Klasse `ReachabilityDedup` (warn einmal, dann debug) ist mit ihrer Nadel W8 (Welle 3 + Sammeltabelle)
+entfernt — `info.connection` trägt den Zustand.
 
 **Löschen ist endgültig** (`device-management.ts` `deleteDevice`): Bestätigung in der UI VOR dem Handler
 (dm-utils `confirmation` am Deskriptor, Text nennt die Datenpunkte — `showConfirmation` im Handler wartete

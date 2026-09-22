@@ -910,6 +910,26 @@ describe("Yamaha auto-discovery", () => {
     expect(ctx.i.deviceRecords.get("RX-V685")?.identity).toEqual({ serial: "0E897553" });
   });
 
+  it("a device the BACKGROUND search found carries the discovered stamp — its identity reaches the store", async () => {
+    // Without the stamp the record looks like a table row to everything that reads `source`:
+    // its identity would not be written into the discovery file, and the next search would
+    // read it against the running set as if the user had typed it.
+    mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+    mocks.discoverYamaha.mockResolvedValue([{ ip: "192.168.1.30", name: "WX-030" }]);
+    const ctx = setup({ devices: [] });
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.i.deviceRecords.get("WX-030")?.source).toBe("discovered");
+    ctx.i.profiles.get("WX-030")!.identity = () => ({ serial: "0E897553" });
+    ctx.i.reportConnection("WX-030", true);
+    await flush();
+    expect(mocks.discoveredStore.devices).toContainEqual({
+      id: "WX-030",
+      ip: "192.168.1.30",
+      identity: { serial: "0E897553" },
+    });
+  });
+
   it("an identity the store already carries is written to the device object at start, and a stored one is read back", async () => {
     mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20", identity: { mac: "00A0DED4F504" } }];
     const ctx = setup({ devices: [] });
@@ -1380,14 +1400,14 @@ describe("Yamaha auto-discovery", () => {
     expect(ctx.i.setTimeout.mock.calls.filter(c => Number(c[1]) > 5000 && Number(c[1]) <= 20000)).toHaveLength(0);
   });
 
-  it("says once that an offline device was not found anywhere, and keeps retrying its address", async () => {
+  it("says once, at debug, that an offline device was not found anywhere, and keeps retrying its address", async () => {
     mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
     const ctx = setup({ devices: [] }, { failIds: ["RX-V685"] });
     await ctx.i.onReady();
     await flush();
     await ctx.i.discoverAdditionalDevices(ctx.i.pushReceiver);
     await ctx.i.discoverAdditionalDevices(ctx.i.pushReceiver);
-    const lines = ctx.i.log.info.mock.calls.filter(c => String(c[0]).includes("not found on the network"));
+    const lines = ctx.i.log.debug.mock.calls.filter(c => String(c[0]).includes("not found on the network"));
     expect(lines).toHaveLength(1);
     expect(String(lines[0][0])).toContain("192.168.1.20");
     // Nothing changed: the record, its address and its objects stay; the supervisor retries.
@@ -1401,7 +1421,7 @@ describe("Yamaha auto-discovery", () => {
     await ctx.i.onReady();
     await flush();
     const lines = (): unknown[] =>
-      ctx.i.log.info.mock.calls.filter(c => String(c[0]).includes("not found on the network"));
+      ctx.i.log.debug.mock.calls.filter(c => String(c[0]).includes("not found on the network"));
     expect(lines()).toHaveLength(1);
     ctx.i.reportConnection("RX-V685", true);
     ctx.i.reportConnection("RX-V685", false);

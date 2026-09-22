@@ -8,7 +8,6 @@ import { MultiTransportHandle, type ConnectableTransport } from "./lifecycle/mul
 import { TransportConnectionAdapter } from "./lifecycle/transport-connection-adapter";
 import { ReconnectStrategy } from "./lifecycle/reconnect-strategy";
 import { CommandGate } from "./lifecycle/command-gate";
-import type { ReachabilityDedup } from "./lifecycle/reachability-dedup";
 import type { YncaSubunitCache } from "./ynca/subunit-cache";
 import type { ProbeMemory } from "./lifecycle/probe-memory";
 import type { Transport } from "./catalog/owner-policy";
@@ -63,8 +62,6 @@ export interface AttemptDeps {
   onDeviceName?(name: string): void;
   /** IPs of all configured devices, so a MusicCast group can resolve a client device by IP. */
   knownDeviceIps: Set<string>;
-  /** Dedup for the "no reachable transport" warning — see {@link ConnectDeps.reachability}. */
-  reachability?: ReachabilityDedup;
   /** Datapoint-group gate for the YNCA sweep — a disabled group's functions are never fetched. */
   isEntryEnabled?(id: string): boolean;
   /** Per-device cache of the YNCA AVAIL probe, held by the caller across reconnects. */
@@ -89,12 +86,6 @@ export interface ConnectDeps {
   upsertObject(id: string, def: ObjectDef): Promise<void>;
   /** Report the transports that are live after every change — the id-safe names ("ynca"/"yxc"/"xml"). */
   onTransports?(names: string[]): void;
-  /**
-   * Dedup for the "no reachable transport" warning: without it every retry warns
-   * again for as long as the device stays offline (nut2 `failedUps` pattern — first
-   * failure warns, repeats stay at debug until the device answers again).
-   */
-  reachability?: ReachabilityDedup;
   /** Timers for the per-transport reconnect loops (absent in tests → no per-transport retry). */
   timers?: {
     /** Schedule a one-shot timer. */
@@ -161,11 +152,11 @@ export async function connectTransports(
   );
   const live = results.filter((conn): conn is ConnectableTransport => conn !== null);
   if (live.length === 0) {
-    const level = deps.reachability?.reportUnreachable() ?? "warn";
-    deps.log[level](`${deviceId}: no reachable transport (YNCA/YXC/XML)`);
+    // A device that is off is off: `info.connection` says so, the log does not (krobi
+    // 2026-09-22 — no adapter of the fleet reports an offline device in the log).
+    deps.log.debug(`${deviceId}: no reachable transport (YNCA/YXC/XML)`);
     return null;
   }
-  deps.reachability?.reportReachable();
   const rebuilds = new Map(attempts.map(attempt => [attempt.transport, attempt.build] as const));
   const handle = new MultiTransportHandle(deviceId, live, {
     upsertObject: deps.upsertObject,
@@ -315,7 +306,6 @@ export function attemptDevice(device: DeviceRecord, deps: AttemptDeps): Promise<
       upsertObject,
       log,
       onTransports: deps.onTransports,
-      reachability: deps.reachability,
       timers: deps.timers,
     },
   );

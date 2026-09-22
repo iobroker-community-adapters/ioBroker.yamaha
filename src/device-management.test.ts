@@ -587,6 +587,8 @@ describe("YamahaDeviceManagement", () => {
       expect(writeExcluded).toHaveBeenCalledWith({}, [
         { id: "Kitchen", ip: "192.168.1.11", identity: { serial: "0E897553" } },
       ]);
+      // A manual card lives in the table alone — the discovery store is not touched.
+      expect(writeDiscovered).not.toHaveBeenCalled();
       adapter._runDeferred();
       await flushPromises();
       expect(order).toEqual(["exclude", "remove", "table"]);
