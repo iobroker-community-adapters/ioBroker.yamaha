@@ -268,9 +268,8 @@ wird genau dort gesehen. Ohne Beschreibung (getippt, migriert) immer alle drei.
 Nadel Y29): `writeDiscovered` schluckt Fehler, ein als ausgeschlossen vermerktes Gerät kann also noch im Fund-Speicher
 stehen — ohne den Filter liefe es beim nächsten Start wieder, Löschen per Neustart rückgängig.
 
-⚠️ **Wiki trägt Versionsvermerke, die beim nächsten Release WEG müssen:** vier Überschriften in
-`Troubleshooting.md`/`Fehlersuche.md` enden auf „(from the version after 2.11.0)" / „(ab der Version nach 2.11.0)"
-(Löschen endgültig, neue IP-Adresse) — beim Release des Standes streichen; kein Gate sieht das.
+Die vier Wiki-Überschriften in `Troubleshooting.md`/`Fehlersuche.md` (Löschen endgültig, neue IP-Adresse) tragen den
+Vermerk „(from 2.12.0)" / „(ab 2.12.0)" — mit dem Release gesetzt, kein Gate sieht das Wiki.
 
 Beleg: Chat-Analyse 2026-09-22 + drei Advisor-Runden + Server-Test, Mutationswelle 19 (Y1–Y39), Chronik in `.claude/dev-history.md`.
 

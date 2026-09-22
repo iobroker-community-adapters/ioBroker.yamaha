@@ -73,17 +73,15 @@ Details on all settings, the object tree and the ports the adapter uses are in t
 <!--
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
--->
 
-### **WORK IN PROGRESS**
-
-- (krobipd) Deleting a device on its card is final: the admin asks first and names the datapoints, the device is excluded from the network search until you add it by hand, the list answers before the instance restarts, and one log line says how many datapoints went with it
-- (krobipd) A device is recognised by its serial number: a receiver that gets a new IP address or a new name keeps its objects, a lost connection triggers a search within seconds instead of minutes, and the adapter hears devices announcing themselves on the network
-- (krobipd) New "Excluded devices" action in the device list to let the search add a deleted device again; that search says what it looks for and whether it found it, the start-up search reports its result, and while no device runs the adapter keeps searching every five minutes
-- (krobipd) A row carried over from the previous adapter (name = IP) follows the receiver to a new address and keeps the network search on; a device you entered by hand stays at the typed address, and the log says when it answers elsewhere
-- (krobipd) While a device stays unreachable, the retries try only the protocols it advertises; the first attempt after every connection tries all of them
-- (krobipd) An offline device is no longer reported in the log — its `info.connection` says so; the "no reachable transport" warning is gone, and the start no longer announces "setting up N device(s)" before anything answered
-- (krobipd) A receiver that lost power is offline within about 90 seconds instead of up to 15 minutes: the first protocol that notices asks the others at once, instead of waiting for MusicCast's third missed five-minute poll
+- (krobipd) Fixed: Deleting a device is final: the card asks first and names the datapoints, the device stays out of the search until you admit it again, and the log says how many datapoints went
+- (krobipd) New: A device is known by its serial number: a receiver with a new IP address or a new name keeps its objects and is reconnected at the new address within seconds
+- (krobipd) New: "Excluded devices…" above the device list shows the deleted devices and lets the network search admit a ticked one again — it says what it looks for and what it found
+- (krobipd) Improved: A receiver that lost power is offline in about 90 seconds instead of up to 15 minutes: the first protocol that notices asks the others at once
+- (krobipd) Improved: The adapter hears devices announcing themselves on the network, and while no device runs it keeps searching every five minutes
+- (krobipd) Changed: A row carried over from the old adapter (name = IP) follows the receiver to a new address; a device entered by hand stays where it was typed, the log says if it answers elsewhere
+- (krobipd) Changed: An offline device is a state, not a log line: the "no reachable transport" warning is gone, and a search announced in the log now reports its result
+- (krobipd) Improved: While a device stays unreachable, the retries try only the protocols it advertises; the first attempt after every connection tries all of them
 
 ### 2.11.0 (2026-09-17) — stable
 
