@@ -201,6 +201,21 @@ describe("DeviceProfileStore", () => {
     expect(store.identity()).toEqual({ serial: "057CCF73", mac: "CCD42ECF0223" });
   });
 
+  test("the remembered model comes from whichever transport answered — XML alone is enough", () => {
+    const d = deps();
+    const xmlOnly = serializeCapabilityProfile(
+      { memory: { xmlIdentity: "RX-V3900|0CE4E483|1.05" }, pendingPurge: [] },
+      { adapterVersion: "2.7.0", learnedAt: "2026-09-01T00:00:00.000Z" },
+    );
+    expect(new DeviceProfileStore("living", { [PROFILE_KEY]: xmlOnly }, d.deps).model()).toBe("RX-V3900");
+    const yxcOnly = serializeCapabilityProfile(
+      { memory: { yxcIdentity: "WX-030|2.1" }, pendingPurge: [] },
+      { adapterVersion: "2.7.0", learnedAt: "2026-09-01T00:00:00.000Z" },
+    );
+    expect(new DeviceProfileStore("living", { [PROFILE_KEY]: yxcOnly }, d.deps).model()).toBe("WX-030");
+    expect(new DeviceProfileStore("living", {}, d.deps).model()).toBeUndefined();
+  });
+
   test("has no identity while both memories are blank or scrubbed", () => {
     const d = deps();
     expect(new DeviceProfileStore("living", {}, d.deps).identity()).toBeUndefined();

@@ -670,6 +670,16 @@ describe("YamahaDeviceManagement", () => {
     });
   });
 
+  it("an adapter that lacks one of the three owner methods gets no owner — the backend never calls into a partial surface", async () => {
+    // The device manager reaches into the running adapter for three things; a partial surface
+    // (an older adapter build, a test double) must not pass as the owner and then throw.
+    store.excluded = [{ id: "Kitchen", ip: "192.168.1.11" }];
+    const i = make([]);
+    delete adapter.rediscoverNow;
+    await expect(i.excludedDevices(mockContext({ form: { Kitchen: true } }))).resolves.toEqual({ refresh: true });
+    expect(writeExcluded).toHaveBeenCalledWith({}, []);
+  });
+
   describe("excluded devices", () => {
     it("lists every exclusion, lifts the ticked ones from both stores, and searches again", async () => {
       store.excluded = [{ id: "Kitchen", ip: "192.168.1.11" }];
