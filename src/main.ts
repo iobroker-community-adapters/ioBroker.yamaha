@@ -37,6 +37,7 @@ import { errorMessage, MAX_HTTP_BODY_BYTES } from "./lib/util";
 import { tName } from "./lib/i18n";
 import { discoverYamaha } from "./lib/discovery";
 import { isExcluded, readDiscovered, readExcluded, readIgnored, writeDiscovered } from "./lib/discovered-store";
+import { identityFrom, mergeIdentity, type DeviceIdentity } from "./lib/device-identity";
 import { discoveredStoreDeps, excludedStoreDeps, ignoredStoreDeps } from "./lib/discovered-store-deps";
 import { YxcPushReceiver } from "./lib/yxc/push-receiver";
 import { YamahaDeviceManagement } from "./device-management";
@@ -356,6 +357,10 @@ export class Yamaha extends utils.Adapter {
     this.deviceConnected.set(device.id, false);
     this.deviceRecords.set(device.id, { ...device });
     this.knownDeviceIps.add(device.ip);
+    // What the search learned about the device rides on the record; the device object gets it
+    // now (persistDeviceNative needs the record above), the header read below merges what the
+    // object already carried from earlier runs.
+    this.learnIdentity(device.id, device.identity);
     await this.ensureDeviceHeader(device.id, device.ip, device.source ?? "discovered");
     // Stamp it disconnected BEFORE the first attempt: ioBroker keeps a state's last value
     // forever, so a crash or a power cut would otherwise leave the device green until it
@@ -585,6 +590,50 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
+   * Take an identity a transport, the search or the stored object reported for a running device:
+   * merge it into the record (the search matches on it), persist it at the device object
+   * (`native.identity`, what the delete action reads), and — for a discovered device — write it
+   * into the discovery store so the next start's search knows it before any transport answers.
+   *
+   * @param deviceId the id-safe device id
+   * @param identity what was learned, if anything
+   */
+  private learnIdentity(deviceId: string, identity: DeviceIdentity | undefined): void {
+    const record = this.deviceRecords.get(deviceId);
+    if (!record || !identity) {
+      return;
+    }
+    const merged = mergeIdentity(record.identity, identity);
+    if (JSON.stringify(merged) === JSON.stringify(record.identity)) {
+      return;
+    }
+    record.identity = merged;
+    this.persistDeviceNative(deviceId, { identity: merged });
+    if (record.source === "discovered" && merged) {
+      this.rememberIdentity(deviceId, merged).catch((e: unknown) =>
+        this.log.debug(`${deviceId}: could not store the identity (${errorMessage(e)})`),
+      );
+    }
+  }
+
+  /**
+   * Carry a learned identity into the discovery store's record.
+   *
+   * @param deviceId the id-safe device id
+   * @param identity the identity to store
+   */
+  private async rememberIdentity(deviceId: string, identity: DeviceIdentity): Promise<void> {
+    const store = discoveredStoreDeps(this);
+    const known = await readDiscovered(store);
+    const entry = known.find(device => device.id === deviceId);
+    if (!entry || JSON.stringify(entry.identity) === JSON.stringify(identity)) {
+      return;
+    }
+    entry.identity = identity;
+    await writeDiscovered(store, known);
+  }
+
+  /**
    * Remove one device for good: stop talking to it and delete its object tree.
    *
    * Driven by the device manager's delete action. Deleting a discovered device used to only
@@ -701,6 +750,11 @@ export class Yamaha extends utils.Adapter {
       // Arm the settle pass even when the connect created nothing new — the once-per-
       // version orphan purge rides the same settled moment as the balance line.
       this.scheduleDatapointBalance();
+    }
+    if (connected) {
+      // On EVERY connect, not only the first: a reconnect over another transport can bring
+      // the first serial this device ever reported.
+      this.learnIdentity(deviceId, this.profiles.get(deviceId)?.identity());
     }
     this.deviceConnected.set(deviceId, connected);
     this.writeState(`${deviceId}.info.connection`, connected);
@@ -1270,7 +1324,13 @@ export class Yamaha extends utils.Adapter {
         this.deviceIcons.set(deviceId, icon);
       }
       const native = existing?.native as
-        { volumeAsPercent?: unknown; label?: unknown; labelRank?: unknown } | undefined;
+        { volumeAsPercent?: unknown; label?: unknown; labelRank?: unknown; identity?: unknown } | undefined;
+      const storedIdentity = identityFrom(
+        typeof native?.identity === "object" && native.identity !== null ? native.identity : {},
+      );
+      if (storedIdentity) {
+        this.learnIdentity(deviceId, storedIdentity);
+      }
       const own = native?.volumeAsPercent;
       if (typeof own === "boolean") {
         percent = own;

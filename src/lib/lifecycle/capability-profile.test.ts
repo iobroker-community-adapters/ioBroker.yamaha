@@ -150,6 +150,16 @@ describe("capability profile — serializing", () => {
     });
   });
 
+  test("the MusicCast device ids ride along in the yxc half when the memory carries them", () => {
+    expect(
+      profileIdentityOf({ yxcIdentity: "WX-030|2.1", yxcDeviceIds: { serial: "0E897553", mac: "00A0DED4F504" } }),
+    ).toEqual({ yxc: { model: "WX-030", systemVersion: "2.1", serial: "0E897553", mac: "00A0DED4F504" } });
+    // Junk in the ids key changes nothing.
+    expect(profileIdentityOf({ yxcIdentity: "WX-030|2.1", yxcDeviceIds: "junk" })).toEqual({
+      yxc: { model: "WX-030", systemVersion: "2.1" },
+    });
+  });
+
   test("names the keys the adapter reads and deletes", () => {
     expect(PROFILE_KEY).toBe("capabilityProfile");
     expect(LEGACY_PROFILE_KEYS).toEqual(["probeCache", "yncaAvail", "purgeVersion"]);
@@ -177,6 +187,32 @@ describe("DeviceProfileStore", () => {
   };
   const profileOf = (patch: Record<string, unknown>): Record<string, unknown> =>
     JSON.parse(patch[PROFILE_KEY] as string) as Record<string, unknown>;
+
+  test("derives the device identity from the XML system id and the MusicCast device ids", () => {
+    const d = deps();
+    const stored = serializeCapabilityProfile(
+      {
+        memory: { xmlIdentity: "RX-V6A|057CCF73|2.15", yxcDeviceIds: { serial: "057CCF73", mac: "CCD42ECF0223" } },
+        pendingPurge: [],
+      },
+      { adapterVersion: "2.7.0", learnedAt: "2026-09-01T00:00:00.000Z" },
+    );
+    const store = new DeviceProfileStore("living", { [PROFILE_KEY]: stored }, d.deps);
+    expect(store.identity()).toEqual({ serial: "057CCF73", mac: "CCD42ECF0223" });
+  });
+
+  test("has no identity while both memories are blank or scrubbed", () => {
+    const d = deps();
+    expect(new DeviceProfileStore("living", {}, d.deps).identity()).toBeUndefined();
+    const scrubbed = serializeCapabilityProfile(
+      {
+        memory: { xmlIdentity: "RX-V6A|00000000|2.15", yxcDeviceIds: { serial: "00000000", mac: "RXV6A0000" } },
+        pendingPurge: [],
+      },
+      { adapterVersion: "2.7.0", learnedAt: "2026-09-01T00:00:00.000Z" },
+    );
+    expect(new DeviceProfileStore("living", { [PROFILE_KEY]: scrubbed }, d.deps).identity()).toBeUndefined();
+  });
 
   test("converts the legacy keys at load — one patch with the profile and the three deletions", () => {
     const d = deps();

@@ -12,7 +12,11 @@
       "source": "manual",
       "volumeAsPercent": false,
       "label": "RX-A2A",
-      "labelRank": 1
+      "labelRank": 1,
+      "identity": {
+        "serial": "0B23E7D3",
+        "mac": "AC44F241D7D9"
+      }
     },
     "_id": "yamaha.0.10_10_0_11"
   },
@@ -22899,7 +22903,11 @@
       "source": "manual",
       "volumeAsPercent": false,
       "label": "Badezimmer",
-      "labelRank": 2
+      "labelRank": 2,
+      "identity": {
+        "serial": "0E897553",
+        "mac": "00A0DED4F504"
+      }
     },
     "_id": "yamaha.0.10_10_0_15"
   },
@@ -25816,7 +25824,11 @@
       "source": "manual",
       "volumeAsPercent": false,
       "label": "Wohnzimmer",
-      "labelRank": 2
+      "labelRank": 2,
+      "identity": {
+        "serial": "0B587073",
+        "mac": "00A0DED15025"
+      }
     },
     "_id": "yamaha.0.10_10_0_16"
   },
@@ -32354,7 +32366,10 @@
     },
     "native": {
       "source": "manual",
-      "volumeAsPercent": false
+      "volumeAsPercent": false,
+      "identity": {
+        "serial": "0CE4E483"
+      }
     },
     "_id": "yamaha.0.10_10_0_18"
   },

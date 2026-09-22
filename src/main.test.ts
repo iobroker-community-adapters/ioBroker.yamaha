@@ -178,7 +178,7 @@ const mocks = vi.hoisted(() => ({
   attemptDevice: vi.fn(),
   discoverYamaha: vi.fn((_deps?: unknown) => Promise.resolve([] as Array<{ ip: string; name: string }>)),
   discoveredStore: {
-    devices: [] as Array<{ id: string; ip: string }>,
+    devices: [] as Array<{ id: string; ip: string; identity?: { serial?: string; mac?: string } }>,
     ignored: [] as string[],
     excluded: [] as Array<{ id: string; ip?: string; identity?: { serial?: string; mac?: string } }>,
   },
@@ -410,7 +410,9 @@ function internalOf(adapter: Yamaha): {
   removeDevice(deviceId: string): Promise<void>;
   persistDeviceNative(deviceId: string, native: Record<string, unknown>): void;
   setVolumePercent(deviceId: string, on: boolean): Promise<void>;
-  pendingNative: Map<string, { timer?: unknown }>;
+  pendingNative: Map<string, { timer?: unknown; native: Record<string, unknown> }>;
+  profiles: Map<string, { identity: () => { serial?: string; mac?: string } | undefined }>;
+  deviceRecords: Map<string, { id: string; ip: string; source?: string; identity?: { serial?: string; mac?: string } }>;
   xmlPollIntervalMs(): number;
   objects: Map<string, Record<string, unknown>>;
   states: Map<string, { val: unknown; ack: boolean }>;
@@ -824,6 +826,32 @@ describe("Yamaha auto-discovery", () => {
     // Neither remembered again nor started again: the initial start is the only attempt.
     expect(mocks.discoveredStore.devices).toEqual([]);
     expect(ctx.calls.filter(c => c.device.id === "RX-V685")).toHaveLength(1);
+  });
+
+  it("writes the identity a transport learned to the device object and the discovery store", async () => {
+    mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+    const ctx = setup({ devices: [] });
+    await ctx.i.onReady();
+    await flush();
+    // The transports write their answers into the profile; the adapter reads the identity from
+    // there whenever a device reports connected.
+    ctx.i.profiles.get("RX-V685")!.identity = () => ({ serial: "0E897553" });
+    ctx.i.reportConnection("RX-V685", true);
+    await flush();
+    expect(ctx.i.pendingNative.get("RX-V685")?.native).toEqual({ identity: { serial: "0E897553" } });
+    expect(mocks.discoveredStore.devices).toEqual([
+      { id: "RX-V685", ip: "192.168.1.20", identity: { serial: "0E897553" } },
+    ]);
+    expect(ctx.i.deviceRecords.get("RX-V685")?.identity).toEqual({ serial: "0E897553" });
+  });
+
+  it("an identity the store already carries is written to the device object at start, and a stored one is read back", async () => {
+    mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20", identity: { mac: "00A0DED4F504" } }];
+    const ctx = setup({ devices: [] });
+    ctx.i.objects.set("RX-V685", { type: "device", common: {}, native: { identity: { serial: "0E897553" } } });
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.i.deviceRecords.get("RX-V685")?.identity).toEqual({ serial: "0E897553", mac: "00A0DED4F504" });
   });
 
   it("removeDevice stops the supervisor, drops the tree and updates the overview", async () => {

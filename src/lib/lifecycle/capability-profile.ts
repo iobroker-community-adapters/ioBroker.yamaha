@@ -1,3 +1,4 @@
+import { identityFrom, type DeviceIdentity } from "../device-identity";
 import { DISCOVERY_SCHEMA } from "./discovery-schema";
 import { memorySchemaOf, ProbeMemory, SCHEMA_KEY } from "./probe-memory";
 import {
@@ -21,8 +22,8 @@ export const LEGACY_PROFILE_KEYS = ["probeCache", "yncaAvail", "purgeVersion"] a
 export interface ProfileIdentity {
   /** YNCA: `SYS:MODELNAME` + `SYS:VERSION`. */
   ynca?: { model: string; firmware: string };
-  /** MusicCast: `getDeviceInfo` model name + `system_version`. */
-  yxc?: { model: string; systemVersion: string };
+  /** MusicCast: `getDeviceInfo` model name + `system_version`, plus `system_id`/`device_id` when reported. */
+  yxc?: { model: string; systemVersion: string; serial?: string; mac?: string };
   /** XML: `System>Config` model + `System_ID` + firmware version. */
   xml?: { model: string; systemId: string; version: string };
 }
@@ -146,9 +147,18 @@ export function profileIdentityOf(memory: Record<string, unknown>): ProfileIdent
   if (typeof caps === "object" && caps !== null && typeof caps.model === "string") {
     identity.ynca = { model: caps.model, firmware: typeof caps.firmware === "string" ? caps.firmware : "" };
   }
-  if (typeof memory.yxcIdentity === "string") {
-    const [model = "", systemVersion = ""] = memory.yxcIdentity.split("|");
-    identity.yxc = { model, systemVersion };
+  const ids = memory.yxcDeviceIds as { serial?: unknown; mac?: unknown } | undefined;
+  const serial = typeof ids === "object" && ids !== null && typeof ids.serial === "string" ? ids.serial : undefined;
+  const mac = typeof ids === "object" && ids !== null && typeof ids.mac === "string" ? ids.mac : undefined;
+  if (typeof memory.yxcIdentity === "string" || serial !== undefined || mac !== undefined) {
+    const [model = "", systemVersion = ""] =
+      typeof memory.yxcIdentity === "string" ? memory.yxcIdentity.split("|") : ["", ""];
+    identity.yxc = {
+      model,
+      systemVersion,
+      ...(serial !== undefined ? { serial } : {}),
+      ...(mac !== undefined ? { mac } : {}),
+    };
   }
   if (typeof memory.xmlIdentity === "string") {
     const [model = "", systemId = "", version = ""] = memory.xmlIdentity.split("|");
@@ -304,6 +314,18 @@ export class DeviceProfileStore {
   public setPendingPurge(ids: readonly string[]): void {
     this.pending = [...ids];
     this.persistNow();
+  }
+
+  /**
+   * The device's identity as the transports learned it — XML `System_ID` and MusicCast
+   * `system_id` are the same serial (measured on the RX-V6A), `device_id` is the MAC. Undefined
+   * until a transport reported one, and for a scrubbed value (see `identityFrom`).
+   *
+   * @returns the identity, or undefined
+   */
+  public identity(): DeviceIdentity | undefined {
+    const identity = profileIdentityOf(this.memory);
+    return identityFrom({ serial: identity.xml?.systemId || identity.yxc?.serial, mac: identity.yxc?.mac });
   }
 
   /** Write the profile now (through the adapter's coalescing persist). */

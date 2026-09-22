@@ -243,6 +243,17 @@ export class YxcDeviceController implements ConnectionHandle {
         );
         this.deps.probeMemory.set("yxcIdentity", identity);
       }
+      // Serial (`system_id`) and MAC (`device_id`) — the device's identity for life. Their own
+      // key, NOT part of `yxcIdentity`: adding them there would drop every remembered feature
+      // once on the update, for nothing the features depend on. The adapter reads them through
+      // the profile (`DeviceProfileStore.identity`).
+      const ids = info as { system_id?: unknown; device_id?: unknown } | null;
+      if (this.deps.probeMemory && (typeof ids?.system_id === "string" || typeof ids?.device_id === "string")) {
+        this.deps.probeMemory.set("yxcDeviceIds", {
+          ...(typeof ids.system_id === "string" ? { serial: ids.system_id } : {}),
+          ...(typeof ids.device_id === "string" ? { mac: ids.device_id } : {}),
+        });
+      }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getDeviceInfo failed (${errorMessage(e)})`);
     }

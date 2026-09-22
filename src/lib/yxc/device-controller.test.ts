@@ -1056,6 +1056,45 @@ describe("YxcDeviceController reachability (a remembered device must still answe
     expect(await s.controller.start()).toBe(false);
   });
 
+  test("remembers the device ids from getDeviceInfo, outside the feature-validating identity", async () => {
+    const memory = new ProbeMemory();
+    const client = makeFakeClient(oneZone, { power: "on" });
+    client.deviceInfo = { model_name: "WX-030", system_version: 2.1, system_id: "0E897553", device_id: "00A0DED4F504" };
+    const controller = new YxcDeviceController("living", {
+      client,
+      registerPush: () => () => {},
+      scheduleKeepalive: () => () => {},
+      upsertObject: async () => {},
+      setStateAck: () => {},
+      log: silentLog,
+      gate: testGate(),
+      probeMemory: memory,
+    });
+    expect(await controller.start()).toBe(true);
+    // Serial and MAC ride in their own key: adding them to `yxcIdentity` would drop every
+    // remembered feature once on the update, for nothing the features depend on.
+    expect(memory.remembered("yxcDeviceIds")).toEqual({ serial: "0E897553", mac: "00A0DED4F504" });
+    expect(memory.remembered("yxcIdentity")).toBe("WX-030|2.1");
+  });
+
+  test("writes no device ids when getDeviceInfo carries none", async () => {
+    const memory = new ProbeMemory();
+    const client = makeFakeClient(oneZone, { power: "on" });
+    client.deviceInfo = { model_name: "WX-030" };
+    const controller = new YxcDeviceController("living", {
+      client,
+      registerPush: () => () => {},
+      scheduleKeepalive: () => () => {},
+      upsertObject: async () => {},
+      setStateAck: () => {},
+      log: silentLog,
+      gate: testGate(),
+      probeMemory: memory,
+    });
+    await controller.start();
+    expect(memory.remembered("yxcDeviceIds")).toBeUndefined();
+  });
+
   test("a reconnect to a device that lost power fails even though its capabilities are remembered", async () => {
     const memory = new ProbeMemory();
     const build = (client: FakeClient): YxcDeviceController =>
