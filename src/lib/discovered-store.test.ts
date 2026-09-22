@@ -1,7 +1,10 @@
 import {
+  isExcluded,
   readDiscovered,
+  readExcluded,
   readIgnored,
   writeDiscovered,
+  writeExcluded,
   writeIgnored,
   type DiscoveredStoreDeps,
 } from "./discovered-store";
@@ -110,5 +113,73 @@ describe("writeIgnored", () => {
   test("swallows a write failure", async () => {
     const deps = fakeDeps({ write: () => Promise.reject(new Error("disk full")) });
     await expect(writeIgnored(deps, ["Living"])).resolves.toBeUndefined();
+  });
+});
+
+describe("readExcluded", () => {
+  test("reads the stored entries", async () => {
+    const deps = fakeDeps({ read: () => Promise.resolve(JSON.stringify([{ id: "RX-V685", ip: "192.168.1.20" }])) });
+    await expect(readExcluded(deps)).resolves.toEqual([{ id: "RX-V685", ip: "192.168.1.20" }]);
+  });
+
+  test("starts empty on a missing, corrupt or non-list file", async () => {
+    await expect(readExcluded(fakeDeps())).resolves.toEqual([]);
+    await expect(readExcluded(fakeDeps({ read: () => Promise.resolve("{nope") }))).resolves.toEqual([]);
+    await expect(readExcluded(fakeDeps({ read: () => Promise.resolve('{"id":"x"}') }))).resolves.toEqual([]);
+  });
+
+  test("starts empty when the read itself rejects", async () => {
+    await expect(readExcluded(fakeDeps({ read: () => Promise.reject(new Error("EACCES")) }))).resolves.toEqual([]);
+  });
+
+  test("drops entries without a string id", async () => {
+    const deps = fakeDeps({
+      read: () => Promise.resolve(JSON.stringify([{ ip: "1.2.3.4" }, { id: 5 }, { id: "ok" }])),
+    });
+    await expect(readExcluded(deps)).resolves.toEqual([{ id: "ok" }]);
+  });
+});
+
+describe("writeExcluded", () => {
+  test("stores each id once, the later entry wins", async () => {
+    const deps = fakeDeps();
+    await writeExcluded(deps, [
+      { id: "a", ip: "1.1.1.1" },
+      { id: "a", ip: "2.2.2.2" },
+    ]);
+    expect(deps.written).toEqual([JSON.stringify([{ id: "a", ip: "2.2.2.2" }])]);
+  });
+
+  test("swallows a write failure", async () => {
+    const deps = fakeDeps({ write: () => Promise.reject(new Error("disk")) });
+    await expect(writeExcluded(deps, [{ id: "a" }])).resolves.toBeUndefined();
+  });
+});
+
+describe("isExcluded", () => {
+  test("matches the legacy id list", () => {
+    expect(isExcluded(["RX-V685"], [], { id: "RX-V685", ip: "1.1.1.1" })).toBe(true);
+  });
+
+  test("matches an entry by id", () => {
+    expect(isExcluded([], [{ id: "RX-V685" }], { id: "RX-V685", ip: "1.1.1.1" })).toBe(true);
+  });
+
+  test("matches an entry WITHOUT identity by its address", () => {
+    expect(isExcluded([], [{ id: "Kitchen", ip: "1.1.1.1" }], { id: "Yamaha_RX-V6a", ip: "1.1.1.1" })).toBe(true);
+  });
+
+  test("matches an entry WITH identity by the identity, whatever the address", () => {
+    const entry = { id: "Kitchen", ip: "1.1.1.1", identity: { serial: "0E897553" } };
+    expect(isExcluded([], [entry], { id: "Other", ip: "9.9.9.9", identity: { serial: "0E897553" } })).toBe(true);
+  });
+
+  test("does not match by address once the entry carries an identity", () => {
+    const entry = { id: "Kitchen", ip: "1.1.1.1", identity: { serial: "0E897553" } };
+    expect(isExcluded([], [entry], { id: "Other", ip: "1.1.1.1", identity: { serial: "0B587073" } })).toBe(false);
+  });
+
+  test("is false for a stranger", () => {
+    expect(isExcluded(["a"], [{ id: "b", ip: "2.2.2.2" }], { id: "c", ip: "3.3.3.3" })).toBe(false);
   });
 });

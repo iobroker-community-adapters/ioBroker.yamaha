@@ -36,7 +36,7 @@ vi.mock("@iobroker/adapter-core", () => ({
 }));
 
 import { join } from "node:path";
-import { discoveredStoreDeps } from "./discovered-store-deps";
+import { discoveredStoreDeps, excludedStoreDeps, ignoredStoreDeps } from "./discovered-store-deps";
 
 /**
  * The data directory as the module under test builds it. Spelled with `join` because
@@ -75,5 +75,15 @@ describe("discoveredStoreDeps", () => {
   it("logs through the adapter", () => {
     discoveredStoreDeps(adapter).log.debug("hello");
     expect(adapter.log.debug).toHaveBeenCalledWith("hello");
+  });
+});
+
+describe("ignoredStoreDeps and excludedStoreDeps", () => {
+  it("keep their own files next to the discovery store — the id list stays readable by 2.11.0", async () => {
+    await ignoredStoreDeps(adapter).write('["RX-V685"]');
+    await excludedStoreDeps(adapter).write('[{"id":"RX-V685","ip":"192.168.1.20"}]');
+    expect([...fsMock.files.keys()]).toEqual([join(dataDir, "ignored.json"), join(dataDir, "excluded.json")]);
+    await expect(ignoredStoreDeps(adapter).read()).resolves.toBe('["RX-V685"]');
+    await expect(excludedStoreDeps(adapter).read()).resolves.toBe('[{"id":"RX-V685","ip":"192.168.1.20"}]');
   });
 });

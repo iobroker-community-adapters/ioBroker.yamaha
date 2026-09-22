@@ -52,3 +52,14 @@ function fileStoreDeps(adapter: ioBroker.Adapter, fileName: string): DiscoveredS
     log: { debug: message => adapter.log.debug(message) },
   };
 }
+
+/**
+ * The exclusion store's file-access deps — `excluded.json` next to `ignored.json`: the entries
+ * carry address and identity, which the plain id list cannot (see `readExcluded`).
+ *
+ * @param adapter the adapter instance (for the data dir and the log)
+ * @returns the store's read/write/log dependencies
+ */
+export function excludedStoreDeps(adapter: ioBroker.Adapter): DiscoveredStoreDeps {
+  return fileStoreDeps(adapter, "excluded.json");
+}
