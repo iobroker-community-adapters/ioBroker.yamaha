@@ -74,6 +74,7 @@ Details on all settings, the object tree and the ports the adapter uses are in t
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+
 ### 2.12.0 (2026-09-22)
 
 - (krobipd) Fixed: Deleting a device is final: the card asks first and names the datapoints, the device stays out of the search until you admit it again, and the log says how many datapoints went

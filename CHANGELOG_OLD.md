@@ -1,4 +1,5 @@
 # Older changes
+
 ## 2.9.0 (2026-09-12)
 
 - (krobipd) New: Devices you enter by hand and devices the network search finds now run side by side — entering one receiver no longer takes every found one out of the instance
