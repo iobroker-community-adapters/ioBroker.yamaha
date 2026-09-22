@@ -1,5 +1,6 @@
 import type { DeviceRecord } from "./types";
 import type { DiscoveredDevice } from "./discovery";
+import { mergeIdentity, sameDevice } from "./device-identity";
 
 interface ConfiguredDevice {
   name?: string;
@@ -34,6 +35,17 @@ function isConfiguredDevice(entry: unknown): entry is ConfiguredDevice {
  */
 export function sanitizeId(raw: string): string {
   return raw.replace(/[^A-Za-z0-9\-_]/g, "_");
+}
+
+/**
+ * An IPv4 address in dotted form — the shape only the 0.5.4 migration writes into a row's
+ * NAME (`legacyDeviceRow`). A name that is an address marks a migrated row.
+ *
+ * @param text a table row's name
+ * @returns whether it is an IPv4 address
+ */
+export function isDottedQuad(text: string): boolean {
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(text);
 }
 
 /**
@@ -78,7 +90,9 @@ export function parseDevices(raw: unknown, onCollision?: (dropped: string, taken
       continue;
     }
     taken.add(id);
-    records.push({ id, ip: entry.ip, source: "manual" });
+    // A name that is an address was written by the migration, not typed: that row follows the
+    // device to a new address like a discovered one, a typed row stays where it was typed.
+    records.push({ id, ip: entry.ip, source: isDottedQuad(entry.name ?? "") ? "migrated" : "manual" });
   }
   return records;
 }
@@ -98,7 +112,7 @@ export function parseDevices(raw: unknown, onCollision?: (dropped: string, taken
 export function unionDevices(manual: readonly DeviceRecord[], discovered: readonly DeviceRecord[]): DeviceRecord[] {
   const byId = new Map<string, DeviceRecord>();
   for (const device of manual) {
-    byId.set(device.id, { ...device, source: "manual" });
+    byId.set(device.id, { ...device, source: device.source ?? "manual" });
   }
   for (const device of discovered) {
     if (byId.has(device.id)) {
@@ -120,12 +134,14 @@ export function unionDevices(manual: readonly DeviceRecord[], discovered: readon
  * run's scan did not find it — a receiver in deep standby answers no SSDP, and its
  * object tree must survive.
  *
- * Identity is the device ID (derived from the friendly name it advertises, or from its
- * address when it advertises none) — NOT its address. Keyed by address, a receiver that
- * moved to a new address by DHCP was lost for good: the remembered record kept the old
+ * Identity is the device's serial/MAC when both sides carry one — that survives a rename AND a
+ * new address — and otherwise the device ID (derived from the friendly name it advertises, or
+ * from its address when it advertises none). NOT its address: keyed by address, a receiver that
+ * moved to a new address by DHCP was lost for good — the remembered record kept the old
  * address, the same receiver found at the new one produced the same id, and the id clash
  * dropped it. It stayed offline with no way back, because the id is what the whole object
- * tree hangs off. Now the same id simply carries the new address over.
+ * tree hangs off. Now the same device simply carries the new address over, and learns its
+ * identity and advertised services from the find.
  *
  * A genuine clash remains a clash: a DIFFERENT device sitting on an address another
  * record already claims is skipped and reported through `onCollision`, so a missing
@@ -152,10 +168,19 @@ export function mergeDiscovered(
   for (const device of found) {
     const label = device.name || device.ip;
     const id = sanitizeId(label);
-    const remembered = byId.get(id);
+    // Identity first: the serial survives a rename and a new address, the name does neither.
+    const twin = [...byId.values()].find(record => sameDevice(record.identity, device.identity));
+    const remembered = twin ?? byId.get(id);
     if (remembered) {
       // Same device, possibly at a new address — carry the address over, keep the id.
       remembered.ip = device.ip;
+      const identity = mergeIdentity(remembered.identity, device.identity);
+      if (identity) {
+        remembered.identity = identity;
+      }
+      if (device.services) {
+        remembered.services = device.services;
+      }
       continue;
     }
     const ipOwner = [...byId.values()].find(record => record.ip === device.ip);
@@ -163,7 +188,12 @@ export function mergeDiscovered(
       onCollision?.(label, ipOwner?.id ?? id);
       continue;
     }
-    byId.set(id, { id, ip: device.ip });
+    byId.set(id, {
+      id,
+      ip: device.ip,
+      ...(device.identity ? { identity: device.identity } : {}),
+      ...(device.services ? { services: device.services } : {}),
+    });
   }
   return [...byId.values()];
 }

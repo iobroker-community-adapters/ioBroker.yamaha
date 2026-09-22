@@ -7,6 +7,7 @@ import { parseYxcFeatures } from "./yxc/capability";
 import { mapYxcToObjects } from "./yxc/object-mapper";
 import {
   boundsOfCommon,
+  isDottedQuad,
   isUsefulDeviceName,
   LABEL_RANK,
   legacyDeviceRow,
@@ -132,7 +133,11 @@ describe("upgrade path from the original 0.5.4 adapter (the ~800 existing instal
     const row = legacyDeviceRow({ ip: "192.168.1.50", intervall: 120, useRealtime: true });
     expect(row).toEqual({ name: "192.168.1.50", ip: "192.168.1.50" });
     const devices = parseDevices([row]);
-    expect(devices).toEqual([{ id: "192_168_1_50", ip: "192.168.1.50", source: "manual" }]);
+    expect(devices).toEqual([
+      // Its name is the address the migration wrote: a MIGRATED row, which follows the device
+      // to a new address like a discovered one (nobody typed that address).
+      { id: "192_168_1_50", ip: "192.168.1.50", source: "migrated" },
+    ]);
 
     // Step 2: start-up cleanup sees the full legacy tree plus our own info objects.
     const existing = [`${NS}.info`, `${NS}.info.connection`, ...legacyRelativeIds.map(id => `${NS}.${id}`)];
@@ -309,6 +314,85 @@ describe("staleObjects", () => {
       "yamaha.0.found.volume",
       "yamaha.0.found",
     ]);
+  });
+});
+
+describe("mergeDiscovered by identity", () => {
+  const v6a = { serial: "057CCF73", mac: "CCD42ECF0223" };
+
+  test("a renamed device at a new address keeps its id when the identity matches", () => {
+    // The serial survives what the name and the address do not — the id (and the tree) stays.
+    const known = [{ id: "Yamaha_RX-V6a", ip: "1.1.1.10", identity: v6a }];
+    const found = [{ ip: "1.1.1.20", name: "Wohnzimmer", identity: v6a, services: { yxc: true, xml: true } }];
+    expect(mergeDiscovered(known, found)).toEqual([
+      { id: "Yamaha_RX-V6a", ip: "1.1.1.20", identity: v6a, services: { yxc: true, xml: true } },
+    ]);
+  });
+
+  test("learns the identity and the services onto a record that matched by id", () => {
+    const known = [{ id: "Living", ip: "1.1.1.1" }];
+    expect(
+      mergeDiscovered(known, [{ ip: "1.1.1.1", name: "Living", identity: v6a, services: { yxc: false, xml: true } }]),
+    ).toEqual([{ id: "Living", ip: "1.1.1.1", identity: v6a, services: { yxc: false, xml: true } }]);
+  });
+
+  test("a new device carries its identity and services from the first find on", () => {
+    expect(
+      mergeDiscovered([], [{ ip: "2.2.2.2", name: "Kitchen", identity: v6a, services: { yxc: true, xml: false } }]),
+    ).toEqual([{ id: "Kitchen", ip: "2.2.2.2", identity: v6a, services: { yxc: true, xml: false } }]);
+  });
+
+  test("identity wins over a name that maps to another record's id", () => {
+    // Device A was renamed to what B is called: the serial says it is A, so A moves and B stays.
+    const known = [
+      { id: "A", ip: "1.1.1.1", identity: v6a },
+      { id: "B", ip: "2.2.2.2", identity: { serial: "0E897553" } },
+    ];
+    const merged = mergeDiscovered(known, [{ ip: "3.3.3.3", name: "B", identity: v6a }]);
+    expect(merged.find(r => r.id === "A")?.ip).toBe("3.3.3.3");
+    expect(merged.find(r => r.id === "B")?.ip).toBe("2.2.2.2");
+  });
+
+  test("without identity a different device with a used address is still a collision", () => {
+    const collisions: Array<[string, string]> = [];
+    mergeDiscovered([{ id: "Living", ip: "1.1.1.1", identity: v6a }], [{ ip: "1.1.1.1", name: "Kitchen" }], (d, t) =>
+      collisions.push([d, t]),
+    );
+    expect(collisions).toEqual([["Kitchen", "Living"]]);
+  });
+
+  test("a remembered identity is kept when this find carries none", () => {
+    expect(
+      mergeDiscovered([{ id: "Living", ip: "1.1.1.1", identity: v6a }], [{ ip: "1.1.1.1", name: "Living" }]),
+    ).toEqual([{ id: "Living", ip: "1.1.1.1", identity: v6a }]);
+  });
+});
+
+describe("parseDevices — migrated rows", () => {
+  test("a row whose name is an IP address is a migrated one — only the 0.5.4 migration writes that", () => {
+    expect(parseDevices([{ name: "192.168.1.10", ip: "192.168.1.10" }])).toEqual([
+      { id: "192_168_1_10", ip: "192.168.1.10", source: "migrated" },
+    ]);
+  });
+
+  test("a row still counts as migrated after it moved — the name keeps the old address", () => {
+    expect(parseDevices([{ name: "192.168.1.10", ip: "192.168.1.20" }])[0].source).toBe("migrated");
+  });
+
+  test("a typed name is manual, a blank name too", () => {
+    expect(parseDevices([{ name: "Living", ip: "1.1.1.1" }, { ip: "2.2.2.2" }]).map(d => d.source)).toEqual([
+      "manual",
+      "manual",
+    ]);
+  });
+});
+
+describe("isDottedQuad", () => {
+  test("recognises an IPv4 address and nothing else", () => {
+    expect(isDottedQuad("192.168.1.10")).toBe(true);
+    expect(isDottedQuad("Living")).toBe(false);
+    expect(isDottedQuad("192.168.1")).toBe(false);
+    expect(isDottedQuad("")).toBe(false);
   });
 });
 
@@ -973,5 +1057,11 @@ describe("unionDevices", () => {
   test("either side alone is the whole set", () => {
     expect(unionDevices([], [found])).toEqual([{ id: "Kitchen", ip: "2.2.2.2", source: "discovered" }]);
     expect(unionDevices([manual], [])).toEqual([manual]);
+  });
+
+  test("a migrated row stays migrated — it follows the device, a typed one does not", () => {
+    expect(unionDevices([{ id: "192_168_1_10", ip: "192.168.1.10", source: "migrated" }], [])[0].source).toBe(
+      "migrated",
+    );
   });
 });
