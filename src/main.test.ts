@@ -1,5 +1,6 @@
 import { vi } from "vitest";
 import type * as OsModule from "node:os";
+import type * as DiscoveredStoreModule from "./lib/discovered-store";
 
 /**
  * Orchestration tests for the adapter lifecycle. `@iobroker/adapter-core` is
@@ -176,7 +177,11 @@ vi.mock("@iobroker/adapter-core", () => {
 const mocks = vi.hoisted(() => ({
   attemptDevice: vi.fn(),
   discoverYamaha: vi.fn((_deps?: unknown) => Promise.resolve([] as Array<{ ip: string; name: string }>)),
-  discoveredStore: { devices: [] as Array<{ id: string; ip: string }>, ignored: [] as string[] },
+  discoveredStore: {
+    devices: [] as Array<{ id: string; ip: string }>,
+    ignored: [] as string[],
+    excluded: [] as Array<{ id: string; ip?: string; identity?: { serial?: string; mac?: string } }>,
+  },
   pushReceivers: [] as Array<{
     start: ReturnType<typeof vi.fn>;
     close: ReturnType<typeof vi.fn>;
@@ -185,21 +190,32 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("./lib/attempt-device", () => ({ attemptDevice: mocks.attemptDevice }));
 vi.mock("./lib/discovery", () => ({ discoverYamaha: mocks.discoverYamaha }));
-vi.mock("./lib/discovered-store", () => ({
-  readDiscovered: vi.fn(() => Promise.resolve(mocks.discoveredStore.devices)),
-  writeDiscovered: vi.fn((_d: unknown, devices: Array<{ id: string; ip: string }>) => {
-    mocks.discoveredStore.devices = devices;
-    return Promise.resolve();
-  }),
-  readIgnored: vi.fn(() => Promise.resolve(mocks.discoveredStore.ignored)),
-  writeIgnored: vi.fn((_d: unknown, ids: string[]) => {
-    mocks.discoveredStore.ignored = [...ids];
-    return Promise.resolve();
-  }),
-}));
+vi.mock("./lib/discovered-store", async importOriginal => {
+  // The pure matcher stays real: the tests prove the adapter's use of it, not a copy.
+  const actual = await importOriginal<typeof DiscoveredStoreModule>();
+  return {
+    isExcluded: actual.isExcluded,
+    readDiscovered: vi.fn(() => Promise.resolve(mocks.discoveredStore.devices)),
+    writeDiscovered: vi.fn((_d: unknown, devices: Array<{ id: string; ip: string }>) => {
+      mocks.discoveredStore.devices = devices;
+      return Promise.resolve();
+    }),
+    readIgnored: vi.fn(() => Promise.resolve(mocks.discoveredStore.ignored)),
+    writeIgnored: vi.fn((_d: unknown, ids: string[]) => {
+      mocks.discoveredStore.ignored = [...ids];
+      return Promise.resolve();
+    }),
+    readExcluded: vi.fn(() => Promise.resolve(mocks.discoveredStore.excluded)),
+    writeExcluded: vi.fn((_d: unknown, entries: typeof mocks.discoveredStore.excluded) => {
+      mocks.discoveredStore.excluded = [...entries];
+      return Promise.resolve();
+    }),
+  };
+});
 vi.mock("./lib/discovered-store-deps", () => ({
   discoveredStoreDeps: () => ({}),
   ignoredStoreDeps: () => ({}),
+  excludedStoreDeps: () => ({}),
 }));
 
 /** A fake dgram + http pair, so the SSDP search and the description fetch are testable. */
@@ -461,6 +477,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.discoveredStore.devices = [];
   mocks.discoveredStore.ignored = [];
+  mocks.discoveredStore.excluded = [];
   mocks.pushReceivers.length = 0;
   mocks.discoverYamaha.mockResolvedValue([]);
   net.sockets.length = 0;
@@ -774,6 +791,39 @@ describe("Yamaha auto-discovery", () => {
     expect(ctx.calls).toHaveLength(0);
     // The exclusion also keeps it out of the remembered list, so nothing resurrects it later.
     expect(mocks.discoveredStore.devices).toEqual([]);
+  });
+
+  it("skips a found device that matches an exclusion entry by address", async () => {
+    // The manual branch of the delete knows no identity yet — the address it was deleted at
+    // is what keeps the receiver out when the search finds it under its own name.
+    mocks.discoveredStore.excluded = [{ id: "Kitchen", ip: "192.168.1.20" }];
+    mocks.discoverYamaha.mockResolvedValue([{ ip: "192.168.1.20", name: "Yamaha RX-V6a" }]);
+    const ctx = setup({ devices: [] });
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.calls).toHaveLength(0);
+    expect(mocks.discoveredStore.devices).toEqual([]);
+  });
+
+  it("a search that was already running when the card was deleted does not bring the device back", async () => {
+    mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+    let release: (found: Array<{ ip: string; name: string }>) => void = () => undefined;
+    // The background search starts right behind the remembered device and hangs in its
+    // collect window while the user clicks delete.
+    mocks.discoverYamaha.mockReturnValueOnce(
+      new Promise<Array<{ ip: string; name: string }>>(resolve => {
+        release = resolve;
+      }),
+    );
+    const ctx = setup({ devices: [] });
+    await ctx.i.onReady();
+    await flush();
+    await ctx.i.removeDevice("RX-V685");
+    release([{ ip: "192.168.1.20", name: "RX-V685" }]);
+    await flush();
+    // Neither remembered again nor started again: the initial start is the only attempt.
+    expect(mocks.discoveredStore.devices).toEqual([]);
+    expect(ctx.calls.filter(c => c.device.id === "RX-V685")).toHaveLength(1);
   });
 
   it("removeDevice stops the supervisor, drops the tree and updates the overview", async () => {

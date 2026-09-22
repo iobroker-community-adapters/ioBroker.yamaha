@@ -36,8 +36,8 @@ import {
 import { errorMessage, MAX_HTTP_BODY_BYTES } from "./lib/util";
 import { tName } from "./lib/i18n";
 import { discoverYamaha } from "./lib/discovery";
-import { readDiscovered, readIgnored, writeDiscovered } from "./lib/discovered-store";
-import { discoveredStoreDeps, ignoredStoreDeps } from "./lib/discovered-store-deps";
+import { isExcluded, readDiscovered, readExcluded, readIgnored, writeDiscovered } from "./lib/discovered-store";
+import { discoveredStoreDeps, excludedStoreDeps, ignoredStoreDeps } from "./lib/discovered-store-deps";
 import { YxcPushReceiver } from "./lib/yxc/push-receiver";
 import { YamahaDeviceManagement } from "./device-management";
 import type { DeviceSource, DeviceRecord } from "./lib/types";
@@ -167,6 +167,12 @@ export class Yamaha extends utils.Adapter {
   private readonly knownDeviceIps = new Set<string>();
   /** Whether the network search runs in this instance — see {@link searchesTheNetwork}. */
   private discovering = false;
+  /**
+   * The devices deleted in this session. A search that was already in flight when the card was
+   * deleted read the stores BEFORE the exclusion was written — without this set it would
+   * remember and start the device again a few seconds after the user removed it.
+   */
+  private readonly removed = new Set<string>();
   /** Armed while an auto-found device is offline: the search that can bring it back. */
   private rediscoverTimer: ioBroker.Timeout | undefined;
   /** When the last background search ran, so the retry cannot become a scan loop. */
@@ -405,6 +411,9 @@ export class Yamaha extends utils.Adapter {
       }
       let changed = false;
       for (const device of merged) {
+        if (this.removed.has(device.id)) {
+          continue; // deleted while this search was running — see `removed`
+        }
         const running = this.deviceRecords.get(device.id);
         try {
           if (!running) {
@@ -586,6 +595,7 @@ export class Yamaha extends utils.Adapter {
    * @param deviceId the id-safe device id
    */
   public async removeDevice(deviceId: string): Promise<void> {
+    this.removed.add(deviceId);
     const supervisor = this.supervisorById.get(deviceId);
     this.stopDevice(deviceId);
     // `stopDevice` marks the supervisor closed, but an attempt already past its await keeps
@@ -1712,17 +1722,24 @@ export class Yamaha extends utils.Adapter {
       this.log.warn(`discovered device "${dropped}" skipped — its object id "${takenId}" is already taken`),
     );
     // Devices the user deleted from the card list stay out — otherwise the next search simply
-    // undoes the delete. So do the ones that live in the device table: a receiver the user gave
+    // undoes the delete: by id (the plain list), by identity or by the address they were deleted
+    // at (`excluded.json`), and — for a delete that happened while THIS search was running — by
+    // the session's `removed` set. So do the ones that live in the device table: a receiver the user gave
     // a fixed address and entered by hand would otherwise come back as a SECOND card, and the
     // store would carry the found address back over the typed one (`mergeDiscovered` updates a
     // known id's address). Both the id and the address are matched — the search reads the name
     // off the device, the user typed their own, so the same receiver can carry two ids.
-    const ignored = new Set(await readIgnored(ignoredStoreDeps(this)));
+    const ignored = await readIgnored(ignoredStoreDeps(this));
+    const excluded = await readExcluded(excludedStoreDeps(this));
     const manual = parseDevices(this.config.devices);
     const manualIds = new Set(manual.map(device => device.id));
     const manualIps = new Set(manual.map(device => device.ip));
     const kept = merged.filter(
-      device => !ignored.has(device.id) && !manualIds.has(device.id) && !manualIps.has(device.ip),
+      device =>
+        !this.removed.has(device.id) &&
+        !isExcluded(ignored, excluded, device) &&
+        !manualIds.has(device.id) &&
+        !manualIps.has(device.ip),
     );
     // The file only changes when a device appeared, vanished or moved — while a device is
     // offline the search runs every five minutes, and it must not rewrite an identical file each
