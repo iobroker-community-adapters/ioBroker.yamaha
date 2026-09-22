@@ -1,9 +1,22 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "2.11.0",
+    "version": "2.12.0",
     "nogit": true,
     "news": {
+      "2.12.0": {
+        "en": "Deleting a device is final, a receiver is known by its serial number and follows a new IP address within seconds, and one that lost power is offline in about 90 seconds.",
+        "de": "Löschen ist endgültig, ein Receiver ist an seiner Seriennummer bekannt und folgt einer neuen IP-Adresse in Sekunden, ein stromloser ist nach etwa 90 Sekunden offline.",
+        "ru": "Удаление устройства окончательно, ресивер известен по серийному номеру и следует за новым IP-адресом за секунды, а обесточенный отмечается офлайн примерно через 90 секунд.",
+        "pt": "Eliminar um dispositivo é definitivo, o receptor é reconhecido pelo número de série e segue um novo endereço IP em segundos, e um sem energia fica offline em cerca de 90 segundos.",
+        "nl": "Verwijderen is definitief, een receiver is bekend aan zijn serienummer en volgt een nieuw IP-adres binnen seconden, en een zonder stroom is na ongeveer 90 seconden offline.",
+        "fr": "La suppression est définitive, un ampli est reconnu par son numéro de série et suit une nouvelle adresse IP en quelques secondes, et un ampli hors tension passe hors ligne en 90 secondes.",
+        "it": "L'eliminazione è definitiva, un ricevitore è riconosciuto dal numero di serie e segue un nuovo indirizzo IP in pochi secondi, e uno senza corrente risulta offline in circa 90 secondi.",
+        "es": "Eliminar un dispositivo es definitivo, un receptor se reconoce por su número de serie y sigue una nueva dirección IP en segundos, y uno sin corriente queda fuera de línea en unos 90 segundos.",
+        "pl": "Usunięcie urządzenia jest ostateczne, amplituner jest rozpoznawany po numerze seryjnym i podąża za nowym adresem IP w sekundy, a odłączony od prądu jest offline po około 90 sekundach.",
+        "uk": "Видалення пристрою остаточне, ресивер відомий за серійним номером і слідує за новою IP-адресою за секунди, а знеструмлений позначається офлайн приблизно за 90 секунд.",
+        "zh-cn": "删除设备是最终操作，接收机通过序列号被识别并在几秒内跟随新的 IP 地址，断电的接收机约 90 秒后显示为离线。"
+      },
       "2.11.0": {
         "en": "A brief database hiccup no longer stops the adapter, and a receiver that is switched off keeps its name after a restart.",
         "de": "Ein kurzer Datenbank-Aussetzer stoppt den Adapter nicht mehr, und ein ausgeschalteter Receiver behält nach einem Neustart seinen Namen.",

@@ -74,8 +74,7 @@ Details on all settings, the object tree and the ports the adapter uses are in t
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
-
-### **WORK IN PROGRESS**
+### 2.12.0 (2026-09-22)
 
 - (krobipd) Fixed: Deleting a device is final: the card asks first and names the datapoints, the device stays out of the search until you admit it again, and the log says how many datapoints went
 - (krobipd) New: A device is known by its serial number: a receiver with a new IP address or a new name keeps its objects and is reconnected at the new address within seconds
@@ -118,18 +117,6 @@ Details on all settings, the object tree and the ports the adapter uses are in t
 ### 2.9.1 (2026-09-12)
 
 - (krobipd) Fixed: A receiver the network search found keeps its datapoints when you add a device by hand — they stay with their history and are marked offline instead of deleted
-
-### 2.9.0 (2026-09-12)
-
-- (krobipd) New: Devices you enter by hand and devices the network search finds now run side by side — entering one receiver no longer takes every found one out of the instance
-- (krobipd) New: Setting "Search the network for devices" — automatically while your device list is empty (as before), always next to it, or never
-- (krobipd) New: Every device card can be edited. Give a found receiver the fixed address you assigned it and it becomes one of your entered devices, keeping its whole object tree
-- (krobipd) New: Each card shows where its address came from, and "Volume as 0–100 %" is now set per device instead of once for the whole instance — every receiver keeps what it had
-- (krobipd) Fixed: hdmi.aspect and hdmi.resolution were missing on every receiver from 2012 on — the models moved those settings to another subunit and the adapter only ever asked the old one
-- (krobipd) Fixed: Receivers from 2010/2011 were offered a 4K video resolution their model does not support
-- (krobipd) Fixed: A write to a receiver could be dropped without a trace while another of its protocols was reconnecting
-- (krobipd) Fixed: Deleting a device and adding the same one again left it with the wrong icon until the next restart, and a pending write could recreate the deleted device object
-- (krobipd) Changed: A MusicCast receiver's datapoints now update only when their value really changed — automations tied to them stop firing for no reason
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 
