@@ -245,7 +245,15 @@ drin und wird immer probiert); der ERSTE Versuch nach jedem Erfolg (Start, erste
 voll (`failedInARow` in `startDevice`) — ein Firmware-Update, das MusicCast bringt, reißt die Verbindung und
 wird genau dort gesehen. Ohne Beschreibung (getippt, migriert) immer alle drei.
 
-Beleg: Chat-Analyse 2026-09-22 + zwei Advisor-Runden, Mutationswelle 19, Chronik in `.claude/dev-history.md`.
+**Der Start-Pfad konsultiert die Ausschlussliste ebenfalls** (`autoDiscover` filtert `known` durch `isExcluded`,
+Nadel Y29): `writeDiscovered` schluckt Fehler, ein als ausgeschlossen vermerktes Gerät kann also noch im Fund-Speicher
+stehen — ohne den Filter liefe es beim nächsten Start wieder, Löschen per Neustart rückgängig.
+
+⚠️ **Wiki trägt Versionsvermerke, die beim nächsten Release WEG müssen:** vier Überschriften in
+`Troubleshooting.md`/`Fehlersuche.md` enden auf „(from the version after 2.11.0)" / „(ab der Version nach 2.11.0)"
+(Löschen endgültig, neue IP-Adresse) — beim Release des Standes streichen; kein Gate sieht das.
+
+Beleg: Chat-Analyse 2026-09-22 + drei Advisor-Runden, Mutationswelle 19 (Y1–Y29), Chronik in `.claude/dev-history.md`.
 
 ## Erreichbarkeit + Anspruch: zwei Regeln, die v1.5.0 eingezogen hat
 

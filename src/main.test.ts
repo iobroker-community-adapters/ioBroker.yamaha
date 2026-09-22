@@ -842,6 +842,24 @@ describe("Yamaha auto-discovery", () => {
     expect(mocks.discoveredStore.devices).toEqual([]);
   });
 
+  it("a remembered device that is on the exclusion list is not started at all", async () => {
+    // The two stores are kept in step by the delete action, but `writeDiscovered` swallows a
+    // failed write: a device recorded as excluded may still sit in the discovery file, and the
+    // start path used to run it from there — tree rebuilt, the delete undone by a restart.
+    mocks.discoveredStore.devices = [
+      { id: "RX-V685", ip: "192.168.1.20" },
+      { id: "WX-021", ip: "192.168.1.21" },
+    ];
+    mocks.discoveredStore.excluded = [{ id: "RX-V685", ip: "192.168.1.20" }];
+    const ctx = setup({ devices: [] });
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.calls.map(c => c.device.id)).toEqual(["WX-021"]);
+    expect(ctx.i.objects.has("RX-V685")).toBe(false);
+    // And the file is brought back in step.
+    expect(mocks.discoveredStore.devices).toEqual([{ id: "WX-021", ip: "192.168.1.21" }]);
+  });
+
   it("skips a found device that matches an exclusion entry by address", async () => {
     // The manual branch of the delete knows no identity yet — the address it was deleted at
     // is what keeps the receiver out when the search finds it under its own name.

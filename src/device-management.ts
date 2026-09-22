@@ -501,7 +501,11 @@ export class YamahaDeviceManagement extends DeviceManagement {
       manual.splice(index, 1);
       this.adapter.setTimeout(() => {
         this.writeManual(manual).catch((e: unknown) =>
-          this.adapter.log.warn(`could not update the device table after deleting "${cardId}": ${errorMessage(e)}`),
+          // The tree is gone and the id is excluded, but the row still stands: the next start
+          // would run the device from the table again, with a fresh tree — say so, loudly.
+          this.adapter.log.error(
+            `could not update the device table after deleting "${cardId}" (${errorMessage(e)}) — the device is still listed in the table, delete it once more`,
+          ),
         );
       }, 0);
     }

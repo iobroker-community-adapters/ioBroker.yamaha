@@ -1979,7 +1979,16 @@ export class Yamaha extends utils.Adapter {
    */
   private async autoDiscover(configuredCount: number): Promise<DeviceRecord[]> {
     const store = discoveredStoreDeps(this);
-    const known = await readDiscovered(store);
+    const remembered = await readDiscovered(store);
+    // The exclusion list rules here too, not only over fresh finds: the delete action takes the
+    // record out of this file, but that write swallows its errors — a device recorded as excluded
+    // may still be remembered, and running it from here would undo the delete on the next start.
+    const ignored = await readIgnored(ignoredStoreDeps(this));
+    const excluded = await readExcluded(excludedStoreDeps(this));
+    const known = remembered.filter(device => !isExcluded(ignored, excluded, device));
+    if (known.length !== remembered.length) {
+      await writeDiscovered(store, known);
+    }
     if (known.length > 0 || configuredCount > 0) {
       // Remembered devices — and the table's rows — start NOW: the network search used to gate
       // every restart by its collect window although the devices were already known. It still
