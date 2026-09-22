@@ -192,6 +192,61 @@ Die datierten Audit-, Umbau-, Plan- und Stand-Abschnitte stehen wörtlich in `.c
 - Fähigkeiten kommen vom Gerät (v2.6.0, Audit + Plan 2026-09-09)
 - Phase 2 des Fähigkeits-Plans (v2.7.1): ein Profil, schnellerer Erst-Sweep, Baum folgt dem Gerät
 
+## Identität, Löschen, Wiederfinden (developing nach 2.11.0, 2026-09-22)
+
+**Ein Gerät ist seine Seriennummer, nicht sein Name und nicht seine Adresse.** `lib/device-identity.ts`:
+`DeviceIdentity { serial?, mac? }`, `identityFrom` (hex, nie nur Nullen — die bereinigten Fixtures tragen
+`00000000`/`RXV6A0000`, zwei solche Geräte sind NICHT eines), `sameDevice` (serial ODER mac gleich, beide
+gesetzt), `mergeIdentity`. Drei Quellen liefern dieselbe Nummer (am RX-V6A gemessen): UPnP `<serialNumber>`
+
+- UDN-MAC (die Suche, `discovery.ts` `parseYamahaDescription`), YXC `getDeviceInfo.system_id`/`device_id`
+  (ProbeMemory `yxcDeviceIds`, NICHT Teil des Validierungs-Strings `yxcIdentity`), XML `System_ID` (schon in
+  `xmlIdentity`); `DeviceProfileStore.identity()` leitet sie ab, `main.ts` `learnIdentity` schreibt sie an
+  `deviceRecords`, `native.identity` und — bei gefundenen Geräten — in `discovered.json`. **Die Objekt-Id bleibt
+  für immer** (`staleObjects` löscht jeden Baum, dessen Id wandert); die Identität ist der Abgleichsschlüssel
+  DANEBEN. `mergeDiscovered` matcht zuerst nach Identität (Umbenennung + Umzug halten den Baum), dann nach Id.
+
+**Drei Herkünfte** (`DeviceSource`): `manual` = getippt → Adresse gilt, volle Konsequenz, der Adapter folgt
+nicht (eine `warn`-Zeile je neuer Adresse, `warnedElsewhere`); `migrated` = die Zeile der 0.5.4-Migration
+(`isDottedQuad(name)` — nur `legacyDeviceRow` schreibt so) → folgt dem Gerät und schreibt die neue Adresse in
+die Tabelle (`updateTableAddress`, Neustart); `discovered` → folgt. Unter `auto` zählt nur eine GETIPPTE Zeile
+als „Liste gefüllt" (`searchesTheNetwork`), sonst wäre eine migrierte Anlage nie zu finden. **Eine Suche
+läuft nie vor den Tabellenzeilen** (`autoDiscover` mit gefüllter Tabelle: Hintergrund) — ein Fund wird gegen
+die LAUFENDE Menge gelesen, sonst würde ein umgezogenes Gerät als Fremder ein zweites Mal gestartet.
+`absorbFinds` ist der EINE Merge-Pfad (Suche und NOTIFY): Fund an der eigenen Adresse einer Zeile lehrt ihr
+die Identität; Fund mit der Identität einer migrierten Zeile woanders = Umzug; einer manuellen = Warnung;
+**Waise gleichen Modells** (`orphanOfModel`): ein Fremder gehört zur einzigen migrierten Zeile ohne Identität,
+die BEWIESEN offline ist (`failedOnce` — ein Versuch scheiterte, keiner gelang seither; „noch nicht
+verbunden" ist nicht offline) und deren gemerktes Modell (`DeviceProfileStore.model()`) passt.
+
+**Umgezogen oder aus:** Der Verlust EINES Transports (`setTransports` schrumpft) stellt die Suche mit kurzer
+Drossel scharf (`REDISCOVER_QUICK_INTERVAL_MS` 20 s, danach die 5 Minuten) — vorher meldete das Handle „weg"
+erst nach dem LETZTEN Transport (YXC: 15 min). Der passive Hörer `lib/ssdp-listener.ts` (Port 1900,
+`reuseAddr`, Membership je Such-Interface, Muster fakeroku) hört `NOTIFY ssdp:alive`: bekannte Adresse →
+nichts; unbekannte → höchstens einmal je Minute (`NOTIFY_PROBE_THROTTLE_MS`) `probeDescription` → derselbe
+Merge-Pfad. Bind-Fehler = eine `warn`-Zeile, weiter mit periodischer Suche. Findet eine Suche ein offlines
+Gerät nirgends, sagt EINE `info`-Zeile je Ausfall „not found on the network — keeping its objects"
+(`reportedMissing`), nichts ändert sich.
+
+**Löschen ist endgültig** (`device-management.ts` `deleteDevice`): Bestätigung in der UI VOR dem Handler
+(dm-utils `confirmation` am Deskriptor, Text nennt die Datenpunkte — `showConfirmation` im Handler wartete
+ohne Timeout, und der Tabellen-Write des manuellen Zweigs startete die Instanz mitten im Handler neu: der
+Balken), dann Ausschluss ZUERST (`excluded.json` `{id, ip, identity}` neben dem rollback-sicheren `string[]`
+`ignored.json`; `isExcluded`: Id, Identität, oder Adresse NUR bei Eintrag ohne Identität), Fund-Speicher,
+`removeDevice` (Stopp + Baum, beide Zweige), Antwort `{ delete }`, und der Tabellen-Write erst DANACH per
+`setTimeout(0)`. `main.ts` `removed` hält ein in dieser Sitzung gelöschtes Gerät aus einer bereits laufenden
+Suche heraus. Rückweg: „+ Hinzufügen" (hebt Id- und Adress-Ausschluss auf) oder die Instanz-Aktion
+„Ausgeschlossene Geräte…" (`excludedDevices`, Häkchen → beide Listen bereinigt → `rediscoverNow(lifted)`
+räumt `removed` und sucht sofort).
+
+**Nicht blind probieren** (`attempt-device.ts`): innerhalb einer Serie fehlgeschlagener Versuche probieren die
+Wiederholungen nur die Transporte, die die UPnP-Beschreibung belegt (`services` — YXC/XML; YNCA steht nie
+drin und wird immer probiert); der ERSTE Versuch nach jedem Erfolg (Start, erster Reconnect nach Abriss) ist
+voll (`failedInARow` in `startDevice`) — ein Firmware-Update, das MusicCast bringt, reißt die Verbindung und
+wird genau dort gesehen. Ohne Beschreibung (getippt, migriert) immer alle drei.
+
+Beleg: Chat-Analyse 2026-09-22 + zwei Advisor-Runden, Mutationswelle 19, Chronik in `.claude/dev-history.md`.
+
 ## Erreichbarkeit + Anspruch: zwei Regeln, die v1.5.0 eingezogen hat
 
 **1) Kein Anspruch ohne Nachweis (#613).** Der YNCA-Browse-Treiber beanspruchte `player.browse.*`,
@@ -374,8 +429,8 @@ in ein öffentliches Repo.
   bis 2.1.1 lief er lokal nie mit, obwohl die CI ihn fährt (`testing-action-adapter` ruft
   `test:unit` UND `test:integration`). `passWithNoTests` ist raus — ein nicht mehr greifendes
   `include` muss rot melden, nicht grün.
-- **Mutationstabellen** (`../../Ressourcen/iobroker-entwicklung/mutation-testing/`) — **ACHTZEHN Dateien (seit
-  Welle 17, 2026-09-15), und das Gate prüft ALLE.** ⚠️ Die fünf Wellen-Originale `mutations_yamaha.py` · `…2.py` · `…3.py` · `…4.py` ·
+- **Mutationstabellen** (`../../Ressourcen/iobroker-entwicklung/mutation-testing/`) — **ZWANZIG Dateien (seit
+  Welle 19, 2026-09-22), und das Gate prüft ALLE.** ⚠️ Die fünf Wellen-Originale `mutations_yamaha.py` · `…2.py` · `…3.py` · `…4.py` ·
   `…5.py` (36/32/26/11/11 Nadeln) leben NEBEN der Sammeltabelle `mutations_yamaha_all.py`, die dieselben
   Regeln zusammenfasst — sie sind kein Altbestand. Wer nur die datierten Tabellen nachzieht, lässt fünf
   Nadeln ins Leere zeigen und merkt es erst, wenn D09 den Release stoppt (2026-09-07: R5, R7, V7, V8, X4 —
@@ -404,7 +459,14 @@ in ein öffentliches Repo.
     plus die Kachel-Anzeige, IDs R23–R24; 2/2 gefangen)
   - `mutations_yamaha_2026-09-15-w17.py` (Welle 17 = das Audit 2026-09-15 / 2.10.0, IDs W1–W37; 37/37
     gefangen — W4 fällt nur, weil die Test-Attrappe `setStateChangedAsync` WIRKLICH vergleicht, W36/W37
-    halten die Icon-Heilung; vier Bestandsnadeln neu verankert: N7, V6, R23, Z3). Läufer `mutation-test.py`. Nadeln sind
+    halten die Icon-Heilung; vier Bestandsnadeln neu verankert: N7, V6, R23, Z3)
+  - `mutations_yamaha_2026-09-17-w18.py` (Welle 18 = In-depth 2026-09-17 / 2.11.0, IDs X1–X24 in eigener
+    Tabelle — das Präfix X ist dort NICHT das der Äquivalenz-Vermerke X2/X4 aus Welle 1; 24/24, zwei
+    Überlebende des ersten Laufs waren toter Code und sind entfernt)
+  - `mutations_yamaha_2026-09-22-w19.py` (Welle 19 = Identität/Löschen/Wiederfinden auf `developing`, IDs
+    Y1–Y28 in eigener Tabelle; 28/28 gefangen — die zwei Überlebenden des ersten Laufs, Y24 „Zeile auf dem
+    ersten Versuch ist nicht offline" und Y19 „XML belegt, MusicCast nicht", waren Testlücken und sind
+    geschlossen). Läufer `mutation-test.py`. Nadeln sind
     exakte Quellzeilen — nach Prettier-Umbrüchen oder Refactorings ZUERST den Nadel-Vorab-Check (jede Nadel
     genau 1×), sonst misst der Lauf nichts. Zwei äquivalente Mutanten (X2, X4 — unerreichbare
     Invarianten-Wächter, im Quelltext begründet); die vier anderen vom 22.08. (M9, X1, Y1, Y13) waren toter

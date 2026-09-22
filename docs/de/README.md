@@ -48,7 +48,10 @@ umzieht, während der Adapter nicht läuft, findet aber erst die nächste Netzwe
   der Adapter es immer gemacht. _Immer_ sucht zusätzlich zu den eingetragenen Geräten.
   _Nie_ überlässt Ihrer Liste allein das Feld. Ein früher gefundenes Gerät, nach dem nicht mehr
   gesucht wird, behält seine Datenpunkte — sie werden nur als offline gekennzeichnet. Endgültig
-  entfernt es allein der Löschknopf auf seiner Karte.
+  entfernt es allein der Löschknopf auf seiner Karte. Eine Liste, die nur die aus dem
+  Vorgänger-Adapter übernommene Zeile enthält (ihr Name ist eine IP-Adresse), gilt als leer:
+  diese Adresse hat niemand getippt, die Suche bleibt an und folgt dem Receiver zu einer
+  neuen Adresse.
 - **Netzwerk-Schnittstelle** — leer lassen, dann verlässt die Suche jede Netzwerkkarte Ihres
   ioBroker-Rechners. Nur setzen, wenn Ihr Server in mehreren Netzen hängt und die Suche eine
   bestimmte nehmen soll. Auf die Receiver selbst hat die Einstellung keine Wirkung.
@@ -160,6 +163,23 @@ Gerät gemerkt und überstehen einen Neustart, deshalb ist das Gerät bei jedem 
 Sekunden da und die Werte werden im Hintergrund aufgefrischt. Ein Firmware-Update oder ein
 anderes Gerät unter derselben Adresse fällt auf und wird neu gefragt.
 
+**Ein Receiver ist an seiner Seriennummer bekannt, nicht an seiner Adresse.** Der Adapter
+lernt die Seriennummer (und die MAC) vom Receiver selbst — aus seiner Netz-Ankündigung, über
+MusicCast, über die XML-Steuerung. Ein Gerät, das eine neue IP-Adresse oder einen neuen Namen
+bekommt, behält seine Objekte: gefundene Geräte und die aus dem Vorgänger übernommene Zeile
+werden an die neue Adresse umgezogen, meist innerhalb von Sekunden, weil ein Receiver sich
+beim Start im Netz meldet — spätestens durch die Suche, die ein Verbindungsabriss auslöst.
+Ein von Hand eingetragenes Gerät bleibt an der getippten Adresse; sieht die Suche es woanders
+antworten, sagt das Log es einmal — Karte bearbeiten, um es umzuziehen. Der Hörer teilt sich
+Port 1900 mit anderen UPnP-Diensten auf Ihrem Rechner; kann er den Port nicht nutzen, steht
+eine Warnung im Log und der Adapter sucht nur noch periodisch.
+
+**Löschen ist endgültig.** Der Löschknopf auf einer Karte fragt zuerst und sagt, was mit dem
+Gerät geht: alle seine Datenpunkte, ihre Historie und jede Visualisierungs-Bindung. Ein per
+Netzsuche gefundenes Gerät wird nicht wieder aufgenommen — es steht auf der Ausschlussliste,
+bis Sie es entweder von Hand hinzufügen oder in **Ausgeschlossene Geräte…** über der
+Geräteliste anhaken; dann nimmt die nächste Suche es wieder auf.
+
 **Der MusicCast-Port gehört immer nur einem Programm.** MusicCast-Geräte schicken ihre
 Meldungen an Port 41100 Ihres ioBroker-Rechners, und den kann nur ein Programm halten. Ist der
 alte `musiccast`-Adapter noch installiert und aktiv, hält er diesen Port, und dieser Adapter
@@ -182,7 +202,12 @@ Sie das als Warnung im Adapter-Log, statt dass einfach nichts passiert.
   liegen, und die Netzwerk-Schnittstelle einmal ausdrücklich setzen.
 - **Das Gerät bleibt offline.** Adresse prüfen, und ob der Receiver überhaupt erreichbar ist
   (seine eigene Webseite antwortet meist unter `http://<Adresse>`). Der Adapter versucht es
-  von selbst weiter, mit wachsenden Pausen.
+  von selbst weiter, mit wachsenden Pausen. Hat der Receiver eine neue Adresse bekommen, folgt
+  ihm ein gefundenes Gerät von selbst; ein von Hand eingetragenes muss bearbeitet werden — das
+  Log nennt die neue Adresse.
+- **Ich habe ein Gerät gelöscht und es kommt wieder / ich will es zurück.** Ein gelöschtes
+  Gerät bleibt aus der Suche draußen, bis Sie es wieder zulassen: von Hand hinzufügen, oder
+  **Ausgeschlossene Geräte…** über der Liste öffnen und es anhaken.
 - **Ein Datenpunkt bleibt leer.** Das Gerät meldet diesen Wert nicht — der Adapter legt nur
   an, was ihm gemeldet wurde. Ein leerer Datenpunkt heißt meist: andere Modelle haben die
   Funktion, Ihres nicht.

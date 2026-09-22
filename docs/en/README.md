@@ -46,7 +46,9 @@ adapter is not running is only found again by the next network search.
   which is what the adapter has always done. _Always_ keeps searching next to the devices you
   entered. _Never_ runs your list alone. A device that was found earlier and is not searched for
   any more keeps its datapoints — they are simply marked offline. Only the delete button on its
-  card removes a device for good.
+  card removes a device for good. A list holding only the row carried over from the previous
+  adapter (its name is an IP address) counts as empty: nobody typed that address, so the search
+  stays on and follows that receiver to a new address.
 - **Network interface** — leave it empty and the search leaves through every network card of
   your ioBroker machine. Only set it if your server sits in several networks and the search
   should use a particular one. It has no effect on the receivers themselves.
@@ -166,6 +168,23 @@ Uninstall or stop the old adapter to get instant updates back.
 `multiroom.zone2`. Recalling a favourite switches the zone that is listening to that source,
 not always the main zone.
 
+**A receiver is known by its serial number, not by its address.** The adapter learns the
+serial (and the MAC) from the receiver itself — from its network announcement, from MusicCast,
+from the XML control. A device that gets a new IP address or a new name keeps its objects:
+found devices and the row carried over from the previous adapter are moved to the new address,
+usually within seconds, because a receiver announces itself when it comes up — and at the
+latest by the search a lost connection triggers. A device you entered by hand stays at the
+address you typed; when the search sees it answering elsewhere, the log says so once — edit
+the card to move it. The listener shares port 1900 with other UPnP services on your machine;
+if it cannot use the port, one warning says so and the adapter falls back to searching
+periodically.
+
+**Deleting is final.** The delete button on a card asks first and tells you what goes with
+the device: all of its datapoints, their history and every visualisation binding. A device the
+network search found is not added again — it is on the exclusion list until you either add it
+by hand or tick it in **Excluded devices…** above the device list, which lets the next search
+take it back.
+
 **A refused command shows up in the log.** If a receiver rejects something — a scene its
 generation does not support, a function that is unavailable in standby — you will find it as
 a warning in the adapter log instead of nothing happening silently.
@@ -177,7 +196,11 @@ a warning in the adapter log instead of nothing happening silently.
   network interface explicitly.
 - **The device stays offline.** Check the address, and whether the receiver is reachable at
   all (its own web page usually answers on `http://<address>`). The adapter retries by
-  itself, with growing pauses.
+  itself, with growing pauses. If the receiver got a new address, a found device follows it
+  on its own; a device you entered by hand has to be edited — the log names the new address.
+- **I deleted a device and it came back / I want it back.** A deleted device stays out of the
+  search until you let it back in: add it by hand, or open **Excluded devices…** above the
+  list and tick it.
 - **A datapoint stays empty.** The device does not report that value — the adapter only
   creates what it was told about, so an empty datapoint usually means the feature exists on
   other models but not on yours.
