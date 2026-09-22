@@ -83,8 +83,8 @@ Details on all settings, the object tree and the ports the adapter uses are in t
 - (krobipd) Improved: A receiver that lost power is offline in about 90 seconds instead of up to 15 minutes: the first protocol that notices asks the others at once
 - (krobipd) Improved: The adapter hears devices announcing themselves on the network, and while no device runs it keeps searching every five minutes
 - (krobipd) Changed: A row carried over from the old adapter (name = IP) follows the receiver to a new address; a device entered by hand stays where it was typed, the log says if it answers elsewhere
-- (krobipd) Changed: An offline device is a state, not a log line: the "no reachable transport" warning is gone, and a search announced in the log now reports its result
-- (krobipd) Improved: While a device stays unreachable, the retries try only the protocols it advertises; the first attempt after every connection tries all of them
+- (krobipd) Improved: Switching a receiver off no longer fills the log with warnings, and every search the log announces also tells you what it found — or that nothing answered
+- (krobipd) Improved: Less network noise while a receiver stays unreachable: the retries knock only on the protocols that device actually speaks, not on all three
 
 ### 2.11.0 (2026-09-17) — stable
 
