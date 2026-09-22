@@ -65,7 +65,7 @@ The **Data points** section switches whole groups of datapoints on or off; the a
 volume, mute, input, sound program, sleep) always stays on. The **Volume as 0–100 %** switch turns
 every volume datapoint into a percentage — the range most VIS widgets expect.
 
-Details on all settings, the object tree and the ports the adapter uses are in the
+Details on all settings and the object tree are in the
 [Wiki](https://github.com/iobroker-community-adapters/ioBroker.yamaha/wiki/Setup).
 
 ## Changelog
