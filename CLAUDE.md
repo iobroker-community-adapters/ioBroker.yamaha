@@ -244,7 +244,8 @@ entfernt — `info.connection` trägt den Zustand.
 ohne Timeout, und der Tabellen-Write des manuellen Zweigs startete die Instanz mitten im Handler neu: der
 Balken), dann Ausschluss ZUERST (`excluded.json` `{id, ip, identity}` neben dem rollback-sicheren `string[]`
 `ignored.json`; `isExcluded`: Id, Identität, oder Adresse NUR bei Eintrag ohne Identität), Fund-Speicher,
-`removeDevice` (Stopp + Baum, beide Zweige), Antwort `{ delete }`, und der Tabellen-Write erst DANACH per
+`removeDevice` (Stopp + Baum, beide Zweige; EINE `info`-Zeile „device deleted — removed N datapoint(s)", gezählt wie
+die Bilanz: nur `state`-Objekte — krobi 2026-09-22 nach dem Server-Test), Antwort `{ delete }`, und der Tabellen-Write erst DANACH per
 `setTimeout(0)`. `main.ts` `removed` hält ein in dieser Sitzung gelöschtes Gerät aus einer bereits laufenden
 Suche heraus. Rückweg: „+ Hinzufügen" (hebt Id- und Adress-Ausschluss auf) oder die Instanz-Aktion
 „Ausgeschlossene Geräte…" (`excludedDevices`, Häkchen → beide Listen bereinigt → `rediscoverNow(lifted)`
@@ -264,7 +265,7 @@ stehen — ohne den Filter liefe es beim nächsten Start wieder, Löschen per Ne
 `Troubleshooting.md`/`Fehlersuche.md` enden auf „(from the version after 2.11.0)" / „(ab der Version nach 2.11.0)"
 (Löschen endgültig, neue IP-Adresse) — beim Release des Standes streichen; kein Gate sieht das.
 
-Beleg: Chat-Analyse 2026-09-22 + drei Advisor-Runden + Server-Test, Mutationswelle 19 (Y1–Y32), Chronik in `.claude/dev-history.md`.
+Beleg: Chat-Analyse 2026-09-22 + drei Advisor-Runden + Server-Test, Mutationswelle 19 (Y1–Y34), Chronik in `.claude/dev-history.md`.
 
 ## Erreichbarkeit + Anspruch: zwei Regeln, die v1.5.0 eingezogen hat
 
@@ -483,7 +484,7 @@ in ein öffentliches Repo.
     Tabelle — das Präfix X ist dort NICHT das der Äquivalenz-Vermerke X2/X4 aus Welle 1; 24/24, zwei
     Überlebende des ersten Laufs waren toter Code und sind entfernt)
   - `mutations_yamaha_2026-09-22-w19.py` (Welle 19 = Identität/Löschen/Wiederfinden auf `developing`, IDs
-    Y1–Y32 in eigener Tabelle; 32/32 gefangen — die zwei Überlebenden des ersten Laufs, Y24 „Zeile auf dem
+    Y1–Y34 in eigener Tabelle; 34/34 gefangen — die zwei Überlebenden des ersten Laufs, Y24 „Zeile auf dem
     ersten Versuch ist nicht offline" und Y19 „XML belegt, MusicCast nicht", waren Testlücken und sind
     geschlossen). Läufer `mutation-test.py`. Nadeln sind
     exakte Quellzeilen — nach Prettier-Umbrüchen oder Refactorings ZUERST den Nadel-Vorab-Check (jede Nadel

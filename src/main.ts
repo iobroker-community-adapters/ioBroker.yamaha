@@ -885,8 +885,19 @@ export class Yamaha extends utils.Adapter {
     this.forgetUnder(this.volumeScales, deviceId);
     this.forgetUnder(this.volumeDefs, deviceId);
     this.volumePercent.delete(deviceId);
+    // Counted like the datapoint balance — state objects only, not the channels and the device
+    // node around them — so the one line below says what the delete took (krobi 2026-09-22).
+    let removed = 0;
+    try {
+      const prefix = `${this.namespace}.${deviceId}.`;
+      const listing = await this.getAdapterObjectsAsync();
+      removed = Object.entries(listing).filter(([id, obj]) => id.startsWith(prefix) && obj?.type === "state").length;
+    } catch (e) {
+      this.log.debug(`${deviceId}: could not count its datapoints before the delete (${errorMessage(e)})`);
+    }
     try {
       await this.delObjectAsync(deviceId, { recursive: true });
+      this.log.info(`${deviceId}: device deleted — removed ${removed} datapoint(s)`);
     } catch (e) {
       this.log.warn(`could not remove the object tree of "${deviceId}" (${errorMessage(e)})`);
     }

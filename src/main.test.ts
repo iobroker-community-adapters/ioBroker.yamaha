@@ -1250,6 +1250,7 @@ describe("Yamaha auto-discovery", () => {
     await ctx.i.onReady();
     await flush();
     ctx.i.objects.set("RX-V685.player.track", { type: "state", common: {}, native: {} });
+    ctx.i.objects.set("RX-V685.player", { type: "channel", common: {}, native: {} });
     expect(ctx.i.states.get("info.devicesTotal")).toEqual({ val: 1, ack: true });
 
     await ctx.i.removeDevice("RX-V685");
@@ -1260,6 +1261,27 @@ describe("Yamaha auto-discovery", () => {
     expect(ctx.i.objects.has("RX-V685.player.track")).toBe(false);
     expect(ctx.i.states.get("info.devicesTotal")).toEqual({ val: 0, ack: true });
     expect(ctx.i.states.get("info.connection")).toEqual({ val: false, ack: true });
+    // ONE line says what happened, counted like the datapoint balance: states only — the
+    // header states (connection, ip, model, transports…) plus the one datapoint above; the
+    // channel and the device node are not datapoints.
+    const line = ctx.i.log.info.mock.calls.map(c => String(c[0])).find(m => m.includes("device deleted"));
+    expect(line).toMatch(/^RX-V685: device deleted — removed \d+ datapoint\(s\)$/);
+    const states = [...ctx.i.objects.keys()].filter(k => k.startsWith("RX-V685."));
+    expect(states).toEqual([]); // and none is left behind to count twice
+  });
+
+  it("removeDevice counts exactly the device's state objects", async () => {
+    mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+    const ctx = setup({ devices: [] });
+    await ctx.i.onReady();
+    await flush();
+    const before = [...ctx.i.objects.entries()].filter(
+      ([k, v]) => k.startsWith("RX-V685.") && (v as { type?: string }).type === "state",
+    ).length;
+    ctx.i.objects.set("RX-V685.player.track", { type: "state", common: {}, native: {} });
+    ctx.i.objects.set("RX-V685.player", { type: "channel", common: {}, native: {} });
+    await ctx.i.removeDevice("RX-V685");
+    expect(ctx.i.log.info).toHaveBeenCalledWith(`RX-V685: device deleted — removed ${before + 1} datapoint(s)`);
   });
 
   it("removeDevice forgets what it cached, so the same id starts clean", async () => {
