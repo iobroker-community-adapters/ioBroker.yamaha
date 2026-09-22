@@ -1512,7 +1512,10 @@ describe("Yamaha auto-discovery", () => {
     // The remembered device is already under supervision before the search settles —
     // its collect window used to gate every restart although the device was known.
     expect(ctx.calls.map(c => c.device.ip)).toContain("192.168.1.20");
-    expect(ctx.i.log.info).toHaveBeenCalledWith(expect.stringContaining("network search runs in the background"));
+    expect(ctx.i.log.debug).toHaveBeenCalledWith(expect.stringContaining("network search runs in the background"));
+    // Not an info line: what the adapter is about to try is not an event (a receiver without
+    // power would read "setting up" in the log while nothing is set up).
+    expect(ctx.i.log.info.mock.calls.some(c => String(c[0]).includes("remembered device"))).toBe(false);
     await flush();
     // The background search then brings the newcomer online in the running instance.
     expect(ctx.calls.map(c => c.device.ip)).toContain("192.168.1.21");
@@ -3392,7 +3395,8 @@ describe("the device table and the network search side by side", () => {
     const ctx = setup({ devices: [{ name: "Typed", ip: "192.168.1.10" }], discovery: "always" });
     await ctx.i.onReady();
     await flush();
-    expect(ctx.i.log.info).toHaveBeenCalledWith("setting up 1 configured device(s)...");
+    expect(ctx.i.log.debug).toHaveBeenCalledWith("connecting 1 configured device(s)");
+    expect(ctx.i.log.info.mock.calls.some(c => String(c[0]).includes("configured device"))).toBe(false);
   });
 
   it("reads the object tree once at start — the snapshot and the cleanup share the listing", async () => {

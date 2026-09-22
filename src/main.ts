@@ -352,8 +352,10 @@ export class Yamaha extends utils.Adapter {
         await this.startSsdpListener();
       }
       if (configured.length > 0) {
-        // The table's count: the found devices announce themselves in autoDiscover.
-        this.log.info(`setting up ${configured.length} configured device(s)...`);
+        // Routine, so debug: what the adapter is ABOUT to try is not an event — a device that
+        // answers says so with its own "ready" line, one that is off says nothing (krobi
+        // 2026-09-22: a "setting up" line for a receiver without power asserts what is not).
+        this.log.debug(`connecting ${configured.length} configured device(s)`);
       }
       for (const device of devices) {
         // Per device, so one failure does not cost the rest of the run: startDevice writes
@@ -1990,16 +1992,18 @@ export class Yamaha extends utils.Adapter {
       // rows on purpose: a find is read against the RUNNING set (a table row's identity, its
       // offline state), and a search that ran before the rows would take a moved row for a
       // stranger and start it a second time.
-      this.log.info(
+      // Routine, so debug (see the configured-devices line in onReady): only a device that
+      // answers earns an info line, its own "ready".
+      this.log.debug(
         known.length > 0
-          ? `setting up ${known.length} remembered device(s); the network search runs in the background`
+          ? `connecting ${known.length} remembered device(s); the network search runs in the background`
           : "the network search runs in the background, behind the configured devices",
       );
       return known;
     }
     this.log.info("auto-discovery via SSDP (older XML-only devices must be added manually)");
     const merged = await this.runDiscovery();
-    this.log.info(`setting up ${merged.length} discovered device(s)...`);
+    this.log.debug(`the search found ${merged.length} device(s)`);
     return merged;
   }
 
