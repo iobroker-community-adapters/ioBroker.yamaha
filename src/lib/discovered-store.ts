@@ -1,3 +1,4 @@
+import { sameDevice, type DeviceIdentity } from "./device-identity";
 import type { DeviceRecord } from "./types";
 import { errorMessage } from "./util";
 
@@ -111,22 +112,7 @@ export interface ExcludedEntry {
   /** The address it had when it was deleted (matched only while no identity is known). */
   ip?: string;
   /** The device's serial/MAC when known — the match that survives a rename and a new address. */
-  identity?: { serial?: string; mac?: string };
-}
-
-/**
- * Same physical device: an equal serial or an equal MAC, both sides set. (Moves to
- * `device-identity.ts` once that module exists — kept local so this store has no dependency.)
- *
- * @param a one identity
- * @param b the other
- * @returns whether they name the same device
- */
-function sameDevice(a?: ExcludedEntry["identity"], b?: ExcludedEntry["identity"]): boolean {
-  if (!a || !b) {
-    return false;
-  }
-  return (!!a.serial && a.serial === b.serial) || (!!a.mac && a.mac === b.mac);
+  identity?: DeviceIdentity;
 }
 
 /**
@@ -198,7 +184,7 @@ export async function writeExcluded(deps: DiscoveredStoreDeps, entries: readonly
 export function isExcluded(
   ignoredIds: readonly string[],
   excluded: readonly ExcludedEntry[],
-  candidate: { id: string; ip: string; identity?: ExcludedEntry["identity"] },
+  candidate: { id: string; ip: string; identity?: DeviceIdentity },
 ): boolean {
   if (ignoredIds.includes(candidate.id)) {
     return true;
