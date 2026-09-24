@@ -14,7 +14,7 @@
   "duplicateDevice": "Esiste già un dispositivo con questo indirizzo IP o nome",
   "invalidName": "Questo nome non può essere utilizzato",
   "networkInterfaceLabel": "Interfaccia di rete",
-  "networkInterfaceTooltip": "Seleziona l'interfaccia di rete per il rilevamento e il controllo LAN. Mantieni il valore predefinito (0.0.0.0 = tutte) a meno che questo host non abbia più interfacce.",
+  "networkInterfaceTooltip": "Seleziona l'interfaccia di rete per la ricerca in rete. Mantieni il valore predefinito (0.0.0.0 = tutte) a meno che questo host non abbia più interfacce.",
   "pushPortLabel": "Porta eventi MusicCast",
   "pushPortTooltip": "Porta UDP su cui i dispositivi MusicCast inviano le loro modifiche. Fissata dal protocollo; una seconda istanza su questo host non può condividerla.",
   "dmAdd": "Aggiungi dispositivo Yamaha",

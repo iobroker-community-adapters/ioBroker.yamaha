@@ -14,7 +14,7 @@
   "duplicateDevice": "Urządzenie o tym adresie IP lub nazwie już istnieje",
   "invalidName": "Ta nazwa nie może być użyta",
   "networkInterfaceLabel": "Interfejs sieciowy",
-  "networkInterfaceTooltip": "Wybierz interfejs sieciowy do wykrywania i sterowania LAN. Pozostaw domyślny (0.0.0.0 = wszystkie), chyba że ten host ma wiele interfejsów.",
+  "networkInterfaceTooltip": "Wybierz interfejs sieciowy do wyszukiwania w sieci. Pozostaw domyślny (0.0.0.0 = wszystkie), chyba że ten host ma wiele interfejsów.",
   "pushPortLabel": "Port zdarzeń MusicCast",
   "pushPortTooltip": "Port UDP, na który urządzenia MusicCast wysyłają swoje zmiany. Ustalony przez protokół; druga instancja na tym hoście nie może go współdzielić.",
   "dmAdd": "Dodaj urządzenie Yamaha",
