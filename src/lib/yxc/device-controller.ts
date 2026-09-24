@@ -56,6 +56,9 @@ const KEEPALIVE_MS = 5 * 60 * 1000;
  */
 export const PUSH_EXPECT_MS = 5000;
 
+/** The longest group name the device takes, in UTF-8 bytes (YXC Advanced §5.6). */
+const GROUP_NAME_MAX_BYTES = 128;
+
 /** How long after a favourite recall the device's `preset_control` verdict is taken as its answer. */
 const PRESET_VERDICT_MS = 30_000;
 
@@ -724,6 +727,10 @@ export class YxcDeviceController implements ConnectionHandle {
       void this.linkClient(String(value));
       return;
     }
+    if (stateId === "multiroom.group.name") {
+      void this.renameGroup(value);
+      return;
+    }
     // Device-wide settings are not part of the zone command map — they carry their own setters.
     const systemEntry = this.systemEntries.find(entry => entry.state === stateId);
     if (systemEntry) {
@@ -1347,6 +1354,31 @@ export class YxcDeviceController implements ConnectionHandle {
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getDistributionInfo failed: ${errorMessage(e)}`);
+    }
+  }
+
+  /**
+   * Name the MusicCast group (YXC Advanced §5.6): UTF-8 within 128 bytes, "" restores the default;
+   * then read the distribution back, so the datapoint shows what the device took (audit 2026-09-24, C8).
+   *
+   * @param value the written name
+   */
+  private async renameGroup(value: unknown): Promise<void> {
+    try {
+      const name = typeof value === "string" ? value : undefined;
+      if (name === undefined) {
+        this.deps.log.debug(`${this.deviceId}: a group name is text — ${typeof value} not sent`);
+      } else if (Buffer.byteLength(name, "utf8") > GROUP_NAME_MAX_BYTES) {
+        this.deps.log.debug(
+          `${this.deviceId}: group name "${name}" is longer than ${GROUP_NAME_MAX_BYTES} bytes — not sent`,
+        );
+      } else {
+        await this.deps.client.setGroupName(name);
+      }
+      await this.refreshDistribution();
+    } catch (e) {
+      this.deps.log.warn(`${this.deviceId}: renaming the group failed: ${errorMessage(e)}`);
+      await this.refreshDistribution();
     }
   }
 

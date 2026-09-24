@@ -221,6 +221,62 @@ describe("YamahaYxcClient player and tuner commands", () => {
     expect(last()).toBe("/clock/getSettings");
   });
 
+  // The setters of audit 2026-09-24 C8/C25, each against the URI its source writes: YXC Basic Rev 1.10
+  // §4.23–4.27/§5.9/§5.13/§5.14/§5.16/§5.17, YXC Advanced §4.1–4.3/§5.6, and pyamaha's URI table
+  // (as bundled in aiomusiccast) for the five no specification names.
+  test("the setters added for C8/C25 reach the URI their source documents", async () => {
+    const urls: string[] = [];
+    const bodies: Array<string | undefined> = [];
+    const client = new YamahaYxcClient("1.2.3.4", (cmd, body) => {
+      urls.push(cmd);
+      bodies.push(body);
+      return Promise.resolve({});
+    });
+    await client.setDialogueLevel(2, "main");
+    await client.setDialogueLift(3, "zone2");
+    await client.set3dSurround(true, "main");
+    await client.setToneMode("manual", "main");
+    await client.setEqualizerMode("auto", "zone2");
+    await client.setLinkControl("normal", "main");
+    await client.setLinkAudioDelay("lip_sync", "main");
+    await client.setLinkAudioQuality("compressed", "main");
+    await client.setDtsDialogueControl(1, "main");
+    await client.setExtraBass(false, "main");
+    await client.setAdaptiveDrc(true, "main");
+    await client.setSurroundDecoderType("dts_neo6_cinema", "main");
+    await client.setDimmer(-1);
+    await client.setSpeakerPattern(2);
+    await client.setSpeakerA(true);
+    await client.setSpeakerB(false);
+    await client.setIrSensor(true);
+    await client.setZoneBVolumeSync(false);
+    await client.setGroupName("[Link] Living Room");
+    expect(urls).toEqual([
+      "/main/setDialogueLevel?value=2",
+      "/zone2/setDialogueLift?value=3",
+      "/main/set3dSurround?enable=true",
+      "/main/setToneControl?mode=manual",
+      "/zone2/setEqualizer?mode=auto",
+      "/main/setLinkControl?control=normal",
+      "/main/setLinkAudioDelay?delay=lip_sync",
+      "/main/setLinkAudioQuality?mode=compressed",
+      "/main/setDtsDialogueControl?num=1",
+      "/main/setExtraBass?enable=false",
+      "/main/setAdaptiveDrc?enable=true",
+      "/main/setSurroundDecoderType?type=dts_neo6_cinema",
+      "/system/setDimmer?value=-1",
+      "/system/setSpeakerPattern?num=2",
+      "/system/setSpeakerA?enable=true",
+      "/system/setSpeakerB?enable=false",
+      "/system/setIrSensor?enable=true",
+      "/system/setZoneBVolumeSync?enable=false",
+      "/dist/setGroupName",
+    ]);
+    // setGroupName is a POST with the name as JSON (YXC Advanced §5.6); every other one a GET.
+    expect(bodies.at(-1)).toBe(JSON.stringify({ name: "[Link] Living Room" }));
+    expect(bodies.slice(0, -1).every(body => body === undefined)).toBe(true);
+  });
+
   test("the six read endpoints that had no URL test at all", async () => {
     // These had no assertion of any kind — and MusicCast is the transport nobody here can
     // check against hardware, so a typo would surface only at a user's device. The gap was

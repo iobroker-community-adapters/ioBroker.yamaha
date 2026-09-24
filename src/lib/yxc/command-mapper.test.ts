@@ -376,8 +376,9 @@ describe("stateToYxc", () => {
     expect(await ranCall("sound.bass", 4)).toEqual(["setBassTo", [4, "main"]]);
     expect(await ranCall("sound.treble", -1)).toEqual(["setTrebleTo", [-1, "main"]]);
     expect(await ranCall("sleep", 60)).toEqual(["sleep", [60, "main"]]);
-    expect(stateToYxc("sound.dialogueLevel", 2)).toBeUndefined();
     expect(stateToYxc("actualVolume", -40)).toBeUndefined();
+    expect(stateToYxc("sound.audioSelect", "auto")).toBeUndefined();
+    expect(stateToYxc("sound.contentsDisplay", true)).toBeUndefined();
   });
 
   test("runs the writable amp fields through their YXC setter; read-only ones yield no command", async () => {
@@ -385,8 +386,25 @@ describe("stateToYxc", () => {
     expect(await ranCall("sound.balance", 3)).toEqual(["setBalance", [3, "main"]]);
     expect(await ranCall("sound.bassExtension", true)).toEqual(["setBassExtension", [true, "main"]]);
     expect(await ranCall("sound.clearVoice", true)).toEqual(["setClearVoice", [true, "main"]]);
-    expect(stateToYxc("sound.extraBass", true)).toBeUndefined();
-    expect(stateToYxc("sound.surround3d", true)).toBeUndefined();
+  });
+
+  // Specification setters that stood read-only (YXC Basic §5.9/§5.13/§5.14/§5.16/§5.17, Advanced
+  // §4.1–4.3), and the four Home Assistant runs through aiomusiccast (audit 2026-09-24, C8).
+  test.each([
+    ["sound.dialogueLevel", 2, "setDialogueLevel", [2, "zone2"]],
+    ["sound.dialogueLift", 3, "setDialogueLift", [3, "zone2"]],
+    ["sound.surround3d", true, "set3dSurround", [true, "zone2"]],
+    ["sound.toneMode", "manual", "setToneMode", ["manual", "zone2"]],
+    ["sound.equalizer.mode", "auto", "setEqualizerMode", ["auto", "zone2"]],
+    ["sound.linkControl", "stability", "setLinkControl", ["stability", "zone2"]],
+    ["sound.linkAudioDelay", "lip_sync", "setLinkAudioDelay", ["lip_sync", "zone2"]],
+    ["sound.linkAudioQuality", "compressed", "setLinkAudioQuality", ["compressed", "zone2"]],
+    ["sound.dtsDialogueControl", 4, "setDtsDialogueControl", [4, "zone2"]],
+    ["sound.extraBass", true, "setExtraBass", [true, "zone2"]],
+    ["sound.adaptiveDrc", false, "setAdaptiveDrc", [false, "zone2"]],
+    ["sound.surroundDecoder", "dolby_pl2x_movie", "setSurroundDecoderType", ["dolby_pl2x_movie", "zone2"]],
+  ])("%s is written through %s", async (state, value, method, args) => {
+    expect(await ranCall(`multiroom.zone2.${state}`, value)).toEqual([method, args]);
   });
 
   test("runs a power write through the power method on main", async () => {

@@ -94,8 +94,8 @@ describe("mapYxcToObjects", () => {
     const group = objs.find(o => o.id === "multiroom.group");
     expect(group?.type).toBe("channel");
     expect(englishName(group)).toBe("MusicCast group (linked devices)");
-    // Group name is read-only (the library's setGroupName payload is unverified).
-    expect(objs.find(o => o.id === "multiroom.group.name")?.common.write).toBe(false);
+    // The group name is writable: YXC Advanced §5.6 documents setGroupName (audit 2026-09-24, C8).
+    expect(objs.find(o => o.id === "multiroom.group.name")?.common.write).toBe(true);
   });
 
   test("a distribution device exposes the leave button and the link-device input", () => {

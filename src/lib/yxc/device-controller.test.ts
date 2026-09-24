@@ -2218,3 +2218,31 @@ describe("YxcDeviceController cover address", () => {
     expect(await coverAfterPush(1.1)).toBe("");
   });
 });
+
+// The group name is writable since YXC Advanced §5.6 documents setGroupName: UTF-8 within 128 bytes,
+// "" restores the default (audit 2026-09-24, C8).
+describe("YxcDeviceController group name", () => {
+  const features = { zone: [{ id: "main", func_list: ["power"] }], distribution: { version: 2 } };
+
+  test("a written group name goes to the device and the distribution is read back", async () => {
+    const s = setup(features, ysp);
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.multiroom.group.name", false, "Wohnzimmer & Küche");
+    await flush();
+    expect(s.client.calls).toEqual([
+      { method: "setGroupName", args: ["Wohnzimmer & Küche"] },
+      { method: "getDistributionInfo", args: [] },
+    ]);
+  });
+
+  test("a name over 128 UTF-8 bytes is not sent — the device's name is shown again", async () => {
+    const s = setup(features, ysp);
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.multiroom.group.name", false, "ü".repeat(65));
+    await flush();
+    expect(s.client.calls).toEqual([{ method: "getDistributionInfo", args: [] }]);
+    expect(s.debugs.some(line => line.includes("longer than 128 bytes"))).toBe(true);
+  });
+});

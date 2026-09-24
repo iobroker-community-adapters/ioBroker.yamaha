@@ -1086,7 +1086,19 @@ export function mapYxcToObjects(
     };
     distState("role", tName("roleServerClient"), "state", tName("descRoleServerClient"));
     distState("id", tName("groupID"), "text", tName("descGroupID"));
-    distState("name", tName("groupName"), "text");
+    // Writable (YXC Advanced §5.6, POST `setGroupName`); the device keeps it in volatile memory only.
+    objects.push({
+      id: "multiroom.group.name",
+      type: "state",
+      common: {
+        name: tName("groupName"),
+        desc: tName("descGroupName"),
+        type: "string",
+        role: "text",
+        read: true,
+        write: true,
+      },
+    });
     distState("serverZone", tName("serverZoneFeedsTheGroup"), "text");
     distState("linkedDevices", tName("linkedDevices"), "json", tName("descLinkedDevices"));
     objects.push({

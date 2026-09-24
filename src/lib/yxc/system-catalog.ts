@@ -61,9 +61,11 @@ export const YXC_SYSTEM_CATALOG: YxcSystemEntry[] = [
       type: "number",
       role: "level.dimmer",
       read: true,
-      write: false,
+      write: true,
     },
     fromStatus: value => Number(value),
+    // YXC Basic §4.26: -1 is automatic, where the declared range includes it.
+    write: { apply: (client, value) => client.setDimmer(Number(value)) },
     rangeId: "dimmer",
   },
   {
@@ -95,10 +97,54 @@ export const YXC_SYSTEM_CATALOG: YxcSystemEntry[] = [
     write: { apply: (client, value) => client.setHdmiOut2(Boolean(value)) },
   },
   // The fields the captured getFuncStatus answers carry beyond those four (RX-V685, RX-A3080,
-  // RX-V6A — coverage audit 2026-09-09). Read-only where the reference library has no setter;
-  // party mode writes through its `setPartyMode`. The MusicCast func_list promises more
-  // (ypao_volume, zone_b_volume_sync, network_standby, …) — no capture shows their answer
-  // field, so they stay out rather than being guessed.
+  // RX-V6A — coverage audit 2026-09-09). Read-only where no setter is known (HDMI OUT 3, the
+  // headphone jack, the video preset); party mode writes through `setPartyMode`.
+  // The four getFuncStatus fields YXC Basic Rev 1.10 §4.21 names together with their setters
+  // (§4.23–4.25, §4.27). The field names come from the specification, not from a guess — the old
+  // comment here kept them out as unseen; like every entry they appear only where the device
+  // answers the field (audit 2026-09-24, C25). Same ids as the YNCA switches where YNCA has one.
+  {
+    state: "advanced.speakers.speakerA",
+    field: "speaker_a",
+    common: { nameKey: "speakerA", type: "boolean", role: "switch", read: true, write: true },
+    fromStatus: value => Boolean(value),
+    write: { apply: (client, value) => client.setSpeakerA(Boolean(value)) },
+  },
+  {
+    state: "advanced.speakers.speakerB",
+    field: "speaker_b",
+    common: { nameKey: "speakerB", type: "boolean", role: "switch", read: true, write: true },
+    fromStatus: value => Boolean(value),
+    write: { apply: (client, value) => client.setSpeakerB(Boolean(value)) },
+  },
+  {
+    state: "advanced.irSensor",
+    field: "ir_sensor",
+    common: {
+      nameKey: "irSensor",
+      descKey: "descIrSensor",
+      type: "boolean",
+      role: "switch",
+      read: true,
+      write: true,
+    },
+    fromStatus: value => Boolean(value),
+    write: { apply: (client, value) => client.setIrSensor(Boolean(value)) },
+  },
+  {
+    state: "multiroom.zoneB.volumeSync",
+    field: "zone_b_volume_sync",
+    common: {
+      nameKey: "zoneBVolumeSync",
+      descKey: "descZoneBVolumeSync",
+      type: "boolean",
+      role: "switch",
+      read: true,
+      write: true,
+    },
+    fromStatus: value => Boolean(value),
+    write: { apply: (client, value) => client.setZoneBVolumeSync(Boolean(value)) },
+  },
   {
     state: "hdmi.out3",
     field: "hdmi_out_3",
@@ -164,9 +210,20 @@ export const YXC_SYSTEM_CATALOG: YxcSystemEntry[] = [
       type: "string",
       role: "state",
       read: true,
-      write: false,
+      write: true,
     },
     fromStatus: value => `Pattern ${Number(value)}`,
+    // pyamaha's `setSpeakerPattern?num=` — no specification, no known caller; where YNCA is present
+    // its documented SPPATTERN owns the datapoint (owner policy), so this serves a MusicCast-only
+    // receiver, and a refusal is read back (audit 2026-09-24, C8/C20).
+    write: {
+      apply: (client: YxcClientLike, value: unknown): Promise<unknown> => {
+        const slot = /^\s*(?:Pattern\s*)?(\d+)\s*$/i.exec(String(value))?.[1];
+        return slot === undefined
+          ? Promise.reject(new Error(`"${String(value)}" is no speaker pattern`))
+          : client.setSpeakerPattern(Number(slot));
+      },
+    },
     countId: "speaker_pattern_num",
     toValue: slot => `Pattern ${slot}`,
   },

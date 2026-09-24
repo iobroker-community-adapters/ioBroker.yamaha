@@ -25,7 +25,8 @@ describe("pickOwner — which transport owns a shared capability", () => {
   test("write-loss keys stay with YNCA/XML where YXC is read-only (census §3c)", () => {
     expect(pickOwner("advanced.maxVolume", ["yxc", "ynca"])).toBe("ynca");
     expect(pickOwner("sound.extraBass", ["yxc", "ynca"])).toBe("ynca");
-    expect(pickOwner("sound.dialogueLift", ["yxc", "xml"])).toBe("xml");
+    // MusicCast writes dialogue lift since 2026-09-24 (YXC Basic §5.17, C8): plain modernity.
+    expect(pickOwner("sound.dialogueLift", ["yxc", "xml"])).toBe("yxc");
     // The unified tuner.preset (v2.0.0) is writable on BOTH — no override, modernity wins.
     expect(pickOwner("tuner.preset", ["yxc", "ynca"])).toBe("yxc");
     // The unified player block's settable states (v2.0.0): YXC is read-only there
@@ -51,7 +52,7 @@ describe("pickOwner — which transport owns a shared capability", () => {
   // drop or add a second one and every behavioural test above would still pass — each of them
   // asks about one key. Pinning the whole table makes any further change a visible, deliberate
   // edit of this list.
-  it("pins the override table — twenty keys since the write-loss pair of 2026-09-24", () => {
+  it("pins the override table — nineteen keys since MusicCast writes dialogue lift (2026-09-24)", () => {
     expect(Object.keys(OWNER_OVERRIDES).sort()).toEqual([
       "advanced.maxVolume",
       "advanced.speakers.pattern",
@@ -65,7 +66,6 @@ describe("pickOwner — which transport owns a shared capability", () => {
       "sleep",
       "sound.adaptiveDrc",
       "sound.bass",
-      "sound.dialogueLift",
       "sound.extraBass",
       "sound.subwooferTrim",
       "sound.surroundAI",
@@ -74,7 +74,7 @@ describe("pickOwner — which transport owns a shared capability", () => {
       "soundProgram",
       "tuner.band",
     ]);
-    expect(Object.keys(OWNER_OVERRIDES)).toHaveLength(20);
+    expect(Object.keys(OWNER_OVERRIDES)).toHaveLength(19);
     expect(OWNER_OVERRIDES).not.toHaveProperty("volume");
   });
 

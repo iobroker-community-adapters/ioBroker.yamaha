@@ -713,6 +713,208 @@ export class YamahaYxcClient {
   }
 
   /**
+   * Set a zone's dialogue level (YXC Basic §5.16).
+   *
+   * @param value the level, within the zone's declared range
+   * @param zone the zone
+   * @returns the command response
+   */
+  public setDialogueLevel(value: number, zone: string): Promise<unknown> {
+    return this.send(`/${zoneSeg(zone)}/setDialogueLevel?value=${q(value)}`);
+  }
+
+  /**
+   * Set a zone's dialogue lift (YXC Basic §5.17).
+   *
+   * @param value the lift, within the zone's declared range
+   * @param zone the zone
+   * @returns the command response
+   */
+  public setDialogueLift(value: number, zone: string): Promise<unknown> {
+    return this.send(`/${zoneSeg(zone)}/setDialogueLift?value=${q(value)}`);
+  }
+
+  /**
+   * Turn a zone's 3D surround on/off (YXC Basic §5.9).
+   *
+   * @param on whether to enable
+   * @param zone the zone
+   * @returns the command response
+   */
+  public set3dSurround(on: boolean, zone: string): Promise<unknown> {
+    return this.send(`/${zoneSeg(zone)}/set3dSurround?enable=${on ? "true" : "false"}`);
+  }
+
+  /**
+   * Set a zone's tone-control mode, leaving bass and treble as they are (YXC Basic §5.13: every parameter but the zone is optional).
+   *
+   * @param mode a mode the zone declares (`tone_control_mode_list`)
+   * @param zone the zone
+   * @returns the command response
+   */
+  public setToneMode(mode: string, zone: string): Promise<unknown> {
+    return this.send(`/${zoneSeg(zone)}/setToneControl?mode=${q(mode)}`);
+  }
+
+  /**
+   * Set a zone's equalizer mode, leaving the bands as they are (YXC Basic §5.14).
+   *
+   * @param mode a mode the zone declares (`equalizer_mode_list`)
+   * @param zone the zone
+   * @returns the command response
+   */
+  public setEqualizerMode(mode: string, zone: string): Promise<unknown> {
+    return this.send(`/${zoneSeg(zone)}/setEqualizer?mode=${q(mode)}`);
+  }
+
+  /**
+   * Set a zone's MusicCast Link control (YXC Advanced §4.1).
+   *
+   * @param control a value the zone declares (`link_control_list`)
+   * @param zone the zone
+   * @returns the command response
+   */
+  public setLinkControl(control: string, zone: string): Promise<unknown> {
+    return this.send(`/${zoneSeg(zone)}/setLinkControl?control=${q(control)}`);
+  }
+
+  /**
+   * Set a zone's MusicCast Link audio delay (YXC Advanced §4.2).
+   *
+   * @param delay a value the zone declares (`link_audio_delay_list`)
+   * @param zone the zone
+   * @returns the command response
+   */
+  public setLinkAudioDelay(delay: string, zone: string): Promise<unknown> {
+    return this.send(`/${zoneSeg(zone)}/setLinkAudioDelay?delay=${q(delay)}`);
+  }
+
+  /**
+   * Set a zone's MusicCast Link audio quality (YXC Advanced §4.3).
+   *
+   * @param mode a value the zone declares (`link_audio_quality_list`)
+   * @param zone the zone
+   * @returns the command response
+   */
+  public setLinkAudioQuality(mode: string, zone: string): Promise<unknown> {
+    return this.send(`/${zoneSeg(zone)}/setLinkAudioQuality?mode=${q(mode)}`);
+  }
+
+  /**
+   * Set a zone's DTS dialogue control (no specification; aiomusiccast/Home Assistant, pyamaha `SET_DTS_DIALOGUE_CONTROL`).
+   *
+   * @param num the level, within the zone's declared range
+   * @param zone the zone
+   * @returns the command response
+   */
+  public setDtsDialogueControl(num: number, zone: string): Promise<unknown> {
+    return this.send(`/${zoneSeg(zone)}/setDtsDialogueControl?num=${q(num)}`);
+  }
+
+  /**
+   * Turn a zone's extra bass on/off (no specification; aiomusiccast/Home Assistant, pyamaha `SET_EXTRA_BASS`).
+   *
+   * @param on whether to enable
+   * @param zone the zone
+   * @returns the command response
+   */
+  public setExtraBass(on: boolean, zone: string): Promise<unknown> {
+    return this.send(`/${zoneSeg(zone)}/setExtraBass?enable=${on ? "true" : "false"}`);
+  }
+
+  /**
+   * Turn a zone's adaptive dynamic range control on/off (no specification; aiomusiccast/Home Assistant, pyamaha `SET_ADAPTIVE_DRC`).
+   *
+   * @param on whether to enable
+   * @param zone the zone
+   * @returns the command response
+   */
+  public setAdaptiveDrc(on: boolean, zone: string): Promise<unknown> {
+    return this.send(`/${zoneSeg(zone)}/setAdaptiveDrc?enable=${on ? "true" : "false"}`);
+  }
+
+  /**
+   * Set a zone's surround decoder (no specification; aiomusiccast/Home Assistant, pyamaha `SET_SURR_DECODER_TYPE`).
+   *
+   * @param type a decoder the zone declares (`surr_decoder_type_list`)
+   * @param zone the zone
+   * @returns the command response
+   */
+  public setSurroundDecoderType(type: string, zone: string): Promise<unknown> {
+    return this.send(`/${zoneSeg(zone)}/setSurroundDecoderType?type=${q(type)}`);
+  }
+
+  /**
+   * Set the front-panel dimmer; -1 is automatic where the device declares it (YXC Basic §4.26).
+   *
+   * @param value the dimmer step, within the declared range
+   * @returns the command response
+   */
+  public setDimmer(value: number): Promise<unknown> {
+    return this.send(`/system/setDimmer?value=${q(value)}`);
+  }
+
+  /**
+   * Select a speaker pattern (no specification and no known caller; pyamaha `SET_SPEAKER_PATTERN`).
+   *
+   * @param num the pattern number, 1…speaker_pattern_num
+   * @returns the command response
+   */
+  public setSpeakerPattern(num: number): Promise<unknown> {
+    return this.send(`/system/setSpeakerPattern?num=${q(num)}`);
+  }
+
+  /**
+   * Switch speaker set A on/off (YXC Basic §4.24).
+   *
+   * @param on whether to enable
+   * @returns the command response
+   */
+  public setSpeakerA(on: boolean): Promise<unknown> {
+    return this.send(`/system/setSpeakerA?enable=${on ? "true" : "false"}`);
+  }
+
+  /**
+   * Switch speaker set B on/off (YXC Basic §4.25).
+   *
+   * @param on whether to enable
+   * @returns the command response
+   */
+  public setSpeakerB(on: boolean): Promise<unknown> {
+    return this.send(`/system/setSpeakerB?enable=${on ? "true" : "false"}`);
+  }
+
+  /**
+   * Switch the remote-control IR sensor on/off (YXC Basic §4.23).
+   *
+   * @param on whether to enable
+   * @returns the command response
+   */
+  public setIrSensor(on: boolean): Promise<unknown> {
+    return this.send(`/system/setIrSensor?enable=${on ? "true" : "false"}`);
+  }
+
+  /**
+   * Let zone B's volume follow zone A's, or not (YXC Basic §4.27).
+   *
+   * @param on whether to sync
+   * @returns the command response
+   */
+  public setZoneBVolumeSync(on: boolean): Promise<unknown> {
+    return this.send(`/system/setZoneBVolumeSync?enable=${on ? "true" : "false"}`);
+  }
+
+  /**
+   * Name the MusicCast group (YXC Advanced §5.6; POST, kept in volatile memory — the device forgets it on restart).
+   *
+   * @param name the name, UTF-8 within 128 bytes ("" = the default)
+   * @returns the command response
+   */
+  public setGroupName(name: string): Promise<unknown> {
+    return this.send("/dist/setGroupName", JSON.stringify({ name }));
+  }
+
+  /**
    * Turn party mode on/off (system-wide).
    *
    * @param on whether to enable

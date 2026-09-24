@@ -51,17 +51,16 @@ describe("the device-wide MusicCast settings (coverage audit 2026-09-09)", () =>
     ]);
   });
 
-  test("party mode writes through the reference library's setter; the fields without a documented setter are read-only", () => {
+  test("party mode writes through the reference library's setter; the fields without a known setter are read-only", () => {
     const byState = new Map(YXC_SYSTEM_CATALOG.map(entry => [entry.state, entry]));
     expect(byState.get("multiroom.party")?.write).toBeDefined();
     expect(byState.get("multiroom.party")?.common.write).toBe(true);
-    for (const state of [
-      "hdmi.out3",
-      "hdmi.standbyThrough",
-      "advanced.headphone",
-      "advanced.speakers.pattern",
-      "hdmi.videoPreset",
-    ]) {
+    // Dimmer (YXC Basic §4.26) and speaker pattern (pyamaha) write since 2026-09-24 (C8).
+    for (const state of ["advanced.displayBrightness", "advanced.speakers.pattern"]) {
+      expect(byState.get(state)?.write, state).toBeDefined();
+      expect(byState.get(state)?.common.write, state).toBe(true);
+    }
+    for (const state of ["hdmi.out3", "hdmi.standbyThrough", "advanced.headphone", "hdmi.videoPreset"]) {
       expect(byState.get(state)?.write, state).toBeUndefined();
       expect(byState.get(state)?.common.write, state).toBe(false);
     }
@@ -143,6 +142,23 @@ describe("every system-catalog entry converts and writes what it claims", () => 
       [1, 1],
       ["2", 2],
     ],
+    // YXC Basic Rev 1.10 §4.21 (audit 2026-09-24, C25).
+    "advanced.speakers.speakerA": [
+      [true, true],
+      [false, false],
+    ],
+    "advanced.speakers.speakerB": [
+      [true, true],
+      [false, false],
+    ],
+    "advanced.irSensor": [
+      [true, true],
+      [false, false],
+    ],
+    "multiroom.zoneB.volumeSync": [
+      [true, true],
+      [false, false],
+    ],
   };
 
   /** The endpoint each writable entry must reach, and with which argument. */
@@ -151,6 +167,12 @@ describe("every system-catalog entry converts and writes what it claims", () => 
     "hdmi.out1": { value: false, method: "setHdmiOut1", args: [false] },
     "hdmi.out2": { value: "on", method: "setHdmiOut2", args: [true] },
     "multiroom.party": { value: 0, method: "setPartyMode", args: [false] },
+    "advanced.displayBrightness": { value: -1, method: "setDimmer", args: [-1] },
+    "advanced.speakers.pattern": { value: "Pattern 2", method: "setSpeakerPattern", args: [2] },
+    "advanced.speakers.speakerA": { value: true, method: "setSpeakerA", args: [true] },
+    "advanced.speakers.speakerB": { value: 0, method: "setSpeakerB", args: [false] },
+    "advanced.irSensor": { value: false, method: "setIrSensor", args: [false] },
+    "multiroom.zoneB.volumeSync": { value: true, method: "setZoneBVolumeSync", args: [true] },
   };
 
   test("the tables cover the catalog — a new entry without a case fails here", () => {
@@ -173,5 +195,15 @@ describe("every system-catalog entry converts and writes what it claims", () => 
     const { client, calls } = recordingClient();
     await entry.write!.apply(client, expected.value);
     expect(calls).toEqual([{ method: expected.method, args: expected.args }]);
+  });
+});
+
+describe("the speaker pattern write", () => {
+  it("sends only a pattern number — a word that names none never reaches the device", async () => {
+    const entry = YXC_SYSTEM_CATALOG.find(candidate => candidate.state === "advanced.speakers.pattern")!;
+    const { client, calls } = recordingClient();
+    await expect(entry.write!.apply(client, "Pattern x")).rejects.toThrow('"Pattern x" is no speaker pattern');
+    await entry.write!.apply(client, "3");
+    expect(calls).toEqual([{ method: "setSpeakerPattern", args: [3] }]);
   });
 });

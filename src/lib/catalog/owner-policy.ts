@@ -66,13 +66,17 @@ export const OWNER_OVERRIDES: Record<string, readonly Transport[]> = {
   // it is the documented-decibel side, so it goes in front — without it MusicCast would have won
   // back the very scale conflict this override exists to prevent, on every YNCA+MusicCast receiver.
   "sound.subwooferTrim": ["ynca", "xml", "yxc"],
+  // MusicCast writes these three since 2026-09-24 (C8), through setters no specification names
+  // (aiomusiccast/Home Assistant); YNCA's are documented, report a change at once over the held
+  // connection, and speak the classic vocabulary every existing script writes.
   "sound.extraBass": ["ynca", "xml", "yxc"],
   "sound.adaptiveDrc": ["ynca", "xml", "yxc"],
   "sound.surroundDecoder": ["ynca", "yxc"],
   // Surround:AI joined MusicCast on 2026-09-09 (the RX-A3080 declares `surround_ai` and reports it
   // in getStatus) as a read-only indicator; YNCA's SURROUNDAI switch is the writable one.
   "sound.surroundAI": ["ynca", "yxc"],
-  "sound.dialogueLift": ["xml", "yxc"],
+  // `sound.dialogueLift` left this table on 2026-09-24: MusicCast writes it now (YXC Basic §5.17)
+  // with the device's declared range, so it is no longer the poorer transport (C8).
   // Write-proof beats modernity rank for the scene TRIGGER (#615): YXC declares the
   // recall endpoint per zone (device-verified), XML declares the write value in its
   // Scene_Sel_Item list — but YNCA's claim rests on the scene NAMES being readable,
