@@ -337,7 +337,6 @@
   "descChannelPlayer": "What is playing right now, plus the transport keys.",
   "descChannelMultiroom": "Everything that spans more than one zone or more than one device.",
   "descChannelGroup": "The MusicCast group of linked devices this receiver belongs to.",
-  "descChannelMusicCastLink": "Playback received from another MusicCast device in the group.",
   "descChannelBrowse": "Step through the menu of a network source, as you would on screen.",
   "descSoundProgram": "The surround program the receiver applies to the current source.",
   "descStraight": "Plays the signal as delivered, bypassing the surround program.",

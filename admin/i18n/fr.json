@@ -337,7 +337,6 @@
   "descChannelPlayer": "Ce qui est en lecture, avec les touches de transport.",
   "descChannelMultiroom": "Tout ce qui dépasse une seule zone ou un seul appareil.",
   "descChannelGroup": "Le groupe MusicCast d'appareils liés auquel appartient cet ampli.",
-  "descChannelMusicCastLink": "Lecture reçue d'un autre appareil MusicCast du groupe.",
   "descChannelBrowse": "Parcourir le menu d'une source réseau, comme à l'écran.",
   "descSoundProgram": "Le programme sonore appliqué par l'ampli à la source actuelle.",
   "descStraight": "Restitue le signal tel quel, sans passer par le programme sonore.",

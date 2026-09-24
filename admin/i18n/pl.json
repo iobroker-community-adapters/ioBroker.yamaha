@@ -337,7 +337,6 @@
   "descChannelPlayer": "Co jest odtwarzane teraz, wraz z klawiszami sterowania.",
   "descChannelMultiroom": "Wszystko, co wykracza poza jedną strefę lub jedno urządzenie.",
   "descChannelGroup": "Grupa MusicCast połączonych urządzeń, do której należy ten amplituner.",
-  "descChannelMusicCastLink": "Odtwarzanie odbierane z innego urządzenia MusicCast w grupie.",
   "descChannelBrowse": "Przeglądanie menu źródła sieciowego, jak na ekranie.",
   "descSoundProgram": "Program dźwiękowy stosowany przez amplituner do bieżącego źródła.",
   "descStraight": "Odtwarza sygnał bez zmian, z pominięciem programu dźwiękowego.",

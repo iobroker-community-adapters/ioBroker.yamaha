@@ -337,7 +337,6 @@
   "descChannelPlayer": "Lo que suena ahora, más las teclas de reproducción.",
   "descChannelMultiroom": "Todo lo que abarca más de una zona o más de un aparato.",
   "descChannelGroup": "El grupo MusicCast de aparatos enlazados al que pertenece este receptor.",
-  "descChannelMusicCastLink": "Reproducción recibida de otro aparato MusicCast del grupo.",
   "descChannelBrowse": "Recorrer el menú de una fuente de red, como en pantalla.",
   "descSoundProgram": "El programa de sonido que el receptor aplica a la fuente actual.",
   "descStraight": "Reproduce la señal tal cual, sin pasar por el programa de sonido.",

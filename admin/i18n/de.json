@@ -337,7 +337,6 @@
   "descChannelPlayer": "Was gerade läuft, dazu die Transporttasten.",
   "descChannelMultiroom": "Alles, was über eine Zone oder über ein Gerät hinausgeht.",
   "descChannelGroup": "Die MusicCast-Gruppe verbundener Geräte, zu der dieser Receiver gehört.",
-  "descChannelMusicCastLink": "Wiedergabe, die von einem anderen MusicCast-Gerät der Gruppe kommt.",
   "descChannelBrowse": "Durch das Menü einer Netzwerkquelle blättern, wie am Bildschirm.",
   "descSoundProgram": "Das Klangprogramm, das der Receiver auf die aktuelle Quelle anwendet.",
   "descStraight": "Gibt das Signal unverändert wieder und umgeht das Klangprogramm.",

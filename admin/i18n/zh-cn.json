@@ -337,7 +337,6 @@
   "descChannelPlayer": "当前播放内容，以及播放控制键。",
   "descChannelMultiroom": "跨越多个分区或多台设备的一切。",
   "descChannelGroup": "本功放所属的 MusicCast 联动设备组。",
-  "descChannelMusicCastLink": "从组内另一台 MusicCast 设备接收的播放内容。",
   "descChannelBrowse": "像在屏幕上那样浏览网络音源的菜单。",
   "descSoundProgram": "功放对当前音源应用的音效程序。",
   "descStraight": "按原样播放信号，绕过音效程序。",
