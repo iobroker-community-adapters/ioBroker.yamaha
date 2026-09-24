@@ -352,7 +352,7 @@
   "descDtsDialogueControl": "Spraakversterking die in de DTS:X-track zelf zit.",
   "descHeadphoneBass": "Basinstelling die alleen voor de hoofdtelefoonuitgang geldt.",
   "descHeadphoneTreble": "Hoge-toneninstelling die alleen voor de hoofdtelefoonuitgang geldt.",
-  "descSubwooferTrim": "Fijnafstemming van de subwoofer ten opzichte van de andere luidsprekers.",
+  "descSubwooferTrim": "Fijnafstelling van de subwoofer ten opzichte van de andere luidsprekers: decibel waar de eenheid dat zegt, anders de eigen stappen van het apparaat.",
   "descContentsDisplay": "Of de receiver trackinformatie op het front toont.",
   "descMaximumVolume": "Bovengrens waarboven het volume van de zone niet kan komen.",
   "descInitialVolumeMode": "Of er bij inschakelen überhaupt een vast startvolume geldt.",

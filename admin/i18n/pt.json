@@ -352,7 +352,7 @@
   "descDtsDialogueControl": "Reforço de fala incluído na própria banda sonora DTS:X.",
   "descHeadphoneBass": "Ajuste de graves apenas para a saída de auscultadores.",
   "descHeadphoneTreble": "Ajuste de agudos apenas para a saída de auscultadores.",
-  "descSubwooferTrim": "Ajuste fino do subwoofer face às outras colunas.",
+  "descSubwooferTrim": "Ajuste fino do subwoofer em relação às outras colunas: decibéis onde a unidade o indica; caso contrário, os passos próprios do dispositivo.",
   "descContentsDisplay": "Se o recetor mostra informação da faixa no painel frontal.",
   "descMaximumVolume": "Limite superior que o volume da zona não pode ultrapassar.",
   "descInitialVolumeMode": "Se é usado de todo um volume inicial fixo ao ligar.",

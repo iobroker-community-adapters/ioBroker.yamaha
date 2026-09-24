@@ -352,7 +352,7 @@
   "descDtsDialogueControl": "Sprachanhebung, die im DTS:X-Ton selbst mitgeliefert wird.",
   "descHeadphoneBass": "Bass-Einstellung, die nur für den Kopfhörerausgang gilt.",
   "descHeadphoneTreble": "Höhen-Einstellung, die nur für den Kopfhörerausgang gilt.",
-  "descSubwooferTrim": "Feinabgleich des Subwoofers gegenüber den anderen Lautsprechern.",
+  "descSubwooferTrim": "Feinabgleich des Subwoofers gegenüber den anderen Lautsprechern: Dezibel, wo die Einheit es sagt, sonst die eigenen Schritte des Geräts.",
   "descContentsDisplay": "Ob der Receiver Titelinformationen im eigenen Display zeigt.",
   "descMaximumVolume": "Obergrenze, über die die Lautstärke der Zone nicht steigen kann.",
   "descInitialVolumeMode": "Ob beim Einschalten überhaupt eine feste Startlautstärke gilt.",

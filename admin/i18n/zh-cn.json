@@ -352,7 +352,7 @@
   "descDtsDialogueControl": "DTS:X 音轨自身携带的人声增强。",
   "descHeadphoneBass": "仅作用于耳机输出的低音调节。",
   "descHeadphoneTreble": "仅作用于耳机输出的高音调节。",
-  "descSubwooferTrim": "低音炮相对其他扬声器的微调。",
+  "descSubwooferTrim": "低音炮相对其他扬声器的微调：单位注明时为分贝，否则为设备自身的步进。",
   "descContentsDisplay": "功放是否在前面板显示曲目信息。",
   "descMaximumVolume": "该分区音量不可超过的上限。",
   "descInitialVolumeMode": "开机时是否启用固定的起始音量。",

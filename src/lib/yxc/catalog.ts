@@ -159,7 +159,10 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
       nameKey: "subwooferTrim",
       descKey: "descSubwooferTrim",
       type: "number",
-      unit: "dB",
+      // No unit: MusicCast counts the subwoofer trim in the device's own steps, like the tone controls
+      // — "dB" claimed a scale nobody documented. Written as "" rather than left out, because an
+      // existing object keeps a unit that is merely omitted (extendObject merges; audit 2026-09-24, C9).
+      unit: "",
       role: "level",
       read: true,
       write: true,
@@ -171,7 +174,8 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
   },
   {
     state: "sound.bass",
-    common: { nameKey: "bass", descKey: "descBass", type: "number", role: "level", read: true, write: true },
+    // unit "": an installation from before 2.5.0 still carries "dB" here (see subwooferVolume, C9).
+    common: { nameKey: "bass", descKey: "descBass", type: "number", unit: "", role: "level", read: true, write: true },
     create: { kind: "func", func: "tone_control" },
     read: { path: ["tone_control", "bass"] },
     fromStatus: num,
@@ -194,7 +198,15 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
   },
   {
     state: "sound.treble",
-    common: { nameKey: "treble", descKey: "descTreble", type: "number", role: "level", read: true, write: true },
+    common: {
+      nameKey: "treble",
+      descKey: "descTreble",
+      type: "number",
+      unit: "",
+      role: "level",
+      read: true,
+      write: true,
+    },
     create: { kind: "func", func: "tone_control" },
     read: { path: ["tone_control", "treble"] },
     fromStatus: num,

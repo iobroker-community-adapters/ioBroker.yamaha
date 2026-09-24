@@ -352,7 +352,7 @@
   "descDtsDialogueControl": "Refuerzo de voz incluido en la propia pista DTS:X.",
   "descHeadphoneBass": "Ajuste de graves solo para la salida de auriculares.",
   "descHeadphoneTreble": "Ajuste de agudos solo para la salida de auriculares.",
-  "descSubwooferTrim": "Ajuste fino del subgrave frente a los demás altavoces.",
+  "descSubwooferTrim": "Ajuste fino del subwoofer frente a los demás altavoces: decibelios donde la unidad lo indica; si no, los pasos propios del dispositivo.",
   "descContentsDisplay": "Si el receptor muestra información de la pista en su panel.",
   "descMaximumVolume": "Límite superior que el volumen de la zona no puede superar.",
   "descInitialVolumeMode": "Si al encender se usa un volumen inicial fijo.",

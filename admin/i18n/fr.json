@@ -352,7 +352,7 @@
   "descDtsDialogueControl": "Renfort de voix inclus dans la bande-son DTS:X elle-même.",
   "descHeadphoneBass": "Réglage des graves valable seulement pour la sortie casque.",
   "descHeadphoneTreble": "Réglage des aigus valable seulement pour la sortie casque.",
-  "descSubwooferTrim": "Réglage fin du caisson de basses par rapport aux autres enceintes.",
+  "descSubwooferTrim": "Réglage fin du caisson de basses par rapport aux autres enceintes : en décibels là où l'unité l'indique, sinon dans les pas propres à l'appareil.",
   "descContentsDisplay": "Si l'ampli affiche les informations de piste en façade.",
   "descMaximumVolume": "Limite haute que le volume de la zone ne peut dépasser.",
   "descInitialVolumeMode": "Si un volume de démarrage fixe est utilisé à l'allumage.",

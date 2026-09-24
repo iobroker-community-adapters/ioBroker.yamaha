@@ -106,12 +106,15 @@ describe("audit 2026-09-06 — the device's own bounds reach the datapoint", () 
     }
   });
 
-  it("does not claim decibels for the tone controls", () => {
+  it("does not claim decibels for the tone controls and the subwoofer trim", () => {
     // MusicCast counts them in half-decibels: −12…+12 in 25 steps is the range the YNCA spec
     // calls −6…+6 dB in 25 steps of 0.5, measured across 19 captures.
+    // The unit is written as "" rather than left out: extendObject merges, so an object from before
+    // 2.5.0 kept its "dB" — and the subwoofer trim claimed decibels on every MusicCast device (C9).
     const objects = mapYxcToObjects(parseYxcFeatures(features));
-    expect(objects.find(o => o.id === "sound.bass")?.common.unit).toBeUndefined();
-    expect(objects.find(o => o.id === "sound.treble")?.common.unit).toBeUndefined();
+    for (const id of ["sound.bass", "sound.treble", "subwooferVolume"]) {
+      expect(objects.find(o => o.id === id)?.common, id).toHaveProperty("unit", "");
+    }
   });
 
   it("hands the tone controls to the transport whose scale is documented in decibels", () => {

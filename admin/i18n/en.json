@@ -352,7 +352,7 @@
   "descDtsDialogueControl": "Speech boost carried inside a DTS:X soundtrack itself.",
   "descHeadphoneBass": "Bass adjustment that applies only to the headphone output.",
   "descHeadphoneTreble": "Treble adjustment that applies only to the headphone output.",
-  "descSubwooferTrim": "Fine adjustment of the subwoofer against the other speakers.",
+  "descSubwooferTrim": "Fine adjustment of the subwoofer against the other speakers: decibels where the unit says so, otherwise the device's own steps.",
   "descContentsDisplay": "Whether the receiver shows track information on its front panel.",
   "descMaximumVolume": "Upper limit the zone's volume cannot be raised beyond.",
   "descInitialVolumeMode": "Whether a fixed start volume is used at all when switching on.",

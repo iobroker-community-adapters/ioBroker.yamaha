@@ -352,7 +352,7 @@
   "descDtsDialogueControl": "Enfasi del parlato contenuta nella traccia DTS:X stessa.",
   "descHeadphoneBass": "Regolazione dei bassi valida solo per l'uscita cuffie.",
   "descHeadphoneTreble": "Regolazione degli alti valida solo per l'uscita cuffie.",
-  "descSubwooferTrim": "Regolazione fine del subwoofer rispetto agli altri diffusori.",
+  "descSubwooferTrim": "Regolazione fine del subwoofer rispetto agli altri diffusori: decibel dove lo indica l'unità, altrimenti i passi propri del dispositivo.",
   "descContentsDisplay": "Se il ricevitore mostra le informazioni del brano sul display.",
   "descMaximumVolume": "Limite superiore oltre il quale il volume della zona non sale.",
   "descInitialVolumeMode": "Se all'accensione si usa davvero un volume iniziale fisso.",

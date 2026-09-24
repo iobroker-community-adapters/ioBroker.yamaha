@@ -352,7 +352,7 @@
   "descDtsDialogueControl": "Wzmocnienie mowy zawarte w samej ścieżce DTS:X.",
   "descHeadphoneBass": "Regulacja basu tylko dla wyjścia słuchawkowego.",
   "descHeadphoneTreble": "Regulacja sopranów tylko dla wyjścia słuchawkowego.",
-  "descSubwooferTrim": "Precyzyjne dopasowanie subwoofera do pozostałych głośników.",
+  "descSubwooferTrim": "Dokładne dostrojenie subwoofera względem pozostałych głośników: decybele tam, gdzie wskazuje to jednostka, w przeciwnym razie własne kroki urządzenia.",
   "descContentsDisplay": "Czy amplituner pokazuje informacje o utworze na wyświetlaczu.",
   "descMaximumVolume": "Górny limit, powyżej którego głośność strefy nie wzrośnie.",
   "descInitialVolumeMode": "Czy przy włączeniu obowiązuje stała głośność startowa.",
