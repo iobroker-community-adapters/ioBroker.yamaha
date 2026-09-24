@@ -13,13 +13,19 @@
     "desc": {}
   },
   "forumThread": "https://forum.iobroker.net/topic/85413/test-adapter-yamaha-2.11.0",
-  "_listenPorts": "The MusicCast event receiver: every MusicCast device pushes its changes to UDP 41100 of the client that subscribed (X-AppPort header) - the port is fixed by the protocol, and the adapter binds all interfaces. native.port/native.bind carry it so the Admin's port check sees the instance; the code binds the constant.",
+  "_listenPorts": "The MusicCast event receiver: every MusicCast device pushes its changes to UDP 41100 of the client that subscribed (X-AppPort header) - the port is fixed by the protocol, and the adapter binds all interfaces. native.port/native.bind carry it so the Admin's port check sees the instance; the code binds the constant. The network-search listener shares UDP 1900 with every other UPnP service on the host (SO_REUSEADDR) to hear devices announce themselves; it runs only while the network search is on, and it binds the fixed SSDP port — nothing to configure (audit 2026-09-24, E2).",
   "listenPorts": [
     {
       "key": "port",
       "protocol": "udp",
       "role": "primary",
       "fixed": 41100
+    },
+    {
+      "key": "ssdp",
+      "protocol": "udp",
+      "role": "shared",
+      "fixed": 1900
     }
   ]
 }

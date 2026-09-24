@@ -66,7 +66,10 @@ export class YxcTransportError extends Error {
    * @param cause the underlying socket or timeout error
    */
   public constructor(command: string, cause: Error) {
-    super(`${cause.message} (${command})`, { cause });
+    // Through the helper (an empty-message AggregateError still says its code, E14); the command is
+    // added only where the cause does not already name it.
+    const reason = errorMessage(cause);
+    super(reason.includes(command) ? reason : `${reason} (${command})`, { cause });
     this.name = "YxcTransportError";
   }
 }

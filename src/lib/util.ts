@@ -1,29 +1,54 @@
 /**
- * A readable message for ANY thrown value — the one helper every catch in this adapter
- * routes its caught value through, instead of repeating `e instanceof Error ? e.message :
- * String(e)`. That idiom renders a thrown plain object (a rejected `{ code: "ECONNRESET" }`,
- * an HTTP client's error object) as `[object Object]`, which says nothing about what failed;
- * the object branch below is the whole point of the helper.
+ * One readable line for anything a `catch` receives — never `[object Object]`, never without the reason.
+ * The fleet's master form (Entwicklung/CLAUDE_PATTERNS.md § Async-Handler), under this adapter's name:
+ * one level of `cause` (a `fetch` rejection's socket reason lives there), the `code` where the message
+ * is empty (an AggregateError from `net.connect`), the type tag for a thrown function — and it never
+ * throws itself (audit 2026-09-24, E1).
  *
  * @param e the caught value
- * @returns a human-readable message
+ * @returns the text
  */
 export function errorMessage(e: unknown): string {
-  if (e instanceof Error) {
-    return e.message;
-  }
-  // Everything that is not an object has a meaningful string form and is its OWN best text —
-  // a thrown string, a number, a boolean, a symbol (where `String()` is the only way: a
-  // template literal throws on one), null and undefined. A separate string branch above this
-  // would be dead code: `String("EPERM")` is "EPERM".
-  if (typeof e !== "object" || e === null) {
-    return String(e);
-  }
+  // It runs inside a `catch` and must not throw there: any property of a caught value can be a
+  // getter that throws, or hold something other than a string.
   try {
-    // `JSON.stringify` returns undefined for a value it cannot represent, and throws on a
-    // circular structure — both end at the same fallback, which names at least the class.
+    if (e instanceof Error) {
+      // An empty message carries its reason in `code`: `http.get`/`net.connect` to `localhost`
+      // reject with an AggregateError (message "", code ECONNREFUSED).
+      const code = "code" in e ? e.code : undefined;
+      const message: unknown = e.message;
+      const name: unknown = e.name;
+      const text = String(message || (typeof code === "string" ? code : name));
+      // `fetch` rejects with TypeError("fetch failed", { cause }) — ENOTFOUND, ECONNREFUSED,
+      // "other side closed" live only in the cause. One level, never the chain (`e.cause = e` is legal).
+      const cause = e.cause;
+      let reason = "";
+      if (cause instanceof Error) {
+        const causeCode = "code" in cause ? cause.code : undefined;
+        const causeMessage: unknown = cause.message;
+        reason =
+          (typeof causeMessage === "string" ? causeMessage : "") || (typeof causeCode === "string" ? causeCode : "");
+      } else if (cause !== undefined && cause !== null) {
+        reason = errorMessage(cause);
+      }
+      // A wrapper that copies its cause's message would say it twice.
+      return reason && !text.includes(reason) ? `${text} (${reason})` : text;
+    }
+    if (typeof e === "string") {
+      return e;
+    }
+    if (typeof e === "function") {
+      // A thrown function or class: `String()` would print its whole source text.
+      return Object.prototype.toString.call(e);
+    }
+    if (e === null || e === undefined || typeof e !== "object") {
+      return String(e); // number, boolean, bigint, symbol (`${symbol}` would throw)
+    }
+    // A thrown object ({ code: "ECONNRESET" }, an HTTP client's error object): JSON.stringify
+    // yields `undefined` for what it cannot render and throws on a circular structure.
     return JSON.stringify(e) ?? Object.prototype.toString.call(e);
   } catch {
+    // A getter that threw, a circular structure for JSON.stringify: the type tag.
     return Object.prototype.toString.call(e);
   }
 }
