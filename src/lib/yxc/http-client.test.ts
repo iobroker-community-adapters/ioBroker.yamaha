@@ -1,7 +1,13 @@
 import { createServer, type IncomingHttpHeaders } from "node:http";
 import { once } from "node:events";
 import type { AddressInfo } from "node:net";
-import { isWriteCommand, YamahaYxcClient, YxcTransportError, YXC_SUBSCRIPTION_HEADERS } from "./http-client";
+import {
+  isWriteCommand,
+  YamahaYxcClient,
+  YxcRefusalError,
+  YxcTransportError,
+  YXC_SUBSCRIPTION_HEADERS,
+} from "./http-client";
 
 /**
  * Capture the command path each method builds, to verify URL construction against the
@@ -250,7 +256,11 @@ describe("YamahaYxcClient player and tuner commands", () => {
     const { port } = server.address() as AddressInfo;
     try {
       const client = new YamahaYxcClient(`127.0.0.1:${port}`);
-      await expect(client.getStatus("main")).rejects.toThrow(/response_code 5/);
+      const refusal = client.getStatus("main");
+      // The code carries its meaning from the specification's table (audit 2026-09-24, C23).
+      await expect(refusal).rejects.toThrow("device refused /main/getStatus (response_code 5: Guarded)");
+      await expect(refusal).rejects.toBeInstanceOf(YxcRefusalError);
+      await expect(refusal).rejects.toMatchObject({ code: 5 });
     } finally {
       server.close();
     }

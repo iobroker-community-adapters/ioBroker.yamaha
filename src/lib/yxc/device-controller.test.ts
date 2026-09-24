@@ -1,4 +1,4 @@
-import { YxcTransportError } from "./http-client";
+import { YxcRefusalError, YxcTransportError } from "./http-client";
 import { YxcDeviceController, zoneNameFrom } from "./device-controller";
 import type { YxcClientLike } from "./device-controller";
 import type { ObjectDef } from "../catalog/types";
@@ -71,6 +71,8 @@ interface FakeClient extends YxcClientLike {
   distRole: string;
   /** Make the zone status / name lookup fail, as an unreachable device would. */
   failStatus: boolean;
+  /** Make the zone status answer with this `response_code` — the device is there and says no. */
+  refuseStatus: number | undefined;
   failWrites: Error | undefined;
   failNameText: boolean;
   /** The getFuncStatus answer (default: an empty success — no device-wide settings). */
@@ -100,6 +102,7 @@ function makeFakeClient(features: unknown, status: unknown): FakeClient {
     statusByZone: undefined,
     distRole: "server",
     failStatus: false,
+    refuseStatus: undefined as number | undefined,
     failNameText: false,
     /** When set, every command that is not a read answer rejects with it (a write that never reaches the device). */
     failWrites: undefined as Error | undefined,
@@ -112,6 +115,9 @@ function makeFakeClient(features: unknown, status: unknown): FakeClient {
     getStatus: ([zone]) => {
       if (state.failStatus) {
         throw new Error("device offline");
+      }
+      if (typeof state.refuseStatus === "number") {
+        throw new YxcRefusalError(`/${String(zone)}/getStatus`, state.refuseStatus);
       }
       const byZone = state.statusByZone as Record<string, unknown> | undefined;
       if (byZone && typeof zone === "string" && zone in byZone) {
@@ -188,6 +194,8 @@ function setup(
 ): {
   /** Every info line the controller logged. */
   infos: string[];
+  /** Every debug line the controller logged. */
+  debugs: string[];
   /**
    * Make value writes throw, to prove what a failing tree write may and may not cost. `only`
    * narrows it to one state id, so a test can break exactly the zone-status path and leave the
@@ -222,6 +230,7 @@ function setup(
   const breakAcks: { on: boolean; only?: string } = { on: false };
   const warnings: string[] = [];
   const infos: string[] = [];
+  const debugs: string[] = [];
   let cancelled = false;
   let unregistered = false;
   const controller = new YxcDeviceController("living", {
@@ -261,6 +270,9 @@ function setup(
     },
     log: {
       ...silentLog,
+      debug: (line: string) => {
+        debugs.push(line);
+      },
       info: (line: string) => {
         infos.push(line);
       },
@@ -271,6 +283,7 @@ function setup(
   });
   return {
     infos,
+    debugs,
     breakAcks,
     warnings,
     hold,
@@ -1109,19 +1122,82 @@ describe("YxcDeviceController", () => {
     expect(s.client.calls.filter(c => c.method === "getStatus").length).toBeGreaterThanOrEqual(1);
   });
 
-  test("a device that refuses a write is alive — no liveness check, no drop", async () => {
+  test("a device that refuses a write is alive — read back once, no liveness check, no drop", async () => {
     const s = setup(wx10, ysp);
     await s.controller.start();
     let dropped = 0;
     s.controller.onDrop(() => dropped++);
     const statusReads = (): number => s.client.calls.filter(c => c.method === "getStatus").length;
     const before = statusReads();
-    s.client.failWrites = new Error("device refused main/setPower (response_code 3)");
+    s.client.failWrites = new YxcRefusalError("/main/setPower?power=standby", 3);
     s.client.failStatus = true;
     s.controller.handleStateChange("living.power", false, false);
     await flush();
-    expect(statusReads()).toBe(before);
+    // The one status read is the read-back of the refused value (C28) — even when it fails, a
+    // refusal never judges the device gone.
+    expect(statusReads()).toBe(before + 1);
     expect(dropped).toBe(0);
+  });
+
+  // A refused value stood unacknowledged: no event corrects it (nothing changed), and the next
+  // zone poll was five minutes away, a system value's thirty (audit 2026-09-24, C28).
+  test("a refused write is read back at once and puts the device's value back, push or not", async () => {
+    const s = setup(wx10, ysp, {}, () => true);
+    await s.controller.start();
+    s.acks.length = 0;
+    s.client.calls.length = 0;
+    s.client.failWrites = new YxcRefusalError("/main/setPower?power=on", 5);
+    s.controller.handleStateChange("living.power", false, true);
+    await flush();
+    expect(s.client.calls.map(c => c.method)).toEqual(["power", "getStatus"]);
+    expect(s.acks).toContainEqual({ id: "living.power", value: false });
+    expect(s.warnings).toEqual([
+      "living: write to power failed: device refused /main/setPower?power=on (response_code 5: Guarded)",
+    ]);
+  });
+
+  test("a refused device-wide setting is read back too", async () => {
+    const s = setup(wx10, ysp, {}, () => true);
+    s.client.funcStatus = { response_code: 0, auto_power_standby: true };
+    await s.controller.start();
+    s.acks.length = 0;
+    s.client.calls.length = 0;
+    s.client.failWrites = new YxcRefusalError("/system/setAutoPowerStandby?enable=false", 5);
+    s.controller.handleStateChange("living.advanced.autoPowerStandby", false, false);
+    await flush();
+    expect(s.client.calls.map(c => c.method)).toEqual(["setAutoPowerStandby", "getFuncStatus"]);
+    expect(s.acks).toContainEqual({ id: "living.advanced.autoPowerStandby", value: true });
+  });
+
+  // A refusal is an answer: code 1 "Initializing" while the device boots, 99 during a firmware
+  // update. The keepalive and the liveness check counted it as silence (audit 2026-09-24, C15).
+  test("a zone status refusal is proof of life — no drop from the keepalive or the liveness check", async () => {
+    const s = setup(wx10, ysp);
+    await s.controller.start();
+    let dropped = 0;
+    s.controller.onDrop(() => dropped++);
+    s.client.refuseStatus = 99;
+    for (let run = 0; run < 4; run++) {
+      s.fire.keepalive?.();
+      await flush();
+    }
+    await s.controller.verifyAlive();
+    expect(dropped).toBe(0);
+    // The same device silent: the liveness check reports the drop at once.
+    s.client.refuseStatus = undefined;
+    s.client.failStatus = true;
+    await s.controller.verifyAlive();
+    expect(dropped).toBe(1);
+  });
+
+  test("a start whose zones all refuse is not ready — and says so, not 'unreachable'", async () => {
+    const s = setup(wx10, ysp);
+    s.client.refuseStatus = 1;
+    expect(await s.controller.start()).toBe(false);
+    expect(s.debugs).toContainEqual(
+      "living: the device answers but is not ready yet — device refused /main/getStatus (response_code 1: Initializing) (YXC)",
+    );
+    expect(s.debugs.some(line => line.includes("unreachable"))).toBe(false);
   });
 
   test("a transport failure on a device whose zone still answers is no drop", async () => {

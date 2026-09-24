@@ -26,7 +26,7 @@ import type { ConnectionHandle, ControllerLog } from "../controller";
 import { errorMessage } from "../util";
 import { coerceBool } from "../catalog/value-coerce";
 import { PollDropDetector } from "../lifecycle/poll-drop-detector";
-import { YxcTransportError } from "./http-client";
+import { YxcRefusalError, YxcTransportError } from "./http-client";
 import type { ProbeMemory } from "../lifecycle/probe-memory";
 import { zonePrefix } from "./zones";
 import { presentSystemEntries, type YxcSystemEntry } from "./system-catalog";
@@ -56,6 +56,9 @@ const ANNOUNCED_MAIN_FIELDS = ["power", "input", "volume", "mute"];
 
 /** The written command kinds a device announces by event when they change something it reports. */
 const ANNOUNCED_KINDS = new Set(["run", "volume", "equalizer", "tunerBand", "tunerFreq"]);
+
+/** A zone's status request: answered, refused by the device (it is there), or unanswered. */
+type ZoneAnswer = { kind: "ok"; status: unknown } | { kind: "refused"; reason: string } | { kind: "unreachable" };
 
 /**
  * Whether a written value equals the one the device reported — compared the way a state write
@@ -329,7 +332,8 @@ export class YxcDeviceController implements ConnectionHandle {
     // RX-A2070 capture lists only "manual" as tone-control mode and answers "auto"), and the
     // list has to carry it from the start (a later widening is possible since 2.7.0, but a
     // dropdown must not be wrong in between). One request per zone, reused below as the seed.
-    const statuses = await Promise.all(this.zones.map(zone => this.fetchZoneStatus(zone)));
+    const answers = await Promise.all(this.zones.map(zone => this.fetchZoneStatus(zone)));
+    const statuses = answers.map(answer => (answer.kind === "ok" ? answer.status : undefined));
     const reported: Record<string, Record<string, string>> = {};
     this.zones.forEach((zone, index) => {
       const status = statuses[index];
@@ -413,7 +417,15 @@ export class YxcDeviceController implements ConnectionHandle {
     // out of memory. Everything before it — capabilities, model, name — can come from the
     // persisted memory without a single request reaching the device.
     if (!zonesAnswered.some(Boolean)) {
-      this.deps.log.debug(`${this.deviceId}: no zone answered getStatus — device unreachable (YXC)`);
+      // A refusal is an answer: the device is there and not ready (response_code 1 "Initializing"
+      // while it boots, 99 during a firmware update) — no values to start from, but no "unreachable"
+      // either (audit 2026-09-24, C15).
+      const refusal = answers.find(answer => answer.kind === "refused");
+      this.deps.log.debug(
+        refusal?.kind === "refused"
+          ? `${this.deviceId}: the device answers but is not ready yet — ${refusal.reason} (YXC)`
+          : `${this.deviceId}: no zone answered getStatus — device unreachable (YXC)`,
+      );
       return false;
     }
     this.mediaBlocks = capabilities.media;
@@ -719,11 +731,20 @@ export class YxcDeviceController implements ConnectionHandle {
       return;
     }
     try {
-      await entry.write?.apply(this.deps.client, input);
+      try {
+        await entry.write?.apply(this.deps.client, input);
+      } catch (e) {
+        this.deps.log.warn(`${this.deviceId}: ${entry.state} could not be set (${errorMessage(e)})`);
+        this.checkAliveAfter(e);
+        // A refused setting is read back like a taken one — the datapoint shows what the device
+        // kept (audit 2026-09-24, C28); a write nobody answered leaves it to the liveness check.
+        if (!(e instanceof YxcRefusalError)) {
+          return;
+        }
+      }
       this.applySystemStatus(await this.deps.client.getFuncStatus());
     } catch (e) {
-      this.deps.log.warn(`${this.deviceId}: ${entry.state} could not be set (${errorMessage(e)})`);
-      this.checkAliveAfter(e);
+      this.deps.log.debug(`${this.deviceId}: reading ${entry.state} back failed (${errorMessage(e)})`);
     }
   }
 
@@ -1251,15 +1272,16 @@ export class YxcDeviceController implements ConnectionHandle {
    * Fetch a zone's status and write its amp states with ack.
    *
    * @param zone the zone to refresh
-   * @returns true if the status was fetched, false if the request failed
+   * @returns true if the device answered (with its status, or refusing it — it is there), false if
+   *   nothing answered
    */
   private async refreshZone(zone: string): Promise<boolean> {
-    const status = await this.fetchZoneStatus(zone);
-    if (status === undefined) {
-      return false;
+    const answer = await this.fetchZoneStatus(zone);
+    if (answer.kind !== "ok") {
+      return answer.kind === "refused";
     }
     try {
-      await this.applyZoneStatus(zone, status);
+      await this.applyZoneStatus(zone, answer.status);
     } catch (e) {
       // A push handler calls this without awaiting it, so a rejection here would have no
       // receiver at all — js-controller turns an unhandled rejection into an adapter stop.
@@ -1274,14 +1296,14 @@ export class YxcDeviceController implements ConnectionHandle {
    * Fetch a zone's status, swallowing the failure of an absent zone or an offline device.
    *
    * @param zone the zone to ask
-   * @returns the raw getStatus answer, or undefined when the request failed
+   * @returns the answer: the raw status, the device's refusal, or none
    */
-  private async fetchZoneStatus(zone: string): Promise<unknown> {
+  private async fetchZoneStatus(zone: string): Promise<ZoneAnswer> {
     try {
-      return await this.deps.client.getStatus(zone);
+      return { kind: "ok", status: await this.deps.client.getStatus(zone) };
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getStatus(${zone}) failed: ${errorMessage(e)}`);
-      return undefined;
+      return e instanceof YxcRefusalError ? { kind: "refused", reason: errorMessage(e) } : { kind: "unreachable" };
     }
   }
 
@@ -1446,8 +1468,13 @@ export class YxcDeviceController implements ConnectionHandle {
   private async applyCommand(stateId: string, command: YxcCommand, written?: unknown): Promise<void> {
     // Dropped with `void` by the write path: nothing may reject out of here.
     try {
-      if (await this.sendCommand(stateId, command)) {
+      const outcome = await this.sendCommand(stateId, command);
+      if (outcome === "sent") {
         await this.confirmWrite(stateId, command, written);
+      } else if (outcome === "refused") {
+        // The device said no: the datapoint still shows the refused value, and no event will
+        // correct it (nothing changed) — read what the device kept (audit 2026-09-24, C28).
+        await this.readBackAfter(stateId, command);
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: confirming the write to ${stateId} failed: ${errorMessage(e)}`);
@@ -1459,9 +1486,9 @@ export class YxcDeviceController implements ConnectionHandle {
    *
    * @param stateId the written state id, for the failure log line
    * @param command the YXC command to apply
-   * @returns whether the device took it (a failure is logged here)
+   * @returns whether the device took it, refused it, or never answered (a failure is logged here)
    */
-  private async sendCommand(stateId: string, command: YxcCommand): Promise<boolean> {
+  private async sendCommand(stateId: string, command: YxcCommand): Promise<"sent" | "refused" | "failed"> {
     try {
       switch (command.kind) {
         case "run":
@@ -1539,9 +1566,9 @@ export class YxcDeviceController implements ConnectionHandle {
     } catch (e) {
       this.deps.log.warn(`${this.deviceId}: write to ${stateId} failed: ${errorMessage(e)}`);
       this.checkAliveAfter(e);
-      return false;
+      return e instanceof YxcRefusalError ? "refused" : "failed";
     }
-    return true;
+    return "sent";
   }
 
   /** Whether events are to be relied on: the socket is bound and this device's events arrive. */

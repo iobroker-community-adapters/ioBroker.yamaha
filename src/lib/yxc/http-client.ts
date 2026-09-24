@@ -53,6 +53,59 @@ export class YxcTransportError extends Error {
   }
 }
 
+/**
+ * What a MusicCast `response_code` means — the tables of YXC Basic Rev 1.00 §9 / Rev 1.10 §10 and
+ * YXC Advanced §6 (which adds 113–115 and the 200s), worded as the specification words them. A log
+ * line that said only "response_code 5" left the reader to look it up (audit 2026-09-24, C23).
+ */
+export const YXC_RESPONSE_CODES: Readonly<Record<number, string>> = {
+  1: "Initializing",
+  2: "Internal Error",
+  3: "Invalid Request",
+  4: "Invalid Parameter",
+  5: "Guarded",
+  6: "Time Out",
+  99: "Firmware Updating",
+  100: "Access Error",
+  101: "Other Errors",
+  102: "Wrong User Name",
+  103: "Wrong Password",
+  104: "Account Expired",
+  105: "Account Disconnected/Gone Off/Shut Down",
+  106: "Account Number Reached to the Limit",
+  107: "Server Maintenance",
+  108: "Invalid Account",
+  109: "License Error",
+  110: "Read Only Mode",
+  111: "Max Stations",
+  112: "Access Denied",
+  113: "There is a need to specify the additional destination Playlist",
+  114: "There is a need to create a new Playlist",
+  115: "Simultaneous logins has reached the upper limit",
+  200: "Linking in progress",
+  201: "Unlinking in progress",
+};
+
+/**
+ * The device answered — and said no (`response_code` ≠ 0). Proof that it is there: a refusal
+ * never makes a device "unreachable" (audit 2026-09-24, C15), and a refused write is read back so
+ * the datapoint shows what the device kept (C28).
+ */
+export class YxcRefusalError extends Error {
+  /**
+   * @param command the command path the device refused
+   * @param code the device's `response_code`
+   */
+  public constructor(
+    command: string,
+    public readonly code: number,
+  ) {
+    const meaning = YXC_RESPONSE_CODES[code];
+    super(`device refused ${command} (response_code ${code}${meaning ? `: ${meaning}` : ""})`);
+    this.name = "YxcRefusalError";
+  }
+}
+
 /** Sends a command path and resolves the parsed JSON body — the injectable transport seam. */
 export type YxcSend = (command: string, body?: string) => Promise<unknown>;
 
@@ -145,7 +198,7 @@ function defaultSend(ip: string): YxcSend {
 function assertOk(payload: unknown, command: string): unknown {
   const code = (payload as { response_code?: unknown } | null)?.response_code;
   if (typeof code === "number" && code !== 0) {
-    throw new Error(`device refused ${command} (response_code ${code})`);
+    throw new YxcRefusalError(command, code);
   }
   return payload;
 }
