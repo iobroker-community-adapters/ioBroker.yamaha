@@ -371,12 +371,36 @@ describe("XmlBrowseDriver paging and its guards", () => {
     expect(windows).toEqual([]);
   });
 
-  it("gives up after the busy polls run out instead of rendering a half-built window", async () => {
-    // One body, handed out again and again: the receiver never leaves Busy.
-    const { driver, calls, windows } = setup([listBody({ busy: true })]);
+  // 20 × 1 s, as rxv waits — 10 × 0.5 s gave up while a catalog level was still coming, in silence (D11).
+  it("gives up after 20 busy polls a second apart, says so, and renders no half-built window", async () => {
+    const calls: Array<{ method: string; element: string; inner: string }> = [];
+    const waited: number[] = [];
+    const warnings: string[] = [];
+    const driver = new XmlBrowseDriver(
+      {
+        send: (element, inner) => {
+          calls.push({ method: "send", element, inner });
+          return Promise.resolve();
+        },
+        getXml: (element, inner) => {
+          calls.push({ method: "getXml", element, inner });
+          return Promise.resolve(listBody({ busy: true }));
+        },
+      },
+      new Set(["NET_RADIO"]),
+      ms => {
+        waited.push(ms);
+        return Promise.resolve();
+      },
+      { debug: () => {}, info: () => {}, warn: line => void warnings.push(line) },
+    );
+    const windows: BrowseWindow[] = [];
+    driver.attach({ onWindow: (window: BrowseWindow) => windows.push(window) } as unknown as BrowseEngine);
     await driver.open("netRadio");
     expect(windows).toEqual([]);
-    expect(calls.filter(call => call.method === "getXml")).toHaveLength(10);
+    expect(calls.filter(call => call.method === "getXml")).toHaveLength(20);
+    expect(waited.every(ms => ms === 1000)).toBe(true);
+    expect(warnings).toEqual(["menu of netRadio still busy after 20 s — window not refreshed"]);
   });
 });
 

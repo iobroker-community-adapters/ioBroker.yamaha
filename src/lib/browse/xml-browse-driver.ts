@@ -11,10 +11,13 @@ import type { BrowseEngine } from "./browse-engine";
 import type { ControllerLog } from "../controller";
 import { decodeXmlText } from "../xml/entities";
 
-/** How often to re-read while the device reports Menu_Status Busy. */
-const BUSY_POLL_MS = 500;
-/** How many busy polls before giving up on one read. */
-const MAX_BUSY_POLLS = 10;
+/**
+ * How often, and how many times, to re-read while the device reports Menu_Status Busy — 20 × 1 s, as
+ * rxv waits: a catalog service can take that long to fill a level, and 10 × 0.5 s gave up while it
+ * was still coming (audit 2026-09-24, D11).
+ */
+const BUSY_POLL_MS = 1000;
+const MAX_BUSY_POLLS = 20;
 
 /** One XML/YNC source with a menu. */
 export interface XmlBrowseSource {
@@ -437,6 +440,10 @@ export class XmlBrowseDriver implements BrowseDriver {
       }
       await this.delay(BUSY_POLL_MS);
     }
+    // A user action that ends without a window says so (it used to end in silence).
+    this.log?.warn(
+      `menu of ${this.active.key} still busy after ${(MAX_BUSY_POLLS * BUSY_POLL_MS) / 1000} s — window not refreshed`,
+    );
     return undefined;
   }
 }
