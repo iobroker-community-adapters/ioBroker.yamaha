@@ -208,6 +208,62 @@ describe("DeviceSupervisor", () => {
   });
 });
 
+describe("DeviceSupervisor closes what runs and names the device (audit 2026-09-24, A3/A16)", () => {
+  test("close() aborts the attempt in flight", async () => {
+    let seen: AbortSignal | undefined;
+    const supervisor = new DeviceSupervisor({
+      attempt: signal => {
+        seen = signal;
+        return new Promise<null>(() => {});
+      },
+      schedule: () => 1,
+      cancel: () => {},
+      onConnectionChange: () => {},
+      backoff: fastBackoff(),
+      log: silentLog,
+    });
+    supervisor.start();
+    await tick();
+    expect(seen?.aborted).toBe(false);
+    supervisor.close();
+    expect(seen?.aborted).toBe(true);
+  });
+
+  test("the attempt-failed and drop lines name the device", async () => {
+    const debugs: string[] = [];
+    let dropCb: (reason?: Error) => void = () => {};
+    let attempts = 0;
+    const supervisor = new DeviceSupervisor({
+      deviceId: "Living_room",
+      attempt: () => {
+        attempts++;
+        return attempts === 1
+          ? Promise.reject(new Error("boom"))
+          : Promise.resolve({
+              onDrop: (cb: (r?: Error) => void) => (dropCb = cb),
+              handleStateChange: () => {},
+              close: () => {},
+            });
+      },
+      schedule: cb => {
+        setImmediate(cb);
+        return 1;
+      },
+      cancel: () => {},
+      onConnectionChange: () => {},
+      backoff: fastBackoff(),
+      log: { ...silentLog, debug: (message: string): void => void debugs.push(message) },
+    });
+    supervisor.start();
+    await tick();
+    await tick();
+    dropCb(new Error("liveness check unanswered"));
+    expect(debugs).toContain("Living_room: connection attempt failed, retrying: boom");
+    expect(debugs).toContain("Living_room: connection dropped, reconnecting: liveness check unanswered");
+    supervisor.close();
+  });
+});
+
 describe("DeviceSupervisor teardown", () => {
   test("a retry timer that fires after close attempts nothing", async () => {
     const attempt = vi.fn(() => Promise.resolve(null));

@@ -70,6 +70,39 @@ function setup(connections: TransportConnection[]): { handle: MultiTransportHand
   return { handle, objects };
 }
 
+describe("MultiTransportHandle start with a latched drop (audit 2026-09-24, A1)", () => {
+  // A drop the YNCA client latched before start is delivered while its handler is armed; it
+  // spliced `live` under the loop, and the NEXT transport never got a drop handler — a device
+  // without power stayed connected for good.
+  test("a drop latched before start() leaves every other transport armed", async () => {
+    const ynca = fakeConn("ynca", [state("power", "Power")]);
+    const latched = ynca.onDrop;
+    ynca.onDrop = (cb: (reason?: Error) => void): void => {
+      latched(cb);
+      cb(new Error("socket closed before start"));
+    };
+    const yxc = fakeConn("yxc", [state("volume", "Volume")]);
+    const xml = fakeConn("xml", [state("mute", "Mute")]);
+    const reports: string[][] = [];
+    const handle = new MultiTransportHandle("living", [ynca, yxc, xml], {
+      upsertObject: () => Promise.resolve(),
+      log: silentLog,
+      onTransports: names => reports.push(names),
+    });
+    const running = await handle.start();
+    expect(running).toEqual(["yxc", "xml"]);
+    yxc.drop(new Error("3 polls failed"));
+    expect(yxc.closed).toBe(true);
+    expect(reports.at(-1)).toEqual(["xml"]);
+    let gone = false;
+    handle.onDrop(() => {
+      gone = true;
+    });
+    xml.drop();
+    expect(gone).toBe(true);
+  });
+});
+
 describe("MultiTransportHandle", () => {
   test("builds one unified tree from all connections and seeds each its owned ids", async () => {
     const ynca = fakeConn("ynca", [state("volume", "Volume dB", { unit: "dB" }), state("power", "Power YNCA")]);

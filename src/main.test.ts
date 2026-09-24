@@ -461,6 +461,8 @@ function internalOf(adapter: Yamaha): {
   setTransports(deviceId: string, names: string[]): void;
   onSsdpAlive(notify: { nts: "alive"; location?: string }, address: string): void;
   rediscoverNow(lifted: readonly string[]): void;
+  updateTableAddress(deviceId: string, ip: string): Promise<void>;
+  removed: Set<string>;
   deviceRecords: Map<string, { id: string; ip: string; source?: string; identity?: { serial?: string; mac?: string } }>;
   xmlPollIntervalMs(): number;
   objects: Map<string, Record<string, unknown>>;
@@ -1265,6 +1267,91 @@ describe("Yamaha auto-discovery", () => {
       expect(ctx.i.supervisorById.size).toBe(1);
     });
 
+    /**
+     * The move scenario of the test above: the attempt on the old address hangs until released.
+     *
+     * @returns the context and the release of the old attempt
+     */
+    async function hangingMove(): Promise<{ ctx: Ctx; releaseOld: () => void }> {
+      mocks.discoveredStore.devices = [{ id: "Yamaha_RX-V6a", ip: "192.168.1.10", identity: v6a }];
+      let releaseOld: () => void = () => undefined;
+      const ctx = setup({ devices: [] });
+      mocks.attemptDevice.mockImplementation((device: AttemptCall["device"], deps: AttemptCall["deps"]) => {
+        ctx.calls.push({ device, deps });
+        if (device.ip === "192.168.1.10") {
+          return new Promise<null>(resolve => (releaseOld = () => resolve(null)));
+        }
+        const h = fakeHandle();
+        ctx.handles.push(h);
+        return Promise.resolve(h);
+      });
+      await ctx.i.onReady();
+      await flush();
+      mocks.probeDescription.mockResolvedValue({ ip: "192.168.1.20", name: "Yamaha RX-V6a", identity: v6a });
+      return { ctx, releaseOld: () => releaseOld() };
+    }
+
+    // Two merges for one move — a NOTIFY and a search at once — both found the old supervisor gone and
+    // each started one at the new address; the first held the one YNCA socket (audit 2026-09-24, A2).
+    it("two merge runs for the same move leave ONE supervisor", async () => {
+      const { ctx, releaseOld } = await hangingMove();
+      mocks.discoverYamaha.mockResolvedValue([{ ip: "192.168.1.20", name: "Yamaha RX-V6a", identity: v6a }]);
+      ctx.i.onSsdpAlive({ nts: "alive", location: "http://192.168.1.20:49154/desc.xml" }, "192.168.1.20");
+      ctx.i.rediscoverNow([]);
+      await flush();
+      releaseOld();
+      await flush();
+      await flush();
+      expect(ctx.calls.filter(c => c.device.ip === "192.168.1.20")).toHaveLength(1);
+      expect(ctx.i.supervisorById.size).toBe(1);
+    });
+
+    it("a delete while a move waits for the old attempt keeps the device deleted", async () => {
+      const { ctx, releaseOld } = await hangingMove();
+      ctx.i.onSsdpAlive({ nts: "alive", location: "http://192.168.1.20:49154/desc.xml" }, "192.168.1.20");
+      await flush();
+      await ctx.i.removeDevice("Yamaha_RX-V6a");
+      releaseOld();
+      await flush();
+      expect(ctx.calls.filter(c => c.device.ip === "192.168.1.20")).toHaveLength(0);
+      expect(ctx.i.supervisorById.size).toBe(0);
+    });
+
+    it("a move whose old attempt settles after the unload starts nothing", async () => {
+      const { ctx, releaseOld } = await hangingMove();
+      ctx.i.onSsdpAlive({ nts: "alive", location: "http://192.168.1.20:49154/desc.xml" }, "192.168.1.20");
+      await flush();
+      await new Promise<void>(resolve => ctx.i.onUnload(resolve));
+      releaseOld();
+      await flush();
+      expect(ctx.calls.filter(c => c.device.ip === "192.168.1.20")).toHaveLength(0);
+    });
+
+    // A delete writes its own table; the move's write came after it and put the row back.
+    it("a move's table write is dropped once the row was deleted", async () => {
+      const ctx = setup({ devices: [{ name: "192.168.1.10", ip: "192.168.1.10" }] });
+      await ctx.i.onReady();
+      await flush();
+      ctx.i.foreignObjects.set("system.adapter.yamaha.0", {
+        native: { devices: [{ name: "192.168.1.10", ip: "192.168.1.10" }] },
+      });
+      const before = JSON.stringify(ctx.i.foreignObjects.get("system.adapter.yamaha.0"));
+      ctx.i.removed.add("192_168_1_10");
+      await ctx.i.updateTableAddress("192_168_1_10", "192.168.1.20");
+      expect(JSON.stringify(ctx.i.foreignObjects.get("system.adapter.yamaha.0"))).toBe(before);
+    });
+
+    // An attempt that finishes while the adapter unloads raised the protocol flags again (A3).
+    it("an attempt finishing during the unload does not raise the protocol flags", async () => {
+      const ctx = setup({ devices: [{ name: "Living room", ip: "192.168.1.10" }] });
+      await ctx.i.onReady();
+      await flush();
+      const deps = ctx.calls[0].deps;
+      await new Promise<void>(resolve => ctx.i.onUnload(resolve));
+      (deps.onTransports as (names: string[]) => void)(["ynca"]);
+      expect(ctx.i.states.get("Living_room.info.transports.ynca")?.val).not.toBe(true);
+    });
+
     it("an alive whose description could not be read is asked again after seconds, not after a minute", async () => {
       // A receiver announces itself early in its boot, before its HTTP server answers — the
       // first probe fails. The boot burst must not be locked out for a minute on that.
@@ -1476,13 +1563,14 @@ describe("Yamaha auto-discovery", () => {
     expect(deps).toBeDefined();
     const removal = ctx.i.removeDevice("RX-V685");
     await flush();
-    // The attempt is still inside its build: it writes one more object, then gives up.
+    // The attempt is still inside its build and tries one more object: the closed supervisor
+    // aborted it, so the write is refused instead of landing as an orphan (audit 2026-09-24, A3).
     await (deps?.upsertObject as (id: string, def: unknown) => Promise<void>)("RX-V685.volume", {
       type: "state",
       common: { name: "Volume", type: "number", role: "level.volume", read: true, write: true },
       native: {},
     });
-    expect(ctx.i.objects.has("RX-V685.volume")).toBe(true);
+    expect(ctx.i.objects.has("RX-V685.volume")).toBe(false);
     finish(null);
     await removal;
     expect(ctx.i.objects.has("RX-V685")).toBe(false);

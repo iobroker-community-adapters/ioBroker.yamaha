@@ -258,6 +258,55 @@ vi.mock("node:dgram", () => ({
   },
 }));
 
+describe("connectTransports ends with what is live (audit 2026-09-24, A21/A3)", () => {
+  // Every transport dropping while the tree was built used to hand the supervisor a handle: a
+  // "ready" line and info.connection true, then at once false — for a device that is off.
+  test("all transports dropping during start is no connection and no ready line", async () => {
+    const latchedDrop = (transport: Transport): ConnectableTransport & { closed: boolean } => {
+      const conn = fakeConn(transport, [state(`${transport}.x`, "X")]);
+      conn.onDrop = (cb: (reason?: Error) => void): void => cb(new Error("gone"));
+      return conn;
+    };
+    const ynca = latchedDrop("ynca");
+    const xml = latchedDrop("xml");
+    const infos: string[] = [];
+    const d = { ...deps(), log: { ...silentLog, info: (message: string): void => void infos.push(message) } };
+    const handle = await connectTransports(
+      "living",
+      [
+        { transport: "ynca", build: () => ynca },
+        { transport: "xml", build: () => xml },
+      ],
+      d,
+    );
+    expect(handle).toBeNull();
+    expect(infos).toEqual([]);
+  });
+
+  // A delete or a move closes the supervisor while the attempt still connects: what it built is
+  // closed (that also closes the command gate) and the attempt yields nothing.
+  test("an aborted attempt closes every transport it built and returns null", async () => {
+    let release: (ok: boolean) => void = () => {};
+    const slow = fakeConn("ynca", [state("power", "Power")], () => new Promise<boolean>(r => (release = r)));
+    const fast = fakeConn("yxc", [state("volume", "Volume")]);
+    const abort = new AbortController();
+    const pending = connectTransports(
+      "living",
+      [
+        { transport: "ynca", build: () => slow },
+        { transport: "yxc", build: () => fast },
+      ],
+      deps(),
+      abort.signal,
+    );
+    abort.abort();
+    expect(slow.closed).toBe(true);
+    expect(fast.closed).toBe(true);
+    release(true);
+    await expect(pending).resolves.toBeNull();
+  });
+});
+
 describe("partnerClient — the multiroom link target", () => {
   test("another device this instance runs gets a client; the device itself and strangers do not", () => {
     const known = new Set(["192.168.1.10", "192.168.1.11"]);

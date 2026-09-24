@@ -42,3 +42,13 @@ describe("PollDropDetector", () => {
     expect(reasons).toHaveLength(1);
   });
 });
+
+describe("PollDropDetector reason (audit 2026-09-24, C29)", () => {
+  it("carries the reason it is given instead of claiming a run of failed polls", () => {
+    const detector = new PollDropDetector();
+    const reasons: Array<string | undefined> = [];
+    detector.onDrop(reason => reasons.push(reason?.message));
+    detector.report("liveness check unanswered");
+    expect(reasons).toEqual(["liveness check unanswered"]);
+  });
+});

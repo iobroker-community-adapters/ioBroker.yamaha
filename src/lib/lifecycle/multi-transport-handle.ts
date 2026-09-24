@@ -105,14 +105,27 @@ export class MultiTransportHandle implements ConnectionHandle {
     this.live = [...connections];
   }
 
-  /** Unify the catalogs into one tree, create it, seed owned states, and arm the drop handlers. */
-  public async start(): Promise<void> {
+  /**
+   * Unify the catalogs into one tree, create it, seed owned states, and arm the drop handlers.
+   *
+   * @returns the transports still live once every handler is armed — empty when all of them
+   *   dropped on the way (a drop latched before start is delivered while arming)
+   */
+  public async start(): Promise<Transport[]> {
     await this.coordinate();
-    for (const connection of this.live) {
+    // Over a COPY: a drop latched before start is delivered synchronously while its handler is
+    // armed, and handleTransportDrop splices it out of `live` — iterating `live` itself skipped
+    // the NEXT transport, which then never got a drop handler: a device without power stayed
+    // connected for good (audit 2026-09-24, A1).
+    for (const connection of [...this.live]) {
+      if (!this.live.includes(connection)) {
+        continue;
+      }
       connection.onDrop(reason => this.handleTransportDrop(connection, reason));
       this.armShapeChanges(connection);
     }
     this.reportTransports();
+    return this.live.map(connection => connection.transport);
   }
 
   /**
@@ -274,7 +287,7 @@ export class MultiTransportHandle implements ConnectionHandle {
     this.reportTransports();
     this.deps.log.debug(
       `${this.deviceId}/${connection.transport}: transport dropped, reconnecting it` +
-        `${reason ? ` (${reason.message})` : ""} — other transports keep running`,
+        `${reason ? ` (${errorMessage(reason)})` : ""} — other transports keep running`,
     );
     // The first drop is the question to the others: a device that lost power has every
     // transport dead, but a polled one notices only at its own cadence. Asked now, it reports

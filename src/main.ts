@@ -198,6 +198,15 @@ export class Yamaha extends utils.Adapter {
    */
   private readonly removed = new Set<string>();
   /**
+   * The merge path (absorb what a search or a NOTIFY found, then start or move devices) runs one
+   * at a time. Two overlapping runs — the quick re-search and a boot announcement — both found the
+   * old supervisor stopped and started two for the same device; the first held the receiver's one
+   * YNCA connection until the adapter stopped (audit 2026-09-24, A2).
+   */
+  private mergeChain: Promise<unknown> = Promise.resolve();
+  /** The setup of a device in progress (header, profile) — a delete waits for it before it deletes. */
+  private readonly starting = new Map<string, Promise<void>>();
+  /**
    * deviceId → the address a MANUAL device was last seen answering at, away from its typed one.
    * The warning is said once per new address, not on every search.
    */
@@ -396,6 +405,28 @@ export class Yamaha extends utils.Adapter {
    * @param pushReceiver the shared YXC push receiver
    */
   private async startDevice(device: DeviceRecord, pushReceiver: YxcPushReceiver): Promise<void> {
+    // One supervisor per device: a second start for a running id would put two of them on the
+    // same tree and the same YNCA socket (audit 2026-09-24, A2).
+    if (this.supervisorById.has(device.id) || this.starting.has(device.id)) {
+      this.log.debug(`${device.id}: already running — not started a second time`);
+      return;
+    }
+    const setup = this.setUpDevice(device, pushReceiver);
+    this.starting.set(device.id, setup);
+    try {
+      await setup;
+    } finally {
+      this.starting.delete(device.id);
+    }
+  }
+
+  /**
+   * The body of {@link startDevice}.
+   *
+   * @param device the device record
+   * @param pushReceiver the shared YXC push receiver
+   */
+  private async setUpDevice(device: DeviceRecord, pushReceiver: YxcPushReceiver): Promise<void> {
     // Both callers check `unloading` after their network search resolves (onReady and
     // discoverAdditionalDevices) — a device handed over after onUnload never gets here.
     this.deviceConnected.set(device.id, false);
@@ -418,6 +449,9 @@ export class Yamaha extends utils.Adapter {
     // persisted at the device object (one capability profile), so a restart starts from the
     // remembered answers.
     const profile = await this.loadDeviceProfile(device.id);
+    if (this.unloading || this.removed.has(device.id)) {
+      return; // deleted, or the adapter stopped, while the header was written
+    }
     const subunitCache = profile.subunitCache;
     const probeMemory = profile.probeMemory;
     // Narrowing (attempt-device.ts: only the transports the description advertises) applies
@@ -427,13 +461,15 @@ export class Yamaha extends utils.Adapter {
     // this a narrowed set could never widen again, silently.
     let failedInARow = 0;
     const supervisor = new DeviceSupervisor({
-      attempt: async () => {
+      deviceId: device.id,
+      attempt: async signal => {
         const handle = await this.attemptDevice(
           { ...device, services: failedInARow > 0 ? device.services : undefined },
           pushReceiver,
           this.knownDeviceIps,
           subunitCache,
           probeMemory,
+          signal,
         );
         failedInARow = handle ? 0 : failedInARow + 1;
         return handle;
@@ -468,11 +504,14 @@ export class Yamaha extends utils.Adapter {
    */
   private async discoverAdditionalDevices(pushReceiver: YxcPushReceiver): Promise<void> {
     try {
-      const merged = await this.runDiscovery();
+      const found = await this.searchNetwork();
       if (this.unloading) {
         return; // the search outlived the adapter — nothing may start now
       }
-      const touched = await this.reconcileDiscovered(merged, pushReceiver);
+      const touched = await this.serializedMerge(async () => {
+        const merged = await this.absorbFinds(found);
+        return this.unloading ? new Set<string>() : this.reconcileDiscovered(merged, pushReceiver);
+      });
       // "Off, not moved": an offline device the whole network did not answer for keeps its
       // objects and its address — the supervisor retries there. A debug line, once per outage:
       // being off is a state the datapoints show, not an event for the log.
@@ -531,6 +570,10 @@ export class Yamaha extends utils.Adapter {
           const old = this.supervisorById.get(device.id);
           this.stopDevice(device.id);
           await this.awaitSettled(old);
+          // The wait is long enough for a delete or the unload to arrive (audit 2026-09-24, A2/A9).
+          if (this.removed.has(device.id) || this.unloading) {
+            continue;
+          }
           await this.startDevice(device, pushReceiver);
           touched.add(device.id);
           if (migrated) {
@@ -559,6 +602,10 @@ export class Yamaha extends utils.Adapter {
   private async updateTableAddress(deviceId: string, ip: string): Promise<void> {
     const instanceId = `system.adapter.${this.namespace}`;
     const instance = await this.getForeignObjectAsync(instanceId);
+    // A delete in the meantime writes its own table — this write would put the row back.
+    if (this.removed.has(deviceId) || this.unloading) {
+      return;
+    }
     const rows = (instance?.native as { devices?: unknown } | undefined)?.devices;
     if (!Array.isArray(rows)) {
       return;
@@ -647,8 +694,24 @@ export class Yamaha extends utils.Adapter {
       return;
     }
     this.log.debug(`SSDP alive from ${address}: ${found.name || found.model || "a Yamaha device"} announced itself`);
-    const merged = await this.absorbFinds([found]);
-    await this.reconcileDiscovered(merged, receiver);
+    await this.serializedMerge(async () => {
+      const merged = await this.absorbFinds([found]);
+      if (!this.unloading) {
+        await this.reconcileDiscovered(merged, receiver);
+      }
+    });
+  }
+
+  /**
+   * Run one merge (absorb + reconcile) behind the one in flight — see `mergeChain`.
+   *
+   * @param run the merge
+   * @returns what the merge returns
+   */
+  private serializedMerge<T>(run: () => Promise<T>): Promise<T> {
+    const next = this.mergeChain.then(run, run);
+    this.mergeChain = next.catch(() => undefined);
+    return next;
   }
 
   /**
@@ -864,6 +927,8 @@ export class Yamaha extends utils.Adapter {
    */
   public async removeDevice(deviceId: string): Promise<void> {
     this.removed.add(deviceId);
+    // A setup still writing the header would recreate what the delete below removes.
+    await this.starting.get(deviceId)?.catch(() => undefined);
     const supervisor = this.supervisorById.get(deviceId);
     this.stopDevice(deviceId);
     // `stopDevice` marks the supervisor closed, but an attempt already past its await keeps
@@ -1876,6 +1941,7 @@ export class Yamaha extends utils.Adapter {
    * @param knownDeviceIps IPs of all configured devices, for resolving a multiroom client
    * @param yncaSubunitCache per-device cache of the YNCA AVAIL probe (skips the probe on reconnects)
    * @param probeMemory per-device memory for constant device answers (skips re-asking on reconnects)
+   * @param signal aborted when the device's supervisor is closed while this attempt runs
    * @returns a connection handle, or null when no transport connected
    */
   private attemptDevice(
@@ -1884,75 +1950,99 @@ export class Yamaha extends utils.Adapter {
     knownDeviceIps: Set<string>,
     yncaSubunitCache: YncaSubunitCache,
     probeMemory: ProbeMemory,
+    signal?: AbortSignal,
   ): Promise<ConnectionHandle | null> {
-    return attemptDevice(device, {
-      yncaSubunitCache,
-      probeMemory,
-      // Group gate for the YNCA sweep: a disabled group's functions are never even fetched.
-      isEntryEnabled: id => isGroupEnabled(id, this.config as unknown as Record<string, unknown>),
-      log: {
-        debug: message => this.log.debug(message),
-        info: message => this.log.info(message),
-        warn: message => this.log.warn(message),
-      },
-      upsertObject: async (id, def) => {
-        // Gate on the datapoint group: a switched-off group's objects are not created. The id is
-        // "<deviceId>.<relativeId>"; groupOf reads the relative part.
-        if (!isGroupEnabled(id.slice(id.indexOf(".") + 1), this.config as unknown as Record<string, unknown>)) {
-          return;
-        }
-        // A SHRINKING dropdown needs a clearing write first: extendObject merges `common.states`
-        // key by key, so the old entries would survive every update (#619 — the reporter would
-        // have seen no change at all). Only when the stored map carries a key the new one lacks;
-        // an unchanged or growing map is one write, as before.
-        if (def.type === "state" && def.common.states) {
-          await this.clearStaleStates(id, def.common.states);
-        }
-        await this.writePresented(id, def);
-        if (def.type === "state") {
-          this.noteDatapointCreated(id);
-          this.touchedThisRun.add(id);
-        }
-      },
-      setStateAck: (id, value) => {
-        // Same group gate as upsertObject, so a switched-off group seeds no orphan value either.
-        if (!isGroupEnabled(id.slice(id.indexOf(".") + 1), this.config as unknown as Record<string, unknown>)) {
-          return;
-        }
-        this.writeState(id, this.volumeAsShown(id, value));
-        // A model report also decides the device-class icon on the device node — and, for a
-        // device still carrying the ip it was migrated with, its readable name.
-        if (id.endsWith(".info.model") && typeof value === "string" && value.length > 0) {
-          const reporting = id.slice(0, id.indexOf("."));
-          if (this.lastModel.get(reporting) !== value) {
-            this.lastModel.set(reporting, value);
-            void this.updateDeviceIcon(reporting, value);
-            void this.updateDeviceLabel(reporting, value, LABEL_RANK.model);
+    // Whether this attempt may still write. A delete or a move closes the supervisor (which aborts
+    // the signal) while its attempt can still be sweeping; what it wrote afterwards survived as an
+    // orphan tree, and an attempt finishing during unload raised the protocol flags again (audit
+    // 2026-09-24, A3).
+    const alive = (): boolean => !signal?.aborted && !this.unloading;
+    return attemptDevice(
+      device,
+      {
+        yncaSubunitCache,
+        probeMemory,
+        // Group gate for the YNCA sweep: a disabled group's functions are never even fetched.
+        isEntryEnabled: id => isGroupEnabled(id, this.config as unknown as Record<string, unknown>),
+        log: {
+          debug: message => this.log.debug(message),
+          info: message => this.log.info(message),
+          warn: message => this.log.warn(message),
+        },
+        upsertObject: async (id, def) => {
+          if (!alive()) {
+            return;
           }
-        }
-      },
-      onDeviceName: name => void this.updateDeviceLabel(device.id, name, LABEL_RANK.deviceName),
-      timers: {
-        schedule: (handler, ms) => (this.unloading ? undefined : this.setTimeout(handler, ms)),
-        cancel: handle => this.clearTimeout(handle),
-      },
-      registerPush: (ip, onPush) => pushReceiver.register(ip, onPush),
-      pushActive: () => pushReceiver.isListening(),
-      scheduleKeepalive: (handler, ms) => {
-        if (this.unloading) {
-          return () => {};
-        }
-        const timer = this.setInterval(handler, ms);
-        return () => {
-          if (timer) {
-            this.clearInterval(timer);
+          // Gate on the datapoint group: a switched-off group's objects are not created. The id is
+          // "<deviceId>.<relativeId>"; groupOf reads the relative part.
+          if (!isGroupEnabled(id.slice(id.indexOf(".") + 1), this.config as unknown as Record<string, unknown>)) {
+            return;
           }
-        };
+          // A SHRINKING dropdown needs a clearing write first: extendObject merges `common.states`
+          // key by key, so the old entries would survive every update (#619 — the reporter would
+          // have seen no change at all). Only when the stored map carries a key the new one lacks;
+          // an unchanged or growing map is one write, as before.
+          if (def.type === "state" && def.common.states) {
+            await this.clearStaleStates(id, def.common.states);
+          }
+          await this.writePresented(id, def);
+          if (def.type === "state") {
+            this.noteDatapointCreated(id);
+            this.touchedThisRun.add(id);
+          }
+        },
+        setStateAck: (id, value) => {
+          if (!alive()) {
+            return;
+          }
+          // Same group gate as upsertObject, so a switched-off group seeds no orphan value either.
+          if (!isGroupEnabled(id.slice(id.indexOf(".") + 1), this.config as unknown as Record<string, unknown>)) {
+            return;
+          }
+          this.writeState(id, this.volumeAsShown(id, value));
+          // A model report also decides the device-class icon on the device node — and, for a
+          // device still carrying the ip it was migrated with, its readable name.
+          if (id.endsWith(".info.model") && typeof value === "string" && value.length > 0) {
+            const reporting = id.slice(0, id.indexOf("."));
+            if (this.lastModel.get(reporting) !== value) {
+              this.lastModel.set(reporting, value);
+              void this.updateDeviceIcon(reporting, value);
+              void this.updateDeviceLabel(reporting, value, LABEL_RANK.model);
+            }
+          }
+        },
+        onDeviceName: name => {
+          if (alive()) {
+            void this.updateDeviceLabel(device.id, name, LABEL_RANK.deviceName);
+          }
+        },
+        timers: {
+          schedule: (handler, ms) => (this.unloading ? undefined : this.setTimeout(handler, ms)),
+          cancel: handle => this.clearTimeout(handle),
+        },
+        registerPush: (ip, onPush) => pushReceiver.register(ip, onPush),
+        pushActive: () => pushReceiver.isListening(),
+        scheduleKeepalive: (handler, ms) => {
+          if (this.unloading) {
+            return () => {};
+          }
+          const timer = this.setInterval(handler, ms);
+          return () => {
+            if (timer) {
+              this.clearInterval(timer);
+            }
+          };
+        },
+        xmlPollIntervalMs: this.xmlPollIntervalMs(),
+        onTransports: names => {
+          if (alive()) {
+            this.setTransports(device.id, names);
+          }
+        },
+        knownDeviceIps,
       },
-      xmlPollIntervalMs: this.xmlPollIntervalMs(),
-      onTransports: names => this.setTransports(device.id, names),
-      knownDeviceIps,
-    });
+      signal,
+    );
   }
 
   /**
@@ -2088,6 +2178,16 @@ export class Yamaha extends utils.Adapter {
    * @returns the device records the search established
    */
   private async runDiscovery(): Promise<DeviceRecord[]> {
+    const found = await this.searchNetwork();
+    return this.serializedMerge(() => this.absorbFinds(found));
+  }
+
+  /**
+   * Search the network — the half of a discovery that may run while a merge is in flight.
+   *
+   * @returns what answered
+   */
+  private async searchNetwork(): Promise<DiscoveredDevice[]> {
     // Every search counts against the throttle, whoever asked for it — otherwise the first
     // offline device would fire another one right behind the start-up search.
     this.lastRediscovery = Date.now();
@@ -2101,7 +2201,7 @@ export class Yamaha extends utils.Adapter {
     } catch (e) {
       this.log.warn(`auto-discovery scan failed, using the remembered devices: ${errorMessage(e)}`);
     }
-    return this.absorbFinds(found);
+    return found;
   }
 
   /**

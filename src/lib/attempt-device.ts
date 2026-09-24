@@ -129,16 +129,55 @@ export function partnerClient(
  * @param deviceId the id-safe device id
  * @param attempts the transports to try
  * @param deps the adapter callbacks (upsert + log + timers)
+ * @param signal aborted when the supervisor is closed mid-attempt: every transport built so far is
+ *   closed (that also closes its command gate, so nothing waits on a timer any more) and the
+ *   attempt yields nothing (audit 2026-09-24, A3)
  * @returns a connection handle over the live transports, or null when none connected
  */
 export async function connectTransports(
   deviceId: string,
   attempts: readonly TransportAttempt[],
   deps: ConnectDeps,
+  signal?: AbortSignal,
+): Promise<ConnectionHandle | null> {
+  if (signal?.aborted) {
+    return null;
+  }
+  const built: ConnectableTransport[] = [];
+  const closeBuilt = (): void => {
+    for (const conn of built) {
+      conn.close();
+    }
+  };
+  signal?.addEventListener("abort", closeBuilt, { once: true });
+  try {
+    return await connectBuilt(deviceId, attempts, deps, built, signal);
+  } finally {
+    signal?.removeEventListener("abort", closeBuilt);
+  }
+}
+
+/**
+ * The body of {@link connectTransports}: build, connect, hand the live set to one handle.
+ *
+ * @param deviceId the id-safe device id
+ * @param attempts the transports to try
+ * @param deps the adapter callbacks
+ * @param built collects every transport built, so an abort can close them
+ * @param signal the attempt's abort signal
+ * @returns a connection handle over the live transports, or null
+ */
+async function connectBuilt(
+  deviceId: string,
+  attempts: readonly TransportAttempt[],
+  deps: ConnectDeps,
+  built: ConnectableTransport[],
+  signal: AbortSignal | undefined,
 ): Promise<ConnectionHandle | null> {
   const results = await Promise.all(
     attempts.map(async attempt => {
       const conn = attempt.build();
+      built.push(conn);
       try {
         if (await conn.connect()) {
           return conn;
@@ -151,6 +190,12 @@ export async function connectTransports(
     }),
   );
   const live = results.filter((conn): conn is ConnectableTransport => conn !== null);
+  if (signal?.aborted) {
+    for (const conn of live) {
+      conn.close();
+    }
+    return null;
+  }
   if (live.length === 0) {
     // A device that is off is off: `info.connection` says so, the log does not (krobi
     // 2026-09-22 — no adapter of the fleet reports an offline device in the log).
@@ -167,8 +212,9 @@ export async function connectTransports(
     cancel: deps.timers ? handle_ => deps.timers!.cancel(handle_ as ioBroker.Timeout | undefined) : undefined,
     backoffFactory: () => new ReconnectStrategy(TRANSPORT_RECONNECT_BASE_MS, TRANSPORT_RECONNECT_MAX_MS),
   });
+  let running: Transport[];
   try {
-    await handle.start();
+    running = await handle.start();
   } catch (e) {
     // Building the unified tree failed (e.g. object creation errored): close every live
     // transport before rethrowing, or the supervisor's retry would leak sockets and timers —
@@ -177,14 +223,21 @@ export async function connectTransports(
     handle.close();
     throw e;
   }
+  if (signal?.aborted) {
+    handle.close();
+    return null;
+  }
+  if (running.length === 0) {
+    // Every transport dropped while the tree was being built: that is no connection. Handing the
+    // handle on said "ready" and flipped info.connection true and at once false again — a log
+    // line for a device that is off (audit 2026-09-24, A21).
+    handle.close();
+    deps.log.debug(`${deviceId}: every transport dropped while connecting`);
+    return null;
+  }
   // One summary line instead of three per-transport "ready" lines; each controller logs its
-  // own readiness at debug level for diagnostics.
-  deps.log.info(
-    readyLine(
-      deviceId,
-      live.map(conn => conn.transport),
-    ),
-  );
+  // own readiness at debug level for diagnostics. It names what is live NOW, not what connected.
+  deps.log.info(readyLine(deviceId, running));
   return handle;
 }
 
@@ -200,9 +253,14 @@ export async function connectTransports(
  *
  * @param device the configured device record
  * @param deps the adapter-bound callbacks
+ * @param signal aborted when the supervisor is closed mid-attempt (see {@link connectTransports})
  * @returns a connection handle, or null when no transport connected
  */
-export function attemptDevice(device: DeviceRecord, deps: AttemptDeps): Promise<ConnectionHandle | null> {
+export function attemptDevice(
+  device: DeviceRecord,
+  deps: AttemptDeps,
+  signal?: AbortSignal,
+): Promise<ConnectionHandle | null> {
   const { log, upsertObject, setStateAck, timers } = deps;
   /**
    * A fresh command gate for one transport connection. EVERY command of that transport
@@ -308,5 +366,6 @@ export function attemptDevice(device: DeviceRecord, deps: AttemptDeps): Promise<
       onTransports: deps.onTransports,
       timers: deps.timers,
     },
+    signal,
   );
 }

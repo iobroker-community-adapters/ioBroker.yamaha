@@ -721,7 +721,7 @@ export class YxcDeviceController implements ConnectionHandle {
   private async probeAlive(): Promise<void> {
     const alive = await this.refreshZone(this.zones[0] ?? "main");
     if (!alive) {
-      this.dropDetector.report();
+      this.dropDetector.report("liveness check unanswered");
     }
   }
 

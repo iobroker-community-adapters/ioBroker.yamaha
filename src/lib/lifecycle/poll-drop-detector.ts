@@ -54,13 +54,18 @@ export class PollDropDetector {
     }
   }
 
-  /** Report the drop once — repeat calls are ignored, as is a report after close. */
-  public report(): void {
+  /**
+   * Report the drop once — repeat calls are ignored, as is a report after close.
+   *
+   * @param why what judged the device gone; default: the run of failed polls. A single unanswered
+   *   liveness question says so instead of claiming three polls failed (audit 2026-09-24, C29).
+   */
+  public report(why?: string): void {
     if (this.dropped) {
       return;
     }
     this.dropped = true;
-    const reason = new Error(`${this.maxFailures} polls failed`);
+    const reason = new Error(why ?? `${this.maxFailures} polls failed`);
     if (this.handler) {
       this.handler(reason);
       return;

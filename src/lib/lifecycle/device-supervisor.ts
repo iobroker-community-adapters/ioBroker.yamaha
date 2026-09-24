@@ -9,8 +9,13 @@ export interface SupervisorDeps {
   /**
    * Try to bring the device online across its transports. Resolves to a live
    * connection handle, or null when no transport is reachable this attempt.
+   *
+   * @param signal aborted when the supervisor is closed while this attempt still runs — the
+   *   attempt closes what it built and writes nothing more (a delete or a move during a slow
+   *   first sweep left an orphan tree and, in compact mode, a zombie YNCA socket; audit
+   *   2026-09-24, A3)
    */
-  attempt: () => Promise<ConnectionHandle | null>;
+  attempt: (signal: AbortSignal) => Promise<ConnectionHandle | null>;
   /**
    * Schedule the next attempt.
    *
@@ -35,6 +40,8 @@ export interface SupervisorDeps {
   backoff: { nextDelay(): number; reset(): void };
   /** Adapter log. */
   log: { debug(message: string): void; info(message: string): void; warn(message: string): void };
+  /** The device the supervisor keeps, so its log lines say which one (audit 2026-09-24, A16). */
+  deviceId?: string;
 }
 
 /**
@@ -51,6 +58,8 @@ export class DeviceSupervisor {
   private closed = false;
   /** The attempt currently running, so a caller can wait for it before tearing the device down. */
   private inFlight: Promise<void> | undefined;
+  /** Aborts the attempt in flight when the supervisor is closed. */
+  private attemptAbort: AbortController | undefined;
 
   /**
    * @param deps the injected attempt/timer/report callbacks
@@ -109,13 +118,18 @@ export class DeviceSupervisor {
       return;
     }
     let handle: ConnectionHandle | null = null;
+    const abort = new AbortController();
+    this.attemptAbort = abort;
     try {
-      handle = await this.deps.attempt();
+      handle = await this.deps.attempt(abort.signal);
     } catch (e) {
       // Never let an attempt failure vanish silently — without this line a repeatable
       // error (e.g. object creation failing) becomes an invisible endless retry loop.
-      this.deps.log.debug(`connection attempt failed, retrying: ${errorMessage(e)}`);
+      this.deps.log.debug(`${this.prefix}connection attempt failed, retrying: ${errorMessage(e)}`);
       handle = null;
+    }
+    if (this.attemptAbort === abort) {
+      this.attemptAbort = undefined;
     }
     if (this.closed) {
       handle?.close();
@@ -139,7 +153,7 @@ export class DeviceSupervisor {
       return;
     }
     if (reason) {
-      this.deps.log.debug(`connection dropped, reconnecting: ${reason.message}`);
+      this.deps.log.debug(`${this.prefix}connection dropped, reconnecting: ${errorMessage(reason)}`);
     }
     // Release the dropped connection's resources (keepalive timer, push registration,
     // socket) before reconnecting — not every transport self-cleans on drop.
@@ -153,9 +167,15 @@ export class DeviceSupervisor {
     this.timer = this.deps.schedule(() => this.runAttempt(), this.deps.backoff.nextDelay());
   }
 
+  /** The log prefix naming the device (empty when the caller gave no id). */
+  private get prefix(): string {
+    return this.deps.deviceId ? `${this.deps.deviceId}: ` : "";
+  }
+
   /** Stop supervising and close the connection. Synchronous — safe from onUnload. */
   public close(): void {
     this.closed = true;
+    this.attemptAbort?.abort();
     this.deps.cancel(this.timer);
     this.handle?.close();
     this.handle = undefined;

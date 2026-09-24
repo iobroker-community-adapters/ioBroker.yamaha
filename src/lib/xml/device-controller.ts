@@ -821,11 +821,11 @@ export class XmlDeviceController implements ConnectionHandle {
     }
     try {
       if (!(await this.refreshZone(zone))) {
-        this.dropDetector.report();
+        this.dropDetector.report("liveness check unanswered");
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: liveness probe failed: ${errorMessage(e)}`);
-      this.dropDetector.report();
+      this.dropDetector.report("liveness check unanswered");
     }
   }
 
