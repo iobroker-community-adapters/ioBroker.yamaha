@@ -40,6 +40,22 @@ describe("detectDeviceType", () => {
     }
   });
 
+  // A network player, a network turntable, a streaming amplifier and the MusicCast streaming adapter got
+  // the AV-receiver silhouette, and a model spelled with an underscore fell through (D13).
+  test("network players, turntables, streaming amplifiers and the WXAD adapter are stereo devices", () => {
+    expect(detectDeviceType("NP-S303")).toBe("stereoReceiver");
+    expect(detectDeviceType("TT-N503")).toBe("stereoReceiver");
+    expect(detectDeviceType("XDA-QS5400")).toBe("stereoReceiver");
+    expect(detectDeviceType("WXAD-10")).toBe("stereoReceiver");
+    expect(detectDeviceType("WX-030")).toBe("speaker");
+  });
+
+  test("an underscore in the model name reads like a dash", () => {
+    expect(detectDeviceType("R_N803")).toBe("stereoReceiver");
+    expect(detectDeviceType("CD_NT670")).toBe("cdSystem");
+    expect(detectDeviceType("SR_B20A")).toBe("soundbar");
+  });
+
   test("model casing and surrounding whitespace do not matter", () => {
     expect(detectDeviceType("  rx-v6a ")).toBe("avReceiver");
     expect(detectDeviceType("musiccast bar 400")).toBe("soundbar");

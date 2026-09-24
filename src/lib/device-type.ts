@@ -20,7 +20,10 @@ export type DeviceType = "avReceiver" | "stereoReceiver" | "speaker" | "soundbar
  * WX/NX/ISX/MusicCast xx; CD systems/players CRX/MCR/CD-N.
  */
 const TYPE_PREFIXES: ReadonlyArray<readonly [DeviceType, readonly string[]]> = [
-  ["stereoReceiver", ["R-N", "RN-", "WXA", "WXC", "A-S", "R-S"]],
+  // NP- network players, TT-N network turntables, XDA- streaming amplifiers and the WXAD streaming
+  // adapter: stereo network devices, none of them an AV receiver (audit 2026-09-24, D13). This list is
+  // checked before the speakers', so WXAD never reads as a WX speaker.
+  ["stereoReceiver", ["R-N", "RN-", "WXA", "WXC", "A-S", "R-S", "NP-", "TT-N", "XDA-", "WXAD"]],
   ["soundbar", ["YSP", "YAS", "ATS", "SRT", "SR-B", "SR-C", "MUSICCAST BAR"]],
   ["cdSystem", ["CRX", "MCR", "CD-N", "CD-NT"]],
   ["speaker", ["WX", "NX-", "ISX", "MUSICCAST 20", "MUSICCAST 50", "MUSICCAST 500"]],
@@ -34,7 +37,8 @@ const TYPE_PREFIXES: ReadonlyArray<readonly [DeviceType, readonly string[]]> = [
  * @returns the device class; an empty/unknown model yields the AV-receiver default
  */
 export function detectDeviceType(model: string | undefined): DeviceType {
-  const normalized = (model ?? "").trim().toUpperCase();
+  // Some firmware spells the dash as an underscore ("RX_V781").
+  const normalized = (model ?? "").trim().toUpperCase().replace(/_/g, "-");
   if (normalized.length > 0) {
     for (const [type, prefixes] of TYPE_PREFIXES) {
       if (prefixes.some(prefix => normalized.startsWith(prefix))) {
