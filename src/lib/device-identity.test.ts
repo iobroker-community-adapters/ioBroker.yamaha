@@ -50,6 +50,19 @@ describe("mergeIdentity", () => {
     expect(mergeIdentity(undefined, { mac: "00A0DED15025" })).toEqual({ mac: "00A0DED15025" });
     expect(mergeIdentity(undefined, undefined)).toBeUndefined();
   });
+
+  // A replacement receiver at the same address: a union kept the old one's MAC next to the new
+  // one's serial (audit 2026-09-24, A10).
+  it("replaces a contradicting identity instead of mixing it", () => {
+    expect(mergeIdentity({ serial: "0A0A0A", mac: "00A0DED15025" }, { serial: "0B0B0B" })).toEqual({
+      serial: "0B0B0B",
+    });
+    // Disjoint fields contradict nothing — they are unioned.
+    expect(mergeIdentity({ serial: "0A0A0A" }, { mac: "00A0DED15025" })).toEqual({
+      serial: "0A0A0A",
+      mac: "00A0DED15025",
+    });
+  });
 });
 
 describe("macFromUdn", () => {

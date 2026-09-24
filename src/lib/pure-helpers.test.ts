@@ -342,6 +342,20 @@ describe("mergeDiscovered by identity", () => {
     ).toEqual([{ id: "Kitchen", ip: "2.2.2.2", identity: v6a, services: { yxc: true, xml: false } }]);
   });
 
+  // Another device with the same (sanitised) name took the record's address and identity over,
+  // and with both answering in one search the real one vanished (audit 2026-09-24, A4).
+  test("a different device with the same name is a collision, not a move", () => {
+    const known = [{ id: "Living", ip: "1.1.1.10", identity: v6a }];
+    const stranger = { ip: "1.1.1.30", name: "Living", identity: { serial: "0E897553" } };
+    const collisions: string[] = [];
+    const merged = mergeDiscovered(known, [stranger], (dropped, taken) => collisions.push(`${dropped}→${taken}`));
+    expect(merged).toEqual([{ id: "Living", ip: "1.1.1.10", identity: v6a }]);
+    expect(collisions).toEqual(["Living→Living"]);
+    // Both answering in one search: the real one keeps its record.
+    const both = mergeDiscovered(known, [stranger, { ip: "1.1.1.10", name: "Living", identity: v6a }]);
+    expect(both).toEqual([{ id: "Living", ip: "1.1.1.10", identity: v6a }]);
+  });
+
   test("identity wins over a name that maps to another record's id", () => {
     // Device A was renamed to what B is called: the serial says it is A, so A moves and B stays.
     const known = [

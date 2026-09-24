@@ -73,7 +73,10 @@ const CURRENT_PICTOGRAMS: ReadonlySet<string> = new Set(Object.values(DEVICE_TYP
 function rememberedModel(native: Record<string, unknown> | undefined): string | undefined {
   try {
     const identity = profileIdentityOf(loadCapabilityProfile(native).memory ?? {});
-    return identity.ynca?.model ?? identity.yxc?.model ?? identity.xml?.model;
+    const fromProfile = identity.ynca?.model ?? identity.yxc?.model ?? identity.xml?.model;
+    // `native.model` sits next to the identity, outside the capability profile: a discovery-schema
+    // bump empties the profile, the model stays (audit 2026-09-24, A22).
+    return fromProfile ?? (typeof native?.model === "string" && native.model.length > 0 ? native.model : undefined);
   } catch {
     return undefined;
   }
@@ -217,6 +220,12 @@ export class Yamaha extends utils.Adapter {
    * The warning is said once per new address, not on every search.
    */
   private readonly warnedElsewhere = new Map<string, string>();
+  /**
+   * The search problems already warned about — a failing interface and an id collision of a find
+   * repeat on every search (every five minutes while a device is offline); said once, then debug
+   * (audit 2026-09-24, A15).
+   */
+  private readonly warnedSearch = new Set<string>();
   /** The devices whose connection attempt failed at least once in this session — "offline" proven, not assumed. */
   private readonly failedOnce = new Set<string>();
   /** deviceId → how many transports it had live at the last report, so a LOSS is visible. */
@@ -370,9 +379,6 @@ export class Yamaha extends utils.Adapter {
       });
       pushReceiver.start();
       this.pushReceiver = pushReceiver;
-      if (this.discovering) {
-        await this.startSsdpListener();
-      }
       if (configured.length > 0) {
         // Routine, so debug: what the adapter is ABOUT to try is not an event — a device that
         // answers says so with its own "ready" line, one that is off says nothing (krobi
@@ -389,6 +395,11 @@ export class Yamaha extends utils.Adapter {
         } catch (e) {
           this.log.error(`${device.id}: could not be set up (${errorMessage(e)}) — the other devices continue`);
         }
+      }
+      // After the table rows, like the search: an announcement is read against the RUNNING set —
+      // heard before, a moved device was taken for a stranger (audit 2026-09-24, A8).
+      if (this.discovering) {
+        await this.startSsdpListener();
       }
       this.writeDeviceOverview();
       // Auto mode with remembered devices: they started WITHOUT waiting for the network
@@ -690,9 +701,14 @@ export class Yamaha extends utils.Adapter {
       location,
       address,
     );
-    if (!found) {
-      // Ask again after seconds, not after the full throttle — see NOTIFY_RETRY_MS.
+    if (found === undefined) {
+      // Ask again after seconds, not after the full throttle — see NOTIFY_RETRY_MS. Only for a
+      // description that could not be READ: a device that is no Yamaha stays on the full throttle
+      // (audit 2026-09-24, A7).
       this.notifyProbed.set(address, Date.now() - NOTIFY_PROBE_THROTTLE_MS + NOTIFY_RETRY_MS);
+      return;
+    }
+    if (found === null) {
       return;
     }
     const receiver = this.pushReceiver;
@@ -995,6 +1011,7 @@ export class Yamaha extends utils.Adapter {
     this.deviceLabels.delete(deviceId);
     this.writtenObjects.delete(deviceId);
     this.lastModel.delete(deviceId);
+    this.storedModels.delete(deviceId);
     this.profiles.delete(deviceId);
     this.forgetUnder(this.knownDatapoints, deviceId);
     this.forgetUnder(this.storedStates, deviceId);
@@ -1021,6 +1038,8 @@ export class Yamaha extends utils.Adapter {
     }
     this.writeState("info.connection", [...this.deviceConnected.values()].some(Boolean));
     this.writeDeviceOverview();
+    // The last device gone: nothing else would arm a search any more (audit 2026-09-24, A11).
+    this.scheduleIdleSearch();
   }
 
   /**
@@ -1724,6 +1743,10 @@ export class Yamaha extends utils.Adapter {
       }
       const native = existing?.native as
         { volumeAsPercent?: unknown; label?: unknown; labelRank?: unknown; identity?: unknown } | undefined;
+      const model = rememberedModel(existing?.native);
+      if (model) {
+        this.storedModels.set(deviceId, model);
+      }
       const storedIdentity = identityFrom(
         typeof native?.identity === "object" && native.identity !== null ? native.identity : {},
       );
@@ -1846,6 +1869,11 @@ export class Yamaha extends utils.Adapter {
    * adapter version with new pictograms must reach every existing device once.
    */
   private readonly lastModel = new Map<string, string>();
+  /**
+   * The model each device object remembers from an earlier run (`native.model`, or its profile) —
+   * what `orphanOfModel` needs for a device that is off and whose profile a schema bump emptied.
+   */
+  private readonly storedModels = new Map<string, string>();
 
   /** The label this adapter wrote per device, with the rank of the source behind it. */
   private readonly deviceLabels = new Map<string, { name: string; rank: LabelRank }>();
@@ -1919,16 +1947,40 @@ export class Yamaha extends utils.Adapter {
   private async migrateLegacyDevice(): Promise<void> {
     const config = this.config as unknown as Record<string, unknown>;
     const row = legacyDeviceRow(config);
-    if (!row) {
+    // The old key has to GO with the migration: js-controller never removes a native key by itself
+    // (CLAUDE_PATTERNS, listen-port rule 5), and with it left in place, deleting the migrated
+    // device emptied the table — and the next start migrated it again (audit 2026-09-24, A5). An
+    // installation migrated by an earlier version still carries it next to its table.
+    const leftover = "ip" in config || "IP" in config;
+    if (!row && !leftover) {
       return;
     }
     // Fill the in-memory config first, so this run already drives the device even
     // if persisting the table below fails — persistence is a convenience for the
     // admin view, not a precondition for running.
-    config.devices = [row];
+    if (row) {
+      config.devices = [row];
+    }
+    delete config.ip;
+    delete config.IP;
+    const instanceId = `system.adapter.${this.namespace}`;
     try {
-      await this.extendForeignObjectAsync(`system.adapter.${this.namespace}`, { native: { devices: [row] } });
-      this.log.info(`carried the previous single-device config (${row.ip}) over into the device table`);
+      // One write of the object WITHOUT the old keys — an extend merges, it cannot remove a key.
+      const instance = await this.getForeignObjectAsync(instanceId);
+      if (!instance?.native) {
+        return;
+      }
+      if (row) {
+        instance.native.devices = [row];
+      }
+      delete instance.native.ip;
+      delete instance.native.IP;
+      await this.setForeignObject(instanceId, instance);
+      if (row) {
+        this.log.info(`carried the previous single-device config (${row.ip}) over into the device table`);
+      } else {
+        this.log.debug("removed the previous adapter's address key next to the device table");
+      }
     } catch (e) {
       this.log.warn(
         `could not persist the migrated device table (${errorMessage(e)}); ` + `running with the in-memory value`,
@@ -2043,6 +2095,10 @@ export class Yamaha extends utils.Adapter {
             const reporting = id.slice(0, id.indexOf("."));
             if (this.lastModel.get(reporting) !== value) {
               this.lastModel.set(reporting, value);
+              if (this.storedModels.get(reporting) !== value) {
+                this.storedModels.set(reporting, value);
+                this.persistDeviceNative(reporting, { model: value });
+              }
               void this.updateDeviceIcon(reporting, value);
               void this.updateDeviceLabel(reporting, value, LABEL_RANK.model);
             }
@@ -2249,7 +2305,7 @@ export class Yamaha extends utils.Adapter {
    * @returns the model name, or undefined
    */
   private rememberedModelOf(deviceId: string): string | undefined {
-    return this.profiles.get(deviceId)?.model();
+    return this.profiles.get(deviceId)?.model() ?? this.storedModels.get(deviceId);
   }
 
   /**
@@ -2305,7 +2361,10 @@ export class Yamaha extends utils.Adapter {
     const store = discoveredStoreDeps(this);
     const known = await readDiscovered(store);
     const merged = mergeDiscovered(known, [...found], (dropped, takenId) =>
-      this.log.warn(`discovered device "${dropped}" skipped — its object id "${takenId}" is already taken`),
+      this.warnSearchOnce(
+        `collision|${dropped}|${takenId}`,
+        `discovered device "${dropped}" skipped — its object id "${takenId}" is already taken`,
+      ),
     );
     const running = [...this.deviceRecords.values()];
     for (const device of found) {
@@ -2370,6 +2429,18 @@ export class Yamaha extends utils.Adapter {
       }
       return true;
     });
+    // Two finds that both claim ONE migrated row (a mixed identity, or two devices of the orphan's
+    // model): moving it to either would rewrite the table — and restart the instance — on every
+    // start, alternating. Nothing moves until the finds say which one it is (audit 2026-09-24, A17).
+    const claims = new Map<string, number>();
+    for (const record of moved) {
+      claims.set(record.id, (claims.get(record.id) ?? 0) + 1);
+    }
+    const ambiguous = [...claims].filter(([, count]) => count > 1).map(([id]) => id);
+    for (const id of ambiguous) {
+      this.log.debug(`${id}: ${claims.get(id)} devices answer for it — not moved`);
+    }
+    const unambiguous = moved.filter(record => !ambiguous.includes(record.id));
     // The file only changes when a device appeared, vanished or moved — while a device is
     // offline the search runs every five minutes, and it must not rewrite an identical file each
     // time. Compared on the stored form, before the records are stamped below.
@@ -2379,7 +2450,22 @@ export class Yamaha extends utils.Adapter {
     // Stamped HERE, for both callers: onReady unions the result with the device table and stamps
     // again (harmless), the background search hands its result straight to startDevice — and a
     // record without the stamp is one the rediscovery never searches for after it moved.
-    return [...kept.map(device => ({ ...device, source: "discovered" as const })), ...moved];
+    return [...kept.map(device => ({ ...device, source: "discovered" as const })), ...unambiguous];
+  }
+
+  /**
+   * Warn about a search problem once per key, then only at debug — see `warnedSearch`.
+   *
+   * @param key what identifies the problem
+   * @param message the line
+   */
+  private warnSearchOnce(key: string, message: string): void {
+    if (this.warnedSearch.has(key)) {
+      this.log.debug(message);
+      return;
+    }
+    this.warnedSearch.add(key);
+    this.log.warn(message);
   }
 
   /**
@@ -2592,7 +2678,8 @@ export class Yamaha extends utils.Adapter {
           // One interface failing (typically a stale selected IP after a DHCP change) must not
           // kill the search on the others — warn and drop just this socket; the timeout still
           // resolves whatever the rest found.
-          this.log.warn(
+          this.warnSearchOnce(
+            `socket|${bindAddr ?? ""}`,
             `discovery socket failed${bindAddr ? ` on interface ${bindAddr}` : ""}: ${errorMessage(err)}${
               bindAddr ? " — check the Network Interface setting" : ""
             }`,

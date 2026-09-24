@@ -216,6 +216,22 @@ describe("DeviceProfileStore", () => {
     expect(new DeviceProfileStore("living", {}, d.deps).model()).toBeUndefined();
   });
 
+  // A scrubbed XML System_ID won the `||` and hid MusicCast's valid serial (audit 2026-09-24, A10).
+  test("an invalid XML System_ID does not hide the MusicCast serial", () => {
+    const d = deps();
+    const stored = serializeCapabilityProfile(
+      {
+        memory: { xmlIdentity: "RX-V6A|00000000|2.15", yxcDeviceIds: { serial: "057CCF73", mac: "CCD42ECF0223" } },
+        pendingPurge: [],
+      },
+      { adapterVersion: "2.7.0", learnedAt: "2026-09-01T00:00:00.000Z" },
+    );
+    expect(new DeviceProfileStore("living", { [PROFILE_KEY]: stored }, d.deps).identity()).toEqual({
+      serial: "057CCF73",
+      mac: "CCD42ECF0223",
+    });
+  });
+
   test("has no identity while both memories are blank or scrubbed", () => {
     const d = deps();
     expect(new DeviceProfileStore("living", {}, d.deps).identity()).toBeUndefined();

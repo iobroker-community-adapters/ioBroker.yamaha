@@ -335,7 +335,10 @@ export class DeviceProfileStore {
    */
   public identity(): DeviceIdentity | undefined {
     const identity = profileIdentityOf(this.memory);
-    return identityFrom({ serial: identity.xml?.systemId || identity.yxc?.serial, mac: identity.yxc?.mac });
+    // Each source judged on its own: a scrubbed XML System_ID ("00000000") used to win the `||`
+    // and hide MusicCast's valid serial (audit 2026-09-24, A10).
+    const serial = identityFrom({ serial: identity.xml?.systemId })?.serial ?? identity.yxc?.serial;
+    return identityFrom({ serial, mac: identity.yxc?.mac });
   }
 
   /** Write the profile now (through the adapter's coalescing persist). */

@@ -68,15 +68,36 @@ export function sameDevice(a?: DeviceIdentity, b?: DeviceIdentity): boolean {
 }
 
 /**
- * Union of two identities, the learned one winning per field.
+ * Two identities that name DIFFERENT devices: a serial or a MAC set on both sides and unequal, with
+ * nothing that ties them together. Disjoint fields (one knows the serial, the other the MAC)
+ * contradict nothing.
+ *
+ * @param a one identity
+ * @param b the other
+ * @returns whether they cannot be the same device
+ */
+export function contradicts(a?: DeviceIdentity, b?: DeviceIdentity): boolean {
+  if (!a || !b || sameDevice(a, b)) {
+    return false;
+  }
+  return (!!a.serial && !!b.serial && a.serial !== b.serial) || (!!a.mac && !!b.mac && a.mac !== b.mac);
+}
+
+/**
+ * Union of two identities, the learned one winning per field — unless they contradict each other:
+ * then the learned one REPLACES the known one (a replacement receiver at the same address), instead
+ * of a record carrying the old device's MAC next to the new one's serial (audit 2026-09-24, A10).
  *
  * @param known what was remembered
  * @param learned what a transport or the search just reported
- * @returns the union, or undefined when both are empty
+ * @returns the union (or the learned identity), or undefined when both are empty
  */
 export function mergeIdentity(known?: DeviceIdentity, learned?: DeviceIdentity): DeviceIdentity | undefined {
   if (!known && !learned) {
     return undefined;
+  }
+  if (contradicts(known, learned)) {
+    return { ...learned };
   }
   return { ...known, ...learned };
 }

@@ -38,7 +38,7 @@ vi.mock("./lib/discovered-store-deps", () => ({
 import { buildDeviceForm, findClash, rowId } from "./device-management-helpers";
 import { YamahaDeviceManagement } from "./device-management";
 import { writeDiscovered, writeExcluded, writeIgnored } from "./lib/discovered-store";
-import { LABEL_RANK } from "./lib/pure-helpers";
+import { LABEL_RANK, parseDevices } from "./lib/pure-helpers";
 
 /**
  * What a read stub answers with: a COPY of the stored value, never the stored object itself.
@@ -407,6 +407,15 @@ describe("YamahaDeviceManagement", () => {
       const ctx = mockContext({ form: { name: "  Bedroom  ", ip: " 192.168.1.50 " } });
       await expect(i.addDevice(ctx)).resolves.toEqual({ refresh: true });
       expect(adapter._stored()).toEqual([living, { name: "Bedroom", ip: "192.168.1.50" }]);
+    });
+
+    // A name that is the address marks a migrated row, which follows the device and rewrites the
+    // table; a typed one must stay where it was typed (audit 2026-09-24, A6).
+    it("stores a typed row whose name is its IP without a name — it stays a typed row", async () => {
+      const i = make([]);
+      await i.addDevice(mockContext({ form: { name: "192.168.1.50", ip: "192.168.1.50" } }));
+      expect(adapter._stored()).toEqual([{ name: "", ip: "192.168.1.50" }]);
+      expect(parseDevices(adapter._stored())[0]).toMatchObject({ id: "192_168_1_50", source: "manual" });
     });
 
     it("passes the IPs already in use into the dialog validator", async () => {

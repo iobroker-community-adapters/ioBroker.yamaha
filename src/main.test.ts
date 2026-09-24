@@ -205,7 +205,7 @@ const mocks = vi.hoisted(() => ({
   probeDescription: vi.fn(
     (_deps: unknown, _location: string, _address: string) =>
       Promise.resolve(undefined) as Promise<
-        { ip: string; name: string; model?: string; identity?: { serial?: string; mac?: string } } | undefined
+        { ip: string; name: string; model?: string; identity?: { serial?: string; mac?: string } } | null | undefined
       >,
   ),
   listeners: [] as Array<{
@@ -215,12 +215,17 @@ const mocks = vi.hoisted(() => ({
   }>,
   /** Whether the next listener's start() rejects (port 1900 taken without reuseAddr on the host). */
   listenerBindFails: false,
+  /** Called when a listener starts — lets a test look at the adapter's state at that moment. */
+  listenerStart: undefined as (() => void) | undefined,
 }));
 vi.mock("./lib/attempt-device", () => ({ attemptDevice: mocks.attemptDevice }));
 vi.mock("./lib/discovery", () => ({ discoverYamaha: mocks.discoverYamaha, probeDescription: mocks.probeDescription }));
 vi.mock("./lib/ssdp-listener", () => ({
   SsdpListener: class {
-    public start = vi.fn(() => (mocks.listenerBindFails ? Promise.reject(new Error("EADDRINUSE")) : Promise.resolve()));
+    public start = vi.fn(() => {
+      mocks.listenerStart?.();
+      return mocks.listenerBindFails ? Promise.reject(new Error("EADDRINUSE")) : Promise.resolve();
+    });
     public close = vi.fn();
     constructor(public deps: { interfaces: readonly string[]; onAlive: (notify: unknown, address: string) => void }) {
       mocks.listeners.push(this);
@@ -981,6 +986,23 @@ describe("Yamaha auto-discovery", () => {
       expect(mocks.discoveredStore.devices).toEqual([]);
     });
 
+    // A mixed identity (or two devices of one model) let two finds claim one migrated row: moved to
+    // either, the table was rewritten and the instance restarted on every start (A17).
+    it("two finds that both claim one migrated row move nothing", async () => {
+      const ctx = setup({ devices: [{ name: "192.168.1.10", ip: "192.168.1.10" }], discovery: "always" });
+      seedTable(ctx);
+      const mixed = { serial: "0A0A0A0A", mac: "00A0DED15025" };
+      ctx.i.objects.set("192_168_1_10", { type: "device", common: {}, native: { identity: mixed } });
+      mocks.discoverYamaha.mockResolvedValue([
+        { ip: "192.168.1.20", name: "One", identity: { serial: "0A0A0A0A" } },
+        { ip: "192.168.1.21", name: "Two", identity: { mac: "00A0DED15025" } },
+      ]);
+      await ctx.i.onReady();
+      await flush();
+      expect(ctx.calls.every(c => c.device.ip === "192.168.1.10")).toBe(true);
+      expect(table()).toEqual([{ name: "192.168.1.10", ip: "192.168.1.10" }]);
+    });
+
     it("a manual row is warned about, once, and stays where it was typed", async () => {
       const ctx = setup({ devices: [{ name: "Living", ip: "192.168.1.10" }], discovery: "always" });
       seedTable(ctx);
@@ -1194,6 +1216,17 @@ describe("Yamaha auto-discovery", () => {
       expect(idle(ctx)).toHaveLength(2);
     });
 
+    // Deleting the last found device left nothing that would arm a search (audit 2026-09-24, A11).
+    it("deleting the last running device arms the idle search", async () => {
+      mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+      const ctx = setup({ devices: [] });
+      await ctx.i.onReady();
+      await flush();
+      expect(idle(ctx)).toHaveLength(0);
+      await ctx.i.removeDevice("RX-V685");
+      expect(idle(ctx)).toHaveLength(1);
+    });
+
     it("once a device runs, the idle search is not armed", async () => {
       mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
       const ctx = setup({ devices: [] });
@@ -1373,6 +1406,24 @@ describe("Yamaha auto-discovery", () => {
       expect(mocks.probeDescription).toHaveBeenCalledTimes(2);
     });
 
+    // A device that is no Yamaha is a final answer — the 5-second retry is for an unreadable
+    // description only; every television was re-probed every five seconds (audit 2026-09-24, A7).
+    it("a non-Yamaha device is probed at most once a minute, also with a flush between its alives", async () => {
+      mocks.probeDescription.mockResolvedValue(null);
+      const ctx = setup({ devices: [] });
+      await ctx.i.onReady();
+      await flush();
+      const now = vi.spyOn(Date, "now");
+      now.mockReturnValue(3_000_000);
+      ctx.i.onSsdpAlive({ nts: "alive", location: "http://10.0.0.7/d.xml" }, "10.0.0.7");
+      await flush();
+      now.mockReturnValue(3_000_000 + 6_000);
+      ctx.i.onSsdpAlive({ nts: "alive", location: "http://10.0.0.7/d.xml" }, "10.0.0.7");
+      await flush();
+      now.mockRestore();
+      expect(mocks.probeDescription).toHaveBeenCalledTimes(1);
+    });
+
     it("a NOTIFY from an unknown address that names a newcomer starts it", async () => {
       mocks.probeDescription.mockResolvedValue({
         ip: "192.168.1.30",
@@ -1437,6 +1488,21 @@ describe("Yamaha auto-discovery", () => {
       expect(mocks.listeners[0].start).toHaveBeenCalledTimes(1);
       await new Promise<void>(resolve => ctx.i.onUnload(resolve));
       expect(mocks.listeners[0].close).toHaveBeenCalledTimes(1);
+    });
+
+    // An announcement is read against the RUNNING set; heard before the table rows ran, a moved
+    // device was taken for a stranger (audit 2026-09-24, A8).
+    it("starts the listener only after the device rows run", async () => {
+      mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+      const ctx = setup({ devices: [] });
+      let runningAtStart = -1;
+      mocks.listenerStart = (): void => {
+        runningAtStart = ctx.i.deviceRecords.size;
+      };
+      await ctx.i.onReady();
+      await flush();
+      mocks.listenerStart = undefined;
+      expect(runningAtStart).toBe(1);
     });
 
     it("does not start the listener while the search is off", async () => {
@@ -1790,14 +1856,42 @@ describe("Yamaha migrations", () => {
 
   it("runs the migrated device even when the table cannot be persisted", async () => {
     const ctx = setup({ devices: [], ip: "192.168.1.30" });
-    (
-      ctx.i as unknown as { extendForeignObjectAsync: ReturnType<typeof vi.fn> }
-    ).extendForeignObjectAsync.mockRejectedValue(new Error("objects db read-only"));
+    ctx.i.foreignObjects.set("system.adapter.yamaha.0", { native: { ip: "192.168.1.30" } });
+    (ctx.i as unknown as { setForeignObject: ReturnType<typeof vi.fn> }).setForeignObject.mockRejectedValue(
+      new Error("objects db read-only"),
+    );
     await ctx.i.onReady();
     await flush();
     // Persisting is a convenience for the admin view, not a precondition.
     expect(ctx.calls.map(c => c.device.ip)).toEqual(["192.168.1.30"]);
     expect(ctx.i.log.warn).toHaveBeenCalledWith(expect.stringContaining("could not persist the migrated device table"));
+  });
+
+  // js-controller never removes a native key: left in place, the old address brought a deleted
+  // migrated device back on the next start (audit 2026-09-24, A5).
+  it("drops the previous adapter's address key in the same write that carries the device over", async () => {
+    const ctx = setup({ devices: [], ip: "192.168.1.30" });
+    ctx.i.foreignObjects.set("system.adapter.yamaha.0", { native: { ip: "192.168.1.30", IP: "192.168.1.30" } });
+    await ctx.i.onReady();
+    await flush();
+    const native = ctx.i.foreignObjects.get("system.adapter.yamaha.0")?.native as Record<string, unknown>;
+    expect(native.devices).toHaveLength(1);
+    expect("ip" in native).toBe(false);
+    expect("IP" in native).toBe(false);
+    expect("ip" in ctx.i.config).toBe(false);
+  });
+
+  it("removes a leftover address key next to a filled table, and a deleted device does not come back", async () => {
+    const ctx = setup({ devices: [{ name: "Living room", ip: "192.168.1.10" }], ip: "192.168.1.30" });
+    ctx.i.foreignObjects.set("system.adapter.yamaha.0", {
+      native: { devices: [{ name: "Living room", ip: "192.168.1.10" }], ip: "192.168.1.30" },
+    });
+    await ctx.i.onReady();
+    await flush();
+    const native = ctx.i.foreignObjects.get("system.adapter.yamaha.0")?.native as Record<string, unknown>;
+    expect("ip" in native).toBe(false);
+    // The table the next start reads: emptied by a delete, nothing to migrate back.
+    expect(ctx.calls.map(c => c.device.ip)).toEqual(["192.168.1.10"]);
   });
 
   it("folds the removed zones toggle into the multiroom group", async () => {
@@ -2389,6 +2483,44 @@ describe("Yamaha volume as 0…100 % (the one switch)", () => {
     const common = ctx.i.objects.get("Living_room.volume")?.common as Record<string, unknown>;
     expect(common.max).toBeUndefined();
     expect(ctx.i.states.get("Living_room.volume")).toEqual({ val: 42, ack: true });
+  });
+});
+
+describe("Yamaha search warnings and the remembered model (audit 2026-09-24, A15/A22)", () => {
+  // Repeated every five minutes while a device is offline: said once, then only at debug.
+  it("warns about an id collision of a find once, then at debug", async () => {
+    mocks.discoveredStore.devices = [{ id: "Living", ip: "192.168.1.10", identity: { serial: "0A0A0A0A" } }];
+    mocks.discoverYamaha.mockResolvedValue([{ ip: "192.168.1.30", name: "Living", identity: { serial: "0E897553" } }]);
+    const ctx = setup({ devices: [] });
+    await ctx.i.onReady();
+    await flush();
+    await ctx.i.discoverAdditionalDevices(ctx.i.pushReceiver);
+    await flush();
+    const warns = ctx.i.log.warn.mock.calls.filter(c => String(c[0]).includes("is already taken"));
+    expect(warns).toHaveLength(1);
+    expect(ctx.i.log.debug).toHaveBeenCalledWith(expect.stringContaining("is already taken"));
+  });
+
+  // A discovery-schema bump empties the capability profile; the model the orphan match needs stays
+  // in native.model next to the identity.
+  it("remembers the model from native.model when the profile is empty", async () => {
+    const ctx = setup({ devices: [{ name: "192.168.1.10", ip: "192.168.1.10" }] });
+    ctx.i.objects.set("192_168_1_10", { type: "device", common: {}, native: { model: "RX-V685" } });
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.i.rememberedModelOf("192_168_1_10")).toBe("RX-V685");
+  });
+
+  it("stores a reported model in native.model", async () => {
+    const ctx = setup({ devices: [{ name: "Living room", ip: "192.168.1.10" }] });
+    await ctx.i.onReady();
+    await flush();
+    (ctx.calls[0].deps.setStateAck as (id: string, value: unknown) => void)("Living_room.info.model", "RX-A2070");
+    for (const call of ctx.i.setTimeout.mock.calls.filter(c => c[1] === 250)) {
+      (call[0] as () => void)();
+    }
+    await flush();
+    expect((ctx.i.objects.get("Living_room")?.native as Record<string, unknown>).model).toBe("RX-A2070");
   });
 });
 

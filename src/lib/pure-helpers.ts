@@ -1,6 +1,6 @@
 import type { DeviceRecord } from "./types";
 import type { DiscoveredDevice } from "./discovery";
-import { mergeIdentity, sameDevice } from "./device-identity";
+import { contradicts, mergeIdentity, sameDevice } from "./device-identity";
 
 interface ConfiguredDevice {
   name?: string;
@@ -170,7 +170,11 @@ export function mergeDiscovered(
     const id = sanitizeId(label);
     // Identity first: the serial survives a rename and a new address, the name does neither.
     const twin = [...byId.values()].find(record => sameDevice(record.identity, device.identity));
-    const remembered = twin ?? byId.get(id);
+    // The NAME fallback only while the identities do not contradict: another device that happens
+    // to carry the same (sanitised) name took the known record's address and identity over, and
+    // with both answering, the real one vanished (audit 2026-09-24, A4).
+    const byName = byId.get(id);
+    const remembered = twin ?? (contradicts(byName?.identity, device.identity) ? undefined : byName);
     if (remembered) {
       // Same device, possibly at a new address — carry the address over, keep the id.
       remembered.ip = device.ip;
@@ -184,7 +188,7 @@ export function mergeDiscovered(
       continue;
     }
     const ipOwner = [...byId.values()].find(record => record.ip === device.ip);
-    if (id === "info" || ipOwner) {
+    if (id === "info" || ipOwner || byId.has(id)) {
       onCollision?.(label, ipOwner?.id ?? id);
       continue;
     }

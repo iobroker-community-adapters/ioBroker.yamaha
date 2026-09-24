@@ -87,19 +87,36 @@ export function parseYamahaDescription(
  * Fetch one responder's description and keep it when it is a Yamaha device. Shared by the
  * active search and the passive NOTIFY listener — both learn of a device the same way.
  *
+ * Two outcomes that are no device are kept apart (audit 2026-09-24, A7): `null` is FINAL — not a
+ * Yamaha, or a description on another host than the sender — and `undefined` is "could not be
+ * read" (a receiver announcing itself before its HTTP server answers), which is worth asking again.
+ *
  * @param deps the HTTP fetch and logger
  * @param location the description URL the device announced
  * @param address the address it announced from
- * @returns the device, or undefined (not Yamaha, or the description could not be read)
+ * @returns the device; null when it is none; undefined when its description could not be read
  */
 export async function probeDescription(
   deps: Pick<DiscoveryDeps, "fetch" | "log">,
   location: string,
   address: string,
-): Promise<DiscoveredDevice | undefined> {
+): Promise<DiscoveredDevice | null | undefined> {
+  // The description has to come from the device that announced it: a LOCATION pointing elsewhere
+  // would hand a known device's name and identity to another address (audit 2026-09-24, A13).
+  let host: string;
+  try {
+    host = new URL(location).hostname;
+  } catch {
+    deps.log.debug(`discovery: ${address} announced an unreadable description address "${location}"`);
+    return null;
+  }
+  if (host !== address) {
+    deps.log.debug(`discovery: ${address} announced a description on another host (${host}) — not taken`);
+    return null;
+  }
   try {
     const yamaha = parseYamahaDescription(await deps.fetch(location));
-    return yamaha ? { ip: address, ...yamaha } : undefined;
+    return yamaha ? { ip: address, ...yamaha } : null;
   } catch (e) {
     deps.log.debug(`discovery: ${address} description fetch failed: ${errorMessage(e)}`);
     return undefined;
@@ -132,5 +149,5 @@ export async function discoverYamaha(deps: DiscoveryDeps): Promise<DiscoveredDev
   const probed = await Promise.all(
     [...byAddress].map(([address, location]) => probeDescription(deps, location, address)),
   );
-  return probed.filter((device): device is DiscoveredDevice => device !== undefined);
+  return probed.filter((device): device is DiscoveredDevice => device !== undefined && device !== null);
 }

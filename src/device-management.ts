@@ -296,7 +296,12 @@ export class YamahaDeviceManagement extends DeviceManagement {
     const manual = await this.readManual();
     const data = await context.showForm(buildDeviceForm(manual.map(r => r.ip)), { title: t("dmAdd") });
     if (data && typeof data.ip === "string" && data.ip.trim()) {
-      const row: ManualRow = { name: typeof data.name === "string" ? data.name.trim() : "", ip: data.ip.trim() };
+      const ip = data.ip.trim();
+      const typedName = typeof data.name === "string" ? data.name.trim() : "";
+      // A name that IS the address marks the row of the 0.5.4 migration (`parseDevices`), and such
+      // a row follows the device to a new address. Typed by the user it is a typed row: stored
+      // without a name, the id is the address all the same (audit 2026-09-24, A6).
+      const row: ManualRow = { name: typedName === ip ? "" : typedName, ip };
       const clash = findClash(manual, row, -1);
       if (clash) {
         await context.showMessage(clash);

@@ -58,17 +58,37 @@ describe("probeDescription", () => {
     expect(found).toMatchObject({ ip: "1.1.1.1", name: "Yamaha RX-V6a", identity: { serial: "057CCF73" } });
   });
 
-  test("is undefined for a stranger and for a failed fetch", async () => {
+  // A stranger is FINAL (null — the full NOTIFY throttle), an unreadable description is worth asking
+  // again (undefined — a receiver announces itself before its HTTP server answers). Both used to be
+  // undefined, so every television was re-probed every five seconds (audit 2026-09-24, A7).
+  test("is null for a stranger and undefined for a failed fetch", async () => {
     await expect(
       probeDescription(
         { fetch: () => Promise.resolve("<manufacturer>Sonos</manufacturer>"), log: silentLog },
-        "u",
+        "http://1.1.1.1/d.xml",
+        "1.1.1.1",
+      ),
+    ).resolves.toBeNull();
+    await expect(
+      probeDescription(
+        { fetch: () => Promise.reject(new Error("offline")), log: silentLog },
+        "http://1.1.1.1/d.xml",
         "1.1.1.1",
       ),
     ).resolves.toBeUndefined();
-    await expect(
-      probeDescription({ fetch: () => Promise.reject(new Error("offline")), log: silentLog }, "u", "1.1.1.1"),
-    ).resolves.toBeUndefined();
+  });
+
+  // The description has to come from the sender: a LOCATION on another host would hand a known
+  // device's name and identity to this address (audit 2026-09-24, A13).
+  test("does not take a description whose LOCATION host is not the sender", async () => {
+    let fetched = false;
+    const fetch = (): Promise<string> => {
+      fetched = true;
+      return Promise.resolve(V6A);
+    };
+    await expect(probeDescription({ fetch, log: silentLog }, "http://10.0.0.5/d.xml", "1.1.1.1")).resolves.toBeNull();
+    await expect(probeDescription({ fetch, log: silentLog }, "not a url", "1.1.1.1")).resolves.toBeNull();
+    expect(fetched).toBe(false);
   });
 });
 
