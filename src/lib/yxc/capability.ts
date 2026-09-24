@@ -77,6 +77,11 @@ export interface YxcCapabilities {
    * the objects are built). Unknown = nothing is withheld on its account.
    */
   apiVersion?: number;
+  /**
+   * The names the user gave the inputs and sound programs in the MusicCast app (getNameText — added
+   * by the controller before the objects are built; audit 2026-09-24, C24).
+   */
+  names?: { inputs: Record<string, string>; soundPrograms: Record<string, string> };
   /** The functions the SYSTEM block declares (`party_mode`, `dimmer`, …) — getFeatures `system.func_list`. */
   systemFuncs?: string[];
   /** The value lists the SYSTEM block declares (`hdmi_standby_through_list`), keyed by their id. */

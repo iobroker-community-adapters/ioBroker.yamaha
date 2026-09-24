@@ -397,6 +397,20 @@ const NETUSB_PLAY_ERRORS: Record<number, string> = {
 };
 
 /**
+ * A dropdown of device ids, each labelled with the name the user gave it where there is one.
+ *
+ * @param ids the device's ids, in its order
+ * @param labels id → name (getNameText), if known
+ * @returns the states map
+ */
+function labelled(
+  ids: readonly string[],
+  labels: Readonly<Record<string, string>> | undefined,
+): Record<string, string> {
+  return Object.fromEntries(ids.map(id => [id, labels?.[id] ?? id]));
+}
+
+/**
  * Turn YXC capabilities into the unified object tree: main's functions as
  * top-level states, each additional zone as a channel with its own states. An
  * input state is added when the zone offers inputs. Player sources (netusb, cd)
@@ -495,18 +509,26 @@ export function mapYxcToObjects(
       // "manual" as tone-control mode and answers "auto" — a device contradicting itself must
       // not leave the admin with a raw value nobody can pick again.
       let declared = false;
+      // The value stays the device's id; the label is the name the user gave it in the MusicCast app
+      // (getNameText) — an input list read "hdmi1, hdmi2, …" where the app says "Apple TV" (C24).
+      const labels =
+        entry.state === "input"
+          ? capabilities.names?.inputs
+          : entry.state === "soundProgram"
+            ? capabilities.names?.soundPrograms
+            : undefined;
       if (entry.state === "input" && zone.inputs.length > 0) {
-        common.states = selfMap(zone.inputs);
+        common.states = labelled(zone.inputs, labels);
         declared = true;
       }
       const valueList = zone.valueLists?.[entry.state];
       if (valueList) {
-        common.states = selfMap(valueList);
+        common.states = labelled(valueList, labels);
         declared = true;
       }
       const reported = current?.[zone.id]?.[entry.state];
       if (common.states && typeof reported === "string" && reported.length > 0 && !(reported in common.states)) {
-        common.states = { ...common.states, [reported]: reported };
+        common.states = { ...common.states, [reported]: labels?.[reported] ?? reported };
       }
       objects.push({ id: fullId, type: "state", common, ...(declared ? { declaredStates: true } : {}) });
     }

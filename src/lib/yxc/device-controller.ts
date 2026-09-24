@@ -118,6 +118,36 @@ function modelNameFrom(deviceInfo: unknown): string | undefined {
 }
 
 /**
+ * The names the user gave the inputs and sound programs in the MusicCast app (getNameText
+ * `input_list` / `sound_program_list`, YXC Basic §4.30): id → text, empty texts left out.
+ *
+ * @param nameText the getNameText response
+ * @returns the two maps
+ */
+export function nameTextLabels(nameText: unknown): {
+  inputs: Record<string, string>;
+  soundPrograms: Record<string, string>;
+} {
+  const list = (key: string): Record<string, string> => {
+    const entries = (nameText as Record<string, unknown> | null)?.[key];
+    const labels: Record<string, string> = {};
+    if (Array.isArray(entries)) {
+      for (const entry of entries) {
+        const { id, text } = (typeof entry === "object" && entry !== null ? entry : {}) as {
+          id?: unknown;
+          text?: unknown;
+        };
+        if (typeof id === "string" && typeof text === "string" && text.trim().length > 0) {
+          labels[id] = text.trim();
+        }
+      }
+    }
+    return labels;
+  };
+  return { inputs: list("input_list"), soundPrograms: list("sound_program_list") };
+}
+
+/**
  * Extract the name a user gave this device from a getNameText response.
  *
  * MusicCast keeps it as the main zone's text — that is the name shown in the app and
@@ -343,9 +373,7 @@ export class YxcDeviceController implements ConnectionHandle {
       const version = (info as { system_version?: unknown } | null)?.system_version;
       const identity = `${model ?? ""}|${typeof version === "number" || typeof version === "string" ? version : ""}`;
       if (this.deps.probeMemory && this.deps.probeMemory.remembered("yxcIdentity") !== identity) {
-        this.deps.probeMemory.drop(
-          key => key === "features" || key === "name" || key === "model" || key === "yxcIdentity",
-        );
+        this.deps.probeMemory.drop(key => key === "features" || key === "model" || key === "yxcIdentity");
         this.deps.probeMemory.set("yxcIdentity", identity);
       }
       // Serial (`system_id`) and MAC (`device_id`) — the device's identity for life. Their own
@@ -411,8 +439,17 @@ export class YxcDeviceController implements ConnectionHandle {
       }
       reported[zone] = values;
     });
-    // getFeatures does not carry the API version; getDeviceInfo above does, and the tree depends on it.
-    this.capabilities = this.apiVersion === undefined ? capabilities : { ...capabilities, apiVersion: this.apiVersion };
+    // The names the user gave the device, its inputs and its sound programs — read FRESH on every
+    // connection: they are the user's, and a rename in the app froze here for good while they rode in
+    // the probe memory (audit 2026-09-24, C12). The memory's old copy is dropped once.
+    this.deps.probeMemory?.drop(key => key === "name");
+    const nameText = await this.readNameText();
+    // getFeatures carries neither the API version nor the names; the tree depends on both.
+    this.capabilities = {
+      ...capabilities,
+      ...(this.apiVersion !== undefined ? { apiVersion: this.apiVersion } : {}),
+      ...(nameText !== undefined ? { names: nameTextLabels(nameText) } : {}),
+    };
     for (const zone of this.zones) {
       this.zoneVolumeMode.set(zone, reported[zone]?.actualVolumeMode);
     }
@@ -447,15 +484,9 @@ export class YxcDeviceController implements ConnectionHandle {
     }
     // The name the user gave the device in the MusicCast app. Best-effort like the model
     // above: an older device that does not answer getNameText simply keeps its label.
-    if (this.deps.reportDeviceName) {
-      try {
-        const name = await this.remember("name", async () => zoneNameFrom(await this.deps.client.getNameText()));
-        if (name) {
-          this.deps.reportDeviceName(name);
-        }
-      } catch (e) {
-        this.deps.log.debug(`${this.deviceId}: getNameText failed (${errorMessage(e)})`);
-      }
+    const name = nameText === undefined ? undefined : zoneNameFrom(nameText);
+    if (name) {
+      this.deps.reportDeviceName?.(name);
     }
     // Seed every zone from the status fetched above — the same answer, not a second request.
     const zonesAnswered: boolean[] = [];
@@ -1104,15 +1135,58 @@ export class YxcDeviceController implements ConnectionHandle {
     }
   }
 
-  /** Re-read the name the user gave the device in the MusicCast app (`name_text_updated`). */
+  /**
+   * Read getNameText, or undefined when the device does not answer it (an older one).
+   *
+   * @returns the raw answer
+   */
+  private async readNameText(): Promise<unknown> {
+    try {
+      return await this.deps.client.getNameText();
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: getNameText failed (${errorMessage(e)})`);
+      return undefined;
+    }
+  }
+
+  /**
+   * Re-read the names the user gave in the MusicCast app (`name_text_updated`, YXC Basic Rev 1.10
+   * §11.3): the device's own name goes to its label, the input and sound-program names to the
+   * dropdowns of every zone (C12/C24).
+   */
   private async refreshDeviceName(): Promise<void> {
     try {
-      const name = zoneNameFrom(await this.deps.client.getNameText());
+      const nameText = await this.readNameText();
+      if (nameText === undefined) {
+        return;
+      }
+      const name = zoneNameFrom(nameText);
       if (name) {
         this.deps.reportDeviceName?.(name);
       }
+      if (!this.capabilities) {
+        return;
+      }
+      this.capabilities = { ...this.capabilities, names: nameTextLabels(nameText) };
+      for (const zone of this.zones) {
+        const prefix = zonePrefix(zone);
+        const current: Record<string, string> = {};
+        for (const field of ["input", "soundProgram"]) {
+          const value = this.deviceValues.get(`${prefix}${field}`);
+          if (typeof value === "string") {
+            current[field] = value;
+          }
+        }
+        const defs = mapYxcToObjects(this.capabilities, { [zone]: current });
+        for (const id of [`${prefix}input`, `${prefix}soundProgram`]) {
+          const def = defs.find(object => object.id === id);
+          if (def) {
+            await this.deps.upsertObject(`${this.deviceId}.${id}`, def);
+          }
+        }
+      }
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: getNameText failed (${errorMessage(e)})`);
+      this.deps.log.debug(`${this.deviceId}: re-reading the names failed (${errorMessage(e)})`);
     }
   }
 

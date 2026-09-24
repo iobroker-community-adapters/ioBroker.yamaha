@@ -1,5 +1,5 @@
 import { YxcRefusalError, YxcTransportError } from "./http-client";
-import { YxcDeviceController, zoneNameFrom } from "./device-controller";
+import { nameTextLabels, YxcDeviceController, zoneNameFrom } from "./device-controller";
 import type { YxcClientLike } from "./device-controller";
 import type { ObjectDef } from "../catalog/types";
 import wx10 from "./__fixtures__/WX10_216_208.json";
@@ -2485,5 +2485,98 @@ describe("YxcDeviceController disable_flags", () => {
     s.controller.handleStateChange("living.mute", false, true);
     await flush();
     expect(s.client.calls[0]).toEqual({ method: "mute", args: [true, "main"] });
+  });
+});
+
+// The names are the user's: remembered in the probe memory, a rename in the MusicCast app never reached
+// the tree again, not even after a restart (audit 2026-09-24, C12). The input and program names the
+// app shows were never used — a MusicCast-only device offered "hdmi1" (C24).
+describe("YxcDeviceController names from the MusicCast app", () => {
+  const features = {
+    zone: [
+      {
+        id: "main",
+        func_list: ["power", "sound_program"],
+        input_list: ["hdmi1", "hdmi2", "net_radio"],
+        sound_program_list: ["straight", "munich"],
+      },
+    ],
+  };
+
+  test("every connection reads the name afresh — a rename in the app arrives", async () => {
+    const memory = new ProbeMemory();
+    memory.set("name", "Wohnzimmer"); // what an older version remembered
+    const first = setup(features, { power: "on", input: "hdmi1" });
+    const client = first.client;
+    client.nameText = { zone_list: [{ id: "main", text: "Wohnzimmer" }] };
+    const run = async (): Promise<string[]> => {
+      const names: string[] = [];
+      const controller = new YxcDeviceController("living", {
+        client,
+        registerPush: () => () => {},
+        scheduleKeepalive: () => () => {},
+        upsertObject: () => Promise.resolve(),
+        setStateAck: () => {},
+        reportDeviceName: name => void names.push(name),
+        log: silentLog,
+        probeMemory: memory,
+      });
+      await controller.start();
+      return names;
+    };
+    expect(await run()).toEqual(["Wohnzimmer"]);
+    client.nameText = { zone_list: [{ id: "main", text: "Küche" }] };
+    expect(await run()).toEqual(["Küche"]);
+    expect(memory.remembered("name")).toBeUndefined();
+  });
+
+  test("the input and sound-program dropdowns carry the app's names; the value stays the id", async () => {
+    const s = setup(features, { power: "on", input: "hdmi1", sound_program: "munich" });
+    s.client.nameText = {
+      zone_list: [{ id: "main", text: "Wohnzimmer" }],
+      input_list: [
+        { id: "hdmi1", text: "Apple TV" },
+        { id: "hdmi2", text: " " },
+      ],
+      sound_program_list: [{ id: "munich", text: "Hall in Munich" }],
+    };
+    await s.controller.start();
+    expect(s.defs.get("living.input")?.common.states).toEqual({
+      hdmi1: "Apple TV",
+      hdmi2: "hdmi2",
+      net_radio: "net_radio",
+    });
+    expect(s.defs.get("living.soundProgram")?.common.states).toEqual({
+      straight: "straight",
+      munich: "Hall in Munich",
+    });
+  });
+
+  test("a rename in the app reaches the label and the dropdowns on name_text_updated", async () => {
+    const s = setup(features, { power: "on", input: "hdmi1" });
+    s.client.nameText = {
+      zone_list: [{ id: "main", text: "Wohnzimmer" }],
+      input_list: [{ id: "hdmi1", text: "Apple TV" }],
+    };
+    await s.controller.start();
+    s.names.length = 0;
+    s.client.nameText = { zone_list: [{ id: "main", text: "Kino" }], input_list: [{ id: "hdmi1", text: "Beamer" }] };
+    s.fire.push?.({ system: { name_text_updated: true } });
+    await flush();
+    await flush();
+    expect(s.names).toEqual(["Kino"]);
+    expect(s.defs.get("living.input")?.common.states).toMatchObject({ hdmi1: "Beamer" });
+  });
+});
+
+describe("nameTextLabels", () => {
+  it("maps ids to the names, leaving out empty ones and malformed entries", () => {
+    expect(
+      nameTextLabels({
+        input_list: [{ id: "hdmi1", text: " Apple TV " }, { id: "hdmi2", text: "" }, { text: "no id" }, "junk"],
+        sound_program_list: [{ id: "munich", text: "Hall in Munich" }],
+      }),
+    ).toEqual({ inputs: { hdmi1: "Apple TV" }, soundPrograms: { munich: "Hall in Munich" } });
+    expect(nameTextLabels(null)).toEqual({ inputs: {}, soundPrograms: {} });
   });
 });
