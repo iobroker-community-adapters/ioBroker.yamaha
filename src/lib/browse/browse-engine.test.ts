@@ -198,6 +198,59 @@ describe("BrowseEngine", () => {
     expect(driver.calls).toEqual(["home", "select:1", "select:1"]);
   });
 
+  // A pull driver (XML, MusicCast) renders the next window inside select() — the walk read the version
+  // afterwards and waited the full 15 s for a window that had already come, per segment (D3).
+  it("a window rendered inside select costs no wait, and the last segment waits for nothing", async () => {
+    const driver = new FakeDriver();
+    const waited: number[] = [];
+    const engine = new BrowseEngine(driver, {
+      emit: () => {},
+      log: silentLog,
+      delay: ms => {
+        waited.push(ms);
+        return Promise.resolve();
+      },
+    });
+    driver.engine = engine;
+    driver.onOp.home = window({ layer: 1, totalItems: 1, rows: [{ line: 1, text: "Bookmarks", kind: "folder" }] });
+    driver.onOp.select = window({ layer: 2, totalItems: 1, rows: [{ line: 1, text: "Radio Paradise", kind: "item" }] });
+    engine.handleWrite("player.browse.path", "Bookmarks>Radio Paradise");
+    await flush();
+    expect(driver.calls).toEqual(["home", "select:1", "select:1"]);
+    expect(waited.reduce((sum, ms) => sum + ms, 0)).toBe(0);
+  });
+
+  it("a window that arrives after select (a push driver, YNCA) is waited for — only that long", async () => {
+    const driver = new FakeDriver();
+    const waited: number[] = [];
+    const level2 = window({ layer: 2, totalItems: 1, rows: [{ line: 1, text: "Radio Paradise", kind: "item" }] });
+    let pending: BrowseWindow | undefined;
+    const engine = new BrowseEngine(driver, {
+      emit: () => {},
+      log: silentLog,
+      delay: ms => {
+        waited.push(ms);
+        if (pending) {
+          engine.onWindow(pending);
+          pending = undefined;
+        }
+        return Promise.resolve();
+      },
+    });
+    driver.engine = engine;
+    driver.onOp.home = window({ layer: 1, totalItems: 1, rows: [{ line: 1, text: "Bookmarks", kind: "folder" }] });
+    driver.select = (line: number): void => {
+      driver.calls.push(`select:${line}`);
+      if (driver.calls.length === 2) {
+        pending = level2;
+      }
+    };
+    engine.handleWrite("player.browse.path", "Bookmarks>Radio Paradise");
+    await flush();
+    expect(driver.calls).toEqual(["home", "select:1", "select:1"]);
+    expect(waited).toEqual([250]);
+  });
+
   it("pages forward while searching a segment and stops at the menu's tail", async () => {
     const { engine, driver } = setup();
     driver.onOp.home = window({

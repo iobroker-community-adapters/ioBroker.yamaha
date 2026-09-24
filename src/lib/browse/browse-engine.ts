@@ -283,21 +283,25 @@ export class BrowseEngine {
     if (segments.length === 0) {
       return;
     }
-    let version = this.windowVersion;
+    const version = this.windowVersion;
     await this.driver.home();
     if (!(await this.waitForWindow(version))) {
       this.deps.log.warn(`browse: path "${path}" aborted — the menu root did not load`);
       return;
     }
-    for (const segment of segments) {
-      if (!(await this.findAndSelect(segment))) {
+    for (const [index, segment] of segments.entries()) {
+      const before = await this.findAndSelect(segment);
+      if (before === undefined) {
         this.deps.log.warn(`browse: path "${path}" aborted — "${segment}" not found in this menu`);
         return;
       }
-      version = this.windowVersion;
-      // Give the device a chance to deliver the next level; a playable final segment
-      // may not change the window at all, so a timeout here is not an error.
-      await this.waitForWindow(version);
+      // Wait for the next level against the version from BEFORE the select: a pull driver (XML,
+      // MusicCast) renders the new window inside select() itself, so a version read afterwards
+      // waited 15 s for a window that had already come — per segment. After the last segment nothing
+      // follows, and a playable one may not change the window at all (audit 2026-09-24, D3).
+      if (index < segments.length - 1) {
+        await this.waitForWindow(before);
+      }
     }
   }
 
@@ -305,29 +309,30 @@ export class BrowseEngine {
    * Find a row by its text in the current menu, paging forward as needed, and select it.
    *
    * @param text the row text to find (without the symbol prefix)
-   * @returns true when the row was found and selected
+   * @returns the window version from before the select, or undefined when the row was not found
    */
-  private async findAndSelect(text: string): Promise<boolean> {
+  private async findAndSelect(text: string): Promise<number | undefined> {
     for (let page = 0; page < MAX_SEARCH_PAGES; page++) {
       const window = this.window;
       if (!window) {
-        return false;
+        return undefined;
       }
       const row = window.rows.find(r => r.text === text && r.kind !== "unselectable");
       if (row) {
+        const before = this.windowVersion;
         await this.driver.select(row.line);
-        return true;
+        return before;
       }
       // Stop at the last page: the window already shows the menu's tail.
       if (window.currentLine - 1 + window.rows.length >= window.totalItems) {
-        return false;
+        return undefined;
       }
       const version = this.windowVersion;
       await this.driver.pageDown();
       if (!(await this.waitForWindow(version))) {
-        return false;
+        return undefined;
       }
     }
-    return false;
+    return undefined;
   }
 }
