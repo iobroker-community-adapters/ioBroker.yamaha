@@ -122,17 +122,30 @@ describe("parseBasicStatus", () => {
     expect(parseBasicStatus(xml)).toEqual({ power: false });
   });
 
-  test("parses straight, direct, adaptive DRC and dialogue level (rxv + openHAB paths)", () => {
+  test("parses straight, direct and adaptive DRC (rxv + openHAB paths)", () => {
     const xml =
       "<Surround><Program_Sel><Current><Straight>On</Straight></Current></Program_Sel></Surround>" +
-      "<Sound_Video><Direct><Mode>Off</Mode></Direct><Adaptive_DRC>Auto</Adaptive_DRC>" +
-      "<Dialogue_Adjust><Dialogue_Lvl><Val>2</Val></Dialogue_Lvl></Dialogue_Adjust></Sound_Video>";
+      "<Sound_Video><Direct><Mode>Off</Mode></Direct><Adaptive_DRC>Auto</Adaptive_DRC></Sound_Video>";
     const status = parseBasicStatus(xml);
     expect(status.straight).toBe(true);
     expect(status.direct).toBe(false);
     expect(status.adaptiveDrc).toBe("Auto");
-    expect(status.dialogueLevel).toBe(2);
-    expect(status.volume).toBeUndefined(); // Dialogue_Lvl's <Val> must not be read as the volume
+    expect(status.volume).toBeUndefined();
+  });
+
+  // The dialogue level is a bare number on every device that reports it — the <Val> form the old
+  // test invented is on none (audit 2026-09-24, D9). Fragments verbatim from the captures.
+  test("reads the dialogue level the way the devices report it", () => {
+    // HTR-4069 (openHAB capture, Main_Zone Basic_Status).
+    expect(parseBasicStatus("<Dialogue_Adjust> <Dialogue_Lvl>1</Dialogue_Lvl> </Dialogue_Adjust>").dialogueLevel).toBe(
+      1,
+    );
+    // RX-V6A (device capture 2026-09-01).
+    const v6a =
+      "<Dialogue_Adjust><Dialogue_Lift>2</Dialogue_Lift><Dialogue_Lvl>0</Dialogue_Lvl>" +
+      "<DTS_Dialogue_Control>0</DTS_Dialogue_Control></Dialogue_Adjust>";
+    expect(parseBasicStatus(v6a).dialogueLevel).toBe(0);
+    expect(parseBasicStatus(v6a).volume).toBeUndefined();
   });
 
   test("parses tone, subwoofer trim and extra-bass/YPAO toggles (soef paths the predecessor exposed)", () => {
@@ -269,15 +282,13 @@ describe("parseDescriptor — the enumerations a classic receiver carries in des
     expect(d.programs).toContain("Surround Decoder");
     expect(d.sleep).toEqual(["120 min", "90 min", "60 min", "30 min", "Off"]);
     expect(d.adaptiveDrc).toEqual(["Auto", "Off"]);
-    expect(d.hdmiOut2).toBeUndefined();
     expect(d.dialogueLevel).toBeUndefined();
   });
 
-  test("a 2016 Aventage: 25 programs, the second HDMI output with its Unavailable state, the dialogue range", () => {
+  test("a 2016 Aventage: 25 programs and the dialogue range", () => {
     const d = parseDescriptor(readFixture("desc-rx-a2060.xml"));
     expect(d.programs).toHaveLength(25);
     expect(d.programs).toContain("9ch Stereo");
-    expect(d.hdmiOut2).toEqual(["Unavailable", "On", "Off"]);
     expect(d.dialogueLevel).toEqual({ min: 0, max: 3, step: 1 });
   });
 
@@ -300,7 +311,6 @@ describe("parseDescriptor — the enumerations a classic receiver carries in des
       cursorZones: [],
       menuZones: [],
       playbackZones: [],
-      volumeOutputZones: [],
     });
   });
 });
@@ -388,12 +398,11 @@ describe("parseBasicStatus — the zone commands desc.xml declares (coverage aud
 });
 
 describe("parseDescriptor — the zone commands and the pad a receiver declares", () => {
-  test("the RX-V675 declares the zone-wide cursor and menu keys, playback and the pre-out mode per zone", () => {
+  test("the RX-V675 declares the zone-wide cursor and menu keys and playback per zone", () => {
     const descriptor = parseDescriptor(readFixture("desc-rx-v675.xml"));
     expect(descriptor.cursorZones).toEqual(["Main_Zone", "Zone_2"]);
     expect(descriptor.menuZones).toEqual(["Main_Zone", "Zone_2"]);
     expect(descriptor.playbackZones).toEqual(["Main_Zone", "Zone_2"]);
-    expect(descriptor.volumeOutputZones).toEqual(["Zone_2"]);
   });
 
   test("the 2012 entry class (RX-V473) declares no zone-wide pad — the menu-bound List_Control is all it has (#613) — but main-zone playback", () => {
@@ -401,7 +410,6 @@ describe("parseDescriptor — the zone commands and the pad a receiver declares"
     expect(descriptor.cursorZones).toEqual([]);
     expect(descriptor.menuZones).toEqual([]);
     expect(descriptor.playbackZones).toEqual(["Main_Zone"]);
-    expect(descriptor.volumeOutputZones).toEqual([]);
   });
 });
 

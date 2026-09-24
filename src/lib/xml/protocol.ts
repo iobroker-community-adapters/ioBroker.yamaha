@@ -349,8 +349,6 @@ export interface XmlDescriptor {
   sleep: string[];
   /** `Sound_Video,Adaptive_DRC` — Auto/Off. */
   adaptiveDrc: string[];
-  /** `Sound_Video,HDMI,Output,OUT_2` — may carry "Unavailable" where the second output is optional. */
-  hdmiOut2?: string[];
   /** `Sound_Video,Dialogue_Adjust,Dialogue_Lvl` range, when declared. */
   dialogueLevel?: { min: number; max: number; step: number };
   /** The zone elements whose `Cmd_List` defines `Cursor_Control,Cursor` — the zone-wide cursor pad. */
@@ -359,8 +357,6 @@ export interface XmlDescriptor {
   menuZones?: string[];
   /** The zone elements with `Play_Control,Playback` — transport keys per zone. */
   playbackZones?: string[];
-  /** The zone elements with `Volume,Output` — the pre-out level mode (zones 2–4). */
-  volumeOutputZones?: string[];
 }
 
 /**
@@ -430,14 +426,9 @@ export function parseDescriptor(xml: string): XmlDescriptor {
     sleep: descriptorParam(xml, "Power_Control,Sleep").values,
     adaptiveDrc: descriptorParam(xml, "Sound_Video,Adaptive_DRC").values,
   };
-  const hdmiOut2 = descriptorParam(xml, "Sound_Video,HDMI,Output,OUT_2").values;
-  if (hdmiOut2.length > 0) {
-    descriptor.hdmiOut2 = hdmiOut2;
-  }
   descriptor.cursorZones = definingZones(xml, "Cursor_Control,Cursor");
   descriptor.menuZones = definingZones(xml, "Cursor_Control,Menu_Control");
   descriptor.playbackZones = definingZones(xml, "Play_Control,Playback");
-  descriptor.volumeOutputZones = definingZones(xml, "Volume,Output");
   const dialogue = descriptorParam(xml, "Sound_Video,Dialogue_Adjust,Dialogue_Lvl").range;
   if (dialogue) {
     descriptor.dialogueLevel = dialogue;
@@ -603,7 +594,10 @@ export function parseBasicStatus(body: string): BasicStatus {
   if (adaptiveDrc) {
     status.adaptiveDrc = decodeXmlText(adaptiveDrc[1]);
   }
-  const dialogueLevel = /<Dialogue_Lvl>\s*<Val>(-?\d+)<\/Val>/.exec(xml);
+  // A bare number (HTR-4069 `<Dialogue_Lvl>1</Dialogue_Lvl>`, RX-V6A `…>0<…`); the `<Val>` form the
+  // parser expected exists on no device and in no desc.xml — the level was never read (audit
+  // 2026-09-24, D9).
+  const dialogueLevel = /<Dialogue_Lvl>\s*(-?\d+)\s*<\/Dialogue_Lvl>/.exec(xml);
   if (dialogueLevel) {
     status.dialogueLevel = Number(dialogueLevel[1]);
   }
