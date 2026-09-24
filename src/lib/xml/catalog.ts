@@ -32,6 +32,11 @@ export interface XmlAmpEntry {
   zonesOnly?: boolean;
   /** Override the write target element (e.g. `System` for HDMI outputs and party); default is the zone element. */
   writeZone?: string;
+  /**
+   * The desc.xml command paths whose declared range this state takes, per zone (see
+   * `descriptorRanges`); the `common` bounds are the fallback where none is declared (D16).
+   */
+  rangePaths?: string[];
 }
 
 /** The unified XML amplifier catalog — object + read field + PUT builder in one list. */
@@ -84,9 +89,10 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
       step: 0.5,
     },
     statusField: "volume",
-    toInner: (value: unknown, dialect?: XmlDialect): string => {
+    rangePaths: ["Volume,Lvl", "Vol,Lvl"],
+    toInner: (value: unknown, dialect?: XmlDialect, form?: XmlZoneForm): string => {
       const element = dialect === "legacy" ? "Vol" : "Volume";
-      return `<${element}><Lvl><Val>${xmlTenths(value, 0.5)}</Val><Exp>1</Exp><Unit>dB</Unit></Lvl></${element}>`;
+      return `<${element}><Lvl><Val>${xmlTenths(value, form?.steps?.volume ?? 0.5)}</Val><Exp>1</Exp><Unit>dB</Unit></Lvl></${element}>`;
     },
   },
   {
@@ -211,9 +217,14 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
       step: 0.5,
     },
     statusField: "bass",
+    rangePaths: ["Sound_Video,Tone,Bass", "Sound_Video,Tone,Manual,Bass"],
     // Under `Tone,Manual` where the zone uses that form (RX-A2060 zones 2/3, the 2020 generation — D6).
     toInner: (value, _dialect, form) =>
-      toneInner("Bass", `<Val>${xmlTenths(value, 0.5)}</Val><Exp>1</Exp><Unit>dB</Unit>`, form),
+      toneInner(
+        "Bass",
+        `<Val>${xmlTenths(value, form?.steps?.["sound.bass"] ?? 0.5)}</Val><Exp>1</Exp><Unit>dB</Unit>`,
+        form,
+      ),
   },
   {
     state: "sound.treble",
@@ -230,8 +241,13 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
       step: 0.5,
     },
     statusField: "treble",
+    rangePaths: ["Sound_Video,Tone,Treble", "Sound_Video,Tone,Manual,Treble"],
     toInner: (value, _dialect, form) =>
-      toneInner("Treble", `<Val>${xmlTenths(value, 0.5)}</Val><Exp>1</Exp><Unit>dB</Unit>`, form),
+      toneInner(
+        "Treble",
+        `<Val>${xmlTenths(value, form?.steps?.["sound.treble"] ?? 0.5)}</Val><Exp>1</Exp><Unit>dB</Unit>`,
+        form,
+      ),
   },
   {
     state: "sound.subwooferTrim",
@@ -248,8 +264,9 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
       step: 0.5,
     },
     statusField: "subwooferTrim",
-    toInner: value =>
-      `<Volume><Subwoofer_Trim><Val>${xmlTenths(value, 0.5)}</Val><Exp>1</Exp><Unit>dB</Unit></Subwoofer_Trim></Volume>`,
+    rangePaths: ["Volume,Subwoofer_Trim"],
+    toInner: (value, _dialect, form) =>
+      `<Volume><Subwoofer_Trim><Val>${xmlTenths(value, form?.steps?.["sound.subwooferTrim"] ?? 0.5)}</Val><Exp>1</Exp><Unit>dB</Unit></Subwoofer_Trim></Volume>`,
   },
   {
     state: "sound.extraBass",
@@ -401,8 +418,9 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     },
     statusField: "zoneBVolume",
     mainOnly: true,
-    toInner: value =>
-      `<Volume><Zone_B><Lvl><Val>${xmlTenths(value, 0.5)}</Val><Exp>1</Exp><Unit>dB</Unit></Lvl></Zone_B></Volume>`,
+    rangePaths: ["Volume,Zone_B,Lvl"],
+    toInner: (value, _dialect, form) =>
+      `<Volume><Zone_B><Lvl><Val>${xmlTenths(value, form?.steps?.["multiroom.zoneB.volume"] ?? 0.5)}</Val><Exp>1</Exp><Unit>dB</Unit></Lvl></Zone_B></Volume>`,
   },
   {
     state: "multiroom.zoneB.mute",

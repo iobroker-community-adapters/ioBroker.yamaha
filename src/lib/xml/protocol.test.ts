@@ -12,6 +12,7 @@ import {
   parseSceneList,
   parseSystemConfig,
   parseTunerInfo,
+  descriptorRanges,
 } from "./protocol";
 
 /**
@@ -332,6 +333,7 @@ describe("parseDescriptor — the enumerations a classic receiver carries in des
       dialogueZones: [],
       toneManualZones: [],
       enhancerCurrentZones: [],
+      ranges: {},
     });
   });
 });
@@ -468,5 +470,31 @@ describe("the zone form a status shows", () => {
     expect(v675.enhancerCurrentZones).toEqual([]);
     expect(a2060.toneManualZones).toEqual(["Zone_2", "Zone_3"]);
     expect(a2060.enhancerCurrentZones).toEqual(["Zone_2", "Zone_3"]);
+  });
+});
+
+// desc.xml declares every level as `Val=Param_1:Exp=Param_2` with its range in tenths, per zone block;
+// the old reader took neither form and fixed constants stood on every zone (audit 2026-09-24, D16).
+describe("descriptorRanges", () => {
+  test("reads the RX-V675's levels per zone, in dB", () => {
+    const ranges = descriptorRanges(readFixture("desc-rx-v675.xml"));
+    expect(ranges.Main_Zone?.["Volume,Lvl"]).toEqual({ min: -80.5, max: 16.5, step: 0.5 });
+    expect(ranges.Main_Zone?.["Sound_Video,Tone,Bass"]).toEqual({ min: -6, max: 6, step: 0.5 });
+    expect(ranges.Main_Zone?.["Volume,Subwoofer_Trim"]).toEqual({ min: -6, max: 6, step: 0.5 });
+    expect(ranges.Zone_2?.["Volume,Lvl"]).toEqual({ min: -80.5, max: 16.5, step: 0.5 });
+  });
+
+  test("a zone block's own declaration is its own — not the main zone's", () => {
+    const xml =
+      '<Menu Func="Subunit" YNC_Tag="Main_Zone"><Put_2><Cmd Type="Number" ID="P2">Val=Param_1:Exp=Param_2:Unit=Param_3</Cmd>' +
+      "<Param_1><Range>-805,165,5</Range></Param_1><Param_2><Direct>1</Direct></Param_2></Put_2>" +
+      '<Cmd_List><Define ID="P2">Main_Zone,Volume,Lvl</Define></Cmd_List></Menu>' +
+      '<Menu Func="Subunit" YNC_Tag="Zone_2"><Put_2><Cmd Type="Number" ID="P2">Val=Param_1:Exp=Param_2:Unit=Param_3</Cmd>' +
+      "<Param_1><Range>-600,0,10</Range></Param_1><Param_2><Direct>1</Direct></Param_2></Put_2>" +
+      '<Cmd_List><Define ID="P2">Zone_2,Volume,Lvl</Define></Cmd_List></Menu>';
+    expect(descriptorRanges(xml)).toEqual({
+      Main_Zone: { "Volume,Lvl": { min: -80.5, max: 16.5, step: 0.5 } },
+      Zone_2: { "Volume,Lvl": { min: -60, max: 0, step: 1 } },
+    });
   });
 });

@@ -1449,3 +1449,30 @@ describe("XmlDeviceController writes a zone in the form its status shows", () =>
     ]);
   });
 });
+
+// A zone that declares other bounds than the constants carries them, and a write snaps to its step (D16/D10).
+describe("XmlDeviceController takes the level ranges the description declares per zone", () => {
+  type Def = { declaredStates?: boolean; common?: { states?: Record<string, string>; min?: number; max?: number } };
+  test("zone 2's declared −60…0/1 dB reaches its volume datapoint and its writes", async () => {
+    const desc =
+      '<Unit><Menu Func="Subunit" YNC_Tag="Main_Zone"><Cmd_List><Define ID="P2">Main_Zone,Volume,Lvl</Define></Cmd_List>' +
+      '<Put_2><Cmd Type="Number" ID="P2">Val=Param_1:Exp=Param_2:Unit=Param_3</Cmd><Param_1><Range>-805,165,5</Range></Param_1>' +
+      "<Param_2><Direct>1</Direct></Param_2></Put_2></Menu>" +
+      '<Menu Func="Subunit" YNC_Tag="Zone_2"><Cmd_List><Define ID="P2">Zone_2,Volume,Lvl</Define></Cmd_List>' +
+      '<Put_2><Cmd Type="Number" ID="P2">Val=Param_1:Exp=Param_2:Unit=Param_3</Cmd><Param_1><Range>-600,0,10</Range></Param_1>' +
+      "<Param_2><Direct>1</Direct></Param_2></Put_2></Menu></Unit>";
+    const s = setup({ Main_Zone: { power: true, volume: -30 }, Zone_2: { power: true, volume: -30 } });
+    s.client.descriptor = desc;
+    await s.controller.start();
+    const zone2 = s.defs.get("living.multiroom.zone2.volume") as Def | undefined;
+    expect(zone2?.common).toMatchObject({ min: -60, max: 0, step: 1 });
+    const main = s.defs.get("living.volume") as Def | undefined;
+    expect(main?.common).toMatchObject({ min: -80.5, max: 16.5, step: 0.5 });
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.multiroom.zone2.volume", false, -30.4);
+    await flush();
+    expect(s.client.calls.find(c => c.method === "send")?.inner).toBe(
+      "<Volume><Lvl><Val>-300</Val><Exp>1</Exp><Unit>dB</Unit></Lvl></Volume>",
+    );
+  });
+});

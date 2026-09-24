@@ -990,6 +990,18 @@ export class XmlDeviceController implements ConnectionHandle {
         common.max = descriptor.dialogueLevel.max;
         common.step = descriptor.dialogueLevel.step;
       }
+      // The bounds the device description declares for THIS zone win over the catalog constants;
+      // the step also becomes the grid a written value snaps to (D16/D10).
+      const declaredRange = entry.rangePaths
+        ?.map(path => descriptor.ranges?.[zone.element]?.[path])
+        .find(range => range !== undefined);
+      if (declaredRange) {
+        common.min = declaredRange.min;
+        common.max = declaredRange.max;
+        common.step = declaredRange.step;
+        const form = this.zoneForms.get(zone.element) ?? {};
+        this.zoneForms.set(zone.element, { ...form, steps: { ...form.steps, [entry.state]: declaredRange.step } });
+      }
       // Writable only where the device description declares the command for this zone (D19).
       if (entry.state === "sound.dialogueLevel" && this.zoneCommands.dialogue.has(zone.element)) {
         common.write = true;

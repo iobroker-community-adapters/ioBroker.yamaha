@@ -367,6 +367,60 @@ export interface XmlZoneForm {
   toneManual?: boolean;
   /** Enhancer under `Surround,Current`. */
   enhancerCurrent?: boolean;
+  /** Per state, the step the zone declares for its level — the grid a written value snaps to (D10/D16). */
+  steps?: Record<string, number>;
+}
+
+/** A numeric range as desc.xml declares it, in the datapoint's unit. */
+export interface XmlRange {
+  /** Lowest value. */
+  min: number;
+  /** Highest value. */
+  max: number;
+  /** Step. */
+  step: number;
+}
+
+/**
+ * The numeric ranges desc.xml declares, per zone and command path (`Main_Zone` → `Volume,Lvl` →
+ * −80.5…16.5/0.5). A level command is `Val=Param_1:Exp=Param_2:Unit=Param_3` — its range in `Param_1`,
+ * scaled by the `Exp` in `Param_2` — and its path is the `Define` its id names inside the zone's own
+ * `YNC_Tag` block. `descriptorParam` reads neither form (it takes `X=Param_1` and the first block, the
+ * main zone's), so every zone carried fixed constants; all ten captured descriptors agree with them
+ * (measured 2026-09-24), a device that declares otherwise gets its own (audit, D16).
+ *
+ * @param xml the desc.xml body
+ * @returns zone element → command path → range
+ */
+export function descriptorRanges(xml: string): Record<string, Record<string, XmlRange>> {
+  const ranges: Record<string, Record<string, XmlRange>> = {};
+  const starts = [...xml.matchAll(/<Menu [^>]*YNC_Tag="(Main_Zone|Zone_[234])"/g)];
+  const all = [...xml.matchAll(/<Menu [^>]*YNC_Tag="([^"]+)"/g)];
+  for (const start of starts) {
+    const zone = start[1];
+    const next = all.find(other => (other.index ?? 0) > (start.index ?? 0));
+    const block = xml.slice(start.index ?? 0, next?.index ?? xml.length);
+    const defines = new Map<string, string>();
+    for (const define of block.matchAll(new RegExp(`<Define ID="(P\\d+)">\\s*${zone},([^<]+?)\\s*</Define>`, "g"))) {
+      defines.set(define[1], define[2]);
+    }
+    for (const put of block.matchAll(/<Put_2>([\s\S]*?)<\/Put_2>/g)) {
+      const body = put[1];
+      const id = /<Cmd[^>]*ID="(P\d+)"[^>]*>\s*Val=Param_1:Exp=Param_2/.exec(body)?.[1];
+      const path = id ? defines.get(id) : undefined;
+      const range = /<Param_1>\s*<Range>(-?\d+),(-?\d+),(\d+)<\/Range>/.exec(body);
+      const exp = /<Param_2>\s*<Direct>(\d+)<\/Direct>/.exec(body);
+      if (path && range && exp) {
+        const scale = 10 ** Number(exp[1]);
+        (ranges[zone] ??= {})[path] = {
+          min: Number(range[1]) / scale,
+          max: Number(range[2]) / scale,
+          step: Number(range[3]) / scale,
+        };
+      }
+    }
+  }
+  return ranges;
 }
 
 /** The enumerations and ranges a classic receiver declares in its device description (`desc.xml`). */
@@ -391,6 +445,8 @@ export interface XmlDescriptor {
   toneManualZones?: string[];
   /** The zone elements with `Surround,Current,Enhancer` (see {@link XmlZoneForm}). */
   enhancerCurrentZones?: string[];
+  /** The numeric ranges per zone and command path (see {@link descriptorRanges}). */
+  ranges?: Record<string, Record<string, XmlRange>>;
 }
 
 /**
@@ -466,6 +522,7 @@ export function parseDescriptor(xml: string): XmlDescriptor {
   descriptor.dialogueZones = definingZones(xml, "Sound_Video,Dialogue_Adjust,Dialogue_Lvl");
   descriptor.toneManualZones = definingZones(xml, "Sound_Video,Tone,Manual,Bass");
   descriptor.enhancerCurrentZones = definingZones(xml, "Surround,Current,Enhancer");
+  descriptor.ranges = descriptorRanges(xml);
   const dialogue = descriptorParam(xml, "Sound_Video,Dialogue_Adjust,Dialogue_Lvl").range;
   if (dialogue) {
     descriptor.dialogueLevel = dialogue;
