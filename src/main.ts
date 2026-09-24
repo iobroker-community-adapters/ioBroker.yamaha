@@ -101,6 +101,9 @@ const SSDP_SEARCH_INTERVAL_MS = 1000;
  * answer (`ensureDeviceHeader`) — which is why the drop runs after the devices were set up.
  */
 const NATIVE_KEY_MIGRATIONS: NativeKeyMigration[] = [
+  { drop: "elapsedInterval" }, // 0.1.x — the play-time poll
+  { drop: "webserverEnabled" }, // 0.1.x — the built-in web server
+  { drop: "webserverPort" }, // 0.1.x — its port
   { drop: "ip" }, // 0.5.x — the single receiver's address
   { drop: "intervall" }, // 0.5.x — the XML poll interval, now `xmlPollInterval`
   { drop: "refreshOnRealtime" }, // 0.5.x — realtime refresh

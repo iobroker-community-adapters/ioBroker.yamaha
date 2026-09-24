@@ -4073,13 +4073,26 @@ describe("switching one device to percent while the adapter runs", () => {
   it("the settings an earlier release declared are removed once the devices took the percent switch down", async () => {
     const ctx = setup();
     ctx.i.foreignObjects.set("system.adapter.yamaha.0", {
-      native: { volumeAsPercent: true, intervall: 30, useRealtime: true, hasXmlDevice: false, devices: [] },
+      native: {
+        volumeAsPercent: true,
+        intervall: 30,
+        useRealtime: true,
+        hasXmlDevice: false,
+        webserverPort: 8080,
+        devices: [],
+      },
     });
     await ctx.i.onReady();
     await flush();
     expect((ctx.i.objects.get("Living_room")?.native as { volumeAsPercent?: boolean }).volumeAsPercent).toBe(true);
     const native = (ctx.i.foreignObjects.get("system.adapter.yamaha.0") as { native: Record<string, unknown> }).native;
-    expect(native).toMatchObject({ volumeAsPercent: null, intervall: null, useRealtime: null, hasXmlDevice: null });
+    expect(native).toMatchObject({
+      volumeAsPercent: null,
+      intervall: null,
+      useRealtime: null,
+      hasXmlDevice: null,
+      webserverPort: null,
+    });
     expect(native.devices).toEqual([]);
   });
 
