@@ -303,31 +303,11 @@ Beleg: Chat-Analyse 2026-09-22 + vier Advisor-Runden + Server-Test, Mutationswel
 
 ## Erreichbarkeit + Anspruch: zwei Regeln, die v1.5.0 eingezogen hat
 
-**1) Kein Anspruch ohne Nachweis (#613).** Der YNCA-Browse-Treiber beanspruchte `player.browse.*`,
-sobald das Gerät die Quellen-Subunits führte — ohne je zu prüfen, ob es die Listen-Befehle kann. Da
-`owner-policy.ts` nach Modernität vergibt (yxc > ynca > xml), verdrängte dieser ungeprüfte Anspruch
-den XML-Treiber, der seit jeher probt (`List_Info` → `<Menu_Status>`). Folge: Auf einem RX-V473
-(2012, kein MusicCast) blieb das Menü leer, obwohl der alte Adapter es über XML konnte.
-`probeBrowseSubunits` fragt jetzt je Kandidat `LISTINFO=?` und meldet nur die Subunits, die mit
-Listen-Feldern antworten (`LIST_PROOF`). **Zwei Fallen, die im Code stehen müssen:** (a) Die beiden
-Absagen `@UNDEFINED` und `@RESTRICTED` tragen KEINEN Subunit, sind also keiner Anfrage zuzuordnen —
-es zählt allein das AUSBLEIBEN einer Antwort. (b) Im Bereitschaftszustand antworten Medien-Subunits
-`@RESTRICTED`, was von „kann keine Listen" nicht zu unterscheiden ist → bei `MAIN:PWR != On` wird
-NICHT geprobt, sonst verlöre ein schlafendes Gerät seine Menüs. Beleg für die Notwendigkeit:
-Das RX-A810-Referenzprotokoll beantwortet `@SERVER:LISTINFO=?` mit `@UNDEFINED`, während NETRADIO/PC/USB
-desselben Geräts ein volles Fenster liefern.
-
-**2) Gemerktes darf keine Verbindung vortäuschen.** `yxc/device-controller.start()` holte die
-Fähigkeiten über `ProbeMemory` (kein Netzabruf beim Neuverbinden), Modell/Name sind „best-effort",
-`refreshZone` verschluckte jeden Fehler — am Ende `return true` ohne Bedingung. Ein Receiver, der im
-laufenden Betrieb vom Strom ging, wurde deshalb weiter als `ready — MusicCast ✓` gemeldet, während
-YNCA/XML ehrlich scheiterten (krobis RX-V6A, 2026-08-26, am Log mit gleicher Prozess-ID belegt).
-Jetzt wird das Ergebnis von `refreshZone` ausgewertet: antwortet KEINE Zone, ist der Transport tot.
-Der Zonen-Status ist die einzige Anfrage des Starts, die immer wirklich ans Gerät geht.
-
-**Prüfstand dafür:** `Ressourcen/yamaha/test-harness/` fährt den echten YNCA-Treiber hardwarefrei
-gegen einen Simulator, der aus den 16 aufgezeichneten Geräteprotokollen antwortet (drei Varianten:
-wie aufgezeichnet / Gerät ein / Listen-Antworten eingepflanzt).
+**1) Kein Anspruch ohne Nachweis (#613):** ein Transport beansprucht `player.browse.*` erst, wenn eine Probe es
+belegt (YNCA `LISTINFO=?` mit Listen-Feldern; die Absagen `@UNDEFINED`/`@RESTRICTED` tragen keinen Subunit — es zählt
+das AUSBLEIBEN einer Antwort), und bei `MAIN:PWR != On` wird nicht geprobt. **2) Gemerktes darf keine Verbindung
+vortäuschen:** der YXC-Start ist nur erfolgreich, wenn eine Zone wirklich antwortet — der Zonen-Status ist die
+einzige Start-Anfrage, die immer ans Gerät geht. Belege und Prüfstand in `.claude/dev-history.md`.
 
 ## Datenpunkt-Bilanz im Log (v1.5.0, beszel-Form)
 
@@ -458,26 +438,14 @@ in ein öffentliches Repo.
   fehlt, und die Zusicherung schlägt fehl, sobald alle da sind (`only 8 of 7 …`, Gate D06 rot beim
   2.5.1-Vorlauf; das Inventar selbst blieb heil, weil die Ruhe-Schleife danach den Baum fertig
   werden lässt).
-- **⚠️ Auf einem GESÄTEN Baum log dieses Wartekriterium (2.5.2 repariert).** Die Aufstiegs-Suite legt
-  das Vorgänger-Inventar vorab an — damit sind beide alten Bedingungen nach EINER Sekunde erfüllt:
-  jedes Gerät trägt schon Datenpunkte, und `extendObject` auf ein vorhandenes Objekt ändert die
-  Zeilenzahl nicht. Der Abzug entstand also, während die drei YNCA-Receiver noch sweepten; 75 von 174
-  neuen Beschreibungen fehlten im Vergleich, und vorher verglich die Suite den Abzug schlicht mit sich
-  selbst. Zwei Bedingungen schließen das: ein Gerät zählt erst als gebaut, wenn es **verbunden**
-  meldet (`device-supervisor.ts` setzt das nach `attempt()`, und `multi-transport-handle.ts` schreibt
-  die Objekte VOR `onTransports`; die Zustandsdatenbank startet leer, auch wenn die Objekte gesät
-  sind), und die Ruhe-Schleife vergleicht den INHALT der verglichenen Felder statt der Zeilenzahl.
+- **Ein gesäter Baum ist erst gebaut, wenn das Gerät VERBUNDEN meldet**, und Ruhe heißt: der INHALT der
+  verglichenen Felder ändert sich nicht mehr (nicht die Zeilenzahl) — sonst vergleicht die Aufstiegs-Suite
+  einen halb gebauten Abzug (2.5.2, Beleg in `.claude/dev-history.md`).
 - **`npm run build` gehört von Hand davor** — der Lauf startet den Adapter aus `build/`.
 - **Die Aufstiegs-Suite vergleicht auch `icon`** (`COMPARED` in `test/inventory.js`): das Geräte-Piktogramm wird
   beim Start aus dem gemerkten Modell geheilt, und nichts anderes bemerkte ein Gerät mit veraltetem.
-- **Zwei Fehler fand schon der erste Lauf**, beide unsichtbar für Quelltext-Gate, Rollen-Gate und
-  906 Tests, weil beide erst im GEBAUTEN Baum entstehen: (a) `player.browse` trug einen festen
-  englischen Ordnernamen — Namens- und Erklärungstabelle sind unabhängig, `browse` stand nur in der
-  zweiten; die Invariante „ein Ordner mit Erklärung hat einen übersetzten Namen" steht jetzt im
-  Test. (b) Die Id-Drift `hdmiOut1` → `hdmi.out1` erzeugt einen Elternpfad, für den keine
-  Eltern-Schleife zuständig ist (der XML-Katalogeintrag hat kein Segment) — der Datenpunkt stand
-  ohne Elternobjekt im Baum (E3009). Geschlossen im **Baum-Koordinator**: er kennt als Einziger die
-  kanonischen Ids, also gilt die Reparatur für jede künftige Drift.
+- **Ein Ordner mit Erklärung hat einen übersetzten Namen, und jede Id-Drift bekommt ihren Elternpfad im
+  Baum-Koordinator** — beides sieht nur der GEBAUTE Baum (Beleg in `.claude/dev-history.md`).
 
 ## Tests
 
@@ -488,55 +456,13 @@ in ein öffentliches Repo.
   bis 2.1.1 lief er lokal nie mit, obwohl die CI ihn fährt (`testing-action-adapter` ruft
   `test:unit` UND `test:integration`). `passWithNoTests` ist raus — ein nicht mehr greifendes
   `include` muss rot melden, nicht grün.
-- **Mutationstabellen** (`../../Ressourcen/iobroker-entwicklung/mutation-testing/`) — **EINUNDZWANZIG Dateien (seit
-  Welle 20, 2026-09-24), und das Gate prüft ALLE.** ⚠️ Die fünf Wellen-Originale `mutations_yamaha.py` · `…2.py` · `…3.py` · `…4.py` ·
-  `…5.py` (36/32/26/11/11 Nadeln) leben NEBEN der Sammeltabelle `mutations_yamaha_all.py`, die dieselben
-  Regeln zusammenfasst — sie sind kein Altbestand. Wer nur die datierten Tabellen nachzieht, lässt fünf
-  Nadeln ins Leere zeigen und merkt es erst, wenn D09 den Release stoppt (2026-09-07: R5, R7, V7, V8, X4 —
-  in `_all.py` nachgezogen, in den Originalen vergessen). Die Äquivalenz-Vermerke (`EQUIVALENT`) gehören in
-  JEDE Tabelle, die den Mutanten führt. Im Einzelnen: `mutations_yamaha_all.py`
-  (116 Regelbrüche, Wellen 1–5 vom 22.08., Nadeln am 02.09. nachgezogen, vier tote entfernt) + `mutations_yamaha_2026-09-02.py`
-  (24, Welle 6 = die Audit-Fixes; IDs Z1–Z24, W gehört Welle 5) + `mutations_yamaha_2026-09-03.py`
-  (18, Welle 7 = die Fehlerbehebungen des Fehler-Audits, IDs Z1–Z18 in eigener Tabelle; 18/18 gefangen) +
-  `mutations_yamaha_2026-09-03-w8.py` (Welle 8, IDs A1–A24; A7 am 03.09. neu verankert auf die Regel: `back` sendet
-  immer das Protokoll-Wort) + `mutations_yamaha_2026-09-04-w9.py` (Welle 9 = die Bildschirm-Fernbedienung, IDs B1–B3;
-  3/3 gefangen) + `mutations_yamaha_2026-09-06-w10.py` (Welle 10 = das Voll-Audit vom 06./07.09., IDs C1–C13;
-  13/13 gefangen — darunter C10 der Override, den der eigene Katalog-Zuwachs aushebelte, und C12/C13 die
-  beiden Funde des Objekt-Inventars) + `mutations_yamaha_2026-09-09-w11.py` (Welle 11 = Phase 1 des
-  Fähigkeits-Plans, IDs D1–D24) + `mutations_yamaha_2026-09-09-w12.py` (Welle 12 = Phase 2, IDs P1–P14)
-  - `mutations_yamaha_2026-09-11-w13.py` (Welle 13 = die Lautstärke auf
-    der Geräteskala und der Prozent-Schalter, IDs Q1–Q22; im ersten Lauf 16/20, die vier Überlebenden waren
-    echte Testlücken und sind geschlossen → 20/20, dann Q21/Q22 für die zwei Regeln nachgezogen, die der
-    Inventar-Lauf beider Schalterstellungen noch aufdeckte → 22/22)
-  - `mutations_yamaha_2026-09-12-w14.py` (Welle 14 = die Audit-Funde vom 12.09. und der Prozent-Schalter
-    pro Gerät, IDs R1–R16; 16/16 gefangen — zwei Überlebende im ersten Lauf waren echte Testlücken und
-    sind geschlossen: die Doppel-Id-Sperre der Kartenliste und „die eigene Antwort eines Geräts schlägt
-    den geerbten Instanz-Schalter")
-  - `mutations_yamaha_2026-09-12-w15.py` (Welle 15 = der Bugfix 2.9.1 „die Netzsuche abzuschalten ist
-    kein Löschbefehl", IDs R17–R22; 6/6 gefangen im ersten Lauf)
-  - `mutations_yamaha_2026-09-12-w16.py` (Welle 16 = 2.9.2: EINE Setz-Stelle für den Prozent-Schalter
-    plus die Kachel-Anzeige, IDs R23–R24; 2/2 gefangen)
-  - `mutations_yamaha_2026-09-15-w17.py` (Welle 17 = das Audit 2026-09-15 / 2.10.0, IDs W1–W37; 37/37
-    gefangen — W4 fällt nur, weil die Test-Attrappe `setStateChangedAsync` WIRKLICH vergleicht, W36/W37
-    halten die Icon-Heilung; vier Bestandsnadeln neu verankert: N7, V6, R23, Z3)
-  - `mutations_yamaha_2026-09-17-w18.py` (Welle 18 = In-depth 2026-09-17 / 2.11.0, IDs X1–X24 in eigener
-    Tabelle — das Präfix X ist dort NICHT das der Äquivalenz-Vermerke X2/X4 aus Welle 1; 24/24, zwei
-    Überlebende des ersten Laufs waren toter Code und sind entfernt)
-  - `mutations_yamaha_2026-09-22-w19.py` (Welle 19 = Identität/Löschen/Wiederfinden auf `developing`, IDs
-    Y1–Y50 in eigener Tabelle; 50/50 gefangen — die zwei Überlebenden des ersten Laufs, Y24 „Zeile auf dem
-    ersten Versuch ist nicht offline" und Y19 „XML belegt, MusicCast nicht", waren Testlücken und sind
-    geschlossen. Die Tabelle wuchs in drei Schüben: Y1–Y29 beim Bau, Y30–Y39 mit der Liveness-Abfrage und
-    der Log-Regel, Y40–Y50 auf die D09-Deckungsforderung des Release-Laufs — wer nur den Bau-Stand zitiert,
-    nennt eine zu kleine Zahl)
-  - `mutations_yamaha_2026-09-24-w20.py` (Welle 20 = Audit-Umsetzung 2.13.0, IDs G1–G139, EINE Nadel je
-    D09-Region seit v2.12.0 — erste Entscheidungszeile umgedreht, vier von Hand; 139/139 gefangen, die zwei
-    Überlebenden des ersten Laufs, G85 Push-`device_id` und G130 aufgelöste Hostnamen-Adresse beim Löschen, waren
-    Testlücken und sind geschlossen. Dabei 46 Bestandsnadeln nachverankert, R7/R8 stillgelegt — die Entdoppelung
-    im Controller gibt es nicht mehr). Läufer `mutation-test.py`. Nadeln sind
-    exakte Quellzeilen — nach Prettier-Umbrüchen oder Refactorings ZUERST den Nadel-Vorab-Check (jede Nadel
-    genau 1×), sonst misst der Lauf nichts. Zwei äquivalente Mutanten (X2, X4 — unerreichbare
-    Invarianten-Wächter, im Quelltext begründet); die vier anderen vom 22.08. (M9, X1, Y1, Y13) waren toter
-    bzw. doppelter Code und sind am 02.09. samt Zwillingen entfernt — ein Überlebender außerhalb X2/X4 ist eine Testlücke.
+- **Mutationstabellen** (`../../Ressourcen/iobroker-entwicklung/mutation-testing/`, ROOT = dieser Adapter):
+  JEDE Tabelle mit diesem `ROOT` zählt für D09 — die fünf Wellen-Originale `mutations_yamaha.py` … `…5.py` leben
+  NEBEN der Sammeltabelle `mutations_yamaha_all.py` und tragen dieselben Regeln: eine Nadel wird in JEDER Tabelle
+  nachgezogen, die sie führt, ebenso jeder `EQUIVALENT`-Vermerk. Nadeln sind exakte Quellzeilen — nach Prettier
+  oder einem Umbau ZUERST `mutation-test.py <tabelle> --check` (jede Nadel genau 1×), nie `build_mutations.py`
+  blind. Jede neue Entscheidung seit dem Vorgänger-Tag braucht eine Nadel in ihrer Region (D09); ein
+  Überlebender ist eine Testlücke. Die Wellen-Chronik (1–20, IDs, Zählstände) steht in `.claude/dev-history.md`.
 - **HW-freies Testen:** `ynca`-Python bringt debug-server + echte Geräte-Logs → YNCA-Client dagegen testbar.
 - **Test-Helfer liegen in `test/helpers/`, nie unter `src/**/__fixtures__`** — der Build übersetzt jedes `.ts`
   unter `src/` außer `*.test.ts`, npm liefert es aus (`src/lib/build-scope.test.ts` wird rot). JSON-Fixtures
