@@ -32,9 +32,11 @@ const VOLATILE = ["ts", "from", "user", "acl"];
  * The fields an update must bring to EVERY existing object. `states`, `min`, `max` and `step`
  * joined on 2026-09-09: a dropdown or a bound that stays stale on an existing installation is
  * exactly the defect of #619 (54 catalog inputs kept although the receiver declares 21), and
- * without them the upgrade suite could not fail on it.
+ * without them the upgrade suite could not fail on it. `icon` joined on 2026-09-24: the device
+ * pictogram is healed on start from the remembered model, and nothing else noticed a device that
+ * kept a stale one.
  */
-const COMPARED = ["name", "desc", "role", "type", "unit", "states", "min", "max", "step"];
+const COMPARED = ["name", "desc", "role", "type", "unit", "states", "min", "max", "step", "icon"];
 // Key order carries no meaning in an ioBroker object: extendObject keeps the key order an existing
 // object already has, while adapter-core's I18n.getTranslatedObject builds its own — the same eleven
 // texts in another order are the same name. Arrays keep their order.
