@@ -71,6 +71,8 @@ interface FakeClient extends YxcClientLike {
   /** Per-zone getStatus answers; falls back to `status` for zones not listed. */
   statusByZone: Record<string, unknown> | undefined;
   distRole: string;
+  /** The whole getDistributionInfo answer, overriding the one derived from `distRole`. */
+  distInfo: unknown;
   /** Make the zone status / name lookup fail, as an unreachable device would. */
   failStatus: boolean;
   /** Make the zone status answer with this `response_code` — the device is there and says no. */
@@ -104,6 +106,7 @@ function makeFakeClient(features: unknown, status: unknown): FakeClient {
     tunerPlayInfo: { band: "fm", fm: { freq: 100900 }, rds: { radio_text_a: "Hit" } },
     statusByZone: undefined,
     distRole: "server",
+    distInfo: undefined,
     failStatus: false,
     refuseStatus: undefined as number | undefined,
     failNameText: false,
@@ -150,13 +153,16 @@ function makeFakeClient(features: unknown, status: unknown): FakeClient {
       }
       return state.playInfo;
     },
-    getDistributionInfo: () => ({
-      role: state.distRole,
-      group_id: "g1",
-      group_name: "Group 1",
-      server_zone: "main",
-      client_list: ["1.2.3.5"],
-    }),
+    // A server carries its group and roster, a client its group id, "none" neither — the shape
+    // YXC Advanced §5.1/§9.2 describe (the role word alone is not what decides the role, C7).
+    getDistributionInfo: () =>
+      state.distInfo ?? {
+        role: state.distRole,
+        group_id: state.distRole === "none" ? "" : "9A237BF5AB80ED3C7251DFF49825CA42",
+        group_name: "Group 1",
+        server_zone: "main",
+        client_list: state.distRole === "server" ? ["1.2.3.5"] : [],
+      },
   };
   return new Proxy(state, {
     get: (target, prop: string) => {
@@ -239,6 +245,7 @@ function setup(
   const controller = new YxcDeviceController("living", {
     client,
     clientFor: ip => linkTargets[ip],
+    partnerIps: () => Object.keys(linkTargets),
     pushActive,
     ...extra,
     registerPush: onPush => {
@@ -762,25 +769,162 @@ describe("YxcDeviceController", () => {
     s.client.calls.length = 0;
     s.controller.handleStateChange("living.multiroom.group.leave", false, true);
     await flush();
-    expect(s.client.calls).toContainEqual({ method: "setClientInfo", args: [{ group_id: "", zone: ["main"] }] });
+    expect(s.client.calls).toContainEqual({ method: "setClientInfo", args: [{ group_id: "" }] });
   });
 
+  // YXC Advanced §9.1.2: the client gets the group, the server's address and the MusicCast Link input,
+  // the server the roster; the first group in the network starts with num 0 (audit 2026-09-24, C7).
   test("linking a client sends it the group, adds it on the server, and starts distribution", async () => {
     const features = { zone: [{ id: "main", func_list: ["power"] }], distribution: { version: 2 } };
-    const clientDevice = makeFakeClient({}, {});
-    const s = setup(features, ysp, { "1.2.3.9": clientDevice });
+    const clientDevice = makeFakeClient({ distribution: { version: 2 } }, {});
+    clientDevice.distRole = "none";
+    const s = setup(features, ysp, { "1.2.3.9": clientDevice }, undefined, { host: "1.2.3.4" });
+    s.client.distRole = "none";
     await s.controller.start();
     s.client.calls.length = 0;
     s.controller.handleStateChange("living.multiroom.group.linkDevice", false, "1.2.3.9");
     await flush();
     const join = clientDevice.calls.find(c => c.method === "setClientInfo");
     const add = s.client.calls.find(c => c.method === "setServerInfo");
+    expect(join?.args[0]).toMatchObject({ zone: ["main"], server_ip_address: "1.2.3.4" });
+    expect(clientDevice.calls).toContainEqual({ method: "setInput", args: ["mc_link", "main"] });
     expect(add?.args[0]).toMatchObject({ type: "add", client_list: ["1.2.3.9"], zone: "main" });
     expect(s.client.calls).toContainEqual({ method: "startDistribution", args: [0] });
-    // The client and server carry the same (non-empty) group id.
+    // The client and server carry the same random 32-digit group id (§9.1.2).
     const clientGroup = (join?.args[0] as { group_id: string }).group_id;
-    expect(clientGroup).toBeTruthy();
+    expect(clientGroup).toMatch(/^[0-9A-F]{32}$/);
     expect(clientGroup).toBe((add?.args[0] as { group_id: string }).group_id);
+  });
+
+  test("the distribution number counts the clients already distributed in the network", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], distribution: { version: 2 } };
+    // Another configured device already serves a group of two (§9.1.5: the second group sends 2).
+    const otherServer = makeFakeClient({}, {});
+    otherServer.distInfo = {
+      role: "server",
+      group_id: "7B335AE4C12345677251DAA466669B40",
+      client_list: [
+        { ip_address: "1.2.3.20", data_type: "base" },
+        { ip_address: "1.2.3.21", data_type: "base" },
+      ],
+    };
+    const joining = makeFakeClient({}, {});
+    joining.distRole = "none";
+    const s = setup(features, ysp, { "1.2.3.9": joining, "1.2.3.10": otherServer });
+    s.client.distRole = "none";
+    await s.controller.start();
+    s.controller.handleStateChange("living.multiroom.group.linkDevice", false, "1.2.3.9");
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "startDistribution", args: [2] });
+  });
+
+  test("a device already serving a group extends it with its own group id", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], distribution: { version: 2 } };
+    const joining = makeFakeClient({}, {});
+    joining.distRole = "none";
+    const s = setup(features, ysp, { "1.2.3.9": joining });
+    await s.controller.start();
+    s.controller.handleStateChange("living.multiroom.group.linkDevice", false, "1.2.3.9");
+    await flush();
+    expect(s.client.calls.find(c => c.method === "setServerInfo")?.args[0]).toMatchObject({
+      group_id: "9A237BF5AB80ED3C7251DFF49825CA42",
+    });
+    // Its own client counts: a second client joining a group of one sends 1 (§9.1.4).
+    expect(s.client.calls).toContainEqual({ method: "startDistribution", args: [1] });
+  });
+
+  test("an incompatible client is not linked — the device says why", async () => {
+    const features = {
+      zone: [{ id: "main", func_list: ["power"] }],
+      distribution: { version: 3.1, compatible_client: [3] },
+    };
+    const joining = makeFakeClient({ distribution: { version: 2.05 } }, {});
+    const s = setup(features, ysp, { "1.2.3.9": joining });
+    await s.controller.start();
+    s.controller.handleStateChange("living.multiroom.group.linkDevice", false, "1.2.3.9");
+    await flush();
+    expect(joining.calls.filter(c => c.method === "setClientInfo")).toEqual([]);
+    expect(s.warnings.some(line => line.includes("MusicCast Link version 2.05"))).toBe(true);
+  });
+
+  test("a new group is read back until it reports working (up to three minutes, §9.1.8-3)", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], distribution: { version: 2 } };
+    const { gate, elapse } = manualGate();
+    const joining = makeFakeClient({}, {});
+    joining.distRole = "none";
+    const s = setup(features, ysp, { "1.2.3.9": joining }, undefined, { gate });
+    s.client.distRole = "none";
+    await s.controller.start();
+    s.client.distInfo = {
+      role: "server",
+      group_id: "9A237BF5AB80ED3C7251DFF49825CA42",
+      client_list: ["1.2.3.9"],
+      status: " building ",
+    };
+    s.acks.length = 0;
+    s.controller.handleStateChange("living.multiroom.group.linkDevice", false, "1.2.3.9");
+    await flush();
+    expect(s.acks).toContainEqual({ id: "living.multiroom.group.status", value: "building" });
+    s.client.distInfo = { ...(s.client.distInfo as Record<string, unknown>), status: " working " };
+    await elapse();
+    expect(s.acks).toContainEqual({ id: "living.multiroom.group.status", value: "working" });
+    const reads = s.client.calls.filter(c => c.method === "getDistributionInfo").length;
+    await elapse();
+    expect(s.client.calls.filter(c => c.method === "getDistributionInfo").length).toBe(reads);
+  });
+
+  // §9.1.3: a leaving client is taken off its server's roster, and the server re-distributes.
+  test("a client leaving is removed from its server's roster, which restarts the distribution", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], distribution: { version: 2 } };
+    const master = makeFakeClient({}, {});
+    master.distInfo = {
+      role: "server",
+      group_id: "9A237BF5AB80ED3C7251DFF49825CA42",
+      server_zone: "main",
+      client_list: ["10.0.0.5", "10.0.0.7"],
+    };
+    const s = setup(features, ysp, { "10.0.0.9": master }, undefined, { host: "10.0.0.5" });
+    s.client.distRole = "client";
+    await s.controller.start();
+    s.controller.handleStateChange("living.multiroom.group.leave", false, true);
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "setClientInfo", args: [{ group_id: "" }] });
+    expect(master.calls).toContainEqual({
+      method: "setServerInfo",
+      args: [{ group_id: "9A237BF5AB80ED3C7251DFF49825CA42", zone: "main", type: "remove", client_list: ["10.0.0.5"] }],
+    });
+    expect(master.calls).toContainEqual({ method: "startDistribution", args: [2] });
+  });
+
+  test("a server whose role word says none still leaves as the server (§9.2)", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], distribution: { version: 2 } };
+    const s = setup(features, ysp);
+    s.client.distInfo = { role: "none", group_id: "9A237BF5AB80ED3C7251DFF49825CA42", client_list: ["1.2.3.5"] };
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.multiroom.group.leave", false, true);
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "stopDistribution", args: [] });
+    expect(s.client.calls).toContainEqual({ method: "setServerInfo", args: [{ group_id: "" }] });
+    expect(s.client.calls.filter(c => c.method === "setClientInfo")).toEqual([]);
+  });
+
+  // §9.1.6-1: a client whose input leaves MusicCast Link has to leave the group.
+  test("a client that switches away from MusicCast Link leaves the group", async () => {
+    const features = {
+      zone: [{ id: "main", func_list: ["power"], input_list: ["mc_link", "hdmi1"] }],
+      distribution: { version: 2 },
+    };
+    const s = setup(features, { ...(ysp as Record<string, unknown>), power: "on", input: "mc_link" });
+    s.client.distRole = "client";
+    await s.controller.start();
+    s.fire.push?.({ dist: { dist_info_updated: true } });
+    await flush();
+    s.client.calls.length = 0;
+    s.client.status = { ...(ysp as Record<string, unknown>), power: "on", input: "hdmi1" };
+    s.fire.push?.({ main: { input: "hdmi1" } });
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "setClientInfo", args: [{ group_id: "" }] });
   });
 
   test("linking an unknown ip does nothing", async () => {

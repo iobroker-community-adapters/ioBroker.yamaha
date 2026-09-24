@@ -243,8 +243,10 @@ export function parseYxcDistribution(info: unknown): StateValue[] {
   }
   const d = info as Record<string, unknown>;
   const updates: StateValue[] = [];
+  const summary = distributionSummary(info);
   if (typeof d.role === "string") {
-    updates.push({ id: "multiroom.group.role", value: d.role });
+    updates.push({ id: "multiroom.group.role", value: summary.role });
+    updates.push({ id: "multiroom.group.status", value: summary.status ?? "" });
   }
   if (typeof d.group_id === "string") {
     updates.push({ id: "multiroom.group.id", value: d.group_id });
@@ -259,6 +261,60 @@ export function parseYxcDistribution(info: unknown): StateValue[] {
     updates.push({ id: "multiroom.group.linkedDevices", value: JSON.stringify(d.client_list) });
   }
   return updates;
+}
+
+/** What a getDistributionInfo answer says about a device's part in a MusicCast group. */
+export interface DistributionSummary {
+  /** The effective role: server, client or none (see {@link distributionSummary}). */
+  role: string;
+  /** The group id, "" when none. */
+  groupId: string;
+  /** Whether the group id names a group (not empty, not all zeros). */
+  inGroup: boolean;
+  /** The clients' IPv4 addresses (a server's roster). */
+  clients: string[];
+  /** The zone the server distributes. */
+  serverZone: string;
+  /** Building / working / deleting — reported for a server from API 2.00 on; undefined otherwise. */
+  status?: string;
+}
+
+/**
+ * Read a device's part in a group the way YXC Advanced asks for it: a device with a group id and a
+ * client list is the server even while it answers "none" (§9.2), and one without a group id is in no
+ * group even while it answers "client" (§9.1.7-5 — any zone on the MusicCast Link input says so).
+ * The role word alone flickered; the leave path read it and sent a server's clean-up to a client
+ * (audit 2026-09-24, C7).
+ *
+ * @param info the getDistributionInfo answer
+ * @returns the summary
+ */
+export function distributionSummary(info: unknown): DistributionSummary {
+  const d = typeof info === "object" && info !== null ? (info as Record<string, unknown>) : {};
+  const groupId = typeof d.group_id === "string" ? d.group_id : "";
+  const inGroup = /[1-9a-f]/i.test(groupId);
+  const clients = (Array.isArray(d.client_list) ? d.client_list : [])
+    .map(entry =>
+      typeof entry === "string"
+        ? entry
+        : typeof entry === "object" &&
+            entry !== null &&
+            typeof (entry as { ip_address?: unknown }).ip_address === "string"
+          ? (entry as { ip_address: string }).ip_address
+          : "",
+    )
+    .filter(ip => ip.length > 0);
+  const reported = typeof d.role === "string" ? d.role : "none";
+  const role = inGroup && clients.length > 0 ? "server" : !inGroup && reported === "client" ? "none" : reported;
+  const status = role === "server" && typeof d.status === "string" ? d.status.trim() : undefined;
+  return {
+    role,
+    groupId,
+    inGroup,
+    clients,
+    serverZone: typeof d.server_zone === "string" ? d.server_zone : "main",
+    ...(status !== undefined ? { status } : {}),
+  };
 }
 
 /**

@@ -313,6 +313,7 @@ export function attemptDevice(
       new YxcDeviceController(device.id, {
         client: new YamahaYxcClient(device.ip, undefined, gate),
         clientFor: ip => partnerClient(device.ip, deps.knownDeviceIps, ip),
+        partnerIps: () => [...deps.knownDeviceIps].filter(ip => ip !== device.ip),
         registerPush: (onPush, deviceId) => deps.registerPush(device.ip, onPush, deviceId),
         pushActive: deps.pushActive,
         pushLiveness: deps.pushLiveness,

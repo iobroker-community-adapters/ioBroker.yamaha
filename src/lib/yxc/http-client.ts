@@ -129,22 +129,24 @@ export type YxcSend = (command: string, body?: string) => Promise<unknown>;
 
 /** Payload for `/dist/setServerInfo` — the group master's client roster (link_unlink.js). */
 export interface YxcServerInfo {
-  /** The shared group id (identical on the server and every client). */
+  /** The shared group id (identical on the server and every client); "" ends the server role. */
   group_id: string;
-  /** The server's zone contributing to the group. */
-  zone: string;
-  /** Whether the listed clients are being added to or removed from the group. */
-  type: "add" | "remove";
-  /** The client device IPs in the group. */
-  client_list: string[];
+  /** The server's zone contributing to the group (YXC Advanced §5.2: optional). */
+  zone?: string;
+  /** Whether the listed clients are being added to or removed from the group (optional when ending). */
+  type?: "add" | "remove";
+  /** The client device IPs in the group (optional when ending). */
+  client_list?: string[];
 }
 
 /** Payload for `/dist/setClientInfo` — a group member joining or leaving (link_unlink.js). */
 export interface YxcClientInfo {
   /** The shared group id, or an empty string to leave the group. */
   group_id: string;
-  /** The client's zones taking part in the group. */
-  zone: string[];
+  /** The client's zones taking part in the group — not needed when leaving (YXC Advanced §5.3). */
+  zone?: string[];
+  /** The server's IPv4 address (YXC Advanced §5.3). */
+  server_ip_address?: string;
 }
 
 /**

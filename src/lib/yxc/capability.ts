@@ -58,6 +58,11 @@ export interface YxcCapabilities {
   netusbSlots?: { presets?: number; recent?: number };
   /** Whether the device reports a MusicCast-Link distribution block (getFeatures `distribution`). */
   hasDistribution?: boolean;
+  /**
+   * The Link compatibility the distribution block declares (YXC Advanced §9.1.1): this device's
+   * `version`, and — as a master — the client major versions it takes (`compatible_client`).
+   */
+  distribution?: { version?: number; compatibleClients?: number[] };
   /** The tuner features (bands, preset mode), when the device has a tuner. */
   tuner?: YxcTunerFeatures;
   /** The clock/alarm features, when the device has the clock block. */
@@ -95,6 +100,22 @@ function netusbSlotsOf(netusb: Record<string, unknown>): { presets?: number; rec
   const presets = count(netusb.preset);
   const recent = count(netusb.recent_info);
   return { ...(presets !== undefined ? { presets } : {}), ...(recent !== undefined ? { recent } : {}) };
+}
+
+/**
+ * The Link compatibility a getFeatures `distribution` block declares (YXC Advanced §9.1.1).
+ *
+ * @param block the distribution block (untrusted)
+ * @returns its version and compatible client majors, where declared
+ */
+function distributionOf(block: Record<string, unknown>): { version?: number; compatibleClients?: number[] } {
+  const clients = Array.isArray(block.compatible_client)
+    ? block.compatible_client.filter((v): v is number => typeof v === "number")
+    : undefined;
+  return {
+    ...(typeof block.version === "number" ? { version: block.version } : {}),
+    ...(clients ? { compatibleClients: clients } : {}),
+  };
 }
 
 // Only true media-player sources — subsystems that report play info and
@@ -316,6 +337,9 @@ export function parseYxcFeatures(response: unknown): YxcCapabilities {
       ? { netusbSlots: netusbSlotsOf(netusb as Record<string, unknown>) }
       : {}),
     hasDistribution: "distribution" in obj,
+    ...(typeof obj.distribution === "object" && obj.distribution !== null
+      ? { distribution: distributionOf(obj.distribution as Record<string, unknown>) }
+      : {}),
     tuner: media.includes("tuner") ? parseTunerFeatures(obj.tuner) : undefined,
     clock: "clock" in obj ? parseClockFeatures(obj.clock) : undefined,
   };

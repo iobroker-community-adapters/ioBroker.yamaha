@@ -94,6 +94,12 @@ describe("mapYxcToObjects", () => {
     const group = objs.find(o => o.id === "multiroom.group");
     expect(group?.type).toBe("channel");
     expect(englishName(group)).toBe("MusicCast group (linked devices)");
+    // Building a group can take minutes (YXC Advanced §9.1.8-3) — the status says where it stands (C7).
+    expect(objs.find(o => o.id === "multiroom.group.status")?.common).toMatchObject({
+      type: "string",
+      write: false,
+      states: { building: "building", working: "working", deleting: "deleting" },
+    });
     // The group name is writable: YXC Advanced §5.6 documents setGroupName (audit 2026-09-24, C8).
     expect(objs.find(o => o.id === "multiroom.group.name")?.common.write).toBe(true);
   });

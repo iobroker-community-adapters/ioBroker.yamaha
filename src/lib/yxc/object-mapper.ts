@@ -1103,6 +1103,21 @@ export function mapYxcToObjects(
     };
     distState("role", tName("roleServerClient"), "state", tName("descRoleServerClient"));
     distState("id", tName("groupID"), "text", tName("descGroupID"));
+    // YXC Advanced §5.1 — reported by the server from API 2.00 on; building a group can take up to
+    // three minutes (§9.1.8-3), and this is how long (audit 2026-09-24, C7).
+    objects.push({
+      id: "multiroom.group.status",
+      type: "state",
+      common: {
+        name: tName("groupStatus"),
+        desc: tName("descGroupStatus"),
+        type: "string",
+        role: "state",
+        read: true,
+        write: false,
+        states: { building: "building", working: "working", deleting: "deleting" },
+      },
+    });
     // Writable (YXC Advanced §5.6, POST `setGroupName`); the device keeps it in volatile memory only.
     objects.push({
       id: "multiroom.group.name",
