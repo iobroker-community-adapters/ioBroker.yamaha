@@ -1032,6 +1032,22 @@ describe("Yamaha auto-discovery", () => {
       expect(ctx.i.log.warn).not.toHaveBeenCalledWith(expect.stringContaining("the device table says"));
     });
 
+    // The resolved address stands in the known-address set next to the hostname; a delete that
+    // left it there would treat the next device at that address as already running (audit
+    // 2026-09-24, A12).
+    it("deleting a hostname row also forgets the address it resolved to", async () => {
+      dnsTable.names = { "yamaha.fritz.box": "192.168.1.20" };
+      const ctx = setup({ devices: [{ name: "Living", ip: "yamaha.fritz.box" }] });
+      await ctx.i.onReady();
+      await flush();
+      dnsTable.names = {};
+      expect(ctx.i.knownDeviceIps.has("192.168.1.20")).toBe(true);
+      await ctx.i.removeDevice("Living");
+      await flush();
+      expect(ctx.i.knownDeviceIps.has("192.168.1.20")).toBe(false);
+      expect(ctx.i.knownDeviceIps.has("yamaha.fritz.box")).toBe(false);
+    });
+
     it("a manual row is warned about, once, and stays where it was typed", async () => {
       const ctx = setup({ devices: [{ name: "Living", ip: "192.168.1.10" }], discovery: "always" });
       seedTable(ctx);

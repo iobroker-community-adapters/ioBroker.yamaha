@@ -227,7 +227,7 @@ function setup(
   trace: Array<{ kind: "object" | "value"; id: string }>;
   /** Set `fn` to hold one id's object write open, proving what waits for it to FINISH. */
   hold: { fn?: (id: string) => Promise<void> | undefined };
-  fire: { push?: (event: unknown) => void; keepalive?: () => void };
+  fire: { push?: (event: unknown) => void; keepalive?: () => void; pushDeviceId?: string };
   names: string[];
   cancelled: () => boolean;
   unregistered: () => boolean;
@@ -240,7 +240,7 @@ function setup(
   /** Set by a test to hold one upsert open; see `holdUpsert` on the returned setup. */
   const hold: { fn?: (id: string) => Promise<void> | undefined } = {};
   const names: string[] = [];
-  const fire: { push?: (event: unknown) => void; keepalive?: () => void } = {};
+  const fire: { push?: (event: unknown) => void; keepalive?: () => void; pushDeviceId?: string } = {};
   const breakAcks: { on: boolean; only?: string } = { on: false };
   const warnings: string[] = [];
   const infos: string[] = [];
@@ -253,8 +253,9 @@ function setup(
     partnerIps: () => Object.keys(linkTargets),
     pushActive,
     ...extra,
-    registerPush: onPush => {
+    registerPush: (onPush, deviceId) => {
       fire.push = onPush;
+      fire.pushDeviceId = deviceId;
       return () => {
         unregistered = true;
       };
@@ -330,6 +331,20 @@ describe("YxcDeviceController", () => {
     const s = setup(wx10, ysp);
     expect(await s.controller.start()).toBe(true);
     expect(s.objects).toEqual(expect.arrayContaining(["living.power", "living.volume", "living.mute"]));
+  });
+
+  // An event from another address (Docker, a second interface) is routed by the device id it
+  // carries (Rev 1.10 §11.3) — the controller registers the id getDeviceInfo reported, and only a
+  // real one (audit 2026-09-24, C2).
+  test("registers for events under the device id getDeviceInfo reports — never an empty one", async () => {
+    const s = setup(wx10, ysp);
+    s.client.deviceInfo = { model_name: "WX-010", device_id: "00A0DED4F504" };
+    await s.controller.start();
+    expect(s.fire.pushDeviceId).toBe("00A0DED4F504");
+    const empty = setup(wx10, ysp);
+    empty.client.deviceInfo = { model_name: "WX-010", device_id: "" };
+    await empty.controller.start();
+    expect(empty.fire.pushDeviceId).toBeUndefined();
   });
 
   test("reports the model from getDeviceInfo into the adapter-created info.model", async () => {
