@@ -1,5 +1,5 @@
 import type { ObjectDef } from "../catalog/types";
-import { coordinateObjectTree, type TransportObjects } from "../catalog/object-tree-coordinator";
+import { canHandOver, coordinateObjectTree, type TransportObjects } from "../catalog/object-tree-coordinator";
 import type { Transport } from "../catalog/owner-policy";
 import type { ConnectionHandle, ControllerLog } from "../controller";
 import { errorMessage } from "../util";
@@ -59,6 +59,12 @@ export interface MultiTransportDeps {
   cancel?(handle: unknown): void;
   /** A fresh exponential backoff for one transport's reconnect loop. */
   backoffFactory?(): { nextDelay(): number; reset(): void };
+  /**
+   * The object definitions last written for this DEVICE, shared by every handle it gets. Kept per
+   * handle, a device that came back as a whole (a new handle per attempt) rewrote its entire tree
+   * unchanged (audit 2026-09-24, A14). The owner of the map drops it whenever it deletes objects.
+   */
+  writtenObjects?: Map<string, string>;
 }
 
 /**
@@ -79,10 +85,15 @@ export interface MultiTransportDeps {
 export class MultiTransportHandle implements ConnectionHandle {
   private ownerByCanonicalId = new Map<string, Transport>();
   /** Object id → the definition last written, so an unchanged re-coordination writes nothing. */
-  private readonly writtenObjects = new Map<string, string>();
+  private readonly writtenObjects: Map<string, string>;
   /** Canonical id → the last DECLARED value list seen, kept while its transport is away (see coordinate). */
   private readonly declaredStates = new Map<string, Record<string, string>>();
   private readonly live: TransportConnection[];
+  /**
+   * The objects of a transport that dropped while others kept running, until it returns — what it
+   * owned stays its own unless a live transport can take it over unchanged (see `coordinate`).
+   */
+  private readonly away = new Map<Transport, readonly ObjectDef[]>();
   private readonly retries = new Map<Transport, { timer: unknown; backoff: { nextDelay(): number } }>();
   private supervisorDrop: ((reason?: Error) => void) | undefined;
   /** The coordination in flight, so two signals never run `coordinate()` concurrently. */
@@ -103,6 +114,7 @@ export class MultiTransportHandle implements ConnectionHandle {
     private readonly deps: MultiTransportDeps,
   ) {
     this.live = [...connections];
+    this.writtenObjects = deps.writtenObjects ?? new Map<string, string>();
   }
 
   /**
@@ -201,7 +213,7 @@ export class MultiTransportHandle implements ConnectionHandle {
       transport: connection.transport,
       objects: connection.buildObjects(),
     }));
-    const { objects, ownerByCanonicalId } = coordinateObjectTree(contributions);
+    const { objects, ownerByCanonicalId } = this.coordinateWithAway(contributions);
     // A declared value list is a property of the MODEL, not of the transport that read it. When the
     // declaring transport is away during a re-coordination (XML dropped, MusicCast just returned),
     // the union-carrying owner would take the dropdown back to the catalog list — and hand it over
@@ -244,6 +256,50 @@ export class MultiTransportHandle implements ConnectionHandle {
   }
 
   /**
+   * Coordinate the live transports — and, while one is away, hand each datapoint it owned to a live
+   * transport that can carry it UNCHANGED (`canHandOver`). Before, a dropped owner froze its values
+   * and dropped every write although a live transport had the same capability (audit 2026-09-24,
+   * A19). What cannot be handed over keeps the absent owner and its definition until it returns.
+   *
+   * @param live the live transports' contributions
+   * @returns the unified tree and the owner of each canonical id
+   */
+  private coordinateWithAway(live: TransportObjects[]): {
+    objects: ObjectDef[];
+    ownerByCanonicalId: Map<string, Transport>;
+  } {
+    const away: TransportObjects[] = [...this.away]
+      .filter(([transport]) => !live.some(contribution => contribution.transport === transport))
+      .map(([transport, objects]) => ({ transport, objects }));
+    const full = coordinateObjectTree([...live, ...away]);
+    if (away.length === 0) {
+      return full;
+    }
+    const liveOnly = coordinateObjectTree(live);
+    const liveDefs = new Map(liveOnly.objects.map(object => [object.id, object]));
+    const absent = new Set(away.map(contribution => contribution.transport));
+    const owners = new Map(full.ownerByCanonicalId);
+    const objects = full.objects.map(object => {
+      const owner = owners.get(object.id);
+      if (owner === undefined || !absent.has(owner)) {
+        return object;
+      }
+      const liveOwner = liveOnly.ownerByCanonicalId.get(object.id);
+      const liveDef = liveDefs.get(object.id);
+      if (
+        liveOwner &&
+        liveDef &&
+        canHandOver({ transport: owner, def: object }, { transport: liveOwner, def: liveDef })
+      ) {
+        owners.set(object.id, liveOwner);
+        return liveDef;
+      }
+      return object;
+    });
+    return { objects, ownerByCanonicalId: owners };
+  }
+
+  /**
    * The canonical ids a transport owns.
    *
    * @param transport the transport to collect owned ids for
@@ -278,6 +334,7 @@ export class MultiTransportHandle implements ConnectionHandle {
       return;
     }
     this.live.splice(index, 1);
+    this.away.set(connection.transport, connection.buildObjects());
     connection.close();
     if (this.live.length === 0) {
       this.cancelRetries();
@@ -297,6 +354,10 @@ export class MultiTransportHandle implements ConnectionHandle {
         this.deps.log.debug(`${this.deviceId}/${other.transport}: liveness check failed (${errorMessage(e)})`);
       });
     }
+    // Hand what the dropped transport owned to a live one where it can carry it unchanged.
+    this.queueCoordination().catch((e: unknown) => {
+      this.deps.log.debug(`${this.deviceId}: re-coordination after a drop failed (${errorMessage(e)})`);
+    });
     this.scheduleTransportRetry(connection.transport);
   }
 
@@ -346,6 +407,7 @@ export class MultiTransportHandle implements ConnectionHandle {
       connected = await connection.connect();
       if (connected && !this.closed) {
         this.live.push(connection);
+        this.away.delete(transport);
         connection.onDrop(reason => this.handleTransportDrop(connection, reason));
         this.armShapeChanges(connection);
         // Queued, not direct: an ALREADY live transport keeps its shape-change wiring armed
@@ -446,6 +508,7 @@ export class MultiTransportHandle implements ConnectionHandle {
   /** Close every transport and stop every reconnect loop. Synchronous — safe from onUnload. */
   public close(): void {
     this.closed = true;
+    this.away.clear();
     this.cancelRetries();
     for (const connection of this.live) {
       connection.close();

@@ -38,6 +38,12 @@ export class TransportConnectionAdapter implements TransportConnection {
   private shapeChanged: (() => void) | undefined;
   /** Ids upserted since the last {@link seedOwned} — their values wait for the re-coordination. */
   private readonly awaitingOwnership = new Set<string>();
+  /**
+   * The last value the controller reported per canonical id, owned or not. When a re-coordination
+   * hands this transport an id it did not own (another transport dropped), the controller will not
+   * repeat an unchanged value — it is delivered from here at once (audit 2026-09-24, C21).
+   */
+  private readonly latest = new Map<string, boolean | number | string>();
 
   /**
    * @param transport the transport this adapts
@@ -82,6 +88,7 @@ export class TransportConnectionAdapter implements TransportConnection {
    */
   public readonly interceptSetStateAck = (fullId: string, value: boolean | number | string): void => {
     const canonicalId = this.canonical(this.relative(fullId));
+    this.latest.set(canonicalId, value);
     if (this.owned?.has(canonicalId)) {
       this.setStateAck(`${this.deviceId}.${canonicalId}`, value);
       return;
@@ -129,7 +136,19 @@ export class TransportConnectionAdapter implements TransportConnection {
    * @param owned the canonical ids this transport owns
    */
   public seedOwned(owned: ReadonlySet<string>): void {
+    const previous = this.owned;
     this.owned = owned;
+    // A re-arming that hands this transport ids it did not own: their last reported values now
+    // belong in the tree. The buffered ones below are delivered anyway.
+    if (previous) {
+      const buffered = new Set(this.buffered.map(seed => seed.canonicalId));
+      for (const id of owned) {
+        const value = this.latest.get(id);
+        if (!previous.has(id) && !buffered.has(id) && value !== undefined) {
+          this.setStateAck(`${this.deviceId}.${id}`, value);
+        }
+      }
+    }
     // Values that waited for this arming: delivered when the id landed here, dropped when it
     // did not (another transport owns it). Either way the wait ends — the buffer stays bounded.
     for (const seed of this.buffered.splice(0)) {

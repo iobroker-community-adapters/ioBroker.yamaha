@@ -462,6 +462,8 @@ function internalOf(adapter: Yamaha): {
   onSsdpAlive(notify: { nts: "alive"; location?: string }, address: string): void;
   rediscoverNow(lifted: readonly string[]): void;
   updateTableAddress(deviceId: string, ip: string): Promise<void>;
+  writtenObjects: Map<string, Map<string, string>>;
+  forgetWritten(id: string): void;
   removed: Set<string>;
   deviceRecords: Map<string, { id: string; ip: string; source?: string; identity?: { serial?: string; mac?: string } }>;
   xmlPollIntervalMs(): number;
@@ -2387,6 +2389,21 @@ describe("Yamaha volume as 0…100 % (the one switch)", () => {
     const common = ctx.i.objects.get("Living_room.volume")?.common as Record<string, unknown>;
     expect(common.max).toBeUndefined();
     expect(ctx.i.states.get("Living_room.volume")).toEqual({ val: 42, ack: true });
+  });
+});
+
+describe("Yamaha written definitions per device (audit 2026-09-24, A14)", () => {
+  // Shared across connection attempts, so a device that comes back writes only what changed —
+  // and forgotten on every delete, or an object built again after a purge would be skipped.
+  it("hands every attempt of a device the same map and forgets it when an object of the device is deleted", async () => {
+    const ctx = setup({ devices: [{ name: "Living room", ip: "192.168.1.10" }] });
+    await ctx.i.onReady();
+    await flush();
+    const map = ctx.calls[0].deps.writtenObjects as unknown as Map<string, string>;
+    expect(map).toBe(ctx.i.writtenObjects.get("Living_room"));
+    map.set("volume", "{}");
+    ctx.i.forgetWritten("yamaha.0.Living_room.volume");
+    expect(map.size).toBe(0);
   });
 });
 

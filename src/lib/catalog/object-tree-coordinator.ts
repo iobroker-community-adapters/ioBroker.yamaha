@@ -137,3 +137,33 @@ export function coordinateObjectTree(contributions: readonly TransportObjects[])
   resolved.sort((a, b) => a.id.split(".").length - b.id.split(".").length);
   return { objects: resolved, ownerByCanonicalId };
 }
+
+/**
+ * Whether a datapoint whose owner dropped out may be handed to a transport that is still live
+ * (audit 2026-09-24, A19 — the adapter's rule is "owner = the most modern PRESENT protocol").
+ * Only where the value keeps its meaning: the same object and value type, the same unit, and —
+ * where a dropdown is involved — the same wire vocabulary. A decibel bass (YNCA) is not MusicCast's
+ * step count, a sleep text is not a number, "HDMI1" is not "hdmi1": those stay with the absent
+ * owner, whose writes are dropped with a line, until it returns.
+ *
+ * @param from the absent owner and its definition
+ * @param from.transport the absent owner
+ * @param from.def its definition
+ * @param to the live candidate and its definition
+ * @param to.transport the live candidate
+ * @param to.def its definition
+ * @returns whether the live transport may take the datapoint over
+ */
+export function canHandOver(
+  from: { transport: Transport; def: ObjectDef },
+  to: { transport: Transport; def: ObjectDef },
+): boolean {
+  if (from.def.type !== to.def.type || from.def.common.type !== to.def.common.type) {
+    return false;
+  }
+  if ((from.def.common.unit ?? "") !== (to.def.common.unit ?? "")) {
+    return false;
+  }
+  const dropdown = Boolean(from.def.common.states) || Boolean(to.def.common.states);
+  return !dropdown || STATES_VOCABULARY[from.transport] === STATES_VOCABULARY[to.transport];
+}

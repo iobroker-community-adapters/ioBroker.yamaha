@@ -51,9 +51,11 @@ describe("pickOwner — which transport owns a shared capability", () => {
   // drop or add a second one and every behavioural test above would still pass — each of them
   // asks about one key. Pinning the whole table makes any further change a visible, deliberate
   // edit of this list.
-  it("removes exactly one override and leaves the other eighteen in place", () => {
+  it("pins the override table — twenty keys since the write-loss pair of 2026-09-24", () => {
     expect(Object.keys(OWNER_OVERRIDES).sort()).toEqual([
       "advanced.maxVolume",
+      "advanced.speakers.pattern",
+      "hdmi.out3",
       "input",
       "player.playback",
       "player.repeat",
@@ -72,8 +74,15 @@ describe("pickOwner — which transport owns a shared capability", () => {
       "soundProgram",
       "tuner.band",
     ]);
-    expect(Object.keys(OWNER_OVERRIDES)).toHaveLength(18);
+    expect(Object.keys(OWNER_OVERRIDES)).toHaveLength(20);
     expect(OWNER_OVERRIDES).not.toHaveProperty("volume");
+  });
+
+  // MusicCast reads HDMI OUT 3 and the speaker pattern but cannot write them; YNCA can (C20).
+  it("hands the third HDMI output and the speaker pattern to the transport that can write them", () => {
+    expect(pickOwner("hdmi.out3", ["yxc", "ynca"])).toBe("ynca");
+    expect(pickOwner("advanced.speakers.pattern", ["yxc", "ynca"])).toBe("ynca");
+    expect(pickOwner("hdmi.out3", ["yxc"])).toBe("yxc");
   });
 });
 

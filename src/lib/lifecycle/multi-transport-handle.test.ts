@@ -241,6 +241,45 @@ describe("MultiTransportHandle per-transport reconnect", () => {
     expect(freshYnca.writes).toContainEqual({ id: "sound.bass", value: -3 });
   });
 
+  // The adapter's rule is "owner = the most modern PRESENT protocol": a dropped owner froze its
+  // values and dropped every write although a live transport had the same capability (A19).
+  test("a drop hands a datapoint the live transport can carry unchanged to it, and back on return", async () => {
+    const ynca = fakeConn("ynca", [state("power", "Power", { type: "boolean", role: "switch.power" })]);
+    const xml = fakeConn("xml", [state("power", "Power", { type: "boolean", role: "switch.power" })]);
+    const freshYnca = fakeConn("ynca", [state("power", "Power", { type: "boolean", role: "switch.power" })]);
+    const { handle, fireTimers } = reconnectSetup([ynca, xml], { ynca: () => freshYnca });
+    await handle.start();
+    handle.handleStateChange("living.power", false, true);
+    expect(ynca.writes).toContainEqual({ id: "power", value: true });
+    ynca.drop(new Error("socket reset"));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    handle.handleStateChange("living.power", false, false);
+    expect(xml.writes).toContainEqual({ id: "power", value: false });
+    await fireTimers();
+    handle.handleStateChange("living.power", false, true);
+    expect(freshYnca.writes).toContainEqual({ id: "power", value: true });
+  });
+
+  // A shared definition map (per device, held by the adapter) survives a new handle: a device that
+  // came back as a whole rewrote its entire tree unchanged (A14).
+  test("a second handle with the device's written definitions writes nothing unchanged", async () => {
+    const written = new Map<string, string>();
+    const upserts: string[] = [];
+    const deps = {
+      upsertObject: (id: string): Promise<void> => {
+        upserts.push(id);
+        return Promise.resolve();
+      },
+      log: silentLog,
+      writtenObjects: written,
+    };
+    await new MultiTransportHandle("living", [fakeConn("ynca", [state("power", "Power")])], deps).start();
+    expect(upserts).toEqual(["living.power"]);
+    upserts.length = 0;
+    await new MultiTransportHandle("living", [fakeConn("ynca", [state("power", "Power")])], deps).start();
+    expect(upserts).toEqual([]);
+  });
+
   test("while the owner is offline its write is dropped, not sent to the dead connection", async () => {
     const ynca = fakeConn("ynca", [state("sound.bass", "Bass dB", { unit: "dB" })]);
     const yxc = fakeConn("yxc", [state("sound.bass", "Bass raw"), state("dist.role", "Role")]);

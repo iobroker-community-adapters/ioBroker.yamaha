@@ -68,6 +68,8 @@ export interface AttemptDeps {
   yncaSubunitCache?: YncaSubunitCache;
   /** Per-device memory for device answers that stay constant while it runs (held by the caller). */
   probeMemory?: ProbeMemory;
+  /** The object definitions last written for this device (held by the caller, see MultiTransportDeps). */
+  writtenObjects?: Map<string, string>;
 }
 
 /** One transport to try: its name and a factory building a FRESH connectable (also for reconnects). */
@@ -93,6 +95,8 @@ export interface ConnectDeps {
     /** Cancel a scheduled timer. */
     cancel(handle: ioBroker.Timeout | undefined): void;
   };
+  /** The object definitions last written for this device (see MultiTransportDeps). */
+  writtenObjects?: Map<string, string>;
 }
 
 /**
@@ -211,6 +215,7 @@ async function connectBuilt(
     schedule: deps.timers ? (cb, ms) => deps.timers!.schedule(cb, ms) : undefined,
     cancel: deps.timers ? handle_ => deps.timers!.cancel(handle_ as ioBroker.Timeout | undefined) : undefined,
     backoffFactory: () => new ReconnectStrategy(TRANSPORT_RECONNECT_BASE_MS, TRANSPORT_RECONNECT_MAX_MS),
+    writtenObjects: deps.writtenObjects,
   });
   let running: Transport[];
   try {
@@ -365,6 +370,7 @@ export function attemptDevice(
       log,
       onTransports: deps.onTransports,
       timers: deps.timers,
+      writtenObjects: deps.writtenObjects,
     },
     signal,
   );

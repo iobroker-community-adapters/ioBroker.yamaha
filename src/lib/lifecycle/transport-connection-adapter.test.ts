@@ -174,3 +174,28 @@ describe("TransportConnectionAdapter — verifyAlive", () => {
     await expect(without.verifyAlive()).resolves.toBeUndefined();
   });
 });
+
+describe("TransportConnectionAdapter takes over an id with its last value (audit 2026-09-24, C21)", () => {
+  // Another transport dropped and a re-coordination hands this one the id: the controller will
+  // not repeat an unchanged value, so the tree kept the dropped owner's value until the device changed.
+  test("an id newly owned after a re-coordination gets its last seen value at once", async () => {
+    const acks: Array<{ id: string; value: unknown }> = [];
+    const adapter = new TransportConnectionAdapter("xml", "living", (id, value) => acks.push({ id, value }));
+    adapter.bind({
+      start: () => Promise.resolve(true),
+      handleStateChange: () => {},
+      onDrop: () => {},
+      close: () => {},
+    });
+    await adapter.connect();
+    adapter.seedOwned(new Set(["mute"]));
+    adapter.interceptSetStateAck("living.power", true); // not owned yet — another transport's
+    expect(acks).toEqual([]);
+    adapter.seedOwned(new Set(["mute", "power"]));
+    expect(acks).toEqual([{ id: "living.power", value: true }]);
+    // An id it already owned is not replayed on a re-arming.
+    acks.length = 0;
+    adapter.seedOwned(new Set(["mute", "power"]));
+    expect(acks).toEqual([]);
+  });
+});

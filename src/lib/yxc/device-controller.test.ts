@@ -807,12 +807,12 @@ describe("YxcDeviceController", () => {
     expect(s.client.calls).not.toContainEqual({ method: "getPlayInfo", args: ["cd"] });
   });
 
-  // MusicCast answers a push by re-reading the WHOLE zone status, so all ~25 of its fields were
-  // written for one button press — 50 on a two-zone receiver, where YNCA writes exactly one
-  // datapoint per protocol line. The re-read stays: a push is partial, and one without
-  // `actual_volume_mode` would hit the scale bug 2.8.0 fixed. Only the unchanged values stop.
-  describe("a push writes what changed, not the whole zone", () => {
-    test("a status that repeats the current values writes nothing", async () => {
+  // Every reported value is handed on, changed or not: the database write compares
+  // (setStateChangedAsync), and only a value handed on can correct a datapoint someone else
+  // wrote with ack, or one this transport just took over from a dropped owner (audit 2026-09-24,
+  // C21 — a poll mirrors the device on every answer). The re-read stays: a push is partial.
+  describe("a push re-reads the zone and hands every value on", () => {
+    test("a status that repeats the current values hands them on again", async () => {
       const s = setup(wx10, ysp);
       await s.controller.start();
       s.acks.length = 0;
@@ -820,17 +820,17 @@ describe("YxcDeviceController", () => {
       await flush();
       // The re-read still happens — it is the only way to learn what a partial push left out.
       expect(s.client.calls).toContainEqual({ method: "getStatus", args: ["main"] });
-      expect(s.acks).toEqual([]);
+      expect(s.acks).toContainEqual({ id: "living.power", value: false });
     });
 
-    test("a changed field is written, and only that one", async () => {
+    test("a changed field is handed on with its new value", async () => {
       const s = setup(wx10, ysp);
       await s.controller.start();
       s.acks.length = 0;
       s.client.status = { ...(ysp as Record<string, unknown>), power: "on" };
       s.fire.push?.({ main: { power: "on" } });
       await flush();
-      expect(s.acks).toEqual([{ id: "living.power", value: true }]);
+      expect(s.acks).toContainEqual({ id: "living.power", value: true });
     });
 
     test("writing the value the device already has still gets its acknowledgement", async () => {

@@ -207,6 +207,12 @@ export class Yamaha extends utils.Adapter {
   /** The setup of a device in progress (header, profile) — a delete waits for it before it deletes. */
   private readonly starting = new Map<string, Promise<void>>();
   /**
+   * Per device, the object definitions last written — shared by every connection attempt, so a
+   * device that comes back as a whole writes only what changed (audit 2026-09-24, A14). Dropped for
+   * a device whenever objects of it are deleted, or a returning object would be skipped as unchanged.
+   */
+  private readonly writtenObjects = new Map<string, Map<string, string>>();
+  /**
    * deviceId → the address a MANUAL device was last seen answering at, away from its typed one.
    * The warning is said once per new address, not on every search.
    */
@@ -835,6 +841,33 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
+   * The shared written-definitions map of one device (see `writtenObjects`).
+   *
+   * @param deviceId the id-safe device id
+   * @returns the map
+   */
+  private writtenObjectsOf(deviceId: string): Map<string, string> {
+    let map = this.writtenObjects.get(deviceId);
+    if (!map) {
+      map = new Map<string, string>();
+      this.writtenObjects.set(deviceId, map);
+    }
+    return map;
+  }
+
+  /**
+   * Forget what was written for the device an object id belongs to — called on every delete, so a
+   * deleted object is written again when a transport builds it once more.
+   *
+   * @param id the object id, with or without the namespace
+   */
+  private forgetWritten(id: string): void {
+    const relative = stripNamespace(id, this.namespace);
+    const dot = relative.indexOf(".");
+    this.writtenObjects.get(dot < 0 ? relative : relative.slice(0, dot))?.clear();
+  }
+
+  /**
    * Stop supervising one device and release its supervisor. The object tree is untouched —
    * a readdress puts the same device straight back on it.
    *
@@ -960,6 +993,7 @@ export class Yamaha extends utils.Adapter {
     // silhouette `ensureDeviceHeader` seeds — a soundbar shows a receiver until the next start.
     this.deviceIcons.delete(deviceId);
     this.deviceLabels.delete(deviceId);
+    this.writtenObjects.delete(deviceId);
     this.lastModel.delete(deviceId);
     this.profiles.delete(deviceId);
     this.forgetUnder(this.knownDatapoints, deviceId);
@@ -1300,6 +1334,7 @@ export class Yamaha extends utils.Adapter {
       return false;
     });
     for (const fullId of [...stale, ...renamed, ...disabled]) {
+      this.forgetWritten(fullId);
       try {
         await this.delObjectAsync(stripNamespace(fullId, this.namespace));
       } catch {
@@ -1363,6 +1398,7 @@ export class Yamaha extends utils.Adapter {
       const recorded = new Set(profile?.pendingPurge ?? []);
       const confirmed = seenNow.filter(id => recorded.has(id));
       for (const id of confirmed) {
+        this.forgetWritten(id);
         try {
           await this.delObjectAsync(id);
           purged.push(`${this.namespace}.${id}`);
@@ -1396,6 +1432,7 @@ export class Yamaha extends utils.Adapter {
     }
     const empty = childlessChannelIds(await this.getAdapterObjectsAsync(), this.readyDevices, this.namespace);
     for (const fullId of empty) {
+      this.forgetWritten(fullId);
       try {
         await this.delObjectAsync(stripNamespace(fullId, this.namespace));
       } catch {
@@ -2034,6 +2071,7 @@ export class Yamaha extends utils.Adapter {
           };
         },
         xmlPollIntervalMs: this.xmlPollIntervalMs(),
+        writtenObjects: this.writtenObjectsOf(device.id),
         onTransports: names => {
           if (alive()) {
             this.setTransports(device.id, names);

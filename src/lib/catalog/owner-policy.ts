@@ -42,6 +42,11 @@ export const OWNER_OVERRIDES: Record<string, readonly Transport[]> = {
   // a raw step count in zone 3 (measured on the RX-A2070 fixture). Plain modernity is correct here.
   // §3c write loss — YXC is read-only for these, YNCA (and often XML) is writable.
   "advanced.maxVolume": ["ynca", "xml", "yxc"],
+  // Same class (audit 2026-09-24, C20): MusicCast reports the third HDMI output and the speaker
+  // pattern in getFuncStatus (RX-A3080 capture) but has no documented setter for HDMI OUT 3;
+  // YNCA's HDMIOUT3 and SPPATTERN are writable. By modernity MusicCast took both read-only.
+  "hdmi.out3": ["ynca", "yxc"],
+  "advanced.speakers.pattern": ["ynca", "yxc"],
   // §3c write loss on the unified player block (v2.0.0): YXC reads playback/repeat/
   // shuffle but cannot WRITE them (its API has only toggle/transport endpoints, which
   // stay YXC-owned buttons); YNCA sets all three directly. Zone mirrors collapse to
