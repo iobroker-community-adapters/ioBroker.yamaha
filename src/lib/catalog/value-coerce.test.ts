@@ -1,4 +1,4 @@
-import { coerceBool, decode, encode, isWritableValue, specToCommon } from "./value-coerce";
+import { coerceBool, decode, encode, isWritableValue, specToCommon, writableNumber } from "./value-coerce";
 
 describe("specToCommon", () => {
   test("an on/off value becomes a boolean switch", () => {
@@ -195,6 +195,26 @@ describe("isWritableValue rejects what must not go on the wire", () => {
     expect(isWritableValue("   ", true)).toBe(false);
     expect(isWritableValue("0", true)).toBe(true);
     expect(isWritableValue(0, true)).toBe(true);
+  });
+});
+
+describe("a numeric datapoint takes only a number (audit 2026-09-24, D2)", () => {
+  it("refuses a boolean, a hex and an exponent string — Number() would read them as 0, 16 and 100", () => {
+    expect(isWritableValue(false, true)).toBe(false);
+    expect(isWritableValue(true, true)).toBe(false);
+    expect(isWritableValue("0x10", true)).toBe(false);
+    expect(isWritableValue("1e2", true)).toBe(false);
+    expect(isWritableValue("+5", true)).toBe(false);
+    expect(isWritableValue(Number.POSITIVE_INFINITY, true)).toBe(false);
+  });
+
+  it("reads a plain decimal string, trimmed, as its number", () => {
+    expect(writableNumber(" -30.5 ")).toBe(-30.5);
+    expect(writableNumber("50")).toBe(50);
+    expect(writableNumber(12)).toBe(12);
+    expect(writableNumber(false)).toBeUndefined();
+    expect(writableNumber("0x10")).toBeUndefined();
+    expect(writableNumber(null)).toBeUndefined();
   });
 });
 

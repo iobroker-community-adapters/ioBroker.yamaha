@@ -54,6 +54,8 @@ export interface YxcCapabilities {
   media: string[];
   /** The netusb block's declared functions (`mc_playlist`, `play_queue`, …). */
   netusbFuncs?: string[];
+  /** How many favourites / recently-played slots the netusb block declares (`preset.num`, `recent_info.num`). */
+  netusbSlots?: { presets?: number; recent?: number };
   /** Whether the device reports a MusicCast-Link distribution block (getFeatures `distribution`). */
   hasDistribution?: boolean;
   /** The tuner features (bands, preset mode), when the device has a tuner. */
@@ -69,6 +71,23 @@ export interface YxcCapabilities {
   systemLists?: Record<string, string[]>;
   /** The counts the SYSTEM block declares (`speaker_pattern_num`, `video_preset_num`), keyed by their id. */
   systemCounts?: Record<string, number>;
+}
+
+/**
+ * The slot counts the netusb block declares — `preset.num` and `recent_info.num` (YXC Basic §4.2;
+ * every capture reports 40). They are the upper bound of the two recall-by-number datapoints.
+ *
+ * @param netusb the netusb block of getFeatures (untrusted)
+ * @returns the counts that are positive integers
+ */
+function netusbSlotsOf(netusb: Record<string, unknown>): { presets?: number; recent?: number } {
+  const count = (block: unknown): number | undefined => {
+    const num = typeof block === "object" && block !== null ? (block as { num?: unknown }).num : undefined;
+    return typeof num === "number" && Number.isInteger(num) && num > 0 ? num : undefined;
+  };
+  const presets = count(netusb.preset);
+  const recent = count(netusb.recent_info);
+  return { ...(presets !== undefined ? { presets } : {}), ...(recent !== undefined ? { recent } : {}) };
 }
 
 // Only true media-player sources — subsystems that report play info and
@@ -285,6 +304,9 @@ export function parseYxcFeatures(response: unknown): YxcCapabilities {
       typeof netusb === "object" && netusb !== null
         ? stringList((netusb as Record<string, unknown>).func_list)
         : undefined,
+    ...(typeof netusb === "object" && netusb !== null
+      ? { netusbSlots: netusbSlotsOf(netusb as Record<string, unknown>) }
+      : {}),
     hasDistribution: "distribution" in obj,
     tuner: media.includes("tuner") ? parseTunerFeatures(obj.tuner) : undefined,
     clock: "clock" in obj ? parseClockFeatures(obj.clock) : undefined,

@@ -1,4 +1,5 @@
 import { channelCommon, type ObjectDef } from "../catalog/types";
+import { writableNumber } from "../catalog/value-coerce";
 import { tName } from "../i18n";
 import {
   isPermanentXmlRefusal,
@@ -610,7 +611,8 @@ export class XmlDeviceController implements ConnectionHandle {
     if (stateId !== "tuner.preset" || !this.hasTuner) {
       return stateId === "tuner.preset";
     }
-    const num = Math.round(Number(value));
+    // Number(true) is 1 — a switch bound here by mistake recalled preset 1 (audit 2026-09-24, D20).
+    const num = Math.round(writableNumber(value) ?? Number.NaN);
     if (!Number.isFinite(num) || num < 1) {
       return true;
     }
@@ -643,7 +645,7 @@ export class XmlDeviceController implements ConnectionHandle {
       typeof value === "string" && !/^\d+$/.test(value.trim())
         ? scenes?.find(scene => scene.title.toLowerCase() === value.trim().toLowerCase())?.num
         : undefined;
-    const num = byTitle ?? Math.round(Number(value));
+    const num = byTitle ?? Math.round(writableNumber(value) ?? Number.NaN);
     if (!zone || !scenes || !scenes.some(scene => scene.num === num)) {
       return true;
     }

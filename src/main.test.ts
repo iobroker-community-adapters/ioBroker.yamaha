@@ -2215,6 +2215,21 @@ describe("Yamaha volume as 0…100 % (the one switch)", () => {
     expect(ctx.handles[0].changes).toEqual([{ id: "Living_room.volume", ack: false, value: -40 }]);
   });
 
+  // A VIS input or MQTT hands the number over as TEXT. Passed on unconverted, "50" reached a
+  // MusicCast speaker as its raw step 50 — 83 % of a 0…60 scale (audit 2026-09-24, D1).
+  it("converts a number written as text like the number, and drops what is no number", async () => {
+    const ctx = percentFromUpgrade();
+    await ctx.i.onReady();
+    await flush();
+    const upsert = ctx.calls[0].deps.upsertObject as (id: string, def: unknown) => Promise<void>;
+    await upsert("Living_room.volume", dbVolume);
+
+    ctx.i.onStateChange("yamaha.0.Living_room.volume", { val: "50.5", ack: false });
+    ctx.i.onStateChange("yamaha.0.Living_room.volume", { val: "loud", ack: false });
+    ctx.i.onStateChange("yamaha.0.Living_room.volume", { val: false, ack: false });
+    expect(ctx.handles[0].changes).toEqual([{ id: "Living_room.volume", ack: false, value: -40 }]);
+  });
+
   // The adapter subscribes to its own namespace, so every value it acks comes straight back as an
   // ACKED change. Converting that one too would read the percent as decibels and walk the value
   // down the scale on every single poll.

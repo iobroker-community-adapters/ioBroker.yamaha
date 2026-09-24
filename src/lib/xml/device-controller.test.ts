@@ -389,6 +389,10 @@ describe("XmlDeviceController", () => {
     s.controller.handleStateChange("living.scene.recall", false, 7);
     await flush();
     expect(s.client.calls).toEqual([]);
+    // A switch bound here by mistake: Number(true) is 1 — it recalled Scene 1 (audit 2026-09-24, D20).
+    s.controller.handleStateChange("living.scene.recall", false, true);
+    await flush();
+    expect(s.client.calls).toEqual([]);
   });
 
   test("the classic tuner surface appears only when <Tuner> answers, with the openHAB-verified preset write", async () => {
@@ -413,6 +417,11 @@ describe("XmlDeviceController", () => {
       zone: "Tuner",
       inner: "<Play_Control><Preset><Preset_Sel>5</Preset_Sel></Preset></Play_Control>",
     });
+    // Number(true) is 1 — a switch bound here recalled preset 1 (audit 2026-09-24, D20).
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.tuner.preset", false, true);
+    await flush();
+    expect(s.client.calls).toEqual([]);
   });
 
   test("the tuner values are read fresh, never replayed from the remembered probe", async () => {

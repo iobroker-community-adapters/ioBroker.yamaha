@@ -13,6 +13,13 @@ describe("stateToXml", () => {
     expect(stateToXml("mute", false)).toEqual({ zone: "Main_Zone", inner: "<Volume><Mute>Off</Mute></Volume>" });
   });
 
+  test("a volume write takes only a number — false, hex and exponent send nothing (audit 2026-09-24, D2)", () => {
+    expect(stateToXml("volume", false)).toBeUndefined();
+    expect(stateToXml("volume", "0x10")).toBeUndefined();
+    expect(stateToXml("volume", "1e2")).toBeUndefined();
+    expect(stateToXml("volume", "-30.5")).toBeDefined();
+  });
+
   test("a switch reads the words and numbers a script writes — 'false' switches OFF, junk sends nothing", () => {
     const off = { zone: "Main_Zone", inner: "<Power_Control><Power>Standby</Power></Power_Control>" };
     const on = { zone: "Main_Zone", inner: "<Power_Control><Power>On</Power></Power_Control>" };
@@ -30,6 +37,16 @@ describe("stateToXml", () => {
       zone: "Main_Zone",
       inner: "<Volume><Lvl><Val>-300</Val><Exp>1</Exp><Unit>dB</Unit></Lvl></Volume>",
     });
+  });
+
+  // desc.xml declares the level on a 0.5 dB grid (Range -805,165,5); -30.3 went out as -303 (audit 2026-09-24, D10).
+  test("snaps a written level onto the declared 0.5 dB grid", () => {
+    expect(stateToXml("volume", -30.3)?.inner).toBe(
+      "<Volume><Lvl><Val>-305</Val><Exp>1</Exp><Unit>dB</Unit></Lvl></Volume>",
+    );
+    expect(stateToXml("sound.bass", 1.2)?.inner).toBe(
+      "<Sound_Video><Tone><Bass><Val>10</Val><Exp>1</Exp><Unit>dB</Unit></Bass></Tone></Sound_Video>",
+    );
   });
 
   test("maps input", () => {

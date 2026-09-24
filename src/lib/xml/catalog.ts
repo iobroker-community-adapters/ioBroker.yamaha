@@ -35,6 +35,20 @@ export interface XmlAmpEntry {
 }
 
 /** The unified XML amplifier catalog — object + read field + PUT builder in one list. */
+/**
+ * A written level in the XML wire form (tenths of a dB), snapped to the 0.5 dB grid every `desc.xml`
+ * declares for it (`Range -805,165,5` and `-60,60,5`, 2008–2017). `Math.round(v * 10)` alone put a
+ * written −30.3 on the wire as −303, off the grid, while the same datapoint owned by YNCA snapped
+ * (audit 2026-09-24, D10; rxv quantises the same way).
+ *
+ * @param value the written value (already checked to be a number)
+ * @param step the declared step in dB
+ * @returns the wire value in tenths
+ */
+export function xmlTenths(value: unknown, step: number): number {
+  return Math.round(Math.round(Number(value) / step) * step * 10);
+}
+
 export const XML_AMP_CATALOG: XmlAmpEntry[] = [
   {
     state: "power",
@@ -59,7 +73,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     statusField: "volume",
     toInner: (value: unknown, dialect?: XmlDialect): string => {
       const element = dialect === "legacy" ? "Vol" : "Volume";
-      return `<${element}><Lvl><Val>${Math.round(Number(value) * 10)}</Val><Exp>1</Exp><Unit>dB</Unit></Lvl></${element}>`;
+      return `<${element}><Lvl><Val>${xmlTenths(value, 0.5)}</Val><Exp>1</Exp><Unit>dB</Unit></Lvl></${element}>`;
     },
   },
   {
@@ -182,7 +196,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     },
     statusField: "bass",
     toInner: value =>
-      `<Sound_Video><Tone><Bass><Val>${Math.round(Number(value) * 10)}</Val><Exp>1</Exp><Unit>dB</Unit></Bass></Tone></Sound_Video>`,
+      `<Sound_Video><Tone><Bass><Val>${xmlTenths(value, 0.5)}</Val><Exp>1</Exp><Unit>dB</Unit></Bass></Tone></Sound_Video>`,
   },
   {
     state: "sound.treble",
@@ -200,7 +214,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     },
     statusField: "treble",
     toInner: value =>
-      `<Sound_Video><Tone><Treble><Val>${Math.round(Number(value) * 10)}</Val><Exp>1</Exp><Unit>dB</Unit></Treble></Tone></Sound_Video>`,
+      `<Sound_Video><Tone><Treble><Val>${xmlTenths(value, 0.5)}</Val><Exp>1</Exp><Unit>dB</Unit></Treble></Tone></Sound_Video>`,
   },
   {
     state: "sound.subwooferTrim",
@@ -218,7 +232,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     },
     statusField: "subwooferTrim",
     toInner: value =>
-      `<Volume><Subwoofer_Trim><Val>${Math.round(Number(value) * 10)}</Val><Exp>1</Exp><Unit>dB</Unit></Subwoofer_Trim></Volume>`,
+      `<Volume><Subwoofer_Trim><Val>${xmlTenths(value, 0.5)}</Val><Exp>1</Exp><Unit>dB</Unit></Subwoofer_Trim></Volume>`,
   },
   {
     state: "sound.extraBass",
@@ -261,7 +275,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     },
     statusField: "dialogueLift",
     toInner: value =>
-      `<Sound_Video><Dialogue_Adjust><Dialogue_Lift>${Number(value)}</Dialogue_Lift></Dialogue_Adjust></Sound_Video>`,
+      `<Sound_Video><Dialogue_Adjust><Dialogue_Lift>${Math.round(Number(value))}</Dialogue_Lift></Dialogue_Adjust></Sound_Video>`,
   },
   // The zone commands desc.xml declares and Basic_Status reports on the 2012–2017 generation
   // (coverage audit 2026-09-09): the enhancer and CINEMA DSP 3D (9 of 10 descriptors), the
@@ -354,7 +368,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     statusField: "zoneBVolume",
     mainOnly: true,
     toInner: value =>
-      `<Volume><Zone_B><Lvl><Val>${Math.round(Number(value) * 10)}</Val><Exp>1</Exp><Unit>dB</Unit></Lvl></Zone_B></Volume>`,
+      `<Volume><Zone_B><Lvl><Val>${xmlTenths(value, 0.5)}</Val><Exp>1</Exp><Unit>dB</Unit></Lvl></Zone_B></Volume>`,
   },
   {
     state: "multiroom.zoneB.mute",

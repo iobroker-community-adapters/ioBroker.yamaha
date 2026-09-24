@@ -211,12 +211,27 @@ export function isWritableValue(value: unknown, numeric: boolean): boolean {
   if (!numeric) {
     return true;
   }
-  // Reject an empty/whitespace string explicitly: Number("") is 0 (finite), so it
-  // would otherwise slip through and put an empty value on the wire.
-  if (typeof value === "string" && value.trim() === "") {
-    return false;
+  return writableNumber(value) !== undefined;
+}
+
+/**
+ * The number a value written to a NUMERIC datapoint means — a finite number, or a string that is
+ * a plain decimal (the same strict rule the read path uses). Everything else means nothing:
+ * `Number(false)` is 0 and `Number("0x10")` is 16, so a switch widget bound to `volume` by mistake
+ * put 0 dB (reference level) on the wire, a hex string +16 dB (audit 2026-09-24, D2).
+ *
+ * @param value the value written to the state
+ * @returns the number, or undefined when the value is not a number
+ */
+export function writableNumber(value: unknown): number | undefined {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
   }
-  return Number.isFinite(Number(value));
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return DECIMAL_RE.test(trimmed) ? Number(trimmed) : undefined;
+  }
+  return undefined;
 }
 
 /** The words a switch datapoint accepts besides a real boolean — compared lower-cased and trimmed. */

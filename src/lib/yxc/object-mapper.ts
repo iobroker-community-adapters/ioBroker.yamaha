@@ -611,6 +611,7 @@ export function mapYxcToObjects(
         read: true,
         write: true,
         min: 1,
+        ...(capabilities.netusbSlots?.presets !== undefined ? { max: capabilities.netusbSlots.presets } : {}),
       },
     });
     // The favourites and recently-played lists (names included) plus the recall-by-number
@@ -650,6 +651,7 @@ export function mapYxcToObjects(
         read: true,
         write: true,
         min: 1,
+        ...(capabilities.netusbSlots?.recent !== undefined ? { max: capabilities.netusbSlots.recent } : {}),
       },
     });
     // MusicCast playlists and the play queue — declared in the netusb func_list.

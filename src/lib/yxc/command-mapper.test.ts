@@ -358,6 +358,18 @@ describe("stateToYxc", () => {
     expect(stateToYxc("volume", -30)).toEqual({ kind: "volume", zone: "main", value: -30 });
   });
 
+  test("a volume write takes only a number (audit 2026-09-24, D2)", () => {
+    expect(stateToYxc("volume", false)).toBeUndefined();
+    expect(stateToYxc("volume", "0x10")).toBeUndefined();
+    expect(stateToYxc("volume", "-30.5")).toEqual({ kind: "volume", zone: "main", value: -30.5 });
+  });
+
+  // Basic §6.2: a reported 0 means "no preset" — it is not a slot to recall (audit 2026-09-24, C16).
+  test("a tuner preset 0 is not sent", () => {
+    expect(stateToYxc("tuner.preset", 0)).toBeUndefined();
+    expect(stateToYxc("tuner.preset", 3)).toEqual({ kind: "tunerPreset", value: 3 });
+  });
+
   test("runs soundProgram through setSound (not setSoundProgram)", async () => {
     expect(await ranCall("soundProgram", "stereo")).toEqual(["setSound", ["stereo", "main"]]);
   });

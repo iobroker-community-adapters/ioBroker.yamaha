@@ -3217,6 +3217,28 @@ export function yncaStateUpdate(
 }
 
 /**
+ * Snap a written tuner frequency onto the grid the device DECLARES (`@SYS:FREQSTEP`, six 2011 lists:
+ * `FM50/AM9` … `FM200/AM10`). The band anchors are the lower ends of the official ranges — FM 87.50 MHz,
+ * AM 531 kHz on the 9 kHz grid and 530 kHz on the 10 kHz grid. A device that declares no step keeps
+ * the written value: an invented grid would be worse than the device's own rounding, which the
+ * read-back shows (audit 2026-09-24, B15).
+ *
+ * @param khz the written frequency in kHz
+ * @param band the band it is written to
+ * @param freqStep the device's `FREQSTEP` answer, if it gave one
+ * @returns the frequency on the declared grid, in kHz
+ */
+export function snapTunerFrequency(khz: number, band: "AM" | "FM", freqStep: string | undefined): number {
+  const declared = /^FM(\d+)\/AM(\d+)$/.exec(freqStep ?? "");
+  if (!declared) {
+    return khz;
+  }
+  const step = Number(band === "FM" ? declared[1] : declared[2]);
+  const anchor = band === "FM" ? 87500 : step === 9 ? 531 : 530;
+  return anchor + Math.round((khz - anchor) / step) * step;
+}
+
+/**
  * Turn a user write into a YNCA subunit/func/value triple via the id map, or
  * undefined when the state is not catalogued.
  *

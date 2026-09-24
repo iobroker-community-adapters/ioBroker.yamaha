@@ -850,6 +850,37 @@ describe("YncaDeviceController unified tuner v2.0.0 (band-routed writes)", () =>
     s.controller.handleStateChange("living.tuner.preset", false, 4);
     expect(s.client.sent).toEqual([{ subunit: "DAB", func: "FMPRESET", value: "4" }]);
   });
+
+  // A switch widget bound to a tuner datapoint by mistake: Number(true) is 1 — preset 1 recalled,
+  // FMFREQ=0.00 sent (audit 2026-09-24, B17).
+  test("a tuner write takes only a number — true recalls no preset and tunes no frequency", async () => {
+    const dab = await tunerSetup({ MAIN: { PWR: "On" }, DAB: { BAND: "DAB", DABPRESET: "No Preset" } });
+    dab.controller.handleStateChange("living.tuner.preset", false, true);
+    dab.controller.handleStateChange("living.tuner.preset", false, "0x2");
+    expect(dab.client.sent).toEqual([]);
+    const tun = await tunerSetup({ MAIN: { PWR: "On" }, TUN: { BAND: "FM", FMFREQ: "98.10" } });
+    tun.controller.handleStateChange("living.tuner.frequency", false, true);
+    expect(tun.client.sent).toEqual([]);
+  });
+
+  // The device declares its grid (@SYS:FREQSTEP) — a write between two channels lands on the
+  // declared one instead of whatever the firmware rounds to (audit 2026-09-24, B15).
+  test("a frequency write snaps to the grid the device declares, and stays as written without one", async () => {
+    const stepped = await tunerSetup({
+      MAIN: { PWR: "On" },
+      SYS: { FREQSTEP: "FM200/AM10" },
+      TUN: { BAND: "FM", FMFREQ: "98.10", AMFREQ: "1000" },
+    });
+    stepped.controller.handleStateChange("living.tuner.frequency", false, 98130);
+    expect(stepped.client.sent).toEqual([{ subunit: "TUN", func: "FMFREQ", value: "98.10" }]);
+    stepped.client.emit({ subunit: "TUN", func: "BAND", value: "AM" });
+    stepped.client.sent.length = 0;
+    stepped.controller.handleStateChange("living.tuner.frequency", false, 1004);
+    expect(stepped.client.sent).toEqual([{ subunit: "TUN", func: "AMFREQ", value: "1000" }]);
+    const plain = await tunerSetup({ MAIN: { PWR: "On" }, TUN: { BAND: "FM", FMFREQ: "98.10" } });
+    plain.controller.handleStateChange("living.tuner.frequency", false, 98130);
+    expect(plain.client.sent).toEqual([{ subunit: "TUN", func: "FMFREQ", value: "98.13" }]);
+  });
 });
 
 describe("YncaDeviceController unified player v2.0.0 (input-routed block)", () => {

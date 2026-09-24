@@ -1,5 +1,5 @@
 import { mergeYncaSubunits, type YncaCapabilities } from "./ynca/capability";
-import { formatWireNumber } from "./catalog/value-coerce";
+import { formatWireNumber, writableNumber } from "./catalog/value-coerce";
 import { playTimeTwin } from "./catalog/play-time";
 import type { ObjectDef } from "./catalog/types";
 import { tName } from "./i18n";
@@ -17,6 +17,7 @@ import {
   funcToEntry,
   idToEntry,
   presentYncaEntries,
+  snapTunerFrequency,
   sweepGets,
   yncaCommand,
   yncaObjectsFor,
@@ -353,6 +354,9 @@ export class YncaDeviceController implements ConnectionHandle {
   private readonly zoneSceneTitles = new Map<string, Array<{ num: number; title: string }>>();
   /** The tuner's current band (AM/FM/DAB), for the band-dependent frequency/preset writes. */
   private tunerBand = "";
+
+  /** The tuner grid the device declares (`@SYS:FREQSTEP`), when it declares one — see snapTunerFrequency. */
+  private freqStep: string | undefined;
   /** Whether the device carries the DAB subunit (its FM half shares the flat tuner ids). */
   private hasDab = false;
   /** Whether the device carries the HD Radio subunit (US models; its AM/FM half shares the flat tuner ids). */
@@ -515,6 +519,7 @@ export class YncaDeviceController implements ConnectionHandle {
       live.subunits.TUN?.BAND ??
       ""
     ).toUpperCase();
+    this.freqStep = live.subunits.SYS?.FREQSTEP;
     await this.setupBrowse(live);
     this.deps.client.onMessage(message => {
       // The browse driver sees every line first: list lines (LINE1TXT…, LISTINFO
@@ -526,6 +531,9 @@ export class YncaDeviceController implements ConnectionHandle {
       this.recordObserved(message.subunit, message.func, message.value);
       if (message.func === "BAND" && ["TUN", "DAB", "HDRADIO"].includes(message.subunit)) {
         this.tunerBand = message.value.toUpperCase();
+      }
+      if (message.subunit === "SYS" && message.func === "FREQSTEP") {
+        this.freqStep = message.value;
       }
       if (message.func === "INP") {
         const zone = YNCA_ZONES.find(z => z.subunit === message.subunit);
@@ -1304,10 +1312,11 @@ export class YncaDeviceController implements ConnectionHandle {
    */
   private handleTunerWrite(stateId: string, value: unknown): boolean {
     if (stateId === "tuner.frequency") {
-      const khz = Number(value);
-      if (!Number.isFinite(khz)) {
+      const written = writableNumber(value);
+      if (written === undefined) {
         return true;
       }
+      const khz = snapTunerFrequency(written, this.tunerBand === "AM" ? "AM" : "FM", this.freqStep);
       if (this.hasDab) {
         if (this.tunerBand === "FM") {
           this.sendProven("DAB", "FMFREQ", formatWireNumber(khz / 1000, 2));
@@ -1351,14 +1360,14 @@ export class YncaDeviceController implements ConnectionHandle {
       return true;
     }
     if (stateId === "tuner.preset" && this.hasDab) {
-      const slot = Math.round(Number(value));
+      const slot = Math.round(writableNumber(value) ?? Number.NaN);
       if (Number.isFinite(slot) && slot >= 1) {
         this.sendProven("DAB", this.tunerBand === "DAB" ? "DABPRESET" : "FMPRESET", String(slot));
       }
       return true;
     }
     if (stateId === "tuner.preset" && this.hasHdRadio) {
-      const slot = Math.round(Number(value));
+      const slot = Math.round(writableNumber(value) ?? Number.NaN);
       if (Number.isFinite(slot) && slot >= 1) {
         this.sendProven("HDRADIO", "PRESET", String(slot));
       }

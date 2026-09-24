@@ -345,6 +345,22 @@ describe("mapYxcToObjects tree hygiene", () => {
     expect(byId.has("player.netPlayer.source")).toBe(false);
   });
 
+  // Every capture declares netusb preset.num / recent_info.num = 40 (Basic §4.2): the recall
+  // datapoints carry that as their upper bound instead of staying open (audit 2026-09-24, C16).
+  test("the recall-by-number datapoints carry the slot count the device declares", () => {
+    const objs = mapYxcToObjects(parseYxcFeatures(wx10));
+    const byId = new Map(objs.map(o => [o.id, o]));
+    expect(byId.get("player.netPlayer.preset")?.common.max).toBe(40);
+    expect(byId.get("player.netPlayer.recallRecent")?.common.max).toBe(40);
+  });
+
+  // Basic §5.1/§5.4: sleep takes 0/30/60/90/120 — the dropdown offers them (a hint, not a gate).
+  test("the sleep timer offers the five values the specification declares", () => {
+    const sleep = mapYxcToObjects(parseYxcFeatures(rxA2070)).find(o => o.id === "sleep");
+    expect(sleep?.common.states).toEqual({ 0: "Off", 30: "30 min", 60: "60 min", 90: "90 min", 120: "120 min" });
+    expect(sleep?.common.max).toBe(120);
+  });
+
   test("the cd player carries track number, totals, disc time and drive status", () => {
     const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: ["cd"] });
     const ids = objs.map(o => o.id);

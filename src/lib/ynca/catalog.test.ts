@@ -250,6 +250,14 @@ describe("YNCA catalog", () => {
     expect(english).toContain("Input name (NET RADIO)");
   });
 
+  test("a volume write takes only a number — false, hex and exponent send nothing (audit 2026-09-24, D2)", () => {
+    const map = idToEntry(buildYncaCatalog().filter(e => e.subunit === "MAIN"));
+    expect(yncaCommand("volume", false, map)).toBeUndefined();
+    expect(yncaCommand("volume", "0x10", map)).toBeUndefined();
+    expect(yncaCommand("volume", "1e2", map)).toBeUndefined();
+    expect(yncaCommand("volume", " -30.5 ", map)).toMatchObject({ func: "VOL", value: "-30.5" });
+  });
+
   test("a switch reads the words and numbers a script writes — 'false' switches OFF, junk sends nothing", () => {
     const map = idToEntry(buildYncaCatalog().filter(e => e.subunit === "MAIN"));
     expect(yncaCommand("power", "false", map)).toMatchObject({ func: "PWR", value: "Standby" });

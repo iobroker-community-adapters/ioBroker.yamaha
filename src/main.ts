@@ -5,6 +5,7 @@ import { networkInterfaces } from "node:os";
 import { attemptDevice } from "./lib/attempt-device";
 import { searchInterfaces } from "./lib/network-interfaces";
 import { isGroupEnabled } from "./lib/catalog/groups";
+import { writableNumber } from "./lib/catalog/value-coerce";
 import type { ObjectDef } from "./lib/catalog/types";
 import {
   asPercentObject,
@@ -1971,6 +1972,10 @@ export class Yamaha extends utils.Adapter {
     // first segment instead of offering each one to every device in turn.
     const deviceId = relative.slice(0, relative.indexOf("."));
     const value = state.ack ? state.val : this.volumeAsDeviceScale(relative, state.val);
+    if (value === null && state.val !== null) {
+      this.log.debug(`${relative}: percent write "${String(state.val)}" is not a number — dropped`);
+      return;
+    }
     this.supervisorById.get(deviceId)?.handleStateChange(relative, state.ack, value);
   }
 
@@ -2380,7 +2385,13 @@ export class Yamaha extends utils.Adapter {
    */
   private volumeAsDeviceScale(relativeId: string, value: ioBroker.StateValue): ioBroker.StateValue {
     const bounds = this.percentFor(relativeId) ? this.volumeScales.get(relativeId) : undefined;
-    return bounds && typeof value === "number" ? fromPercent(value, bounds) : value;
+    if (!bounds) {
+      return value;
+    }
+    // A number written as text ("50" from a VIS input or MQTT) is still a percentage — passed on
+    // unconverted it reached a speaker as its raw step 50, 83 % of a 0…60 scale (audit 2026-09-24, D1).
+    const percent = writableNumber(value);
+    return percent === undefined ? null : fromPercent(percent, bounds);
   }
 
   /**

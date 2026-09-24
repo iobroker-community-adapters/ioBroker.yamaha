@@ -147,6 +147,11 @@ export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefi
     return { kind: "netusbRecent", value: num };
   }
   if (stateId === "tuner.preset" && isWritableValue(value, true)) {
+    // 0 is what the device REPORTS for "no preset" (Basic §6.2) — it is not a slot to recall.
+    // That is the specification's statement, not a dropdown used as validation (audit 2026-09-24, C16).
+    if (Number(value) === 0) {
+      return undefined;
+    }
     // The controller supplies the band (or `common` on shared-list devices).
     return { kind: "tunerPreset", value: Number(value) };
   }

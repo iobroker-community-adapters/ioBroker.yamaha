@@ -198,6 +198,12 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
       role: "level",
       read: true,
       write: true,
+      // The five values YXC Basic §5.1/§5.4 declares, as a HINT for the dropdown — a value outside
+      // them still goes to the device, which decides; a refusal is read back (audit 2026-09-24, C22).
+      min: 0,
+      max: 120,
+      step: 30,
+      states: { 0: "Off", 30: "30 min", 60: "60 min", 90: "90 min", 120: "120 min" },
     },
     create: { kind: "func", func: "sleep" },
     read: { field: "sleep" },
