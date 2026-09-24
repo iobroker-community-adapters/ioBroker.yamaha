@@ -67,6 +67,11 @@ export interface YxcCapabilities {
    * zone's {@link YxcZone.ranges}, for the states that belong to the device, not to a zone.
    */
   systemRanges?: Record<string, { min: number; max: number; step: number }>;
+  /**
+   * The device's `api_version` (getDeviceInfo — not part of getFeatures; the controller adds it before
+   * the objects are built). Unknown = nothing is withheld on its account.
+   */
+  apiVersion?: number;
   /** The functions the SYSTEM block declares (`party_mode`, `dimmer`, …) — getFeatures `system.func_list`. */
   systemFuncs?: string[];
   /** The value lists the SYSTEM block declares (`hdmi_standby_through_list`), keyed by their id. */

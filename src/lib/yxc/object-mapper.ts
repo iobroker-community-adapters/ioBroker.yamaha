@@ -885,16 +885,19 @@ export function mapYxcToObjects(
       presetCommon.max = capabilities.tuner.presetNum;
     }
     objects.push({ id: "tuner.preset", type: "state", common: presetCommon });
-    objects.push({
-      id: "tuner.presetUp",
-      type: "state",
-      common: { name: tName("nextPreset"), type: "boolean", role: "button", read: false, write: true },
-    });
-    objects.push({
-      id: "tuner.presetDown",
-      type: "state",
-      common: { name: tName("previousPreset"), type: "boolean", role: "button", read: false, write: true },
-    });
+    // `switchPreset` exists from API 1.17 on (YXC Basic §6.6); an older device refused every press.
+    if (capabilities.apiVersion === undefined || capabilities.apiVersion >= 1.17) {
+      objects.push({
+        id: "tuner.presetUp",
+        type: "state",
+        common: { name: tName("nextPreset"), type: "boolean", role: "button", read: false, write: true },
+      });
+      objects.push({
+        id: "tuner.presetDown",
+        type: "state",
+        common: { name: tName("previousPreset"), type: "boolean", role: "button", read: false, write: true },
+      });
+    }
     objects.push({
       id: "tuner.presets",
       type: "state",
@@ -947,6 +950,17 @@ export function mapYxcToObjects(
           },
         });
       }
+      // A DAB station is chosen by service, not by frequency (YXC Basic §6.15; audit 2026-09-24, C17).
+      objects.push({
+        id: "tuner.dab.serviceUp",
+        type: "state",
+        common: { name: tName("nextDabService"), type: "boolean", role: "button", read: false, write: true },
+      });
+      objects.push({
+        id: "tuner.dab.serviceDown",
+        type: "state",
+        common: { name: tName("previousDabService"), type: "boolean", role: "button", read: false, write: true },
+      });
     }
   }
   if (capabilities.clock) {

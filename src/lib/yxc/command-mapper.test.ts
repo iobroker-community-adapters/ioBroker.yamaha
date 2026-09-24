@@ -581,6 +581,8 @@ describe("preset/recent selection (musiccast-adapter parity)", () => {
     expect(stateToYxc("player.netPlayer.recallRecent", 2)).toEqual({ kind: "netusbRecent", value: 2 });
     expect(await ranCall("tuner.presetUp", true)).toEqual(["switchTunerPreset", ["next"]]);
     expect(await ranCall("tuner.presetDown", true)).toEqual(["switchTunerPreset", ["previous"]]);
+    expect(await ranCall("tuner.dab.serviceUp", true)).toEqual(["setDabService", ["next"]]);
+    expect(await ranCall("tuner.dab.serviceDown", true)).toEqual(["setDabService", ["previous"]]);
     // The band comes from controller state, so the command is declarative like tunerFreq.
     expect(stateToYxc("tuner.preset", 5)).toEqual({ kind: "tunerPreset", value: 5 });
     expect(stateToYxc("tuner.preset", null)).toBeUndefined();

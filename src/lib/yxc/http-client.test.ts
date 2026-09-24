@@ -250,6 +250,7 @@ describe("YamahaYxcClient player and tuner commands", () => {
     await client.setSpeakerB(false);
     await client.setIrSensor(true);
     await client.setZoneBVolumeSync(false);
+    await client.setDabService("next");
     await client.setGroupName("[Link] Living Room");
     expect(urls).toEqual([
       "/main/setDialogueLevel?value=2",
@@ -270,6 +271,7 @@ describe("YamahaYxcClient player and tuner commands", () => {
       "/system/setSpeakerB?enable=false",
       "/system/setIrSensor?enable=true",
       "/system/setZoneBVolumeSync?enable=false",
+      "/tuner/setDabService?dir=next",
       "/dist/setGroupName",
     ]);
     // setGroupName is a POST with the name as JSON (YXC Advanced §5.6); every other one a GET.

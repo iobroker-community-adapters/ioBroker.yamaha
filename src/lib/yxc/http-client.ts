@@ -1016,9 +1016,20 @@ export class YamahaYxcClient {
   }
 
   /**
-   * Step to the next/previous stored tuner preset.
+   * Select the next or previous DAB service (YXC Basic §6.15) — a DAB station is chosen by service,
+   * not by frequency.
    *
-   * @param direction `next` or `previous`
+   * @param direction next or previous
+   * @returns the command response
+   */
+  public setDabService(direction: "next" | "previous"): Promise<unknown> {
+    return this.send(`/tuner/setDabService?dir=${q(direction)}`);
+  }
+
+  /**
+   * Step through the stored presets (YXC Basic §6.6, API 1.17 and later).
+   *
+   * @param direction next or previous
    * @returns the command response
    */
   public switchTunerPreset(direction: "next" | "previous"): Promise<unknown> {

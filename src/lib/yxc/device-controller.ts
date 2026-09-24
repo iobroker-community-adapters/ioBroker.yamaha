@@ -395,11 +395,12 @@ export class YxcDeviceController implements ConnectionHandle {
       }
       reported[zone] = values;
     });
-    this.capabilities = capabilities;
+    // getFeatures does not carry the API version; getDeviceInfo above does, and the tree depends on it.
+    this.capabilities = this.apiVersion === undefined ? capabilities : { ...capabilities, apiVersion: this.apiVersion };
     for (const zone of this.zones) {
       this.zoneVolumeMode.set(zone, reported[zone]?.actualVolumeMode);
     }
-    const objects = mapYxcToObjects(capabilities, reported);
+    const objects = mapYxcToObjects(this.capabilities, reported);
     if (objects.length === 0) {
       this.deps.log.warn(`${this.deviceId}: no capabilities reported — creating no objects`);
       return false;
@@ -1684,6 +1685,15 @@ export class YxcDeviceController implements ConnectionHandle {
           await this.deps.client.setBand(command.band);
           break;
         case "tunerFreq":
+          // setFreq knows only "am" and "fm" (YXC Basic §6.4): on DAB the write goes nowhere — the
+          // datapoint gets the device's value back, and the service buttons choose a station (C17).
+          if (this.lastTunerBand === "dab") {
+            this.deps.log.debug(`${this.deviceId}: ${stateId} — DAB is tuned by service, not by frequency; not sent`);
+            if (this.mediaBlocks.includes("tuner")) {
+              await this.refreshMediaSource("tuner");
+            }
+            return "failed";
+          }
           await this.deps.client.setFreq(this.lastTunerBand, command.value);
           break;
         case "tunerPreset": {

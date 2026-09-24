@@ -161,6 +161,12 @@ export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefi
   if (stateId === "tuner.presetDown") {
     return { kind: "run", run: client => client.switchTunerPreset("previous") };
   }
+  if (stateId === "tuner.dab.serviceUp") {
+    return { kind: "run", run: client => client.setDabService("next") };
+  }
+  if (stateId === "tuner.dab.serviceDown") {
+    return { kind: "run", run: client => client.setDabService("previous") };
+  }
   let zone = "main";
   let name = stateId;
   const zoneMatch = /^multiroom\.(zone[234])\.(.+)$/.exec(stateId);

@@ -64,8 +64,10 @@ interface FakeClient extends YxcClientLike {
   recentInfo: unknown;
   tunerPresetInfo: unknown;
   clockSettings: unknown;
-  /** The netusb getPlayInfo answer (tuner/cd have fixed canned answers). */
+  /** The netusb getPlayInfo answer (cd has a fixed canned answer). */
   playInfo: unknown;
+  /** The tuner getPlayInfo answer (default: FM 100.9 MHz with RDS text). */
+  tunerPlayInfo: unknown;
   /** Per-zone getStatus answers; falls back to `status` for zones not listed. */
   statusByZone: Record<string, unknown> | undefined;
   distRole: string;
@@ -99,6 +101,7 @@ function makeFakeClient(features: unknown, status: unknown): FakeClient {
     tunerPresetInfo: { response_code: 0, preset_info: [] },
     clockSettings: { response_code: 0 },
     playInfo: {},
+    tunerPlayInfo: { band: "fm", fm: { freq: 100900 }, rds: { radio_text_a: "Hit" } },
     statusByZone: undefined,
     distRole: "server",
     failStatus: false,
@@ -140,7 +143,7 @@ function makeFakeClient(features: unknown, status: unknown): FakeClient {
     getClockSettings: () => state.clockSettings,
     getPlayInfo: ([source]) => {
       if (source === "tuner") {
-        return { band: "fm", fm: { freq: 100900 }, rds: { radio_text_a: "Hit" } };
+        return state.tunerPlayInfo;
       }
       if (source === "cd") {
         return { playback: "play", track: "Track 1" };
@@ -2244,5 +2247,61 @@ describe("YxcDeviceController group name", () => {
     await flush();
     expect(s.client.calls).toEqual([{ method: "getDistributionInfo", args: [] }]);
     expect(s.debugs.some(line => line.includes("longer than 128 bytes"))).toBe(true);
+  });
+});
+
+// setFreq knows only "am" and "fm" (YXC Basic §6.4) — a frequency written while DAB plays went to the
+// wrong band; DAB is tuned by service (§6.15), and switchPreset exists from API 1.17 (§6.6; C17).
+describe("YxcDeviceController tuner on DAB", () => {
+  const features = {
+    zone: [{ id: "main", func_list: ["power"], input_list: ["tuner"] }],
+    tuner: { func_list: ["fm", "dab"], preset: { type: "common", num: 30 } },
+  };
+
+  test("a frequency written while DAB plays is not sent, and the datapoint gets the device's value back", async () => {
+    const s = setup(features, { power: "on", input: "tuner" });
+    s.client.tunerPlayInfo = { band: "dab", dab: { freq: 180064 } };
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.acks.length = 0;
+    s.controller.handleStateChange("living.tuner.frequency", false, 98500);
+    await flush();
+    expect(s.client.calls.map(c => c.method)).toEqual(["getPlayInfo"]);
+    expect(s.acks).toContainEqual({ id: "living.tuner.frequency", value: 180064 });
+  });
+
+  test("on FM the frequency is sent as before", async () => {
+    const s = setup(features, { power: "on", input: "tuner" });
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.tuner.frequency", false, 98500);
+    await flush();
+    expect(s.client.calls[0]).toEqual({ method: "setFreq", args: ["fm", 98500] });
+  });
+
+  test("the DAB service buttons choose the next and previous station", async () => {
+    const s = setup(features, { power: "on", input: "tuner" });
+    await s.controller.start();
+    expect(s.objects).toContain("living.tuner.dab.serviceUp");
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.tuner.dab.serviceUp", false, true);
+    s.controller.handleStateChange("living.tuner.dab.serviceDown", false, true);
+    await flush();
+    expect(s.client.calls.filter(c => c.method === "setDabService")).toEqual([
+      { method: "setDabService", args: ["next"] },
+      { method: "setDabService", args: ["previous"] },
+    ]);
+  });
+
+  test("the preset step buttons exist from API 1.17 on", async () => {
+    const older = setup(features, { power: "on", input: "tuner" });
+    older.client.deviceInfo = { model_name: "WX-030", api_version: 1.16 };
+    await older.controller.start();
+    expect(older.objects).not.toContain("living.tuner.presetUp");
+    const newer = setup(features, { power: "on", input: "tuner" });
+    newer.client.deviceInfo = { model_name: "WX-030", api_version: 1.19 };
+    await newer.controller.start();
+    expect(newer.objects).toContain("living.tuner.presetUp");
+    expect(newer.objects).toContain("living.tuner.presetDown");
   });
 });
