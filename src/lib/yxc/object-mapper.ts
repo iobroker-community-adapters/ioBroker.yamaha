@@ -431,11 +431,14 @@ export function mapYxcToObjects(
       if (entry.create.kind === "input") {
         return hasInput;
       }
+      if (entry.create.kind === "systemFunc") {
+        return capabilities.systemFuncs?.includes(entry.create.func) ?? false;
+      }
       return zone.funcs.includes(entry.create.func);
     });
     // A zone needs an advertised function or an input to exist — the "always" status
-    // fields alone (which every entry set contains) do not create a zone.
-    if (!entries.some(entry => entry.create.kind !== "always")) {
+    // fields and the device-wide entries alone do not create a zone.
+    if (!entries.some(entry => entry.create.kind !== "always" && entry.create.kind !== "systemFunc")) {
       continue;
     }
     // Every parent — the zone channel included — is created by the per-state loop and

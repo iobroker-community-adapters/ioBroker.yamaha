@@ -67,6 +67,8 @@ export interface YxcCapabilities {
    * zone's {@link YxcZone.ranges}, for the states that belong to the device, not to a zone.
    */
   systemRanges?: Record<string, { min: number; max: number; step: number }>;
+  /** The functions the SYSTEM block declares (`party_mode`, `dimmer`, …) — getFeatures `system.func_list`. */
+  systemFuncs?: string[];
   /** The value lists the SYSTEM block declares (`hdmi_standby_through_list`), keyed by their id. */
   systemLists?: Record<string, string[]>;
   /** The counts the SYSTEM block declares (`speaker_pattern_num`, `video_preset_num`), keyed by their id. */
@@ -295,6 +297,7 @@ export function parseYxcFeatures(response: unknown): YxcCapabilities {
     }
   }
   return {
+    systemFuncs: stringList(system.func_list),
     systemRanges: parseRanges(system.range_step),
     ...(Object.keys(systemLists).length > 0 ? { systemLists } : {}),
     ...(Object.keys(systemCounts).length > 0 ? { systemCounts } : {}),

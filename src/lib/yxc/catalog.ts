@@ -23,10 +23,12 @@ export interface YxcAmpEntry {
   common: Omit<ObjectDef["common"], "name"> & { nameKey: I18nKey; descKey?: I18nKey };
   /**
    * When the state is created: `func` = only if the zone's func_list advertises that
-   * feature key; `always` = a core status field created for every active zone;
-   * `input` = only if the zone offers inputs (from input_list, not func_list).
+   * feature key; `systemFunc` = only if the SYSTEM func_list does (a device-wide feature);
+   * `always` = a core status field created for every active zone; `input` = only if the zone
+   * offers inputs (from input_list, not func_list).
    */
-  create: { kind: "func"; func: string } | { kind: "always" } | { kind: "input" };
+  create:
+    { kind: "func"; func: string } | { kind: "systemFunc"; func: string } | { kind: "always" } | { kind: "input" };
   /**
    * Where to read the value in a getStatus response: a flat field, or a nested path with an
    * optional flat fallback for devices that do not report the nested one (`volume` reads the
@@ -544,7 +546,8 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
       read: true,
       write: false,
     },
-    create: { kind: "always" },
+    // A zone without its own volume has no maximum either (RX-A2070 zone 4 — audit 2026-09-24, C10).
+    create: { kind: "func", func: "volume" },
     read: { field: "max_volume" },
     fromStatus: num,
   },
@@ -576,7 +579,9 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
       read: true,
       write: true,
     },
-    create: { kind: "always" },
+    // Only where the device declares party mode (system func_list: 3 of the 22 captures — RX-A2070,
+    // RX-V685, RX-V781); a speaker or soundbar got a party switch that did nothing (C10).
+    create: { kind: "systemFunc", func: "party_mode" },
     read: { field: "party_enable" },
     fromStatus: bool,
     write: { apply: (c, v) => c.setPartyMode(Boolean(v)) },

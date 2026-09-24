@@ -112,12 +112,23 @@ describe("mapYxcToObjects", () => {
     expect(link?.common.read).toBe(false);
   });
 
-  test("a main-only device still gets the multiroom channel from the always-present dist/party states", () => {
+  test("a main-only device still gets the multiroom channel from the always-present link state", () => {
     const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: [] });
     const ids = objs.map(o => o.id);
     expect(ids).toContain("multiroom");
     expect(ids).toContain("multiroom.group.streamingEnabled");
-    expect(ids).toContain("multiroom.partyEnable");
+  });
+
+  // A party switch on a speaker did nothing; the device declares party mode in its system
+  // func_list (3 of 22 captures), and only there the switch exists (audit 2026-09-24, C10).
+  test("the party switch exists only where the device declares party mode", () => {
+    const zones = [{ id: "main", funcs: ["power"], inputs: [] }];
+    const speaker = mapYxcToObjects({ zones, media: [], systemFuncs: ["dimmer"] }).map(o => o.id);
+    expect(speaker).not.toContain("multiroom.partyEnable");
+    const receiver = mapYxcToObjects({ zones, media: [], systemFuncs: ["party_mode"] }).map(o => o.id);
+    expect(receiver).toContain("multiroom.partyEnable");
+    expect(ids(rxA2070)).toContain("multiroom.partyEnable");
+    expect(ids(wx10)).not.toContain("multiroom.partyEnable");
   });
 
   test("a zoned device never gets zone-prefixed copies of the device-global multiroom states", () => {
@@ -188,15 +199,20 @@ describe("mapYxcToObjects", () => {
     expect(ids(rxA2070)).toEqual(expect.arrayContaining(["power", "volume", "mute", "soundProgram", "input"]));
   });
 
-  test("always-present amp fields (max volume) are created for an active zone", () => {
-    const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: [] });
-    const ids = objs.map(o => o.id);
-    expect(ids).toContain("advanced.maxVolume");
-    expect(ids).toContain("multiroom.group.streamingEnabled");
+  // A zone without its own volume has no maximum either (RX-A2070 zone 4; audit 2026-09-24, C10).
+  test("the maximum volume exists only for a zone that has a volume", () => {
+    const withVolume = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power", "volume"], inputs: [] }], media: [] });
+    expect(withVolume.map(o => o.id)).toContain("advanced.maxVolume");
+    const without = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: [] });
+    expect(without.map(o => o.id)).not.toContain("advanced.maxVolume");
+    expect(without.map(o => o.id)).toContain("multiroom.group.streamingEnabled");
+    const a2070 = ids(rxA2070);
+    expect(a2070).toContain("multiroom.zone2.advanced.maxVolume");
+    expect(a2070).not.toContain("multiroom.zone4.advanced.maxVolume");
   });
 
   test("creates intermediate channel objects for dotted amp catalog state IDs", () => {
-    const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: [] });
+    const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power", "volume"], inputs: [] }], media: [] });
     const ids = objs.map(o => o.id);
     expect(ids).toContain("advanced");
     expect(objs.find(o => o.id === "advanced")?.type).toBe("channel");
@@ -217,7 +233,7 @@ describe("mapYxcToObjects", () => {
     const objs = mapYxcToObjects({
       zones: [
         { id: "main", funcs: ["power"], inputs: [] },
-        { id: "zone2", funcs: ["power", "equalizer"], inputs: [] },
+        { id: "zone2", funcs: ["power", "volume", "equalizer"], inputs: [] },
       ],
       media: [],
     });
