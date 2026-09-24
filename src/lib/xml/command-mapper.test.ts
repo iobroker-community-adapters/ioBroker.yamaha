@@ -74,8 +74,13 @@ describe("stateToXml", () => {
     });
   });
 
-  test("dialogue level is read-only — no write command", () => {
-    expect(stateToXml("sound.dialogueLevel", 2)).toBeUndefined();
+  // desc.xml declares the write as a bare number (`Put_2`, Range 0,3,1); the controller sends it only
+  // where the zone declares it (audit 2026-09-24, D19).
+  test("the dialogue level is written as the bare number desc.xml declares", () => {
+    expect(stateToXml("sound.dialogueLevel", 2)).toEqual({
+      zone: "Main_Zone",
+      inner: "<Sound_Video><Dialogue_Adjust><Dialogue_Lvl>2</Dialogue_Lvl></Dialogue_Adjust></Sound_Video>",
+    });
   });
 
   test("maps tone, subwoofer trim and extra-bass/YPAO writes (soef lib paths)", () => {

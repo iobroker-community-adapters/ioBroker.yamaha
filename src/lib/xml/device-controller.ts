@@ -148,10 +148,11 @@ export class XmlDeviceController implements ConnectionHandle {
    * the transport keys. Read from the device description, so a receiver that declares none
    * (the 2012 entry class) offers none.
    */
-  private zoneCommands: { cursor: Set<string>; menu: Set<string>; playback: Set<string> } = {
+  private zoneCommands: { cursor: Set<string>; menu: Set<string>; playback: Set<string>; dialogue: Set<string> } = {
     cursor: new Set(),
     menu: new Set(),
     playback: new Set(),
+    dialogue: new Set(),
   };
 
   /**
@@ -246,6 +247,7 @@ export class XmlDeviceController implements ConnectionHandle {
       cursor: new Set(descriptor.cursorZones ?? []),
       menu: new Set(descriptor.menuZones ?? []),
       playback: new Set(descriptor.playbackZones ?? []),
+      dialogue: new Set(descriptor.dialogueZones ?? []),
     };
     // Claim with proof, XML edition (2.0.1): only the states whose Basic_Status field
     // this device DELIVERS are created — a blind full-catalog rollout left valueless
@@ -372,7 +374,8 @@ export class XmlDeviceController implements ConnectionHandle {
       }
     };
     try {
-      return this.deps.probeMemory ? await this.deps.probeMemory.once("xmlDescriptor", probe) : await probe();
+      // `:v2` since the parse carries the dialogue zones (2026-09-24, D19) — an older parse lacks them.
+      return this.deps.probeMemory ? await this.deps.probeMemory.once("xmlDescriptor:v2", probe) : await probe();
     } catch (e) {
       this.deps.log.debug(
         `${this.deviceId}: desc.xml probe failed, asking again on the next connect (${errorMessage(e)})`,
@@ -768,6 +771,10 @@ export class XmlDeviceController implements ConnectionHandle {
       return;
     }
     const command = stateToXml(stateId, value, this.dialect);
+    if (command && /(^|\.)sound\.dialogueLevel$/.test(stateId) && !this.zoneCommands.dialogue.has(command.zone)) {
+      this.deps.log.debug(`${this.deviceId}: ${stateId} — this zone declares no dialogue level command, write dropped`);
+      return;
+    }
     if (command) {
       // The zone to read back afterwards: the command's own element, or the main zone for a
       // command that goes out on the System element (HDMI outputs, party mode).
@@ -935,6 +942,11 @@ export class XmlDeviceController implements ConnectionHandle {
         common.min = descriptor.dialogueLevel.min;
         common.max = descriptor.dialogueLevel.max;
         common.step = descriptor.dialogueLevel.step;
+      }
+      // Writable only where the device description declares the command for this zone (D19).
+      if (entry.state === "sound.dialogueLevel" && this.zoneCommands.dialogue.has(zone.element)) {
+        common.write = true;
+        common.role = "level";
       }
       await this.deps.upsertObject(`${this.deviceId}.${stateId}`, {
         id: stateId,

@@ -149,8 +149,9 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     toInner: value => `<Sound_Video><Adaptive_DRC>${escapeXmlText(value)}</Adaptive_DRC></Sound_Video>`,
   },
   {
-    // Read-only: openHAB reads the Dialogue_Lvl path, but the write value structure
-    // (Val/Exp/Unit vs bare) is not confirmed by a reference, so no write is offered.
+    // Writable where desc.xml declares `Sound_Video,Dialogue_Adjust,Dialogue_Lvl` for the zone
+    // (`Put_2`, a bare number in `Range 0,3,1` — HTR-4069, RX-A2060, RX-V675, RX-V775, TSR-5810); the
+    // controller opens the write there and only there (audit 2026-09-24, D19). Read-only elsewhere.
     state: "sound.dialogueLevel",
     common: {
       nameKey: "dialogueLevel",
@@ -161,6 +162,8 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
       write: false,
     },
     statusField: "dialogueLevel",
+    toInner: value =>
+      `<Sound_Video><Dialogue_Adjust><Dialogue_Lvl>${Math.round(Number(value))}</Dialogue_Lvl></Dialogue_Adjust></Sound_Video>`,
   },
   {
     state: "sleep",

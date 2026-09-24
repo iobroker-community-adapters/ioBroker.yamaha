@@ -311,6 +311,7 @@ describe("parseDescriptor — the enumerations a classic receiver carries in des
       cursorZones: [],
       menuZones: [],
       playbackZones: [],
+      dialogueZones: [],
     });
   });
 });

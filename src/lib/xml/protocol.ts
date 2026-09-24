@@ -357,6 +357,8 @@ export interface XmlDescriptor {
   menuZones?: string[];
   /** The zone elements with `Play_Control,Playback` — transport keys per zone. */
   playbackZones?: string[];
+  /** The zone elements with `Sound_Video,Dialogue_Adjust,Dialogue_Lvl` — the dialogue level is writable there. */
+  dialogueZones?: string[];
 }
 
 /**
@@ -429,6 +431,7 @@ export function parseDescriptor(xml: string): XmlDescriptor {
   descriptor.cursorZones = definingZones(xml, "Cursor_Control,Cursor");
   descriptor.menuZones = definingZones(xml, "Cursor_Control,Menu_Control");
   descriptor.playbackZones = definingZones(xml, "Play_Control,Playback");
+  descriptor.dialogueZones = definingZones(xml, "Sound_Video,Dialogue_Adjust,Dialogue_Lvl");
   const dialogue = descriptorParam(xml, "Sound_Video,Dialogue_Adjust,Dialogue_Lvl").range;
   if (dialogue) {
     descriptor.dialogueLevel = dialogue;

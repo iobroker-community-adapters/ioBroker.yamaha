@@ -546,7 +546,7 @@ describe("desc.xml — the classic generation's own enumerations (2026-09-09)", 
     ]);
     expect(def("living.sleep")?.declaredStates).toBe(true);
     expect(def("living.sound.adaptiveDrc")?.common?.states).toEqual({ Auto: "Auto", Off: "Off" });
-    expect(memory.remembered("xmlDescriptor")).toMatchObject({ programs: expect.any(Array) });
+    expect(memory.remembered("xmlDescriptor:v2")).toMatchObject({ programs: expect.any(Array) });
     // The description is read once per device, not once per zone.
     expect(s.client.calls.filter(c => c.method === "getDescriptor")).toHaveLength(1);
   });
@@ -560,6 +560,36 @@ describe("desc.xml — the classic generation's own enumerations (2026-09-09)", 
     expect(def?.common?.max).toBe(3);
   });
 
+  // desc.xml declares the dialogue level's write (`Main_Zone,Sound_Video,Dialogue_Adjust,Dialogue_Lvl`,
+  // Put_2 Range 0,3,1) — it stood read-only (audit 2026-09-24, D19).
+  test("the dialogue level is writable where the description declares it, and written as a bare number", async () => {
+    const s = setup({ Main_Zone: { power: true, dialogueLevel: 1 } });
+    s.client.descriptor = readFixture("desc-rx-v675.xml");
+    await s.controller.start();
+    const def = s.defs.get("living.sound.dialogueLevel") as Def | undefined;
+    expect(def?.common).toMatchObject({ write: true, role: "level" });
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.sound.dialogueLevel", false, 2);
+    await flush();
+    expect(s.client.calls).toContainEqual({
+      method: "send",
+      zone: "Main_Zone",
+      inner: "<Sound_Video><Dialogue_Adjust><Dialogue_Lvl>2</Dialogue_Lvl></Dialogue_Adjust></Sound_Video>",
+    });
+  });
+
+  test("without that declaration the dialogue level stays read-only and a write is not sent", async () => {
+    const s = setup({ Main_Zone: { power: true, dialogueLevel: 1 } });
+    s.client.descriptor = readFixture("desc-rx-v473.xml");
+    await s.controller.start();
+    const def = s.defs.get("living.sound.dialogueLevel") as Def | undefined;
+    expect(def?.common).toMatchObject({ write: false, role: "value" });
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.sound.dialogueLevel", false, 2);
+    await flush();
+    expect(s.client.calls.filter(c => c.method === "send")).toEqual([]);
+  });
+
   test("a receiver without desc.xml keeps plain states, and the 404 is remembered as definite", async () => {
     const memory = new ProbeMemory();
     const s = setup({ Main_Zone: { power: true, soundProgram: "Standard" } });
@@ -567,7 +597,7 @@ describe("desc.xml — the classic generation's own enumerations (2026-09-09)", 
     s.client.descriptorError = new XmlHttpError("device refused the request (HTTP 404)", 404);
     await s.controller.start();
     expect((s.defs.get("living.soundProgram") as Def | undefined)?.common?.states).toBeUndefined();
-    expect(memory.remembered("xmlDescriptor")).toEqual({ programs: [], sleep: [], adaptiveDrc: [] });
+    expect(memory.remembered("xmlDescriptor:v2")).toEqual({ programs: [], sleep: [], adaptiveDrc: [] });
   });
 
   test("a transient descriptor failure is not remembered — the next connect asks again", async () => {
@@ -576,13 +606,13 @@ describe("desc.xml — the classic generation's own enumerations (2026-09-09)", 
     withMemory(s, memory);
     s.client.descriptorError = new Error("XML request timeout");
     await s.controller.start();
-    expect(memory.remembered("xmlDescriptor")).toBeUndefined();
+    expect(memory.remembered("xmlDescriptor:v2")).toBeUndefined();
   });
 
   test("a remembered description is not read again", async () => {
     const memory = new ProbeMemory({
       __schema: DISCOVERY_SCHEMA,
-      xmlDescriptor: { programs: ["Standard"], sleep: [], adaptiveDrc: [] },
+      "xmlDescriptor:v2": { programs: ["Standard"], sleep: [], adaptiveDrc: [] },
     });
     const s = setup({ Main_Zone: { power: true, soundProgram: "Standard" } });
     withMemory(s, memory);

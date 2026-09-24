@@ -10,10 +10,14 @@ describe("XML_AMP_CATALOG", () => {
   const writable = XML_AMP_CATALOG.filter(e => e.toInner);
 
   it("offers a writable mapping for every entry the objects mark writable", () => {
+    // Written only where desc.xml declares the command for the zone — the controller opens the write
+    // there (D19); the catalog carries the builder for it.
+    const WRITE_OPENED_BY_DESCRIPTOR = new Set(["sound.dialogueLevel"]);
     for (const entry of XML_AMP_CATALOG) {
       // A `write: true` common with no toInner is a datapoint the user can change
       // and that never reaches the device.
-      expect(Boolean(entry.toInner), `${entry.state} write/toInner mismatch`).toBe(entry.common.write === true);
+      const writable = entry.common.write === true || WRITE_OPENED_BY_DESCRIPTOR.has(entry.state);
+      expect(Boolean(entry.toInner), `${entry.state} write/toInner mismatch`).toBe(writable);
     }
     expect(writable.length).toBeGreaterThan(5);
   });
