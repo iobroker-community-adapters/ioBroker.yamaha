@@ -1,6 +1,6 @@
-import { buildCapabilities, type YncaCapabilities } from "../capability";
-import { decodeLine } from "../protocol";
-import type { YncaMessage } from "../protocol";
+import { buildCapabilities, type YncaCapabilities } from "../../src/lib/ynca/capability";
+import { decodeLine } from "../../src/lib/ynca/protocol";
+import type { YncaMessage } from "../../src/lib/ynca/protocol";
 
 /**
  * Build a capability report straight from recorded device lines — a TEST helper.

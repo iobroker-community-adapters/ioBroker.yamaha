@@ -24,7 +24,7 @@ import { CHANNEL_NAME_KEYS } from "../catalog/types";
 import { catalogToObjects } from "../catalog/build-objects";
 import { decode, type EnumSpec } from "../catalog/value-coerce";
 import type { YncaCapabilities } from "./capability";
-import { capabilitiesFromLines as parseCapabilities } from "./__fixtures__/capabilities-from-lines";
+import { capabilitiesFromLines as parseCapabilities } from "../../../test/helpers/capabilities-from-lines";
 import rxA810 from "./__fixtures__/RX-A810.json";
 import zoneEvidence from "./__fixtures__/zone-function-evidence.json";
 import functionEvidence from "./__fixtures__/official-function-evidence.json";
