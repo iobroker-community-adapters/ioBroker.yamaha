@@ -71,6 +71,37 @@ export function isPermanentXmlRefusal(e: unknown): boolean {
   return e instanceof XmlHttpError && (e.statusCode === 400 || e.statusCode === 404);
 }
 
+/**
+ * A probe's body with the device's verdict applied, for answers that are REMEMBERED per device: a
+ * node the model does not have (RC 2, or the bodyless HTTP 400/404) is a definite "" — remembered;
+ * RC 3/4 ("not now", a receiver in standby or busy) and every transport error throw — never
+ * remembered. The menu probe checked the body only, so a busy receiver's RC 4 was stored as "no menu"
+ * for good (audit 2026-09-24, D4).
+ *
+ * @param request the request
+ * @param what the probe, for the error message
+ * @returns the body, or "" when the model has no such node
+ */
+export async function definiteXmlBody(request: () => Promise<string>, what: string): Promise<string> {
+  let body: string;
+  try {
+    body = await request();
+  } catch (e) {
+    if (isPermanentXmlRefusal(e)) {
+      return "";
+    }
+    throw e;
+  }
+  const rc = parseReturnCode(body);
+  if (rc !== undefined && rc !== 0) {
+    if (rc === 2) {
+      return "";
+    }
+    throw new Error(`device refused ${what} (RC=${rc})`);
+  }
+  return body;
+}
+
 /** One scene as the device declares it in `<Scene_Sel_Item>`. */
 export interface XmlScene {
   /** The 1-based scene number (from the `<Param>Scene N</Param>` write value). */

@@ -925,6 +925,52 @@ describe("XmlDeviceController probe memory verdicts (audit 2026-09-02)", () => {
     expect(memory2.remembered("xmlScenes:main")).toBeUndefined();
   });
 
+  // A receiver in standby or busy answers the menu probe with RC 3/4 — "not now". The probe read only
+  // the body, stored "no menu" for good, and the device never offered its menus again (D4).
+  test("an RC 3/4 answer to the menu probe is not remembered as 'no menu'", async () => {
+    for (const rc of ["3", "4"]) {
+      const memory = new ProbeMemory();
+      const client = new FakeClient({ Main_Zone: { power: true } });
+      client.getXml = (element: string, inner: string): Promise<string> => {
+        client.calls.push({ method: "getXml", zone: element, inner });
+        return Promise.resolve(
+          inner.includes("List_Info") ? `<YAMAHA_AV rsp="GET" RC="${rc}"><${element}></${element}></YAMAHA_AV>` : "",
+        );
+      };
+      const controller = new XmlDeviceController("living", {
+        client,
+        scheduleKeepalive: () => () => {},
+        upsertObject: () => Promise.resolve(),
+        setStateAck: () => {},
+        log: silentLog,
+        gate: testGate(),
+        probeMemory: memory,
+      });
+      await controller.start();
+      expect(memory.remembered("xmlBrowseSources"), `RC ${rc}`).toBeUndefined();
+    }
+  });
+
+  test("an RC 2 answer (the model has no such menu) is remembered as none", async () => {
+    const memory = new ProbeMemory();
+    const client = new FakeClient({ Main_Zone: { power: true } });
+    client.getXml = (element: string, inner: string): Promise<string> =>
+      Promise.resolve(
+        inner.includes("List_Info") ? `<YAMAHA_AV rsp="GET" RC="2"><${element}></${element}></YAMAHA_AV>` : "",
+      );
+    const controller = new XmlDeviceController("living", {
+      client,
+      scheduleKeepalive: () => () => {},
+      upsertObject: () => Promise.resolve(),
+      setStateAck: () => {},
+      log: silentLog,
+      gate: testGate(),
+      probeMemory: memory,
+    });
+    await controller.start();
+    expect(memory.remembered("xmlBrowseSources")).toEqual([]);
+  });
+
   test("a transient failure during the menu probe leaves the menus un-remembered, not 'none' for good", async () => {
     const memory = new ProbeMemory();
     const client = new FakeClient({ Main_Zone: { power: true } });

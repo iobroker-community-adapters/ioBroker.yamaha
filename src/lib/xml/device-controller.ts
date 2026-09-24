@@ -2,11 +2,11 @@ import { channelCommon, type ObjectDef } from "../catalog/types";
 import { writableNumber } from "../catalog/value-coerce";
 import { tName } from "../i18n";
 import {
+  definiteXmlBody,
   isPermanentXmlRefusal,
   parseDescriptor,
   parseInputList,
   parseInputLabels,
-  parseReturnCode,
   parseSceneList,
   parseTunerInfo,
   type BasicStatus,
@@ -376,25 +376,8 @@ export class XmlDeviceController implements ConnectionHandle {
   }
 
   private async probeXml(key: string, element: string, inner: string): Promise<string> {
-    const probe = async (): Promise<string> => {
-      let body: string;
-      try {
-        body = await this.deps.client.getXml(element, inner);
-      } catch (e) {
-        if (isPermanentXmlRefusal(e)) {
-          return ""; // the model has no such node — definite
-        }
-        throw e; // transient — not remembered
-      }
-      const rc = parseReturnCode(body);
-      if (rc !== undefined && rc !== 0) {
-        if (rc === 2) {
-          return ""; // RC 2 = the node does not exist on this model — definite
-        }
-        throw new Error(`device refused ${element} probe (RC=${rc})`); // "not now" — not remembered
-      }
-      return body;
-    };
+    const probe = (): Promise<string> =>
+      definiteXmlBody(() => this.deps.client.getXml(element, inner), `${element} probe`);
     try {
       return this.deps.probeMemory ? await this.deps.probeMemory.once(key, probe) : await probe();
     } catch (e) {
@@ -670,15 +653,12 @@ export class XmlDeviceController implements ConnectionHandle {
     const probe = async (): Promise<string[]> => {
       const probes = await Promise.all(
         XML_BROWSE_SOURCES.map(async source => {
-          try {
-            const body = await this.deps.client.getXml(source.element, "<List_Info>GetParam</List_Info>");
-            return body.includes("<Menu_Status>") ? source.key : undefined;
-          } catch (e) {
-            if (isPermanentXmlRefusal(e)) {
-              return undefined; // this model has no menu for that source (bodyless HTTP 400)
-            }
-            throw e; // transient — "no menus" must not be remembered for good
-          }
+          // RC 3/4 or a transport error throws — "no menus" must not be remembered for good.
+          const body = await definiteXmlBody(
+            () => this.deps.client.getXml(source.element, "<List_Info>GetParam</List_Info>"),
+            `${source.element} List_Info probe`,
+          );
+          return body.includes("<Menu_Status>") ? source.key : undefined;
         }),
       );
       return probes.filter((key): key is string => key !== undefined);
@@ -1153,22 +1133,10 @@ export class XmlDeviceController implements ConnectionHandle {
    */
   private async probeZoneName(zone: XmlZone): Promise<string> {
     const probe = async (): Promise<string> => {
-      let body: string;
-      try {
-        body = await this.deps.client.getXml(zone.element, "<Config>GetParam</Config>");
-      } catch (e) {
-        if (isPermanentXmlRefusal(e)) {
-          return "";
-        }
-        throw e;
-      }
-      const rc = parseReturnCode(body);
-      if (rc !== undefined && rc !== 0) {
-        if (rc === 2) {
-          return "";
-        }
-        throw new Error(`device refused ${zone.element} Config probe (RC=${rc})`);
-      }
+      const body = await definiteXmlBody(
+        () => this.deps.client.getXml(zone.element, "<Config>GetParam</Config>"),
+        `${zone.element} Config probe`,
+      );
       const name = /<Name>\s*<Zone>([^<]*)<\/Zone>/.exec(body);
       return name ? decodeXmlText(name[1]).trim() : "";
     };
