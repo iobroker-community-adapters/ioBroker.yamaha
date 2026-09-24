@@ -22,6 +22,13 @@ Funktionalität (voller MusicCast-Reichtum). Vorbild-Adapter (Multi-Transport): 
 - **XML/YNC** (`<YAMAHA_AV>`, HTTP :80) — Steuer-API der Geräte vor ~2010; **dritter, gleichberechtigter
   Transport** (Fallback, wenn weder YNCA noch YXC antworten).
 - YNCA + YXC laufen auf einem MusicCast-AVR **parallel** (kein Konflikt) — pro Gerät/Fähigkeit geroutet.
+- **Zeichensatz:** Gerätetext wird als BYTES gesammelt und EINMAL dekodiert (`util.ts` `decodeDeviceText`: strikt
+  UTF-8, sonst Latin-1) — YNCA je Zeile, HTTP je Antwortkörper; nie je Paket, sonst zerbricht ein Umlaut an der
+  Paketgrenze. Geschrieben wird Latin-1 nur, wo die Liste es deklariert (YNCA `ZONENAME`/`ZONEBNAME`, XML-desc
+  `Text 1,9,Latin-1`); ein Namens-Schreibvorgang läuft durch `textWriteProblem` (Steuerzeichen, Länge, Latin-1).
+- **YNCA-Generation aus dem Gerät, nie aus `SYS:VERSION`:** `yncaGenerationEvidence` — Subunit SERVER = 2012+
+  (`Return`/`One`), PC = 2010/11 (`Back`/`Single`); Zonen-`TONEMODE` = MusicCast-Generation (Zonen-Klang ±6/0,5,
+  sonst die offizielle ±10/2). Die Protokollhälfte von `SYS:VERSION` trennt keine Generation (gemessen).
 
 ## Befehls-Schleuse (`lib/lifecycle/command-gate.ts`) — JEDER Gerätebefehl geht hier durch
 
@@ -34,7 +41,12 @@ Yamaha-Spezifikation via ynca-python `protocol.py`; YXC/XML 0 ms, aber serialisi
 vertragen keine parallelen Anfragen), **Vorrang** (`"user"` überholt `"background"`, sonst wartet ein
 Tastendruck hinter dem Sweep; Nutzerbefehle behalten untereinander ihre Reihenfolge), **Abbruch**
 (`close()` leert die Warteschlange, bricht `signal` ab, `gate.delay()` löst sofort auf → EIN
-Abschalt-Kennzeichen statt drei Eigenbauten; `gate.closed` gated jeden `emit()` der Controller).
+Abschalt-Kennzeichen statt drei Eigenbauten; `gate.closed` gated jeden `emit()` der Controller;
+`DeviceSupervisor.close()` bricht auch einen LAUFENDEN Verbindungsversuch ab und schließt jede schon gebaute
+Verbindung). **YNCA-Absagen ordnet nur eine Klammer zu:** ein Nutzer-PUT läuft als EINE Schleusen-Operation
+zwischen zwei `@SYS:VERSION=?`-Markern (der vordere nur nach Hintergrundverkehr); nur eine Absage INNERHALB
+der Klammer ist das Urteil über den PUT — gemessen kommt eine Absage bis 1,5 s später, hinter der nächsten
+Zeile; der Pad-Dialekt kommt aus einer geklammerten Probe, nie aus einem Tastendruck.
 YNCA schleust in `writeLine` (send=user, get=background), YXC/XML im Client-Konstruktor
 (Schreibbefehle am Endpunkt-Verb erkannt: `set|recall|toggle|start|stop|manage|prepare`). Deshalb
 brauchen die Browse-Treiber KEINE eigene Pause mehr. Vorbild: nut2 `nut-client.ts`-Warteschlange.
@@ -56,18 +68,26 @@ einmal, jeder Write an den Owner. **Wiederkehrende Antworten werden pro Gerät g
 `main.ts` neben dem Subunit-Cache, seit 2.0.0 PERSISTIERT im Geräteobjekt `native.probeCache` —
 s. „Schnellstart" unten): YXC-`getFeatures`/Modell/Name
 und die XML-Browse-Quellen-Probe sind über die Gerätelaufzeit konstant — ein Reconnect fragt sie nicht
-erneut. Der YNCA-Subunit-Cache prüft die Identität jetzt ZUERST (2 Abrufe Modell+Firmware, ~0,2 s) und
+erneut; **vom Nutzer umbenennbare Namen** (MusicCast-`getNameText`, XML-Eingangs-/Szenen-/Zonennamen) werden
+dagegen bei JEDER Verbindung frisch gelesen, das Gedächtnis ist nur Rückfall (`ProbeMemory.refresh`). Der YNCA-Subunit-Cache prüft die Identität jetzt ZUERST (2 Abrufe Modell+Firmware, ~0,2 s) und
 sweept erst danach; vorher kostete ein veralteter Cache Sweep→Probe→Sweep (~40 s, langsamer als ohne
 Cache). Die Ausfall-Erkennung der beiden Poll-Transporte liegt gemeinsam in
 `lib/lifecycle/poll-drop-detector.ts`, die YXC-Zonen-Präfixe in `lib/yxc/zones.ts` (die frühere
 Dreifach-Pflege hatte den Zonen-Equalizer-Cache gebrochen). `coordinate()` schreibt nur noch
-GEÄNDERTE Objekt-Definitionen (Fingerabdruck je Id) — ein flackerndes Gerät schrieb sonst alle paar
-Minuten ~250 unveränderte Objekte neu. **Reconnect ist zweistufig:** Der Ausfall EINES Transports schließt nur ihn —
-das Handle baut ihn über seine Factory mit eigenem Backoff neu auf und re-koordiniert danach den Baum
-(idempotente Upserts, Ownership neu), während die anderen Transporte durchlaufen. Erst wenn der LETZTE lebende
+GEÄNDERTE Objekt-Definitionen (Fingerabdruck je Id, die Karte hält `main.ts` je Gerät über Reconnects;
+jede Purge-/Aufräum-Id fällt heraus, sonst fehlt einem zurückkehrenden Kind der Elternkanal) — ein flackerndes
+Gerät schrieb sonst alle paar Minuten ~250 unveränderte Objekte neu. **Werte entdoppelt die Datenbank, nie der
+Controller:** jeder Controller liefert jeden Wert (`setStateChangedAsync` vergleicht), und der
+Transport-Adapter liefert einer neu gewonnenen Id sofort ihren letzten Wert nach. **Reconnect ist zweistufig:** Der Ausfall EINES Transports schließt nur ihn und
+koordiniert sofort neu — ein lebender Transport übernimmt jede Id, die er VERTRÄGLICH baut (gleicher Typ,
+gleiche Einheit, verträgliche Werteliste; `sleep`, `input`, `soundProgram`, Bass/Höhen/Subwoofer bleiben beim
+Abgerissenen und verwerfen Schreibvorgänge) —; das Handle baut ihn über seine Factory mit eigenem Backoff neu auf
+und re-koordiniert nach der Rückkehr den Baum (idempotente Upserts, Ownership neu), während die anderen
+Transporte durchlaufen. Erst wenn der LETZTE lebende
 Transport wegfällt, meldet das Handle den Drop an den Supervisor, der die ganze Menge neu verbindet. YXC/XML
 melden Drop nach mehreren erfolglosen Keepalive-Polls, YNCA über das echte Socket-Drop-Event (Drops vor der
-Handler-Registrierung werden gelatcht — im Client wie im Handle).
+Handler-Registrierung werden gelatcht — im Client wie im Handle; `start()` iteriert eine KOPIE der lebenden
+Menge, und reißen dabei alle ab, gibt es keine „ready"-Zeile, sondern keine Verbindung).
 
 **YNCA-Init ist ein 2-Pass-Sweep** (`device-controller.ts` `sweepDevice`): erst eine `AVAIL=?`-Probe je
 Katalog-Subunit (~2 s; SYS antwortet nie auf AVAIL und wird immer gesweept), dann der gezielte Sweep nur über
@@ -170,7 +190,11 @@ Gerät je ein Event** (beim Lib-Ersatz v0.9.0 verloren gegangen, per Referenz-Te
 HTTP-Server abgesichert). Der 5-Minuten-Keepalive-Poll erneuert die Anmeldung. YXC-Schreibbefehle laufen
 direkt über `write.apply`-Funktionen im Katalog (kein Methodennamen-Switch mehr; nur Equalizer/Tuner-Frequenz
 bleiben deklarativ, weil sie Controller-Zustand brauchen). YXC-Push: ein geteilter UDP-Empfänger
-(`yxc/push-receiver.ts`) auf :41100, per Quell-IP geroutet. Discovery: SSDP-M-SEARCH + HTTP-`fetch` in `main.ts`
+(`yxc/push-receiver.ts`) auf :41100, geroutet per aufgelöster Quell-IP (Hostnamen-Zeilen werden aufgelöst), sonst
+per `device_id` im Ereignis; ob die Ereignisse eines Geräts WIRKLICH ankommen, urteilt `yxc/push-liveness.ts`
+(zwei Änderungen ohne Ereignis → wie ohne Push: Voll-Abfrage je Keepalive, jeder Schreibvorgang zurückgelesen).
+**Jeder Schreibvorgang wird gespiegelt:** YNCA liest nach jedem PUT zurück, MusicCast und XML auch nach einer
+Ablehnung — ein abgelehnter Wert steht nie länger als ein Rücklesen auf dem Datenpunkt. Discovery: SSDP-M-SEARCH + HTTP-`fetch` in `main.ts`
 (adapter-Timer, sonst S5005), reine Logik in `lib/discovery.ts`.
 
 ## Chroniken — verlegt nach `.claude/dev-history.md` (2026-09-21)
@@ -204,11 +228,13 @@ gesetzt), `mergeIdentity`. Drei Quellen liefern dieselbe Nummer (am RX-V6A gemes
   `xmlIdentity`); `DeviceProfileStore.identity()` leitet sie ab, `main.ts` `learnIdentity` schreibt sie an
   `deviceRecords`, `native.identity` und — bei gefundenen Geräten — in `discovered.json`. **Die Objekt-Id bleibt
   für immer** (`staleObjects` löscht jeden Baum, dessen Id wandert); die Identität ist der Abgleichsschlüssel
-  DANEBEN. `mergeDiscovered` matcht zuerst nach Identität (Umbenennung + Umzug halten den Baum), dann nach Id.
+  DANEBEN. `mergeDiscovered` matcht zuerst nach Identität (Umbenennung + Umzug halten den Baum), dann nach Id — nach Id nur
+  ohne widersprechende Identität (sonst Kollision); `mergeIdentity` ERSETZT bei widersprechender Seriennummer.
 
 **Drei Herkünfte** (`DeviceSource`): `manual` = getippt → Adresse gilt, volle Konsequenz, der Adapter folgt
 nicht (eine `warn`-Zeile je neuer Adresse, `warnedElsewhere`); `migrated` = die Zeile der 0.5.4-Migration
-(`isDottedQuad(name)` — nur `legacyDeviceRow` schreibt so) → folgt dem Gerät und schreibt die neue Adresse in
+(`isDottedQuad(name)` — `legacyDeviceRow` schreibt so; `addDevice` speichert eine getippte Zeile mit Name = IP
+ohne Namen, damit sie `manual` bleibt) → folgt dem Gerät und schreibt die neue Adresse in
 die Tabelle (`updateTableAddress`, Neustart); `discovered` → folgt. Unter `auto` zählt nur eine GETIPPTE Zeile
 als „Liste gefüllt" (`searchesTheNetwork`), sonst wäre eine migrierte Anlage nie zu finden. **Eine Suche
 läuft nie vor den Tabellenzeilen** (`autoDiscover` mit gefüllter Tabelle: Hintergrund) — ein Fund wird gegen
@@ -439,6 +465,8 @@ in ein öffentliches Repo.
   die Objekte VOR `onTransports`; die Zustandsdatenbank startet leer, auch wenn die Objekte gesät
   sind), und die Ruhe-Schleife vergleicht den INHALT der verglichenen Felder statt der Zeilenzahl.
 - **`npm run build` gehört von Hand davor** — der Lauf startet den Adapter aus `build/`.
+- **Die Aufstiegs-Suite vergleicht auch `icon`** (`COMPARED` in `test/inventory.js`): das Geräte-Piktogramm wird
+  beim Start aus dem gemerkten Modell geheilt, und nichts anderes bemerkte ein Gerät mit veraltetem.
 - **Zwei Fehler fand schon der erste Lauf**, beide unsichtbar für Quelltext-Gate, Rollen-Gate und
   906 Tests, weil beide erst im GEBAUTEN Baum entstehen: (a) `player.browse` trug einen festen
   englischen Ordnernamen — Namens- und Erklärungstabelle sind unabhängig, `browse` stand nur in der
@@ -502,6 +530,9 @@ in ein öffentliches Repo.
     Invarianten-Wächter, im Quelltext begründet); die vier anderen vom 22.08. (M9, X1, Y1, Y13) waren toter
     bzw. doppelter Code und sind am 02.09. samt Zwillingen entfernt — ein Überlebender außerhalb X2/X4 ist eine Testlücke.
 - **HW-freies Testen:** `ynca`-Python bringt debug-server + echte Geräte-Logs → YNCA-Client dagegen testbar.
+- **Test-Helfer liegen in `test/helpers/`, nie unter `src/**/__fixtures__`** — der Build übersetzt jedes `.ts`
+  unter `src/` außer `*.test.ts`, npm liefert es aus (`src/lib/build-scope.test.ts` wird rot). JSON-Fixtures
+  dürfen in `src/` liegen, solange keine Produktivdatei sie importiert.
 
 ## Befehle
 
@@ -515,13 +546,16 @@ Drei Flächen, jede Aussage lebt an genau EINER Stelle:
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | `README.md`                                | Schaufenster: was ist das, Voraussetzungen, Konfiguration in Kurzform, Wiki-Tabelle                                       | Konsistenz-Audit (Pflicht-Abschnitte + Reihenfolge), Prüfbot E6006 |
 | `docs/en/README.md` · `docs/de/README.md`  | der Kurzweg, den ioBroker über `common.docs` ausliefert und der Admin anzeigt — kanonisch für Einrichtung und Fehlersuche | `audit_common_docs`, Konsistenz-Stufe 2                            |
-| Wiki (`Entwicklung/iobroker.yamaha.wiki/`) | die Tiefe: Umstieg, Protokolle, Datenpunkte, Geräte, Fehlersuche — 14 Inhaltsseiten = 7 Paare EN+DE, handgeschrieben      | **KEINS**                                                          |
+| Wiki (`Entwicklung/iobroker.yamaha.wiki/`) | die Tiefe: Umstieg, Protokolle, Datenpunkte, Geräte, Fehlersuche — 14 Inhaltsseiten = 7 Paare EN+DE, handgeschrieben      | Gate A13 (Form, Ids, Sync)                                         |
 
-⚠️ **Das Wiki sieht kein Gate.** Es ist ein eigenes git-Repo (`…/ioBroker.yamaha.wiki.git`), der
-Release-Commit fasst es nicht an, und es gibt hier keinen Generator, der die Drift auffinge. Nach
-jedem Release, das Datenpunkte, Verhalten oder die Admin-Oberfläche ändert, gehören die betroffenen
-Wiki-Seiten von Hand nachgezogen — besonders `Datapoints`/`Datenpunkte` und `Upgrade`/`Umstieg`.
-Das Wiki trägt bewusst KEIN Einrichtungs-Kapitel; das steht in `docs/` und stünde sonst doppelt.
+**Das Wiki prüft Gate A13** (`../scripts/check-wiki.py`, seit 2026-09-12): Klon sauber, Gegenstelle auf
+demselben Stand, Sprachpaare, Sidebar, keine erfundene Datenpunkt-Id, neue Datenpunkt-Arten dokumentiert. Es ist
+ein eigenes git-Repo (`…/ioBroker.yamaha.wiki.git`), der Release-Commit fasst es nicht an — der Wiki-Commit
+wird VOR dem Release-Vorlauf gepusht, sonst hält A13 (R2). Den INHALT prüft kein Gate: nach jedem Release, das
+Datenpunkte, Verhalten oder die Admin-Oberfläche ändert, gehören die betroffenen Seiten von Hand nachgezogen —
+besonders `Datapoints`/`Datenpunkte` und `Upgrade`/`Umstieg`.
+Die Wiki-Seite `Setup`/`Einrichtung` erklärt nur, was darunter passiert; die Einrichtung selbst steht in `docs/`
+und stünde sonst doppelt.
 
 ## Versionshistorie
 
