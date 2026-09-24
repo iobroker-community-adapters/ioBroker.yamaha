@@ -36,6 +36,7 @@ import {
   stripNamespace,
 } from "./lib/pure-helpers";
 import { DeviceBody, errorMessage } from "./lib/util";
+import { migrateNativeKeys, type NativeKeyMigration } from "./lib/native-key-migration";
 import { tName } from "./lib/i18n";
 import { discoverYamaha, probeDescription, type DiscoveredDevice } from "./lib/discovery";
 import { SsdpListener, type SsdpNotify } from "./lib/ssdp-listener";
@@ -90,6 +91,24 @@ const FETCH_TIMEOUT_MS = 4000;
 const SSDP_SEARCH_BURST = 3;
 /** Spacing between the repeated M-SEARCH sends, inside the collect window. */
 const SSDP_SEARCH_INTERVAL_MS = 1000;
+
+/**
+ * Instance settings an earlier release declared and this one no longer reads. js-controller adds a
+ * missing key on an update but never removes one, so each stayed in every installation for good.
+ * Where the code still takes a value over, that happens BEFORE the drop: `ip` becomes the device
+ * table row (`migrateLegacyDevice`), `group_zones` folds into `group_multiroom`
+ * (`migrateGroupZones`), and every device writes the 2.8.0 `volumeAsPercent` switch down as its own
+ * answer (`ensureDeviceHeader`) — which is why the drop runs after the devices were set up.
+ */
+const NATIVE_KEY_MIGRATIONS: NativeKeyMigration[] = [
+  { drop: "ip" }, // 0.5.x — the single receiver's address
+  { drop: "intervall" }, // 0.5.x — the XML poll interval, now `xmlPollInterval`
+  { drop: "refreshOnRealtime" }, // 0.5.x — realtime refresh
+  { drop: "useRealtime" }, // 0.5.x — realtime events
+  { drop: "hasXmlDevice" }, // until 0.14.0
+  { drop: "group_zones" }, // until 0.17.0 — the zones group joined the multiroom group
+  { drop: "volumeAsPercent" }, // 2.8.0 — the percent switch is a device setting since 2.9.0
+];
 
 /** The three transports in attempt order — also the per-transport `info.transports.*` state ids. */
 const TRANSPORT_IDS = ["ynca", "yxc", "xml"] as const;
@@ -415,6 +434,11 @@ export class Yamaha extends utils.Adapter {
         } catch (e) {
           this.log.error(`${device.id}: could not be set up (${errorMessage(e)}) — the other devices continue`);
         }
+      }
+      // Every running device wrote the old percent switch down in its header by now — the
+      // settings earlier releases declared can go.
+      if (!this.unloading) {
+        await this.dropObsoleteSettings([...devices, ...idle]);
       }
       // After the table rows, like the search: an announcement is read against the RUNNING set —
       // heard before, a moved device was taken for a stranger (audit 2026-09-24, A8).
@@ -2055,6 +2079,30 @@ export class Yamaha extends utils.Adapter {
    * belong to the multiroom group. Existing installs that had zones on but multiroom
    * off would otherwise lose their zone datapoints after the update.
    */
+  /**
+   * Remove the settings earlier releases declared ({@link NATIVE_KEY_MIGRATIONS}). The 2.8.0
+   * percent switch stays while a known device has not written its own answer down yet — an idle
+   * device is not written to in a run it does not take part in, so it inherits the switch the next
+   * time it runs, and the key goes then. The write restarts the instance once; nothing after this
+   * point binds anything that restart would leave behind.
+   *
+   * @param known every device of this run, running and idle
+   */
+  private async dropObsoleteSettings(known: readonly DeviceRecord[]): Promise<void> {
+    let migrations = NATIVE_KEY_MIGRATIONS;
+    if (this.legacyVolumePercent) {
+      for (const device of known) {
+        const own = ((await this.getObjectAsync(device.id))?.native as { volumeAsPercent?: unknown } | undefined)
+          ?.volumeAsPercent;
+        if (typeof own !== "boolean") {
+          migrations = migrations.filter(m => !("drop" in m && m.drop === "volumeAsPercent"));
+          break;
+        }
+      }
+    }
+    await migrateNativeKeys(this, migrations, errorMessage);
+  }
+
   private async migrateGroupZones(): Promise<void> {
     const config = this.config as unknown as Record<string, unknown>;
     if (!("group_zones" in config)) {

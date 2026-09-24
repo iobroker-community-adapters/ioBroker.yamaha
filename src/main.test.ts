@@ -4067,6 +4067,36 @@ describe("switching one device to percent while the adapter runs", () => {
     expect((ctx.i.objects.get("Living_room")?.native as { volumeAsPercent?: boolean }).volumeAsPercent).toBe(false);
   });
 
+  // js-controller never deletes a native key: every key an earlier release declared stayed in
+  // every installation for good. They go once, AFTER every device wrote the percent switch down —
+  // dropped first, the inheritance above would have nothing left to inherit (round 38, 2026-09-24).
+  it("the settings an earlier release declared are removed once the devices took the percent switch down", async () => {
+    const ctx = setup();
+    ctx.i.foreignObjects.set("system.adapter.yamaha.0", {
+      native: { volumeAsPercent: true, intervall: 30, useRealtime: true, hasXmlDevice: false, devices: [] },
+    });
+    await ctx.i.onReady();
+    await flush();
+    expect((ctx.i.objects.get("Living_room")?.native as { volumeAsPercent?: boolean }).volumeAsPercent).toBe(true);
+    const native = (ctx.i.foreignObjects.get("system.adapter.yamaha.0") as { native: Record<string, unknown> }).native;
+    expect(native).toMatchObject({ volumeAsPercent: null, intervall: null, useRealtime: null, hasXmlDevice: null });
+    expect(native.devices).toEqual([]);
+  });
+
+  it("the old percent switch stays while a device that is not running has not taken it down yet", async () => {
+    mocks.discoveredStore.devices = [{ id: "Found_one", ip: "192.168.1.99" }];
+    const ctx = setup({ discovery: "never" });
+    ctx.i.foreignObjects.set("system.adapter.yamaha.0", { native: { volumeAsPercent: true, intervall: 30 } });
+    ctx.i.objects.set("Found_one", { type: "device", common: {}, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    const native = (ctx.i.foreignObjects.get("system.adapter.yamaha.0") as { native: Record<string, unknown> }).native;
+    expect(native.intervall).toBeNull();
+    expect(native.volumeAsPercent).toBe(true);
+    // An idle device is not written to — it takes the switch down the next time it runs.
+    expect(ctx.i.objects.get("Found_one")?.native).toEqual({});
+  });
+
   it("an upgraded instance hands its old instance-wide switch to every device, once", async () => {
     const ctx = setup();
     ctx.i.foreignObjects.set("system.adapter.yamaha.0", { native: { volumeAsPercent: true } });
