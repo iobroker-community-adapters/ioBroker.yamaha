@@ -88,6 +88,7 @@ describe("BrowseEngine", () => {
     engine.seed();
     const byId = Object.fromEntries(emitted.map(e => [e.id, e.value]));
     expect(byId["player.browse.busy"]).toBe(false);
+    expect(byId["player.browse.source"]).toBe(""); // audit 2026-09-24, D15
     expect(byId["player.browse.path"]).toBe("");
     expect(byId["player.browse.menuName"]).toBe("");
     expect(byId["player.browse.layer"]).toBe(0);
