@@ -26,6 +26,7 @@
   "dmDelete": "删除",
   "dmEditTitle": "编辑 Yamaha 设备",
   "dmDeleteConfirm": "删除\"%s\"及其所有数据点？其历史记录和可视化绑定将丢失。网络搜索找到的设备在您手动添加之前不会再次被添加。",
+  "dmActionFailed": "操作失败：%s",
   "ipLabel": "IP",
   "datapointsHeader": "数据点",
   "datapointsHint": "选择将哪些功能组创建为数据点。关闭的组不会创建，已有对象会被移除。",

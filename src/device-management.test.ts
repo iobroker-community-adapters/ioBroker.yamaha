@@ -401,6 +401,31 @@ describe("YamahaDeviceManagement", () => {
     expect(info.actions.map(a => a.id)).toEqual(["add", "excluded"]);
   });
 
+  // A database call failing inside an action rejected into dm-utils, which only logs — the admin's
+  // progress bar ran until it gave up (audit 2026-09-24, A18).
+  describe("a failing action answers the dialog", () => {
+    it("add and the excluded list say what failed and answer with a reload", async () => {
+      const i = make([living]);
+      adapter.extendForeignObjectAsync.mockRejectedValue(new Error("objects db read-only"));
+      const ctx = mockContext({ form: { name: "Bedroom", ip: "192.168.1.30" } });
+      const add = i.getInstanceInfo().actions.find(action => action.id === "add");
+      await expect(add?.handler(ctx)).resolves.toEqual({ refresh: true });
+      expect(ctx.showMessage).toHaveBeenCalledTimes(1);
+      expect(adapter.log.error).toHaveBeenCalledWith(expect.stringContaining("add failed (objects db read-only)"));
+    });
+
+    it("one card whose reads fail does not cost the others", async () => {
+      const i = make([living, kitchen]);
+      adapter.getForeignStateAsync.mockImplementation((id: string) =>
+        id.includes("Living") ? Promise.reject(new Error("states db gone")) : Promise.resolve(null),
+      );
+      const out: unknown[] = [];
+      await i.loadDevices({ addDevice: (c: unknown) => out.push(c) });
+      expect(out).toHaveLength(1);
+      expect(adapter.log.error).toHaveBeenCalledWith(expect.stringContaining("could not be shown"));
+    });
+  });
+
   describe("add", () => {
     it("appends the device and trims what the user typed", async () => {
       const i = make([living]);

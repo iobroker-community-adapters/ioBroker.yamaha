@@ -3,7 +3,7 @@ import { createSocket } from "node:dgram";
 import { get as httpGet } from "node:http";
 import { networkInterfaces } from "node:os";
 import { attemptDevice } from "./lib/attempt-device";
-import { searchInterfaces } from "./lib/network-interfaces";
+import { isIPv4, resolveIPv4, searchInterfaces } from "./lib/network-interfaces";
 import { isGroupEnabled } from "./lib/catalog/groups";
 import { writableNumber } from "./lib/catalog/value-coerce";
 import type { ObjectDef } from "./lib/catalog/types";
@@ -192,6 +192,13 @@ export class Yamaha extends utils.Adapter {
   private readonly deviceRecords = new Map<string, DeviceRecord>();
   /** The addresses of all supervised devices — a multiroom group resolves its clients through it. */
   private readonly knownDeviceIps = new Set<string>();
+  /**
+   * deviceId → the IPv4 address a row's HOSTNAME resolves to. Every packet the adapter matches (an
+   * SSDP answer, a NOTIFY, a MusicCast event) carries the numeric source address; compared with the
+   * name, a migrated `yamaha.fritz.box` row was started a second time or warned about as "elsewhere"
+   * (audit 2026-09-24, A12).
+   */
+  private readonly resolvedHosts = new Map<string, string>();
   /** Whether the network search runs in this instance — see {@link searchesTheNetwork}. */
   private discovering = false;
   /**
@@ -449,6 +456,15 @@ export class Yamaha extends utils.Adapter {
     this.deviceConnected.set(device.id, false);
     this.deviceRecords.set(device.id, { ...device });
     this.knownDeviceIps.add(device.ip);
+    if (!isIPv4(device.ip)) {
+      const resolved = await resolveIPv4(device.ip);
+      if (resolved) {
+        this.resolvedHosts.set(device.id, resolved);
+        this.knownDeviceIps.add(resolved);
+      } else {
+        this.log.debug(`${device.id}: ${device.ip} does not resolve to an IPv4 address right now`);
+      }
+    }
     // What the search learned about the device rides on the record; the device object gets it
     // now (persistDeviceNative needs the record above), the header read below merges what the
     // object already carried from earlier runs.
@@ -996,6 +1012,11 @@ export class Yamaha extends utils.Adapter {
     if (record) {
       this.knownDeviceIps.delete(record.ip);
     }
+    const resolved = this.resolvedHosts.get(deviceId);
+    if (resolved) {
+      this.knownDeviceIps.delete(resolved);
+      this.resolvedHosts.delete(deviceId);
+    }
     this.deviceRecords.delete(deviceId);
     this.deviceConnected.delete(deviceId);
     this.readyDevices.delete(deviceId);
@@ -1054,6 +1075,14 @@ export class Yamaha extends utils.Adapter {
       this.removed.delete(id);
     }
     const receiver = this.pushReceiver;
+    if (!this.discovering && !this.unloading && lifted.length > 0) {
+      // The user admitted a device and nothing will look for it — say so instead of nothing
+      // (audit 2026-09-24, A18).
+      this.log.info(
+        `${lifted.join(", ")}: admitted again — the network search is off; add it by hand or set the search to Always`,
+      );
+      return;
+    }
     if (!this.discovering || !receiver || this.unloading) {
       return;
     }
@@ -2113,7 +2142,7 @@ export class Yamaha extends utils.Adapter {
           schedule: (handler, ms) => (this.unloading ? undefined : this.setTimeout(handler, ms)),
           cancel: handle => this.clearTimeout(handle),
         },
-        registerPush: (ip, onPush) => pushReceiver.register(ip, onPush),
+        registerPush: (ip, onPush, deviceId) => pushReceiver.register(ip, onPush, deviceId),
         pushActive: () => pushReceiver.isListening(),
         scheduleKeepalive: (handler, ms) => {
           if (this.unloading) {
@@ -2367,8 +2396,11 @@ export class Yamaha extends utils.Adapter {
       ),
     );
     const running = [...this.deviceRecords.values()];
+    // Whether a record sits at an address — its typed one, or what its typed hostname resolves to.
+    const at = (record: DeviceRecord, ip: string): boolean =>
+      record.ip === ip || this.resolvedHosts.get(record.id) === ip;
     for (const device of found) {
-      const own = running.find(record => record.source !== "discovered" && record.ip === device.ip);
+      const own = running.find(record => record.source !== "discovered" && at(record, device.ip));
       if (own && device.identity) {
         this.learnIdentity(own.id, device.identity);
       }
@@ -2385,7 +2417,7 @@ export class Yamaha extends utils.Adapter {
     const excluded = await readExcluded(excludedStoreDeps(this));
     const manual = parseDevices(this.config.devices);
     const manualIds = new Set(manual.map(device => device.id));
-    const manualIps = new Set(manual.map(device => device.ip));
+    const manualIps = new Set(manual.flatMap(device => [device.ip, this.resolvedHosts.get(device.id) ?? device.ip]));
     const moved: DeviceRecord[] = [];
     const kept = merged.filter(device => {
       if (
@@ -2400,7 +2432,7 @@ export class Yamaha extends utils.Adapter {
         record => record.source !== "discovered" && sameDevice(record.identity, device.identity),
       );
       if (twin) {
-        if (twin.ip === device.ip) {
+        if (at(twin, device.ip)) {
           return false;
         }
         if (twin.source === "migrated") {

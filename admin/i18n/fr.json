@@ -26,6 +26,7 @@
   "dmDelete": "Supprimer",
   "dmEditTitle": "Modifier l'appareil Yamaha",
   "dmDeleteConfirm": "Supprimer « %s » avec tous ses points de données ? Son historique et les liaisons de visualisation seront perdus. Un appareil trouvé par la recherche réseau ne sera pas rajouté tant que vous ne l'ajoutez pas à la main.",
+  "dmActionFailed": "L'action a échoué : %s",
   "ipLabel": "IP",
   "datapointsHeader": "Points de données",
   "datapointsHint": "Choisissez les groupes de fonctions créés comme points de données. Un groupe désactivé n'est pas créé et les objets existants sont supprimés.",

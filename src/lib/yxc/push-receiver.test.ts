@@ -237,6 +237,51 @@ describe("YxcPushReceiver", () => {
   });
 });
 
+describe("YxcPushReceiver routing beyond the literal address (audit 2026-09-24, C2/C19)", () => {
+  // A row that kept the hostname the 0.5.x adapter used never received an event: they come from
+  // the numeric address.
+  test("a hostname registration is resolved and routes by the resolved address", async () => {
+    const fake = new FakeSocket();
+    const d = makeDeps();
+    const receiver = new YxcPushReceiver(
+      { ...d.deps, resolve: host => Promise.resolve(host === "yamaha.fritz.box" ? "192.168.1.5" : undefined) },
+      () => fake,
+    );
+    const seen: unknown[] = [];
+    receiver.register("yamaha.fritz.box", e => seen.push(e));
+    await new Promise(resolve => setImmediate(resolve));
+    receiver.start();
+    fake.emitMessage(JSON.stringify({ main: { power: "on" } }), "192.168.1.5");
+    expect(seen).toEqual([{ main: { power: "on" } }]);
+  });
+
+  // YXC Basic Rev 1.10 §11.3: every event carries the device_id getDeviceInfo reports.
+  test("routes by device_id when the source address is not registered", () => {
+    const fake = new FakeSocket();
+    const receiver = new YxcPushReceiver(makeDeps().deps, () => fake);
+    const seen: unknown[] = [];
+    receiver.register("192.168.1.5", e => seen.push(e), "ccd42ecf0223");
+    receiver.start();
+    fake.emitMessage(JSON.stringify({ device_id: "CCD42ECF0223", main: { volume: 40 } }), "10.0.0.9");
+    fake.emitMessage(JSON.stringify({ device_id: "000000000000", main: { volume: 1 } }), "10.0.0.9");
+    expect(seen).toEqual([{ device_id: "CCD42ECF0223", main: { volume: 40 } }]);
+  });
+
+  // A reconnect registers again before the old connection's cleanup runs; the old unregister
+  // deleted by address and took the new handler with it.
+  test("an old unregister does not remove a newer registration of the same device", () => {
+    const fake = new FakeSocket();
+    const receiver = new YxcPushReceiver(makeDeps().deps, () => fake);
+    const seen: string[] = [];
+    const oldUnregister = receiver.register("192.168.1.5", () => seen.push("old"));
+    receiver.register("192.168.1.5", () => seen.push("new"));
+    oldUnregister();
+    receiver.start();
+    fake.emitMessage("{}", "192.168.1.5");
+    expect(seen).toEqual(["new"]);
+  });
+});
+
 describe("YxcPushReceiver on a real dgram socket", () => {
   beforeEach(() => {
     dgramMock.sockets.length = 0;

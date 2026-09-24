@@ -1,4 +1,5 @@
 import { createSocket } from "node:dgram";
+import { isIPv4, resolveIPv4 } from "../network-interfaces";
 
 /** The UDP port MusicCast devices push unsolicited events to. */
 const YXC_PUSH_PORT = 41100;
@@ -63,6 +64,8 @@ export interface YxcPushReceiverDeps {
   schedule(handler: () => void, ms: number): ioBroker.Timeout | undefined;
   /** Cancel a scheduled rebind. */
   cancel(handle: ioBroker.Timeout | undefined): void;
+  /** Resolve a hostname registration to its IPv4 address (default: DNS; injectable for tests). */
+  resolve?(host: string): Promise<string | undefined>;
 }
 
 /**
@@ -81,6 +84,11 @@ export interface YxcPushReceiverDeps {
 export class YxcPushReceiver {
   private socket: YxcPushSocket | undefined;
   private readonly handlers = new Map<string, (event: unknown) => void>();
+  /**
+   * The same handlers by the MusicCast `device_id` the events carry (YXC Basic Rev 1.10 §11.3, from
+   * API 1.17) — the fallback when the source address is not the registered one (audit 2026-09-24, C2).
+   */
+  private readonly byDeviceId = new Map<string, (event: unknown) => void>();
   private listening = false;
   private closed = false;
   private retryTimer: ioBroker.Timeout | undefined;
@@ -97,16 +105,50 @@ export class YxcPushReceiver {
   ) {}
 
   /**
-   * Register a handler for pushes from a device IP.
+   * Register a handler for pushes from a device.
    *
-   * @param ip the device IP, matched against the UDP source address
-   * @param onPush invoked with each parsed push event from that IP
-   * @returns a function that unregisters this handler
+   * A hostname is resolved first: the events arrive from the numeric address, and a row that kept
+   * the name the 0.5.x adapter used never received one (audit 2026-09-24, C2).
+   *
+   * @param host the device address or hostname, matched against the UDP source address
+   * @param onPush invoked with each parsed push event from that device
+   * @param deviceId the device's MusicCast `device_id`, when known — matched against the events'
+   * @returns a function that unregisters THIS handler (a later registration of the same device stays)
    */
-  public register(ip: string, onPush: (event: unknown) => void): () => void {
-    this.handlers.set(ip, onPush);
+  public register(host: string, onPush: (event: unknown) => void, deviceId?: string): () => void {
+    const addresses: string[] = [];
+    let active = true;
+    const add = (ip: string): void => {
+      this.handlers.set(ip, onPush);
+      addresses.push(ip);
+    };
+    if (isIPv4(host)) {
+      add(host);
+    } else {
+      void (this.deps.resolve ?? resolveIPv4)(host).then(ip => {
+        if (ip && active) {
+          add(ip);
+        } else if (!ip) {
+          this.deps.log.debug(`YXC push: ${host} does not resolve — its events are routed by device id only`);
+        }
+      });
+    }
+    const id = deviceId?.toUpperCase();
+    if (id) {
+      this.byDeviceId.set(id, onPush);
+    }
     return () => {
-      this.handlers.delete(ip);
+      active = false;
+      // Only this registration: a reconnect registers again BEFORE the old connection's cleanup
+      // runs, and deleting by address took the new handler with it (audit 2026-09-24, C19).
+      for (const ip of addresses) {
+        if (this.handlers.get(ip) === onPush) {
+          this.handlers.delete(ip);
+        }
+      }
+      if (id && this.byDeviceId.get(id) === onPush) {
+        this.byDeviceId.delete(id);
+      }
     };
   }
 
@@ -183,8 +225,8 @@ export class YxcPushReceiver {
    * @param address the source IP
    */
   private dispatch(payload: string, address: string): void {
-    const handler = this.handlers.get(address);
-    if (!handler) {
+    const byAddress = this.handlers.get(address);
+    if (!byAddress && this.byDeviceId.size === 0) {
       return;
     }
     let event: unknown;
@@ -194,6 +236,9 @@ export class YxcPushReceiver {
       this.deps.log.debug(`ignoring malformed YXC push from ${address}`);
       return;
     }
-    handler(event);
+    const deviceId = (event as { device_id?: unknown } | null)?.device_id;
+    const handler =
+      byAddress ?? (typeof deviceId === "string" ? this.byDeviceId.get(deviceId.toUpperCase()) : undefined);
+    handler?.(event);
   }
 }

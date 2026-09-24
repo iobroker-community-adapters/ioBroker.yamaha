@@ -26,6 +26,7 @@
   "dmDelete": "Usuń",
   "dmEditTitle": "Edytuj urządzenie Yamaha",
   "dmDeleteConfirm": "Usunąć „%s\" wraz ze wszystkimi punktami danych? Historia i powiązania wizualizacji zostaną utracone. Urządzenie znalezione przez wyszukiwanie sieciowe nie zostanie dodane ponownie, dopóki nie dodasz go ręcznie.",
+  "dmActionFailed": "Akcja nie powiodła się: %s",
   "ipLabel": "IP",
   "datapointsHeader": "Punkty danych",
   "datapointsHint": "Wybierz, które grupy funkcji są tworzone jako punkty danych. Wyłączona grupa nie jest tworzona, a istniejące obiekty są usuwane.",

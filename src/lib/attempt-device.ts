@@ -48,8 +48,8 @@ export interface AttemptDeps {
     /** Cancel a scheduled timer. */
     cancel(handle: ioBroker.Timeout | undefined): void;
   };
-  /** Register a YXC push handler for a device IP; returns a function that unregisters it. */
-  registerPush(ip: string, onPush: (event: unknown) => void): () => void;
+  /** Register a YXC push handler for a device address (and its MusicCast device id); returns the unregister. */
+  registerPush(ip: string, onPush: (event: unknown) => void, deviceId?: string): () => void;
   /** Whether the shared push receiver is listening (decides how much the keepalive polls). */
   pushActive?(): boolean;
   /** Schedule a repeating keepalive; returns a function that cancels it. */
@@ -310,7 +310,7 @@ export function attemptDevice(
       new YxcDeviceController(device.id, {
         client: new YamahaYxcClient(device.ip, undefined, gate),
         clientFor: ip => partnerClient(device.ip, deps.knownDeviceIps, ip),
-        registerPush: onPush => deps.registerPush(device.ip, onPush),
+        registerPush: (onPush, deviceId) => deps.registerPush(device.ip, onPush, deviceId),
         pushActive: deps.pushActive,
         probeMemory: deps.probeMemory,
         scheduleKeepalive: deps.scheduleKeepalive,

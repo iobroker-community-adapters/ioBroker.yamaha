@@ -26,6 +26,7 @@
   "dmDelete": "Verwijderen",
   "dmEditTitle": "Yamaha-apparaat bewerken",
   "dmDeleteConfirm": "\"%s\" samen met al zijn datapunten verwijderen? De historie en visualisatiekoppelingen gaan verloren. Een apparaat dat de netwerkzoekopdracht vond, wordt pas weer toegevoegd als je het handmatig toevoegt.",
+  "dmActionFailed": "De actie is mislukt: %s",
   "ipLabel": "IP",
   "datapointsHeader": "Datapunten",
   "datapointsHint": "Kies welke functiegroepen als datapunten worden aangemaakt. Een uitgeschakelde groep wordt niet aangemaakt en bestaande objecten worden verwijderd.",

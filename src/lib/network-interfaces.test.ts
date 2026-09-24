@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { NetworkInterfaceInfo } from "node:os";
-import { searchInterfaces } from "./network-interfaces";
+import { resolveIPv4, searchInterfaces } from "./network-interfaces";
 
 /**
  * Shorthand for a network-interface entry — only the fields searchInterfaces reads.
@@ -46,5 +46,15 @@ describe("searchInterfaces", () => {
   it("returns empty when no usable interface exists (caller falls back to the default route)", () => {
     expect(searchInterfaces("", { lo0: [nif("127.0.0.1", "IPv4", true)] })).toEqual([]);
     expect(searchInterfaces("", {})).toEqual([]);
+  });
+});
+
+describe("resolveIPv4 (audit 2026-09-24, A12)", () => {
+  it("returns an address as it is and resolves a hostname", async () => {
+    await expect(resolveIPv4("192.168.1.10")).resolves.toBe("192.168.1.10");
+    await expect(resolveIPv4("yamaha.fritz.box", () => Promise.resolve({ address: "192.168.1.20" }))).resolves.toBe(
+      "192.168.1.20",
+    );
+    await expect(resolveIPv4("nowhere.invalid", () => Promise.reject(new Error("ENOTFOUND")))).resolves.toBeUndefined();
   });
 });

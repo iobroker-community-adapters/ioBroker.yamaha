@@ -95,8 +95,11 @@ export interface YxcControllerDeps {
   client: YxcClientLike;
   /** Resolve another configured device's client by IP, for forming a multiroom group. */
   clientFor?: (ip: string) => YxcClientLike | undefined;
-  /** Register a push handler for this device (by IP); returns a function that unregisters it. */
-  registerPush(onPush: (event: unknown) => void): () => void;
+  /**
+   * Register a push handler for this device (by its address, and by its MusicCast `device_id` when
+   * known); returns a function that unregisters it.
+   */
+  registerPush(onPush: (event: unknown) => void, deviceId?: string): () => void;
   /**
    * Whether the shared push receiver is actually listening. With push the device reports
    * its own changes, so the keepalive only has to renew the subscription and refresh the
@@ -248,6 +251,7 @@ export class YxcDeviceController implements ConnectionHandle {
       // once on the update, for nothing the features depend on. The adapter reads them through
       // the profile (`DeviceProfileStore.identity`).
       const ids = info as { system_id?: unknown; device_id?: unknown } | null;
+      this.pushDeviceId = typeof ids?.device_id === "string" && ids.device_id.length > 0 ? ids.device_id : undefined;
       if (this.deps.probeMemory && (typeof ids?.system_id === "string" || typeof ids?.device_id === "string")) {
         this.deps.probeMemory.set("yxcDeviceIds", {
           ...(typeof ids.system_id === "string" ? { serial: ids.system_id } : {}),
@@ -393,7 +397,7 @@ export class YxcDeviceController implements ConnectionHandle {
       await this.refreshDistribution();
     }
     await this.setupSystemStates(capabilities);
-    this.cancelPush = this.deps.registerPush(event => this.onPush(event));
+    this.cancelPush = this.deps.registerPush(event => this.onPush(event), this.pushDeviceId);
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), KEEPALIVE_MS);
     // The adapter logs one combined "ready" line across all transports; this stays at debug.
     this.deps.log.debug(`${this.deviceId}: MusicCast device ready (YXC)`);
@@ -567,6 +571,9 @@ export class YxcDeviceController implements ConnectionHandle {
   }
 
   /** Per state id, the value the device last reported on THIS connection. */
+  /** The MusicCast `device_id` this device reported — the events carry it too (see registerPush). */
+  private pushDeviceId: string | undefined;
+
   private readonly deviceValues = new Map<string, boolean | number | string>();
 
   /**

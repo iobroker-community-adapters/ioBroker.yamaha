@@ -330,6 +330,17 @@ const net = vi.hoisted(() => {
   return { sockets, fail, interfaces, createSocket, http, httpCalls };
 });
 vi.mock("node:dgram", () => ({ createSocket: () => net.createSocket() }));
+/** Hostname rows resolve through here (A12) — a fixed table, nothing reaches a real DNS. */
+const dnsTable = vi.hoisted(() => {
+  const table: { names: Record<string, string> } = { names: {} };
+  return table;
+});
+vi.mock("node:dns/promises", () => ({
+  lookup: (name: string) =>
+    name in dnsTable.names
+      ? Promise.resolve({ address: dnsTable.names[name], family: 4 })
+      : Promise.reject(new Error("ENOTFOUND")),
+}));
 vi.mock("node:os", async importOriginal => {
   const actual = await importOriginal<typeof OsModule>();
   const networkInterfaces = (): unknown => net.interfaces.value ?? actual.networkInterfaces();
@@ -1003,6 +1014,22 @@ describe("Yamaha auto-discovery", () => {
       expect(table()).toEqual([{ name: "192.168.1.10", ip: "192.168.1.10" }]);
     });
 
+    // A row that kept a hostname (0.5.x took `config.ip` over as it was) was compared with the
+    // numeric source address of every find: started a second time with Always, warned about as
+    // "elsewhere" otherwise (audit 2026-09-24, A12).
+    it("a hostname row learns its identity from a find at its resolved address and is not started twice", async () => {
+      dnsTable.names = { "yamaha.fritz.box": "192.168.1.20" };
+      const ctx = setup({ devices: [{ name: "Living", ip: "yamaha.fritz.box" }], discovery: "always" });
+      mocks.discoverYamaha.mockResolvedValue([{ ip: "192.168.1.20", name: "Yamaha RX-V6a", identity: v6a }]);
+      await ctx.i.onReady();
+      await flush();
+      dnsTable.names = {};
+      expect(ctx.calls.map(c => c.device.id)).toEqual(["Living"]);
+      expect(ctx.i.deviceRecords.get("Living")?.identity).toEqual(v6a);
+      expect(mocks.discoveredStore.devices).toEqual([]);
+      expect(ctx.i.log.warn).not.toHaveBeenCalledWith(expect.stringContaining("the device table says"));
+    });
+
     it("a manual row is warned about, once, and stays where it was typed", async () => {
       const ctx = setup({ devices: [{ name: "Living", ip: "192.168.1.10" }], discovery: "always" });
       seedTable(ctx);
@@ -1120,6 +1147,11 @@ describe("Yamaha auto-discovery", () => {
     ctx.i.rediscoverNow([]);
     await flush();
     expect(mocks.discoverYamaha).not.toHaveBeenCalled();
+    // A device admitted while nothing searches: said, not swallowed (audit 2026-09-24, A18).
+    ctx.i.rediscoverNow(["Kitchen"]);
+    expect(ctx.i.log.info).toHaveBeenCalledWith(
+      expect.stringContaining("Kitchen: admitted again — the network search is off"),
+    );
   });
 
   it("the first attempt tries every transport; a retry in the same failure streak narrows; the attempt after a success is full again", async () => {

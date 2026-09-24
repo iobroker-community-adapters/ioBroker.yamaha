@@ -26,6 +26,7 @@
   "dmDelete": "Delete",
   "dmEditTitle": "Edit Yamaha device",
   "dmDeleteConfirm": "Delete \"%s\" together with all of its datapoints? Its history and any visualisation bindings are lost. A device the network search found is not added again until you add it by hand.",
+  "dmActionFailed": "The action failed: %s",
   "ipLabel": "IP",
   "datapointsHeader": "Data points",
   "datapointsHint": "Choose which function groups are created as data points. A switched-off group is not created and existing objects are removed.",

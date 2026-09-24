@@ -155,29 +155,86 @@ export class YamahaDeviceManagement extends DeviceManagement {
    * @param context the load context
    */
   protected async loadDevices(context: DeviceLoadContext<string>): Promise<void> {
-    for (const card of await this.cards()) {
-      // Model and object are independent reads — fetch them together so a card with
-      // several devices does not add up their round-trips.
-      const [model, node] = await Promise.all([
-        this.adapter.getForeignStateAsync(`${this.adapter.namespace}.${card.id}.info.model`),
-        this.adapter.getForeignObjectAsync(`${this.adapter.namespace}.${card.id}`),
-      ]);
-      // The card title follows the device object's name, not the table entry. On an
-      // instance upgraded from the previous adapter the table entry is the receiver's
-      // ip — the object carries the readable name the adapter learned from the device.
-      // The table entry itself must stay put: the object id is derived from it, and
-      // changing that would move the whole tree.
-      const label = typeof node?.common?.name === "string" ? node.common.name : undefined;
-      // The percent answer comes from the object read above — no extra round-trip for the badge.
-      const percent = (node?.native as { volumeAsPercent?: unknown } | undefined)?.volumeAsPercent === true;
-      context.addDevice(
-        this.toDeviceInfo(
-          label && label !== card.id ? { ...card, name: label } : card,
-          typeof model?.val === "string" ? model.val : undefined,
-          percent,
-        ),
-      );
+    let cards: CardDevice[];
+    try {
+      cards = await this.cards();
+    } catch (e) {
+      this.adapter.log.error(`device manager: could not list the devices (${errorMessage(e)})`);
+      return;
     }
+    for (const card of cards) {
+      // One card whose reads fail must not cost the whole list (audit 2026-09-24, A18).
+      try {
+        await this.addCard(context, card);
+      } catch (e) {
+        this.adapter.log.error(`device manager: ${card.id} could not be shown (${errorMessage(e)})`);
+      }
+    }
+  }
+
+  /**
+   * Run a user action from the device manager. A database call that fails inside one used to
+   * reject into dm-utils, which only logs — the admin's progress bar span until it gave up, the
+   * symptom 2.12.0 fixed for the delete alone (audit 2026-09-24, A18). Now the user reads what
+   * failed and the dialog closes with the list reloaded.
+   *
+   * @param action what the user did, for the log line
+   * @param deviceId the card, when the action is a card's
+   * @param context the action context, for the message
+   * @param run the action
+   * @param fallback the answer when it failed
+   * @returns what the action answered, or the fallback
+   */
+  private async runAction<T>(
+    action: string,
+    deviceId: string | undefined,
+    context: ActionContext | undefined,
+    run: () => Promise<T>,
+    fallback: T,
+  ): Promise<T> {
+    try {
+      return await run();
+    } catch (e) {
+      this.adapter.log.error(
+        `device manager: ${action}${deviceId ? ` of ${deviceId}` : ""} failed (${errorMessage(e)})`,
+      );
+      try {
+        await context?.showMessage(t("dmActionFailed", errorMessage(e)));
+      } catch {
+        // the dialog is already gone — the log line above carries it
+      }
+      return fallback;
+    }
+  }
+
+  /**
+   * Add one card to the list.
+   *
+   * @param context the load context
+   * @param card the running device
+   */
+  private async addCard(context: DeviceLoadContext<string>, card: CardDevice): Promise<void> {
+    // Model and object are independent reads — fetch them together so a card with
+    // several devices does not add up their round-trips.
+    const [model, node] = await Promise.all([
+      this.adapter.getForeignStateAsync(`${this.adapter.namespace}.${card.id}.info.model`),
+      this.adapter.getForeignObjectAsync(`${this.adapter.namespace}.${card.id}`),
+    ]);
+    // The card title follows the device object's name, not the table entry. On an
+    // instance upgraded from the previous adapter the table entry is the receiver's
+    // ip — the object carries the readable name the adapter learned from the device.
+    // The table entry itself must stay put: the object id is derived from it, and
+    // changing that would move the whole tree.
+    const label = typeof node?.common?.name === "string" ? node.common.name : undefined;
+    // The percent answer comes from the object read above — no extra round-trip for the badge.
+    const percent = (node?.native as { volumeAsPercent?: unknown } | undefined)?.volumeAsPercent === true;
+    context.addDevice(
+      this.toDeviceInfo(
+        label && label !== card.id ? { ...card, name: label } : card,
+        typeof model?.val === "string" ? model.val : undefined,
+        percent,
+      ),
+    );
   }
 
   /**
@@ -203,13 +260,17 @@ export class YamahaDeviceManagement extends DeviceManagement {
       // used to leave the reply hanging when the manual branch's table write restarted the
       // instance — the progress bar span until the admin gave up.
       confirmation: t("dmDeleteConfirm", card.name),
-      handler: async (id: string): Promise<{ delete: string }> => this.deleteDevice(id),
+      handler: async (id: string, ctx?: ActionContext): Promise<{ delete: string } | { refresh: "devices" }> =>
+        this.runAction<{ delete: string } | { refresh: "devices" }>("delete", id, ctx, () => this.deleteDevice(id), {
+          refresh: "devices",
+        }),
     };
     const edit = {
       id: "edit",
       icon: "edit",
       description: t("dmEdit"),
-      handler: async (id: string, ctx: ActionContext): Promise<{ refresh: "devices" }> => this.editDevice(id, ctx),
+      handler: async (id: string, ctx: ActionContext): Promise<{ refresh: "devices" }> =>
+        this.runAction("edit", id, ctx, () => this.editDevice(id, ctx), { refresh: "devices" }),
     };
     return {
       id: card.id,
@@ -273,13 +334,19 @@ export class YamahaDeviceManagement extends DeviceManagement {
       apiVersion: "v3",
       identifierLabel: t("ipLabel"),
       actions: [
-        { id: "add", icon: "add", description: t("dmAdd"), handler: async ctx => this.addDevice(ctx) },
+        {
+          id: "add",
+          icon: "add",
+          description: t("dmAdd"),
+          handler: async ctx => this.runAction("add", undefined, ctx, () => this.addDevice(ctx), { refresh: true }),
+        },
         // The way back for a deleted device: without it an exclusion is invisible and permanent.
         {
           id: "excluded",
           icon: "lines",
           description: t("dmExcluded"),
-          handler: async ctx => this.excludedDevices(ctx),
+          handler: async ctx =>
+            this.runAction("excluded devices", undefined, ctx, () => this.excludedDevices(ctx), { refresh: true }),
         },
       ],
     };
