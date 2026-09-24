@@ -14,6 +14,7 @@ import {
   type XmlDialect,
   type XmlScene,
   type XmlSystemConfig,
+  type XmlTunerInfo,
 } from "./protocol";
 import { parseXmlStatus, stateToXml, type XmlCommand } from "./command-mapper";
 import { XML_AMP_CATALOG } from "./catalog";
@@ -505,7 +506,14 @@ export class XmlDeviceController implements ConnectionHandle {
         common: channelCommon("tuner"),
       });
     }
-    const state = async (id: string, common: ObjectDef["common"]): Promise<void> => {
+    // Only the fields this device's Play_Info carries become datapoints — the remembered probe is the
+    // proof of existence, never the source of a value (D7: an RX-V675 has no RDS block and carried
+    // three RDS datapoints that never got a value).
+    const carried = parseTunerInfo(probe);
+    const state = async (id: keyof XmlTunerInfo, common: ObjectDef["common"]): Promise<void> => {
+      if (carried[id] === undefined && !(id === "preset" && /<Preset[>_]/.test(probe))) {
+        return;
+      }
       await this.deps.upsertObject(`${this.deviceId}.tuner.${id}`, { id: `tuner.${id}`, type: "state", common });
     };
     await state("preset", {
@@ -540,6 +548,14 @@ export class XmlDeviceController implements ConnectionHandle {
     await state("rdsText", {
       name: tName("rdsText"),
       desc: tName("descRdsText"),
+      type: "string",
+      role: "text",
+      read: true,
+      write: false,
+    });
+    await state("rdsTextB", {
+      name: tName("rdsTextB"),
+      desc: tName("descRdsTextB"),
       type: "string",
       role: "text",
       read: true,
@@ -589,6 +605,9 @@ export class XmlDeviceController implements ConnectionHandle {
     }
     if (info.rdsText !== undefined) {
       this.emit("tuner.rdsText", info.rdsText);
+    }
+    if (info.rdsTextB !== undefined) {
+      this.emit("tuner.rdsTextB", info.rdsTextB);
     }
     if (info.tuned !== undefined) {
       this.emit("tuner.tuned", info.tuned);

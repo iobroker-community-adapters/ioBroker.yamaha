@@ -427,6 +427,25 @@ describe("XmlDeviceController", () => {
     expect(s.client.calls).toEqual([]);
   });
 
+  // An RX-V675 declares no RDS block (desc.xml): three RDS datapoints stood there without a value, for
+  // good — only what the device's Play_Info carries becomes a datapoint (audit 2026-09-24, D7).
+  test("a tuner without RDS gets no RDS datapoints; one with both text lines gets both", async () => {
+    const plain = setup({ Main_Zone: { power: true } });
+    plain.client.xmlAnswers["Tuner|<Play_Info>GetParam</Play_Info>"] =
+      `<YAMAHA_AV rsp="GET" RC="0"><Tuner><Play_Info><Preset><Preset_Sel>3</Preset_Sel></Preset>` +
+      `<Tuning><Freq><Val>9810</Val><Exp>2</Exp><Unit>MHz</Unit></Freq></Tuning></Play_Info></Tuner></YAMAHA_AV>`;
+    await plain.controller.start();
+    expect(plain.objects).toEqual(expect.arrayContaining(["living.tuner.preset", "living.tuner.frequency"]));
+    expect(plain.objects.filter(id => id.startsWith("living.tuner.rds"))).toEqual([]);
+    const rds = setup({ Main_Zone: { power: true } });
+    rds.client.xmlAnswers["Tuner|<Play_Info>GetParam</Play_Info>"] =
+      `<YAMAHA_AV rsp="GET" RC="0"><Tuner><Play_Info><Meta_Info><Program_Service>R</Program_Service>` +
+      `<Radio_Text_A>A</Radio_Text_A><Radio_Text_B>B</Radio_Text_B></Meta_Info></Play_Info></Tuner></YAMAHA_AV>`;
+    await rds.controller.start();
+    expect(rds.acks).toContainEqual({ id: "living.tuner.rdsText", value: "A" });
+    expect(rds.acks).toContainEqual({ id: "living.tuner.rdsTextB", value: "B" });
+  });
+
   test("the tuner values are read fresh, never replayed from the remembered probe", async () => {
     // The existence probe is remembered per device (a model property) — its BODY is a
     // snapshot of that moment. Seeding from it published the frequency and RDS text of an

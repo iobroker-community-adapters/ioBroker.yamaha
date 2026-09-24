@@ -249,22 +249,40 @@ describe("parseInputList (the zone's own input vocabulary)", () => {
 });
 
 describe("parseTunerInfo (classic <Tuner> Play_Info)", () => {
-  test("reads preset, scaled frequency, RDS and the signal flags, presence-checked", () => {
+  // The shapes as the descriptors declare them (audit 2026-09-24, D7): `Meta_Info,Radio_Text_A/_B` on six
+  // of ten (HTR-4069, RX-A2060, RX-V473/479/579/775) — the bare `Radio_Text` the parser read is the
+  // RX-S601D's alone, so every other generation's text never arrived.
+  test("reads preset, scaled frequency, both RDS text lines and the signal flags (2012–2017 form)", () => {
     const body =
       "<Tuner><Play_Info><Preset><Preset_Sel>3</Preset_Sel></Preset>" +
       "<Tuning><Freq><Val>9810</Val><Exp>2</Exp><Unit>MHz</Unit></Freq></Tuning>" +
       "<Signal_Info><Tuned>Assert</Tuned><Stereo>Negate</Stereo></Signal_Info>" +
-      "<Meta_Info><Program_Service>Radio X</Program_Service><Radio_Text>Now playing</Radio_Text></Meta_Info>" +
-      "</Play_Info></Tuner>";
+      "<Meta_Info><Program_Service>Radio X</Program_Service><Radio_Text_A>Now playing</Radio_Text_A>" +
+      "<Radio_Text_B>Next up</Radio_Text_B></Meta_Info></Play_Info></Tuner>";
     expect(parseTunerInfo(body)).toEqual({
       preset: 3,
       frequency: 98.1,
       frequencyUnit: "MHz",
       rdsService: "Radio X",
       rdsText: "Now playing",
+      rdsTextB: "Next up",
       tuned: true,
       stereo: false,
     });
+  });
+
+  test("the RX-S601D's single Radio_Text line is the text", () => {
+    expect(parseTunerInfo("<FM><Meta_Info><Radio_Text>Hello</Radio_Text></Meta_Info></FM>")).toEqual({
+      rdsText: "Hello",
+    });
+  });
+
+  test("the 2008 form: the slot directly under Preset, RDS under RDS (RX-V3900 desc.xml)", () => {
+    const body =
+      "<Tuner><Play_Info><Preset>7</Preset><RDS><Program_Service>Radio Y</Program_Service>" +
+      "<Radio_Text_A>A line</Radio_Text_A><Radio_Text_B>B line</Radio_Text_B></RDS></Play_Info></Tuner>";
+    expect(parseTunerInfo(body)).toEqual({ preset: 7, rdsService: "Radio Y", rdsText: "A line", rdsTextB: "B line" });
+    expect(parseTunerInfo("<Preset>No Preset</Preset>")).toEqual({ preset: 0 });
   });
 
   test("an empty preset slot ('No Preset') reads as 0; absent fields stay absent", () => {

@@ -186,8 +186,10 @@ export interface XmlTunerInfo {
   frequencyUnit?: string;
   /** RDS station name. */
   rdsService?: string;
-  /** RDS radio text. */
+  /** RDS radio text (the A line, or the one line where only one is declared). */
   rdsText?: string;
+  /** RDS radio text, B line. */
+  rdsTextB?: string;
   /** Whether the tuner is locked onto a station. */
   tuned?: boolean;
   /** Whether reception is stereo. */
@@ -207,10 +209,16 @@ export interface XmlTunerInfo {
  */
 export function parseTunerInfo(xml: string): XmlTunerInfo {
   const info: XmlTunerInfo = {};
-  const preset = /<Preset>\s*<Preset_Sel>([^<]+)<\/Preset_Sel>/.exec(xml);
+  // `Preset,Preset_Sel` from 2009 on; the 2008 generation declares the slot directly as `Preset`
+  // (RX-V3900 desc.xml) — "No Preset" is no slot (audit 2026-09-24, D7).
+  const preset = /<Preset>\s*(?:<Preset_Sel>)?([^<]+?)\s*<\/(?:Preset_Sel|Preset)>/.exec(xml);
   if (preset) {
     const slot = Number(preset[1]);
-    info.preset = Number.isFinite(slot) ? slot : 0;
+    if (Number.isFinite(slot)) {
+      info.preset = slot;
+    } else if (preset[1] === "No Preset") {
+      info.preset = 0;
+    }
   }
   const freq = /<Freq>\s*(?:<Current>\s*)?<Val>(-?\d+)<\/Val>\s*<Exp>(\d+)<\/Exp>\s*<Unit>([^<]*)<\/Unit>/.exec(xml);
   if (freq) {
@@ -221,9 +229,16 @@ export function parseTunerInfo(xml: string): XmlTunerInfo {
   if (service) {
     info.rdsService = decodeXmlText(service[1]);
   }
-  const text = /<Radio_Text>([^<]*)<\/Radio_Text>/.exec(xml);
+  // `Meta_Info,Radio_Text_A/_B` (2012–2017, six of ten descriptors) and `RDS,Radio_Text_A/_B` (2008);
+  // the RX-S601D declares one bare `Radio_Text`. Only the bare form was read — the text of every
+  // other generation never arrived (D7).
+  const text = /<Radio_Text(?:_A)?>([^<]*)<\/Radio_Text(?:_A)?>/.exec(xml);
   if (text) {
     info.rdsText = decodeXmlText(text[1]);
+  }
+  const textB = /<Radio_Text_B>([^<]*)<\/Radio_Text_B>/.exec(xml);
+  if (textB) {
+    info.rdsTextB = decodeXmlText(textB[1]);
   }
   const tuned = /<Tuned>(Assert|Negate)<\/Tuned>/.exec(xml);
   if (tuned) {
