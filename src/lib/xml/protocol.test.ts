@@ -330,6 +330,8 @@ describe("parseDescriptor — the enumerations a classic receiver carries in des
       menuZones: [],
       playbackZones: [],
       dialogueZones: [],
+      toneManualZones: [],
+      enhancerCurrentZones: [],
     });
   });
 });
@@ -438,5 +440,33 @@ describe("descriptorParam anchors the command path at the Cmd element", () => {
       '<Unit><Menu><Put_1><Cmd ID="P1">Zone_B_Power_Control,Sleep=Param_1</Cmd><Param_1><Direct>Wrong</Direct></Param_1></Put_1>' +
       '<Put_1><Cmd ID="P23">Power_Control,Sleep=Param_1</Cmd><Param_1><Direct>120 min</Direct><Direct>Off</Direct></Param_1></Put_1></Menu></Unit>';
     expect(parseDescriptor(xml).sleep).toEqual(["120 min", "Off"]);
+  });
+});
+
+// The RX-V6A's zone 2 (capture 2026-09-01): `<Tone><Mode>Auto</Mode><Manual>…` and
+// `<Surround><Current><Enhancer>` — the form of the RX-A2060's zones (audit 2026-09-24, D6).
+describe("the zone form a status shows", () => {
+  test("the 2020 generation's zone 2 reads its tone mode and shows the Manual/Current form", () => {
+    const status = parseBasicStatus(readFixture("basic-status-zone2-rx-v6a.xml"));
+    expect(status.toneMode).toBe("Auto");
+    expect(status.zoneForm).toEqual({ toneManual: true, enhancerCurrent: true });
+    expect(status.bass).toBe(0);
+    expect(status.enhancer).toBe(true);
+  });
+
+  test("a main zone in the classic form carries no zone form", () => {
+    const main =
+      "<Main_Zone><Basic_Status><Surround><Program_Sel><Current><Enhancer>On</Enhancer></Current></Program_Sel></Surround>" +
+      "<Sound_Video><Tone><Bass><Val>0</Val><Exp>1</Exp><Unit>dB</Unit></Bass></Tone></Sound_Video></Basic_Status></Main_Zone>";
+    expect(parseBasicStatus(main).zoneForm).toBeUndefined();
+  });
+
+  test("desc.xml names the zones of each form", () => {
+    const a2060 = parseDescriptor(readFixture("desc-rx-a2060.xml"));
+    const v675 = parseDescriptor(readFixture("desc-rx-v675.xml"));
+    expect(v675.toneManualZones).toEqual([]);
+    expect(v675.enhancerCurrentZones).toEqual([]);
+    expect(a2060.toneManualZones).toEqual(["Zone_2", "Zone_3"]);
+    expect(a2060.enhancerCurrentZones).toEqual(["Zone_2", "Zone_3"]);
   });
 });

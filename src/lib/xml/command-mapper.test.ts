@@ -268,3 +268,28 @@ describe("stateToXml — the zone commands desc.xml declares (coverage audit 202
     );
   });
 });
+
+// The RX-A2060's zones 2/3 and the 2020 generation put bass/treble under `Tone,Manual` and the enhancer
+// under `Surround,Current`; the RX-S601D/V675/V775 zones 2 use the main zone's paths (desc.xml, the
+// RX-V6A zone-2 capture). Every zone wrote the main zone's path (audit 2026-09-24, D6).
+describe("stateToXml writes a zone in its own form", () => {
+  test("zone 2 bass on the A2060 form goes under Tone,Manual; on the V675 form under Tone", () => {
+    expect(stateToXml("multiroom.zone2.sound.bass", 3, "classic", { toneManual: true })).toEqual({
+      zone: "Zone_2",
+      inner:
+        "<Sound_Video><Tone><Manual><Bass><Val>30</Val><Exp>1</Exp><Unit>dB</Unit></Bass></Manual></Tone></Sound_Video>",
+    });
+    expect(stateToXml("multiroom.zone2.sound.bass", 3, "classic")?.inner).toBe(
+      "<Sound_Video><Tone><Bass><Val>30</Val><Exp>1</Exp><Unit>dB</Unit></Bass></Tone></Sound_Video>",
+    );
+  });
+
+  test("the enhancer goes under Surround,Current where the zone uses that form", () => {
+    expect(stateToXml("multiroom.zone2.sound.enhancer", true, "classic", { enhancerCurrent: true })?.inner).toBe(
+      "<Surround><Current><Enhancer>On</Enhancer></Current></Surround>",
+    );
+    expect(stateToXml("sound.enhancer", true)?.inner).toBe(
+      "<Surround><Program_Sel><Current><Enhancer>On</Enhancer></Current></Program_Sel></Surround>",
+    );
+  });
+});

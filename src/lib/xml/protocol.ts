@@ -356,6 +356,19 @@ export function parseSystemConfig(xml: string): XmlSystemConfig {
   return config;
 }
 
+/**
+ * The command form of a zone where it differs from the main zone's (audit 2026-09-24, D6): the RX-A2060's
+ * zones 2/3 and the 2020 generation (RX-V6A capture) put bass and treble under `Tone,Manual` next to a
+ * `Tone,Mode`, and the enhancer under `Surround,Current` instead of `Surround,Program_Sel,Current` —
+ * the RX-S601D/V675/V775 zones 2 use the main zone's paths.
+ */
+export interface XmlZoneForm {
+  /** Bass/treble under `Sound_Video,Tone,Manual`. */
+  toneManual?: boolean;
+  /** Enhancer under `Surround,Current`. */
+  enhancerCurrent?: boolean;
+}
+
 /** The enumerations and ranges a classic receiver declares in its device description (`desc.xml`). */
 export interface XmlDescriptor {
   /** `Surround,Program_Sel,Current,Sound_Program` — the SOUNDPRG spelling of Yamaha's lists. */
@@ -374,6 +387,10 @@ export interface XmlDescriptor {
   playbackZones?: string[];
   /** The zone elements with `Sound_Video,Dialogue_Adjust,Dialogue_Lvl` — the dialogue level is writable there. */
   dialogueZones?: string[];
+  /** The zone elements with `Sound_Video,Tone,Manual,Bass` (see {@link XmlZoneForm}). */
+  toneManualZones?: string[];
+  /** The zone elements with `Surround,Current,Enhancer` (see {@link XmlZoneForm}). */
+  enhancerCurrentZones?: string[];
 }
 
 /**
@@ -447,6 +464,8 @@ export function parseDescriptor(xml: string): XmlDescriptor {
   descriptor.menuZones = definingZones(xml, "Cursor_Control,Menu_Control");
   descriptor.playbackZones = definingZones(xml, "Play_Control,Playback");
   descriptor.dialogueZones = definingZones(xml, "Sound_Video,Dialogue_Adjust,Dialogue_Lvl");
+  descriptor.toneManualZones = definingZones(xml, "Sound_Video,Tone,Manual,Bass");
+  descriptor.enhancerCurrentZones = definingZones(xml, "Surround,Current,Enhancer");
   const dialogue = descriptorParam(xml, "Sound_Video,Dialogue_Adjust,Dialogue_Lvl").range;
   if (dialogue) {
     descriptor.dialogueLevel = dialogue;
@@ -509,6 +528,10 @@ export interface BasicStatus {
   dialogueLift?: number;
   /** Compressed Music Enhancer (`Surround,Program_Sel,Current,Enhancer`, 9 of 10 descriptors). */
   enhancer?: boolean;
+  /** The tone-control mode (`Tone,Mode` — Auto/Manual/Bypass; RX-A2060 zones, the 2020 generation). */
+  toneMode?: string;
+  /** Which command form the zone's status shows (see {@link XmlZoneForm}); learned where no desc.xml says it. */
+  zoneForm?: XmlZoneForm;
   /** CINEMA DSP 3D (`Surround,_3D_Cinema_DSP` Auto/Off, mapped to a boolean like YNCA's 3DCINEMA). */
   cinemaDsp3d?: boolean;
   /** Speaker terminal A on/off (`Speaker_Preout,Speaker_AB,Speaker_A`). */
@@ -668,6 +691,17 @@ export function parseBasicStatus(body: string): BasicStatus {
   const enhancer = /<Enhancer>(On|Off)<\/Enhancer>/.exec(xml);
   if (enhancer) {
     status.enhancer = enhancer[1] === "On";
+  }
+  const toneMode = /<Tone>\s*<Mode>([^<]+)<\/Mode>/.exec(xml);
+  if (toneMode) {
+    status.toneMode = decodeXmlText(toneMode[1]);
+  }
+  const form: XmlZoneForm = {
+    ...(/<Tone>\s*(?:<Mode>[^<]*<\/Mode>\s*)?<Manual>/.test(xml) ? { toneManual: true } : {}),
+    ...(/<Surround>\s*<Current>\s*<Enhancer>/.test(xml) ? { enhancerCurrent: true } : {}),
+  };
+  if (form.toneManual || form.enhancerCurrent) {
+    status.zoneForm = form;
   }
   const cinema = /<_3D_Cinema_DSP>(Auto|Off)<\/_3D_Cinema_DSP>/.exec(xml);
   if (cinema) {

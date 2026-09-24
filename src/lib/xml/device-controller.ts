@@ -15,6 +15,7 @@ import {
   type XmlScene,
   type XmlSystemConfig,
   type XmlTunerInfo,
+  type XmlZoneForm,
 } from "./protocol";
 import { parseXmlStatus, stateToXml, type XmlCommand } from "./command-mapper";
 import { XML_AMP_CATALOG } from "./catalog";
@@ -149,6 +150,8 @@ export class XmlDeviceController implements ConnectionHandle {
    * the transport keys. Read from the device description, so a receiver that declares none
    * (the 2012 entry class) offers none.
    */
+  /** Per zone element, the command form it uses where that differs from the main zone's (D6). */
+  private readonly zoneForms = new Map<string, XmlZoneForm>();
   private zoneCommands: { cursor: Set<string>; menu: Set<string>; playback: Set<string>; dialogue: Set<string> } = {
     cursor: new Set(),
     menu: new Set(),
@@ -252,6 +255,12 @@ export class XmlDeviceController implements ConnectionHandle {
       playback: new Set(descriptor.playbackZones ?? []),
       dialogue: new Set(descriptor.dialogueZones ?? []),
     };
+    for (const element of descriptor.toneManualZones ?? []) {
+      this.zoneForms.set(element, { ...this.zoneForms.get(element), toneManual: true });
+    }
+    for (const element of descriptor.enhancerCurrentZones ?? []) {
+      this.zoneForms.set(element, { ...this.zoneForms.get(element), enhancerCurrent: true });
+    }
     // Claim with proof, XML edition (2.0.1): only the states whose Basic_Status field
     // this device DELIVERS are created — a blind full-catalog rollout left valueless
     // objects (hdmi.out2, sound.direct, …) standing on devices without the feature.
@@ -806,7 +815,9 @@ export class XmlDeviceController implements ConnectionHandle {
       this.deps.log.debug(`${this.deviceId}: ${stateId} was not reported by this device — write dropped`);
       return;
     }
-    const command = stateToXml(stateId, value, this.dialect);
+    const zoneKey = /^multiroom\.(zone[234])\./.exec(stateId)?.[1] ?? "main";
+    const element = this.zones.find(candidate => candidate.key === zoneKey)?.element ?? "Main_Zone";
+    const command = stateToXml(stateId, value, this.dialect, this.zoneForms.get(element));
     if (command && /(^|\.)sound\.dialogueLevel$/.test(stateId) && !this.zoneCommands.dialogue.has(command.zone)) {
       this.deps.log.debug(`${this.deviceId}: ${stateId} — this zone declares no dialogue level command, write dropped`);
       return;
@@ -1002,6 +1013,10 @@ export class XmlDeviceController implements ConnectionHandle {
    * @param status the parsed Basic_Status
    */
   private seedZone(zone: XmlZone, status: BasicStatus): void {
+    // Where no desc.xml declares the zone's form, its own status shows it (the 2020 generation, D6).
+    if (status.zoneForm) {
+      this.zoneForms.set(zone.element, { ...this.zoneForms.get(zone.element), ...status.zoneForm });
+    }
     if (status.dialect !== undefined && status.dialect !== this.dialect) {
       this.dialect = status.dialect;
       this.deps.probeMemory?.set("xmlDialect", status.dialect);

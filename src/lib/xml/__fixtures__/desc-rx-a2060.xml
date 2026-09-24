@@ -57,4 +57,8 @@
               <Direct Func_Ex="HDMI_Out_On">On</Direct>
               <Direct Func_Ex="HDMI_Out_Off">Off</Direct>
             </Param_1>
+<Define ID="P7">Zone_2,Sound_Video,Tone,Manual,Bass</Define>
+<Define ID="P11">Zone_2,Surround,Current,Enhancer</Define>
+<Define ID="P7">Zone_3,Sound_Video,Tone,Manual,Bass</Define>
+<Define ID="P11">Zone_3,Surround,Current,Enhancer</Define>
 </Unit>

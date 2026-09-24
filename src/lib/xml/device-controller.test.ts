@@ -1420,3 +1420,32 @@ describe("XML: a field the device delivers for the first time becomes an object 
     expect(s.defs.has("living.sound.enhancer")).toBe(true);
   });
 });
+
+// Without desc.xml (the 2020 generation) the zone's status shows its form, and the write follows it (D6).
+describe("XmlDeviceController writes a zone in the form its status shows", () => {
+  test("zone 2 reporting the Manual/Current form is written in that form; the main zone stays classic", async () => {
+    const s = setup({
+      Main_Zone: { power: true, bass: 0, enhancer: true },
+      Zone_2: {
+        power: true,
+        bass: 0,
+        enhancer: true,
+        toneMode: "Auto",
+        zoneForm: { toneManual: true, enhancerCurrent: true },
+      },
+    });
+    await s.controller.start();
+    expect(s.acks).toContainEqual({ id: "living.multiroom.zone2.sound.toneMode", value: "Auto" });
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.multiroom.zone2.sound.bass", false, 2);
+    s.controller.handleStateChange("living.multiroom.zone2.sound.enhancer", false, false);
+    s.controller.handleStateChange("living.sound.bass", false, 2);
+    await flush();
+    const sends = s.client.calls.filter(c => c.method === "send").map(c => `${c.zone}:${c.inner}`);
+    expect(sends).toEqual([
+      "Zone_2:<Sound_Video><Tone><Manual><Bass><Val>20</Val><Exp>1</Exp><Unit>dB</Unit></Bass></Manual></Tone></Sound_Video>",
+      "Zone_2:<Surround><Current><Enhancer>Off</Enhancer></Current></Surround>",
+      "Main_Zone:<Sound_Video><Tone><Bass><Val>20</Val><Exp>1</Exp><Unit>dB</Unit></Bass></Tone></Sound_Video>",
+    ]);
+  });
+});

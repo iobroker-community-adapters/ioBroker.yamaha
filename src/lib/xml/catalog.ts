@@ -1,7 +1,7 @@
 import type { ObjectDef } from "../catalog/types";
 import type { I18nKey } from "../i18n";
 import { escapeXmlText } from "./entities";
-import type { BasicStatus, XmlDialect } from "./protocol";
+import type { BasicStatus, XmlDialect, XmlZoneForm } from "./protocol";
 
 /**
  * The single source for XML/YNC amplifier states: one entry per unified state
@@ -19,13 +19,13 @@ export interface XmlAmpEntry {
    */
   common: Omit<ObjectDef["common"], "name"> & { nameKey: I18nKey; descKey?: I18nKey };
   /** The Basic_Status field this state reads from; absent for a write-only command (e.g. scene recall). */
-  statusField?: keyof BasicStatus;
+  statusField?: Exclude<keyof BasicStatus, "zoneForm">;
   /**
    * Build the inner PUT XML for a written value; absent means read-only. The dialect is the
    * spelling THIS device answered its status with (see {@link XmlDialect}); an entry whose
    * element differs between the generations builds the device's own.
    */
-  toInner?: (value: unknown, dialect?: XmlDialect) => string;
+  toInner?: (value: unknown, dialect?: XmlDialect, form?: XmlZoneForm) => string;
   /** Only exists on the main zone (a system/main-wide feature like scenes, HDMI outputs, party). */
   mainOnly?: boolean;
   /** Only exists on zones 2–4 (the pre-out level mode). */
@@ -47,6 +47,19 @@ export interface XmlAmpEntry {
  */
 export function xmlTenths(value: unknown, step: number): number {
   return Math.round(Math.round(Number(value) / step) * step * 10);
+}
+
+/**
+ * A tone write in the zone's own form (see {@link XmlZoneForm}).
+ *
+ * @param band `Bass` or `Treble`
+ * @param body the level envelope
+ * @param form the zone's command form
+ * @returns the inner XML
+ */
+function toneInner(band: "Bass" | "Treble", body: string, form: XmlZoneForm | undefined): string {
+  const level = `<${band}>${body}</${band}>`;
+  return `<Sound_Video><Tone>${form?.toneManual ? `<Manual>${level}</Manual>` : level}</Tone></Sound_Video>`;
 }
 
 export const XML_AMP_CATALOG: XmlAmpEntry[] = [
@@ -198,8 +211,9 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
       step: 0.5,
     },
     statusField: "bass",
-    toInner: value =>
-      `<Sound_Video><Tone><Bass><Val>${xmlTenths(value, 0.5)}</Val><Exp>1</Exp><Unit>dB</Unit></Bass></Tone></Sound_Video>`,
+    // Under `Tone,Manual` where the zone uses that form (RX-A2060 zones 2/3, the 2020 generation — D6).
+    toInner: (value, _dialect, form) =>
+      toneInner("Bass", `<Val>${xmlTenths(value, 0.5)}</Val><Exp>1</Exp><Unit>dB</Unit>`, form),
   },
   {
     state: "sound.treble",
@@ -216,8 +230,8 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
       step: 0.5,
     },
     statusField: "treble",
-    toInner: value =>
-      `<Sound_Video><Tone><Treble><Val>${xmlTenths(value, 0.5)}</Val><Exp>1</Exp><Unit>dB</Unit></Treble></Tone></Sound_Video>`,
+    toInner: (value, _dialect, form) =>
+      toneInner("Treble", `<Val>${xmlTenths(value, 0.5)}</Val><Exp>1</Exp><Unit>dB</Unit>`, form),
   },
   {
     state: "sound.subwooferTrim",
@@ -288,8 +302,25 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     state: "sound.enhancer",
     common: { nameKey: "enhancer", descKey: "descEnhancer", type: "boolean", role: "switch", read: true, write: true },
     statusField: "enhancer",
-    toInner: value =>
-      `<Surround><Program_Sel><Current><Enhancer>${value ? "On" : "Off"}</Enhancer></Current></Program_Sel></Surround>`,
+    // Under `Surround,Current` where the zone uses that form (D6).
+    toInner: (value, _dialect, form) =>
+      form?.enhancerCurrent
+        ? `<Surround><Current><Enhancer>${value ? "On" : "Off"}</Enhancer></Current></Surround>`
+        : `<Surround><Program_Sel><Current><Enhancer>${value ? "On" : "Off"}</Enhancer></Current></Program_Sel></Surround>`,
+  },
+  {
+    // The zone's tone-control mode — same id as YNCA's TONEMODE and MusicCast's, read here where the
+    // zone reports `Tone,Mode` (D6). Read-only: desc.xml declares no write for it.
+    state: "sound.toneMode",
+    common: {
+      nameKey: "toneControlMode",
+      descKey: "descToneControlMode",
+      type: "string",
+      role: "state",
+      read: true,
+      write: false,
+    },
+    statusField: "toneMode",
   },
   {
     state: "sound.cinemaDsp3d",
