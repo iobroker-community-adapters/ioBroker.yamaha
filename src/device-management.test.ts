@@ -145,7 +145,9 @@ function mockAdapter(
     getForeignObjectAsync: vi.fn((id: string) =>
       // A COPY, never the stored object — see `read-stub-copy`: a shared reference would put a
       // change the code makes on what it read into the store before any write happened.
-      Promise.resolve(id === "system.adapter.yamaha.0" ? { native: { devices: stored } } : copyOf(objects[id])),
+      Promise.resolve(
+        id === "system.adapter.yamaha.0" ? { native: { devices: structuredClone(stored) } } : copyOf(objects[id]),
+      ),
     ),
     extendForeignObjectAsync: vi.fn((id: string, patch: Record<string, any>) => {
       // Two kinds of write reach this: the device TABLE on the instance object, and a device
