@@ -57,6 +57,5 @@
   "*.sound.equalizer.low": "One band of the graphic equalizer; its name and the range the device declares are the whole control.",
   "*.sound.equalizer.mid": "One band of the graphic equalizer; its name and the range the device declares are the whole control.",
   "*.sound.equalizer.high": "One band of the graphic equalizer; its name and the range the device declares are the whole control.",
-  "*.multiroom.group.name": "The name the MusicCast app gave the group; the group channel explains the group itself.",
   "*.multiroom.group.serverZone": "Which zone of the server feeds the group — the name already says it in full."
 }
