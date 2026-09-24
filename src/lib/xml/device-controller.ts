@@ -24,7 +24,13 @@ import type { ProbeMemory } from "../lifecycle/probe-memory";
 import type { CommandGate } from "../lifecycle/command-gate";
 import type { BrowseEngine } from "../browse/browse-engine";
 import { createBrowseSurface } from "../browse/surface";
-import { XML_BROWSE_SOURCES, XML_CURSOR_WIRE, XML_MENU_WIRE, XmlBrowseDriver } from "../browse/xml-browse-driver";
+import {
+  provesMenu,
+  XML_BROWSE_SOURCES,
+  XML_CURSOR_WIRE,
+  XML_MENU_WIRE,
+  XmlBrowseDriver,
+} from "../browse/xml-browse-driver";
 import { wireFor } from "../browse/types";
 import { decodeXmlText, escapeXmlText } from "./entities";
 
@@ -650,23 +656,34 @@ export class XmlDeviceController implements ConnectionHandle {
     // Which sources have a menu is a property of the MODEL, not of this connection — ask
     // once per device instead of costing three extra requests (up to five seconds on a
     // receiver that has no menus at all) on every single reconnect.
+    // One request per menu element — the 2008 generation's three network inputs share one NET_USB
+    // menu (D5). The proven sources are remembered by id.
     const probe = async (): Promise<string[]> => {
-      const probes = await Promise.all(
-        XML_BROWSE_SOURCES.map(async source => {
+      const menus = [
+        ...new Map(XML_BROWSE_SOURCES.map(source => [`${source.element}|${source.list}`, source])).values(),
+      ];
+      const proven = new Set<string>();
+      await Promise.all(
+        menus.map(async menu => {
           // RC 3/4 or a transport error throws — "no menus" must not be remembered for good.
           const body = await definiteXmlBody(
-            () => this.deps.client.getXml(source.element, "<List_Info>GetParam</List_Info>"),
-            `${source.element} List_Info probe`,
+            () => this.deps.client.getXml(menu.element, `<${menu.list}>GetParam</${menu.list}>`),
+            `${menu.element} ${menu.list} probe`,
           );
-          return body.includes("<Menu_Status>") ? source.key : undefined;
+          if (provesMenu(menu, body)) {
+            proven.add(`${menu.element}|${menu.list}`);
+          }
         }),
       );
-      return probes.filter((key): key is string => key !== undefined);
+      return XML_BROWSE_SOURCES.filter(source => proven.has(`${source.element}|${source.list}`)).map(
+        source => source.id,
+      );
     };
     let available: Set<string>;
     try {
       available = new Set(
-        this.deps.probeMemory ? await this.deps.probeMemory.once("xmlBrowseSources", probe) : await probe(),
+        // `:v2` since the answers are source ids (2026-09-24, D5) — the old key held keys.
+        this.deps.probeMemory ? await this.deps.probeMemory.once("xmlBrowseSources:v2", probe) : await probe(),
       );
     } catch (e) {
       this.deps.log.debug(

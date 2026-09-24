@@ -16,16 +16,78 @@ const BUSY_POLL_MS = 500;
 /** How many busy polls before giving up on one read. */
 const MAX_BUSY_POLLS = 10;
 
+/** One XML/YNC source with a menu. */
+export interface XmlBrowseSource {
+  /** Unique id — what the start-up probe remembers. */
+  id: string;
+  /** The element that carries the menu. */
+  element: string;
+  /** The transport-neutral source key (`player.browse.source`). */
+  key: string;
+  /** The dropdown label. */
+  label: string;
+  /** The input name that activates the source. */
+  input: string;
+  /** The list element: `List_Info` (from 2009) or the 2008 generation's `List_Info_2`. */
+  list: "List_Info" | "List_Info_2";
+}
+
 /**
- * The XML/YNC sources with a List_Info menu (the ones the predecessor adapter's
- * users browsed; rxv drives the same three), with the transport-neutral source key
- * and the input name that activates the source.
+ * The XML/YNC sources with a menu, with the transport-neutral source key and the input name that
+ * activates the source. The first three are the ones the predecessor adapter's users browsed (rxv
+ * drives the same three). The 2008 generation declares its menus as `List_Info_2` (RX-V3900
+ * desc.xml): ONE `NET_USB` menu serves the three network inputs — which one it shows follows the
+ * selected input (`NET RADIO`, `PC/MCX`, `USB`, the RX-V3900's own Input_Sel_Item) — and the iPod
+ * has its own. Until 2026-09-24 that generation had no menu at all (audit, D5).
  */
-export const XML_BROWSE_SOURCES: ReadonlyArray<{ element: string; key: string; label: string; input: string }> = [
-  { element: "NET_RADIO", key: "netRadio", label: "Net Radio", input: "NET RADIO" },
-  { element: "SERVER", key: "server", label: "Media server", input: "SERVER" },
-  { element: "USB", key: "usb", label: "USB", input: "USB" },
+export const XML_BROWSE_SOURCES: readonly XmlBrowseSource[] = [
+  { id: "NET_RADIO", element: "NET_RADIO", key: "netRadio", label: "Net Radio", input: "NET RADIO", list: "List_Info" },
+  { id: "SERVER", element: "SERVER", key: "server", label: "Media server", input: "SERVER", list: "List_Info" },
+  { id: "USB", element: "USB", key: "usb", label: "USB", input: "USB", list: "List_Info" },
+  {
+    id: "NET_USB/NET RADIO",
+    element: "NET_USB",
+    key: "netRadio",
+    label: "Net Radio",
+    input: "NET RADIO",
+    list: "List_Info_2",
+  },
+  {
+    id: "NET_USB/PC/MCX",
+    element: "NET_USB",
+    key: "server",
+    label: "Media server",
+    input: "PC/MCX",
+    list: "List_Info_2",
+  },
+  { id: "NET_USB/USB", element: "NET_USB", key: "usb", label: "USB", input: "USB", list: "List_Info_2" },
+  { id: "iPod", element: "iPod", key: "ipod", label: "iPod", input: "iPod", list: "List_Info_2" },
 ];
+
+/**
+ * What proves a source's menu in its probe answer: `Menu_Status` in a `List_Info`; the 2008
+ * `List_Info_2` carries no status (desc.xml), so its `Menu_Layer`.
+ *
+ * @param source the source
+ * @param body the probe's answer
+ * @returns whether the answer proves the menu
+ */
+export function provesMenu(source: XmlBrowseSource, body: string): boolean {
+  return body.includes(source.list === "List_Info" ? "<Menu_Status>" : "<Menu_Layer>");
+}
+
+/** The 2008 generation's row types (`Container`: True = a folder, Play = playable, False = stays). */
+const ROW_KIND_BY_CONTAINER: Readonly<Record<string, BrowseRow["kind"]>> = {
+  True: "folder",
+  Play: "item",
+  False: "unselectable",
+};
+
+/** The cursor keys the 2008 generation declares (`Up`/`Down`/`Left`/`Right`/`Sel` — no Return, no Home). */
+const LEGACY_CURSOR_VALUES = ["up", "down", "left", "right", "select"];
+
+/** The deepest menu level the 2008 generation declares (`Menu_Layer` 1…16). */
+const LEGACY_MAX_LAYER = 16;
 
 /** The client surface the driver needs (a slice of the XML client). */
 export interface XmlBrowseClient {
@@ -60,13 +122,14 @@ export interface XmlListInfo {
  */
 export function parseXmlListInfo(xml: string): XmlListInfo {
   const rows: BrowseRow[] = [];
-  const linePattern = /<Line_([1-8])>\s*<Txt>([^<]*)<\/Txt>\s*<Attribute>([^<]*)<\/Attribute>/g;
+  const linePattern = /<Line_([1-8])>\s*<Txt>([^<]*)<\/Txt>\s*<(Attribute|Container)>([^<]*)<\/\3>/g;
   for (let match = linePattern.exec(xml); match; match = linePattern.exec(xml)) {
     if (match[2].length > 0) {
+      const kinds = match[3] === "Attribute" ? ROW_KIND_BY_ATTRIBUTE : ROW_KIND_BY_CONTAINER;
       rows.push({
         line: Number(match[1]),
         text: decodeXmlText(match[2]),
-        kind: ROW_KIND_BY_ATTRIBUTE[match[3]] ?? "item",
+        kind: kinds[match[4]] ?? "item",
       });
     }
   }
@@ -125,11 +188,13 @@ export interface XmlZoneWidePad {
  */
 export class XmlBrowseDriver implements BrowseDriver {
   private engine: BrowseEngine | undefined;
-  private active: { element: string; key: string; input: string } | undefined;
+  private active: XmlBrowseSource | undefined;
   private lastTotal = 0;
+  /** Whether the device is of the 2008 generation (its menus are `List_Info_2`). */
+  private readonly legacy: boolean;
   /**
    * @param client the XML client slice (send + getXml)
-   * @param available the source keys whose List_Info the start-up probe answered
+   * @param available the source ids whose menu the start-up probe proved (see {@link XML_BROWSE_SOURCES})
    * @param delay adapter-managed delay
    * @param log adapter log — a cursor press with no open menu has to say so
    * @param zoneWide the zone-wide pad commands desc.xml declares for the main zone (none = the
@@ -143,6 +208,8 @@ export class XmlBrowseDriver implements BrowseDriver {
     private readonly zoneWide: XmlZoneWidePad = { cursor: false, menu: false },
   ) {
     this.menuValues = zoneWide.menu ? Object.keys(XML_MENU_WIRE) : undefined;
+    this.legacy = XML_BROWSE_SOURCES.some(source => source.list === "List_Info_2" && available.has(source.id));
+    this.cursorValues = this.legacy ? LEGACY_CURSOR_VALUES : Object.keys(XML_CURSOR_WIRE);
   }
 
   /** The menu keys — only where desc.xml declares the zone-wide `Menu_Control`. */
@@ -172,8 +239,13 @@ export class XmlBrowseDriver implements BrowseDriver {
 
   /** @returns the selectable sources this device offers (state value → label) */
   public sources(): Record<string, string> {
-    const entries = XML_BROWSE_SOURCES.filter(source => this.available.has(source.key));
-    return Object.fromEntries(entries.map(source => [source.key, source.label]));
+    const offered: Record<string, string> = {};
+    for (const source of XML_BROWSE_SOURCES) {
+      if (this.available.has(source.id) && !(source.key in offered)) {
+        offered[source.key] = source.label;
+      }
+    }
+    return offered;
   }
 
   /**
@@ -182,7 +254,7 @@ export class XmlBrowseDriver implements BrowseDriver {
    * @param source the source key (from {@link sources})
    */
   public async open(source: string): Promise<void> {
-    const entry = XML_BROWSE_SOURCES.find(s => s.key === source && this.available.has(s.key));
+    const entry = XML_BROWSE_SOURCES.find(s => s.key === source && this.available.has(s.id));
     if (!entry) {
       return;
     }
@@ -200,13 +272,21 @@ export class XmlBrowseDriver implements BrowseDriver {
     await this.control(`<Direct_Sel>Line_${line}</Direct_Sel>`);
   }
 
-  /** Show the previous 8 lines (jump the cursor back a page). */
+  /** Show the previous 8 lines (jump the cursor back a page; the 2008 generation's `Page`). */
   public async pageUp(): Promise<void> {
+    if (this.active?.list === "List_Info_2") {
+      await this.control("<Page>Up</Page>");
+      return;
+    }
     await this.jumpBy(-8);
   }
 
-  /** Show the next 8 lines (jump the cursor forward a page). */
+  /** Show the next 8 lines (jump the cursor forward a page; the 2008 generation's `Page`). */
   public async pageDown(): Promise<void> {
+    if (this.active?.list === "List_Info_2") {
+      await this.control("<Page>Down</Page>");
+      return;
+    }
     await this.jumpBy(8);
   }
 
@@ -219,16 +299,35 @@ export class XmlBrowseDriver implements BrowseDriver {
    * step through `remote.cursor` = `left`, which that generation accepts.
    */
   public async back(): Promise<void> {
-    await this.control("<Cursor>Return</Cursor>");
+    // The 2008 generation declares no Return; its step back is `Left` (RX-V3900 desc.xml).
+    await this.control(this.active?.list === "List_Info_2" ? "<Cursor>Left</Cursor>" : "<Cursor>Return</Cursor>");
   }
 
-  /** Return to the menu root. */
+  /**
+   * Return to the menu root. The 2008 generation declares no `Return to Home`: its declared step back
+   * (`Left`) is repeated until the menu reports its first level — nothing invented, and a path walk
+   * can start there.
+   */
   public async home(): Promise<void> {
-    await this.control("<Cursor>Return to Home</Cursor>");
+    if (this.active?.list !== "List_Info_2") {
+      await this.control("<Cursor>Return to Home</Cursor>");
+      return;
+    }
+    for (let step = 0; step < LEGACY_MAX_LAYER; step++) {
+      const window = await this.readWindow();
+      if (!window || window.layer <= 1) {
+        break;
+      }
+      await this.send("<Cursor>Left</Cursor>");
+    }
+    await this.fetch();
   }
 
-  /** The cursor keys this protocol declares — the full pad, `<List_Control><Cursor>`. */
-  public readonly cursorValues = Object.keys(XML_CURSOR_WIRE);
+  /**
+   * The cursor keys this protocol declares — the full pad, `<List_Control><Cursor>`; the 2008
+   * generation's five (no Return, no Home).
+   */
+  public readonly cursorValues: readonly string[];
 
   /**
    * Press a cursor key: on the zone-wide `Cursor_Control` where desc.xml declares it (menu open
@@ -242,7 +341,7 @@ export class XmlBrowseDriver implements BrowseDriver {
    */
   public async cursor(value: string): Promise<void> {
     const wire = wireFor(XML_CURSOR_WIRE, value);
-    if (wire === undefined) {
+    if (wire === undefined || !this.cursorValues.includes(value)) {
       return;
     }
     if (this.zoneWide.cursor) {
@@ -331,7 +430,8 @@ export class XmlBrowseDriver implements BrowseDriver {
       return undefined;
     }
     for (let attempt = 0; attempt < MAX_BUSY_POLLS; attempt++) {
-      const info = parseXmlListInfo(await this.client.getXml(this.active.element, "<List_Info>GetParam</List_Info>"));
+      const list = this.active.list;
+      const info = parseXmlListInfo(await this.client.getXml(this.active.element, `<${list}>GetParam</${list}>`));
       if (info.ready) {
         return info;
       }

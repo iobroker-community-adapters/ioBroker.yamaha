@@ -76,7 +76,7 @@ function setup(bodies: string[]): {
         return Promise.resolve(bodies.length > 1 ? (bodies.shift() as string) : bodies[0]);
       },
     },
-    new Set(["netRadio", "server"]),
+    new Set(["NET_RADIO", "SERVER"]),
     instantDelay,
   );
   const windows: BrowseWindow[] = [];
@@ -144,7 +144,7 @@ describe("XmlBrowseDriver back and the cursor pad (#613)", () => {
         },
         getXml: () => Promise.resolve(listBody({})),
       },
-      new Set(["netRadio"]),
+      new Set(["NET_RADIO"]),
       instantDelay,
     );
     driver.attach({ onWindow: (): void => {} } as unknown as BrowseEngine);
@@ -213,7 +213,7 @@ describe("XmlBrowseDriver back and the cursor pad (#613)", () => {
         },
         getXml: () => (readable ? Promise.resolve(listBody({})) : Promise.reject(new Error("socket hang up"))),
       },
-      new Set(["netRadio"]),
+      new Set(["NET_RADIO"]),
       instantDelay,
     );
     driver.attach({ onWindow: (): void => {} } as unknown as BrowseEngine);
@@ -244,7 +244,7 @@ describe("XmlBrowseDriver — a cursor press with no open menu says so (audit 20
         },
         getXml: () => Promise.resolve(""),
       },
-      new Set(["netRadio"]),
+      new Set(["NET_RADIO"]),
       instantDelay,
       { debug: () => {}, info: () => {}, warn: message => warnings.push(message) },
     );
@@ -271,7 +271,7 @@ describe("XmlBrowseDriver with the zone-wide pad desc.xml declares (coverage aud
         },
         getXml: () => Promise.resolve(listBody({})),
       },
-      new Set(["netRadio"]),
+      new Set(["NET_RADIO"]),
       instantDelay,
       undefined,
       zoneWide,
@@ -377,5 +377,125 @@ describe("XmlBrowseDriver paging and its guards", () => {
     await driver.open("netRadio");
     expect(windows).toEqual([]);
     expect(calls.filter(call => call.method === "getXml")).toHaveLength(10);
+  });
+});
+
+// The 2008 generation (RX-V3900 desc.xml): `NET_USB,List_Info_2` and `iPod,List_Info_2` — Menu_Layer,
+// Menu_Name, Current_List lines with `Container` True/Play/False, Cursor_Position; no Menu_Status. List
+// control: Direct_Sel `Line_N`, Cursor Up/Down/Left/Right/Sel, Page Up/Down. No captured answer exists —
+// the body below is built from the declaration (audit 2026-09-24, D5).
+describe("XmlBrowseDriver on the 2008 generation (List_Info_2)", () => {
+  /**
+   * A List_Info_2 answer in the declared shape.
+   *
+   * @param layer the menu layer
+   * @param lines [text, container] per line
+   * @returns the body
+   */
+  function list2(layer: number, lines: Array<[string, string]>): string {
+    const current = lines
+      .map(
+        ([text, container], i) =>
+          `<Line_${i + 1}><Txt>${text}</Txt><Container>${container}</Container></Line_${i + 1}>`,
+      )
+      .join("");
+    return (
+      `<YAMAHA_AV rsp="GET" RC="0"><NET_USB><List_Info_2><Menu_Layer>${layer}</Menu_Layer><Menu_Name>USB</Menu_Name>` +
+      `<Current_List>${current}</Current_List><Cursor_Position><Current_Line>1</Current_Line><Max_Line>${lines.length}</Max_Line></Cursor_Position>` +
+      `</List_Info_2></NET_USB></YAMAHA_AV>`
+    );
+  }
+
+  function legacySetup(bodies: string[]): {
+    driver: XmlBrowseDriver;
+    calls: Array<{ method: string; element: string; inner: string }>;
+    windows: BrowseWindow[];
+  } {
+    const calls: Array<{ method: string; element: string; inner: string }> = [];
+    const driver = new XmlBrowseDriver(
+      {
+        send: (element, inner) => {
+          calls.push({ method: "send", element, inner });
+          return Promise.resolve();
+        },
+        getXml: (element, inner) => {
+          calls.push({ method: "getXml", element, inner });
+          return Promise.resolve(bodies.length > 1 ? (bodies.shift() as string) : bodies[0]);
+        },
+      },
+      new Set(["NET_USB/NET RADIO", "NET_USB/PC/MCX", "NET_USB/USB", "iPod"]),
+      instantDelay,
+    );
+    const windows: BrowseWindow[] = [];
+    driver.attach({ onWindow: (window: BrowseWindow) => windows.push(window) } as unknown as BrowseEngine);
+    return { driver, calls, windows };
+  }
+
+  it("reads the Container rows: True a folder, Play playable, False a line that stays", () => {
+    const info = parseXmlListInfo(
+      list2(2, [
+        ["Rock", "True"],
+        ["Song", "Play"],
+        ["Info", "False"],
+      ]),
+    );
+    expect(info).toEqual({
+      ready: true,
+      menuName: "USB",
+      layer: 2,
+      currentLine: 1,
+      totalItems: 3,
+      rows: [
+        { line: 1, text: "Rock", kind: "folder" },
+        { line: 2, text: "Song", kind: "item" },
+        { line: 3, text: "Info", kind: "unselectable" },
+      ],
+    });
+  });
+
+  it("offers the three network inputs and the iPod; a source is opened by its input on the shared NET_USB menu", async () => {
+    const { driver, calls } = legacySetup([list2(1, [["Folder", "True"]])]);
+    expect(driver.sources()).toEqual({ netRadio: "Net Radio", server: "Media server", usb: "USB", ipod: "iPod" });
+    await driver.open("server");
+    expect(calls).toEqual([
+      { method: "send", element: "Main_Zone", inner: "<Input><Input_Sel>PC/MCX</Input_Sel></Input>" },
+      { method: "getXml", element: "NET_USB", inner: "<List_Info_2>GetParam</List_Info_2>" },
+    ]);
+  });
+
+  it("pages with Page, steps back with Left, and knows the five declared cursor keys", async () => {
+    const { driver, calls } = legacySetup([list2(2, [["Song", "Play"]])]);
+    await driver.open("usb");
+    calls.length = 0;
+    await driver.pageDown();
+    await driver.pageUp();
+    await driver.back();
+    expect(calls.filter(c => c.method === "send").map(c => c.inner)).toEqual([
+      "<List_Control><Page>Down</Page></List_Control>",
+      "<List_Control><Page>Up</Page></List_Control>",
+      "<List_Control><Cursor>Left</Cursor></List_Control>",
+    ]);
+    expect(driver.cursorValues).toEqual(["up", "down", "left", "right", "select"]);
+    calls.length = 0;
+    await driver.cursor("return");
+    await driver.cursor("home");
+    expect(calls).toEqual([]);
+  });
+
+  it("reaches the menu root by stepping back until the first level", async () => {
+    const { driver, calls, windows } = legacySetup([
+      list2(3, [["Deep", "True"]]),
+      list2(3, [["Deep", "True"]]),
+      list2(2, [["Mid", "True"]]),
+      list2(1, [["Top", "True"]]),
+    ]);
+    await driver.open("usb");
+    calls.length = 0;
+    await driver.home();
+    expect(calls.filter(c => c.method === "send").map(c => c.inner)).toEqual([
+      "<List_Control><Cursor>Left</Cursor></List_Control>",
+      "<List_Control><Cursor>Left</Cursor></List_Control>",
+    ]);
+    expect(windows.at(-1)?.layer).toBe(1);
   });
 });

@@ -947,8 +947,47 @@ describe("XmlDeviceController probe memory verdicts (audit 2026-09-02)", () => {
         probeMemory: memory,
       });
       await controller.start();
-      expect(memory.remembered("xmlBrowseSources"), `RC ${rc}`).toBeUndefined();
+      expect(memory.remembered("xmlBrowseSources:v2"), `RC ${rc}`).toBeUndefined();
     }
+  });
+
+  // The 2008 generation's menus are List_Info_2 on NET_USB and iPod (RX-V3900 desc.xml); the probe
+  // asked only List_Info, and that generation had no menu at all (D5).
+  test("a 2008 receiver's NET_USB and iPod menus are found by their List_Info_2", async () => {
+    const memory = new ProbeMemory();
+    const client = new FakeClient({ Main_Zone: { power: true } });
+    client.getXml = (element: string, inner: string): Promise<string> => {
+      client.calls.push({ method: "getXml", zone: element, inner });
+      if ((element === "NET_USB" || element === "iPod") && inner.includes("List_Info_2")) {
+        return Promise.resolve(
+          `<YAMAHA_AV rsp="GET" RC="0"><${element}><List_Info_2><Menu_Layer>1</Menu_Layer></List_Info_2></${element}></YAMAHA_AV>`,
+        );
+      }
+      return Promise.reject(new XmlHttpError("device refused the request (HTTP 400)", 400));
+    };
+    const objects: string[] = [];
+    const controller = new XmlDeviceController("living", {
+      client,
+      scheduleKeepalive: () => () => {},
+      upsertObject: id => {
+        objects.push(id);
+        return Promise.resolve();
+      },
+      setStateAck: () => {},
+      log: silentLog,
+      gate: testGate(),
+      probeMemory: memory,
+    });
+    await controller.start();
+    expect(memory.remembered("xmlBrowseSources:v2")).toEqual([
+      "NET_USB/NET RADIO",
+      "NET_USB/PC/MCX",
+      "NET_USB/USB",
+      "iPod",
+    ]);
+    expect(objects).toContain("living.player.browse.source");
+    // One probe per menu element — the three network inputs share NET_USB.
+    expect(client.calls.filter(c => c.zone === "NET_USB")).toHaveLength(1);
   });
 
   test("an RC 2 answer (the model has no such menu) is remembered as none", async () => {
@@ -968,7 +1007,7 @@ describe("XmlDeviceController probe memory verdicts (audit 2026-09-02)", () => {
       probeMemory: memory,
     });
     await controller.start();
-    expect(memory.remembered("xmlBrowseSources")).toEqual([]);
+    expect(memory.remembered("xmlBrowseSources:v2")).toEqual([]);
   });
 
   test("a transient failure during the menu probe leaves the menus un-remembered, not 'none' for good", async () => {
@@ -1000,7 +1039,7 @@ describe("XmlDeviceController probe memory verdicts (audit 2026-09-02)", () => {
     expect(objects.some(id => id.includes("player.browse"))).toBe(false);
     // The NET_RADIO menu could not be asked — so nothing is remembered and the next
     // connect probes again, instead of "this device has no menus" standing for good.
-    expect(memory.remembered("xmlBrowseSources")).toBeUndefined();
+    expect(memory.remembered("xmlBrowseSources:v2")).toBeUndefined();
   });
 });
 
