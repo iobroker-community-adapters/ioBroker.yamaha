@@ -6,6 +6,13 @@ export interface OnOffSpec {
   on: string;
   /** Wire value that maps to `false`. */
   off: string;
+  /**
+   * Further wire values the device reports for `true` — read, never written (a muted receiver
+   * reports `Att -20 dB`/`Att -40 dB` when it only dampens; an iPod shuffles `Songs` or `Albums`).
+   */
+  alsoOn?: readonly string[];
+  /** Further wire values the device reports for `false` — read, never written. */
+  alsoOff?: readonly string[];
 }
 
 /** A fixed multi-value choice → a string state with a `states` dropdown. */
@@ -179,6 +186,14 @@ export function decode(spec: ValueSpec, wire: string): boolean | number | string
         return true;
       }
       if (wire === spec.off) {
+        return false;
+      }
+      // The further words the device reports for either side (a dampened mute, an iPod's
+      // album shuffle) — read for what they mean, never written.
+      if (spec.alsoOn?.includes(wire)) {
+        return true;
+      }
+      if (spec.alsoOff?.includes(wire)) {
         return false;
       }
       return undefined;

@@ -815,5 +815,3983 @@
     "ZONE3:PLAYBACK",
     "ZONE3:SCENE",
     "ZONE4:SCENE"
-  ]
+  ],
+  "paramsNote": "params = per pair, merged over every list: the words a device may REPORT (a PUT-only parameter is left out) and every declared numeric range as [min, max, step].",
+  "params": {
+    "AIRPLAY:AVAIL": {
+      "values": [
+        "Not Ready",
+        "Ready"
+      ],
+      "ranges": []
+    },
+    "AIRPLAY:MEM": {
+      "values": [
+        "Auto"
+      ],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "AIRPLAY:PLAYBACKINFO": {
+      "values": [
+        "Play",
+        "Stop"
+      ],
+      "ranges": []
+    },
+    "AIRPLAY:PRESET": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "AIRPLAY:VOLINTERLOCK": {
+      "values": [
+        "Full",
+        "Limited",
+        "Off"
+      ],
+      "ranges": []
+    },
+    "BT:AVAIL": {
+      "values": [
+        "Not Connected",
+        "Not Ready",
+        "Ready"
+      ],
+      "ranges": []
+    },
+    "BT:CONNECTINFO": {
+      "values": [
+        "Connected",
+        "Disconnected"
+      ],
+      "ranges": []
+    },
+    "BT:MEM": {
+      "values": [
+        "Auto"
+      ],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "BT:PRESET": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "HDRADIO:AMFREQ": {
+      "values": [],
+      "ranges": [
+        [
+          530,
+          1710,
+          10
+        ]
+      ]
+    },
+    "HDRADIO:AUDIOMODE": {
+      "values": [
+        "Auto",
+        "Mono"
+      ],
+      "ranges": []
+    },
+    "HDRADIO:AVAIL": {
+      "values": [
+        "Not Ready",
+        "Ready"
+      ],
+      "ranges": []
+    },
+    "HDRADIO:AVAILPRG1": {
+      "values": [
+        "Available",
+        "Unavailable"
+      ],
+      "ranges": []
+    },
+    "HDRADIO:AVAILPRG2": {
+      "values": [
+        "Available",
+        "Unavailable"
+      ],
+      "ranges": []
+    },
+    "HDRADIO:AVAILPRG3": {
+      "values": [
+        "Available",
+        "Unavailable"
+      ],
+      "ranges": []
+    },
+    "HDRADIO:AVAILPRG4": {
+      "values": [
+        "Available",
+        "Unavailable"
+      ],
+      "ranges": []
+    },
+    "HDRADIO:AVAILPRG5": {
+      "values": [
+        "Available",
+        "Unavailable"
+      ],
+      "ranges": []
+    },
+    "HDRADIO:AVAILPRG6": {
+      "values": [
+        "Available",
+        "Unavailable"
+      ],
+      "ranges": []
+    },
+    "HDRADIO:AVAILPRG7": {
+      "values": [
+        "Available",
+        "Unavailable"
+      ],
+      "ranges": []
+    },
+    "HDRADIO:AVAILPRG8": {
+      "values": [
+        "Available",
+        "Unavailable"
+      ],
+      "ranges": []
+    },
+    "HDRADIO:BAND": {
+      "values": [
+        "AM",
+        "FM"
+      ],
+      "ranges": []
+    },
+    "HDRADIO:FMFREQ": {
+      "values": [],
+      "ranges": [
+        [
+          87.5,
+          107.9,
+          0.2
+        ]
+      ]
+    },
+    "HDRADIO:HDSIGINFO": {
+      "values": [
+        "Assert",
+        "Negate"
+      ],
+      "ranges": []
+    },
+    "HDRADIO:MEM": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "HDRADIO:PRESET": {
+      "values": [
+        "No Preset"
+      ],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "HDRADIO:PRGNUM": {
+      "values": [
+        "---",
+        "HD1",
+        "HD2",
+        "HD3",
+        "HD4",
+        "HD5",
+        "HD6",
+        "HD7",
+        "HD8"
+      ],
+      "ranges": []
+    },
+    "HDRADIO:PRGSEL": {
+      "values": [
+        "---",
+        "HD1",
+        "HD2",
+        "HD3",
+        "HD4",
+        "HD5",
+        "HD6",
+        "HD7",
+        "HD8"
+      ],
+      "ranges": []
+    },
+    "HDRADIO:SEARCHMODE": {
+      "values": [
+        "Preset",
+        "Tuning"
+      ],
+      "ranges": []
+    },
+    "HDRADIO:SIGSTEREOMONO": {
+      "values": [
+        "Assert",
+        "Negate"
+      ],
+      "ranges": []
+    },
+    "HDRADIO:TAGINFO": {
+      "values": [
+        "Available",
+        "Unavailable"
+      ],
+      "ranges": []
+    },
+    "HDRADIO:TUNED": {
+      "values": [
+        "Assert",
+        "Negate"
+      ],
+      "ranges": []
+    },
+    "IPOD:AVAIL": {
+      "values": [
+        "Not Connected",
+        "Not Ready",
+        "Ready"
+      ],
+      "ranges": []
+    },
+    "IPOD:CURRLINE": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          65536,
+          1
+        ]
+      ]
+    },
+    "IPOD:LINE1ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "IPOD:LINE2ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "IPOD:LINE3ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "IPOD:LINE4ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "IPOD:LINE5ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "IPOD:LINE6ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "IPOD:LINE7ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "IPOD:LINE8ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "IPOD:LISTCURSOR": {
+      "values": [
+        "Back to Home"
+      ],
+      "ranges": []
+    },
+    "IPOD:LISTLAYER": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          16,
+          1
+        ]
+      ]
+    },
+    "IPOD:MAXLINE": {
+      "values": [],
+      "ranges": [
+        [
+          0,
+          65536,
+          1
+        ]
+      ]
+    },
+    "IPOD:MODE": {
+      "values": [
+        "Extended",
+        "Normal"
+      ],
+      "ranges": []
+    },
+    "IPOD:PLAYBACKINFO": {
+      "values": [
+        "Pause",
+        "Play",
+        "Stop"
+      ],
+      "ranges": []
+    },
+    "IPOD:REPEAT": {
+      "values": [
+        "All",
+        "Off",
+        "One"
+      ],
+      "ranges": []
+    },
+    "IPOD:SHUFFLE": {
+      "values": [
+        "Albums",
+        "Off",
+        "Songs"
+      ],
+      "ranges": []
+    },
+    "IPODUSB:AVAIL": {
+      "values": [
+        "Not Connected",
+        "Not Ready",
+        "Ready"
+      ],
+      "ranges": []
+    },
+    "IPODUSB:CURRLINE": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          65536,
+          1
+        ]
+      ]
+    },
+    "IPODUSB:LINE1ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "IPODUSB:LINE2ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "IPODUSB:LINE3ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "IPODUSB:LINE4ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "IPODUSB:LINE5ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "IPODUSB:LINE6ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "IPODUSB:LINE7ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "IPODUSB:LINE8ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "IPODUSB:LISTCURSOR": {
+      "values": [
+        "Back to Home"
+      ],
+      "ranges": []
+    },
+    "IPODUSB:LISTLAYER": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          16,
+          1
+        ]
+      ]
+    },
+    "IPODUSB:MAXLINE": {
+      "values": [],
+      "ranges": [
+        [
+          0,
+          65536,
+          1
+        ]
+      ]
+    },
+    "IPODUSB:MODE": {
+      "values": [
+        "Extended",
+        "Normal"
+      ],
+      "ranges": []
+    },
+    "IPODUSB:PLAYBACKINFO": {
+      "values": [
+        "Pause",
+        "Play",
+        "Stop"
+      ],
+      "ranges": []
+    },
+    "IPODUSB:REPEAT": {
+      "values": [
+        "All",
+        "Off",
+        "One"
+      ],
+      "ranges": []
+    },
+    "IPODUSB:SHUFFLE": {
+      "values": [
+        "Albums",
+        "Off",
+        "Songs"
+      ],
+      "ranges": []
+    },
+    "MAIN:2CHDECODER": {
+      "values": [
+        "DTS NEO:6 Cinema",
+        "DTS NEO:6 Music",
+        "Dolby PL",
+        "Dolby PLII Game",
+        "Dolby PLII Movie",
+        "Dolby PLII Music",
+        "Dolby PLIIx Game",
+        "Dolby PLIIx Movie",
+        "Dolby PLIIx Music",
+        "Dolby Surround"
+      ],
+      "ranges": []
+    },
+    "MAIN:3DCINEMA": {
+      "values": [
+        "Auto",
+        "Off"
+      ],
+      "ranges": []
+    },
+    "MAIN:ADAPTIVEDRC": {
+      "values": [
+        "Auto",
+        "Off"
+      ],
+      "ranges": []
+    },
+    "MAIN:ADAPTIVEDSP": {
+      "values": [
+        "Auto",
+        "Off"
+      ],
+      "ranges": []
+    },
+    "MAIN:AUDSEL": {
+      "values": [
+        "Analog",
+        "Auto",
+        "Coax/Opt",
+        "HDMI",
+        "Unavailable"
+      ],
+      "ranges": []
+    },
+    "MAIN:AVAIL": {
+      "values": [
+        "Not Ready",
+        "Ready"
+      ],
+      "ranges": []
+    },
+    "MAIN:CONTENTSDISP": {
+      "values": [
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "MAIN:CURSOR": {
+      "values": [
+        "Left",
+        "Right"
+      ],
+      "ranges": []
+    },
+    "MAIN:DECODERSEL": {
+      "values": [
+        "Auto",
+        "DTS",
+        "Unavailable"
+      ],
+      "ranges": []
+    },
+    "MAIN:DIALOGUELVL": {
+      "values": [],
+      "ranges": [
+        [
+          0,
+          2,
+          1
+        ],
+        [
+          0,
+          3,
+          1
+        ]
+      ]
+    },
+    "MAIN:ENHANCER": {
+      "values": [
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "MAIN:EXBASS": {
+      "values": [
+        "Auto",
+        "Off"
+      ],
+      "ranges": []
+    },
+    "MAIN:EXSURDECODER": {
+      "values": [
+        "Auto",
+        "Dolby PLIIx Movie",
+        "Dolby PLIIx Music",
+        "EX/ES",
+        "Off"
+      ],
+      "ranges": []
+    },
+    "MAIN:HDMIASPECT": {
+      "values": [
+        "16:9 Normal",
+        "Smart Zoom",
+        "Through"
+      ],
+      "ranges": []
+    },
+    "MAIN:HDMIAUDOUT1": {
+      "values": [
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "MAIN:HDMIAUDOUT2": {
+      "values": [
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "MAIN:HDMIAUDOUTAMP": {
+      "values": [
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "MAIN:HDMIOUT": {
+      "values": [
+        "OUT",
+        "OUT1",
+        "OUT1 + 2",
+        "OUT2",
+        "Off"
+      ],
+      "ranges": []
+    },
+    "MAIN:HDMIPROCESSING": {
+      "values": [
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "MAIN:HDMIRESOL": {
+      "values": [
+        "1080i",
+        "1080p",
+        "480p / 576p",
+        "720p",
+        "Auto",
+        "Through"
+      ],
+      "ranges": []
+    },
+    "MAIN:HPBASS": {
+      "values": [],
+      "ranges": [
+        [
+          -6,
+          6,
+          0.5
+        ]
+      ]
+    },
+    "MAIN:HPTREBLE": {
+      "values": [],
+      "ranges": [
+        [
+          -6,
+          6,
+          0.5
+        ]
+      ]
+    },
+    "MAIN:INITVOLLVL": {
+      "values": [
+        "Mute"
+      ],
+      "ranges": [
+        [
+          -80,
+          16.5,
+          0.5
+        ]
+      ]
+    },
+    "MAIN:INITVOLMODE": {
+      "values": [
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "MAIN:INP": {
+      "values": [
+        "AUDIO1",
+        "AUDIO2",
+        "AUDIO3",
+        "AUDIO4",
+        "AV1",
+        "AV2",
+        "AV3",
+        "AV4",
+        "AV5",
+        "AV6",
+        "AV7",
+        "AirPlay",
+        "Bluetooth",
+        "HDMI1",
+        "HDMI2",
+        "HDMI3",
+        "HDMI4",
+        "HDMI5",
+        "HDMI6",
+        "HDMI7",
+        "MULTI CH",
+        "NET RADIO",
+        "Napster",
+        "PC",
+        "PHONO",
+        "Pandora",
+        "Rhapsody",
+        "SERVER",
+        "SIRIUS",
+        "SIRIUS InternetRadio",
+        "SiriusXM",
+        "Spotify",
+        "TUNER",
+        "UAW",
+        "V-AUX",
+        "iPod",
+        "iPod (USB)"
+      ],
+      "ranges": []
+    },
+    "MAIN:LIPSYNCANLGOUT": {
+      "values": [],
+      "ranges": [
+        [
+          0,
+          250,
+          1
+        ],
+        [
+          0,
+          500,
+          1
+        ]
+      ]
+    },
+    "MAIN:LIPSYNCHDMIOUT1MANUAL": {
+      "values": [],
+      "ranges": [
+        [
+          0,
+          250,
+          1
+        ],
+        [
+          0,
+          500,
+          1
+        ]
+      ]
+    },
+    "MAIN:LIPSYNCHDMIOUT1OFFSET": {
+      "values": [],
+      "ranges": [
+        [
+          -500,
+          500,
+          1
+        ],
+        [
+          -250,
+          250,
+          1
+        ]
+      ]
+    },
+    "MAIN:LIPSYNCHDMIOUT2MANUAL": {
+      "values": [],
+      "ranges": [
+        [
+          0,
+          250,
+          1
+        ],
+        [
+          0,
+          500,
+          1
+        ]
+      ]
+    },
+    "MAIN:LIPSYNCHDMIOUT2OFFSET": {
+      "values": [],
+      "ranges": [
+        [
+          -500,
+          500,
+          1
+        ],
+        [
+          -250,
+          250,
+          1
+        ]
+      ]
+    },
+    "MAIN:LIPSYNCMODE": {
+      "values": [
+        "Auto",
+        "Manual"
+      ],
+      "ranges": []
+    },
+    "MAIN:LIPSYNCOFFSETINFO": {
+      "values": [],
+      "ranges": [
+        [
+          0,
+          250,
+          1
+        ],
+        [
+          0,
+          500,
+          1
+        ]
+      ]
+    },
+    "MAIN:LIPSYNCSELINFO": {
+      "values": [
+        "Analog",
+        "HDMI1 Auto",
+        "HDMI1 Manual",
+        "HDMI2 Auto",
+        "HDMI2 Manual"
+      ],
+      "ranges": []
+    },
+    "MAIN:LISTCURSOR": {
+      "values": [
+        "Back to Home"
+      ],
+      "ranges": []
+    },
+    "MAIN:MAXVOL": {
+      "values": [
+        "16.5"
+      ],
+      "ranges": [
+        [
+          -30,
+          15,
+          5
+        ],
+        [
+          -30,
+          16.5,
+          5
+        ]
+      ]
+    },
+    "MAIN:MENU": {
+      "values": [
+        "Menu",
+        "On Screen",
+        "Option",
+        "Top Menu"
+      ],
+      "ranges": []
+    },
+    "MAIN:MUTE": {
+      "values": [
+        "Att -20 dB",
+        "Att -40 dB",
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "MAIN:PUREDIRMODE": {
+      "values": [
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "MAIN:PWR": {
+      "values": [
+        "On",
+        "Standby"
+      ],
+      "ranges": []
+    },
+    "MAIN:SLEEP": {
+      "values": [
+        "120 min",
+        "30 min",
+        "60 min",
+        "90 min",
+        "Off"
+      ],
+      "ranges": []
+    },
+    "MAIN:SOUNDPRG": {
+      "values": [
+        "2ch Stereo",
+        "7ch Stereo",
+        "9ch Stereo",
+        "Action Game",
+        "Adventure",
+        "Cellar Club",
+        "Chamber",
+        "Church in Freiburg",
+        "Church in Royaumont",
+        "Drama",
+        "Hall in Amsterdam",
+        "Hall in Munich",
+        "Hall in Vienna",
+        "Mono Movie",
+        "Music Video",
+        "Recital/Opera",
+        "Roleplaying Game",
+        "Sci-Fi",
+        "Spectacle",
+        "Sports",
+        "Standard",
+        "Surround Decoder",
+        "The Bottom Line",
+        "The Roxy Theatre",
+        "Village Vanguard",
+        "Warehouse Loft"
+      ],
+      "ranges": []
+    },
+    "MAIN:SPBASS": {
+      "values": [],
+      "ranges": [
+        [
+          -6,
+          6,
+          0.5
+        ]
+      ]
+    },
+    "MAIN:SPTREBLE": {
+      "values": [],
+      "ranges": [
+        [
+          -6,
+          6,
+          0.5
+        ]
+      ]
+    },
+    "MAIN:STRAIGHT": {
+      "values": [
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "MAIN:SWFRTRIM": {
+      "values": [],
+      "ranges": [
+        [
+          -6,
+          6,
+          0.5
+        ]
+      ]
+    },
+    "MAIN:TONEBASS": {
+      "values": [],
+      "ranges": [
+        [
+          -6,
+          6,
+          0.5
+        ]
+      ]
+    },
+    "MAIN:TONETREBLE": {
+      "values": [],
+      "ranges": [
+        [
+          -6,
+          6,
+          0.5
+        ]
+      ]
+    },
+    "MAIN:TVAUDIN1": {
+      "values": [
+        "AUDIO1",
+        "AUDIO2",
+        "AUDIO3",
+        "AUDIO4",
+        "AV1",
+        "AV2",
+        "AV3",
+        "AV4",
+        "AV5",
+        "AV6"
+      ],
+      "ranges": []
+    },
+    "MAIN:TVAUDIN2": {
+      "values": [
+        "AUDIO1",
+        "AUDIO2",
+        "AUDIO3",
+        "AUDIO4",
+        "AV1",
+        "AV2",
+        "AV3",
+        "AV4",
+        "AV5",
+        "AV6"
+      ],
+      "ranges": []
+    },
+    "MAIN:VOL": {
+      "values": [],
+      "ranges": [
+        [
+          -80.5,
+          16.5,
+          0.5
+        ]
+      ]
+    },
+    "MAIN:YPAOVOL": {
+      "values": [
+        "Auto",
+        "Off"
+      ],
+      "ranges": []
+    },
+    "MAIN:ZONENAME": {
+      "values": [
+        "@@@@@@@@@"
+      ],
+      "ranges": []
+    },
+    "NAPSTER:AVAIL": {
+      "values": [
+        "Not Connected",
+        "Not Ready",
+        "Ready"
+      ],
+      "ranges": []
+    },
+    "NAPSTER:CURRLINE": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          65000,
+          1
+        ]
+      ]
+    },
+    "NAPSTER:LINE1ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Keyword",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "NAPSTER:LINE2ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Keyword",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "NAPSTER:LINE3ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Keyword",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "NAPSTER:LINE4ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Keyword",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "NAPSTER:LINE5ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Keyword",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "NAPSTER:LINE6ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Keyword",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "NAPSTER:LINE7ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Keyword",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "NAPSTER:LINE8ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Keyword",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "NAPSTER:LISTCURSOR": {
+      "values": [
+        "Back to Home"
+      ],
+      "ranges": []
+    },
+    "NAPSTER:LISTLAYER": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          16,
+          1
+        ]
+      ]
+    },
+    "NAPSTER:MAXLINE": {
+      "values": [],
+      "ranges": [
+        [
+          0,
+          65000,
+          1
+        ]
+      ]
+    },
+    "NAPSTER:MEM": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "NAPSTER:PLAYBACKINFO": {
+      "values": [
+        "Play",
+        "Stop"
+      ],
+      "ranges": []
+    },
+    "NAPSTER:PRESET": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "NAPSTER:REPEAT": {
+      "values": [
+        "All",
+        "Off",
+        "Single"
+      ],
+      "ranges": []
+    },
+    "NAPSTER:SHUFFLE": {
+      "values": [
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "NETRADIO:AVAIL": {
+      "values": [
+        "Not Connected",
+        "Not Ready",
+        "Ready"
+      ],
+      "ranges": []
+    },
+    "NETRADIO:CURRLINE": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          65000,
+          1
+        ]
+      ]
+    },
+    "NETRADIO:LINE1ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "NETRADIO:LINE2ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "NETRADIO:LINE3ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "NETRADIO:LINE4ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "NETRADIO:LINE5ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "NETRADIO:LINE6ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "NETRADIO:LINE7ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "NETRADIO:LINE8ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "NETRADIO:LISTCURSOR": {
+      "values": [
+        "Back to Home"
+      ],
+      "ranges": []
+    },
+    "NETRADIO:LISTLAYER": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          16,
+          1
+        ]
+      ]
+    },
+    "NETRADIO:MAXLINE": {
+      "values": [],
+      "ranges": [
+        [
+          0,
+          65000,
+          1
+        ]
+      ]
+    },
+    "NETRADIO:MEM": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "NETRADIO:PLAYBACKINFO": {
+      "values": [
+        "Play",
+        "Stop"
+      ],
+      "ranges": []
+    },
+    "NETRADIO:PRESET": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "PANDORA:BOOKMARK": {
+      "values": [
+        "Track"
+      ],
+      "ranges": []
+    },
+    "PANDORA:FEEDBACK": {
+      "values": [
+        "Thumb Down",
+        "Thumb Up"
+      ],
+      "ranges": []
+    },
+    "PANDORA:MEM": {
+      "values": [
+        "Auto"
+      ],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "PANDORA:PLAYBACK": {
+      "values": [
+        "Pause",
+        "Play",
+        "Stop"
+      ],
+      "ranges": []
+    },
+    "PANDORA:PRESET": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "PC:AVAIL": {
+      "values": [
+        "Not Connected",
+        "Not Ready",
+        "Ready"
+      ],
+      "ranges": []
+    },
+    "PC:CURRLINE": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          65000,
+          1
+        ]
+      ]
+    },
+    "PC:LINE1ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "PC:LINE2ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "PC:LINE3ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "PC:LINE4ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "PC:LINE5ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "PC:LINE6ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "PC:LINE7ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "PC:LINE8ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "PC:LISTCURSOR": {
+      "values": [
+        "Back to Home"
+      ],
+      "ranges": []
+    },
+    "PC:LISTLAYER": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          16,
+          1
+        ]
+      ]
+    },
+    "PC:MAXLINE": {
+      "values": [],
+      "ranges": [
+        [
+          0,
+          65000,
+          1
+        ]
+      ]
+    },
+    "PC:MEM": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "PC:PLAYBACKINFO": {
+      "values": [
+        "Pause",
+        "Play",
+        "Stop"
+      ],
+      "ranges": []
+    },
+    "PC:PRESET": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "PC:REPEAT": {
+      "values": [
+        "All",
+        "Off",
+        "Single"
+      ],
+      "ranges": []
+    },
+    "PC:SHUFFLE": {
+      "values": [
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "RHAP:AVAIL": {
+      "values": [
+        "Not Connected",
+        "Not Ready",
+        "Ready"
+      ],
+      "ranges": []
+    },
+    "RHAP:CURRLINE": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          65000,
+          1
+        ]
+      ]
+    },
+    "RHAP:LINE1ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "RHAP:LINE2ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "RHAP:LINE3ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "RHAP:LINE4ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "RHAP:LINE5ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "RHAP:LINE6ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "RHAP:LINE7ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "RHAP:LINE8ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "RHAP:LISTCURSOR": {
+      "values": [
+        "Return",
+        "Return to Home"
+      ],
+      "ranges": []
+    },
+    "RHAP:LISTLAYER": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          16,
+          1
+        ]
+      ]
+    },
+    "RHAP:LISTPAGE": {
+      "values": [
+        "Down 10",
+        "Up 10"
+      ],
+      "ranges": []
+    },
+    "RHAP:MAXLINE": {
+      "values": [],
+      "ranges": [
+        [
+          0,
+          65000,
+          1
+        ]
+      ]
+    },
+    "RHAP:MEM": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "RHAP:PLAYBACKINFO": {
+      "values": [
+        "Pause",
+        "Play",
+        "Stop"
+      ],
+      "ranges": []
+    },
+    "RHAP:PRESET": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "RHAP:REPEAT": {
+      "values": [
+        "All",
+        "Off",
+        "One",
+        "Single"
+      ],
+      "ranges": []
+    },
+    "RHAP:SHUFFLE": {
+      "values": [
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "SERVER:AVAIL": {
+      "values": [
+        "Not Ready",
+        "Ready"
+      ],
+      "ranges": []
+    },
+    "SERVER:CURRLINE": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          65000,
+          1
+        ]
+      ]
+    },
+    "SERVER:LINE1ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "SERVER:LINE2ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "SERVER:LINE3ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "SERVER:LINE4ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "SERVER:LINE5ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "SERVER:LINE6ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "SERVER:LINE7ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "SERVER:LINE8ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "SERVER:LISTLAYER": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          16,
+          1
+        ]
+      ]
+    },
+    "SERVER:MAXLINE": {
+      "values": [],
+      "ranges": [
+        [
+          0,
+          65000,
+          1
+        ]
+      ]
+    },
+    "SERVER:MEM": {
+      "values": [
+        "Auto"
+      ],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "SERVER:PLAYBACKINFO": {
+      "values": [
+        "Pause",
+        "Play",
+        "Stop"
+      ],
+      "ranges": []
+    },
+    "SERVER:PRESET": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "SERVER:REPEAT": {
+      "values": [
+        "All",
+        "Off",
+        "One"
+      ],
+      "ranges": []
+    },
+    "SERVER:SHUFFLE": {
+      "values": [
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "SIRIUS:ANTLVL": {
+      "values": [
+        "Excellent",
+        "Good",
+        "No Signal",
+        "Weak"
+      ],
+      "ranges": []
+    },
+    "SIRIUS:AVAIL": {
+      "values": [
+        "Not Connected",
+        "Not Ready",
+        "Ready"
+      ],
+      "ranges": []
+    },
+    "SIRIUS:CHNUM": {
+      "values": [],
+      "ranges": [
+        [
+          0,
+          255,
+          1
+        ]
+      ]
+    },
+    "SIRIUS:CHSEL": {
+      "values": [
+        "255"
+      ],
+      "ranges": [
+        [
+          0,
+          223,
+          1
+        ]
+      ]
+    },
+    "SIRIUS:MEM": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "SIRIUS:PLOCK": {
+      "values": [
+        "Locked",
+        "Unlocked"
+      ],
+      "ranges": []
+    },
+    "SIRIUS:PRESET": {
+      "values": [
+        "No Preset"
+      ],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "SIRIUS:SEARCHMODE": {
+      "values": [
+        "All Ch",
+        "Category",
+        "Preset"
+      ],
+      "ranges": []
+    },
+    "SIRIUSIR:AVAIL": {
+      "values": [
+        "Not Connected",
+        "Not Ready",
+        "Ready"
+      ],
+      "ranges": []
+    },
+    "SIRIUSIR:CURRLINE": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          65000,
+          1
+        ]
+      ]
+    },
+    "SIRIUSIR:LINE1ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "SIRIUSIR:LINE2ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "SIRIUSIR:LINE3ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "SIRIUSIR:LINE4ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "SIRIUSIR:LINE5ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "SIRIUSIR:LINE6ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "SIRIUSIR:LINE7ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "SIRIUSIR:LINE8ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "SIRIUSIR:LISTLAYER": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          16,
+          1
+        ]
+      ]
+    },
+    "SIRIUSIR:MAXLINE": {
+      "values": [],
+      "ranges": [
+        [
+          0,
+          65000,
+          1
+        ]
+      ]
+    },
+    "SIRIUSIR:MEM": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "SIRIUSIR:PLAYBACKINFO": {
+      "values": [
+        "Play",
+        "Stop"
+      ],
+      "ranges": []
+    },
+    "SIRIUSIR:PRESET": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "SIRIUSXM:MEM": {
+      "values": [
+        "Auto"
+      ],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "SIRIUSXM:PLAYBACK": {
+      "values": [
+        "Play",
+        "Stop"
+      ],
+      "ranges": []
+    },
+    "SIRIUSXM:PRESET": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "SPOTIFY:MEM": {
+      "values": [
+        "Auto"
+      ],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "SPOTIFY:PLAYBACK": {
+      "values": [
+        "Pause",
+        "Play",
+        "Stop"
+      ],
+      "ranges": []
+    },
+    "SPOTIFY:PRESET": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "SYS:DEST": {
+      "values": [
+        "A",
+        "BGF",
+        "C",
+        "J",
+        "K",
+        "L",
+        "RS",
+        "T",
+        "U"
+      ],
+      "ranges": []
+    },
+    "SYS:DMCCONTROL": {
+      "values": [
+        "Disable",
+        "Enable"
+      ],
+      "ranges": []
+    },
+    "SYS:FREQSTEP": {
+      "values": [
+        "FM100/AM10",
+        "FM100/AM9",
+        "FM200/AM10",
+        "FM50/AM9"
+      ],
+      "ranges": []
+    },
+    "SYS:HDMIASPECT": {
+      "values": [
+        "16:9 Normal",
+        "Smart Zoom",
+        "Through"
+      ],
+      "ranges": []
+    },
+    "SYS:HDMIOUT1": {
+      "values": [
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "SYS:HDMIOUT2": {
+      "values": [
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "SYS:HDMIRESOL": {
+      "values": [
+        "1080i",
+        "1080p",
+        "480p / 576p",
+        "4K",
+        "720p",
+        "Auto",
+        "Through"
+      ],
+      "ranges": []
+    },
+    "SYS:HDMIVIDEOMODE": {
+      "values": [
+        "Direct",
+        "Processing"
+      ],
+      "ranges": []
+    },
+    "SYS:LIPSYNCMODE": {
+      "values": [
+        "Auto",
+        "Manual"
+      ],
+      "ranges": []
+    },
+    "SYS:LIPSYNCSELINFO": {
+      "values": [
+        "Analog",
+        "Disable",
+        "HDMI1 Auto",
+        "HDMI1 Manual",
+        "HDMI2 Auto",
+        "HDMI2 Manual"
+      ],
+      "ranges": []
+    },
+    "SYS:LIPSYNCTOTALDELAY": {
+      "values": [],
+      "ranges": [
+        [
+          0,
+          500,
+          1
+        ]
+      ]
+    },
+    "SYS:LIPSYNCTOTALDELAYINFO": {
+      "values": [],
+      "ranges": [
+        [
+          0,
+          500,
+          1
+        ]
+      ]
+    },
+    "SYS:MEMGRD": {
+      "values": [
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "SYS:PARTY": {
+      "values": [
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "SYS:PWR": {
+      "values": [
+        "On",
+        "Standby"
+      ],
+      "ranges": []
+    },
+    "SYS:REMOTECODE": {
+      "values": [
+        "@@@@@@@@"
+      ],
+      "ranges": []
+    },
+    "SYS:RS232CSTANDBY": {
+      "values": [
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN": {
+      "values": [
+        "Pattern 1",
+        "Pattern 2"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN1AMP": {
+      "values": [
+        "5ch +FRONT+2ZONE",
+        "5ch BI-AMP",
+        "5ch BI-AMP +SB",
+        "5chBI-AMP",
+        "5chBI-AMP +FPR",
+        "5chBI-AMP +FPR+RPR",
+        "5chBI-AMP +SB",
+        "5chBI-AMP +SB+FPR",
+        "7ch +1ZONE",
+        "7ch +2ZONE",
+        "7ch +FP+RP",
+        "7ch +FPR",
+        "7ch +FPR+1ZONE",
+        "7ch +FPR+RPR",
+        "7ch +FPR+RPR+1ZONE",
+        "7ch +FRONT",
+        "7ch +FRONT+1ZONE",
+        "7ch +RPR",
+        "7ch BI-AMP",
+        "7ch BI-AMP +FP",
+        "7ch BI-AMP +FP+RP",
+        "7ch Normal",
+        "9ch +1ZONE",
+        "9ch +FRONT",
+        "9ch +RP",
+        "Basic"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN1CENTCNFG": {
+      "values": [
+        "Large",
+        "None",
+        "Small"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN1CENTCRSOVR": {
+      "values": [
+        "100 Hz",
+        "110 Hz",
+        "120 Hz",
+        "160 Hz",
+        "200 Hz",
+        "40 Hz",
+        "60 Hz",
+        "80 Hz",
+        "90 Hz"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN1EXBASS": {
+      "values": [
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN1FPLAYOUT": {
+      "values": [
+        "Dolby Enabled SP",
+        "Front Height",
+        "Overhead"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN1FPRESCNFG": {
+      "values": [
+        "Large",
+        "None",
+        "Small"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN1FPRESCRSOVR": {
+      "values": [
+        "100 Hz",
+        "110 Hz",
+        "120 Hz",
+        "160 Hz",
+        "200 Hz",
+        "40 Hz",
+        "60 Hz",
+        "80 Hz",
+        "90 Hz"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN1FRNTCNFG": {
+      "values": [
+        "Large",
+        "Small"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN1FRNTCRSOVR": {
+      "values": [
+        "100 Hz",
+        "110 Hz",
+        "120 Hz",
+        "160 Hz",
+        "200 Hz",
+        "40 Hz",
+        "60 Hz",
+        "80 Hz",
+        "90 Hz"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN1FRNTPRES": {
+      "values": [
+        "None",
+        "Use"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN1REARPRES": {
+      "values": [
+        "None",
+        "Use"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN1SURBCNFG": {
+      "values": [
+        "Large x1",
+        "Large x2",
+        "None",
+        "Small x1",
+        "Small x2"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN1SURBCRSOVR": {
+      "values": [
+        "100 Hz",
+        "110 Hz",
+        "120 Hz",
+        "160 Hz",
+        "200 Hz",
+        "40 Hz",
+        "60 Hz",
+        "80 Hz",
+        "90 Hz"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN1SURCNFG": {
+      "values": [
+        "Large",
+        "None",
+        "Small"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN1SURCRSOVR": {
+      "values": [
+        "100 Hz",
+        "110 Hz",
+        "120 Hz",
+        "160 Hz",
+        "200 Hz",
+        "40 Hz",
+        "60 Hz",
+        "80 Hz",
+        "90 Hz"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN1SURLAYOUT": {
+      "values": [
+        "Front",
+        "Rear"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN1SWFR1CNFG": {
+      "values": [
+        "None",
+        "Use"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN1SWFR1PHASE": {
+      "values": [
+        "Normal",
+        "Reverse"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN1SWFR2CNFG": {
+      "values": [
+        "None",
+        "Use"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN1SWFR2PHASE": {
+      "values": [
+        "Normal",
+        "Reverse"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN1SWFRCRSOVR": {
+      "values": [
+        "100 Hz",
+        "110 Hz",
+        "120 Hz",
+        "160 Hz",
+        "200 Hz",
+        "40 Hz",
+        "60 Hz",
+        "80 Hz",
+        "90 Hz"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN1SWFRLAYOUT": {
+      "values": [
+        "Front & Rear",
+        "Left & Right",
+        "Monaural x2"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN2AMP": {
+      "values": [
+        "5ch +FRONT+2ZONE",
+        "5ch BI-AMP",
+        "5ch BI-AMP +SB",
+        "5chBI-AMP",
+        "5chBI-AMP +FPR",
+        "5chBI-AMP +FPR+RPR",
+        "5chBI-AMP +SB",
+        "5chBI-AMP +SB+FPR",
+        "7ch +1ZONE",
+        "7ch +2ZONE",
+        "7ch +FP+RP",
+        "7ch +FPR",
+        "7ch +FPR+1ZONE",
+        "7ch +FPR+RPR",
+        "7ch +FPR+RPR+1ZONE",
+        "7ch +FRONT",
+        "7ch +FRONT+1ZONE",
+        "7ch +RPR",
+        "7ch BI-AMP",
+        "7ch BI-AMP +FP",
+        "7ch BI-AMP +FP+RP",
+        "7ch Normal",
+        "9ch +1ZONE",
+        "9ch +FRONT",
+        "9ch +RP",
+        "Basic"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN2CENTCNFG": {
+      "values": [
+        "Large",
+        "None",
+        "Small"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN2CENTCRSOVR": {
+      "values": [
+        "100 Hz",
+        "110 Hz",
+        "120 Hz",
+        "160 Hz",
+        "200 Hz",
+        "40 Hz",
+        "60 Hz",
+        "80 Hz",
+        "90 Hz"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN2EXBASS": {
+      "values": [
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN2FRNTCNFG": {
+      "values": [
+        "Large",
+        "Small"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN2FRNTCRSOVR": {
+      "values": [
+        "100 Hz",
+        "110 Hz",
+        "120 Hz",
+        "160 Hz",
+        "200 Hz",
+        "40 Hz",
+        "60 Hz",
+        "80 Hz",
+        "90 Hz"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN2FRNTPRES": {
+      "values": [
+        "None",
+        "Use"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN2REARPRES": {
+      "values": [
+        "None",
+        "Use"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN2SURBCNFG": {
+      "values": [
+        "Large x1",
+        "Large x2",
+        "None",
+        "Small x1",
+        "Small x2"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN2SURBCRSOVR": {
+      "values": [
+        "100 Hz",
+        "110 Hz",
+        "120 Hz",
+        "160 Hz",
+        "200 Hz",
+        "40 Hz",
+        "60 Hz",
+        "80 Hz",
+        "90 Hz"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN2SURCNFG": {
+      "values": [
+        "Large",
+        "None",
+        "Small"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN2SURCRSOVR": {
+      "values": [
+        "100 Hz",
+        "110 Hz",
+        "120 Hz",
+        "160 Hz",
+        "200 Hz",
+        "40 Hz",
+        "60 Hz",
+        "80 Hz",
+        "90 Hz"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN2SWFR1CNFG": {
+      "values": [
+        "None",
+        "Use"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN2SWFR1PHASE": {
+      "values": [
+        "Normal",
+        "Reverse"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN2SWFR2CNFG": {
+      "values": [
+        "None",
+        "Use"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN2SWFR2PHASE": {
+      "values": [
+        "Normal",
+        "Reverse"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN2SWFRCRSOVR": {
+      "values": [
+        "100 Hz",
+        "110 Hz",
+        "120 Hz",
+        "160 Hz",
+        "200 Hz",
+        "40 Hz",
+        "60 Hz",
+        "80 Hz",
+        "90 Hz"
+      ],
+      "ranges": []
+    },
+    "SYS:SPPATTERN2SWFRLAYOUT": {
+      "values": [
+        "Front & Rear",
+        "Left & Right",
+        "Monaural x2"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPAIRPLAY": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPAUDIO1": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPAUDIO2": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPAUDIO3": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPAUDIO4": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPAV1": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPAV2": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPAV3": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPAV4": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPAV5": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPAV6": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPAV7": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPBT": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPDOCK": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPHDMI1": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPHDMI2": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPHDMI3": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPHDMI4": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPHDMI5": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPHDMI6": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPHDMI7": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPMULTICH": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPNETRADIO": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPPANDORA": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPPC": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPPHONO": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPRHAPSODY": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPSERVER": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPSIRIUS": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPSIRIUSIR": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPSIRIUSXM": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPSPOTIFY": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPTUNER": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPUSB": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1INPVAUX": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1MANUAL": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1TYPE": {
+      "values": [
+        "Manual",
+        "Power",
+        "Zone and Input"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG1ZONE": {
+      "values": [
+        "All",
+        "Main Zone",
+        "Zone2",
+        "Zone3",
+        "Zone4"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG2INPAIRPLAY": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG2INPAUDIO1": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG2INPAUDIO2": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG2INPAUDIO3": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG2INPAUDIO4": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG2INPAV1": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG2INPAV2": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG2INPAV3": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG2INPAV4": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG2INPAV5": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG2INPAV6": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG2INPAV7": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG2INPDOCK": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG2INPMULTICH": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG2INPNETRADIO": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG2INPPC": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG2INPPHONO": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG2INPRHAPSODY": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG2INPSERVER": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG2INPSIRIUS": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG2INPSIRIUSIR": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG2INPTUNER": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG2INPUSB": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG2INPVAUX": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG2MANUAL": {
+      "values": [
+        "Hi",
+        "Lo"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG2TYPE": {
+      "values": [
+        "Manual",
+        "Power",
+        "Zone and Input"
+      ],
+      "ranges": []
+    },
+    "SYS:TRIG2ZONE": {
+      "values": [
+        "All",
+        "Main Zone",
+        "Zone2",
+        "Zone3",
+        "Zone4"
+      ],
+      "ranges": []
+    },
+    "SYS:TVAUDIN1": {
+      "values": [
+        "AUDIO1",
+        "AUDIO2",
+        "AV1",
+        "AV2",
+        "AV3",
+        "AV4",
+        "AV5",
+        "AV6"
+      ],
+      "ranges": []
+    },
+    "SYS:UPDTNOTICEMSG": {
+      "values": [
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "SYS:VIDANLGCONV": {
+      "values": [
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "SYS:YNCAPORT": {
+      "values": [],
+      "ranges": [
+        [
+          50000,
+          65535,
+          1
+        ]
+      ]
+    },
+    "TUN:AMFREQ": {
+      "values": [],
+      "ranges": [
+        [
+          530,
+          1710,
+          10
+        ],
+        [
+          531,
+          1611,
+          9
+        ]
+      ]
+    },
+    "TUN:AVAIL": {
+      "values": [
+        "Not Ready",
+        "Ready"
+      ],
+      "ranges": []
+    },
+    "TUN:BAND": {
+      "values": [
+        "AM",
+        "FM"
+      ],
+      "ranges": []
+    },
+    "TUN:FMFREQ": {
+      "values": [],
+      "ranges": [
+        [
+          87.5,
+          107.9,
+          0.2
+        ],
+        [
+          87.5,
+          108,
+          0.05
+        ],
+        [
+          8750,
+          10790,
+          20
+        ]
+      ]
+    },
+    "TUN:FMMODE": {
+      "values": [
+        "Auto",
+        "Mono"
+      ],
+      "ranges": []
+    },
+    "TUN:MEM": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "TUN:PRESET": {
+      "values": [
+        "No Preset"
+      ],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "TUN:RDSPRGTYPE": {
+      "values": [
+        "",
+        "AFFAIRS",
+        "CLASSICS",
+        "CULTURE",
+        "DRAMA",
+        "EDUCATE",
+        "INFO",
+        "LIGHT M",
+        "M.O.R M",
+        "NEWS",
+        "OTHER M",
+        "POP M",
+        "ROCK M",
+        "SCIENCE",
+        "SPORT",
+        "VARIED"
+      ],
+      "ranges": []
+    },
+    "TUN:SEARCHMODE": {
+      "values": [
+        "Preset",
+        "Tuning"
+      ],
+      "ranges": []
+    },
+    "TUN:SIGSTEREOMONO": {
+      "values": [
+        "Assert",
+        "Negate"
+      ],
+      "ranges": []
+    },
+    "TUN:TUNED": {
+      "values": [
+        "Assert",
+        "Negate"
+      ],
+      "ranges": []
+    },
+    "UAW:AVAIL": {
+      "values": [
+        "Not Connected",
+        "Not Ready",
+        "Ready"
+      ],
+      "ranges": []
+    },
+    "USB:AVAIL": {
+      "values": [
+        "Not Connected",
+        "Not Ready",
+        "Ready"
+      ],
+      "ranges": []
+    },
+    "USB:CURRLINE": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          65000,
+          1
+        ]
+      ]
+    },
+    "USB:LINE1ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "USB:LINE2ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "USB:LINE3ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "USB:LINE4ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "USB:LINE5ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "USB:LINE6ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "USB:LINE7ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "USB:LINE8ATRIB": {
+      "values": [
+        "Container",
+        "Item",
+        "Unplayable Item",
+        "Unselectable"
+      ],
+      "ranges": []
+    },
+    "USB:LISTCURSOR": {
+      "values": [
+        "Back to Home"
+      ],
+      "ranges": []
+    },
+    "USB:LISTLAYER": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          16,
+          1
+        ]
+      ]
+    },
+    "USB:MAXLINE": {
+      "values": [],
+      "ranges": [
+        [
+          0,
+          65000,
+          1
+        ]
+      ]
+    },
+    "USB:MEM": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "USB:PLAYBACKINFO": {
+      "values": [
+        "Pause",
+        "Play",
+        "Stop"
+      ],
+      "ranges": []
+    },
+    "USB:PRESET": {
+      "values": [],
+      "ranges": [
+        [
+          1,
+          40,
+          1
+        ]
+      ]
+    },
+    "USB:REPEAT": {
+      "values": [
+        "All",
+        "Off",
+        "One",
+        "Single"
+      ],
+      "ranges": []
+    },
+    "USB:SHUFFLE": {
+      "values": [
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "ZONE2:AVAIL": {
+      "values": [
+        "Not Ready",
+        "Ready"
+      ],
+      "ranges": []
+    },
+    "ZONE2:BALANCE": {
+      "values": [],
+      "ranges": [
+        [
+          -20,
+          20,
+          1
+        ]
+      ]
+    },
+    "ZONE2:BASS": {
+      "values": [],
+      "ranges": [
+        [
+          -10,
+          10,
+          2
+        ]
+      ]
+    },
+    "ZONE2:INITVOLLVL": {
+      "values": [
+        "Mute"
+      ],
+      "ranges": [
+        [
+          -80,
+          16.5,
+          0.5
+        ]
+      ]
+    },
+    "ZONE2:INITVOLMODE": {
+      "values": [
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "ZONE2:INP": {
+      "values": [
+        "AUDIO1",
+        "AUDIO2",
+        "AUDIO3",
+        "AUDIO4",
+        "AV1",
+        "AV2",
+        "AV3",
+        "AV4",
+        "AV5",
+        "AV6",
+        "AV7",
+        "AirPlay",
+        "Bluetooth",
+        "Main Zone Sync",
+        "NET RADIO",
+        "Napster",
+        "PC",
+        "PHONO",
+        "Pandora",
+        "Rhapsody",
+        "SERVER",
+        "SIRIUS",
+        "SIRIUS InternetRadio",
+        "SiriusXM",
+        "Spotify",
+        "TUNER",
+        "UAW",
+        "USB",
+        "V-AUX",
+        "iPod",
+        "iPod (USB)"
+      ],
+      "ranges": []
+    },
+    "ZONE2:LISTCURSOR": {
+      "values": [
+        "Back to Home"
+      ],
+      "ranges": []
+    },
+    "ZONE2:MAXVOL": {
+      "values": [
+        "16.5"
+      ],
+      "ranges": [
+        [
+          -30,
+          15,
+          5
+        ],
+        [
+          -30,
+          16.5,
+          5
+        ]
+      ]
+    },
+    "ZONE2:MUTE": {
+      "values": [
+        "Att -20 dB",
+        "Att -40 dB",
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "ZONE2:PWR": {
+      "values": [
+        "On",
+        "Standby"
+      ],
+      "ranges": []
+    },
+    "ZONE2:SLEEP": {
+      "values": [
+        "120 min",
+        "30 min",
+        "60 min",
+        "90 min",
+        "Off"
+      ],
+      "ranges": []
+    },
+    "ZONE2:TONEBASS": {
+      "values": [],
+      "ranges": [
+        [
+          -10,
+          10,
+          2
+        ]
+      ]
+    },
+    "ZONE2:TONETREBLE": {
+      "values": [],
+      "ranges": [
+        [
+          -10,
+          10,
+          2
+        ]
+      ]
+    },
+    "ZONE2:TREBLE": {
+      "values": [],
+      "ranges": [
+        [
+          -10,
+          10,
+          2
+        ]
+      ]
+    },
+    "ZONE2:VOL": {
+      "values": [],
+      "ranges": [
+        [
+          -80.5,
+          16.5,
+          0.5
+        ]
+      ]
+    },
+    "ZONE2:VOLFIXVAR": {
+      "values": [
+        "Fixed",
+        "Variable"
+      ],
+      "ranges": []
+    },
+    "ZONE2:ZONENAME": {
+      "values": [
+        "@@@@@@@@@"
+      ],
+      "ranges": []
+    },
+    "ZONE3:AVAIL": {
+      "values": [
+        "Not Ready",
+        "Ready"
+      ],
+      "ranges": []
+    },
+    "ZONE3:BALANCE": {
+      "values": [],
+      "ranges": [
+        [
+          -20,
+          20,
+          1
+        ]
+      ]
+    },
+    "ZONE3:BASS": {
+      "values": [],
+      "ranges": [
+        [
+          -10,
+          10,
+          2
+        ]
+      ]
+    },
+    "ZONE3:INITVOLLVL": {
+      "values": [
+        "Mute"
+      ],
+      "ranges": [
+        [
+          -80,
+          16.5,
+          0.5
+        ]
+      ]
+    },
+    "ZONE3:INITVOLMODE": {
+      "values": [
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "ZONE3:INP": {
+      "values": [
+        "AUDIO1",
+        "AUDIO2",
+        "AUDIO3",
+        "AUDIO4",
+        "AV1",
+        "AV2",
+        "AV3",
+        "AV4",
+        "AirPlay",
+        "Bluetooth",
+        "NET RADIO",
+        "Napster",
+        "PC",
+        "PHONO",
+        "Rhapsody",
+        "SERVER",
+        "SIRIUS",
+        "SIRIUS InternetRadio",
+        "TUNER",
+        "UAW",
+        "USB",
+        "V-AUX",
+        "iPod",
+        "iPod (USB)"
+      ],
+      "ranges": []
+    },
+    "ZONE3:LISTCURSOR": {
+      "values": [
+        "Back to Home"
+      ],
+      "ranges": []
+    },
+    "ZONE3:MAXVOL": {
+      "values": [
+        "16.5"
+      ],
+      "ranges": [
+        [
+          -30,
+          15,
+          5
+        ]
+      ]
+    },
+    "ZONE3:MUTE": {
+      "values": [
+        "Att -20 dB",
+        "Att -40 dB",
+        "Off",
+        "On"
+      ],
+      "ranges": []
+    },
+    "ZONE3:PWR": {
+      "values": [
+        "On",
+        "Standby"
+      ],
+      "ranges": []
+    },
+    "ZONE3:SLEEP": {
+      "values": [
+        "120 min",
+        "30 min",
+        "60 min",
+        "90 min",
+        "Off"
+      ],
+      "ranges": []
+    },
+    "ZONE3:TONEBASS": {
+      "values": [],
+      "ranges": [
+        [
+          -10,
+          10,
+          2
+        ]
+      ]
+    },
+    "ZONE3:TONETREBLE": {
+      "values": [],
+      "ranges": [
+        [
+          -10,
+          10,
+          2
+        ]
+      ]
+    },
+    "ZONE3:TREBLE": {
+      "values": [],
+      "ranges": [
+        [
+          -10,
+          10,
+          2
+        ]
+      ]
+    },
+    "ZONE3:VOL": {
+      "values": [],
+      "ranges": [
+        [
+          -80.5,
+          16.5,
+          0.5
+        ]
+      ]
+    },
+    "ZONE3:VOLFIXVAR": {
+      "values": [
+        "Fixed",
+        "Variable"
+      ],
+      "ranges": []
+    },
+    "ZONE4:AVAIL": {
+      "values": [
+        "Not Ready",
+        "Ready"
+      ],
+      "ranges": []
+    },
+    "ZONE4:INP": {
+      "values": [
+        "AUDIO1",
+        "AUDIO2",
+        "AUDIO3",
+        "AUDIO4",
+        "AV1",
+        "AV2",
+        "AV3",
+        "AV4",
+        "AV5",
+        "AV6",
+        "AV7",
+        "V-AUX"
+      ],
+      "ranges": []
+    },
+    "ZONE4:PWR": {
+      "values": [
+        "On",
+        "Standby"
+      ],
+      "ranges": []
+    },
+    "ZONE4:SLEEP": {
+      "values": [
+        "120 min",
+        "30 min",
+        "60 min",
+        "90 min",
+        "Off"
+      ],
+      "ranges": []
+    }
+  }
 }

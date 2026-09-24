@@ -264,6 +264,46 @@ describe("YncaDeviceController", () => {
     expect(acked).toContainEqual({ id: "living.volume", value: -25 });
   });
 
+  // A receiver without INITVOLMODE reports the switched-off initial volume as `INITVOLLVL=Off`
+  // (RX-V583); the number state could not take the word and the mode had no datapoint (B7).
+  test("INITVOLLVL=Off on a device without INITVOLMODE reads as the initial volume switched off", async () => {
+    const client = new FakeClient();
+    client.capabilities = { model: "RX-V583", subunits: { MAIN: { PWR: "On", INITVOLLVL: "Off" } } };
+    const { acked, objects, deps } = makeDeps(client);
+    await new YncaDeviceController("living", deps).start();
+    expect(acked).toContainEqual({ id: "living.advanced.initialVolume.mode", value: false });
+    expect(objects.find(o => o.id === "living.advanced.initialVolume.mode")?.def.common.write).toBe(false);
+    acked.length = 0;
+    client.emit({ subunit: "MAIN", func: "INITVOLLVL", value: "-30.0" });
+    expect(acked).toEqual([
+      { id: "living.advanced.initialVolume.mode", value: true },
+      { id: "living.advanced.initialVolume.level", value: -30 },
+    ]);
+  });
+
+  test("a device that answers INITVOLMODE keeps its own mode — the level never overwrites it", async () => {
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX-A810",
+      subunits: { MAIN: { PWR: "On", INITVOLMODE: "Off", INITVOLLVL: "Mute" } },
+    };
+    const { acked, objects, deps } = makeDeps(client);
+    const controller = new YncaDeviceController("living", deps);
+    await controller.start();
+    expect(acked.filter(a => a.id === "living.advanced.initialVolume.mode")).toEqual([
+      { id: "living.advanced.initialVolume.mode", value: false },
+    ]);
+    expect(acked).toContainEqual({ id: "living.advanced.initialVolume.level", value: -80.5 });
+    expect(objects.find(o => o.id === "living.advanced.initialVolume.mode")?.def.common.write).toBe(true);
+    client.sent.length = 0;
+    controller.handleStateChange("living.advanced.initialVolume.mode", false, true);
+    controller.handleStateChange("living.advanced.initialVolume.level", false, -80.5);
+    expect(client.sent).toEqual([
+      { subunit: "MAIN", func: "INITVOLMODE", value: "On" },
+      { subunit: "MAIN", func: "INITVOLLVL", value: "Mute" },
+    ]);
+  });
+
   test("a write before the sweep finds no proven function and puts nothing on the wire", () => {
     // The adapter routes writes only through a connected handle, which exists after start()
     // — so nothing ever answered here in production. The unfiltered static map that used to
@@ -1028,6 +1068,33 @@ describe("YncaDeviceController unified player v2.0.0 (input-routed block)", () =
     s.client.emit({ subunit: "MAIN", func: "INP", value: "HDMI1" });
     expect(s.acked).toContainEqual({ id: "living.player.playback", value: 1 });
     expect(s.acked).toContainEqual({ id: "living.player.source", value: "" });
+  });
+
+  // The 2010/2011 lists say `Single`, the iPod sources and every list from 2012 on say `One`; the
+  // adapter sent `Single` everywhere and a newer receiver refused it (audit 2026-09-24, B6).
+  test("repeat-one goes out in the word the device speaks", async () => {
+    const write = async (subunits: YncaCapabilities["subunits"]): Promise<unknown[]> => {
+      const s = await playerSetup(subunits);
+      s.client.sent.length = 0;
+      s.controller.handleStateChange("living.player.repeat", false, 1);
+      return s.client.sent;
+    };
+    const usb = { PLAYBACKINFO: "Play", REPEAT: "Off" };
+    // 2012 generation (SERVER source) → One; 2010/2011 generation (PC source) → Single.
+    expect(await write({ MAIN: { PWR: "On", INP: "USB" }, USB: usb, SERVER: { PLAYBACKINFO: "Stop" } })).toEqual([
+      { subunit: "USB", func: "REPEAT", value: "One" },
+    ]);
+    expect(await write({ MAIN: { PWR: "On", INP: "USB" }, USB: usb, PC: { PLAYBACKINFO: "Stop" } })).toEqual([
+      { subunit: "USB", func: "REPEAT", value: "Single" },
+    ]);
+    // The word the device reported beats the generation guess.
+    expect(
+      await write({ MAIN: { PWR: "On", INP: "USB" }, USB: { PLAYBACKINFO: "Play", REPEAT: "One" }, PC: {} }),
+    ).toEqual([{ subunit: "USB", func: "REPEAT", value: "One" }]);
+    // An iPod says One in every list, next to a PC source too.
+    expect(
+      await write({ MAIN: { PWR: "On", INP: "iPod" }, IPOD: { PLAYBACKINFO: "Play", REPEAT: "Off" }, PC: {} }),
+    ).toEqual([{ subunit: "IPOD", func: "REPEAT", value: "One" }]);
   });
 
   test("a transport write goes to the subunit the zone is listening to — claim with proof", async () => {

@@ -544,6 +544,7 @@ export class YncaDeviceController implements ConnectionHandle {
     if (!fromCache) {
       for (const [subunit, funcs] of Object.entries(capabilities.subunits)) {
         for (const [func, value] of Object.entries(funcs)) {
+          this.writeDerived(subunit, func, value);
           const update = yncaStateUpdate({ subunit, func, value }, FUNC_MAP);
           if (update) {
             if (FLAT_PLAYER_ID.test(update.id)) {
@@ -1528,6 +1529,7 @@ export class YncaDeviceController implements ConnectionHandle {
         this.handleInputSwitch(zone.key, message.value);
       }
     }
+    this.writeDerived(message.subunit, message.func, message.value);
     const update = yncaStateUpdate(message, FUNC_MAP);
     if (update) {
       if (FLAT_PLAYER_ID.test(update.id)) {
@@ -1535,6 +1537,24 @@ export class YncaDeviceController implements ConnectionHandle {
       } else {
         this.reported.set(update.id, update.value);
         this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
+      }
+    }
+  }
+
+  /**
+   * The values THIS device derives from a line (see `YncaEntry.derive`): only the derived entries it
+   * kept, so a device that reports the value itself is never overwritten by the derivation.
+   *
+   * @param subunit the line's subunit
+   * @param func the line's function
+   * @param wire the line's raw value
+   */
+  private writeDerived(subunit: string, func: string, wire: string): void {
+    for (const entry of this.presentEntries) {
+      if (entry.derive && entry.subunit === subunit && entry.func === func) {
+        const value = entry.derive(wire);
+        this.reported.set(entry.id, value);
+        this.deps.setStateAck(`${this.deviceId}.${entry.id}`, value);
       }
     }
   }
@@ -1562,7 +1582,9 @@ export class YncaDeviceController implements ConnectionHandle {
    */
   private restoreRefused(command: string): void {
     const parsed = /^@([A-Z0-9]+):([A-Z0-9]+)=/.exec(command);
-    const entry = parsed ? this.presentEntries.find(e => e.subunit === parsed[1] && e.func === parsed[2]) : undefined;
+    const entry = parsed
+      ? this.presentEntries.find(e => !e.derived && e.subunit === parsed[1] && e.func === parsed[2])
+      : undefined;
     const value = entry ? this.reported.get(entry.id) : undefined;
     if (entry && value !== undefined) {
       this.deps.setStateAck(`${this.deviceId}.${entry.id}`, value);

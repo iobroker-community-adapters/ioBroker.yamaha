@@ -22,7 +22,7 @@ import {
 } from "./catalog";
 import { CHANNEL_NAME_KEYS } from "../catalog/types";
 import { catalogToObjects } from "../catalog/build-objects";
-import type { EnumSpec } from "../catalog/value-coerce";
+import { decode, type EnumSpec } from "../catalog/value-coerce";
 import type { YncaCapabilities } from "./capability";
 import { capabilitiesFromLines as parseCapabilities } from "./__fixtures__/capabilities-from-lines";
 import rxA810 from "./__fixtures__/RX-A810.json";
@@ -121,7 +121,12 @@ describe("YNCA catalog", () => {
     expect(cat.find(e => e.id === "multiroom.zoneB.volume")).toMatchObject({ subunit: "MAIN", func: "ZONEBVOL" });
     expect(cat.find(e => e.id === "multiroom.zone2.zoneB.volume")).toBeUndefined();
     expect(cat.find(e => e.id === "advanced.speakers.speakerA")).toMatchObject({ subunit: "MAIN", func: "SPEAKERA" });
-    expect(cat.find(e => e.id === "multiroom.zoneB.power")?.spec).toEqual({ kind: "onoff", on: "On", off: "Standby" });
+    expect(cat.find(e => e.id === "multiroom.zoneB.power")?.spec).toEqual({
+      kind: "onoff",
+      on: "On",
+      off: "Standby",
+      alsoOff: ["Unavailable"],
+    });
   });
 
   test("scene names are no longer own datapoints — the recall entry sweeps them as aliases (v2.0.0)", () => {
@@ -1393,5 +1398,162 @@ describe("yncaGenerationEvidence (audit 2026-09-24, B16/B6)", () => {
   it("reads the generation off the network source a device answers", () => {
     expect(yncaGenerationEvidence({ MAIN: {}, SERVER: {} })).toEqual({ returnWords: true, display: true });
     expect(yncaGenerationEvidence({ MAIN: {}, PC: {} })).toEqual({ returnWords: false, display: false });
+  });
+});
+
+describe("the catalog reads every word and covers every range the official lists declare (audit 2026-09-24, B10)", () => {
+  const params = functionEvidence.params as Record<string, { values: string[]; ranges: number[][] }>;
+
+  /**
+   * The entry in the form a device takes that answered it (and nothing else) — a zone's tone
+   * range, for one, depends on what else the zone reports.
+   *
+   * @param entry the catalog entry
+   * @returns the entry as such a device takes it
+   */
+  function deviceForm(entry: YncaEntry): YncaEntry {
+    const funcs = Object.fromEntries([entry.readFunc ?? entry.func, ...(entry.readAliases ?? [])].map(f => [f, "0"]));
+    return presentYncaEntries({ model: "", subunits: { [entry.subunit]: funcs } }, [entry])[0] ?? entry;
+  }
+
+  test("every word a device may report for a switch or a coded value is read", () => {
+    const unread: string[] = [];
+    for (const entry of YNCA_CATALOG) {
+      if (entry.derived || entry.writeOnly || (entry.spec.kind !== "onoff" && entry.spec.kind !== "code")) {
+        continue;
+      }
+      for (const func of [entry.readFunc ?? entry.func, ...(entry.readAliases ?? [])]) {
+        for (const word of params[`${entry.subunit}:${func}`]?.values ?? []) {
+          const wire = entry.wireDecode ? entry.wireDecode(word) : word;
+          if (decode(entry.spec, wire) === undefined) {
+            unread.push(`${entry.subunit}:${func}=${word}`);
+          }
+        }
+      }
+    }
+    expect(unread).toEqual([]);
+  });
+
+  test("every word a device may report for a number is read or deliberately left to another state", () => {
+    const unread: string[] = [];
+    for (const entry of YNCA_CATALOG) {
+      if (entry.derived || entry.writeOnly || entry.spec.kind !== "number") {
+        continue;
+      }
+      for (const func of [entry.readFunc ?? entry.func, ...(entry.readAliases ?? [])]) {
+        for (const word of params[`${entry.subunit}:${func}`]?.values ?? []) {
+          const wire = entry.wireDecode ? entry.wireDecode(word) : word;
+          if (decode(entry.spec, wire) === undefined) {
+            unread.push(`${entry.subunit}:${func}=${word}`);
+          }
+        }
+      }
+    }
+    expect(unread).toEqual([]);
+  });
+
+  test("every declared range lies inside the datapoint's bounds, on its grid", () => {
+    const outside: string[] = [];
+    for (const entry of YNCA_CATALOG) {
+      if (entry.derived || entry.spec.kind !== "number") {
+        continue;
+      }
+      const form = deviceForm(entry);
+      if (form.spec.kind !== "number") {
+        continue;
+      }
+      const { min, max, step } = form.spec;
+      for (const [low, high, declaredStep] of params[`${entry.subunit}:${entry.func}`]?.ranges ?? []) {
+        const inside = (min === undefined || min <= low) && (max === undefined || max >= high);
+        const onGrid = step === undefined || Math.abs(declaredStep / step - Math.round(declaredStep / step)) < 1e-9;
+        if (!inside || !onGrid) {
+          outside.push(
+            `${entry.subunit}:${entry.func} declares ${low}…${high}/${declaredStep}, the datapoint ${min}…${max}/${step}`,
+          );
+        }
+      }
+    }
+    expect(outside).toEqual([]);
+  });
+});
+
+describe("the words and ranges of the official lists, read and written (audit 2026-09-24, B6–B9)", () => {
+  const map = funcToEntry(YNCA_CATALOG);
+  const read = (subunit: string, func: string, value: string): unknown =>
+    yncaStateUpdate({ subunit, func, value }, map)?.value;
+
+  test("a dampened mute is muted; the written words stay On/Off", () => {
+    expect(read("MAIN", "MUTE", "Att -20 dB")).toBe(true);
+    expect(read("ZONE2", "MUTE", "Att -40 dB")).toBe(true);
+    const writes = idToEntry(YNCA_CATALOG);
+    expect(yncaCommand("mute", true, writes)?.value).toBe("On");
+    expect(yncaCommand("mute", false, writes)?.value).toBe("Off");
+  });
+
+  test("repeat reads both words for one", () => {
+    expect(read("USB", "REPEAT", "Single")).toBe(1);
+    expect(read("USB", "REPEAT", "One")).toBe(1);
+    expect(read("IPOD", "REPEAT", "One")).toBe(1);
+  });
+
+  test("an iPod shuffles songs or albums — both are on, switching on writes Songs", () => {
+    expect(read("IPOD", "SHUFFLE", "Songs")).toBe(true);
+    expect(read("IPODUSB", "SHUFFLE", "Albums")).toBe(true);
+    expect(read("IPOD", "SHUFFLE", "Off")).toBe(false);
+    const ipod = presentYncaEntries({ model: "", subunits: { IPOD: { SHUFFLE: "Off" } } });
+    expect(yncaCommand("player.shuffle", true, idToEntry(ipod))?.value).toBe("Songs");
+    // The other sources keep On/Off.
+    expect(read("USB", "SHUFFLE", "On")).toBe(true);
+  });
+
+  test("zone B that is not available is not powered", () => {
+    expect(read("MAIN", "PWRB", "Unavailable")).toBe(false);
+  });
+
+  test("the initial volume's Mute is the -80.5 step, both ways", () => {
+    expect(read("MAIN", "INITVOLLVL", "Mute")).toBe(-80.5);
+    const writes = idToEntry(YNCA_CATALOG);
+    expect(yncaCommand("advanced.initialVolume.level", -80.5, writes)?.value).toBe("Mute");
+    expect(yncaCommand("advanced.initialVolume.level", -80.3, writes)?.value).toBe("Mute");
+    expect(yncaCommand("advanced.initialVolume.level", -30, writes)?.value).toBe("-30.0");
+  });
+
+  test("the initial volume mode is read from INITVOLLVL only where the device has no INITVOLMODE", () => {
+    const without = presentYncaEntries({ model: "", subunits: { MAIN: { INITVOLLVL: "Off" } } });
+    const twin = without.find(e => e.id === "advanced.initialVolume.mode");
+    expect(twin).toMatchObject({ func: "INITVOLLVL", derived: true, write: false });
+    expect(twin?.derive?.("Off")).toBe(false);
+    expect(twin?.derive?.("-30.0")).toBe(true);
+    const withMode = presentYncaEntries({ model: "", subunits: { MAIN: { INITVOLLVL: "-30.0", INITVOLMODE: "On" } } });
+    expect(withMode.filter(e => e.id === "advanced.initialVolume.mode")).toMatchObject([
+      { func: "INITVOLMODE", write: true },
+    ]);
+  });
+
+  test("a zone's tone range: ±10 in 2 dB steps unless the zone reports TONEMODE, then ±6 in 0.5 dB steps", () => {
+    const classic = idToEntry(
+      presentYncaEntries({ model: "", subunits: { ZONE2: { TONEBASS: "0.0", TONETREBLE: "0.0" } } }),
+    );
+    expect(classic.get("multiroom.zone2.sound.bass")?.spec).toMatchObject({ min: -10, max: 10, step: 2 });
+    expect(classic.get("multiroom.zone2.sound.treble")?.spec).toMatchObject({ min: -10, max: 10, step: 2 });
+    expect(yncaCommand("multiroom.zone2.sound.bass", 3, classic)?.value).toBe("4.0");
+    const musicCast = idToEntry(
+      presentYncaEntries({ model: "", subunits: { ZONE2: { TONEBASS: "0.0", TONEMODE: "Auto" } } }),
+    );
+    expect(musicCast.get("multiroom.zone2.sound.bass")?.spec).toMatchObject({ min: -6, max: 6, step: 0.5 });
+    expect(yncaCommand("multiroom.zone2.sound.bass", 3, musicCast)?.value).toBe("3.0");
+    // The main zone keeps the ±6/0.5 every list declares for it.
+    const main = idToEntry(presentYncaEntries({ model: "", subunits: { MAIN: { TONEBASS: "0.0" } } }));
+    expect(main.get("sound.bass")?.spec).toMatchObject({ min: -6, max: 6, step: 0.5 });
+  });
+
+  test("lip sync takes the hull of the official ranges", () => {
+    const byFunc = (func: string): unknown => YNCA_CATALOG.find(e => e.subunit === "MAIN" && e.func === func)?.spec;
+    for (const func of ["LIPSYNCANLGOUT", "LIPSYNCHDMIOUT1MANUAL", "LIPSYNCHDMIOUT2MANUAL", "LIPSYNCOFFSETINFO"]) {
+      expect(byFunc(func), func).toMatchObject({ min: 0, max: 500, step: 1 });
+    }
+    for (const func of ["LIPSYNCHDMIOUT1OFFSET", "LIPSYNCHDMIOUT2OFFSET"]) {
+      expect(byFunc(func), func).toMatchObject({ min: -500, max: 500, step: 1 });
+    }
   });
 });

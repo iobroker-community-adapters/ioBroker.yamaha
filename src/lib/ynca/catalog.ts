@@ -56,6 +56,12 @@ export interface YncaEntry extends CatalogEntry {
    * The controller writes it alongside its source; the readable playback times use this.
    */
   derived?: boolean;
+  /**
+   * For a derived entry read from its own wire function: the value it takes from that function's
+   * wire value (the initial volume mode from `INITVOLLVL=Off`). Without it the controller derives
+   * the value itself (the readable playback times).
+   */
+  derive?: (wire: string) => boolean | number | string;
 }
 
 /**
@@ -437,6 +443,10 @@ interface FuncDef {
   nameArgs?: Array<string | number>;
   /** Further functions the device answers this entry under (see {@link YncaEntry.readAliases}). */
   readAliases?: string[];
+  /** Written by the controller from another value (see {@link YncaEntry.derived}). */
+  derived?: boolean;
+  /** How the derived value is read from the wire (see {@link YncaEntry.derive}). */
+  derive?: (wire: string) => boolean | number | string;
 }
 
 const AMP_FUNCS: FuncDef[] = [
@@ -461,7 +471,9 @@ const AMP_FUNCS: FuncDef[] = [
     func: "MUTE",
     state: "mute",
     nameKey: "mute",
-    spec: { kind: "onoff", on: "On", off: "Off" },
+    // The official lists declare two dampened steps next to On/Off; a dampened receiver is muted
+    // for the datapoint — before, the state kept whatever it said last (audit 2026-09-24, B6).
+    spec: { kind: "onoff", on: "On", off: "Off", alsoOn: ["Att -20 dB", "Att -40 dB"] },
     write: true,
     role: "media.mute",
   },
@@ -684,6 +696,21 @@ const AMP_FUNCS: FuncDef[] = [
     write: true,
     role: "switch",
   },
+  // Some receivers have no INITVOLMODE and report the switched-off initial volume as
+  // `INITVOLLVL=Off` instead (RX-V583: INITVOLMODE `@RESTRICTED`, INITVOLLVL `Off`). There the
+  // mode is read from the level — read-only, and only where the device does not answer the mode
+  // itself (`presentYncaEntries` drops a derived twin of a reported id; audit 2026-09-24, B7).
+  {
+    func: "INITVOLLVL",
+    state: "advanced.initialVolume.mode",
+    nameKey: "initialVolumeMode",
+    descKey: "descInitialVolumeMode",
+    spec: { kind: "onoff", on: "On", off: "Off" },
+    write: false,
+    role: "indicator",
+    derived: true,
+    derive: wire => wire !== "Off",
+  },
   {
     func: "INITVOLMODE",
     state: "advanced.initialVolume.mode",
@@ -698,6 +725,12 @@ const AMP_FUNCS: FuncDef[] = [
     state: "advanced.initialVolume.level",
     nameKey: "initialVolumeLevel",
     descKey: "descInitialVolumeLevel",
+    // The official lists declare `Mute` below -80.0 — the same step the VOL scale calls -80.5.
+    wireDecode: wire => (wire === "Mute" ? "-80.5" : wire),
+    wireEncode: value => {
+      const wire = formatWireNumber(Number(value), 1, 0.5);
+      return wire === "-80.5" ? "Mute" : wire;
+    },
     spec: { kind: "number", unit: "dB", min: -80.5, max: 16.5, step: 0.5, decimals: 1 },
     write: true,
     role: "level.volume",
@@ -721,7 +754,8 @@ const AMP_FUNCS: FuncDef[] = [
     state: "hdmi.lipSyncOut1",
     nameKey: "lipSyncHDMIOUT1Offset",
     descKey: "descLipSyncHDMIOUT1Offset",
-    spec: { kind: "number", unit: "ms", decimals: 0 },
+    // The hull of the official declarations: -250…250, on the RX-A2010/A3010 -500…500 (B9).
+    spec: { kind: "number", unit: "ms", min: -500, max: 500, step: 1, decimals: 0 },
     write: true,
     role: "level",
   },
@@ -730,7 +764,8 @@ const AMP_FUNCS: FuncDef[] = [
     state: "hdmi.lipSyncOut2",
     nameKey: "lipSyncHDMIOUT2Offset",
     descKey: "descLipSyncHDMIOUT2Offset",
-    spec: { kind: "number", unit: "ms", decimals: 0 },
+    // The hull of the official declarations: -250…250, on the RX-A2010/A3010 -500…500 (B9).
+    spec: { kind: "number", unit: "ms", min: -500, max: 500, step: 1, decimals: 0 },
     write: true,
     role: "level",
   },
@@ -843,10 +878,13 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
   },
   {
     func: "LIPSYNCANLGOUT",
+    // Lip sync delays: the hull of the official declarations — 0…250 ms, on the RX-A2010/A3010
+    // 0…500 ms. The model is not known at runtime; a value the device cannot take is refused, and
+    // the read-back shows what it kept (audit 2026-09-24, B9).
     state: "hdmi.lipSyncAnalogOut",
     nameKey: "lipSyncAnalogOutput",
     descKey: "descLipSyncAnalogOutput",
-    spec: { kind: "number", unit: "ms", min: 0, max: 250, step: 1, decimals: 0 },
+    spec: { kind: "number", unit: "ms", min: 0, max: 500, step: 1, decimals: 0 },
     write: true,
     role: "level",
   },
@@ -855,7 +893,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     state: "hdmi.lipSyncOut1Manual",
     nameKey: "lipSyncHdmiOutput1Manual",
     descKey: "descLipSyncHdmiOutput1Manual",
-    spec: { kind: "number", unit: "ms", min: 0, max: 250, step: 1, decimals: 0 },
+    spec: { kind: "number", unit: "ms", min: 0, max: 500, step: 1, decimals: 0 },
     write: true,
     role: "level",
   },
@@ -864,7 +902,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     state: "hdmi.lipSyncOut2Manual",
     nameKey: "lipSyncHdmiOutput2Manual",
     descKey: "descLipSyncHdmiOutput2Manual",
-    spec: { kind: "number", unit: "ms", min: 0, max: 250, step: 1, decimals: 0 },
+    spec: { kind: "number", unit: "ms", min: 0, max: 500, step: 1, decimals: 0 },
     write: true,
     role: "level",
   },
@@ -882,7 +920,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     state: "hdmi.lipSyncOffset",
     nameKey: "lipSyncOffsetReportedByDisplay",
     descKey: "descLipSyncOffsetReportedByDisplay",
-    spec: { kind: "number", unit: "ms", min: 0, max: 250, step: 1, decimals: 0 },
+    spec: { kind: "number", unit: "ms", min: 0, max: 500, step: 1, decimals: 0 },
     write: false,
     role: "value",
   },
@@ -958,7 +996,9 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     func: "PWRB",
     state: "multiroom.zoneB.power",
     nameKey: "zoneBPower",
-    spec: { kind: "onoff", on: "On", off: "Standby" },
+    // `Unavailable` comes with `ZONEBAVAIL=Not Ready`: zone B is not playing, and the reason is in
+    // `multiroom.zoneB.available` — a `true` left standing was the lie (audit 2026-09-24, B7).
+    spec: { kind: "onoff", on: "On", off: "Standby", alsoOff: ["Unavailable"] },
     write: true,
     role: "switch.power",
   },
@@ -2386,6 +2426,56 @@ const HDRADIO_FUNCS: FuncDef[] = [
   },
 ];
 
+/** The iPod sources: their own shuffle and repeat words in every official list (2010–2012). */
+const IPOD_SUBUNITS = ["IPOD", "IPODUSB"];
+
+/**
+ * An iPod shuffles `Songs` or `Albums` (all official lists) — both are "on" for the boolean
+ * shuffle state, and `Songs` is what switching it on writes (audit 2026-09-24, B7).
+ */
+const IPOD_SHUFFLE: ValueSpec = { kind: "onoff", on: "Songs", off: "Off", alsoOn: ["Albums"] };
+
+/** The repeat codes whose wire word is the same on every generation. */
+const REPEAT_WIRE: Record<number, string> = { 0: "Off", 2: "All" };
+
+/**
+ * The repeat encoder of one device: code 1 goes out in the word the device speaks — `Single`
+ * on the 2010/2011 generation, `One` on the iPod sources and from 2012 on.
+ *
+ * @param one the device's word for "repeat one"
+ * @returns the wire encoder for the repeat entry
+ */
+function repeatWriter(one: string): (value: boolean | number | string) => string {
+  return value => REPEAT_WIRE[Number(value)] ?? (Number(value) === 1 ? one : String(value));
+}
+
+/**
+ * The word a device takes for "repeat one" on a (non-iPod) source: the word the source itself
+ * reported, else the word any other source of the device reported, else the generation's word —
+ * `One` where the device has the 2012 SERVER source (or no PC), `Single` on the 2010/2011 PC
+ * generation (audit 2026-09-24, B6).
+ *
+ * @param subunit the source written to
+ * @param subunits the device's answered subunits (subunit → function → value)
+ * @returns `One` or `Single`
+ */
+export function repeatWord(
+  subunit: string,
+  subunits: Readonly<Record<string, Readonly<Record<string, string>>>>,
+): string {
+  const spoken = (value: string | undefined): value is "One" | "Single" => value === "One" || value === "Single";
+  const own = subunits[subunit]?.REPEAT;
+  if (spoken(own)) {
+    return own;
+  }
+  for (const [other, funcs] of Object.entries(subunits)) {
+    if (!IPOD_SUBUNITS.includes(other) && spoken(funcs.REPEAT)) {
+      return funcs.REPEAT;
+    }
+  }
+  return yncaGenerationEvidence(subunits).returnWords ? "One" : "Single";
+}
+
 /**
  * Network/media player sources — each a subunit, mapped under its own channel. Only
  * the entries a device reports are created, so listing every source is safe.
@@ -2551,7 +2641,10 @@ const PLAYER_FUNCS: Array<{
     nameKey: "repeat",
     // media.mode.repeat is a number in the type-detector (off/one/all); code-mapped so it fills
     // the REPEAT slot and still reads/writes as labels.
-    spec: { kind: "code", codes: { Off: 0, Single: 1, All: 2 }, labels: { 0: "Off", 1: "Single", 2: "All" } },
+    // Both words for "one" are read: the 2010/2011 lists say `Single`, the iPod sources and every
+    // list from 2012 on say `One`. Which word is WRITTEN is the device's: see `repeatWord`
+    // (audit 2026-09-24, B6).
+    spec: { kind: "code", codes: { Off: 0, Single: 1, One: 1, All: 2 }, labels: { 0: "Off", 1: "Single", 2: "All" } },
     write: true,
     role: "media.mode.repeat",
   },
@@ -2617,6 +2710,7 @@ function fnEntries(fns: readonly FuncDef[], subunit: string, prefix = ""): YncaE
     wireDecode: fn.wireDecode,
     readFunc: fn.readFunc,
     writeOnly: fn.writeOnly,
+    ...(fn.derived ? { derived: true, derive: fn.derive } : {}),
     ...(fn.nameArgs ? { nameArgs: fn.nameArgs } : {}),
     ...(fn.readAliases ? { readAliases: fn.readAliases } : {}),
   }));
@@ -2750,19 +2844,20 @@ export function buildYncaCatalog(): YncaEntry[] {
     // flat player block — the controller routes reads and writes by which source
     // each zone is listening to (INPUT → subunit). Only genuinely source-own states
     // below (preset, presetSave, bookmark) keep their per-source paths.
+    const ipod = IPOD_SUBUNITS.includes(source.subunit);
     for (const fn of PLAYER_FUNCS) {
       entries.push({
         id: `player.${fn.state}`,
         nameKey: fn.nameKey,
         descKey: fn.descKey,
-        spec: fn.spec,
+        spec: ipod && fn.func === "SHUFFLE" ? IPOD_SHUFFLE : fn.spec,
         write: fn.write,
         role: fn.role,
         subunit: source.subunit,
         func: fn.func,
         readFunc: fn.readFunc,
         readAliases: fn.readAliases,
-        wireEncode: fn.wireEncode,
+        wireEncode: ipod && fn.func === "REPEAT" ? repeatWriter("One") : fn.wireEncode,
         wireDecode: fn.wireDecode,
         writeOnly: fn.writeOnly,
         derived: fn.derived,
@@ -3154,7 +3249,32 @@ export function presentYncaEntries(
   const present = catalog.filter(entry =>
     readFuncsOf(entry).some(func => capabilities.subunits[entry.subunit]?.[func] !== undefined),
   );
-  return unionSharedDropdowns(present);
+  // A derived value never displaces one the device reports itself (the initial volume mode read
+  // from `INITVOLLVL=Off` exists only where the device does not answer `INITVOLMODE`).
+  const reported = new Set(present.filter(entry => !entry.derived).map(entry => entry.id));
+  const own = present.filter(entry => !entry.derived || !reported.has(entry.id));
+  return unionSharedDropdowns(own.map(entry => forThisDevice(entry, capabilities)));
+}
+
+/**
+ * The entry in the form THIS device takes, where the official lists differ between generations:
+ * the word a source's repeat-one goes out in, and the range of a zone's tone controls — ±6 dB in
+ * 0.5 dB steps where the zone reports `TONEMODE` (the MusicCast generation, RX-V6A/A6A/A2A), else
+ * the one official zone declaration, ±10 dB in 2 dB steps (RX-A1020/A2020/A3020; audit 2026-09-24, B6/B8).
+ *
+ * @param entry a catalog entry the device reported
+ * @param capabilities the device's YNCA capabilities
+ * @returns the entry as this device takes it
+ */
+function forThisDevice(entry: YncaEntry, capabilities: YncaCapabilities): YncaEntry {
+  if (entry.func === "REPEAT" && !entry.wireEncode) {
+    return { ...entry, wireEncode: repeatWriter(repeatWord(entry.subunit, capabilities.subunits)) };
+  }
+  const zoneTone = entry.subunit.startsWith("ZONE") && (entry.func === "TONEBASS" || entry.func === "TONETREBLE");
+  if (zoneTone && entry.spec.kind === "number" && capabilities.subunits[entry.subunit]?.TONEMODE === undefined) {
+    return { ...entry, spec: { ...entry.spec, min: -10, max: 10, step: 2 } };
+  }
+  return entry;
 }
 
 /**
