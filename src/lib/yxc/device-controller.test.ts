@@ -2069,3 +2069,123 @@ describe("the device-wide settings with their declarations (coverage audit 2026-
     expect(s.client.calls).toContainEqual({ method: "setPartyMode", args: [true] });
   });
 });
+
+// Six refresh signals were ignored (a group formed in the app, a changed setting, a renamed room, a
+// new input signal, a stored tuner preset, a changed alarm) and waited for the 30-minute sweep; a
+// favourite store re-read the whole playback info; the network player's error and message were never
+// shown (audit 2026-09-24, C3/C18 — YXC Basic Rev 1.10 §11.3).
+describe("YxcDeviceController push signals", () => {
+  const features = {
+    system: {},
+    zone: [{ id: "main", func_list: ["power", "signal_info"], input_list: ["net_radio", "tuner", "cd"] }],
+    netusb: {},
+    tuner: { func_list: ["fm"] },
+    cd: {},
+    clock: { func_list: ["alarm"] },
+    distribution: { version: 2 },
+  };
+
+  async function started(): Promise<ReturnType<typeof setup>> {
+    const s = setup(features, ysp, {}, () => true, { gate: testGate() });
+    s.client.nameText = { zone_list: [{ id: "main", text: "Kitchen" }] };
+    s.client.funcStatus = { response_code: 0, auto_power_standby: true };
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.acks.length = 0;
+    s.names.length = 0;
+    return s;
+  }
+
+  const methods = (s: ReturnType<typeof setup>): string[] => s.client.calls.map(c => c.method);
+
+  test.each([
+    [{ dist: { dist_info_updated: true } }, "getDistributionInfo"],
+    [{ system: { func_status_updated: true } }, "getFuncStatus"],
+    [{ tuner: { preset_info_updated: true } }, "getTunerPresetInfo"],
+    [{ clock: { settings_updated: true } }, "getClockSettings"],
+    [{ system: { name_text_updated: true } }, "getNameText"],
+  ])("%j is answered by %s alone", async (event, method) => {
+    const s = await started();
+    s.fire.push?.(event);
+    await flush();
+    expect(methods(s)).toContain(method);
+    expect(methods(s)).not.toContain("getPlayInfo");
+  });
+
+  test("a zone's signal flag re-reads that zone's signal", async () => {
+    const s = await started();
+    s.fire.push?.({ main: { signal_info_updated: true } });
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "getSignalInfo", args: ["main"] });
+  });
+
+  test("a renamed room reaches the device label", async () => {
+    const s = await started();
+    s.client.nameText = { zone_list: [{ id: "main", text: "Living room" }] };
+    s.fire.push?.({ system: { name_text_updated: true } });
+    await flush();
+    expect(s.names).toEqual(["Living room"]);
+  });
+
+  test("a flag that is false asks nothing", async () => {
+    const s = await started();
+    s.fire.push?.({ dist: { dist_info_updated: false }, system: { func_status_updated: false } });
+    await flush();
+    expect(methods(s)).toEqual([]);
+  });
+
+  test("a list change re-reads the open menu window", async () => {
+    const s = await started();
+    s.controller.handleStateChange("living.player.browse.source", false, "netRadio");
+    await flush();
+    const reads = (): number => s.client.calls.filter(c => c.method === "getListInfo").length;
+    const before = reads();
+    s.fire.push?.({ netusb: { list_info_updated: true } });
+    await flush();
+    expect(reads()).toBe(before + 1);
+    expect(methods(s)).not.toContain("getPlayInfo");
+  });
+
+  test("the network player's error and message land in their states straight from the push", async () => {
+    const s = await started();
+    s.fire.push?.({ netusb: { play_error: 2, play_message: "Playback unavailable" } });
+    await flush();
+    expect(s.acks).toContainEqual({ id: "living.player.netPlayer.playError", value: 2 });
+    expect(s.acks).toContainEqual({ id: "living.player.netPlayer.playMessage", value: "Playback unavailable" });
+    expect(methods(s)).not.toContain("getPlayInfo");
+  });
+
+  test("the error and message states start at 'none' and exist on a network player", async () => {
+    const s = setup(features, ysp, {}, () => true, { gate: testGate() });
+    await s.controller.start();
+    expect(s.acks).toContainEqual({ id: "living.player.netPlayer.playError", value: 0 });
+    expect(s.acks).toContainEqual({ id: "living.player.netPlayer.playMessage", value: "" });
+    expect(s.defs.get("living.player.netPlayer.playError")?.common).toMatchObject({
+      type: "number",
+      role: "value",
+      write: false,
+      states: expect.objectContaining({ 0: "No Error", 2: "Playback Unavailable", 100: "Multiple Errors" }),
+    });
+  });
+
+  test("a favourite this adapter recalled and the device could not play is said on warn — another one is not", async () => {
+    const s = await started();
+    s.controller.handleStateChange("living.player.netPlayer.preset", false, 4);
+    await flush();
+    s.fire.push?.({ netusb: { preset_control: { type: "recall", num: 4, result: "empty" } } });
+    await flush();
+    expect(s.warnings).toEqual(["living: favourite 4 could not be recalled (empty)"]);
+    s.fire.push?.({ netusb: { preset_control: { type: "recall", num: 7, result: "not_found" } } });
+    s.fire.push?.({ netusb: { preset_control: { type: "store", num: 4, result: "error" } } });
+    await flush();
+    expect(s.warnings).toHaveLength(1);
+  });
+
+  test("the disc drive's state comes from the push itself", async () => {
+    const s = await started();
+    s.fire.push?.({ cd: { device_status: "open" } });
+    await flush();
+    expect(s.acks).toContainEqual({ id: "living.player.cd.deviceStatus", value: "open" });
+    expect(methods(s)).not.toContain("getPlayInfo");
+  });
+});

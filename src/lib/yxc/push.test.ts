@@ -1,4 +1,4 @@
-import { mediaTimeUpdates, mediaToRefresh, zonesToRefresh } from "./push";
+import { mediaTimeUpdates, mediaToRefresh, netusbNotice, pushSignals, zonesToRefresh } from "./push";
 
 describe("mediaToRefresh", () => {
   test("returns the media-player blocks present in a push event", () => {
@@ -62,5 +62,82 @@ describe("zonesToRefresh", () => {
   test("returns empty for a malformed event", () => {
     expect(zonesToRefresh(null)).toEqual([]);
     expect(zonesToRefresh("nope")).toEqual([]);
+  });
+});
+
+// YXC Basic Rev 1.10 §11.3 (audit 2026-09-24, C3): a media block re-reads its playback info only when
+// the device says so, or when it carries a field the specification does not know.
+describe("mediaToRefresh — only a playback-info change re-reads the playback info", () => {
+  test("list, account, preset and error fields alone are no playback-info change", () => {
+    expect(mediaToRefresh({ netusb: { preset_info_updated: true } })).toEqual([]);
+    expect(mediaToRefresh({ netusb: { list_info_updated: true, play_error: 0 } })).toEqual([]);
+    expect(mediaToRefresh({ tuner: { preset_info_updated: true, play_info_updated: false } })).toEqual([]);
+    expect(mediaToRefresh({ cd: { device_status: "open" } })).toEqual([]);
+  });
+
+  test("the device's own flag, an unknown field, and an empty block still re-read", () => {
+    expect(mediaToRefresh({ tuner: { play_info_updated: true } })).toEqual(["tuner"]);
+    expect(mediaToRefresh({ netusb: { something_new: 1 } })).toEqual(["netusb"]);
+    expect(mediaToRefresh({ cd: {} })).toEqual(["cd"]);
+  });
+});
+
+describe("pushSignals", () => {
+  test("reads each flag of the specification — only a true one counts", () => {
+    expect(
+      pushSignals({
+        dist: { dist_info_updated: true },
+        system: { func_status_updated: true, name_text_updated: true },
+        main: { signal_info_updated: true },
+        zone2: { signal_info_updated: false },
+        tuner: { preset_info_updated: true },
+        clock: { settings_updated: true },
+        netusb: { list_info_updated: true },
+      }),
+    ).toEqual({
+      distribution: true,
+      system: true,
+      nameText: true,
+      signalZones: ["main"],
+      tunerPresets: true,
+      clock: true,
+      list: true,
+    });
+    expect(pushSignals({ system: { func_status_updated: "yes" } }).system).toBe(false);
+  });
+
+  test("a malformed event carries no signal", () => {
+    const none = {
+      distribution: false,
+      system: false,
+      nameText: false,
+      signalZones: [],
+      tunerPresets: false,
+      clock: false,
+      list: false,
+    };
+    expect(pushSignals(null)).toEqual(none);
+    expect(pushSignals("x")).toEqual(none);
+    expect(pushSignals({ dist: 1 })).toEqual(none);
+  });
+});
+
+describe("netusbNotice", () => {
+  test("carries the error, the message and a complete preset result", () => {
+    expect(
+      netusbNotice({
+        netusb: {
+          play_error: 3,
+          play_message: "Skip limit",
+          preset_control: { type: "recall", num: 2, result: "empty" },
+        },
+      }),
+    ).toEqual({ playError: 3, playMessage: "Skip limit", presetControl: { type: "recall", num: 2, result: "empty" } });
+  });
+
+  test("ignores mistyped fields and an incomplete preset result", () => {
+    expect(netusbNotice({ netusb: { play_error: "3", preset_control: { type: "recall", num: 2 } } })).toEqual({});
+    expect(netusbNotice({ main: {} })).toEqual({});
+    expect(netusbNotice(null)).toEqual({});
   });
 });

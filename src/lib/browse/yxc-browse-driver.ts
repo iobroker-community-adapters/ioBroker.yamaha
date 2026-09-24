@@ -1,5 +1,6 @@
 import type { BrowseDriver, BrowseRow } from "./types";
 import type { BrowseEngine } from "./browse-engine";
+import { errorMessage } from "../util";
 
 /** The engine's page size — YXC serves any window, we keep the device's 8-line form. */
 const PAGE_SIZE = 8;
@@ -156,6 +157,19 @@ export class YxcBrowseDriver implements BrowseDriver {
       }
       await this.client.setListControl("return");
       this.index = 0;
+    }
+  }
+
+  /**
+   * Re-read the open window: the device announced that the list changed (`list_info_updated`, YXC
+   * Basic §11.3) — a folder that filled or a queue that moved. Nothing open, nothing asked. Called
+   * from a push without awaiting, so it never rejects (audit 2026-09-24, C3).
+   */
+  public async refresh(): Promise<void> {
+    try {
+      await this.fetch();
+    } catch (e) {
+      this.engine?.log.debug(`menu refresh after a list change failed: ${errorMessage(e)}`);
     }
   }
 

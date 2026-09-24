@@ -18,7 +18,15 @@ import {
   type PlayerTransport,
   type YxcCommand,
 } from "./command-mapper";
-import { mediaTimeUpdates, mediaToRefresh, netusbListsToRefresh, zonesToRefresh } from "./push";
+import {
+  mediaTimeUpdates,
+  mediaToRefresh,
+  netusbListsToRefresh,
+  netusbNotice,
+  pushSignals,
+  zonesToRefresh,
+  type NetusbNotice,
+} from "./push";
 import type { ObjectDef } from "../catalog/types";
 import { tName } from "../i18n";
 import type { StateValue } from "../types";
@@ -46,6 +54,9 @@ const KEEPALIVE_MS = 5 * 60 * 1000;
  * device changed the value without telling, counted against the events (see PushLiveness).
  */
 export const PUSH_EXPECT_MS = 5000;
+
+/** How long after a favourite recall the device's `preset_control` verdict is taken as its answer. */
+const PRESET_VERDICT_MS = 30_000;
 
 /**
  * The main-zone fields every main-zone event carries (YXC Basic Rev 1.00 §10.3) — a keepalive that
@@ -253,6 +264,10 @@ export class YxcDeviceController implements ConnectionHandle {
   /** {@link pushEvents} when the previous keepalive finished. */
   private eventsAtLastKeepalive = 0;
   private browseEngine: BrowseEngine | undefined;
+  /** The menu driver, for a re-read when the device announces a list change. */
+  private browseDriver: YxcBrowseDriver | undefined;
+  /** The favourite this adapter recalled last, so the device's verdict on it can be told apart. */
+  private lastPresetRecall: { num: number; at: number } | undefined;
   /**
    * The device-wide settings this receiver really answers (`/system/getFuncStatus`). Empty
    * until the first successful call — claim with proof, exactly like the XML side's status
@@ -377,6 +392,12 @@ export class YxcDeviceController implements ConnectionHandle {
     if (capabilities.media.includes("tuner") && (capabilities.tuner?.bands ?? []).includes("dab")) {
       this.emit("tuner.dab.totalStations", 0);
       this.emit("tuner.dab.scanProgress", 0);
+    }
+    // The network player's error and message come by push only — seeded to "none" so they never
+    // stand valueless (and are not purged as never filled) before the first report (C18).
+    if (capabilities.media.includes("netusb")) {
+      this.emit("player.netPlayer.playError", 0);
+      this.emit("player.netPlayer.playMessage", "");
     }
     if (model) {
       // The info channel and info.model already exist — the adapter creates them for
@@ -807,6 +828,7 @@ export class YxcDeviceController implements ConnectionHandle {
     }
     const inputs = capabilities.zones.find(zone => zone.id === "main")?.inputs ?? [];
     const driver = new YxcBrowseDriver(this.deps.client, inputs);
+    this.browseDriver = driver;
     this.browseEngine = await createBrowseSurface(driver, this.deviceId, {
       upsertObject: this.deps.upsertObject,
       emit: (id, value) => this.emit(id, value),
@@ -866,6 +888,39 @@ export class YxcDeviceController implements ConnectionHandle {
     }
     if (lists.recent && this.mediaBlocks.includes("netusb")) {
       void this.refreshNetusbRecent();
+    }
+    // Every other area the device announces, each re-read with its own one request (C3).
+    const signals = pushSignals(event);
+    if (signals.distribution && this.hasDistribution) {
+      void this.refreshDistribution();
+    }
+    if (signals.system) {
+      void this.refreshSystemStates();
+    }
+    for (const zone of signals.signalZones) {
+      if (this.signalZones.includes(zone)) {
+        void this.refreshZoneSignal(zone);
+      }
+    }
+    if (signals.tunerPresets && this.mediaBlocks.includes("tuner")) {
+      void this.refreshTunerPresets();
+    }
+    if (signals.clock && this.hasClock) {
+      void this.refreshClock();
+    }
+    if (signals.nameText) {
+      void this.refreshDeviceName();
+    }
+    if (signals.list) {
+      void this.browseDriver?.refresh();
+    }
+    if (this.mediaBlocks.includes("netusb")) {
+      this.applyNetusbNotice(netusbNotice(event));
+    }
+    // The disc drive's state rides in the push itself (it is no playback-info change).
+    const cd = (event as { cd?: { device_status?: unknown } } | null)?.cd;
+    if (typeof cd?.device_status === "string" && this.mediaBlocks.includes("cd")) {
+      this.emit("player.cd.deviceStatus", cd.device_status);
     }
   }
 
@@ -971,13 +1026,62 @@ export class YxcDeviceController implements ConnectionHandle {
   /** Fetch each declaring zone's audio-signal info and write the signal states. */
   private async refreshSignalInfo(): Promise<void> {
     for (const zone of this.signalZones) {
-      try {
-        for (const update of parseYxcSignalInfo(await this.deps.client.getSignalInfo(zone), zone)) {
-          this.emit(update.id, update.value);
-        }
-      } catch (e) {
-        this.deps.log.debug(`${this.deviceId}: getSignalInfo(${zone}) failed: ${errorMessage(e)}`);
+      await this.refreshZoneSignal(zone);
+    }
+  }
+
+  /**
+   * Fetch one zone's audio-signal info and write its signal states.
+   *
+   * @param zone the zone
+   */
+  private async refreshZoneSignal(zone: string): Promise<void> {
+    try {
+      for (const update of parseYxcSignalInfo(await this.deps.client.getSignalInfo(zone), zone)) {
+        this.emit(update.id, update.value);
       }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: getSignalInfo(${zone}) failed: ${errorMessage(e)}`);
+    }
+  }
+
+  /** Re-read the name the user gave the device in the MusicCast app (`name_text_updated`). */
+  private async refreshDeviceName(): Promise<void> {
+    try {
+      const name = zoneNameFrom(await this.deps.client.getNameText());
+      if (name) {
+        this.deps.reportDeviceName?.(name);
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: getNameText failed (${errorMessage(e)})`);
+    }
+  }
+
+  /**
+   * What the network player reports in a push itself: its playback error and message go to their
+   * states, the verdict on a favourite this adapter recalled is said (audit 2026-09-24, C18).
+   *
+   * @param notice the network player's fields of the push
+   */
+  private applyNetusbNotice(notice: NetusbNotice): void {
+    if (notice.playError !== undefined) {
+      this.emit("player.netPlayer.playError", notice.playError);
+    }
+    if (notice.playMessage !== undefined) {
+      this.emit("player.netPlayer.playMessage", notice.playMessage);
+    }
+    const control = notice.presetControl;
+    if (!control || control.result === "success") {
+      return;
+    }
+    const recalled = this.lastPresetRecall;
+    const ours =
+      control.type === "recall" && recalled?.num === control.num && Date.now() - recalled.at < PRESET_VERDICT_MS;
+    if (ours) {
+      this.lastPresetRecall = undefined;
+      this.deps.log.warn(`${this.deviceId}: favourite ${control.num} could not be recalled (${control.result})`);
+    } else {
+      this.deps.log.debug(`${this.deviceId}: preset ${control.type} ${control.num}: ${control.result}`);
     }
   }
 
@@ -1536,6 +1640,7 @@ export class YxcDeviceController implements ConnectionHandle {
           break;
         }
         case "netusbPreset":
+          this.lastPresetRecall = { num: command.value, at: Date.now() };
           await this.deps.client.recallPreset(command.value, this.zoneListeningTo(this.lastNetusbInput));
           break;
         case "netusbRecent":

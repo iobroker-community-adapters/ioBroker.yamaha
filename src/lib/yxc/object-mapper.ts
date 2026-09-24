@@ -377,6 +377,26 @@ export function volumePresentation(
 }
 
 /**
+ * The network player's playback error codes, worded as YXC Basic Rev 1.00 §10.3 / Rev 1.10 §11.3
+ * word them — the device's own vocabulary, shown as it is (like the speaker patterns).
+ */
+const NETUSB_PLAY_ERRORS: Record<number, string> = {
+  0: "No Error",
+  1: "Access Error",
+  2: "Playback Unavailable",
+  3: "Skip Limit Reached",
+  4: "Invalid Session",
+  5: "High-Resolution File Not Playable at MusicCast Leaf",
+  6: "User Uncredentialed",
+  7: "Track Restricted by Right Holders",
+  8: "Sample Restricted by Right Holders",
+  9: "Genre Restricted by Streaming Credentials",
+  10: "Application Restricted by Streaming Credentials",
+  11: "Intent Restricted by Streaming Credentials",
+  100: "Multiple Errors",
+};
+
+/**
  * Turn YXC capabilities into the unified object tree: main's functions as
  * top-level states, each additional zone as a channel with its own states. An
  * input state is added when the zone offers inputs. Player sources (netusb, cd)
@@ -652,6 +672,33 @@ export function mapYxcToObjects(
         write: true,
         min: 1,
         ...(capabilities.netusbSlots?.recent !== undefined ? { max: capabilities.netusbSlots.recent } : {}),
+      },
+    });
+    // What the network player reports about the current playback — carried by the push only (YXC
+    // Basic §10.3/§11.3), seeded to "no error / no message" at every connect (audit 2026-09-24, C18).
+    objects.push({
+      id: "player.netPlayer.playError",
+      type: "state",
+      common: {
+        name: tName("playbackError"),
+        desc: tName("descPlaybackError"),
+        type: "number",
+        role: "value",
+        read: true,
+        write: false,
+        states: NETUSB_PLAY_ERRORS,
+      },
+    });
+    objects.push({
+      id: "player.netPlayer.playMessage",
+      type: "state",
+      common: {
+        name: tName("playbackMessage"),
+        desc: tName("descPlaybackMessage"),
+        type: "string",
+        role: "text",
+        read: true,
+        write: false,
       },
     });
     // MusicCast playlists and the play queue — declared in the netusb func_list.
