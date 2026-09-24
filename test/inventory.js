@@ -35,6 +35,19 @@ const VOLATILE = ["ts", "from", "user", "acl"];
  * without them the upgrade suite could not fail on it.
  */
 const COMPARED = ["name", "desc", "role", "type", "unit", "states", "min", "max", "step"];
+// Key order carries no meaning in an ioBroker object: extendObject keeps the key order an existing
+// object already has, while adapter-core's I18n.getTranslatedObject builds its own — the same eleven
+// texts in another order are the same name. Arrays keep their order.
+const canonical = v =>
+  JSON.stringify(v, (_k, x) =>
+    x && typeof x === "object" && !Array.isArray(x)
+      ? Object.fromEntries(
+          Object.keys(x)
+            .sort()
+            .map(k => [k, x[k]]),
+        )
+      : x,
+  );
 /** How many fixture devices devices.json lists — every one of them must build a tree. */
 const FIXTURE_DEVICES = loadFixtures().length;
 /** The English texts, to prove a datapoint carries the explanation its MODE deserves. */
@@ -563,7 +576,7 @@ tests.integration(ADAPTER_DIR, {
               continue;
             }
             for (const f of COMPARED) {
-              if (JSON.stringify(got.common?.[f]) !== JSON.stringify(obj.common?.[f])) {
+              if (canonical(got.common?.[f]) !== canonical(obj.common?.[f])) {
                 stale.push(`${id}: ${f} still ${JSON.stringify(got.common?.[f])}`);
               }
             }
