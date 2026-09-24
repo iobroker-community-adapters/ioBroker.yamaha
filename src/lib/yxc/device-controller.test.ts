@@ -625,7 +625,8 @@ describe("YxcDeviceController", () => {
   // A speaker reports no display scale at all — its datapoint already holds the device's own step
   // count, so the value goes out untouched, exactly as before this rebuild.
   test("a device without a display scale writes its raw value straight through", async () => {
-    const s = setup(wx10, ysp);
+    // Switched on: in standby the YSP reports volume and mute not operable (disable_flags 3, C27).
+    const s = setup(wx10, { ...(ysp as Record<string, unknown>), power: "on", disable_flags: 0 });
     await s.controller.start();
     s.client.calls.length = 0;
 
@@ -1204,7 +1205,7 @@ describe("YxcDeviceController", () => {
   });
 
   test("a transport failure on a device whose zone still answers is no drop", async () => {
-    const s = setup(wx10, ysp);
+    const s = setup(wx10, { ...(ysp as Record<string, unknown>), power: "on", disable_flags: 0 });
     await s.controller.start();
     let dropped = 0;
     s.controller.onDrop(() => dropped++);
@@ -2303,5 +2304,42 @@ describe("YxcDeviceController tuner on DAB", () => {
     await newer.controller.start();
     expect(newer.objects).toContain("living.tuner.presetUp");
     expect(newer.objects).toContain("living.tuner.presetDown");
+  });
+});
+
+// A soundbar in standby reports volume and mute not operable (YSP-1600 capture: disable_flags 3; YXC
+// Basic §5.1 b0 volume, b1 mute, b2 link audio delay) — each write drew a refusal and a warning (C27).
+describe("YxcDeviceController disable_flags", () => {
+  test("a write to a function the zone reports not operable is not sent; the zone is read back", async () => {
+    const s = setup(wx10, ysp);
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.volume", false, 20);
+    s.controller.handleStateChange("living.mute", false, true);
+    await flush();
+    expect(s.client.calls.map(c => c.method)).toEqual(["getStatus", "getStatus"]);
+    expect(s.warnings).toEqual([]);
+    expect(s.debugs.filter(line => line.includes("not operable"))).toHaveLength(2);
+  });
+
+  test("once the device reports them operable again, they are written", async () => {
+    const s = setup(wx10, ysp);
+    await s.controller.start();
+    s.client.status = { ...(ysp as Record<string, unknown>), power: "on", disable_flags: 0 };
+    s.fire.push?.({ main: { power: "on" } });
+    await flush();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.mute", false, true);
+    await flush();
+    expect(s.client.calls[0]).toEqual({ method: "mute", args: [true, "main"] });
+  });
+
+  test("a flag that does not name the written function blocks nothing", async () => {
+    const s = setup(wx10, { ...(ysp as Record<string, unknown>), disable_flags: 0b100 });
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.mute", false, true);
+    await flush();
+    expect(s.client.calls[0]).toEqual({ method: "mute", args: [true, "main"] });
   });
 });

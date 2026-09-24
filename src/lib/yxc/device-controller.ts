@@ -286,6 +286,9 @@ export class YxcDeviceController implements ConnectionHandle {
   private readonly cover = (url: string): string =>
     this.apiVersion !== undefined && this.apiVersion < 1.17 ? "" : absoluteDeviceUrl(url, this.deps.host);
 
+  /** Per zone, the `disable_flags` of its last status — the functions it cannot operate right now. */
+  private readonly disabledFlags = new Map<string, number>();
+
   /** The menu driver, for a re-read when the device announces a list change. */
   private browseDriver: YxcBrowseDriver | undefined;
   /** The favourite this adapter recalled last, so the device's verdict on it can be told apart. */
@@ -760,9 +763,23 @@ export class YxcDeviceController implements ConnectionHandle {
       }
     }
     const command = stateToYxc(stateId, value);
-    if (command) {
-      void this.applyCommand(stateId, command, value);
+    if (!command) {
+      return;
     }
+    // A function the zone reports not operable right now (YXC Basic §5.1 `disable_flags`: b0 volume,
+    // b1 mute, b2 link audio delay — a soundbar in standby reports 3) is not sent: the device would
+    // refuse it with a warning; the datapoint gets the device's value back (audit 2026-09-24, C27).
+    const blocked = /^(?:multiroom\.(zone[234])\.)?(volume|mute|sound\.linkAudioDelay)$/.exec(stateId);
+    if (blocked) {
+      const zone = blocked[1] ?? "main";
+      const bit = { volume: 0b1, mute: 0b10, "sound.linkAudioDelay": 0b100 }[blocked[2]] ?? 0;
+      if (((this.disabledFlags.get(zone) ?? 0) & bit) !== 0) {
+        this.deps.log.debug(`${this.deviceId}: ${stateId} is not operable on the device right now — not sent`);
+        void this.refreshZone(zone);
+        return;
+      }
+    }
+    void this.applyCommand(stateId, command, value);
   }
 
   /**
@@ -1472,6 +1489,8 @@ export class YxcDeviceController implements ConnectionHandle {
    * @param status the raw getStatus answer
    */
   private async applyZoneStatus(zone: string, status: unknown): Promise<void> {
+    const flags = (status as { disable_flags?: unknown } | null)?.disable_flags;
+    this.disabledFlags.set(zone, typeof flags === "number" ? flags : 0);
     // The display scale decides the BOUNDS and the unit of the volume datapoint, so the object
     // has to carry the new scale BEFORE the new value is written. The status updates are emitted
     // in catalog order, which puts the value ahead of any mode information — reshaping from inside
