@@ -36,9 +36,44 @@ import type { CommandGate } from "../lifecycle/command-gate";
 import type { BrowseEngine } from "../browse/browse-engine";
 import { createBrowseSurface } from "../browse/surface";
 import { YxcBrowseDriver } from "../browse/yxc-browse-driver";
+import type { PushLiveness } from "./push-liveness";
 
-/** Renew interval for the push registration + state poll, well under the ~20 min expiry. */
+/** Renew interval for the push registration + state poll, well under the 10-minute expiry (YXC Basic §10.2). */
 const KEEPALIVE_MS = 5 * 60 * 1000;
+
+/**
+ * How long a changing write waits for the device's event before its effect is read back and, if the
+ * device changed the value without telling, counted against the events (see PushLiveness).
+ */
+export const PUSH_EXPECT_MS = 5000;
+
+/**
+ * The main-zone fields every main-zone event carries (YXC Basic Rev 1.00 §10.3) — a keepalive that
+ * finds one of them changed with no event since the previous keepalive saw a change nobody announced.
+ * Zone 2–4 events are "Reserved" in Rev 1.00, so a zone's silence proves nothing there.
+ */
+const ANNOUNCED_MAIN_FIELDS = ["power", "input", "volume", "mute"];
+
+/** The written command kinds a device announces by event when they change something it reports. */
+const ANNOUNCED_KINDS = new Set(["run", "volume", "equalizer", "tunerBand", "tunerFreq"]);
+
+/**
+ * Whether a written value equals the one the device reported — compared the way a state write
+ * arrives (a script writes "true" or "-30" as text).
+ *
+ * @param reported the value the device reported
+ * @param written the value that was written
+ * @returns true when the write asks for what the device already has
+ */
+function sameValue(reported: boolean | number | string | undefined, written: unknown): boolean {
+  if (typeof reported === "boolean") {
+    return coerceBool(written) === reported;
+  }
+  if (typeof reported === "number") {
+    return typeof written !== "boolean" && written !== null && written !== "" && Number(written) === reported;
+  }
+  return reported !== undefined && String(written) === reported;
+}
 
 /**
  * With push working, run the full media/list/group sweep only every Nth keepalive (6 × 5 min
@@ -107,6 +142,11 @@ export interface YxcControllerDeps {
    * source of change and has to cover everything. Absent = assume no push.
    */
   pushActive?(): boolean;
+  /**
+   * Whether this device's events actually arrive (held per device by the adapter, so the verdict
+   * survives a reconnect). Absent = trust the bound socket, as before (audit 2026-09-24, C1).
+   */
+  pushLiveness?: PushLiveness;
   /** Per-device memory for answers that do not change while the device runs (see ProbeMemory). */
   probeMemory?: ProbeMemory;
   /** Schedule the keepalive handler; returns a function that cancels it. */
@@ -205,6 +245,10 @@ export class YxcDeviceController implements ConnectionHandle {
   private hasPlayQueue = false;
   /** Counts keepalive runs, so the safety-net sweep can run every Nth one under push. */
   private keepaliveRuns = 0;
+  /** Events of this device received on this connection — a write or a keepalive compares it. */
+  private pushEvents = 0;
+  /** {@link pushEvents} when the previous keepalive finished. */
+  private eventsAtLastKeepalive = 0;
   private browseEngine: BrowseEngine | undefined;
   /**
    * The device-wide settings this receiver really answers (`/system/getFuncStatus`). Empty
@@ -655,7 +699,7 @@ export class YxcDeviceController implements ConnectionHandle {
     }
     const command = stateToYxc(stateId, value);
     if (command) {
-      void this.applyCommand(stateId, command);
+      void this.applyCommand(stateId, command, value);
     }
   }
 
@@ -773,6 +817,10 @@ export class YxcDeviceController implements ConnectionHandle {
    * @param event the parsed push event
    */
   private onPush(event: unknown): void {
+    this.pushEvents++;
+    if (this.deps.pushLiveness?.noteEvent()) {
+      this.deps.log.info(`${this.deviceId}: MusicCast events arrive again`);
+    }
     for (const zone of zonesToRefresh(event)) {
       if (this.zones.includes(zone)) {
         void this.refreshZone(zone);
@@ -815,14 +863,26 @@ export class YxcDeviceController implements ConnectionHandle {
       // Zones in parallel: their writes are disjoint and one zone stuck in its timeout must
       // not delay the others (a four-zone receiver used to poll them strictly in series).
       const zones = this.zones.length > 0 ? this.zones : ["main"];
+      const announced = ANNOUNCED_MAIN_FIELDS.map(id => this.deviceValues.get(id));
       const anyOk = (await Promise.all(zones.map(zone => this.refreshZone(zone)))).some(Boolean);
+      // A main-zone field that changed while no event came since the previous keepalive: the
+      // device told nobody. Only a field that HAD a value counts — one reported for the first time
+      // is no change. An event during this refresh moves the counter and judges nothing.
+      const unannounced = ANNOUNCED_MAIN_FIELDS.some((id, i) => {
+        const before = announced[i];
+        return before !== undefined && this.deviceValues.get(id) !== before;
+      });
+      if (unannounced && this.pushEvents === this.eventsAtLastKeepalive) {
+        this.noteMiss();
+      }
+      this.eventsAtLastKeepalive = this.pushEvents;
       // Every request above already carried the subscription headers, so the push
       // registration is renewed either way. What still has to be polled depends on whether
       // push works: with push the device announces media, list and group changes itself, so
       // the full sweep only runs occasionally as a safety net (UDP can drop a packet);
       // without push it is the only way anything ever updates.
       this.keepaliveRuns++;
-      const fullSweep = !this.deps.pushActive?.() || this.keepaliveRuns % PUSH_MODE_FULL_SWEEP_EVERY === 0;
+      const fullSweep = !this.pushWorking() || this.keepaliveRuns % PUSH_MODE_FULL_SWEEP_EVERY === 0;
       if (fullSweep) {
         await this.refreshSystemStates();
         await this.refreshMedia();
@@ -1381,8 +1441,27 @@ export class YxcDeviceController implements ConnectionHandle {
    *
    * @param stateId the written state id, for the failure log line
    * @param command the YXC command to apply
+   * @param written the value that was written, when the state mirrors a device value
    */
-  private async applyCommand(stateId: string, command: YxcCommand): Promise<void> {
+  private async applyCommand(stateId: string, command: YxcCommand, written?: unknown): Promise<void> {
+    // Dropped with `void` by the write path: nothing may reject out of here.
+    try {
+      if (await this.sendCommand(stateId, command)) {
+        await this.confirmWrite(stateId, command, written);
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: confirming the write to ${stateId} failed: ${errorMessage(e)}`);
+    }
+  }
+
+  /**
+   * Put one command on the wire.
+   *
+   * @param stateId the written state id, for the failure log line
+   * @param command the YXC command to apply
+   * @returns whether the device took it (a failure is logged here)
+   */
+  private async sendCommand(stateId: string, command: YxcCommand): Promise<boolean> {
     try {
       switch (command.kind) {
         case "run":
@@ -1460,23 +1539,76 @@ export class YxcDeviceController implements ConnectionHandle {
     } catch (e) {
       this.deps.log.warn(`${this.deviceId}: write to ${stateId} failed: ${errorMessage(e)}`);
       this.checkAliveAfter(e);
-      return;
+      return false;
     }
-    await this.readBackAfter(stateId, command);
+    return true;
+  }
+
+  /** Whether events are to be relied on: the socket is bound and this device's events arrive. */
+  private pushWorking(): boolean {
+    return this.deps.pushActive?.() === true && this.deps.pushLiveness?.state !== "dead";
   }
 
   /**
-   * Without push, nothing reports the effect of a write until the next keepalive — five
-   * minutes away; the datapoint sat unconfirmed that long. Read the written area back at
-   * once. With push the device announces the change itself and nothing is asked.
+   * A change the device made without an event (see PushLiveness). Only counted while the socket is
+   * bound — without it no event can come, and the poll covers everything anyway.
+   */
+  private noteMiss(): void {
+    if (this.deps.pushActive?.() && this.deps.pushLiveness?.noteMiss()) {
+      this.deps.log.info(`${this.deviceId}: MusicCast events are not arriving — polling and reading writes back`);
+    }
+  }
+
+  /**
+   * See that the device's datapoint shows what a write did.
+   *
+   * Without working events, and for a zone 2–4 write (those events are "Reserved" in YXC Basic
+   * Rev 1.00 §10.3), the written area is read back at once. A write of the value the device already
+   * has is read back at once too: the device announces only a CHANGE, so no event would ever confirm
+   * it. A changing write of a reported main-zone or tuner value waits for the event; when none comes,
+   * the area is read back — and only if that shows the value changed did the device change it without
+   * telling (a write it accepted and did not carry out, in standby say, changes nothing and judges
+   * nothing; audit 2026-09-24, C1).
+   *
+   * @param stateId the written state id, relative to the device
+   * @param command the command that was applied
+   * @param written the written value, when the state mirrors a device value
+   */
+  private async confirmWrite(stateId: string, command: YxcCommand, written: unknown): Promise<void> {
+    if (!this.pushWorking() || /^multiroom\.zone[234]\./.test(stateId)) {
+      await this.readBackAfter(stateId, command);
+      return;
+    }
+    const before = this.deviceValues.get(stateId);
+    if (written === undefined || before === undefined || !ANNOUNCED_KINDS.has(command.kind)) {
+      return;
+    }
+    if (sameValue(before, written)) {
+      await this.readBackAfter(stateId, command);
+      return;
+    }
+    const gate = this.deps.gate;
+    if (!gate) {
+      return;
+    }
+    const events = this.pushEvents;
+    await gate.delay(PUSH_EXPECT_MS);
+    if (gate.closed || this.pushEvents !== events) {
+      return;
+    }
+    await this.readBackAfter(stateId, command);
+    if (this.pushEvents === events && this.deviceValues.get(stateId) !== before) {
+      this.noteMiss();
+    }
+  }
+
+  /**
+   * Read the area a write touched back from the device (see {@link confirmWrite} for when).
    *
    * @param stateId the written state id, relative to the device (carries the zone prefix)
    * @param command the command that was just applied
    */
   private async readBackAfter(stateId: string, command: YxcCommand): Promise<void> {
-    if (this.deps.pushActive?.()) {
-      return;
-    }
     switch (command.kind) {
       case "tunerFreq":
       case "tunerPreset":

@@ -16,6 +16,7 @@ import { errorMessage } from "./util";
 import type { ConnectionHandle, ControllerLog } from "./controller";
 import type { ObjectDef } from "./catalog/types";
 import type { DeviceRecord } from "./types";
+import type { PushLiveness } from "./yxc/push-liveness";
 
 // Re-exported so existing importers (tests) keep resolving it from here.
 export type { ConnectableTransport };
@@ -52,6 +53,8 @@ export interface AttemptDeps {
   registerPush(ip: string, onPush: (event: unknown) => void, deviceId?: string): () => void;
   /** Whether the shared push receiver is listening (decides how much the keepalive polls). */
   pushActive?(): boolean;
+  /** Whether this device's MusicCast events actually arrive (held by the caller across reconnects). */
+  pushLiveness?: PushLiveness;
   /** Schedule a repeating keepalive; returns a function that cancels it. */
   scheduleKeepalive(handler: () => void, ms: number): () => void;
   /** How often to poll an XML/YNC device for state (ms). */
@@ -312,6 +315,7 @@ export function attemptDevice(
         clientFor: ip => partnerClient(device.ip, deps.knownDeviceIps, ip),
         registerPush: (onPush, deviceId) => deps.registerPush(device.ip, onPush, deviceId),
         pushActive: deps.pushActive,
+        pushLiveness: deps.pushLiveness,
         probeMemory: deps.probeMemory,
         scheduleKeepalive: deps.scheduleKeepalive,
         upsertObject: yxc.interceptUpsert,

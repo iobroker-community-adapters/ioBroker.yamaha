@@ -412,6 +412,7 @@ import { DISCOVERY_SCHEMA } from "./lib/lifecycle/discovery-schema";
 import { DEVICE_TYPE_ICONS, iconForModel } from "./lib/device-type";
 import { MAX_HTTP_BODY_BYTES } from "./lib/util";
 import { LABEL_RANK } from "./lib/pure-helpers";
+import { PushLiveness } from "./lib/yxc/push-liveness";
 
 /**
  * What a read stub answers with: a COPY of the stored value, never the stored object itself.
@@ -1152,6 +1153,32 @@ describe("Yamaha auto-discovery", () => {
     expect(ctx.i.log.info).toHaveBeenCalledWith(
       expect.stringContaining("Kitchen: admitted again — the network search is off"),
     );
+  });
+
+  // Whether a device's MusicCast events arrive is a verdict about the DEVICE: a reconnect must not
+  // start it over (audit 2026-09-24, C1).
+  it("every attempt of a device carries the same push-event verdict, another device its own", async () => {
+    mocks.discoveredStore.devices = [
+      { id: "WX", ip: "1.1.1.1" },
+      { id: "RX", ip: "1.1.1.2" },
+    ];
+    const ctx = setup({ devices: [] }, { failIds: ["WX"] });
+    await ctx.i.onReady();
+    await flush();
+    const retry = (): void => {
+      const call = ctx.i.setTimeout.mock.calls.filter(c => Number(c[1]) >= 800 && Number(c[1]) <= 4000).at(-1)!;
+      (call[0] as () => void)();
+    };
+    retry();
+    await flush();
+    const verdicts = (id: string): unknown[] =>
+      ctx.calls.filter(c => c.device.id === id).map(c => (c.deps as { pushLiveness?: unknown }).pushLiveness);
+    const wx = verdicts("WX");
+    expect(wx.length).toBeGreaterThanOrEqual(2);
+    expect(wx[0]).toBeInstanceOf(PushLiveness);
+    expect(new Set(wx).size).toBe(1);
+    expect(verdicts("RX")[0]).toBeInstanceOf(PushLiveness);
+    expect(verdicts("RX")[0]).not.toBe(wx[0]);
   });
 
   it("the first attempt tries every transport; a retry in the same failure streak narrows; the attempt after a success is full again", async () => {

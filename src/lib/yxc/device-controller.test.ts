@@ -9,6 +9,7 @@ import ysp from "./__fixtures__/status/YSP1600_main.json";
 import { CommandGate } from "../lifecycle/command-gate";
 import { ProbeMemory } from "../lifecycle/probe-memory";
 import { DISCOVERY_SCHEMA } from "../lifecycle/discovery-schema";
+import { PushLiveness } from "./push-liveness";
 
 /** A real command gate for the controller under test (pacing has its own suite). */
 const testGate = (): CommandGate =>
@@ -18,6 +19,28 @@ const testGate = (): CommandGate =>
   });
 
 const flush = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
+
+/** A command gate whose waits end only when the test says so — the push-event window, say. */
+function manualGate(): { gate: CommandGate; elapse: () => Promise<void> } {
+  const pending: Array<() => void> = [];
+  const gate = new CommandGate({
+    minSpacingMs: 0,
+    timers: {
+      schedule: handler => pending.push(handler),
+      cancel: () => {},
+    },
+  });
+  return {
+    gate,
+    elapse: async () => {
+      await flush();
+      for (const handler of pending.splice(0)) {
+        handler();
+      }
+      await flush();
+    },
+  };
+}
 const silentLog = { debug: (): void => {}, info: (): void => {}, warn: (): void => {} };
 
 /**
@@ -161,7 +184,10 @@ function setup(
   status: unknown,
   linkTargets: Record<string, YxcClientLike> = {},
   pushActive?: () => boolean,
+  extra: { pushLiveness?: PushLiveness; gate?: CommandGate } = {},
 ): {
+  /** Every info line the controller logged. */
+  infos: string[];
   /**
    * Make value writes throw, to prove what a failing tree write may and may not cost. `only`
    * narrows it to one state id, so a test can break exactly the zone-status path and leave the
@@ -195,12 +221,14 @@ function setup(
   const fire: { push?: (event: unknown) => void; keepalive?: () => void } = {};
   const breakAcks: { on: boolean; only?: string } = { on: false };
   const warnings: string[] = [];
+  const infos: string[] = [];
   let cancelled = false;
   let unregistered = false;
   const controller = new YxcDeviceController("living", {
     client,
     clientFor: ip => linkTargets[ip],
     pushActive,
+    ...extra,
     registerPush: onPush => {
       fire.push = onPush;
       return () => {
@@ -233,12 +261,16 @@ function setup(
     },
     log: {
       ...silentLog,
+      info: (line: string) => {
+        infos.push(line);
+      },
       warn: (line: string) => {
         warnings.push(line);
       },
     },
   });
   return {
+    infos,
     breakAcks,
     warnings,
     hold,
@@ -757,13 +789,49 @@ describe("YxcDeviceController", () => {
     expect(order.indexOf("getStatus")).toBeGreaterThan(order.indexOf("power"));
   });
 
-  test("with push working, a write is not read back — the device announces the change itself", async () => {
+  // The device announces a CHANGE only (YXC Basic §10.3): a write of the value it already has
+  // stood unacknowledged for good under push (audit 2026-09-24, C1).
+  test("with push working, writing the value the device already has is read back at once", async () => {
     const s = setup(wx10, ysp, {}, () => true);
     await s.controller.start();
     s.client.calls.length = 0;
     s.controller.handleStateChange("living.power", false, false);
     await flush();
+    expect(s.client.calls.map(c => c.method)).toEqual(["power", "getStatus"]);
+  });
+
+  test("with push working, a changing write waits for the event — and the event is the confirmation", async () => {
+    const { gate, elapse } = manualGate();
+    const liveness = new PushLiveness();
+    const s = setup(wx10, ysp, {}, () => true, { gate, pushLiveness: liveness });
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.power", false, true);
+    await flush();
     expect(s.client.calls.map(c => c.method)).toEqual(["power"]);
+    s.client.status = { ...(ysp as Record<string, unknown>), power: "on" };
+    s.fire.push?.({ main: { power: "on" } });
+    await elapse();
+    // The push re-read the zone once; the window closed with nothing more asked.
+    expect(s.client.calls.map(c => c.method)).toEqual(["power", "getStatus"]);
+    expect(liveness.state).toBe("alive");
+  });
+
+  // Zone 2–4 events are "Reserved" in YXC Basic Rev 1.00 §10.3: a zone write under push stood
+  // unconfirmed until the next keepalive on such a firmware (found while building C1).
+  test("a zone 2 write is read back at once, push or not", async () => {
+    const features = {
+      zone: [
+        { id: "main", func_list: ["power"] },
+        { id: "zone2", func_list: ["power"] },
+      ],
+    };
+    const s = setup(features, ysp, {}, () => true);
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.multiroom.zone2.power", false, true);
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "getStatus", args: ["zone2"] });
   });
 
   test("without push, a tuner write re-reads the tuner, not the zone", async () => {
@@ -833,17 +901,134 @@ describe("YxcDeviceController", () => {
       expect(s.acks).toContainEqual({ id: "living.power", value: true });
     });
 
-    test("writing the value the device already has still gets its acknowledgement", async () => {
-      const s = setup(wx10, ysp);
+    test("writing the value the device already has gets its acknowledgement from the read-back", async () => {
+      const s = setup(wx10, ysp, {}, () => true);
       await s.controller.start();
       s.acks.length = 0;
       // A scene recalling a fixed level, a script with a fixed volume: the write produces no
-      // CHANGE, so without forgetting the remembered value the echo would be skipped and the
-      // datapoint would stay unacknowledged for good.
+      // CHANGE, so the device sends no event (YXC Basic §10.3) — only reading it back acknowledges it.
       s.controller.handleStateChange("living.power", false, false);
-      s.fire.push?.({ main: { power: "standby" } });
       await flush();
       expect(s.acks).toContainEqual({ id: "living.power", value: false });
+    });
+  });
+
+  // "Push active" meant the socket is bound: a second MusicCast client on the same host takes the
+  // events away (they go to the last registration), and the adapter still trusted them — no
+  // read-back after a write, the full sweep every 30 minutes (audit 2026-09-24, C1).
+  describe("push liveness", () => {
+    const fullSweep = (calls: Array<{ method: string }>): boolean => calls.some(c => c.method === "getPlayInfo");
+
+    test("a changing write no event confirms is read back; the second such change stops trusting push", async () => {
+      const { gate, elapse } = manualGate();
+      const liveness = new PushLiveness();
+      const s = setup(wx10, ysp, {}, () => true, { gate, pushLiveness: liveness });
+      await s.controller.start();
+      s.client.calls.length = 0;
+      s.client.status = { ...(ysp as Record<string, unknown>), power: "on" };
+      s.controller.handleStateChange("living.power", false, true);
+      await elapse();
+      expect(s.client.calls.map(c => c.method)).toEqual(["power", "getStatus"]);
+      expect(s.acks).toContainEqual({ id: "living.power", value: true });
+      expect(liveness.state).toBe("unknown");
+      s.client.status = { ...(s.client.status as Record<string, unknown>), power: "standby" };
+      s.controller.handleStateChange("living.power", false, false);
+      await elapse();
+      expect(liveness.state).toBe("dead");
+      expect(s.infos).toEqual(["living: MusicCast events are not arriving — polling and reading writes back"]);
+      // Now every keepalive sweeps everything, and a write is read back at once.
+      s.client.calls.length = 0;
+      s.fire.keepalive?.();
+      await flush();
+      expect(fullSweep(s.client.calls)).toBe(true);
+      s.client.calls.length = 0;
+      s.controller.handleStateChange("living.power", false, true);
+      await flush();
+      expect(s.client.calls.map(c => c.method)).toEqual(["power", "getStatus"]);
+    });
+
+    test("a write the device took and did not carry out judges nothing", async () => {
+      const { gate, elapse } = manualGate();
+      const liveness = new PushLiveness();
+      const s = setup(wx10, ysp, {}, () => true, { gate, pushLiveness: liveness });
+      await s.controller.start();
+      // Accepted, not done (the read-back still says standby): no change, so no event was owed.
+      s.controller.handleStateChange("living.power", false, true);
+      await elapse();
+      s.controller.handleStateChange("living.power", false, true);
+      await elapse();
+      expect(liveness.state).toBe("unknown");
+      expect(s.infos).toEqual([]);
+    });
+
+    test("a resting device stays in push mode: the full sweep only every sixth keepalive", async () => {
+      const liveness = new PushLiveness();
+      const s = setup(wx10, ysp, {}, () => true, { pushLiveness: liveness });
+      await s.controller.start();
+      const sweeps: boolean[] = [];
+      for (let run = 1; run <= 6; run++) {
+        s.client.calls.length = 0;
+        s.fire.keepalive?.();
+        await flush();
+        sweeps.push(fullSweep(s.client.calls));
+      }
+      expect(sweeps).toEqual([false, false, false, false, false, true]);
+      expect(liveness.state).toBe("unknown");
+    });
+
+    test("a keepalive that finds the main zone changed without an event counts a miss", async () => {
+      const liveness = new PushLiveness();
+      const s = setup(wx10, ysp, {}, () => true, { pushLiveness: liveness });
+      await s.controller.start();
+      s.client.status = { ...(ysp as Record<string, unknown>), power: "on" };
+      s.fire.keepalive?.();
+      await flush();
+      expect(liveness.state).toBe("unknown");
+      s.client.status = { ...(ysp as Record<string, unknown>), power: "standby" };
+      s.fire.keepalive?.();
+      await flush();
+      expect(liveness.state).toBe("dead");
+      // An event in between would have told: the same changes with events judge nothing.
+      const told = new PushLiveness();
+      const t = setup(wx10, ysp, {}, () => true, { pushLiveness: told });
+      await t.controller.start();
+      t.client.status = { ...(ysp as Record<string, unknown>), power: "on" };
+      t.fire.push?.({ netusb: { play_time: 3 } });
+      t.fire.keepalive?.();
+      await flush();
+      t.client.status = { ...(ysp as Record<string, unknown>), power: "standby" };
+      t.fire.push?.({ netusb: { play_time: 4 } });
+      t.fire.keepalive?.();
+      await flush();
+      expect(told.state).toBe("alive");
+    });
+
+    test("an event brings it back", async () => {
+      const liveness = new PushLiveness();
+      liveness.noteMiss();
+      liveness.noteMiss();
+      const s = setup(wx10, ysp, {}, () => true, { pushLiveness: liveness });
+      await s.controller.start();
+      s.fire.push?.({ main: { power: "standby" } });
+      await flush();
+      expect(liveness.state).toBe("alive");
+      expect(s.infos).toEqual(["living: MusicCast events arrive again"]);
+      s.client.calls.length = 0;
+      s.fire.keepalive?.();
+      await flush();
+      expect(fullSweep(s.client.calls)).toBe(false);
+    });
+
+    test("no misses are counted while the push socket is not bound", async () => {
+      const liveness = new PushLiveness();
+      const s = setup(wx10, ysp, {}, () => false, { pushLiveness: liveness });
+      await s.controller.start();
+      for (const power of ["on", "standby", "on"]) {
+        s.client.status = { ...(ysp as Record<string, unknown>), power };
+        s.fire.keepalive?.();
+        await flush();
+      }
+      expect(liveness.state).toBe("unknown");
     });
   });
 

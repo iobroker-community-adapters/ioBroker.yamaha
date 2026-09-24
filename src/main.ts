@@ -43,6 +43,7 @@ import { isExcluded, readDiscovered, readExcluded, readIgnored, writeDiscovered 
 import { identityFrom, mergeIdentity, sameDevice, type DeviceIdentity } from "./lib/device-identity";
 import { discoveredStoreDeps, excludedStoreDeps, ignoredStoreDeps } from "./lib/discovered-store-deps";
 import { YxcPushReceiver } from "./lib/yxc/push-receiver";
+import { PushLiveness } from "./lib/yxc/push-liveness";
 import { YamahaDeviceManagement } from "./device-management";
 import type { DeviceSource, DeviceRecord } from "./lib/types";
 import { DeviceSupervisor, type ConnectionHandle } from "./lib/lifecycle/device-supervisor";
@@ -487,6 +488,9 @@ export class Yamaha extends utils.Adapter {
     }
     const subunitCache = profile.subunitCache;
     const probeMemory = profile.probeMemory;
+    // Whether this device's MusicCast events arrive — a verdict of the device, not of one connection
+    // (audit 2026-09-24, C1).
+    const pushLiveness = new PushLiveness();
     // Narrowing (attempt-device.ts: only the transports the description advertises) applies
     // INSIDE a streak of failed attempts. The first attempt after a success — the start, and the
     // first reconnect after a drop — always tries all three: a firmware update that brings
@@ -503,6 +507,7 @@ export class Yamaha extends utils.Adapter {
           subunitCache,
           probeMemory,
           signal,
+          pushLiveness,
         );
         failedInARow = handle ? 0 : failedInARow + 1;
         return handle;
@@ -2060,6 +2065,7 @@ export class Yamaha extends utils.Adapter {
    * @param yncaSubunitCache per-device cache of the YNCA AVAIL probe (skips the probe on reconnects)
    * @param probeMemory per-device memory for constant device answers (skips re-asking on reconnects)
    * @param signal aborted when the device's supervisor is closed while this attempt runs
+   * @param pushLiveness whether the device's MusicCast events arrive (held per device)
    * @returns a connection handle, or null when no transport connected
    */
   private attemptDevice(
@@ -2069,6 +2075,7 @@ export class Yamaha extends utils.Adapter {
     yncaSubunitCache: YncaSubunitCache,
     probeMemory: ProbeMemory,
     signal?: AbortSignal,
+    pushLiveness?: PushLiveness,
   ): Promise<ConnectionHandle | null> {
     // Whether this attempt may still write. A delete or a move closes the supervisor (which aborts
     // the signal) while its attempt can still be sweeping; what it wrote afterwards survived as an
@@ -2144,6 +2151,7 @@ export class Yamaha extends utils.Adapter {
         },
         registerPush: (ip, onPush, deviceId) => pushReceiver.register(ip, onPush, deviceId),
         pushActive: () => pushReceiver.isListening(),
+        pushLiveness,
         scheduleKeepalive: (handler, ms) => {
           if (this.unloading) {
             return () => {};
