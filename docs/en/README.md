@@ -24,14 +24,15 @@ uses everything that answers.
 ## Setting it up
 
 1. Install the adapter and create an instance.
-2. Open the instance settings. The **Devices** tab lists your receivers as cards.
+2. Open the instance settings. The **Devices** section lists your receivers as cards.
 3. Leave the list empty and the adapter searches the network by itself and runs whatever it
    finds — or press **+** and enter the IP address of a receiver. You can do both: devices you
    entered and devices the search found run side by side.
 
-Every card carries a small icon for where its address came from: a pencil for one you entered,
-a magnifier for one the search found. A found device can be edited too — give it the fixed
-address you assigned the receiver, and it becomes one of your entered devices.
+Every card shows a speaker symbol for the volume: a speaker with a percent sign and the main
+zone's current volume under it while **Volume as 0–100 %** is on, the plain speaker otherwise.
+Every card can be edited, found ones included — give a found device the fixed address you
+assigned the receiver, and it becomes one of your entered devices.
 
 A receiver from before 2010 does not answer a network search and always has to be added by
 hand. The same is true for any device your router keeps in a different network segment.
@@ -44,7 +45,8 @@ adapter is not running is only found again by the next network search.
 
 - **Search the network for devices** — _Automatically_ searches while the device list is empty,
   which is what the adapter has always done. _Always_ keeps searching next to the devices you
-  entered. _Never_ runs your list alone. A device that was found earlier and is not searched for
+  entered. _Never_ runs your list alone and opens no listener on UDP port 1900. A device that
+  was found earlier and is not searched for
   any more keeps its datapoints — they are simply marked offline. Only the delete button on its
   card removes a device for good. A list holding only the row carried over from the previous
   adapter (its name is an IP address) counts as empty: nobody typed that address, so the search
@@ -69,8 +71,8 @@ adapter is not running is only found again by the next network search.
 
   It belongs to the device, not to the instance: one receiver wanting percent says nothing
   about the others. You set it where you set the device's name and address: in the add/edit
-  dialog on its card — and while it is on, the card shows a small **0–100 %** badge next to the
-  protocol labels, so you can see what a receiver's volume carries without opening anything.
+  dialog on its card — and while it is on, the card's speaker symbol carries a percent sign, so
+  you can see what a receiver's volume carries without opening anything.
 
 ## What you get in the object tree
 
@@ -122,7 +124,9 @@ setState("yamaha.0.living.power", true);
 setState("yamaha.0.living.input", "HDMI1");
 ```
 
-**Set the volume** — in decibels, exactly as the receiver shows it:
+**Set the volume** — in the scale the receiver shows (decibels or its own steps), within the
+limits of its `volume` datapoint; with **Volume as 0–100 %** on, in percent. On a receiver
+that shows decibels:
 
 ```javascript
 setState("yamaha.0.living.volume", -35.5);
@@ -158,11 +162,14 @@ remembered per device and survive a restart, so every later start brings the dev
 seconds and refreshes the values in the background. A firmware update or a different device
 at the same address is noticed and asked again.
 
-**The MusicCast port can only belong to one program.** MusicCast devices send their updates
-to port 41100 on your ioBroker machine, and only one program can hold it. If the old
-`musiccast` adapter is still installed and running, it holds that port, and this adapter
-falls back to asking every five minutes instead of being told. YNCA devices are unaffected.
-Uninstall or stop the old adapter to get instant updates back.
+**MusicCast updates need UDP port 41100.** MusicCast devices send their updates to port 41100
+on your ioBroker machine, and only one program can hold it. If the old `musiccast` adapter is
+still installed and running, it holds that port. The updates also stay away when ioBroker runs
+in Docker without that UDP port published, or when a second MusicCast program on the same
+machine registers for them. The adapter notices a change that came without an update: after
+two of them it says so once in the log, reads every write back and asks for everything every
+five minutes. YNCA devices are unaffected. Free or publish the port to get instant updates
+back — the log says so when they arrive again.
 
 **Zone 2 is a full zone.** It has its own volume, input, player block and scenes under
 `multiroom.zone2`. Recalling a favourite switches the zone that is listening to that source,
@@ -187,7 +194,9 @@ take it back.
 
 **A refused command shows up in the log.** If a receiver rejects something — a scene its
 generation does not support, a function that is unavailable in standby — you will find it as
-a warning in the adapter log instead of nothing happening silently.
+a warning in the adapter log instead of nothing happening silently. A MusicCast device's answer
+comes with its meaning, e.g. `Guarded` for "not possible in the current state". The datapoint
+then shows the device's value again.
 
 ## When something does not work
 

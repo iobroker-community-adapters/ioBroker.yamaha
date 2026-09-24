@@ -45,7 +45,7 @@
   "group_sound": "音效",
   "group_sound_help": "音效处理模式、音调、低音炮、平衡和均衡器",
   "group_advanced": "高级",
-  "group_advanced_help": "初始音量、最大音量、扬声器模式和 23 个输入名称",
+  "group_advanced_help": "初始音量、最大音量、扬声器设置、显示屏以及设备报告的输入名称",
   "adaptiveDRC": "自适应 DRC",
   "adaptiveDSP": "自适应 DSP",
   "adaptiveDSPLevel": "自适应 DSP 电平",

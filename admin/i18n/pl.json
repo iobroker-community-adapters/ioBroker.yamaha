@@ -45,7 +45,7 @@
   "group_sound": "Dźwięk",
   "group_sound_help": "Tryby przetwarzania dźwięku, tony, subwoofer, balans i korektor",
   "group_advanced": "Zaawansowane",
-  "group_advanced_help": "Głośność początkowa, głośność maksymalna, wzorce głośników i 23 nazwy wejść",
+  "group_advanced_help": "Głośność początkowa, głośność maksymalna, ustawienia głośników, wyświetlacz i nazwy wejść zgłaszane przez urządzenie",
   "adaptiveDRC": "Adaptacyjny DRC",
   "adaptiveDSP": "Adaptacyjny DSP",
   "adaptiveDSPLevel": "Poziom adaptacyjnego DSP",

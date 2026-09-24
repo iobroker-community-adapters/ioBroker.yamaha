@@ -45,7 +45,7 @@
   "group_sound": "Som",
   "group_sound_help": "Modos de processamento de som, controlo de tom, subwoofer, balanço e equalizador",
   "group_advanced": "Avançado",
-  "group_advanced_help": "Volume inicial, volume máximo, padrões de altifalantes e os 23 nomes de entrada",
+  "group_advanced_help": "Volume inicial, volume máximo, definições de altifalantes, ecrã e os nomes de entrada que o dispositivo indica",
   "adaptiveDRC": "DRC adaptativo",
   "adaptiveDSP": "DSP adaptativo",
   "adaptiveDSPLevel": "Nível de DSP adaptativo",

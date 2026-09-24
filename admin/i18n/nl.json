@@ -45,7 +45,7 @@
   "group_sound": "Geluid",
   "group_sound_help": "Geluidsmodi, klankregeling, subwoofer, balans en equalizer",
   "group_advanced": "Geavanceerd",
-  "group_advanced_help": "Beginvolume, maximumvolume, luidsprekerpatronen en de 23 ingangsnamen",
+  "group_advanced_help": "Beginvolume, maximumvolume, luidsprekerinstellingen, display en de ingangsnamen die het apparaat meldt",
   "adaptiveDRC": "Adaptieve DRC",
   "adaptiveDSP": "Adaptieve DSP",
   "adaptiveDSPLevel": "Adaptief DSP-niveau",

@@ -45,7 +45,7 @@
   "group_sound": "Klang",
   "group_sound_help": "Klangmodi, Klangregler, Subwoofer, Balance und Equalizer",
   "group_advanced": "Erweitert",
-  "group_advanced_help": "Anfangslautstärke, Maximallautstärke, Lautsprechermuster und die 23 Eingangsnamen",
+  "group_advanced_help": "Anfangslautstärke, Maximallautstärke, Lautsprechereinstellungen, Anzeige und die Eingangsnamen, die das Gerät meldet",
   "adaptiveDRC": "Adaptive DRC",
   "adaptiveDSP": "Adaptives DSP",
   "adaptiveDSPLevel": "Adaptiver DSP-Pegel",

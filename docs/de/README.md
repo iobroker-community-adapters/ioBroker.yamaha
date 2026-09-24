@@ -18,27 +18,28 @@ viele davon es beantwortet.
 | CD-Receiver / Netzwerkspieler        | CRX, MCR, CD-NT                  | MusicCast                                         |
 | Receiver vor 2010                    | RX-V ab etwa 2008                | XML                                               |
 
-Sie müssen nicht wissen, welches Protokoll Ihr Gerät spricht. Der Adapter probiert alle drei
+Du musst nicht wissen, welches Protokoll dein Gerät spricht. Der Adapter probiert alle drei
 und nutzt alles, was antwortet.
 
 ## Einrichtung
 
 1. Adapter installieren und eine Instanz anlegen.
-2. Die Instanz-Einstellungen öffnen. Der Reiter **Geräte** zeigt Ihre Receiver als Karten.
+2. Die Instanz-Einstellungen öffnen. Der Abschnitt **Geräte** zeigt deine Receiver als Karten.
 3. Die Liste leer lassen — dann sucht der Adapter selbst im Netz und betreibt, was er findet —
    oder auf **+** drücken und die IP-Adresse eines Receivers eintragen. Beides geht zusammen:
    eingetragene und gefundene Geräte laufen nebeneinander.
 
-Jede Karte trägt ein kleines Symbol dafür, woher ihre Adresse kommt: ein Stift für ein
-eingetragenes Gerät, eine Lupe für ein gefundenes. Auch ein gefundenes Gerät lässt sich
-bearbeiten — geben Sie ihm die feste Adresse, die Sie dem Receiver vergeben haben, und es wird
-zu einem Ihrer eingetragenen Geräte.
+Jede Karte zeigt ein Lautsprecher-Symbol für die Lautstärke: einen Lautsprecher mit
+Prozentzeichen und darunter die aktuelle Lautstärke der Hauptzone, solange **Lautstärke als
+0–100 %** an ist, sonst den schlichten Lautsprecher. Jede Karte lässt sich bearbeiten, auch die
+eines gefundenen Geräts — gib ihm die feste Adresse, die du dem Receiver vergeben hast, und es
+wird zu einem deiner eingetragenen Geräte.
 
 Ein Receiver von vor 2010 antwortet auf keine Netzwerksuche und muss immer von Hand
-eingetragen werden. Dasselbe gilt für jedes Gerät, das Ihr Router in einem anderen
+eingetragen werden. Dasselbe gilt für jedes Gerät, das dein Router in einem anderen
 Netzabschnitt hält.
 
-**Geben Sie dem Receiver eine feste Adresse.** Der Adapter erkennt ein Gerät an seiner
+**Gib dem Receiver eine feste Adresse.** Der Adapter erkennt ein Gerät an seiner
 Identität, nicht an der Adresse, und folgt ihm bei einem Adresswechsel — ein Gerät, das
 umzieht, während der Adapter nicht läuft, findet aber erst die nächste Netzwerksuche wieder.
 
@@ -46,14 +47,14 @@ umzieht, während der Adapter nicht läuft, findet aber erst die nächste Netzwe
 
 - **Netzsuche nach Geräten** — _Automatisch_ sucht, solange die Geräteliste leer ist; so hat
   der Adapter es immer gemacht. _Immer_ sucht zusätzlich zu den eingetragenen Geräten.
-  _Nie_ überlässt Ihrer Liste allein das Feld. Ein früher gefundenes Gerät, nach dem nicht mehr
-  gesucht wird, behält seine Datenpunkte — sie werden nur als offline gekennzeichnet. Endgültig
-  entfernt es allein der Löschknopf auf seiner Karte. Eine Liste, die nur die aus dem
-  Vorgänger-Adapter übernommene Zeile enthält (ihr Name ist eine IP-Adresse), gilt als leer:
-  diese Adresse hat niemand getippt, die Suche bleibt an und folgt dem Receiver zu einer
-  neuen Adresse.
-- **Netzwerk-Schnittstelle** — leer lassen, dann verlässt die Suche jede Netzwerkkarte Ihres
-  ioBroker-Rechners. Nur setzen, wenn Ihr Server in mehreren Netzen hängt und die Suche eine
+  _Nie_ überlässt deiner Liste allein das Feld und öffnet keinen Hörer auf UDP-Port 1900. Ein
+  früher gefundenes Gerät, nach dem nicht mehr gesucht wird, behält seine Datenpunkte — sie
+  werden nur als offline gekennzeichnet. Endgültig entfernt es allein der Löschknopf auf seiner
+  Karte. Eine Liste, die nur die aus dem Vorgänger-Adapter übernommene Zeile enthält (ihr Name
+  ist eine IP-Adresse), gilt als leer: diese Adresse hat niemand getippt, die Suche bleibt an
+  und folgt dem Receiver zu einer neuen Adresse.
+- **Netzwerk-Schnittstelle** — leer lassen, dann verlässt die Suche jede Netzwerkkarte deines
+  ioBroker-Rechners. Nur setzen, wenn dein Server in mehreren Netzen hängt und die Suche eine
   bestimmte nehmen soll. Auf die Receiver selbst hat die Einstellung keine Wirkung.
 - **MusicCast-Ereignisport** — wird angezeigt, ist nicht änderbar: MusicCast-Geräte melden ihre
   Änderungen an den UDP-Port 41100, das legt das Protokoll fest. Das Feld ist da, damit der Admin
@@ -72,9 +73,9 @@ umzieht, während der Adapter nicht läuft, findet aber erst die nächste Netzwe
   bekommt also immer den Wert, den er erwartet.
 
   Die Einstellung gehört dem Gerät, nicht der Instanz: dass ein Receiver Prozent will, sagt
-  nichts über die anderen. Gesetzt wird sie dort, wo auch Name und Adresse des Geräts stehen:
-  im Anlegen-/Bearbeiten-Dialog seiner Karte — und solange sie an ist, trägt die Karte neben den
-  Protokoll-Kürzeln ein kleines **0–100 %**-Abzeichen, man sieht es also ohne etwas zu öffnen.
+  nichts über die anderen. Du setzt sie dort, wo auch Name und Adresse des Geräts stehen: im
+  Anlegen-/Bearbeiten-Dialog seiner Karte — und solange sie an ist, trägt das
+  Lautsprecher-Symbol der Karte ein Prozentzeichen, du siehst es also, ohne etwas zu öffnen.
 
 ## Was im Objektbaum entsteht
 
@@ -100,23 +101,23 @@ Jeder Receiver wird ein Gerät. Darunter:
   Datenpunkte tragen die Grenzen, die das Gerät selbst angibt — ein Schieberegler bietet damit
   genau den Bereich an, den der Receiver annimmt.
 
-Angelegt wird nur, was Ihr Gerät wirklich meldet. Eine Soundbar bekommt keine Zone 4, ein
+Angelegt wird nur, was dein Gerät wirklich meldet. Eine Soundbar bekommt keine Zone 4, ein
 Stereo-Receiver keinen Surround-Dekoder.
 
 ### Wiedergabezeiten gibt es in zwei Formen
 
 `player.elapsedTime` und `player.totalTime` sind eine **Zahl in Sekunden** — das ist die Form,
-die das ioBroker-Medienspieler-Widget, Alexa und Google brauchen, und die Form, mit der man
-rechnen kann. Direkt daneben tragen `player.elapsedTimeText` und `player.totalTimeText`
+die das ioBroker-Medienspieler-Widget, Alexa und Google brauchen, und die Form, mit der du
+rechnen kannst. Direkt daneben tragen `player.elapsedTimeText` und `player.totalTimeText`
 denselben Wert als lesbaren Text (`1:23`), für eine Visualisierung, die ihn nur anzeigen will.
 
 ### Datenpunktgruppen abschalten
 
 Sieben Gruppen lassen sich in den Einstellungen abschalten: Wiedergabe, Tuner, Multiroom,
 HDMI, Szenen, Klang und Erweitert, dazu die Uhr auf Geräten, die eine haben. Das Menü und die
-Bildschirm-Fernbedienung gehören zur Wiedergabe-Gruppe. Wird eine Gruppe
-abgeschaltet, verschwinden ihre Datenpunkte — der Adapter lässt keine leeren Reste stehen.
-Beim Wiedereinschalten entstehen sie mit der nächsten Verbindung neu.
+Bildschirm-Fernbedienung gehören zur Wiedergabe-Gruppe. Schaltest du eine Gruppe ab,
+verschwinden ihre Datenpunkte — der Adapter lässt keine leeren Reste stehen. Beim
+Wiedereinschalten entstehen sie mit der nächsten Verbindung neu.
 
 ## Anwendung
 
@@ -127,7 +128,9 @@ setState("yamaha.0.wohnzimmer.power", true);
 setState("yamaha.0.wohnzimmer.input", "HDMI1");
 ```
 
-**Lautstärke setzen** — in Dezibel, genau so, wie der Receiver sie anzeigt:
+**Lautstärke setzen** — in der Skala, die der Receiver anzeigt (Dezibel oder seine eigenen
+Schritte), innerhalb der Grenzen seines `volume`-Datenpunkts; mit **Lautstärke als 0–100 %** in
+Prozent. Auf einem Receiver mit Dezibel-Anzeige:
 
 ```javascript
 setState("yamaha.0.wohnzimmer.volume", -35.5);
@@ -153,9 +156,9 @@ Steuerkreuz wirkt auf das geöffnete Menü.
 **Im Menü einer Netzwerkquelle blättern.** `player.browse.source` öffnet eine Quelle, die acht
 Datenpunkte `line1` bis `line8` zeigen das aktuelle Fenster, `selectLine` wirkt wie die
 OK-Taste, und `pageUp`/`pageDown`/`back`/`home` navigieren. Für Skripte gibt es `path`:
-schreiben Sie `Bookmarks>Radio Paradise` hinein, und der Adapter läuft den Weg selbst ab.
+schreib `Bookmarks>Radio Paradise` hinein, und der Adapter läuft den Weg selbst ab.
 
-## Was man wissen sollte
+## Was du wissen solltest
 
 **Der erste Kontakt dauert.** Beim allerersten Verbinden fragt der Adapter den Receiver, welche
 Funktionen er hat — auf einem YNCA-Gerät bis zu eine halbe Minute. Die Antworten werden je
@@ -170,49 +173,54 @@ bekommt, behält seine Objekte: gefundene Geräte und die aus dem Vorgänger üb
 werden an die neue Adresse umgezogen, meist innerhalb von Sekunden, weil ein Receiver sich
 beim Start im Netz meldet — spätestens durch die Suche, die ein Verbindungsabriss auslöst.
 Ein von Hand eingetragenes Gerät bleibt an der getippten Adresse; sieht die Suche es woanders
-antworten, sagt das Log es einmal — Karte bearbeiten, um es umzuziehen. Der Hörer teilt sich
-Port 1900 mit anderen UPnP-Diensten auf Ihrem Rechner; kann er den Port nicht nutzen, steht
+antworten, sagt das Log es einmal — bearbeite die Karte, um es umzuziehen. Der Hörer teilt sich
+Port 1900 mit anderen UPnP-Diensten auf deinem Rechner; kann er den Port nicht nutzen, steht
 eine Warnung im Log und der Adapter sucht nur noch periodisch.
 
 **Löschen ist endgültig.** Der Löschknopf auf einer Karte fragt zuerst und sagt, was mit dem
 Gerät geht: alle seine Datenpunkte, ihre Historie und jede Visualisierungs-Bindung. Ein per
 Netzsuche gefundenes Gerät wird nicht wieder aufgenommen — es steht auf der Ausschlussliste,
-bis Sie es entweder von Hand hinzufügen oder in **Ausgeschlossene Geräte…** über der
-Geräteliste anhaken; dann nimmt die nächste Suche es wieder auf.
+bis du es entweder von Hand hinzufügst oder in **Ausgeschlossene Geräte…** über der
+Geräteliste anhakst; dann nimmt die nächste Suche es wieder auf.
 
-**Der MusicCast-Port gehört immer nur einem Programm.** MusicCast-Geräte schicken ihre
-Meldungen an Port 41100 Ihres ioBroker-Rechners, und den kann nur ein Programm halten. Ist der
-alte `musiccast`-Adapter noch installiert und aktiv, hält er diesen Port, und dieser Adapter
-fragt dann alle fünf Minuten nach, statt benachrichtigt zu werden. YNCA-Geräte sind davon
-nicht betroffen. Den alten Adapter deinstallieren oder stoppen, dann kommen die sofortigen
-Meldungen zurück.
+**MusicCast-Meldungen brauchen UDP-Port 41100.** MusicCast-Geräte schicken ihre Meldungen an
+Port 41100 deines ioBroker-Rechners, und den kann nur ein Programm halten. Ist der alte
+`musiccast`-Adapter noch installiert und aktiv, hält er diesen Port. Die Meldungen bleiben auch
+aus, wenn ioBroker in Docker läuft und dieser UDP-Port nicht freigegeben ist, oder wenn sich
+ein zweites MusicCast-Programm auf demselben Rechner für sie anmeldet. Der Adapter merkt eine
+Änderung, zu der keine Meldung kam: nach zweien sagt er es einmal im Log, liest jeden
+Schreibvorgang zurück und fragt alle fünf Minuten alles ab. YNCA-Geräte sind davon nicht
+betroffen. Gib den Port frei, dann kommen die sofortigen Meldungen zurück — das Log sagt es,
+sobald sie wieder ankommen.
 
 **Zone 2 ist eine vollwertige Zone.** Sie hat unter `multiroom.zone2` eine eigene Lautstärke,
 einen eigenen Eingang, einen eigenen Wiedergabeblock und eigene Szenen. Der Aufruf eines
 Favoriten schaltet die Zone um, die auf diese Quelle hört — nicht immer die Hauptzone.
 
 **Ein abgelehnter Befehl steht im Log.** Weist ein Receiver etwas zurück — eine Szene, die
-seine Generation nicht kennt, eine Funktion, die im Bereitschaftszustand nicht geht —, finden
-Sie das als Warnung im Adapter-Log, statt dass einfach nichts passiert.
+seine Generation nicht kennt, eine Funktion, die im Bereitschaftszustand nicht geht —, findest
+du das als Warnung im Adapter-Log, statt dass einfach nichts passiert. Die Antwort eines
+MusicCast-Geräts kommt mit ihrer Bedeutung, z. B. `Guarded` für „im jetzigen Zustand nicht
+möglich“. Der Datenpunkt zeigt danach wieder den Wert des Geräts.
 
 ## Wenn etwas nicht geht
 
-- **Das Gerät wird nicht gefunden.** Ältere Geräte antworten auf keine Suche — tragen Sie sie
-  über ihre IP-Adresse ein. Ansonsten prüfen, ob ioBroker und Receiver im selben Netzabschnitt
-  liegen, und die Netzwerk-Schnittstelle einmal ausdrücklich setzen.
-- **Das Gerät bleibt offline.** Adresse prüfen, und ob der Receiver überhaupt erreichbar ist
+- **Das Gerät wird nicht gefunden.** Ältere Geräte antworten auf keine Suche — trag sie
+  über ihre IP-Adresse ein. Ansonsten prüf, ob ioBroker und Receiver im selben Netzabschnitt
+  liegen, und setz die Netzwerk-Schnittstelle einmal ausdrücklich.
+- **Das Gerät bleibt offline.** Prüf die Adresse, und ob der Receiver überhaupt erreichbar ist
   (seine eigene Webseite antwortet meist unter `http://<Adresse>`). Der Adapter versucht es
   von selbst weiter, mit wachsenden Pausen. Hat der Receiver eine neue Adresse bekommen, folgt
-  ihm ein gefundenes Gerät von selbst; ein von Hand eingetragenes muss bearbeitet werden — das
+  ihm ein gefundenes Gerät von selbst; ein von Hand eingetragenes musst du bearbeiten — das
   Log nennt die neue Adresse.
 - **Ich habe ein Gerät gelöscht und es kommt wieder / ich will es zurück.** Ein gelöschtes
-  Gerät bleibt aus der Suche draußen, bis Sie es wieder zulassen: von Hand hinzufügen, oder
+  Gerät bleibt aus der Suche draußen, bis du es wieder zulässt: von Hand hinzufügen, oder
   **Ausgeschlossene Geräte…** über der Liste öffnen und es anhaken.
 - **Ein Datenpunkt bleibt leer.** Das Gerät meldet diesen Wert nicht — der Adapter legt nur
   an, was ihm gemeldet wurde. Ein leerer Datenpunkt heißt meist: andere Modelle haben die
-  Funktion, Ihres nicht.
-- **Es kommen keine Aktualisierungen mehr.** Auf den Hinweis zum MusicCast-Port oben achten
-  und `info.connection` am Gerät ansehen.
+  Funktion, deines nicht.
+- **Es kommen keine Aktualisierungen mehr.** Achte auf den Hinweis zum MusicCast-Port oben und
+  sieh dir `info.connection` am Gerät an.
 
-Für alles Weitere die Protokollstufe der Instanz kurz auf `debug` stellen — der Adapter sagt
+Für alles Weitere stell die Protokollstufe der Instanz kurz auf `debug` — der Adapter sagt
 dort, was er fragt, was er bekommt und was er nicht abschickt.

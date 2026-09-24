@@ -45,7 +45,7 @@
   "group_sound": "Son",
   "group_sound_help": "Modes de traitement du son, réglages de tonalité, caisson de basses, balance et égaliseur",
   "group_advanced": "Avancé",
-  "group_advanced_help": "Volume initial, volume maximal, motifs d'enceintes et les 23 noms d'entrée",
+  "group_advanced_help": "Volume initial, volume maximal, réglages des enceintes, affichage et les noms d'entrée que l'appareil indique",
   "adaptiveDRC": "DRC adaptatif",
   "adaptiveDSP": "DSP adaptatif",
   "adaptiveDSPLevel": "Niveau DSP adaptatif",
