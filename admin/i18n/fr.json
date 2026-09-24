@@ -57,7 +57,7 @@
   "alarmVolume": "Volume du réveil",
   "album": "Album",
   "albumArt": "Pochette d'album",
-  "descAlbumArt": "Où récupérer la pochette du titre en cours : une URL complète, ou un chemin sur le serveur web de l'ampli.",
+  "descAlbumArt": "L'adresse web de la pochette du titre en cours.",
   "allDevicesOnline": "Tous les appareils en ligne",
   "artist": "Artiste",
   "audioMode": "Mode audio",

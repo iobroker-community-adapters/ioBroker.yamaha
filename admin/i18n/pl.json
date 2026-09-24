@@ -57,7 +57,7 @@
   "alarmVolume": "Głośność budzika",
   "album": "Album",
   "albumArt": "Okładka albumu",
-  "descAlbumArt": "Skąd pobrać okładkę bieżącego utworu: pełny adres URL albo ścieżka na serwerze WWW samego amplitunera.",
+  "descAlbumArt": "Adres internetowy okładki bieżącego utworu.",
   "allDevicesOnline": "Wszystkie urządzenia online",
   "artist": "Wykonawca",
   "audioMode": "Tryb dźwięku",

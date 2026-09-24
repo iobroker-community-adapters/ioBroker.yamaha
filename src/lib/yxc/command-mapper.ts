@@ -256,6 +256,34 @@ export function parseYxcDistribution(info: unknown): StateValue[] {
 }
 
 /**
+ * The address a device-relative path is fetched at: YXC answers the cover as a path on its own web
+ * server ("If xxx/yyy/zzz.jpg is returned, the absolute path is http://{host}/xxx/yyy/zzz.jpg", YXC
+ * Basic §7.2). A full URL (a service's own cover in the recently-played list) and "" stay as they
+ * are; without a host nothing is invented (audit 2026-09-24, C6).
+ *
+ * @param url the address the device reported
+ * @param host the device's address, as configured
+ * @returns the address a browser or a visualisation can load
+ */
+export function absoluteDeviceUrl(url: string, host: string | undefined): string {
+  if (url === "" || host === undefined || /^[a-z][a-z0-9+.-]*:\/\//i.test(url)) {
+    return url;
+  }
+  return `http://${host}/${url.replace(/^\/+/, "")}`;
+}
+
+/** The play time YXC reports when there is none (YXC Basic §7.2: "-60000 (invalid)"). */
+const INVALID_PLAY_TIME = -60000;
+
+/**
+ * Leaves a reported address as it is — for a caller that has no device to resolve it against.
+ *
+ * @param url the reported address
+ * @returns the same address
+ */
+const asReported = (url: string): string => url;
+
+/**
  * Parse a YXC getPlayInfo response into a player's read-only state updates
  * (playback status plus artist/album/track metadata). The same response shape is
  * used by every player source; the updates target the unified flat `player.*` block
@@ -264,9 +292,14 @@ export function parseYxcDistribution(info: unknown): StateValue[] {
  *
  * @param playInfo the getPlayInfo response object
  * @param block the source the info came from (`netusb` or `cd`)
+ * @param cover turns the reported cover path into the address to show (see {@link absoluteDeviceUrl})
  * @returns the player state updates, empty if malformed
  */
-export function parseYxcPlayInfo(playInfo: unknown, block: "netusb" | "cd" = "netusb"): StateValue[] {
+export function parseYxcPlayInfo(
+  playInfo: unknown,
+  block: "netusb" | "cd" = "netusb",
+  cover: (url: string) => string = asReported,
+): StateValue[] {
   if (typeof playInfo !== "object" || playInfo === null) {
     return [];
   }
@@ -280,30 +313,41 @@ export function parseYxcPlayInfo(playInfo: unknown, block: "netusb" | "cd" = "ne
     }
   }
   // Repeat/shuffle carry the same typed form as the YNCA sources: repeat as the
-  // media.mode.repeat code (wire off/one/all — captures-verified), shuffle as a boolean
-  // (wire off/on). An unknown wire value is skipped, never coerced to a wrong state.
-  const repeatCode: Record<string, number> = { off: 0, one: 1, all: 2 };
+  // media.mode.repeat code, shuffle as a boolean. The specification's words (YXC Basic §7.2
+  // netusb, §8.1 cd): repeat off/one/all, on a CD also folder (= all of it) and a-b (a stretch
+  // played again = one); shuffle off/on/songs/albums, on a CD folder/program — every one but
+  // "off" shuffles (audit 2026-09-24, C14). A word outside them is skipped, never coerced.
+  const repeatCode: Record<string, number> = { off: 0, one: 1, all: 2, folder: 2, "a-b": 1 };
   if (typeof info.repeat === "string" && info.repeat in repeatCode) {
     updates.push({ id: "player.repeat", value: repeatCode[info.repeat] });
   }
-  if (info.shuffle === "on" || info.shuffle === "off") {
-    updates.push({ id: "player.shuffle", value: info.shuffle === "on" });
+  if (
+    typeof info.shuffle === "string" &&
+    ["off", "on", "songs", "albums", "folder", "program"].includes(info.shuffle)
+  ) {
+    updates.push({ id: "player.shuffle", value: info.shuffle !== "off" });
   }
-  // Playback status → media.state code (the same 0/1/2 numbers as the YNCA player).
-  const playbackCode: Record<string, number> = { play: 0, stop: 1, pause: 2 };
+  // Playback status → media.state code (the same 0/1/2 numbers as the YNCA player); winding
+  // forward or back is still playing.
+  const playbackCode: Record<string, number> = { play: 0, stop: 1, pause: 2, fast_reverse: 0, fast_forward: 0 };
   if (typeof info.playback === "string" && info.playback in playbackCode) {
     updates.push({ id: "player.playback", value: playbackCode[info.playback] });
   }
   // Album art URL and the elapsed/total play time (renamed from the YXC field names).
   const albumArt = info.albumart_url;
   if (typeof albumArt === "string") {
-    updates.push({ id: "player.albumArt", value: albumArt });
+    updates.push({ id: "player.albumArt", value: cover(albumArt) });
   }
   // Both forms of each time — see catalog/play-time.ts. MusicCast reports the seconds, so
   // the readable text is formatted from them here; the YNCA side parses its text into the
   // same seconds. One meaning per datapoint, on every device.
+  // -60000 is the specification's "invalid" (YXC Basic §7.2) — no time, like total_time 0; every
+  // other negative value is a valid time before the start (audit 2026-09-24, C11).
   const elapsed = info.play_time;
-  if (typeof elapsed === "number") {
+  if (elapsed === INVALID_PLAY_TIME) {
+    updates.push({ id: "player.elapsedTime", value: 0 });
+    updates.push({ id: "player.elapsedTimeText", value: "" });
+  } else if (typeof elapsed === "number") {
     updates.push({ id: "player.elapsedTime", value: elapsed });
     updates.push({ id: "player.elapsedTimeText", value: formatPlayTime(elapsed) });
   }
@@ -524,9 +568,10 @@ export function parseYxcPresetList(info: unknown): StateValue | undefined {
  * Parse a `/netusb/getRecentInfo` response into the recently-played JSON state.
  *
  * @param info the getRecentInfo response object
+ * @param cover turns a reported cover path into the address to show (see {@link absoluteDeviceUrl})
  * @returns the state update, or undefined if the response is malformed
  */
-export function parseYxcRecentList(info: unknown): StateValue | undefined {
+export function parseYxcRecentList(info: unknown, cover: (url: string) => string = asReported): StateValue | undefined {
   const list = (info as { recent_info?: unknown } | null)?.recent_info;
   if (!Array.isArray(list)) {
     return undefined;
@@ -545,8 +590,9 @@ export function parseYxcRecentList(info: unknown): StateValue | undefined {
       input: e.input,
       name: e.text,
     };
-    if (typeof e.albumart_url === "string" && e.albumart_url.length > 0) {
-      item.albumArt = e.albumart_url;
+    const art = typeof e.albumart_url === "string" ? cover(e.albumart_url) : "";
+    if (art.length > 0) {
+      item.albumArt = art;
     }
     if (typeof e.play_count === "number") {
       item.playCount = e.play_count;

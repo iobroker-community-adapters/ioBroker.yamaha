@@ -43,14 +43,18 @@ export function parsePlayTime(text: string): number | undefined {
 
 /**
  * Format a playback time in seconds as the readable form: `m:ss` below an hour, `h:mm:ss`
- * from an hour on. A negative or non-finite value has nothing to show and yields "".
+ * from an hour on; a negative time (valid on MusicCast down to -59999, YXC Basic §7.2 — the time
+ * before the start) carries its sign (audit 2026-09-24, C11). A non-finite value yields "".
  *
  * @param seconds the time in seconds
  * @returns the readable time, or "" when there is none
  */
 export function formatPlayTime(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) {
+  if (!Number.isFinite(seconds)) {
     return "";
+  }
+  if (seconds < 0) {
+    return `-${formatPlayTime(-seconds)}`;
   }
   const total = Math.floor(seconds);
   const ss = String(total % 60).padStart(2, "0");

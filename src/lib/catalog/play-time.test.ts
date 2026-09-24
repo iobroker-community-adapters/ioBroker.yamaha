@@ -42,7 +42,13 @@ describe("formatPlayTime", () => {
 
   it("shows nothing for a value that is no time", () => {
     expect(formatPlayTime(Number.NaN)).toBe("");
-    expect(formatPlayTime(-5)).toBe("");
+  });
+
+  // MusicCast reports -59999…-1 as valid times (YXC Basic §7.2); the text kept nothing of them
+  // (audit 2026-09-24, C11).
+  it("a negative time carries its sign", () => {
+    expect(formatPlayTime(-5)).toBe("-0:05");
+    expect(formatPlayTime(-3725)).toBe("-1:02:05");
   });
 });
 

@@ -57,7 +57,7 @@
   "alarmVolume": "Volume do alarme",
   "album": "Álbum",
   "albumArt": "Capa do álbum",
-  "descAlbumArt": "Onde ir buscar a capa da faixa atual: um URL completo ou um caminho no servidor web do próprio recetor.",
+  "descAlbumArt": "O endereço web da capa da faixa atual.",
   "allDevicesOnline": "Todos os dispositivos online",
   "artist": "Artista",
   "audioMode": "Modo de áudio",

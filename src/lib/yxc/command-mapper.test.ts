@@ -1,4 +1,5 @@
 import {
+  absoluteDeviceUrl,
   parseYxcClock,
   parseYxcDistribution,
   parseYxcPlayInfo,
@@ -235,6 +236,58 @@ describe("parseYxcPlayInfo", () => {
 
   test("returns an empty list for a malformed response", () => {
     expect(parseYxcPlayInfo(null)).toEqual([]);
+  });
+
+  // A cover path is fetched from the device's own web server (YXC Basic §7.2); the relative path
+  // loaded from the ioBroker web server and showed nothing (audit 2026-09-24, C6). Captures: RX-A2070
+  // "/YamahaRemoteControl/AlbumART/AlbumART5419.jpg"; recently-played lists carry services' full URLs.
+  test("a cover path becomes the address on the device; a full URL and an empty one stay", () => {
+    const host = "10.0.0.5";
+    expect(absoluteDeviceUrl("/YamahaRemoteControl/AlbumART/AlbumART5419.jpg", host)).toBe(
+      "http://10.0.0.5/YamahaRemoteControl/AlbumART/AlbumART5419.jpg",
+    );
+    expect(absoluteDeviceUrl("xxx/yyy/zzz.jpg", "receiver.lan")).toBe("http://receiver.lan/xxx/yyy/zzz.jpg");
+    expect(absoluteDeviceUrl("https://cdn.example/cover.jpg", host)).toBe("https://cdn.example/cover.jpg");
+    expect(absoluteDeviceUrl("", host)).toBe("");
+    expect(absoluteDeviceUrl("/cover.jpg", undefined)).toBe("/cover.jpg");
+    const cover = (url: string): string => absoluteDeviceUrl(url, host);
+    expect(parseYxcPlayInfo({ albumart_url: "/cover.jpg" }, "netusb", cover)).toEqual([
+      { id: "player.albumArt", value: "http://10.0.0.5/cover.jpg" },
+    ]);
+    const recent = parseYxcRecentList(
+      { recent_info: [{ input: "net_radio", text: "Radio", albumart_url: "/art/1.jpg" }] },
+      cover,
+    );
+    expect(JSON.parse(String(recent?.value))).toEqual([
+      { num: 1, input: "net_radio", name: "Radio", albumArt: "http://10.0.0.5/art/1.jpg" },
+    ]);
+  });
+
+  // YXC Basic §7.2: play_time -60000 is "invalid", -59999…59999 valid; WX-010/WX-030 captures report
+  // -60000 (audit 2026-09-24, C11).
+  test("the invalid play time is no time; a negative valid one keeps its sign", () => {
+    expect(parseYxcPlayInfo({ play_time: -60000 })).toEqual([
+      { id: "player.elapsedTime", value: 0 },
+      { id: "player.elapsedTimeText", value: "" },
+    ]);
+    expect(parseYxcPlayInfo({ play_time: -5 })).toEqual([
+      { id: "player.elapsedTime", value: -5 },
+      { id: "player.elapsedTimeText", value: "-0:05" },
+    ]);
+  });
+
+  // The specification's words outside the old tables (YXC Basic §7.2, §8.1; audit 2026-09-24, C14).
+  test("every repeat, shuffle and playback word of the specification is read", () => {
+    const read = (info: Record<string, unknown>): unknown[] => parseYxcPlayInfo(info, "cd").map(u => u.value);
+    expect(read({ repeat: "folder" })).toEqual([2, "cd"]);
+    expect(read({ repeat: "a-b" })).toEqual([1, "cd"]);
+    for (const shuffle of ["on", "songs", "albums", "folder", "program"]) {
+      expect(read({ shuffle }), shuffle).toEqual([true, "cd"]);
+    }
+    expect(read({ shuffle: "off" })).toEqual([false, "cd"]);
+    expect(read({ playback: "fast_forward" })).toEqual([0, "cd"]);
+    expect(read({ playback: "fast_reverse" })).toEqual([0, "cd"]);
+    expect(read({ repeat: "sometimes", shuffle: "maybe", playback: "rewinding" })).toEqual(["cd"]);
   });
 
   test("reads repeat, shuffle, elapsed/total time and album art (verified against captures)", () => {

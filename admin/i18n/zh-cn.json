@@ -57,7 +57,7 @@
   "alarmVolume": "闹钟音量",
   "album": "专辑",
   "albumArt": "专辑封面",
-  "descAlbumArt": "当前曲目封面的取用位置：一个完整 URL，或功放自身 Web 服务器上的路径。",
+  "descAlbumArt": "当前曲目封面的网址。",
   "allDevicesOnline": "所有设备在线",
   "artist": "艺术家",
   "audioMode": "音频模式",

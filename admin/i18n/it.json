@@ -57,7 +57,7 @@
   "alarmVolume": "Volume sveglia",
   "album": "Album",
   "albumArt": "Copertina dell'album",
-  "descAlbumArt": "Dove recuperare la copertina del brano in riproduzione: un URL completo oppure un percorso sul server web del ricevitore.",
+  "descAlbumArt": "L'indirizzo web della copertina del brano in riproduzione.",
   "allDevicesOnline": "Tutti i dispositivi online",
   "artist": "Artista",
   "audioMode": "Modalità audio",

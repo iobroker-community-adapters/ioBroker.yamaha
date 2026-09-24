@@ -190,7 +190,7 @@ function setup(
   status: unknown,
   linkTargets: Record<string, YxcClientLike> = {},
   pushActive?: () => boolean,
-  extra: { pushLiveness?: PushLiveness; gate?: CommandGate } = {},
+  extra: { pushLiveness?: PushLiveness; gate?: CommandGate; host?: string } = {},
 ): {
   /** Every info line the controller logged. */
   infos: string[];
@@ -2187,5 +2187,34 @@ describe("YxcDeviceController push signals", () => {
     await flush();
     expect(s.acks).toContainEqual({ id: "living.player.cd.deviceStatus", value: "open" });
     expect(methods(s)).not.toContain("getPlayInfo");
+  });
+});
+
+// A cover path loaded relative to the ioBroker web server and showed nothing; below API 1.17 the
+// device sends only Yamaha's encrypted ymf (YXC Basic §7.2; audit 2026-09-24, C6).
+describe("YxcDeviceController cover address", () => {
+  const features = { zone: [{ id: "main", func_list: ["power"], input_list: ["net_radio"] }], netusb: {} };
+
+  async function coverAfterPush(apiVersion: number): Promise<unknown> {
+    const s = setup(features, { power: "on", input: "net_radio" }, {}, () => true, { host: "10.0.0.5" });
+    s.client.deviceInfo = { model_name: "WX-030", api_version: apiVersion };
+    s.client.playInfo = {
+      input: "net_radio",
+      playback: "play",
+      albumart_url: "/YamahaRemoteControl/AlbumART/AlbumART1.jpg",
+    };
+    await s.controller.start();
+    s.acks.length = 0;
+    s.fire.push?.({ netusb: { play_info_updated: true } });
+    await flush();
+    return s.acks.find(a => a.id === "living.player.albumArt")?.value;
+  }
+
+  test("a cover path is shown as the address on the device", async () => {
+    expect(await coverAfterPush(2.08)).toBe("http://10.0.0.5/YamahaRemoteControl/AlbumART/AlbumART1.jpg");
+  });
+
+  test("a device below API 1.17 shows no cover — its format is Yamaha's encrypted one", async () => {
+    expect(await coverAfterPush(1.1)).toBe("");
   });
 });

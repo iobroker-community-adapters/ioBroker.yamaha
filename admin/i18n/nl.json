@@ -57,7 +57,7 @@
   "alarmVolume": "Wekkervolume",
   "album": "Album",
   "albumArt": "Albumhoes",
-  "descAlbumArt": "Waar de hoes van het huidige nummer te halen is: een volledige URL of een pad op de webserver van de receiver zelf.",
+  "descAlbumArt": "Het webadres van de hoes van het huidige nummer.",
   "allDevicesOnline": "Alle apparaten online",
   "artist": "Artiest",
   "audioMode": "Audiomodus",

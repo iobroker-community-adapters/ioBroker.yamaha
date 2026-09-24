@@ -57,7 +57,7 @@
   "alarmVolume": "Alarm volume",
   "album": "Album",
   "albumArt": "Album art",
-  "descAlbumArt": "Where the cover of the current track can be fetched: a full URL, or a path on the receiver's own web server.",
+  "descAlbumArt": "The web address of the current track's cover.",
   "allDevicesOnline": "All devices online",
   "artist": "Artist",
   "audioMode": "Audio mode",

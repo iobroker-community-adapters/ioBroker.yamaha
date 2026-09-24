@@ -316,6 +316,7 @@ export function attemptDevice(
         registerPush: (onPush, deviceId) => deps.registerPush(device.ip, onPush, deviceId),
         pushActive: deps.pushActive,
         pushLiveness: deps.pushLiveness,
+        host: device.ip,
         probeMemory: deps.probeMemory,
         scheduleKeepalive: deps.scheduleKeepalive,
         upsertObject: yxc.interceptUpsert,

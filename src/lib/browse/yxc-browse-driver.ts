@@ -63,10 +63,12 @@ export class YxcBrowseDriver implements BrowseDriver {
   /**
    * @param client the YXC client slice (getListInfo + setListControl)
    * @param inputList the device's netusb input list (getFeatures `input_list`)
+   * @param cover turns a reported thumbnail path into the address to show (see `absoluteDeviceUrl`)
    */
   public constructor(
     private readonly client: YxcBrowseClient,
     private readonly inputList: readonly string[],
+    private readonly cover: (url: string) => string = url => url,
   ) {}
 
   /**
@@ -217,8 +219,9 @@ export class YxcBrowseDriver implements BrowseDriver {
         kind: selectable ? "folder" : playable ? "item" : "unselectable",
         ...(selectable && playable ? { playable: true } : {}),
       };
-      if (typeof entry.thumbnail === "string" && entry.thumbnail.length > 0) {
-        row.thumbnail = entry.thumbnail;
+      const thumbnail = typeof entry.thumbnail === "string" ? this.cover(entry.thumbnail) : "";
+      if (thumbnail.length > 0) {
+        row.thumbnail = thumbnail;
       }
       return row;
     });

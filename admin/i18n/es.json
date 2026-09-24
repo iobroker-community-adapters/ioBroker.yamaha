@@ -57,7 +57,7 @@
   "alarmVolume": "Volumen de la alarma",
   "album": "Álbum",
   "albumArt": "Carátula del álbum",
-  "descAlbumArt": "Dónde obtener la carátula de la pista actual: una URL completa o una ruta en el propio servidor web del receptor.",
+  "descAlbumArt": "La dirección web de la carátula de la pista actual.",
   "allDevicesOnline": "Todos los dispositivos en línea",
   "artist": "Artista",
   "audioMode": "Modo de audio",

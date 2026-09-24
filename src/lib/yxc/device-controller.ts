@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { parseYxcFeatures, type YxcCapabilities, type YxcTunerFeatures } from "./capability";
 import { mapYxcToObjects, rawVolumeFor, shownVolumeFor, volumeScaleOf, type VolumeScale } from "./object-mapper";
 import {
+  absoluteDeviceUrl,
   parseYxcClock,
   parseYxcDistribution,
   parseYxcPlayInfo,
@@ -161,6 +162,11 @@ export interface YxcControllerDeps {
    * survives a reconnect). Absent = trust the bound socket, as before (audit 2026-09-24, C1).
    */
   pushLiveness?: PushLiveness;
+  /**
+   * The device's address as configured — a cover path it reports is fetched from it (C6). Absent =
+   * addresses stay as reported.
+   */
+  host?: string;
   /** Per-device memory for answers that do not change while the device runs (see ProbeMemory). */
   probeMemory?: ProbeMemory;
   /** Schedule the keepalive handler; returns a function that cancels it. */
@@ -264,6 +270,19 @@ export class YxcDeviceController implements ConnectionHandle {
   /** {@link pushEvents} when the previous keepalive finished. */
   private eventsAtLastKeepalive = 0;
   private browseEngine: BrowseEngine | undefined;
+  /** `api_version` from getDeviceInfo — below 1.17 a cover comes only as Yamaha's encrypted ymf. */
+  private apiVersion: number | undefined;
+
+  /**
+   * The address a reported cover path is shown at: absolute on the device's own web server; empty
+   * below API 1.17, whose covers only Yamaha's app can decode (YXC Basic §7.2 "ymf … encrypted").
+   *
+   * @param url the reported path or address
+   * @returns the address to show, or ""
+   */
+  private readonly cover = (url: string): string =>
+    this.apiVersion !== undefined && this.apiVersion < 1.17 ? "" : absoluteDeviceUrl(url, this.deps.host);
+
   /** The menu driver, for a re-read when the device announces a list change. */
   private browseDriver: YxcBrowseDriver | undefined;
   /** The favourite this adapter recalled last, so the device's verdict on it can be told apart. */
@@ -300,6 +319,8 @@ export class YxcDeviceController implements ConnectionHandle {
     try {
       const info = await this.deps.client.getDeviceInfo();
       model = modelNameFrom(info);
+      const api = (info as { api_version?: unknown } | null)?.api_version;
+      this.apiVersion = typeof api === "number" ? api : undefined;
       const version = (info as { system_version?: unknown } | null)?.system_version;
       const identity = `${model ?? ""}|${typeof version === "number" || typeof version === "string" ? version : ""}`;
       if (this.deps.probeMemory && this.deps.probeMemory.remembered("yxcIdentity") !== identity) {
@@ -827,7 +848,7 @@ export class YxcDeviceController implements ConnectionHandle {
       return;
     }
     const inputs = capabilities.zones.find(zone => zone.id === "main")?.inputs ?? [];
-    const driver = new YxcBrowseDriver(this.deps.client, inputs);
+    const driver = new YxcBrowseDriver(this.deps.client, inputs, this.cover);
     this.browseDriver = driver;
     this.browseEngine = await createBrowseSurface(driver, this.deviceId, {
       upsertObject: this.deps.upsertObject,
@@ -878,7 +899,7 @@ export class YxcDeviceController implements ConnectionHandle {
     // states of the zone listening to that source, and nothing is asked of the device.
     for (const { block, info } of mediaTimeUpdates(event)) {
       if (this.mediaBlocks.includes(block)) {
-        this.routePlayerBlock(block, parseYxcPlayInfo(info, block));
+        this.routePlayerBlock(block, parseYxcPlayInfo(info, block, this.cover));
       }
     }
     // The favourites/recently-played lists announce their changes as flags in the push.
@@ -1100,7 +1121,7 @@ export class YxcDeviceController implements ConnectionHandle {
   /** Fetch the recently-played list and write the JSON list state. */
   private async refreshNetusbRecent(): Promise<void> {
     try {
-      const update = parseYxcRecentList(await this.deps.client.getRecentInfo());
+      const update = parseYxcRecentList(await this.deps.client.getRecentInfo(), this.cover);
       if (update) {
         this.emit(update.id, update.value);
       }
@@ -1167,7 +1188,7 @@ export class YxcDeviceController implements ConnectionHandle {
         return;
       }
       const source: "netusb" | "cd" = block === "cd" ? "cd" : "netusb";
-      const updates = parseYxcPlayInfo(info, source);
+      const updates = parseYxcPlayInfo(info, source, this.cover);
       if (source === "netusb") {
         const active = updates.find(update => update.id === "player.source");
         if (typeof active?.value === "string") {

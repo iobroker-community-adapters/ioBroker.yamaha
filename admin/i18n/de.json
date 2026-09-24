@@ -57,7 +57,7 @@
   "alarmVolume": "Wecklautstärke",
   "album": "Album",
   "albumArt": "Albumbild",
-  "descAlbumArt": "Wo das Cover des laufenden Titels zu holen ist: eine vollständige URL oder ein Pfad auf dem Webserver des Receivers.",
+  "descAlbumArt": "Die Webadresse des Covers des laufenden Titels.",
   "allDevicesOnline": "Alle Geräte verbunden",
   "artist": "Interpret",
   "audioMode": "Audiomodus",
