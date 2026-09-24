@@ -10,9 +10,10 @@ import { tName } from "../i18n";
  * the `player` folder gate them like every other playback datapoint.
  *
  * @param sources the selectable sources (state value → display label)
+ * @param playLine whether the transport can play a folder line as a whole (creates `playLine`)
  * @returns the channel and state definitions, parents first
  */
-export function browseObjectDefs(sources: Record<string, string>): ObjectDef[] {
+export function browseObjectDefs(sources: Record<string, string>, playLine = false): ObjectDef[] {
   const line = (n: number): ObjectDef => ({
     id: `player.browse.line${n}`,
     type: "state",
@@ -110,6 +111,25 @@ export function browseObjectDefs(sources: Record<string, string>): ObjectDef[] {
         step: 1,
       },
     },
+    ...(playLine
+      ? [
+          {
+            id: "player.browse.playLine",
+            type: "state",
+            common: {
+              name: tName("playLine"),
+              desc: tName("descPlayLine"),
+              type: "number",
+              role: "level",
+              read: true,
+              write: true,
+              min: 1,
+              max: 8,
+              step: 1,
+            },
+          } satisfies ObjectDef,
+        ]
+      : []),
     button("pageUp", tName("pageUp"), tName("descPageUp")),
     button("pageDown", tName("pageDown"), tName("descPageDown")),
     button("back", tName("back")),

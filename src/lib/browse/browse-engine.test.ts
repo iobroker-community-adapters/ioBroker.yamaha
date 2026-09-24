@@ -155,6 +155,20 @@ describe("BrowseEngine", () => {
     expect(driver.calls).toEqual(["open:netRadio", "select:3", "pageDown", "back", "home"]);
   });
 
+  it("a playLine write plays the folder on that line — only where the driver can", async () => {
+    const { engine, driver } = setup();
+    engine.handleWrite("player.browse.playLine", 2); // this driver cannot → nothing
+    await flush();
+    expect(driver.calls).toEqual([]);
+    const played: number[] = [];
+    Object.assign(driver, { playContainer: (line: number): void => void played.push(line) });
+    engine.handleWrite("player.browse.playLine", 2);
+    await flush();
+    engine.handleWrite("player.browse.playLine", 9); // out of window → ignored
+    await flush();
+    expect(played).toEqual([2]);
+  });
+
   it("acknowledges the source state after a successful open", async () => {
     const { engine, emitted } = setup();
     engine.handleWrite("player.browse.source", "usb");

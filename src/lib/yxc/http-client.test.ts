@@ -3,6 +3,7 @@ import { once } from "node:events";
 import type { AddressInfo } from "node:net";
 import {
   isWriteCommand,
+  requestTimeoutFor,
   YamahaYxcClient,
   YxcRefusalError,
   YxcTransportError,
@@ -262,6 +263,32 @@ describe("YamahaYxcClient player and tuner commands", () => {
       await expect(refusal).rejects.toBeInstanceOf(YxcRefusalError);
       await expect(refusal).rejects.toMatchObject({ code: 5 });
     } finally {
+      server.close();
+    }
+  });
+
+  // getListInfo may take up to 30 s and blocks every other command meanwhile (YXC Basic Rev 1.10
+  // §13.1.6); cut at 4 s it counted as "no answer" (audit 2026-09-24, C26).
+  test("a list request gets 30 s, every other request 4 s", () => {
+    expect(requestTimeoutFor("/netusb/getListInfo?input=usb&index=0&size=8")).toBe(30_000);
+    expect(requestTimeoutFor("/main/getStatus")).toBe(4000);
+  });
+
+  test("a list answer that takes longer than 4 s still arrives", { timeout: 15_000 }, async () => {
+    const server = createServer((_req, res) => {
+      setTimeout(() => {
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ response_code: 0, menu_layer: 0, list_info: [] }));
+      }, 4300);
+    });
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const { port } = server.address() as AddressInfo;
+    try {
+      const client = new YamahaYxcClient(`127.0.0.1:${port}`);
+      await expect(client.getListInfo("usb", 0)).resolves.toMatchObject({ menu_layer: 0 });
+    } finally {
+      server.closeAllConnections();
       server.close();
     }
   });

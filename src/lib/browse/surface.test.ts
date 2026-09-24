@@ -80,3 +80,20 @@ describe("createBrowseSurface — the remote pad", () => {
     expect(created.size).toBe(0);
   });
 });
+
+// An album is a folder that can also be played as a whole (MusicCast attribute b1 + b2); only a
+// transport that can do that gets the line to do it with (audit 2026-09-24, C13).
+describe("createBrowseSurface — playing a folder line", () => {
+  it("creates playLine only for a driver that can play a folder", async () => {
+    const plain = await build(driverStub({}));
+    expect(plain.has("living.player.browse.playLine")).toBe(false);
+    const musicCast = await build({ ...driverStub({}), playContainer: (): void => {} });
+    expect(musicCast.get("living.player.browse.playLine")?.common).toMatchObject({
+      type: "number",
+      role: "level",
+      write: true,
+      min: 1,
+      max: 8,
+    });
+  });
+});

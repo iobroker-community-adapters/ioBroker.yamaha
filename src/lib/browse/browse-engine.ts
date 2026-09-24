@@ -185,6 +185,14 @@ export class BrowseEngine {
         }
         return;
       }
+      case "playLine": {
+        const line = Number(value);
+        const play = this.driver.playContainer?.bind(this.driver);
+        if (play && Number.isInteger(line) && line >= 1 && line <= 8) {
+          void this.run(`play line ${line}`, () => play(line));
+        }
+        return;
+      }
       case "pageUp":
         void this.run("page up", () => this.driver.pageUp());
         return;

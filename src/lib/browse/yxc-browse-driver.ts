@@ -135,6 +135,21 @@ export class YxcBrowseDriver implements BrowseDriver {
     await this.fetch();
   }
 
+  /**
+   * Play a folder line as a whole — an album or a playlist the device marks as both selectable and
+   * playable (audit 2026-09-24, C13).
+   *
+   * @param line the line number (1–8)
+   */
+  public async playContainer(line: number): Promise<void> {
+    const row = this.rows.find(r => r.line === line);
+    if (!this.active || !row || (row.kind !== "item" && !row.playable)) {
+      return;
+    }
+    await this.client.setListControl("play", this.index + line - 1, "main");
+    await this.fetch();
+  }
+
   /** Go one menu level back. */
   public async back(): Promise<void> {
     if (!this.active) {
@@ -190,14 +205,17 @@ export class YxcBrowseDriver implements BrowseDriver {
     }
     const entries = Array.isArray(response.list_info) ? (response.list_info as RawListEntry[]) : [];
     this.rows = entries.slice(0, PAGE_SIZE).map((entry, i) => {
-      // b1 = capable of Select (a container to enter), b2 = capable of Play.
+      // b1 = capable of Select (a container to enter), b2 = capable of Play. An album carries both:
+      // it is a folder (selecting opens it), playable as a whole through playLine — read as an item
+      // it could never be opened (audit 2026-09-24, C13).
       const attribute = typeof entry.attribute === "number" ? entry.attribute : 0;
       const playable = (attribute & 0b100) !== 0;
       const selectable = (attribute & 0b10) !== 0;
       const row: BrowseRow = {
         line: i + 1,
         text: typeof entry.text === "string" ? entry.text : "",
-        kind: playable ? "item" : selectable ? "folder" : "unselectable",
+        kind: selectable ? "folder" : playable ? "item" : "unselectable",
+        ...(selectable && playable ? { playable: true } : {}),
       };
       if (typeof entry.thumbnail === "string" && entry.thumbnail.length > 0) {
         row.thumbnail = entry.thumbnail;
@@ -205,7 +223,9 @@ export class YxcBrowseDriver implements BrowseDriver {
       return row;
     });
     this.totalItems = typeof response.max_line === "number" ? response.max_line : this.rows.length;
-    const layer = typeof response.menu_layer === "number" ? response.menu_layer : 0;
+    // MusicCast counts the root as layer 0 (YXC Basic Rev 1.10 §13.1.2, RX-V6A capture); the surface
+    // counts it as 1, as XML and YNCA do — 0 there means "no menu open" (audit 2026-09-24, C4).
+    const layer = typeof response.menu_layer === "number" ? response.menu_layer + 1 : 0;
     this.engine?.onWindow({
       menuName: typeof response.menu_name === "string" ? response.menu_name : "",
       layer,

@@ -21,6 +21,24 @@ export function isWriteCommand(command: string): boolean {
 /** Timeout for a single YXC HTTP request, so an unresponsive device cannot hang the keepalive. */
 const REQUEST_TIMEOUT_MS = 4000;
 
+/**
+ * `getListInfo` may take up to 30 seconds and blocks every other command meanwhile (YXC Basic
+ * Rev 1.10 §13.1.6). Cut at 4 s it counted as "no answer": the gate let the next command through to
+ * a device still busy, that one timed out too, and the liveness check that follows reported the
+ * device gone (audit 2026-09-24, C26).
+ */
+const LIST_INFO_TIMEOUT_MS = 30_000;
+
+/**
+ * How long one request may take before it counts as unanswered.
+ *
+ * @param command the command path
+ * @returns the timeout in ms
+ */
+export function requestTimeoutFor(command: string): number {
+  return command.startsWith("/netusb/getListInfo") ? LIST_INFO_TIMEOUT_MS : REQUEST_TIMEOUT_MS;
+}
+
 /** Base path of the Yamaha Extended Control HTTP API. */
 const API_BASE = "/YamahaExtendedControl/v1";
 
@@ -175,7 +193,7 @@ function defaultSend(ip: string): YxcSend {
       // Refused, reset, unreachable — and the timeout below, which destroys the request with
       // its own error and lands here too. All of them: no device answered.
       req.on("error", transportFailure);
-      req.setTimeout(REQUEST_TIMEOUT_MS, () => req.destroy(new Error(`YXC request timed out: ${command}`)));
+      req.setTimeout(requestTimeoutFor(command), () => req.destroy(new Error(`YXC request timed out: ${command}`)));
       if (body !== undefined) {
         req.end(body);
       }

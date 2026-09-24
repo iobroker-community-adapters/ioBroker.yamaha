@@ -3,12 +3,13 @@ import type { BrowseEngine } from "./browse-engine";
 import type { BrowseWindow } from "./types";
 
 /**
- * A list_info response shaping helper.
+ * A list_info response shaping helper. The device's root is `menu_layer` 0 (YXC Basic Rev 1.10
+ * §13.1.2; the RX-V6A capture answers 0 at the root of NET RADIO, SERVER and USB).
  *
  * @param partial Fields that override the empty root list
  */
 function listResponse(partial: Record<string, unknown>): Record<string, unknown> {
-  return { response_code: 0, menu_layer: 1, menu_name: "Root", max_line: 0, list_info: [], ...partial };
+  return { response_code: 0, menu_layer: 0, menu_name: "Root", max_line: 0, list_info: [], ...partial };
 }
 
 function setup(inputs: string[]): {
@@ -43,16 +44,19 @@ describe("YxcBrowseDriver", () => {
     expect(driver.sources()).toEqual({ netRadio: "Net Radio", server: "Media server", qobuz: "Qobuz" });
   });
 
+  // b1 = Select, b2 = Play (YXC Basic Rev 1.10 §7.7). An album carries both: read as an item it could
+  // never be opened (audit 2026-09-24, C13).
   it("renders a fetched window with the attribute bitmask decoded", async () => {
     const { driver, windows, respond } = setup(["net_radio"]);
     respond(
       listResponse({
         menu_name: "NET RADIO",
         menu_layer: 2,
-        max_line: 3,
+        max_line: 4,
         list_info: [
           { text: "Bookmarks", attribute: 0b10 },
-          { text: "Radio Paradise", attribute: 0b110, thumbnail: "http://x/y.jpg" },
+          { text: "Best of", attribute: 0b110, thumbnail: "http://x/y.jpg" },
+          { text: "Radio Paradise", attribute: 0b100 },
           { text: "— header —", attribute: 0 },
         ],
       }),
@@ -61,15 +65,49 @@ describe("YxcBrowseDriver", () => {
     expect(windows).toHaveLength(1);
     expect(windows[0]).toEqual({
       menuName: "NET RADIO",
-      layer: 2,
-      totalItems: 3,
+      layer: 3,
+      totalItems: 4,
       currentLine: 1,
       rows: [
         { line: 1, text: "Bookmarks", kind: "folder" },
-        { line: 2, text: "Radio Paradise", kind: "item", thumbnail: "http://x/y.jpg" },
-        { line: 3, text: "— header —", kind: "unselectable" },
+        { line: 2, text: "Best of", kind: "folder", playable: true, thumbnail: "http://x/y.jpg" },
+        { line: 3, text: "Radio Paradise", kind: "item" },
+        { line: 4, text: "— header —", kind: "unselectable" },
       ],
     });
+  });
+
+  // MusicCast counts its root as 0; the surface counts it as 1 like XML and YNCA, 0 there meaning "no
+  // menu open" (audit 2026-09-24, C4).
+  it("the device root is shown as layer 1", async () => {
+    const { driver, windows } = setup(["net_radio"]);
+    await driver.open("netRadio");
+    expect(windows[0].layer).toBe(1);
+  });
+
+  it("plays a folder line as a whole — an album; a plain folder or an unselectable line is not played", async () => {
+    const { driver, calls, respond } = setup(["net_radio"]);
+    respond(
+      listResponse({
+        max_line: 3,
+        list_info: [
+          { text: "Album", attribute: 0b110 },
+          { text: "Folder", attribute: 0b10 },
+          { text: "Header", attribute: 0 },
+        ],
+      }),
+    );
+    await driver.open("netRadio");
+    calls.length = 0;
+    await driver.playContainer(2);
+    await driver.playContainer(3);
+    expect(calls).toEqual([]);
+    await driver.playContainer(1);
+    expect(calls[0]).toEqual({ method: "setListControl", args: ["play", 0, "main"] });
+    // Selecting the album opens it.
+    calls.length = 0;
+    await driver.select(1);
+    expect(calls[0]).toEqual({ method: "setListControl", args: ["select", 0, undefined] });
   });
 
   it("selects a folder with type=select and an item with type=play on the absolute index", async () => {
@@ -108,10 +146,10 @@ describe("YxcBrowseDriver", () => {
     expect(calls[0].args).toEqual(["net_radio", 0, undefined]);
   });
 
-  it("returns to the root by stepping back until layer 1", async () => {
+  it("returns to the device root (menu_layer 0) — not one level short of it", async () => {
     const calls: Array<{ method: string; args: unknown[] }> = [];
-    // Each return moves one layer up: the fetches answer 3, then 2, then 1.
-    let layer = 3;
+    // Each return moves one layer up: the fetches answer 2, then 1, then the root 0.
+    let layer = 2;
     const driver = new YxcBrowseDriver(
       {
         getListInfo: (input, index) => {
@@ -166,7 +204,7 @@ describe("YxcBrowseDriver survives a mangled list response", () => {
 
   it("reads an empty window when the list is not a list", async () => {
     const { driver, windows, respond } = setup(["net_radio"]);
-    respond({ response_code: 0, menu_name: "Root", menu_layer: 1, list_info: "nothing here" });
+    respond({ response_code: 0, menu_name: "Root", menu_layer: 0, list_info: "nothing here" });
     await driver.open("netRadio");
     expect(windows.at(-1)).toEqual({
       menuName: "Root",

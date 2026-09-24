@@ -40,7 +40,10 @@ export async function createBrowseSurface(
   if (Object.keys(sources).length === 0) {
     return undefined;
   }
-  const built = [...browseObjectDefs(sources), ...remoteObjectDefs(driver.cursorValues, driver.menuValues)];
+  const built = [
+    ...browseObjectDefs(sources, driver.playContainer !== undefined),
+    ...remoteObjectDefs(driver.cursorValues, driver.menuValues),
+  ];
   // A claim the transport could not prove is marked, so the coordinator prefers one that
   // could — see ObjectDef.unproven (#613 through the standby door).
   const defs = unproven ? built.map(def => ({ ...def, unproven: true })) : built;

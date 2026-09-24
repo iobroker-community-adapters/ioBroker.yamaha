@@ -93,7 +93,7 @@ function makeFakeClient(features: unknown, status: unknown): FakeClient {
     status,
     deviceInfo: {},
     nameText: {},
-    listInfo: { response_code: 0, menu_layer: 1, menu_name: "", max_line: 0, list_info: [] },
+    listInfo: { response_code: 0, menu_layer: 0, menu_name: "", max_line: 0, list_info: [] },
     presetInfo: { response_code: 0, preset_info: [] },
     recentInfo: { response_code: 0, recent_info: [] },
     tunerPresetInfo: { response_code: 0, preset_info: [] },

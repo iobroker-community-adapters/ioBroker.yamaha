@@ -20,6 +20,11 @@ export interface BrowseRow {
   kind: BrowseRowKind;
   /** Cover/thumbnail URL, where the protocol carries one (YXC only). */
   thumbnail?: string;
+  /**
+   * A folder that can also be played as a whole (an album, a playlist — MusicCast attribute bits
+   * b1 Select AND b2 Play); `player.browse.playLine` plays it, `selectLine` opens it.
+   */
+  playable?: boolean;
 }
 
 /** A snapshot of the device's current menu window. */
@@ -60,6 +65,11 @@ export interface BrowseDriver {
   pageDown(): Promise<void> | void;
   /** Go one menu level back. */
   back(): Promise<void> | void;
+  /**
+   * Play a folder line as a whole instead of opening it — only where the protocol can
+   * (MusicCast); its presence creates `player.browse.playLine`.
+   */
+  playContainer?(line: number): Promise<void> | void;
   /** Return to the menu root. */
   home(): Promise<void> | void;
   /**
