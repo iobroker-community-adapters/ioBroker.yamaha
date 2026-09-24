@@ -18,6 +18,7 @@ import {
   idToEntry,
   presentYncaEntries,
   snapTunerFrequency,
+  writeProblem,
   sweepGets,
   yncaCommand,
   yncaObjectsFor,
@@ -283,7 +284,7 @@ export interface YncaClientLike {
   /** Run the init sweep and return the device's capabilities. */
   readCapabilities(gets: Array<{ subunit: string; func: string }>): Promise<YncaCapabilities>;
   /** Send a PUT command. */
-  send(subunit: string, func: string, value: string): void;
+  send(subunit: string, func: string, value: string, charset?: "latin1"): void;
   /** Send a GET request (the browse driver reads LISTINFO with it). */
   get(subunit: string, func: string): void;
   /** Register a handler for pushed messages. */
@@ -1115,6 +1116,12 @@ export class YncaDeviceController implements ConnectionHandle {
     if (this.handleTunerWrite(stateId, value)) {
       return;
     }
+    const target = this.writeMap.get(stateId);
+    const problem = target ? writeProblem(target, value) : undefined;
+    if (problem) {
+      this.deps.log.debug(`${this.deviceId}: ${stateId} not written — ${problem}`);
+      return;
+    }
     const triple = yncaCommand(stateId, value, this.writeMap);
     if (!triple) {
       // The one write path that still dropped a user action without a word. Every special
@@ -1128,7 +1135,7 @@ export class YncaDeviceController implements ConnectionHandle {
       );
       return;
     }
-    this.deps.client.send(triple.subunit, triple.func, triple.value);
+    this.deps.client.send(triple.subunit, triple.func, triple.value, triple.charset);
   }
 
   /**
@@ -1293,9 +1300,14 @@ export class YncaDeviceController implements ConnectionHandle {
       this.deps.log.debug(`${this.deviceId}: ${flatId} ignored — ${subunit} did not report it`);
       return;
     }
+    const problem = writeProblem(entry, value);
+    if (problem) {
+      this.deps.log.debug(`${this.deviceId}: ${flatId} not written — ${problem}`);
+      return;
+    }
     const triple = yncaCommand(flatId, value, new Map([[flatId, entry]]));
     if (triple) {
-      this.deps.client.send(triple.subunit, triple.func, triple.value);
+      this.deps.client.send(triple.subunit, triple.func, triple.value, triple.charset);
     }
   }
 

@@ -37,8 +37,8 @@ vi.mock("node:net", () => ({
       setNoDelay(enable: boolean) {
         s.noDelay.push(enable);
       },
-      write(data: string) {
-        s.written.push(data);
+      write(data: string | Uint8Array) {
+        s.written.push(typeof data === "string" ? data : Buffer.from(data).toString("utf8"));
       },
       destroy(e?: Error) {
         s.destroyed = e ?? true;
@@ -77,19 +77,23 @@ const drain = (): Promise<void> => new Promise(resolve => setImmediate(resolve))
 
 class FakeSocket implements YncaSocket {
   public written: string[] = [];
+  /** The raw bytes of every write — the charset of a line shows only here. */
+  public writtenBytes: Buffer[] = [];
   public destroyed = false;
-  private dataHandler?: (chunk: string) => void;
+  private dataHandler?: (chunk: Uint8Array | string) => void;
   private connectHandler?: () => void;
   private closeHandler?: () => void;
   private errorHandler?: (err: Error) => void;
 
-  public write(data: string): void {
-    this.written.push(data);
+  public write(data: string | Uint8Array): void {
+    const bytes = typeof data === "string" ? Buffer.from(data, "utf8") : Buffer.from(data);
+    this.writtenBytes.push(bytes);
+    this.written.push(bytes.toString("utf8"));
   }
   public destroy(): void {
     this.destroyed = true;
   }
-  public onData(handler: (chunk: string) => void): void {
+  public onData(handler: (chunk: Uint8Array | string) => void): void {
     this.dataHandler = handler;
   }
   public onConnect(handler: () => void): void {
@@ -105,7 +109,7 @@ class FakeSocket implements YncaSocket {
   public emitConnect(): void {
     this.connectHandler?.();
   }
-  public emitData(chunk: string): void {
+  public emitData(chunk: Uint8Array | string): void {
     this.dataHandler?.(chunk);
   }
   public emitClose(): void {
@@ -146,6 +150,20 @@ describe("YncaClient", () => {
     await connected;
     client.send("MAIN", "PWR", "On");
     expect(sockets[0].written).toContain("@MAIN:PWR=On\r\n");
+  });
+
+  // The official lists declare zone names Latin-1; a line break in a value would start a second
+  // command on the wire (audit 2026-09-24, B5/B13).
+  test("writes a Latin-1 function as Latin-1 bytes and never a value with a line break", async () => {
+    const { factory, sockets } = fixtureFactory();
+    const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
+    const connected = client.connect();
+    sockets[0].emitConnect();
+    await connected;
+    client.send("MAIN", "ZONENAME", "Küche", "latin1");
+    client.send("MAIN", "ZONENAME", "A\r\n@MAIN:PWR=Standby");
+    await drain();
+    expect(sockets[0].writtenBytes).toEqual([Buffer.from("@MAIN:ZONENAME=Küche\r\n", "latin1")]);
   });
 
   test("sends a GET as =? terminated line", async () => {

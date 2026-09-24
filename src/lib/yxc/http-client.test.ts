@@ -146,6 +146,26 @@ describe("YamahaYxcClient real transport", () => {
       expect(request.headers["x-appport"]).toBe(YXC_SUBSCRIPTION_HEADERS["X-AppPort"]);
     }
   });
+
+  // A chunk that ends inside "Ä" turned "Die Ärzte" into "Die ��rzte" (audit 2026-09-24, C5).
+  test("a multi-byte character split across two TCP chunks arrives intact", async () => {
+    const body = Buffer.from(JSON.stringify({ response_code: 0, artist: "Die Ärzte – Schrei nach Liebe ♪" }), "utf8");
+    const cut = body.indexOf(Buffer.from("Ä")) + 1;
+    const server = createServer((_req, res) => {
+      res.setHeader("Content-Type", "application/json");
+      res.write(body.subarray(0, cut));
+      setTimeout(() => res.end(body.subarray(cut)), 20);
+    });
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const { port } = server.address() as AddressInfo;
+    try {
+      const info = (await new YamahaYxcClient(`127.0.0.1:${port}`).getPlayInfo()) as { artist?: string };
+      expect(info.artist).toBe("Die Ärzte – Schrei nach Liebe ♪");
+    } finally {
+      server.close();
+    }
+  });
 });
 
 describe("YamahaYxcClient player and tuner commands", () => {

@@ -12,6 +12,7 @@ import {
   presentYncaEntries,
   sweepGets,
   sysFamilyMemberOf,
+  writeProblem,
   yncaCommand,
   yncaObjectsFor,
   yncaStateUpdate,
@@ -248,6 +249,18 @@ describe("YNCA catalog", () => {
     expect(english).toContain("Input name (MULTI CH)");
     expect(english).toContain("Input name (MusicCast Link)");
     expect(english).toContain("Input name (NET RADIO)");
+  });
+
+  // ynca-python StrConverter(max_len=9) and the official lists' Latin-1; a control character would
+  // end the line and inject a second command (audit 2026-09-24, B13).
+  test("a zone name with a control character, over 9 characters or outside Latin-1 is not written", () => {
+    const zoneName = buildYncaCatalog().find(e => e.subunit === "MAIN" && e.func === "ZONENAME");
+    expect(zoneName).toBeDefined();
+    expect(writeProblem(zoneName!, "Küche")).toBeUndefined();
+    expect(writeProblem(zoneName!, "A\r\nB")).toMatch(/control character/);
+    expect(writeProblem(zoneName!, "Living room")).toMatch(/longer than the 9/);
+    expect(writeProblem(zoneName!, "Kü€")).toMatch(/Latin-1/);
+    expect(yncaCommand("zoneName", "Küche", idToEntry([zoneName!]))).toMatchObject({ charset: "latin1" });
   });
 
   test("a volume write takes only a number — false, hex and exponent send nothing (audit 2026-09-24, D2)", () => {

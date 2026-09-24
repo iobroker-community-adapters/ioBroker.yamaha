@@ -42,6 +42,13 @@ export interface NumberSpec {
 export interface TextSpec {
   /** Discriminant. */
   kind: "text";
+  /**
+   * The charset the specification declares for a WRITABLE text (the official YNCA lists and
+   * desc.xml: zone names are `Latin-1`); unset = UTF-8. The wire bytes follow it.
+   */
+  charset?: "latin1";
+  /** The longest text the specification declares for a writable text (zone names: 9). */
+  maxLength?: number;
 }
 
 /**

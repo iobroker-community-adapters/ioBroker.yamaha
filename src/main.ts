@@ -35,7 +35,7 @@ import {
   staleObjects,
   stripNamespace,
 } from "./lib/pure-helpers";
-import { errorMessage, MAX_HTTP_BODY_BYTES } from "./lib/util";
+import { DeviceBody, errorMessage } from "./lib/util";
 import { tName } from "./lib/i18n";
 import { discoverYamaha, probeDescription, type DiscoveredDevice } from "./lib/discovery";
 import { SsdpListener, type SsdpNotify } from "./lib/ssdp-listener";
@@ -2515,21 +2515,19 @@ export class Yamaha extends utils.Adapter {
   private fetchUrl(url: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const req = httpGet(url, res => {
-        let data = "";
-        let bytes = 0;
+        // Collected as bytes and decoded once: a friendlyName ("Küche") split inside a character
+        // became "K��che" — and a second id for the same device (audit 2026-09-24, A20).
+        const body = new DeviceBody();
         res.on("data", chunk => {
-          bytes += (chunk as Buffer).length;
-          if (bytes > MAX_HTTP_BODY_BYTES) {
+          if (!body.add(chunk)) {
             // A description document is a few KB — whatever streams past the cap is not one.
             res.destroy(new Error(`description too large: ${url}`));
-            return;
           }
-          data += String(chunk);
         });
         // A connection dropped mid-body emits on the RESPONSE stream, not the request —
         // without this handler that is an unhandled error event instead of a rejection.
         res.on("error", reject);
-        res.on("end", () => resolve(data));
+        res.on("end", () => resolve(body.text()));
       });
       req.on("error", reject);
       req.setTimeout(FETCH_TIMEOUT_MS, () => req.destroy(new Error(`fetch timed out: ${url}`)));

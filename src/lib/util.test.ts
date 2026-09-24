@@ -1,4 +1,4 @@
-import { errorMessage } from "./util";
+import { DeviceBody, decodeDeviceText, encodeDeviceText, errorMessage } from "./util";
 
 describe("errorMessage", () => {
   it("uses an Error's message", () => {
@@ -38,5 +38,28 @@ describe("errorMessage", () => {
 
   it("keeps working for a thrown symbol, where a template literal would throw", () => {
     expect(errorMessage(Symbol("YNCA"))).toBe("Symbol(YNCA)");
+  });
+});
+
+describe("device text (audit 2026-09-24, B5/C5/D12)", () => {
+  it("decodes UTF-8, and bytes that are no UTF-8 as Latin-1", () => {
+    expect(decodeDeviceText(Buffer.from("Küche", "utf8"))).toBe("Küche");
+    expect(decodeDeviceText(Buffer.from("Küche", "latin1"))).toBe("Küche");
+  });
+
+  it("encodes Latin-1 only when every character fits", () => {
+    expect(encodeDeviceText("Küche", "latin1")).toEqual(Buffer.from([0x4b, 0xfc, 0x63, 0x68, 0x65]));
+    expect(encodeDeviceText("Kü€", "latin1")).toBeUndefined();
+    expect(encodeDeviceText("€")).toEqual(Buffer.from("€", "utf8"));
+  });
+
+  it("a body collected in chunks decodes a split character whole and stops at the cap", () => {
+    const body = new DeviceBody();
+    const bytes = Buffer.from('{"artist":"Die Ärzte"}', "utf8");
+    const cut = bytes.indexOf(0xc3) + 1;
+    expect(body.add(bytes.subarray(0, cut))).toBe(true);
+    expect(body.add(bytes.subarray(cut))).toBe(true);
+    expect(body.text()).toBe('{"artist":"Die Ärzte"}');
+    expect(new DeviceBody().add(Buffer.alloc(1024 * 1024 + 1))).toBe(false);
   });
 });

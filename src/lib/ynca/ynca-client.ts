@@ -3,7 +3,7 @@ import { LineBuffer } from "./line-buffer";
 import { decodeLine, encodeCommand, encodeGet, type YncaMessage } from "./protocol";
 import { buildCapabilities, type YncaCapabilities } from "./capability";
 import { CommandGateClosedError, type CommandGate } from "../lifecycle/command-gate";
-import { errorMessage } from "../util";
+import { encodeDeviceText, errorMessage } from "../util";
 
 /** The YNCA control port (TCP). */
 export const YNCA_PORT = 50000;
@@ -62,11 +62,11 @@ export type { YncaMessage };
 /** The minimal socket surface the client needs — abstracted so tests can inject a fake. */
 export interface YncaSocket {
   /** Write raw data to the socket. */
-  write(data: string): void;
+  write(data: string | Uint8Array): void;
   /** Close the socket. */
   destroy(): void;
-  /** Register a handler for received data chunks. */
-  onData(handler: (chunk: string) => void): void;
+  /** Register a handler for received data chunks (bytes; a string counts as its UTF-8 bytes). */
+  onData(handler: (chunk: Uint8Array | string) => void): void;
   /** Register a handler for the connect event. */
   onConnect(handler: () => void): void;
   /** Register a handler for the close event. */
@@ -107,7 +107,9 @@ function defaultFactory(host: string, port: number): YncaSocket {
       socket.destroy();
     },
     onData: handler => {
-      socket.on("data", (chunk: Buffer) => handler(chunk.toString()));
+      // Bytes, not text: a chunk may end inside a multi-byte character — the line buffer decodes
+      // whole lines only (audit 2026-09-24, B5).
+      socket.on("data", (chunk: Buffer) => handler(chunk));
     },
     onConnect: handler => {
       socket.on("connect", handler);
@@ -193,7 +195,7 @@ export class YncaClient {
     });
   }
 
-  private handleData(chunk: string): void {
+  private handleData(chunk: Uint8Array | string): void {
     // Every byte is proof of life: while a paced sweep or refresh keeps the gate busy, its
     // answers hold the counter at zero, so a busy socket is never mistaken for a dead one.
     this.unansweredKeepalives = 0;
@@ -286,10 +288,15 @@ export class YncaClient {
    * @param subunit target subunit (e.g. `MAIN`)
    * @param func function name (e.g. `PWR`)
    * @param value value to set
+   * @param charset `latin1` for a function the specification declares Latin-1 (zone names)
    */
-  public send(subunit: string, func: string, value: string): void {
+  public send(subunit: string, func: string, value: string, charset?: "latin1"): void {
+    // A line break inside the value would end this command and start another one on the wire.
+    if (/[\r\n]/.test(value)) {
+      return;
+    }
     const line = encodeCommand(subunit, func, value);
-    void this.writeLine(line, "user").then(() => {
+    void this.writeLine(line, "user", charset).then(() => {
       // Recorded AFTER the gate actually wrote it — the refusal window starts on the wire,
       // not in the queue (a queued write behind a sweep would otherwise expire unseen).
       this.lastUserWrite = { line, at: Date.now() };
@@ -328,12 +335,19 @@ export class YncaClient {
    *
    * @param line the encoded YNCA line (without the terminator)
    * @param priority user command or background read
+   * @param charset `latin1` for a function the specification declares Latin-1
    * @returns resolves once the line was written, or once it is clear it never will be
    */
-  private writeLine(line: string, priority: "user" | "background"): Promise<void> {
+  private writeLine(line: string, priority: "user" | "background", charset?: "latin1"): Promise<void> {
+    // A function the specification declares Latin-1 (zone names) is sent as Latin-1 bytes; a text it
+    // cannot carry is not sent at all — the controller checks that before (audit 2026-09-24, B5/B13).
+    const bytes = encodeDeviceText(`${line}\r\n`, charset);
+    if (!bytes) {
+      return Promise.resolve();
+    }
     return this.gate
       .run(() => {
-        this.socket?.write(`${line}\r\n`);
+        this.socket?.write(bytes);
       }, priority)
       .catch((e: unknown) => {
         if (!(e instanceof CommandGateClosedError)) {

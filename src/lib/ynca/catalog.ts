@@ -5,6 +5,7 @@ import type { StateValue } from "../types";
 import type { YncaCapabilities } from "./capability";
 import type { I18nKey } from "../i18n";
 import { parsePlayTime } from "../catalog/play-time";
+import { encodeDeviceText } from "../util";
 
 /**
  * A YNCA catalog entry: the object part ({@link CatalogEntry}) plus its subunit
@@ -738,7 +739,7 @@ const AMP_FUNCS: FuncDef[] = [
     state: "zoneName",
     nameKey: "zoneName",
     descKey: "descZoneName",
-    spec: { kind: "text" },
+    spec: { kind: "text", charset: "latin1", maxLength: 9 },
     write: true,
     role: "text",
   },
@@ -990,7 +991,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     func: "ZONEBNAME",
     state: "multiroom.zoneB.name",
     nameKey: "zoneBName",
-    spec: { kind: "text" },
+    spec: { kind: "text", charset: "latin1", maxLength: 9 },
     write: true,
     role: "text",
   },
@@ -3217,6 +3218,45 @@ export function yncaStateUpdate(
 }
 
 /**
+ * Whether a character is a C0 control character or DEL — never part of a name or a value.
+ *
+ * @param ch one character
+ * @returns true for U+0000…U+001F and U+007F
+ */
+function isControlCharacter(ch: string): boolean {
+  const code = ch.codePointAt(0) ?? 0;
+  return code < 0x20 || code === 0x7f;
+}
+
+/**
+ * Why a written value must not go on the wire, or undefined when it may. A control character
+ * would end the line early and inject a second command (`ZONENAME=A\r\n@MAIN:PWR=Standby`); a
+ * name longer than the declared 9 characters, or with a character Latin-1 cannot carry, is not
+ * what the device accepts (ynca-python `StrConverter(max_len=9)`, the official lists' `Latin-1`;
+ * audit 2026-09-24, B13/B5).
+ *
+ * @param entry the catalog entry written to
+ * @param value the written value
+ * @returns the reason, or undefined when the value may be sent
+ */
+export function writeProblem(entry: YncaEntry, value: unknown): string | undefined {
+  if (typeof value === "string" && [...value].some(isControlCharacter)) {
+    return "it holds a control character";
+  }
+  if (entry.spec.kind !== "text") {
+    return undefined;
+  }
+  const text = String(value);
+  if (entry.spec.maxLength !== undefined && [...text].length > entry.spec.maxLength) {
+    return `it is longer than the ${entry.spec.maxLength} characters the device accepts`;
+  }
+  if (entry.spec.charset === "latin1" && encodeDeviceText(text, "latin1") === undefined) {
+    return "it holds a character the device's charset (Latin-1) cannot carry";
+  }
+  return undefined;
+}
+
+/**
  * Snap a written tuner frequency onto the grid the device DECLARES (`@SYS:FREQSTEP`, six 2011 lists:
  * `FM50/AM9` … `FM200/AM10`). The band anchors are the lower ends of the official ranges — FM 87.50 MHz,
  * AM 531 kHz on the 9 kHz grid and 530 kHz on the 10 kHz grid. A device that declares no step keeps
@@ -3251,7 +3291,7 @@ export function yncaCommand(
   stateId: string,
   value: unknown,
   map: Map<string, YncaEntry>,
-): { subunit: string; func: string; value: string } | undefined {
+): { subunit: string; func: string; value: string; charset?: "latin1" } | undefined {
   const entry = map.get(stateId);
   // A read-only entry maps no write: without this check a script writing e.g. the
   // (deliberately read-only) YNCA port state would still put a PUT on the wire.
@@ -3274,5 +3314,6 @@ export function yncaCommand(
   const wire = entry.wireEncode
     ? entry.wireEncode(input as boolean | number | string)
     : encode(entry.spec, input as boolean | number | string);
-  return { subunit: entry.subunit, func: entry.func, value: wire };
+  const charset = entry.spec.kind === "text" ? entry.spec.charset : undefined;
+  return { subunit: entry.subunit, func: entry.func, value: wire, ...(charset ? { charset } : {}) };
 }

@@ -27,3 +27,18 @@ describe("LineBuffer overflow", () => {
     expect(buffer.push("@MAIN:PWR=On\r\n")).toEqual(["@MAIN:PWR=On"]);
   });
 });
+
+describe("LineBuffer decodes whole lines (audit 2026-09-24, B5)", () => {
+  it("keeps a multi-byte character that a TCP chunk splits", () => {
+    const buf = new LineBuffer();
+    const bytes = Buffer.from("@NETRADIO:STATION=Hitradio Ö3\r\n", "utf8");
+    const cut = bytes.indexOf(0xc3) + 1;
+    expect(buf.push(bytes.subarray(0, cut))).toEqual([]);
+    expect(buf.push(bytes.subarray(cut))).toEqual(["@NETRADIO:STATION=Hitradio Ö3"]);
+  });
+
+  it("reads a line that is not UTF-8 as the Latin-1 the specification declares for names", () => {
+    const buf = new LineBuffer();
+    expect(buf.push(Buffer.from("@MAIN:ZONENAME=K\xfcche\r\n", "latin1"))).toEqual(["@MAIN:ZONENAME=Küche"]);
+  });
+});

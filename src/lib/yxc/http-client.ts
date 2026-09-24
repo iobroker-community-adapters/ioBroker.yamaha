@@ -1,6 +1,6 @@
 import { get as httpGet, request as httpRequest, type IncomingMessage } from "node:http";
 import type { CommandGate } from "../lifecycle/command-gate";
-import { errorMessage, MAX_HTTP_BODY_BYTES } from "../util";
+import { DeviceBody, errorMessage } from "../util";
 
 /**
  * Whether a command path changes something on the device (as opposed to reading). The
@@ -90,24 +90,22 @@ function defaultSend(ip: string): YxcSend {
       const url = `http://${ip}${API_BASE}${command}`;
       const transportFailure = (e: Error): void => reject(new YxcTransportError(command, e));
       const onResponse = (res: IncomingMessage): void => {
-        let data = "";
-        let bytes = 0;
+        // Collected as bytes and decoded once: a chunk may end inside a multi-byte character
+        // ("Die Ärzte" arrived as "Die ��rzte", audit 2026-09-24 C5).
+        const body = new DeviceBody();
         res.on("data", chunk => {
-          bytes += (chunk as Buffer).length;
-          if (bytes > MAX_HTTP_BODY_BYTES) {
+          if (!body.add(chunk)) {
             // The largest real answer (getFeatures) is a few KB — past the cap this is no
             // device answer but a stream that would grow memory without bound.
             res.destroy(new Error(`YXC response too large: ${command}`));
-            return;
           }
-          data += String(chunk);
         });
         // A connection dropped mid-body emits on the RESPONSE stream, not the request —
         // without this handler that is an unhandled error event, not a rejected promise.
         res.on("error", transportFailure);
         res.on("end", () => {
           try {
-            resolve(assertOk(JSON.parse(data), command));
+            resolve(assertOk(JSON.parse(body.text()), command));
           } catch (e) {
             reject(e instanceof Error ? e : new Error(errorMessage(e)));
           }

@@ -10,7 +10,7 @@ import {
   type XmlSystemConfig,
 } from "./protocol";
 import type { CommandGate } from "../lifecycle/command-gate";
-import { MAX_HTTP_BODY_BYTES } from "../util";
+import { DeviceBody } from "../util";
 
 /** The receiver's XML control endpoint. */
 const CONTROL_PATH = "/YamahaRemoteControl/ctrl";
@@ -34,17 +34,15 @@ const DESCRIPTOR_PATH = "/YamahaRemoteControl/desc.xml";
  * @param reject rejects it with a transport error or the device's HTTP verdict
  */
 function readResponse(res: IncomingMessage, resolve: (body: string) => void, reject: (e: Error) => void): void {
-  let data = "";
-  let bytes = 0;
+  // Collected as bytes and decoded once: a chunk may end inside a multi-byte character (a desc.xml
+  // of up to 160 KB always spans several), audit 2026-09-24 D12.
+  const body = new DeviceBody();
   res.on("data", chunk => {
-    bytes += (chunk as Buffer).length;
-    if (bytes > MAX_HTTP_BODY_BYTES) {
+    if (!body.add(chunk)) {
       // A Basic_Status or a menu window is a few KB, a device description at most ~160 KB —
       // past the cap this is no receiver answer but a stream that would grow memory without bound.
       res.destroy(new Error("XML response too large"));
-      return;
     }
-    data += String(chunk);
   });
   res.on("error", reject);
   res.on("end", () => {
@@ -57,7 +55,7 @@ function readResponse(res: IncomingMessage, resolve: (body: string) => void, rej
       reject(new XmlHttpError(`device refused the request (HTTP ${res.statusCode})`, res.statusCode));
       return;
     }
-    resolve(data);
+    resolve(body.text());
   });
 }
 

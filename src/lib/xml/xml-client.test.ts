@@ -5,12 +5,16 @@ import { vi } from "vitest";
  * the request shape (host, port, path, method, timeout) and the timeout/error
  * handling are provable without a device — the class's own seam covers the rest.
  */
-const httpMock = vi.hoisted(() => ({
-  requests: [] as Array<{ options: Record<string, unknown>; written: string[]; ended: boolean; destroyed?: Error }>,
-  body: "<YAMAHA_AV/>",
-  mode: "ok",
-  status: 200,
-}));
+const httpMock = vi.hoisted(() => {
+  const mock: {
+    requests: Array<{ options: Record<string, unknown>; written: string[]; ended: boolean; destroyed?: Error }>;
+    /** A string arrives as one chunk; an array of buffers chunk by chunk (D12). */
+    body: string | Buffer[];
+    mode: string;
+    status: number;
+  } = { requests: [], body: "<YAMAHA_AV/>", mode: "ok", status: 200 };
+  return mock;
+});
 vi.mock("node:http", () => ({
   request: (options: Record<string, unknown>, cb: (res: unknown) => void) => {
     const entry = { options, written: [] as string[], ended: false, destroyed: undefined as Error | undefined };
@@ -44,7 +48,9 @@ vi.mock("node:http", () => ({
             on: (ev: string, h: (...a: unknown[]) => void) => {
               (resHandlers[ev] ??= []).push(h);
               if (ev === "end") {
-                (resHandlers.data ?? []).forEach(d => d(httpMock.body));
+                for (const chunk of Array.isArray(httpMock.body) ? httpMock.body : [httpMock.body]) {
+                  (resHandlers.data ?? []).forEach(d => d(chunk));
+                }
                 h();
               }
             },
@@ -221,6 +227,15 @@ describe("XmlClient default HTTP poster", () => {
   test("rejects on a transport error", async () => {
     httpMock.mode = "error";
     await expect(new XmlClient("192.168.1.99").getSystemConfig()).rejects.toThrow("ECONNREFUSED");
+  });
+
+  // A desc.xml of up to 160 KB always spans several chunks; one that ends inside "Ü" turned it
+  // into two replacement characters (audit 2026-09-24, D12).
+  test("decodes a body split inside a multi-byte character as a whole", async () => {
+    const bytes = Buffer.from("<Model_Name>RX-Übersicht</Model_Name>", "utf8");
+    const cut = bytes.indexOf(0xc3) + 1;
+    httpMock.body = [bytes.subarray(0, cut), bytes.subarray(cut)];
+    await expect(new XmlClient("192.168.1.10").getSystemConfig()).resolves.toEqual({ model: "RX-Übersicht" });
   });
 });
 

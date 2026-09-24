@@ -275,7 +275,8 @@ const net = vi.hoisted(() => {
   const interfaces: { value: Record<string, unknown[]> | null } = { value: null };
   const httpCalls: string[] = [];
   const http = {
-    body: "<root/>",
+    // A string arrives as one chunk; an array of buffers arrives chunk by chunk (A20).
+    body: "<root/>" as string | Buffer[],
     error: null as Error | null,
     lastReq: null as { timeoutMs?: number; destroyed?: Error } | null,
   };
@@ -362,7 +363,9 @@ vi.mock("node:http", () => ({
         on: (ev: string, h: (...a: unknown[]) => void) => {
           (resHandlers[ev] ??= []).push(h);
           if (ev === "end") {
-            (resHandlers.data ?? []).forEach(d => d(net.http.body));
+            for (const chunk of Array.isArray(net.http.body) ? net.http.body : [net.http.body]) {
+              (resHandlers.data ?? []).forEach(d => d(chunk));
+            }
             h();
           }
         },
@@ -2925,6 +2928,16 @@ describe("Yamaha description fetch", () => {
     const fetchUrl = await realFetch();
     net.http.error = new Error("ECONNREFUSED");
     await expect(fetchUrl("http://192.168.1.99/desc.xml")).rejects.toThrow("ECONNREFUSED");
+  });
+
+  // A friendlyName split inside a multi-byte character became "K��che" — and sanitizeId made a
+  // second id of it for the same device (audit 2026-09-24, A20).
+  it("decodes a name split inside a multi-byte character as a whole", async () => {
+    const fetchUrl = await realFetch();
+    const bytes = Buffer.from("<root><friendlyName>Küche</friendlyName></root>", "utf8");
+    const cut = bytes.indexOf(0xc3) + 1;
+    net.http.body = [bytes.subarray(0, cut), bytes.subarray(cut)];
+    await expect(fetchUrl("http://192.168.1.20/desc.xml")).resolves.toContain("Küche");
   });
 
   it("rejects a description that streams past the size cap instead of buffering it", async () => {
