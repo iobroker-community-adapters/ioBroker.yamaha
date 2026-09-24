@@ -21,7 +21,7 @@ legacy XML protocol of the oldest pre-2010 models — behind one object tree.
 - **Now playing, per zone** — one player block per zone, whatever that zone is listening to, with
   menu browsing, presets and favourites
 - **Multi-zone and multiroom** — zones 2–4 with their own player and scenes, party mode, MusicCast groups
-- **Automatic discovery** — an empty device list finds and sets up MusicCast devices at startup
+- **Automatic discovery** — an empty device list finds and sets up Yamaha network devices at startup
 - **Self-healing connections** — a single protocol reconnects on its own while the others keep running
 
 ## Documentation
@@ -55,15 +55,30 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
 
 > The adapter CANNOT be installed via GitHub: The adapter must be installed via the ioBroker repository (stable or latest).
 
+## Ports
+
+| Port | Protocol | Direction | Purpose |
+|---|---|---|---|
+| 41100 | UDP | incoming | MusicCast devices report their changes |
+| 1900 | UDP | incoming, shared with other UPnP services | devices announcing themselves — only while the network search is on |
+| 1900 (multicast 239.255.255.250) | UDP | outgoing | the network search |
+| 50000 | TCP | outgoing | YNCA control of the receivers |
+| 80 and the port a device announces | TCP | outgoing | MusicCast and XML control, the device description |
+
 ## Configuration
 
-Devices are managed in the admin as cards. **Leave the list empty** and the adapter finds MusicCast
-devices on the network by itself at startup, or add devices by IP via the **"+" dialog**. Older
+Devices are managed in the admin as cards. **Leave the list empty** and the adapter finds Yamaha
+network devices by itself at startup, or add devices by IP via the **"+" dialog**. Older
 receivers (before ~2010) do not announce themselves and must be added by hand.
 
+The network search runs **Automatically** (while the list is empty), **Always** (next to the devices
+you entered) or **Never**. With **Never** the adapter opens no listener on UDP port 1900 and controls
+the devices in your list by their address.
+
 The **Data points** section switches whole groups of datapoints on or off; the amplifier core (power,
-volume, mute, input, sound program, sleep) always stays on. The **Volume as 0–100 %** switch turns
-every volume datapoint into a percentage — the range most VIS widgets expect.
+volume, mute, input, sound program, sleep) always stays on. **Volume as 0–100 %** is set per device,
+in the add/edit dialog of its card, and turns that receiver's volume datapoints into a percentage —
+the range most VIS widgets expect.
 
 Details on all settings and the object tree are in the
 [Wiki](https://github.com/iobroker-community-adapters/ioBroker.yamaha/wiki/Setup).
