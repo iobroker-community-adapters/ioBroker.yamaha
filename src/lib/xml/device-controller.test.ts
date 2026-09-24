@@ -1298,6 +1298,23 @@ describe("the zone commands desc.xml declares: pads, transport keys, zone names 
     expect(memory.remembered("xmlZoneName:zone2")).toBe("Terrace");
   });
 
+  // desc.xml declares the zone name as `Text 1,9,Latin-1`; a longer one, a line break or a character
+  // Latin-1 cannot carry went out unchecked (audit 2026-09-24, D18).
+  test("a zone name the device cannot take is not sent — one it can is", async () => {
+    const s = setup(statuses);
+    s.client.xmlAnswers["Zone_2|<Config>GetParam</Config>"] =
+      '<YAMAHA_AV rsp="GET" RC="0"><Zone_2><Config><Name><Zone>Kitchen</Zone></Name></Config></Zone_2></YAMAHA_AV>';
+    await s.controller.start();
+    for (const name of ["Living Room", "A\r\nB", "Küche ♥"]) {
+      s.controller.handleStateChange("living.multiroom.zone2.zoneName", false, name);
+    }
+    await tick();
+    expect(sent(s)).toEqual([]);
+    s.controller.handleStateChange("living.multiroom.zone2.zoneName", false, "Küche");
+    await tick();
+    expect(sent(s)).toEqual([{ zone: "Zone_2", inner: "<Config><Name><Zone>Küche</Zone></Name></Config>" }]);
+  });
+
   // The zone-name confirmation hangs off a detached `.then`, so a throw inside it has nobody to
   // report to — the chain needs its own receiver, exactly like the object creation in seedZone.
   test("a failing zone-name confirmation is caught, not left as an unhandled rejection", async () => {

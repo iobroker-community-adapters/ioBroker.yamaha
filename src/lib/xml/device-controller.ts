@@ -1,5 +1,5 @@
 import { channelCommon, type ObjectDef } from "../catalog/types";
-import { writableNumber } from "../catalog/value-coerce";
+import { textWriteProblem, writableNumber } from "../catalog/value-coerce";
 import { tName } from "../i18n";
 import {
   definiteXmlBody,
@@ -1128,8 +1128,8 @@ export class XmlDeviceController implements ConnectionHandle {
 
   /**
    * Every zone's own name from `<Config><Name><Zone>` (desc.xml `Config,Name,Zone`, 5+4+1+1
-   * zones over the captured descriptors) — a property of the model, asked once per device and
-   * remembered as `xmlZoneName:<zone>`; a zone that declares none gets no datapoint. Same id as
+   * zones over the captured descriptors) — read on every connection (the user can rename a zone at
+   * the device, D8) with `xmlZoneName:<zone>` as the fallback; a zone that declares none gets no datapoint. Same id as
    * YNCA's ZONENAME, so an XML-only receiver finally shows the names its owner gave the zones.
    *
    * @param createdChannels the channels created so far (parents once)
@@ -1233,6 +1233,14 @@ export class XmlDeviceController implements ConnectionHandle {
           : `<Cursor_Control><Menu_Control>${wire}</Menu_Control></Cursor_Control>`;
     } else if (command === "zoneName") {
       if (typeof value !== "string") {
+        return true;
+      }
+      // desc.xml declares the name as `Text 1,9,Latin-1` (7 descriptors) — the same rule as YNCA's
+      // ZONENAME: a control character, a tenth character or one Latin-1 cannot carry is not sent
+      // (audit 2026-09-24, D18).
+      const problem = textWriteProblem(value, { maxLength: 9, charset: "latin1" });
+      if (problem !== undefined) {
+        this.deps.log.debug(`${this.deviceId}: ${stateId} "${value}" not sent — ${problem}`);
         return true;
       }
       // The name is not part of the zone status the read-back fetches: confirm it here, and

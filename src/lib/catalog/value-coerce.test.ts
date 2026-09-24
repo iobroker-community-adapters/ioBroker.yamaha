@@ -1,4 +1,12 @@
-import { coerceBool, decode, encode, isWritableValue, specToCommon, writableNumber } from "./value-coerce";
+import {
+  coerceBool,
+  decode,
+  encode,
+  isWritableValue,
+  specToCommon,
+  textWriteProblem,
+  writableNumber,
+} from "./value-coerce";
 
 describe("specToCommon", () => {
   test("an on/off value becomes a boolean switch", () => {
@@ -271,5 +279,24 @@ describe("coerceBool — what a switch datapoint accepts (audit 2026-09-15)", ()
     expect(coerceBool(undefined)).toBeUndefined();
     expect(coerceBool({})).toBeUndefined();
     expect(coerceBool(Number.NaN)).toBeUndefined();
+  });
+});
+
+// One rule for a written name on every transport — YNCA lists and desc.xml declare `1,9,Latin-1` (B13/D18).
+describe("textWriteProblem", () => {
+  it("names what the device cannot take", () => {
+    expect(textWriteProblem("A\nB")).toBe("it holds a control character");
+    expect(textWriteProblem("0123456789", { maxLength: 9 })).toBe(
+      "it is longer than the 9 characters the device accepts",
+    );
+    expect(textWriteProblem("Küche ♥", { charset: "latin1" })).toBe(
+      "it holds a character the device's charset (Latin-1) cannot carry",
+    );
+  });
+
+  it("lets a text the device takes through, and leaves non-texts alone", () => {
+    expect(textWriteProblem("Küche", { maxLength: 9, charset: "latin1" })).toBeUndefined();
+    expect(textWriteProblem("♥ long text beyond nine")).toBeUndefined();
+    expect(textWriteProblem(5)).toBeUndefined();
   });
 });

@@ -1,11 +1,18 @@
 import { catalogToObjects, type StatesResolver } from "../catalog/build-objects";
 import type { CatalogEntry, ObjectDef } from "../catalog/types";
-import { coerceBool, decode, encode, formatWireNumber, isWritableValue, type ValueSpec } from "../catalog/value-coerce";
+import {
+  coerceBool,
+  decode,
+  encode,
+  formatWireNumber,
+  isWritableValue,
+  textWriteProblem,
+  type ValueSpec,
+} from "../catalog/value-coerce";
 import type { StateValue } from "../types";
 import type { YncaCapabilities } from "./capability";
 import type { I18nKey } from "../i18n";
 import { parsePlayTime } from "../catalog/play-time";
-import { encodeDeviceText } from "../util";
 
 /**
  * A YNCA catalog entry: the object part ({@link CatalogEntry}) plus its subunit
@@ -3364,17 +3371,6 @@ export function yncaGenerationEvidence(subunits: Readonly<Record<string, unknown
 }
 
 /**
- * Whether a character is a C0 control character or DEL — never part of a name or a value.
- *
- * @param ch one character
- * @returns true for U+0000…U+001F and U+007F
- */
-function isControlCharacter(ch: string): boolean {
-  const code = ch.codePointAt(0) ?? 0;
-  return code < 0x20 || code === 0x7f;
-}
-
-/**
  * Why a written value must not go on the wire, or undefined when it may. A control character
  * would end the line early and inject a second command (`ZONENAME=A\r\n@MAIN:PWR=Standby`); a
  * name longer than the declared 9 characters, or with a character Latin-1 cannot carry, is not
@@ -3386,20 +3382,10 @@ function isControlCharacter(ch: string): boolean {
  * @returns the reason, or undefined when the value may be sent
  */
 export function writeProblem(entry: YncaEntry, value: unknown): string | undefined {
-  if (typeof value === "string" && [...value].some(isControlCharacter)) {
-    return "it holds a control character";
-  }
   if (entry.spec.kind !== "text") {
-    return undefined;
+    return textWriteProblem(value);
   }
-  const text = String(value);
-  if (entry.spec.maxLength !== undefined && [...text].length > entry.spec.maxLength) {
-    return `it is longer than the ${entry.spec.maxLength} characters the device accepts`;
-  }
-  if (entry.spec.charset === "latin1" && encodeDeviceText(text, "latin1") === undefined) {
-    return "it holds a character the device's charset (Latin-1) cannot carry";
-  }
-  return undefined;
+  return textWriteProblem(typeof value === "string" ? value : String(value), entry.spec);
 }
 
 /**

@@ -1,3 +1,5 @@
+import { encodeDeviceText } from "../util";
+
 /** An on/off value → a boolean state. */
 export interface OnOffSpec {
   /** Discriminant. */
@@ -333,4 +335,46 @@ export function encode(spec: ValueSpec, value: boolean | number | string): strin
       // command, so yncaCommand never falls back to encode() here.
       return "";
   }
+}
+
+/**
+ * Whether a character is a C0 control character or DEL — never part of a name or a value.
+ *
+ * @param ch one character
+ * @returns true for U+0000…U+001F and U+007F
+ */
+function isControlCharacter(ch: string): boolean {
+  const code = ch.codePointAt(0) ?? 0;
+  return code < 0x20 || code === 0x7f;
+}
+
+/**
+ * Why a written text must not go to the device, or undefined when it may: a control character (on
+ * YNCA a line break ends the line and injects a second command), more characters than the device
+ * declares, or a character its declared charset cannot carry. One rule for every transport — the
+ * official YNCA lists and desc.xml both declare names as `1,9,Latin-1` (audit 2026-09-24, B13/D18).
+ *
+ * @param value the written value
+ * @param declared what the device declares for the text, if anything
+ * @param declared.maxLength the longest text it takes
+ * @param declared.charset the charset it takes
+ * @returns the reason, or undefined when the text may be sent
+ */
+export function textWriteProblem(
+  value: unknown,
+  declared: { maxLength?: number; charset?: "latin1" } = {},
+): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  if ([...value].some(isControlCharacter)) {
+    return "it holds a control character";
+  }
+  if (declared.maxLength !== undefined && [...value].length > declared.maxLength) {
+    return `it is longer than the ${declared.maxLength} characters the device accepts`;
+  }
+  if (declared.charset === "latin1" && encodeDeviceText(value, "latin1") === undefined) {
+    return "it holds a character the device's charset (Latin-1) cannot carry";
+  }
+  return undefined;
 }
