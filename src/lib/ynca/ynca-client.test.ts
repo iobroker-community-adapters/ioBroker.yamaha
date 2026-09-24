@@ -531,8 +531,11 @@ describe("YncaClient on a real TCP socket", () => {
   });
 });
 
-describe("YncaClient refusal attribution (#615)", () => {
-  it("attributes a @RESTRICTED right after a user PUT to that command", async () => {
+describe("YncaClient refusal attribution (#615, bracketed since audit 2026-09-24 B3)", () => {
+  // Real-time wait: a bracketed exchange keeps the 100 ms line spacing on the gate's timers.
+  const wait = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
+
+  it("attributes a @RESTRICTED between a user PUT and its closing marker to that command", async () => {
     const { factory, sockets } = fixtureFactory();
     const client = new YncaClient("10.0.0.2", testTimers, testGate(), factory);
     const connect = client.connect();
@@ -541,10 +544,36 @@ describe("YncaClient refusal attribution (#615)", () => {
     const refusals: Array<{ command: string; verdict: string }> = [];
     client.onRefusal((command, verdict) => refusals.push({ command, verdict }));
     client.send("MAIN", "SCENE", "Scene 1");
+    await wait(150);
+    expect(sockets[0].written).toEqual(["@MAIN:SCENE=Scene 1\r\n", "@SYS:VERSION=?\r\n"]);
+    // The 2012 generation's answer to a scene recall (ynca-python PRACTICALITIES), then the marker.
+    sockets[0].emitData("@RESTRICTED\r\n@SYS:VERSION=1.00\r\n");
     await drain();
-    // The 2012 generation's answer to a scene recall (ynca-python PRACTICALITIES).
-    sockets[0].emitData("@RESTRICTED\r\n");
     expect(refusals).toEqual([{ command: "@MAIN:SCENE=Scene 1", verdict: "restricted" }]);
+  });
+
+  // Measured on the RX-V473: a GET answered 1.5 s later, after the next line had gone out. A
+  // background refusal that arrives while a user write waits is not that write's verdict.
+  it("a late background refusal before the leading marker is not the user PUT's verdict", async () => {
+    const { factory, sockets } = fixtureFactory();
+    const client = new YncaClient("10.0.0.2", testTimers, testGate(), factory);
+    const connect = client.connect();
+    sockets[0].emitConnect();
+    await connect;
+    const refusals: string[] = [];
+    client.onRefusal(command => refusals.push(command));
+    client.get("SYS", "HDMIOUT2");
+    await drain();
+    client.send("MAIN", "LISTCURSOR", "Up");
+    await drain();
+    // Background traffic within the last two seconds: the write opens with a marker.
+    expect(sockets[0].written).toEqual(["@SYS:HDMIOUT2=?\r\n", "@SYS:VERSION=?\r\n"]);
+    sockets[0].emitData("@UNDEFINED\r\n@SYS:VERSION=1.00\r\n");
+    await wait(250);
+    expect(sockets[0].written.slice(2)).toEqual(["@MAIN:LISTCURSOR=Up\r\n", "@SYS:VERSION=?\r\n"]);
+    sockets[0].emitData("@SYS:VERSION=1.00\r\n");
+    await drain();
+    expect(refusals).toEqual([]);
   });
 
   it("does not blame a user write for a sweep's @UNDEFINED noise", async () => {
@@ -571,9 +600,105 @@ describe("YncaClient refusal attribution (#615)", () => {
     const refusals: string[] = [];
     client.onRefusal(command => refusals.push(command));
     client.send("MAIN", "SCENE", "Scene 2");
+    await wait(150);
+    sockets[0].emitData("@RESTRICTED\r\n@RESTRICTED\r\n@SYS:VERSION=1.00\r\n");
     await drain();
-    sockets[0].emitData("@RESTRICTED\r\n@RESTRICTED\r\n");
     expect(refusals).toEqual(["@MAIN:SCENE=Scene 2"]);
+  });
+
+  // A write-only key answers a GET with nothing, an unknown one with @UNDEFINED: the probe asks
+  // without changing anything, each GET in its own bracket.
+  it("probeKnown judges each function inside its own bracket", async () => {
+    const { factory, sockets } = fixtureFactory();
+    const client = new YncaClient("10.0.0.2", testTimers, testGate(), factory);
+    const connect = client.connect();
+    sockets[0].emitConnect();
+    await connect;
+    const pending = client.probeKnown("MAIN", ["LISTCURSOR", "CURSOR"]);
+    /**
+     * Wait until the socket carries `count` lines, then answer.
+     *
+     * @param count the number of lines written so far to wait for
+     * @param lines what the device answers
+     */
+    const answerAfter = async (count: number, lines: string): Promise<void> => {
+      for (let i = 0; i < 100 && sockets[0].written.length < count; i++) {
+        await wait(10);
+      }
+      sockets[0].emitData(lines);
+    };
+    await answerAfter(1, "@SYS:VERSION=1\r\n"); // leading marker of LISTCURSOR
+    await answerAfter(3, "@SYS:VERSION=1\r\n"); // LISTCURSOR is write-only: silence, then the marker
+    await answerAfter(4, "@SYS:VERSION=1\r\n"); // leading marker of CURSOR
+    await answerAfter(6, "@UNDEFINED\r\n@SYS:VERSION=1\r\n");
+    expect(sockets[0].written).toEqual([
+      "@SYS:VERSION=?\r\n",
+      "@MAIN:LISTCURSOR=?\r\n",
+      "@SYS:VERSION=?\r\n",
+      "@SYS:VERSION=?\r\n",
+      "@MAIN:CURSOR=?\r\n",
+      "@SYS:VERSION=?\r\n",
+    ]);
+    await expect(pending).resolves.toEqual({ LISTCURSOR: "known", CURSOR: "undefined" });
+  });
+});
+
+describe("YncaClient unknown lines (audit 2026-09-24, B14)", () => {
+  test("a line that decodes to nothing reaches the unknown-line handler instead of vanishing", async () => {
+    const { factory, sockets } = fixtureFactory();
+    const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
+    const connected = client.connect();
+    sockets[0].emitConnect();
+    await connected;
+    const unknown: string[] = [];
+    client.onUnknownLine(line => unknown.push(line));
+    sockets[0].emitData("garbage without an at sign\r\n@MAIN:PWR=On\r\n");
+    expect(unknown).toEqual(["garbage without an at sign"]);
+  });
+});
+
+describe("YncaClient sweep marker (audit 2026-09-24, B2)", () => {
+  // A drop after the last GET but before the marker's answer handed back a PARTIAL report after the
+  // timeout — stored as complete.
+  test("rejects when the socket drops inside the marker window", async () => {
+    vi.useFakeTimers();
+    try {
+      const { factory, sockets } = fixtureFactory();
+      const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
+      const connected = client.connect();
+      sockets[0].emitConnect();
+      await connected;
+      const caps = client.readCapabilities([{ subunit: "MAIN", func: "PWR" }]);
+      const verdict = caps.then(
+        () => "resolved",
+        (e: Error) => e.message,
+      );
+      await vi.advanceTimersByTimeAsync(150);
+      expect(sockets[0].written).toContain("@SYS:VERSION=?\r\n");
+      sockets[0].emitClose();
+      await vi.advanceTimersByTimeAsync(10);
+      await expect(verdict).resolves.toBe("connection lost during capability sweep");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("an unanswered marker reports the sweep as incomplete", async () => {
+    vi.useFakeTimers();
+    try {
+      const { factory, sockets } = fixtureFactory();
+      const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
+      const connected = client.connect();
+      sockets[0].emitConnect();
+      await connected;
+      const caps = client.readCapabilities([{ subunit: "MAIN", func: "PWR" }]);
+      await vi.advanceTimersByTimeAsync(100);
+      sockets[0].emitData("@MAIN:PWR=On\r\n");
+      await vi.advanceTimersByTimeAsync(6000);
+      await expect(caps).resolves.toMatchObject({ complete: false });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

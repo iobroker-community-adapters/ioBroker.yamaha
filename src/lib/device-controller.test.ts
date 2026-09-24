@@ -2,6 +2,7 @@ import { vi } from "vitest";
 import { MAX_OBSERVED_VALUES, YncaDeviceController } from "./device-controller";
 import type { YncaClientLike } from "./device-controller";
 import type { YncaCapabilities } from "./ynca/capability";
+import { availGets, YNCA_CATALOG } from "./ynca/catalog";
 import type { ObjectDef } from "./catalog/types";
 import { createSubunitCache } from "./ynca/subunit-cache";
 import { CommandGate } from "./lifecycle/command-gate";
@@ -45,6 +46,11 @@ class FakeClient implements YncaClientLike {
   public requests: Array<Array<{ subunit: string; func: string }>> = [];
   /** Every bundle GET asked (`SUBUNIT:FUNC`), in order. */
   public bundlesAsked: string[] = [];
+  /** The bracketed probe, when a test gives the fake one. */
+  public probeKnown?: (
+    subunit: string,
+    funcs: readonly string[],
+  ) => Promise<Record<string, "known" | "undefined" | "unclear">>;
   private handler?: (message: Msg) => void;
 
   public async connect(): Promise<void> {}
@@ -210,6 +216,54 @@ describe("YncaDeviceController", () => {
     expect(client.sent).toEqual([{ subunit: "MAIN", func: "PWR", value: "On" }]);
   });
 
+  // The receiver answers a PUT only when the value changes, and in standby not at all — the
+  // written value stood unacknowledged for good (audit 2026-09-24, B4).
+  test("a user PUT of a readable function is followed by a read-back of it", async () => {
+    const client = new FakeClient();
+    client.capabilities = { model: "RX-A810", subunits: { MAIN: { PWR: "On", VOL: "-40.0" } } };
+    const controller = new YncaDeviceController("living", makeDeps(client).deps);
+    await controller.start();
+    client.gets.length = 0;
+    controller.handleStateChange("living.volume", false, -30);
+    expect(client.sent).toContainEqual({ subunit: "MAIN", func: "VOL", value: "-30.0" });
+    expect(client.gets).toEqual([{ subunit: "MAIN", func: "VOL" }]);
+  });
+
+  test("a refused PUT puts the device's last reported value back, acknowledged", async () => {
+    const client = new FakeClient();
+    client.capabilities = { model: "RX-A810", subunits: { MAIN: { PWR: "Standby", VOL: "-40.0" } } };
+    let refuse: ((command: string, verdict: "restricted" | "undefined") => void) | undefined;
+    client.onRefusal = (handler): void => {
+      refuse = handler;
+    };
+    const { acked, deps } = makeDeps(client);
+    const controller = new YncaDeviceController("living", deps);
+    await controller.start();
+    acked.length = 0;
+    controller.handleStateChange("living.volume", false, -30);
+    refuse?.("@MAIN:VOL=-30.0", "restricted");
+    expect(acked).toEqual([{ id: "living.volume", value: -40 }]);
+  });
+
+  // Registered only after the tree was built, the live handler lost what the device pushed while
+  // ~250 objects were being created (audit 2026-09-24, B12).
+  test("a push that arrives while the tree is being built reaches its state", async () => {
+    const client = new FakeClient();
+    client.capabilities = { model: "RX-A810", subunits: { MAIN: { PWR: "On", VOL: "-40.0" } } };
+    const { acked, deps } = makeDeps(client);
+    const upsert = deps.upsertObject;
+    let pushed = false;
+    deps.upsertObject = async (id, def) => {
+      if (!pushed) {
+        pushed = true;
+        client.emit({ subunit: "MAIN", func: "VOL", value: "-25.0" });
+      }
+      await upsert(id, def);
+    };
+    await new YncaDeviceController("living", deps).start();
+    expect(acked).toContainEqual({ id: "living.volume", value: -25 });
+  });
+
   test("a write before the sweep finds no proven function and puts nothing on the wire", () => {
     // The adapter routes writes only through a connected handle, which exists after start()
     // — so nothing ever answered here in production. The unfiltered static map that used to
@@ -236,6 +290,9 @@ describe("YncaDeviceController", () => {
   });
 });
 
+/** The subunits the AVAIL probe asks — what a fresh snapshot records as asked. */
+const PROBED = new Set(availGets(YNCA_CATALOG).map(get => get.subunit));
+
 describe("YncaDeviceController two-pass sweep", () => {
   test("probes AVAIL first, then sweeps only the answering subunits plus SYS", async () => {
     const client = new FakeClient();
@@ -246,7 +303,7 @@ describe("YncaDeviceController two-pass sweep", () => {
     // and doubles as the fast path's liveness proof; then the probe, then the BASIC bundle
     // of every present zone (2026-09-09), then the sweep.
     expect(client.requests).toHaveLength(4);
-    expect(client.requests[0].map(get => get.func)).toEqual(["MODELNAME", "VERSION"]);
+    expect(client.requests[0].map(get => get.func)).toEqual(["MODELNAME", "MODELNAME", "VERSION"]);
     expect(client.requests[1].every(get => get.func === "AVAIL")).toBe(true);
     // SYS answers no AVAIL and must never be probed…
     expect(client.requests[1].some(get => get.subunit === "SYS")).toBe(false);
@@ -285,7 +342,7 @@ describe("YncaDeviceController two-pass sweep", () => {
     };
     const persisted: unknown[] = [];
     const cache = createSubunitCache(
-      { schema: DISCOVERY_SCHEMA, subunits: ["MAIN"], model: "RX-V6A", firmware: "1.80" },
+      { schema: DISCOVERY_SCHEMA, subunits: ["MAIN"], probed: [...PROBED], model: "RX-V6A", firmware: "1.80" },
       s => persisted.push(s),
     );
     const { deps } = makeDeps(client);
@@ -295,7 +352,7 @@ describe("YncaDeviceController two-pass sweep", () => {
     // identity FIRST is what keeps a stale cache from costing a wasted full sweep before the
     // mismatch shows.
     expect(client.requests).toHaveLength(3);
-    expect(client.requests[0].map(get => get.func)).toEqual(["MODELNAME", "VERSION"]);
+    expect(client.requests[0].map(get => get.func)).toEqual(["MODELNAME", "MODELNAME", "VERSION"]);
     expect(
       client.requests
         .slice(1)
@@ -325,8 +382,48 @@ describe("YncaDeviceController two-pass sweep", () => {
     // clear() persisted undefined, then set() persisted the fresh snapshot.
     expect(persisted).toEqual([
       undefined,
-      { schema: DISCOVERY_SCHEMA, subunits: ["MAIN", "ZONE2"], model: "RX-A4A", firmware: "2.10" },
+      { schema: DISCOVERY_SCHEMA, subunits: ["MAIN", "ZONE2"], probed: [...PROBED], model: "RX-A4A", firmware: "2.10" },
     ]);
+  });
+
+  // A subunit the catalog gained after the snapshot was never asked; judged "silent" it fell out of
+  // the input dropdown for good (audit 2026-09-24, B11). A snapshot from before 2.13.0 lists nothing
+  // as asked and is probed once in full.
+  test("a snapshot without the asked list is probed once and stored with it", async () => {
+    const client = new FakeClient();
+    client.availableSubunits = ["MAIN", "SPOTIFY"];
+    client.capabilities = {
+      model: "RX-V6A",
+      subunits: { SYS: { MODELNAME: "RX-V6A", VERSION: "1.80" }, MAIN: { PWR: "On" } },
+    };
+    const persisted: Array<{ subunits: string[]; probed?: string[] } | undefined> = [];
+    const cache = createSubunitCache(
+      { schema: DISCOVERY_SCHEMA, subunits: ["MAIN"], model: "RX-V6A", firmware: "1.80" },
+      s => persisted.push(s),
+    );
+    const { deps } = makeDeps(client);
+    await new YncaDeviceController("living", { ...deps, subunitCache: cache }).start();
+    expect(client.requests[1].every(get => get.func === "AVAIL")).toBe(true);
+    expect(persisted.at(-1)?.subunits).toEqual(["MAIN", "SPOTIFY"]);
+    expect(persisted.at(-1)?.probed).toEqual([...PROBED]);
+  });
+
+  // The receiver loses the first command after its power-save state (ynca-python); an empty model
+  // was taken for "another device" and every remembered YNCA answer dropped (audit 2026-09-24, B1).
+  test("an empty identity answer drops no memory and clears no AVAIL cache", async () => {
+    const client = new FakeClient();
+    client.availableSubunits = ["MAIN"];
+    client.capabilities = { model: "", subunits: { MAIN: { PWR: "On" } } };
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA, yncaObserved: { MAIN: { INP: ["HDMI1"] } } });
+    const persisted: unknown[] = [];
+    const cache = createSubunitCache(
+      { schema: DISCOVERY_SCHEMA, subunits: ["MAIN"], probed: [...PROBED], model: "RX-V6A", firmware: "1.80" },
+      s => persisted.push(s),
+    );
+    const { deps } = makeDeps(client);
+    await new YncaDeviceController("living", { ...deps, subunitCache: cache, probeMemory: memory }).start();
+    expect(memory.remembered("yncaObserved")).toBeDefined();
+    expect(persisted).not.toContain(undefined);
   });
 
   test("a disabled datapoint group is excluded from the sweep AND the objects", async () => {
@@ -645,7 +742,7 @@ describe("YncaDeviceController fast restart (persisted capability layer)", () =>
     await new YncaDeviceController("living", { ...deps2, probeMemory: memory }).start();
     // The only request the READY LINE waited for is the identity read plus the handful of
     // values the start DECIDES from; no AVAIL probe, no blocking sweep.
-    expect(client.requests[0].map(get => get.func)).toEqual(["MODELNAME", "VERSION"]);
+    expect(client.requests[0].map(get => get.func)).toEqual(["MODELNAME", "MODELNAME", "VERSION"]);
     expect(client.requests.some(gets => gets.every(get => get.func === "AVAIL"))).toBe(false);
     // The remembered layer is a SHAPE — its values are the last run's. Power, the zone
     // inputs and the tuner band decide something (menu claim, write routing), so they are
@@ -1378,12 +1475,22 @@ describe("HD Radio in the tuner router (coverage audit 2026-09-09)", () => {
 });
 
 describe("the YNCA pad dialect of the 2015 generation (RX-A850: @MAIN:CURSOR/MENU instead of LISTCURSOR/LISTMENU)", () => {
-  async function padSetup(memory?: ProbeMemory): Promise<{
+  const flush = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
+  async function padSetup(
+    memory?: ProbeMemory,
+    probe?: Record<string, "known" | "undefined" | "unclear">,
+  ): Promise<{
     client: FakeClient;
     refuse: (command: string, verdict: "restricted" | "undefined") => void;
     controller: YncaDeviceController;
+    probes: string[][];
   }> {
     const client = new FakeClient();
+    const probes: string[][] = [];
+    client.probeKnown = (_subunit: string, funcs: readonly string[]) => {
+      probes.push([...funcs]);
+      return Promise.resolve(probe ?? {});
+    };
     client.availableSubunits = ["MAIN", "NETRADIO"];
     client.listSubunits = ["NETRADIO"];
     client.capabilities = {
@@ -1406,33 +1513,62 @@ describe("the YNCA pad dialect of the 2015 generation (RX-A850: @MAIN:CURSOR/MEN
     const controller = new YncaDeviceController("living", deps);
     await controller.start();
     client.sent.length = 0;
-    return { client, refuse: refuse!, controller };
+    return { client, refuse: refuse!, controller, probes };
   }
 
-  test("an @UNDEFINED for a list-dialect key switches the pad to CURSOR/MENU, resends the key and remembers the dialect", async () => {
-    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
-    const s = await padSetup(memory);
+  // The dialect comes from a side-effect-free, bracketed probe — never from a key press: 2.12.0 took
+  // a background read's refusal for the verdict on a pad key and switched a 2012 receiver's pad to
+  // CURSOR for good (audit 2026-09-24, B3).
+  test("the dialect is set by the bracketed probe and remembered as proven", async () => {
+    const zone = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
+    const s = await padSetup(zone, { LISTCURSOR: "undefined", CURSOR: "known" });
+    expect(s.probes).toEqual([["LISTCURSOR", "CURSOR"]]);
+    expect(zone.remembered("yncaPadDialect")).toEqual({ dialect: "zone", proven: true });
+    s.controller.handleStateChange("living.remote.cursor", false, "return");
+    expect(s.client.sent).toEqual([{ subunit: "MAIN", func: "CURSOR", value: "Return" }]);
+    const list = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
+    const t = await padSetup(list, { LISTCURSOR: "known", CURSOR: "undefined" });
+    expect(list.remembered("yncaPadDialect")).toEqual({ dialect: "list", proven: true });
+    t.controller.handleStateChange("living.remote.cursor", false, "up");
+    expect(t.client.sent).toEqual([{ subunit: "MAIN", func: "LISTCURSOR", value: "Up" }]);
+  });
+
+  test("an unclear probe keeps the list dialect and remembers nothing; a 2.12.0 string is not trusted", async () => {
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA, yncaPadDialect: "zone" });
+    const s = await padSetup(memory, { LISTCURSOR: "unclear", CURSOR: "unclear" });
+    expect(s.probes).toHaveLength(1);
+    expect(memory.remembered("yncaPadDialect")).toBe("zone");
     s.controller.handleStateChange("living.remote.cursor", false, "up");
     expect(s.client.sent).toEqual([{ subunit: "MAIN", func: "LISTCURSOR", value: "Up" }]);
+  });
+
+  test("a single refused key never persists a dialect by itself — it only triggers one re-probe", async () => {
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
+    const s = await padSetup(memory, { LISTCURSOR: "known", CURSOR: "known" });
+    s.controller.handleStateChange("living.remote.cursor", false, "up");
+    s.refuse("@MAIN:LISTCURSOR=Up", "restricted");
     s.refuse("@MAIN:LISTCURSOR=Up", "undefined");
+    await flush();
+    expect(s.probes).toHaveLength(2); // the start probe and the one re-probe
+    expect(memory.remembered("yncaPadDialect")).toEqual({ dialect: "list", proven: true });
+    s.refuse("@MAIN:LISTCURSOR=Up", "undefined");
+    await flush();
+    expect(s.probes).toHaveLength(2); // once per session
+    expect(s.client.sent).toEqual([{ subunit: "MAIN", func: "LISTCURSOR", value: "Up" }]);
+  });
+
+  test("a re-probe that proves the other dialect switches and sends the refused key once more", async () => {
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
+    const s = await padSetup(memory, { LISTCURSOR: "unclear", CURSOR: "unclear" });
+    s.client.probeKnown = () => Promise.resolve({ LISTCURSOR: "undefined", CURSOR: "known" });
+    s.controller.handleStateChange("living.remote.cursor", false, "up");
+    s.refuse("@MAIN:LISTCURSOR=Up", "undefined");
+    await flush();
     expect(s.client.sent).toEqual([
       { subunit: "MAIN", func: "LISTCURSOR", value: "Up" },
       { subunit: "MAIN", func: "CURSOR", value: "Up" },
     ]);
-    expect(memory.remembered("yncaPadDialect")).toBe("zone");
-    s.client.sent.length = 0;
-    s.controller.handleStateChange("living.remote.menu", false, "on_screen");
-    expect(s.client.sent).toEqual([{ subunit: "MAIN", func: "MENU", value: "On Screen" }]);
-  });
-
-  test("an @RESTRICTED (not now) changes nothing, and a remembered zone dialect is used from the first press", async () => {
-    const first = await padSetup(new ProbeMemory({ __schema: DISCOVERY_SCHEMA }));
-    first.controller.handleStateChange("living.remote.cursor", false, "down");
-    first.refuse("@MAIN:LISTCURSOR=Down", "restricted");
-    expect(first.client.sent).toEqual([{ subunit: "MAIN", func: "LISTCURSOR", value: "Down" }]);
-    const second = await padSetup(new ProbeMemory({ __schema: DISCOVERY_SCHEMA, yncaPadDialect: "zone" }));
-    second.controller.handleStateChange("living.remote.cursor", false, "return");
-    expect(second.client.sent).toEqual([{ subunit: "MAIN", func: "CURSOR", value: "Return" }]);
+    expect(memory.remembered("yncaPadDialect")).toEqual({ dialect: "zone", proven: true });
   });
 });
 

@@ -53,6 +53,10 @@ interface Waiting<T = unknown> {
   resolve: (value: T) => void;
   reject: (err: Error) => void;
   priority: CommandPriority;
+  /** Writes to the same target collapse while queued — see {@link CommandGate.run}. */
+  key?: string;
+  /** Callers whose queued write this one replaced: they settle with it. */
+  followers?: Array<{ resolve: (value: T) => void; reject: (err: Error) => void }>;
 }
 
 /** Thrown to every queued operation when the gate closes. */
@@ -100,14 +104,24 @@ export class CommandGate {
    *
    * @param run the operation (its result is passed through)
    * @param priority "user" jumps ahead of queued background work
+   * @param key the write's target: a write still WAITING for the same target is replaced by this
+   *   one — the newest value wins and keeps the older one's place. A volume slider sends a burst of
+   *   writes, and each YNCA write now costs a bracketed exchange; without this they queued up behind
+   *   each other (audit 2026-09-24, B3/B4).
    * @returns the operation's result
    */
-  public run<T>(run: () => Promise<T> | T, priority: CommandPriority = "background"): Promise<T> {
+  public run<T>(run: () => Promise<T> | T, priority: CommandPriority = "background", key?: string): Promise<T> {
     if (this.closed) {
       return Promise.reject(new CommandGateClosedError());
     }
     return new Promise<T>((resolve, reject) => {
-      const waiting = { run, resolve, reject, priority } as unknown as Waiting<never>;
+      const queued = key === undefined ? undefined : this.queue.find(entry => entry.key === key);
+      if (queued) {
+        queued.run = run as unknown as () => never;
+        (queued.followers ??= []).push({ resolve, reject });
+        return;
+      }
+      const waiting = { run, resolve, reject, priority, key } as unknown as Waiting<never>;
       if (priority === "user") {
         // Ahead of queued background work, behind earlier user commands — so a burst of
         // button presses still reaches the device in the order it was pressed.
@@ -164,6 +178,9 @@ export class CommandGate {
     const pending = this.queue.splice(0, this.queue.length);
     for (const entry of pending) {
       entry.reject(new CommandGateClosedError());
+      for (const follower of entry.followers ?? []) {
+        follower.reject(new CommandGateClosedError());
+      }
     }
   }
 
@@ -202,8 +219,15 @@ export class CommandGate {
     try {
       const result = await entry.run();
       entry.resolve(result);
+      for (const follower of entry.followers ?? []) {
+        follower.resolve(result);
+      }
     } catch (e) {
-      entry.reject(e instanceof Error ? e : new Error(errorMessage(e)));
+      const error = e instanceof Error ? e : new Error(errorMessage(e));
+      entry.reject(error);
+      for (const follower of entry.followers ?? []) {
+        follower.reject(error);
+      }
     } finally {
       this.running = false;
       this.pump();

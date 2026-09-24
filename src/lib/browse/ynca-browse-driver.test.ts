@@ -230,16 +230,43 @@ describe("the 2015 generation's zone-wide pad (@MAIN:CURSOR / @MAIN:MENU, RX-A85
     ]);
   });
 
-  it("a refused list-dialect key is sent again in the zone dialect, and the dialect sticks", () => {
+  // The official lists split by generation: 2012+ (SERVER) say Return / Return to Home on the list
+  // and pad keys, 2010/11 (PC) say Back / Back to Home and have no Display key (audit 2026-09-24, B16).
+  it("speaks the words of the device's generation", () => {
+    const sent: Array<{ subunit: string; func: string; value: string }> = [];
+    const client = {
+      send: (subunit: string, func: string, value: string) => sent.push({ subunit, func, value }),
+      get: (): void => {},
+    };
+    const returnGen = new YncaBrowseDriver(client, new Set(["SERVER"]), instantDelay, "list", {
+      returnWords: true,
+      display: true,
+    });
+    returnGen.open("server");
+    sent.length = 0;
+    returnGen.back();
+    returnGen.home();
+    returnGen.cursor("return");
+    expect(sent).toEqual([
+      { subunit: "SERVER", func: "LISTCURSOR", value: "Return" },
+      { subunit: "SERVER", func: "LISTCURSOR", value: "Return to Home" },
+      { subunit: "MAIN", func: "LISTCURSOR", value: "Return" },
+    ]);
+    const backGen = new YncaBrowseDriver(client, new Set(["PC"]), instantDelay, "list", {
+      returnWords: false,
+      display: false,
+    });
+    expect(backGen.menuValues).not.toContain("display");
+  });
+
+  it("a refused key is sent once more in the dialect a probe switched to", () => {
     const { driver, sent } = setup(["NETRADIO"]);
-    expect(driver.retryInZoneDialect("LISTCURSOR", "Back to Home")).toBe(true);
-    expect(driver.padDialect).toBe("zone");
+    driver.usePadDialect("zone");
+    driver.resend("LISTCURSOR", "Back to Home");
     expect(sent).toEqual([{ subunit: "MAIN", func: "CURSOR", value: "Return to Home" }]);
     sent.length = 0;
-    driver.menu("option");
+    driver.resend("LISTMENU", "Option");
     expect(sent).toEqual([{ subunit: "MAIN", func: "MENU", value: "Option" }]);
-    // A refusal in the zone dialect is not retried — nothing left to switch to.
-    expect(driver.retryInZoneDialect("LISTCURSOR", "Up")).toBe(false);
   });
 
   it("the menu keys are the five of both generations — Display included (RX-A3020 2012 list, RX-A850 2015 list)", () => {

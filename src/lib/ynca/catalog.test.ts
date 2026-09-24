@@ -14,6 +14,7 @@ import {
   sysFamilyMemberOf,
   writeProblem,
   yncaCommand,
+  yncaGenerationEvidence,
   yncaObjectsFor,
   yncaStateUpdate,
   zoneFunctionAsked,
@@ -1385,5 +1386,12 @@ describe("the catalog answers every readable function the official lists declare
     for (const pair of ["MAIN:HDMIASPECT", "SYS:HDMIASPECT", "MAIN:HDMIRESOL", "SYS:HDMIRESOL"]) {
       expect(covered.has(pair), pair).toBe(true);
     }
+  });
+});
+
+describe("yncaGenerationEvidence (audit 2026-09-24, B16/B6)", () => {
+  it("reads the generation off the network source a device answers", () => {
+    expect(yncaGenerationEvidence({ MAIN: {}, SERVER: {} })).toEqual({ returnWords: true, display: true });
+    expect(yncaGenerationEvidence({ MAIN: {}, PC: {} })).toEqual({ returnWords: false, display: false });
   });
 });

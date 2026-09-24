@@ -6,6 +6,11 @@ export interface YncaCapabilities {
   model: string;
   /** subunit (MAIN, ZONE2, TUN, …) → function name → value seen in the init sweep. */
   subunits: Record<string, Record<string, string>>;
+  /**
+   * False when the sweep's closing marker went unanswered: the answers of a busy device may still
+   * have been on their way, so the report can miss functions (audit 2026-09-24, B2). Absent = complete.
+   */
+  complete?: boolean;
 }
 
 /**

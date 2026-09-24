@@ -3217,6 +3217,32 @@ export function yncaStateUpdate(
   return value === undefined ? undefined : { id: entry.id, value };
 }
 
+/** What the device's generation says about wording, read from the subunits it answered. */
+export interface YncaGenerationEvidence {
+  /**
+   * `Return` / `Return to Home` instead of `Back` / `Back to Home` on the list and pad keys, and
+   * `One` instead of `Single` for repeat. The official lists split exactly along the network
+   * sources: every 2012-and-later list (HTR-7065, RX-A720/820/1020/2020/3020, RX-V673/773, RX-A850)
+   * carries `SERVER` and says `Return`/`One`; every 2010/2011 list carries `PC` and says `Back`/`Single`
+   * (audit 2026-09-24, B16/B6).
+   */
+  returnWords: boolean;
+  /** Whether the menu pad has `Display` — the 2010/2011 lists do not declare it. */
+  display: boolean;
+}
+
+/**
+ * The generation evidence of a device (see {@link YncaGenerationEvidence}).
+ *
+ * @param subunits the subunits the device answered (subunit → function → value)
+ * @returns the evidence
+ */
+export function yncaGenerationEvidence(subunits: Readonly<Record<string, unknown>>): YncaGenerationEvidence {
+  const server = "SERVER" in subunits;
+  const pc = "PC" in subunits;
+  return { returnWords: server || !pc, display: !pc || server };
+}
+
 /**
  * Whether a character is a C0 control character or DEL — never part of a name or a value.
  *

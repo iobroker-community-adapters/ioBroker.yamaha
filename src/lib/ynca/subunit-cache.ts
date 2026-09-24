@@ -14,6 +14,11 @@ export interface YncaAvailSnapshot {
   schema: number;
   /** The subunits that answered `AVAIL=?` (SYS excluded — it is always swept). */
   subunits: string[];
+  /**
+   * The subunits the probe ASKED — only those can be judged absent. Absent on a snapshot from
+   * before 2.13.0: then nothing counts as asked and the probe runs once in full (audit 2026-09-24, B11).
+   */
+  probed?: string[];
   /** SYS MODELNAME at the time of the probe — cache key half 1. */
   model: string;
   /** SYS VERSION at the time of the probe — cache key half 2. */
@@ -51,6 +56,8 @@ export function isAvailSnapshot(value: unknown): value is YncaAvailSnapshot {
     candidate.schema === DISCOVERY_SCHEMA &&
     Array.isArray(candidate.subunits) &&
     candidate.subunits.every(entry => typeof entry === "string") &&
+    (candidate.probed === undefined ||
+      (Array.isArray(candidate.probed) && candidate.probed.every(entry => typeof entry === "string"))) &&
     typeof candidate.model === "string" &&
     typeof candidate.firmware === "string"
   );

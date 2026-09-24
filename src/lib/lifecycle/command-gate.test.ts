@@ -168,3 +168,21 @@ describe("CommandGate", () => {
     await expect(gate.run(() => Promise.resolve({ ok: 1 }))).resolves.toEqual({ ok: 1 });
   });
 });
+
+describe("CommandGate coalesces queued writes to one target (audit 2026-09-24, B3/B4)", () => {
+  // A VIS volume slider sends a burst; each YNCA write is a bracketed exchange now, so without
+  // this the writes queued up behind each other and the receiver trailed the slider by seconds.
+  test("ten fast writes to one target run at most twice, and the last value arrives", async () => {
+    const gate = new CommandGate({
+      minSpacingMs: 0,
+      timers: { schedule: (cb, ms) => setTimeout(cb, ms), cancel: () => {} },
+    });
+    const ran: number[] = [];
+    let release: () => void = () => {};
+    const first = gate.run(() => new Promise<void>(resolve => (release = resolve)), "user", "MAIN:VOL");
+    const rest = Array.from({ length: 9 }, (_, i) => gate.run(() => void ran.push(i + 1), "user", "MAIN:VOL"));
+    release();
+    await Promise.all([first, ...rest]);
+    expect(ran).toEqual([9]);
+  });
+});

@@ -21,11 +21,22 @@ const SWEEP_MARKER_TIMEOUT_MS = 5000;
 const CONNECT_TIMEOUT_MS = 5000;
 
 /**
- * How long after a user PUT a `@RESTRICTED`/`@UNDEFINED` line is still attributed to
- * it. Generous against a busy receiver, short enough that a sweep's refusals (which
- * follow their own GETs within the 100 ms spacing) never blame an old user write.
+ * How long a device may take to answer one line. A refusal carries no subunit, so it can only be
+ * told apart by ORDER — the receiver answers in the order it was asked (`ynca-python` syncs on the
+ * same `@SYS:VERSION` marker). Measured: the RX-V473 answered a GET 1,521 ms later, after the next
+ * line had already gone out (`ynca-python/logs/RX-V473.txt`), so a time window never attributes a
+ * refusal safely (audit 2026-09-24, B3). A marker answer later than this means: no verdict.
  */
-const REFUSAL_ATTRIBUTION_MS = 2000;
+const MAX_ANSWER_MS = 2000;
+
+/** The specification's minimum spacing between two lines, kept inside a bracketed exchange. */
+const LINE_SPACING_MS = 100;
+
+/** The closing marker every receiver answers (see {@link MAX_ANSWER_MS}). */
+const VERSION_GET = encodeGet("SYS", "VERSION");
+
+/** What a bracketed probe learned about one function (see {@link YncaClient.probeKnown}). */
+export type FunctionVerdict = "known" | "undefined" | "unclear";
 
 /**
  * Poll a keepalive this often while connected. The receiver closes an idle YNCA
@@ -134,8 +145,18 @@ export class YncaClient {
   private readonly messageHandlers: Array<(message: YncaMessage) => void> = [];
   private dropHandler: ((reason?: Error) => void) | undefined;
   private refusalHandler: ((command: string, verdict: "restricted" | "undefined") => void) | undefined;
-  /** The last user PUT actually written, so a refusal right after it can be attributed. */
-  private lastUserWrite: { line: string; at: number } | undefined;
+  /**
+   * One entry per `@SYS:VERSION=?` on the wire, in wire order — the answers come in the same order,
+   * so each answer settles the oldest entry (a marker's, or a plain read's placeholder).
+   */
+  private readonly versionAnswers: Array<() => void> = [];
+  /** Woken when the connection drops or closes — a wait for an answer must not outlive it. */
+  private readonly dropWaiters = new Set<() => void>();
+  /** When the last background line went out — a user write after it opens with a marker. */
+  private lastBackgroundAt = Number.NEGATIVE_INFINITY;
+  private unknownLineHandler: ((line: string) => void) | undefined;
+  /** The refusal window of a bracketed exchange: open between its line and its closing marker. */
+  private refusalWindow: { refusal?: "restricted" | "undefined" } | undefined;
   private reachable = false;
   private everReachable = false;
   private closed = false;
@@ -203,21 +224,22 @@ export class YncaClient {
       const response = decodeLine(line);
       if (response.status === "ok") {
         const message: YncaMessage = { subunit: response.subunit, func: response.func, value: response.value };
+        if (message.subunit === "SYS" && message.func === "VERSION") {
+          this.versionAnswers.shift()?.();
+        }
         for (const handler of this.messageHandlers) {
           handler(message);
         }
       } else if (response.status === "restricted" || response.status === "undefined") {
-        // A refusal carries no subunit, so it cannot be matched to a request by content.
-        // But user PUTs are serialized through the gate, and the refusal arrives on their
-        // heels — a refusal shortly after a user write is that write's verdict. Before
-        // this, the device saying "I will not do that" was silently discarded and a dead
-        // button (#615's scene recall) produced no trace at all. Background GETs are not
-        // tracked: an init sweep legitimately collects hundreds of @UNDEFINED answers.
-        const write = this.lastUserWrite;
-        if (write && Date.now() - write.at <= REFUSAL_ATTRIBUTION_MS) {
-          this.lastUserWrite = undefined;
-          this.refusalHandler?.(write.line, response.status);
+        // A refusal carries no subunit, so it is judged by ORDER: only one that arrives inside a
+        // bracketed exchange — after the answers to everything sent before it, before its closing
+        // marker — is the verdict on that exchange's line. Anything else is a background read's
+        // answer (an init sweep collects hundreds) and blames nothing (audit 2026-09-24, B3).
+        if (this.refusalWindow && this.refusalWindow.refusal === undefined) {
+          this.refusalWindow.refusal = response.status;
         }
+      } else {
+        this.unknownLineHandler?.(line);
       }
     }
   }
@@ -225,6 +247,9 @@ export class YncaClient {
   private handleClose(): void {
     this.reachable = false;
     this.stopKeepalive();
+    this.wakeDropWaiters();
+    // A new connection starts a new order — nothing outstanding here will ever be answered.
+    this.versionAnswers.length = 0;
     if (this.closed) {
       return;
     }
@@ -296,10 +321,115 @@ export class YncaClient {
       return;
     }
     const line = encodeCommand(subunit, func, value);
-    void this.writeLine(line, "user", charset).then(() => {
-      // Recorded AFTER the gate actually wrote it — the refusal window starts on the wire,
-      // not in the queue (a queued write behind a sweep would otherwise expire unseen).
-      this.lastUserWrite = { line, at: Date.now() };
+    const bytes = encodeDeviceText(`${line}\r\n`, charset);
+    if (!bytes) {
+      return;
+    }
+    this.gate
+      .run(
+        async () => {
+          const verdict = await this.bracketed(bytes, false);
+          if (verdict === "restricted" || verdict === "undefined") {
+            this.refusalHandler?.(line, verdict);
+          }
+        },
+        "user",
+        `${subunit}:${func}`,
+      )
+      .catch((e: unknown) => {
+        if (!(e instanceof CommandGateClosedError)) {
+          this.lastError = e instanceof Error ? e : new Error(errorMessage(e));
+        }
+      });
+  }
+
+  /**
+   * Ask whether the device KNOWS some functions, without changing anything: a GET of each, bracketed
+   * by markers. `@UNDEFINED` inside the bracket = unknown on this model; silence or a value = known
+   * (a write-only key such as `LISTCURSOR` answers a GET with nothing — RX-A810 log); a timeout or
+   * `@RESTRICTED` (not now) = unclear. The pad dialect is decided by this, never by a refused key
+   * press (audit 2026-09-24, B3).
+   *
+   * @param subunit the subunit to ask
+   * @param funcs the functions to ask about
+   * @returns the verdict per function (all unclear when the connection closed meanwhile)
+   */
+  public async probeKnown(subunit: string, funcs: readonly string[]): Promise<Record<string, FunctionVerdict>> {
+    const unclear: Record<string, FunctionVerdict> = {};
+    for (const func of funcs) {
+      unclear[func] = "unclear";
+    }
+    try {
+      return await this.gate.run(async () => {
+        const verdicts: Record<string, FunctionVerdict> = {};
+        for (const func of funcs) {
+          const bytes = encodeDeviceText(`${encodeGet(subunit, func)}\r\n`);
+          const verdict = bytes ? await this.bracketed(bytes, true) : "unclear";
+          verdicts[func] = verdict === "undefined" ? "undefined" : verdict === "ok" ? "known" : "unclear";
+        }
+        return verdicts;
+      }, "background");
+    } catch {
+      return unclear;
+    }
+  }
+
+  /**
+   * Put one line on the wire bracketed by markers and judge the refusal that arrives inside the
+   * bracket. Runs INSIDE a gate operation, so nothing else is written meanwhile; the spacing between
+   * the lines is kept by hand.
+   *
+   * @param bytes the encoded line
+   * @param alwaysLead whether to open with a marker even without recent background traffic
+   * @returns `ok` (no refusal), the refusal, or `unclear` when a marker went unanswered
+   */
+  private async bracketed(bytes: Buffer, alwaysLead: boolean): Promise<"ok" | "restricted" | "undefined" | "unclear"> {
+    let certain = true;
+    if (alwaysLead || Date.now() - this.lastBackgroundAt < MAX_ANSWER_MS) {
+      // Answers to lines sent before this one may still be on their way (1.5 s measured):
+      // the leading marker's answer comes after all of them.
+      certain = await this.marker();
+      await this.gate.delay(LINE_SPACING_MS);
+    }
+    const window: { refusal?: "restricted" | "undefined" } = {};
+    this.refusalWindow = window;
+    try {
+      this.socket?.write(bytes);
+      await this.gate.delay(LINE_SPACING_MS);
+      certain = (await this.marker()) && certain;
+    } finally {
+      if (this.refusalWindow === window) {
+        this.refusalWindow = undefined;
+      }
+    }
+    if (!certain) {
+      return "unclear";
+    }
+    return window.refusal ?? "ok";
+  }
+
+  /**
+   * Write a `@SYS:VERSION=?` marker (inside a gate operation) and wait for its answer.
+   *
+   * @returns true when the answer came within {@link MAX_ANSWER_MS}
+   */
+  private marker(): Promise<boolean> {
+    return new Promise<boolean>(resolve => {
+      let settled = false;
+      // Stays queued after a timeout, so a late answer still settles THIS entry and the order holds.
+      this.versionAnswers.push(() => {
+        if (!settled) {
+          settled = true;
+          resolve(true);
+        }
+      });
+      this.socket?.write(encodeDeviceText(`${VERSION_GET}\r\n`) ?? Buffer.alloc(0));
+      void this.gate.delay(MAX_ANSWER_MS).then(() => {
+        if (!settled) {
+          settled = true;
+          resolve(false);
+        }
+      });
     });
   }
 
@@ -316,13 +446,24 @@ export class YncaClient {
   }
 
   /**
+   * Register the handler for a line the adapter cannot decode (neither a value, nor a refusal) —
+   * such a line used to vanish without a trace (audit 2026-09-24, B14).
+   *
+   * @param handler called with the raw line
+   */
+  public onUnknownLine(handler: (line: string) => void): void {
+    this.unknownLineHandler = handler;
+  }
+
+  /**
    * Send a GET request (background priority — reads yield to user commands).
    *
    * @param subunit target subunit
    * @param func function name
+   * @param priority `user` for the read-back of a user write, which must not wait behind a refresh
    */
-  public get(subunit: string, func: string): void {
-    void this.writeLine(encodeGet(subunit, func), "background");
+  public get(subunit: string, func: string, priority: "user" | "background" = "background"): void {
+    void this.writeLine(encodeGet(subunit, func), priority);
   }
 
   /**
@@ -347,6 +488,13 @@ export class YncaClient {
     }
     return this.gate
       .run(() => {
+        if (line === VERSION_GET) {
+          // A plain read of the version is answered like a marker: its entry keeps the order.
+          this.versionAnswers.push(() => {});
+        }
+        if (priority === "background") {
+          this.lastBackgroundAt = Date.now();
+        }
         this.socket?.write(bytes);
       }, priority)
       .catch((e: unknown) => {
@@ -417,8 +565,14 @@ export class YncaClient {
       if (!this.reachable) {
         throw new Error("connection lost during capability sweep");
       }
-      await this.awaitSweepMarker(handler => (markerSeen = handler));
-      return buildCapabilities(collected);
+      const answered = await this.awaitSweepMarker(handler => (markerSeen = handler));
+      // A drop inside the marker window used to hand back a PARTIAL report after the timeout,
+      // stored as complete (audit 2026-09-24, B2).
+      if (!this.reachable) {
+        throw new Error("connection lost during capability sweep");
+      }
+      const capabilities = buildCapabilities(collected);
+      return answered ? capabilities : { ...capabilities, complete: false };
     } finally {
       const index = this.messageHandlers.indexOf(collector);
       if (index >= 0) {
@@ -432,25 +586,45 @@ export class YncaClient {
    * so an unusual firmware that stays silent costs a delay, never the whole connection.
    *
    * @param arm registers the resolve callback with the sweep's collector
-   * @returns resolves when the marker was answered or the wait timed out
+   * @returns true when the marker was answered; false on the timeout or a drop
    */
-  private async awaitSweepMarker(arm: (handler: () => void) => void): Promise<void> {
+  private async awaitSweepMarker(arm: (handler: () => void) => void): Promise<boolean> {
     let settled = false;
-    const answered = new Promise<void>(resolve => {
+    let wake: () => void = () => {};
+    const answered = new Promise<boolean>(resolve => {
       arm(() => {
         if (!settled) {
           settled = true;
-          resolve();
+          resolve(true);
         }
       });
+      wake = (): void => {
+        if (!settled) {
+          settled = true;
+          resolve(false);
+        }
+      };
     });
-    await this.writeLine(encodeGet("SYS", "VERSION"), "background");
-    await Promise.race([
-      answered,
-      this.gate.delay(SWEEP_MARKER_TIMEOUT_MS).then(() => {
-        settled = true;
-      }),
-    ]);
+    this.dropWaiters.add(wake);
+    try {
+      await this.writeLine(encodeGet("SYS", "VERSION"), "background");
+      return await Promise.race([
+        answered,
+        this.gate.delay(SWEEP_MARKER_TIMEOUT_MS).then(() => {
+          settled = true;
+          return false;
+        }),
+      ]);
+    } finally {
+      this.dropWaiters.delete(wake);
+    }
+  }
+
+  /** End every wait for an answer — the connection that would carry it is gone. */
+  private wakeDropWaiters(): void {
+    for (const wake of [...this.dropWaiters]) {
+      wake();
+    }
   }
 
   /** Whether the connection is currently up. */
@@ -467,6 +641,7 @@ export class YncaClient {
     this.closed = true;
     this.reachable = false;
     this.stopKeepalive();
+    this.wakeDropWaiters();
     this.gate.close();
     this.socket?.destroy();
     this.socket = undefined;

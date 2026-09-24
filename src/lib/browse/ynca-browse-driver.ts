@@ -9,6 +9,7 @@ import {
   type WireTable,
 } from "./types";
 import type { BrowseEngine } from "./browse-engine";
+import type { YncaGenerationEvidence } from "../ynca/catalog";
 import { errorMessage } from "../util";
 
 /** Collect a burst of list lines for this long before rendering the window. */
@@ -59,6 +60,18 @@ const YNCA_CURSOR_WIRE: WireTable<CursorValue> = {
   select: "Sel",
   return: "Back",
   home: "Back to Home",
+};
+
+/**
+ * The LIST dialect of the 2012 generation: the same keys, but `Return` / `Return to Home` — eight of
+ * the fifteen official lists with the list dialect (HTR-7065, RX-A720/820/1020/2020/3020, RX-V673/773)
+ * and the source subunits of the 2012 and 2015 lists (audit 2026-09-24, B16). The 2011 lists say
+ * `Back`. The word comes from the generation evidence, never from a refused key.
+ */
+const YNCA_RETURN_CURSOR_WIRE: WireTable<CursorValue> = {
+  ...YNCA_CURSOR_WIRE,
+  return: "Return",
+  home: "Return to Home",
 };
 
 const YNCA_MENU_WIRE: WireTable<MenuValue> = {
@@ -122,22 +135,25 @@ export class YncaBrowseDriver implements BrowseDriver {
   private closed = false;
 
   /**
-   * @param client the YNCA client slice (send + get)
-   * @param present the browsable subunits this device reported in the AVAIL probe
-   * @param delay adapter-managed delay
-   */
-  /**
    * @param client the client slice (send + get)
    * @param present the source subunits that proved their menus
    * @param delay adapter-managed delay
    * @param padDialect the pad dialect this device is known to speak (remembered per device)
+   * @param generation what the device's generation says about the key words (see `yncaGenerationEvidence`)
    */
   public constructor(
     private readonly client: YncaBrowseClient,
     private readonly present: ReadonlySet<string>,
     private readonly delay: (ms: number) => Promise<void>,
     public padDialect: YncaPadDialect = "list",
-  ) {}
+    generation: YncaGenerationEvidence = { returnWords: false, display: true },
+  ) {
+    this.listCursorWire = generation.returnWords ? YNCA_RETURN_CURSOR_WIRE : YNCA_CURSOR_WIRE;
+    this.menuValues = Object.keys(YNCA_MENU_WIRE).filter(key => generation.display || key !== "display");
+  }
+
+  /** The list-dialect cursor words of this device's generation. */
+  private readonly listCursorWire: WireTable<CursorValue>;
 
   /**
    * Switch the pad's dialect (see {@link YncaPadDialect}).
@@ -149,33 +165,28 @@ export class YncaBrowseDriver implements BrowseDriver {
   }
 
   /**
-   * A list-dialect key the device answered `@UNDEFINED` to: switch to the zone dialect and send
-   * the same key again in it, so the press that revealed the dialect is not lost.
+   * Send a refused pad key once more, in the dialect a probe just proved (see the controller's
+   * `reprobePad`) — so the press that revealed the wrong dialect is not lost.
    *
-   * @param func the refused function (LISTCURSOR or LISTMENU)
+   * @param func the refused function (LISTCURSOR, LISTMENU, CURSOR, MENU)
    * @param wire the refused wire value
-   * @returns true when the key was resent (list dialect was active and the word is known)
    */
-  public retryInZoneDialect(func: string, wire: string): boolean {
-    if (this.padDialect !== "list") {
-      return false;
+  public resend(func: string, wire: string): void {
+    const cursor = func === "LISTCURSOR" || func === "CURSOR";
+    const tables = cursor
+      ? [YNCA_CURSOR_WIRE, YNCA_RETURN_CURSOR_WIRE, YNCA_ZONE_CURSOR_WIRE]
+      : [YNCA_MENU_WIRE, YNCA_ZONE_MENU_WIRE];
+    for (const table of tables) {
+      const word = Object.keys(table).find(key => wireFor(table as WireTable<string>, key) === wire);
+      if (word !== undefined) {
+        if (cursor) {
+          this.cursor(word);
+        } else {
+          this.menu(word);
+        }
+        return;
+      }
     }
-    const word =
-      func === "LISTCURSOR"
-        ? Object.keys(YNCA_CURSOR_WIRE).find(key => wireFor(YNCA_CURSOR_WIRE, key) === wire)
-        : func === "LISTMENU"
-          ? Object.keys(YNCA_MENU_WIRE).find(key => wireFor(YNCA_MENU_WIRE, key) === wire)
-          : undefined;
-    if (word === undefined) {
-      return false;
-    }
-    this.padDialect = "zone";
-    if (func === "LISTCURSOR") {
-      this.cursor(word);
-    } else {
-      this.menu(word);
-    }
-    return true;
   }
 
   /**
@@ -195,8 +206,8 @@ export class YncaBrowseDriver implements BrowseDriver {
   /** The cursor keys this protocol has on the main zone. */
   public readonly cursorValues = Object.keys(YNCA_CURSOR_WIRE);
 
-  /** The menu keys this protocol has on the main zone. */
-  public readonly menuValues = Object.keys(YNCA_MENU_WIRE);
+  /** The menu keys this protocol has on the main zone (`display` only where the generation declares it). */
+  public readonly menuValues: string[];
 
   /** @returns the selectable sources this device offers (state value → label) */
   public sources(): Record<string, string> {
@@ -250,12 +261,12 @@ export class YncaBrowseDriver implements BrowseDriver {
    * offers every value the official command list declares, including `Left`.
    */
   public back(): void {
-    this.command("LISTCURSOR", "Back");
+    this.command("LISTCURSOR", wireFor(this.listCursorWire, "return") ?? "Back");
   }
 
   /** Return to the menu root. */
   public home(): void {
-    this.command("LISTCURSOR", "Back to Home");
+    this.command("LISTCURSOR", wireFor(this.listCursorWire, "home") ?? "Back to Home");
   }
 
   /**
@@ -275,7 +286,7 @@ export class YncaBrowseDriver implements BrowseDriver {
       this.send("CURSOR", wireFor(YNCA_ZONE_CURSOR_WIRE, value));
       return;
     }
-    this.send("LISTCURSOR", wireFor(YNCA_CURSOR_WIRE, value));
+    this.send("LISTCURSOR", wireFor(this.listCursorWire, value));
   }
 
   /**
