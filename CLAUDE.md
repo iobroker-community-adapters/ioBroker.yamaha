@@ -488,8 +488,8 @@ in ein öffentliches Repo.
   bis 2.1.1 lief er lokal nie mit, obwohl die CI ihn fährt (`testing-action-adapter` ruft
   `test:unit` UND `test:integration`). `passWithNoTests` ist raus — ein nicht mehr greifendes
   `include` muss rot melden, nicht grün.
-- **Mutationstabellen** (`../../Ressourcen/iobroker-entwicklung/mutation-testing/`) — **ZWANZIG Dateien (seit
-  Welle 19, 2026-09-22), und das Gate prüft ALLE.** ⚠️ Die fünf Wellen-Originale `mutations_yamaha.py` · `…2.py` · `…3.py` · `…4.py` ·
+- **Mutationstabellen** (`../../Ressourcen/iobroker-entwicklung/mutation-testing/`) — **EINUNDZWANZIG Dateien (seit
+  Welle 20, 2026-09-24), und das Gate prüft ALLE.** ⚠️ Die fünf Wellen-Originale `mutations_yamaha.py` · `…2.py` · `…3.py` · `…4.py` ·
   `…5.py` (36/32/26/11/11 Nadeln) leben NEBEN der Sammeltabelle `mutations_yamaha_all.py`, die dieselben
   Regeln zusammenfasst — sie sind kein Altbestand. Wer nur die datierten Tabellen nachzieht, lässt fünf
   Nadeln ins Leere zeigen und merkt es erst, wenn D09 den Release stoppt (2026-09-07: R5, R7, V7, V8, X4 —
@@ -527,7 +527,12 @@ in ein öffentliches Repo.
     ersten Versuch ist nicht offline" und Y19 „XML belegt, MusicCast nicht", waren Testlücken und sind
     geschlossen. Die Tabelle wuchs in drei Schüben: Y1–Y29 beim Bau, Y30–Y39 mit der Liveness-Abfrage und
     der Log-Regel, Y40–Y50 auf die D09-Deckungsforderung des Release-Laufs — wer nur den Bau-Stand zitiert,
-    nennt eine zu kleine Zahl). Läufer `mutation-test.py`. Nadeln sind
+    nennt eine zu kleine Zahl)
+  - `mutations_yamaha_2026-09-24-w20.py` (Welle 20 = Audit-Umsetzung 2.13.0, IDs G1–G139, EINE Nadel je
+    D09-Region seit v2.12.0 — erste Entscheidungszeile umgedreht, vier von Hand; 139/139 gefangen, die zwei
+    Überlebenden des ersten Laufs, G85 Push-`device_id` und G130 aufgelöste Hostnamen-Adresse beim Löschen, waren
+    Testlücken und sind geschlossen. Dabei 46 Bestandsnadeln nachverankert, R7/R8 stillgelegt — die Entdoppelung
+    im Controller gibt es nicht mehr). Läufer `mutation-test.py`. Nadeln sind
     exakte Quellzeilen — nach Prettier-Umbrüchen oder Refactorings ZUERST den Nadel-Vorab-Check (jede Nadel
     genau 1×), sonst misst der Lauf nichts. Zwei äquivalente Mutanten (X2, X4 — unerreichbare
     Invarianten-Wächter, im Quelltext begründet); die vier anderen vom 22.08. (M9, X1, Y1, Y13) waren toter
