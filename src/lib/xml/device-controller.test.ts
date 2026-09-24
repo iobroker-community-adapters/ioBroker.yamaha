@@ -226,17 +226,20 @@ describe("XmlDeviceController", () => {
       expect(s.client.calls.some(c => c.method === "getXml" && (c.inner ?? "").includes("Input_Sel_Item"))).toBe(true);
     });
 
-    test("the same identity keeps the XML memory — no re-read", async () => {
+    test("the same identity keeps the XML memory — no re-read of what the model declares", async () => {
       const memory = new ProbeMemory({
         __schema: DISCOVERY_SCHEMA,
         xmlIdentity: "RX-V6A|057CCF73|1.80/3.14",
+        "xmlDescriptor:v2": { programs: [], sleep: [], adaptiveDrc: [] },
         "xmlInputs:main": "<Input_Sel_Item/>",
       });
       const s = setup({ Main_Zone: { power: true, input: "HDMI1" } });
       withMemory(s, memory);
       s.client.config = { model: "RX-V6A", systemId: "057CCF73", version: "1.80/3.14" };
       await s.controller.start();
-      expect(s.client.calls.some(c => c.method === "getXml" && (c.inner ?? "").includes("Input_Sel_Item"))).toBe(false);
+      expect(s.client.calls.some(c => c.method === "getDescriptor")).toBe(false);
+      // The input list carries the user's names for the inputs — asked on every connection (D8).
+      expect(s.client.calls.some(c => c.method === "getXml" && (c.inner ?? "").includes("Input_Sel_Item"))).toBe(true);
     });
 
     test("the declaration is remembered for the other transports", async () => {
@@ -510,6 +513,23 @@ describe("XmlDeviceController", () => {
       { declaredStates?: boolean; common?: { states?: Record<string, string> } } | undefined;
     expect(input?.common?.states).toEqual({ HDMI1: "Apple TV", "NET RADIO": "NET RADIO", PHONO: "PHONO" });
     expect(input?.declaredStates).toBe(true);
+  });
+
+  // An input renamed at the device kept its old label for good — the list was remembered with `once`
+  // (audit 2026-09-24, D8).
+  test("an input renamed at the device shows its new name on the next connect", async () => {
+    const request = "Main_Zone|<Input><Input_Sel_Item>GetParam</Input_Sel_Item></Input>";
+    const list = (title: string): string =>
+      `<YAMAHA_AV rsp="GET" RC="0"><Main_Zone><Input><Input_Sel_Item>` +
+      `<Item_1><Param>HDMI1</Param><Title>${title}</Title></Item_1>` +
+      `</Input_Sel_Item></Input></Main_Zone></YAMAHA_AV>`;
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA, "xmlInputs:main": list("Apple TV") });
+    const s = setup({ Main_Zone: { power: true, input: "HDMI1" } });
+    (s.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
+    s.client.xmlAnswers[request] = list("Beamer");
+    await s.controller.start();
+    const input = s.defs.get("living.input") as { common?: { states?: Record<string, string> } } | undefined;
+    expect(input?.common?.states).toEqual({ HDMI1: "Beamer" });
   });
 
   test("a zone that declares no inputs gets a plain input state, not a declared empty list", async () => {
@@ -803,12 +823,14 @@ describe("XmlDeviceController freshness guard (persisted memory)", () => {
     first.client.xmlAnswers[sceneRequest] = sceneDeclaration([{ num: 1, title: "Movie" }]);
     await first.controller.start();
 
-    // Same model again: the scene declaration comes from the memory, not the wire.
+    // Same model again: the scene titles are the user's, so they are asked again (D8) — and when the
+    // device does not answer this time, the remembered declaration stands in.
     const second = setup({ Main_Zone: { power: true } });
     (second.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
     second.client.config = { model: "RX-V773" };
+    second.client.xmlErrors[sceneRequest] = new Error("XML request timeout");
     await second.controller.start();
-    expect(second.client.calls.some(c => c.inner?.includes("Scene_Sel_Item"))).toBe(false);
+    expect(second.client.calls.some(c => c.inner?.includes("Scene_Sel_Item"))).toBe(true);
     expect(second.objects).toContain("living.scene.recall");
 
     // A different model behind the address: the old declarations are void — re-asked.
@@ -1253,11 +1275,27 @@ describe("the zone commands desc.xml declares: pads, transport keys, zone names 
     // bring the old one back from the probe memory (until 2.10.0 it did).
     expect(s.acks).toContainEqual({ id: "living.multiroom.zone2.zoneName", value: "Küche" });
     expect(memory.remembered("xmlZoneName:zone2")).toBe("Küche");
+    // The next start reads the name again (D8); a device that does not answer this time keeps the
+    // remembered one — never the old "Kitchen".
     const second = setup(statuses);
     (second.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
+    second.client.xmlErrors["Zone_2|<Config>GetParam</Config>"] = new Error("XML request timeout");
     await second.controller.start();
     expect(second.acks).toContainEqual({ id: "living.multiroom.zone2.zoneName", value: "Küche" });
     expect(second.acks).not.toContainEqual({ id: "living.multiroom.zone2.zoneName", value: "Kitchen" });
+  });
+
+  // Renamed at the device (its own menu, the AV Controller app): remembered with `once`, the old name
+  // stood for good, even across restarts (audit 2026-09-24, D8).
+  test("a zone renamed at the device shows its new name on the next connect", async () => {
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA, "xmlZoneName:zone2": "Kitchen" });
+    const s = setup(statuses);
+    (s.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
+    s.client.xmlAnswers["Zone_2|<Config>GetParam</Config>"] =
+      '<YAMAHA_AV rsp="GET" RC="0"><Zone_2><Config><Name><Zone>Terrace</Zone></Name></Config></Zone_2></YAMAHA_AV>';
+    await s.controller.start();
+    expect(s.acks).toContainEqual({ id: "living.multiroom.zone2.zoneName", value: "Terrace" });
+    expect(memory.remembered("xmlZoneName:zone2")).toBe("Terrace");
   });
 
   // The zone-name confirmation hangs off a detached `.then`, so a throw inside it has nobody to

@@ -228,7 +228,8 @@ export class XmlDeviceController implements ConnectionHandle {
     const model = config.model;
     // The zone's own input list (`Input_Sel_Item`, per zone — Main and Zone 2 differ on
     // real hardware): the device says which inputs it accepts, so the input state gets a
-    // dropdown instead of a free string. Constant per model — remembered per device.
+    // dropdown instead of a free string. The labels are the user's names — asked on every connection,
+    // the memory is only the fallback (D8).
     const inputsByZone = new Map<string, string[]>();
     const inputLabels = new Map<string, Record<string, string>>();
     for (const zone of this.zones) {
@@ -236,6 +237,7 @@ export class XmlDeviceController implements ConnectionHandle {
         `xmlInputs:${zone.key}`,
         zone.element,
         "<Input><Input_Sel_Item>GetParam</Input_Sel_Item></Input>",
+        true, // the labels are the user's names for the inputs
       );
       inputsByZone.set(zone.key, parseInputList(body));
       inputLabels.set(zone.key, parseInputLabels(body));
@@ -384,11 +386,25 @@ export class XmlDeviceController implements ConnectionHandle {
     }
   }
 
-  private async probeXml(key: string, element: string, inner: string): Promise<string> {
+  /**
+   * One XML probe, remembered per device.
+   *
+   * @param key the memory key
+   * @param element the element asked
+   * @param inner the request
+   * @param fresh ask again on every connection (a name the user can change — D8), the memory only
+   *   the fallback
+   * @returns the body, or "" when the model has no such node or nothing answered
+   */
+  private async probeXml(key: string, element: string, inner: string, fresh = false): Promise<string> {
     const probe = (): Promise<string> =>
       definiteXmlBody(() => this.deps.client.getXml(element, inner), `${element} probe`);
+    const memory = this.deps.probeMemory;
     try {
-      return this.deps.probeMemory ? await this.deps.probeMemory.once(key, probe) : await probe();
+      if (!memory) {
+        return await probe();
+      }
+      return fresh ? await memory.refresh(key, probe) : await memory.once(key, probe);
     } catch (e) {
       this.deps.log.debug(
         `${this.deviceId}: ${key} probe failed, asking again on the next connect (${errorMessage(e)})`,
@@ -412,6 +428,7 @@ export class XmlDeviceController implements ConnectionHandle {
         `xmlScenes:${zone.key}`,
         zone.element,
         "<Scene><Scene_Sel_Item>GetParam</Scene_Sel_Item></Scene>",
+        true, // the titles are the user's names for the scenes
       );
       const scenes = parseSceneList(body);
       if (scenes.length === 0) {
@@ -1170,7 +1187,10 @@ export class XmlDeviceController implements ConnectionHandle {
       return name ? decodeXmlText(name[1]).trim() : "";
     };
     try {
-      return this.deps.probeMemory ? await this.deps.probeMemory.once(`xmlZoneName:${zone.key}`, probe) : await probe();
+      // Fresh on every connection — the zone name is the user's (D8).
+      return this.deps.probeMemory
+        ? await this.deps.probeMemory.refresh(`xmlZoneName:${zone.key}`, probe)
+        : await probe();
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: ${zone.element} name probe failed (${errorMessage(e)})`);
       return "";

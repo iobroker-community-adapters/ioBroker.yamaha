@@ -101,3 +101,34 @@ describe("ProbeMemory knows the discovery logic it was learned by (DISCOVERY_SCH
     expect(memorySchemaOf({ __schema: "x" })).toBe(0);
   });
 });
+
+// For what the user can change at the device — input, zone and scene names: asked on every connection,
+// the memory only the fallback (audit 2026-09-24, D8).
+describe("ProbeMemory.refresh", () => {
+  test("a fresh answer replaces the remembered one", async () => {
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA, name: "Kitchen" });
+    expect(await memory.refresh("name", () => Promise.resolve("Terrace"))).toBe("Terrace");
+    expect(memory.remembered("name")).toBe("Terrace");
+  });
+
+  test("a device that does not answer this time keeps the remembered value", async () => {
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA, name: "Kitchen" });
+    expect(await memory.refresh("name", () => Promise.reject(new Error("timeout")))).toBe("Kitchen");
+  });
+
+  test("with nothing remembered the failure reaches the caller", async () => {
+    const memory = new ProbeMemory();
+    await expect(memory.refresh("name", () => Promise.reject(new Error("timeout")))).rejects.toThrow("timeout");
+  });
+
+  test('a remembered definite absence ("") is not asked again', async () => {
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA, name: "" });
+    let asked = 0;
+    const probe = (): Promise<string> => {
+      asked++;
+      return Promise.resolve("x");
+    };
+    expect(await memory.refresh("name", probe)).toBe("");
+    expect(asked).toBe(0);
+  });
+});

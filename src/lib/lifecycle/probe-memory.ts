@@ -70,6 +70,32 @@ export class ProbeMemory {
   }
 
   /**
+   * Ask again on every connection and remember the answer — for what a user can change at the
+   * device (input, zone and scene names): remembered with {@link once}, a rename never reached the
+   * tree again (audit 2026-09-24, D8). The memory is only the fallback when the device does not
+   * answer this time; a remembered definite "" (the model has no such node) is not asked again.
+   *
+   * @param key what is being remembered
+   * @param probe the request
+   * @returns the fresh answer, else the remembered one
+   */
+  public async refresh<T>(key: string, probe: () => Promise<T>): Promise<T> {
+    if (this.values.get(key) === "") {
+      return "" as T;
+    }
+    try {
+      const value = await probe();
+      this.set(key, value);
+      return value;
+    } catch (e) {
+      if (this.values.has(key)) {
+        return this.values.get(key) as T;
+      }
+      throw e;
+    }
+  }
+
+  /**
    * The remembered value, or undefined when nothing was stored under that key yet.
    *
    * @param key what was remembered
