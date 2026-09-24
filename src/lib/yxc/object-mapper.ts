@@ -411,6 +411,69 @@ function labelled(
 }
 
 /**
+ * Whether a catalog entry has a copy in this zone: the device-global entries (under `multiroom.`)
+ * exist once, on the main zone — never as a per-zone copy.
+ *
+ * @param entry the catalog entry
+ * @param zoneId the zone (`main`, `zone2`, …)
+ * @returns whether the zone carries the entry at all
+ */
+function belongsToZone(entry: (typeof YXC_AMP_CATALOG)[number], zoneId: string): boolean {
+  return zoneId === "main" || !entry.state.startsWith("multiroom.");
+}
+
+/**
+ * Whether the device's getFeatures declares what the entry needs: the zone function, an input,
+ * or a system function (`always` needs nothing).
+ *
+ * @param entry the catalog entry
+ * @param zone the zone as getFeatures declares it
+ * @param capabilities the parsed YXC capabilities
+ * @returns whether the declaration carries the entry
+ */
+function declares(
+  entry: (typeof YXC_AMP_CATALOG)[number],
+  zone: YxcCapabilities["zones"][number],
+  capabilities: YxcCapabilities,
+): boolean {
+  if (entry.create.kind === "always") {
+    return true;
+  }
+  if (entry.create.kind === "input") {
+    return zone.inputs.length > 0;
+  }
+  if (entry.create.kind === "systemFunc") {
+    return capabilities.systemFuncs?.includes(entry.create.func) ?? false;
+  }
+  return zone.funcs.includes(entry.create.func);
+}
+
+/**
+ * The datapoints of the zones this device declares whose function the declaration LACKS — the party
+ * switch without `party_mode`, a zone's maximum volume without `volume`. getFeatures does not depend
+ * on standby, so an earlier version's copy of such a datapoint is proven absent on the first start
+ * (audit 2026-09-24: the upgrade from 2.12.0 left both behind).
+ *
+ * @param capabilities the parsed YXC capabilities
+ * @returns the device-relative ids (this transport's own spelling)
+ */
+export function yxcDeclaredAbsent(capabilities: YxcCapabilities): string[] {
+  const absent: string[] = [];
+  for (const zoneDef of ZONES) {
+    const zone = capabilities.zones.find(z => z.id === zoneDef.id);
+    if (!zone) {
+      continue;
+    }
+    for (const entry of YXC_AMP_CATALOG) {
+      if (belongsToZone(entry, zoneDef.id) && !declares(entry, zone, capabilities)) {
+        absent.push(`${zoneDef.prefix}${entry.state}`);
+      }
+    }
+  }
+  return absent;
+}
+
+/**
  * Turn YXC capabilities into the unified object tree: main's functions as
  * top-level states, each additional zone as a channel with its own states. An
  * input state is added when the zone offers inputs. Player sources (netusb, cd)
@@ -433,23 +496,9 @@ export function mapYxcToObjects(
     if (!zone) {
       continue;
     }
-    const hasInput = zone.inputs.length > 0;
-    const entries = YXC_AMP_CATALOG.filter(entry => {
-      // Device-global entries (id under multiroom.) exist once — never as a per-zone copy.
-      if (zoneDef.id !== "main" && entry.state.startsWith("multiroom.")) {
-        return false;
-      }
-      if (entry.create.kind === "always") {
-        return true;
-      }
-      if (entry.create.kind === "input") {
-        return hasInput;
-      }
-      if (entry.create.kind === "systemFunc") {
-        return capabilities.systemFuncs?.includes(entry.create.func) ?? false;
-      }
-      return zone.funcs.includes(entry.create.func);
-    });
+    const entries = YXC_AMP_CATALOG.filter(
+      entry => belongsToZone(entry, zoneDef.id) && declares(entry, zone, capabilities),
+    );
     // A zone needs an advertised function or an input to exist — the "always" status
     // fields and the device-wide entries alone do not create a zone.
     if (!entries.some(entry => entry.create.kind !== "always" && entry.create.kind !== "systemFunc")) {

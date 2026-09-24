@@ -10,7 +10,7 @@ import { ReconnectStrategy } from "./lifecycle/reconnect-strategy";
 import { CommandGate } from "./lifecycle/command-gate";
 import type { YncaSubunitCache } from "./ynca/subunit-cache";
 import type { ProbeMemory } from "./lifecycle/probe-memory";
-import type { Transport } from "./catalog/owner-policy";
+import { canonicalIdOf, type Transport } from "./catalog/owner-policy";
 import { readyLine } from "./ready-line";
 import { errorMessage } from "./util";
 import type { ConnectionHandle, ControllerLog } from "./controller";
@@ -63,6 +63,11 @@ export interface AttemptDeps {
   onTransports?(names: string[]): void;
   /** Report the name the device carries for itself (MusicCast), for the device object's label. */
   onDeviceName?(name: string): void;
+  /**
+   * Report the datapoints (device-relative, canonical) the device's own declaration proves absent —
+   * the MusicCast function lists — so a never-filled leftover of an earlier version goes at once.
+   */
+  onDeclaredAbsent?(ids: string[]): void;
   /** IPs of all configured devices, so a MusicCast group can resolve a client device by IP. */
   knownDeviceIps: Set<string>;
   /** Datapoint-group gate for the YNCA sweep — a disabled group's functions are never fetched. */
@@ -323,6 +328,7 @@ export function attemptDevice(
         upsertObject: yxc.interceptUpsert,
         setStateAck: yxc.interceptSetStateAck,
         reportDeviceName: deps.onDeviceName,
+        reportDeclaredAbsent: ids => deps.onDeclaredAbsent?.(ids.map(id => canonicalIdOf("yxc", id))),
         log,
         gate,
       }),

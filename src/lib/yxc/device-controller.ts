@@ -1,7 +1,14 @@
 import { randomBytes } from "node:crypto";
 import { resolveIPv4 } from "../network-interfaces";
 import { parseYxcFeatures, type YxcCapabilities, type YxcTunerFeatures } from "./capability";
-import { mapYxcToObjects, rawVolumeFor, shownVolumeFor, volumeScaleOf, type VolumeScale } from "./object-mapper";
+import {
+  mapYxcToObjects,
+  rawVolumeFor,
+  shownVolumeFor,
+  volumeScaleOf,
+  yxcDeclaredAbsent,
+  type VolumeScale,
+} from "./object-mapper";
 import {
   absoluteDeviceUrl,
   distributionSummary,
@@ -222,6 +229,8 @@ export interface YxcControllerDeps {
   setStateAck(id: string, value: boolean | number | string): void;
   /** Report the name the device carries for itself, for the device object's label. */
   reportDeviceName?(name: string): void;
+  /** Report the datapoints this device's getFeatures proves absent (see {@link yxcDeclaredAbsent}). */
+  reportDeclaredAbsent?(ids: string[]): void;
   /** Adapter log. */
   log: ControllerLog;
   /**
@@ -462,6 +471,7 @@ export class YxcDeviceController implements ConnectionHandle {
     for (const object of objects) {
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
     }
+    this.deps.reportDeclaredAbsent?.(yxcDeclaredAbsent(this.capabilities));
     await this.setupSceneLists(capabilities);
     // The DAB scan counters are the one DAB detail the device reports only after a
     // station scan (status stays not_ready before) — seed the documented start state

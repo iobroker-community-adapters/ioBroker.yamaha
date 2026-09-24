@@ -490,6 +490,7 @@ function internalOf(adapter: Yamaha): {
   foreignObjects: Map<string, Record<string, unknown>>;
   config: Record<string, unknown>;
   subscribed: string[];
+  scheduleDatapointBalance(): void;
   subscribeFails: Error | undefined;
   setStateFail: Error | null;
   extendObjectFail: Error | null;
@@ -3410,6 +3411,82 @@ describe("Yamaha never-filled purge (once per adapter version, after connect)", 
       (second.i.objects.get("Living_room")?.native as { capabilityProfile: string }).capabilityProfile,
     ) as { pendingPurge?: string[] };
     expect(after.pendingPurge ?? []).toEqual([]);
+  });
+
+  // "Two starts decide" held for two BALANCE PASSES: the first recorded the untouched orphans and a
+  // second pass in the same process — another device settling later — deleted them. A receiver in
+  // standby lost datapoints within one start (audit 2026-09-24, measured in the upgrade suite's log).
+  it("a second balance pass in the SAME start does not delete what the first one only recorded", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room", { type: "device", common: {}, native: {} });
+    ctx.i.objects.set("Living_room.sound.direct", { type: "state", common: { read: true }, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    settle(ctx);
+    await flush();
+    flushNative(ctx);
+    await flush();
+    expect(pendingPurgeOf(ctx, "Living_room")).toEqual(["Living_room.sound.direct"]);
+    ctx.i.scheduleDatapointBalance();
+    settle(ctx);
+    await flush();
+    flushNative(ctx);
+    await flush();
+    expect(ctx.i.objects.has("Living_room.sound.direct")).toBe(true);
+    expect(pendingPurgeOf(ctx, "Living_room")).toEqual(["Living_room.sound.direct"]);
+  });
+
+  // A MusicCast declaration (getFeatures) does not depend on standby: what it proves absent is gone
+  // on the FIRST start — the party switch on a speaker without party mode, the maximum volume of a
+  // zone without volume. Two starts left both behind after the update that stopped creating them.
+  it("a never-filled datapoint the device's declaration proves absent goes on the first start, its folder with it", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room", { type: "device", common: {}, native: {} });
+    ctx.i.objects.set("Living_room.multiroom.party", { type: "state", common: { read: true }, native: {} });
+    ctx.i.objects.set("Living_room.multiroom.zone4.advanced", { type: "channel", common: {}, native: {} });
+    ctx.i.objects.set("Living_room.multiroom.zone4.advanced.maxVolume", {
+      type: "state",
+      common: { read: true },
+      native: {},
+    });
+    await ctx.i.onReady();
+    await flush();
+    ctx.calls[0].deps.onDeclaredAbsent(["multiroom.party", "multiroom.zone4.advanced.maxVolume"] as never);
+    settle(ctx);
+    await flush();
+    flushNative(ctx);
+    await flush();
+    expect(ctx.i.objects.has("Living_room.multiroom.party")).toBe(false);
+    expect(ctx.i.objects.has("Living_room.multiroom.zone4.advanced.maxVolume")).toBe(false);
+    expect(ctx.i.objects.has("Living_room.multiroom.zone4.advanced")).toBe(false);
+    expect(pendingPurgeOf(ctx, "Living_room")).toEqual([]);
+  });
+
+  it("a declared-absent datapoint that carries a value, or that another transport built this start, stays", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room", { type: "device", common: {}, native: {} });
+    ctx.i.objects.set("Living_room.multiroom.party", { type: "state", common: { read: true }, native: {} });
+    ctx.i.objects.set("Living_room.advanced.maxVolume", { type: "state", common: { read: true }, native: {} });
+    ctx.i.states.set("Living_room.advanced.maxVolume", { val: 16.5, ack: true, lc: 5 } as never);
+    await ctx.i.onReady();
+    await flush();
+    const deps = ctx.calls[0].deps;
+    // YNCA builds the party switch on this receiver — the MusicCast declaration speaks only for itself.
+    await deps.upsertObject(
+      "Living_room.multiroom.party" as never,
+      {
+        id: "multiroom.party",
+        type: "state",
+        common: { type: "boolean", role: "switch", read: true, write: true, name: "Party" },
+      } as never,
+    );
+    deps.onDeclaredAbsent(["multiroom.party", "advanced.maxVolume"] as never);
+    settle(ctx);
+    await flush();
+    flushNative(ctx);
+    await flush();
+    expect(ctx.i.objects.has("Living_room.multiroom.party")).toBe(true);
+    expect(ctx.i.objects.has("Living_room.advanced.maxVolume")).toBe(true);
   });
 
   it("removes a folder left empty by the tree rework, even when the version purge already ran", async () => {

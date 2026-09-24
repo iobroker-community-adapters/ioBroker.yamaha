@@ -199,7 +199,12 @@ function setup(
   status: unknown,
   linkTargets: Record<string, YxcClientLike> = {},
   pushActive?: () => boolean,
-  extra: { pushLiveness?: PushLiveness; gate?: CommandGate; host?: string } = {},
+  extra: {
+    pushLiveness?: PushLiveness;
+    gate?: CommandGate;
+    host?: string;
+    reportDeclaredAbsent?: (ids: string[]) => void;
+  } = {},
 ): {
   /** Every info line the controller logged. */
   infos: string[];
@@ -311,6 +316,16 @@ function setup(
 }
 
 describe("YxcDeviceController", () => {
+  // The update from 2.12.0 left a speaker's party switch and a zone's maximum volume behind: the
+  // controller now says what its declaration proves absent, so the adapter removes them at once.
+  test("start() reports what getFeatures proves absent — a speaker's party switch among it", async () => {
+    const absent: string[] = [];
+    const s = setup(wx10, ysp, {}, undefined, { reportDeclaredAbsent: ids => void absent.push(...ids) });
+    await s.controller.start();
+    expect(absent).toContain("multiroom.partyEnable");
+    expect(absent.filter(id => s.objects.includes(`living.${id}`))).toEqual([]);
+  });
+
   test("builds the object tree from getFeatures", async () => {
     const s = setup(wx10, ysp);
     expect(await s.controller.start()).toBe(true);

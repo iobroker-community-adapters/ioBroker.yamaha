@@ -285,6 +285,18 @@ export class Yamaha extends utils.Adapter {
   private readonly storedBounds = new Map<string, BoundFields>();
   /** State ids (namespace-relative) some transport upserted in THIS run — live claims. */
   private readonly touchedThisRun = new Set<string>();
+  /**
+   * Ids (namespace-relative) the never-filled purge recorded for confirmation during THIS process.
+   * "Two starts decide" means two PROCESS starts: a later balance pass of the same run (another
+   * device settling) must not confirm what an earlier pass only recorded (audit 2026-09-24).
+   */
+  private readonly recordedThisRun = new Set<string>();
+  /**
+   * Ids (namespace-relative) a transport's own declaration proves absent on the device — the
+   * MusicCast getFeatures function lists, which do not depend on standby. The purge takes a
+   * never-filled, untouched one on the first start instead of waiting for a second.
+   */
+  private readonly declaredAbsent = new Set<string>();
   /** Devices that reported connected at least once in this run (gates the orphan purge). */
   private readonly readyDevices = new Set<string>();
   private createdDatapoints = 0;
@@ -1043,6 +1055,8 @@ export class Yamaha extends utils.Adapter {
     this.forgetUnder(this.storedStates, deviceId);
     this.forgetUnder(this.storedBounds, deviceId);
     this.forgetUnder(this.touchedThisRun, deviceId);
+    this.forgetUnder(this.recordedThisRun, deviceId);
+    this.forgetUnder(this.declaredAbsent, deviceId);
     this.forgetUnder(this.volumeScales, deviceId);
     this.forgetUnder(this.volumeDefs, deviceId);
     this.volumePercent.delete(deviceId);
@@ -1425,12 +1439,16 @@ export class Yamaha extends utils.Adapter {
    * next run deletes those still untouched and still never filled, and forgets the rest. A device
    * is examined once per adapter version (`purgeVersion`) OR whenever it carries a recorded
    * candidate — the confirmation has to reach its second start even without a new version.
+   * "Run" is a PROCESS start: an id recorded during this process waits for the next one, however
+   * many balance passes this one makes. A datapoint a transport's declaration proves absent
+   * ({@link declaredAbsent}) needs no second start — the declaration is no standby answer.
    */
   private async purgeNeverFilled(): Promise<void> {
     const candidates: string[] = [];
     for (const deviceId of this.readyDevices) {
       const profile = this.profiles.get(deviceId);
-      if (profile?.purgeVersion !== this.version || (profile?.pendingPurge.length ?? 0) > 0) {
+      const declared = [...this.declaredAbsent].some(id => id.startsWith(`${deviceId}.`));
+      if (profile?.purgeVersion !== this.version || (profile?.pendingPurge.length ?? 0) > 0 || declared) {
         candidates.push(deviceId);
       }
     }
@@ -1449,7 +1467,9 @@ export class Yamaha extends utils.Adapter {
         .filter(fullId => fullId.startsWith(`${this.namespace}.${deviceId}.`))
         .map(fullId => stripNamespace(fullId, this.namespace));
       const recorded = new Set(profile?.pendingPurge ?? []);
-      const confirmed = seenNow.filter(id => recorded.has(id));
+      const confirmed = seenNow.filter(
+        id => (recorded.has(id) && !this.recordedThisRun.has(id)) || this.declaredAbsent.has(id),
+      );
       for (const id of confirmed) {
         this.forgetWritten(id);
         try {
@@ -1459,12 +1479,20 @@ export class Yamaha extends utils.Adapter {
           // already gone
         }
       }
-      // Whatever is untouched THIS run and was not just deleted waits for the next run.
-      profile?.setPendingPurge(seenNow.filter(id => !confirmed.includes(id)));
+      // Whatever is untouched THIS run and was not just deleted waits for the next process start.
+      const waiting = seenNow.filter(id => !confirmed.includes(id));
+      for (const id of waiting) {
+        if (!recorded.has(id)) {
+          this.recordedThisRun.add(id);
+        }
+      }
+      profile?.setPendingPurge(waiting);
       profile?.markPurged(this.version ?? "");
     }
     if (purged.length > 0) {
-      this.log.debug(`removed ${purged.length} never-filled object(s), confirmed over two starts`);
+      this.log.debug(
+        `removed ${purged.length} never-filled object(s) — confirmed over two starts or declared absent by the device`,
+      );
       this.noteDatapointsRemoved(purged);
     }
   }
@@ -2143,6 +2171,13 @@ export class Yamaha extends utils.Adapter {
         onDeviceName: name => {
           if (alive()) {
             void this.updateDeviceLabel(device.id, name, LABEL_RANK.deviceName);
+          }
+        },
+        onDeclaredAbsent: ids => {
+          if (alive()) {
+            for (const id of ids) {
+              this.declaredAbsent.add(`${device.id}.${id}`);
+            }
           }
         },
         timers: {

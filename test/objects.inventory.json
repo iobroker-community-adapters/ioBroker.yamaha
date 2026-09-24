@@ -13,6 +13,7 @@
       "volumeAsPercent": false,
       "label": "RX-A2A",
       "labelRank": 1,
+      "model": "RX-A2A",
       "identity": {
         "serial": "0B23E7D3",
         "mac": "AC44F241D7D9"
@@ -682,10 +683,23 @@
         "uk": "Назва групи",
         "zh-cn": "群组名称"
       },
+      "desc": {
+        "en": "The name of the MusicCast group. The device keeps it only until it restarts; an empty name restores the default.",
+        "de": "Der Name der MusicCast-Gruppe. Das Gerät behält ihn nur bis zum nächsten Neustart; ein leerer Name stellt den Standard wieder her.",
+        "ru": "Имя группы MusicCast. Устройство хранит его только до перезапуска; пустое имя восстанавливает имя по умолчанию.",
+        "pt": "O nome do grupo MusicCast. O dispositivo só o guarda até reiniciar; um nome vazio repõe o predefinido.",
+        "nl": "De naam van de MusicCast-groep. Het apparaat bewaart hem alleen tot de volgende herstart; een lege naam zet de standaard terug.",
+        "fr": "Le nom du groupe MusicCast. L'appareil ne le garde que jusqu'à son redémarrage ; un nom vide rétablit celui par défaut.",
+        "it": "Il nome del gruppo MusicCast. Il dispositivo lo conserva solo fino al riavvio; un nome vuoto ripristina quello predefinito.",
+        "es": "El nombre del grupo MusicCast. El dispositivo solo lo conserva hasta que se reinicia; un nombre vacío restablece el predeterminado.",
+        "pl": "Nazwa grupy MusicCast. Urządzenie przechowuje ją tylko do ponownego uruchomienia; pusta nazwa przywraca domyślną.",
+        "uk": "Назва групи MusicCast. Пристрій зберігає її лише до перезапуску; порожня назва відновлює стандартну.",
+        "zh-cn": "MusicCast 组的名称。设备仅保留到下次重启；留空则恢复默认名称。"
+      },
       "type": "string",
       "role": "text",
       "read": true,
-      "write": false
+      "write": true
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_11.multiroom.group.name"
@@ -707,17 +721,17 @@
         "zh-cn": "角色（服务器/客户端）"
       },
       "desc": {
-        "en": "Whether this device feeds the group, plays along in it, or is not linked at all.",
-        "de": "Ob dieses Gerät die Gruppe speist, in ihr mitspielt oder gar nicht verbunden ist.",
-        "ru": "Питает ли это устройство группу, играет ли в ней вместе с другими или вовсе не связано.",
-        "pt": "Se este aparelho alimenta o grupo, toca em conjunto nele, ou não está ligado de todo.",
-        "nl": "Of dit apparaat de groep voedt, erin meespeelt, of helemaal niet gekoppeld is.",
-        "fr": "Si cet appareil alimente le groupe, y joue avec les autres, ou n'est pas lié du tout.",
-        "it": "Se questo apparecchio alimenta il gruppo, vi suona insieme agli altri, o non è affatto collegato.",
-        "es": "Si este aparato alimenta el grupo, suena junto a los demás, o no está enlazado en absoluto.",
-        "pl": "Czy to urządzenie zasila grupę, gra w niej razem z innymi, czy nie jest w ogóle połączone.",
-        "uk": "Чи живить цей пристрій групу, чи грає в ній разом з іншими, чи взагалі не пов'язаний.",
-        "zh-cn": "本设备是为该组供源、随组同播，还是根本未加入联动。"
+        "en": "Whether this device feeds the group, plays along in it, or is not linked at all — read from its group and its client list, as the specification asks, not from the device's role word alone.",
+        "de": "Ob dieses Gerät die Gruppe speist, in ihr mitspielt oder gar nicht verbunden ist — gelesen aus seiner Gruppe und seiner Client-Liste, wie die Spezifikation es verlangt, nicht nur aus dem Rollenwort des Geräts.",
+        "ru": "Питает ли это устройство группу, играет ли в ней или вообще не связано — определяется по его группе и списку клиентов, как требует спецификация, а не только по слову роли устройства.",
+        "pt": "Se este dispositivo alimenta o grupo, participa nele ou não está ligado — deduzido do seu grupo e da sua lista de clientes, como pede a especificação, não apenas da palavra de função do dispositivo.",
+        "nl": "Of dit apparaat de groep voedt, erin meespeelt of helemaal niet gekoppeld is — afgeleid uit zijn groep en zijn clientlijst, zoals de specificatie vraagt, niet alleen uit het rolwoord van het apparaat.",
+        "fr": "Si cet appareil alimente le groupe, y participe ou n'est pas lié du tout — déduit de son groupe et de sa liste de clients, comme la spécification le demande, pas du seul mot de rôle de l'appareil.",
+        "it": "Se questo dispositivo alimenta il gruppo, vi partecipa o non è collegato affatto — dedotto dal suo gruppo e dalla sua lista di client, come chiede la specifica, non solo dalla parola di ruolo del dispositivo.",
+        "es": "Si este dispositivo alimenta el grupo, participa en él o no está enlazado — se deduce de su grupo y de su lista de clientes, como pide la especificación, no solo de la palabra de rol del dispositivo.",
+        "pl": "Czy to urządzenie zasila grupę, gra w niej, czy nie jest połączone — ustalane z jego grupy i listy klientów, jak wymaga specyfikacja, a nie tylko ze słowa roli urządzenia.",
+        "uk": "Чи живить цей пристрій групу, грає в ній чи зовсім не з'єднаний — визначається за його групою та списком клієнтів, як вимагає специфікація, а не лише за словом ролі пристрою.",
+        "zh-cn": "此设备是为组供音、在组中播放，还是完全未连接——按规范要求根据其组和客户端列表判断，而不只看设备的角色字段。"
       },
       "type": "string",
       "role": "state",
@@ -750,6 +764,48 @@
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_11.multiroom.group.serverZone"
+  },
+  "yamaha.0.10_10_0_11.multiroom.group.status": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Group status",
+        "de": "Gruppenstatus",
+        "ru": "Состояние группы",
+        "pt": "Estado do grupo",
+        "nl": "Groepsstatus",
+        "fr": "État du groupe",
+        "it": "Stato del gruppo",
+        "es": "Estado del grupo",
+        "pl": "Stan grupy",
+        "uk": "Стан групи",
+        "zh-cn": "组状态"
+      },
+      "desc": {
+        "en": "Whether the group is being built, working or being dissolved, as its server reports it; building a group can take up to three minutes.",
+        "de": "Ob die Gruppe gerade aufgebaut wird, läuft oder aufgelöst wird, so wie ihr Server es meldet; der Aufbau kann bis zu drei Minuten dauern.",
+        "ru": "Создаётся ли группа, работает или распускается — по данным её сервера; создание группы может занять до трёх минут.",
+        "pt": "Se o grupo está a ser criado, a funcionar ou a ser desfeito, tal como o servidor o comunica; criar um grupo pode demorar até três minutos.",
+        "nl": "Of de groep wordt opgebouwd, werkt of wordt opgeheven, zoals de server van de groep het meldt; het opbouwen kan tot drie minuten duren.",
+        "fr": "Si le groupe est en cours de création, actif ou en cours de dissolution, tel que son serveur l'indique ; la création peut prendre jusqu'à trois minutes.",
+        "it": "Se il gruppo è in creazione, attivo o in scioglimento, come lo segnala il suo server; la creazione può durare fino a tre minuti.",
+        "es": "Si el grupo se está creando, está funcionando o se está deshaciendo, según lo informa su servidor; crear un grupo puede tardar hasta tres minutos.",
+        "pl": "Czy grupa jest tworzona, działa czy jest rozwiązywana, zgodnie z tym, co zgłasza jej serwer; tworzenie grupy może potrwać do trzech minut.",
+        "uk": "Чи група створюється, працює чи розпускається — за даними її сервера; створення групи може тривати до трьох хвилин.",
+        "zh-cn": "组是否正在建立、正在运行或正在解散，以组服务器的报告为准；建立组最多可能需要三分钟。"
+      },
+      "type": "string",
+      "role": "state",
+      "read": true,
+      "write": false,
+      "states": {
+        "building": "building",
+        "working": "working",
+        "deleting": "deleting"
+      }
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_11.multiroom.group.status"
   },
   "yamaha.0.10_10_0_11.multiroom.group.streamingEnabled": {
     "type": "state",
@@ -1167,17 +1223,17 @@
         "zh-cn": "专辑封面"
       },
       "desc": {
-        "en": "Where the cover of the current track can be fetched: a full URL, or a path on the receiver's own web server.",
-        "de": "Wo das Cover des laufenden Titels zu holen ist: eine vollständige URL oder ein Pfad auf dem Webserver des Receivers.",
-        "ru": "Откуда взять обложку текущего трека: полный URL либо путь на собственном веб-сервере ресивера.",
-        "pt": "Onde ir buscar a capa da faixa atual: um URL completo ou um caminho no servidor web do próprio recetor.",
-        "nl": "Waar de hoes van het huidige nummer te halen is: een volledige URL of een pad op de webserver van de receiver zelf.",
-        "fr": "Où récupérer la pochette du titre en cours : une URL complète, ou un chemin sur le serveur web de l'ampli.",
-        "it": "Dove recuperare la copertina del brano in riproduzione: un URL completo oppure un percorso sul server web del ricevitore.",
-        "es": "Dónde obtener la carátula de la pista actual: una URL completa o una ruta en el propio servidor web del receptor.",
-        "pl": "Skąd pobrać okładkę bieżącego utworu: pełny adres URL albo ścieżka na serwerze WWW samego amplitunera.",
-        "uk": "Звідки взяти обкладинку поточного треку: повна URL-адреса або шлях на власному вебсервері ресивера.",
-        "zh-cn": "当前曲目封面的取用位置：一个完整 URL，或功放自身 Web 服务器上的路径。"
+        "en": "The web address of the current track's cover.",
+        "de": "Die Webadresse des Covers des laufenden Titels.",
+        "ru": "Веб-адрес обложки текущего трека.",
+        "pt": "O endereço web da capa da faixa atual.",
+        "nl": "Het webadres van de hoes van het huidige nummer.",
+        "fr": "L'adresse web de la pochette du titre en cours.",
+        "it": "L'indirizzo web della copertina del brano in riproduzione.",
+        "es": "La dirección web de la carátula de la pista actual.",
+        "pl": "Adres internetowy okładki bieżącego utworu.",
+        "uk": "Вебадреса обкладинки поточного треку.",
+        "zh-cn": "当前曲目封面的网址。"
       }
     },
     "native": {},
@@ -2150,9 +2206,9 @@
     "type": "state",
     "common": {
       "type": "string",
-      "role": "text",
+      "role": "state",
       "read": true,
-      "write": false,
+      "write": true,
       "name": {
         "en": "Link audio quality",
         "de": "Link-Audioqualität",
@@ -2191,9 +2247,9 @@
     "type": "state",
     "common": {
       "type": "string",
-      "role": "text",
+      "role": "state",
       "read": true,
-      "write": false,
+      "write": true,
       "name": {
         "en": "Link control",
         "de": "Link-Steuerung",
@@ -2235,7 +2291,7 @@
       "type": "string",
       "role": "state",
       "read": true,
-      "write": false,
+      "write": true,
       "name": {
         "en": "Tone control mode",
         "de": "Klangregelung",
@@ -2250,17 +2306,17 @@
         "zh-cn": "音调控制模式"
       },
       "desc": {
-        "en": "Whether bass and treble are set by hand or left to the receiver.",
-        "de": "Ob Bass und Höhen von Hand eingestellt werden oder der Receiver das übernimmt.",
-        "ru": "Задаются ли НЧ и ВЧ вручную или их выбирает ресивер.",
-        "pt": "Se graves e agudos são definidos à mão ou pelo recetor.",
-        "nl": "Of bas en hoog handmatig worden ingesteld of door de receiver.",
-        "fr": "Si les graves et aigus sont réglés à la main ou par l'ampli.",
-        "it": "Se bassi e alti sono impostati a mano o dal ricevitore.",
-        "es": "Si graves y agudos se ajustan a mano o los fija el receptor.",
-        "pl": "Czy tony niskie i wysokie ustawia użytkownik, czy amplituner.",
-        "uk": "Чи задаються НЧ і ВЧ вручну, чи це робить ресивер.",
-        "zh-cn": "低音与高音由手动设定，还是交给功放。"
+        "en": "Whether bass and treble are set by hand or left to the receiver; writing a bass or treble value switches to manual.",
+        "de": "Ob Bass und Höhen von Hand eingestellt oder dem Receiver überlassen werden; wer einen Bass- oder Höhenwert schreibt, schaltet auf manuell.",
+        "ru": "Настраиваются ли низкие и высокие частоты вручную или их выбирает ресивер; запись значения низких или высоких частот переключает в ручной режим.",
+        "pt": "Se os graves e agudos são ajustados à mão ou deixados ao recetor; escrever um valor de graves ou agudos muda para manual.",
+        "nl": "Of bas en hoge tonen met de hand worden ingesteld of aan de receiver worden overgelaten; een bas- of hoge-tonenwaarde schrijven schakelt naar handmatig.",
+        "fr": "Si les graves et les aigus sont réglés à la main ou laissés à l'ampli ; écrire une valeur de graves ou d'aigus passe en manuel.",
+        "it": "Se bassi e alti si regolano a mano o li decide il ricevitore; scrivere un valore di bassi o alti passa a manuale.",
+        "es": "Si los graves y agudos se ajustan a mano o los decide el receptor; al escribir un valor de graves o agudos se pasa a manual.",
+        "pl": "Czy tony niskie i wysokie ustawia się ręcznie, czy decyduje o nich amplituner; zapisanie wartości tonów niskich lub wysokich przełącza na tryb ręczny.",
+        "uk": "Чи налаштовуються низькі й високі частоти вручну, чи їх обирає ресивер; запис значення низьких або високих частот перемикає в ручний режим.",
+        "zh-cn": "低音和高音是手动设置还是交给接收机；写入低音或高音值会切换到手动。"
       },
       "states": {
         "manual": "manual",
@@ -2581,17 +2637,17 @@
         "zh-cn": "专辑封面"
       },
       "desc": {
-        "en": "Where the cover of the current track can be fetched: a full URL, or a path on the receiver's own web server.",
-        "de": "Wo das Cover des laufenden Titels zu holen ist: eine vollständige URL oder ein Pfad auf dem Webserver des Receivers.",
-        "ru": "Откуда взять обложку текущего трека: полный URL либо путь на собственном веб-сервере ресивера.",
-        "pt": "Onde ir buscar a capa da faixa atual: um URL completo ou um caminho no servidor web do próprio recetor.",
-        "nl": "Waar de hoes van het huidige nummer te halen is: een volledige URL of een pad op de webserver van de receiver zelf.",
-        "fr": "Où récupérer la pochette du titre en cours : une URL complète, ou un chemin sur le serveur web de l'ampli.",
-        "it": "Dove recuperare la copertina del brano in riproduzione: un URL completo oppure un percorso sul server web del ricevitore.",
-        "es": "Dónde obtener la carátula de la pista actual: una URL completa o una ruta en el propio servidor web del receptor.",
-        "pl": "Skąd pobrać okładkę bieżącego utworu: pełny adres URL albo ścieżka na serwerze WWW samego amplitunera.",
-        "uk": "Звідки взяти обкладинку поточного треку: повна URL-адреса або шлях на власному вебсервері ресивера.",
-        "zh-cn": "当前曲目封面的取用位置：一个完整 URL，或功放自身 Web 服务器上的路径。"
+        "en": "The web address of the current track's cover.",
+        "de": "Die Webadresse des Covers des laufenden Titels.",
+        "ru": "Веб-адрес обложки текущего трека.",
+        "pt": "O endereço web da capa da faixa atual.",
+        "nl": "Het webadres van de hoes van het huidige nummer.",
+        "fr": "L'adresse web de la pochette du titre en cours.",
+        "it": "L'indirizzo web della copertina del brano in riproduzione.",
+        "es": "La dirección web de la carátula de la pista actual.",
+        "pl": "Adres internetowy okładki bieżącego utworu.",
+        "uk": "Вебадреса обкладинки поточного треку.",
+        "zh-cn": "当前曲目封面的网址。"
       }
     },
     "native": {},
@@ -3250,6 +3306,16 @@
       "role": "level",
       "read": true,
       "write": true,
+      "min": 0,
+      "max": 120,
+      "step": 30,
+      "states": {
+        "0": "Off",
+        "30": "30 min",
+        "60": "60 min",
+        "90": "90 min",
+        "120": "120 min"
+      },
       "name": {
         "en": "Sleep timer",
         "de": "Einschlaf-Zeit",
@@ -3304,6 +3370,7 @@
     "type": "state",
     "common": {
       "type": "number",
+      "unit": "",
       "role": "level",
       "read": true,
       "write": true,
@@ -3383,7 +3450,7 @@
       "type": "string",
       "role": "state",
       "read": true,
-      "write": false,
+      "write": true,
       "name": {
         "en": "Tone control mode",
         "de": "Klangregelung",
@@ -3398,17 +3465,17 @@
         "zh-cn": "音调控制模式"
       },
       "desc": {
-        "en": "Whether bass and treble are set by hand or left to the receiver.",
-        "de": "Ob Bass und Höhen von Hand eingestellt werden oder der Receiver das übernimmt.",
-        "ru": "Задаются ли НЧ и ВЧ вручную или их выбирает ресивер.",
-        "pt": "Se graves e agudos são definidos à mão ou pelo recetor.",
-        "nl": "Of bas en hoog handmatig worden ingesteld of door de receiver.",
-        "fr": "Si les graves et aigus sont réglés à la main ou par l'ampli.",
-        "it": "Se bassi e alti sono impostati a mano o dal ricevitore.",
-        "es": "Si graves y agudos se ajustan a mano o los fija el receptor.",
-        "pl": "Czy tony niskie i wysokie ustawia użytkownik, czy amplituner.",
-        "uk": "Чи задаються НЧ і ВЧ вручну, чи це робить ресивер.",
-        "zh-cn": "低音与高音由手动设定，还是交给功放。"
+        "en": "Whether bass and treble are set by hand or left to the receiver; writing a bass or treble value switches to manual.",
+        "de": "Ob Bass und Höhen von Hand eingestellt oder dem Receiver überlassen werden; wer einen Bass- oder Höhenwert schreibt, schaltet auf manuell.",
+        "ru": "Настраиваются ли низкие и высокие частоты вручную или их выбирает ресивер; запись значения низких или высоких частот переключает в ручной режим.",
+        "pt": "Se os graves e agudos são ajustados à mão ou deixados ao recetor; escrever um valor de graves ou agudos muda para manual.",
+        "nl": "Of bas en hoge tonen met de hand worden ingesteld of aan de receiver worden overgelaten; een bas- of hoge-tonenwaarde schrijven schakelt naar handmatig.",
+        "fr": "Si les graves et les aigus sont réglés à la main ou laissés à l'ampli ; écrire une valeur de graves ou d'aigus passe en manuel.",
+        "it": "Se bassi e alti si regolano a mano o li decide il ricevitore; scrivere un valore di bassi o alti passa a manuale.",
+        "es": "Si los graves y agudos se ajustan a mano o los decide el receptor; al escribir un valor de graves o agudos se pasa a manual.",
+        "pl": "Czy tony niskie i wysokie ustawia się ręcznie, czy decyduje o nich amplituner; zapisanie wartości tonów niskich lub wysokich przełącza na tryb ręczny.",
+        "uk": "Чи налаштовуються низькі й високі частоти вручну, чи їх обирає ресивер; запис значення низьких або високих частот перемикає в ручний режим.",
+        "zh-cn": "低音和高音是手动设置还是交给接收机；写入低音或高音值会切换到手动。"
       },
       "states": {
         "manual": "manual",
@@ -3423,6 +3490,7 @@
     "type": "state",
     "common": {
       "type": "number",
+      "unit": "",
       "role": "level",
       "read": true,
       "write": true,
@@ -3519,76 +3587,6 @@
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_11.multiroom.zone4"
-  },
-  "yamaha.0.10_10_0_11.multiroom.zone4.advanced": {
-    "type": "channel",
-    "common": {
-      "name": {
-        "en": "Advanced",
-        "de": "Erweitert",
-        "ru": "Дополнительно",
-        "pt": "Avançado",
-        "nl": "Geavanceerd",
-        "fr": "Avancé",
-        "it": "Avanzate",
-        "es": "Avanzado",
-        "pl": "Zaawansowane",
-        "uk": "Додатково",
-        "zh-cn": "高级"
-      },
-      "desc": {
-        "en": "Settings you would otherwise reach through the receiver's own setup menu.",
-        "de": "Einstellungen, die sonst nur über das Einrichtungsmenü des Receivers erreichbar sind.",
-        "ru": "Настройки, доступные иначе только через меню настройки ресивера.",
-        "pt": "Definições que de outra forma só se alcançam pelo menu de configuração do recetor.",
-        "nl": "Instellingen die je anders alleen via het instelmenu van de receiver bereikt.",
-        "fr": "Réglages accessibles autrement uniquement par le menu de configuration de l'ampli.",
-        "it": "Impostazioni altrimenti raggiungibili solo dal menu di configurazione del ricevitore.",
-        "es": "Ajustes a los que de otro modo solo se llega por el menú de configuración del receptor.",
-        "pl": "Ustawienia dostępne inaczej tylko przez menu konfiguracji amplitunera.",
-        "uk": "Налаштування, доступні інакше лише через меню налаштування ресивера.",
-        "zh-cn": "通常只能通过功放自身设置菜单访问的选项。"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.10_10_0_11.multiroom.zone4.advanced"
-  },
-  "yamaha.0.10_10_0_11.multiroom.zone4.advanced.maxVolume": {
-    "type": "state",
-    "common": {
-      "type": "number",
-      "role": "value",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Maximum volume",
-        "de": "Maximale Lautstärke",
-        "ru": "Максимальная громкость",
-        "pt": "Volume máximo",
-        "nl": "Maximaal volume",
-        "fr": "Volume maximal",
-        "it": "Volume massimo",
-        "es": "Volumen máximo",
-        "pl": "Głośność maksymalna",
-        "uk": "Максимальна гучність",
-        "zh-cn": "最大音量"
-      },
-      "desc": {
-        "en": "Upper limit the zone's volume cannot be raised beyond.",
-        "de": "Obergrenze, über die die Lautstärke der Zone nicht steigen kann.",
-        "ru": "Верхний предел, выше которого громкость зоны не поднимется.",
-        "pt": "Limite superior que o volume da zona não pode ultrapassar.",
-        "nl": "Bovengrens waarboven het volume van de zone niet kan komen.",
-        "fr": "Limite haute que le volume de la zone ne peut dépasser.",
-        "it": "Limite superiore oltre il quale il volume della zona non sale.",
-        "es": "Límite superior que el volumen de la zona no puede superar.",
-        "pl": "Górny limit, powyżej którego głośność strefy nie wzrośnie.",
-        "uk": "Верхня межа, вище якої гучність зони не підніметься.",
-        "zh-cn": "该分区音量不可超过的上限。"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.10_10_0_11.multiroom.zone4.advanced.maxVolume"
   },
   "yamaha.0.10_10_0_11.multiroom.zone4.input": {
     "type": "state",
@@ -3689,17 +3687,17 @@
         "zh-cn": "专辑封面"
       },
       "desc": {
-        "en": "Where the cover of the current track can be fetched: a full URL, or a path on the receiver's own web server.",
-        "de": "Wo das Cover des laufenden Titels zu holen ist: eine vollständige URL oder ein Pfad auf dem Webserver des Receivers.",
-        "ru": "Откуда взять обложку текущего трека: полный URL либо путь на собственном веб-сервере ресивера.",
-        "pt": "Onde ir buscar a capa da faixa atual: um URL completo ou um caminho no servidor web do próprio recetor.",
-        "nl": "Waar de hoes van het huidige nummer te halen is: een volledige URL of een pad op de webserver van de receiver zelf.",
-        "fr": "Où récupérer la pochette du titre en cours : une URL complète, ou un chemin sur le serveur web de l'ampli.",
-        "it": "Dove recuperare la copertina del brano in riproduzione: un URL completo oppure un percorso sul server web del ricevitore.",
-        "es": "Dónde obtener la carátula de la pista actual: una URL completa o una ruta en el propio servidor web del receptor.",
-        "pl": "Skąd pobrać okładkę bieżącego utworu: pełny adres URL albo ścieżka na serwerze WWW samego amplitunera.",
-        "uk": "Звідки взяти обкладинку поточного треку: повна URL-адреса або шлях на власному вебсервері ресивера.",
-        "zh-cn": "当前曲目封面的取用位置：一个完整 URL，或功放自身 Web 服务器上的路径。"
+        "en": "The web address of the current track's cover.",
+        "de": "Die Webadresse des Covers des laufenden Titels.",
+        "ru": "Веб-адрес обложки текущего трека.",
+        "pt": "O endereço web da capa da faixa atual.",
+        "nl": "Het webadres van de hoes van het huidige nummer.",
+        "fr": "L'adresse web de la pochette du titre en cours.",
+        "it": "L'indirizzo web della copertina del brano in riproduzione.",
+        "es": "La dirección web de la carátula de la pista actual.",
+        "pl": "Adres internetowy okładki bieżącego utworu.",
+        "uk": "Вебадреса обкладинки поточного треку.",
+        "zh-cn": "当前曲目封面的网址。"
       }
     },
     "native": {},
@@ -4358,6 +4356,16 @@
       "role": "level",
       "read": true,
       "write": true,
+      "min": 0,
+      "max": 120,
+      "step": 30,
+      "states": {
+        "0": "Off",
+        "30": "30 min",
+        "60": "60 min",
+        "90": "90 min",
+        "120": "120 min"
+      },
       "name": {
         "en": "Sleep timer",
         "de": "Einschlaf-Zeit",
@@ -4590,17 +4598,17 @@
         "zh-cn": "专辑封面"
       },
       "desc": {
-        "en": "Where the cover of the current track can be fetched: a full URL, or a path on the receiver's own web server.",
-        "de": "Wo das Cover des laufenden Titels zu holen ist: eine vollständige URL oder ein Pfad auf dem Webserver des Receivers.",
-        "ru": "Откуда взять обложку текущего трека: полный URL либо путь на собственном веб-сервере ресивера.",
-        "pt": "Onde ir buscar a capa da faixa atual: um URL completo ou um caminho no servidor web do próprio recetor.",
-        "nl": "Waar de hoes van het huidige nummer te halen is: een volledige URL of een pad op de webserver van de receiver zelf.",
-        "fr": "Où récupérer la pochette du titre en cours : une URL complète, ou un chemin sur le serveur web de l'ampli.",
-        "it": "Dove recuperare la copertina del brano in riproduzione: un URL completo oppure un percorso sul server web del ricevitore.",
-        "es": "Dónde obtener la carátula de la pista actual: una URL completa o una ruta en el propio servidor web del receptor.",
-        "pl": "Skąd pobrać okładkę bieżącego utworu: pełny adres URL albo ścieżka na serwerze WWW samego amplitunera.",
-        "uk": "Звідки взяти обкладинку поточного треку: повна URL-адреса або шлях на власному вебсервері ресивера.",
-        "zh-cn": "当前曲目封面的取用位置：一个完整 URL，或功放自身 Web 服务器上的路径。"
+        "en": "The web address of the current track's cover.",
+        "de": "Die Webadresse des Covers des laufenden Titels.",
+        "ru": "Веб-адрес обложки текущего трека.",
+        "pt": "O endereço web da capa da faixa atual.",
+        "nl": "Het webadres van de hoes van het huidige nummer.",
+        "fr": "L'adresse web de la pochette du titre en cours.",
+        "it": "L'indirizzo web della copertina del brano in riproduzione.",
+        "es": "La dirección web de la carátula de la pista actual.",
+        "pl": "Adres internetowy okładki bieżącego utworu.",
+        "uk": "Вебадреса обкладинки поточного треку.",
+        "zh-cn": "当前曲目封面的网址。"
       }
     },
     "native": {},
@@ -4802,17 +4810,17 @@
         "zh-cn": "菜单层级"
       },
       "desc": {
-        "en": "How deep in the menu you currently are; 0 is the top.",
-        "de": "Wie tief Sie gerade im Menü stehen; 0 ist die oberste Ebene.",
-        "ru": "Насколько глубоко вы сейчас в меню; 0 — верхний уровень.",
-        "pt": "A que profundidade está no menu; 0 é o topo.",
-        "nl": "Hoe diep u nu in het menu zit; 0 is bovenaan.",
-        "fr": "À quelle profondeur du menu vous êtes ; 0 est le sommet.",
-        "it": "Quanto in profondità siete nel menu; 0 è il livello più alto.",
-        "es": "A qué profundidad está en el menú; 0 es el nivel superior.",
-        "pl": "Jak głęboko jesteś w menu; 0 to najwyższy poziom.",
-        "uk": "Наскільки глибоко ви в меню; 0 — верхній рівень.",
-        "zh-cn": "当前处于菜单的第几层；0 为最上层。"
+        "en": "How deep in the menu you currently are: 1 is the top, 0 means no menu is open.",
+        "de": "Wie tief du gerade im Menü stehst: 1 ist die oberste Ebene, 0 heißt, kein Menü ist offen.",
+        "ru": "Насколько глубоко вы сейчас в меню: 1 — верхний уровень, 0 — меню не открыто.",
+        "pt": "A que profundidade está no menu: 1 é o topo, 0 significa que nenhum menu está aberto.",
+        "nl": "Hoe diep u nu in het menu zit: 1 is bovenaan, 0 betekent dat er geen menu open is.",
+        "fr": "À quelle profondeur du menu vous êtes : 1 est le sommet, 0 signifie qu'aucun menu n'est ouvert.",
+        "it": "Quanto in profondità siete nel menu: 1 è il livello più alto, 0 significa che nessun menu è aperto.",
+        "es": "A qué profundidad está en el menú: 1 es el nivel superior, 0 significa que no hay ningún menú abierto.",
+        "pl": "Jak głęboko jesteś w menu: 1 to najwyższy poziom, 0 oznacza, że żadne menu nie jest otwarte.",
+        "uk": "Наскільки глибоко ви в меню: 1 — верхній рівень, 0 — меню не відкрите.",
+        "zh-cn": "当前处于菜单的第几层：1 为最上层，0 表示没有打开的菜单。"
       },
       "type": "number",
       "role": "value",
@@ -5266,6 +5274,46 @@
     "native": {},
     "_id": "yamaha.0.10_10_0_11.player.browse.path"
   },
+  "yamaha.0.10_10_0_11.player.browse.playLine": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Play line (whole folder)",
+        "de": "Zeile abspielen (ganzer Ordner)",
+        "ru": "Воспроизвести строку (всю папку)",
+        "pt": "Reproduzir linha (pasta inteira)",
+        "nl": "Regel afspelen (hele map)",
+        "fr": "Lire la ligne (dossier entier)",
+        "it": "Riproduci riga (cartella intera)",
+        "es": "Reproducir línea (carpeta completa)",
+        "pl": "Odtwórz wiersz (cały folder)",
+        "uk": "Відтворити рядок (усю теку)",
+        "zh-cn": "播放行（整个文件夹）"
+      },
+      "desc": {
+        "en": "Plays the folder on this line (an album, a playlist) as a whole instead of opening it.",
+        "de": "Spielt den Ordner auf dieser Zeile (ein Album, eine Playlist) als Ganzes ab, statt ihn zu öffnen.",
+        "ru": "Воспроизводит папку в этой строке (альбом, плейлист) целиком, вместо того чтобы открыть её.",
+        "pt": "Reproduz por inteiro a pasta desta linha (um álbum, uma playlist) em vez de a abrir.",
+        "nl": "Speelt de map op deze regel (een album, een afspeellijst) als geheel af in plaats van hem te openen.",
+        "fr": "Lit en entier le dossier de cette ligne (un album, une playlist) au lieu de l'ouvrir.",
+        "it": "Riproduce per intero la cartella di questa riga (un album, una playlist) invece di aprirla.",
+        "es": "Reproduce completa la carpeta de esta línea (un álbum, una lista) en lugar de abrirla.",
+        "pl": "Odtwarza w całości folder z tego wiersza (album, playlistę) zamiast go otwierać.",
+        "uk": "Відтворює теку в цьому рядку (альбом, плейлист) повністю, замість того щоб відкрити її.",
+        "zh-cn": "将此行的文件夹（专辑、播放列表）整体播放，而不是打开它。"
+      },
+      "type": "number",
+      "role": "level",
+      "read": true,
+      "write": true,
+      "min": 1,
+      "max": 8,
+      "step": 1
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_11.player.browse.playLine"
+  },
   "yamaha.0.10_10_0_11.player.browse.rows": {
     "type": "state",
     "common": {
@@ -5621,6 +5669,58 @@
     "native": {},
     "_id": "yamaha.0.10_10_0_11.player.netPlayer"
   },
+  "yamaha.0.10_10_0_11.player.netPlayer.playError": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Playback error",
+        "de": "Wiedergabefehler",
+        "ru": "Ошибка воспроизведения",
+        "pt": "Erro de reprodução",
+        "nl": "Afspeelfout",
+        "fr": "Erreur de lecture",
+        "it": "Errore di riproduzione",
+        "es": "Error de reproducción",
+        "pl": "Błąd odtwarzania",
+        "uk": "Помилка відтворення",
+        "zh-cn": "播放错误"
+      },
+      "desc": {
+        "en": "The error the network player reports for the current playback: 0 means none, otherwise the reason (for example an access error or playback unavailable).",
+        "de": "Der Fehler, den der Netzwerk-Player zur laufenden Wiedergabe meldet: 0 heißt keiner, sonst der Grund (zum Beispiel ein Zugriffsfehler oder Wiedergabe nicht verfügbar).",
+        "ru": "Ошибка, которую сетевой плеер сообщает о текущем воспроизведении: 0 означает отсутствие ошибки, иначе причину (например, ошибка доступа или воспроизведение недоступно).",
+        "pt": "O erro que o leitor de rede comunica sobre a reprodução atual: 0 significa nenhum; caso contrário, o motivo (por exemplo, um erro de acesso ou reprodução indisponível).",
+        "nl": "De fout die de netwerkspeler meldt voor het huidige afspelen: 0 betekent geen, anders de reden (bijvoorbeeld een toegangsfout of afspelen niet beschikbaar).",
+        "fr": "L'erreur que le lecteur réseau signale pour la lecture en cours : 0 signifie aucune, sinon la raison (par exemple une erreur d'accès ou une lecture indisponible).",
+        "it": "L'errore che il lettore di rete segnala per la riproduzione in corso: 0 significa nessuno, altrimenti il motivo (ad esempio un errore di accesso o riproduzione non disponibile).",
+        "es": "El error que el reproductor de red informa sobre la reproducción actual: 0 significa ninguno; si no, el motivo (por ejemplo, un error de acceso o reproducción no disponible).",
+        "pl": "Błąd, który odtwarzacz sieciowy zgłasza dla bieżącego odtwarzania: 0 oznacza brak, w przeciwnym razie przyczynę (np. błąd dostępu lub niedostępne odtwarzanie).",
+        "uk": "Помилка, яку мережевий плеєр повідомляє про поточне відтворення: 0 означає відсутність помилки, інакше причину (наприклад, помилка доступу або відтворення недоступне).",
+        "zh-cn": "网络播放器针对当前播放报告的错误：0 表示无错误，否则为原因（例如访问错误或无法播放）。"
+      },
+      "type": "number",
+      "role": "value",
+      "read": true,
+      "write": false,
+      "states": {
+        "0": "No Error",
+        "1": "Access Error",
+        "2": "Playback Unavailable",
+        "3": "Skip Limit Reached",
+        "4": "Invalid Session",
+        "5": "High-Resolution File Not Playable at MusicCast Leaf",
+        "6": "User Uncredentialed",
+        "7": "Track Restricted by Right Holders",
+        "8": "Sample Restricted by Right Holders",
+        "9": "Genre Restricted by Streaming Credentials",
+        "10": "Application Restricted by Streaming Credentials",
+        "11": "Intent Restricted by Streaming Credentials",
+        "100": "Multiple Errors"
+      }
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_11.player.netPlayer.playError"
+  },
   "yamaha.0.10_10_0_11.player.netPlayer.playlists": {
     "type": "state",
     "common": {
@@ -5658,6 +5758,43 @@
     "native": {},
     "_id": "yamaha.0.10_10_0_11.player.netPlayer.playlists"
   },
+  "yamaha.0.10_10_0_11.player.netPlayer.playMessage": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Playback message",
+        "de": "Wiedergabemeldung",
+        "ru": "Сообщение о воспроизведении",
+        "pt": "Mensagem de reprodução",
+        "nl": "Afspeelmelding",
+        "fr": "Message de lecture",
+        "it": "Messaggio di riproduzione",
+        "es": "Mensaje de reproducción",
+        "pl": "Komunikat odtwarzania",
+        "uk": "Повідомлення про відтворення",
+        "zh-cn": "播放消息"
+      },
+      "desc": {
+        "en": "The message the network player shows about the current playback, as the device sends it.",
+        "de": "Die Meldung, die der Netzwerk-Player zur laufenden Wiedergabe zeigt, so wie das Gerät sie schickt.",
+        "ru": "Сообщение сетевого плеера о текущем воспроизведении в том виде, в каком его отправляет устройство.",
+        "pt": "A mensagem que o leitor de rede mostra sobre a reprodução atual, tal como o dispositivo a envia.",
+        "nl": "De melding die de netwerkspeler toont over het huidige afspelen, zoals het apparaat die stuurt.",
+        "fr": "Le message que le lecteur réseau affiche pour la lecture en cours, tel que l'appareil l'envoie.",
+        "it": "Il messaggio che il lettore di rete mostra sulla riproduzione in corso, così come lo invia il dispositivo.",
+        "es": "El mensaje que el reproductor de red muestra sobre la reproducción actual, tal como lo envía el dispositivo.",
+        "pl": "Komunikat, który odtwarzacz sieciowy wyświetla o bieżącym odtwarzaniu, w postaci wysłanej przez urządzenie.",
+        "uk": "Повідомлення мережевого плеєра про поточне відтворення в тому вигляді, в якому його надсилає пристрій.",
+        "zh-cn": "网络播放器针对当前播放显示的消息，与设备发送的内容一致。"
+      },
+      "type": "string",
+      "role": "text",
+      "read": true,
+      "write": false
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_11.player.netPlayer.playMessage"
+  },
   "yamaha.0.10_10_0_11.player.netPlayer.preset": {
     "type": "state",
     "common": {
@@ -5691,7 +5828,8 @@
       "role": "level",
       "read": true,
       "write": true,
-      "min": 1
+      "min": 1,
+      "max": 40
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_11.player.netPlayer.preset"
@@ -5803,7 +5941,8 @@
       "role": "level",
       "read": true,
       "write": true,
-      "min": 1
+      "min": 1,
+      "max": 40
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_11.player.netPlayer.recallRecent"
@@ -7209,9 +7348,9 @@
     "type": "state",
     "common": {
       "type": "number",
-      "role": "value",
+      "role": "level",
       "read": true,
-      "write": false,
+      "write": true,
       "name": {
         "en": "Dialogue level",
         "de": "Dialogpegel",
@@ -7360,9 +7499,9 @@
     "type": "state",
     "common": {
       "type": "string",
-      "role": "text",
+      "role": "state",
       "read": true,
-      "write": false,
+      "write": true,
       "name": {
         "en": "Link audio delay",
         "de": "Link-Audioverzögerung",
@@ -7401,9 +7540,9 @@
     "type": "state",
     "common": {
       "type": "string",
-      "role": "text",
+      "role": "state",
       "read": true,
-      "write": false,
+      "write": true,
       "name": {
         "en": "Link audio quality",
         "de": "Link-Audioqualität",
@@ -7442,9 +7581,9 @@
     "type": "state",
     "common": {
       "type": "string",
-      "role": "text",
+      "role": "state",
       "read": true,
-      "write": false,
+      "write": true,
       "name": {
         "en": "Link control",
         "de": "Link-Steuerung",
@@ -7746,7 +7885,7 @@
       "type": "string",
       "role": "state",
       "read": true,
-      "write": false,
+      "write": true,
       "name": {
         "en": "Tone control mode",
         "de": "Klangregelung",
@@ -7761,17 +7900,17 @@
         "zh-cn": "音调控制模式"
       },
       "desc": {
-        "en": "Whether bass and treble are set by hand or left to the receiver.",
-        "de": "Ob Bass und Höhen von Hand eingestellt werden oder der Receiver das übernimmt.",
-        "ru": "Задаются ли НЧ и ВЧ вручную или их выбирает ресивер.",
-        "pt": "Se graves e agudos são definidos à mão ou pelo recetor.",
-        "nl": "Of bas en hoog handmatig worden ingesteld of door de receiver.",
-        "fr": "Si les graves et aigus sont réglés à la main ou par l'ampli.",
-        "it": "Se bassi e alti sono impostati a mano o dal ricevitore.",
-        "es": "Si graves y agudos se ajustan a mano o los fija el receptor.",
-        "pl": "Czy tony niskie i wysokie ustawia użytkownik, czy amplituner.",
-        "uk": "Чи задаються НЧ і ВЧ вручну, чи це робить ресивер.",
-        "zh-cn": "低音与高音由手动设定，还是交给功放。"
+        "en": "Whether bass and treble are set by hand or left to the receiver; writing a bass or treble value switches to manual.",
+        "de": "Ob Bass und Höhen von Hand eingestellt oder dem Receiver überlassen werden; wer einen Bass- oder Höhenwert schreibt, schaltet auf manuell.",
+        "ru": "Настраиваются ли низкие и высокие частоты вручную или их выбирает ресивер; запись значения низких или высоких частот переключает в ручной режим.",
+        "pt": "Se os graves e agudos são ajustados à mão ou deixados ao recetor; escrever um valor de graves ou agudos muda para manual.",
+        "nl": "Of bas en hoge tonen met de hand worden ingesteld of aan de receiver worden overgelaten; een bas- of hoge-tonenwaarde schrijven schakelt naar handmatig.",
+        "fr": "Si les graves et les aigus sont réglés à la main ou laissés à l'ampli ; écrire une valeur de graves ou d'aigus passe en manuel.",
+        "it": "Se bassi e alti si regolano a mano o li decide il ricevitore; scrivere un valore di bassi o alti passa a manuale.",
+        "es": "Si los graves y agudos se ajustan a mano o los decide el receptor; al escribir un valor de graves o agudos se pasa a manual.",
+        "pl": "Czy tony niskie i wysokie ustawia się ręcznie, czy decyduje o nich amplituner; zapisanie wartości tonów niskich lub wysokich przełącza na tryb ręczny.",
+        "uk": "Чи налаштовуються низькі й високі частоти вручну, чи їх обирає ресивер; запис значення низьких або високих частот перемикає в ручний режим.",
+        "zh-cn": "低音和高音是手动设置还是交给接收机；写入低音或高音值会切换到手动。"
       },
       "states": {
         "manual": "manual",
@@ -8362,6 +8501,30 @@
     "native": {},
     "_id": "yamaha.0.10_10_0_11.tuner.dab.scanProgress"
   },
+  "yamaha.0.10_10_0_11.tuner.dab.serviceDown": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Previous DAB station",
+        "de": "Vorheriger DAB-Sender",
+        "ru": "Предыдущая станция DAB",
+        "pt": "Estação DAB anterior",
+        "nl": "Vorige DAB-zender",
+        "fr": "Station DAB précédente",
+        "it": "Stazione DAB precedente",
+        "es": "Emisora DAB anterior",
+        "pl": "Poprzednia stacja DAB",
+        "uk": "Попередня станція DAB",
+        "zh-cn": "上一个 DAB 电台"
+      },
+      "type": "boolean",
+      "role": "button",
+      "read": false,
+      "write": true
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_11.tuner.dab.serviceDown"
+  },
   "yamaha.0.10_10_0_11.tuner.dab.serviceLabel": {
     "type": "state",
     "common": {
@@ -8398,6 +8561,30 @@
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_11.tuner.dab.serviceLabel"
+  },
+  "yamaha.0.10_10_0_11.tuner.dab.serviceUp": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Next DAB station",
+        "de": "Nächster DAB-Sender",
+        "ru": "Следующая станция DAB",
+        "pt": "Estação DAB seguinte",
+        "nl": "Volgende DAB-zender",
+        "fr": "Station DAB suivante",
+        "it": "Stazione DAB successiva",
+        "es": "Siguiente emisora DAB",
+        "pl": "Następna stacja DAB",
+        "uk": "Наступна станція DAB",
+        "zh-cn": "下一个 DAB 电台"
+      },
+      "type": "boolean",
+      "role": "button",
+      "read": false,
+      "write": true
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_11.tuner.dab.serviceUp"
   },
   "yamaha.0.10_10_0_11.tuner.dab.status": {
     "type": "state",
@@ -8935,7 +9122,8 @@
       "source": "manual",
       "volumeAsPercent": false,
       "label": "RX-V473",
-      "labelRank": 1
+      "labelRank": 1,
+      "model": "RX-V473"
     },
     "_id": "yamaha.0.10_10_0_12"
   },
@@ -10152,17 +10340,17 @@
         "zh-cn": "菜单层级"
       },
       "desc": {
-        "en": "How deep in the menu you currently are; 0 is the top.",
-        "de": "Wie tief Sie gerade im Menü stehen; 0 ist die oberste Ebene.",
-        "ru": "Насколько глубоко вы сейчас в меню; 0 — верхний уровень.",
-        "pt": "A que profundidade está no menu; 0 é o topo.",
-        "nl": "Hoe diep u nu in het menu zit; 0 is bovenaan.",
-        "fr": "À quelle profondeur du menu vous êtes ; 0 est le sommet.",
-        "it": "Quanto in profondità siete nel menu; 0 è il livello più alto.",
-        "es": "A qué profundidad está en el menú; 0 es el nivel superior.",
-        "pl": "Jak głęboko jesteś w menu; 0 to najwyższy poziom.",
-        "uk": "Наскільки глибоко ви в меню; 0 — верхній рівень.",
-        "zh-cn": "当前处于菜单的第几层；0 为最上层。"
+        "en": "How deep in the menu you currently are: 1 is the top, 0 means no menu is open.",
+        "de": "Wie tief du gerade im Menü stehst: 1 ist die oberste Ebene, 0 heißt, kein Menü ist offen.",
+        "ru": "Насколько глубоко вы сейчас в меню: 1 — верхний уровень, 0 — меню не открыто.",
+        "pt": "A que profundidade está no menu: 1 é o topo, 0 significa que nenhum menu está aberto.",
+        "nl": "Hoe diep u nu in het menu zit: 1 is bovenaan, 0 betekent dat er geen menu open is.",
+        "fr": "À quelle profondeur du menu vous êtes : 1 est le sommet, 0 signifie qu'aucun menu n'est ouvert.",
+        "it": "Quanto in profondità siete nel menu: 1 è il livello più alto, 0 significa che nessun menu è aperto.",
+        "es": "A qué profundidad está en el menú: 1 es el nivel superior, 0 significa que no hay ningún menú abierto.",
+        "pl": "Jak głęboko jesteś w menu: 1 to najwyższy poziom, 0 oznacza, że żadne menu nie jest otwarte.",
+        "uk": "Наскільки глибоко ви в меню: 1 — верхній рівень, 0 — меню не відкрите.",
+        "zh-cn": "当前处于菜单的第几层：1 为最上层，0 表示没有打开的菜单。"
       },
       "type": "number",
       "role": "value",
@@ -12466,7 +12654,8 @@
       "source": "manual",
       "volumeAsPercent": false,
       "label": "RX-V6A",
-      "labelRank": 1
+      "labelRank": 1,
+      "model": "RX-V6A"
     },
     "_id": "yamaha.0.10_10_0_13"
   },
@@ -13363,10 +13552,23 @@
         "uk": "Назва групи",
         "zh-cn": "群组名称"
       },
+      "desc": {
+        "en": "The name of the MusicCast group. The device keeps it only until it restarts; an empty name restores the default.",
+        "de": "Der Name der MusicCast-Gruppe. Das Gerät behält ihn nur bis zum nächsten Neustart; ein leerer Name stellt den Standard wieder her.",
+        "ru": "Имя группы MusicCast. Устройство хранит его только до перезапуска; пустое имя восстанавливает имя по умолчанию.",
+        "pt": "O nome do grupo MusicCast. O dispositivo só o guarda até reiniciar; um nome vazio repõe o predefinido.",
+        "nl": "De naam van de MusicCast-groep. Het apparaat bewaart hem alleen tot de volgende herstart; een lege naam zet de standaard terug.",
+        "fr": "Le nom du groupe MusicCast. L'appareil ne le garde que jusqu'à son redémarrage ; un nom vide rétablit celui par défaut.",
+        "it": "Il nome del gruppo MusicCast. Il dispositivo lo conserva solo fino al riavvio; un nome vuoto ripristina quello predefinito.",
+        "es": "El nombre del grupo MusicCast. El dispositivo solo lo conserva hasta que se reinicia; un nombre vacío restablece el predeterminado.",
+        "pl": "Nazwa grupy MusicCast. Urządzenie przechowuje ją tylko do ponownego uruchomienia; pusta nazwa przywraca domyślną.",
+        "uk": "Назва групи MusicCast. Пристрій зберігає її лише до перезапуску; порожня назва відновлює стандартну.",
+        "zh-cn": "MusicCast 组的名称。设备仅保留到下次重启；留空则恢复默认名称。"
+      },
       "type": "string",
       "role": "text",
       "read": true,
-      "write": false
+      "write": true
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_13.multiroom.group.name"
@@ -13388,17 +13590,17 @@
         "zh-cn": "角色（服务器/客户端）"
       },
       "desc": {
-        "en": "Whether this device feeds the group, plays along in it, or is not linked at all.",
-        "de": "Ob dieses Gerät die Gruppe speist, in ihr mitspielt oder gar nicht verbunden ist.",
-        "ru": "Питает ли это устройство группу, играет ли в ней вместе с другими или вовсе не связано.",
-        "pt": "Se este aparelho alimenta o grupo, toca em conjunto nele, ou não está ligado de todo.",
-        "nl": "Of dit apparaat de groep voedt, erin meespeelt, of helemaal niet gekoppeld is.",
-        "fr": "Si cet appareil alimente le groupe, y joue avec les autres, ou n'est pas lié du tout.",
-        "it": "Se questo apparecchio alimenta il gruppo, vi suona insieme agli altri, o non è affatto collegato.",
-        "es": "Si este aparato alimenta el grupo, suena junto a los demás, o no está enlazado en absoluto.",
-        "pl": "Czy to urządzenie zasila grupę, gra w niej razem z innymi, czy nie jest w ogóle połączone.",
-        "uk": "Чи живить цей пристрій групу, чи грає в ній разом з іншими, чи взагалі не пов'язаний.",
-        "zh-cn": "本设备是为该组供源、随组同播，还是根本未加入联动。"
+        "en": "Whether this device feeds the group, plays along in it, or is not linked at all — read from its group and its client list, as the specification asks, not from the device's role word alone.",
+        "de": "Ob dieses Gerät die Gruppe speist, in ihr mitspielt oder gar nicht verbunden ist — gelesen aus seiner Gruppe und seiner Client-Liste, wie die Spezifikation es verlangt, nicht nur aus dem Rollenwort des Geräts.",
+        "ru": "Питает ли это устройство группу, играет ли в ней или вообще не связано — определяется по его группе и списку клиентов, как требует спецификация, а не только по слову роли устройства.",
+        "pt": "Se este dispositivo alimenta o grupo, participa nele ou não está ligado — deduzido do seu grupo e da sua lista de clientes, como pede a especificação, não apenas da palavra de função do dispositivo.",
+        "nl": "Of dit apparaat de groep voedt, erin meespeelt of helemaal niet gekoppeld is — afgeleid uit zijn groep en zijn clientlijst, zoals de specificatie vraagt, niet alleen uit het rolwoord van het apparaat.",
+        "fr": "Si cet appareil alimente le groupe, y participe ou n'est pas lié du tout — déduit de son groupe et de sa liste de clients, comme la spécification le demande, pas du seul mot de rôle de l'appareil.",
+        "it": "Se questo dispositivo alimenta il gruppo, vi partecipa o non è collegato affatto — dedotto dal suo gruppo e dalla sua lista di client, come chiede la specifica, non solo dalla parola di ruolo del dispositivo.",
+        "es": "Si este dispositivo alimenta el grupo, participa en él o no está enlazado — se deduce de su grupo y de su lista de clientes, como pide la especificación, no solo de la palabra de rol del dispositivo.",
+        "pl": "Czy to urządzenie zasila grupę, gra w niej, czy nie jest połączone — ustalane z jego grupy i listy klientów, jak wymaga specyfikacja, a nie tylko ze słowa roli urządzenia.",
+        "uk": "Чи живить цей пристрій групу, грає в ній чи зовсім не з'єднаний — визначається за його групою та списком клієнтів, як вимагає специфікація, а не лише за словом ролі пристрою.",
+        "zh-cn": "此设备是为组供音、在组中播放，还是完全未连接——按规范要求根据其组和客户端列表判断，而不只看设备的角色字段。"
       },
       "type": "string",
       "role": "state",
@@ -13431,6 +13633,48 @@
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_13.multiroom.group.serverZone"
+  },
+  "yamaha.0.10_10_0_13.multiroom.group.status": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Group status",
+        "de": "Gruppenstatus",
+        "ru": "Состояние группы",
+        "pt": "Estado do grupo",
+        "nl": "Groepsstatus",
+        "fr": "État du groupe",
+        "it": "Stato del gruppo",
+        "es": "Estado del grupo",
+        "pl": "Stan grupy",
+        "uk": "Стан групи",
+        "zh-cn": "组状态"
+      },
+      "desc": {
+        "en": "Whether the group is being built, working or being dissolved, as its server reports it; building a group can take up to three minutes.",
+        "de": "Ob die Gruppe gerade aufgebaut wird, läuft oder aufgelöst wird, so wie ihr Server es meldet; der Aufbau kann bis zu drei Minuten dauern.",
+        "ru": "Создаётся ли группа, работает или распускается — по данным её сервера; создание группы может занять до трёх минут.",
+        "pt": "Se o grupo está a ser criado, a funcionar ou a ser desfeito, tal como o servidor o comunica; criar um grupo pode demorar até três minutos.",
+        "nl": "Of de groep wordt opgebouwd, werkt of wordt opgeheven, zoals de server van de groep het meldt; het opbouwen kan tot drie minuten duren.",
+        "fr": "Si le groupe est en cours de création, actif ou en cours de dissolution, tel que son serveur l'indique ; la création peut prendre jusqu'à trois minutes.",
+        "it": "Se il gruppo è in creazione, attivo o in scioglimento, come lo segnala il suo server; la creazione può durare fino a tre minuti.",
+        "es": "Si el grupo se está creando, está funcionando o se está deshaciendo, según lo informa su servidor; crear un grupo puede tardar hasta tres minutos.",
+        "pl": "Czy grupa jest tworzona, działa czy jest rozwiązywana, zgodnie z tym, co zgłasza jej serwer; tworzenie grupy może potrwać do trzech minut.",
+        "uk": "Чи група створюється, працює чи розпускається — за даними її сервера; створення групи може тривати до трьох хвилин.",
+        "zh-cn": "组是否正在建立、正在运行或正在解散，以组服务器的报告为准；建立组最多可能需要三分钟。"
+      },
+      "type": "string",
+      "role": "state",
+      "read": true,
+      "write": false,
+      "states": {
+        "building": "building",
+        "working": "working",
+        "deleting": "deleting"
+      }
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_13.multiroom.group.status"
   },
   "yamaha.0.10_10_0_13.multiroom.group.streamingEnabled": {
     "type": "state",
@@ -13842,17 +14086,17 @@
         "zh-cn": "专辑封面"
       },
       "desc": {
-        "en": "Where the cover of the current track can be fetched: a full URL, or a path on the receiver's own web server.",
-        "de": "Wo das Cover des laufenden Titels zu holen ist: eine vollständige URL oder ein Pfad auf dem Webserver des Receivers.",
-        "ru": "Откуда взять обложку текущего трека: полный URL либо путь на собственном веб-сервере ресивера.",
-        "pt": "Onde ir buscar a capa da faixa atual: um URL completo ou um caminho no servidor web do próprio recetor.",
-        "nl": "Waar de hoes van het huidige nummer te halen is: een volledige URL of een pad op de webserver van de receiver zelf.",
-        "fr": "Où récupérer la pochette du titre en cours : une URL complète, ou un chemin sur le serveur web de l'ampli.",
-        "it": "Dove recuperare la copertina del brano in riproduzione: un URL completo oppure un percorso sul server web del ricevitore.",
-        "es": "Dónde obtener la carátula de la pista actual: una URL completa o una ruta en el propio servidor web del receptor.",
-        "pl": "Skąd pobrać okładkę bieżącego utworu: pełny adres URL albo ścieżka na serwerze WWW samego amplitunera.",
-        "uk": "Звідки взяти обкладинку поточного треку: повна URL-адреса або шлях на власному вебсервері ресивера.",
-        "zh-cn": "当前曲目封面的取用位置：一个完整 URL，或功放自身 Web 服务器上的路径。"
+        "en": "The web address of the current track's cover.",
+        "de": "Die Webadresse des Covers des laufenden Titels.",
+        "ru": "Веб-адрес обложки текущего трека.",
+        "pt": "O endereço web da capa da faixa atual.",
+        "nl": "Het webadres van de hoes van het huidige nummer.",
+        "fr": "L'adresse web de la pochette du titre en cours.",
+        "it": "L'indirizzo web della copertina del brano in riproduzione.",
+        "es": "La dirección web de la carátula de la pista actual.",
+        "pl": "Adres internetowy okładki bieżącego utworu.",
+        "uk": "Вебадреса обкладинки поточного треку.",
+        "zh-cn": "当前曲目封面的网址。"
       }
     },
     "native": {},
@@ -14760,9 +15004,9 @@
     "type": "state",
     "common": {
       "type": "string",
-      "role": "text",
+      "role": "state",
       "read": true,
-      "write": false,
+      "write": true,
       "name": {
         "en": "Link control",
         "de": "Link-Steuerung",
@@ -14878,7 +15122,7 @@
       "type": "string",
       "role": "state",
       "read": true,
-      "write": false,
+      "write": true,
       "name": {
         "en": "Tone control mode",
         "de": "Klangregelung",
@@ -14893,17 +15137,17 @@
         "zh-cn": "音调控制模式"
       },
       "desc": {
-        "en": "Whether bass and treble are set by hand or left to the receiver.",
-        "de": "Ob Bass und Höhen von Hand eingestellt werden oder der Receiver das übernimmt.",
-        "ru": "Задаются ли НЧ и ВЧ вручную или их выбирает ресивер.",
-        "pt": "Se graves e agudos são definidos à mão ou pelo recetor.",
-        "nl": "Of bas en hoog handmatig worden ingesteld of door de receiver.",
-        "fr": "Si les graves et aigus sont réglés à la main ou par l'ampli.",
-        "it": "Se bassi e alti sono impostati a mano o dal ricevitore.",
-        "es": "Si graves y agudos se ajustan a mano o los fija el receptor.",
-        "pl": "Czy tony niskie i wysokie ustawia użytkownik, czy amplituner.",
-        "uk": "Чи задаються НЧ і ВЧ вручну, чи це робить ресивер.",
-        "zh-cn": "低音与高音由手动设定，还是交给功放。"
+        "en": "Whether bass and treble are set by hand or left to the receiver; writing a bass or treble value switches to manual.",
+        "de": "Ob Bass und Höhen von Hand eingestellt oder dem Receiver überlassen werden; wer einen Bass- oder Höhenwert schreibt, schaltet auf manuell.",
+        "ru": "Настраиваются ли низкие и высокие частоты вручную или их выбирает ресивер; запись значения низких или высоких частот переключает в ручной режим.",
+        "pt": "Se os graves e agudos são ajustados à mão ou deixados ao recetor; escrever um valor de graves ou agudos muda para manual.",
+        "nl": "Of bas en hoge tonen met de hand worden ingesteld of aan de receiver worden overgelaten; een bas- of hoge-tonenwaarde schrijven schakelt naar handmatig.",
+        "fr": "Si les graves et les aigus sont réglés à la main ou laissés à l'ampli ; écrire une valeur de graves ou d'aigus passe en manuel.",
+        "it": "Se bassi e alti si regolano a mano o li decide il ricevitore; scrivere un valore di bassi o alti passa a manuale.",
+        "es": "Si los graves y agudos se ajustan a mano o los decide el receptor; al escribir un valor de graves o agudos se pasa a manual.",
+        "pl": "Czy tony niskie i wysokie ustawia się ręcznie, czy decyduje o nich amplituner; zapisanie wartości tonów niskich lub wysokich przełącza na tryb ręczny.",
+        "uk": "Чи налаштовуються низькі й високі частоти вручну, чи їх обирає ресивер; запис значення низьких або високих частот перемикає в ручний режим.",
+        "zh-cn": "低音和高音是手动设置还是交给接收机；写入低音或高音值会切换到手动。"
       },
       "states": {
         "manual": "manual",
@@ -15313,17 +15557,17 @@
         "zh-cn": "专辑封面"
       },
       "desc": {
-        "en": "Where the cover of the current track can be fetched: a full URL, or a path on the receiver's own web server.",
-        "de": "Wo das Cover des laufenden Titels zu holen ist: eine vollständige URL oder ein Pfad auf dem Webserver des Receivers.",
-        "ru": "Откуда взять обложку текущего трека: полный URL либо путь на собственном веб-сервере ресивера.",
-        "pt": "Onde ir buscar a capa da faixa atual: um URL completo ou um caminho no servidor web do próprio recetor.",
-        "nl": "Waar de hoes van het huidige nummer te halen is: een volledige URL of een pad op de webserver van de receiver zelf.",
-        "fr": "Où récupérer la pochette du titre en cours : une URL complète, ou un chemin sur le serveur web de l'ampli.",
-        "it": "Dove recuperare la copertina del brano in riproduzione: un URL completo oppure un percorso sul server web del ricevitore.",
-        "es": "Dónde obtener la carátula de la pista actual: una URL completa o una ruta en el propio servidor web del receptor.",
-        "pl": "Skąd pobrać okładkę bieżącego utworu: pełny adres URL albo ścieżka na serwerze WWW samego amplitunera.",
-        "uk": "Звідки взяти обкладинку поточного треку: повна URL-адреса або шлях на власному вебсервері ресивера.",
-        "zh-cn": "当前曲目封面的取用位置：一个完整 URL，或功放自身 Web 服务器上的路径。"
+        "en": "The web address of the current track's cover.",
+        "de": "Die Webadresse des Covers des laufenden Titels.",
+        "ru": "Веб-адрес обложки текущего трека.",
+        "pt": "O endereço web da capa da faixa atual.",
+        "nl": "Het webadres van de hoes van het huidige nummer.",
+        "fr": "L'adresse web de la pochette du titre en cours.",
+        "it": "L'indirizzo web della copertina del brano in riproduzione.",
+        "es": "La dirección web de la carátula de la pista actual.",
+        "pl": "Adres internetowy okładki bieżącego utworu.",
+        "uk": "Вебадреса обкладинки поточного треку.",
+        "zh-cn": "当前曲目封面的网址。"
       }
     },
     "native": {},
@@ -15745,17 +15989,17 @@
         "zh-cn": "菜单层级"
       },
       "desc": {
-        "en": "How deep in the menu you currently are; 0 is the top.",
-        "de": "Wie tief Sie gerade im Menü stehen; 0 ist die oberste Ebene.",
-        "ru": "Насколько глубоко вы сейчас в меню; 0 — верхний уровень.",
-        "pt": "A que profundidade está no menu; 0 é o topo.",
-        "nl": "Hoe diep u nu in het menu zit; 0 is bovenaan.",
-        "fr": "À quelle profondeur du menu vous êtes ; 0 est le sommet.",
-        "it": "Quanto in profondità siete nel menu; 0 è il livello più alto.",
-        "es": "A qué profundidad está en el menú; 0 es el nivel superior.",
-        "pl": "Jak głęboko jesteś w menu; 0 to najwyższy poziom.",
-        "uk": "Наскільки глибоко ви в меню; 0 — верхній рівень.",
-        "zh-cn": "当前处于菜单的第几层；0 为最上层。"
+        "en": "How deep in the menu you currently are: 1 is the top, 0 means no menu is open.",
+        "de": "Wie tief du gerade im Menü stehst: 1 ist die oberste Ebene, 0 heißt, kein Menü ist offen.",
+        "ru": "Насколько глубоко вы сейчас в меню: 1 — верхний уровень, 0 — меню не открыто.",
+        "pt": "A que profundidade está no menu: 1 é o topo, 0 significa que nenhum menu está aberto.",
+        "nl": "Hoe diep u nu in het menu zit: 1 is bovenaan, 0 betekent dat er geen menu open is.",
+        "fr": "À quelle profondeur du menu vous êtes : 1 est le sommet, 0 signifie qu'aucun menu n'est ouvert.",
+        "it": "Quanto in profondità siete nel menu: 1 è il livello più alto, 0 significa che nessun menu è aperto.",
+        "es": "A qué profundidad está en el menú: 1 es el nivel superior, 0 significa que no hay ningún menú abierto.",
+        "pl": "Jak głęboko jesteś w menu: 1 to najwyższy poziom, 0 oznacza, że żadne menu nie jest otwarte.",
+        "uk": "Наскільки глибоко ви в меню: 1 — верхній рівень, 0 — меню не відкрите.",
+        "zh-cn": "当前处于菜单的第几层：1 为最上层，0 表示没有打开的菜单。"
       },
       "type": "number",
       "role": "value",
@@ -16209,6 +16453,46 @@
     "native": {},
     "_id": "yamaha.0.10_10_0_13.player.browse.path"
   },
+  "yamaha.0.10_10_0_13.player.browse.playLine": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Play line (whole folder)",
+        "de": "Zeile abspielen (ganzer Ordner)",
+        "ru": "Воспроизвести строку (всю папку)",
+        "pt": "Reproduzir linha (pasta inteira)",
+        "nl": "Regel afspelen (hele map)",
+        "fr": "Lire la ligne (dossier entier)",
+        "it": "Riproduci riga (cartella intera)",
+        "es": "Reproducir línea (carpeta completa)",
+        "pl": "Odtwórz wiersz (cały folder)",
+        "uk": "Відтворити рядок (усю теку)",
+        "zh-cn": "播放行（整个文件夹）"
+      },
+      "desc": {
+        "en": "Plays the folder on this line (an album, a playlist) as a whole instead of opening it.",
+        "de": "Spielt den Ordner auf dieser Zeile (ein Album, eine Playlist) als Ganzes ab, statt ihn zu öffnen.",
+        "ru": "Воспроизводит папку в этой строке (альбом, плейлист) целиком, вместо того чтобы открыть её.",
+        "pt": "Reproduz por inteiro a pasta desta linha (um álbum, uma playlist) em vez de a abrir.",
+        "nl": "Speelt de map op deze regel (een album, een afspeellijst) als geheel af in plaats van hem te openen.",
+        "fr": "Lit en entier le dossier de cette ligne (un album, une playlist) au lieu de l'ouvrir.",
+        "it": "Riproduce per intero la cartella di questa riga (un album, una playlist) invece di aprirla.",
+        "es": "Reproduce completa la carpeta de esta línea (un álbum, una lista) en lugar de abrirla.",
+        "pl": "Odtwarza w całości folder z tego wiersza (album, playlistę) zamiast go otwierać.",
+        "uk": "Відтворює теку в цьому рядку (альбом, плейлист) повністю, замість того щоб відкрити її.",
+        "zh-cn": "将此行的文件夹（专辑、播放列表）整体播放，而不是打开它。"
+      },
+      "type": "number",
+      "role": "level",
+      "read": true,
+      "write": true,
+      "min": 1,
+      "max": 8,
+      "step": 1
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_13.player.browse.playLine"
+  },
   "yamaha.0.10_10_0_13.player.browse.rows": {
     "type": "state",
     "common": {
@@ -16564,6 +16848,58 @@
     "native": {},
     "_id": "yamaha.0.10_10_0_13.player.netPlayer"
   },
+  "yamaha.0.10_10_0_13.player.netPlayer.playError": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Playback error",
+        "de": "Wiedergabefehler",
+        "ru": "Ошибка воспроизведения",
+        "pt": "Erro de reprodução",
+        "nl": "Afspeelfout",
+        "fr": "Erreur de lecture",
+        "it": "Errore di riproduzione",
+        "es": "Error de reproducción",
+        "pl": "Błąd odtwarzania",
+        "uk": "Помилка відтворення",
+        "zh-cn": "播放错误"
+      },
+      "desc": {
+        "en": "The error the network player reports for the current playback: 0 means none, otherwise the reason (for example an access error or playback unavailable).",
+        "de": "Der Fehler, den der Netzwerk-Player zur laufenden Wiedergabe meldet: 0 heißt keiner, sonst der Grund (zum Beispiel ein Zugriffsfehler oder Wiedergabe nicht verfügbar).",
+        "ru": "Ошибка, которую сетевой плеер сообщает о текущем воспроизведении: 0 означает отсутствие ошибки, иначе причину (например, ошибка доступа или воспроизведение недоступно).",
+        "pt": "O erro que o leitor de rede comunica sobre a reprodução atual: 0 significa nenhum; caso contrário, o motivo (por exemplo, um erro de acesso ou reprodução indisponível).",
+        "nl": "De fout die de netwerkspeler meldt voor het huidige afspelen: 0 betekent geen, anders de reden (bijvoorbeeld een toegangsfout of afspelen niet beschikbaar).",
+        "fr": "L'erreur que le lecteur réseau signale pour la lecture en cours : 0 signifie aucune, sinon la raison (par exemple une erreur d'accès ou une lecture indisponible).",
+        "it": "L'errore che il lettore di rete segnala per la riproduzione in corso: 0 significa nessuno, altrimenti il motivo (ad esempio un errore di accesso o riproduzione non disponibile).",
+        "es": "El error que el reproductor de red informa sobre la reproducción actual: 0 significa ninguno; si no, el motivo (por ejemplo, un error de acceso o reproducción no disponible).",
+        "pl": "Błąd, który odtwarzacz sieciowy zgłasza dla bieżącego odtwarzania: 0 oznacza brak, w przeciwnym razie przyczynę (np. błąd dostępu lub niedostępne odtwarzanie).",
+        "uk": "Помилка, яку мережевий плеєр повідомляє про поточне відтворення: 0 означає відсутність помилки, інакше причину (наприклад, помилка доступу або відтворення недоступне).",
+        "zh-cn": "网络播放器针对当前播放报告的错误：0 表示无错误，否则为原因（例如访问错误或无法播放）。"
+      },
+      "type": "number",
+      "role": "value",
+      "read": true,
+      "write": false,
+      "states": {
+        "0": "No Error",
+        "1": "Access Error",
+        "2": "Playback Unavailable",
+        "3": "Skip Limit Reached",
+        "4": "Invalid Session",
+        "5": "High-Resolution File Not Playable at MusicCast Leaf",
+        "6": "User Uncredentialed",
+        "7": "Track Restricted by Right Holders",
+        "8": "Sample Restricted by Right Holders",
+        "9": "Genre Restricted by Streaming Credentials",
+        "10": "Application Restricted by Streaming Credentials",
+        "11": "Intent Restricted by Streaming Credentials",
+        "100": "Multiple Errors"
+      }
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_13.player.netPlayer.playError"
+  },
   "yamaha.0.10_10_0_13.player.netPlayer.playlists": {
     "type": "state",
     "common": {
@@ -16601,6 +16937,43 @@
     "native": {},
     "_id": "yamaha.0.10_10_0_13.player.netPlayer.playlists"
   },
+  "yamaha.0.10_10_0_13.player.netPlayer.playMessage": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Playback message",
+        "de": "Wiedergabemeldung",
+        "ru": "Сообщение о воспроизведении",
+        "pt": "Mensagem de reprodução",
+        "nl": "Afspeelmelding",
+        "fr": "Message de lecture",
+        "it": "Messaggio di riproduzione",
+        "es": "Mensaje de reproducción",
+        "pl": "Komunikat odtwarzania",
+        "uk": "Повідомлення про відтворення",
+        "zh-cn": "播放消息"
+      },
+      "desc": {
+        "en": "The message the network player shows about the current playback, as the device sends it.",
+        "de": "Die Meldung, die der Netzwerk-Player zur laufenden Wiedergabe zeigt, so wie das Gerät sie schickt.",
+        "ru": "Сообщение сетевого плеера о текущем воспроизведении в том виде, в каком его отправляет устройство.",
+        "pt": "A mensagem que o leitor de rede mostra sobre a reprodução atual, tal como o dispositivo a envia.",
+        "nl": "De melding die de netwerkspeler toont over het huidige afspelen, zoals het apparaat die stuurt.",
+        "fr": "Le message que le lecteur réseau affiche pour la lecture en cours, tel que l'appareil l'envoie.",
+        "it": "Il messaggio che il lettore di rete mostra sulla riproduzione in corso, così come lo invia il dispositivo.",
+        "es": "El mensaje que el reproductor de red muestra sobre la reproducción actual, tal como lo envía el dispositivo.",
+        "pl": "Komunikat, który odtwarzacz sieciowy wyświetla o bieżącym odtwarzaniu, w postaci wysłanej przez urządzenie.",
+        "uk": "Повідомлення мережевого плеєра про поточне відтворення в тому вигляді, в якому його надсилає пристрій.",
+        "zh-cn": "网络播放器针对当前播放显示的消息，与设备发送的内容一致。"
+      },
+      "type": "string",
+      "role": "text",
+      "read": true,
+      "write": false
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_13.player.netPlayer.playMessage"
+  },
   "yamaha.0.10_10_0_13.player.netPlayer.preset": {
     "type": "state",
     "common": {
@@ -16634,7 +17007,8 @@
       "role": "level",
       "read": true,
       "write": true,
-      "min": 1
+      "min": 1,
+      "max": 40
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_13.player.netPlayer.preset"
@@ -16746,7 +17120,8 @@
       "role": "level",
       "read": true,
       "write": true,
-      "min": 1
+      "min": 1,
+      "max": 40
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_13.player.netPlayer.recallRecent"
@@ -18158,9 +18533,9 @@
     "type": "state",
     "common": {
       "type": "number",
-      "role": "value",
+      "role": "level",
       "read": true,
-      "write": false,
+      "write": true,
       "name": {
         "en": "Dialogue level",
         "de": "Dialogpegel",
@@ -18201,9 +18576,6 @@
       "role": "level",
       "read": true,
       "write": true,
-      "min": 0,
-      "max": 5,
-      "step": 1,
       "name": {
         "en": "Dialogue lift",
         "de": "Dialoghöhe",
@@ -18229,7 +18601,10 @@
         "pl": "Przesuwa mowę w górę, na wysokość ekranu.",
         "uk": "Зміщує мовлення вгору, на висоту екрана.",
         "zh-cn": "将人声上移到屏幕高度。"
-      }
+      },
+      "min": 0,
+      "max": 5,
+      "step": 1
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_13.sound.dialogueLift"
@@ -18238,9 +18613,9 @@
     "type": "state",
     "common": {
       "type": "number",
-      "role": "value",
+      "role": "level",
       "read": true,
-      "write": false,
+      "write": true,
       "name": {
         "en": "DTS dialogue control",
         "de": "DTS-Dialogsteuerung",
@@ -18352,9 +18727,9 @@
     "type": "state",
     "common": {
       "type": "string",
-      "role": "text",
+      "role": "state",
       "read": true,
-      "write": false,
+      "write": true,
       "name": {
         "en": "Link audio delay",
         "de": "Link-Audioverzögerung",
@@ -18394,9 +18769,9 @@
     "type": "state",
     "common": {
       "type": "string",
-      "role": "text",
+      "role": "state",
       "read": true,
-      "write": false,
+      "write": true,
       "name": {
         "en": "Link control",
         "de": "Link-Steuerung",
@@ -18673,17 +19048,17 @@
         "zh-cn": "低音炮微调"
       },
       "desc": {
-        "en": "Fine adjustment of the subwoofer against the other speakers.",
-        "de": "Feinabgleich des Subwoofers gegenüber den anderen Lautsprechern.",
-        "ru": "Точная подстройка сабвуфера относительно других колонок.",
-        "pt": "Ajuste fino do subwoofer face às outras colunas.",
-        "nl": "Fijnafstemming van de subwoofer ten opzichte van de andere luidsprekers.",
-        "fr": "Réglage fin du caisson de basses par rapport aux autres enceintes.",
-        "it": "Regolazione fine del subwoofer rispetto agli altri diffusori.",
-        "es": "Ajuste fino del subgrave frente a los demás altavoces.",
-        "pl": "Precyzyjne dopasowanie subwoofera do pozostałych głośników.",
-        "uk": "Точне налаштування сабвуфера відносно інших колонок.",
-        "zh-cn": "低音炮相对其他扬声器的微调。"
+        "en": "Fine adjustment of the subwoofer against the other speakers: decibels where the unit says so, otherwise the device's own steps.",
+        "de": "Feinabgleich des Subwoofers gegenüber den anderen Lautsprechern: Dezibel, wo die Einheit es sagt, sonst die eigenen Schritte des Geräts.",
+        "ru": "Точная подстройка сабвуфера относительно остальных колонок: в децибелах, где это указано единицей, иначе в собственных шагах устройства.",
+        "pt": "Ajuste fino do subwoofer em relação às outras colunas: decibéis onde a unidade o indica; caso contrário, os passos próprios do dispositivo.",
+        "nl": "Fijnafstelling van de subwoofer ten opzichte van de andere luidsprekers: decibel waar de eenheid dat zegt, anders de eigen stappen van het apparaat.",
+        "fr": "Réglage fin du caisson de basses par rapport aux autres enceintes : en décibels là où l'unité l'indique, sinon dans les pas propres à l'appareil.",
+        "it": "Regolazione fine del subwoofer rispetto agli altri diffusori: decibel dove lo indica l'unità, altrimenti i passi propri del dispositivo.",
+        "es": "Ajuste fino del subwoofer frente a los demás altavoces: decibelios donde la unidad lo indica; si no, los pasos propios del dispositivo.",
+        "pl": "Dokładne dostrojenie subwoofera względem pozostałych głośników: decybele tam, gdzie wskazuje to jednostka, w przeciwnym razie własne kroki urządzenia.",
+        "uk": "Точне підлаштування сабвуфера відносно інших колонок: у децибелах, де це вказує одиниця, інакше у власних кроках пристрою.",
+        "zh-cn": "低音炮相对其他扬声器的微调：单位注明时为分贝，否则为设备自身的步进。"
       }
     },
     "native": {},
@@ -18739,7 +19114,7 @@
       "type": "string",
       "role": "state",
       "read": true,
-      "write": false,
+      "write": true,
       "name": {
         "en": "Tone control mode",
         "de": "Klangregelung",
@@ -18754,17 +19129,17 @@
         "zh-cn": "音调控制模式"
       },
       "desc": {
-        "en": "Whether bass and treble are set by hand or left to the receiver.",
-        "de": "Ob Bass und Höhen von Hand eingestellt werden oder der Receiver das übernimmt.",
-        "ru": "Задаются ли НЧ и ВЧ вручную или их выбирает ресивер.",
-        "pt": "Se graves e agudos são definidos à mão ou pelo recetor.",
-        "nl": "Of bas en hoog handmatig worden ingesteld of door de receiver.",
-        "fr": "Si les graves et aigus sont réglés à la main ou par l'ampli.",
-        "it": "Se bassi e alti sono impostati a mano o dal ricevitore.",
-        "es": "Si graves y agudos se ajustan a mano o los fija el receptor.",
-        "pl": "Czy tony niskie i wysokie ustawia użytkownik, czy amplituner.",
-        "uk": "Чи задаються НЧ і ВЧ вручну, чи це робить ресивер.",
-        "zh-cn": "低音与高音由手动设定，还是交给功放。"
+        "en": "Whether bass and treble are set by hand or left to the receiver; writing a bass or treble value switches to manual.",
+        "de": "Ob Bass und Höhen von Hand eingestellt oder dem Receiver überlassen werden; wer einen Bass- oder Höhenwert schreibt, schaltet auf manuell.",
+        "ru": "Настраиваются ли низкие и высокие частоты вручную или их выбирает ресивер; запись значения низких или высоких частот переключает в ручной режим.",
+        "pt": "Se os graves e agudos são ajustados à mão ou deixados ao recetor; escrever um valor de graves ou agudos muda para manual.",
+        "nl": "Of bas en hoge tonen met de hand worden ingesteld of aan de receiver worden overgelaten; een bas- of hoge-tonenwaarde schrijven schakelt naar handmatig.",
+        "fr": "Si les graves et les aigus sont réglés à la main ou laissés à l'ampli ; écrire une valeur de graves ou d'aigus passe en manuel.",
+        "it": "Se bassi e alti si regolano a mano o li decide il ricevitore; scrivere un valore di bassi o alti passa a manuale.",
+        "es": "Si los graves y agudos se ajustan a mano o los decide el receptor; al escribir un valor de graves o agudos se pasa a manual.",
+        "pl": "Czy tony niskie i wysokie ustawia się ręcznie, czy decyduje o nich amplituner; zapisanie wartości tonów niskich lub wysokich przełącza na tryb ręczny.",
+        "uk": "Чи налаштовуються низькі й високі частоти вручну, чи їх обирає ресивер; запис значення низьких або високих частот перемикає в ручний режим.",
+        "zh-cn": "低音和高音是手动设置还是交给接收机；写入低音或高音值会切换到手动。"
       },
       "states": {
         "manual": "manual"
@@ -19421,6 +19796,30 @@
     "native": {},
     "_id": "yamaha.0.10_10_0_13.tuner.dab.scanProgress"
   },
+  "yamaha.0.10_10_0_13.tuner.dab.serviceDown": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Previous DAB station",
+        "de": "Vorheriger DAB-Sender",
+        "ru": "Предыдущая станция DAB",
+        "pt": "Estação DAB anterior",
+        "nl": "Vorige DAB-zender",
+        "fr": "Station DAB précédente",
+        "it": "Stazione DAB precedente",
+        "es": "Emisora DAB anterior",
+        "pl": "Poprzednia stacja DAB",
+        "uk": "Попередня станція DAB",
+        "zh-cn": "上一个 DAB 电台"
+      },
+      "type": "boolean",
+      "role": "button",
+      "read": false,
+      "write": true
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_13.tuner.dab.serviceDown"
+  },
   "yamaha.0.10_10_0_13.tuner.dab.serviceLabel": {
     "type": "state",
     "common": {
@@ -19457,6 +19856,30 @@
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_13.tuner.dab.serviceLabel"
+  },
+  "yamaha.0.10_10_0_13.tuner.dab.serviceUp": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Next DAB station",
+        "de": "Nächster DAB-Sender",
+        "ru": "Следующая станция DAB",
+        "pt": "Estação DAB seguinte",
+        "nl": "Volgende DAB-zender",
+        "fr": "Station DAB suivante",
+        "it": "Stazione DAB successiva",
+        "es": "Siguiente emisora DAB",
+        "pl": "Następna stacja DAB",
+        "uk": "Наступна станція DAB",
+        "zh-cn": "下一个 DAB 电台"
+      },
+      "type": "boolean",
+      "role": "button",
+      "read": false,
+      "write": true
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_13.tuner.dab.serviceUp"
   },
   "yamaha.0.10_10_0_13.tuner.dab.status": {
     "type": "state",
@@ -20068,7 +20491,8 @@
       "source": "manual",
       "volumeAsPercent": false,
       "label": "R-N500",
-      "labelRank": 1
+      "labelRank": 1,
+      "model": "R-N500"
     },
     "_id": "yamaha.0.10_10_0_14"
   },
@@ -20846,17 +21270,17 @@
         "zh-cn": "菜单层级"
       },
       "desc": {
-        "en": "How deep in the menu you currently are; 0 is the top.",
-        "de": "Wie tief Sie gerade im Menü stehen; 0 ist die oberste Ebene.",
-        "ru": "Насколько глубоко вы сейчас в меню; 0 — верхний уровень.",
-        "pt": "A que profundidade está no menu; 0 é o topo.",
-        "nl": "Hoe diep u nu in het menu zit; 0 is bovenaan.",
-        "fr": "À quelle profondeur du menu vous êtes ; 0 est le sommet.",
-        "it": "Quanto in profondità siete nel menu; 0 è il livello più alto.",
-        "es": "A qué profundidad está en el menú; 0 es el nivel superior.",
-        "pl": "Jak głęboko jesteś w menu; 0 to najwyższy poziom.",
-        "uk": "Наскільки глибоко ви в меню; 0 — верхній рівень.",
-        "zh-cn": "当前处于菜单的第几层；0 为最上层。"
+        "en": "How deep in the menu you currently are: 1 is the top, 0 means no menu is open.",
+        "de": "Wie tief du gerade im Menü stehst: 1 ist die oberste Ebene, 0 heißt, kein Menü ist offen.",
+        "ru": "Насколько глубоко вы сейчас в меню: 1 — верхний уровень, 0 — меню не открыто.",
+        "pt": "A que profundidade está no menu: 1 é o topo, 0 significa que nenhum menu está aberto.",
+        "nl": "Hoe diep u nu in het menu zit: 1 is bovenaan, 0 betekent dat er geen menu open is.",
+        "fr": "À quelle profondeur du menu vous êtes : 1 est le sommet, 0 signifie qu'aucun menu n'est ouvert.",
+        "it": "Quanto in profondità siete nel menu: 1 è il livello più alto, 0 significa che nessun menu è aperto.",
+        "es": "A qué profundidad está en el menú: 1 es el nivel superior, 0 significa que no hay ningún menú abierto.",
+        "pl": "Jak głęboko jesteś w menu: 1 to najwyższy poziom, 0 oznacza, że żadne menu nie jest otwarte.",
+        "uk": "Наскільки глибоко ви в меню: 1 — верхній рівень, 0 — меню не відкрите.",
+        "zh-cn": "当前处于菜单的第几层：1 为最上层，0 表示没有打开的菜单。"
       },
       "type": "number",
       "role": "value",
@@ -23255,16 +23679,16 @@
         "zh-cn": "输入"
       },
       "states": {
-        "napster": "napster",
-        "spotify": "spotify",
-        "juke": "juke",
-        "tidal": "tidal",
-        "deezer": "deezer",
-        "airplay": "airplay",
-        "mc_link": "mc_link",
-        "server": "server",
-        "net_radio": "net_radio",
-        "bluetooth": "bluetooth"
+        "napster": "Napster",
+        "spotify": "Spotify",
+        "juke": "JUKE",
+        "tidal": "TIDAL",
+        "deezer": "Deezer",
+        "airplay": "AirPlay",
+        "mc_link": "MC Link",
+        "server": "Server",
+        "net_radio": "Net Radio",
+        "bluetooth": "Bluetooth"
       }
     },
     "native": {},
@@ -23500,10 +23924,23 @@
         "uk": "Назва групи",
         "zh-cn": "群组名称"
       },
+      "desc": {
+        "en": "The name of the MusicCast group. The device keeps it only until it restarts; an empty name restores the default.",
+        "de": "Der Name der MusicCast-Gruppe. Das Gerät behält ihn nur bis zum nächsten Neustart; ein leerer Name stellt den Standard wieder her.",
+        "ru": "Имя группы MusicCast. Устройство хранит его только до перезапуска; пустое имя восстанавливает имя по умолчанию.",
+        "pt": "O nome do grupo MusicCast. O dispositivo só o guarda até reiniciar; um nome vazio repõe o predefinido.",
+        "nl": "De naam van de MusicCast-groep. Het apparaat bewaart hem alleen tot de volgende herstart; een lege naam zet de standaard terug.",
+        "fr": "Le nom du groupe MusicCast. L'appareil ne le garde que jusqu'à son redémarrage ; un nom vide rétablit celui par défaut.",
+        "it": "Il nome del gruppo MusicCast. Il dispositivo lo conserva solo fino al riavvio; un nome vuoto ripristina quello predefinito.",
+        "es": "El nombre del grupo MusicCast. El dispositivo solo lo conserva hasta que se reinicia; un nombre vacío restablece el predeterminado.",
+        "pl": "Nazwa grupy MusicCast. Urządzenie przechowuje ją tylko do ponownego uruchomienia; pusta nazwa przywraca domyślną.",
+        "uk": "Назва групи MusicCast. Пристрій зберігає її лише до перезапуску; порожня назва відновлює стандартну.",
+        "zh-cn": "MusicCast 组的名称。设备仅保留到下次重启；留空则恢复默认名称。"
+      },
       "type": "string",
       "role": "text",
       "read": true,
-      "write": false
+      "write": true
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_15.multiroom.group.name"
@@ -23525,17 +23962,17 @@
         "zh-cn": "角色（服务器/客户端）"
       },
       "desc": {
-        "en": "Whether this device feeds the group, plays along in it, or is not linked at all.",
-        "de": "Ob dieses Gerät die Gruppe speist, in ihr mitspielt oder gar nicht verbunden ist.",
-        "ru": "Питает ли это устройство группу, играет ли в ней вместе с другими или вовсе не связано.",
-        "pt": "Se este aparelho alimenta o grupo, toca em conjunto nele, ou não está ligado de todo.",
-        "nl": "Of dit apparaat de groep voedt, erin meespeelt, of helemaal niet gekoppeld is.",
-        "fr": "Si cet appareil alimente le groupe, y joue avec les autres, ou n'est pas lié du tout.",
-        "it": "Se questo apparecchio alimenta il gruppo, vi suona insieme agli altri, o non è affatto collegato.",
-        "es": "Si este aparato alimenta el grupo, suena junto a los demás, o no está enlazado en absoluto.",
-        "pl": "Czy to urządzenie zasila grupę, gra w niej razem z innymi, czy nie jest w ogóle połączone.",
-        "uk": "Чи живить цей пристрій групу, чи грає в ній разом з іншими, чи взагалі не пов'язаний.",
-        "zh-cn": "本设备是为该组供源、随组同播，还是根本未加入联动。"
+        "en": "Whether this device feeds the group, plays along in it, or is not linked at all — read from its group and its client list, as the specification asks, not from the device's role word alone.",
+        "de": "Ob dieses Gerät die Gruppe speist, in ihr mitspielt oder gar nicht verbunden ist — gelesen aus seiner Gruppe und seiner Client-Liste, wie die Spezifikation es verlangt, nicht nur aus dem Rollenwort des Geräts.",
+        "ru": "Питает ли это устройство группу, играет ли в ней или вообще не связано — определяется по его группе и списку клиентов, как требует спецификация, а не только по слову роли устройства.",
+        "pt": "Se este dispositivo alimenta o grupo, participa nele ou não está ligado — deduzido do seu grupo e da sua lista de clientes, como pede a especificação, não apenas da palavra de função do dispositivo.",
+        "nl": "Of dit apparaat de groep voedt, erin meespeelt of helemaal niet gekoppeld is — afgeleid uit zijn groep en zijn clientlijst, zoals de specificatie vraagt, niet alleen uit het rolwoord van het apparaat.",
+        "fr": "Si cet appareil alimente le groupe, y participe ou n'est pas lié du tout — déduit de son groupe et de sa liste de clients, comme la spécification le demande, pas du seul mot de rôle de l'appareil.",
+        "it": "Se questo dispositivo alimenta il gruppo, vi partecipa o non è collegato affatto — dedotto dal suo gruppo e dalla sua lista di client, come chiede la specifica, non solo dalla parola di ruolo del dispositivo.",
+        "es": "Si este dispositivo alimenta el grupo, participa en él o no está enlazado — se deduce de su grupo y de su lista de clientes, como pide la especificación, no solo de la palabra de rol del dispositivo.",
+        "pl": "Czy to urządzenie zasila grupę, gra w niej, czy nie jest połączone — ustalane z jego grupy i listy klientów, jak wymaga specyfikacja, a nie tylko ze słowa roli urządzenia.",
+        "uk": "Чи живить цей пристрій групу, грає в ній чи зовсім не з'єднаний — визначається за його групою та списком клієнтів, як вимагає специфікація, а не лише за словом ролі пристрою.",
+        "zh-cn": "此设备是为组供音、在组中播放，还是完全未连接——按规范要求根据其组和客户端列表判断，而不只看设备的角色字段。"
       },
       "type": "string",
       "role": "state",
@@ -23568,6 +24005,48 @@
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_15.multiroom.group.serverZone"
+  },
+  "yamaha.0.10_10_0_15.multiroom.group.status": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Group status",
+        "de": "Gruppenstatus",
+        "ru": "Состояние группы",
+        "pt": "Estado do grupo",
+        "nl": "Groepsstatus",
+        "fr": "État du groupe",
+        "it": "Stato del gruppo",
+        "es": "Estado del grupo",
+        "pl": "Stan grupy",
+        "uk": "Стан групи",
+        "zh-cn": "组状态"
+      },
+      "desc": {
+        "en": "Whether the group is being built, working or being dissolved, as its server reports it; building a group can take up to three minutes.",
+        "de": "Ob die Gruppe gerade aufgebaut wird, läuft oder aufgelöst wird, so wie ihr Server es meldet; der Aufbau kann bis zu drei Minuten dauern.",
+        "ru": "Создаётся ли группа, работает или распускается — по данным её сервера; создание группы может занять до трёх минут.",
+        "pt": "Se o grupo está a ser criado, a funcionar ou a ser desfeito, tal como o servidor o comunica; criar um grupo pode demorar até três minutos.",
+        "nl": "Of de groep wordt opgebouwd, werkt of wordt opgeheven, zoals de server van de groep het meldt; het opbouwen kan tot drie minuten duren.",
+        "fr": "Si le groupe est en cours de création, actif ou en cours de dissolution, tel que son serveur l'indique ; la création peut prendre jusqu'à trois minutes.",
+        "it": "Se il gruppo è in creazione, attivo o in scioglimento, come lo segnala il suo server; la creazione può durare fino a tre minuti.",
+        "es": "Si el grupo se está creando, está funcionando o se está deshaciendo, según lo informa su servidor; crear un grupo puede tardar hasta tres minutos.",
+        "pl": "Czy grupa jest tworzona, działa czy jest rozwiązywana, zgodnie z tym, co zgłasza jej serwer; tworzenie grupy może potrwać do trzech minut.",
+        "uk": "Чи група створюється, працює чи розпускається — за даними її сервера; створення групи може тривати до трьох хвилин.",
+        "zh-cn": "组是否正在建立、正在运行或正在解散，以组服务器的报告为准；建立组最多可能需要三分钟。"
+      },
+      "type": "string",
+      "role": "state",
+      "read": true,
+      "write": false,
+      "states": {
+        "building": "building",
+        "working": "working",
+        "deleting": "deleting"
+      }
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_15.multiroom.group.status"
   },
   "yamaha.0.10_10_0_15.multiroom.group.streamingEnabled": {
     "type": "state",
@@ -23605,43 +24084,6 @@
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_15.multiroom.group.streamingEnabled"
-  },
-  "yamaha.0.10_10_0_15.multiroom.party": {
-    "type": "state",
-    "common": {
-      "type": "boolean",
-      "role": "switch",
-      "read": true,
-      "write": true,
-      "name": {
-        "en": "Party mode (all zones)",
-        "de": "Party-Modus (alle Zonen)",
-        "ru": "Режим вечеринки (все зоны)",
-        "pt": "Modo festa (todas as zonas)",
-        "nl": "Partymodus (alle zones)",
-        "fr": "Mode fête (toutes zones)",
-        "it": "Modalità party (tutte le zone)",
-        "es": "Modo fiesta (todas las zonas)",
-        "pl": "Tryb imprezy (wszystkie strefy)",
-        "uk": "Режим вечірки (усі зони)",
-        "zh-cn": "派对模式（所有区域）"
-      },
-      "desc": {
-        "en": "Plays the main zone's source in every zone at once.",
-        "de": "Gibt die Quelle der Hauptzone in allen Zonen gleichzeitig wieder.",
-        "ru": "Воспроизводит источник главной зоны сразу во всех зонах.",
-        "pt": "Reproduz a fonte da zona principal em todas as zonas ao mesmo tempo.",
-        "nl": "Speelt de bron van de hoofdzone in alle zones tegelijk af.",
-        "fr": "Diffuse la source de la zone principale dans toutes les zones.",
-        "it": "Riproduce la sorgente della zona principale in tutte le zone insieme.",
-        "es": "Reproduce la fuente de la zona principal en todas las zonas a la vez.",
-        "pl": "Odtwarza źródło strefy głównej we wszystkich strefach naraz.",
-        "uk": "Відтворює джерело головної зони в усіх зонах одночасно.",
-        "zh-cn": "将主区音源同时播放到所有分区。"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.10_10_0_15.multiroom.party"
   },
   "yamaha.0.10_10_0_15.mute": {
     "type": "state",
@@ -23745,17 +24187,17 @@
         "zh-cn": "专辑封面"
       },
       "desc": {
-        "en": "Where the cover of the current track can be fetched: a full URL, or a path on the receiver's own web server.",
-        "de": "Wo das Cover des laufenden Titels zu holen ist: eine vollständige URL oder ein Pfad auf dem Webserver des Receivers.",
-        "ru": "Откуда взять обложку текущего трека: полный URL либо путь на собственном веб-сервере ресивера.",
-        "pt": "Onde ir buscar a capa da faixa atual: um URL completo ou um caminho no servidor web do próprio recetor.",
-        "nl": "Waar de hoes van het huidige nummer te halen is: een volledige URL of een pad op de webserver van de receiver zelf.",
-        "fr": "Où récupérer la pochette du titre en cours : une URL complète, ou un chemin sur le serveur web de l'ampli.",
-        "it": "Dove recuperare la copertina del brano in riproduzione: un URL completo oppure un percorso sul server web del ricevitore.",
-        "es": "Dónde obtener la carátula de la pista actual: una URL completa o una ruta en el propio servidor web del receptor.",
-        "pl": "Skąd pobrać okładkę bieżącego utworu: pełny adres URL albo ścieżka na serwerze WWW samego amplitunera.",
-        "uk": "Звідки взяти обкладинку поточного треку: повна URL-адреса або шлях на власному вебсервері ресивера.",
-        "zh-cn": "当前曲目封面的取用位置：一个完整 URL，或功放自身 Web 服务器上的路径。"
+        "en": "The web address of the current track's cover.",
+        "de": "Die Webadresse des Covers des laufenden Titels.",
+        "ru": "Веб-адрес обложки текущего трека.",
+        "pt": "O endereço web da capa da faixa atual.",
+        "nl": "Het webadres van de hoes van het huidige nummer.",
+        "fr": "L'adresse web de la pochette du titre en cours.",
+        "it": "L'indirizzo web della copertina del brano in riproduzione.",
+        "es": "La dirección web de la carátula de la pista actual.",
+        "pl": "Adres internetowy okładki bieżącego utworu.",
+        "uk": "Вебадреса обкладинки поточного треку.",
+        "zh-cn": "当前曲目封面的网址。"
       }
     },
     "native": {},
@@ -23957,17 +24399,17 @@
         "zh-cn": "菜单层级"
       },
       "desc": {
-        "en": "How deep in the menu you currently are; 0 is the top.",
-        "de": "Wie tief Sie gerade im Menü stehen; 0 ist die oberste Ebene.",
-        "ru": "Насколько глубоко вы сейчас в меню; 0 — верхний уровень.",
-        "pt": "A que profundidade está no menu; 0 é o topo.",
-        "nl": "Hoe diep u nu in het menu zit; 0 is bovenaan.",
-        "fr": "À quelle profondeur du menu vous êtes ; 0 est le sommet.",
-        "it": "Quanto in profondità siete nel menu; 0 è il livello più alto.",
-        "es": "A qué profundidad está en el menú; 0 es el nivel superior.",
-        "pl": "Jak głęboko jesteś w menu; 0 to najwyższy poziom.",
-        "uk": "Наскільки глибоко ви в меню; 0 — верхній рівень.",
-        "zh-cn": "当前处于菜单的第几层；0 为最上层。"
+        "en": "How deep in the menu you currently are: 1 is the top, 0 means no menu is open.",
+        "de": "Wie tief du gerade im Menü stehst: 1 ist die oberste Ebene, 0 heißt, kein Menü ist offen.",
+        "ru": "Насколько глубоко вы сейчас в меню: 1 — верхний уровень, 0 — меню не открыто.",
+        "pt": "A que profundidade está no menu: 1 é o topo, 0 significa que nenhum menu está aberto.",
+        "nl": "Hoe diep u nu in het menu zit: 1 is bovenaan, 0 betekent dat er geen menu open is.",
+        "fr": "À quelle profondeur du menu vous êtes : 1 est le sommet, 0 signifie qu'aucun menu n'est ouvert.",
+        "it": "Quanto in profondità siete nel menu: 1 è il livello più alto, 0 significa che nessun menu è aperto.",
+        "es": "A qué profundidad está en el menú: 1 es el nivel superior, 0 significa que no hay ningún menú abierto.",
+        "pl": "Jak głęboko jesteś w menu: 1 to najwyższy poziom, 0 oznacza, że żadne menu nie jest otwarte.",
+        "uk": "Наскільки глибоко ви в меню: 1 — верхній рівень, 0 — меню не відкрите.",
+        "zh-cn": "当前处于菜单的第几层：1 为最上层，0 表示没有打开的菜单。"
       },
       "type": "number",
       "role": "value",
@@ -24421,6 +24863,46 @@
     "native": {},
     "_id": "yamaha.0.10_10_0_15.player.browse.path"
   },
+  "yamaha.0.10_10_0_15.player.browse.playLine": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Play line (whole folder)",
+        "de": "Zeile abspielen (ganzer Ordner)",
+        "ru": "Воспроизвести строку (всю папку)",
+        "pt": "Reproduzir linha (pasta inteira)",
+        "nl": "Regel afspelen (hele map)",
+        "fr": "Lire la ligne (dossier entier)",
+        "it": "Riproduci riga (cartella intera)",
+        "es": "Reproducir línea (carpeta completa)",
+        "pl": "Odtwórz wiersz (cały folder)",
+        "uk": "Відтворити рядок (усю теку)",
+        "zh-cn": "播放行（整个文件夹）"
+      },
+      "desc": {
+        "en": "Plays the folder on this line (an album, a playlist) as a whole instead of opening it.",
+        "de": "Spielt den Ordner auf dieser Zeile (ein Album, eine Playlist) als Ganzes ab, statt ihn zu öffnen.",
+        "ru": "Воспроизводит папку в этой строке (альбом, плейлист) целиком, вместо того чтобы открыть её.",
+        "pt": "Reproduz por inteiro a pasta desta linha (um álbum, uma playlist) em vez de a abrir.",
+        "nl": "Speelt de map op deze regel (een album, een afspeellijst) als geheel af in plaats van hem te openen.",
+        "fr": "Lit en entier le dossier de cette ligne (un album, une playlist) au lieu de l'ouvrir.",
+        "it": "Riproduce per intero la cartella di questa riga (un album, una playlist) invece di aprirla.",
+        "es": "Reproduce completa la carpeta de esta línea (un álbum, una lista) en lugar de abrirla.",
+        "pl": "Odtwarza w całości folder z tego wiersza (album, playlistę) zamiast go otwierać.",
+        "uk": "Відтворює теку в цьому рядку (альбом, плейлист) повністю, замість того щоб відкрити її.",
+        "zh-cn": "将此行的文件夹（专辑、播放列表）整体播放，而不是打开它。"
+      },
+      "type": "number",
+      "role": "level",
+      "read": true,
+      "write": true,
+      "min": 1,
+      "max": 8,
+      "step": 1
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_15.player.browse.playLine"
+  },
   "yamaha.0.10_10_0_15.player.browse.rows": {
     "type": "state",
     "common": {
@@ -24674,6 +25156,58 @@
     "native": {},
     "_id": "yamaha.0.10_10_0_15.player.netPlayer"
   },
+  "yamaha.0.10_10_0_15.player.netPlayer.playError": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Playback error",
+        "de": "Wiedergabefehler",
+        "ru": "Ошибка воспроизведения",
+        "pt": "Erro de reprodução",
+        "nl": "Afspeelfout",
+        "fr": "Erreur de lecture",
+        "it": "Errore di riproduzione",
+        "es": "Error de reproducción",
+        "pl": "Błąd odtwarzania",
+        "uk": "Помилка відтворення",
+        "zh-cn": "播放错误"
+      },
+      "desc": {
+        "en": "The error the network player reports for the current playback: 0 means none, otherwise the reason (for example an access error or playback unavailable).",
+        "de": "Der Fehler, den der Netzwerk-Player zur laufenden Wiedergabe meldet: 0 heißt keiner, sonst der Grund (zum Beispiel ein Zugriffsfehler oder Wiedergabe nicht verfügbar).",
+        "ru": "Ошибка, которую сетевой плеер сообщает о текущем воспроизведении: 0 означает отсутствие ошибки, иначе причину (например, ошибка доступа или воспроизведение недоступно).",
+        "pt": "O erro que o leitor de rede comunica sobre a reprodução atual: 0 significa nenhum; caso contrário, o motivo (por exemplo, um erro de acesso ou reprodução indisponível).",
+        "nl": "De fout die de netwerkspeler meldt voor het huidige afspelen: 0 betekent geen, anders de reden (bijvoorbeeld een toegangsfout of afspelen niet beschikbaar).",
+        "fr": "L'erreur que le lecteur réseau signale pour la lecture en cours : 0 signifie aucune, sinon la raison (par exemple une erreur d'accès ou une lecture indisponible).",
+        "it": "L'errore che il lettore di rete segnala per la riproduzione in corso: 0 significa nessuno, altrimenti il motivo (ad esempio un errore di accesso o riproduzione non disponibile).",
+        "es": "El error que el reproductor de red informa sobre la reproducción actual: 0 significa ninguno; si no, el motivo (por ejemplo, un error de acceso o reproducción no disponible).",
+        "pl": "Błąd, który odtwarzacz sieciowy zgłasza dla bieżącego odtwarzania: 0 oznacza brak, w przeciwnym razie przyczynę (np. błąd dostępu lub niedostępne odtwarzanie).",
+        "uk": "Помилка, яку мережевий плеєр повідомляє про поточне відтворення: 0 означає відсутність помилки, інакше причину (наприклад, помилка доступу або відтворення недоступне).",
+        "zh-cn": "网络播放器针对当前播放报告的错误：0 表示无错误，否则为原因（例如访问错误或无法播放）。"
+      },
+      "type": "number",
+      "role": "value",
+      "read": true,
+      "write": false,
+      "states": {
+        "0": "No Error",
+        "1": "Access Error",
+        "2": "Playback Unavailable",
+        "3": "Skip Limit Reached",
+        "4": "Invalid Session",
+        "5": "High-Resolution File Not Playable at MusicCast Leaf",
+        "6": "User Uncredentialed",
+        "7": "Track Restricted by Right Holders",
+        "8": "Sample Restricted by Right Holders",
+        "9": "Genre Restricted by Streaming Credentials",
+        "10": "Application Restricted by Streaming Credentials",
+        "11": "Intent Restricted by Streaming Credentials",
+        "100": "Multiple Errors"
+      }
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_15.player.netPlayer.playError"
+  },
   "yamaha.0.10_10_0_15.player.netPlayer.playlists": {
     "type": "state",
     "common": {
@@ -24711,6 +25245,43 @@
     "native": {},
     "_id": "yamaha.0.10_10_0_15.player.netPlayer.playlists"
   },
+  "yamaha.0.10_10_0_15.player.netPlayer.playMessage": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Playback message",
+        "de": "Wiedergabemeldung",
+        "ru": "Сообщение о воспроизведении",
+        "pt": "Mensagem de reprodução",
+        "nl": "Afspeelmelding",
+        "fr": "Message de lecture",
+        "it": "Messaggio di riproduzione",
+        "es": "Mensaje de reproducción",
+        "pl": "Komunikat odtwarzania",
+        "uk": "Повідомлення про відтворення",
+        "zh-cn": "播放消息"
+      },
+      "desc": {
+        "en": "The message the network player shows about the current playback, as the device sends it.",
+        "de": "Die Meldung, die der Netzwerk-Player zur laufenden Wiedergabe zeigt, so wie das Gerät sie schickt.",
+        "ru": "Сообщение сетевого плеера о текущем воспроизведении в том виде, в каком его отправляет устройство.",
+        "pt": "A mensagem que o leitor de rede mostra sobre a reprodução atual, tal como o dispositivo a envia.",
+        "nl": "De melding die de netwerkspeler toont over het huidige afspelen, zoals het apparaat die stuurt.",
+        "fr": "Le message que le lecteur réseau affiche pour la lecture en cours, tel que l'appareil l'envoie.",
+        "it": "Il messaggio che il lettore di rete mostra sulla riproduzione in corso, così come lo invia il dispositivo.",
+        "es": "El mensaje que el reproductor de red muestra sobre la reproducción actual, tal como lo envía el dispositivo.",
+        "pl": "Komunikat, który odtwarzacz sieciowy wyświetla o bieżącym odtwarzaniu, w postaci wysłanej przez urządzenie.",
+        "uk": "Повідомлення мережевого плеєра про поточне відтворення в тому вигляді, в якому його надсилає пристрій.",
+        "zh-cn": "网络播放器针对当前播放显示的消息，与设备发送的内容一致。"
+      },
+      "type": "string",
+      "role": "text",
+      "read": true,
+      "write": false
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_15.player.netPlayer.playMessage"
+  },
   "yamaha.0.10_10_0_15.player.netPlayer.preset": {
     "type": "state",
     "common": {
@@ -24744,7 +25315,8 @@
       "role": "level",
       "read": true,
       "write": true,
-      "min": 1
+      "min": 1,
+      "max": 40
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_15.player.netPlayer.preset"
@@ -24856,7 +25428,8 @@
       "role": "level",
       "read": true,
       "write": true,
-      "min": 1
+      "min": 1,
+      "max": 40
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_15.player.netPlayer.recallRecent"
@@ -25342,6 +25915,16 @@
       "role": "level",
       "read": true,
       "write": true,
+      "min": 0,
+      "max": 120,
+      "step": 30,
+      "states": {
+        "0": "Off",
+        "30": "30 min",
+        "60": "60 min",
+        "90": "90 min",
+        "120": "120 min"
+      },
       "name": {
         "en": "Sleep timer",
         "de": "Einschlaf-Zeit",
@@ -25512,7 +26095,7 @@
       "type": "string",
       "role": "state",
       "read": true,
-      "write": false,
+      "write": true,
       "name": {
         "en": "Equalizer mode",
         "de": "Equalizer-Modus",
@@ -25550,9 +26133,9 @@
     "type": "state",
     "common": {
       "type": "string",
-      "role": "text",
+      "role": "state",
       "read": true,
-      "write": false,
+      "write": true,
       "name": {
         "en": "Link audio quality",
         "de": "Link-Audioqualität",
@@ -25591,9 +26174,9 @@
     "type": "state",
     "common": {
       "type": "string",
-      "role": "text",
+      "role": "state",
       "read": true,
-      "write": false,
+      "write": true,
       "name": {
         "en": "Link control",
         "de": "Link-Steuerung",
@@ -26176,19 +26759,19 @@
         "zh-cn": "输入"
       },
       "states": {
-        "napster": "napster",
-        "spotify": "spotify",
-        "juke": "juke",
-        "tidal": "tidal",
-        "deezer": "deezer",
-        "airplay": "airplay",
-        "mc_link": "mc_link",
-        "server": "server",
-        "net_radio": "net_radio",
-        "bluetooth": "bluetooth",
-        "hdmi": "hdmi",
-        "tv": "tv",
-        "analog": "analog"
+        "napster": "Napster",
+        "spotify": "Spotify",
+        "juke": "JUKE",
+        "tidal": "TIDAL",
+        "deezer": "Deezer",
+        "airplay": "AirPlay",
+        "mc_link": "MC Link",
+        "server": "Server",
+        "net_radio": "Net Radio",
+        "bluetooth": "Bluetooth",
+        "hdmi": "HDMI",
+        "tv": "TV",
+        "analog": "Analog"
       }
     },
     "native": {},
@@ -26424,10 +27007,23 @@
         "uk": "Назва групи",
         "zh-cn": "群组名称"
       },
+      "desc": {
+        "en": "The name of the MusicCast group. The device keeps it only until it restarts; an empty name restores the default.",
+        "de": "Der Name der MusicCast-Gruppe. Das Gerät behält ihn nur bis zum nächsten Neustart; ein leerer Name stellt den Standard wieder her.",
+        "ru": "Имя группы MusicCast. Устройство хранит его только до перезапуска; пустое имя восстанавливает имя по умолчанию.",
+        "pt": "O nome do grupo MusicCast. O dispositivo só o guarda até reiniciar; um nome vazio repõe o predefinido.",
+        "nl": "De naam van de MusicCast-groep. Het apparaat bewaart hem alleen tot de volgende herstart; een lege naam zet de standaard terug.",
+        "fr": "Le nom du groupe MusicCast. L'appareil ne le garde que jusqu'à son redémarrage ; un nom vide rétablit celui par défaut.",
+        "it": "Il nome del gruppo MusicCast. Il dispositivo lo conserva solo fino al riavvio; un nome vuoto ripristina quello predefinito.",
+        "es": "El nombre del grupo MusicCast. El dispositivo solo lo conserva hasta que se reinicia; un nombre vacío restablece el predeterminado.",
+        "pl": "Nazwa grupy MusicCast. Urządzenie przechowuje ją tylko do ponownego uruchomienia; pusta nazwa przywraca domyślną.",
+        "uk": "Назва групи MusicCast. Пристрій зберігає її лише до перезапуску; порожня назва відновлює стандартну.",
+        "zh-cn": "MusicCast 组的名称。设备仅保留到下次重启；留空则恢复默认名称。"
+      },
       "type": "string",
       "role": "text",
       "read": true,
-      "write": false
+      "write": true
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_16.multiroom.group.name"
@@ -26449,17 +27045,17 @@
         "zh-cn": "角色（服务器/客户端）"
       },
       "desc": {
-        "en": "Whether this device feeds the group, plays along in it, or is not linked at all.",
-        "de": "Ob dieses Gerät die Gruppe speist, in ihr mitspielt oder gar nicht verbunden ist.",
-        "ru": "Питает ли это устройство группу, играет ли в ней вместе с другими или вовсе не связано.",
-        "pt": "Se este aparelho alimenta o grupo, toca em conjunto nele, ou não está ligado de todo.",
-        "nl": "Of dit apparaat de groep voedt, erin meespeelt, of helemaal niet gekoppeld is.",
-        "fr": "Si cet appareil alimente le groupe, y joue avec les autres, ou n'est pas lié du tout.",
-        "it": "Se questo apparecchio alimenta il gruppo, vi suona insieme agli altri, o non è affatto collegato.",
-        "es": "Si este aparato alimenta el grupo, suena junto a los demás, o no está enlazado en absoluto.",
-        "pl": "Czy to urządzenie zasila grupę, gra w niej razem z innymi, czy nie jest w ogóle połączone.",
-        "uk": "Чи живить цей пристрій групу, чи грає в ній разом з іншими, чи взагалі не пов'язаний.",
-        "zh-cn": "本设备是为该组供源、随组同播，还是根本未加入联动。"
+        "en": "Whether this device feeds the group, plays along in it, or is not linked at all — read from its group and its client list, as the specification asks, not from the device's role word alone.",
+        "de": "Ob dieses Gerät die Gruppe speist, in ihr mitspielt oder gar nicht verbunden ist — gelesen aus seiner Gruppe und seiner Client-Liste, wie die Spezifikation es verlangt, nicht nur aus dem Rollenwort des Geräts.",
+        "ru": "Питает ли это устройство группу, играет ли в ней или вообще не связано — определяется по его группе и списку клиентов, как требует спецификация, а не только по слову роли устройства.",
+        "pt": "Se este dispositivo alimenta o grupo, participa nele ou não está ligado — deduzido do seu grupo e da sua lista de clientes, como pede a especificação, não apenas da palavra de função do dispositivo.",
+        "nl": "Of dit apparaat de groep voedt, erin meespeelt of helemaal niet gekoppeld is — afgeleid uit zijn groep en zijn clientlijst, zoals de specificatie vraagt, niet alleen uit het rolwoord van het apparaat.",
+        "fr": "Si cet appareil alimente le groupe, y participe ou n'est pas lié du tout — déduit de son groupe et de sa liste de clients, comme la spécification le demande, pas du seul mot de rôle de l'appareil.",
+        "it": "Se questo dispositivo alimenta il gruppo, vi partecipa o non è collegato affatto — dedotto dal suo gruppo e dalla sua lista di client, come chiede la specifica, non solo dalla parola di ruolo del dispositivo.",
+        "es": "Si este dispositivo alimenta el grupo, participa en él o no está enlazado — se deduce de su grupo y de su lista de clientes, como pide la especificación, no solo de la palabra de rol del dispositivo.",
+        "pl": "Czy to urządzenie zasila grupę, gra w niej, czy nie jest połączone — ustalane z jego grupy i listy klientów, jak wymaga specyfikacja, a nie tylko ze słowa roli urządzenia.",
+        "uk": "Чи живить цей пристрій групу, грає в ній чи зовсім не з'єднаний — визначається за його групою та списком клієнтів, як вимагає специфікація, а не лише за словом ролі пристрою.",
+        "zh-cn": "此设备是为组供音、在组中播放，还是完全未连接——按规范要求根据其组和客户端列表判断，而不只看设备的角色字段。"
       },
       "type": "string",
       "role": "state",
@@ -26492,6 +27088,48 @@
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_16.multiroom.group.serverZone"
+  },
+  "yamaha.0.10_10_0_16.multiroom.group.status": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Group status",
+        "de": "Gruppenstatus",
+        "ru": "Состояние группы",
+        "pt": "Estado do grupo",
+        "nl": "Groepsstatus",
+        "fr": "État du groupe",
+        "it": "Stato del gruppo",
+        "es": "Estado del grupo",
+        "pl": "Stan grupy",
+        "uk": "Стан групи",
+        "zh-cn": "组状态"
+      },
+      "desc": {
+        "en": "Whether the group is being built, working or being dissolved, as its server reports it; building a group can take up to three minutes.",
+        "de": "Ob die Gruppe gerade aufgebaut wird, läuft oder aufgelöst wird, so wie ihr Server es meldet; der Aufbau kann bis zu drei Minuten dauern.",
+        "ru": "Создаётся ли группа, работает или распускается — по данным её сервера; создание группы может занять до трёх минут.",
+        "pt": "Se o grupo está a ser criado, a funcionar ou a ser desfeito, tal como o servidor o comunica; criar um grupo pode demorar até três minutos.",
+        "nl": "Of de groep wordt opgebouwd, werkt of wordt opgeheven, zoals de server van de groep het meldt; het opbouwen kan tot drie minuten duren.",
+        "fr": "Si le groupe est en cours de création, actif ou en cours de dissolution, tel que son serveur l'indique ; la création peut prendre jusqu'à trois minutes.",
+        "it": "Se il gruppo è in creazione, attivo o in scioglimento, come lo segnala il suo server; la creazione può durare fino a tre minuti.",
+        "es": "Si el grupo se está creando, está funcionando o se está deshaciendo, según lo informa su servidor; crear un grupo puede tardar hasta tres minutos.",
+        "pl": "Czy grupa jest tworzona, działa czy jest rozwiązywana, zgodnie z tym, co zgłasza jej serwer; tworzenie grupy może potrwać do trzech minut.",
+        "uk": "Чи група створюється, працює чи розпускається — за даними її сервера; створення групи може тривати до трьох хвилин.",
+        "zh-cn": "组是否正在建立、正在运行或正在解散，以组服务器的报告为准；建立组最多可能需要三分钟。"
+      },
+      "type": "string",
+      "role": "state",
+      "read": true,
+      "write": false,
+      "states": {
+        "building": "building",
+        "working": "working",
+        "deleting": "deleting"
+      }
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_16.multiroom.group.status"
   },
   "yamaha.0.10_10_0_16.multiroom.group.streamingEnabled": {
     "type": "state",
@@ -26529,43 +27167,6 @@
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_16.multiroom.group.streamingEnabled"
-  },
-  "yamaha.0.10_10_0_16.multiroom.party": {
-    "type": "state",
-    "common": {
-      "type": "boolean",
-      "role": "switch",
-      "read": true,
-      "write": true,
-      "name": {
-        "en": "Party mode (all zones)",
-        "de": "Party-Modus (alle Zonen)",
-        "ru": "Режим вечеринки (все зоны)",
-        "pt": "Modo festa (todas as zonas)",
-        "nl": "Partymodus (alle zones)",
-        "fr": "Mode fête (toutes zones)",
-        "it": "Modalità party (tutte le zone)",
-        "es": "Modo fiesta (todas las zonas)",
-        "pl": "Tryb imprezy (wszystkie strefy)",
-        "uk": "Режим вечірки (усі зони)",
-        "zh-cn": "派对模式（所有区域）"
-      },
-      "desc": {
-        "en": "Plays the main zone's source in every zone at once.",
-        "de": "Gibt die Quelle der Hauptzone in allen Zonen gleichzeitig wieder.",
-        "ru": "Воспроизводит источник главной зоны сразу во всех зонах.",
-        "pt": "Reproduz a fonte da zona principal em todas as zonas ao mesmo tempo.",
-        "nl": "Speelt de bron van de hoofdzone in alle zones tegelijk af.",
-        "fr": "Diffuse la source de la zone principale dans toutes les zones.",
-        "it": "Riproduce la sorgente della zona principale in tutte le zone insieme.",
-        "es": "Reproduce la fuente de la zona principal en todas las zonas a la vez.",
-        "pl": "Odtwarza źródło strefy głównej we wszystkich strefach naraz.",
-        "uk": "Відтворює джерело головної зони в усіх зонах одночасно.",
-        "zh-cn": "将主区音源同时播放到所有分区。"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.10_10_0_16.multiroom.party"
   },
   "yamaha.0.10_10_0_16.mute": {
     "type": "state",
@@ -26669,17 +27270,17 @@
         "zh-cn": "专辑封面"
       },
       "desc": {
-        "en": "Where the cover of the current track can be fetched: a full URL, or a path on the receiver's own web server.",
-        "de": "Wo das Cover des laufenden Titels zu holen ist: eine vollständige URL oder ein Pfad auf dem Webserver des Receivers.",
-        "ru": "Откуда взять обложку текущего трека: полный URL либо путь на собственном веб-сервере ресивера.",
-        "pt": "Onde ir buscar a capa da faixa atual: um URL completo ou um caminho no servidor web do próprio recetor.",
-        "nl": "Waar de hoes van het huidige nummer te halen is: een volledige URL of een pad op de webserver van de receiver zelf.",
-        "fr": "Où récupérer la pochette du titre en cours : une URL complète, ou un chemin sur le serveur web de l'ampli.",
-        "it": "Dove recuperare la copertina del brano in riproduzione: un URL completo oppure un percorso sul server web del ricevitore.",
-        "es": "Dónde obtener la carátula de la pista actual: una URL completa o una ruta en el propio servidor web del receptor.",
-        "pl": "Skąd pobrać okładkę bieżącego utworu: pełny adres URL albo ścieżka na serwerze WWW samego amplitunera.",
-        "uk": "Звідки взяти обкладинку поточного треку: повна URL-адреса або шлях на власному вебсервері ресивера.",
-        "zh-cn": "当前曲目封面的取用位置：一个完整 URL，或功放自身 Web 服务器上的路径。"
+        "en": "The web address of the current track's cover.",
+        "de": "Die Webadresse des Covers des laufenden Titels.",
+        "ru": "Веб-адрес обложки текущего трека.",
+        "pt": "O endereço web da capa da faixa atual.",
+        "nl": "Het webadres van de hoes van het huidige nummer.",
+        "fr": "L'adresse web de la pochette du titre en cours.",
+        "it": "L'indirizzo web della copertina del brano in riproduzione.",
+        "es": "La dirección web de la carátula de la pista actual.",
+        "pl": "Adres internetowy okładki bieżącego utworu.",
+        "uk": "Вебадреса обкладинки поточного треку.",
+        "zh-cn": "当前曲目封面的网址。"
       }
     },
     "native": {},
@@ -26881,17 +27482,17 @@
         "zh-cn": "菜单层级"
       },
       "desc": {
-        "en": "How deep in the menu you currently are; 0 is the top.",
-        "de": "Wie tief Sie gerade im Menü stehen; 0 ist die oberste Ebene.",
-        "ru": "Насколько глубоко вы сейчас в меню; 0 — верхний уровень.",
-        "pt": "A que profundidade está no menu; 0 é o topo.",
-        "nl": "Hoe diep u nu in het menu zit; 0 is bovenaan.",
-        "fr": "À quelle profondeur du menu vous êtes ; 0 est le sommet.",
-        "it": "Quanto in profondità siete nel menu; 0 è il livello più alto.",
-        "es": "A qué profundidad está en el menú; 0 es el nivel superior.",
-        "pl": "Jak głęboko jesteś w menu; 0 to najwyższy poziom.",
-        "uk": "Наскільки глибоко ви в меню; 0 — верхній рівень.",
-        "zh-cn": "当前处于菜单的第几层；0 为最上层。"
+        "en": "How deep in the menu you currently are: 1 is the top, 0 means no menu is open.",
+        "de": "Wie tief du gerade im Menü stehst: 1 ist die oberste Ebene, 0 heißt, kein Menü ist offen.",
+        "ru": "Насколько глубоко вы сейчас в меню: 1 — верхний уровень, 0 — меню не открыто.",
+        "pt": "A que profundidade está no menu: 1 é o topo, 0 significa que nenhum menu está aberto.",
+        "nl": "Hoe diep u nu in het menu zit: 1 is bovenaan, 0 betekent dat er geen menu open is.",
+        "fr": "À quelle profondeur du menu vous êtes : 1 est le sommet, 0 signifie qu'aucun menu n'est ouvert.",
+        "it": "Quanto in profondità siete nel menu: 1 è il livello più alto, 0 significa che nessun menu è aperto.",
+        "es": "A qué profundidad está en el menú: 1 es el nivel superior, 0 significa que no hay ningún menú abierto.",
+        "pl": "Jak głęboko jesteś w menu: 1 to najwyższy poziom, 0 oznacza, że żadne menu nie jest otwarte.",
+        "uk": "Наскільки глибоко ви в меню: 1 — верхній рівень, 0 — меню не відкрите.",
+        "zh-cn": "当前处于菜单的第几层：1 为最上层，0 表示没有打开的菜单。"
       },
       "type": "number",
       "role": "value",
@@ -27345,6 +27946,46 @@
     "native": {},
     "_id": "yamaha.0.10_10_0_16.player.browse.path"
   },
+  "yamaha.0.10_10_0_16.player.browse.playLine": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Play line (whole folder)",
+        "de": "Zeile abspielen (ganzer Ordner)",
+        "ru": "Воспроизвести строку (всю папку)",
+        "pt": "Reproduzir linha (pasta inteira)",
+        "nl": "Regel afspelen (hele map)",
+        "fr": "Lire la ligne (dossier entier)",
+        "it": "Riproduci riga (cartella intera)",
+        "es": "Reproducir línea (carpeta completa)",
+        "pl": "Odtwórz wiersz (cały folder)",
+        "uk": "Відтворити рядок (усю теку)",
+        "zh-cn": "播放行（整个文件夹）"
+      },
+      "desc": {
+        "en": "Plays the folder on this line (an album, a playlist) as a whole instead of opening it.",
+        "de": "Spielt den Ordner auf dieser Zeile (ein Album, eine Playlist) als Ganzes ab, statt ihn zu öffnen.",
+        "ru": "Воспроизводит папку в этой строке (альбом, плейлист) целиком, вместо того чтобы открыть её.",
+        "pt": "Reproduz por inteiro a pasta desta linha (um álbum, uma playlist) em vez de a abrir.",
+        "nl": "Speelt de map op deze regel (een album, een afspeellijst) als geheel af in plaats van hem te openen.",
+        "fr": "Lit en entier le dossier de cette ligne (un album, une playlist) au lieu de l'ouvrir.",
+        "it": "Riproduce per intero la cartella di questa riga (un album, una playlist) invece di aprirla.",
+        "es": "Reproduce completa la carpeta de esta línea (un álbum, una lista) en lugar de abrirla.",
+        "pl": "Odtwarza w całości folder z tego wiersza (album, playlistę) zamiast go otwierać.",
+        "uk": "Відтворює теку в цьому рядку (альбом, плейлист) повністю, замість того щоб відкрити її.",
+        "zh-cn": "将此行的文件夹（专辑、播放列表）整体播放，而不是打开它。"
+      },
+      "type": "number",
+      "role": "level",
+      "read": true,
+      "write": true,
+      "min": 1,
+      "max": 8,
+      "step": 1
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_16.player.browse.playLine"
+  },
   "yamaha.0.10_10_0_16.player.browse.rows": {
     "type": "state",
     "common": {
@@ -27598,6 +28239,58 @@
     "native": {},
     "_id": "yamaha.0.10_10_0_16.player.netPlayer"
   },
+  "yamaha.0.10_10_0_16.player.netPlayer.playError": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Playback error",
+        "de": "Wiedergabefehler",
+        "ru": "Ошибка воспроизведения",
+        "pt": "Erro de reprodução",
+        "nl": "Afspeelfout",
+        "fr": "Erreur de lecture",
+        "it": "Errore di riproduzione",
+        "es": "Error de reproducción",
+        "pl": "Błąd odtwarzania",
+        "uk": "Помилка відтворення",
+        "zh-cn": "播放错误"
+      },
+      "desc": {
+        "en": "The error the network player reports for the current playback: 0 means none, otherwise the reason (for example an access error or playback unavailable).",
+        "de": "Der Fehler, den der Netzwerk-Player zur laufenden Wiedergabe meldet: 0 heißt keiner, sonst der Grund (zum Beispiel ein Zugriffsfehler oder Wiedergabe nicht verfügbar).",
+        "ru": "Ошибка, которую сетевой плеер сообщает о текущем воспроизведении: 0 означает отсутствие ошибки, иначе причину (например, ошибка доступа или воспроизведение недоступно).",
+        "pt": "O erro que o leitor de rede comunica sobre a reprodução atual: 0 significa nenhum; caso contrário, o motivo (por exemplo, um erro de acesso ou reprodução indisponível).",
+        "nl": "De fout die de netwerkspeler meldt voor het huidige afspelen: 0 betekent geen, anders de reden (bijvoorbeeld een toegangsfout of afspelen niet beschikbaar).",
+        "fr": "L'erreur que le lecteur réseau signale pour la lecture en cours : 0 signifie aucune, sinon la raison (par exemple une erreur d'accès ou une lecture indisponible).",
+        "it": "L'errore che il lettore di rete segnala per la riproduzione in corso: 0 significa nessuno, altrimenti il motivo (ad esempio un errore di accesso o riproduzione non disponibile).",
+        "es": "El error que el reproductor de red informa sobre la reproducción actual: 0 significa ninguno; si no, el motivo (por ejemplo, un error de acceso o reproducción no disponible).",
+        "pl": "Błąd, który odtwarzacz sieciowy zgłasza dla bieżącego odtwarzania: 0 oznacza brak, w przeciwnym razie przyczynę (np. błąd dostępu lub niedostępne odtwarzanie).",
+        "uk": "Помилка, яку мережевий плеєр повідомляє про поточне відтворення: 0 означає відсутність помилки, інакше причину (наприклад, помилка доступу або відтворення недоступне).",
+        "zh-cn": "网络播放器针对当前播放报告的错误：0 表示无错误，否则为原因（例如访问错误或无法播放）。"
+      },
+      "type": "number",
+      "role": "value",
+      "read": true,
+      "write": false,
+      "states": {
+        "0": "No Error",
+        "1": "Access Error",
+        "2": "Playback Unavailable",
+        "3": "Skip Limit Reached",
+        "4": "Invalid Session",
+        "5": "High-Resolution File Not Playable at MusicCast Leaf",
+        "6": "User Uncredentialed",
+        "7": "Track Restricted by Right Holders",
+        "8": "Sample Restricted by Right Holders",
+        "9": "Genre Restricted by Streaming Credentials",
+        "10": "Application Restricted by Streaming Credentials",
+        "11": "Intent Restricted by Streaming Credentials",
+        "100": "Multiple Errors"
+      }
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_16.player.netPlayer.playError"
+  },
   "yamaha.0.10_10_0_16.player.netPlayer.playlists": {
     "type": "state",
     "common": {
@@ -27635,6 +28328,43 @@
     "native": {},
     "_id": "yamaha.0.10_10_0_16.player.netPlayer.playlists"
   },
+  "yamaha.0.10_10_0_16.player.netPlayer.playMessage": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Playback message",
+        "de": "Wiedergabemeldung",
+        "ru": "Сообщение о воспроизведении",
+        "pt": "Mensagem de reprodução",
+        "nl": "Afspeelmelding",
+        "fr": "Message de lecture",
+        "it": "Messaggio di riproduzione",
+        "es": "Mensaje de reproducción",
+        "pl": "Komunikat odtwarzania",
+        "uk": "Повідомлення про відтворення",
+        "zh-cn": "播放消息"
+      },
+      "desc": {
+        "en": "The message the network player shows about the current playback, as the device sends it.",
+        "de": "Die Meldung, die der Netzwerk-Player zur laufenden Wiedergabe zeigt, so wie das Gerät sie schickt.",
+        "ru": "Сообщение сетевого плеера о текущем воспроизведении в том виде, в каком его отправляет устройство.",
+        "pt": "A mensagem que o leitor de rede mostra sobre a reprodução atual, tal como o dispositivo a envia.",
+        "nl": "De melding die de netwerkspeler toont over het huidige afspelen, zoals het apparaat die stuurt.",
+        "fr": "Le message que le lecteur réseau affiche pour la lecture en cours, tel que l'appareil l'envoie.",
+        "it": "Il messaggio che il lettore di rete mostra sulla riproduzione in corso, così come lo invia il dispositivo.",
+        "es": "El mensaje que el reproductor de red muestra sobre la reproducción actual, tal como lo envía el dispositivo.",
+        "pl": "Komunikat, który odtwarzacz sieciowy wyświetla o bieżącym odtwarzaniu, w postaci wysłanej przez urządzenie.",
+        "uk": "Повідомлення мережевого плеєра про поточне відтворення в тому вигляді, в якому його надсилає пристрій.",
+        "zh-cn": "网络播放器针对当前播放显示的消息，与设备发送的内容一致。"
+      },
+      "type": "string",
+      "role": "text",
+      "read": true,
+      "write": false
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_16.player.netPlayer.playMessage"
+  },
   "yamaha.0.10_10_0_16.player.netPlayer.preset": {
     "type": "state",
     "common": {
@@ -27668,7 +28398,8 @@
       "role": "level",
       "read": true,
       "write": true,
-      "min": 1
+      "min": 1,
+      "max": 40
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_16.player.netPlayer.preset"
@@ -27780,7 +28511,8 @@
       "role": "level",
       "read": true,
       "write": true,
-      "min": 1
+      "min": 1,
+      "max": 40
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_16.player.netPlayer.recallRecent"
@@ -28319,9 +29051,9 @@
     "type": "state",
     "common": {
       "type": "string",
-      "role": "text",
+      "role": "state",
       "read": true,
-      "write": false,
+      "write": true,
       "name": {
         "en": "Link audio delay",
         "de": "Link-Audioverzögerung",
@@ -28360,9 +29092,9 @@
     "type": "state",
     "common": {
       "type": "string",
-      "role": "text",
+      "role": "state",
       "read": true,
-      "write": false,
+      "write": true,
       "name": {
         "en": "Link audio quality",
         "de": "Link-Audioqualität",
@@ -28401,9 +29133,9 @@
     "type": "state",
     "common": {
       "type": "string",
-      "role": "text",
+      "role": "state",
       "read": true,
-      "write": false,
+      "write": true,
       "name": {
         "en": "Link control",
         "de": "Link-Steuerung",
@@ -28585,7 +29317,7 @@
     "type": "state",
     "common": {
       "type": "number",
-      "unit": "dB",
+      "unit": "",
       "role": "level",
       "read": true,
       "write": true,
@@ -28603,17 +29335,17 @@
         "zh-cn": "低音炮微调"
       },
       "desc": {
-        "en": "Fine adjustment of the subwoofer against the other speakers.",
-        "de": "Feinabgleich des Subwoofers gegenüber den anderen Lautsprechern.",
-        "ru": "Точная подстройка сабвуфера относительно других колонок.",
-        "pt": "Ajuste fino do subwoofer face às outras colunas.",
-        "nl": "Fijnafstemming van de subwoofer ten opzichte van de andere luidsprekers.",
-        "fr": "Réglage fin du caisson de basses par rapport aux autres enceintes.",
-        "it": "Regolazione fine del subwoofer rispetto agli altri diffusori.",
-        "es": "Ajuste fino del subgrave frente a los demás altavoces.",
-        "pl": "Precyzyjne dopasowanie subwoofera do pozostałych głośników.",
-        "uk": "Точне налаштування сабвуфера відносно інших колонок.",
-        "zh-cn": "低音炮相对其他扬声器的微调。"
+        "en": "Fine adjustment of the subwoofer against the other speakers: decibels where the unit says so, otherwise the device's own steps.",
+        "de": "Feinabgleich des Subwoofers gegenüber den anderen Lautsprechern: Dezibel, wo die Einheit es sagt, sonst die eigenen Schritte des Geräts.",
+        "ru": "Точная подстройка сабвуфера относительно остальных колонок: в децибелах, где это указано единицей, иначе в собственных шагах устройства.",
+        "pt": "Ajuste fino do subwoofer em relação às outras colunas: decibéis onde a unidade o indica; caso contrário, os passos próprios do dispositivo.",
+        "nl": "Fijnafstelling van de subwoofer ten opzichte van de andere luidsprekers: decibel waar de eenheid dat zegt, anders de eigen stappen van het apparaat.",
+        "fr": "Réglage fin du caisson de basses par rapport aux autres enceintes : en décibels là où l'unité l'indique, sinon dans les pas propres à l'appareil.",
+        "it": "Regolazione fine del subwoofer rispetto agli altri diffusori: decibel dove lo indica l'unità, altrimenti i passi propri del dispositivo.",
+        "es": "Ajuste fino del subwoofer frente a los demás altavoces: decibelios donde la unidad lo indica; si no, los pasos propios del dispositivo.",
+        "pl": "Dokładne dostrojenie subwoofera względem pozostałych głośników: decybele tam, gdzie wskazuje to jednostka, w przeciwnym razie własne kroki urządzenia.",
+        "uk": "Точне підлаштування сабвуфера відносно інших колонок: у децибелах, де це вказує одиниця, інакше у власних кроках пристрою.",
+        "zh-cn": "低音炮相对其他扬声器的微调：单位注明时为分贝，否则为设备自身的步进。"
       },
       "min": -10,
       "max": 10,
@@ -28656,12 +29388,12 @@
         "zh-cn": "功放对当前音源应用的音效程序。"
       },
       "states": {
-        "sports": "sports",
-        "game": "game",
-        "music": "music",
-        "tv_program": "tv_program",
-        "movie": "movie",
-        "stereo": "stereo"
+        "sports": "Sports",
+        "game": "Game",
+        "music": "Music",
+        "tv_program": "TV Program",
+        "movie": "Movie",
+        "stereo": "Stereo"
       }
     },
     "native": {},
@@ -29280,10 +30012,23 @@
         "uk": "Назва групи",
         "zh-cn": "群组名称"
       },
+      "desc": {
+        "en": "The name of the MusicCast group. The device keeps it only until it restarts; an empty name restores the default.",
+        "de": "Der Name der MusicCast-Gruppe. Das Gerät behält ihn nur bis zum nächsten Neustart; ein leerer Name stellt den Standard wieder her.",
+        "ru": "Имя группы MusicCast. Устройство хранит его только до перезапуска; пустое имя восстанавливает имя по умолчанию.",
+        "pt": "O nome do grupo MusicCast. O dispositivo só o guarda até reiniciar; um nome vazio repõe o predefinido.",
+        "nl": "De naam van de MusicCast-groep. Het apparaat bewaart hem alleen tot de volgende herstart; een lege naam zet de standaard terug.",
+        "fr": "Le nom du groupe MusicCast. L'appareil ne le garde que jusqu'à son redémarrage ; un nom vide rétablit celui par défaut.",
+        "it": "Il nome del gruppo MusicCast. Il dispositivo lo conserva solo fino al riavvio; un nome vuoto ripristina quello predefinito.",
+        "es": "El nombre del grupo MusicCast. El dispositivo solo lo conserva hasta que se reinicia; un nombre vacío restablece el predeterminado.",
+        "pl": "Nazwa grupy MusicCast. Urządzenie przechowuje ją tylko do ponownego uruchomienia; pusta nazwa przywraca domyślną.",
+        "uk": "Назва групи MusicCast. Пристрій зберігає її лише до перезапуску; порожня назва відновлює стандартну.",
+        "zh-cn": "MusicCast 组的名称。设备仅保留到下次重启；留空则恢复默认名称。"
+      },
       "type": "string",
       "role": "text",
       "read": true,
-      "write": false
+      "write": true
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_17.multiroom.group.name"
@@ -29305,17 +30050,17 @@
         "zh-cn": "角色（服务器/客户端）"
       },
       "desc": {
-        "en": "Whether this device feeds the group, plays along in it, or is not linked at all.",
-        "de": "Ob dieses Gerät die Gruppe speist, in ihr mitspielt oder gar nicht verbunden ist.",
-        "ru": "Питает ли это устройство группу, играет ли в ней вместе с другими или вовсе не связано.",
-        "pt": "Se este aparelho alimenta o grupo, toca em conjunto nele, ou não está ligado de todo.",
-        "nl": "Of dit apparaat de groep voedt, erin meespeelt, of helemaal niet gekoppeld is.",
-        "fr": "Si cet appareil alimente le groupe, y joue avec les autres, ou n'est pas lié du tout.",
-        "it": "Se questo apparecchio alimenta il gruppo, vi suona insieme agli altri, o non è affatto collegato.",
-        "es": "Si este aparato alimenta el grupo, suena junto a los demás, o no está enlazado en absoluto.",
-        "pl": "Czy to urządzenie zasila grupę, gra w niej razem z innymi, czy nie jest w ogóle połączone.",
-        "uk": "Чи живить цей пристрій групу, чи грає в ній разом з іншими, чи взагалі не пов'язаний.",
-        "zh-cn": "本设备是为该组供源、随组同播，还是根本未加入联动。"
+        "en": "Whether this device feeds the group, plays along in it, or is not linked at all — read from its group and its client list, as the specification asks, not from the device's role word alone.",
+        "de": "Ob dieses Gerät die Gruppe speist, in ihr mitspielt oder gar nicht verbunden ist — gelesen aus seiner Gruppe und seiner Client-Liste, wie die Spezifikation es verlangt, nicht nur aus dem Rollenwort des Geräts.",
+        "ru": "Питает ли это устройство группу, играет ли в ней или вообще не связано — определяется по его группе и списку клиентов, как требует спецификация, а не только по слову роли устройства.",
+        "pt": "Se este dispositivo alimenta o grupo, participa nele ou não está ligado — deduzido do seu grupo e da sua lista de clientes, como pede a especificação, não apenas da palavra de função do dispositivo.",
+        "nl": "Of dit apparaat de groep voedt, erin meespeelt of helemaal niet gekoppeld is — afgeleid uit zijn groep en zijn clientlijst, zoals de specificatie vraagt, niet alleen uit het rolwoord van het apparaat.",
+        "fr": "Si cet appareil alimente le groupe, y participe ou n'est pas lié du tout — déduit de son groupe et de sa liste de clients, comme la spécification le demande, pas du seul mot de rôle de l'appareil.",
+        "it": "Se questo dispositivo alimenta il gruppo, vi partecipa o non è collegato affatto — dedotto dal suo gruppo e dalla sua lista di client, come chiede la specifica, non solo dalla parola di ruolo del dispositivo.",
+        "es": "Si este dispositivo alimenta el grupo, participa en él o no está enlazado — se deduce de su grupo y de su lista de clientes, como pide la especificación, no solo de la palabra de rol del dispositivo.",
+        "pl": "Czy to urządzenie zasila grupę, gra w niej, czy nie jest połączone — ustalane z jego grupy i listy klientów, jak wymaga specyfikacja, a nie tylko ze słowa roli urządzenia.",
+        "uk": "Чи живить цей пристрій групу, грає в ній чи зовсім не з'єднаний — визначається за його групою та списком клієнтів, як вимагає специфікація, а не лише за словом ролі пристрою.",
+        "zh-cn": "此设备是为组供音、在组中播放，还是完全未连接——按规范要求根据其组和客户端列表判断，而不只看设备的角色字段。"
       },
       "type": "string",
       "role": "state",
@@ -29348,6 +30093,48 @@
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_17.multiroom.group.serverZone"
+  },
+  "yamaha.0.10_10_0_17.multiroom.group.status": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Group status",
+        "de": "Gruppenstatus",
+        "ru": "Состояние группы",
+        "pt": "Estado do grupo",
+        "nl": "Groepsstatus",
+        "fr": "État du groupe",
+        "it": "Stato del gruppo",
+        "es": "Estado del grupo",
+        "pl": "Stan grupy",
+        "uk": "Стан групи",
+        "zh-cn": "组状态"
+      },
+      "desc": {
+        "en": "Whether the group is being built, working or being dissolved, as its server reports it; building a group can take up to three minutes.",
+        "de": "Ob die Gruppe gerade aufgebaut wird, läuft oder aufgelöst wird, so wie ihr Server es meldet; der Aufbau kann bis zu drei Minuten dauern.",
+        "ru": "Создаётся ли группа, работает или распускается — по данным её сервера; создание группы может занять до трёх минут.",
+        "pt": "Se o grupo está a ser criado, a funcionar ou a ser desfeito, tal como o servidor o comunica; criar um grupo pode demorar até três minutos.",
+        "nl": "Of de groep wordt opgebouwd, werkt of wordt opgeheven, zoals de server van de groep het meldt; het opbouwen kan tot drie minuten duren.",
+        "fr": "Si le groupe est en cours de création, actif ou en cours de dissolution, tel que son serveur l'indique ; la création peut prendre jusqu'à trois minutes.",
+        "it": "Se il gruppo è in creazione, attivo o in scioglimento, come lo segnala il suo server; la creazione può durare fino a tre minuti.",
+        "es": "Si el grupo se está creando, está funcionando o se está deshaciendo, según lo informa su servidor; crear un grupo puede tardar hasta tres minutos.",
+        "pl": "Czy grupa jest tworzona, działa czy jest rozwiązywana, zgodnie z tym, co zgłasza jej serwer; tworzenie grupy może potrwać do trzech minut.",
+        "uk": "Чи група створюється, працює чи розпускається — за даними її сервера; створення групи може тривати до трьох хвилин.",
+        "zh-cn": "组是否正在建立、正在运行或正在解散，以组服务器的报告为准；建立组最多可能需要三分钟。"
+      },
+      "type": "string",
+      "role": "state",
+      "read": true,
+      "write": false,
+      "states": {
+        "building": "building",
+        "working": "working",
+        "deleting": "deleting"
+      }
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_17.multiroom.group.status"
   },
   "yamaha.0.10_10_0_17.multiroom.group.streamingEnabled": {
     "type": "state",
@@ -29385,43 +30172,6 @@
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_17.multiroom.group.streamingEnabled"
-  },
-  "yamaha.0.10_10_0_17.multiroom.party": {
-    "type": "state",
-    "common": {
-      "type": "boolean",
-      "role": "switch",
-      "read": true,
-      "write": true,
-      "name": {
-        "en": "Party mode (all zones)",
-        "de": "Party-Modus (alle Zonen)",
-        "ru": "Режим вечеринки (все зоны)",
-        "pt": "Modo festa (todas as zonas)",
-        "nl": "Partymodus (alle zones)",
-        "fr": "Mode fête (toutes zones)",
-        "it": "Modalità party (tutte le zone)",
-        "es": "Modo fiesta (todas las zonas)",
-        "pl": "Tryb imprezy (wszystkie strefy)",
-        "uk": "Режим вечірки (усі зони)",
-        "zh-cn": "派对模式（所有区域）"
-      },
-      "desc": {
-        "en": "Plays the main zone's source in every zone at once.",
-        "de": "Gibt die Quelle der Hauptzone in allen Zonen gleichzeitig wieder.",
-        "ru": "Воспроизводит источник главной зоны сразу во всех зонах.",
-        "pt": "Reproduz a fonte da zona principal em todas as zonas ao mesmo tempo.",
-        "nl": "Speelt de bron van de hoofdzone in alle zones tegelijk af.",
-        "fr": "Diffuse la source de la zone principale dans toutes les zones.",
-        "it": "Riproduce la sorgente della zona principale in tutte le zone insieme.",
-        "es": "Reproduce la fuente de la zona principal en todas las zonas a la vez.",
-        "pl": "Odtwarza źródło strefy głównej we wszystkich strefach naraz.",
-        "uk": "Відтворює джерело головної зони в усіх зонах одночасно.",
-        "zh-cn": "将主区音源同时播放到所有分区。"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.10_10_0_17.multiroom.party"
   },
   "yamaha.0.10_10_0_17.mute": {
     "type": "state",
@@ -29525,17 +30275,17 @@
         "zh-cn": "专辑封面"
       },
       "desc": {
-        "en": "Where the cover of the current track can be fetched: a full URL, or a path on the receiver's own web server.",
-        "de": "Wo das Cover des laufenden Titels zu holen ist: eine vollständige URL oder ein Pfad auf dem Webserver des Receivers.",
-        "ru": "Откуда взять обложку текущего трека: полный URL либо путь на собственном веб-сервере ресивера.",
-        "pt": "Onde ir buscar a capa da faixa atual: um URL completo ou um caminho no servidor web do próprio recetor.",
-        "nl": "Waar de hoes van het huidige nummer te halen is: een volledige URL of een pad op de webserver van de receiver zelf.",
-        "fr": "Où récupérer la pochette du titre en cours : une URL complète, ou un chemin sur le serveur web de l'ampli.",
-        "it": "Dove recuperare la copertina del brano in riproduzione: un URL completo oppure un percorso sul server web del ricevitore.",
-        "es": "Dónde obtener la carátula de la pista actual: una URL completa o una ruta en el propio servidor web del receptor.",
-        "pl": "Skąd pobrać okładkę bieżącego utworu: pełny adres URL albo ścieżka na serwerze WWW samego amplitunera.",
-        "uk": "Звідки взяти обкладинку поточного треку: повна URL-адреса або шлях на власному вебсервері ресивера.",
-        "zh-cn": "当前曲目封面的取用位置：一个完整 URL，或功放自身 Web 服务器上的路径。"
+        "en": "The web address of the current track's cover.",
+        "de": "Die Webadresse des Covers des laufenden Titels.",
+        "ru": "Веб-адрес обложки текущего трека.",
+        "pt": "O endereço web da capa da faixa atual.",
+        "nl": "Het webadres van de hoes van het huidige nummer.",
+        "fr": "L'adresse web de la pochette du titre en cours.",
+        "it": "L'indirizzo web della copertina del brano in riproduzione.",
+        "es": "La dirección web de la carátula de la pista actual.",
+        "pl": "Adres internetowy okładki bieżącego utworu.",
+        "uk": "Вебадреса обкладинки поточного треку.",
+        "zh-cn": "当前曲目封面的网址。"
       }
     },
     "native": {},
@@ -29737,17 +30487,17 @@
         "zh-cn": "菜单层级"
       },
       "desc": {
-        "en": "How deep in the menu you currently are; 0 is the top.",
-        "de": "Wie tief Sie gerade im Menü stehen; 0 ist die oberste Ebene.",
-        "ru": "Насколько глубоко вы сейчас в меню; 0 — верхний уровень.",
-        "pt": "A que profundidade está no menu; 0 é o topo.",
-        "nl": "Hoe diep u nu in het menu zit; 0 is bovenaan.",
-        "fr": "À quelle profondeur du menu vous êtes ; 0 est le sommet.",
-        "it": "Quanto in profondità siete nel menu; 0 è il livello più alto.",
-        "es": "A qué profundidad está en el menú; 0 es el nivel superior.",
-        "pl": "Jak głęboko jesteś w menu; 0 to najwyższy poziom.",
-        "uk": "Наскільки глибоко ви в меню; 0 — верхній рівень.",
-        "zh-cn": "当前处于菜单的第几层；0 为最上层。"
+        "en": "How deep in the menu you currently are: 1 is the top, 0 means no menu is open.",
+        "de": "Wie tief du gerade im Menü stehst: 1 ist die oberste Ebene, 0 heißt, kein Menü ist offen.",
+        "ru": "Насколько глубоко вы сейчас в меню: 1 — верхний уровень, 0 — меню не открыто.",
+        "pt": "A que profundidade está no menu: 1 é o topo, 0 significa que nenhum menu está aberto.",
+        "nl": "Hoe diep u nu in het menu zit: 1 is bovenaan, 0 betekent dat er geen menu open is.",
+        "fr": "À quelle profondeur du menu vous êtes : 1 est le sommet, 0 signifie qu'aucun menu n'est ouvert.",
+        "it": "Quanto in profondità siete nel menu: 1 è il livello più alto, 0 significa che nessun menu è aperto.",
+        "es": "A qué profundidad está en el menú: 1 es el nivel superior, 0 significa que no hay ningún menú abierto.",
+        "pl": "Jak głęboko jesteś w menu: 1 to najwyższy poziom, 0 oznacza, że żadne menu nie jest otwarte.",
+        "uk": "Наскільки глибоко ви в меню: 1 — верхній рівень, 0 — меню не відкрите.",
+        "zh-cn": "当前处于菜单的第几层：1 为最上层，0 表示没有打开的菜单。"
       },
       "type": "number",
       "role": "value",
@@ -30201,6 +30951,46 @@
     "native": {},
     "_id": "yamaha.0.10_10_0_17.player.browse.path"
   },
+  "yamaha.0.10_10_0_17.player.browse.playLine": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Play line (whole folder)",
+        "de": "Zeile abspielen (ganzer Ordner)",
+        "ru": "Воспроизвести строку (всю папку)",
+        "pt": "Reproduzir linha (pasta inteira)",
+        "nl": "Regel afspelen (hele map)",
+        "fr": "Lire la ligne (dossier entier)",
+        "it": "Riproduci riga (cartella intera)",
+        "es": "Reproducir línea (carpeta completa)",
+        "pl": "Odtwórz wiersz (cały folder)",
+        "uk": "Відтворити рядок (усю теку)",
+        "zh-cn": "播放行（整个文件夹）"
+      },
+      "desc": {
+        "en": "Plays the folder on this line (an album, a playlist) as a whole instead of opening it.",
+        "de": "Spielt den Ordner auf dieser Zeile (ein Album, eine Playlist) als Ganzes ab, statt ihn zu öffnen.",
+        "ru": "Воспроизводит папку в этой строке (альбом, плейлист) целиком, вместо того чтобы открыть её.",
+        "pt": "Reproduz por inteiro a pasta desta linha (um álbum, uma playlist) em vez de a abrir.",
+        "nl": "Speelt de map op deze regel (een album, een afspeellijst) als geheel af in plaats van hem te openen.",
+        "fr": "Lit en entier le dossier de cette ligne (un album, une playlist) au lieu de l'ouvrir.",
+        "it": "Riproduce per intero la cartella di questa riga (un album, una playlist) invece di aprirla.",
+        "es": "Reproduce completa la carpeta de esta línea (un álbum, una lista) en lugar de abrirla.",
+        "pl": "Odtwarza w całości folder z tego wiersza (album, playlistę) zamiast go otwierać.",
+        "uk": "Відтворює теку в цьому рядку (альбом, плейлист) повністю, замість того щоб відкрити її.",
+        "zh-cn": "将此行的文件夹（专辑、播放列表）整体播放，而不是打开它。"
+      },
+      "type": "number",
+      "role": "level",
+      "read": true,
+      "write": true,
+      "min": 1,
+      "max": 8,
+      "step": 1
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_17.player.browse.playLine"
+  },
   "yamaha.0.10_10_0_17.player.browse.rows": {
     "type": "state",
     "common": {
@@ -30456,6 +31246,58 @@
     "native": {},
     "_id": "yamaha.0.10_10_0_17.player.netPlayer"
   },
+  "yamaha.0.10_10_0_17.player.netPlayer.playError": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Playback error",
+        "de": "Wiedergabefehler",
+        "ru": "Ошибка воспроизведения",
+        "pt": "Erro de reprodução",
+        "nl": "Afspeelfout",
+        "fr": "Erreur de lecture",
+        "it": "Errore di riproduzione",
+        "es": "Error de reproducción",
+        "pl": "Błąd odtwarzania",
+        "uk": "Помилка відтворення",
+        "zh-cn": "播放错误"
+      },
+      "desc": {
+        "en": "The error the network player reports for the current playback: 0 means none, otherwise the reason (for example an access error or playback unavailable).",
+        "de": "Der Fehler, den der Netzwerk-Player zur laufenden Wiedergabe meldet: 0 heißt keiner, sonst der Grund (zum Beispiel ein Zugriffsfehler oder Wiedergabe nicht verfügbar).",
+        "ru": "Ошибка, которую сетевой плеер сообщает о текущем воспроизведении: 0 означает отсутствие ошибки, иначе причину (например, ошибка доступа или воспроизведение недоступно).",
+        "pt": "O erro que o leitor de rede comunica sobre a reprodução atual: 0 significa nenhum; caso contrário, o motivo (por exemplo, um erro de acesso ou reprodução indisponível).",
+        "nl": "De fout die de netwerkspeler meldt voor het huidige afspelen: 0 betekent geen, anders de reden (bijvoorbeeld een toegangsfout of afspelen niet beschikbaar).",
+        "fr": "L'erreur que le lecteur réseau signale pour la lecture en cours : 0 signifie aucune, sinon la raison (par exemple une erreur d'accès ou une lecture indisponible).",
+        "it": "L'errore che il lettore di rete segnala per la riproduzione in corso: 0 significa nessuno, altrimenti il motivo (ad esempio un errore di accesso o riproduzione non disponibile).",
+        "es": "El error que el reproductor de red informa sobre la reproducción actual: 0 significa ninguno; si no, el motivo (por ejemplo, un error de acceso o reproducción no disponible).",
+        "pl": "Błąd, który odtwarzacz sieciowy zgłasza dla bieżącego odtwarzania: 0 oznacza brak, w przeciwnym razie przyczynę (np. błąd dostępu lub niedostępne odtwarzanie).",
+        "uk": "Помилка, яку мережевий плеєр повідомляє про поточне відтворення: 0 означає відсутність помилки, інакше причину (наприклад, помилка доступу або відтворення недоступне).",
+        "zh-cn": "网络播放器针对当前播放报告的错误：0 表示无错误，否则为原因（例如访问错误或无法播放）。"
+      },
+      "type": "number",
+      "role": "value",
+      "read": true,
+      "write": false,
+      "states": {
+        "0": "No Error",
+        "1": "Access Error",
+        "2": "Playback Unavailable",
+        "3": "Skip Limit Reached",
+        "4": "Invalid Session",
+        "5": "High-Resolution File Not Playable at MusicCast Leaf",
+        "6": "User Uncredentialed",
+        "7": "Track Restricted by Right Holders",
+        "8": "Sample Restricted by Right Holders",
+        "9": "Genre Restricted by Streaming Credentials",
+        "10": "Application Restricted by Streaming Credentials",
+        "11": "Intent Restricted by Streaming Credentials",
+        "100": "Multiple Errors"
+      }
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_17.player.netPlayer.playError"
+  },
   "yamaha.0.10_10_0_17.player.netPlayer.playlists": {
     "type": "state",
     "common": {
@@ -30493,6 +31335,43 @@
     "native": {},
     "_id": "yamaha.0.10_10_0_17.player.netPlayer.playlists"
   },
+  "yamaha.0.10_10_0_17.player.netPlayer.playMessage": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Playback message",
+        "de": "Wiedergabemeldung",
+        "ru": "Сообщение о воспроизведении",
+        "pt": "Mensagem de reprodução",
+        "nl": "Afspeelmelding",
+        "fr": "Message de lecture",
+        "it": "Messaggio di riproduzione",
+        "es": "Mensaje de reproducción",
+        "pl": "Komunikat odtwarzania",
+        "uk": "Повідомлення про відтворення",
+        "zh-cn": "播放消息"
+      },
+      "desc": {
+        "en": "The message the network player shows about the current playback, as the device sends it.",
+        "de": "Die Meldung, die der Netzwerk-Player zur laufenden Wiedergabe zeigt, so wie das Gerät sie schickt.",
+        "ru": "Сообщение сетевого плеера о текущем воспроизведении в том виде, в каком его отправляет устройство.",
+        "pt": "A mensagem que o leitor de rede mostra sobre a reprodução atual, tal como o dispositivo a envia.",
+        "nl": "De melding die de netwerkspeler toont over het huidige afspelen, zoals het apparaat die stuurt.",
+        "fr": "Le message que le lecteur réseau affiche pour la lecture en cours, tel que l'appareil l'envoie.",
+        "it": "Il messaggio che il lettore di rete mostra sulla riproduzione in corso, così come lo invia il dispositivo.",
+        "es": "El mensaje que el reproductor de red muestra sobre la reproducción actual, tal como lo envía el dispositivo.",
+        "pl": "Komunikat, który odtwarzacz sieciowy wyświetla o bieżącym odtwarzaniu, w postaci wysłanej przez urządzenie.",
+        "uk": "Повідомлення мережевого плеєра про поточне відтворення в тому вигляді, в якому його надсилає пристрій.",
+        "zh-cn": "网络播放器针对当前播放显示的消息，与设备发送的内容一致。"
+      },
+      "type": "string",
+      "role": "text",
+      "read": true,
+      "write": false
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_17.player.netPlayer.playMessage"
+  },
   "yamaha.0.10_10_0_17.player.netPlayer.preset": {
     "type": "state",
     "common": {
@@ -30526,7 +31405,8 @@
       "role": "level",
       "read": true,
       "write": true,
-      "min": 1
+      "min": 1,
+      "max": 40
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_17.player.netPlayer.preset"
@@ -30638,7 +31518,8 @@
       "role": "level",
       "read": true,
       "write": true,
-      "min": 1
+      "min": 1,
+      "max": 40
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_17.player.netPlayer.recallRecent"
@@ -31124,6 +32005,16 @@
       "role": "level",
       "read": true,
       "write": true,
+      "min": 0,
+      "max": 120,
+      "step": 30,
+      "states": {
+        "0": "Off",
+        "30": "30 min",
+        "60": "60 min",
+        "90": "90 min",
+        "120": "120 min"
+      },
       "name": {
         "en": "Sleep timer",
         "de": "Einschlaf-Zeit",
@@ -31178,9 +32069,9 @@
     "type": "state",
     "common": {
       "type": "string",
-      "role": "text",
+      "role": "state",
       "read": true,
-      "write": false,
+      "write": true,
       "name": {
         "en": "Link control",
         "de": "Link-Steuerung",
@@ -31833,6 +32724,30 @@
     "native": {},
     "_id": "yamaha.0.10_10_0_17.tuner.dab.scanProgress"
   },
+  "yamaha.0.10_10_0_17.tuner.dab.serviceDown": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Previous DAB station",
+        "de": "Vorheriger DAB-Sender",
+        "ru": "Предыдущая станция DAB",
+        "pt": "Estação DAB anterior",
+        "nl": "Vorige DAB-zender",
+        "fr": "Station DAB précédente",
+        "it": "Stazione DAB precedente",
+        "es": "Emisora DAB anterior",
+        "pl": "Poprzednia stacja DAB",
+        "uk": "Попередня станція DAB",
+        "zh-cn": "上一个 DAB 电台"
+      },
+      "type": "boolean",
+      "role": "button",
+      "read": false,
+      "write": true
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_17.tuner.dab.serviceDown"
+  },
   "yamaha.0.10_10_0_17.tuner.dab.serviceLabel": {
     "type": "state",
     "common": {
@@ -31869,6 +32784,30 @@
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_17.tuner.dab.serviceLabel"
+  },
+  "yamaha.0.10_10_0_17.tuner.dab.serviceUp": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Next DAB station",
+        "de": "Nächster DAB-Sender",
+        "ru": "Следующая станция DAB",
+        "pt": "Estação DAB seguinte",
+        "nl": "Volgende DAB-zender",
+        "fr": "Station DAB suivante",
+        "it": "Stazione DAB successiva",
+        "es": "Siguiente emisora DAB",
+        "pl": "Następna stacja DAB",
+        "uk": "Наступна станція DAB",
+        "zh-cn": "下一个 DAB 电台"
+      },
+      "type": "boolean",
+      "role": "button",
+      "read": false,
+      "write": true
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_17.tuner.dab.serviceUp"
   },
   "yamaha.0.10_10_0_17.tuner.dab.status": {
     "type": "state",
@@ -32657,6 +33596,831 @@
     "native": {},
     "_id": "yamaha.0.10_10_0_18.mute"
   },
+  "yamaha.0.10_10_0_18.player": {
+    "type": "channel",
+    "common": {
+      "name": {
+        "en": "Media player",
+        "de": "Medienwiedergabe",
+        "ru": "Медиаплеер",
+        "pt": "Leitor de multimédia",
+        "nl": "Mediaspeler",
+        "fr": "Lecteur multimédia",
+        "it": "Lettore multimediale",
+        "es": "Reproductor multimedia",
+        "pl": "Odtwarzacz multimediów",
+        "uk": "Медіаплеєр",
+        "zh-cn": "媒体播放器"
+      },
+      "desc": {
+        "en": "What is playing right now, plus the transport keys.",
+        "de": "Was gerade läuft, dazu die Transporttasten.",
+        "ru": "Что играет сейчас, плюс клавиши управления воспроизведением.",
+        "pt": "O que está a tocar agora, mais as teclas de reprodução.",
+        "nl": "Wat er nu speelt, plus de transporttoetsen.",
+        "fr": "Ce qui est en lecture, avec les touches de transport.",
+        "it": "Cosa è in riproduzione ora, con i tasti di trasporto.",
+        "es": "Lo que suena ahora, más las teclas de reproducción.",
+        "pl": "Co jest odtwarzane teraz, wraz z klawiszami sterowania.",
+        "uk": "Що грає зараз, разом із клавішами відтворення.",
+        "zh-cn": "当前播放内容，以及播放控制键。"
+      }
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_18.player"
+  },
+  "yamaha.0.10_10_0_18.player.browse": {
+    "type": "channel",
+    "common": {
+      "name": {
+        "en": "Browse",
+        "de": "Durchsuchen",
+        "ru": "Обзор",
+        "pt": "Navegar",
+        "nl": "Bladeren",
+        "fr": "Parcourir",
+        "it": "Sfoglia",
+        "es": "Explorar",
+        "pl": "Przeglądaj",
+        "uk": "Огляд",
+        "zh-cn": "浏览"
+      },
+      "desc": {
+        "en": "Step through the menu of a network source, as you would on screen.",
+        "de": "Durch das Menü einer Netzwerkquelle blättern, wie am Bildschirm.",
+        "ru": "Перемещение по меню сетевого источника, как на экране.",
+        "pt": "Percorrer o menu de uma fonte de rede, como no ecrã.",
+        "nl": "Door het menu van een netwerkbron bladeren, zoals op het scherm.",
+        "fr": "Parcourir le menu d'une source réseau, comme à l'écran.",
+        "it": "Sfogliare il menu di una sorgente di rete, come a schermo.",
+        "es": "Recorrer el menú de una fuente de red, como en pantalla.",
+        "pl": "Przeglądanie menu źródła sieciowego, jak na ekranie.",
+        "uk": "Перегляд меню мережевого джерела, як на екрані.",
+        "zh-cn": "像在屏幕上那样浏览网络音源的菜单。"
+      }
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_18.player.browse"
+  },
+  "yamaha.0.10_10_0_18.player.browse.back": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Back",
+        "de": "Zurück",
+        "ru": "Назад",
+        "pt": "Voltar",
+        "nl": "Terug",
+        "fr": "Retour",
+        "it": "Indietro",
+        "es": "Atrás",
+        "pl": "Wstecz",
+        "uk": "Назад",
+        "zh-cn": "返回"
+      },
+      "type": "boolean",
+      "role": "button",
+      "read": false,
+      "write": true
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_18.player.browse.back"
+  },
+  "yamaha.0.10_10_0_18.player.browse.busy": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Busy",
+        "de": "Beschäftigt",
+        "ru": "Занято",
+        "pt": "Ocupado",
+        "nl": "Bezig",
+        "fr": "Occupé",
+        "it": "Occupato",
+        "es": "Ocupado",
+        "pl": "Zajęty",
+        "uk": "Зайнято",
+        "zh-cn": "忙碌"
+      },
+      "desc": {
+        "en": "True while the device is still answering a menu request.",
+        "de": "Wahr, solange das Gerät eine Menü-Anfrage noch beantwortet.",
+        "ru": "Истина, пока устройство ещё отвечает на запрос меню.",
+        "pt": "Verdadeiro enquanto o aparelho ainda responde a um pedido de menu.",
+        "nl": "Waar zolang het apparaat nog op een menuverzoek antwoordt.",
+        "fr": "Vrai tant que l'appareil répond encore à une requête de menu.",
+        "it": "Vero finché l'apparecchio sta ancora rispondendo a una richiesta di menu.",
+        "es": "Verdadero mientras el aparato aún responde a una petición de menú.",
+        "pl": "Prawda, dopóki urządzenie wciąż odpowiada na żądanie menu.",
+        "uk": "Істина, доки пристрій ще відповідає на запит меню.",
+        "zh-cn": "设备仍在响应菜单请求时为真。"
+      },
+      "type": "boolean",
+      "role": "indicator",
+      "read": true,
+      "write": false
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_18.player.browse.busy"
+  },
+  "yamaha.0.10_10_0_18.player.browse.currentLine": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Current line",
+        "de": "Aktuelle Zeile",
+        "ru": "Текущая строка",
+        "pt": "Linha atual",
+        "nl": "Huidige regel",
+        "fr": "Ligne actuelle",
+        "it": "Riga corrente",
+        "es": "Línea actual",
+        "pl": "Bieżący wiersz",
+        "uk": "Поточний рядок",
+        "zh-cn": "当前行"
+      },
+      "desc": {
+        "en": "Which entry of the current menu window is highlighted.",
+        "de": "Welcher Eintrag im aktuellen Menüfenster hervorgehoben ist.",
+        "ru": "Какая запись текущего окна меню выделена.",
+        "pt": "Que entrada da janela de menu atual está realçada.",
+        "nl": "Welk item in het huidige menuvenster is gemarkeerd.",
+        "fr": "Quelle entrée de la fenêtre de menu est sélectionnée.",
+        "it": "Quale voce della finestra di menu è evidenziata.",
+        "es": "Qué entrada de la ventana de menú está resaltada.",
+        "pl": "Która pozycja bieżącego okna menu jest podświetlona.",
+        "uk": "Який запис поточного вікна меню виділено.",
+        "zh-cn": "当前菜单窗口中哪一条被选中。"
+      },
+      "type": "number",
+      "role": "value",
+      "read": true,
+      "write": false
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_18.player.browse.currentLine"
+  },
+  "yamaha.0.10_10_0_18.player.browse.home": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Menu root",
+        "de": "Hauptmenü",
+        "ru": "Главное меню",
+        "pt": "Menu principal",
+        "nl": "Hoofdmenu",
+        "fr": "Menu principal",
+        "it": "Menu principale",
+        "es": "Menú principal",
+        "pl": "Menu główne",
+        "uk": "Головне меню",
+        "zh-cn": "主菜单"
+      },
+      "type": "boolean",
+      "role": "button",
+      "read": false,
+      "write": true
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_18.player.browse.home"
+  },
+  "yamaha.0.10_10_0_18.player.browse.layer": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Menu level",
+        "de": "Menüebene",
+        "ru": "Уровень меню",
+        "pt": "Nível do menu",
+        "nl": "Menuniveau",
+        "fr": "Niveau du menu",
+        "it": "Livello del menu",
+        "es": "Nivel del menú",
+        "pl": "Poziom menu",
+        "uk": "Рівень меню",
+        "zh-cn": "菜单层级"
+      },
+      "desc": {
+        "en": "How deep in the menu you currently are: 1 is the top, 0 means no menu is open.",
+        "de": "Wie tief du gerade im Menü stehst: 1 ist die oberste Ebene, 0 heißt, kein Menü ist offen.",
+        "ru": "Насколько глубоко вы сейчас в меню: 1 — верхний уровень, 0 — меню не открыто.",
+        "pt": "A que profundidade está no menu: 1 é o topo, 0 significa que nenhum menu está aberto.",
+        "nl": "Hoe diep u nu in het menu zit: 1 is bovenaan, 0 betekent dat er geen menu open is.",
+        "fr": "À quelle profondeur du menu vous êtes : 1 est le sommet, 0 signifie qu'aucun menu n'est ouvert.",
+        "it": "Quanto in profondità siete nel menu: 1 è il livello più alto, 0 significa che nessun menu è aperto.",
+        "es": "A qué profundidad está en el menú: 1 es el nivel superior, 0 significa que no hay ningún menú abierto.",
+        "pl": "Jak głęboko jesteś w menu: 1 to najwyższy poziom, 0 oznacza, że żadne menu nie jest otwarte.",
+        "uk": "Наскільки глибоко ви в меню: 1 — верхній рівень, 0 — меню не відкрите.",
+        "zh-cn": "当前处于菜单的第几层：1 为最上层，0 表示没有打开的菜单。"
+      },
+      "type": "number",
+      "role": "value",
+      "read": true,
+      "write": false
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_18.player.browse.layer"
+  },
+  "yamaha.0.10_10_0_18.player.browse.line1": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Line 1",
+        "de": "Zeile 1",
+        "ru": "Строка 1",
+        "pt": "Linha 1",
+        "nl": "Regel 1",
+        "fr": "Ligne 1",
+        "it": "Riga 1",
+        "es": "Línea 1",
+        "pl": "Wiersz 1",
+        "uk": "Рядок 1",
+        "zh-cn": "第 1 行"
+      },
+      "desc": {
+        "en": "One row of the menu window currently shown; selecting this line by its number opens the folder or starts the item.",
+        "de": "Eine Zeile des gerade gezeigten Menüfensters; diese Zeile über ihre Nummer zu wählen öffnet den Ordner oder startet den Eintrag.",
+        "ru": "Одна строка показанного сейчас окна меню; выбор этой строки по номеру открывает папку или запускает запись.",
+        "pt": "Uma linha da janela de menu atualmente mostrada; escolher esta linha pelo seu número abre a pasta ou inicia o item.",
+        "nl": "Eén regel van het nu getoonde menuvenster; deze regel op nummer kiezen opent de map of start het item.",
+        "fr": "Une ligne de la fenêtre de menu affichée ; choisir cette ligne par son numéro ouvre le dossier ou lance l'élément.",
+        "it": "Una riga della finestra di menu ora mostrata; scegliere questa riga con il suo numero apre la cartella o avvia la voce.",
+        "es": "Una fila de la ventana de menú mostrada ahora; elegir esta fila por su número abre la carpeta o inicia el elemento.",
+        "pl": "Jeden wiersz aktualnie pokazanego okna menu; wybranie tego wiersza po numerze otwiera folder lub uruchamia pozycję.",
+        "uk": "Один рядок показаного зараз вікна меню; вибір цього рядка за номером відкриває теку або запускає запис.",
+        "zh-cn": "当前所示菜单窗口中的一行；按行号选择该行即可打开文件夹或播放条目。"
+      },
+      "type": "string",
+      "role": "text",
+      "read": true,
+      "write": false
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_18.player.browse.line1"
+  },
+  "yamaha.0.10_10_0_18.player.browse.line2": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Line 2",
+        "de": "Zeile 2",
+        "ru": "Строка 2",
+        "pt": "Linha 2",
+        "nl": "Regel 2",
+        "fr": "Ligne 2",
+        "it": "Riga 2",
+        "es": "Línea 2",
+        "pl": "Wiersz 2",
+        "uk": "Рядок 2",
+        "zh-cn": "第 2 行"
+      },
+      "desc": {
+        "en": "One row of the menu window currently shown; selecting this line by its number opens the folder or starts the item.",
+        "de": "Eine Zeile des gerade gezeigten Menüfensters; diese Zeile über ihre Nummer zu wählen öffnet den Ordner oder startet den Eintrag.",
+        "ru": "Одна строка показанного сейчас окна меню; выбор этой строки по номеру открывает папку или запускает запись.",
+        "pt": "Uma linha da janela de menu atualmente mostrada; escolher esta linha pelo seu número abre a pasta ou inicia o item.",
+        "nl": "Eén regel van het nu getoonde menuvenster; deze regel op nummer kiezen opent de map of start het item.",
+        "fr": "Une ligne de la fenêtre de menu affichée ; choisir cette ligne par son numéro ouvre le dossier ou lance l'élément.",
+        "it": "Una riga della finestra di menu ora mostrata; scegliere questa riga con il suo numero apre la cartella o avvia la voce.",
+        "es": "Una fila de la ventana de menú mostrada ahora; elegir esta fila por su número abre la carpeta o inicia el elemento.",
+        "pl": "Jeden wiersz aktualnie pokazanego okna menu; wybranie tego wiersza po numerze otwiera folder lub uruchamia pozycję.",
+        "uk": "Один рядок показаного зараз вікна меню; вибір цього рядка за номером відкриває теку або запускає запис.",
+        "zh-cn": "当前所示菜单窗口中的一行；按行号选择该行即可打开文件夹或播放条目。"
+      },
+      "type": "string",
+      "role": "text",
+      "read": true,
+      "write": false
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_18.player.browse.line2"
+  },
+  "yamaha.0.10_10_0_18.player.browse.line3": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Line 3",
+        "de": "Zeile 3",
+        "ru": "Строка 3",
+        "pt": "Linha 3",
+        "nl": "Regel 3",
+        "fr": "Ligne 3",
+        "it": "Riga 3",
+        "es": "Línea 3",
+        "pl": "Wiersz 3",
+        "uk": "Рядок 3",
+        "zh-cn": "第 3 行"
+      },
+      "desc": {
+        "en": "One row of the menu window currently shown; selecting this line by its number opens the folder or starts the item.",
+        "de": "Eine Zeile des gerade gezeigten Menüfensters; diese Zeile über ihre Nummer zu wählen öffnet den Ordner oder startet den Eintrag.",
+        "ru": "Одна строка показанного сейчас окна меню; выбор этой строки по номеру открывает папку или запускает запись.",
+        "pt": "Uma linha da janela de menu atualmente mostrada; escolher esta linha pelo seu número abre a pasta ou inicia o item.",
+        "nl": "Eén regel van het nu getoonde menuvenster; deze regel op nummer kiezen opent de map of start het item.",
+        "fr": "Une ligne de la fenêtre de menu affichée ; choisir cette ligne par son numéro ouvre le dossier ou lance l'élément.",
+        "it": "Una riga della finestra di menu ora mostrata; scegliere questa riga con il suo numero apre la cartella o avvia la voce.",
+        "es": "Una fila de la ventana de menú mostrada ahora; elegir esta fila por su número abre la carpeta o inicia el elemento.",
+        "pl": "Jeden wiersz aktualnie pokazanego okna menu; wybranie tego wiersza po numerze otwiera folder lub uruchamia pozycję.",
+        "uk": "Один рядок показаного зараз вікна меню; вибір цього рядка за номером відкриває теку або запускає запис.",
+        "zh-cn": "当前所示菜单窗口中的一行；按行号选择该行即可打开文件夹或播放条目。"
+      },
+      "type": "string",
+      "role": "text",
+      "read": true,
+      "write": false
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_18.player.browse.line3"
+  },
+  "yamaha.0.10_10_0_18.player.browse.line4": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Line 4",
+        "de": "Zeile 4",
+        "ru": "Строка 4",
+        "pt": "Linha 4",
+        "nl": "Regel 4",
+        "fr": "Ligne 4",
+        "it": "Riga 4",
+        "es": "Línea 4",
+        "pl": "Wiersz 4",
+        "uk": "Рядок 4",
+        "zh-cn": "第 4 行"
+      },
+      "desc": {
+        "en": "One row of the menu window currently shown; selecting this line by its number opens the folder or starts the item.",
+        "de": "Eine Zeile des gerade gezeigten Menüfensters; diese Zeile über ihre Nummer zu wählen öffnet den Ordner oder startet den Eintrag.",
+        "ru": "Одна строка показанного сейчас окна меню; выбор этой строки по номеру открывает папку или запускает запись.",
+        "pt": "Uma linha da janela de menu atualmente mostrada; escolher esta linha pelo seu número abre a pasta ou inicia o item.",
+        "nl": "Eén regel van het nu getoonde menuvenster; deze regel op nummer kiezen opent de map of start het item.",
+        "fr": "Une ligne de la fenêtre de menu affichée ; choisir cette ligne par son numéro ouvre le dossier ou lance l'élément.",
+        "it": "Una riga della finestra di menu ora mostrata; scegliere questa riga con il suo numero apre la cartella o avvia la voce.",
+        "es": "Una fila de la ventana de menú mostrada ahora; elegir esta fila por su número abre la carpeta o inicia el elemento.",
+        "pl": "Jeden wiersz aktualnie pokazanego okna menu; wybranie tego wiersza po numerze otwiera folder lub uruchamia pozycję.",
+        "uk": "Один рядок показаного зараз вікна меню; вибір цього рядка за номером відкриває теку або запускає запис.",
+        "zh-cn": "当前所示菜单窗口中的一行；按行号选择该行即可打开文件夹或播放条目。"
+      },
+      "type": "string",
+      "role": "text",
+      "read": true,
+      "write": false
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_18.player.browse.line4"
+  },
+  "yamaha.0.10_10_0_18.player.browse.line5": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Line 5",
+        "de": "Zeile 5",
+        "ru": "Строка 5",
+        "pt": "Linha 5",
+        "nl": "Regel 5",
+        "fr": "Ligne 5",
+        "it": "Riga 5",
+        "es": "Línea 5",
+        "pl": "Wiersz 5",
+        "uk": "Рядок 5",
+        "zh-cn": "第 5 行"
+      },
+      "desc": {
+        "en": "One row of the menu window currently shown; selecting this line by its number opens the folder or starts the item.",
+        "de": "Eine Zeile des gerade gezeigten Menüfensters; diese Zeile über ihre Nummer zu wählen öffnet den Ordner oder startet den Eintrag.",
+        "ru": "Одна строка показанного сейчас окна меню; выбор этой строки по номеру открывает папку или запускает запись.",
+        "pt": "Uma linha da janela de menu atualmente mostrada; escolher esta linha pelo seu número abre a pasta ou inicia o item.",
+        "nl": "Eén regel van het nu getoonde menuvenster; deze regel op nummer kiezen opent de map of start het item.",
+        "fr": "Une ligne de la fenêtre de menu affichée ; choisir cette ligne par son numéro ouvre le dossier ou lance l'élément.",
+        "it": "Una riga della finestra di menu ora mostrata; scegliere questa riga con il suo numero apre la cartella o avvia la voce.",
+        "es": "Una fila de la ventana de menú mostrada ahora; elegir esta fila por su número abre la carpeta o inicia el elemento.",
+        "pl": "Jeden wiersz aktualnie pokazanego okna menu; wybranie tego wiersza po numerze otwiera folder lub uruchamia pozycję.",
+        "uk": "Один рядок показаного зараз вікна меню; вибір цього рядка за номером відкриває теку або запускає запис.",
+        "zh-cn": "当前所示菜单窗口中的一行；按行号选择该行即可打开文件夹或播放条目。"
+      },
+      "type": "string",
+      "role": "text",
+      "read": true,
+      "write": false
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_18.player.browse.line5"
+  },
+  "yamaha.0.10_10_0_18.player.browse.line6": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Line 6",
+        "de": "Zeile 6",
+        "ru": "Строка 6",
+        "pt": "Linha 6",
+        "nl": "Regel 6",
+        "fr": "Ligne 6",
+        "it": "Riga 6",
+        "es": "Línea 6",
+        "pl": "Wiersz 6",
+        "uk": "Рядок 6",
+        "zh-cn": "第 6 行"
+      },
+      "desc": {
+        "en": "One row of the menu window currently shown; selecting this line by its number opens the folder or starts the item.",
+        "de": "Eine Zeile des gerade gezeigten Menüfensters; diese Zeile über ihre Nummer zu wählen öffnet den Ordner oder startet den Eintrag.",
+        "ru": "Одна строка показанного сейчас окна меню; выбор этой строки по номеру открывает папку или запускает запись.",
+        "pt": "Uma linha da janela de menu atualmente mostrada; escolher esta linha pelo seu número abre a pasta ou inicia o item.",
+        "nl": "Eén regel van het nu getoonde menuvenster; deze regel op nummer kiezen opent de map of start het item.",
+        "fr": "Une ligne de la fenêtre de menu affichée ; choisir cette ligne par son numéro ouvre le dossier ou lance l'élément.",
+        "it": "Una riga della finestra di menu ora mostrata; scegliere questa riga con il suo numero apre la cartella o avvia la voce.",
+        "es": "Una fila de la ventana de menú mostrada ahora; elegir esta fila por su número abre la carpeta o inicia el elemento.",
+        "pl": "Jeden wiersz aktualnie pokazanego okna menu; wybranie tego wiersza po numerze otwiera folder lub uruchamia pozycję.",
+        "uk": "Один рядок показаного зараз вікна меню; вибір цього рядка за номером відкриває теку або запускає запис.",
+        "zh-cn": "当前所示菜单窗口中的一行；按行号选择该行即可打开文件夹或播放条目。"
+      },
+      "type": "string",
+      "role": "text",
+      "read": true,
+      "write": false
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_18.player.browse.line6"
+  },
+  "yamaha.0.10_10_0_18.player.browse.line7": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Line 7",
+        "de": "Zeile 7",
+        "ru": "Строка 7",
+        "pt": "Linha 7",
+        "nl": "Regel 7",
+        "fr": "Ligne 7",
+        "it": "Riga 7",
+        "es": "Línea 7",
+        "pl": "Wiersz 7",
+        "uk": "Рядок 7",
+        "zh-cn": "第 7 行"
+      },
+      "desc": {
+        "en": "One row of the menu window currently shown; selecting this line by its number opens the folder or starts the item.",
+        "de": "Eine Zeile des gerade gezeigten Menüfensters; diese Zeile über ihre Nummer zu wählen öffnet den Ordner oder startet den Eintrag.",
+        "ru": "Одна строка показанного сейчас окна меню; выбор этой строки по номеру открывает папку или запускает запись.",
+        "pt": "Uma linha da janela de menu atualmente mostrada; escolher esta linha pelo seu número abre a pasta ou inicia o item.",
+        "nl": "Eén regel van het nu getoonde menuvenster; deze regel op nummer kiezen opent de map of start het item.",
+        "fr": "Une ligne de la fenêtre de menu affichée ; choisir cette ligne par son numéro ouvre le dossier ou lance l'élément.",
+        "it": "Una riga della finestra di menu ora mostrata; scegliere questa riga con il suo numero apre la cartella o avvia la voce.",
+        "es": "Una fila de la ventana de menú mostrada ahora; elegir esta fila por su número abre la carpeta o inicia el elemento.",
+        "pl": "Jeden wiersz aktualnie pokazanego okna menu; wybranie tego wiersza po numerze otwiera folder lub uruchamia pozycję.",
+        "uk": "Один рядок показаного зараз вікна меню; вибір цього рядка за номером відкриває теку або запускає запис.",
+        "zh-cn": "当前所示菜单窗口中的一行；按行号选择该行即可打开文件夹或播放条目。"
+      },
+      "type": "string",
+      "role": "text",
+      "read": true,
+      "write": false
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_18.player.browse.line7"
+  },
+  "yamaha.0.10_10_0_18.player.browse.line8": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Line 8",
+        "de": "Zeile 8",
+        "ru": "Строка 8",
+        "pt": "Linha 8",
+        "nl": "Regel 8",
+        "fr": "Ligne 8",
+        "it": "Riga 8",
+        "es": "Línea 8",
+        "pl": "Wiersz 8",
+        "uk": "Рядок 8",
+        "zh-cn": "第 8 行"
+      },
+      "desc": {
+        "en": "One row of the menu window currently shown; selecting this line by its number opens the folder or starts the item.",
+        "de": "Eine Zeile des gerade gezeigten Menüfensters; diese Zeile über ihre Nummer zu wählen öffnet den Ordner oder startet den Eintrag.",
+        "ru": "Одна строка показанного сейчас окна меню; выбор этой строки по номеру открывает папку или запускает запись.",
+        "pt": "Uma linha da janela de menu atualmente mostrada; escolher esta linha pelo seu número abre a pasta ou inicia o item.",
+        "nl": "Eén regel van het nu getoonde menuvenster; deze regel op nummer kiezen opent de map of start het item.",
+        "fr": "Une ligne de la fenêtre de menu affichée ; choisir cette ligne par son numéro ouvre le dossier ou lance l'élément.",
+        "it": "Una riga della finestra di menu ora mostrata; scegliere questa riga con il suo numero apre la cartella o avvia la voce.",
+        "es": "Una fila de la ventana de menú mostrada ahora; elegir esta fila por su número abre la carpeta o inicia el elemento.",
+        "pl": "Jeden wiersz aktualnie pokazanego okna menu; wybranie tego wiersza po numerze otwiera folder lub uruchamia pozycję.",
+        "uk": "Один рядок показаного зараз вікна меню; вибір цього рядка за номером відкриває теку або запускає запис.",
+        "zh-cn": "当前所示菜单窗口中的一行；按行号选择该行即可打开文件夹或播放条目。"
+      },
+      "type": "string",
+      "role": "text",
+      "read": true,
+      "write": false
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_18.player.browse.line8"
+  },
+  "yamaha.0.10_10_0_18.player.browse.menuName": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Menu name",
+        "de": "Menüname",
+        "ru": "Название меню",
+        "pt": "Nome do menu",
+        "nl": "Menunaam",
+        "fr": "Nom du menu",
+        "it": "Nome del menu",
+        "es": "Nombre del menú",
+        "pl": "Nazwa menu",
+        "uk": "Назва меню",
+        "zh-cn": "菜单名称"
+      },
+      "desc": {
+        "en": "Title of the menu level currently shown by the network source.",
+        "de": "Titel der Menüebene, die die Netzwerkquelle gerade zeigt.",
+        "ru": "Заголовок текущего уровня меню сетевого источника.",
+        "pt": "Título do nível de menu que a fonte de rede mostra agora.",
+        "nl": "Titel van het menuniveau dat de netwerkbron nu toont.",
+        "fr": "Titre du niveau de menu affiché par la source réseau.",
+        "it": "Titolo del livello di menu mostrato dalla sorgente di rete.",
+        "es": "Título del nivel de menú que muestra la fuente de red.",
+        "pl": "Tytuł poziomu menu pokazywanego przez źródło sieciowe.",
+        "uk": "Заголовок рівня меню, який показує мережеве джерело.",
+        "zh-cn": "网络音源当前显示的菜单层级标题。"
+      },
+      "type": "string",
+      "role": "text",
+      "read": true,
+      "write": false
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_18.player.browse.menuName"
+  },
+  "yamaha.0.10_10_0_18.player.browse.pageDown": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Page down",
+        "de": "Seite vor",
+        "ru": "Страница вниз",
+        "pt": "Página seguinte",
+        "nl": "Pagina omlaag",
+        "fr": "Page suivante",
+        "it": "Pagina giù",
+        "es": "Página siguiente",
+        "pl": "Strona w dół",
+        "uk": "Сторінка вниз",
+        "zh-cn": "下一页"
+      },
+      "desc": {
+        "en": "Moves the eight-line window one page towards the end of the list.",
+        "de": "Verschiebt das Fenster aus acht Zeilen um eine Seite Richtung Listenende.",
+        "ru": "Сдвигает окно из восьми строк на страницу к концу списка.",
+        "pt": "Desloca a janela de oito linhas uma página em direção ao fim da lista.",
+        "nl": "Verschuift het venster van acht regels één pagina richting het einde van de lijst.",
+        "fr": "Déplace la fenêtre de huit lignes d'une page vers la fin de la liste.",
+        "it": "Sposta la finestra di otto righe di una pagina verso la fine dell'elenco.",
+        "es": "Desplaza la ventana de ocho filas una página hacia el final de la lista.",
+        "pl": "Przesuwa okno ośmiu wierszy o jedną stronę w stronę końca listy.",
+        "uk": "Зсуває вікно з восьми рядків на сторінку до кінця списку.",
+        "zh-cn": "把八行的窗口向列表末尾翻一页。"
+      },
+      "type": "boolean",
+      "role": "button",
+      "read": false,
+      "write": true
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_18.player.browse.pageDown"
+  },
+  "yamaha.0.10_10_0_18.player.browse.pageUp": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Page up",
+        "de": "Seite zurück",
+        "ru": "Страница вверх",
+        "pt": "Página anterior",
+        "nl": "Pagina omhoog",
+        "fr": "Page précédente",
+        "it": "Pagina su",
+        "es": "Página anterior",
+        "pl": "Strona w górę",
+        "uk": "Сторінка вгору",
+        "zh-cn": "上一页"
+      },
+      "desc": {
+        "en": "Moves the eight-line window one page towards the start of the list.",
+        "de": "Verschiebt das Fenster aus acht Zeilen um eine Seite Richtung Listenanfang.",
+        "ru": "Сдвигает окно из восьми строк на страницу к началу списка.",
+        "pt": "Desloca a janela de oito linhas uma página em direção ao início da lista.",
+        "nl": "Verschuift het venster van acht regels één pagina richting het begin van de lijst.",
+        "fr": "Déplace la fenêtre de huit lignes d'une page vers le début de la liste.",
+        "it": "Sposta la finestra di otto righe di una pagina verso l'inizio dell'elenco.",
+        "es": "Desplaza la ventana de ocho filas una página hacia el principio de la lista.",
+        "pl": "Przesuwa okno ośmiu wierszy o jedną stronę w stronę początku listy.",
+        "uk": "Зсуває вікно з восьми рядків на сторінку до початку списку.",
+        "zh-cn": "把八行的窗口向列表开头翻一页。"
+      },
+      "type": "boolean",
+      "role": "button",
+      "read": false,
+      "write": true
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_18.player.browse.pageUp"
+  },
+  "yamaha.0.10_10_0_18.player.browse.path": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Navigate path (e.g. Bookmarks>Radio Paradise)",
+        "de": "Pfad ansteuern (z. B. Bookmarks>Radio Paradise)",
+        "ru": "Перейти по пути (напр. Bookmarks>Radio Paradise)",
+        "pt": "Navegar por caminho (ex.: Bookmarks>Radio Paradise)",
+        "nl": "Pad volgen (bijv. Bookmarks>Radio Paradise)",
+        "fr": "Suivre un chemin (p. ex. Bookmarks>Radio Paradise)",
+        "it": "Percorri un percorso (es. Bookmarks>Radio Paradise)",
+        "es": "Navegar por ruta (p. ej. Bookmarks>Radio Paradise)",
+        "pl": "Przejdź ścieżką (np. Bookmarks>Radio Paradise)",
+        "uk": "Перейти шляхом (напр. Bookmarks>Radio Paradise)",
+        "zh-cn": "按路径导航（例如 Bookmarks>Radio Paradise）"
+      },
+      "desc": {
+        "en": "Write a path and the adapter walks the menu there by itself.",
+        "de": "Einen Pfad hineinschreiben, und der Adapter läuft den Weg im Menü selbst ab.",
+        "ru": "Впишите путь — адаптер сам пройдёт по меню.",
+        "pt": "Escreva um caminho e o adaptador percorre o menu sozinho.",
+        "nl": "Schrijf een pad en de adapter loopt het menu zelf af.",
+        "fr": "Écrivez un chemin et l'adaptateur parcourt le menu tout seul.",
+        "it": "Scrivete un percorso e l'adattatore percorre il menu da solo.",
+        "es": "Escriba una ruta y el adaptador recorre el menú por sí mismo.",
+        "pl": "Wpisz ścieżkę, a adapter sam przejdzie przez menu.",
+        "uk": "Впишіть шлях — адаптер сам пройде меню.",
+        "zh-cn": "写入一个路径，适配器会自行在菜单中导航过去。"
+      },
+      "type": "string",
+      "role": "text",
+      "read": true,
+      "write": true
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_18.player.browse.path"
+  },
+  "yamaha.0.10_10_0_18.player.browse.rows": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Rows (JSON)",
+        "de": "Zeilen (JSON)",
+        "ru": "Строки (JSON)",
+        "pt": "Linhas (JSON)",
+        "nl": "Regels (JSON)",
+        "fr": "Lignes (JSON)",
+        "it": "Righe (JSON)",
+        "es": "Filas (JSON)",
+        "pl": "Wiersze (JSON)",
+        "uk": "Рядки (JSON)",
+        "zh-cn": "行（JSON）"
+      },
+      "desc": {
+        "en": "The whole current menu window in one datapoint, for scripts.",
+        "de": "Das ganze aktuelle Menüfenster in einem Datenpunkt, für Skripte.",
+        "ru": "Всё текущее окно меню в одном датапоинте — для скриптов.",
+        "pt": "Toda a janela de menu atual num só ponto de dados, para scripts.",
+        "nl": "Het hele huidige menuvenster in één datapunt, voor scripts.",
+        "fr": "Toute la fenêtre de menu actuelle en un point de données, pour les scripts.",
+        "it": "L'intera finestra di menu attuale in un solo datapoint, per gli script.",
+        "es": "Toda la ventana de menú actual en un punto de datos, para scripts.",
+        "pl": "Całe bieżące okno menu w jednym punkcie danych, dla skryptów.",
+        "uk": "Усе поточне вікно меню в одному датапоінті — для скриптів.",
+        "zh-cn": "把当前整个菜单窗口放在一个数据点里，便于脚本使用。"
+      },
+      "type": "string",
+      "role": "json",
+      "read": true,
+      "write": false
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_18.player.browse.rows"
+  },
+  "yamaha.0.10_10_0_18.player.browse.selectLine": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Select line (folder opens, item plays)",
+        "de": "Zeile wählen (Ordner öffnet, Eintrag spielt)",
+        "ru": "Выбрать строку (папка откроется, запись начнёт играть)",
+        "pt": "Selecionar linha (a pasta abre, o item toca)",
+        "nl": "Regel kiezen (map opent, item speelt)",
+        "fr": "Choisir une ligne (le dossier s'ouvre, l'élément se lance)",
+        "it": "Seleziona riga (la cartella si apre, l'elemento parte)",
+        "es": "Seleccionar línea (la carpeta se abre, el elemento suena)",
+        "pl": "Wybierz wiersz (folder otworzy się, pozycja zagra)",
+        "uk": "Вибрати рядок (тека відкриється, запис почне грати)",
+        "zh-cn": "选择行（文件夹打开，条目播放）"
+      },
+      "desc": {
+        "en": "Acts like the OK key: a folder opens, an item starts playing.",
+        "de": "Wirkt wie die OK-Taste: ein Ordner öffnet sich, ein Titel startet.",
+        "ru": "Действует как кнопка OK: папка открывается, запись начинает играть.",
+        "pt": "Age como a tecla OK: uma pasta abre, um item começa a tocar.",
+        "nl": "Werkt als de OK-toets: een map opent, een item start.",
+        "fr": "Agit comme la touche OK : un dossier s'ouvre, un titre démarre.",
+        "it": "Agisce come il tasto OK: una cartella si apre, un brano parte.",
+        "es": "Actúa como la tecla OK: una carpeta se abre, un tema empieza.",
+        "pl": "Działa jak klawisz OK: folder się otwiera, utwór startuje.",
+        "uk": "Діє як клавіша OK: тека відкривається, запис починає грати.",
+        "zh-cn": "等同于 OK 键：文件夹会打开，条目会开始播放。"
+      },
+      "type": "number",
+      "role": "level",
+      "read": true,
+      "write": true,
+      "min": 1,
+      "max": 8,
+      "step": 1
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_18.player.browse.selectLine"
+  },
+  "yamaha.0.10_10_0_18.player.browse.source": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Source",
+        "de": "Quelle",
+        "ru": "Источник",
+        "pt": "Fonte",
+        "nl": "Bron",
+        "fr": "Source",
+        "it": "Sorgente",
+        "es": "Fuente",
+        "pl": "Źródło",
+        "uk": "Джерело",
+        "zh-cn": "音源"
+      },
+      "desc": {
+        "en": "Whose menu is open; writing another source starts browsing that one from its top level.",
+        "de": "Wessen Menü offen ist; eine andere Quelle hineinschreiben beginnt dort von der obersten Ebene.",
+        "ru": "Чьё меню открыто; запись другого источника начинает просмотр с его верхнего уровня.",
+        "pt": "De quem é o menu aberto; escrever outra fonte começa a navegar essa a partir do nível superior.",
+        "nl": "Wiens menu open is; een andere bron schrijven begint daar op het hoogste niveau te bladeren.",
+        "fr": "Le menu de quelle source est ouvert ; écrire une autre source y démarre la navigation au niveau le plus haut.",
+        "it": "Di chi è il menu aperto; scrivere un'altra sorgente inizia a sfogliarla dal livello più alto.",
+        "es": "De quién es el menú abierto; escribir otra fuente empieza a recorrerla desde su nivel superior.",
+        "pl": "Czyje menu jest otwarte; wpisanie innego źródła rozpoczyna przeglądanie go od najwyższego poziomu.",
+        "uk": "Чиє меню відкрито; запис іншого джерела починає перегляд з його найвищого рівня.",
+        "zh-cn": "当前打开的是哪个音源的菜单；写入另一个音源即从其最上层开始浏览。"
+      },
+      "type": "string",
+      "role": "state",
+      "read": true,
+      "write": true,
+      "states": {
+        "netRadio": "Net Radio",
+        "server": "Media server",
+        "usb": "USB"
+      }
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_18.player.browse.source"
+  },
+  "yamaha.0.10_10_0_18.player.browse.totalItems": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Total entries",
+        "de": "Einträge gesamt",
+        "ru": "Всего записей",
+        "pt": "Total de entradas",
+        "nl": "Aantal items",
+        "fr": "Nombre d'entrées",
+        "it": "Voci totali",
+        "es": "Total de entradas",
+        "pl": "Liczba pozycji",
+        "uk": "Усього записів",
+        "zh-cn": "条目总数"
+      },
+      "desc": {
+        "en": "How many entries the current menu level holds in total.",
+        "de": "Wie viele Einträge die aktuelle Menüebene insgesamt hat.",
+        "ru": "Сколько всего записей на текущем уровне меню.",
+        "pt": "Quantas entradas tem no total o nível de menu atual.",
+        "nl": "Hoeveel items het huidige menuniveau in totaal heeft.",
+        "fr": "Combien d'entrées compte le niveau de menu actuel.",
+        "it": "Quante voci contiene in tutto il livello di menu attuale.",
+        "es": "Cuántas entradas tiene en total el nivel de menú actual.",
+        "pl": "Ile pozycji ma łącznie bieżący poziom menu.",
+        "uk": "Скільки всього записів на поточному рівні меню.",
+        "zh-cn": "当前菜单层级共有多少条目。"
+      },
+      "type": "number",
+      "role": "value",
+      "read": true,
+      "write": false
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_18.player.browse.totalItems"
+  },
   "yamaha.0.10_10_0_18.power": {
     "type": "state",
     "common": {
@@ -32680,6 +34444,83 @@
     },
     "native": {},
     "_id": "yamaha.0.10_10_0_18.power"
+  },
+  "yamaha.0.10_10_0_18.remote": {
+    "type": "channel",
+    "common": {
+      "name": {
+        "en": "Remote control",
+        "de": "Fernbedienung",
+        "ru": "Пульт",
+        "pt": "Comando",
+        "nl": "Afstandsbediening",
+        "fr": "Télécommande",
+        "it": "Telecomando",
+        "es": "Mando a distancia",
+        "pl": "Pilot",
+        "uk": "Пульт",
+        "zh-cn": "遥控器"
+      },
+      "desc": {
+        "en": "Cursor and menu keys, exactly as on the physical remote control.",
+        "de": "Pfeil- und Menütasten, genau wie auf der echten Fernbedienung.",
+        "ru": "Клавиши курсора и меню — как на физическом пульте.",
+        "pt": "Teclas de cursor e de menu, tal como no comando físico.",
+        "nl": "Cursor- en menutoetsen, net als op de fysieke afstandsbediening.",
+        "fr": "Touches de navigation et de menu, comme sur la télécommande physique.",
+        "it": "Tasti cursore e menu, come sul telecomando fisico.",
+        "es": "Teclas de cursor y menú, igual que en el mando físico.",
+        "pl": "Klawisze kursora i menu, tak jak na fizycznym pilocie.",
+        "uk": "Клавіші курсора та меню — як на справжньому пульті.",
+        "zh-cn": "方向键与菜单键，与实体遥控器上的一致。"
+      }
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_18.remote"
+  },
+  "yamaha.0.10_10_0_18.remote.cursor": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Cursor pad",
+        "de": "Steuerkreuz",
+        "ru": "Кнопки навигации",
+        "pt": "Cursor",
+        "nl": "Bedieningskruis",
+        "fr": "Pavé directionnel",
+        "it": "Tasti direzionali",
+        "es": "Cursor",
+        "pl": "Przyciski nawigacji",
+        "uk": "Кнопки навігації",
+        "zh-cn": "方向键"
+      },
+      "desc": {
+        "en": "The direction keys of the on-screen menu.",
+        "de": "Die Richtungstasten des Bildschirmmenüs.",
+        "ru": "Клавиши направления экранного меню.",
+        "pt": "As teclas de direção do menu no ecrã.",
+        "nl": "De richtingstoetsen van het schermmenu.",
+        "fr": "Les touches de direction du menu à l'écran.",
+        "it": "I tasti direzionali del menu a schermo.",
+        "es": "Las teclas de dirección del menú en pantalla.",
+        "pl": "Klawisze kierunkowe menu ekranowego.",
+        "uk": "Клавіші напрямку екранного меню.",
+        "zh-cn": "屏幕菜单的方向键。"
+      },
+      "type": "string",
+      "role": "state",
+      "read": false,
+      "write": true,
+      "states": {
+        "up": "up",
+        "down": "down",
+        "left": "left",
+        "right": "right",
+        "select": "select"
+      }
+    },
+    "native": {},
+    "_id": "yamaha.0.10_10_0_18.remote.cursor"
   },
   "yamaha.0.10_10_0_18.sleep": {
     "type": "state",

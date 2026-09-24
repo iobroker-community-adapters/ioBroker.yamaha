@@ -592,6 +592,38 @@ tests.integration(ADAPTER_DIR, {
           assert.deepStrictEqual(stale, [], `objects an update did not reach:\n${stale.join("\n")}`);
         });
 
+        // The discovery-schema jump of an update drops every device's learned memory
+        // (`native.probeCache`) — the device's own settings and what it is known by live in their
+        // own keys next to it and must come through unchanged; the model is kept outside the
+        // memory so an offline migrated receiver is still recognised by it (audit 2026-09-24, A22).
+        it("every device keeps its settings, identity and label, and carries its model", async function () {
+          this.timeout(60000);
+          const live = await dumpObjects(harness);
+          const lost = [];
+          for (const [id, obj] of Object.entries(previous)) {
+            if (obj.type !== "device") {
+              continue;
+            }
+            for (const key of ["volumeAsPercent", "identity", "label", "labelRank", "source"]) {
+              if (
+                obj.native?.[key] !== undefined &&
+                canonical(live[id]?.native?.[key]) !== canonical(obj.native[key])
+              ) {
+                lost.push(
+                  `${id}: native.${key} ${JSON.stringify(obj.native[key])} became ${JSON.stringify(live[id]?.native?.[key])}`,
+                );
+              }
+            }
+            const model = await harness.states.getStateAsync(`${id}.info.model`);
+            if (typeof model?.val === "string" && model.val !== "" && live[id]?.native?.model !== model.val) {
+              lost.push(
+                `${id}: reports model ${model.val} but native.model is ${JSON.stringify(live[id]?.native?.model)}`,
+              );
+            }
+          }
+          assert.deepStrictEqual(lost, [], `device settings an update did not keep:\n${lost.join("\n")}`);
+        });
+
         it("objects the release removed are gone (no leftovers)", async function () {
           this.timeout(60000);
           const current = JSON.parse(fs.readFileSync(INVENTORY, "utf8"));

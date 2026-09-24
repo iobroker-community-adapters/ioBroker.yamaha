@@ -339,6 +339,9 @@ Anfassen `extendObject` fährt — sonst meldete jeder Neustart den ganzen Baum 
 verbinden asynchron und parallel, deshalb ein 5-Sekunden-Nachlauf (`DATAPOINT_BALANCE_SETTLE_MS`)
 statt einer Zeile je Gerät: EINE Umschaltung, EIN Ergebnis. Gezählt werden NUR `state`-Objekte,
 nicht die Kanäle/Geräteknoten drumherum. Regel-Herkunft: Memory `feedback_datenpunkt_bilanz_im_log`.
+**Aufräumen nie gefüllter Datenpunkte (`purgeNeverFilled`):** erst im zweiten PROZESS-Start, nie im zweiten
+Bilanz-Durchgang desselben Laufs (`recordedThisRun`) — ein Receiver im Standby antwortet `@RESTRICTED`; was die
+MusicCast-Deklaration (`getFeatures`) beweisbar nicht trägt (`yxcDeclaredAbsent`), geht schon im ersten Start.
 
 ## Namen sind Übersetzungsobjekte (2026-09-02, Gate-Pflicht)
 
