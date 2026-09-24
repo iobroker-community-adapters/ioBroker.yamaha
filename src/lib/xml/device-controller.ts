@@ -653,10 +653,10 @@ export class XmlDeviceController implements ConnectionHandle {
     if (!Number.isFinite(num) || num < 1) {
       return true;
     }
-    void this.applyCommand({
-      zone: "Tuner",
-      inner: `<Play_Control><Preset><Preset_Sel>${num}</Preset_Sel></Preset></Play_Control>`,
-    });
+    void this.applyCommand(
+      { zone: "Tuner", inner: `<Play_Control><Preset><Preset_Sel>${num}</Preset_Sel></Preset></Play_Control>` },
+      () => this.refreshTuner(),
+    );
     return true;
   }
 
@@ -686,7 +686,9 @@ export class XmlDeviceController implements ConnectionHandle {
     if (!zone || !scenes || !scenes.some(scene => scene.num === num)) {
       return true;
     }
-    void this.applyCommand({ zone: zone.element, inner: `<Scene><Scene_Sel>Scene ${num}</Scene_Sel></Scene>` });
+    void this.applyCommand({ zone: zone.element, inner: `<Scene><Scene_Sel>Scene ${num}</Scene_Sel></Scene>` }, () =>
+      this.refreshZone(zone),
+    );
     return true;
   }
 
@@ -826,7 +828,7 @@ export class XmlDeviceController implements ConnectionHandle {
       // The zone to read back afterwards: the command's own element, or the main zone for a
       // command that goes out on the System element (HDMI outputs, party mode).
       const zone = this.zones.find(candidate => candidate.element === command.zone) ?? this.zones[0];
-      void this.applyCommand(command, zone);
+      void this.applyCommand(command, () => this.refreshZone(zone));
     } else {
       this.deps.log.debug(`${this.deviceId}: ${stateId} is not writable on this device — write dropped`);
     }
@@ -1087,11 +1089,6 @@ export class XmlDeviceController implements ConnectionHandle {
   }
 
   /**
-   * Send a mapped command to the device.
-   *
-   * @param command the XML command to apply
-   */
-  /**
    * The zone-wide pads desc.xml declares: `remote.cursor` / `remote.menu` under every zone whose
    * `Cmd_List` defines `Cursor_Control,Cursor` / `Menu_Control` — the main zone's only when no
    * browse surface owns it already (then the surface's pad goes zone-wide through the driver).
@@ -1289,50 +1286,55 @@ export class XmlDeviceController implements ConnectionHandle {
         this.deps.log.debug(`${this.deviceId}: ${stateId} "${value}" not sent — ${problem}`);
         return true;
       }
-      // The name is not part of the zone status the read-back fetches: confirm it here, and
-      // remember it — the probe memory otherwise brings the OLD name back on the next start.
+      // The name is not part of the zone status: read it back from the zone's Config — the fresh
+      // probe also updates the memory, which otherwise brings the OLD name back on the next start.
+      // A refused name is read back the same way, so the datapoint shows the device's name again.
       void this.applyCommand(
         { zone: zone.element, inner: `<Config><Name><Zone>${escapeXmlText(value)}</Zone></Name></Config>` },
-        zone,
-      )
-        .then(ok => {
-          if (ok) {
-            this.deps.probeMemory?.set(`xmlZoneName:${zone.key}`, value);
-            this.emit(stateId, value);
+        async () => {
+          const name = await this.probeZoneName(zone);
+          if (name) {
+            this.emit(stateId, name);
           }
-        })
-        .catch((e: unknown) => {
-          // Same rule as the object creation above: a fire-and-forget chain needs its own
-          // receiver, or the rejection ends the instance.
-          this.deps.log.debug(`${this.deviceId}: confirming the zone name failed: ${errorMessage(e)}`);
-        });
+        },
+      );
       return true;
     } else {
       const word = XML_TRANSPORT_WIRE[command.slice("player.".length)];
       inner = `<Play_Control><Playback>${word}</Playback></Play_Control>`;
     }
-    void this.applyCommand({ zone: zone.element, inner }, zone);
+    void this.applyCommand({ zone: zone.element, inner }, () => this.refreshZone(zone));
     return true;
   }
 
   /**
-   * Send a command and, when the device took it, read the zone back at once — an older
-   * receiver reports nothing by itself, and the next poll is up to a minute away.
+   * Send a command and read what it touched back at once — an older receiver reports nothing by
+   * itself, and the next poll is up to a minute away. A refused command is read back too: nothing
+   * else would put the device's value back over the one the user wrote (audit 2026-09-24). Called
+   * without an awaiting caller, so the whole body is one try/catch.
    *
    * @param command the zone element and the inner XML to send
-   * @param zone the zone whose status to read back afterwards
-   * @returns true when the device accepted the command
+   * @param readBack reads the zone, the tuner or the name the command touched
    */
-  private async applyCommand(command: XmlCommand, zone?: XmlZone): Promise<boolean> {
+  private async applyCommand(command: XmlCommand, readBack?: () => Promise<unknown>): Promise<void> {
+    try {
+      await this.sendCommand(command);
+      await readBack?.();
+    } catch (e) {
+      this.deps.log.warn(`${this.deviceId}: reading back after an XML command failed: ${errorMessage(e)}`);
+    }
+  }
+
+  /**
+   * Send one command; a refusal or a transport error is logged, never thrown.
+   *
+   * @param command the zone element and the inner XML to send
+   */
+  private async sendCommand(command: XmlCommand): Promise<void> {
     try {
       await this.deps.client.send(command.zone, command.inner);
     } catch (e) {
       this.deps.log.warn(`${this.deviceId}: XML command failed: ${errorMessage(e)}`);
-      return false;
     }
-    if (zone) {
-      await this.refreshZone(zone);
-    }
-    return true;
   }
 }

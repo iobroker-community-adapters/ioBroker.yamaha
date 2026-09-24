@@ -387,6 +387,8 @@ describe("XmlDeviceController", () => {
       zone: "Main_Zone",
       inner: "<Scene><Scene_Sel>Scene 4</Scene_Sel></Scene>",
     });
+    // A scene switches input and program: the zone is read back at once (audit 2026-09-24).
+    expect(s.client.calls.at(-1)).toMatchObject({ method: "getStatus", zone: "Main_Zone" });
     // A number the device did not declare is not sent at all.
     s.client.calls.length = 0;
     s.controller.handleStateChange("living.scene.recall", false, 7);
@@ -419,6 +421,12 @@ describe("XmlDeviceController", () => {
       method: "send",
       zone: "Tuner",
       inner: "<Play_Control><Preset><Preset_Sel>5</Preset_Sel></Preset></Play_Control>",
+    });
+    // Read back at once, not a poll interval later (audit 2026-09-24).
+    expect(s.client.calls.at(-1)).toEqual({
+      method: "getXml",
+      zone: "Tuner",
+      inner: "<Play_Info>GetParam</Play_Info>",
     });
     // Number(true) is 1 — a switch bound here recalled preset 1 (audit 2026-09-24, D20).
     s.client.calls.length = 0;
@@ -1148,16 +1156,20 @@ describe("the 2008 dialect drives every write and is remembered (RX-V3900)", () 
     expect(s.acks).toContainEqual({ id: "living.multiroom.zone2.volume", value: -25 });
   });
 
-  test("a write the device refuses is not read back", async () => {
+  // A refused value stood unacknowledged until the next poll, up to a minute: nothing changed on the
+  // device, so only a read-back puts its own value back (audit 2026-09-24; YNCA B4, MusicCast C28).
+  test("a write the device refuses is read back at once — the datapoint shows the device's value again", async () => {
     const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
     const s = setup({ Main_Zone: legacyMain });
     withMemory(s, memory);
     await s.controller.start();
     s.client.calls.length = 0;
+    s.acks.length = 0;
     s.client.sendError = new Error("device refused Main_Zone (RC=3)");
     s.controller.handleStateChange("living.volume", false, -40);
     await new Promise(resolve => setImmediate(resolve));
-    expect(s.client.calls.map(c => c.method)).toEqual(["send"]);
+    expect(s.client.calls.map(c => `${c.method}:${c.zone}`)).toEqual(["send:Main_Zone", "getStatus:Main_Zone"]);
+    expect(s.acks).toContainEqual({ id: "living.volume", value: legacyMain.volume });
   });
 
   test("a volume write after a legacy status goes out as Vol, a program write as Surr>Pgm_Sel", async () => {
@@ -1288,10 +1300,13 @@ describe("the zone commands desc.xml declares: pads, transport keys, zone names 
     expect(s.acks).toContainEqual({ id: "living.multiroom.zone2.zoneName", value: "Kitchen" });
     expect(memory.remembered("xmlZoneName:zone2")).toBe("Kitchen");
     s.controller.handleStateChange("living.multiroom.zone2.zoneName", false, "Küche");
+    // The device takes the name: its Config carries it from now on.
+    s.client.xmlAnswers["Zone_2|<Config>GetParam</Config>"] =
+      '<YAMAHA_AV rsp="GET" RC="0"><Zone_2><Config><Name><Zone>Küche</Zone></Name></Config></Zone_2></YAMAHA_AV>';
     await tick();
     expect(sent(s)).toEqual([{ zone: "Zone_2", inner: "<Config><Name><Zone>Küche</Zone></Name></Config>" }]);
-    // The new name is confirmed on the datapoint and remembered — the next start must not
-    // bring the old one back from the probe memory (until 2.10.0 it did).
+    // The new name is read back, confirmed on the datapoint and remembered — the next start must
+    // not bring the old one back from the probe memory (until 2.10.0 it did).
     expect(s.acks).toContainEqual({ id: "living.multiroom.zone2.zoneName", value: "Küche" });
     expect(memory.remembered("xmlZoneName:zone2")).toBe("Küche");
     // The next start reads the name again (D8); a device that does not answer this time keeps the
@@ -1358,7 +1373,9 @@ describe("the zone commands desc.xml declares: pads, transport keys, zone names 
     expect(rejections).toEqual([]);
   });
 
-  test("a rejected zone-name write neither confirms nor remembers the name", async () => {
+  // A refused name stood unconfirmed on the datapoint until the next start: the zone status does
+  // not carry the name, so no poll put the device's own back (audit 2026-09-24).
+  test("a rejected zone-name write shows the device's name again and does not remember the written one", async () => {
     const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
     const s = setup(statuses);
     (s.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
@@ -1369,7 +1386,9 @@ describe("the zone commands desc.xml declares: pads, transport keys, zone names 
     s.client.sendError = new Error("device refused Zone_2 (RC=3)");
     s.controller.handleStateChange("living.multiroom.zone2.zoneName", false, "Küche");
     await tick();
-    expect(s.acks.filter(ack => ack.id === "living.multiroom.zone2.zoneName")).toEqual([]);
+    expect(s.acks.filter(ack => ack.id === "living.multiroom.zone2.zoneName")).toEqual([
+      { id: "living.multiroom.zone2.zoneName", value: "Kitchen" },
+    ]);
     expect(memory.remembered("xmlZoneName:zone2")).toBe("Kitchen");
   });
 
