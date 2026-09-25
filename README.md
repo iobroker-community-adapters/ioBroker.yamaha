@@ -27,7 +27,7 @@ legacy XML protocol of the oldest pre-2010 models — behind one object tree.
 ## Documentation
 
 The **[Wiki](https://github.com/iobroker-community-adapters/ioBroker.yamaha/wiki)** has the full
-documentation in English and German:
+documentation in English and German: 
 
 | | |
 |---|---|
