@@ -120,8 +120,8 @@ recreates them at the next connection.
 **Switch on and choose a source**
 
 ```javascript
-setState("yamaha.0.living.power", true);
-setState("yamaha.0.living.input", "HDMI1");
+setState("yamaha.0.rx-v6a-1a2b.power", true);
+setState("yamaha.0.rx-v6a-1a2b.input", "HDMI1");
 ```
 
 **Set the volume** — in the scale the receiver shows (decibels or its own steps), within the
@@ -129,20 +129,20 @@ limits of its `volume` datapoint; with **Volume as 0–100 %** on, in percent. O
 that shows decibels:
 
 ```javascript
-setState("yamaha.0.living.volume", -35.5);
+setState("yamaha.0.rx-v6a-1a2b.volume", -35.5);
 ```
 
 **Recall a scene** — by number or by the name shown on the device:
 
 ```javascript
-setState("yamaha.0.living.scene.recall", "Movie Viewing");
+setState("yamaha.0.rx-v6a-1a2b.scene.recall", "Movie Viewing");
 ```
 
 **Press a key on the on-screen remote** — `up`, `down`, `left`, `right`, `select`, `return`,
 `home`:
 
 ```javascript
-setState("yamaha.0.living.remote.cursor", "left");
+setState("yamaha.0.rx-v6a-1a2b.remote.cursor", "left");
 ```
 
 The words are the same on all three protocols, so a script keeps working when you replace the
@@ -174,6 +174,15 @@ back — the log says so when they arrive again.
 **Zone 2 is a full zone.** It has its own volume, input, player block and scenes under
 `multiroom.zone2`. Recalling a favourite switches the zone that is listening to that source,
 not always the main zone.
+
+**A device's object ID is its model and the end of its serial number** — for example
+`yamaha.0.rx-v6a-1a2b`. Two devices of the same model therefore get two object trees, and a
+device keeps its ID whatever you or the app call it: the name next to the ID comes from the
+device and can be changed on its card. Should two devices of one model share the last four
+characters, the second one gets the whole serial number. A device that reports no serial number
+— a YNCA receiver whose XML control does not answer — is known by its model: `rx-v473`,
+`rx-v473-2`. A device you add by hand while it is switched off starts under the name you typed;
+once it has answered, its objects move to its model ID at the next start.
 
 **A receiver is known by its serial number, not by its address.** The adapter learns the
 serial (and the MAC) from the receiver itself — from its network announcement, from MusicCast,

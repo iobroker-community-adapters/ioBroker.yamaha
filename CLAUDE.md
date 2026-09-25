@@ -170,9 +170,9 @@ fiele eine Soundbar bei jedem Start bis zum ersten Modell-Report auf den Receive
 path/circle), und `ensureDeviceHeader` HEILT ein Icon, das keines der fünf aktuellen ist, aus
 dem im Profil gemerkten Modell — Details im Abschnitt „Audit 2026-09-15 (v2.10.0)".
 **Anzeigename am Device-Objekt** (`updateDeviceLabel` + `pure-helpers.nextDeviceLabel`): der
-Migrationspfad taufte das Gerät auf seine IP (der Alt-Adapter kannte nichts anderes), und aus
-dem Namen entsteht die Objekt-ID — die bleibt für immer, sonst löscht `staleObjects` den ganzen
-Baum samt Historie/VIS-Bindungen. Deshalb wird NUR `common.name` nachgezogen: MusicCast-Zonenname
+Migrationspfad taufte das Gerät auf seine IP (der Alt-Adapter kannte nichts anderes); die Objekt-ID
+trägt seit 3.0.0 Modell und Seriennummer (Abschnitt „Geräte-ID“), nie den Namen. Deshalb wird NUR
+`common.name` nachgezogen: MusicCast-Zonenname
 (`yxc/device-controller.zoneNameFrom` aus `system/getNameText`, generische Zonennamen gefiltert)
 schlägt Modell. Überschrieben wird ausschließlich der eigene Platzhalter (= die ID) oder der zuletzt
 selbst geschriebene Name — ein User-Name bleibt, deshalb dort bewusst OHNE `preserve`, die
@@ -216,6 +216,20 @@ Die datierten Audit-, Umbau-, Plan- und Stand-Abschnitte stehen wörtlich in `.c
 - Fähigkeiten kommen vom Gerät (v2.6.0, Audit + Plan 2026-09-09)
 - Phase 2 des Fähigkeits-Plans (v2.7.1): ein Profil, schnellerer Erst-Sweep, Baum folgt dem Gerät
 
+## Geräte-ID (3.0.0, krobi 2026-09-25)
+
+**Die Objekt-Id ist Modell + die letzten 4 Stellen der Seriennummer, klein** (`device-id.ts` `serialId`, `wx-030-2b3c`);
+gleiche Endung bei gleichem Modell → das zweite (nach Seriennummer sortiert) die ganze Seriennummer; ohne Seriennummer
+das Modell mit `-2`/`-3` (`modelId`); ohne Modell der getippte Name oder die IP (`nameId`). Vorbild homeconnect.
+**Einmal festgelegt, gespeichert, nie neu abgeleitet:** Tabellenzeilen tragen `id` (und den Namen = Id, damit 2.x
+nach einer Rückkehr denselben Baum findet), gefundene Geräte die Id in `discovered.json`; `rowDeviceId` fällt nur für
+Zeilen ohne `id` auf die 2.x-Formel `sanitizeId` zurück. **Umzug** (`migrateDeviceIds`, VOR allem anderen in `onReady`):
+Journal `native.movingTo` am alten Gerät → `copyDeviceTree` (Objekte samt `custom`, Werte, enums, Alias-Ziele,
+`aliasId` = alte Id für aktive Aufzeichnungen, Gerätobjekt zuletzt mit `native.idScheme = 3`) → Zeilen/Fundspeicher
+→ alter Baum weg; wiederholbar. Was der Start nicht entscheiden kann, entscheidet `checkIdDecision` beim ersten
+Kontakt und schreibt NUR das Journal — der Umzug läuft beim nächsten Start; nie ein eigener Neustart (Wegwerf-Umgebungen
+starten nicht neu, ein gescheiterter Umzug hieße Neustart-Schleife). Belege: `.claude/dev-history.md` 2026-09-25.
+
 ## Identität, Löschen, Wiederfinden (developing nach 2.11.0, 2026-09-22)
 
 **Ein Gerät ist seine Seriennummer, nicht sein Name und nicht seine Adresse.** `lib/device-identity.ts`:
@@ -226,8 +240,8 @@ gesetzt), `mergeIdentity`. Drei Quellen liefern dieselbe Nummer (am RX-V6A gemes
 - UDN-MAC (die Suche, `discovery.ts` `parseYamahaDescription`), YXC `getDeviceInfo.system_id`/`device_id`
   (ProbeMemory `yxcDeviceIds`, NICHT Teil des Validierungs-Strings `yxcIdentity`), XML `System_ID` (schon in
   `xmlIdentity`); `DeviceProfileStore.identity()` leitet sie ab, `main.ts` `learnIdentity` schreibt sie an
-  `deviceRecords`, `native.identity` und — bei gefundenen Geräten — in `discovered.json`. **Die Objekt-Id bleibt
-  für immer** (`staleObjects` löscht jeden Baum, dessen Id wandert); die Identität ist der Abgleichsschlüssel
+  `deviceRecords`, `native.identity` und — bei gefundenen Geräten — in `discovered.json`. **Die Objekt-Id wird
+  einmal festgelegt und nie neu abgeleitet** (Abschnitt „Geräte-ID“); die Identität ist der Abgleichsschlüssel
   DANEBEN. `mergeDiscovered` matcht zuerst nach Identität (Umbenennung + Umzug halten den Baum), dann nach Id — nach Id nur
   ohne widersprechende Identität (sonst Kollision); `mergeIdentity` ERSETZT bei widersprechender Seriennummer.
 

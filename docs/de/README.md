@@ -124,8 +124,8 @@ Wiedereinschalten entstehen sie mit der nächsten Verbindung neu.
 **Einschalten und Quelle wählen**
 
 ```javascript
-setState("yamaha.0.wohnzimmer.power", true);
-setState("yamaha.0.wohnzimmer.input", "HDMI1");
+setState("yamaha.0.rx-v6a-1a2b.power", true);
+setState("yamaha.0.rx-v6a-1a2b.input", "HDMI1");
 ```
 
 **Lautstärke setzen** — in der Skala, die der Receiver anzeigt (Dezibel oder seine eigenen
@@ -133,20 +133,20 @@ Schritte), innerhalb der Grenzen seines `volume`-Datenpunkts; mit **Lautstärke 
 Prozent. Auf einem Receiver mit Dezibel-Anzeige:
 
 ```javascript
-setState("yamaha.0.wohnzimmer.volume", -35.5);
+setState("yamaha.0.rx-v6a-1a2b.volume", -35.5);
 ```
 
 **Szene aufrufen** — über die Nummer oder über den Namen, der am Gerät steht:
 
 ```javascript
-setState("yamaha.0.wohnzimmer.scene.recall", "Movie Viewing");
+setState("yamaha.0.rx-v6a-1a2b.scene.recall", "Movie Viewing");
 ```
 
 **Eine Taste der Bildschirm-Fernbedienung drücken** — `up`, `down`, `left`, `right`, `select`,
 `return`, `home`:
 
 ```javascript
-setState("yamaha.0.wohnzimmer.remote.cursor", "left");
+setState("yamaha.0.rx-v6a-1a2b.remote.cursor", "left");
 ```
 
 Die Wörter sind auf allen drei Protokollen dieselben, ein Skript überlebt also den Gerätewechsel.
@@ -165,6 +165,16 @@ Funktionen er hat — auf einem YNCA-Gerät bis zu eine halbe Minute. Die Antwor
 Gerät gemerkt und überstehen einen Neustart, deshalb ist das Gerät bei jedem späteren Start in
 Sekunden da und die Werte werden im Hintergrund aufgefrischt. Ein Firmware-Update oder ein
 anderes Gerät unter derselben Adresse fällt auf und wird neu gefragt.
+
+**Die Objekt-ID eines Geräts ist sein Modell und das Ende seiner Seriennummer** — zum Beispiel
+`yamaha.0.rx-v6a-1a2b`. Zwei Geräte desselben Modells bekommen damit zwei Objektbäume, und ein
+Gerät behält seine ID, wie auch immer du oder die App es nennen: Der Name neben der ID kommt vom
+Gerät und lässt sich auf seiner Karte ändern. Haben zwei Geräte desselben Modells dieselben
+letzten vier Stellen, bekommt das zweite die ganze Seriennummer. Ein Gerät, das keine
+Seriennummer meldet — ein YNCA-Receiver, dessen XML-Steuerung nicht antwortet —, heißt nach
+seinem Modell: `rx-v473`, `rx-v473-2`. Ein Gerät, das du von Hand einträgst, während es aus ist,
+startet unter dem getippten Namen; sobald es geantwortet hat, ziehen seine Objekte beim nächsten
+Start auf seine Modell-ID um.
 
 **Ein Receiver ist an seiner Seriennummer bekannt, nicht an seiner Adresse.** Der Adapter
 lernt die Seriennummer (und die MAC) vom Receiver selbst — aus seiner Netz-Ankündigung, über

@@ -90,6 +90,15 @@ Details on all settings and the object tree are in the
     ### **WORK IN PROGRESS**
 -->
 
+### **WORK IN PROGRESS**
+
+- (krobipd) Changed: Every device gets a new object ID once — its model and the end of its serial number, e.g. `wx-030-2b3c`; scripts and VIS need the new IDs
+- (krobipd) Changed: The move carries values, recording settings, rooms, functions and aliases along, and recorded history continues in its old series
+- (krobipd) Fixed: A second device of the same model and name is no longer skipped — every device gets its own object tree
+- (krobipd) Fixed: After a restart, the input list of a YNCA receiver offers only the sources the receiver has again, not the whole catalog
+- (krobipd) New: A device added by hand is asked for its model and serial number, and the name you type is its display name from the start
+- (krobipd) New: The device card shows the object ID, the MAC address and the serial number under its details
+
 ### 2.13.0 (2026-09-25)
 
 - (krobipd) Fixed: A value a receiver refuses no longer stays on the datapoint — every write is read back, and the log names the device's reason
