@@ -3,7 +3,7 @@ export type Transport = "yxc" | "ynca" | "xml";
 
 /**
  * Ownership preference by modernity, used when a shared capability is equally good on each
- * transport (krobi: "wenn mehrere Protokolle dasselbe können, das modernste nutzen"). YXC is
+ * transport (krobi: "when several protocols can do the same, use the most modern one"). YXC is
  * push + structured JSON, YNCA the text-poll base, XML the pre-2010 fallback.
  */
 const MODERNITY: readonly Transport[] = ["yxc", "ynca", "xml"];

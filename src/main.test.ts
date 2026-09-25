@@ -4344,10 +4344,9 @@ describe("device ids since 3.0.0 — the one-time move", () => {
     expect((ctx.i.objects.get(`${office}.volume`)?.common as { custom: unknown }).custom).toEqual({
       "influxdb.0": { enabled: true, aliasId: "yamaha.0.B_ro.volume" },
     });
-    expect((ctx.i.foreignObjects.get("enum.rooms.office")?.common as { members: unknown }).members).toEqual([
-      `yamaha.0.${office}`,
-      "hm-rpc.0.X.STATE",
-    ]);
+    expect(
+      [...((ctx.i.foreignObjects.get("enum.rooms.office")?.common as { members: string[] }).members ?? [])].sort(),
+    ).toEqual(["hm-rpc.0.X.STATE", `yamaha.0.${office}`]);
     expect((ctx.i.foreignObjects.get("alias.0.office.volume")?.common as { alias: unknown }).alias).toEqual({
       id: `yamaha.0.${office}.volume`,
     });
@@ -4361,6 +4360,29 @@ describe("device ids since 3.0.0 — the one-time move", () => {
       `B_ro: device id is now ${office} — moved 1 datapoint(s) with 1 room/function entry, 1 alias(es), 1 recording(s) keep their history`,
     );
     expect(ctx.i.restart).not.toHaveBeenCalled();
+  });
+
+  it("keeps the room when the delete writes the enums back from a stale cache", async () => {
+    // js-controller's delete removes the old ids from every enum and writes each one back WHOLE from
+    // the adapter's enum cache — one that may not know the new id yet (enum-carry.ts).
+    const ctx = upgradedOffice();
+    const stale = JSON.parse(JSON.stringify(ctx.i.foreignObjects.get("enum.rooms.office"))) as {
+      common: { members: string[] };
+    };
+    const del = (ctx.i as unknown as { delObjectAsync: ReturnType<typeof vi.fn> }).delObjectAsync;
+    const original = del.getMockImplementation() as (id: string, options?: { recursive?: boolean }) => Promise<void>;
+    del.mockImplementation((id: string, options?: { recursive?: boolean }) => {
+      if (id === "B_ro") {
+        stale.common.members = stale.common.members.filter(member => !member.startsWith("yamaha.0.B_ro"));
+        ctx.i.foreignObjects.set("enum.rooms.office", JSON.parse(JSON.stringify(stale)) as Record<string, unknown>);
+      }
+      return original(id, options);
+    });
+    await ctx.i.onReady();
+    await flush();
+    expect((ctx.i.foreignObjects.get("enum.rooms.office")?.common as { members: string[] }).members).toContain(
+      `yamaha.0.${office}`,
+    );
   });
 
   it("moves a found device and renames its record in the discovery store", async () => {

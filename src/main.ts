@@ -38,7 +38,14 @@ import {
   stripNamespace,
 } from "./lib/pure-helpers";
 import { ID_SCHEME, modelId, serialId } from "./lib/device-id";
-import { copyDeviceTree, type DeviceMoveDeps, type MoveReport } from "./lib/lifecycle/device-move";
+import {
+  copyDeviceTree,
+  enumMembersUnder,
+  movedId,
+  type DeviceMoveDeps,
+  type MoveReport,
+} from "./lib/lifecycle/device-move";
+import { moveWithEnums } from "./lib/enum-carry";
 import { DeviceBody, errorMessage } from "./lib/util";
 import { migrateNativeKeys, type NativeKeyMigration } from "./lib/native-key-migration";
 import { tName } from "./lib/i18n";
@@ -115,6 +122,12 @@ const NATIVE_KEY_MIGRATIONS: NativeKeyMigration[] = [
   { drop: "hasXmlDevice" }, // until 0.14.0
   { drop: "group_zones" }, // until 0.17.0 — the zones group joined the multiroom group
   { drop: "volumeAsPercent" }, // 2.8.0 — the percent switch is a device setting since 2.9.0
+  // Manifest keys of earlier releases that js-controller keeps in the instance's `common` for good.
+  { commonDrop: "license" }, // since 0.1.0 — `common.licenseInformation` replaced it
+  { commonDrop: "localLink" }, // since 0.1.0 — the adapter has no web page of its own
+  { commonDrop: "materialize" }, // since 0.3.21 — the admin page is jsonConfig
+  { commonDrop: "messagebox" }, // since 0.1.0 — `supportedMessages` declares what the adapter receives
+  { commonDrop: "nondeletable" }, // since 0.0.2 — an instance must be deletable
 ];
 
 /** The three transports in attempt order — also the per-transport `info.transports.*` state ids. */
@@ -2208,7 +2221,6 @@ export class Yamaha extends utils.Adapter {
       setState: async (id, state) => {
         await this.setForeignStateAsync(id, state);
       },
-      enums: () => this.getForeignObjectsAsync("enum.*", "enum"),
       aliases: () => this.getForeignObjectsAsync("alias.*", "state"),
       setForeignObject: async (id, obj) => {
         await this.setForeignObject(id, obj);
@@ -2318,7 +2330,7 @@ export class Yamaha extends utils.Adapter {
       }
       await this.renameTableRows(rows, renamed);
       for (const move of done) {
-        await this.delObjectAsync(move.from, { recursive: true });
+        move.report.enums = await this.deleteMovedTree(move.from, move.to);
         const { datapoints, enums, aliases, history } = move.report;
         const carried = [
           ...(enums > 0 ? [`${enums} room/function entr${enums === 1 ? "y" : "ies"}`] : []),
@@ -2333,6 +2345,36 @@ export class Yamaha extends utils.Adapter {
       this.log.error(`moving the device ids failed (${errorMessage(e)}) — the devices run under their current ids`);
     }
     return undefined;
+  }
+
+  /**
+   * Delete a moved device's old tree and carry its room and function assignments to the new ids —
+   * through the fleet helper, in its order: the memberships are read first, the tree is deleted, the
+   * new ids are written last. The delete removes the old ids from every enum, written back from the
+   * adapter's enum cache, and would take away an id written before it.
+   *
+   * @param from the old device id
+   * @param to the new device id
+   * @returns how many room/function entries now list the moved objects
+   */
+  private async deleteMovedTree(from: string, to: string): Promise<number> {
+    const fromFull = `${this.namespace}.${from}`;
+    const toFull = `${this.namespace}.${to}`;
+    const members = enumMembersUnder(await this.getForeignObjectsAsync("enum.*", "enum"), fromFull);
+    const carried = new Set<string>();
+    // One carry per moved member, nested so that every one reads before the single delete runs.
+    let remove = async (): Promise<unknown> => this.delObjectAsync(from, { recursive: true });
+    for (const oldId of members) {
+      const inner = remove;
+      const newId = movedId(oldId, fromFull, toFull)!;
+      remove = async () => {
+        for (const enumId of await moveWithEnums(this, oldId, newId, inner, errorMessage)) {
+          carried.add(`${enumId}|${newId}`);
+        }
+      };
+    }
+    await remove();
+    return carried.size;
   }
 
   /**

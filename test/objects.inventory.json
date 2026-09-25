@@ -4000,9 +4000,9 @@
     "native": {
       "source": "manual",
       "volumeAsPercent": false,
-      "idScheme": 3,
       "label": "R-N500",
       "labelRank": 1,
+      "idScheme": 3,
       "model": "R-N500"
     },
     "_id": "yamaha.0.r-n500"
@@ -6837,9 +6837,9 @@
     "native": {
       "source": "manual",
       "volumeAsPercent": false,
-      "idScheme": 3,
       "label": "RX-A2A",
       "labelRank": 1,
+      "idScheme": 3,
       "model": "RX-A2A",
       "identity": {
         "serial": "0B23E7D3",
@@ -17356,9 +17356,9 @@
     "native": {
       "source": "manual",
       "volumeAsPercent": false,
-      "idScheme": 3,
       "label": "RX-V473",
       "labelRank": 1,
+      "idScheme": 3,
       "model": "RX-V473"
     },
     "_id": "yamaha.0.rx-v473"
@@ -20889,9 +20889,9 @@
     "native": {
       "source": "manual",
       "volumeAsPercent": false,
-      "idScheme": 3,
       "label": "RX-V6A",
       "labelRank": 1,
+      "idScheme": 3,
       "model": "RX-V6A"
     },
     "_id": "yamaha.0.rx-v6a"

@@ -7,7 +7,7 @@ describe("volume percent mode", () => {
   const speaker = { min: 0, max: 60, step: 1 };
 
   describe("isAmpVolumeId", () => {
-    // The switch reaches EVERY zone (krobi 2026-09-11: "ein schalter für ALLE"), and nothing else.
+    // The switch reaches EVERY zone (krobi 2026-09-11: "one switch for ALL of them"), and nothing else.
     // Every other id carrying "volume" is a different quantity on a different scale: a limit, a
     // calibration offset, a line-output mode, a button.
     test("matches main and every zone, and nothing else", () => {

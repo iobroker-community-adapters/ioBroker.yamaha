@@ -1,4 +1,11 @@
-import { copyDeviceTree, movedAliasTarget, movedId, rewriteMovedObject, type DeviceMoveDeps } from "./device-move";
+import {
+  copyDeviceTree,
+  enumMembersUnder,
+  movedAliasTarget,
+  movedId,
+  rewriteMovedObject,
+  type DeviceMoveDeps,
+} from "./device-move";
 
 const NS = "yamaha.0";
 
@@ -51,7 +58,6 @@ function database(objects: Record<string, unknown>, states: Record<string, unkno
       db.states.set(id, state as ioBroker.State);
       return Promise.resolve();
     },
-    enums: () => Promise.resolve(byPrefix(db.objects, "enum.")),
     aliases: () => Promise.resolve(byPrefix(db.objects, "alias.")),
     setForeignObject: (id, obj) => {
       db.objects.set(id, JSON.parse(JSON.stringify(obj)) as ioBroker.Object);
@@ -192,7 +198,7 @@ describe("rewriteMovedObject", () => {
 });
 
 describe("copyDeviceTree", () => {
-  test("carries objects, values, rooms and alias targets to the new id", async () => {
+  test("carries objects, values and alias targets to the new id — rooms are the delete's business", async () => {
     const { db, deps } = database(upgradedTree(), {
       [`${NS}.B_ro.volume`]: { val: 42, ack: true, ts: 1000, lc: 900, q: 0 },
       [`${NS}.B_ro.info.connection`]: { val: true, ack: true, ts: 2000, lc: 2000 },
@@ -200,12 +206,17 @@ describe("copyDeviceTree", () => {
     });
     const report = await copyDeviceTree(deps, "B_ro", "WX-030_00A0DED4F504");
     const to = `${NS}.WX-030_00A0DED4F504`;
-    expect(report).toEqual({ datapoints: 2, enums: 1, aliases: 2, history: 1 });
+    expect(report).toEqual({ datapoints: 2, enums: 0, aliases: 2, history: 1 });
     expect(db.objects.get(to)?.native).toMatchObject({ idScheme: 3, identity: { mac: "00A0DED4F504" } });
     expect(db.objects.get(`${to}.info`)?.type).toBe("channel");
     expect(db.states.get(`${to}.volume`)).toEqual({ val: 42, ack: true, ts: 1000, lc: 900, q: 0 });
     expect(db.states.get(`${to}.info.connection`)).toEqual({ val: true, ack: true, ts: 2000, lc: 2000 });
-    expect(db.objects.get("enum.rooms.office")?.common.members).toEqual([to, `${to}.volume`, "hm-rpc.0.X.1.STATE"]);
+    // Untouched here: an id written before the delete would be taken away by it (enum-carry.ts).
+    expect(db.objects.get("enum.rooms.office")?.common.members).toEqual([
+      `${NS}.B_ro`,
+      `${NS}.B_ro.volume`,
+      "hm-rpc.0.X.1.STATE",
+    ]);
     expect((db.objects.get("alias.0.office.volume")?.common as { alias: unknown }).alias).toEqual({
       id: `${to}.volume`,
     });
@@ -248,5 +259,14 @@ describe("copyDeviceTree", () => {
     const report = await copyDeviceTree(deps, "B_ro", "W");
     expect(report.datapoints).toBe(2);
     expect(db.objects.get(`${NS}.W`)?.native).toMatchObject({ idScheme: 3 });
+  });
+});
+
+describe("enumMembersUnder", () => {
+  test("names every id of the moved tree that a room or function lists, and nothing else", () => {
+    const enums = upgradedTree();
+    expect(enumMembersUnder(enums, `${NS}.B_ro`)).toEqual([`${NS}.B_ro`, `${NS}.B_ro.volume`]);
+    expect(enumMembersUnder({ "enum.x": { common: { members: [`${NS}.B_roth.power`] } } }, `${NS}.B_ro`)).toEqual([]);
+    expect(enumMembersUnder(undefined, `${NS}.B_ro`)).toEqual([]);
   });
 });

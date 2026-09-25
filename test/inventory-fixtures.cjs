@@ -230,8 +230,8 @@ function declaredListsOf(fixture) {
  * What a MusicCast fixture DECLARES about its volume, per zone. `range_step` carries the raw
  * wire range under `volume` and, where the receiver has a display of its own, that display's
  * range under `actual_volume_db` / `actual_volume_numeric`. Those declarations are what the
- * built datapoint must carry — taken, never derived (krobi 2026-09-11: "der receiver schickt
- * min und max und das ist dann eben min und max fertig"), and per zone, because a receiver
+ * built datapoint must carry — taken, never derived (krobi 2026-09-11: "the receiver sends
+ * min and max, and that is simply min and max, done"), and per zone, because a receiver
  * declares them per zone (RX-V6A: main 0…97, zone 2 0…90.5).
  *
  * A fixture that speaks no MusicCast declares nothing here; its `volume` comes from the YNCA

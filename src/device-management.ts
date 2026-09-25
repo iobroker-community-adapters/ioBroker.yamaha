@@ -329,7 +329,7 @@ export class YamahaDeviceManagement extends DeviceManagement {
       // next to name and address, because it is a decision about the device and not something
       // flipped in passing. 2.9.1 had it in both places — the card control showed the wrong
       // position while the dialog showed the right one, and two ways to set one value is one
-      // too many (krobi 2026-09-12: "für was hast du den das doppelt gemoppelt?").
+      // too many (krobi 2026-09-12: "why did you put that in twice?").
       actions: [edit, del],
     };
   }
