@@ -375,6 +375,21 @@ function withoutSchema(memory: Record<string, unknown>): Record<string, unknown>
   return entries;
 }
 
+/**
+ * The YNCA snapshot as the profile keeps it — the schema lives on the profile. Every other field
+ * rides along: `probed` was dropped here from 2.13.0 on, so after every restart no source counted
+ * as asked, none could be judged absent, and a YNCA receiver's input dropdown offered the whole
+ * source catalog again (#619 back through the restart — found by the 3.0.0 upgrade suite, the
+ * first run that starts the adapter twice).
+ *
+ * @param snapshot the snapshot with its schema
+ * @returns the snapshot without it
+ */
 function withoutSnapshotSchema(snapshot: YncaAvailSnapshot): Omit<YncaAvailSnapshot, "schema"> {
-  return { subunits: snapshot.subunits, model: snapshot.model, firmware: snapshot.firmware };
+  return {
+    subunits: snapshot.subunits,
+    ...(snapshot.probed ? { probed: snapshot.probed } : {}),
+    model: snapshot.model,
+    firmware: snapshot.firmware,
+  };
 }

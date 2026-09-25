@@ -188,17 +188,38 @@ describe("DeviceProfileStore", () => {
   const profileOf = (patch: Record<string, unknown>): Record<string, unknown> =>
     JSON.parse(patch[PROFILE_KEY] as string) as Record<string, unknown>;
 
+  test("keeps the list of subunits the YNCA probe asked — a restart judges absent sources by it", () => {
+    const { patches, deps: d } = deps();
+    const store = new DeviceProfileStore("rx", undefined, d);
+    store.subunitCache.set({
+      subunits: ["MAIN", "NETRADIO"],
+      probed: ["NETRADIO", "SPOTIFY"],
+      model: "RX-V473",
+      firmware: "1.0",
+    });
+    const saved = profileOf(patches.at(-1)!);
+    expect(saved.yncaAvail).toEqual({
+      subunits: ["MAIN", "NETRADIO"],
+      probed: ["NETRADIO", "SPOTIFY"],
+      model: "RX-V473",
+      firmware: "1.0",
+    });
+    // …and after the restart the cache hands it back.
+    const again = new DeviceProfileStore("rx", { [PROFILE_KEY]: patches.at(-1)![PROFILE_KEY] }, deps().deps);
+    expect(again.subunitCache.get()?.probed).toEqual(["NETRADIO", "SPOTIFY"]);
+  });
+
   test("derives the device identity from the XML system id and the MusicCast device ids", () => {
     const d = deps();
     const stored = serializeCapabilityProfile(
       {
-        memory: { xmlIdentity: "RX-V6A|057CCF73|2.15", yxcDeviceIds: { serial: "057CCF73", mac: "CCD42ECF0223" } },
+        memory: { xmlIdentity: "RX-V6A|0A1B2C3D|2.15", yxcDeviceIds: { serial: "0A1B2C3D", mac: "00A0DE0A1B2C" } },
         pendingPurge: [],
       },
       { adapterVersion: "2.7.0", learnedAt: "2026-09-01T00:00:00.000Z" },
     );
     const store = new DeviceProfileStore("living", { [PROFILE_KEY]: stored }, d.deps);
-    expect(store.identity()).toEqual({ serial: "057CCF73", mac: "CCD42ECF0223" });
+    expect(store.identity()).toEqual({ serial: "0A1B2C3D", mac: "00A0DE0A1B2C" });
   });
 
   test("the remembered model comes from whichever transport answered — XML alone is enough", () => {
@@ -221,14 +242,14 @@ describe("DeviceProfileStore", () => {
     const d = deps();
     const stored = serializeCapabilityProfile(
       {
-        memory: { xmlIdentity: "RX-V6A|00000000|2.15", yxcDeviceIds: { serial: "057CCF73", mac: "CCD42ECF0223" } },
+        memory: { xmlIdentity: "RX-V6A|00000000|2.15", yxcDeviceIds: { serial: "0A1B2C3D", mac: "00A0DE0A1B2C" } },
         pendingPurge: [],
       },
       { adapterVersion: "2.7.0", learnedAt: "2026-09-01T00:00:00.000Z" },
     );
     expect(new DeviceProfileStore("living", { [PROFILE_KEY]: stored }, d.deps).identity()).toEqual({
-      serial: "057CCF73",
-      mac: "CCD42ECF0223",
+      serial: "0A1B2C3D",
+      mac: "00A0DE0A1B2C",
     });
   });
 
