@@ -1,4 +1,7 @@
 # Older changes
+## 2.9.1 (2026-09-12)
+
+- (krobipd) Fixed: A receiver the network search found keeps its datapoints when you add a device by hand — they stay with their history and are marked offline instead of deleted
 
 ## 2.9.0 (2026-09-12)
 

@@ -1,9 +1,22 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "2.12.0",
+    "version": "2.13.0",
     "nogit": true,
     "news": {
+      "2.13.0": {
+        "en": "Every write is read back, a refused one shows the device value again; MusicCast writes more settings and builds Link groups as specified; umlauts arrive intact.",
+        "de": "Jeder Schreibvorgang wird zurückgelesen, ein abgelehnter zeigt wieder den Gerätewert; MusicCast schreibt mehr Einstellungen, bildet Link-Gruppen nach Spec; Umlaute kommen heil an.",
+        "ru": "Каждая запись считывается обратно, отклонённая снова показывает значение устройства; MusicCast пишет больше настроек и строит группы Link по спецификации; умлауты целы.",
+        "pt": "Cada escrita é relida, uma recusada volta a mostrar o valor do aparelho; o MusicCast escreve mais definições e forma grupos Link conforme a norma; acentos chegam intactos.",
+        "nl": "Elke schrijfactie wordt teruggelezen, een geweigerde toont weer de apparaatwaarde; MusicCast schrijft meer instellingen en vormt Link-groepen volgens spec; umlauten blijven heel.",
+        "fr": "Chaque écriture est relue, une écriture refusée réaffiche la valeur de l'appareil ; MusicCast écrit plus de réglages et forme les groupes Link selon la norme ; accents intacts.",
+        "it": "Ogni scrittura viene riletta, una rifiutata mostra di nuovo il valore del dispositivo; MusicCast scrive più impostazioni e forma i gruppi Link a norma; accenti integri.",
+        "es": "Cada escritura se relee, una rechazada vuelve a mostrar el valor del equipo; MusicCast escribe más ajustes y forma grupos Link según la norma; los acentos llegan intactos.",
+        "pl": "Każdy zapis jest odczytywany ponownie, odrzucony znów pokazuje wartość urządzenia; MusicCast zapisuje więcej ustawień i tworzy grupy Link wg specyfikacji; znaki całe.",
+        "uk": "Кожен запис зчитується назад, відхилений знову показує значення пристрою; MusicCast пише більше налаштувань і будує групи Link за специфікацією; умлаути цілі.",
+        "zh-cn": "每次写入都会回读，被拒绝的写入会重新显示设备值；MusicCast 可写入更多设置并按规范组建 Link 组；变音字符完整到达。"
+      },
       "2.12.0": {
         "en": "Deleting a device is final, a receiver is known by its serial number and follows a new IP address within seconds, and one that lost power is offline in about 90 seconds.",
         "de": "Löschen ist endgültig, ein Receiver ist an seiner Seriennummer bekannt und folgt einer neuen IP-Adresse in Sekunden, ein stromloser ist nach etwa 90 Sekunden offline.",
@@ -81,19 +94,6 @@
         "pl": "Wpisane i znalezione urządzenia działają obok siebie, każdą kartę można edytować, a \"Głośność 0-100 %\" ustawiasz per urządzenie.",
         "uk": "Введені та знайдені пристрої тепер працюють поруч, кожну картку можна редагувати, а \"Гучність 0-100 %\" задається для кожного пристрою.",
         "zh-cn": "手动添加与搜索到的设备现在并行运行，每张卡片都可编辑，“音量 0-100 %”按设备设置。"
-      },
-      "2.8.0": {
-        "en": "Volume now carries the scale the receiver itself shows, and its range is what the receiver accepts. A new setting shows every zone's volume as 0-100 % instead. Three datapoints are gone.",
-        "de": "Die Lautstärke trägt jetzt die Skala, die der Receiver selbst anzeigt, und ihr Bereich ist das, was er annimmt. Eine neue Einstellung zeigt jede Zone als 0-100 %. Drei Datenpunkte fallen weg.",
-        "ru": "Громкость теперь использует шкалу, которую показывает сам ресивер, а её диапазон — то, что он принимает. Новая настройка показывает каждую зону как 0-100 %. Три датапоинта удалены.",
-        "pt": "O volume usa agora a escala que o próprio receptor mostra, e o seu intervalo é o que ele aceita. Uma nova definição mostra cada zona como 0-100 %. Três pontos de dados foram removidos.",
-        "nl": "Het volume gebruikt nu de schaal die de receiver zelf toont, en het bereik is wat hij accepteert. Een nieuwe instelling toont elke zone als 0-100 %. Drie datapunten vervallen.",
-        "fr": "Le volume utilise désormais l'échelle que l'ampli affiche lui-même, et sa plage est ce qu'il accepte. Un nouveau réglage affiche chaque zone en 0-100 %. Trois points de données disparaissent.",
-        "it": "Il volume usa ora la scala che il ricevitore stesso mostra, e il suo intervallo è ciò che accetta. Una nuova impostazione mostra ogni zona come 0-100 %. Tre datapoint sono stati rimossi.",
-        "es": "El volumen usa ahora la escala que el propio receptor muestra, y su rango es lo que acepta. Un nuevo ajuste muestra cada zona como 0-100 %. Tres puntos de datos se eliminan.",
-        "pl": "Głośność używa teraz skali, którą pokazuje sam amplituner, a jej zakres to zakres, który on przyjmuje. Nowe ustawienie pokazuje każdą strefę jako 0-100 %. Trzy punkty danych zniknęły.",
-        "uk": "Гучність тепер використовує шкалу, яку показує сам ресивер, а її діапазон — те, що він приймає. Нове налаштування показує кожну зону як 0-100 %. Три датапоінти вилучено.",
-        "zh-cn": "音量现在使用功放自身显示的刻度，其范围即功放可接受的范围。新增设置可将每个区域显示为 0-100 %。三个数据点已移除。"
       }
     },
     "titleLang": {

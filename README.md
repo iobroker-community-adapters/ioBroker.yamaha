@@ -89,8 +89,7 @@ Details on all settings and the object tree are in the
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
-
-### **WORK IN PROGRESS**
+### 2.13.0 (2026-09-25)
 
 - (krobipd) Fixed: A value a receiver refuses no longer stays on the datapoint — every write is read back, and the log names the device's reason
 - (krobipd) Fixed: MusicCast values stay current in Docker or next to a second MusicCast app — missing events are noticed, then the adapter polls and reads writes back
@@ -106,6 +105,7 @@ Details on all settings and the object tree are in the
 - (krobipd) New: Menus on the 2008 XML receivers (RX-V3900 generation); XML zones write tone and dialogue level the way the receiver declares them
 - (krobipd) Changed: The first start after this update asks every receiver again what it can do — up to half a minute on a YNCA receiver, as on a first contact
 - (krobipd) Improved: The README lists the ports the adapter uses; with the network search set to Never it opens no listener on UDP port 1900
+- (krobipd) Changed: Settings left over from older versions are removed from the instance once after the update; the instance restarts once for it
 
 ### 2.12.0 (2026-09-22)
 
@@ -146,10 +146,6 @@ Details on all settings and the object tree are in the
 
 - (krobipd) New: The device card shows a 0–100 % badge while that receiver's volume is in percent, so you can tell the two scales apart at a glance
 - (krobipd) Fixed: The percent setting is made in one place again — the device's edit dialog; the extra switch on the card showed the wrong position and is gone
-
-### 2.9.1 (2026-09-12)
-
-- (krobipd) Fixed: A receiver the network search found keeps its datapoints when you add a device by hand — they stay with their history and are marked offline instead of deleted
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 
