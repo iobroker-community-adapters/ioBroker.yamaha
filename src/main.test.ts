@@ -96,7 +96,7 @@ vi.mock("@iobroker/adapter-core", () => {
     public getAdapterObjectsAsync = vi.fn(() => {
       const out: Record<string, unknown> = {};
       for (const [k, v] of this.objects) {
-        out[`${this.namespace}.${k}`] = v;
+        out[`${this.namespace}.${k}`] = copyOf(v);
       }
       return Promise.resolve(out);
     });

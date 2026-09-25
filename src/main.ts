@@ -1796,45 +1796,21 @@ export class Yamaha extends utils.Adapter {
    * instance that predates a change keeps whatever the old version wrote. Measured after the
    * name translation went live: five of them still carried a plain-string name while the whole
    * rest of the tree was translated. Writing them here every start closes that half; extendObject
-   * merges, so a recording setting or anything else a user attached survives.
+   * merges, so a recording setting or anything else a user attached survives. Only the name and
+   * the description: the manifest owns the rest of the shape, and js-controller applies it.
    */
   private async ensureInstanceInfoObjects(): Promise<void> {
     // Spelled out with LITERAL ids on purpose. A loop over a table reads more compactly, but
     // then neither a reader nor the consistency gate can see which manifest objects are
     // actually refreshed — and "the call exists" is not the same question as "the call runs
     // for THIS object". This is the one place where that distinction cost a release (2.1.1).
-    await this.extendObject("info", {
-      type: "channel",
-      common: { name: tName("information") },
-      native: {},
-    });
+    await this.extendObject("info", { common: { name: tName("information") } });
     await this.extendObject("info.connection", {
-      type: "state",
-      common: {
-        name: tName("deviceOrServiceConnected"),
-        desc: tName("descDeviceOrServiceConnected"),
-        type: "boolean",
-        role: "indicator.connected",
-        read: true,
-        write: false,
-      },
-      native: {},
+      common: { name: tName("deviceOrServiceConnected"), desc: tName("descDeviceOrServiceConnected") },
     });
-    await this.extendObject("info.devicesTotal", {
-      type: "state",
-      common: { name: tName("devicesTotal"), type: "number", role: "value", read: true, write: false },
-      native: {},
-    });
-    await this.extendObject("info.devicesOnline", {
-      type: "state",
-      common: { name: tName("devicesOnline"), type: "number", role: "value", read: true, write: false },
-      native: {},
-    });
-    await this.extendObject("info.devicesAllOnline", {
-      type: "state",
-      common: { name: tName("allDevicesOnline"), type: "boolean", role: "indicator", read: true, write: false },
-      native: {},
-    });
+    await this.extendObject("info.devicesTotal", { common: { name: tName("devicesTotal") } });
+    await this.extendObject("info.devicesOnline", { common: { name: tName("devicesOnline") } });
+    await this.extendObject("info.devicesAllOnline", { common: { name: tName("allDevicesOnline") } });
   }
 
   /**
