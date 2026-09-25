@@ -471,8 +471,8 @@ export class YamahaDeviceManagement extends DeviceManagement {
       if (name !== "") {
         // The name the user typed is the display name from the start — the id no longer carries it.
         await this.adapter.extendForeignObjectAsync(`${this.adapter.namespace}.${id}`, {
-          common: { name },
-          native: { label: name, labelRank: LABEL_RANK.user },
+          common: { name: typedName },
+          native: { label: typedName, labelRank: LABEL_RANK.user },
         });
       }
     }
