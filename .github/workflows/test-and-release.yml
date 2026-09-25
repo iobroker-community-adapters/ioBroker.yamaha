@@ -16,21 +16,7 @@ on:
       - "v[0-9]+.[0-9]+.[0-9]+"
       # pre-releases
       - "v[0-9]+.[0-9]+.[0-9]+-**"
-    # Documentation-only pushes start no run: no test can fail on a line of prose.
-    # Per GitHub's docs, "Path filters are not evaluated for pushes of tags", so the
-    # release run on a tag is unaffected. Deliberately only under `push`, never under
-    # `pull_request`: there the run supplies the required status check of the branch
-    # protection (Dependabot merges).
-    # The filter looks at the FILES of the push — unlike a `[skip ci]` in the commit
-    # message, which swallows the whole push even when source code rides along.
-    paths-ignore:
-      - "**.md"
-      - "docs/**"
-      - ".gitignore"
-      - ".gitattributes"
-      - ".editorconfig"
-      - "LICENSE"
-      - ".github/dependabot.yml"
+
   pull_request: {}
 
 # Cancel previous PR/branch runs when a new commit is pushed
