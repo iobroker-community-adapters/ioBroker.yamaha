@@ -260,11 +260,11 @@ describe("YxcPushReceiver routing beyond the literal address (audit 2026-09-24, 
     const fake = new FakeSocket();
     const receiver = new YxcPushReceiver(makeDeps().deps, () => fake);
     const seen: unknown[] = [];
-    receiver.register("192.168.1.5", e => seen.push(e), "ccd42ecf0223");
+    receiver.register("192.168.1.5", e => seen.push(e), "00a0de0a1b2c");
     receiver.start();
-    fake.emitMessage(JSON.stringify({ device_id: "CCD42ECF0223", main: { volume: 40 } }), "10.0.0.9");
+    fake.emitMessage(JSON.stringify({ device_id: "00A0DE0A1B2C", main: { volume: 40 } }), "10.0.0.9");
     fake.emitMessage(JSON.stringify({ device_id: "000000000000", main: { volume: 1 } }), "10.0.0.9");
-    expect(seen).toEqual([{ device_id: "CCD42ECF0223", main: { volume: 40 } }]);
+    expect(seen).toEqual([{ device_id: "00A0DE0A1B2C", main: { volume: 40 } }]);
   });
 
   // A reconnect registers again before the old connection's cleanup runs; the old unregister

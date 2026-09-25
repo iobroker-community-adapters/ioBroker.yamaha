@@ -629,5 +629,8 @@
   "discoveryAuto": "Automatisch (solange die Liste leer ist)",
   "discoveryAlways": "Immer",
   "discoveryNever": "Nie",
-  "volumeDeviceScale": "Lautstärke in der Skala des Receivers"
+  "volumeDeviceScale": "Lautstärke in der Skala des Receivers",
+  "dmDetailsId": "Objekt-ID: %s",
+  "dmDetailsMac": "MAC-Adresse: %s",
+  "dmDetailsSerial": "Seriennummer: %s"
 }

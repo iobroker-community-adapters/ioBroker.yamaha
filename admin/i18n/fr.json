@@ -629,5 +629,8 @@
   "discoveryAuto": "Automatique (tant que la liste est vide)",
   "discoveryAlways": "Toujours",
   "discoveryNever": "Jamais",
-  "volumeDeviceScale": "Volume dans l'échelle propre du récepteur"
+  "volumeDeviceScale": "Volume dans l'échelle propre du récepteur",
+  "dmDetailsId": "ID de l'objet : %s",
+  "dmDetailsMac": "Adresse MAC : %s",
+  "dmDetailsSerial": "Numéro de série : %s"
 }

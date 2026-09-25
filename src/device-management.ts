@@ -1,9 +1,11 @@
 import {
   DeviceManagement,
   type ActionContext,
+  type DeviceDetails,
   type DeviceInfo,
   type DeviceLoadContext,
   type InstanceDetails,
+  type JsonFormSchema,
 } from "@iobroker/dm-utils";
 import { t } from "./lib/i18n";
 import { iconForModel, volumeIndicatorIcon } from "./lib/device-type";
@@ -19,12 +21,17 @@ import {
 import { discoveredStoreDeps, excludedStoreDeps, ignoredStoreDeps } from "./lib/discovered-store-deps";
 import type { DeviceRecord } from "./lib/types";
 import { errorMessage } from "./lib/util";
-import { LABEL_RANK, unionDevices } from "./lib/pure-helpers";
+import { LABEL_RANK, sanitizeId, unionDevices } from "./lib/pure-helpers";
+import { deviceIdFor } from "./lib/device-id";
+import { identityFrom, mergeIdentity, sameDevice } from "./lib/device-identity";
+import { identifyDevice } from "./lib/identify-device";
+import { DeviceProfileStore } from "./lib/lifecycle/capability-profile";
 import {
   TRANSPORTS,
   buildDeviceForm,
   buildExcludedForm,
   findClash,
+  isValidIp,
   rowId,
   type CardDevice,
   type ManualRow,
@@ -313,6 +320,9 @@ export class YamahaDeviceManagement extends DeviceManagement {
           order: 20,
         },
       ],
+      // "More" opens the device's id and what it told about itself — with two speakers of the same
+      // model and the same name, the MAC is what tells them apart (see getDeviceDetails).
+      hasDetails: true,
       // Edit on every card: a device the search found can be given the fixed address the user
       // just assigned it, which makes it a manual device (see editDevice).
       // The percent switch is NOT a second control on the card: it lives in the edit dialog,
@@ -322,6 +332,42 @@ export class YamahaDeviceManagement extends DeviceManagement {
       // too many (krobi 2026-09-12: "für was hast du den das doppelt gemoppelt?").
       actions: [edit, del],
     };
+  }
+
+  /**
+   * The card's "more" panel: the object id, and the MAC and serial the device reported — the
+   * identity the id is made of. Read from the device object: the identity the transports learned
+   * (`native.identity`) and the one in the capability profile.
+   *
+   * @param id the card id (= the object-tree device id)
+   * @returns the panel
+   */
+  protected async getDeviceDetails(id: string): Promise<DeviceDetails<string>> {
+    const node = await this.adapter.getForeignObjectAsync(`${this.adapter.namespace}.${id}`);
+    const native = (node?.native ?? {}) as Record<string, unknown>;
+    const stored =
+      typeof native.identity === "object" && native.identity !== null ? identityFrom(native.identity) : undefined;
+    const profile = new DeviceProfileStore(id, native, {
+      adapterVersion: "",
+      now: () => "",
+      persist: () => undefined,
+    }).identity();
+    const identity = mergeIdentity(stored, profile);
+    const line = (key: "dmDetailsId" | "dmDetailsMac" | "dmDetailsSerial", value: string | undefined): unknown => ({
+      type: "staticText",
+      text: t(key, value ?? "–"),
+      newLine: true,
+      sm: 12,
+    });
+    const schema = {
+      type: "panel",
+      items: {
+        id: line("dmDetailsId", id),
+        mac: line("dmDetailsMac", identity?.mac?.replace(/(..)(?!$)/g, "$1:")),
+        serial: line("dmDetailsSerial", identity?.serial),
+      },
+    } as unknown as JsonFormSchema;
+    return { id, schema };
   }
 
   /**
@@ -353,8 +399,15 @@ export class YamahaDeviceManagement extends DeviceManagement {
   }
 
   /**
-   * Manual add: show the name+IP form, then append the device to `native.devices` (which
-   * restarts the adapter and switches it to manual mode).
+   * Manual add: show the name+IP form, ask the device who it is, then append it to
+   * `native.devices` (which restarts the adapter).
+   *
+   * The id is decided HERE and stored in the row (3.0.0): model and the last four characters of the
+   * serial (`wx-030-2b3c`) when the device answers MusicCast or XML, the model alone when it tells
+   * no serial, otherwise the typed name ("Küche" → `kueche`) or the address. A device that is off
+   * or speaks YNCA only moves once, at the first contact that tells its model and serial
+   * (`checkIdDecision`). The typed name is the device's DISPLAY name from the start, at the rank
+   * only a user gives.
    *
    * @param context the action context
    * @returns a directive to reload the manager
@@ -365,32 +418,49 @@ export class YamahaDeviceManagement extends DeviceManagement {
     if (data && typeof data.ip === "string" && data.ip.trim()) {
       const ip = data.ip.trim();
       const typedName = typeof data.name === "string" ? data.name.trim() : "";
-      // A name that IS the address marks the row of the 0.5.4 migration (`parseDevices`), and such
-      // a row follows the device to a new address. Typed by the user it is a typed row: stored
-      // without a name, the id is the address all the same (audit 2026-09-24, A6).
-      const row: ManualRow = { name: typedName === ip ? "" : typedName, ip };
-      const clash = findClash(manual, row, -1);
+      if (!isValidIp(ip)) {
+        await context.showMessage(t("invalidIp"));
+        return { refresh: true };
+      }
+      // A name that IS the address says nothing the address does not — it is no display name.
+      const name = typedName === ip ? "" : typedName;
+      const report = await identifyDevice(ip);
+      const found = await readDiscovered(discoveredStoreDeps(this.adapter));
+      // The same receiver found by the search already runs — a second card would be a second tree.
+      if (found.some(record => sameDevice(record.identity, report.identity))) {
+        await context.showMessage(t("duplicateDevice"));
+        return { refresh: true };
+      }
+      const taken = new Set([...manual.map(entry => rowId(entry)), ...found.map(record => record.id)]);
+      const id = deviceIdFor({ model: report.model, identity: report.identity, name, ip }, taken);
+      // The row carries the id as its name too: a return to 2.x derives the id from the name, and
+      // then finds the tree where it is (and a typed row never reads as a migrated one).
+      const row: ManualRow = { id, name: id, ip };
+      const clash = findClash(manual, row, -1, new Set(found.map(record => record.id)));
       if (clash) {
         await context.showMessage(clash);
         return { refresh: true };
       }
       manual.push(row);
-      // Adding a device by hand undoes an earlier delete of the same id — otherwise the
-      // exclusion would silently outlive the decision that created it.
+      // Adding a device by hand undoes an earlier delete of the same device — otherwise the
+      // exclusion would silently outlive the decision that created it. By its id, and by the id
+      // 2.x gave the same name: a device deleted before 3.0.0 is on the list under that one.
+      const lifted = new Set([id, ...(name !== "" ? [sanitizeId(name)] : [])]);
       const ignoredDeps = ignoredStoreDeps(this.adapter);
       const ignored = await readIgnored(ignoredDeps);
-      const id = rowId(row);
-      if (ignored.includes(id)) {
+      if (ignored.some(entry => lifted.has(entry))) {
         await writeIgnored(
           ignoredDeps,
-          ignored.filter(entry => entry !== id),
+          ignored.filter(entry => !lifted.has(entry)),
         );
       }
-      // The same for the exclusion entries — by id AND by address: the entry of a deleted
-      // manual device carries the address the user is typing again right now.
+      // The same for the exclusion entries — by id, by address and by identity: the entry of a
+      // deleted manual device carries the address the user is typing again right now.
       const excludedDeps = excludedStoreDeps(this.adapter);
       const excluded = await readExcluded(excludedDeps);
-      const remaining = excluded.filter(entry => entry.id !== id && entry.ip !== row.ip);
+      const remaining = excluded.filter(
+        entry => !lifted.has(entry.id) && entry.ip !== row.ip && !sameDevice(entry.identity, report.identity),
+      );
       if (remaining.length !== excluded.length) {
         await writeExcluded(excludedDeps, remaining);
       }
@@ -398,6 +468,13 @@ export class YamahaDeviceManagement extends DeviceManagement {
       // Written down right away, so the device starts with the answer the user gave instead of
       // inheriting whatever the instance-wide switch of 2.8.0 was left on.
       await this.applyVolumePercent(id, data.volumeAsPercent === true);
+      if (name !== "") {
+        // The name the user typed is the display name from the start — the id no longer carries it.
+        await this.adapter.extendForeignObjectAsync(`${this.adapter.namespace}.${id}`, {
+          common: { name },
+          native: { label: name, labelRank: LABEL_RANK.user },
+        });
+      }
     }
     return { refresh: true };
   }
@@ -490,7 +567,8 @@ export class YamahaDeviceManagement extends DeviceManagement {
     const name = typeof data.name === "string" ? data.name.trim() : "";
     const manual = await this.readManual();
     const index = manual.findIndex(entry => rowId(entry) === cardId);
-    const row: ManualRow = { name: cardId, ip };
+    // The row keeps the card's id — stored, and as its name for a return to 2.x.
+    const row: ManualRow = { id: cardId, name: cardId, ip };
     const clash = findClash(manual, row, index);
     if (clash) {
       await context.showMessage(clash);

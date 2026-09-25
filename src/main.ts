@@ -28,13 +28,17 @@ import {
   mergeDiscovered,
   neverWrittenStateIds,
   nextDeviceLabel,
+  isDottedQuad,
   parseDevices,
+  rowDeviceId,
   sanitizeId,
   unionDevices,
   renamedObjectIds,
   staleObjects,
   stripNamespace,
 } from "./lib/pure-helpers";
+import { ID_SCHEME, modelId, serialId } from "./lib/device-id";
+import { copyDeviceTree, type DeviceMoveDeps, type MoveReport } from "./lib/lifecycle/device-move";
 import { DeviceBody, errorMessage } from "./lib/util";
 import { migrateNativeKeys, type NativeKeyMigration } from "./lib/native-key-migration";
 import { tName } from "./lib/i18n";
@@ -342,6 +346,12 @@ export class Yamaha extends utils.Adapter {
   private readonly profiles = new Map<string, DeviceProfileStore>();
   /** Per device, the native patch inside its coalescing window (see persistDeviceNative). */
   private readonly pendingNative = new Map<string, PendingNative>();
+  /** Per device, the last write to its device object — the next one waits for it (see writeDeviceObject). */
+  private readonly deviceObjectWrites = new Map<string, Promise<unknown>>();
+  /** The devices whose id is final under the 3.0.0 rule (`native.idScheme`) — see checkIdDecision. */
+  private readonly idDecided = new Set<string>();
+  /** The devices whose id was already judged in this run — once per process is enough. */
+  private readonly idChecked = new Set<string>();
 
   /**
    * @param options adapter options passed through by js-controller
@@ -365,6 +375,9 @@ export class Yamaha extends utils.Adapter {
       await this.setState("info.connection", { val: false, ack: true });
       await this.migrateLegacyDevice();
       await this.migrateGroupZones();
+      // Before anything reads a device id: the table rows and the discovery store come out of it
+      // carrying the ids the trees now live under, and the cleanup below never sees an old one.
+      const unmoved = await this.migrateDeviceIds();
       // The running set is the UNION of the device table and the discovery store, and whether
       // the network search runs at all is its own setting. Until 2.9.0 the table WAS the switch
       // — filled meant manual, empty meant auto — so the two could never be combined, and
@@ -401,7 +414,7 @@ export class Yamaha extends utils.Adapter {
       const idle = this.discovering ? [] : await this.rememberedButIdle(devices);
       // Before the cleanup and before any device connects — see knownDatapoints. The listing
       // is read once and handed on: the cleanup runs on the very same tree.
-      const listing = await this.snapshotExistingDatapoints();
+      const listing = await this.snapshotExistingDatapoints(unmoved);
       await this.cleanupStaleObjects(
         new Set(devices.map(device => device.id)),
         new Set(idle.map(device => device.id)),
@@ -670,7 +683,8 @@ export class Yamaha extends utils.Adapter {
 
   /**
    * Write a migrated row's new address into the device table. The row's NAME stays (it is the
-   * old address, and the object id derives from it — see `parseDevices`); only `ip` moves.
+   * old address, and it marks the row as migrated — see `parseDevices`); only `ip` moves, and the
+   * row is found by its id (`rowDeviceId`: the stored one, or the one 2.x derived from the name).
    * Writing the instance's native restarts the adapter — a rare event, once per DHCP change.
    *
    * @param deviceId the row's id
@@ -688,10 +702,11 @@ export class Yamaha extends utils.Adapter {
       return;
     }
     const devices = rows.map(row => {
-      const entry = row as { name?: unknown; ip?: unknown };
-      const name = typeof entry.name === "string" && entry.name.length > 0 ? entry.name : undefined;
+      const entry = row as { id?: unknown; name?: unknown; ip?: unknown };
       const rowIp = typeof entry.ip === "string" ? entry.ip : "";
-      return name !== undefined && sanitizeId(name) === deviceId ? { ...entry, ip } : { ...entry, ip: rowIp };
+      return rowIp !== "" && rowDeviceId({ ...entry, ip: rowIp }) === deviceId
+        ? { ...entry, ip }
+        : { ...entry, ip: rowIp };
     });
     await this.extendForeignObjectAsync(instanceId, { native: { devices } });
   }
@@ -1068,12 +1083,15 @@ export class Yamaha extends utils.Adapter {
     this.warnedElsewhere.delete(deviceId);
     this.liveTransportCount.delete(deviceId);
     this.reportedMissing.delete(deviceId);
+    this.idDecided.delete(deviceId);
+    this.idChecked.delete(deviceId);
     // Everything else this device left behind goes with it. A cache that survives makes the
     // adapter believe it already did the work: re-adding the SAME id finds the icon cache
     // intact, `updateDeviceIcon` bails on the identity check, and the card keeps the default
     // silhouette `ensureDeviceHeader` seeds — a soundbar shows a receiver until the next start.
     this.deviceIcons.delete(deviceId);
     this.deviceLabels.delete(deviceId);
+    this.deviceObjectWrites.delete(deviceId);
     this.writtenObjects.delete(deviceId);
     this.lastModel.delete(deviceId);
     this.storedModels.delete(deviceId);
@@ -1135,9 +1153,13 @@ export class Yamaha extends utils.Adapter {
     // A search the user asked for is an event, not a poll: say what it looks for, and — when
     // that device is not there — that the admission holds and what brings it back.
     this.log.info(`searching the network for ${lifted.join(", ")}`);
+    const before = new Set(this.deviceRecords.keys());
     void this.discoverAdditionalDevices(receiver).then(() => {
+      // A device deleted under 2.x comes back under its 3.0.0 id, not the one it was deleted by —
+      // a device that appeared in this search is the answer, whatever its id.
+      const appeared = [...this.deviceRecords.keys()].some(id => !before.has(id));
       for (const id of lifted) {
-        if (!this.deviceRecords.has(id)) {
+        if (!this.deviceRecords.has(id) && !appeared) {
           this.log.info(
             `${id}: not on the network right now — admitted again; it is added when it announces itself or the next search sees it`,
           );
@@ -1236,6 +1258,7 @@ export class Yamaha extends utils.Adapter {
       // On EVERY connect, not only the first: a reconnect over another transport can bring
       // the first serial this device ever reported.
       this.learnIdentity(deviceId, this.profiles.get(deviceId)?.identity());
+      void this.checkIdDecision(deviceId);
     } else {
       this.failedOnce.add(deviceId);
     }
@@ -1350,6 +1373,31 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
+   * Merge into a device object — one write after the other per device. `extendObject` reads the
+   * object, merges and writes it back; two of them at the same moment each write what they read,
+   * and the later one takes the earlier one's fields away. Measured in the inventory run: the id
+   * mark (`native.idScheme`) and the display name written in the same instant — the mark was gone
+   * on three of eight devices, a different three on each run. Every writer of a device object's
+   * `common`/`native` goes through here.
+   *
+   * @param deviceId the device id
+   * @param patch what to merge
+   * @returns the write
+   */
+  private writeDeviceObject(deviceId: string, patch: ioBroker.PartialObject): Promise<void> {
+    const previous = this.deviceObjectWrites.get(deviceId) ?? Promise.resolve();
+    const next = previous
+      .catch(() => undefined)
+      .then(() => this.extendObject(deviceId, patch))
+      .then(() => undefined);
+    this.deviceObjectWrites.set(
+      deviceId,
+      next.catch(() => undefined),
+    );
+    return next;
+  }
+
+  /**
    * Write a device's pending native patch now (the coalescing window ended, or the adapter is
    * unloading).
    *
@@ -1363,7 +1411,7 @@ export class Yamaha extends utils.Adapter {
     }
     this.pendingNative.delete(deviceId);
     this.clearTimeout(pending.timer);
-    return this.extendObject(deviceId, { native: pending.native }).then(
+    return this.writeDeviceObject(deviceId, { native: pending.native }).then(
       () => {
         this.stateWritesFailing = false;
       },
@@ -1624,11 +1672,12 @@ export class Yamaha extends utils.Adapter {
    * Remember every datapoint that already exists, ONCE per adapter run.
    *
    * @see knownDatapoints for why the create path alone cannot answer "is this new?"
+   * @param read the listing the id migration read, when it moved nothing — one read of the tree
    * @returns the object listing it read, for the cleanup that follows — undefined when the read failed
    */
-  private async snapshotExistingDatapoints(): Promise<AdapterObjects | undefined> {
+  private async snapshotExistingDatapoints(read?: AdapterObjects): Promise<AdapterObjects | undefined> {
     try {
-      const listing = await this.getAdapterObjectsAsync();
+      const listing = read ?? (await this.getAdapterObjectsAsync());
       for (const [fullId, object] of Object.entries(listing)) {
         if (object?.type === "state") {
           const id = stripNamespace(fullId, this.namespace);
@@ -1831,7 +1880,17 @@ export class Yamaha extends utils.Adapter {
         this.deviceIcons.set(deviceId, icon);
       }
       const native = existing?.native as
-        { volumeAsPercent?: unknown; label?: unknown; labelRank?: unknown; identity?: unknown } | undefined;
+        | {
+            volumeAsPercent?: unknown;
+            label?: unknown;
+            labelRank?: unknown;
+            identity?: unknown;
+            idScheme?: unknown;
+          }
+        | undefined;
+      if (native?.idScheme === ID_SCHEME) {
+        this.idDecided.add(deviceId);
+      }
       const model = rememberedModel(existing?.native);
       if (model) {
         this.storedModels.set(deviceId, model);
@@ -1877,7 +1936,7 @@ export class Yamaha extends utils.Adapter {
       icon = undefined;
     }
     this.volumePercent.set(deviceId, percent);
-    await this.extendObject(deviceId, {
+    await this.writeDeviceObject(deviceId, {
       type: "device",
       common: {
         ...(foreignName ? {} : { name: label ?? deviceId }),
@@ -1998,7 +2057,7 @@ export class Yamaha extends utils.Adapter {
       // The marker rides in the SAME write as the name: a name in the tree without the record
       // behind it would read as a stranger's on the next start, and `ensureDeviceHeader` would
       // put the bare id back (that is the defect the record exists to close).
-      await this.extendObject(deviceId, { common: { name: label }, native: { label, labelRank: rank } });
+      await this.writeDeviceObject(deviceId, { common: { name: label }, native: { label, labelRank: rank } });
       this.deviceLabels.set(deviceId, { name: label, rank });
       this.log.debug(`${deviceId}: device name set to "${label}"`);
     } catch (e) {
@@ -2020,7 +2079,7 @@ export class Yamaha extends utils.Adapter {
     }
     this.deviceIcons.set(deviceId, icon);
     try {
-      await this.extendObject(deviceId, { common: { icon } });
+      await this.writeDeviceObject(deviceId, { common: { icon } });
     } catch (e) {
       this.log.debug(`${deviceId}: setting device icon failed (${errorMessage(e)})`);
     }
@@ -2131,6 +2190,259 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
+   * The object and state calls a tree move needs, over this adapter.
+   *
+   * @returns the move's dependencies
+   */
+  private moveDeps(): DeviceMoveDeps {
+    return {
+      namespace: this.namespace,
+      objects: () => this.getAdapterObjectsAsync(),
+      states: pattern => this.getForeignStatesAsync(pattern),
+      setObject: async (id, obj) => {
+        await this.setForeignObject(id, obj);
+      },
+      extendObject: async (id, patch) => {
+        await this.extendForeignObjectAsync(id, patch);
+      },
+      setState: async (id, state) => {
+        await this.setForeignStateAsync(id, state);
+      },
+      enums: () => this.getForeignObjectsAsync("enum.*", "enum"),
+      aliases: () => this.getForeignObjectsAsync("alias.*", "state"),
+      setForeignObject: async (id, obj) => {
+        await this.setForeignObject(id, obj);
+      },
+    };
+  }
+
+  /**
+   * The one-time move of 3.0.0: every device an earlier version created under a name-derived id
+   * (`B_ro` for "Büro", `Yamaha_RX-V685` for a factory name — and a second device of the same
+   * name was skipped) moves to its model and the last four characters of its serial
+   * (`wx-030-2b3c`, see `serialId`) as soon as both are known. Runs on every start, before anything
+   * reads an id; a device whose id is final carries `native.idScheme` and costs one comparison.
+   *
+   * Three kinds of device: one whose model and serial the stored tree knows moves right here; one
+   * whose model or serial the tree does not know yet (switched off since the update, or never asked
+   * before 2.13.0 kept the model) is decided at its first contact ({@link checkIdDecision} writes the
+   * journal) and moves at the next start; one whose journal says a move is due is moved here.
+   *
+   * The order keeps every step repeatable: the journal (`native.movingTo` at the OLD device object)
+   * first, then the copy, then the table rows and the discovery store, and the old tree last — a
+   * start that finds the journal again finds the copy complete and only finishes what is left.
+   *
+   * @returns the object listing it read when nothing moved (the datapoint snapshot reuses it)
+   */
+  private async migrateDeviceIds(): Promise<AdapterObjects | undefined> {
+    try {
+      const listing = await this.getAdapterObjectsAsync();
+      const store = discoveredStoreDeps(this);
+      const discovered = await readDiscovered(store);
+      const rows = Array.isArray(this.config.devices) ? (this.config.devices as unknown[]) : [];
+      const known = new Set([...parseDevices(rows).map(device => device.id), ...discovered.map(device => device.id)]);
+      const devices = new Map<string, ioBroker.Object>();
+      const prefix = `${this.namespace}.`;
+      for (const [fullId, obj] of Object.entries(listing)) {
+        const id = fullId.slice(prefix.length);
+        if (obj?.type === "device" && !id.includes(".") && id !== "info") {
+          devices.set(id, obj);
+        }
+      }
+      const taken = new Set([...devices.keys(), ...known]);
+      const moves: Array<{ from: string; to: string }> = [];
+      const candidates: Array<{ id: string; model?: string; identity?: DeviceIdentity }> = [];
+      for (const [id, obj] of devices) {
+        const native = (obj.native ?? {}) as Record<string, unknown>;
+        const journal = native.movingTo;
+        if (typeof journal === "string" && /^[A-Za-z0-9\-_]+$/.test(journal) && journal !== id) {
+          moves.push({ from: id, to: journal });
+          taken.add(journal);
+          continue;
+        }
+        // Only a device this instance runs: a tree the cleanup is about to delete is not moved first.
+        if (native.idScheme === ID_SCHEME || !known.has(id)) {
+          continue;
+        }
+        const record = discovered.find(device => device.id === id);
+        candidates.push({
+          id,
+          model: rememberedModel(native) ?? record?.model,
+          identity: this.storedIdentityOf(id, native, record),
+        });
+      }
+      // By serial, so two devices of one model whose serials end alike get the same ids on every
+      // installation and every start — the listing order of the object database is no order.
+      candidates.sort((a, b) => (a.identity?.serial ?? a.id).localeCompare(b.identity?.serial ?? b.id));
+      for (const { id, model, identity } of candidates) {
+        const target = serialId(model, identity, new Set([...taken].filter(other => other !== id)));
+        if (!target) {
+          continue; // decided at its first contact — checkIdDecision
+        }
+        if (target === id) {
+          await this.extendObject(id, { native: { idScheme: ID_SCHEME } });
+          continue;
+        }
+        if (taken.has(target)) {
+          this.log.warn(`${id}: its device id would be ${target}, which another device holds — it keeps ${id}`);
+          continue;
+        }
+        taken.add(target);
+        moves.push({ from: id, to: target });
+      }
+      if (moves.length === 0) {
+        // Nothing moved: the tree is still what was read — the datapoint snapshot takes this listing.
+        return listing;
+      }
+      const done: Array<{ from: string; to: string; report: MoveReport }> = [];
+      for (const move of moves) {
+        try {
+          await this.extendObject(move.from, { native: { movingTo: move.to } });
+          done.push({ ...move, report: await copyDeviceTree(this.moveDeps(), move.from, move.to) });
+        } catch (e) {
+          // The journal stays: the next start tries again, and this run keeps the device where it was.
+          this.log.warn(
+            `${move.from}: could not move to ${move.to} (${errorMessage(e)}) — tried again on the next start`,
+          );
+        }
+      }
+      if (done.length === 0) {
+        return undefined;
+      }
+      const renamed = new Map(done.map(move => [move.from, move.to]));
+      const nextDiscovered = discovered.map(record =>
+        renamed.has(record.id) ? { ...record, id: renamed.get(record.id)! } : record,
+      );
+      if (nextDiscovered.some((record, index) => record !== discovered[index])) {
+        await writeDiscovered(store, nextDiscovered);
+      }
+      await this.renameTableRows(rows, renamed);
+      for (const move of done) {
+        await this.delObjectAsync(move.from, { recursive: true });
+        const { datapoints, enums, aliases, history } = move.report;
+        const carried = [
+          ...(enums > 0 ? [`${enums} room/function entr${enums === 1 ? "y" : "ies"}`] : []),
+          ...(aliases > 0 ? [`${aliases} alias(es)`] : []),
+          ...(history > 0 ? [`${history} recording(s) keep their history`] : []),
+        ];
+        this.log.info(
+          `${move.from}: device id is now ${move.to} — moved ${datapoints} datapoint(s)${carried.length > 0 ? ` with ${carried.join(", ")}` : ""}`,
+        );
+      }
+    } catch (e) {
+      this.log.error(`moving the device ids failed (${errorMessage(e)}) — the devices run under their current ids`);
+    }
+    return undefined;
+  }
+
+  /**
+   * Point the table rows of moved devices at their new ids — in memory for this run and in the
+   * instance object (whose write restarts the instance once; this run goes on with the same ids).
+   * A typed row gets the new id as its name too, so a return to 2.x finds the tree it expects; a
+   * row the 0.5.4 migration wrote keeps its address as the name, which is what makes it follow the
+   * device (`parseDevices`).
+   *
+   * @param rows the rows as read
+   * @param renamed old id → new id
+   */
+  private async renameTableRows(rows: readonly unknown[], renamed: ReadonlyMap<string, string>): Promise<void> {
+    let changed = false;
+    const next = rows.map(row => {
+      const entry = row as { id?: unknown; name?: unknown; ip?: unknown };
+      if (typeof entry.ip !== "string" || entry.ip === "") {
+        return row;
+      }
+      const to = renamed.get(rowDeviceId({ ...entry, ip: entry.ip }));
+      if (to === undefined) {
+        return row;
+      }
+      changed = true;
+      const migrated = typeof entry.name === "string" && isDottedQuad(entry.name);
+      return { ...entry, id: to, ...(migrated ? {} : { name: to }) };
+    });
+    if (!changed) {
+      return;
+    }
+    (this.config as unknown as Record<string, unknown>).devices = next;
+    await this.extendForeignObjectAsync(`system.adapter.${this.namespace}`, { native: { devices: next } });
+  }
+
+  /**
+   * Everything a stored tree knows about who the device is: the identity the transports learned
+   * (`native.identity`), the one in the capability profile, and the discovery record's.
+   *
+   * @param deviceId the device id
+   * @param native the device object's native part
+   * @param record its discovery record, if it has one
+   * @returns the identity, or undefined
+   */
+  private storedIdentityOf(
+    deviceId: string,
+    native: Record<string, unknown>,
+    record: DeviceRecord | undefined,
+  ): DeviceIdentity | undefined {
+    const stored =
+      typeof native.identity === "object" && native.identity !== null ? identityFrom(native.identity) : undefined;
+    const profile = new DeviceProfileStore(deviceId, native, {
+      adapterVersion: this.version ?? "",
+      now: () => new Date().toISOString(),
+      persist: () => undefined,
+    }).identity();
+    return mergeIdentity(mergeIdentity(record?.identity, stored), profile);
+  }
+
+  /**
+   * Decide a device's id at its first contact — for a device the start could not decide (it never
+   * told its identity before, or it was switched off during the update). Once per run and device.
+   *
+   * With model and serial known the id is `serialId` (`wx-030-2b3c`); a device that tells its model
+   * but no serial after a whole connect — a YNCA receiver whose XML server does not answer — is
+   * known by its model alone (`modelId`, `rx-v473`). When that differs from the current id the
+   * journal is written at the device object, and the move runs at the next start of the instance,
+   * before any device connects (`migrateDeviceIds`). The adapter never restarts itself for it: a
+   * move that fails at the start would otherwise restart the instance on every connect.
+   *
+   * @param deviceId the device that just connected
+   */
+  private async checkIdDecision(deviceId: string): Promise<void> {
+    if (this.idDecided.has(deviceId) || this.idChecked.has(deviceId) || this.unloading) {
+      return;
+    }
+    try {
+      const record = this.deviceRecords.get(deviceId);
+      const model = this.rememberedModelOf(deviceId) ?? record?.model;
+      if (!record || !model) {
+        return; // nothing to decide on yet — the next connect asks again
+      }
+      this.idChecked.add(deviceId);
+      const identity = mergeIdentity(record.identity, this.profiles.get(deviceId)?.identity());
+      // Every device id in use — the running ones and every device object, an idle one included.
+      const objects = await this.getForeignObjectsAsync(`${this.namespace}.*`, "device");
+      const others = new Set(
+        [...this.deviceRecords.keys(), ...Object.keys(objects).map(id => stripNamespace(id, this.namespace))].filter(
+          id => id !== deviceId,
+        ),
+      );
+      const target = serialId(model, identity, others) ?? modelId(model, others);
+      if (target === undefined || target === deviceId) {
+        this.idDecided.add(deviceId);
+        await this.writeDeviceObject(deviceId, { native: { idScheme: ID_SCHEME } });
+        return;
+      }
+      if (this.deviceRecords.has(target) || (await this.getObjectAsync(target))) {
+        this.log.warn(
+          `${deviceId}: its device id would be ${target}, which another device holds — it keeps ${deviceId}`,
+        );
+        return;
+      }
+      await this.writeDeviceObject(deviceId, { native: { movingTo: target } });
+      this.log.info(`${deviceId}: the device told who it is — its objects move to ${target} at the next start`);
+    } catch (e) {
+      this.log.debug(`${deviceId}: deciding its device id failed (${errorMessage(e)}) — tried again on the next start`);
+    }
+  }
+
+  /**
    * Bring one device online across ALL its transports: every protocol that answers
    * — YNCA (amp control over a held TCP connection), YXC (MusicCast), XML/YNC
    * (pre-2010) — connects in parallel on one object tree. Returns a connection handle
@@ -2216,6 +2528,12 @@ export class Yamaha extends utils.Adapter {
               }
               void this.updateDeviceIcon(reporting, value);
               void this.updateDeviceLabel(reporting, value, LABEL_RANK.model);
+              // YNCA reports the model in its sweep, AFTER the connect report — the id is decided
+              // now. Only for a connected device: by then every transport of the attempt has told
+              // its serial, so a model arriving early can never pass for "no serial".
+              if (this.deviceConnected.get(reporting) === true) {
+                void this.checkIdDecision(reporting);
+              }
             }
           }
         },
@@ -2483,11 +2801,16 @@ export class Yamaha extends utils.Adapter {
   private async absorbFinds(found: readonly DiscoveredDevice[]): Promise<DeviceRecord[]> {
     const store = discoveredStoreDeps(this);
     const known = await readDiscovered(store);
-    const merged = mergeDiscovered(known, [...found], (dropped, takenId) =>
-      this.warnSearchOnce(
-        `collision|${dropped}|${takenId}`,
-        `discovered device "${dropped}" skipped — its object id "${takenId}" is already taken`,
-      ),
+    const merged = mergeDiscovered(
+      known,
+      [...found],
+      (dropped, takenId) =>
+        this.warnSearchOnce(
+          `collision|${dropped}|${takenId}`,
+          `discovered device "${dropped}" skipped — its address belongs to device "${takenId}"`,
+        ),
+      // A new find never takes an id a table row or a running device holds.
+      new Set([...parseDevices(this.config.devices).map(device => device.id), ...this.deviceRecords.keys()]),
     );
     const running = [...this.deviceRecords.values()];
     // Whether a record sits at an address — its typed one, or what its typed hostname resolves to.
@@ -2512,11 +2835,16 @@ export class Yamaha extends utils.Adapter {
     const manual = parseDevices(this.config.devices);
     const manualIds = new Set(manual.map(device => device.id));
     const manualIps = new Set(manual.flatMap(device => [device.ip, this.resolvedHosts.get(device.id) ?? device.ip]));
+    // A device deleted under 2.x is on the plain list by the id 2.x derived from its advertised
+    // name — a find gets its id by the 3.0.0 rule now, so that one is checked too.
+    const legacyIdAt = new Map(found.map(find => [find.ip, sanitizeId(find.name || find.ip)]));
     const moved: DeviceRecord[] = [];
     const kept = merged.filter(device => {
+      const legacyId = legacyIdAt.get(device.ip);
       if (
         this.removed.has(device.id) ||
         isExcluded(ignored, excluded, device) ||
+        (legacyId !== undefined && legacyId !== device.id && ignored.includes(legacyId)) ||
         manualIds.has(device.id) ||
         manualIps.has(device.ip)
       ) {
@@ -2647,7 +2975,7 @@ export class Yamaha extends utils.Adapter {
       return;
     }
     this.volumePercent.set(deviceId, on);
-    await this.extendObject(deviceId, { native: { volumeAsPercent: on } });
+    await this.writeDeviceObject(deviceId, { native: { volumeAsPercent: on } });
     for (const [id, def] of [...this.volumeDefs]) {
       if (!id.startsWith(`${deviceId}.`)) {
         continue;

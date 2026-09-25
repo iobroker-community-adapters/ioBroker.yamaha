@@ -629,5 +629,8 @@
   "discoveryAuto": "Автоматически (пока список пуст)",
   "discoveryAlways": "Всегда",
   "discoveryNever": "Никогда",
-  "volumeDeviceScale": "Громкость в собственной шкале ресивера"
+  "volumeDeviceScale": "Громкость в собственной шкале ресивера",
+  "dmDetailsId": "ID объекта: %s",
+  "dmDetailsMac": "MAC-адрес: %s",
+  "dmDetailsSerial": "Серийный номер: %s"
 }

@@ -21,7 +21,11 @@ const DIR = path.join(__dirname, "fixtures", "inventory");
 /** @returns {unknown[]} every device fixture, in the order devices.json lists them */
 function loadFixtures() {
   const manifest = JSON.parse(fs.readFileSync(path.join(DIR, "devices.json"), "utf8"));
-  return manifest.map(entry => JSON.parse(fs.readFileSync(path.join(DIR, `${entry.id}.json`), "utf8")));
+  // The object id the manifest gives each device (3.0.0 rule: model and serial) rides along.
+  return manifest.map(entry => ({
+    ...JSON.parse(fs.readFileSync(path.join(DIR, `${entry.id}.json`), "utf8")),
+    deviceId: entry.deviceId,
+  }));
 }
 
 /**
@@ -279,8 +283,9 @@ function listen(server) {
 /**
  * Start every fixture device and report how the adapter process must be routed to them.
  *
- * @returns {Promise<{devices: {id: string, ip: string}[], routes: Record<string, {http: number, ynca: number|null}>, stop: () => Promise<void>}>}
- *   the device list for the adapter's configuration, the hook's routing table, and a stopper
+ * @returns {Promise<{devices: {id: string, name: string, ip: string}[], legacyDevices: {ip: string}[], routes: Record<string, {http: number, ynca: number|null}>, stop: () => Promise<void>}>}
+ *   the device list for the adapter's configuration — as 3.0.0 writes it (the id stored), and as
+ *   2.x held it (the address only, the id derived from it) — the hook's routing table, and a stopper
  */
 async function startFixtureDevices() {
   const fixtures = loadFixtures();
@@ -298,7 +303,8 @@ async function startFixtureDevices() {
     routes[fixture.ip] = { http: httpServer.port, ynca: ynca ? ynca.port : null };
   }
   return {
-    devices: fixtures.map(f => ({ id: f.id, ip: f.ip })),
+    devices: fixtures.map(f => ({ id: f.deviceId, name: f.deviceId, ip: f.ip })),
+    legacyDevices: fixtures.map(f => ({ ip: f.ip })),
     routes,
     stop: async () => {
       for (const server of servers) {

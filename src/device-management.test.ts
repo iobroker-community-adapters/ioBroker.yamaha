@@ -29,6 +29,18 @@ vi.mock("./lib/discovered-store", () => ({
     return Promise.resolve();
   }),
 }));
+// Asking a device who it is goes over the network — answered here, nothing by default (a device
+// that is off, or speaks YNCA only).
+const identify = vi.hoisted(() => ({
+  report: {},
+  asked: [] as string[],
+}));
+vi.mock("./lib/identify-device", () => ({
+  identifyDevice: vi.fn((ip: string) => {
+    identify.asked.push(ip);
+    return Promise.resolve(identify.report);
+  }),
+}));
 vi.mock("./lib/discovered-store-deps", () => ({
   discoveredStoreDeps: () => ({}),
   ignoredStoreDeps: () => ({}),
@@ -83,6 +95,13 @@ describe("findClash", () => {
   it("rejects a different name that sanitizes to the same id as another row — as a duplicate", () => {
     // "Living room" and "Living*room" both sanitize to "Living_room": distinct names, same tree.
     expect(findClash(rows, { name: "Living*room", ip: "192.168.1.12" }, -1)).toBe("duplicateDevice");
+  });
+
+  it("flags an id a found device already holds — the table must not take its tree", () => {
+    expect(findClash(rows, { id: "kueche", name: "kueche", ip: "192.168.1.12" }, -1, new Set(["kueche"]))).toBe(
+      "duplicateDevice",
+    );
+    expect(findClash(rows, { id: "kueche", name: "kueche", ip: "192.168.1.12" }, -1, new Set(["bad"]))).toBeNull();
   });
 
   it("falls back to the ip as the id when the name is blank", () => {
@@ -283,6 +302,8 @@ describe("YamahaDeviceManagement", () => {
     store.devices = [];
     store.ignored = [];
     store.excluded = [];
+    identify.report = {};
+    identify.asked = [];
     vi.clearAllMocks();
   });
 
@@ -381,6 +402,48 @@ describe("YamahaDeviceManagement", () => {
     expect(withModel[0].icon).not.toBe(plain[0].icon);
   });
 
+  it("the card's details name the id and what the device told about itself", async () => {
+    const i = make(
+      [],
+      {},
+      { "yamaha.0.wx-030-2b3c": { native: { identity: { serial: "0E1A2B3C", mac: "00A0DED4F504" } } } },
+    );
+    const details = await (
+      i as unknown as { getDeviceDetails(id: string): Promise<{ id: string; schema: unknown }> }
+    ).getDeviceDetails("wx-030-2b3c");
+    const line = (key: string, value: string): unknown => ({
+      type: "staticText",
+      text: { key, args: [value] },
+      newLine: true,
+      sm: 12,
+    });
+    expect(details).toEqual({
+      id: "wx-030-2b3c",
+      schema: {
+        type: "panel",
+        items: {
+          id: line("dmDetailsId", "wx-030-2b3c"),
+          mac: line("dmDetailsMac", "00:A0:DE:D4:F5:04"),
+          serial: line("dmDetailsSerial", "0E1A2B3C"),
+        },
+      },
+    });
+  });
+
+  it("the details say so when the device has not told its identity yet", async () => {
+    const i = make([]);
+    const details = (await (
+      i as unknown as { getDeviceDetails(id: string): Promise<{ schema: unknown }> }
+    ).getDeviceDetails("kueche")) as { schema: { items: Record<string, { text: unknown }> } };
+    expect(details.schema.items.mac.text).toEqual({ key: "dmDetailsMac", args: ["–"] });
+    expect(details.schema.items.serial.text).toEqual({ key: "dmDetailsSerial", args: ["–"] });
+  });
+
+  it("every card offers its details", async () => {
+    const out = await cards([living]);
+    expect((out[0] as unknown as { hasDetails?: unknown }).hasDetails).toBe(true);
+  });
+
   it("offers edit and delete on every card, whichever store it came from", async () => {
     expect((await cards([living]))[0].actions.map(a => a.id)).toEqual(["edit", "delete"]);
     store.devices = [{ id: "rx-v685", ip: "192.168.1.20" }];
@@ -433,16 +496,67 @@ describe("YamahaDeviceManagement", () => {
       const i = make([living]);
       const ctx = mockContext({ form: { name: "  Bedroom  ", ip: " 192.168.1.50 " } });
       await expect(i.addDevice(ctx)).resolves.toEqual({ refresh: true });
-      expect(adapter._stored()).toEqual([living, { name: "Bedroom", ip: "192.168.1.50" }]);
+      // The id is decided now and stored: the typed name as an id segment, since this device
+      // answered neither MusicCast nor XML.
+      expect(adapter._stored()).toEqual([living, { id: "bedroom", name: "bedroom", ip: "192.168.1.50" }]);
+      expect(identify.asked).toEqual(["192.168.1.50"]);
     });
 
     // A name that is the address marks a migrated row, which follows the device and rewrites the
     // table; a typed one must stay where it was typed (audit 2026-09-24, A6).
-    it("stores a typed row whose name is its IP without a name — it stays a typed row", async () => {
+    it("stores a typed row whose name is its IP under the address id — it stays a typed row", async () => {
       const i = make([]);
       await i.addDevice(mockContext({ form: { name: "192.168.1.50", ip: "192.168.1.50" } }));
-      expect(adapter._stored()).toEqual([{ name: "", ip: "192.168.1.50" }]);
-      expect(parseDevices(adapter._stored())[0]).toMatchObject({ id: "192_168_1_50", source: "manual" });
+      expect(adapter._stored()).toEqual([{ id: "192-168-1-50", name: "192-168-1-50", ip: "192.168.1.50" }]);
+      expect(parseDevices(adapter._stored())[0]).toMatchObject({ id: "192-168-1-50", source: "manual" });
+    });
+
+    it("a device that tells its model and serial gets both as its id — and the typed name as its display name", async () => {
+      identify.report = { model: "WX-030", identity: { serial: "0E1A2B3C", mac: "00A0DED4F504" } };
+      const i = make([]);
+      await i.addDevice(mockContext({ form: { name: "Büro", ip: "192.168.1.30" } }));
+      expect(adapter._stored()).toEqual([{ id: "wx-030-2b3c", name: "wx-030-2b3c", ip: "192.168.1.30" }]);
+      expect(adapter.extendForeignObjectAsync).toHaveBeenCalledWith("yamaha.0.wx-030-2b3c", {
+        common: { name: "Büro" },
+        native: { label: "Büro", labelRank: LABEL_RANK.user },
+      });
+    });
+
+    it("a device that tells its model but no serial gets the model, counted on", async () => {
+      identify.report = { model: "RX-V473" };
+      const i = make([{ id: "rx-v473", name: "rx-v473", ip: "192.168.1.20" }]);
+      await i.addDevice(mockContext({ form: { name: "Bad", ip: "192.168.1.21" } }));
+      expect(adapter._stored()[1]).toEqual({ id: "rx-v473-2", name: "rx-v473-2", ip: "192.168.1.21" });
+    });
+
+    it("a device that tells nothing gets its typed name as the id — umlauts written out", async () => {
+      const i = make([]);
+      await i.addDevice(mockContext({ form: { name: "Küche", ip: "192.168.1.31" } }));
+      expect(adapter._stored()).toEqual([{ id: "kueche", name: "kueche", ip: "192.168.1.31" }]);
+    });
+
+    it("counts on when a found device holds the typed name's id", async () => {
+      store.devices = [{ id: "kueche", ip: "192.168.1.40" }];
+      const i = make([]);
+      await i.addDevice(mockContext({ form: { name: "Küche", ip: "192.168.1.31" } }));
+      expect(adapter._stored()).toEqual([{ id: "kueche-2", name: "kueche-2", ip: "192.168.1.31" }]);
+    });
+
+    it("refuses a device the search already runs — same serial", async () => {
+      store.devices = [{ id: "wx-030-2b3c", ip: "192.168.1.30", identity: { serial: "0E1A2B3C" } } as never];
+      identify.report = { model: "WX-030", identity: { serial: "0E1A2B3C" } };
+      const i = make([]);
+      const ctx = mockContext({ form: { name: "Büro", ip: "192.168.1.99" } });
+      await i.addDevice(ctx);
+      expect(ctx.showMessage).toHaveBeenCalledWith("duplicateDevice");
+    });
+
+    it("does not ask a malformed address who it is", async () => {
+      const i = make([]);
+      const ctx = mockContext({ form: { name: "X", ip: "not-an-ip" } });
+      await i.addDevice(ctx);
+      expect(ctx.showMessage).toHaveBeenCalledWith("invalidIp");
+      expect(identify.asked).toEqual([]);
     });
 
     it("passes the IPs already in use into the dialog validator", async () => {
@@ -487,7 +601,7 @@ describe("YamahaDeviceManagement", () => {
       const ctx = mockContext({ form: { name: "Kitchen", ip: "192.168.1.99" } });
       await expect(i.editDevice("Kitchen", ctx)).resolves.toEqual({ refresh: "devices" });
       expect(ctx.showForm.mock.calls[0][1]).toMatchObject({ data: { name: "Kitchen", ip: "192.168.1.11" } });
-      expect(adapter._stored()).toEqual([living, { name: "Kitchen", ip: "192.168.1.99" }]);
+      expect(adapter._stored()).toEqual([living, { id: "Kitchen", name: "Kitchen", ip: "192.168.1.99" }]);
     });
 
     it("leaves the edited row out of the dialog's in-use list", async () => {
@@ -524,7 +638,7 @@ describe("YamahaDeviceManagement", () => {
       expect(store.devices).toEqual([]);
       // The row's name IS the id, so the object tree stays where it is; what the user typed
       // becomes the display name at the device object.
-      expect(adapter._stored()).toEqual([{ name: "rx-v685", ip: "192.168.1.99" }]);
+      expect(adapter._stored()).toEqual([{ id: "rx-v685", name: "rx-v685", ip: "192.168.1.99" }]);
       // The marker rides in the SAME write: it tells the next start that this is the
       // established name (so the header write does not put the bare id back) and it carries the
       // user rank, which no name a device reports for itself can outrank.
@@ -541,7 +655,7 @@ describe("YamahaDeviceManagement", () => {
       store.devices = [{ id: "192_168_1_20", ip: "192.168.1.20" }];
       const i = make([]);
       await i.editDevice("192_168_1_20", mockContext({ form: { name: "", ip: "192.168.1.99" } }));
-      expect(adapter._stored()).toEqual([{ name: "192_168_1_20", ip: "192.168.1.99" }]);
+      expect(adapter._stored()).toEqual([{ id: "192_168_1_20", name: "192_168_1_20", ip: "192.168.1.99" }]);
       expect(rowId(adapter._stored()[0])).toBe("192_168_1_20");
     });
 
@@ -815,9 +929,9 @@ describe("YamahaDeviceManagement", () => {
       await i.addDevice(ctx);
       // No object exists yet, so the dialog seeds one instead of asking the adapter to rebuild
       // datapoints that are not there.
-      expect(adapter.extendForeignObjectAsync).toHaveBeenCalledWith("yamaha.0.Bedroom", {
+      expect(adapter.extendForeignObjectAsync).toHaveBeenCalledWith("yamaha.0.bedroom", {
         type: "device",
-        common: { name: "Bedroom" },
+        common: { name: "bedroom" },
         native: { volumeAsPercent: true },
       });
     });

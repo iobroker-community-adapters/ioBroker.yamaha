@@ -12,9 +12,12 @@ interface InventoryObject {
 
 /**
  * The shape of the discovery output: which state objects exist, which values they offer and
- * which bounds they carry — NOT their values, names or descriptions. Hashed over the committed
- * object inventory (`npm run test:inventory`, eight fixture devices over every transport
- * combination), sorted by id in code-point order so a Python or shell re-computation agrees.
+ * which bounds they carry — NOT their values, names or descriptions, and NOT the device id they
+ * sit under: the id is the device's model and serial (3.0.0), which discovery does not decide —
+ * a new id rule changed the hash of every row while the discovery output stayed byte-identical
+ * (measured 2026-09-25 against the 2.13.0 inventory). Hashed over the committed object inventory
+ * (`npm run test:inventory`, eight fixture devices over every transport combination) as a sorted
+ * list of rows, so a Python or shell re-computation agrees.
  *
  * @param objects the object inventory
  * @returns the sha256 of the shape rows
@@ -23,7 +26,8 @@ function shapeHash(objects: Record<string, InventoryObject>): string {
   const rows = Object.entries(objects)
     .filter(([, object]) => object.type === "state")
     .map(([id, object]) => [
-      id,
+      // `yamaha.0.<device>.<relative id>` → the relative id
+      id.split(".").slice(3).join("."),
       object.common?.states && typeof object.common.states === "object"
         ? Object.keys(object.common.states).sort()
         : null,
@@ -31,8 +35,11 @@ function shapeHash(objects: Record<string, InventoryObject>): string {
       object.common?.max ?? null,
       object.common?.step ?? null,
     ])
-    .sort((a, b) => ((a[0] as string) < (b[0] as string) ? -1 : 1));
-  return createHash("sha256").update(JSON.stringify(rows)).digest("hex");
+    .map(row => JSON.stringify(row))
+    .sort();
+  return createHash("sha256")
+    .update(JSON.stringify(rows.map(row => JSON.parse(row) as unknown)))
+    .digest("hex");
 }
 
 /**

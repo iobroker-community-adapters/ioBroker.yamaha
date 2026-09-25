@@ -23,6 +23,8 @@ export interface DeviceRecord {
   source?: DeviceSource;
   /** Serial/MAC as the description or a transport reported it — the match key next to the id. */
   identity?: DeviceIdentity;
+  /** The model the UPnP description advertised (discovered devices only) — half of the id. */
+  model?: string;
   /** The control services the UPnP description advertised (discovered devices only). */
   services?: DeviceServices;
 }

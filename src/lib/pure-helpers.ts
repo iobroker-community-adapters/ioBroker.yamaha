@@ -1,9 +1,15 @@
 import type { DeviceRecord } from "./types";
 import type { DiscoveredDevice } from "./discovery";
 import { contradicts, mergeIdentity, sameDevice } from "./device-identity";
+import { deviceIdFor, idSegment, RESERVED_DEVICE_IDS } from "./device-id";
 
-interface ConfiguredDevice {
+/** One row of the instance's device table (`native.devices`). */
+export interface DeviceRow {
+  /** The object id, stored since 3.0.0 — a row without one carries the id 2.x derived from its name. */
+  id?: string;
+  /** The name the row was typed with (2.x), the address (the 0.5.4 migration), or the id itself. */
   name?: string;
+  /** The device address. */
   ip: string;
 }
 
@@ -15,26 +21,50 @@ interface ConfiguredDevice {
  * @param entry a raw config row from the admin device table
  * @returns whether the row is a valid configured device
  */
-function isConfiguredDevice(entry: unknown): entry is ConfiguredDevice {
+function isConfiguredDevice(entry: unknown): entry is DeviceRow {
   if (typeof entry !== "object" || entry === null) {
     return false;
   }
-  const candidate = entry as { name?: unknown; ip?: unknown };
+  const candidate = entry as { id?: unknown; name?: unknown; ip?: unknown };
   return (
     typeof candidate.ip === "string" &&
     candidate.ip.length > 0 &&
-    (candidate.name === undefined || typeof candidate.name === "string")
+    (candidate.name === undefined || typeof candidate.name === "string") &&
+    (candidate.id === undefined || typeof candidate.id === "string")
   );
 }
 
 /**
- * Make a string safe for use as an ioBroker object id segment.
+ * The 2.x id rule: every character outside `A-Z a-z 0-9 - _` became an underscore ("Büro" →
+ * `B_ro`). Kept for exactly one purpose — reading the id of a table row written before 3.0.0,
+ * which stored no id and had it derived from its name on every start.
  *
  * @param raw the raw string (e.g. a device name)
  * @returns the string with id-unsafe characters replaced by underscores
  */
 export function sanitizeId(raw: string): string {
   return raw.replace(/[^A-Za-z0-9\-_]/g, "_");
+}
+
+/** What a stored id may look like — anything else in a hand-edited table is not an id. */
+const STORED_ID = /^[A-Za-z0-9\-_]+$/;
+
+/**
+ * The object id of a table row: the one it stores (3.0.0), or the one 2.x derived from its name,
+ * or from its address when the name was left blank. The id is never derived again once a row
+ * carries it — a rename, a new address or a new id rule leaves the tree where it is.
+ *
+ * @param row the table row
+ * @param row.id the stored id, if any
+ * @param row.name the name the row was typed with
+ * @param row.ip the address
+ * @returns the object id
+ */
+export function rowDeviceId(row: { id?: unknown; name?: unknown; ip: string }): string {
+  if (typeof row.id === "string" && STORED_ID.test(row.id)) {
+    return row.id;
+  }
+  return sanitizeId(typeof row.name === "string" && row.name.length > 0 ? row.name : row.ip);
 }
 
 /**
@@ -82,9 +112,7 @@ export function parseDevices(raw: unknown, onCollision?: (dropped: string, taken
     if (!isConfiguredDevice(entry)) {
       continue;
     }
-    // Fall back to the ip as the id when the name is blank, so the device still appears
-    // instead of vanishing silently.
-    const id = sanitizeId(entry.name && entry.name.length > 0 ? entry.name : entry.ip);
+    const id = rowDeviceId(entry);
     if (taken.has(id)) {
       onCollision?.(entry.name || entry.ip, id);
       continue;
@@ -143,6 +171,11 @@ export function unionDevices(manual: readonly DeviceRecord[], discovered: readon
  * tree hangs off. Now the same device simply carries the new address over, and learns its
  * identity and advertised services from the find.
  *
+ * A NEW device gets its id from {@link deviceIdFor} — model and MAC (or serial) when the
+ * description carries them, so two devices of the same model and the same name get two trees
+ * (2.x derived the id from the advertised name and skipped the second device outright). The id
+ * is decided once and stored; a later find never derives it again.
+ *
  * A genuine clash remains a clash: a DIFFERENT device sitting on an address another
  * record already claims is skipped and reported through `onCollision`, so a missing
  * device is explainable rather than silent.
@@ -150,31 +183,42 @@ export function unionDevices(manual: readonly DeviceRecord[], discovered: readon
  * @param known the device records remembered from earlier runs
  * @param found the devices discovered this run
  * @param onCollision called with the dropped device's name/ip and the clashing id
+ * @param reserved ids held by devices outside the store (the table rows) — never handed out
  * @returns the merged records, one per device id
  */
 export function mergeDiscovered(
   known: DeviceRecord[],
   found: DiscoveredDevice[],
   onCollision?: (dropped: string, takenId: string) => void,
+  reserved: ReadonlySet<string> = new Set(),
 ): DeviceRecord[] {
   const byId = new Map<string, DeviceRecord>();
   for (const device of known) {
     // "info" is the adapter's own channel — a device may never claim it.
-    if (device.id === "info" || byId.has(device.id)) {
+    if (RESERVED_DEVICE_IDS.has(device.id) || byId.has(device.id)) {
       continue;
     }
     byId.set(device.id, { ...device });
   }
-  for (const device of found) {
+  // One search answers in network order; sorted by what the device is, the same finds give the
+  // same ids on every run — and on every installation.
+  const ordered = [...found].sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+  for (const device of ordered) {
     const label = device.name || device.ip;
-    const id = sanitizeId(label);
     // Identity first: the serial survives a rename and a new address, the name does neither.
     const twin = [...byId.values()].find(record => sameDevice(record.identity, device.identity));
-    // The NAME fallback only while the identities do not contradict: another device that happens
-    // to carry the same (sanitised) name took the known record's address and identity over, and
-    // with both answering, the real one vanished (audit 2026-09-24, A4).
-    const byName = byId.get(id);
-    const remembered = twin ?? (contradicts(byName?.identity, device.identity) ? undefined : byName);
+    // The NAME fallback, for a record that was stored before its identity was known — under the
+    // id 2.x derived from the name, or the one the name gives today. Never across a contradicting
+    // identity: another device that happens to carry the same name took the known record's address
+    // and identity over, and with both answering, the real one vanished (audit 2026-09-24, A4).
+    // And never from a find WITHOUT identity onto a record WITH one: a second device of the same
+    // name that tells nothing about itself is not the one that did (3.0.0).
+    const byName = byId.get(sanitizeId(label)) ?? byId.get(idSegment(label));
+    const nameMatches =
+      byName !== undefined &&
+      !contradicts(byName.identity, device.identity) &&
+      (byName.identity === undefined || device.identity !== undefined);
+    const remembered = twin ?? (nameMatches ? byName : undefined);
     if (remembered) {
       // Same device, possibly at a new address — carry the address over, keep the id.
       remembered.ip = device.ip;
@@ -185,21 +229,39 @@ export function mergeDiscovered(
       if (device.services) {
         remembered.services = device.services;
       }
+      if (device.model) {
+        remembered.model = device.model;
+      }
       continue;
     }
     const ipOwner = [...byId.values()].find(record => record.ip === device.ip);
-    if (id === "info" || ipOwner || byId.has(id)) {
-      onCollision?.(label, ipOwner?.id ?? id);
+    if (ipOwner) {
+      onCollision?.(label, ipOwner.id);
       continue;
     }
+    const id = deviceIdFor(
+      { model: device.model, identity: device.identity, name: device.name, ip: device.ip },
+      new Set([...byId.keys(), ...reserved]),
+    );
     byId.set(id, {
       id,
       ip: device.ip,
       ...(device.identity ? { identity: device.identity } : {}),
+      ...(device.model ? { model: device.model } : {}),
       ...(device.services ? { services: device.services } : {}),
     });
   }
   return [...byId.values()];
+}
+
+/**
+ * What a find is ordered by: its MAC, its serial, its address — the most stable key it has.
+ *
+ * @param device the find
+ * @returns the key
+ */
+function sortKey(device: DiscoveredDevice): string {
+  return device.identity?.mac ?? device.identity?.serial ?? device.ip;
 }
 
 /**

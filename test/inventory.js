@@ -74,16 +74,67 @@ let fixtures;
  *
  * @param {import("@iobroker/testing").TestHarness} harness the running harness
  * @param {Record<string, unknown>} [extraNative] instance settings on top of the manifest defaults
+ * @param {boolean} [legacyRows] configure the device table as 2.x held it (address only, the id
+ *   derived from it) instead of as 3.0.0 writes it (the id stored)
  */
-async function startWithFixtures(harness, extraNative = {}) {
+async function startWithFixtures(harness, extraNative = {}, legacyRows = false) {
   fixtures = await startFixtureDevices();
-  await harness.changeAdapterConfig(ADAPTER, { native: { devices: fixtures.devices, ...extraNative } });
+  const devices = legacyRows ? fixtures.legacyDevices : fixtures.devices;
+  await harness.changeAdapterConfig(ADAPTER, { native: { devices, ...extraNative } });
+  await startAdapter(harness);
+}
+
+/**
+ * Start the adapter process against the running fixture devices — also a second time, the way the
+ * host starts an instance again: the device table stays what the previous run left in the instance.
+ *
+ * @param {import("@iobroker/testing").TestHarness} harness the running harness
+ */
+async function startAdapter(harness) {
+  // `@iobroker/testing` refuses a second start of a stopped adapter ("This test harness has
+  // already been used") — it remembers the exit in `_adapterExit`. A second start is exactly what
+  // the upgrade suite has to prove (a move written at the first contact runs at the next start),
+  // and a new harness would bring a fresh database. Forgetting the exit is all the refusal needs.
+  if (harness.didAdapterStop() && !harness.isAdapterRunning()) {
+    harness._adapterExit = undefined;
+    // The adapter refuses to start while its instance still counts as alive ("yamaha.0 already
+    // running", exit 7) — the stopped process clears that flag a moment after it is gone.
+    for (let i = 0; i < 30; i++) {
+      const alive = await harness.states.getStateAsync(`system.adapter.${ADAPTER}.0.alive`);
+      if (alive?.val !== true) {
+        break;
+      }
+      await new Promise(done => setTimeout(done, 1000));
+    }
+  }
   // The routing table reaches the adapter process through its environment; the require hook
   // rewrites the device addresses to the fixture servers there. The adapter has no test seam.
   await harness.startAdapterAndWait(false, {
     NODE_OPTIONS: `--require ${path.join(__dirname, "inventory-hook.cjs")}`,
     YAMAHA_FIXTURE_ROUTES: JSON.stringify(fixtures.routes),
   });
+}
+
+/**
+ * The device objects of a dump that do not run under their final 3.0.0 id — a missing mark
+ * (`native.idScheme`) or a move still due (`native.movingTo`). Empty when every id is final.
+ *
+ * @param {Record<string, any>} objects a dump of the object tree
+ * @returns {string[]} one line per device that is not final
+ */
+function devicesNotFinal(objects) {
+  const out = [];
+  for (const [id, obj] of Object.entries(objects)) {
+    if (obj.type !== "device") {
+      continue;
+    }
+    if (obj.native?.idScheme !== 3 || (obj.native?.movingTo !== undefined && obj.native?.movingTo !== null)) {
+      out.push(
+        `${id}: idScheme ${JSON.stringify(obj.native?.idScheme)}, movingTo ${JSON.stringify(obj.native?.movingTo)}`,
+      );
+    }
+  }
+  return out;
 }
 
 /**
@@ -250,6 +301,17 @@ tests.integration(ADAPTER_DIR, {
         const objects = await dumpObjects(harness);
         assert.ok(Object.keys(objects).length > 0, "no objects created — fixtures did not reach the adapter");
         fs.writeFileSync(INVENTORY, `${JSON.stringify(objects, null, 2)}\n`);
+      });
+
+      it("runs every device under its final id — model and serial, the model alone without one", async function () {
+        this.timeout(60000);
+        const objects = await dumpObjects(harness);
+        const devices = Object.keys(objects)
+          .filter(id => objects[id].type === "device")
+          .sort();
+        const expected = fixtures.devices.map(device => `${NS}${device.id}`).sort();
+        assert.deepStrictEqual(devices, expected, "the device ids are not the ones the 3.0.0 rule gives");
+        assert.deepStrictEqual(devicesNotFinal(objects), [], "devices whose id is not final");
       });
 
       it("gives every device object one of the five pictograms, as an inline data URL", async function () {
@@ -556,7 +618,14 @@ tests.integration(ADAPTER_DIR, {
           for (const [id, obj] of Object.entries(previous)) {
             await harness.objects.setObjectAsync(id, obj);
           }
-          await startWithFixtures(harness);
+          // The device table as 2.x held it — the ids derived from the addresses, as on every
+          // installation that updates. A device whose model and serial the stored tree knows moves
+          // to its 3.0.0 id at this start; the others tell theirs at the first contact and move at
+          // the next start — the second one below, as the host gives it after an update or a reboot.
+          await startWithFixtures(harness, {}, true);
+          await waitForSettledTree(harness, fixtures.devices.length);
+          await harness.stopAdapter();
+          await startAdapter(harness);
           await waitForSettledTree(harness, fixtures.devices.length);
         });
 
@@ -599,29 +668,45 @@ tests.integration(ADAPTER_DIR, {
         it("every device keeps its settings, identity and label, and carries its model", async function () {
           this.timeout(60000);
           const live = await dumpObjects(harness);
+          // A device lives under its 3.0.0 id now: the previous one is found by the address it
+          // was configured with (2.x derived the id from it), the current one by its info.ip.
+          const liveIdByIp = await deviceIdByIp(harness, live);
           const lost = [];
           for (const [id, obj] of Object.entries(previous)) {
             if (obj.type !== "device") {
               continue;
             }
+            const ip = id.slice(NS.length).replace(/_/g, ".");
+            const now = live[id] ? id : liveIdByIp.get(ip);
             for (const key of ["volumeAsPercent", "identity", "label", "labelRank", "source"]) {
               if (
                 obj.native?.[key] !== undefined &&
-                canonical(live[id]?.native?.[key]) !== canonical(obj.native[key])
+                canonical(live[now]?.native?.[key]) !== canonical(obj.native[key])
               ) {
                 lost.push(
-                  `${id}: native.${key} ${JSON.stringify(obj.native[key])} became ${JSON.stringify(live[id]?.native?.[key])}`,
+                  `${id} → ${now}: native.${key} ${JSON.stringify(obj.native[key])} became ${JSON.stringify(live[now]?.native?.[key])}`,
                 );
               }
             }
-            const model = await harness.states.getStateAsync(`${id}.info.model`);
-            if (typeof model?.val === "string" && model.val !== "" && live[id]?.native?.model !== model.val) {
+            const model = await harness.states.getStateAsync(`${now}.info.model`);
+            if (typeof model?.val === "string" && model.val !== "" && live[now]?.native?.model !== model.val) {
               lost.push(
-                `${id}: reports model ${model.val} but native.model is ${JSON.stringify(live[id]?.native?.model)}`,
+                `${id} → ${now}: reports model ${model.val} but native.model is ${JSON.stringify(live[now]?.native?.model)}`,
               );
             }
           }
           assert.deepStrictEqual(lost, [], `device settings an update did not keep:\n${lost.join("\n")}`);
+        });
+
+        it("every device ran under its final id after the second start", async function () {
+          this.timeout(60000);
+          const live = await dumpObjects(harness);
+          assert.deepStrictEqual(devicesNotFinal(live), [], "devices whose id is not final");
+          const devices = Object.keys(live)
+            .filter(id => live[id].type === "device")
+            .sort();
+          const expected = fixtures.devices.map(device => `${NS}${device.id}`).sort();
+          assert.deepStrictEqual(devices, expected, "the device ids after the update are not the 3.0.0 ones");
         });
 
         it("objects the release removed are gone (no leftovers)", async function () {

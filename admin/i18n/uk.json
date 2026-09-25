@@ -629,5 +629,8 @@
   "discoveryAuto": "Автоматично (доки список порожній)",
   "discoveryAlways": "Завжди",
   "discoveryNever": "Ніколи",
-  "volumeDeviceScale": "Гучність у власній шкалі ресивера"
+  "volumeDeviceScale": "Гучність у власній шкалі ресивера",
+  "dmDetailsId": "ID об'єкта: %s",
+  "dmDetailsMac": "MAC-адреса: %s",
+  "dmDetailsSerial": "Серійний номер: %s"
 }

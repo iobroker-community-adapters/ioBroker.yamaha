@@ -214,14 +214,14 @@ describe("XmlDeviceController", () => {
     test("the identity key is model + system id + version: a firmware update drops the XML memory", async () => {
       const memory = new ProbeMemory({
         __schema: DISCOVERY_SCHEMA,
-        xmlIdentity: "RX-V6A|057CCF73|1.79/3.14",
+        xmlIdentity: "RX-V6A|0A1B2C3D|1.79/3.14",
         "xmlInputs:main": "<Input_Sel_Item/>",
       });
       const s = setup({ Main_Zone: { power: true, input: "HDMI1" } });
       withMemory(s, memory);
-      s.client.config = { model: "RX-V6A", systemId: "057CCF73", version: "1.80/3.14" };
+      s.client.config = { model: "RX-V6A", systemId: "0A1B2C3D", version: "1.80/3.14" };
       await s.controller.start();
-      expect(memory.remembered("xmlIdentity")).toBe("RX-V6A|057CCF73|1.80/3.14");
+      expect(memory.remembered("xmlIdentity")).toBe("RX-V6A|0A1B2C3D|1.80/3.14");
       // The remembered input list was dropped and re-read (the probe went to the device).
       expect(s.client.calls.some(c => c.method === "getXml" && (c.inner ?? "").includes("Input_Sel_Item"))).toBe(true);
     });
@@ -229,13 +229,13 @@ describe("XmlDeviceController", () => {
     test("the same identity keeps the XML memory — no re-read of what the model declares", async () => {
       const memory = new ProbeMemory({
         __schema: DISCOVERY_SCHEMA,
-        xmlIdentity: "RX-V6A|057CCF73|1.80/3.14",
+        xmlIdentity: "RX-V6A|0A1B2C3D|1.80/3.14",
         "xmlDescriptor:v2": { programs: [], sleep: [], adaptiveDrc: [] },
         "xmlInputs:main": "<Input_Sel_Item/>",
       });
       const s = setup({ Main_Zone: { power: true, input: "HDMI1" } });
       withMemory(s, memory);
-      s.client.config = { model: "RX-V6A", systemId: "057CCF73", version: "1.80/3.14" };
+      s.client.config = { model: "RX-V6A", systemId: "0A1B2C3D", version: "1.80/3.14" };
       await s.controller.start();
       expect(s.client.calls.some(c => c.method === "getDescriptor")).toBe(false);
       // The input list carries the user's names for the inputs — asked on every connection (D8).

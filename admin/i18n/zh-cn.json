@@ -629,5 +629,8 @@
   "discoveryAuto": "自动（列表为空时）",
   "discoveryAlways": "始终",
   "discoveryNever": "从不",
-  "volumeDeviceScale": "音量采用接收机自身的刻度"
+  "volumeDeviceScale": "音量采用接收机自身的刻度",
+  "dmDetailsId": "对象 ID：%s",
+  "dmDetailsMac": "MAC 地址：%s",
+  "dmDetailsSerial": "序列号：%s"
 }

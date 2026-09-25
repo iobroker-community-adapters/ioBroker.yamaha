@@ -629,5 +629,8 @@
   "discoveryAuto": "Automatycznie (dopóki lista jest pusta)",
   "discoveryAlways": "Zawsze",
   "discoveryNever": "Nigdy",
-  "volumeDeviceScale": "Głośność we własnej skali amplitunera"
+  "volumeDeviceScale": "Głośność we własnej skali amplitunera",
+  "dmDetailsId": "ID obiektu: %s",
+  "dmDetailsMac": "Adres MAC: %s",
+  "dmDetailsSerial": "Numer seryjny: %s"
 }

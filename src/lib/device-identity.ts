@@ -9,9 +9,9 @@
  * replacement: an id that moves takes the whole tree with it.
  */
 export interface DeviceIdentity {
-  /** The serial number (hex, `057CCF73`). */
+  /** The serial number (hex, `0A1B2C3D`). */
   serial?: string;
-  /** The MAC address without separators (`CCD42ECF0223`). */
+  /** The MAC address without separators (`00A0DE0A1B2C`). */
   mac?: string;
 }
 

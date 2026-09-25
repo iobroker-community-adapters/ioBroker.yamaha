@@ -1,6 +1,6 @@
 import type { JsonFormSchema } from "@iobroker/dm-utils";
 import { t } from "./lib/i18n";
-import { sanitizeId } from "./lib/pure-helpers";
+import { rowDeviceId } from "./lib/pure-helpers";
 import { TRANSPORT_LABELS } from "./lib/ready-line";
 import type { DeviceSource } from "./lib/types";
 
@@ -12,12 +12,24 @@ const IP_RE = /^(\d{1,3}\.){3}\d{1,3}$/;
 /** The transports shown as card indicators — the single source shared with the ready-log line. */
 export const TRANSPORTS = TRANSPORT_LABELS;
 
-/** One raw manual device row from `native.devices` (the name is optional). */
+/** One raw manual device row from `native.devices` (name and id are optional). */
 export interface ManualRow {
-  /** Display name, or empty/absent when the user left it blank. */
+  /** The object id, stored since 3.0.0 — a row without one carries the id 2.x derived from its name. */
+  id?: string;
+  /** The name the row was typed with (2.x), the address (0.5.4 migration), or the id itself. */
   name?: string;
   /** The device IP address. */
   ip: string;
+}
+
+/**
+ * Whether a typed address is an IPv4 dotted quad — checked before the device is asked who it is.
+ *
+ * @param ip the typed address
+ * @returns whether it is one
+ */
+export function isValidIp(ip: string): boolean {
+  return IP_RE.test(ip);
 }
 
 /** A running device as shown on a card, plus which source it came from (routes edit/delete). */
@@ -33,13 +45,14 @@ export interface CardDevice {
 }
 
 /**
- * The id the object tree uses for a manual row: its name, or the ip when the name is blank.
+ * The id the object tree uses for a manual row: the one it stores, or — for a row written before
+ * 3.0.0 — its name, or the ip when the name is blank (see `rowDeviceId`).
  *
  * @param row the manual device row
  * @returns the id-safe device id
  */
 export function rowId(row: ManualRow): string {
-  return sanitizeId(row.name && row.name.length > 0 ? row.name : row.ip);
+  return rowDeviceId(row);
 }
 
 /**
@@ -99,12 +112,14 @@ export function buildDeviceForm(usedIps: readonly string[]): JsonFormSchema {
  * @param rows the current manual rows
  * @param candidate the row being added/edited
  * @param exceptIndex the row position to ignore (the row being edited), or -1
+ * @param otherIds ids devices outside the table hold (the found ones) — a clash with them too
  * @returns a translated clash message, or null when the row is fine
  */
 export function findClash(
   rows: readonly ManualRow[],
   candidate: ManualRow,
   exceptIndex: number,
+  otherIds: ReadonlySet<string> = new Set(),
 ): ioBroker.StringOrTranslated | null {
   if (!IP_RE.test(candidate.ip)) {
     return t("invalidIp");
@@ -112,6 +127,9 @@ export function findClash(
   const id = rowId(candidate);
   if (id === "" || RESERVED_IDS.has(id)) {
     return t("invalidName");
+  }
+  if (otherIds.has(id)) {
+    return t("duplicateDevice");
   }
   for (let i = 0; i < rows.length; i++) {
     if (i === exceptIndex) {

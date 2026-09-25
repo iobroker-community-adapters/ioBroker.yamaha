@@ -89,7 +89,7 @@ describe("parseSsdpNotify", () => {
     "LOCATION: http://10.47.88.7:49154/desc.xml",
     "NT: upnp:rootdevice",
     "NTS: ssdp:alive",
-    "USN: uuid:9ab0c000-f668-11de-9976-ccd42ecf0223::upnp:rootdevice",
+    "USN: uuid:00000000-0000-1000-8000-00a0de0a1b2c::upnp:rootdevice",
     "",
     "",
   ].join("\r\n");
@@ -99,7 +99,7 @@ describe("parseSsdpNotify", () => {
       nts: "alive",
       location: "http://10.47.88.7:49154/desc.xml",
       nt: "upnp:rootdevice",
-      usn: "uuid:9ab0c000-f668-11de-9976-ccd42ecf0223::upnp:rootdevice",
+      usn: "uuid:00000000-0000-1000-8000-00a0de0a1b2c::upnp:rootdevice",
     });
   });
 

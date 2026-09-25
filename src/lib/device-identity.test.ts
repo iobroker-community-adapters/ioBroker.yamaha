@@ -67,11 +67,11 @@ describe("mergeIdentity", () => {
 
 describe("macFromUdn", () => {
   it("takes the last uuid segment", () => {
-    expect(macFromUdn("uuid:9ab0c000-f668-11de-9976-ccd42ecf0223")).toBe("CCD42ECF0223");
+    expect(macFromUdn("uuid:00000000-0000-1000-8000-00a0de0a1b2c")).toBe("00A0DE0A1B2C");
   });
 
   it("is undefined for a uuid without a MAC-shaped tail", () => {
     expect(macFromUdn("uuid:roku:ecp:abc")).toBeUndefined();
-    expect(macFromUdn("uuid:9ab0c000-f668-11de-9976-000000000000")).toBeUndefined();
+    expect(macFromUdn("uuid:00000000-0000-1000-8000-000000000000")).toBeUndefined();
   });
 });

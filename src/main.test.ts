@@ -141,6 +141,11 @@ vi.mock("@iobroker/adapter-core", () => {
       return Promise.resolve();
     });
     public extendForeignObjectAsync = vi.fn((id: string, patch: Record<string, unknown>) => {
+      // An id inside this instance's namespace is one of its own objects — the same store the
+      // adapter-scoped calls use, merged the same way.
+      if (id.startsWith(`${this.namespace}.`)) {
+        return this.extendObject(id, patch);
+      }
       const prev = this.foreignObjects.get(id) ?? {};
       this.foreignObjects.set(id, {
         ...prev,
@@ -148,6 +153,39 @@ vi.mock("@iobroker/adapter-core", () => {
       });
       return Promise.resolve();
     });
+    /** Every state under a `<prefix>.*` pattern, keyed by full id — the tree a device move reads. */
+    public getForeignStatesAsync = vi.fn((pattern: string) => {
+      const prefix = pattern.replace(/\*$/, "");
+      const out: Record<string, { val: unknown; ack: boolean }> = {};
+      for (const [k, v] of this.states) {
+        const full = `${this.namespace}.${k}`;
+        if (full.startsWith(prefix)) {
+          out[full] = { ...v };
+        }
+      }
+      return Promise.resolve(out);
+    });
+    public setForeignStateAsync = vi.fn((id: string, state: { val?: unknown; ack?: boolean }) => {
+      this.states.set(this.key(id), { val: state.val, ack: state.ack === true });
+      return Promise.resolve();
+    });
+    /** Objects under a `<prefix>.*` pattern, of one type when given — foreign ones and this instance's own. */
+    public getForeignObjectsAsync = vi.fn((pattern: string, type?: string) => {
+      const prefix = pattern.replace(/\*$/, "");
+      const out: Record<string, unknown> = {};
+      const all: Array<[string, Record<string, unknown>]> = [
+        ...this.foreignObjects,
+        ...[...this.objects].map(([k, v]): [string, Record<string, unknown>] => [`${this.namespace}.${k}`, v]),
+      ];
+      for (const [k, v] of all) {
+        if (k.startsWith(prefix) && (type === undefined || v.type === type)) {
+          out[k] = copyOf(v);
+        }
+      }
+      return Promise.resolve(out);
+    });
+    /** js-controller's restart request — recorded, the process goes on in the test. */
+    public restart = vi.fn();
     /**
      * The adapter subscribes through the awaited `…Async` form so a rejection cannot become an
      * unhandled one (js-controller turns those into an adapter stop). `subscribeFails` lets a
@@ -499,6 +537,7 @@ function internalOf(adapter: Yamaha): {
   clearTimeout: ReturnType<typeof vi.fn>;
   setInterval: ReturnType<typeof vi.fn>;
   clearInterval: ReturnType<typeof vi.fn>;
+  restart: ReturnType<typeof vi.fn>;
 } {
   return adapter as never;
 }
@@ -946,12 +985,12 @@ describe("Yamaha auto-discovery", () => {
     const ctx = setup({ devices: [] });
     await ctx.i.onReady();
     await flush();
-    expect(ctx.i.deviceRecords.get("WX-030")?.source).toBe("discovered");
-    ctx.i.profiles.get("WX-030")!.identity = () => ({ serial: "0E897553" });
-    ctx.i.reportConnection("WX-030", true);
+    expect(ctx.i.deviceRecords.get("wx-030")?.source).toBe("discovered");
+    ctx.i.profiles.get("wx-030")!.identity = () => ({ serial: "0E897553" });
+    ctx.i.reportConnection("wx-030", true);
     await flush();
     expect(mocks.discoveredStore.devices).toContainEqual({
-      id: "WX-030",
+      id: "wx-030",
       ip: "192.168.1.30",
       identity: { serial: "0E897553" },
     });
@@ -967,7 +1006,7 @@ describe("Yamaha auto-discovery", () => {
   });
 
   describe("a find and the table rows", () => {
-    const v6a = { serial: "057CCF73", mac: "CCD42ECF0223" };
+    const v6a = { serial: "0A1B2C3D", mac: "00A0DE0A1B2C" };
     let ctxTable: Ctx | undefined;
     const table = (): unknown[] | undefined =>
       (ctxTable?.i.foreignObjects.get("system.adapter.yamaha.0")?.native as { devices?: unknown[] } | undefined)
@@ -1110,7 +1149,9 @@ describe("Yamaha auto-discovery", () => {
       ]);
       await ctx.i.onReady();
       await flush();
-      expect(mocks.discoveredStore.devices).toEqual([{ id: "Yamaha_RX-V6a", ip: "192.168.1.20", identity: v6a }]);
+      expect(mocks.discoveredStore.devices).toEqual([
+        { id: "rx-v6a-2c3d", ip: "192.168.1.20", identity: v6a, model: "RX-V6A" },
+      ]);
     });
 
     it("a migrated row still on its first attempt is not offline — it does not adopt a stranger of its model", async () => {
@@ -1126,7 +1167,9 @@ describe("Yamaha auto-discovery", () => {
       ]);
       await ctx.i.onReady();
       await flush();
-      expect(mocks.discoveredStore.devices).toEqual([{ id: "Yamaha_RX-V6a", ip: "192.168.1.20", identity: v6a }]);
+      expect(mocks.discoveredStore.devices).toEqual([
+        { id: "rx-v6a-2c3d", ip: "192.168.1.20", identity: v6a, model: "RX-V6A" },
+      ]);
       expect(ctx.calls.filter(c => c.device.id === "192_168_1_10").every(c => c.device.ip === "192.168.1.10")).toBe(
         true,
       );
@@ -1141,7 +1184,9 @@ describe("Yamaha auto-discovery", () => {
       await ctx.i.onReady();
       await flush();
       // The row answers at its own address: a second RX-V6A is simply a second device.
-      expect(mocks.discoveredStore.devices).toEqual([{ id: "Yamaha_RX-V6a", ip: "192.168.1.20", identity: v6a }]);
+      expect(mocks.discoveredStore.devices).toEqual([
+        { id: "rx-v6a-2c3d", ip: "192.168.1.20", identity: v6a, model: "RX-V6A" },
+      ]);
     });
   });
 
@@ -1273,7 +1318,8 @@ describe("Yamaha auto-discovery", () => {
       mocks.discoverYamaha.mockResolvedValue([{ ip: "192.168.1.20", name: "Yamaha RX-V6a" }]);
       ctx.i.rediscoverNow(["Yamaha_RX-V6a"]);
       await flush();
-      expect(ctx.i.log.info).toHaveBeenCalledWith("discovery found Yamaha_RX-V6a — setting up");
+      // Found again under the 3.0.0 id — the search says what it set up, and nothing about "not there".
+      expect(ctx.i.log.info).toHaveBeenCalledWith("discovery found yamaha-rx-v6a — setting up");
       expect(ctx.i.log.info.mock.calls.some(c => String(c[0]).includes("not on the network right now"))).toBe(false);
     });
   });
@@ -1320,7 +1366,7 @@ describe("Yamaha auto-discovery", () => {
   });
 
   describe("NOTIFY ssdp:alive", () => {
-    const v6a = { serial: "057CCF73", mac: "CCD42ECF0223" };
+    const v6a = { serial: "0A1B2C3D", mac: "00A0DE0A1B2C" };
 
     it("a NOTIFY from an unknown address probes it and moves the device it names", async () => {
       mocks.discoveredStore.devices = [{ id: "Yamaha_RX-V6a", ip: "192.168.1.10", identity: v6a }];
@@ -1511,9 +1557,9 @@ describe("Yamaha auto-discovery", () => {
       await flush();
       ctx.i.onSsdpAlive({ nts: "alive", location: "http://192.168.1.30/d.xml" }, "192.168.1.30");
       await flush();
-      expect(ctx.calls.map(c => c.device.id)).toContain("WX-030");
+      expect(ctx.calls.map(c => c.device.id)).toContain("wx-030");
       expect(mocks.discoveredStore.devices).toEqual([
-        { id: "WX-030", ip: "192.168.1.30", identity: { serial: "0E897553" } },
+        { id: "wx-030", ip: "192.168.1.30", identity: { serial: "0E897553" } },
       ]);
     });
 
@@ -1825,10 +1871,10 @@ describe("Yamaha auto-discovery", () => {
     // a newcomer that later moved to another address was never searched for again.
     mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
     mocks.discoverYamaha.mockResolvedValue([{ ip: "192.168.1.21", name: "WX-021" }]);
-    const ctx = setup({ devices: [] }, { failIds: ["WX-021"] });
+    const ctx = setup({ devices: [] }, { failIds: ["wx-021"] });
     await ctx.i.onReady();
     await flush();
-    expect(ctx.calls.map(c => c.device.id)).toContain("WX-021");
+    expect(ctx.calls.map(c => c.device.id)).toContain("wx-021");
     const armed = (): unknown[] => ctx.i.setTimeout.mock.calls.filter(c => Number(c[1]) > 200000);
     expect(armed()).toHaveLength(1);
   });
@@ -2564,17 +2610,18 @@ describe("Yamaha volume as 0…100 % (the one switch)", () => {
 
 describe("Yamaha search warnings and the remembered model (audit 2026-09-24, A15/A22)", () => {
   // Repeated every five minutes while a device is offline: said once, then only at debug.
-  it("warns about an id collision of a find once, then at debug", async () => {
+  it("warns about a find at a taken address once, then at debug", async () => {
+    // Another receiver answering at the address a remembered one holds: its find is skipped, and said so.
     mocks.discoveredStore.devices = [{ id: "Living", ip: "192.168.1.10", identity: { serial: "0A0A0A0A" } }];
-    mocks.discoverYamaha.mockResolvedValue([{ ip: "192.168.1.30", name: "Living", identity: { serial: "0E897553" } }]);
+    mocks.discoverYamaha.mockResolvedValue([{ ip: "192.168.1.10", name: "Living", identity: { serial: "0E897553" } }]);
     const ctx = setup({ devices: [] });
     await ctx.i.onReady();
     await flush();
     await ctx.i.discoverAdditionalDevices(ctx.i.pushReceiver);
     await flush();
-    const warns = ctx.i.log.warn.mock.calls.filter(c => String(c[0]).includes("is already taken"));
+    const warns = ctx.i.log.warn.mock.calls.filter(c => String(c[0]).includes("its address belongs to device"));
     expect(warns).toHaveLength(1);
-    expect(ctx.i.log.debug).toHaveBeenCalledWith(expect.stringContaining("is already taken"));
+    expect(ctx.i.log.debug).toHaveBeenCalledWith(expect.stringContaining("its address belongs to device"));
   });
 
   // A discovery-schema bump empties the capability profile; the model the orphan match needs stays
@@ -3861,12 +3908,16 @@ describe("per-device memory and the discovery schema (2.6.0)", () => {
     const memory = ctx.calls[0].deps.probeMemory as unknown as { set(key: string, value: unknown): void };
     memory.set("late", true);
     expect(extendObject).not.toHaveBeenCalled();
-    const cb = vi.fn();
+    const cb = vi.fn(() => {
+      // The callback comes only after the write — the host tears the process down on it.
+      expect(extendObject.mock.calls.filter(call => call[0] === "Living_room")).toHaveLength(1);
+    });
     ctx.i.onUnload(cb);
-    // The pending snapshot is written at once; its timer is cleared, not left to fire on a dead adapter.
-    expect(extendObject.mock.calls.filter(call => call[0] === "Living_room")).toHaveLength(1);
+    // The pending snapshot is written now (behind the device object's write queue); its timer is
+    // cleared, not left to fire on a dead adapter.
     expect(ctx.i.clearTimeout).toHaveBeenCalled();
     await flush();
+    expect(extendObject.mock.calls.filter(call => call[0] === "Living_room")).toHaveLength(1);
     expect(cb).toHaveBeenCalledTimes(1);
   });
 });
@@ -3931,7 +3982,7 @@ describe("the device table and the network search side by side", () => {
     expect(started(ctx)).toEqual(["Typed"]); // onReady did not wait for the search
     release([{ ip: "192.168.1.20", name: "Found" }]);
     await flush();
-    expect(started(ctx)).toEqual(["Found", "Typed"]); // `started` sorts; the order was proven above
+    expect(started(ctx)).toEqual(["Typed", "found"]); // `started` sorts; the order was proven above
   });
 
   it("always: mixed operation — the typed device and the found ones run together", async () => {
@@ -4241,5 +4292,295 @@ describe("Yamaha writes only what changed (audit 2026-09-15 — setStateChangedA
     setStateAck("Living_room.info.model", "RX-V6A");
     await flush();
     expect(objectReads.mock.calls.filter(c => c[0] === "Living_room").length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("device ids since 3.0.0 — the one-time move", () => {
+  const office = "wx-030-2b3c";
+  const officeSerial = { serial: "0E1A2B3C" };
+
+  /** An installation upgraded from 2.x: "Büro" typed into the table, living at `B_ro`. */
+  function upgradedOffice(): Ctx {
+    const row = { name: "Büro", ip: "192.168.1.30" };
+    const ctx = setup({ devices: [row] });
+    ctx.i.foreignObjects.set("system.adapter.yamaha.0", { native: { devices: [row] } });
+    ctx.i.objects.set("B_ro", {
+      type: "device",
+      common: { name: "Büro", statusStates: { onlineId: "yamaha.0.B_ro.info.connection" } },
+      native: { identity: officeSerial, model: "WX-030", label: "Büro", labelRank: 2 },
+    });
+    ctx.i.objects.set("B_ro.volume", {
+      type: "state",
+      common: { name: "Volume", type: "number", custom: { "influxdb.0": { enabled: true } } },
+      native: {},
+    });
+    ctx.i.states.set("B_ro.volume", { val: 25, ack: true });
+    ctx.i.foreignObjects.set("enum.rooms.office", {
+      type: "enum",
+      common: { name: "Office", members: ["yamaha.0.B_ro", "hm-rpc.0.X.STATE"] },
+      native: {},
+    });
+    ctx.i.foreignObjects.set("alias.0.office.volume", {
+      type: "state",
+      common: { name: "Volume", alias: { id: "yamaha.0.B_ro.volume" } },
+      native: {},
+    });
+    return ctx;
+  }
+
+  it("moves an upgraded device to its model and serial id at the start, with everything that points at it", async () => {
+    const ctx = upgradedOffice();
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.calls.map(call => call.device.id)).toEqual([office]);
+    expect(ctx.i.objects.has("B_ro")).toBe(false);
+    expect(ctx.i.objects.has("B_ro.volume")).toBe(false);
+    expect(ctx.i.states.get(`${office}.volume`)).toEqual({ val: 25, ack: true });
+    expect(ctx.i.objects.get(office)?.native).toMatchObject({ idScheme: 3, label: "Büro", labelRank: 2 });
+    expect(ctx.i.objects.get(office)?.common).toMatchObject({
+      name: "Büro",
+      statusStates: { onlineId: `yamaha.0.${office}.info.connection` },
+    });
+    expect((ctx.i.objects.get(`${office}.volume`)?.common as { custom: unknown }).custom).toEqual({
+      "influxdb.0": { enabled: true, aliasId: "yamaha.0.B_ro.volume" },
+    });
+    expect((ctx.i.foreignObjects.get("enum.rooms.office")?.common as { members: unknown }).members).toEqual([
+      `yamaha.0.${office}`,
+      "hm-rpc.0.X.STATE",
+    ]);
+    expect((ctx.i.foreignObjects.get("alias.0.office.volume")?.common as { alias: unknown }).alias).toEqual({
+      id: `yamaha.0.${office}.volume`,
+    });
+    // The typed row carries the new id — as its id AND its name, so a return to 2.x finds the tree.
+    const row = { name: office, ip: "192.168.1.30", id: office };
+    expect(ctx.i.config.devices).toEqual([row]);
+    expect((ctx.i.foreignObjects.get("system.adapter.yamaha.0")?.native as { devices: unknown }).devices).toEqual([
+      row,
+    ]);
+    expect(ctx.i.log.info).toHaveBeenCalledWith(
+      `B_ro: device id is now ${office} — moved 1 datapoint(s) with 1 room/function entry, 1 alias(es), 1 recording(s) keep their history`,
+    );
+    expect(ctx.i.restart).not.toHaveBeenCalled();
+  });
+
+  it("moves a found device and renames its record in the discovery store", async () => {
+    mocks.discoveredStore.devices = [{ id: "Yamaha_RX-V685", ip: "192.168.1.40", identity: { serial: "0D6D7E8F" } }];
+    const ctx = setup({ devices: [] });
+    ctx.i.objects.set("Yamaha_RX-V685", {
+      type: "device",
+      common: { name: "Wohnzimmer" },
+      native: { model: "RX-V685", label: "Wohnzimmer", labelRank: 2 },
+    });
+    await ctx.i.onReady();
+    await flush();
+    expect(mocks.discoveredStore.devices.map(record => record.id)).toEqual(["rx-v685-7e8f"]);
+    expect(ctx.calls.map(call => call.device.id)).toEqual(["rx-v685-7e8f"]);
+    expect(ctx.i.objects.has("Yamaha_RX-V685")).toBe(false);
+    expect(ctx.i.foreignObjects.has("system.adapter.yamaha.0")).toBe(false); // no table write, no restart
+  });
+
+  it("two upgraded devices of one model whose serials end alike: the second takes the whole serial", async () => {
+    mocks.discoveredStore.devices = [
+      { id: "Bad", ip: "192.168.1.31", identity: { serial: "0B11AA22" } },
+      { id: "Flur", ip: "192.168.1.32", identity: { serial: "0C33AA22" } },
+    ];
+    const ctx = setup({ devices: [] });
+    ctx.i.objects.set("Bad", { type: "device", common: { name: "Bad" }, native: { model: "WX-010" } });
+    ctx.i.objects.set("Flur", { type: "device", common: { name: "Flur" }, native: { model: "WX-010" } });
+    await ctx.i.onReady();
+    await flush();
+    expect(mocks.discoveredStore.devices.map(record => record.id)).toEqual(["wx-010-aa22", "wx-010-0c33aa22"]);
+  });
+
+  it("a device already under its final id is only marked — at the start, before it answers", async () => {
+    mocks.discoveredStore.devices = [{ id: office, ip: "192.168.1.30", identity: officeSerial }];
+    const ctx = setup({ devices: [] }, { hangIds: [office] });
+    ctx.i.objects.set(office, { type: "device", common: { name: "Büro" }, native: { model: "WX-030" } });
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.i.objects.get(office)?.native).toMatchObject({ idScheme: 3 });
+    expect(ctx.calls.map(call => call.device.id)).toEqual([office]);
+    expect(ctx.i.log.info).not.toHaveBeenCalledWith(expect.stringContaining("device id is now"));
+    expect(ctx.i.log.warn).not.toHaveBeenCalled();
+  });
+
+  it("keeps the id when both of its new ids are held by other devices", async () => {
+    mocks.discoveredStore.devices = [
+      { id: "Bad", ip: "192.168.1.31", identity: officeSerial },
+      { id: office, ip: "192.168.1.30", identity: { serial: "0F002B3C" } },
+      { id: "wx-030-0e1a2b3c", ip: "192.168.1.33", identity: { serial: "0F112B3C" } },
+    ];
+    const ctx = setup({ devices: [] });
+    ctx.i.objects.set("Bad", { type: "device", common: { name: "Bad" }, native: { model: "WX-030" } });
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.i.objects.has("Bad")).toBe(true);
+    expect(ctx.i.log.warn).toHaveBeenCalledWith(
+      "Bad: its device id would be wx-030-0e1a2b3c, which another device holds — it keeps Bad",
+    );
+  });
+
+  it("completes a move a previous start was cut short in", async () => {
+    const ctx = upgradedOffice();
+    const journal = ctx.i.objects.get("B_ro")!;
+    ctx.i.objects.set("B_ro", { ...journal, native: { ...(journal.native as object), movingTo: office } });
+    // The copy had begun: one object stands already, the device object and its mark do not.
+    ctx.i.objects.set(`${office}.volume`, { type: "state", common: { name: "Volume" }, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.calls.map(call => call.device.id)).toEqual([office]);
+    expect(ctx.i.objects.has("B_ro")).toBe(false);
+    expect(ctx.i.objects.get(office)?.native).toMatchObject({ idScheme: 3 });
+    expect(ctx.i.objects.get(office)?.native).not.toHaveProperty("movingTo");
+  });
+
+  it("a device that told its model only now: journal at its first contact, moved at the next start", async () => {
+    // Remembered before 2.13.0 kept models: the start knows the serial but not the model.
+    mocks.discoveredStore.devices = [{ id: "B_ro", ip: "192.168.1.30", identity: officeSerial }];
+    const first = setup({ devices: [] });
+    first.i.objects.set("B_ro", { type: "device", common: { name: "Büro" }, native: {} });
+    first.i.rememberedModelOf = () => "WX-030"; // what the first contact reports
+    await first.i.onReady();
+    await flush();
+    expect(first.calls.map(call => call.device.id)).toEqual(["B_ro"]);
+    expect(first.i.objects.get("B_ro")?.native).toMatchObject({ movingTo: office });
+    expect(first.i.log.info).toHaveBeenCalledWith(
+      `B_ro: the device told who it is — its objects move to ${office} at the next start`,
+    );
+    // Never a restart of its own: a move that failed at the start would restart on every connect.
+    expect(first.i.restart).not.toHaveBeenCalled();
+
+    const next = setup({ devices: [] });
+    for (const [id, obj] of first.i.objects) {
+      next.i.objects.set(id, obj);
+    }
+    await next.i.onReady();
+    await flush();
+    expect(next.calls.map(call => call.device.id)).toEqual([office]);
+    expect(next.i.objects.has("B_ro")).toBe(false);
+    expect(next.i.objects.get(office)?.native).toMatchObject({ idScheme: 3 });
+  });
+
+  it("a device that tells its model but no serial takes the model as its id", async () => {
+    const ctx = setup({ devices: [{ name: "Küche", ip: "192.168.1.50" }] });
+    ctx.i.objects.set("K_che", { type: "device", common: { name: "Küche" }, native: {} });
+    ctx.i.rememberedModelOf = () => "RX-V473";
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.i.objects.get("K_che")?.native).toMatchObject({ movingTo: "rx-v473" });
+  });
+
+  it("a device that tells neither serial nor model keeps its id, and is asked again at its next connect", async () => {
+    const ctx = setup({ devices: [{ name: "Küche", ip: "192.168.1.50" }] });
+    ctx.i.objects.set("K_che", { type: "device", common: { name: "Küche" }, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.i.objects.get("K_che")?.native).not.toHaveProperty("movingTo");
+    expect(ctx.i.objects.get("K_che")?.native).not.toHaveProperty("idScheme");
+    ctx.i.rememberedModelOf = () => "RX-V473";
+    ctx.i.reportConnection("K_che", false);
+    ctx.i.reportConnection("K_che", true);
+    await flush();
+    expect(ctx.i.objects.get("K_che")?.native).toMatchObject({ movingTo: "rx-v473" });
+  });
+
+  it("a model reported after the connect decides the id then — a YNCA receiver tells it in its sweep", async () => {
+    const ctx = setup({ devices: [{ name: "Küche", ip: "192.168.1.50" }] });
+    ctx.i.objects.set("K_che", { type: "device", common: { name: "Küche" }, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.i.objects.get("K_che")?.native).not.toHaveProperty("movingTo");
+    const setStateAck = ctx.calls[0].deps.setStateAck as (id: string, value: unknown) => void;
+    setStateAck("K_che.info.model", "RX-V473");
+    await flush();
+    expect(ctx.i.objects.get("K_che")?.native).toMatchObject({ movingTo: "rx-v473" });
+  });
+
+  it("a model reported before the connect decides nothing yet", async () => {
+    const ctx = setup({ devices: [{ name: "Küche", ip: "192.168.1.50" }] }, { hangIds: ["K_che"] });
+    ctx.i.objects.set("K_che", { type: "device", common: { name: "Küche" }, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    const setStateAck = ctx.calls[0].deps.setStateAck as (id: string, value: unknown) => void;
+    setStateAck("K_che.info.model", "RX-V473");
+    await flush();
+    expect(ctx.i.objects.get("K_che")?.native).not.toHaveProperty("movingTo");
+  });
+
+  it("a moved 0.5.4 row keeps its address as its name — it goes on following the device", async () => {
+    const row = { name: "192.168.1.50", ip: "192.168.1.50" };
+    const ctx = setup({ devices: [row] });
+    ctx.i.foreignObjects.set("system.adapter.yamaha.0", { native: { devices: [row] } });
+    ctx.i.objects.set("192_168_1_50", {
+      type: "device",
+      common: { name: "Wohnzimmer" },
+      native: { identity: officeSerial, model: "RX-V475" },
+    });
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.i.config.devices).toEqual([{ name: "192.168.1.50", ip: "192.168.1.50", id: "rx-v475-2b3c" }]);
+    expect(ctx.i.deviceRecords.get("rx-v475-2b3c")?.source).toBe("migrated");
+  });
+
+  it("a first contact whose short id another device holds takes the whole serial", async () => {
+    // Two WX-030 whose serials end alike; the other one holds the short id already.
+    mocks.discoveredStore.devices = [
+      { id: "B_ro", ip: "192.168.1.30", identity: officeSerial },
+      { id: office, ip: "192.168.1.31", identity: { serial: "0F002B3C" } },
+    ];
+    const ctx = setup({ devices: [] }, { hangIds: [office] });
+    ctx.i.objects.set("B_ro", { type: "device", common: { name: "Büro" }, native: {} });
+    ctx.i.objects.set(office, { type: "device", common: { name: "Bad" }, native: { model: "WX-030", idScheme: 3 } });
+    ctx.i.rememberedModelOf = id => (id === "B_ro" ? "WX-030" : undefined);
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.i.objects.get("B_ro")?.native).toMatchObject({ movingTo: "wx-030-0e1a2b3c" });
+  });
+
+  it("a first contact whose short AND whole serial id other devices hold keeps its id and writes no journal", async () => {
+    mocks.discoveredStore.devices = [
+      { id: "B_ro", ip: "192.168.1.30", identity: officeSerial },
+      { id: office, ip: "192.168.1.31", identity: { serial: "0F002B3C" } },
+      { id: "wx-030-0e1a2b3c", ip: "192.168.1.32", identity: { serial: "0F112B3C" } },
+    ];
+    const ctx = setup({ devices: [] }, { hangIds: [office, "wx-030-0e1a2b3c"] });
+    ctx.i.objects.set("B_ro", { type: "device", common: { name: "Büro" }, native: {} });
+    ctx.i.objects.set(office, { type: "device", common: { name: "Bad" }, native: { model: "WX-030", idScheme: 3 } });
+    ctx.i.objects.set("wx-030-0e1a2b3c", { type: "device", common: { name: "Flur" }, native: { idScheme: 3 } });
+    ctx.i.rememberedModelOf = id => (id === "B_ro" ? "WX-030" : undefined);
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.i.objects.get("B_ro")?.native).not.toHaveProperty("movingTo");
+    expect(ctx.i.log.warn).toHaveBeenCalledWith(
+      "B_ro: its device id would be wx-030-0e1a2b3c, which another device holds — it keeps B_ro",
+    );
+  });
+
+  it("a model id another device holds is counted on at the first contact", async () => {
+    mocks.discoveredStore.devices = [{ id: "rx-v473", ip: "192.168.1.51" }];
+    const ctx = setup(
+      { devices: [{ name: "Küche", ip: "192.168.1.50" }], discovery: "always" },
+      { hangIds: ["rx-v473"] },
+    );
+    ctx.i.objects.set("K_che", { type: "device", common: { name: "Küche" }, native: {} });
+    ctx.i.objects.set("rx-v473", { type: "device", common: { name: "Bad" }, native: { idScheme: 3 } });
+    ctx.i.rememberedModelOf = () => "RX-V473";
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.i.objects.get("K_che")?.native).toMatchObject({ movingTo: "rx-v473-2" });
+  });
+
+  it("a decided device is not judged again", async () => {
+    mocks.discoveredStore.devices = [{ id: office, ip: "192.168.1.30", identity: officeSerial }];
+    const ctx = setup({ devices: [] });
+    ctx.i.objects.set(office, { type: "device", common: { name: "Büro" }, native: { model: "WX-030", idScheme: 3 } });
+    const extendObject = (ctx.i as unknown as { extendObject: ReturnType<typeof vi.fn> }).extendObject;
+    await ctx.i.onReady();
+    await flush();
+    const marks = extendObject.mock.calls.filter(
+      call => call[0] === office && (call[1] as { native?: { idScheme?: unknown } }).native?.idScheme !== undefined,
+    );
+    expect(marks).toEqual([]);
+    expect(ctx.i.restart).not.toHaveBeenCalled();
   });
 });

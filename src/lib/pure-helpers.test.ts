@@ -21,6 +21,7 @@ import {
   RENAMED_CHANNELS,
   RENAMED_STATE_IDS,
   renamedObjectIds,
+  rowDeviceId,
   sanitizeId,
   staleObjects,
   stripNamespace,
@@ -176,7 +177,11 @@ describe("upgrade path from the original 0.5.4 adapter (the ~800 existing instal
 
 describe("mergeDiscovered", () => {
   test("turns a fresh discovery into device records", () => {
-    expect(mergeDiscovered([], [{ ip: "1.1.1.1", name: "Living" }])).toEqual([{ id: "Living", ip: "1.1.1.1" }]);
+    // A find without model or serial: its advertised name, as an id segment (3.0.0 id rule).
+    expect(mergeDiscovered([], [{ ip: "1.1.1.1", name: "Living" }])).toEqual([{ id: "living", ip: "1.1.1.1" }]);
+    expect(
+      mergeDiscovered([], [{ ip: "1.1.1.1", name: "Living", model: "RX-V6A", identity: { serial: "0A1B2C3D" } }]),
+    ).toEqual([{ id: "rx-v6a-2c3d", ip: "1.1.1.1", model: "RX-V6A", identity: { serial: "0A1B2C3D" } }]);
   });
 
   test("keeps a known device the scan did not find this run (standby)", () => {
@@ -194,12 +199,12 @@ describe("mergeDiscovered", () => {
   test("adds a newly discovered address to the known ones", () => {
     expect(mergeDiscovered([{ id: "Living", ip: "1.1.1.1" }], [{ ip: "2.2.2.2", name: "Kitchen" }])).toEqual([
       { id: "Living", ip: "1.1.1.1" },
-      { id: "Kitchen", ip: "2.2.2.2" },
+      { id: "kitchen", ip: "2.2.2.2" },
     ]);
   });
 
   test("falls back to the ip as id when a device advertises no name", () => {
-    expect(mergeDiscovered([], [{ ip: "3.3.3.3", name: "" }])).toEqual([{ id: "3_3_3_3", ip: "3.3.3.3" }]);
+    expect(mergeDiscovered([], [{ ip: "3.3.3.3", name: "" }])).toEqual([{ id: "3-3-3-3", ip: "3.3.3.3" }]);
   });
 
   test("carries a new address over when the same device moved (DHCP), instead of dropping it", () => {
@@ -257,8 +262,8 @@ describe("mergeDiscovered", () => {
     const collisions: Array<[string, string]> = [];
     expect(
       mergeDiscovered([], [{ ip: "4.4.4.4", name: "info" }], (dropped, takenId) => collisions.push([dropped, takenId])),
-    ).toEqual([]);
-    expect(collisions).toEqual([["info", "info"]]);
+    ).toEqual([{ id: "info-2", ip: "4.4.4.4" }]);
+    expect(collisions).toEqual([]);
   });
 });
 
@@ -318,7 +323,7 @@ describe("staleObjects", () => {
 });
 
 describe("mergeDiscovered by identity", () => {
-  const v6a = { serial: "057CCF73", mac: "CCD42ECF0223" };
+  const v6a = { serial: "0A1B2C3D", mac: "00A0DE0A1B2C" };
 
   test("a renamed device at a new address keeps its id when the identity matches", () => {
     // The serial survives what the name and the address do not — the id (and the tree) stays.
@@ -339,21 +344,27 @@ describe("mergeDiscovered by identity", () => {
   test("a new device carries its identity and services from the first find on", () => {
     expect(
       mergeDiscovered([], [{ ip: "2.2.2.2", name: "Kitchen", identity: v6a, services: { yxc: true, xml: false } }]),
-    ).toEqual([{ id: "Kitchen", ip: "2.2.2.2", identity: v6a, services: { yxc: true, xml: false } }]);
+    ).toEqual([{ id: "kitchen", ip: "2.2.2.2", identity: v6a, services: { yxc: true, xml: false } }]);
   });
 
   // Another device with the same (sanitised) name took the record's address and identity over,
   // and with both answering in one search the real one vanished (audit 2026-09-24, A4).
-  test("a different device with the same name is a collision, not a move", () => {
+  test("a different device with the same name gets its own id, not the known one's", () => {
     const known = [{ id: "Living", ip: "1.1.1.10", identity: v6a }];
     const stranger = { ip: "1.1.1.30", name: "Living", identity: { serial: "0E897553" } };
     const collisions: string[] = [];
     const merged = mergeDiscovered(known, [stranger], (dropped, taken) => collisions.push(`${dropped}→${taken}`));
-    expect(merged).toEqual([{ id: "Living", ip: "1.1.1.10", identity: v6a }]);
-    expect(collisions).toEqual(["Living→Living"]);
-    // Both answering in one search: the real one keeps its record.
+    expect(merged).toEqual([
+      { id: "Living", ip: "1.1.1.10", identity: v6a },
+      { id: "living", ip: "1.1.1.30", identity: { serial: "0E897553" } },
+    ]);
+    expect(collisions).toEqual([]);
+    // Both answering in one search: the real one keeps its record, the stranger gets its own.
     const both = mergeDiscovered(known, [stranger, { ip: "1.1.1.10", name: "Living", identity: v6a }]);
-    expect(both).toEqual([{ id: "Living", ip: "1.1.1.10", identity: v6a }]);
+    expect(both).toEqual([
+      { id: "Living", ip: "1.1.1.10", identity: v6a },
+      { id: "living", ip: "1.1.1.30", identity: { serial: "0E897553" } },
+    ]);
   });
 
   test("identity wins over a name that maps to another record's id", () => {
@@ -1077,5 +1088,95 @@ describe("unionDevices", () => {
     expect(unionDevices([{ id: "192_168_1_10", ip: "192.168.1.10", source: "migrated" }], [])[0].source).toBe(
       "migrated",
     );
+  });
+});
+
+describe("device ids since 3.0.0", () => {
+  test("two speakers of the same model and the same name both get a tree", () => {
+    const merged = mergeDiscovered(
+      [],
+      [
+        {
+          ip: "10.0.0.2",
+          name: "Lautsprecher",
+          model: "WX-010",
+          identity: { serial: "0B33BB44", mac: "00A0DE000002" },
+        },
+        {
+          ip: "10.0.0.1",
+          name: "Lautsprecher",
+          model: "WX-010",
+          identity: { serial: "0B11AA22", mac: "00A0DE000001" },
+        },
+      ],
+    );
+    expect(merged.map(record => record.id)).toEqual(["wx-010-aa22", "wx-010-bb44"]);
+    expect(merged[0]).toMatchObject({ ip: "10.0.0.1", model: "WX-010" });
+  });
+
+  test("the same finds give the same ids whatever order the network answered in", () => {
+    const a = { ip: "10.0.0.1", name: "Bad", model: "RX-V473" };
+    const b = { ip: "10.0.0.2", name: "Bad", model: "RX-V473" };
+    expect(mergeDiscovered([], [a, b])).toEqual(mergeDiscovered([], [b, a]));
+    expect(mergeDiscovered([], [b, a]).map(record => record.id)).toEqual(["rx-v473", "rx-v473-2"]);
+  });
+
+  test("a find without identity never takes over a record that has one", () => {
+    const known = [{ id: "wx-030-2b3c", ip: "10.0.0.5", identity: { serial: "0E1A2B3C" } }];
+    const merged = mergeDiscovered(known, [{ ip: "10.0.0.6", name: "wx-030-2b3c" }]);
+    expect(merged.find(record => record.id === "wx-030-2b3c")?.ip).toBe("10.0.0.5");
+    expect(merged).toHaveLength(2);
+  });
+
+  test("a record stored before its identity was known is still found by its 2.x name id", () => {
+    const merged = mergeDiscovered(
+      [{ id: "B_ro", ip: "10.0.0.5" }],
+      [{ ip: "10.0.0.9", name: "Büro", model: "WX-030", identity: { serial: "0E1A2B3C" } }],
+    );
+    expect(merged).toEqual([{ id: "B_ro", ip: "10.0.0.9", identity: { serial: "0E1A2B3C" }, model: "WX-030" }]);
+  });
+
+  test("never hands out an id a table row holds", () => {
+    const merged = mergeDiscovered(
+      [],
+      [{ ip: "10.0.0.1", name: "Küche", model: "RX-V473" }],
+      undefined,
+      new Set(["rx-v473"]),
+    );
+    expect(merged.map(record => record.id)).toEqual(["rx-v473-2"]);
+  });
+
+  test("a name id is trimmed and has its umlauts written out", () => {
+    expect(mergeDiscovered([], [{ ip: "10.0.0.1", name: "Werkstatt " }]).map(record => record.id)).toEqual([
+      "werkstatt",
+    ]);
+    expect(mergeDiscovered([], [{ ip: "10.0.0.1", name: "Gäste-WC" }]).map(record => record.id)).toEqual(["gaeste-wc"]);
+  });
+});
+
+describe("rowDeviceId", () => {
+  test("is the id a row stores", () => {
+    expect(rowDeviceId({ id: "wx-030-2b3c", name: "Büro", ip: "10.0.0.5" })).toBe("wx-030-2b3c");
+  });
+
+  test("is the 2.x id for a row without one — the name, else the address", () => {
+    expect(rowDeviceId({ name: "Büro", ip: "10.0.0.5" })).toBe("B_ro");
+    expect(rowDeviceId({ name: "", ip: "10.0.0.5" })).toBe("10_0_0_5");
+    expect(rowDeviceId({ ip: "10.10.0.11" })).toBe("10_10_0_11");
+  });
+
+  test("ignores a stored id that is no id", () => {
+    expect(rowDeviceId({ id: "a b", name: "Bad", ip: "10.0.0.5" })).toBe("Bad");
+    expect(rowDeviceId({ id: 7, name: "Bad", ip: "10.0.0.5" })).toBe("Bad");
+  });
+
+  test("parseDevices runs a row under the id it stores", () => {
+    expect(parseDevices([{ id: "rx-v6a-2c3d", name: "Wohnzimmer", ip: "10.0.0.7" }])).toEqual([
+      { id: "rx-v6a-2c3d", ip: "10.0.0.7", source: "manual" },
+    ]);
+  });
+
+  test("a moved 0.5.4 row keeps following the device", () => {
+    expect(parseDevices([{ id: "rx-v475-0001", name: "10.0.0.7", ip: "10.0.0.7" }])[0]?.source).toBe("migrated");
   });
 });

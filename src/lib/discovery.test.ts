@@ -8,8 +8,8 @@ const NO_SERVICES = { services: { yxc: false, xml: false } };
 /** The RX-V6A's real description (2026-09-01 capture), reduced to the fields the parser reads. */
 const V6A =
   '<root xmlns:yamaha="urn:schemas-yamaha-com:device-1-0"><device><friendlyName>Yamaha RX-V6a</friendlyName>' +
-  "<manufacturer>Yamaha Corporation</manufacturer><modelName>RX-V6A</modelName><serialNumber>057CCF73</serialNumber>" +
-  "<UDN>uuid:9ab0c000-f668-11de-9976-ccd42ecf0223</UDN></device><yamaha:X_device><yamaha:X_serviceList>" +
+  "<manufacturer>Yamaha Corporation</manufacturer><modelName>RX-V6A</modelName><serialNumber>0A1B2C3D</serialNumber>" +
+  "<UDN>uuid:00000000-0000-1000-8000-00a0de0a1b2c</UDN></device><yamaha:X_device><yamaha:X_serviceList>" +
   "<yamaha:X_service><yamaha:X_specType>urn:schemas-yamaha-com:service:X_YamahaRemoteControl:1</yamaha:X_specType></yamaha:X_service>" +
   "<yamaha:X_service><yamaha:X_specType>urn:schemas-yamaha-com:service:X_YamahaExtendedControl:1</yamaha:X_specType></yamaha:X_service>" +
   "</yamaha:X_serviceList></yamaha:X_device></root>";
@@ -35,7 +35,7 @@ describe("parseYamahaDescription", () => {
     expect(parseYamahaDescription(V6A)).toEqual({
       name: "Yamaha RX-V6a",
       model: "RX-V6A",
-      identity: { serial: "057CCF73", mac: "CCD42ECF0223" },
+      identity: { serial: "0A1B2C3D", mac: "00A0DE0A1B2C" },
       services: { yxc: true, xml: true },
     });
   });
@@ -55,7 +55,7 @@ describe("probeDescription", () => {
       "http://1.1.1.1/d.xml",
       "1.1.1.1",
     );
-    expect(found).toMatchObject({ ip: "1.1.1.1", name: "Yamaha RX-V6a", identity: { serial: "057CCF73" } });
+    expect(found).toMatchObject({ ip: "1.1.1.1", name: "Yamaha RX-V6a", identity: { serial: "0A1B2C3D" } });
   });
 
   // A stranger is FINAL (null — the full NOTIFY throttle), an unreadable description is worth asking
