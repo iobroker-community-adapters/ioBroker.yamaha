@@ -134,6 +134,13 @@ describe("buildNativeKeyPatch", () => {
     expect(buildNativeKeyPatch({}, HOST_TO_BIND)).toEqual({});
   });
 
+  it("never coerces an absent or nulled key, even when the coercion would make a value out of nothing", () => {
+    const MAKES_A_VALUE: NativeKeyMigration[] = [{ key: "x", coerce: () => 5 }];
+    expect(buildNativeKeyPatch({}, MAKES_A_VALUE)).toEqual({});
+    expect(buildNativeKeyPatch({ x: null }, MAKES_A_VALUE)).toEqual({});
+    expect(buildNativeKeyPatch({ x: "5" }, MAKES_A_VALUE)).toEqual({ x: 5 });
+  });
+
   it("does not store a coercion that yields NaN or undefined", () => {
     expect(buildNativeKeyPatch({ port: "abc" }, HOST_TO_BIND)).toEqual({});
     expect(buildNativeKeyPatch({ host: "x" }, [{ from: "host", to: "bind", coerce: () => undefined }])).toEqual({});
