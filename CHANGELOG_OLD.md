@@ -1,4 +1,5 @@
 # Older changes
+
 ## 2.9.2 (2026-09-12)
 
 - (krobipd) New: The device card shows a 0–100 % badge while that receiver's volume is in percent, so you can tell the two scales apart at a glance
