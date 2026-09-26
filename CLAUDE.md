@@ -177,7 +177,7 @@ trägt seit 3.0.0 Modell und Seriennummer (Abschnitt „Geräte-ID“), nie den 
 schlägt Modell. Überschrieben wird ausschließlich der eigene Platzhalter (= die ID) oder der zuletzt
 selbst geschriebene Name — ein User-Name bleibt, deshalb dort bewusst OHNE `preserve`, die
 Vorbedingung prüft `nextDeviceLabel`. Die Geräte-Karte titelt nach dem Objektnamen, nicht nach dem
-Tabelleneintrag (der bleibt unangetastet, er bildet die ID). Das Adapter-Logo
+Tabelleneintrag (die Zeile trägt die gespeicherte `id`, Abschnitt „Geräte-ID“). Das Adapter-Logo
 `admin/yamaha.svg` behält das etablierte Kreis-Stimmgabel-Motiv (krobi-Entscheidung — Ersatzmotiv
 abgelehnt) mit THEME-FESTEN Farben — nie `currentColor` (rendert als `<img>` schwarz, unsichtbar
 im Dunkel-Modus; der Alt-Fehler). Bis 2.9.2 dunkle Striche plus helle via Medien-Abfrage im SVG;
@@ -224,13 +224,15 @@ das Modell mit `-2`/`-3` (`modelId`); ohne Modell der getippte Name oder die IP 
 **Einmal festgelegt, gespeichert, nie neu abgeleitet:** Tabellenzeilen tragen `id` (und den Namen = Id, damit 2.x
 nach einer Rückkehr denselben Baum findet), gefundene Geräte die Id in `discovered.json`; `rowDeviceId` fällt nur für
 Zeilen ohne `id` auf die 2.x-Formel `sanitizeId` zurück. **Umzug** (`migrateDeviceIds`, VOR allem anderen in `onReady`):
-Journal `native.movingTo` am alten Gerät → `copyDeviceTree` (Objekte samt `custom`, Werte, enums, Alias-Ziele,
+Journal `native.movingTo` am alten Gerät → `copyDeviceTree` (Objekte samt `custom`, Werte, Alias-Ziele,
 `aliasId` = alte Id für aktive Aufzeichnungen, Gerätobjekt zuletzt mit `native.idScheme = 3`) → Zeilen/Fundspeicher
-→ alter Baum weg; wiederholbar. Was der Start nicht entscheiden kann, entscheidet `checkIdDecision` beim ersten
+→ alter Baum weg über `deleteMovedTree`, das Räume und Funktionen per Flotten-Helfer `moveWithEnums` (`enum-carry.ts`)
+mitnimmt: erst lesen, dann löschen, dann schreiben — das Löschen schreibt die Enums aus dem Cache zurück und nähme eine
+vorher geschriebene neue Id wieder weg; wiederholbar. Was der Start nicht entscheiden kann, entscheidet `checkIdDecision` beim ersten
 Kontakt und schreibt NUR das Journal — der Umzug läuft beim nächsten Start; nie ein eigener Neustart (Wegwerf-Umgebungen
 starten nicht neu, ein gescheiterter Umzug hieße Neustart-Schleife). Belege: `.claude/dev-history.md` 2026-09-25.
 
-## Identität, Löschen, Wiederfinden (developing nach 2.11.0, 2026-09-22)
+## Identität, Löschen, Wiederfinden (2.12.0, 2026-09-22)
 
 **Ein Gerät ist seine Seriennummer, nicht sein Name und nicht seine Adresse.** `lib/device-identity.ts`:
 `DeviceIdentity { serial?, mac? }`, `identityFrom` (hex, nie nur Nullen — die bereinigten Fixtures tragen
@@ -242,13 +244,14 @@ gesetzt), `mergeIdentity`. Drei Quellen liefern dieselbe Nummer (am RX-V6A gemes
   `xmlIdentity`); `DeviceProfileStore.identity()` leitet sie ab, `main.ts` `learnIdentity` schreibt sie an
   `deviceRecords`, `native.identity` und — bei gefundenen Geräten — in `discovered.json`. **Die Objekt-Id wird
   einmal festgelegt und nie neu abgeleitet** (Abschnitt „Geräte-ID“); die Identität ist der Abgleichsschlüssel
-  DANEBEN. `mergeDiscovered` matcht zuerst nach Identität (Umbenennung + Umzug halten den Baum), dann nach Id — nach Id nur
-  ohne widersprechende Identität (sonst Kollision); `mergeIdentity` ERSETZT bei widersprechender Seriennummer.
+  DANEBEN. `mergeDiscovered` matcht zuerst nach Identität (Umbenennung + Umzug halten den Baum), dann nach dem Namen
+  (2.x-Id oder heutige Namens-Id) — nie über eine widersprechende Identität und nie von einem Fund OHNE Identität auf
+  einen Datensatz MIT Identität; neue Funde bekommen `deviceIdFor`; `mergeIdentity` ERSETZT bei widersprechender Seriennummer.
 
 **Drei Herkünfte** (`DeviceSource`): `manual` = getippt → Adresse gilt, volle Konsequenz, der Adapter folgt
 nicht (eine `warn`-Zeile je neuer Adresse, `warnedElsewhere`); `migrated` = die Zeile der 0.5.4-Migration
-(`isDottedQuad(name)` — `legacyDeviceRow` schreibt so; `addDevice` speichert eine getippte Zeile mit Name = IP
-ohne Namen, damit sie `manual` bleibt) → folgt dem Gerät und schreibt die neue Adresse in
+(`isDottedQuad(name)` — `legacyDeviceRow` schreibt so; `addDevice` speichert eine getippte Zeile als
+`{ id, name: id, ip }`, der Name ist nie eine IP, also bleibt sie `manual`) → folgt dem Gerät und schreibt die neue Adresse in
 die Tabelle (`updateTableAddress`, Neustart); `discovered` → folgt. Unter `auto` zählt nur eine GETIPPTE Zeile
 als „Liste gefüllt" (`searchesTheNetwork`), sonst wäre eine migrierte Anlage nie zu finden. **Eine Suche
 läuft nie vor den Tabellenzeilen** (`autoDiscover` mit gefüllter Tabelle: Hintergrund) — ein Fund wird gegen
@@ -387,8 +390,9 @@ Der Adapter lebt im Community-Repo `iobroker-community-adapters/ioBroker.yamaha`
 push/triage — Repo-Einstellungen/About nur via mcm/Org). **Community-Standard gilt:** Release-Branch
 **`master`** (Arbeit auf `developing`, die CI prüft seit 2026-08-23 BEIDE Zweige — vorher fiel ein nur
 unter Windows roter Test erst am Release-Tag auf und verbrannte v1.1.0; `deploy` hängt am Tag, aus
-einem Push auf `developing` wird nie ein Release), Changelog-Bullets mit `(krobipd)`-Präfix, Community-CI (KEINE Fleet-Härtungen
-repochecker-version-gate/workflow-lint; Bots `automerge-iobroker-bot`/`auto-merge.yml`/dependabot in
+einem Push auf `developing` wird nie ein Release), Changelog-Bullets mit `(krobipd)`-Präfix, Community-CI (KEINE Fleet-Jobs
+repochecker-version-gate/workflow-lint/adapter-inventory/ci-passed, kein push-`paths-ignore` seit mcm1957s `2dfd1d6`
+vom 2026-09-25; Bots `automerge-iobroker-bot`/`auto-merge.yml`/dependabot in
 Community-Form), Asset-URLs auf `iobroker-community-adapters/…@master`. Das Fleet-Tooling erkennt das
 automatisch an `package.json repository.url` (`scripts/_community.py`). Der alte krobipd-Fork ist
 archiviert; Historie beider Linien steckt via ours-Merge im master.
@@ -464,7 +468,7 @@ in ein öffentliches Repo.
 ## Tests
 
 - **Zwei getrennte Läufe, und `npm test` fährt seit 2.2.0 BEIDE.** `test:ts` = vitest über
-  `src/**/*.test.ts` + `test/standards/` (851 Tests) — darin ist auch `src/main.test.ts`, das den
+  `src/**/*.test.ts` + `test/standards/` — darin ist auch `src/main.test.ts`, das den
   Adapter GEMOCKT hochfährt, nicht echt. Der echte Boot-Test ist `test/integration.js`
   (`@iobroker/testing` startet js-controller + Instanz, ~30 s) und hängt an `test:integration`;
   bis 2.1.1 lief er lokal nie mit, obwohl die CI ihn fährt (`testing-action-adapter` ruft
