@@ -4357,7 +4357,7 @@ describe("device ids since 3.0.0 — the one-time move", () => {
       row,
     ]);
     expect(ctx.i.log.info).toHaveBeenCalledWith(
-      `B_ro: device id is now ${office} — moved 1 datapoint(s) with 1 room/function entry, 1 alias(es), 1 recording(s) keep their history`,
+      `B_ro: device id is now ${office} — moved 1 datapoint(s) with 1 room/function entry, 1 alias(es); 1 recording(s) keep their history`,
     );
     expect(ctx.i.restart).not.toHaveBeenCalled();
   });

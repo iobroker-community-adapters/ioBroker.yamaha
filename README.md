@@ -90,6 +90,10 @@ Details on all settings and the object tree are in the
     ### **WORK IN PROGRESS**
 -->
 
+### **WORK IN PROGRESS**
+
+- (krobipd) Fixed: The log line after a device ID move reads as one sentence again, with the number of recordings that keep their history at its end
+
 ### 3.0.0 (2026-09-26)
 
 - (krobipd) Changed: Every device gets a new object ID once — its model and the end of its serial number, e.g. `wx-030-2b3c`; scripts and VIS need the new IDs

@@ -2311,10 +2311,11 @@ export class Yamaha extends utils.Adapter {
         const carried = [
           ...(enums > 0 ? [`${enums} room/function entr${enums === 1 ? "y" : "ies"}`] : []),
           ...(aliases > 0 ? [`${aliases} alias(es)`] : []),
-          ...(history > 0 ? [`${history} recording(s) keep their history`] : []),
         ];
         this.log.info(
-          `${move.from}: device id is now ${move.to} — moved ${datapoints} datapoint(s)${carried.length > 0 ? ` with ${carried.join(", ")}` : ""}`,
+          `${move.from}: device id is now ${move.to} — moved ${datapoints} datapoint(s)` +
+            `${carried.length > 0 ? ` with ${carried.join(", ")}` : ""}` +
+            `${history > 0 ? `; ${history} recording(s) keep their history` : ""}`,
         );
       }
     } catch (e) {
