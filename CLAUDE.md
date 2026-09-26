@@ -494,11 +494,11 @@ in ein öffentliches Repo.
 
 Drei Flächen, jede Aussage lebt an genau EINER Stelle:
 
-| Fläche                                     | Rolle                                                                                                                     | Gate                                                               |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `README.md`                                | Schaufenster: was ist das, Voraussetzungen, Konfiguration in Kurzform, Wiki-Tabelle                                       | Konsistenz-Audit (Pflicht-Abschnitte + Reihenfolge), Prüfbot E6006 |
-| `docs/en/README.md` · `docs/de/README.md`  | der Kurzweg, den ioBroker über `common.docs` ausliefert und der Admin anzeigt — kanonisch für Einrichtung und Fehlersuche | `audit_common_docs`, Konsistenz-Stufe 2                            |
-| Wiki (`Entwicklung/iobroker.yamaha.wiki/`) | die Tiefe: Umstieg, Protokolle, Datenpunkte, Geräte, Fehlersuche — 14 Inhaltsseiten = 7 Paare EN+DE, handgeschrieben      | Gate A13 (Form, Ids, Sync)                                         |
+| Fläche                                     | Rolle                                                                                                                     | Gate                                                                   |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `README.md`                                | Schaufenster: was ist das, Voraussetzungen, Konfiguration in Kurzform, Wiki-Tabelle                                       | Konsistenz-Audit (Pflicht-Abschnitte + Reihenfolge), Prüfbot E6006     |
+| `docs/en/README.md` · `docs/de/README.md`  | der Kurzweg, den ioBroker über `common.docs` ausliefert und der Admin anzeigt — kanonisch für Einrichtung und Fehlersuche | Paket-Check `common-docs` (`iobroker-adapter-checks`, `npm test` + CI) |
+| Wiki (`Entwicklung/iobroker.yamaha.wiki/`) | die Tiefe: Umstieg, Protokolle, Datenpunkte, Geräte, Fehlersuche — 14 Inhaltsseiten = 7 Paare EN+DE, handgeschrieben      | Gate A13 (Form, Ids, Sync)                                             |
 
 **Das Wiki prüft Gate A13** (`../scripts/check-wiki.py`, seit 2026-09-12): Klon sauber, Gegenstelle auf
 demselben Stand, Sprachpaare, Sidebar, keine erfundene Datenpunkt-Id, neue Datenpunkt-Arten dokumentiert. Es ist
