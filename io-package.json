@@ -1,9 +1,22 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "2.13.0",
+    "version": "3.0.0",
     "nogit": true,
     "news": {
+      "3.0.0": {
+        "en": "Each device's object ID is now its model and the end of its serial number, e.g. wx-030-2b3c; two devices of one model both get a tree; scripts and VIS need the new IDs.",
+        "de": "Die Objekt-ID jedes Geräts ist jetzt sein Modell und das Ende der Seriennummer, z. B. wx-030-2b3c; zwei Geräte eines Modells haben je einen Baum; Skripte und VIS brauchen die neuen IDs.",
+        "ru": "ID объекта каждого устройства теперь — модель и конец серийного номера, напр. wx-030-2b3c; два устройства одной модели получают по дереву; скриптам и VIS нужны новые ID.",
+        "pt": "O ID de objeto de cada dispositivo é agora o modelo e o fim do número de série, ex. wx-030-2b3c; dois do mesmo modelo têm cada um árvore; scripts e VIS precisam dos novos IDs.",
+        "nl": "De object-ID van elk apparaat is nu het model plus het einde van het serienummer, bv. wx-030-2b3c; twee apparaten van één model krijgen elk een boom; scripts en VIS hebben de nieuwe ID's nodig.",
+        "fr": "L'ID d'objet de chaque appareil est son modèle et la fin du numéro de série, ex. wx-030-2b3c ; deux appareils d'un modèle ont chacun un arbre ; scripts et VIS ont besoin des nouveaux ID.",
+        "it": "L'ID oggetto di ogni dispositivo è ora il modello e la fine del numero di serie, es. wx-030-2b3c; due dispositivi dello stesso modello hanno un albero ciascuno; script e VIS servono i nuovi ID.",
+        "es": "El ID de objeto de cada dispositivo es su modelo y el final del número de serie, p. ej. wx-030-2b3c; dos del mismo modelo tienen cada uno su árbol; scripts y VIS necesitan los nuevos ID.",
+        "pl": "ID obiektu każdego urządzenia to teraz model i koniec numeru seryjnego, np. wx-030-2b3c; dwa urządzenia jednego modelu mają osobne drzewa; skrypty i VIS potrzebują nowych ID.",
+        "uk": "ID об'єкта кожного пристрою тепер — модель і кінець серійного номера, напр. wx-030-2b3c; два пристрої однієї моделі мають окремі дерева; скриптам і VIS потрібні нові ID.",
+        "zh-cn": "每台设备的对象 ID 现为型号加序列号末尾，例如 wx-030-2b3c；同型号的两台设备各有对象树；脚本和 VIS 需改用新 ID。"
+      },
       "2.13.0": {
         "en": "Every write is read back, a refused one shows the device value again; MusicCast writes more settings and builds Link groups as specified; umlauts arrive intact.",
         "de": "Jeder Schreibvorgang wird zurückgelesen, ein abgelehnter zeigt wieder den Gerätewert; MusicCast schreibt mehr Einstellungen, bildet Link-Gruppen nach Spec; Umlaute kommen heil an.",
@@ -81,19 +94,6 @@
         "pl": "Amplituner znaleziony przez wyszukiwanie w sieci zachowuje swoje punkty danych po ręcznym dodaniu urządzenia: zostają wraz z historią i są tylko oznaczane jako offline.",
         "uk": "Ресивер, знайдений мережевим пошуком, зберігає свої точки даних, коли ви додаєте пристрій вручну: вони лишаються з історією і лише позначаються як офлайн.",
         "zh-cn": "网络搜索找到的功放在您手动添加设备时会保留其数据点：它们连同历史记录一起保留，只是被标记为离线，而不再被删除。"
-      },
-      "2.9.0": {
-        "en": "Entered and found devices now run side by side, every card can be edited, and \"Volume as 0-100 %\" is set per device.",
-        "de": "Eingetragene und gefundene Geräte laufen jetzt nebeneinander, jede Karte ist bearbeitbar, und \"Lautstärke als 0-100 %\" gilt pro Gerät.",
-        "ru": "Введённые и найденные устройства теперь работают вместе, каждую карточку можно изменить, а \"Громкость 0-100 %\" задаётся для каждого устройства.",
-        "pt": "Dispositivos introduzidos e encontrados funcionam agora lado a lado, cada cartão é editável e \"Volume 0-100 %\" é por dispositivo.",
-        "nl": "Ingevoerde en gevonden apparaten draaien nu naast elkaar, elke kaart is te bewerken en \"Volume als 0-100 %\" geldt per apparaat.",
-        "fr": "Les appareils saisis et trouvés fonctionnent côte à côte, chaque carte est modifiable et \"Volume 0-100 %\" se règle par appareil.",
-        "it": "I dispositivi inseriti e trovati funzionano fianco a fianco, ogni scheda è modificabile e \"Volume 0-100 %\" è per dispositivo.",
-        "es": "Los dispositivos introducidos y los encontrados funcionan a la vez, cada tarjeta es editable y \"Volumen 0-100 %\" es por dispositivo.",
-        "pl": "Wpisane i znalezione urządzenia działają obok siebie, każdą kartę można edytować, a \"Głośność 0-100 %\" ustawiasz per urządzenie.",
-        "uk": "Введені та знайдені пристрої тепер працюють поруч, кожну картку можна редагувати, а \"Гучність 0-100 %\" задається для кожного пристрою.",
-        "zh-cn": "手动添加与搜索到的设备现在并行运行，每张卡片都可编辑，“音量 0-100 %”按设备设置。"
       }
     },
     "titleLang": {
