@@ -403,6 +403,10 @@ Der Upgrade-Pfad vom Ur-Adapter 0.5.4 ist test-bewiesen (`pure-helpers.test.ts` 
 `migrateLegacyDevice` (config.ip/IP, Hostname ok, `:port`-Suffix wird gestrippt) + `cleanupStaleObjects`
 räumt den KOMPLETTEN Alt-Baum (47 Instanz-Objekte + dynamische `Realtime.*`/`SystemConfig.*`/`inputEnum`).
 
+**Update-Meldungen (`common.messages`, fünf: 1.0.0, 2.0.0, 2.2.0, 2.8.0, 3.0.0) folgen seit 2026-09-27 der Flotten-Form:**
+Titel = die Warnung, Text je Sprache ≤ 200 Zeichen mit einem Beispiel alt → neu, `link` auf die englische Wiki-Seite
+`Upgrade` (Gate `audit_upgrade_messages_short`, `CLAUDE_CONSISTENCY.md`).
+
 ## Design-Entscheidungen (belegt, nicht wieder aufmachen)
 
 - **Objektbaum = sauberer Neuschnitt** (Greenfield), yamaha-Nutzer per one-shot-Migration; musiccast-Nutzer
