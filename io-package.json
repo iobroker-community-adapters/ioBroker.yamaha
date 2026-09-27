@@ -1,9 +1,22 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "3.0.0",
+    "version": "3.0.1",
     "nogit": true,
     "news": {
+      "3.0.1": {
+        "en": "The notes the Admin shows before an update are short now: what changes, one example old → new, and a link to the details.",
+        "de": "Die Hinweise, die der Admin vor einem Update zeigt, sind jetzt kurz: was sich ändert, ein Beispiel alt → neu und ein Link zu den Details.",
+        "ru": "Уведомления, которые Admin показывает перед обновлением, теперь короткие: что меняется, пример старое → новое и ссылка на подробности.",
+        "pt": "As notas que o Admin mostra antes de uma atualização agora são curtas: o que muda, um exemplo antigo → novo e um link para os detalhes.",
+        "nl": "De meldingen die de Admin vóór een update toont, zijn nu kort: wat er verandert, één voorbeeld oud → nieuw en een link naar de details.",
+        "fr": "Les notes affichées par l'Admin avant une mise à jour sont courtes : ce qui change, un exemple ancien → nouveau et un lien vers les détails.",
+        "it": "Le note che l'Admin mostra prima di un aggiornamento ora sono brevi: cosa cambia, un esempio vecchio → nuovo e un link ai dettagli.",
+        "es": "Los avisos que muestra el Admin antes de una actualización ahora son breves: qué cambia, un ejemplo antiguo → nuevo y un enlace a los detalles.",
+        "pl": "Komunikaty, które Admin pokazuje przed aktualizacją, są teraz krótkie: co się zmienia, przykład stare → nowe i link do szczegółów.",
+        "uk": "Повідомлення, які Admin показує перед оновленням, тепер короткі: що змінюється, приклад старе → нове та посилання на подробиці.",
+        "zh-cn": "Admin 在更新前显示的提示现在很简短：变更内容、一个新旧对照示例和详情链接。"
+      },
       "3.0.0": {
         "en": "Each device's object ID is now its model and the end of its serial number, e.g. wx-030-2b3c; two devices of one model both get a tree; scripts and VIS need the new IDs.",
         "de": "Die Objekt-ID jedes Geräts ist jetzt sein Modell und das Ende der Seriennummer, z. B. wx-030-2b3c; zwei Geräte eines Modells haben je einen Baum; Skripte und VIS brauchen die neuen IDs.",
@@ -81,19 +94,6 @@
         "pl": "Kafelek pokazuje teraz odznakę 0–100 %, dopóki głośność amplitunera jest w procentach. Samo ustawienie zmienia się już tylko w oknie edycji.",
         "uk": "Картка тепер показує позначку 0–100 %, поки гучність ресивера у відсотках. Саме налаштування задається лише в діалозі редагування пристрою.",
         "zh-cn": "当功放音量以百分比显示时，卡片现在会显示一个 0–100 % 标记。该设置本身只在设备的编辑对话框中更改。"
-      },
-      "2.9.1": {
-        "en": "A receiver the network search found keeps its datapoints when you add a device by hand: they stay with their history and are marked offline instead of being deleted.",
-        "de": "Ein per Netzsuche gefundener Receiver behält seine Datenpunkte, wenn Sie ein Gerät von Hand eintragen: Sie bleiben samt Historie und werden nur als offline gekennzeichnet.",
-        "ru": "Ресивер, найденный поиском в сети, сохраняет свои точки данных при добавлении устройства вручную: они остаются вместе с историей и просто помечаются как офлайн.",
-        "pt": "Um recetor encontrado pela pesquisa de rede mantém os seus pontos de dados quando adiciona um aparelho à mão: ficam com o histórico e são apenas marcados como offline.",
-        "nl": "Een receiver die de netwerkzoekactie vond behoudt zijn datapunten als u een apparaat handmatig toevoegt: ze blijven met hun historie en worden alleen offline gemarkeerd.",
-        "fr": "Un ampli trouvé par la recherche réseau conserve ses points de données quand vous ajoutez un appareil à la main : ils restent avec leur historique et sont marqués hors ligne.",
-        "it": "Un ricevitore trovato dalla ricerca di rete mantiene i suoi datapoint quando aggiungete un dispositivo a mano: restano con la loro cronologia e vengono solo segnati offline.",
-        "es": "Un receptor encontrado por la búsqueda de red conserva sus puntos de datos al añadir un equipo a mano: permanecen con su histórico y solo se marcan como desconectados.",
-        "pl": "Amplituner znaleziony przez wyszukiwanie w sieci zachowuje swoje punkty danych po ręcznym dodaniu urządzenia: zostają wraz z historią i są tylko oznaczane jako offline.",
-        "uk": "Ресивер, знайдений мережевим пошуком, зберігає свої точки даних, коли ви додаєте пристрій вручну: вони лишаються з історією і лише позначаються як офлайн.",
-        "zh-cn": "网络搜索找到的功放在您手动添加设备时会保留其数据点：它们连同历史记录一起保留，只是被标记为离线，而不再被删除。"
       }
     },
     "titleLang": {
@@ -170,7 +170,7 @@
     ],
     "globalDependencies": [
       {
-        "admin": ">=8.0.11"
+        "admin": ">=8.0.14"
       }
     ],
     "adminUI": {
