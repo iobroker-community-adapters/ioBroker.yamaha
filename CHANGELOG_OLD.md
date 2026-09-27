@@ -1,4 +1,5 @@
 # Older changes
+
 ## 2.10.0 (2026-09-15)
 
 - (krobipd) Fixed: A receiver the search found is searched for again after it moved to another address — until now that only worked for receivers found at start-up

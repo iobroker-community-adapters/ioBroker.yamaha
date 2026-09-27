@@ -89,6 +89,7 @@ Details on all settings and the object tree are in the
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+
 ### 3.0.1 (2026-09-27)
 
 - (krobipd) Improved: The notes the Admin shows before an update are short now: what changes, one example old → new, and a link to the details
