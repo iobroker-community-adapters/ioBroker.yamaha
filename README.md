@@ -92,7 +92,6 @@ Details on all settings and the object tree are in the
 
 ### **WORK IN PROGRESS**
 
-- (krobipd) Fixed: The log line after a device ID move reads as one sentence again, with the number of recordings that keep their history at its end
 - (krobipd) Improved: The notes the Admin shows before an update are short now: what changes, one example old → new, and a link to the details
 
 ### 3.0.0 (2026-09-26)
