@@ -619,11 +619,13 @@ tests.integration(ADAPTER_DIR, {
           for (const [id, obj] of Object.entries(previous)) {
             await harness.objects.setObjectAsync(id, obj);
           }
-          // The device table as 2.x held it — the ids derived from the addresses, as on every
-          // installation that updates. A device whose model and serial the stored tree knows moves
-          // to its 3.0.0 id at this start; the others tell theirs at the first contact and move at
-          // the next start — the second one below, as the host gives it after an update or a reboot.
-          await startWithFixtures(harness, {}, true);
+          // The device table in the form the previous release left it. From 2.x that is the
+          // address only (the id derived from it): a device whose model and serial the stored tree
+          // knows moves to its 3.0.0 id at this start; the others tell theirs at the first contact
+          // and move at the next start — the second one below, as the host gives it after an update
+          // or a reboot. From 3.0.0 on the table carries the final id next to the address; a 3.x tree
+          // started with 2.x rows is a state no installation reaches.
+          await startWithFixtures(harness, {}, devicesNotFinal(previous).length > 0);
           await waitForSettledTree(harness, fixtures.devices.length);
           await harness.stopAdapter();
           await startAdapter(harness);
