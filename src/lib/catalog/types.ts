@@ -141,6 +141,7 @@ export const CHANNEL_DESC_KEYS: Record<string, I18nKey> = {
   browse: "descChannelBrowse",
   trigger1Inputs: "descChannelTrigger1Inputs",
   trigger2Inputs: "descChannelTrigger2Inputs",
+  clock: "descClockAlarm",
 };
 
 /**
@@ -206,7 +207,8 @@ export const CHANNEL_NAME_KEYS: Record<string, I18nKey> = {
   // YXC/XML media channels
   cd: "cd",
   netPlayer: "networkPlayer",
-  clock: "clock",
+  clock: "clockAlarm",
+  alarm: "alarm",
 };
 
 /**

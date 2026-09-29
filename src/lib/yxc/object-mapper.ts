@@ -100,17 +100,13 @@ function actionState(
  * dotted prefix. Used for every player source the device reports.
  *
  * @param objects the object list to append to
- * @param prefix the channel/state prefix (e.g. `netPlayer`, `cd`)
- * @param channelName the human-readable channel name
+ * @param prefix the channel/state prefix (`player`, `multiroom.zone2.player`)
  * @param settableModes whether repeat and shuffle are written directly (API 1.19+ network player)
  */
-function pushPlayerBlock(
-  objects: ObjectDef[],
-  prefix: string,
-  channelName: ioBroker.StringOrTranslated,
-  settableModes: boolean,
-): void {
-  objects.push({ id: prefix, type: "channel", common: { name: channelName } });
+function pushPlayerBlock(objects: ObjectDef[], prefix: string, settableModes: boolean): void {
+  // Named and explained from the one channel table — the hand-written name here had no explanation,
+  // and MusicCast owns the folder wherever it answers (audit 2026-09-29, A26).
+  objects.push({ id: prefix, type: "channel", common: channelCommon("player") });
   for (const player of PLAYER_STATES) {
     objects.push({
       id: `${prefix}.${player.state}`,
@@ -639,15 +635,15 @@ export function mapYxcToObjects(
     // setRepeat/setShuffle exist from API 1.19 on the network player (aiomusiccast, Home Assistant; C37).
     const settableModes =
       capabilities.media.includes("netusb") && capabilities.apiVersion !== undefined && capabilities.apiVersion >= 1.19;
-    pushPlayerBlock(objects, "player", tName("mediaPlayer"), settableModes);
+    pushPlayerBlock(objects, "player", settableModes);
     for (const zone of capabilities.zones) {
       if (zone.id !== "main") {
-        pushPlayerBlock(objects, `${zonePrefix(zone.id)}player`, tName("mediaPlayer"), settableModes);
+        pushPlayerBlock(objects, `${zonePrefix(zone.id)}player`, settableModes);
       }
     }
   }
   if (capabilities.media.includes("netusb")) {
-    objects.push({ id: "player.netPlayer", type: "channel", common: { name: tName("networkPlayer") } });
+    objects.push({ id: "player.netPlayer", type: "channel", common: channelCommon("netPlayer") });
     objects.push({
       id: "player.netPlayer.preset",
       type: "state",
@@ -800,7 +796,7 @@ export function mapYxcToObjects(
   }
   if (capabilities.media.includes("cd")) {
     // Drive-own states only — what the disc is PLAYING shows in the flat block above.
-    objects.push({ id: "player.cd", type: "channel", common: { name: tName("cd") } });
+    objects.push({ id: "player.cd", type: "channel", common: channelCommon("cd") });
     objects.push(actionState("player.cd.trackSelect", "playTrackNumber", "descPlayTrackNumber", { min: 1, max: 512 }));
     objects.push({
       id: "player.cd.tray",
@@ -852,7 +848,7 @@ export function mapYxcToObjects(
     });
   }
   if (capabilities.media.includes("tuner")) {
-    objects.push({ id: "tuner", type: "channel", common: { name: tName("tuner") } });
+    objects.push({ id: "tuner", type: "channel", common: channelCommon("tuner") });
     const bandCommon: ObjectDef["common"] = {
       name: tName("band"),
       type: "string",
@@ -984,7 +980,7 @@ export function mapYxcToObjects(
       },
     });
     if (bands.includes("dab")) {
-      objects.push({ id: "tuner.dab", type: "channel", common: { name: tName("dab") } });
+      objects.push({ id: "tuner.dab", type: "channel", common: channelCommon("dab") });
       for (const field of DAB_FIELDS) {
         if (field.requires && !tunerFuncs.includes(field.requires)) {
           continue;
@@ -1022,11 +1018,7 @@ export function mapYxcToObjects(
     // The clock/alarm block of the desk-audio/clock models. The switches, the volume, the mode and each
     // day's enable/time/beep are written through the specification's setters (YXC Basic Rev 1.10
     // §9.2/§9.4/§9.5; audit 2026-09-29, C38); the playback choice of an alarm stays read-only.
-    objects.push({
-      id: "clock",
-      type: "channel",
-      common: { name: tName("clockAlarm"), desc: tName("descClockAlarm") },
-    });
+    objects.push({ id: "clock", type: "channel", common: channelCommon("clock") });
     objects.push({
       id: "clock.autoSync",
       type: "state",
@@ -1057,7 +1049,7 @@ export function mapYxcToObjects(
         },
       });
     }
-    objects.push({ id: "clock.alarm", type: "channel", common: { name: tName("alarm") } });
+    objects.push({ id: "clock.alarm", type: "channel", common: channelCommon("alarm") });
     objects.push({
       id: "clock.alarm.on",
       type: "state",
