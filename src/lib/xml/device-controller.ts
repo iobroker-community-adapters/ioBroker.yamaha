@@ -8,12 +8,14 @@ import {
   parseInputList,
   parseInputLabels,
   parseSceneList,
+  parsePresetList,
   parseTunerInfo,
   type BasicStatus,
   type XmlDescriptor,
   type XmlDialect,
   type XmlScene,
   type XmlSystemConfig,
+  type XmlPresetSlot,
   type XmlTunerInfo,
   type XmlZoneForm,
 } from "./protocol";
@@ -51,6 +53,9 @@ const XML_TRANSPORT_WIRE: Record<string, string> = {
   next: "Skip Fwd",
   prev: "Skip Rev",
 };
+
+/** The tuner's declared preset slots (`Tuner,Play_Control,Preset,Preset_Sel_Item`, desc.xml `G3`). */
+const PRESET_LIST_GET = "<Play_Control><Preset><Preset_Sel_Item>GetParam</Preset_Sel_Item></Preset></Play_Control>";
 
 /** The all-zones power read (`System,Power_Control,Power`; RX-V6A capture `xml-system-power.xml`). */
 const SYSTEM_POWER_GET = "<Power_Control><Power>GetParam</Power></Power_Control>";
@@ -118,6 +123,11 @@ export class XmlDeviceController implements ConnectionHandle {
   private readonly scenesByZone = new Map<string, XmlScene[]>();
   /** Whether the device answers `<Tuner><Play_Info>` (the classic pre-2010 tuner). */
   private hasTuner = false;
+  /** The slots the tuner declares (`Preset_Sel_Item`) — the values a recall takes (D2). */
+  private presetSlots: XmlPresetSlot[] = [];
+  /** The band the tuner last reported, and how its frequency is spelled (D6). */
+  private tunerBand: string | undefined;
+  private freqForm: "band" | "flat" = "band";
   /** Whether the device answered `System,Power_Control,Power` (the all-zones power; D4). */
   private hasSystemPower = false;
   /** The amp state ids this controller actually created — the claim-with-proof gate for BOTH ways. */
@@ -509,12 +519,17 @@ export class XmlDeviceController implements ConnectionHandle {
     // proof of existence, never the source of a value (D7: an RX-V675 has no RDS block and carried
     // three RDS datapoints that never got a value).
     const carried = parseTunerInfo(probe);
+    this.freqForm = carried.freqForm ?? "band";
     const state = async (id: keyof XmlTunerInfo, common: ObjectDef["common"]): Promise<void> => {
       if (carried[id] === undefined && !(id === "preset" && /<Preset[>_]/.test(probe))) {
         return;
       }
       await this.deps.upsertObject(`${this.deviceId}.tuner.${id}`, { id: `tuner.${id}`, type: "state", common });
     };
+    // The slots the device declares (`Preset_Sel_Item`, desc.xml `Indirect G3`) — the 2008 generation
+    // names them `A1…E8`; 0 is "no preset", as on YNCA and MusicCast (audit 2026-09-29, D2).
+    this.presetSlots = parsePresetList(await this.probeXml("xmlTunerPresets", "Tuner", PRESET_LIST_GET));
+    const slots = this.presetSlots;
     await state("preset", {
       name: tName("presetRecallByNumber"),
       desc: tName("descPresetRecallByNumber"),
@@ -522,19 +537,27 @@ export class XmlDeviceController implements ConnectionHandle {
       role: "level",
       read: true,
       write: true,
-      // Slot 1 upwards — `handleTunerWrite` drops a 0, so offering it as the lower bound
-      // invited a write that goes nowhere.
-      min: 1,
-      max: 40,
+      min: 0,
+      max: slots.length > 0 ? Math.max(...slots.map(slot => slot.num)) : 40,
       step: 1,
+      ...(slots.length > 0 ? { states: Object.fromEntries(slots.map(slot => [slot.num, slot.title])) } : {}),
+    });
+    // The band and the frequency are written too — the XML-only generation had no way to tune (D6).
+    await state("band", {
+      name: tName("band"),
+      type: "string",
+      role: "state",
+      read: true,
+      write: true,
+      states: { AM: "AM", FM: "FM" },
     });
     await state("frequency", {
       name: tName("frequency"),
       type: "number",
-      role: "value",
+      role: "level",
       unit: "kHz",
       read: true,
-      write: false,
+      write: true,
     });
     await state("rdsService", {
       name: tName("rdsStation"),
@@ -595,6 +618,10 @@ export class XmlDeviceController implements ConnectionHandle {
     if (info.preset !== undefined) {
       this.emit("tuner.preset", info.preset);
     }
+    if (info.band !== undefined) {
+      this.tunerBand = info.band;
+      this.emit("tuner.band", info.band);
+    }
     if (info.frequency !== undefined) {
       // Unified kHz (v2.0.0): the device reports FM in MHz, AM in kHz — normalize.
       this.emit("tuner.frequency", Math.round(info.frequencyUnit === "MHz" ? info.frequency * 1000 : info.frequency));
@@ -617,8 +644,49 @@ export class XmlDeviceController implements ConnectionHandle {
   }
 
   /**
-   * Poll the tuner's Play_Info (keepalive) and write the states.
+   * A write to `tuner.band` or `tuner.frequency` (`Tuner,Play_Control,Tuning`, 9 of 10 descriptors):
+   * the band as AM/FM, the frequency in kHz on the current band, snapped to the grid the device
+   * declares (`Tuning,Freq` ranges — 9 kHz/50 kHz in Europe, 10 kHz/200 kHz in the US) and written in
+   * the device's own spelling — `Freq,FM|AM` from 2009, `Freq` alone on the 2008 generation (D6).
+   *
+   * @param stateId `tuner.band` or `tuner.frequency`
+   * @param value the written value
+   * @returns true (the id is handled here)
    */
+  private handleTuningWrite(stateId: string, value: unknown): boolean {
+    if (!this.hasTuner) {
+      return true;
+    }
+    if (stateId === "tuner.band") {
+      if (value !== "AM" && value !== "FM") {
+        return true;
+      }
+      void this.applyCommand(
+        { zone: "Tuner", inner: `<Play_Control><Tuning><Band>${value}</Band></Tuning></Play_Control>` },
+        () => this.refreshTuner(),
+      );
+      return true;
+    }
+    const khz = writableNumber(value);
+    const band = this.tunerBand === "AM" ? "AM" : this.tunerBand === "FM" ? "FM" : undefined;
+    if (khz === undefined || band === undefined) {
+      this.deps.log.debug(`${this.deviceId}: tuner.frequency not written — the band is not known yet`);
+      return true;
+    }
+    const grid = this.deviceDescriptor?.tunerGrid?.[band];
+    const snapped = grid ? grid.min + Math.round((khz - grid.min) / grid.step) * grid.step : Math.round(khz);
+    const bounded = grid ? Math.min(grid.max, Math.max(grid.min, snapped)) : snapped;
+    const wire =
+      band === "FM"
+        ? `<Val>${Math.round(bounded / 10)}</Val><Exp>2</Exp><Unit>MHz</Unit>`
+        : `<Val>${bounded}</Val><Exp>0</Exp><Unit>kHz</Unit>`;
+    const freq = this.freqForm === "flat" ? `<Freq>${wire}</Freq>` : `<Freq><${band}>${wire}</${band}></Freq>`;
+    void this.applyCommand({ zone: "Tuner", inner: `<Play_Control><Tuning>${freq}</Tuning></Play_Control>` }, () =>
+      this.refreshTuner(),
+    );
+    return true;
+  }
+
   /**
    * The all-zones power: every desc.xml declares `System,Power_Control,Power` (10 of 10, the 2008
    * RX-V3900 included) and the predecessor switched it; the id is YNCA's `multiroom.masterPower`, so a
@@ -686,6 +754,7 @@ export class XmlDeviceController implements ConnectionHandle {
     return true;
   }
 
+  /** Poll the tuner's Play_Info (keepalive, read-back) and write the states. */
   private async refreshTuner(): Promise<void> {
     try {
       this.emitTunerInfo(await this.deps.client.getXml("Tuner", "<Play_Info>GetParam</Play_Info>"));
@@ -702,6 +771,9 @@ export class XmlDeviceController implements ConnectionHandle {
    * @returns true when the id was the tuner preset (handled here)
    */
   private handleTunerWrite(stateId: string, value: unknown): boolean {
+    if (stateId === "tuner.band" || stateId === "tuner.frequency") {
+      return this.handleTuningWrite(stateId, value);
+    }
     if (stateId !== "tuner.preset" || !this.hasTuner) {
       return stateId === "tuner.preset";
     }
@@ -710,8 +782,15 @@ export class XmlDeviceController implements ConnectionHandle {
     if (!Number.isFinite(num) || num < 1) {
       return true;
     }
+    // The device's own spelling of the slot (`A1` on the 2008 generation); a slot it does not
+    // declare is not sent (D2).
+    const code = this.presetSlots.length > 0 ? this.presetSlots.find(slot => slot.num === num)?.code : String(num);
+    if (code === undefined) {
+      this.deps.log.debug(`${this.deviceId}: tuner preset ${num} is not a slot this device declares — not sent`);
+      return true;
+    }
     void this.applyCommand(
-      { zone: "Tuner", inner: `<Play_Control><Preset><Preset_Sel>${num}</Preset_Sel></Preset></Play_Control>` },
+      { zone: "Tuner", inner: `<Play_Control><Preset><Preset_Sel>${code}</Preset_Sel></Preset></Play_Control>` },
       () => this.refreshTuner(),
     );
     return true;

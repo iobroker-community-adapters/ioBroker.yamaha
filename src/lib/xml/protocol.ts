@@ -194,6 +194,64 @@ export interface XmlTunerInfo {
   tuned?: boolean;
   /** Whether reception is stereo. */
   stereo?: boolean;
+  /** The band the tuner is on (`Tuning,Band`, 9 of 10 descriptors; D6). */
+  band?: string;
+  /**
+   * How the frequency is spelled: `band` = `Freq,Current` read / `Freq,FM|AM` written (2009+), `flat` =
+   * `Freq,Val/Exp/Unit` read and written (the 2008 RX-V3900).
+   */
+  freqForm?: "band" | "flat";
+}
+
+/** One stored station as the device declares it in `Preset_Sel_Item` (D2). */
+export interface XmlPresetSlot {
+  /** The slot as a number: the plain number, or a 2008 bank code (`A1` = 1 … `E8` = 40). */
+  num: number;
+  /** The value the device takes and reports (`12`, `A1`). */
+  code: string;
+  /** The slot's title as the device shows it. */
+  title: string;
+}
+
+/**
+ * A preset slot's number from its code: a plain number, or the 2008 generation's bank code — eight
+ * slots per letter, `A1` = 1, `B1` = 9 (openHAB `InputWithPresetControlXML.convertToPresetNumber`).
+ * "No Preset"/"Not Used" is no slot (0).
+ *
+ * @param code the value the device reports
+ * @returns the slot number, 0 for none, undefined for a code of no known form
+ */
+export function presetSlotNumber(code: string): number | undefined {
+  const trimmed = code.trim();
+  if (/^\d+$/.test(trimmed)) {
+    return Number(trimmed);
+  }
+  const bank = /^([A-E])([1-8])$/.exec(trimmed);
+  if (bank) {
+    return (bank[1].charCodeAt(0) - 65) * 8 + Number(bank[2]);
+  }
+  return trimmed === "No Preset" || trimmed === "Not Used" ? 0 : undefined;
+}
+
+/**
+ * Parse a `Tuner,Play_Control,Preset,Preset_Sel_Item` answer into the slots the device declares —
+ * the values its preset takes (desc.xml `Indirect G3`), with their titles (D2). An unused slot
+ * (`Not Used`) is none.
+ *
+ * @param xml the Preset_Sel_Item response body
+ * @returns the declared slots
+ */
+export function parsePresetList(xml: string): XmlPresetSlot[] {
+  const slots: XmlPresetSlot[] = [];
+  const pattern = /<Item_\d+>\s*<Param>([^<]+)<\/Param>(?:\s*<RW>[^<]*<\/RW>)?(?:\s*<Title>([^<]*)<\/Title>)?/g;
+  for (const match of xml.matchAll(pattern)) {
+    const code = decodeXmlText(match[1]).trim();
+    const num = presetSlotNumber(code);
+    if (num !== undefined && num > 0) {
+      slots.push({ num, code, title: match[2] !== undefined ? decodeXmlText(match[2]).trim() || code : code });
+    }
+  }
+  return slots;
 }
 
 /**
@@ -213,12 +271,20 @@ export function parseTunerInfo(xml: string): XmlTunerInfo {
   // (RX-V3900 desc.xml) — "No Preset" is no slot (audit 2026-09-24, D7).
   const preset = /<Preset>\s*(?:<Preset_Sel>)?([^<]+?)\s*<\/(?:Preset_Sel|Preset)>/.exec(xml);
   if (preset) {
-    const slot = Number(preset[1]);
-    if (Number.isFinite(slot)) {
+    // A plain slot, the 2008 bank code (`A1`), or "No Preset" = 0 — `A1` read as NaN before (D2).
+    const slot = presetSlotNumber(preset[1]);
+    if (slot !== undefined) {
       info.preset = slot;
-    } else if (preset[1] === "No Preset") {
-      info.preset = 0;
     }
+  }
+  const band = /<Tuning>\s*<Band>(AM|FM)<\/Band>/.exec(xml);
+  if (band) {
+    info.band = band[1];
+  }
+  if (/<Freq>\s*<Current>/.test(xml)) {
+    info.freqForm = "band";
+  } else if (/<Freq>\s*<Val>/.test(xml)) {
+    info.freqForm = "flat";
   }
   const freq = /<Freq>\s*(?:<Current>\s*)?<Val>(-?\d+)<\/Val>\s*<Exp>(\d+)<\/Exp>\s*<Unit>([^<]*)<\/Unit>/.exec(xml);
   if (freq) {
@@ -447,6 +513,34 @@ export interface XmlDescriptor {
   enhancerCurrentZones?: string[];
   /** The numeric ranges per zone and command path (see {@link descriptorRanges}). */
   ranges?: Record<string, Record<string, XmlRange>>;
+  /**
+   * The tuner's declared frequency grid per band, in kHz: `Tuning,Freq(,AM|,FM)` `<Range>` — EU
+   * `531,1611,9` / `8750,10800,5` (Exp 2), US `530,1710,10` / `8750,10790,20` (D6).
+   */
+  tunerGrid?: { AM?: XmlRange; FM?: XmlRange };
+}
+
+/**
+ * The tuner's declared frequency grid (see {@link XmlDescriptor.tunerGrid}): every `<Range>` of a
+ * `Tuning,Freq` reading, classified by magnitude — AM in kHz (below 2000), FM in hundredths of a MHz.
+ *
+ * @param xml the desc.xml body
+ * @returns the grid per band, in kHz
+ */
+function tunerGridOf(xml: string): { AM?: XmlRange; FM?: XmlRange } | undefined {
+  const grid: { AM?: XmlRange; FM?: XmlRange } = {};
+  const blocks = xml.matchAll(/Tuning,Freq[^<]*Val=Param_1[^<]*<\/Cmd>\s*<Param_1>([\s\S]*?)<\/Param_1>/g);
+  for (const block of blocks) {
+    for (const range of block[1].matchAll(/<Range>(-?\d+),(-?\d+),(\d+)<\/Range>/g)) {
+      const [min, max, step] = [Number(range[1]), Number(range[2]), Number(range[3])];
+      if (max < 2000) {
+        grid.AM ??= { min, max, step };
+      } else {
+        grid.FM ??= { min: min * 10, max: max * 10, step: step * 10 };
+      }
+    }
+  }
+  return grid.AM || grid.FM ? grid : undefined;
 }
 
 /**
@@ -523,6 +617,10 @@ export function parseDescriptor(xml: string): XmlDescriptor {
   descriptor.toneManualZones = definingZones(xml, "Sound_Video,Tone,Manual,Bass");
   descriptor.enhancerCurrentZones = definingZones(xml, "Surround,Current,Enhancer");
   descriptor.ranges = descriptorRanges(xml);
+  const tunerGrid = tunerGridOf(xml);
+  if (tunerGrid) {
+    descriptor.tunerGrid = tunerGrid;
+  }
   const dialogue = descriptorParam(xml, "Sound_Video,Dialogue_Adjust,Dialogue_Lvl").range;
   if (dialogue) {
     descriptor.dialogueLevel = dialogue;

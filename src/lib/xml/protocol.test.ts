@@ -11,7 +11,9 @@ import {
   parseReturnCode,
   parseSceneList,
   parseSystemConfig,
+  parsePresetList,
   parseTunerInfo,
+  presetSlotNumber,
   descriptorRanges,
 } from "./protocol";
 
@@ -278,7 +280,35 @@ describe("parseTunerInfo (classic <Tuner> Play_Info)", () => {
       rdsTextB: "Next up",
       tuned: true,
       stereo: false,
+      freqForm: "flat",
     });
+  });
+
+  // D2/D6 (audit 2026-09-29): the 2008 bank code is a slot, the band is read, and the frequency's
+  // spelling decides how a write is spelled.
+  test("reads a 2008 bank code as its slot number, the band, and the frequency form", () => {
+    expect(
+      parseTunerInfo(
+        "<Tuner><Play_Info><Tuning><Band>FM</Band><Freq><Current><Val>9810</Val><Exp>2</Exp><Unit>MHz</Unit></Current></Freq></Tuning><Preset>B3</Preset></Play_Info></Tuner>",
+      ),
+    ).toMatchObject({ preset: 11, band: "FM", freqForm: "band", frequency: 98.1 });
+    expect(presetSlotNumber("A1")).toBe(1);
+    expect(presetSlotNumber("E8")).toBe(40);
+    expect(presetSlotNumber("Not Used")).toBe(0);
+    expect(presetSlotNumber("Z9")).toBeUndefined();
+  });
+
+  test("parses the declared preset slots, skipping unused ones", () => {
+    expect(
+      parsePresetList(
+        "<Preset_Sel_Item><Item_1><Param>Not Used</Param><RW>R</RW><Title>Not Used</Title></Item_1>" +
+          "<Item_2><Param>A1</Param><RW>RW</RW><Title>hr3</Title></Item_2>" +
+          "<Item_3><Param>A2</Param><RW>RW</RW></Item_3></Preset_Sel_Item>",
+      ),
+    ).toEqual([
+      { num: 1, code: "A1", title: "hr3" },
+      { num: 2, code: "A2", title: "A2" },
+    ]);
   });
 
   test("the RX-S601D's single Radio_Text line is the text", () => {
@@ -325,6 +355,18 @@ describe("parseDescriptor — the enumerations a classic receiver carries in des
     expect(d.programs).toEqual([]);
     expect(d.adaptiveDrc).toEqual([]);
     expect(d.sleep).toEqual(["120", "90", "60", "30", "Off"]);
+  });
+
+  // The declared frequency grid per band, in kHz (audit 2026-09-29, D6): EU 9/50 kHz, US 10/200 kHz.
+  test("reads the tuner's frequency grid per band", () => {
+    expect(parseDescriptor(readFixture("desc-rx-v473.xml")).tunerGrid).toEqual({
+      AM: { min: 531, max: 1611, step: 9 },
+      FM: { min: 87500, max: 108000, step: 50 },
+    });
+    expect(parseDescriptor(readFixture("desc-rx-v675.xml")).tunerGrid).toEqual({
+      AM: { min: 530, max: 1710, step: 10 },
+      FM: { min: 87500, max: 107900, step: 200 },
+    });
   });
 
   test("the Straight and Enhancer switches beside the program list are not programs", () => {

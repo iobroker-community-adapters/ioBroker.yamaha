@@ -103,7 +103,7 @@ export const OWNER_OVERRIDES: Record<string, readonly Transport[]> = {
   input: ["ynca", "yxc", "xml"],
   soundProgram: ["ynca", "yxc", "xml"],
   sleep: ["ynca", "xml", "yxc"],
-  "tuner.band": ["ynca", "yxc"],
+  "tuner.band": ["ynca", "yxc", "xml"],
 };
 
 /**

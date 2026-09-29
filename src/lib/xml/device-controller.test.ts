@@ -435,6 +435,44 @@ describe("XmlDeviceController", () => {
     expect(s.client.calls).toEqual([]);
   });
 
+  // D2/D6 (audit 2026-09-29): the 2008 slots are bank codes the device declares, the band is read and
+  // written, the frequency written on the declared grid in the device's own spelling.
+  test("the 2008 tuner recalls by bank code, and band and frequency are written", async () => {
+    const s = setup({ Main_Zone: { power: true } });
+    s.client.xmlAnswers["Tuner|<Play_Info>GetParam</Play_Info>"] =
+      `<YAMAHA_AV rsp="GET" RC="0"><Tuner><Play_Info><Tuning><Band>FM</Band>` +
+      `<Freq><Val>9810</Val><Exp>2</Exp><Unit>MHz</Unit></Freq></Tuning><Preset>A3</Preset></Play_Info></Tuner></YAMAHA_AV>`;
+    s.client.xmlAnswers[
+      "Tuner|<Play_Control><Preset><Preset_Sel_Item>GetParam</Preset_Sel_Item></Preset></Play_Control>"
+    ] =
+      `<YAMAHA_AV rsp="GET" RC="0"><Tuner><Play_Control><Preset><Preset_Sel_Item>` +
+      `<Item_1><Param>Not Used</Param><RW>R</RW><Title>Not Used</Title></Item_1>` +
+      `<Item_2><Param>A3</Param><RW>RW</RW><Title>hr3</Title></Item_2>` +
+      `<Item_3><Param>B1</Param><RW>RW</RW><Title>SWR3</Title></Item_3>` +
+      `</Preset_Sel_Item></Preset></Play_Control></Tuner></YAMAHA_AV>`;
+    s.client.descriptor = readFileSync(join(__dirname, "__fixtures__", "desc-rx-v473.xml"), "utf8");
+    await s.controller.start();
+    expect(s.acks).toContainEqual({ id: "living.tuner.preset", value: 3 });
+    expect(s.acks).toContainEqual({ id: "living.tuner.band", value: "FM" });
+    expect(s.defs.get("living.tuner.preset")?.common).toMatchObject({
+      min: 0,
+      max: 9,
+      states: { 3: "hr3", 9: "SWR3" },
+    });
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.tuner.preset", false, 9);
+    s.controller.handleStateChange("living.tuner.preset", false, 5); // not declared → not sent
+    s.controller.handleStateChange("living.tuner.frequency", false, 98130); // → 98150 on the 50 kHz grid
+    s.controller.handleStateChange("living.tuner.band", false, "AM");
+    await flush();
+    const sent = s.client.calls.filter(c => c.method === "send").map(c => c.inner);
+    expect(sent).toEqual([
+      "<Play_Control><Preset><Preset_Sel>B1</Preset_Sel></Preset></Play_Control>",
+      "<Play_Control><Tuning><Freq><Val>9815</Val><Exp>2</Exp><Unit>MHz</Unit></Freq></Tuning></Play_Control>",
+      "<Play_Control><Tuning><Band>AM</Band></Tuning></Play_Control>",
+    ]);
+  });
+
   // An RX-V675 declares no RDS block (desc.xml): three RDS datapoints stood there without a value, for
   // good — only what the device's Play_Info carries becomes a datapoint (audit 2026-09-24, D7).
   test("a tuner without RDS gets no RDS datapoints; one with both text lines gets both", async () => {
