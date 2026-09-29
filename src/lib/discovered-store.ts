@@ -66,11 +66,11 @@ export async function writeDiscovered(deps: DiscoveredStoreDeps, devices: Device
 }
 
 /**
- * Read the device ids the user removed from the auto-discovered list.
+ * Read the device ids the user removed from the auto-discovered list under 2.x (`ignored.json`).
  *
- * Deleting a discovered device only ever emptied the remembered list, so the next network
- * search found the receiver again and put it straight back — the delete button was undone by
- * the adapter itself. The ids kept here are skipped by every following search.
+ * A delete writes `excluded.json` (since 2.12.0); this list is read for the entries 2.x left and shrinks
+ * when the user admits one of them again — nothing adds to it (audit 2026-09-29, A31: an id 3.0.0
+ * wrote here never matched on a rollback, 2.x derives its ids from the name).
  *
  * @param deps file access and logger
  * @returns the ignored device ids (empty when none/unreadable)
@@ -127,9 +127,9 @@ function isExcludedEntry(entry: unknown): entry is ExcludedEntry {
 }
 
 /**
- * Read the exclusion entries. They live NEXT to `ignored.json` (a plain id list), not inside
- * it: the 2.11.0 reader keeps only strings, so objects in that file would vanish on a rollback
- * and every deleted device would come back.
+ * Read the exclusion entries — every delete since 2.12.0 lands here. They live NEXT to `ignored.json`
+ * (2.x's plain id list), not inside it: the 2.11.0 reader keeps only strings, so objects in that file
+ * would vanish on a rollback.
  *
  * @param deps file access and logger
  * @returns the entries (empty when none/unreadable)

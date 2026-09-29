@@ -782,12 +782,15 @@ describe("YamahaDeviceManagement", () => {
       expect(adapter.setTimeout).not.toHaveBeenCalled();
     });
 
-    it("keeps the legacy id list in step so a rollback to 2.11.0 still excludes", async () => {
+    // An id this version writes to the 2.x list never matched on a rollback — 2.x derives its ids
+    // from the name (audit 2026-09-29, A31). The list is read for what 2.x left, nothing adds to it.
+    it("writes the exclusion only to excluded.json, never to the 2.x id list", async () => {
       store.devices = [{ id: "rx-v685", ip: "192.168.1.20" }];
       store.ignored = ["Old"];
       const i = make([]);
       await i.deleteDevice("rx-v685");
-      expect(writeIgnored).toHaveBeenCalledWith({}, ["Old", "rx-v685"]);
+      expect(writeExcluded).toHaveBeenCalled();
+      expect(writeIgnored).not.toHaveBeenCalled();
     });
 
     it("an unknown card id changes nothing", async () => {

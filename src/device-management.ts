@@ -601,8 +601,9 @@ export class YamahaDeviceManagement extends DeviceManagement {
    * is the fix for "I deleted it and it came back":
    *
    * 1. The exclusion is written FIRST — a search running right now must not put the device
-   *    back. Both stores: `excluded.json` with address and identity, and the plain id list a
-   *    rollback to 2.11.0 still reads.
+   *    back: `excluded.json`, with address and identity. The plain id list (`ignored.json`) is only
+   *    read now — an id this version writes there never matched on a rollback, 2.x derives its ids
+   *    from the name (audit 2026-09-29, A31).
    * 2. A discovered record leaves the store; the running adapter stops the device and deletes
    *    its tree (`removeDevice`) — for a manual card too, so nothing waits for the restart.
    * 3. The reply `{ delete }` leaves BEFORE the table write: writing the instance's `native`
@@ -631,8 +632,6 @@ export class YamahaDeviceManagement extends DeviceManagement {
       ...(await readExcluded(excludedDeps)),
       { id: cardId, ip, ...(identity ? { identity } : {}) },
     ]);
-    const ignoredDeps = ignoredStoreDeps(this.adapter);
-    await writeIgnored(ignoredDeps, [...(await readIgnored(ignoredDeps)), cardId]);
     if (record) {
       await writeDiscovered(
         store,
