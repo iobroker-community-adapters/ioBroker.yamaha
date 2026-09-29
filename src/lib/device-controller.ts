@@ -36,7 +36,7 @@ import type { CommandGate } from "./lifecycle/command-gate";
 import type { ProbeMemory } from "./lifecycle/probe-memory";
 import type { BrowseEngine } from "./browse/browse-engine";
 import { createBrowseSurface } from "./browse/surface";
-import { YNCA_STATIC_KEY, yncaSceneTitles } from "./catalog/scene-titles";
+import { YNCA_STATIC_KEY, sceneListSurface, yncaSceneTitles } from "./catalog/scene-titles";
 import { YNCA_BROWSE_SOURCES, YncaBrowseDriver, type YncaPadDialect } from "./browse/ynca-browse-driver";
 
 // The YNCA catalog and its lookup maps are static — built once for all devices.
@@ -508,19 +508,7 @@ export class YncaDeviceController implements ConnectionHandle {
       if (titles === undefined || titles.length === 0) {
         continue;
       }
-      await this.deps.upsertObject(`${this.deviceId}.${zone.prefix}scene.list`, {
-        id: `${zone.prefix}scene.list`,
-        type: "state",
-        common: {
-          name: tName("scenesNumberTitle"),
-          desc: tName("descScenesNumberTitle"),
-          type: "string",
-          role: "json",
-          read: true,
-          write: false,
-        },
-      });
-      this.deps.setStateAck(`${this.deviceId}.${zone.prefix}scene.list`, JSON.stringify(titles));
+      await this.publishSceneList(`${zone.prefix}scene`, titles);
     }
     await this.setupZonePlayers(capabilities, objects);
     // Seed the states with the values read during the init sweep. On the fast path the
@@ -741,7 +729,7 @@ export class YncaDeviceController implements ConnectionHandle {
       if (JSON.stringify(titles) !== JSON.stringify(this.sceneTitles)) {
         this.sceneTitles = titles;
         if (titles.length > 0) {
-          this.deps.setStateAck(`${this.deviceId}.scene.list`, JSON.stringify(titles));
+          await this.publishSceneList("scene", titles);
         }
       }
       for (const zone of YNCA_ZONES) {
@@ -752,7 +740,7 @@ export class YncaDeviceController implements ConnectionHandle {
         if (JSON.stringify(zoneTitles) !== JSON.stringify(this.zoneSceneTitles.get(zone.key) ?? [])) {
           this.zoneSceneTitles.set(zone.key, zoneTitles);
           if (zoneTitles.length > 0) {
-            this.deps.setStateAck(`${this.deviceId}.${zone.prefix}scene.list`, JSON.stringify(zoneTitles));
+            await this.publishSceneList(`${zone.prefix}scene`, zoneTitles);
           }
         }
       }
@@ -918,6 +906,22 @@ export class YncaDeviceController implements ConnectionHandle {
       return { model: "", subunits: {} };
     }
     return await this.deps.client.readCapabilities(gets);
+  }
+
+  /**
+   * Put a scene channel's list and its per-scene titles in the tree (D8, `sceneListSurface`).
+   *
+   * @param channel the scene channel id (`scene`, `multiroom.zone2.scene`)
+   * @param scenes the declared scenes
+   */
+  private async publishSceneList(channel: string, scenes: Array<{ num: number; title: string }>): Promise<void> {
+    const surface = sceneListSurface(channel, scenes);
+    for (const object of surface.objects) {
+      await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
+    }
+    for (const { id, value } of surface.values) {
+      this.deps.setStateAck(`${this.deviceId}.${id}`, value);
+    }
   }
 
   /**

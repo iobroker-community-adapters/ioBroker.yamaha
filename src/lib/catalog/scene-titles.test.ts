@@ -1,4 +1,4 @@
-import { knownScenes, resolveSceneNumber } from "./scene-titles";
+import { knownScenes, resolveSceneNumber, sceneListSurface } from "./scene-titles";
 import { ProbeMemory } from "../lifecycle/probe-memory";
 import { DISCOVERY_SCHEMA } from "../lifecycle/discovery-schema";
 
@@ -65,5 +65,33 @@ describe("title source precedence", () => {
     expect(knownScenes(memory, "zone2")).toEqual([{ num: 2, title: "Patio" }]);
     expect(resolveSceneNumber("patio", memory, "zone2")).toBe(2);
     expect(knownScenes(memory, "zone3")).toEqual([]);
+  });
+});
+
+// Fleet rule 2026-09-28: a JSON list only IN ADDITION — every title is its own datapoint (audit 2026-09-29, D8).
+describe("the scene list surface", () => {
+  test("carries the JSON list and one title datapoint per scene, empty titles included", () => {
+    const surface = sceneListSurface("multiroom.zone2.scene", [
+      { num: 1, title: "Movie" },
+      { num: 2, title: "" },
+    ]);
+    expect(surface.objects.map(o => o.id)).toEqual([
+      "multiroom.zone2.scene.list",
+      "multiroom.zone2.scene.title1",
+      "multiroom.zone2.scene.title2",
+    ]);
+    expect(surface.objects[1].common).toMatchObject({ type: "string", role: "text", write: false });
+    expect((surface.objects[1].common.name as Record<string, string>).en).toBe("Scene 1 title");
+    expect(surface.values).toEqual([
+      {
+        id: "multiroom.zone2.scene.list",
+        value: JSON.stringify([
+          { num: 1, title: "Movie" },
+          { num: 2, title: "" },
+        ]),
+      },
+      { id: "multiroom.zone2.scene.title1", value: "Movie" },
+      { id: "multiroom.zone2.scene.title2", value: "" },
+    ]);
   });
 });

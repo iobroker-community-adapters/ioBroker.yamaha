@@ -867,9 +867,9 @@ describe("YncaDeviceController fast restart (persisted capability layer)", () =>
     expect(created).toContain("living.advanced.inputNames.hdmi1");
     expect(created).toContain("living.power");
     // Stale values are not seeded — the states hold last-known values anyway. The
-    // scene list is the one deliberate exception: it is derived presentation, not a
-    // stale device value.
-    expect(acked.filter(a => a.id !== "living.scene.list")).toEqual([]);
+    // scene list and its per-scene titles are the one deliberate exception: derived
+    // presentation, not a stale device value.
+    expect(acked.filter(a => !/^living\.scene\.(list|title\d+)$/.test(a.id))).toEqual([]);
     // The full question round then runs BEHIND the ready line as a value refresh —
     // statics included, so a rename at the device heals in seconds, not on a restart.
     await flushAsync();

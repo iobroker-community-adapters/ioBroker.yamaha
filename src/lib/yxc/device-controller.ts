@@ -51,7 +51,7 @@ import type { ProbeMemory } from "../lifecycle/probe-memory";
 import { zonePrefix } from "./zones";
 import { presentSystemEntries, type YxcSystemEntry } from "./system-catalog";
 import { channelCommon } from "../catalog/types";
-import { knownScenes, resolveSceneNumber } from "../catalog/scene-titles";
+import { knownScenes, resolveSceneNumber, sceneListSurface } from "../catalog/scene-titles";
 import type { CommandGate } from "../lifecycle/command-gate";
 import type { BrowseEngine } from "../browse/browse-engine";
 import { createBrowseSurface } from "../browse/surface";
@@ -1417,20 +1417,13 @@ export class YxcDeviceController implements ConnectionHandle {
         num: i + 1,
         title: titles.get(i + 1) ?? "",
       }));
-      const id = `${zonePrefix(zone.id)}scene.list`;
-      await this.deps.upsertObject(`${this.deviceId}.${id}`, {
-        id,
-        type: "state",
-        common: {
-          name: tName("scenesNumberTitle"),
-          desc: tName("descScenesNumberTitle"),
-          type: "string",
-          role: "json",
-          read: true,
-          write: false,
-        },
-      });
-      this.emit(id, JSON.stringify(list));
+      const surface = sceneListSurface(`${zonePrefix(zone.id)}scene`, list);
+      for (const object of surface.objects) {
+        await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
+      }
+      for (const { id, value } of surface.values) {
+        this.emit(id, value);
+      }
     }
   }
 

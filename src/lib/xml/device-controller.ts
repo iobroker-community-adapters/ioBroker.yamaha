@@ -34,6 +34,7 @@ import {
   XmlBrowseDriver,
 } from "../browse/xml-browse-driver";
 import { wireFor } from "../browse/types";
+import { sceneListSurface } from "../catalog/scene-titles";
 import { decodeXmlText, escapeXmlText } from "./entities";
 
 /** XML/YNC has no push channel, so the state is polled at this interval by default. */
@@ -473,22 +474,16 @@ export class XmlDeviceController implements ConnectionHandle {
           states: Object.fromEntries(scenes.map(scene => [scene.num, scene.title])),
         },
       });
-      // ONE list state instead of a name datapoint per scene (v2.0.0): visualizations
-      // read titles as VALUES (button captions — the #613 reporter's setup), and a
-      // dropdown's labels are not readable, so the list carries them.
-      await this.deps.upsertObject(`${this.deviceId}.${channelId}.list`, {
-        id: `${channelId}.list`,
-        type: "state",
-        common: {
-          name: tName("scenesNumberTitle"),
-          desc: tName("descScenesNumberTitle"),
-          type: "string",
-          role: "json",
-          read: true,
-          write: false,
-        },
-      });
-      this.emit(`${channelId}.list`, JSON.stringify(scenes));
+      // Visualizations read titles as VALUES (button captions — the #613 reporter's setup), and a
+      // dropdown's labels are not readable: the list for widgets, a title datapoint per scene for
+      // everything else (D8).
+      const surface = sceneListSurface(channelId, scenes);
+      for (const object of surface.objects) {
+        await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
+      }
+      for (const { id, value } of surface.values) {
+        this.emit(id, value);
+      }
     }
   }
 

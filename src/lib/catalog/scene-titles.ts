@@ -1,5 +1,7 @@
 import type { ProbeMemory } from "../lifecycle/probe-memory";
 import { parseSceneList } from "../xml/protocol";
+import { tName } from "../i18n";
+import type { ObjectDef } from "./types";
 
 /**
  * Scene titles, cross-transport. The device reports its scene titles over XML
@@ -109,4 +111,51 @@ export function resolveSceneNumber(
   const needle = trimmed.toLowerCase();
   const match = knownScenes(memory, zoneKey).find(scene => scene.title.toLowerCase() === needle);
   return match?.num;
+}
+
+/**
+ * The scene list of one scene channel as datapoints: the JSON list (for widgets that render every
+ * scene at once) and, beside it, one title datapoint per scene — a Blockly user reads "scene 3 is
+ * called …" as a value, never by parsing JSON (fleet rule 2026-09-28; audit 2026-09-29, D8). Shared
+ * by all three transports, so the ids and texts cannot drift between them.
+ *
+ * @param channel the scene channel id (`scene`, `multiroom.zone2.scene`)
+ * @param scenes the scenes the channel declares
+ * @returns the objects to create (the list, then `title<N>` per scene) and their values
+ */
+export function sceneListSurface(
+  channel: string,
+  scenes: readonly SceneListEntry[],
+): { objects: ObjectDef[]; values: Array<{ id: string; value: string }> } {
+  const objects: ObjectDef[] = [
+    {
+      id: `${channel}.list`,
+      type: "state",
+      common: {
+        name: tName("scenesNumberTitle"),
+        desc: tName("descScenesNumberTitle"),
+        type: "string",
+        role: "json",
+        read: true,
+        write: false,
+      },
+    },
+  ];
+  const values = [{ id: `${channel}.list`, value: JSON.stringify(scenes) }];
+  for (const scene of scenes) {
+    objects.push({
+      id: `${channel}.title${scene.num}`,
+      type: "state",
+      common: {
+        name: tName("sceneTitleNumber", scene.num),
+        desc: tName("descSceneTitleNumber"),
+        type: "string",
+        role: "text",
+        read: true,
+        write: false,
+      },
+    });
+    values.push({ id: `${channel}.title${scene.num}`, value: scene.title });
+  }
+  return { objects, values };
 }
