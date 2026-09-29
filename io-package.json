@@ -449,6 +449,60 @@
           "agree",
           "cancel"
         ]
+      },
+      {
+        "condition": {
+          "operand": "and",
+          "rules": [
+            "oldVersion<3.1.0",
+            "newVersion>=3.1.0"
+          ]
+        },
+        "title": {
+          "en": "Playback state values change",
+          "de": "Werte des Wiedergabestatus ändern sich",
+          "ru": "Значения статуса воспроизведения меняются",
+          "pt": "Os valores do estado de reprodução mudam",
+          "nl": "Waarden van de afspeelstatus veranderen",
+          "fr": "Les valeurs de l'état de lecture changent",
+          "it": "I valori dello stato di riproduzione cambiano",
+          "es": "Cambian los valores del estado de reproducción",
+          "pl": "Zmieniają się wartości stanu odtwarzania",
+          "uk": "Значення стану відтворення змінюються",
+          "zh-cn": "播放状态的数值将更改"
+        },
+        "text": {
+          "en": "player.playback now follows the ioBroker standard: 0 pause, 1 play, 2 stop (before: 0 play, 1 stop, 2 pause). Check scripts that compare the number.",
+          "de": "player.playback folgt jetzt dem ioBroker-Standard: 0 Pause, 1 Play, 2 Stopp (bisher: 0 Play, 1 Stopp, 2 Pause). Skripte prüfen, die die Zahl vergleichen.",
+          "ru": "player.playback теперь по стандарту ioBroker: 0 пауза, 1 воспр., 2 стоп (было: 0 воспр., 1 стоп, 2 пауза). Проверьте скрипты, сравнивающие число.",
+          "pt": "player.playback segue agora o padrão ioBroker: 0 pausa, 1 play, 2 stop (antes: 0 play, 1 stop, 2 pausa). Verifique scripts que comparam o número.",
+          "nl": "player.playback volgt nu de ioBroker-standaard: 0 pauze, 1 play, 2 stop (eerder: 0 play, 1 stop, 2 pauze). Controleer scripts die het getal vergelijken.",
+          "fr": "player.playback suit la norme ioBroker : 0 pause, 1 lecture, 2 stop (avant : 0 lecture, 1 stop, 2 pause). Vérifiez les scripts qui comparent le nombre.",
+          "it": "player.playback segue ora lo standard ioBroker: 0 pausa, 1 play, 2 stop (prima: 0 play, 1 stop, 2 pausa). Controlla gli script che confrontano il numero.",
+          "es": "player.playback sigue el estándar de ioBroker: 0 pausa, 1 play, 2 stop (antes: 0 play, 1 stop, 2 pausa). Revisa los scripts que comparan el número.",
+          "pl": "player.playback stosuje standard ioBroker: 0 pauza, 1 play, 2 stop (wcześniej: 0 play, 1 stop, 2 pauza). Sprawdź skrypty porównujące liczbę.",
+          "uk": "player.playback тепер за стандартом ioBroker: 0 пауза, 1 відтв., 2 стоп (було: 0 відтв., 1 стоп, 2 пауза). Перевірте скрипти, що порівнюють число.",
+          "zh-cn": "player.playback 现遵循 ioBroker 标准：0 暂停，1 播放，2 停止（此前：0 播放，1 停止，2 暂停）。请检查比较该数值的脚本。"
+        },
+        "link": "https://github.com/iobroker-community-adapters/ioBroker.yamaha/wiki/Upgrade",
+        "linkText": {
+          "en": "Details",
+          "de": "Details",
+          "ru": "Подробнее",
+          "pt": "Detalhes",
+          "nl": "Details",
+          "fr": "Détails",
+          "it": "Dettagli",
+          "es": "Detalles",
+          "pl": "Szczegóły",
+          "uk": "Докладніше",
+          "zh-cn": "详情"
+        },
+        "level": "warn",
+        "buttons": [
+          "agree",
+          "cancel"
+        ]
       }
     ]
   },
