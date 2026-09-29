@@ -25,12 +25,27 @@ export const YXC_BROWSE_SOURCES: ReadonlyArray<{ input: string; key: string; lab
   { input: "qobuz", key: "qobuz", label: "Qobuz" },
   { input: "deezer", key: "deezer", label: "Deezer" },
   { input: "amazon_music", key: "amazonMusic", label: "Amazon Music" },
+  // TIDAL is an airable source like Net Radio on the RX-V6A (getFeatures `netusb.tidal.mode`), and its
+  // XML twin serves a list (`xml-tidal-list-info.xml`); the probe decides per device (audit 2026-09-29, C48).
+  { input: "tidal", key: "tidal", label: "TIDAL" },
 ];
+
+/**
+ * The menu language `getListInfo` takes (YXC Basic Rev 1.10 §7.7: en/ja/fr/de/es/ru/it/zh) for the
+ * system language of the ioBroker installation — the menus came in English everywhere (C48).
+ *
+ * @param language the system language (`system.config.common.language`)
+ * @returns the list language, `en` for one the device does not offer
+ */
+export function yxcListLanguage(language: string | undefined): string {
+  const base = (language ?? "en").toLowerCase().split("-")[0];
+  return ["en", "ja", "fr", "de", "es", "ru", "it", "zh"].includes(base) ? base : "en";
+}
 
 /** The client surface the driver needs (a slice of the YXC client). */
 export interface YxcBrowseClient {
   /** Read one window of a netusb source's list. */
-  getListInfo(input: string, index: number, size?: number): Promise<unknown>;
+  getListInfo(input: string, index: number, size?: number, lang?: string): Promise<unknown>;
   /** Drive the netusb list: select/play an absolute index, or go one level back. */
   setListControl(type: "select" | "play" | "return", index?: number, zone?: string): Promise<unknown>;
 }
@@ -66,12 +81,14 @@ export class YxcBrowseDriver implements BrowseDriver {
    * @param cover turns a reported thumbnail path into the address to show (see `absoluteDeviceUrl`)
    * @param zoneFor the zone that plays a source — the one listening to it, like a favourite's recall
    *   (YXC Basic §7.8: the play zone switches its input; audit 2026-09-29, C33)
+   * @param lang the menus' language (see {@link yxcListLanguage})
    */
   public constructor(
     private readonly client: YxcBrowseClient,
     private readonly inputList: readonly string[],
     private readonly cover: (url: string) => string = url => url,
     private readonly zoneFor: (input: string) => string = () => "main",
+    private readonly lang = "en",
   ) {}
 
   /**
@@ -204,7 +221,10 @@ export class YxcBrowseDriver implements BrowseDriver {
     }
     // A refusal (response_code != 0) never arrives here: the client's transport already
     // turns it into an error, which the engine reports. Only a null body is left to guard.
-    const response = (await this.client.getListInfo(this.active.input, this.index)) as Record<string, unknown> | null;
+    const response = (await this.client.getListInfo(this.active.input, this.index, PAGE_SIZE, this.lang)) as Record<
+      string,
+      unknown
+    > | null;
     if (!response) {
       return undefined;
     }
@@ -215,7 +235,9 @@ export class YxcBrowseDriver implements BrowseDriver {
       // it could never be opened (audit 2026-09-24, C13).
       const attribute = typeof entry.attribute === "number" ? entry.attribute : 0;
       const playable = (attribute & 0b100) !== 0;
-      const selectable = (attribute & 0b10) !== 0;
+      // b3 "Capable of Search" opens a level only after `setSearchString` (§7.7/§7.8) — selected here it
+      // showed an empty level; such an entry is shown and not selectable (C48).
+      const selectable = (attribute & 0b10) !== 0 && (attribute & 0b1000) === 0;
       const row: BrowseRow = {
         line: i + 1,
         text: typeof entry.text === "string" ? entry.text : "",

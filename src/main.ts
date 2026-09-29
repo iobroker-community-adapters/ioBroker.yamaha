@@ -358,6 +358,8 @@ export class Yamaha extends utils.Adapter {
   private readonly profiles = new Map<string, DeviceProfileStore>();
   /** Per device, the native patch inside its coalescing window (see persistDeviceNative). */
   private readonly pendingDevicePatches = new Map<string, PendingDevicePatch>();
+  /** The installation's system language (`system.config`), read at start — the MusicCast menus' language. */
+  private systemLanguage: string | undefined;
   /** Per device, the last write to its device object — the next one waits for it (see writeDeviceObject). */
   private readonly deviceObjectWrites = new Map<string, Promise<unknown>>();
   /** The devices whose id is final under the 3.0.0 rule (`native.idScheme`) — see checkIdDecision. */
@@ -399,6 +401,14 @@ export class Yamaha extends utils.Adapter {
       // the settings earlier releases declared.
       const legacyRow = this.carryLegacyDevice();
       const zonesOn = this.foldGroupZones();
+      // The installation's language, for the MusicCast menus (C48) — read once; a failed read keeps English.
+      try {
+        const systemConfig = await this.getForeignObjectAsync("system.config");
+        const language = (systemConfig?.common as { language?: unknown } | undefined)?.language;
+        this.systemLanguage = typeof language === "string" ? language : undefined;
+      } catch {
+        this.systemLanguage = undefined;
+      }
       // Before anything reads a device id: the table rows and the discovery store come out of it
       // carrying the ids the trees now live under, and the cleanup below never sees an old one.
       const { listing: unmoved, rows: movedRows } = await this.migrateDeviceIds();
@@ -2644,6 +2654,7 @@ export class Yamaha extends utils.Adapter {
       {
         yncaSubunitCache,
         probeMemory,
+        systemLanguage: this.systemLanguage,
         // Group gate for the YNCA sweep: a disabled group's functions are never even fetched.
         isEntryEnabled: id => isGroupEnabled(id, this.config as unknown as Record<string, unknown>),
         log: {

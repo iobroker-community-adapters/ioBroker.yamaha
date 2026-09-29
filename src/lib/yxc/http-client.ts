@@ -969,10 +969,13 @@ export class YamahaYxcClient {
    * @param input the netusb input (net_radio, server, usb, …)
    * @param index the 0-based index of the window's first entry
    * @param size how many entries to fetch (the device caps at 8)
+   * @param lang the menus' language (`en`, `de`, … — YXC Basic Rev 1.10 §7.7); the device's default without
    * @returns the list_info response
    */
-  public getListInfo(input: string, index: number, size = 8): Promise<unknown> {
-    return this.send(`/netusb/getListInfo?input=${q(input)}&index=${q(index)}&size=${q(size)}`);
+  public getListInfo(input: string, index: number, size = 8, lang?: string): Promise<unknown> {
+    return this.send(
+      `/netusb/getListInfo?input=${q(input)}&index=${q(index)}&size=${q(size)}${lang ? `&lang=${q(lang)}` : ""}`,
+    );
   }
 
   /**

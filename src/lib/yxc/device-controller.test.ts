@@ -1961,7 +1961,7 @@ describe("YxcDeviceController browse surface (#613)", () => {
     expect(objects).toContain("living.player.browse.selectLine");
     controller.handleStateChange("living.player.browse.source", false, "netRadio");
     await flush();
-    expect(client.calls).toContainEqual({ method: "getListInfo", args: ["net_radio", 0] });
+    expect(client.calls).toContainEqual({ method: "getListInfo", args: ["net_radio", 0, 8, "en"] });
   });
 
   test("creates no browse tree without the netusb block", async () => {

@@ -66,7 +66,7 @@ import { knownScenes, resolveSceneNumber, sceneListSurface } from "../catalog/sc
 import type { CommandGate } from "../lifecycle/command-gate";
 import type { BrowseEngine } from "../browse/browse-engine";
 import { createBrowseSurface } from "../browse/surface";
-import { YxcBrowseDriver } from "../browse/yxc-browse-driver";
+import { YxcBrowseDriver, yxcListLanguage } from "../browse/yxc-browse-driver";
 import type { PushLiveness } from "./push-liveness";
 
 /** Renew interval for the push registration + state poll, well under the 10-minute expiry (YXC Basic §10.2). */
@@ -209,6 +209,8 @@ export interface YxcControllerDeps {
    * (audit 2026-09-29, C29). Unset (tests, a single transport): the ids stay as built.
    */
   aliasZone?: (from: string, to: string) => void;
+  /** The installation's system language, for the menus' language (`getListInfo` `lang`, C48). */
+  systemLanguage?: string;
   /** Resolve another configured device's client by IP, for forming a multiroom group. */
   clientFor?: (ip: string) => YxcClientLike | undefined;
   /**
@@ -945,7 +947,13 @@ export class YxcDeviceController implements ConnectionHandle {
       return;
     }
     const inputs = capabilities.zones.find(zone => zone.id === "main")?.inputs ?? [];
-    const driver = new YxcBrowseDriver(this.deps.client, inputs, this.cover, input => this.zoneListeningTo(input));
+    const driver = new YxcBrowseDriver(
+      this.deps.client,
+      inputs,
+      this.cover,
+      input => this.zoneListeningTo(input),
+      yxcListLanguage(this.deps.systemLanguage),
+    );
     this.browseDriver = driver;
     this.browseEngine = await createBrowseSurface(driver, this.deviceId, {
       upsertObject: this.deps.upsertObject,

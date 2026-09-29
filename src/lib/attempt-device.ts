@@ -36,6 +36,8 @@ const COMMAND_SPACING_MS: Readonly<Record<Transport, number>> = { ynca: 100, yxc
 
 /** The adapter-bound callbacks {@link attemptDevice} drives — injected so it needs no adapter. */
 export interface AttemptDeps {
+  /** The installation's system language (`system.config`), for the MusicCast menus' language. */
+  systemLanguage?: string;
   /** Adapter log. */
   log: ControllerLog;
   /** Create or update an object in the device tree. */
@@ -318,6 +320,7 @@ export function attemptDevice(
       new YxcDeviceController(device.id, {
         client: new YamahaYxcClient(device.ip, undefined, gate),
         aliasZone: (from, to) => yxc.aliasZone(from, to),
+        systemLanguage: deps.systemLanguage,
         clientFor: ip => partnerClient(device.ip, deps.knownDeviceIps, ip),
         partnerIps: () => [...deps.knownDeviceIps].filter(ip => ip !== device.ip),
         registerPush: (onPush, deviceId) => deps.registerPush(device.ip, onPush, deviceId),

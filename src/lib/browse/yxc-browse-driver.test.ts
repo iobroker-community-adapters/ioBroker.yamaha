@@ -1,4 +1,4 @@
-import { YxcBrowseDriver } from "./yxc-browse-driver";
+import { yxcListLanguage, YxcBrowseDriver } from "./yxc-browse-driver";
 import type { BrowseEngine } from "./browse-engine";
 import type { BrowseWindow } from "./types";
 
@@ -22,8 +22,8 @@ function setup(inputs: string[]): {
   let response: Record<string, unknown> = listResponse({});
   const driver = new YxcBrowseDriver(
     {
-      getListInfo: (input, index, size) => {
-        calls.push({ method: "getListInfo", args: [input, index, size] });
+      getListInfo: (input, index, size, lang) => {
+        calls.push({ method: "getListInfo", args: [input, index, size, lang] });
         return Promise.resolve(response);
       },
       setListControl: (type, index, zone) => {
@@ -160,13 +160,13 @@ describe("YxcBrowseDriver", () => {
     await driver.open("netRadio");
     calls.length = 0;
     await driver.pageDown();
-    expect(calls[0].args).toEqual(["net_radio", 8, undefined]);
+    expect(calls[0].args).toEqual(["net_radio", 8, 8, "en"]);
     calls.length = 0;
     await driver.pageDown(); // 16 ≥ 10 → stays
-    expect(calls[0].args).toEqual(["net_radio", 8, undefined]);
+    expect(calls[0].args).toEqual(["net_radio", 8, 8, "en"]);
     calls.length = 0;
     await driver.pageUp();
-    expect(calls[0].args).toEqual(["net_radio", 0, undefined]);
+    expect(calls[0].args).toEqual(["net_radio", 0, 8, "en"]);
   });
 
   it("returns to the device root (menu_layer 0) — not one level short of it", async () => {
@@ -253,5 +253,46 @@ describe("YxcBrowseDriver survives a mangled list response", () => {
       { line: 1, text: "No art", kind: "item" },
       { line: 2, text: "Bad art", kind: "item" },
     ]);
+  });
+});
+
+// YXC Basic Rev 1.10 §7.7: the list in the installation's language, and a search entry (b3) is not
+// selectable — it needs a search text first (audit 2026-09-29, C48).
+describe("YxcBrowseDriver language and search entries", () => {
+  it("maps the system language onto the languages the device offers", () => {
+    expect(yxcListLanguage("de")).toBe("de");
+    expect(yxcListLanguage("zh-cn")).toBe("zh");
+    expect(yxcListLanguage("pl")).toBe("en");
+    expect(yxcListLanguage(undefined)).toBe("en");
+  });
+
+  it("asks in the given language and shows a search entry as not selectable", async () => {
+    const calls: unknown[][] = [];
+    const windows: BrowseWindow[] = [];
+    const driver = new YxcBrowseDriver(
+      {
+        getListInfo: (...args) => {
+          calls.push(args);
+          return Promise.resolve(
+            listResponse({
+              max_line: 2,
+              list_info: [
+                { text: "Search", attribute: 0b1010 },
+                { text: "Charts", attribute: 0b10 },
+              ],
+            }),
+          );
+        },
+        setListControl: () => Promise.resolve({ response_code: 0 }),
+      },
+      ["rhapsody"],
+      undefined,
+      undefined,
+      "de",
+    );
+    driver.attach({ onWindow: (w: BrowseWindow) => windows.push(w) } as unknown as BrowseEngine);
+    await driver.open("rhapsody");
+    expect(calls[0]).toEqual(["rhapsody", 0, 8, "de"]);
+    expect(windows.at(-1)?.rows.map(row => row.kind)).toEqual(["unselectable", "folder"]);
   });
 });
