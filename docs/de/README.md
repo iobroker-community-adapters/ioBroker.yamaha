@@ -53,8 +53,8 @@ umzieht, während der Adapter nicht läuft, findet aber erst die nächste Netzwe
   Karte. Eine Liste, die nur die aus dem Vorgänger-Adapter übernommene Zeile enthält (ihr Name
   ist eine IP-Adresse), gilt als leer: diese Adresse hat niemand getippt, die Suche bleibt an
   und folgt dem Receiver zu einer neuen Adresse.
-- **Netzwerk-Schnittstelle** — leer lassen, dann verlässt die Suche jede Netzwerkkarte deines
-  ioBroker-Rechners. Nur setzen, wenn dein Server in mehreren Netzen hängt und die Suche eine
+- **Netzwerk-Schnittstelle** — auf „alle Adressen“ (0.0.0.0) lassen, dann verlässt die Suche jede
+  Netzwerkkarte deines ioBroker-Rechners. Nur setzen, wenn dein Server in mehreren Netzen hängt und die Suche eine
   bestimmte nehmen soll. Auf die Receiver selbst hat die Einstellung keine Wirkung.
 - **MusicCast-Ereignisport** — wird angezeigt, ist nicht änderbar: MusicCast-Geräte melden ihre
   Änderungen an den UDP-Port 41100, das legt das Protokoll fest. Das Feld ist da, damit der Admin

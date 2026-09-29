@@ -19,6 +19,10 @@ Funktionalität (voller MusicCast-Reichtum). Vorbild-Adapter (Multi-Transport): 
   **keine reife Lib** → **TS-Eigenbau**, Python-`ynca` als Protokoll-Spec. Nur **1** Verbindung/Gerät.
 - **YXC / MusicCast** (JSON-HTTP + UDP-Push :41100) — MusicCast-Geräteklasse + Reichtum
   (Medien/Tuner/CD/Multiroom), via `yamaha-yxc-nodejs`. Re-Subscribe-Keepalive Pflicht (der musiccast-Bug).
+- **XML-Schreibbarkeit kommt aus desc.xml:** wo die Gerätebeschreibung eine Befehlsliste deklariert, ist ein Datenpunkt
+  genau dort schreibbar, wo sie einen seiner `putPaths` für die Zone deklariert, mit den dort deklarierten Grenzen
+  (`descriptorPuts`); ohne Beschreibung (2020er Generation) gilt die Katalogregel. Die Wiedergabe liest XML aus dem
+  `Play_Info` der Quelle, die das Gerät je Eingang als `Src_Name` deklariert.
 - **XML/YNC** (`<YAMAHA_AV>`, HTTP :80) — Steuer-API der Geräte vor ~2010; **dritter, gleichberechtigter
   Transport** (Fallback, wenn weder YNCA noch YXC antworten).
 - YNCA + YXC laufen auf einem MusicCast-AVR **parallel** (kein Konflikt) — pro Gerät/Fähigkeit geroutet.
@@ -72,18 +76,22 @@ erneut; **vom Nutzer umbenennbare Namen** (MusicCast-`getNameText`, XML-Eingangs
 dagegen bei JEDER Verbindung frisch gelesen, das Gedächtnis ist nur Rückfall (`ProbeMemory.refresh`). Der YNCA-Subunit-Cache prüft die Identität jetzt ZUERST (2 Abrufe Modell+Firmware, ~0,2 s) und
 sweept erst danach; vorher kostete ein veralteter Cache Sweep→Probe→Sweep (~40 s, langsamer als ohne
 Cache). Die Ausfall-Erkennung der beiden Poll-Transporte liegt gemeinsam in
-`lib/lifecycle/poll-drop-detector.ts`, die YXC-Zonen-Präfixe in `lib/yxc/zones.ts` (die frühere
-Dreifach-Pflege hatte den Zonen-Equalizer-Cache gebrochen). `coordinate()` schreibt nur noch
+`lib/lifecycle/poll-drop-detector.ts`, die Zonentabelle in `lib/catalog/zones.ts` (EINE für alle Transporte;
+die frühere Mehrfach-Pflege hatte den Zonen-Equalizer-Cache gebrochen). `coordinate()` schreibt nur noch
 GEÄNDERTE Objekt-Definitionen (Fingerabdruck je Id, die Karte hält `main.ts` je Gerät über Reconnects;
 jede Purge-/Aufräum-Id fällt heraus, sonst fehlt einem zurückkehrenden Kind der Elternkanal) — ein flackerndes
 Gerät schrieb sonst alle paar Minuten ~250 unveränderte Objekte neu. **Werte entdoppelt die Datenbank, nie der
 Controller:** jeder Controller liefert jeden Wert (`setStateChangedAsync` vergleicht), und der
 Transport-Adapter liefert einer neu gewonnenen Id sofort ihren letzten Wert nach. **Reconnect ist zweistufig:** Der Ausfall EINES Transports schließt nur ihn und
 koordiniert sofort neu — ein lebender Transport übernimmt jede Id, die er VERTRÄGLICH baut (gleicher Typ,
-gleiche Einheit, verträgliche Werteliste; `sleep`, `input`, `soundProgram`, Bass/Höhen/Subwoofer bleiben beim
-Abgerissenen und verwerfen Schreibvorgänge) —; das Handle baut ihn über seine Factory mit eigenem Backoff neu auf
+gleiche Einheit, verträgliche Werteliste, kein schreibbarer Punkt an einen nur lesenden Transport; `sleep`, `input`,
+`soundProgram`, Bass/Höhen/Subwoofer bleiben beim Abgerissenen und verwerfen Schreibvorgänge) —; das Handle baut ihn
+über seine Factory mit eigenem Backoff neu auf
 und re-koordiniert nach der Rückkehr den Baum (idempotente Upserts, Ownership neu), während die anderen
-Transporte durchlaufen. Erst wenn der LETZTE lebende
+Transporte durchlaufen. **Ein Transport, den das Gerät schon einmal beantwortet hat (YNCA-Profil, MusicCast-/XML-Identität),
+der beim Verbinden aber schweigt, wird genauso nachverbunden;** bis zu seiner Rückkehr (höchstens 3 min) behält jeder
+Datenpunkt, dem die lebenden Transporte eine andere Form gäben, die Form aus dem Baum — nie ein stiller Typwechsel. Ein
+nie beantworteter Transport wird nicht wiederholt. Erst wenn der LETZTE lebende
 Transport wegfällt, meldet das Handle den Drop an den Supervisor, der die ganze Menge neu verbindet. YXC/XML
 melden Drop nach mehreren erfolglosen Keepalive-Polls, YNCA über das echte Socket-Drop-Event (Drops vor der
 Handler-Registrierung werden gelatcht — im Client wie im Handle; `start()` iteriert eine KOPIE der lebenden
@@ -108,10 +116,10 @@ PFLICHT-Zahlenformat** (`NumberSpec.decimals` + Step-Raster in `encode`, Referen
 zwei Nachkommastellen — der Datenpunkt `tuner.frequency` ist seit v2.0.0 einheitlich kHz). **Preset-/Favoriten-Oberfläche (#613, Parität zum alten musiccast-Adapter):** YNCA
 `TUN.PRESET` lesbar+schreibbar (Sentinel „No Preset"→0 via `wireDecode`) + Up/Down-Buttons, DAB-/FM-Presets
 schreibbar, Quellen-Abruf `player.<src>.preset` nur auf den Preset-fähigen Subunits (`PRESET_SUBUNITS`, Spec
-ynca-python-Mixins; write-only, PLAYBACKINFO-gegated). YXC: Favoriten-/Zuletzt-Listen als JSON-States +
-Abruf-Nummern, Tuner-Presets je Band (`getFeatures tuner.preset.type` common/separate steuert Abruf-Band),
+ynca-python-Mixins; write-only, PLAYBACKINFO-gegated). YXC: Favoriten-/Zuletzt-/Senderlisten als Einzel-Datenpunkte je Platz
+(`catalog/list-slots.ts`, JSON nur daneben) + Abruf-Nummern, Tuner-Presets je Band (`getFeatures tuner.preset.type` common/separate steuert Abruf-Band),
 Geräte-eigene Wertelisten aus `getFeatures` werden Dropdowns (`YxcZone.valueLists`), Wecker-Block `clock.*`
-read-only (der Alt-Adapter hatte auch keinen funktionierenden Schreibweg) mit eigener Admin-Gruppe
+über die Setter der Spezifikation schreibbar (Zeitabgleich, Uhrformat, Wecker) mit eigener Admin-Gruppe
 `group_clock`. **Abruf-Zone (2026-08-26):** `recallPreset`/`recallRecentItem`/`recallTunerPreset` schalten die
 ZIELZONE auf die Quelle — deshalb ging ein Favorit früher immer in die Hauptzone und riss sie von
 ihrem Programm weg. Die Kommandos sind jetzt deklarativ (`netusbPreset`/`netusbRecent`/`tunerPreset`),
@@ -138,13 +146,12 @@ List-Funktionen NICHT; Fenster kommt als Zeilen-Burst + Auto-Feedback über die 
 Verbindung, Burst-Debounce im Treiber; open() schaltet den MAIN-Eingang um wie die
 Fernbedienung), YXC `netusb/getListInfo+setListControl` (Pull, absoluter Index,
 Attribut-Bitmaske b1=Select/b2=Play, Thumbnails), XML `List_Info/List_Control`
-(Busy-Polling; Start-Probe NET_RADIO/SERVER/USB entscheidet die Quellen). Jeder fähige
+(Busy-Polling; die Start-Probe über die neun Quellen mit `List_Info` entscheidet die Quellen). Jeder fähige
 Transport steuert IDENTISCHE `player.browse.*`-Objekte bei → Koordinator dedupt, Modernität
 wählt den einen Owner, Schreibrouting läuft wie überall; Ordner-Präfix `player.` = der
 gebündelte Admin-Schalter „Wiedergabe & Browsen" (`group_player`, krobi-Entscheidung
-2026-08-25 — kein eigener Browse-Schalter). Engine/Treiber brauchen die `delay`-Dep der
-Controller (adapter-Timer via `attempt-device`); fehlt sie (alte Tests), entsteht kein
-Browse-Baum. Der Objektbaum ist thematisch gruppiert
+2026-08-25 — kein eigener Browse-Schalter). Engine/Treiber takten über die Befehlsschleuse des
+Controllers (Pflicht-Abhängigkeit wie Probe-Gedächtnis und Subunit-Cache). Der Objektbaum ist thematisch gruppiert
 (`catalog/groups.ts`, `groupOf(id)` bucketet nach dem ERSTEN Kanal-Segment — Zonen-States fallen damit
 in die multiroom-Gruppe, test-verankert in groups.test.ts): die Wiedergabe-Quellen unter `player.*`, DAB unter `tuner.dab`,
 Multiroom statt `dist`. **Der `multiroom`-Ordner trägt den Geltungsbereich selbst** (v1.0.0-Schnitt): direkt im
