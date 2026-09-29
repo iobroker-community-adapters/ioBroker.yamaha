@@ -727,7 +727,7 @@ describe("YncaClient sweep marker (audit 2026-09-24, B2)", () => {
     }
   });
 
-  test("an unanswered marker reports the sweep as incomplete", async () => {
+  test("an unanswered marker still hands back the answers that came", async () => {
     vi.useFakeTimers();
     try {
       const { factory, sockets } = fixtureFactory();
@@ -739,7 +739,7 @@ describe("YncaClient sweep marker (audit 2026-09-24, B2)", () => {
       await vi.advanceTimersByTimeAsync(100);
       sockets[0].emitData("@MAIN:PWR=On\r\n");
       await vi.advanceTimersByTimeAsync(6000);
-      await expect(caps).resolves.toMatchObject({ complete: false });
+      await expect(caps).resolves.toEqual({ model: "", subunits: { MAIN: { PWR: "On" } } });
     } finally {
       vi.useRealTimers();
     }

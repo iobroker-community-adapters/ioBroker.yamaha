@@ -730,6 +730,30 @@ describe("YncaDeviceController fast restart (persisted capability layer)", () =>
     expect(acked).toContainEqual({ id: "living.player.totalTimeText", value: "1:02:03" });
   });
 
+  // `ELAPSEDTIME=` with nothing playing, `DABBITRATE=` between stations (CX-A5100/RX-V4A/RX-V6A
+  // protocols): no value — the previous track's time and station's bit rate no longer stand (B12).
+  test("an empty time or bit rate reads as no value, not as the last one", async () => {
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX",
+      subunits: {
+        MAIN: { PWR: "On", INP: "NET RADIO" },
+        NETRADIO: { PLAYBACKINFO: "Play", ELAPSEDTIME: "1:23" },
+        DAB: { BAND: "DAB", DABBITRATE: "128" },
+      },
+    };
+    const { acked, deps } = makeDeps(client);
+    await new YncaDeviceController("living", deps).start();
+    acked.length = 0;
+    client.emit({ subunit: "NETRADIO", func: "ELAPSEDTIME", value: "" });
+    client.emit({ subunit: "DAB", func: "DABBITRATE", value: "" });
+    expect(acked).toEqual([
+      { id: "living.player.elapsedTime", value: 0 },
+      { id: "living.player.elapsedTimeText", value: "" },
+      { id: "living.tuner.dab.bitRate", value: 0 },
+    ]);
+  });
+
   test("a scene renamed at the receiver reaches the running session", async () => {
     // Scene titles are no datapoints any more, so nothing but this refresh carries them
     // into a running session: the fast path built them from the memory, and a rename

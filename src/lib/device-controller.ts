@@ -233,15 +233,12 @@ interface CachedCapabilities {
   model: string;
   /** SYS VERSION at capture time — freshness key half 2. */
   firmware: string;
-  /** The captured subunit→function map (values are last-known, used for SHAPE only). */
-  subunits: Record<string, Record<string, string>>;
   /**
-   * Whether the sweep that captured the shape reached its end: `readCapabilities` throws on a
-   * drop (also inside the marker window since audit 2026-09-24, B2) and reports an unanswered
-   * closing marker as incomplete — then the shape may add and never subtract. Absent on a shape
-   * written before 2.7.0 (read as complete: it was).
+   * The captured subunit→function map (values are last-known, used for SHAPE only). A sweep whose
+   * closing marker went unanswered may lack functions; the background refresh of every later start
+   * unions its answers into this shape and never takes one away, so a short first sweep heals.
    */
-  complete?: boolean;
+  subunits: Record<string, Record<string, string>>;
 }
 
 /**
@@ -533,17 +530,7 @@ export class YncaDeviceController implements ConnectionHandle {
       for (const [subunit, funcs] of Object.entries(capabilities.subunits)) {
         for (const [func, value] of Object.entries(funcs)) {
           this.writeDerived(subunit, func, value);
-          const update = yncaStateUpdate({ subunit, func, value }, FUNC_MAP);
-          if (update) {
-            if (FLAT_PLAYER_ID.test(update.id)) {
-              // Player-block values feed only the zones LISTENING to their source
-              // (v2.0.0) — an idle source's leftover metadata must not seed the block.
-              this.routePlayerUpdate(subunit, update.id, update.value);
-            } else {
-              this.reported.set(update.id, update.value);
-              this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
-            }
-          }
+          this.applyLine({ subunit, func, value });
         }
       }
     }
@@ -633,7 +620,6 @@ export class YncaDeviceController implements ConnectionHandle {
         model: capabilities.model,
         firmware: capabilities.subunits.SYS?.VERSION ?? firmware,
         subunits: capabilities.subunits,
-        complete: capabilities.complete !== false,
       } satisfies CachedCapabilities);
     } else {
       // No model, no identity — and without an identity nothing can ever invalidate what was
@@ -734,7 +720,6 @@ export class YncaDeviceController implements ConnectionHandle {
         model: fresh.model,
         firmware: fresh.subunits.SYS?.VERSION ?? "",
         subunits,
-        complete: fresh.complete !== false,
       } satisfies CachedCapabilities);
       // The write map follows the union too — a standby refresh must not shrink the
       // proven write surface until the next restart either.
@@ -1257,11 +1242,12 @@ export class YncaDeviceController implements ConnectionHandle {
    * @param subunit the source subunit the value came from
    * @param id the flat player state id
    * @param value the decoded value
+   * @param none true when the device reported no value (the twin then reads "")
    */
-  private routePlayerUpdate(subunit: string, id: string, value: boolean | number | string): void {
+  private routePlayerUpdate(subunit: string, id: string, value: boolean | number | string, none = false): void {
     // A playback time is published in both forms, from this one value: the seconds fill
     // the media-player slot, the readable text is what a visualisation shows.
-    const twin = playTimeTwin(id, value);
+    const twin = playTimeTwin(id, none ? Number.NaN : value);
     for (const zone of YNCA_ZONES) {
       if (!this.playerZones.includes(zone.key)) {
         continue;
@@ -1539,14 +1525,32 @@ export class YncaDeviceController implements ConnectionHandle {
       }
     }
     this.writeDerived(message.subunit, message.func, message.value);
-    const update = yncaStateUpdate(message, FUNC_MAP);
-    if (update) {
-      if (FLAT_PLAYER_ID.test(update.id)) {
-        this.routePlayerUpdate(message.subunit, update.id, update.value);
-      } else {
-        this.reported.set(update.id, update.value);
-        this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
-      }
+    this.applyLine(message);
+  }
+
+  /**
+   * Put one answered line on its datapoint — the sweep's answers and the live lines alike. An EMPTY
+   * value of a read-only number is "no value" (`ELAPSEDTIME=`, `TOTALTIME=` when nothing plays,
+   * `DABBITRATE=` between stations — CX-A5100, RX-V4A and RX-V6A protocols): it reads 0 and a playback
+   * time's text reads "", like a source switch clears them. Before, the number decoder took nothing
+   * and the previous track's time or station's bit rate stood (audit 2026-09-29, B12).
+   *
+   * @param message the line
+   */
+  private applyLine(message: YncaMessage): void {
+    const entry = FUNC_MAP.get(`${message.subunit}:${message.func}`);
+    const none = entry !== undefined && !entry.write && entry.spec.kind === "number" && message.value.trim() === "";
+    const update = none ? { id: entry.id, value: 0 } : yncaStateUpdate(message, FUNC_MAP);
+    if (!update) {
+      return;
+    }
+    if (FLAT_PLAYER_ID.test(update.id)) {
+      // Player-block values feed only the zones LISTENING to their source (v2.0.0) — an idle
+      // source's leftover metadata must not seed the block.
+      this.routePlayerUpdate(message.subunit, update.id, update.value, none);
+    } else {
+      this.reported.set(update.id, update.value);
+      this.deps.setStateAck(`${this.deviceId}.${update.id}`, update.value);
     }
   }
 

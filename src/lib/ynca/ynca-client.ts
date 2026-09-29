@@ -576,14 +576,16 @@ export class YncaClient {
       if (!this.reachable) {
         throw new Error("connection lost during capability sweep");
       }
-      const answered = await this.awaitSweepMarker(handler => (markerSeen = handler));
-      // A drop inside the marker window used to hand back a PARTIAL report after the timeout,
-      // stored as complete (audit 2026-09-24, B2).
+      // An unanswered marker ends the wait too: a busy device's last answers may still be on their
+      // way — what came is used, and the next start's background refresh unions the rest into the
+      // remembered shape (audit 2026-09-29, B13).
+      await this.awaitSweepMarker(handler => (markerSeen = handler));
+      // A drop inside the marker window used to hand back a PARTIAL report after the timeout
+      // (audit 2026-09-24, B2).
       if (!this.reachable) {
         throw new Error("connection lost during capability sweep");
       }
-      const capabilities = buildCapabilities(collected);
-      return answered ? capabilities : { ...capabilities, complete: false };
+      return buildCapabilities(collected);
     } finally {
       const index = this.messageHandlers.indexOf(collector);
       if (index >= 0) {
