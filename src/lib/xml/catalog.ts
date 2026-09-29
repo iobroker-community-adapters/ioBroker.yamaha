@@ -39,7 +39,6 @@ export interface XmlAmpEntry {
   rangePaths?: string[];
 }
 
-/** The unified XML amplifier catalog — object + read field + PUT builder in one list. */
 /**
  * A written level in the XML wire form (tenths of a dB), snapped to the 0.5 dB grid every `desc.xml`
  * declares for it (`Range -805,165,5` and `-60,60,5`, 2008–2017). `Math.round(v * 10)` alone put a
@@ -67,6 +66,7 @@ function toneInner(band: "Bass" | "Treble", body: string, form: XmlZoneForm | un
   return `<Sound_Video><Tone>${form?.toneManual ? `<Manual>${level}</Manual>` : level}</Tone></Sound_Video>`;
 }
 
+/** The unified XML amplifier catalog — object + read field + PUT builder in one list. */
 export const XML_AMP_CATALOG: XmlAmpEntry[] = [
   {
     state: "power",

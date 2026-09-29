@@ -64,26 +64,16 @@ function translated(key: I18nKey, args: (string | number | boolean | null)[]): i
 }
 
 /**
- * A user-facing string for the device-manager titles, dialogs and confirmations, resolved to
- * all admin languages so the card renders in the admin's language.
- *
- * @param key translation key from admin/i18n/en.json
- * @param args values substituted into the key's `%s` placeholders
- * @returns the translated string object
- */
-export function t(key: I18nKey, ...args: (string | number | boolean | null)[]): ioBroker.StringOrTranslated {
-  return translated(key, args);
-}
-
-/**
- * An OBJECT name as a translation object, for `common.name` of a state or channel.
+ * A text as a translation object — an OBJECT name or explanation (`common.name`/`desc`) and every
+ * device-manager title, dialog and confirmation alike (one export since 2026-09-29; `t` was the same
+ * function under a second name, D20).
  *
  * ioBroker resolves the object itself in the reader's language (js-controller
  * `StringOrTranslated`), which is why the core team asks for the object rather than a string
  * picked at creation time: a plain string would freeze the tree in one language, and rewriting
  * the names on every start would trample the names a user has changed.
  *
- * @param key the English name, which is also its translation key
+ * @param key the translation key in `admin/i18n/en.json`
  * @param args values substituted into the key's `%s` placeholders
  * @returns the name in all eleven languages
  */

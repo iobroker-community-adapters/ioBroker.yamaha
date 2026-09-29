@@ -177,11 +177,11 @@ export function browseObjectDefs(sources: Record<string, string>, playLine = fal
  * The on-screen remote of one transport: the cursor pad, and the menu keys where the
  * protocol has them.
  *
- * Lives beside the browsing surface because that is where the proof is. A cursor key is a
- * LIST command on both text protocols (`LISTCURSOR`, `<List_Control><Cursor>`), so a device
- * that answered no list probe has no pad either — the same rule that keeps the menu folder
- * off a receiver that cannot browse (#613). Ids are unprefixed, i.e. the main zone: neither
- * YNCA nor XML declares a cursor for zones 2–4.
+ * Lives beside the browsing surface because that is where the proof is: on the main zone a
+ * cursor key is proven by the list probe or the pad probe, so a device that proved neither has no
+ * pad — the same rule that keeps the menu folder off a receiver that cannot browse (#613). The ids
+ * are unprefixed, i.e. the main zone; a zone's own pad (XML `Cursor_Control` of Zone 2, MusicCast
+ * `cursor_list`) is built by its transport under the zone's prefix.
  *
  * @param cursorValues the cursor words this transport supports (empty/absent = no pad)
  * @param menuValues the menu keys this transport supports (empty/absent = none)

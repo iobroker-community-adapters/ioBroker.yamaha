@@ -2,7 +2,7 @@ import { volumeIndicatorIcon } from "./lib/device-type";
 import type { Mock } from "vitest";
 // t() returns the key (with its arguments when it has any) so the tests assert on
 // the message CHOICE, not on wording.
-vi.mock("./lib/i18n", () => ({ t: (key: string, ...args: unknown[]) => (args.length ? { key, args } : key) }));
+vi.mock("./lib/i18n", () => ({ tName: (key: string, ...args: unknown[]) => (args.length ? { key, args } : key) }));
 
 // The discovered-devices store is a JSON file in the instance data dir — replaced
 // by an in-memory pair so the manager's auto-mode is testable without the disk.

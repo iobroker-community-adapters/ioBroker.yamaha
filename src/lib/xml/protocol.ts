@@ -201,8 +201,8 @@ export interface XmlTunerInfo {
  * generation dialects (flat vs band-wrapped — the shared field shapes are verified
  * against the captured `<DAB>` sibling: Preset/Preset_Sel, Tuning/Freq Val+Exp+Unit,
  * Signal_Info Tuned/Stereo as Assert/Negate, Meta_Info Program_Service/Radio_Text).
- * Only the XML-only generation (pre-2010, the third transport as the only one) ever
- * OWNS these states — newer devices carry the tuner via YNCA/YXC.
+ * XML owns these states on the XML-only generation (pre-2010) and wherever the other transports
+ * are not connected; otherwise YNCA/YXC carry the tuner.
  *
  * @param xml the Play_Info response body
  * @returns the fields the response carries

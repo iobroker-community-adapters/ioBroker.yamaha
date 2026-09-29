@@ -7,7 +7,7 @@ import {
   type InstanceDetails,
   type JsonFormSchema,
 } from "@iobroker/dm-utils";
-import { t } from "./lib/i18n";
+import { tName } from "./lib/i18n";
 import { iconForModel, volumeIndicatorIcon } from "./lib/device-type";
 import {
   readDiscovered,
@@ -206,7 +206,7 @@ export class YamahaDeviceManagement extends DeviceManagement {
         `device manager: ${action}${deviceId ? ` of ${deviceId}` : ""} failed (${errorMessage(e)})`,
       );
       try {
-        await context?.showMessage(t("dmActionFailed", errorMessage(e)));
+        await context?.showMessage(tName("dmActionFailed", errorMessage(e)));
       } catch {
         // the dialog is already gone — the log line above carries it
       }
@@ -261,12 +261,12 @@ export class YamahaDeviceManagement extends DeviceManagement {
     const del = {
       id: "delete",
       icon: "delete",
-      description: t("dmDelete"),
+      description: tName("dmDelete"),
       // The UI asks BEFORE the handler runs (dm-utils `confirmation`): no message round-trip,
       // and the text names what goes with the device. `showConfirmation` inside the handler
       // used to leave the reply hanging when the manual branch's table write restarted the
       // instance — the progress bar span until the admin gave up.
-      confirmation: t("dmDeleteConfirm", card.name),
+      confirmation: tName("dmDeleteConfirm", card.name),
       handler: async (id: string, ctx?: ActionContext): Promise<{ delete: string } | { refresh: "devices" }> =>
         this.runAction<{ delete: string } | { refresh: "devices" }>("delete", id, ctx, () => this.deleteDevice(id), {
           refresh: "devices",
@@ -275,7 +275,7 @@ export class YamahaDeviceManagement extends DeviceManagement {
     const edit = {
       id: "edit",
       icon: "edit",
-      description: t("dmEdit"),
+      description: tName("dmEdit"),
       handler: async (id: string, ctx: ActionContext): Promise<{ refresh: "devices" }> =>
         this.runAction("edit", id, ctx, () => this.editDevice(id, ctx), { refresh: "devices" }),
     };
@@ -316,7 +316,7 @@ export class YamahaDeviceManagement extends DeviceManagement {
           hideIfEmpty: false,
           color: "primary" as const,
           colorOn: "primary" as const,
-          tooltip: t(percent ? "volumeAsPercent" : "volumeDeviceScale"),
+          tooltip: tName(percent ? "volumeAsPercent" : "volumeDeviceScale"),
           order: 20,
         },
       ],
@@ -355,7 +355,7 @@ export class YamahaDeviceManagement extends DeviceManagement {
     const identity = mergeIdentity(stored, profile);
     const line = (key: "dmDetailsId" | "dmDetailsMac" | "dmDetailsSerial", value: string | undefined): unknown => ({
       type: "staticText",
-      text: t(key, value ?? "–"),
+      text: tName(key, value ?? "–"),
       newLine: true,
       sm: 12,
     });
@@ -378,19 +378,19 @@ export class YamahaDeviceManagement extends DeviceManagement {
   protected getInstanceInfo(): InstanceDetails {
     return {
       apiVersion: "v3",
-      identifierLabel: t("ipLabel"),
+      identifierLabel: tName("ipLabel"),
       actions: [
         {
           id: "add",
           icon: "add",
-          description: t("dmAdd"),
+          description: tName("dmAdd"),
           handler: async ctx => this.runAction("add", undefined, ctx, () => this.addDevice(ctx), { refresh: true }),
         },
         // The way back for a deleted device: without it an exclusion is invisible and permanent.
         {
           id: "excluded",
           icon: "lines",
-          description: t("dmExcluded"),
+          description: tName("dmExcluded"),
           handler: async ctx =>
             this.runAction("excluded devices", undefined, ctx, () => this.excludedDevices(ctx), { refresh: true }),
         },
@@ -414,12 +414,12 @@ export class YamahaDeviceManagement extends DeviceManagement {
    */
   private async addDevice(context: ActionContext): Promise<{ refresh: boolean }> {
     const manual = await this.readManual();
-    const data = await context.showForm(buildDeviceForm(manual.map(r => r.ip)), { title: t("dmAdd") });
+    const data = await context.showForm(buildDeviceForm(manual.map(r => r.ip)), { title: tName("dmAdd") });
     if (data && typeof data.ip === "string" && data.ip.trim()) {
       const ip = data.ip.trim();
       const typedName = typeof data.name === "string" ? data.name.trim() : "";
       if (!isValidIp(ip)) {
-        await context.showMessage(t("invalidIp"));
+        await context.showMessage(tName("invalidIp"));
         return { refresh: true };
       }
       // A name that IS the address says nothing the address does not — it is no display name.
@@ -428,7 +428,7 @@ export class YamahaDeviceManagement extends DeviceManagement {
       const found = await readDiscovered(discoveredStoreDeps(this.adapter));
       // The same receiver found by the search already runs — a second card would be a second tree.
       if (found.some(record => sameDevice(record.identity, report.identity))) {
-        await context.showMessage(t("duplicateDevice"));
+        await context.showMessage(tName("duplicateDevice"));
         return { refresh: true };
       }
       const taken = new Set([...manual.map(entry => rowId(entry)), ...found.map(record => record.id)]);
@@ -499,11 +499,11 @@ export class YamahaDeviceManagement extends DeviceManagement {
       ...ignored.filter(id => !excluded.some(entry => entry.id === id)).map(id => ({ id })),
     ];
     if (entries.length === 0) {
-      await context.showMessage(t("dmExcludedNone"));
+      await context.showMessage(tName("dmExcludedNone"));
       return { refresh: false };
     }
     const data = await context.showForm(buildExcludedForm(entries), {
-      title: t("dmExcludedTitle"),
+      title: tName("dmExcludedTitle"),
       buttons: ["apply", "cancel"],
     });
     if (!data) {
@@ -558,7 +558,7 @@ export class YamahaDeviceManagement extends DeviceManagement {
     const percent = await this.volumeAsPercentOf(cardId);
     const data = await context.showForm(
       buildDeviceForm(cards.filter(entry => entry.id !== cardId).map(entry => entry.ip)),
-      { title: t("dmEditTitle"), data: { name: shownName, ip: card.ip, volumeAsPercent: percent } },
+      { title: tName("dmEditTitle"), data: { name: shownName, ip: card.ip, volumeAsPercent: percent } },
     );
     if (!data || typeof data.ip !== "string" || !data.ip.trim()) {
       return { refresh: "devices" };

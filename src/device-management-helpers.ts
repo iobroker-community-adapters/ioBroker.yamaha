@@ -1,5 +1,5 @@
 import type { JsonFormSchema } from "@iobroker/dm-utils";
-import { t } from "./lib/i18n";
+import { tName } from "./lib/i18n";
 import { rowDeviceId } from "./lib/pure-helpers";
 import { TRANSPORT_LABELS } from "./lib/ready-line";
 import type { DeviceSource } from "./lib/types";
@@ -72,15 +72,15 @@ export function buildDeviceForm(usedIps: readonly string[]): JsonFormSchema {
     items: {
       name: {
         type: "text",
-        label: t("columnName"),
+        label: tName("columnName"),
         sm: 12,
         md: 6,
       },
       ip: {
         type: "text",
-        label: t("columnIp"),
+        label: tName("columnIp"),
         validator: `!!(data.ip && ${IP_RE.toString()}.test(data.ip)) && !${ipList}.includes(data.ip)`,
-        validatorErrorText: t("invalidIp"),
+        validatorErrorText: tName("invalidIp"),
         validatorNoSaveOnError: true,
         sm: 12,
         md: 6,
@@ -92,8 +92,8 @@ export function buildDeviceForm(usedIps: readonly string[]): JsonFormSchema {
       volumeAsPercent: {
         newLine: true,
         type: "checkbox",
-        label: t("volumeAsPercent"),
-        help: t("volumeAsPercent_help"),
+        label: tName("volumeAsPercent"),
+        help: tName("volumeAsPercent_help"),
         sm: 12,
         md: 12,
       },
@@ -122,21 +122,21 @@ export function findClash(
   otherIds: ReadonlySet<string> = new Set(),
 ): ioBroker.StringOrTranslated | null {
   if (!IP_RE.test(candidate.ip)) {
-    return t("invalidIp");
+    return tName("invalidIp");
   }
   const id = rowId(candidate);
   if (id === "" || RESERVED_IDS.has(id)) {
-    return t("invalidName");
+    return tName("invalidName");
   }
   if (otherIds.has(id)) {
-    return t("duplicateDevice");
+    return tName("duplicateDevice");
   }
   for (let i = 0; i < rows.length; i++) {
     if (i === exceptIndex) {
       continue;
     }
     if (rows[i].ip === candidate.ip || rowId(rows[i]) === id) {
-      return t("duplicateDevice");
+      return tName("duplicateDevice");
     }
   }
   return null;
@@ -155,7 +155,7 @@ export function buildExcludedForm(entries: ReadonlyArray<{ id: string; ip?: stri
     items[entry.id] = {
       type: "checkbox",
       label: entry.ip ? `${entry.id} (${entry.ip})` : entry.id,
-      ...(index === 0 ? { help: t("dmExcludedHelp") } : {}),
+      ...(index === 0 ? { help: tName("dmExcludedHelp") } : {}),
       sm: 12,
     };
   });

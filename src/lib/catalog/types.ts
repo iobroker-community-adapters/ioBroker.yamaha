@@ -117,13 +117,6 @@ export interface ObjectDef {
 }
 
 /**
- * Display names for the channel ids the catalogs use. A channel id not listed
- * here falls back to its capitalised segment, so a new channel still renders — but
- * every channel a catalog actually creates is named here, so nothing shows a raw id
- * like "Pc" or "Ipod" in the object browser. Keys match the real channel segments
- * (verified against the built catalogs); do not add speculative entries.
- */
-/**
  * Explanations for the channel ids that need one — the folders whose purpose is not obvious
  * from their name. Same rule as {@link CatalogEntry.descKey}: a folder that explains itself
  * (`sound`, `tuner`, a source name like `spotify`) stays out, because the fleet standard wants
@@ -150,6 +143,13 @@ export const CHANNEL_DESC_KEYS: Record<string, I18nKey> = {
   trigger2Inputs: "descChannelTrigger2Inputs",
 };
 
+/**
+ * Display names for the channel ids the catalogs use. A channel id not listed
+ * here falls back to its capitalised segment, so a new channel still renders — but
+ * every channel a catalog actually creates is named here, so nothing shows a raw id
+ * like "Pc" or "Ipod" in the object browser. Keys match the real channel segments
+ * (verified against the built catalogs); do not add speculative entries.
+ */
 export const CHANNEL_NAME_KEYS: Record<string, I18nKey> = {
   // Device info (metadata beside the per-device connection indicator)
   info: "info",

@@ -1,10 +1,10 @@
-import { t, tName } from "./i18n";
+import { tName } from "./i18n";
 import en from "../../admin/i18n/en.json";
 import de from "../../admin/i18n/de.json";
 
 describe("i18n — the eleven admin languages from the admin's own files", () => {
   test("a translated string carries every admin language, each from its own file", () => {
-    const text = t("volumeAsPercent") as Record<string, string>;
+    const text = tName("volumeAsPercent") as Record<string, string>;
     expect(Object.keys(text).sort()).toEqual(["de", "en", "es", "fr", "it", "nl", "pl", "pt", "ru", "uk", "zh-cn"]);
     expect(text.en).toBe(en.volumeAsPercent);
     expect(text.de).toBe(de.volumeAsPercent);
@@ -31,7 +31,7 @@ describe("i18n — the eleven admin languages from the admin's own files", () =>
     const original = (de as Record<string, string>)[key];
     delete (de as Record<string, string>)[key];
     try {
-      const text = t(key) as Record<string, string>;
+      const text = tName(key) as Record<string, string>;
       expect(text.de).toBe(en[key]);
       expect(text.de).not.toBe(key);
     } finally {
