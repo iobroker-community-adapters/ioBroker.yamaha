@@ -3362,6 +3362,13 @@ export interface YncaGenerationEvidence {
   returnWords: boolean;
   /** Whether the menu pad has `Display` — the 2010/2011 lists do not declare it. */
   display: boolean;
+  /**
+   * Whether the main zone has an on-screen pad at all (`@MAIN:LISTCURSOR`/`LISTMENU` or
+   * `CURSOR`/`MENU`), and whether a source's list knows `Back to Home`. The six 2010 lists
+   * (RX-A700/A800/A1000/A2000/A3000, RX-V867) declare neither — they are the lists with IPOD but
+   * without IPODUSB; every 2011 list has both (audit 2026-09-29, B5).
+   */
+  pad: boolean;
 }
 
 /**
@@ -3371,9 +3378,12 @@ export interface YncaGenerationEvidence {
  * @returns the evidence
  */
 export function yncaGenerationEvidence(subunits: Readonly<Record<string, unknown>>): YncaGenerationEvidence {
+  // The 2010/2011 lists answer PC or — the RX-A700/A800, which have no PC — IPOD; no list from 2012 on
+  // has either, every one of them has SERVER (all 21 official lists, audit 2026-09-29, B6).
   const server = "SERVER" in subunits;
-  const pc = "PC" in subunits;
-  return { returnWords: server || !pc, display: !pc || server };
+  const older = !server && ("PC" in subunits || "IPOD" in subunits);
+  const first = !server && "IPOD" in subunits && !("IPODUSB" in subunits);
+  return { returnWords: !older, display: !older, pad: !first };
 }
 
 /**

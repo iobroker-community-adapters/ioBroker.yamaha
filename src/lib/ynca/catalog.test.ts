@@ -1403,8 +1403,32 @@ describe("the catalog answers every readable function the official lists declare
 
 describe("yncaGenerationEvidence (audit 2026-09-24, B16/B6)", () => {
   it("reads the generation off the network source a device answers", () => {
-    expect(yncaGenerationEvidence({ MAIN: {}, SERVER: {} })).toEqual({ returnWords: true, display: true });
-    expect(yncaGenerationEvidence({ MAIN: {}, PC: {} })).toEqual({ returnWords: false, display: false });
+    expect(yncaGenerationEvidence({ MAIN: {}, SERVER: {} })).toEqual({ returnWords: true, display: true, pad: true });
+    expect(yncaGenerationEvidence({ MAIN: {}, PC: {}, IPOD: {}, IPODUSB: {} })).toEqual({
+      returnWords: false,
+      display: false,
+      pad: true,
+    });
+  });
+
+  // The RX-A700/A800 lists have neither PC nor SERVER, their sources say Back/Single (audit 2026-09-29, B6);
+  // the six 2010 lists (IPOD without IPODUSB) declare no pad on MAIN and no `Back to Home` (B5).
+  it("a 2010 receiver without PC is told by its IPOD source, and has no pad", () => {
+    expect(yncaGenerationEvidence({ MAIN: {}, IPOD: {}, NETRADIO: {} })).toEqual({
+      returnWords: false,
+      display: false,
+      pad: false,
+    });
+    expect(yncaGenerationEvidence({ MAIN: {}, PC: {}, IPOD: {} })).toEqual({
+      returnWords: false,
+      display: false,
+      pad: false,
+    });
+    expect(yncaGenerationEvidence({ MAIN: {}, NETRADIO: {} })).toEqual({
+      returnWords: true,
+      display: true,
+      pad: true,
+    });
   });
 });
 

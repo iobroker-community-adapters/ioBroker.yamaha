@@ -157,7 +157,9 @@ const PAD_DIALECT_KEY = "yncaPadDialect";
  */
 function provenPadDialect(remembered: unknown): YncaPadDialect | undefined {
   const entry = remembered as { dialect?: unknown; proven?: unknown } | undefined;
-  return entry?.proven === true && (entry.dialect === "list" || entry.dialect === "zone") ? entry.dialect : undefined;
+  return entry?.proven === true && (entry.dialect === "list" || entry.dialect === "zone" || entry.dialect === "none")
+    ? entry.dialect
+    : undefined;
 }
 
 /** Unknown lines logged per connection before they are only counted (see the onUnknownLine handler). */
@@ -1629,12 +1631,15 @@ export class YncaDeviceController implements ConnectionHandle {
       return "list";
     }
     const verdicts = await this.deps.client.probeKnown("MAIN", ["LISTCURSOR", "CURSOR"]);
+    // Both unknown to the device: it has no pad, and none is offered (audit 2026-09-29, B5).
     const dialect: YncaPadDialect | undefined =
       verdicts.LISTCURSOR === "known"
         ? "list"
         : verdicts.LISTCURSOR === "undefined" && verdicts.CURSOR === "known"
           ? "zone"
-          : undefined;
+          : verdicts.LISTCURSOR === "undefined" && verdicts.CURSOR === "undefined"
+            ? "none"
+            : undefined;
     if (!dialect) {
       return "list";
     }

@@ -106,8 +106,11 @@ const YNCA_ZONE_MENU_WIRE: WireTable<MenuValue> = {
   display: "Display",
 };
 
-/** Which wire functions the main-zone pad uses (see {@link YNCA_ZONE_CURSOR_WIRE}). */
-export type YncaPadDialect = "list" | "zone";
+/**
+ * Which wire functions the main-zone pad uses (see {@link YNCA_ZONE_CURSOR_WIRE}) — or `none`: the
+ * device has no pad (a 2010 receiver, or one whose probe knows neither `LISTCURSOR` nor `CURSOR`).
+ */
+export type YncaPadDialect = "list" | "zone" | "none";
 
 /**
  * The YNCA list driver: navigation writes go out as LISTSEL/LISTPAGE/LISTCURSOR
@@ -146,11 +149,21 @@ export class YncaBrowseDriver implements BrowseDriver {
     private readonly present: ReadonlySet<string>,
     private readonly delay: (ms: number) => Promise<void>,
     public padDialect: YncaPadDialect = "list",
-    generation: YncaGenerationEvidence = { returnWords: false, display: true },
+    generation: YncaGenerationEvidence = { returnWords: false, display: true, pad: true },
   ) {
     this.listCursorWire = generation.returnWords ? YNCA_RETURN_CURSOR_WIRE : YNCA_CURSOR_WIRE;
-    this.menuValues = Object.keys(YNCA_MENU_WIRE).filter(key => generation.display || key !== "display");
+    this.homeWord = generation.pad;
+    // No pad on the device: no cursor or menu datapoints — every key would come back @UNDEFINED
+    // (audit 2026-09-29, B5; the rule "no claim without proof").
+    const pad = generation.pad && padDialect !== "none";
+    this.cursorValues = pad ? Object.keys(YNCA_CURSOR_WIRE) : undefined;
+    this.menuValues = pad
+      ? Object.keys(YNCA_MENU_WIRE).filter(key => generation.display || key !== "display")
+      : undefined;
   }
+
+  /** Whether the sources' lists know `Back to Home` (every list from 2011 on). */
+  private readonly homeWord: boolean;
 
   /** The list-dialect cursor words of this device's generation. */
   private readonly listCursorWire: WireTable<CursorValue>;
@@ -203,11 +216,11 @@ export class YncaBrowseDriver implements BrowseDriver {
     this.closed = true;
   }
 
-  /** The cursor keys this protocol has on the main zone. */
-  public readonly cursorValues = Object.keys(YNCA_CURSOR_WIRE);
+  /** The cursor keys this device has on the main zone — none without a pad. */
+  public readonly cursorValues: string[] | undefined;
 
-  /** The menu keys this protocol has on the main zone (`display` only where the generation declares it). */
-  public readonly menuValues: string[];
+  /** The menu keys this device has on the main zone (`display` only where the generation declares it). */
+  public readonly menuValues: string[] | undefined;
 
   /** @returns the selectable sources this device offers (state value → label) */
   public sources(): Record<string, string> {
@@ -264,9 +277,27 @@ export class YncaBrowseDriver implements BrowseDriver {
     this.command("LISTCURSOR", wireFor(this.listCursorWire, "return") ?? "Back");
   }
 
-  /** Return to the menu root. */
+  /**
+   * Return to the menu root. The 2010 lists declare no `Back to Home` on a source's list — there the
+   * root is reached one `Back` per level (audit 2026-09-29, B5).
+   */
   public home(): void {
-    this.command("LISTCURSOR", wireFor(this.listCursorWire, "home") ?? "Back to Home");
+    if (this.homeWord) {
+      this.command("LISTCURSOR", wireFor(this.listCursorWire, "home") ?? "Back to Home");
+      return;
+    }
+    if (!this.active) {
+      return;
+    }
+    const back = wireFor(this.listCursorWire, "return") ?? "Back";
+    for (let level = this.layer; level > 2; level--) {
+      this.client.send(this.active.subunit, "LISTCURSOR", back);
+    }
+    if (this.layer > 1) {
+      this.command("LISTCURSOR", back);
+    } else {
+      this.refresh();
+    }
   }
 
   /**
@@ -282,6 +313,9 @@ export class YncaBrowseDriver implements BrowseDriver {
    * @param value one of {@link cursorValues}
    */
   public cursor(value: string): void {
+    if (!this.cursorValues) {
+      return;
+    }
     if (this.padDialect === "zone") {
       this.send("CURSOR", wireFor(YNCA_ZONE_CURSOR_WIRE, value));
       return;
@@ -295,6 +329,9 @@ export class YncaBrowseDriver implements BrowseDriver {
    * @param value one of {@link menuValues}
    */
   public menu(value: string): void {
+    if (!this.menuValues) {
+      return;
+    }
     if (this.padDialect === "zone") {
       this.send("MENU", wireFor(YNCA_ZONE_MENU_WIRE, value));
       return;

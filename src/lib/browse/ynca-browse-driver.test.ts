@@ -156,7 +156,7 @@ describe("YncaBrowseDriver remote pad (#613)", () => {
     const { driver, sent } = setup(["NETRADIO"]);
     driver.open("netRadio");
     sent.length = 0;
-    for (const value of driver.cursorValues) {
+    for (const value of driver.cursorValues ?? []) {
       driver.cursor(value);
     }
     expect(driver.cursorValues).toEqual(["up", "down", "left", "right", "select", "return", "home"]);
@@ -241,6 +241,7 @@ describe("the 2015 generation's zone-wide pad (@MAIN:CURSOR / @MAIN:MENU, RX-A85
     const returnGen = new YncaBrowseDriver(client, new Set(["SERVER"]), instantDelay, "list", {
       returnWords: true,
       display: true,
+      pad: true,
     });
     returnGen.open("server");
     sent.length = 0;
@@ -255,8 +256,47 @@ describe("the 2015 generation's zone-wide pad (@MAIN:CURSOR / @MAIN:MENU, RX-A85
     const backGen = new YncaBrowseDriver(client, new Set(["PC"]), instantDelay, "list", {
       returnWords: false,
       display: false,
+      pad: true,
     });
     expect(backGen.menuValues).not.toContain("display");
+  });
+
+  // The six 2010 lists declare no pad on MAIN, and their sources know no `Back to Home` (audit 2026-09-29, B5).
+  it("a 2010 receiver gets no pad, and reaches the menu root one Back per level", () => {
+    const sent: Array<{ subunit: string; func: string; value: string }> = [];
+    const client = {
+      send: (subunit: string, func: string, value: string) => sent.push({ subunit, func, value }),
+      get: (): void => {},
+    };
+    const first = new YncaBrowseDriver(client, new Set(["NETRADIO"]), instantDelay, "list", {
+      returnWords: false,
+      display: false,
+      pad: false,
+    });
+    expect(first.cursorValues).toBeUndefined();
+    expect(first.menuValues).toBeUndefined();
+    first.cursor("up");
+    first.menu("on_screen");
+    expect(sent).toEqual([]);
+    first.open("netRadio");
+    first.handleMessage({ subunit: "NETRADIO", func: "LISTLAYER", value: "3" });
+    sent.length = 0;
+    first.home();
+    expect(sent).toEqual([
+      { subunit: "NETRADIO", func: "LISTCURSOR", value: "Back" },
+      { subunit: "NETRADIO", func: "LISTCURSOR", value: "Back" },
+    ]);
+  });
+
+  it("a device whose probe knows no pad function gets no pad either", () => {
+    const client = { send: (): void => {}, get: (): void => {} };
+    const none = new YncaBrowseDriver(client, new Set(["NETRADIO"]), instantDelay, "none", {
+      returnWords: true,
+      display: true,
+      pad: true,
+    });
+    expect(none.cursorValues).toBeUndefined();
+    expect(none.menuValues).toBeUndefined();
   });
 
   it("a refused key is sent once more in the dialect a probe switched to", () => {
