@@ -1,4 +1,4 @@
-import { channelCommon, keyedCommon, parentChannels, zoneRole, type ObjectDef } from "../catalog/types";
+import { keyedCommon, parentChannels, zoneRole, type ObjectDef } from "../catalog/types";
 import { coerceBool, textWriteProblem, writableNumber } from "../catalog/value-coerce";
 import { tName } from "../i18n";
 import {
@@ -170,12 +170,13 @@ export class XmlDeviceController implements ConnectionHandle {
    */
   /** Per zone element, the command form it uses where that differs from the main zone's (D6). */
   private readonly zoneForms = new Map<string, XmlZoneForm>();
-  private zoneCommands: { cursor: Set<string>; menu: Set<string>; playback: Set<string>; dialogue: Set<string> } = {
+  private zoneCommands: { cursor: Set<string>; menu: Set<string>; playback: Set<string> } = {
     cursor: new Set(),
     menu: new Set(),
     playback: new Set(),
-    dialogue: new Set(),
   };
+  /** The states built read-only because the device description declares no write for them (D11). */
+  private readonly readOnlyStates = new Set<string>();
 
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
@@ -272,7 +273,6 @@ export class XmlDeviceController implements ConnectionHandle {
       cursor: new Set(descriptor.cursorZones ?? []),
       menu: new Set(descriptor.menuZones ?? []),
       playback: new Set(descriptor.playbackZones ?? []),
-      dialogue: new Set(descriptor.dialogueZones ?? []),
     };
     for (const element of descriptor.toneManualZones ?? []) {
       this.zoneForms.set(element, { ...this.zoneForms.get(element), toneManual: true });
@@ -301,15 +301,14 @@ export class XmlDeviceController implements ConnectionHandle {
     this.inputsByZone = inputsByZone;
     this.inputLabelsByZone = inputLabels;
     this.deviceDescriptor = descriptor;
-    const createdChannels = this.createdChannels;
     for (const zone of this.zones) {
       await this.createZoneStates(zone);
     }
-    await this.setupScenes(createdChannels);
-    await this.setupTuner(createdChannels);
-    await this.setupSystemPower(createdChannels);
-    await this.setupTransportKeys(createdChannels);
-    await this.setupZoneNames(createdChannels);
+    await this.setupScenes();
+    await this.setupTuner();
+    await this.setupSystemPower();
+    await this.setupTransportKeys();
+    await this.setupZoneNames();
     // Seed from the statuses already fetched during the probe — no second round-trip.
     for (const { zone, status } of answered) {
       if (status) {
@@ -408,8 +407,8 @@ export class XmlDeviceController implements ConnectionHandle {
       }
     };
     try {
-      // `:v2` since the parse carries the dialogue zones (2026-09-24, D19) — an older parse lacks them.
-      return this.deps.probeMemory ? await this.deps.probeMemory.once("xmlDescriptor:v2", probe) : await probe();
+      // `:v3` since the parse carries every declared write command (2026-09-29, D18) — an older parse lacks them.
+      return this.deps.probeMemory ? await this.deps.probeMemory.once("xmlDescriptor:v3", probe) : await probe();
     } catch (e) {
       this.deps.log.debug(
         `${this.deviceId}: desc.xml probe failed, asking again on the next connect (${errorMessage(e)})`,
@@ -451,10 +450,8 @@ export class XmlDeviceController implements ConnectionHandle {
    * (`Scene N` via `<Scene_Sel>`). The predecessor blindly sent `Scene_Load` to a
    * fixed 1..12 main-zone state; the capture shows the device declaring `Scene_Sel`
    * instead — and declaring scenes for Zone 2 too.
-   *
-   * @param createdChannels the channel ids already created (extended here)
    */
-  private async setupScenes(createdChannels: Set<string>): Promise<void> {
+  private async setupScenes(): Promise<void> {
     for (const zone of this.zones) {
       const body = await this.probeXml(
         `xmlScenes:${zone.key}`,
@@ -468,14 +465,7 @@ export class XmlDeviceController implements ConnectionHandle {
       }
       this.scenesByZone.set(zone.key, scenes);
       const channelId = `${zone.prefix}scene`;
-      if (!createdChannels.has(channelId)) {
-        createdChannels.add(channelId);
-        await this.deps.upsertObject(`${this.deviceId}.${channelId}`, {
-          id: channelId,
-          type: "channel",
-          common: channelCommon("scene"),
-        });
-      }
+      await this.ensureChannels(`${channelId}.recall`);
       const max = Math.max(...scenes.map(scene => scene.num));
       await this.deps.upsertObject(`${this.deviceId}.${channelId}.recall`, {
         id: `${channelId}.recall`,
@@ -514,23 +504,14 @@ export class XmlDeviceController implements ConnectionHandle {
    * Existence is probed once per device; the preset write is the openHAB-verified
    * `<Play_Control><Preset><Preset_Sel>`; frequency/RDS/tuned are read-only from
    * Play_Info. On newer devices YNCA/YXC own these ids via the owner policy.
-   *
-   * @param createdChannels the channel ids already created (extended here)
    */
-  private async setupTuner(createdChannels: Set<string>): Promise<void> {
+  private async setupTuner(): Promise<void> {
     const probe = await this.probeXml("xmlTuner", "Tuner", "<Play_Info>GetParam</Play_Info>");
     if (probe.length === 0) {
       return;
     }
     this.hasTuner = true;
-    if (!createdChannels.has("tuner")) {
-      createdChannels.add("tuner");
-      await this.deps.upsertObject(`${this.deviceId}.tuner`, {
-        id: "tuner",
-        type: "channel",
-        common: channelCommon("tuner"),
-      });
-    }
+    await this.ensureChannels("tuner.preset");
     // Only the fields this device's Play_Info carries become datapoints — the remembered probe is the
     // proof of existence, never the source of a value (D7: an RX-V675 has no RDS block and carried
     // three RDS datapoints that never got a value).
@@ -707,19 +688,15 @@ export class XmlDeviceController implements ConnectionHandle {
    * The all-zones power: every desc.xml declares `System,Power_Control,Power` (10 of 10, the 2008
    * RX-V3900 included) and the predecessor switched it; the id is YNCA's `multiroom.masterPower`, so a
    * receiver without YNCA keeps the switch (audit 2026-09-29, D4). Proven by the device's answer.
-   *
-   * @param createdChannels the channels created so far (parents once)
    */
-  private async setupSystemPower(createdChannels: Set<string>): Promise<void> {
+  private async setupSystemPower(): Promise<void> {
     const probe = await this.probeXml("xmlSystemPower", "System", SYSTEM_POWER_GET);
     const power = parseSystemPower(probe);
     if (power === undefined) {
       return;
     }
     this.hasSystemPower = true;
-    for (const parent of parentChannels("multiroom.masterPower", createdChannels)) {
-      await this.deps.upsertObject(`${this.deviceId}.${parent.id}`, parent);
-    }
+    await this.ensureChannels("multiroom.masterPower");
     await this.deps.upsertObject(`${this.deviceId}.multiroom.masterPower`, {
       id: "multiroom.masterPower",
       type: "state",
@@ -812,9 +789,7 @@ export class XmlDeviceController implements ConnectionHandle {
         }
         const id = `${prefix}.${state}`;
         if (!this.playerStates.has(id)) {
-          for (const parent of parentChannels(id, this.createdChannels)) {
-            await this.deps.upsertObject(`${this.deviceId}.${parent.id}`, parent);
-          }
+          await this.ensureChannels(id);
           await this.deps.upsertObject(`${this.deviceId}.${id}`, {
             id,
             type: "state",
@@ -1051,11 +1026,11 @@ export class XmlDeviceController implements ConnectionHandle {
     }
     const { zone: zoneKey } = splitZone(stateId);
     const element = this.zones.find(candidate => candidate.key === zoneKey)?.element ?? "Main_Zone";
-    const command = stateToXml(stateId, value, this.dialect, this.zoneForms.get(element));
-    if (command && /(^|\.)sound\.dialogueLevel$/.test(stateId) && !this.zoneCommands.dialogue.has(command.zone)) {
-      this.deps.log.debug(`${this.deviceId}: ${stateId} — this zone declares no dialogue level command, write dropped`);
+    if (this.readOnlyStates.has(stateId)) {
+      this.deps.log.debug(`${this.deviceId}: ${stateId} — this device declares no write for it, write dropped`);
       return;
     }
+    const command = stateToXml(stateId, value, this.dialect, this.zoneForms.get(element));
     if (command) {
       // The zone to read back afterwards: the command's own element, or the main zone for a
       // command that goes out on the System element (HDMI outputs, party mode).
@@ -1181,7 +1156,6 @@ export class XmlDeviceController implements ConnectionHandle {
    * @param zone the zone to build
    */
   private async createZoneStates(zone: XmlZone): Promise<void> {
-    const createdChannels = this.createdChannels;
     const inputsByZone = this.inputsByZone;
     const descriptor = this.deviceDescriptor;
     for (const entry of XML_AMP_CATALOG) {
@@ -1198,9 +1172,7 @@ export class XmlDeviceController implements ConnectionHandle {
       // A dotted state (e.g. scene.recall) needs its parent channel created first — named AND
       // explained from the one shared table, so the same folder cannot end up called "sound" here
       // and "Sound" there depending on which transport owns it.
-      for (const parent of parentChannels(stateId, createdChannels)) {
-        await this.deps.upsertObject(`${this.deviceId}.${parent.id}`, parent);
-      }
+      await this.ensureChannels(stateId);
       // An absent explanation key means the datapoint explains itself — the fleet standard wants
       // the field empty there rather than filled with invented prose.
       const keyed = keyedCommon(entry.common);
@@ -1217,27 +1189,41 @@ export class XmlDeviceController implements ConnectionHandle {
         const labels = entry.state === "input" ? this.inputLabelsByZone.get(zone.key) : undefined;
         common.states = Object.fromEntries(declaredList.map(value => [value, labels?.[value] ?? value]));
       }
-      if (entry.state === "sound.dialogueLevel" && descriptor.dialogueLevel) {
-        common.min = descriptor.dialogueLevel.min;
-        common.max = descriptor.dialogueLevel.max;
-        common.step = descriptor.dialogueLevel.step;
+      // Where the device description declares a command list, it decides: writable exactly where it
+      // declares one of the entry's write paths for this zone (or the System element the entry writes
+      // to), with the bounds declared there — the step also the grid a written value snaps to
+      // (D16/D10). Before, only the dialogue level asked; everything else was writable because its
+      // status carried it (D11, D18). Without a description the catalog rule stands.
+      const puts = descriptor.puts ?? {};
+      if (entry.putPaths && Object.keys(puts).length > 0) {
+        const declaredPut = entry.putPaths
+          .map(path => puts[entry.writeZone ?? zone.element]?.[path])
+          .find(put => put !== undefined);
+        common.write = declaredPut !== undefined;
+        if (declaredPut?.range) {
+          common.min = declaredPut.range.min;
+          common.max = declaredPut.range.max;
+          common.step = declaredPut.range.step;
+          const form = this.zoneForms.get(zone.element) ?? {};
+          this.zoneForms.set(zone.element, {
+            ...form,
+            steps: { ...form.steps, [entry.state]: declaredPut.range.step },
+          });
+        }
+        if (declaredPut?.words && !common.states) {
+          common.states = Object.fromEntries(declaredPut.words.map(word => [word, word]));
+        }
       }
-      // The bounds the device description declares for THIS zone win over the catalog constants;
-      // the step also becomes the grid a written value snaps to (D16/D10).
-      const declaredRange = entry.rangePaths
-        ?.map(path => descriptor.ranges?.[zone.element]?.[path])
-        .find(range => range !== undefined);
-      if (declaredRange) {
-        common.min = declaredRange.min;
-        common.max = declaredRange.max;
-        common.step = declaredRange.step;
-        const form = this.zoneForms.get(zone.element) ?? {};
-        this.zoneForms.set(zone.element, { ...form, steps: { ...form.steps, [entry.state]: declaredRange.step } });
-      }
-      // Writable only where the device description declares the command for this zone (D19).
-      if (entry.state === "sound.dialogueLevel" && this.zoneCommands.dialogue.has(zone.element)) {
-        common.write = true;
+      // A number the user sets is a level, one the device only reports a value.
+      if (common.role === "value" && common.write) {
         common.role = "level";
+      } else if (common.role === "level" && !common.write) {
+        common.role = "value";
+      }
+      if (common.write) {
+        this.readOnlyStates.delete(stateId);
+      } else {
+        this.readOnlyStates.add(stateId);
       }
       await this.deps.upsertObject(`${this.deviceId}.${stateId}`, {
         id: stateId,
@@ -1246,6 +1232,18 @@ export class XmlDeviceController implements ConnectionHandle {
         ...(declared ? { declaredStates: true } : {}),
       });
       this.createdStates.add(stateId);
+    }
+  }
+
+  /**
+   * Create the channels an id still lacks above it, parents first, each once — named from the one
+   * channel table (audit 2026-09-29, D19: the loop stood five times in this controller).
+   *
+   * @param id the state (or channel) id
+   */
+  private async ensureChannels(id: string): Promise<void> {
+    for (const parent of parentChannels(id, this.createdChannels)) {
+      await this.deps.upsertObject(`${this.deviceId}.${parent.id}`, parent);
     }
   }
 
@@ -1336,11 +1334,7 @@ export class XmlDeviceController implements ConnectionHandle {
       if (!cursor && !menu) {
         continue;
       }
-      await this.deps.upsertObject(`${this.deviceId}.${zone.prefix}remote`, {
-        id: `${zone.prefix}remote`,
-        type: "channel",
-        common: channelCommon("remote"),
-      });
+      await this.ensureChannels(`${zone.prefix}remote.cursor`);
       const pads: Array<[string, string, readonly string[]]> = [];
       if (cursor) {
         pads.push(["cursor", "cursorPad", Object.keys(XML_CURSOR_WIRE)]);
@@ -1373,23 +1367,13 @@ export class XmlDeviceController implements ConnectionHandle {
    * Skip Fwd, Skip Rev — 8 of the 10 captured descriptors, per zone on the 2013+ models): five
    * keys on the flat player block of the zone, the same ids YNCA and MusicCast use, so on a
    * receiver with a richer transport the owner policy hands them over.
-   *
-   * @param createdChannels the channels created so far (parents once)
    */
-  private async setupTransportKeys(createdChannels: Set<string>): Promise<void> {
+  private async setupTransportKeys(): Promise<void> {
     for (const zone of this.zones) {
       if (!this.zoneCommands.playback.has(zone.element)) {
         continue;
       }
-      const channelId = `${zone.prefix}player`;
-      if (!createdChannels.has(channelId)) {
-        createdChannels.add(channelId);
-        await this.deps.upsertObject(`${this.deviceId}.${channelId}`, {
-          id: channelId,
-          type: "channel",
-          common: channelCommon("player"),
-        });
-      }
+      await this.ensureChannels(`${zone.prefix}player.play`);
       for (const [key, { nameKey, role }] of Object.entries(TRANSPORT_KEYS)) {
         const stateId = `${zone.prefix}player.${key}`;
         await this.deps.upsertObject(`${this.deviceId}.${stateId}`, {
@@ -1407,27 +1391,15 @@ export class XmlDeviceController implements ConnectionHandle {
    * zones over the captured descriptors) — read on every connection (the user can rename a zone at
    * the device, D8) with `xmlZoneName:<zone>` as the fallback; a zone that declares none gets no datapoint. Same id as
    * YNCA's ZONENAME, so an XML-only receiver finally shows the names its owner gave the zones.
-   *
-   * @param createdChannels the channels created so far (parents once)
    */
-  private async setupZoneNames(createdChannels: Set<string>): Promise<void> {
+  private async setupZoneNames(): Promise<void> {
     for (const zone of this.zones) {
       const name = await this.probeZoneName(zone);
       if (!name) {
         continue;
       }
       const stateId = `${zone.prefix}zoneName`;
-      const channelId = zone.prefix.replace(/\.$/, "");
-      if (channelId && !createdChannels.has(channelId)) {
-        // Cannot happen for a zone that answered its status (its channel exists), kept for
-        // the zone whose only answer is its name.
-        createdChannels.add(channelId);
-        await this.deps.upsertObject(`${this.deviceId}.${channelId}`, {
-          id: channelId,
-          type: "channel",
-          common: channelCommon(channelId.split(".").pop() ?? channelId),
-        });
-      }
+      await this.ensureChannels(stateId);
       await this.deps.upsertObject(`${this.deviceId}.${stateId}`, {
         id: stateId,
         type: "state",

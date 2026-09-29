@@ -50,7 +50,7 @@ export function stateToXml(
   if (input === undefined) {
     return undefined;
   }
-  return { zone, inner: entry.toInner(input, dialect, form) };
+  return { zone, inner: entry.toInner(input, dialect, form, form?.steps?.[entry.state] ?? entry.common.step) };
 }
 
 /**

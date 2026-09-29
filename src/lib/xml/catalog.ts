@@ -23,9 +23,11 @@ export interface XmlAmpEntry {
   /**
    * Build the inner PUT XML for a written value; absent means read-only. The dialect is the
    * spelling THIS device answered its status with (see {@link XmlDialect}); an entry whose
-   * element differs between the generations builds the device's own.
+   * element differs between the generations builds the device's own. `step` is the grid the zone
+   * declares for this entry's level — the caller looks it up under the entry's own state, so a
+   * renamed entry cannot fall back to 0.5 unnoticed (audit 2026-09-29, D19).
    */
-  toInner?: (value: unknown, dialect?: XmlDialect, form?: XmlZoneForm) => string;
+  toInner?: (value: unknown, dialect?: XmlDialect, form?: XmlZoneForm, step?: number) => string;
   /** Only exists on the main zone (a system/main-wide feature like scenes, HDMI outputs, party). */
   mainOnly?: boolean;
   /** Only exists on zones 2–4 (the pre-out level mode). */
@@ -33,10 +35,13 @@ export interface XmlAmpEntry {
   /** Override the write target element (e.g. `System` for HDMI outputs and party); default is the zone element. */
   writeZone?: string;
   /**
-   * The desc.xml command paths whose declared range this state takes, per zone (see
-   * `descriptorRanges`); the `common` bounds are the fallback where none is declared (D16).
+   * The desc.xml write paths of this state, after the element (`Volume,Lvl`; the 2008 spelling next
+   * to it). Where the device description declares a command list, the state is writable exactly where
+   * one of them is declared, with the bounds declared there; `common.write` and the `common` bounds are
+   * the rule for a device without one (the 2020 generation). Before, only the dialogue level asked the
+   * description and every other state was writable because its status carried it (D11, D18).
    */
-  rangePaths?: string[];
+  putPaths?: string[];
 }
 
 /**
@@ -51,6 +56,17 @@ export interface XmlAmpEntry {
  */
 export function xmlTenths(value: unknown, step: number): number {
   return Math.round(Math.round(Number(value) / step) * step * 10);
+}
+
+/**
+ * A level in the wire envelope of every desc.xml (`Val` in tenths, `Exp 1`, `Unit dB`).
+ *
+ * @param value the written value in dB
+ * @param step the declared grid in dB
+ * @returns the envelope
+ */
+function dbLevel(value: unknown, step = 0.5): string {
+  return `<Val>${xmlTenths(value, step)}</Val><Exp>1</Exp><Unit>dB</Unit>`;
 }
 
 /**
@@ -72,6 +88,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     state: "power",
     common: { nameKey: "power", type: "boolean", role: "switch.power", read: true, write: true },
     statusField: "power",
+    putPaths: ["Power_Control,Power"],
     toInner: value => `<Power_Control><Power>${value ? "On" : "Standby"}</Power></Power_Control>`,
   },
   {
@@ -89,16 +106,17 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
       step: 0.5,
     },
     statusField: "volume",
-    rangePaths: ["Volume,Lvl", "Vol,Lvl"],
-    toInner: (value: unknown, dialect?: XmlDialect, form?: XmlZoneForm): string => {
+    putPaths: ["Volume,Lvl", "Vol,Lvl"],
+    toInner: (value: unknown, dialect?: XmlDialect, _form?: XmlZoneForm, step?: number): string => {
       const element = dialect === "legacy" ? "Vol" : "Volume";
-      return `<${element}><Lvl><Val>${xmlTenths(value, form?.steps?.volume ?? 0.5)}</Val><Exp>1</Exp><Unit>dB</Unit></Lvl></${element}>`;
+      return `<${element}><Lvl>${dbLevel(value, step)}</Lvl></${element}>`;
     },
   },
   {
     state: "mute",
     common: { nameKey: "mute", type: "boolean", role: "media.mute", read: true, write: true },
     statusField: "mute",
+    putPaths: ["Volume,Mute", "Vol,Mute"],
     toInner: (value: unknown, dialect?: XmlDialect): string => {
       const element = dialect === "legacy" ? "Vol" : "Volume";
       return `<${element}><Mute>${value ? "On" : "Off"}</Mute></${element}>`;
@@ -108,6 +126,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     state: "input",
     common: { nameKey: "input", type: "string", role: "media.input", read: true, write: true },
     statusField: "input",
+    putPaths: ["Input,Input_Sel"],
     toInner: value => `<Input><Input_Sel>${escapeXmlText(value)}</Input_Sel></Input>`,
   },
   {
@@ -121,6 +140,8 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
       write: true,
     },
     statusField: "soundProgram",
+    // No write paths: the 2008 description declares no PUT for `Surr` while openHAB writes it there —
+    // the known gap of that description (D12), so the program stays writable without its declaration.
     toInner: (value, dialect) =>
       // The 2008 generation leaves Straight on unless the write turns it off in the same command
       // (openHAB `ZoneControlXML`, the only source — its desc declares no PUT for `Surr`; D12).
@@ -139,12 +160,14 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
       write: true,
     },
     statusField: "pureDirect",
+    putPaths: ["Sound_Video,Pure_Direct,Mode"],
     toInner: value => `<Sound_Video><Pure_Direct><Mode>${value ? "On" : "Off"}</Mode></Pure_Direct></Sound_Video>`,
   },
   {
     state: "sound.straight",
     common: { nameKey: "straight", descKey: "descStraight", type: "boolean", role: "switch", read: true, write: true },
     statusField: "straight",
+    // No write paths, like the program it belongs to (D12).
     toInner: (value, dialect) =>
       dialect === "legacy"
         ? `<Surr><Pgm_Sel><Straight>${value ? "On" : "Off"}</Straight></Pgm_Sel></Surr>`
@@ -154,6 +177,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     state: "sound.direct",
     common: { nameKey: "direct", descKey: "descDirect", type: "boolean", role: "switch", read: true, write: true },
     statusField: "direct",
+    putPaths: ["Sound_Video,Direct,Mode"],
     toInner: value => `<Sound_Video><Direct><Mode>${value ? "On" : "Off"}</Mode></Direct></Sound_Video>`,
   },
   {
@@ -167,12 +191,12 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
       write: true,
     },
     statusField: "adaptiveDrc",
+    putPaths: ["Sound_Video,Adaptive_DRC"],
     toInner: value => `<Sound_Video><Adaptive_DRC>${escapeXmlText(value)}</Adaptive_DRC></Sound_Video>`,
   },
   {
-    // Writable where desc.xml declares `Sound_Video,Dialogue_Adjust,Dialogue_Lvl` for the zone
-    // (`Put_2`, a bare number in `Range 0,3,1` — HTR-4069, RX-A2060, RX-V675, RX-V775, TSR-5810); the
-    // controller opens the write there and only there (audit 2026-09-24, D19). Read-only elsewhere.
+    // Writable where desc.xml declares it for the zone (`Put_2`, a bare number in `Range 0,3,1` —
+    // HTR-4069, RX-A2060, RX-V675, RX-V775, TSR-5810); read-only without a description (D19, D18).
     state: "sound.dialogueLevel",
     common: {
       nameKey: "dialogueLevel",
@@ -183,6 +207,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
       write: false,
     },
     statusField: "dialogueLevel",
+    putPaths: ["Sound_Video,Dialogue_Adjust,Dialogue_Lvl"],
     toInner: value =>
       `<Sound_Video><Dialogue_Adjust><Dialogue_Lvl>${Math.round(Number(value))}</Dialogue_Lvl></Dialogue_Adjust></Sound_Video>`,
   },
@@ -197,6 +222,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
       write: true,
     },
     statusField: "sleep",
+    putPaths: ["Power_Control,Sleep"],
     toInner: value => `<Power_Control><Sleep>${escapeXmlText(value)}</Sleep></Power_Control>`,
   },
   // Tone, subwoofer trim and the Extra-Bass/YPAO toggles — exposed by the predecessor
@@ -219,14 +245,9 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
       step: 0.5,
     },
     statusField: "bass",
-    rangePaths: ["Sound_Video,Tone,Bass", "Sound_Video,Tone,Manual,Bass"],
+    putPaths: ["Sound_Video,Tone,Bass", "Sound_Video,Tone,Manual,Bass"],
     // Under `Tone,Manual` where the zone uses that form (RX-A2060 zones 2/3, the 2020 generation — D6).
-    toInner: (value, _dialect, form) =>
-      toneInner(
-        "Bass",
-        `<Val>${xmlTenths(value, form?.steps?.["sound.bass"] ?? 0.5)}</Val><Exp>1</Exp><Unit>dB</Unit>`,
-        form,
-      ),
+    toInner: (value, _dialect, form, step) => toneInner("Bass", dbLevel(value, step), form),
   },
   {
     state: "sound.treble",
@@ -243,13 +264,8 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
       step: 0.5,
     },
     statusField: "treble",
-    rangePaths: ["Sound_Video,Tone,Treble", "Sound_Video,Tone,Manual,Treble"],
-    toInner: (value, _dialect, form) =>
-      toneInner(
-        "Treble",
-        `<Val>${xmlTenths(value, form?.steps?.["sound.treble"] ?? 0.5)}</Val><Exp>1</Exp><Unit>dB</Unit>`,
-        form,
-      ),
+    putPaths: ["Sound_Video,Tone,Treble", "Sound_Video,Tone,Manual,Treble"],
+    toInner: (value, _dialect, form, step) => toneInner("Treble", dbLevel(value, step), form),
   },
   {
     state: "sound.subwooferTrim",
@@ -266,9 +282,9 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
       step: 0.5,
     },
     statusField: "subwooferTrim",
-    rangePaths: ["Volume,Subwoofer_Trim"],
-    toInner: (value, _dialect, form) =>
-      `<Volume><Subwoofer_Trim><Val>${xmlTenths(value, form?.steps?.["sound.subwooferTrim"] ?? 0.5)}</Val><Exp>1</Exp><Unit>dB</Unit></Subwoofer_Trim></Volume>`,
+    putPaths: ["Volume,Subwoofer_Trim"],
+    toInner: (value, _dialect, _form, step) =>
+      `<Volume><Subwoofer_Trim>${dbLevel(value, step)}</Subwoofer_Trim></Volume>`,
   },
   {
     state: "sound.extraBass",
@@ -281,6 +297,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
       write: true,
     },
     statusField: "extraBass",
+    putPaths: ["Sound_Video,Extra_Bass"],
     toInner: value => `<Sound_Video><Extra_Bass>${value ? "Auto" : "Off"}</Extra_Bass></Sound_Video>`,
   },
   {
@@ -294,6 +311,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
       write: true,
     },
     statusField: "ypaoVolume",
+    putPaths: ["Sound_Video,YPAO_Volume"],
     toInner: value => `<Sound_Video><YPAO_Volume>${value ? "Auto" : "Off"}</YPAO_Volume></Sound_Video>`,
   },
   {
@@ -310,6 +328,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
       step: 1,
     },
     statusField: "dialogueLift",
+    putPaths: ["Sound_Video,Dialogue_Adjust,Dialogue_Lift"],
     toInner: value =>
       `<Sound_Video><Dialogue_Adjust><Dialogue_Lift>${Math.round(Number(value))}</Dialogue_Lift></Dialogue_Adjust></Sound_Video>`,
   },
@@ -321,6 +340,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     state: "sound.enhancer",
     common: { nameKey: "enhancer", descKey: "descEnhancer", type: "boolean", role: "switch", read: true, write: true },
     statusField: "enhancer",
+    putPaths: ["Surround,Program_Sel,Current,Enhancer", "Surround,Current,Enhancer"],
     // Under `Surround,Current` where the zone uses that form (D6).
     toInner: (value, _dialect, form) =>
       form?.enhancerCurrent
@@ -329,7 +349,8 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
   },
   {
     // The zone's tone-control mode — same id as YNCA's TONEMODE and MusicCast's, read here where the
-    // zone reports `Tone,Mode` (D6). Read-only: desc.xml declares no write for it.
+    // zone reports `Tone,Mode` (D6). Writable where desc.xml declares it (RX-A2060 zones 2/3: `Put_1`
+    // Auto/Bypass/Manual, P9) — the comment here said no description did; read-only without one.
     state: "sound.toneMode",
     common: {
       nameKey: "toneControlMode",
@@ -340,6 +361,8 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
       write: false,
     },
     statusField: "toneMode",
+    putPaths: ["Sound_Video,Tone,Mode"],
+    toInner: value => `<Sound_Video><Tone><Mode>${escapeXmlText(value)}</Mode></Tone></Sound_Video>`,
   },
   {
     state: "sound.cinemaDsp3d",
@@ -352,6 +375,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
       write: true,
     },
     statusField: "cinemaDsp3d",
+    putPaths: ["Surround,_3D_Cinema_DSP"],
     toInner: value => `<Surround><_3D_Cinema_DSP>${value ? "Auto" : "Off"}</_3D_Cinema_DSP></Surround>`,
   },
   {
@@ -359,6 +383,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     common: { nameKey: "speakerA", type: "boolean", role: "switch", read: true, write: true },
     statusField: "speakerA",
     mainOnly: true,
+    putPaths: ["Speaker_Preout,Speaker_AB,Speaker_A"],
     toInner: value =>
       `<Speaker_Preout><Speaker_AB><Speaker_A>${value ? "On" : "Off"}</Speaker_A></Speaker_AB></Speaker_Preout>`,
   },
@@ -367,6 +392,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     common: { nameKey: "speakerB", type: "boolean", role: "switch", read: true, write: true },
     statusField: "speakerB",
     mainOnly: true,
+    putPaths: ["Speaker_Preout,Speaker_AB,Speaker_B"],
     toInner: value =>
       `<Speaker_Preout><Speaker_AB><Speaker_B>${value ? "On" : "Off"}</Speaker_B></Speaker_AB></Speaker_Preout>`,
   },
@@ -375,6 +401,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     common: { nameKey: "zoneBPower", type: "boolean", role: "switch.power", read: true, write: true },
     statusField: "zoneBPower",
     mainOnly: true,
+    putPaths: ["Power_Control,Zone_B_Power"],
     toInner: value => `<Power_Control><Zone_B_Power>${value ? "On" : "Standby"}</Zone_B_Power></Power_Control>`,
   },
   {
@@ -403,6 +430,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     },
     statusField: "zoneBInterlock",
     mainOnly: true,
+    putPaths: ["Volume,Zone_B,Interlock"],
     toInner: value => `<Volume><Zone_B><Interlock>${value ? "On" : "Off"}</Interlock></Zone_B></Volume>`,
   },
   {
@@ -420,15 +448,15 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     },
     statusField: "zoneBVolume",
     mainOnly: true,
-    rangePaths: ["Volume,Zone_B,Lvl"],
-    toInner: (value, _dialect, form) =>
-      `<Volume><Zone_B><Lvl><Val>${xmlTenths(value, form?.steps?.["multiroom.zoneB.volume"] ?? 0.5)}</Val><Exp>1</Exp><Unit>dB</Unit></Lvl></Zone_B></Volume>`,
+    putPaths: ["Volume,Zone_B,Lvl"],
+    toInner: (value, _dialect, _form, step) => `<Volume><Zone_B><Lvl>${dbLevel(value, step)}</Lvl></Zone_B></Volume>`,
   },
   {
     state: "multiroom.zoneB.mute",
     common: { nameKey: "zoneBMute", type: "boolean", role: "media.mute", read: true, write: true },
     statusField: "zoneBMute",
     mainOnly: true,
+    putPaths: ["Volume,Zone_B,Mute"],
     toInner: value => `<Volume><Zone_B><Mute>${value ? "On" : "Off"}</Mute></Zone_B></Volume>`,
   },
   {
@@ -444,6 +472,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     },
     statusField: "volumeOutput",
     zonesOnly: true,
+    putPaths: ["Volume,Output"],
     toInner: value => `<Volume><Output>${escapeXmlText(value)}</Output></Volume>`,
   },
   // HDMI outputs and party — the predecessor's setHDMIOutput / partyMode.
@@ -458,6 +487,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     statusField: "hdmiOut1",
     mainOnly: true,
     writeZone: "System",
+    putPaths: ["Sound_Video,HDMI,Output,OUT_1"],
     toInner: value => `<Sound_Video><HDMI><Output><OUT_1>${value ? "On" : "Off"}</OUT_1></Output></HDMI></Sound_Video>`,
   },
   {
@@ -466,6 +496,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     statusField: "hdmiOut2",
     mainOnly: true,
     writeZone: "System",
+    putPaths: ["Sound_Video,HDMI,Output,OUT_2"],
     toInner: value => `<Sound_Video><HDMI><Output><OUT_2>${value ? "On" : "Off"}</OUT_2></Output></HDMI></Sound_Video>`,
   },
   {
@@ -481,6 +512,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     statusField: "party",
     mainOnly: true,
     writeZone: "System",
+    putPaths: ["Party_Mode,Mode"],
     toInner: value => `<Party_Mode><Mode>${value ? "On" : "Off"}</Mode></Party_Mode>`,
   },
 ];

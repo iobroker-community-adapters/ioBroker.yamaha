@@ -541,38 +541,55 @@ export interface XmlRange {
   step: number;
 }
 
+/** One write command desc.xml declares: its path exists, with the range or the words it takes. */
+export interface XmlDeclaredPut {
+  /** The numeric range (`Put_2`, a bare `Param_1` or `Val=Param_1:Exp=Param_2`), in the datapoint's unit. */
+  range?: XmlRange;
+  /** The words a `Put_1` group writes (`Auto`/`Bypass`/`Manual`). */
+  words?: string[];
+}
+
 /**
- * The numeric ranges desc.xml declares, per zone and command path (`Main_Zone` → `Volume,Lvl` →
- * −80.5…16.5/0.5). A level command is `Val=Param_1:Exp=Param_2:Unit=Param_3` — its range in `Param_1`,
- * scaled by the `Exp` in `Param_2` — and its path is the `Define` its id names inside the zone's own
- * `YNC_Tag` block. `descriptorParam` reads neither form (it takes `X=Param_1` and the first block, the
- * main zone's), so every zone carried fixed constants; all ten captured descriptors agree with them
- * (measured 2026-09-24), a device that declares otherwise gets its own (audit, D16).
+ * Every write command desc.xml declares, per element and command path (`Zone_2` →
+ * `Sound_Video,Tone,Mode` → words Auto/Bypass/Manual; `Main_Zone` → `Volume,Lvl` → −80.5…16.5/0.5):
+ * the `Define` with a P id names the path, the `Put_1`/`Put_2` with that id in the same `YNC_Tag`
+ * block carries what it takes. A level is `Val=Param_1:Exp=Param_2` with its range scaled by the
+ * `Exp`; the dialogue level and lift are a bare `Param_1` (`Range 0,3,1`) and needed their own reader
+ * until this one read both (audit 2026-09-29, D18). The ids are per block — a zone block can define a
+ * `System` path (RX-A2060 Zone 2: `System,Sound_Video,HDMI,Output,OUT_2`).
  *
  * @param xml the desc.xml body
- * @returns zone element → command path → range
+ * @returns element → command path → what the command takes
  */
-export function descriptorRanges(xml: string): Record<string, Record<string, XmlRange>> {
-  const ranges: Record<string, Record<string, XmlRange>> = {};
-  const starts = [...xml.matchAll(/<Menu [^>]*YNC_Tag="(Main_Zone|Zone_[234])"/g)];
-  const all = [...xml.matchAll(/<Menu [^>]*YNC_Tag="([^"]+)"/g)];
-  for (const start of starts) {
-    const zone = start[1];
-    const next = all.find(other => (other.index ?? 0) > (start.index ?? 0));
-    const block = xml.slice(start.index ?? 0, next?.index ?? xml.length);
-    const defines = new Map<string, string>();
-    for (const define of block.matchAll(new RegExp(`<Define ID="(P\\d+)">\\s*${zone},([^<]+?)\\s*</Define>`, "g"))) {
-      defines.set(define[1], define[2]);
+export function descriptorPuts(xml: string): Record<string, Record<string, XmlDeclaredPut>> {
+  const puts: Record<string, Record<string, XmlDeclaredPut>> = {};
+  // Block boundaries: every `YNC_Tag` menu, and the text before the first one (an excerpt).
+  const bounds = [0, ...[...xml.matchAll(/<Menu [^>]*YNC_Tag="[^"]+"/g)].map(match => match.index), xml.length];
+  for (let index = 0; index + 1 < bounds.length; index++) {
+    const block = xml.slice(bounds[index], bounds[index + 1]);
+    const defines = new Map<string, XmlDeclaredPut>();
+    for (const define of block.matchAll(/<Define ID="(P\d+)">\s*([A-Za-z_0-9]+),([^<]+?)\s*<\/Define>/g)) {
+      const declared: XmlDeclaredPut = {};
+      (puts[define[2]] ??= {})[define[3]] = declared;
+      defines.set(define[1], declared);
+    }
+    for (const put of block.matchAll(/<Put_1[^>]*\sID="(P\d+)"[^>]*>([^<]*)<\/Put_1>/g)) {
+      const declared = defines.get(put[1]);
+      if (declared) {
+        (declared.words ??= []).push(decodeXmlText(put[2]));
+      }
     }
     for (const put of block.matchAll(/<Put_2>([\s\S]*?)<\/Put_2>/g)) {
-      const body = put[1];
-      const id = /<Cmd[^>]*ID="(P\d+)"[^>]*>\s*Val=Param_1:Exp=Param_2/.exec(body)?.[1];
-      const path = id ? defines.get(id) : undefined;
-      const range = /<Param_1>\s*<Range>(-?\d+),(-?\d+),(\d+)<\/Range>/.exec(body);
-      const exp = /<Param_2>\s*<Direct>(\d+)<\/Direct>/.exec(body);
-      if (path && range && exp) {
-        const scale = 10 ** Number(exp[1]);
-        (ranges[zone] ??= {})[path] = {
+      const cmd = /<Cmd[^>]*ID="(P\d+)"[^>]*>\s*(Val=Param_1:Exp=Param_2[^<]*|Param_1)\s*<\/Cmd>/.exec(put[1]);
+      const range = /<Param_1>\s*<Range>(-?\d+),(-?\d+),(\d+)<\/Range>/.exec(put[1]);
+      const declared = cmd ? defines.get(cmd[1]) : undefined;
+      if (!declared || !range) {
+        continue;
+      }
+      const exp = cmd![2] === "Param_1" ? "0" : /<Param_2>\s*<Direct>(\d+)<\/Direct>/.exec(put[1])?.[1];
+      if (exp !== undefined) {
+        const scale = 10 ** Number(exp);
+        declared.range = {
           min: Number(range[1]) / scale,
           max: Number(range[2]) / scale,
           step: Number(range[3]) / scale,
@@ -580,7 +597,7 @@ export function descriptorRanges(xml: string): Record<string, Record<string, Xml
       }
     }
   }
-  return ranges;
+  return puts;
 }
 
 /** The enumerations and ranges a classic receiver declares in its device description (`desc.xml`). */
@@ -591,22 +608,21 @@ export interface XmlDescriptor {
   sleep: string[];
   /** `Sound_Video,Adaptive_DRC` — Auto/Off. */
   adaptiveDrc: string[];
-  /** `Sound_Video,Dialogue_Adjust,Dialogue_Lvl` range, when declared. */
-  dialogueLevel?: { min: number; max: number; step: number };
   /** The zone elements whose `Cmd_List` defines `Cursor_Control,Cursor` — the zone-wide cursor pad. */
   cursorZones?: string[];
   /** The zone elements with `Cursor_Control,Menu_Control` — the zone-wide menu keys. */
   menuZones?: string[];
   /** The zone elements with `Play_Control,Playback` — transport keys per zone. */
   playbackZones?: string[];
-  /** The zone elements with `Sound_Video,Dialogue_Adjust,Dialogue_Lvl` — the dialogue level is writable there. */
-  dialogueZones?: string[];
   /** The zone elements with `Sound_Video,Tone,Manual,Bass` (see {@link XmlZoneForm}). */
   toneManualZones?: string[];
   /** The zone elements with `Surround,Current,Enhancer` (see {@link XmlZoneForm}). */
   enhancerCurrentZones?: string[];
-  /** The numeric ranges per zone and command path (see {@link descriptorRanges}). */
-  ranges?: Record<string, Record<string, XmlRange>>;
+  /**
+   * Every write command it declares, per element and path (see {@link descriptorPuts}) — which
+   * datapoints are writable, with which bounds. Empty where the description declares no command list.
+   */
+  puts?: Record<string, Record<string, XmlDeclaredPut>>;
   /**
    * The tuner's declared frequency grid per band, in kHz: `Tuning,Freq(,AM|,FM)` `<Range>` — EU
    * `531,1611,9` / `8750,10800,5` (Exp 2), US `530,1710,10` / `8750,10790,20` (D6).
@@ -638,37 +654,26 @@ function tunerGridOf(xml: string): { AM?: XmlRange; FM?: XmlRange } | undefined 
 }
 
 /**
- * The zone elements whose `Cmd_List` defines the given command path (`<Define ID="P18">
- * Main_Zone,Cursor_Control,Cursor</Define>`), in document order, each once.
+ * The zone elements that declare a write command, in document order.
  *
- * @param xml the desc.xml body
+ * @param puts the declared write commands (see {@link descriptorPuts})
  * @param path the command path after the zone element
  * @returns the zone elements declaring it
  */
-function definingZones(xml: string, path: string): string[] {
-  const zones: string[] = [];
-  const pattern = new RegExp(`<Define ID="[PG]\\d+">(Main_Zone|Zone_[234]),${path.replace(/,/g, ",")}</Define>`, "g");
-  for (const match of xml.matchAll(pattern)) {
-    if (!zones.includes(match[1])) {
-      zones.push(match[1]);
-    }
-  }
-  return zones;
+function zonesDeclaring(puts: Record<string, Record<string, XmlDeclaredPut>>, path: string): string[] {
+  return Object.keys(puts).filter(element => /^(Main_Zone|Zone_[234])$/.test(element) && puts[element][path]);
 }
 
 /**
- * The `<Direct>` values or the `<Range>` of one command's first parameter in desc.xml. The
- * command text is matched as the whole `<Cmd>` content (`…=Param_1`); the zone lives in the
- * `Cmd_List` defines, not in the command text, so the first block found is the main zone's.
+ * The `<Direct>` values of one command's first parameter in desc.xml. The command text is matched
+ * as the whole `<Cmd>` content (`…=Param_1`); the zone lives in the `Cmd_List` defines, not in the
+ * command text, so the first block found is the main zone's. Ranges come from {@link descriptorPuts}.
  *
  * @param xml the device description
  * @param command the command path (`Power_Control,Sleep`)
- * @returns the values and, for a numeric parameter, its range
+ * @returns the values
  */
-function descriptorParam(
-  xml: string,
-  command: string,
-): { values: string[]; range?: { min: number; max: number; step: number } } {
+function descriptorParam(xml: string, command: string): { values: string[] } {
   const escaped = command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const block = new RegExp(`<Cmd[^>]*>${escaped}=Param_1</Cmd>\\s*<Param_1>([\\s\\S]*?)</Param_1>`).exec(xml);
   if (!block) {
@@ -679,10 +684,7 @@ function descriptorParam(
   for (let match = direct.exec(block[1]); match; match = direct.exec(block[1])) {
     values.push(decodeXmlText(match[1]));
   }
-  const range = /<Range>(-?\d+),(-?\d+),(\d+)/.exec(block[1]);
-  return range
-    ? { values, range: { min: Number(range[1]), max: Number(range[2]), step: Number(range[3]) } }
-    : { values };
+  return { values };
 }
 
 /**
@@ -704,20 +706,16 @@ export function parseDescriptor(xml: string): XmlDescriptor {
     sleep: descriptorParam(xml, "Power_Control,Sleep").values,
     adaptiveDrc: descriptorParam(xml, "Sound_Video,Adaptive_DRC").values,
   };
-  descriptor.cursorZones = definingZones(xml, "Cursor_Control,Cursor");
-  descriptor.menuZones = definingZones(xml, "Cursor_Control,Menu_Control");
-  descriptor.playbackZones = definingZones(xml, "Play_Control,Playback");
-  descriptor.dialogueZones = definingZones(xml, "Sound_Video,Dialogue_Adjust,Dialogue_Lvl");
-  descriptor.toneManualZones = definingZones(xml, "Sound_Video,Tone,Manual,Bass");
-  descriptor.enhancerCurrentZones = definingZones(xml, "Surround,Current,Enhancer");
-  descriptor.ranges = descriptorRanges(xml);
+  const puts = descriptorPuts(xml);
+  descriptor.cursorZones = zonesDeclaring(puts, "Cursor_Control,Cursor");
+  descriptor.menuZones = zonesDeclaring(puts, "Cursor_Control,Menu_Control");
+  descriptor.playbackZones = zonesDeclaring(puts, "Play_Control,Playback");
+  descriptor.toneManualZones = zonesDeclaring(puts, "Sound_Video,Tone,Manual,Bass");
+  descriptor.enhancerCurrentZones = zonesDeclaring(puts, "Surround,Current,Enhancer");
+  descriptor.puts = puts;
   const tunerGrid = tunerGridOf(xml);
   if (tunerGrid) {
     descriptor.tunerGrid = tunerGrid;
-  }
-  const dialogue = descriptorParam(xml, "Sound_Video,Dialogue_Adjust,Dialogue_Lvl").range;
-  if (dialogue) {
-    descriptor.dialogueLevel = dialogue;
   }
   return descriptor;
 }

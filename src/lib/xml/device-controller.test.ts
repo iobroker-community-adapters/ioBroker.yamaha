@@ -232,7 +232,7 @@ describe("XmlDeviceController", () => {
       const memory = new ProbeMemory({
         __schema: DISCOVERY_SCHEMA,
         xmlIdentity: "RX-V6A|0A1B2C3D|1.80/3.14",
-        "xmlDescriptor:v2": { programs: [], sleep: [], adaptiveDrc: [] },
+        "xmlDescriptor:v3": { programs: [], sleep: [], adaptiveDrc: [] },
         "xmlInputs:main": "<Input_Sel_Item/>",
       });
       const s = setup({ Main_Zone: { power: true, input: "HDMI1" } });
@@ -633,7 +633,7 @@ describe("desc.xml — the classic generation's own enumerations (2026-09-09)", 
     ]);
     expect(def("living.sleep")?.declaredStates).toBe(true);
     expect(def("living.sound.adaptiveDrc")?.common?.states).toEqual({ Auto: "Auto", Off: "Off" });
-    expect(memory.remembered("xmlDescriptor:v2")).toMatchObject({ programs: expect.any(Array) });
+    expect(memory.remembered("xmlDescriptor:v3")).toMatchObject({ programs: expect.any(Array) });
     // The description is read once per device, not once per zone.
     expect(s.client.calls.filter(c => c.method === "getDescriptor")).toHaveLength(1);
   });
@@ -684,7 +684,7 @@ describe("desc.xml — the classic generation's own enumerations (2026-09-09)", 
     s.client.descriptorError = new XmlHttpError("device refused the request (HTTP 404)", 404);
     await s.controller.start();
     expect((s.defs.get("living.soundProgram") as Def | undefined)?.common?.states).toBeUndefined();
-    expect(memory.remembered("xmlDescriptor:v2")).toEqual({ programs: [], sleep: [], adaptiveDrc: [] });
+    expect(memory.remembered("xmlDescriptor:v3")).toEqual({ programs: [], sleep: [], adaptiveDrc: [] });
   });
 
   test("a transient descriptor failure is not remembered — the next connect asks again", async () => {
@@ -693,13 +693,13 @@ describe("desc.xml — the classic generation's own enumerations (2026-09-09)", 
     withMemory(s, memory);
     s.client.descriptorError = new Error("XML request timeout");
     await s.controller.start();
-    expect(memory.remembered("xmlDescriptor:v2")).toBeUndefined();
+    expect(memory.remembered("xmlDescriptor:v3")).toBeUndefined();
   });
 
   test("a remembered description is not read again", async () => {
     const memory = new ProbeMemory({
       __schema: DISCOVERY_SCHEMA,
-      "xmlDescriptor:v2": { programs: ["Standard"], sleep: [], adaptiveDrc: [] },
+      "xmlDescriptor:v3": { programs: ["Standard"], sleep: [], adaptiveDrc: [] },
     });
     const s = setup({ Main_Zone: { power: true, soundProgram: "Standard" } });
     withMemory(s, memory);
@@ -1656,5 +1656,83 @@ describe("XmlDeviceController player block from the source's Play_Info (audit 20
     expect(s.client.calls.some(c => c.method === "getXml" && c.zone === "NET_RADIO" && c.inner === PLAY_INFO)).toBe(
       true,
     );
+  });
+});
+
+describe("the device description decides what is writable (audit 2026-09-29, D11/D18)", () => {
+  const readFixture = (name: string): string => readFileSync(join(__dirname, "__fixtures__", name), "utf8");
+  type Def = {
+    common?: { write?: boolean; role?: string; states?: Record<string, string>; min?: number; max?: number };
+  };
+
+  // HTR-4069 and RX-S601D report `OUT_1` in their status, but their descriptions declare no write
+  // for it: the switch pretended a command that the device refuses.
+  test("an output the status reports but the description does not declare is read-only, and a write is not sent", async () => {
+    const s = setup({ Main_Zone: { power: true, hdmiOut1: true } });
+    s.client.descriptor = readFixture("desc-rx-v675.xml");
+    await s.controller.start();
+    expect((s.defs.get("living.hdmiOut1") as Def | undefined)?.common?.write).toBe(false);
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.hdmiOut1", false, false);
+    await flush();
+    expect(s.client.calls.filter(c => c.method === "send")).toEqual([]);
+  });
+
+  test("where the description declares it, the same output is written on System", async () => {
+    const s = setup({ Main_Zone: { power: true, hdmiOut2: true } });
+    s.client.descriptor = readFixture("desc-rx-a2060.xml");
+    await s.controller.start();
+    expect((s.defs.get("living.hdmiOut2") as Def | undefined)?.common?.write).toBe(true);
+    s.controller.handleStateChange("living.hdmiOut2", false, false);
+    await flush();
+    expect(s.client.calls).toContainEqual({
+      method: "send",
+      zone: "System",
+      inner: "<Sound_Video><HDMI><Output><OUT_2>Off</OUT_2></Output></HDMI></Sound_Video>",
+    });
+  });
+
+  // RX-A2060 zones 2/3 declare `Sound_Video,Tone,Mode` with Put_1 Auto/Bypass/Manual (P9).
+  test("the RX-A2060's zone 2 tone mode is writable with the words the description declares", async () => {
+    const s = setup({ Main_Zone: { power: true }, Zone_2: { power: true, toneMode: "Auto" } });
+    s.client.descriptor = readFixture("desc-rx-a2060.xml");
+    await s.controller.start();
+    const def = s.defs.get("living.multiroom.zone2.sound.toneMode") as Def | undefined;
+    expect(def?.common).toMatchObject({ write: true, states: { Auto: "Auto", Bypass: "Bypass", Manual: "Manual" } });
+    s.controller.handleStateChange("living.multiroom.zone2.sound.toneMode", false, "Bypass");
+    await flush();
+    expect(s.client.calls).toContainEqual({
+      method: "send",
+      zone: "Zone_2",
+      inner: "<Sound_Video><Tone><Mode>Bypass</Mode></Tone></Sound_Video>",
+    });
+  });
+
+  test("the dialogue lift takes its bare Param_1 range; without its declaration it is a read-only value", async () => {
+    const declared = setup({ Main_Zone: { power: true, dialogueLift: 1 } });
+    declared.client.descriptor = readFixture("desc-rx-v675.xml");
+    await declared.controller.start();
+    expect((declared.defs.get("living.sound.dialogueLift") as Def | undefined)?.common).toMatchObject({
+      write: true,
+      role: "level",
+      min: 0,
+      max: 5,
+    });
+    // The HTR-4069 declares a command list without the lift.
+    const absent = setup({ Main_Zone: { power: true, dialogueLift: 1 } });
+    absent.client.descriptor =
+      '<Unit><Menu YNC_Tag="Main_Zone"><Put_1 ID="P1">On</Put_1><Cmd_List><Define ID="P1">Main_Zone,Power_Control,Power</Define></Cmd_List></Menu></Unit>';
+    await absent.controller.start();
+    expect((absent.defs.get("living.sound.dialogueLift") as Def | undefined)?.common).toMatchObject({
+      write: false,
+      role: "value",
+    });
+  });
+
+  test("without a description the catalog rule stands", async () => {
+    const s = setup({ Main_Zone: { power: true, hdmiOut1: true, dialogueLift: 1 } });
+    await s.controller.start();
+    expect((s.defs.get("living.hdmiOut1") as Def | undefined)?.common?.write).toBe(true);
+    expect((s.defs.get("living.sound.dialogueLift") as Def | undefined)?.common?.write).toBe(true);
   });
 });

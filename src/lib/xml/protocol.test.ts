@@ -17,7 +17,7 @@ import {
   parsePresetList,
   parseTunerInfo,
   presetSlotNumber,
-  descriptorRanges,
+  descriptorPuts,
 } from "./protocol";
 
 /**
@@ -343,14 +343,16 @@ describe("parseDescriptor — the enumerations a classic receiver carries in des
     expect(d.programs).toContain("Surround Decoder");
     expect(d.sleep).toEqual(["120 min", "90 min", "60 min", "30 min", "Off"]);
     expect(d.adaptiveDrc).toEqual(["Auto", "Off"]);
-    expect(d.dialogueLevel).toBeUndefined();
+    expect(d.puts?.Main_Zone?.["Sound_Video,Dialogue_Adjust,Dialogue_Lvl"]).toBeUndefined();
   });
 
   test("a 2016 Aventage: 25 programs and the dialogue range", () => {
     const d = parseDescriptor(readFixture("desc-rx-a2060.xml"));
     expect(d.programs).toHaveLength(25);
     expect(d.programs).toContain("9ch Stereo");
-    expect(d.dialogueLevel).toEqual({ min: 0, max: 3, step: 1 });
+    expect(d.puts?.Main_Zone?.["Sound_Video,Dialogue_Adjust,Dialogue_Lvl"]).toEqual({
+      range: { min: 0, max: 3, step: 1 },
+    });
   });
 
   test("the 2008 generation enumerates its own sleep words and no programs", () => {
@@ -384,10 +386,9 @@ describe("parseDescriptor — the enumerations a classic receiver carries in des
       cursorZones: [],
       menuZones: [],
       playbackZones: [],
-      dialogueZones: [],
       toneManualZones: [],
       enhancerCurrentZones: [],
-      ranges: {},
+      puts: {},
     });
   });
 });
@@ -527,15 +528,33 @@ describe("the zone form a status shows", () => {
   });
 });
 
-// desc.xml declares every level as `Val=Param_1:Exp=Param_2` with its range in tenths, per zone block;
-// the old reader took neither form and fixed constants stood on every zone (audit 2026-09-24, D16).
-describe("descriptorRanges", () => {
+// desc.xml declares every write command as a P-id `Define` in the element's block, with what it takes
+// in the `Put_1`/`Put_2` of that id — a level as `Val=Param_1:Exp=Param_2` in tenths, the dialogue
+// level and lift as a bare `Param_1` (audit 2026-09-24, D16; 2026-09-29, D11/D18).
+describe("descriptorPuts", () => {
   test("reads the RX-V675's levels per zone, in dB", () => {
-    const ranges = descriptorRanges(readFixture("desc-rx-v675.xml"));
-    expect(ranges.Main_Zone?.["Volume,Lvl"]).toEqual({ min: -80.5, max: 16.5, step: 0.5 });
-    expect(ranges.Main_Zone?.["Sound_Video,Tone,Bass"]).toEqual({ min: -6, max: 6, step: 0.5 });
-    expect(ranges.Main_Zone?.["Volume,Subwoofer_Trim"]).toEqual({ min: -6, max: 6, step: 0.5 });
-    expect(ranges.Zone_2?.["Volume,Lvl"]).toEqual({ min: -80.5, max: 16.5, step: 0.5 });
+    const puts = descriptorPuts(readFixture("desc-rx-v675.xml"));
+    expect(puts.Main_Zone?.["Volume,Lvl"]?.range).toEqual({ min: -80.5, max: 16.5, step: 0.5 });
+    expect(puts.Main_Zone?.["Sound_Video,Tone,Bass"]?.range).toEqual({ min: -6, max: 6, step: 0.5 });
+    expect(puts.Main_Zone?.["Volume,Subwoofer_Trim"]?.range).toEqual({ min: -6, max: 6, step: 0.5 });
+    expect(puts.Zone_2?.["Volume,Lvl"]?.range).toEqual({ min: -80.5, max: 16.5, step: 0.5 });
+  });
+
+  test("a bare Param_1 range is read too — the dialogue level and lift", () => {
+    const puts = descriptorPuts(readFixture("desc-rx-v675.xml"));
+    expect(puts.Main_Zone?.["Sound_Video,Dialogue_Adjust,Dialogue_Lvl"]).toEqual({
+      range: { min: 0, max: 3, step: 1 },
+    });
+    expect(puts.Main_Zone?.["Sound_Video,Dialogue_Adjust,Dialogue_Lift"]).toEqual({
+      range: { min: 0, max: 5, step: 1 },
+    });
+  });
+
+  test("a Put_1 group carries its words; a System path defined in a zone block lands under System", () => {
+    const puts = descriptorPuts(readFixture("desc-rx-a2060.xml"));
+    expect(puts.Zone_2?.["Sound_Video,Tone,Mode"]).toEqual({ words: ["Auto", "Bypass", "Manual"] });
+    expect(puts.System?.["Sound_Video,HDMI,Output,OUT_2"]).toBeDefined();
+    expect(puts.Main_Zone?.["Sound_Video,Tone,Mode"]).toBeUndefined();
   });
 
   test("a zone block's own declaration is its own — not the main zone's", () => {
@@ -546,10 +565,16 @@ describe("descriptorRanges", () => {
       '<Menu Func="Subunit" YNC_Tag="Zone_2"><Put_2><Cmd Type="Number" ID="P2">Val=Param_1:Exp=Param_2:Unit=Param_3</Cmd>' +
       "<Param_1><Range>-600,0,10</Range></Param_1><Param_2><Direct>1</Direct></Param_2></Put_2>" +
       '<Cmd_List><Define ID="P2">Zone_2,Volume,Lvl</Define></Cmd_List></Menu>';
-    expect(descriptorRanges(xml)).toEqual({
-      Main_Zone: { "Volume,Lvl": { min: -80.5, max: 16.5, step: 0.5 } },
-      Zone_2: { "Volume,Lvl": { min: -60, max: 0, step: 1 } },
+    expect(descriptorPuts(xml)).toEqual({
+      Main_Zone: { "Volume,Lvl": { range: { min: -80.5, max: 16.5, step: 0.5 } } },
+      Zone_2: { "Volume,Lvl": { range: { min: -60, max: 0, step: 1 } } },
     });
+  });
+
+  // HTR-4069 and RX-S601D report `OUT_1` in their status, but neither declares a write for it.
+  test("an output the status reports but the description does not declare is not writable", () => {
+    const puts = descriptorPuts(readFixture("desc-rx-v675.xml"));
+    expect(puts.System?.["Sound_Video,HDMI,Output,OUT_1"]).toBeUndefined();
   });
 });
 
