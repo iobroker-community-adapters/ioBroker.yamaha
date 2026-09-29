@@ -1121,6 +1121,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     func: "ZONEBNAME",
     state: "multiroom.zoneB.name",
     nameKey: "zoneBName",
+    descKey: "descZoneName",
     spec: { kind: "text", charset: "latin1", maxLength: 9 },
     write: true,
     role: "text",

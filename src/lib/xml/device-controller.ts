@@ -62,6 +62,13 @@ const XML_TRANSPORT_WIRE: Record<string, string> = {
 /** The tuner's declared preset slots (`Tuner,Play_Control,Preset,Preset_Sel_Item`, desc.xml `G3`). */
 const PRESET_LIST_GET = "<Play_Control><Preset><Preset_Sel_Item>GetParam</Preset_Sel_Item></Preset></Play_Control>";
 
+/** The 2008 generation's zone name (`Rename,Rename_Latin_1`, RX-V3900 desc.xml P6/G3 — D15). */
+const RENAME_PATH = "Rename,Rename_Latin_1";
+const RENAME_GET = "<Rename><Rename_Latin_1>GetParam</Rename_Latin_1></Rename>";
+
+/** A zone's contents display (`Cursor_Control,Contents_Display`, desc.xml G9 — D15). */
+const CONTENTS_DISPLAY_GET = "<Cursor_Control><Contents_Display>GetParam</Contents_Display></Cursor_Control>";
+
 /** The all-zones power read (`System,Power_Control,Power`; RX-V6A capture `xml-system-power.xml`). */
 const SYSTEM_POWER_GET = "<Power_Control><Power>GetParam</Power></Power_Control>";
 
@@ -177,6 +184,8 @@ export class XmlDeviceController implements ConnectionHandle {
   };
   /** The states built read-only because the device description declares no write for them (D11). */
   private readonly readOnlyStates = new Set<string>();
+  /** The zones whose contents display answered (D15). */
+  private readonly contentsDisplayZones = new Set<string>();
 
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
@@ -309,6 +318,8 @@ export class XmlDeviceController implements ConnectionHandle {
     await this.setupSystemPower();
     await this.setupTransportKeys();
     await this.setupZoneNames();
+    await this.setupContentsDisplay();
+    await this.setupPartyVolume();
     // Seed from the statuses already fetched during the probe — no second round-trip.
     for (const { zone, status } of answered) {
       if (status) {
@@ -748,6 +759,166 @@ export class XmlDeviceController implements ConnectionHandle {
   }
 
   /**
+   * Whether the device description declares a write command for an element.
+   *
+   * @param element the element (`Main_Zone`, `System`)
+   * @param path the command path after it
+   * @returns true when declared
+   */
+  private declares(element: string, path: string): boolean {
+    return this.deviceDescriptor.puts?.[element]?.[path] !== undefined;
+  }
+
+  /**
+   * Whether the device description declares a command list at all — where it does, it decides what is
+   * writable (D11); where it does not (the 2020 generation), the catalog rule stands.
+   *
+   * @returns true when a command list is declared
+   */
+  private hasCommandList(): boolean {
+    return Object.keys(this.deviceDescriptor.puts ?? {}).length > 0;
+  }
+
+  /**
+   * The contents display of every zone that declares it (`Cursor_Control,Contents_Display`, GET and
+   * PUT On/Off, six desc.xml) — the id is YNCA's `sound.contentsDisplay` (audit 2026-09-29, D15).
+   * Proven by the zone's answer.
+   */
+  private async setupContentsDisplay(): Promise<void> {
+    for (const zone of this.zones) {
+      if (!this.declares(zone.element, "Cursor_Control,Contents_Display")) {
+        continue;
+      }
+      const on = await this.readContentsDisplay(zone);
+      if (on === undefined) {
+        continue;
+      }
+      const stateId = `${zone.prefix}sound.contentsDisplay`;
+      await this.ensureChannels(stateId);
+      await this.deps.upsertObject(`${this.deviceId}.${stateId}`, {
+        id: stateId,
+        type: "state",
+        common: {
+          name: tName("contentsDisplay"),
+          desc: tName("descContentsDisplay"),
+          type: "boolean",
+          role: "switch",
+          read: true,
+          write: true,
+        },
+      });
+      this.createdStates.add(stateId);
+      this.contentsDisplayZones.add(zone.key);
+      this.emit(stateId, on);
+    }
+  }
+
+  /**
+   * Read one zone's contents display.
+   *
+   * @param zone the zone
+   * @returns On as true, Off as false, undefined when the zone does not answer it
+   */
+  private async readContentsDisplay(zone: XmlZone): Promise<boolean | undefined> {
+    try {
+      const body = await this.deps.client.getXml(zone.element, CONTENTS_DISPLAY_GET);
+      const word = /<Contents_Display>\s*(On|Off)\s*<\/Contents_Display>/.exec(body)?.[1];
+      return word === undefined ? undefined : word === "On";
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: ${zone.element} contents display failed: ${errorMessage(e)}`);
+      return undefined;
+    }
+  }
+
+  /** Read the contents display of every zone that has one (poll and read-back). */
+  private async refreshContentsDisplay(): Promise<void> {
+    for (const zone of this.zones) {
+      if (!this.contentsDisplayZones.has(zone.key)) {
+        continue;
+      }
+      const on = await this.readContentsDisplay(zone);
+      if (on !== undefined) {
+        this.emit(`${zone.prefix}sound.contentsDisplay`, on);
+      }
+    }
+  }
+
+  /**
+   * A write to a zone's `sound.contentsDisplay` → `Cursor_Control,Contents_Display` On/Off.
+   *
+   * @param stateId the state id relative to the device
+   * @param value the written value
+   * @returns true when the id was a contents display (handled here)
+   */
+  private handleContentsDisplayWrite(stateId: string, value: unknown): boolean {
+    const { zone: zoneKey, name } = splitZone(stateId);
+    if (name !== "sound.contentsDisplay") {
+      return false;
+    }
+    const zone = this.zones.find(candidate => candidate.key === zoneKey);
+    const on = coerceBool(value);
+    if (!zone || !this.contentsDisplayZones.has(zone.key) || on === undefined) {
+      return true;
+    }
+    void this.applyCommand(
+      {
+        zone: zone.element,
+        inner: `<Cursor_Control><Contents_Display>${on ? "On" : "Off"}</Contents_Display></Cursor_Control>`,
+      },
+      () => this.refreshContentsDisplay(),
+    );
+    return true;
+  }
+
+  /**
+   * The party-mode volume keys where the description declares them (`System,Party_Mode,Volume,Lvl`
+   * Up/Down — RX-A2060, RX-S601D, RX-V775): YNCA's `multiroom.partyVolumeUp`/`Down` buttons (D15). The
+   * party mute is declared as a write only — no description declares a read, so a switch could never
+   * show the device's state; it stays with YNCA, which every one of these models has.
+   */
+  private async setupPartyVolume(): Promise<void> {
+    if (!this.declares("System", "Party_Mode,Volume,Lvl")) {
+      return;
+    }
+    for (const [state, nameKey, descKey] of [
+      ["multiroom.partyVolumeUp", "partyVolumeUp", "descPartyVolumeUp"],
+      ["multiroom.partyVolumeDown", "partyVolumeDown", "descPartyVolumeDown"],
+    ] as const) {
+      await this.ensureChannels(state);
+      await this.deps.upsertObject(`${this.deviceId}.${state}`, {
+        id: state,
+        type: "state",
+        common: {
+          name: tName(nameKey),
+          desc: tName(descKey),
+          type: "boolean",
+          role: "button",
+          read: false,
+          write: true,
+        },
+      });
+      this.createdStates.add(state);
+    }
+  }
+
+  /**
+   * A press of a party-mode volume key → `System,Party_Mode,Volume,Lvl` Up/Down.
+   *
+   * @param stateId the state id relative to the device
+   * @returns true when the id was a party volume key (handled here)
+   */
+  private handlePartyVolumeWrite(stateId: string): boolean {
+    if (stateId !== "multiroom.partyVolumeUp" && stateId !== "multiroom.partyVolumeDown") {
+      return false;
+    }
+    if (this.createdStates.has(stateId)) {
+      const word = stateId === "multiroom.partyVolumeUp" ? "Up" : "Down";
+      void this.applyCommand({ zone: "System", inner: `<Party_Mode><Volume><Lvl>${word}</Lvl></Volume></Party_Mode>` });
+    }
+    return true;
+  }
+
+  /**
    * The "now playing" block of every zone listening to a media source: the source's `Play_Info`
    * (2009+ one element per source, 2008 `NET_USB`/`iPod`) — artist, album, track, station, status,
    * repeat, shuffle and cover, under the same `player.*` ids YNCA and MusicCast fill. XML read none of
@@ -992,6 +1163,10 @@ export class XmlDeviceController implements ConnectionHandle {
       return;
     }
     const stateId = fullStateId.slice(prefix.length);
+    if (this.readOnlyStates.has(stateId)) {
+      this.deps.log.debug(`${this.deviceId}: ${stateId} — this device declares no write for it, write dropped`);
+      return;
+    }
     if (stateId.startsWith("remote.") && this.browseEngine) {
       this.browseEngine.handleRemoteWrite(stateId, value);
       return;
@@ -1013,6 +1188,9 @@ export class XmlDeviceController implements ConnectionHandle {
     if (this.handleSystemPowerWrite(stateId, value)) {
       return;
     }
+    if (this.handleContentsDisplayWrite(stateId, value) || this.handlePartyVolumeWrite(stateId)) {
+      return;
+    }
     // Claim with proof, on the WRITE way too. Object creation has been proof-gated since
     // 2.0.1 (only fields this device's Basic_Status really delivers), but the write path was
     // not — the comment on `createdStates` claimed otherwise while it guarded the read side
@@ -1026,10 +1204,6 @@ export class XmlDeviceController implements ConnectionHandle {
     }
     const { zone: zoneKey } = splitZone(stateId);
     const element = this.zones.find(candidate => candidate.key === zoneKey)?.element ?? "Main_Zone";
-    if (this.readOnlyStates.has(stateId)) {
-      this.deps.log.debug(`${this.deviceId}: ${stateId} — this device declares no write for it, write dropped`);
-      return;
-    }
     const command = stateToXml(stateId, value, this.dialect, this.zoneForms.get(element));
     if (command) {
       // The zone to read back afterwards: the command's own element, or the main zone for a
@@ -1118,6 +1292,7 @@ export class XmlDeviceController implements ConnectionHandle {
       if (this.hasSystemPower) {
         await this.refreshSystemPower();
       }
+      await this.refreshContentsDisplay();
       await this.refreshPlayers();
       this.dropDetector.record(anyOk);
     } catch (e) {
@@ -1394,54 +1569,101 @@ export class XmlDeviceController implements ConnectionHandle {
    */
   private async setupZoneNames(): Promise<void> {
     for (const zone of this.zones) {
-      const name = await this.probeZoneName(zone);
-      if (!name) {
-        continue;
+      const names = await this.probeZoneNames(zone);
+      if (names.zone) {
+        const stateId = `${zone.prefix}zoneName`;
+        const write =
+          !this.hasCommandList() ||
+          this.declares(zone.element, "Config,Name,Zone") ||
+          this.declares(zone.element, RENAME_PATH);
+        await this.ensureChannels(stateId);
+        await this.deps.upsertObject(`${this.deviceId}.${stateId}`, {
+          id: stateId,
+          type: "state",
+          common: {
+            name: tName("zoneName"),
+            desc: tName("descZoneName"),
+            type: "string",
+            role: "text",
+            read: true,
+            write,
+          },
+        });
+        this.markWritable(stateId, write);
+        this.emit(stateId, names.zone);
       }
-      const stateId = `${zone.prefix}zoneName`;
-      await this.ensureChannels(stateId);
-      await this.deps.upsertObject(`${this.deviceId}.${stateId}`, {
-        id: stateId,
-        type: "state",
-        common: {
-          name: tName("zoneName"),
-          desc: tName("descZoneName"),
-          type: "string",
-          role: "text",
-          read: true,
-          write: true,
-        },
-      });
-      this.createdStates.add(stateId);
-      this.emit(stateId, name);
+      // The Zone B name rides in the main zone's Config (`Config,Name,Zone_B`, HTR-4069, RX-V579,
+      // TSR-5810) — YNCA's ZONEBNAME under the same id (audit 2026-09-29, D15).
+      if (zone.key === "main" && names.zoneB) {
+        const stateId = "multiroom.zoneB.name";
+        const write = !this.hasCommandList() || this.declares(zone.element, "Config,Name,Zone_B");
+        await this.ensureChannels(stateId);
+        await this.deps.upsertObject(`${this.deviceId}.${stateId}`, {
+          id: stateId,
+          type: "state",
+          common: {
+            name: tName("zoneBName"),
+            desc: tName("descZoneName"),
+            type: "string",
+            role: "text",
+            read: true,
+            write,
+          },
+        });
+        this.markWritable(stateId, write);
+        this.emit(stateId, names.zoneB);
+      }
     }
   }
 
   /**
-   * A zone's name from its Config, remembered per device. Only a definite answer is
-   * remembered (a name, or the model's own "no such node" as none); a transient failure asks
-   * again on the next connect.
+   * Record a state as created, and as read-only where it is not writable.
+   *
+   * @param stateId the state id
+   * @param write whether it is writable
+   */
+  private markWritable(stateId: string, write: boolean): void {
+    this.createdStates.add(stateId);
+    if (write) {
+      this.readOnlyStates.delete(stateId);
+    } else {
+      this.readOnlyStates.add(stateId);
+    }
+  }
+
+  /**
+   * A zone's names, remembered per device: its own from its Config (`Name,Zone`) — or, on the 2008
+   * generation, from `Rename,Rename_Latin_1`, the path its description declares instead (RX-V3900, D15)
+   * — and the Zone B name the main zone's Config carries next to it. Only a definite answer is
+   * remembered (a name, or the model's own "no such node" as none); a transient failure asks again on
+   * the next connect.
    *
    * @param zone the zone
-   * @returns the name, or "" when the zone declares none
+   * @returns the names, "" where the zone declares none
    */
-  private async probeZoneName(zone: XmlZone): Promise<string> {
-    const probe = async (): Promise<string> => {
+  private async probeZoneNames(zone: XmlZone): Promise<{ zone: string; zoneB: string }> {
+    const rename = this.declares(zone.element, RENAME_PATH);
+    const probe = async (): Promise<{ zone: string; zoneB: string }> => {
       const body = await definiteXmlBody(
-        () => this.deps.client.getXml(zone.element, "<Config>GetParam</Config>"),
-        `${zone.element} Config probe`,
+        () => this.deps.client.getXml(zone.element, rename ? RENAME_GET : "<Config>GetParam</Config>"),
+        `${zone.element} name probe`,
       );
-      const name = /<Name>\s*<Zone>([^<]*)<\/Zone>/.exec(body);
-      return name ? decodeXmlText(name[1]).trim() : "";
+      const text = (pattern: RegExp): string => {
+        const match = pattern.exec(body);
+        return match ? decodeXmlText(match[1]).trim() : "";
+      };
+      return rename
+        ? { zone: text(/<Rename_Latin_1>([^<]*)<\/Rename_Latin_1>/), zoneB: "" }
+        : { zone: text(/<Name>[\s\S]*?<Zone>([^<]*)<\/Zone>/), zoneB: text(/<Name>[\s\S]*?<Zone_B>([^<]*)<\/Zone_B>/) };
     };
     try {
-      // Fresh on every connection — the zone name is the user's (D8).
+      // Fresh on every connection — the names are the user's (D8).
       return this.deps.probeMemory
-        ? await this.deps.probeMemory.refresh(`xmlZoneName:${zone.key}`, probe)
+        ? await this.deps.probeMemory.refresh(`xmlZoneNames:${zone.key}`, probe)
         : await probe();
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: ${zone.element} name probe failed (${errorMessage(e)})`);
-      return "";
+      return { zone: "", zoneB: "" };
     }
   }
 
@@ -1457,7 +1679,9 @@ export class XmlDeviceController implements ConnectionHandle {
   private handleZoneCommandWrite(stateId: string, value: unknown): boolean {
     const { zone: zoneKey, name: command } = splitZone(stateId);
     if (
-      !/^(remote\.(?:cursor|menu)|player\.(?:play|pause|stop|next|prev)|zoneName)$/.test(command) ||
+      !/^(remote\.(?:cursor|menu)|player\.(?:play|pause|stop|next|prev)|zoneName|multiroom\.zoneB\.name)$/.test(
+        command,
+      ) ||
       !this.createdStates.has(stateId)
     ) {
       return false;
@@ -1478,7 +1702,7 @@ export class XmlDeviceController implements ConnectionHandle {
         command === "remote.cursor"
           ? `<Cursor_Control><Cursor>${wire}</Cursor></Cursor_Control>`
           : `<Cursor_Control><Menu_Control>${wire}</Menu_Control></Cursor_Control>`;
-    } else if (command === "zoneName") {
+    } else if (command === "zoneName" || command === "multiroom.zoneB.name") {
       if (typeof value !== "string") {
         return true;
       }
@@ -1493,15 +1717,20 @@ export class XmlDeviceController implements ConnectionHandle {
       // The name is not part of the zone status: read it back from the zone's Config — the fresh
       // probe also updates the memory, which otherwise brings the OLD name back on the next start.
       // A refused name is read back the same way, so the datapoint shows the device's name again.
-      void this.applyCommand(
-        { zone: zone.element, inner: `<Config><Name><Zone>${escapeXmlText(value)}</Zone></Name></Config>` },
-        async () => {
-          const name = await this.probeZoneName(zone);
-          if (name) {
-            this.emit(stateId, name);
-          }
-        },
-      );
+      const escaped = escapeXmlText(value);
+      const nameInner =
+        command === "multiroom.zoneB.name"
+          ? `<Config><Name><Zone_B>${escaped}</Zone_B></Name></Config>`
+          : this.declares(zone.element, RENAME_PATH)
+            ? `<Rename><Rename_Latin_1>${escaped}</Rename_Latin_1></Rename>`
+            : `<Config><Name><Zone>${escaped}</Zone></Name></Config>`;
+      void this.applyCommand({ zone: zone.element, inner: nameInner }, async () => {
+        const names = await this.probeZoneNames(zone);
+        const name = command === "multiroom.zoneB.name" ? names.zoneB : names.zone;
+        if (name) {
+          this.emit(stateId, name);
+        }
+      });
       return true;
     } else {
       const word = XML_TRANSPORT_WIRE[command.slice("player.".length)];

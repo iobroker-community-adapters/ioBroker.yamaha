@@ -332,6 +332,23 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     toInner: value =>
       `<Sound_Video><Dialogue_Adjust><Dialogue_Lift>${Math.round(Number(value))}</Dialogue_Lift></Dialogue_Adjust></Sound_Video>`,
   },
+  {
+    // Same id as YNCA's DTSDIALOGUECONTROL and MusicCast's `dts_dialogue_control`; the RX-A2060 and
+    // TSR-5810 declare it (`Put_2`, `Range 0,6,1`) and report it in Basic_Status (audit 2026-09-29, D15).
+    state: "sound.dtsDialogueControl",
+    common: {
+      nameKey: "dtsDialogueControl",
+      descKey: "descDtsDialogueControl",
+      type: "number",
+      role: "value",
+      read: true,
+      write: false,
+    },
+    statusField: "dtsDialogueControl",
+    putPaths: ["Sound_Video,Dialogue_Adjust,DTS_Dialogue_Control"],
+    toInner: value =>
+      `<Sound_Video><Dialogue_Adjust><DTS_Dialogue_Control>${Math.round(Number(value))}</DTS_Dialogue_Control></Dialogue_Adjust></Sound_Video>`,
+  },
   // The zone commands desc.xml declares and Basic_Status reports on the 2012–2017 generation
   // (coverage audit 2026-09-09): the enhancer and CINEMA DSP 3D (9 of 10 descriptors), the
   // speaker terminals A/B and Zone B (HTR-4069 class), the pre-out level mode of zones 2–4.

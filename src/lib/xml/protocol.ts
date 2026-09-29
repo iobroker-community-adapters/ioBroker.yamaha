@@ -773,6 +773,8 @@ export interface BasicStatus {
   party?: boolean;
   /** Dialogue lift. */
   dialogueLift?: number;
+  /** DTS dialogue control (`Sound_Video,Dialogue_Adjust,DTS_Dialogue_Control`, RX-A2060, TSR-5810). */
+  dtsDialogueControl?: number;
   /** Compressed Music Enhancer (`Surround,Program_Sel,Current,Enhancer`, 9 of 10 descriptors). */
   enhancer?: boolean;
   /** The tone-control mode (`Tone,Mode` — Auto/Manual/Bypass; RX-A2060 zones, the 2020 generation). */
@@ -971,6 +973,10 @@ export function parseBasicStatus(body: string): BasicStatus {
   const dialogueLift = /<Dialogue_Lift>(-?\d+)<\/Dialogue_Lift>/.exec(xml);
   if (dialogueLift) {
     status.dialogueLift = Number(dialogueLift[1]);
+  }
+  const dts = /<DTS_Dialogue_Control>\s*(-?\d+)\s*<\/DTS_Dialogue_Control>/.exec(xml);
+  if (dts) {
+    status.dtsDialogueControl = Number(dts[1]);
   }
   return status;
 }

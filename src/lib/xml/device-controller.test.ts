@@ -1338,7 +1338,7 @@ describe("the zone commands desc.xml declares: pads, transport keys, zone names 
     await s.controller.start();
     expect(s.acks).toContainEqual({ id: "living.zoneName", value: "Living" });
     expect(s.acks).toContainEqual({ id: "living.multiroom.zone2.zoneName", value: "Kitchen" });
-    expect(memory.remembered("xmlZoneName:zone2")).toBe("Kitchen");
+    expect(memory.remembered("xmlZoneNames:zone2")).toEqual({ zone: "Kitchen", zoneB: "" });
     s.controller.handleStateChange("living.multiroom.zone2.zoneName", false, "Küche");
     // The device takes the name: its Config carries it from now on.
     s.client.xmlAnswers["Zone_2|<Config>GetParam</Config>"] =
@@ -1348,7 +1348,7 @@ describe("the zone commands desc.xml declares: pads, transport keys, zone names 
     // The new name is read back, confirmed on the datapoint and remembered — the next start must
     // not bring the old one back from the probe memory (until 2.10.0 it did).
     expect(s.acks).toContainEqual({ id: "living.multiroom.zone2.zoneName", value: "Küche" });
-    expect(memory.remembered("xmlZoneName:zone2")).toBe("Küche");
+    expect(memory.remembered("xmlZoneNames:zone2")).toEqual({ zone: "Küche", zoneB: "" });
     // The next start reads the name again (D8); a device that does not answer this time keeps the
     // remembered one — never the old "Kitchen".
     const second = setup(statuses);
@@ -1362,14 +1362,17 @@ describe("the zone commands desc.xml declares: pads, transport keys, zone names 
   // Renamed at the device (its own menu, the AV Controller app): remembered with `once`, the old name
   // stood for good, even across restarts (audit 2026-09-24, D8).
   test("a zone renamed at the device shows its new name on the next connect", async () => {
-    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA, "xmlZoneName:zone2": "Kitchen" });
+    const memory = new ProbeMemory({
+      __schema: DISCOVERY_SCHEMA,
+      "xmlZoneNames:zone2": { zone: "Kitchen", zoneB: "" },
+    });
     const s = setup(statuses);
     (s.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
     s.client.xmlAnswers["Zone_2|<Config>GetParam</Config>"] =
       '<YAMAHA_AV rsp="GET" RC="0"><Zone_2><Config><Name><Zone>Terrace</Zone></Name></Config></Zone_2></YAMAHA_AV>';
     await s.controller.start();
     expect(s.acks).toContainEqual({ id: "living.multiroom.zone2.zoneName", value: "Terrace" });
-    expect(memory.remembered("xmlZoneName:zone2")).toBe("Terrace");
+    expect(memory.remembered("xmlZoneNames:zone2")).toEqual({ zone: "Terrace", zoneB: "" });
   });
 
   // desc.xml declares the zone name as `Text 1,9,Latin-1`; a longer one, a line break or a character
@@ -1429,7 +1432,7 @@ describe("the zone commands desc.xml declares: pads, transport keys, zone names 
     expect(s.acks.filter(ack => ack.id === "living.multiroom.zone2.zoneName")).toEqual([
       { id: "living.multiroom.zone2.zoneName", value: "Kitchen" },
     ]);
-    expect(memory.remembered("xmlZoneName:zone2")).toBe("Kitchen");
+    expect(memory.remembered("xmlZoneNames:zone2")).toEqual({ zone: "Kitchen", zoneB: "" });
   });
 
   test("a zone whose Config carries no name gets no name datapoint", async () => {
@@ -1734,5 +1737,107 @@ describe("the device description decides what is writable (audit 2026-09-29, D11
     await s.controller.start();
     expect((s.defs.get("living.hdmiOut1") as Def | undefined)?.common?.write).toBe(true);
     expect((s.defs.get("living.sound.dialogueLift") as Def | undefined)?.common?.write).toBe(true);
+  });
+});
+
+describe("declared functions YNCA and MusicCast carry under the same ids (audit 2026-09-29, D15)", () => {
+  const readFixture = (name: string): string => readFileSync(join(__dirname, "__fixtures__", name), "utf8");
+  type Def = { common?: { write?: boolean; role?: string; min?: number; max?: number; type?: string } };
+  const sends = (s: ReturnType<typeof setup>): Array<{ zone: string; inner?: string }> =>
+    s.client.calls.filter(c => c.method === "send").map(c => ({ zone: c.zone, inner: c.inner }));
+
+  test("the DTS dialogue control: read from Basic_Status, writable with the declared range", async () => {
+    const s = setup({ Main_Zone: { power: true, dtsDialogueControl: 2 } });
+    s.client.descriptor = readFixture("desc-rx-a2060.xml");
+    await s.controller.start();
+    expect((s.defs.get("living.sound.dtsDialogueControl") as Def | undefined)?.common).toMatchObject({
+      write: true,
+      role: "level",
+      min: 0,
+      max: 6,
+    });
+    expect(s.acks).toContainEqual({ id: "living.sound.dtsDialogueControl", value: 2 });
+    s.controller.handleStateChange("living.sound.dtsDialogueControl", false, 4);
+    await flush();
+    expect(sends(s)).toContainEqual({
+      zone: "Main_Zone",
+      inner:
+        "<Sound_Video><Dialogue_Adjust><DTS_Dialogue_Control>4</DTS_Dialogue_Control></Dialogue_Adjust></Sound_Video>",
+    });
+  });
+
+  test("the contents display of a zone that declares it is read and written", async () => {
+    const s = setup({ Main_Zone: { power: true } });
+    s.client.descriptor = readFixture("desc-rx-a2060.xml");
+    s.client.xmlAnswers["Main_Zone|<Cursor_Control><Contents_Display>GetParam</Contents_Display></Cursor_Control>"] =
+      '<YAMAHA_AV rsp="GET" RC="0"><Main_Zone><Cursor_Control><Contents_Display>On</Contents_Display></Cursor_Control></Main_Zone></YAMAHA_AV>';
+    await s.controller.start();
+    expect(s.acks).toContainEqual({ id: "living.sound.contentsDisplay", value: true });
+    s.controller.handleStateChange("living.sound.contentsDisplay", false, false);
+    await flush();
+    expect(sends(s)).toContainEqual({
+      zone: "Main_Zone",
+      inner: "<Cursor_Control><Contents_Display>Off</Contents_Display></Cursor_Control>",
+    });
+  });
+
+  test("a zone that does not declare it reads nothing and builds nothing", async () => {
+    const s = setup({ Main_Zone: { power: true } });
+    s.client.descriptor = readFixture("desc-rx-v675.xml");
+    await s.controller.start();
+    expect(s.client.calls.some(c => (c.inner ?? "").includes("Contents_Display"))).toBe(false);
+    expect(s.objects).not.toContain("living.sound.contentsDisplay");
+  });
+
+  test("the party volume keys where the description declares them, written on System", async () => {
+    const s = setup({ Main_Zone: { power: true, party: false } });
+    s.client.descriptor = readFixture("desc-rx-a2060.xml");
+    await s.controller.start();
+    expect((s.defs.get("living.multiroom.partyVolumeUp") as Def | undefined)?.common).toMatchObject({
+      type: "boolean",
+      role: "button",
+    });
+    s.controller.handleStateChange("living.multiroom.partyVolumeDown", false, true);
+    await flush();
+    expect(sends(s)).toContainEqual({
+      zone: "System",
+      inner: "<Party_Mode><Volume><Lvl>Down</Lvl></Volume></Party_Mode>",
+    });
+  });
+
+  // HTR-4069 desc.xml: `Main_Zone,Config,Name,Zone_B` (P5), read as `Name,Zone_B` from the Config (G3).
+  test("the Zone B name rides in the main zone's Config and is written there", async () => {
+    const s = setup({ Main_Zone: { power: true } });
+    s.client.xmlAnswers["Main_Zone|<Config>GetParam</Config>"] =
+      '<YAMAHA_AV rsp="GET" RC="0"><Main_Zone><Config><Name><Zone>Living</Zone><Zone_B>Patio</Zone_B></Name></Config></Main_Zone></YAMAHA_AV>';
+    await s.controller.start();
+    expect(s.acks).toContainEqual({ id: "living.multiroom.zoneB.name", value: "Patio" });
+    s.controller.handleStateChange("living.multiroom.zoneB.name", false, "Garden");
+    await flush();
+    expect(sends(s)).toContainEqual({
+      zone: "Main_Zone",
+      inner: "<Config><Name><Zone_B>Garden</Zone_B></Name></Config>",
+    });
+  });
+
+  // RX-V3900 desc.xml: no `Config,Name,Zone`; the zone name is `Rename,Rename_Latin_1` (P6/G3) per zone.
+  test("the 2008 generation reads and writes its zone name through Rename", async () => {
+    const descriptor = (
+      JSON.parse(readFileSync(join(__dirname, "../../../test/fixtures/inventory/rxv3900.json"), "utf8")) as {
+        xml: { descriptor: string };
+      }
+    ).xml.descriptor;
+    const s = setup({ Main_Zone: { power: true } });
+    s.client.descriptor = descriptor;
+    s.client.xmlAnswers["Main_Zone|<Rename><Rename_Latin_1>GetParam</Rename_Latin_1></Rename>"] =
+      '<YAMAHA_AV rsp="GET" RC="0"><Main_Zone><Rename><Rename_Latin_1>Den</Rename_Latin_1></Rename></Main_Zone></YAMAHA_AV>';
+    await s.controller.start();
+    expect(s.acks).toContainEqual({ id: "living.zoneName", value: "Den" });
+    s.controller.handleStateChange("living.zoneName", false, "Cinema");
+    await flush();
+    expect(sends(s)).toContainEqual({
+      zone: "Main_Zone",
+      inner: "<Rename><Rename_Latin_1>Cinema</Rename_Latin_1></Rename>",
+    });
   });
 });
