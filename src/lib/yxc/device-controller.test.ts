@@ -978,6 +978,51 @@ describe("YxcDeviceController", () => {
     expect(master.calls).toContainEqual({ method: "startDistribution", args: [2] });
   });
 
+  // §9.1.3-2: the last client gone, the server's group is emptied (audit 2026-09-29, C43).
+  test("the last client leaving empties its server's group", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], distribution: { version: 2 } };
+    const master = makeFakeClient({}, {});
+    master.distInfo = { role: "server", group_id: "9A23", server_zone: "main", client_list: ["10.0.0.5"] };
+    const s = setup(features, ysp, { "10.0.0.9": master }, undefined, { host: "10.0.0.5" });
+    s.client.distRole = "client";
+    await s.controller.start();
+    s.controller.handleStateChange("living.multiroom.group.leave", false, true);
+    await flush();
+    expect(master.calls).toContainEqual({ method: "setServerInfo", args: [{ group_id: "" }] });
+    expect(master.calls.filter(c => c.method === "startDistribution")).toEqual([]);
+  });
+
+  // §9.1.3-1: a server leaving releases the clients it runs among the configured devices (C43).
+  test("a server leaving releases its configured clients", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], distribution: { version: 2 } };
+    const member = makeFakeClient({}, {});
+    const s = setup(features, ysp, { "10.0.0.7": member });
+    s.client.distInfo = {
+      role: "server",
+      group_id: "9A23",
+      client_list: [{ ip_address: "10.0.0.7", data_type: "base" }],
+    };
+    await s.controller.start();
+    s.controller.handleStateChange("living.multiroom.group.leave", false, true);
+    await flush();
+    expect(member.calls).toContainEqual({ method: "setClientInfo", args: [{ group_id: "" }] });
+  });
+
+  // §9.1.8-1/-2: no `version` is a 1.x module — a master taking only 2.x refuses it with a line (C43).
+  test("a device without a Link version is checked as 1.x", async () => {
+    const features = {
+      zone: [{ id: "main", func_list: ["power"] }],
+      distribution: { version: 2, compatible_client: [2] },
+    };
+    const old = makeFakeClient({ distribution: {} }, {});
+    const s = setup(features, ysp, { "1.2.3.9": old }, undefined, { host: "1.2.3.4" });
+    await s.controller.start();
+    s.controller.handleStateChange("living.multiroom.group.linkDevice", false, "1.2.3.9");
+    await flush();
+    expect(old.calls.filter(c => c.method === "setClientInfo")).toEqual([]);
+    expect(s.warnings.some(line => line.includes("version 1 is not one this device takes"))).toBe(true);
+  });
+
   test("a server whose role word says none still leaves as the server (§9.2)", async () => {
     const features = { zone: [{ id: "main", func_list: ["power"] }], distribution: { version: 2 } };
     const s = setup(features, ysp);

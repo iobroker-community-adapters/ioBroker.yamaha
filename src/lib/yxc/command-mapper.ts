@@ -1200,8 +1200,10 @@ export function clientSlotEntries(info: unknown): SlotEntry[] | undefined {
   if (!Array.isArray(list)) {
     return undefined;
   }
+  // The specification's form is `{ ip_address, data_type }`; a bare address is taken too, as the
+  // roster reader (`distributionSummary`) does.
   return list.map(entry => {
-    const ip = (entry as { ip_address?: unknown } | null)?.ip_address;
+    const ip = typeof entry === "string" ? entry : (entry as { ip_address?: unknown } | null)?.ip_address;
     return typeof ip === "string" ? { ip } : undefined;
   });
 }

@@ -1619,8 +1619,18 @@ export class YxcDeviceController implements ConnectionHandle {
     try {
       await this.refreshDistribution();
       if (this.dist.role === "server") {
+        const clients = this.dist.clients;
         await this.deps.client.stopDistribution();
         await this.deps.client.setServerInfo({ group_id: "" });
+        // The clients are released too (YXC Advanced §9.1.3-1): before, they kept the group id and the
+        // MusicCast Link input (audit 2026-09-29, C43). A client this adapter does not run is left
+        // alone — it notices the lost server itself.
+        for (const ip of this.deps.partnerIps?.() ?? []) {
+          const partner = this.deps.clientFor?.(ip);
+          if (partner && clients.includes((await resolveIPv4(ip)) ?? ip)) {
+            await partner.setClientInfo({ group_id: "" });
+          }
+        }
       } else if (this.dist.role === "client") {
         await this.leaveAsClient();
       } else {
@@ -1660,6 +1670,10 @@ export class YxcDeviceController implements ConnectionHandle {
       });
       if (summary.clients.length > 1) {
         await partner.startDistribution(num);
+      } else {
+        // The last client gone: "If all clients are to be removed, set empty text to GroupID in
+        // setServerInfo" (YXC Advanced §9.1.3-2) — the server showed "server" with an empty roster (C43).
+        await partner.setServerInfo({ group_id: "" });
       }
       return;
     }
@@ -1749,10 +1763,13 @@ export class YxcDeviceController implements ConnectionHandle {
       const joiningZones = joiningFeatures.zones.some(zone => zone.id === "zone2" && zone.zoneB === true)
         ? ["main", "zone2"]
         : ["main"];
-      if (master?.compatibleClients !== undefined && joining?.version !== undefined) {
-        if (!master.compatibleClients.includes(Math.floor(joining.version))) {
+      if (master?.compatibleClients !== undefined) {
+        // No `version` means a 1.x network module (YXC Advanced §9.1.8-1/-2) — it was let through
+        // unchecked and the build failed silently after three minutes of polling (audit 2026-09-29, C43).
+        const version = joining?.version ?? 1;
+        if (!master.compatibleClients.includes(Math.floor(version))) {
           this.deps.log.warn(
-            `${this.deviceId}: cannot link ${target} — its MusicCast Link version ${joining.version} is not one this device takes (${master.compatibleClients.join(", ")}); a firmware update of either brings them together`,
+            `${this.deviceId}: cannot link ${target} — its MusicCast Link version ${version} is not one this device takes (${master.compatibleClients.join(", ")}); a firmware update of either brings them together`,
           );
           return;
         }
