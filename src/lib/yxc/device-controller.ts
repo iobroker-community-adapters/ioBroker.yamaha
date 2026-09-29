@@ -191,6 +191,11 @@ export type { YxcClientLike };
 export interface YxcControllerDeps {
   /** The YXC (MusicCast) client for this device. */
   client: YxcClientLike;
+  /**
+   * Name a zone folder as the tree does — `zone2` → `zoneB` on a device whose zone2 is its Zone B
+   * (audit 2026-09-29, C29). Unset (tests, a single transport): the ids stay as built.
+   */
+  aliasZone?: (from: string, to: string) => void;
   /** Resolve another configured device's client by IP, for forming a multiroom group. */
   clientFor?: (ip: string) => YxcClientLike | undefined;
   /**
@@ -414,6 +419,9 @@ export class YxcDeviceController implements ConnectionHandle {
       features => features.zones.length > 0,
     );
     this.zones = capabilities.zones.map(zone => zone.id);
+    if (capabilities.zones.some(zone => zone.id === "zone2" && zone.zoneB === true)) {
+      this.deps.aliasZone?.("zone2", "zoneB");
+    }
     for (const zone of capabilities.zones) {
       if (zone.valueLists) {
         this.zoneValueLists.set(zone.id, zone.valueLists);
@@ -1639,7 +1647,12 @@ export class YxcDeviceController implements ConnectionHandle {
         return;
       }
       const master = this.capabilities?.distribution;
-      const joining = parseYxcFeatures(await partner.getFeatures()).distribution;
+      const joiningFeatures = parseYxcFeatures(await partner.getFeatures());
+      const joining = joiningFeatures.distribution;
+      // Zone A and Zone B join a group only together (YXC Advanced §9.1.7-2).
+      const joiningZones = joiningFeatures.zones.some(zone => zone.id === "zone2" && zone.zoneB === true)
+        ? ["main", "zone2"]
+        : ["main"];
       if (master?.compatibleClients !== undefined && joining?.version !== undefined) {
         if (!master.compatibleClients.includes(Math.floor(joining.version))) {
           this.deps.log.warn(
@@ -1657,10 +1670,12 @@ export class YxcDeviceController implements ConnectionHandle {
       const serverIp = await this.ownIp();
       await partner.setClientInfo({
         group_id: groupId,
-        zone: ["main"],
+        zone: joiningZones,
         ...(serverIp !== undefined ? { server_ip_address: serverIp } : {}),
       });
-      await partner.setInput("mc_link", "main");
+      for (const zone of joiningZones) {
+        await partner.setInput("mc_link", zone);
+      }
       await this.deps.client.setServerInfo({ group_id: groupId, zone: "main", type: "add", client_list: [clientIp] });
       await this.deps.client.startDistribution(num);
       await this.awaitGroupBuilt();

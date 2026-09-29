@@ -130,6 +130,12 @@ describe("parseYxcFeatures", () => {
     expect(clock?.alarmVolumeRange).toEqual({ min: 5, max: 60, step: 1 });
     expect(parseYxcFeatures(rxV481).clock).toBeUndefined();
   });
+
+  // Basic Rev 1.10 §4.2 `zone_b` (audit 2026-09-29, C29).
+  test("marks a zone2 that is the receiver's Zone B", () => {
+    expect(parseYxcFeatures(rxV481).zones.find(z => z.id === "zone2")?.zoneB).toBe(true);
+    expect(parseYxcFeatures(rxV481).zones.find(z => z.id === "main")?.zoneB).toBeUndefined();
+  });
 });
 
 describe("scene count and netusb functions (RX-V6A getFeatures, 2026-09-01)", () => {

@@ -204,6 +204,7 @@ function setup(
     gate?: CommandGate;
     host?: string;
     reportDeclaredAbsent?: (ids: string[]) => void;
+    aliasZone?: (from: string, to: string) => void;
   } = {},
 ): {
   /** Every info line the controller logged. */
@@ -824,6 +825,40 @@ describe("YxcDeviceController", () => {
     const clientGroup = (join?.args[0] as { group_id: string }).group_id;
     expect(clientGroup).toMatch(/^[0-9A-F]{32}$/);
     expect(clientGroup).toBe((add?.args[0] as { group_id: string }).group_id);
+  });
+
+  // YXC Basic Rev 1.10 §4.2: a Zone B is served as zone2 with `zone_b: true` — its folder is renamed for
+  // the tree, and Zone A and B join a group together (Advanced §9.1.7-2; audit 2026-09-29, C29).
+  test("a Zone B receiver names its zone2 folder Zone B, and joins a group with both zones", async () => {
+    const aliases: string[] = [];
+    const features = { zone: [{ id: "main", func_list: ["power"] }], distribution: { version: 2 } };
+    const zoneB = {
+      zone: [
+        { id: "main", func_list: ["power"] },
+        { id: "zone2", func_list: ["power", "volume"], zone_b: true },
+      ],
+      distribution: { version: 2 },
+    };
+    const own = setup(zoneB, { power: "on" }, {}, undefined, {
+      aliasZone: (from, to) => aliases.push(`${from}>${to}`),
+    });
+    await own.controller.start();
+    expect(aliases).toEqual(["zone2>zoneB"]);
+
+    const clientDevice = makeFakeClient(zoneB, {});
+    clientDevice.distRole = "none";
+    const s = setup(features, ysp, { "1.2.3.9": clientDevice }, undefined, { host: "1.2.3.4" });
+    s.client.distRole = "none";
+    await s.controller.start();
+    s.controller.handleStateChange("living.multiroom.group.linkDevice", false, "1.2.3.9");
+    await flush();
+    expect(clientDevice.calls.find(c => c.method === "setClientInfo")?.args[0]).toMatchObject({
+      zone: ["main", "zone2"],
+    });
+    expect(clientDevice.calls.filter(c => c.method === "setInput").map(c => c.args)).toEqual([
+      ["mc_link", "main"],
+      ["mc_link", "zone2"],
+    ]);
   });
 
   test("the distribution number counts the clients already distributed in the network", async () => {

@@ -199,3 +199,44 @@ describe("TransportConnectionAdapter takes over an id with its last value (audit
     expect(acks).toEqual([]);
   });
 });
+
+// MusicCast serves a Zone B as its zone2 (YXC Basic Rev 1.10 §4.2); the tree and YNCA call it Zone B.
+// Before, one physical zone stood in two folders on the RX-V481/RX-V4A/RX-V583 class (audit 2026-09-29, C29).
+describe("TransportConnectionAdapter — a zone folder named as the tree does", () => {
+  test("zone2 ids land under multiroom.zoneB, the folder is named Zone B, writes go back to zone2", async () => {
+    const acks: Array<{ id: string; value: unknown }> = [];
+    const writes: string[] = [];
+    const adapter = new TransportConnectionAdapter("yxc", "living", (id, value) => acks.push({ id, value }));
+    adapter.bind({
+      start: async () => {
+        adapter.aliasZone("zone2", "zoneB");
+        await adapter.interceptUpsert("living.multiroom.zone2", {
+          id: "multiroom.zone2",
+          type: "channel",
+          common: { name: "Zone 2" },
+        });
+        await adapter.interceptUpsert("living.multiroom.zone2.volume", st("multiroom.zone2.volume"));
+        await adapter.interceptUpsert("living.multiroom.zone2.subwooferVolume", st("multiroom.zone2.subwooferVolume"));
+        adapter.interceptSetStateAck("living.multiroom.zone2.volume", 40);
+        return true;
+      },
+      handleStateChange: fullId => writes.push(fullId),
+      onDrop: () => {},
+      close: () => {},
+    });
+    await adapter.connect();
+    const objects = adapter.buildObjects();
+    expect(objects.map(o => o.id)).toEqual([
+      "multiroom.zoneB",
+      "multiroom.zoneB.volume",
+      "multiroom.zoneB.sound.subwooferTrim",
+    ]);
+    expect((objects[0].common.name as Record<string, string>).en).toBe("Zone B");
+    adapter.seedOwned(new Set(["multiroom.zoneB.volume"]));
+    expect(acks).toEqual([{ id: "living.multiroom.zoneB.volume", value: 40 }]);
+    adapter.handleWrite("multiroom.zoneB.sound.subwooferTrim", false, 1);
+    adapter.handleWrite("multiroom.zoneB.volume", false, 30);
+    expect(writes).toEqual(["living.multiroom.zone2.subwooferVolume", "living.multiroom.zone2.volume"]);
+    expect(adapter.canonicalId("living.multiroom.zone2.mute")).toBe("multiroom.zoneB.mute");
+  });
+});

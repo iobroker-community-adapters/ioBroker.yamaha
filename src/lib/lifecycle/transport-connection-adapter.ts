@@ -1,4 +1,4 @@
-import type { ObjectDef } from "../catalog/types";
+import { channelCommon, type ObjectDef } from "../catalog/types";
 import { canonicalIdOf, ZONE_PREFIX, type Transport } from "../catalog/owner-policy";
 import type { TransportConnection } from "./multi-transport-handle";
 
@@ -44,6 +44,11 @@ export class TransportConnectionAdapter implements TransportConnection {
    * repeat an unchanged value — it is delivered from here at once (audit 2026-09-24, C21).
    */
   private readonly latest = new Map<string, boolean | number | string>();
+  /**
+   * A zone folder this transport names differently from the tree (`zone2` → `zoneB`): MusicCast serves a
+   * Zone B as its zone2 (YXC Basic Rev 1.10 §4.2), YNCA and the tree call it Zone B (audit 2026-09-29, C29).
+   */
+  private zoneAlias: { from: string; to: string } | undefined;
 
   /**
    * @param transport the transport this adapts
@@ -64,7 +69,14 @@ export class TransportConnectionAdapter implements TransportConnection {
    * @returns a resolved promise (the controller's upsert dep is async)
    */
   public readonly interceptUpsert = (_fullId: string, def: ObjectDef): Promise<void> => {
-    const object: ObjectDef = { ...def, id: this.canonical(def.id) };
+    const id = this.canonical(def.id);
+    // The renamed zone folder itself takes the name and explanation of its tree id.
+    const renamedFolder = this.zoneAlias !== undefined && id === `multiroom.${this.zoneAlias.to}` && def.id !== id;
+    const object: ObjectDef = {
+      ...def,
+      id,
+      ...(renamedFolder ? { common: { ...def.common, ...channelCommon(this.zoneAlias!.to) } } : {}),
+    };
     const previous = this.collected.get(object.id);
     this.collected.set(object.id, object);
     // While the handle has not coordinated yet (the connect's own upserts), the collection is
@@ -167,8 +179,9 @@ export class TransportConnectionAdapter implements TransportConnection {
    * @param value the value written
    */
   public handleWrite(canonicalId: string, ack: boolean, value: unknown): void {
-    const zone = ZONE_PREFIX.exec(canonicalId)?.[0] ?? "";
-    const template = canonicalId.slice(zone.length);
+    const own = this.unalias(canonicalId);
+    const zone = ZONE_PREFIX.exec(own)?.[0] ?? "";
+    const template = own.slice(zone.length);
     const controllerId = zone + (INVERSE_DRIFT[this.transport]?.[template] ?? template);
     this.controller?.handleStateChange(`${this.deviceId}.${controllerId}`, ack, value);
   }
@@ -197,7 +210,45 @@ export class TransportConnectionAdapter implements TransportConnection {
     return fullId.startsWith(prefix) ? fullId.slice(prefix.length) : fullId;
   }
 
+  /**
+   * Name one of this transport's zone folders as the tree does (`zone2` → `zoneB`). Called by the
+   * controller before it builds its objects.
+   *
+   * @param from the transport's zone segment
+   * @param to the tree's zone segment
+   */
+  public aliasZone(from: string, to: string): void {
+    this.zoneAlias = { from, to };
+  }
+
+  /**
+   * The tree id of one of the controller's ids — drift resolved, zone folder renamed.
+   *
+   * @param id the controller's (device-relative or full) id
+   * @returns the canonical id
+   */
+  public canonicalId(id: string): string {
+    return this.canonical(id);
+  }
+
   private canonical(id: string): string {
-    return canonicalIdOf(this.transport, this.relative(id));
+    const canonical = canonicalIdOf(this.transport, this.relative(id));
+    const alias = this.zoneAlias;
+    if (alias === undefined) {
+      return canonical;
+    }
+    const from = `multiroom.${alias.from}`;
+    return canonical === from || canonical.startsWith(`${from}.`)
+      ? `multiroom.${alias.to}${canonical.slice(from.length)}`
+      : canonical;
+  }
+
+  private unalias(id: string): string {
+    const alias = this.zoneAlias;
+    if (alias === undefined) {
+      return id;
+    }
+    const to = `multiroom.${alias.to}`;
+    return id === to || id.startsWith(`${to}.`) ? `multiroom.${alias.from}${id.slice(to.length)}` : id;
   }
 }

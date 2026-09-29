@@ -24,6 +24,11 @@ export interface YxcZone {
   valueLists?: Record<string, string[]>;
   /** How many scenes the zone offers (`scene_num`, with `scene` in func_list). */
   sceneNum?: number;
+  /**
+   * The zone is Zone B, not a Zone 2 (`zone_b`, YXC Basic Rev 1.10 §4.2: "Zone B is treated as Zone2 in
+   * YXC") — its states belong under `multiroom.zoneB`, where YNCA puts the same zone (audit 2026-09-29, C29).
+   */
+  zoneB?: boolean;
 }
 
 /** The tuner block of a YXC getFeatures response, as far as the adapter uses it. */
@@ -317,6 +322,7 @@ export function parseYxcFeatures(response: unknown): YxcCapabilities {
           ranges: parseRanges(zone.range_step),
           valueLists: parseValueLists(zone),
           sceneNum: typeof zone.scene_num === "number" ? zone.scene_num : undefined,
+          ...(zone.zone_b === true ? { zoneB: true } : {}),
         });
       }
     }

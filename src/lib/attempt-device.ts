@@ -10,7 +10,7 @@ import { ReconnectStrategy } from "./lifecycle/reconnect-strategy";
 import { CommandGate } from "./lifecycle/command-gate";
 import type { YncaSubunitCache } from "./ynca/subunit-cache";
 import type { ProbeMemory } from "./lifecycle/probe-memory";
-import { canonicalIdOf, type Transport } from "./catalog/owner-policy";
+import type { Transport } from "./catalog/owner-policy";
 import { readyLine } from "./ready-line";
 import { errorMessage } from "./util";
 import type { ConnectionHandle, ControllerLog } from "./controller";
@@ -317,6 +317,7 @@ export function attemptDevice(
     yxc.bind(
       new YxcDeviceController(device.id, {
         client: new YamahaYxcClient(device.ip, undefined, gate),
+        aliasZone: (from, to) => yxc.aliasZone(from, to),
         clientFor: ip => partnerClient(device.ip, deps.knownDeviceIps, ip),
         partnerIps: () => [...deps.knownDeviceIps].filter(ip => ip !== device.ip),
         registerPush: (onPush, deviceId) => deps.registerPush(device.ip, onPush, deviceId),
@@ -328,7 +329,7 @@ export function attemptDevice(
         upsertObject: yxc.interceptUpsert,
         setStateAck: yxc.interceptSetStateAck,
         reportDeviceName: deps.onDeviceName,
-        reportDeclaredAbsent: ids => deps.onDeclaredAbsent?.(ids.map(id => canonicalIdOf("yxc", id))),
+        reportDeclaredAbsent: ids => deps.onDeclaredAbsent?.(ids.map(id => yxc.canonicalId(id))),
         log,
         gate,
       }),
