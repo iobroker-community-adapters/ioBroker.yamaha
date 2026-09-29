@@ -1538,6 +1538,20 @@ describe("XmlDeviceController all-zones power", () => {
     });
   });
 
+  test("the keepalive reads the all-zones power again", async () => {
+    const s = setup({ Main_Zone: { power: true } });
+    s.client.xmlAnswers[`System|${POWER}`] =
+      '<YAMAHA_AV rsp="GET" RC="0"><System><Power_Control><Power>Standby</Power></Power_Control></System></YAMAHA_AV>';
+    await s.controller.start();
+    s.client.xmlAnswers[`System|${POWER}`] =
+      '<YAMAHA_AV rsp="GET" RC="0"><System><Power_Control><Power>On</Power></Power_Control></System></YAMAHA_AV>';
+    s.acks.length = 0;
+    s.fire.keepalive?.();
+    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => setImmediate(resolve));
+    expect(s.acks).toContainEqual({ id: "living.multiroom.masterPower", value: true });
+  });
+
   test("a device that does not answer it gets no switch, and a write sends nothing", async () => {
     const s = setup({ Main_Zone: { power: true } });
     await s.controller.start();
@@ -1618,6 +1632,21 @@ describe("XmlDeviceController player block from the source's Play_Info (audit 20
         { id: "living.player.albumArt", value: "" },
       ]),
     );
+  });
+
+  test("an input switch reads the player block back", async () => {
+    const statuses: Record<string, BasicStatus> = { Main_Zone: { power: true, input: "HDMI1" } };
+    const s = setup(statuses);
+    s.client.xmlAnswers[`Main_Zone|${INPUTS}`] = inputList;
+    s.client.xmlAnswers[`NET_RADIO|${PLAY_INFO}`] = playing;
+    await s.controller.start();
+    statuses.Main_Zone = { power: true, input: "NET RADIO" };
+    s.client.calls.length = 0;
+    s.controller.handleWrite("input", "NET RADIO");
+    await flush();
+    await flush();
+    await flush();
+    expect(s.client.calls.some(c => c.zone === "NET_RADIO" && c.inner === PLAY_INFO)).toBe(true);
   });
 
   test("a transport key reads the player block back", async () => {
@@ -1789,12 +1818,18 @@ describe("declared functions YNCA and MusicCast carry under the same ids (audit 
       '<YAMAHA_AV rsp="GET" RC="0"><Main_Zone><Config><Name><Zone>Living</Zone><Zone_B>Patio</Zone_B></Name></Config></Main_Zone></YAMAHA_AV>';
     await s.controller.start();
     expect(s.acks).toContainEqual({ id: "living.multiroom.zoneB.name", value: "Patio" });
+    s.client.xmlAnswers["Main_Zone|<Config>GetParam</Config>"] =
+      '<YAMAHA_AV rsp="GET" RC="0"><Main_Zone><Config><Name><Zone>Living</Zone><Zone_B>Garden</Zone_B></Name></Config></Main_Zone></YAMAHA_AV>';
+    s.acks.length = 0;
     s.controller.handleWrite("multiroom.zoneB.name", "Garden");
+    await flush();
     await flush();
     expect(sends(s)).toContainEqual({
       zone: "Main_Zone",
       inner: "<Config><Name><Zone_B>Garden</Zone_B></Name></Config>",
     });
+    // Read back from the Config: the Zone B name, not the zone's own.
+    expect(s.acks).toEqual([{ id: "living.multiroom.zoneB.name", value: "Garden" }]);
   });
 
   // RX-V3900 desc.xml: no `Config,Name,Zone`; the zone name is `Rename,Rename_Latin_1` (P6/G3) per zone.

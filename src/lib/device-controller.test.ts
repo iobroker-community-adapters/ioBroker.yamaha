@@ -1714,6 +1714,18 @@ describe("the YNCA pad dialect of the 2015 generation (RX-A850: @MAIN:CURSOR/MEN
     expect(t.client.sent).toEqual([{ subunit: "MAIN", func: "LISTCURSOR", value: "Up" }]);
   });
 
+  test("a proven dialect in the memory is used without asking again", async () => {
+    for (const dialect of ["list", "zone"] as const) {
+      const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA, yncaPadDialect: { dialect, proven: true } });
+      const s = await padSetup(memory, { LISTCURSOR: "known", CURSOR: "known" });
+      expect(s.probes).toEqual([]);
+      s.controller.handleWrite("remote.cursor", "up");
+      expect(s.client.sent).toEqual([
+        { subunit: "MAIN", func: dialect === "list" ? "LISTCURSOR" : "CURSOR", value: "Up" },
+      ]);
+    }
+  });
+
   test("an unclear probe keeps the list dialect and remembers nothing; a 2.12.0 string is not trusted", async () => {
     const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA, yncaPadDialect: "zone" });
     const s = await padSetup(memory, { LISTCURSOR: "unclear", CURSOR: "unclear" });

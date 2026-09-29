@@ -363,6 +363,14 @@ describe("parseDescriptor — the enumerations a classic receiver carries in des
   });
 
   // The declared frequency grid per band, in kHz (audit 2026-09-29, D6): EU 9/50 kHz, US 10/200 kHz.
+  test("a tuner that declares FM only has its FM grid", () => {
+    const xml =
+      '<Cmd ID="G1" Type="Number">Tuning,Freq,Val=Param_1:Exp=Param_2:Unit=Param_3</Cmd>' +
+      "<Param_1><Range>8750,10800,5</Range></Param_1>";
+    expect(parseDescriptor(xml).tunerGrid).toEqual({ FM: { min: 87500, max: 108000, step: 50 } });
+    expect(parseDescriptor("<Unit/>").tunerGrid).toBeUndefined();
+  });
+
   test("reads the tuner's frequency grid per band", () => {
     expect(parseDescriptor(readFixture("desc-rx-v473.xml")).tunerGrid).toEqual({
       AM: { min: 531, max: 1611, step: 9 },

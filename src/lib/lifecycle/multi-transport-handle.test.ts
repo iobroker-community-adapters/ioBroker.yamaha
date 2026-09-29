@@ -807,6 +807,61 @@ describe("MultiTransportHandle — a transport missing at start (audit 2026-09-2
     expect(s.info).toEqual(["living: ynca did not return — sleep now take the form of yxc"]);
   });
 
+  test("when the missing transport returns, the hold ends: the datapoint takes its form and the timer goes", async () => {
+    // The tree still carries an older form than either transport builds (a switch left by an earlier version).
+    const oldTree = new Map([["sleep", { type: "state", common: { type: "boolean" as const, write: true } }]]);
+    const cancelled: unknown[] = [];
+    const timers: Array<{ cb: () => void; ms: number }> = [];
+    const objects: string[] = [];
+    const fresh = fakeConn("ynca", [yncaSleep]);
+    const handle = new MultiTransportHandle("living", [fakeConn("yxc", [yxcSleep])], {
+      upsertObject: id => {
+        objects.push(id);
+        return Promise.resolve();
+      },
+      log: silentLog,
+      rebuild: () => fresh,
+      schedule: (cb, ms) => {
+        timers.push({ cb, ms });
+        return `timer-${ms}`;
+      },
+      cancel: handle_ => {
+        cancelled.push(handle_);
+      },
+      backoffFactory: () => ({ nextDelay: () => 1000, reset: () => {} }),
+      missing: ["ynca"],
+      existingObjects: () => Promise.resolve(oldTree),
+      holdMs: 180_000,
+    });
+    await handle.start();
+    expect(objects).not.toContain("living.sleep");
+    timers.find(timer => timer.ms === 1000)!.cb();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(objects).toContain("living.sleep");
+    expect(fresh.seeded).toContain("sleep");
+    expect(cancelled).toContain("timer-180000");
+  });
+
+  test("closing the handle cancels the hold timer", async () => {
+    const cancelled: unknown[] = [];
+    const handle = new MultiTransportHandle("living", [fakeConn("yxc", [yxcSleep])], {
+      upsertObject: () => Promise.resolve(),
+      log: silentLog,
+      rebuild: () => fakeConn("ynca", [yncaSleep]),
+      schedule: (_cb, ms) => `timer-${ms}`,
+      cancel: handle_ => {
+        cancelled.push(handle_);
+      },
+      backoffFactory: () => ({ nextDelay: () => 1000, reset: () => {} }),
+      missing: ["ynca"],
+      existingObjects: () => Promise.resolve(existingTree),
+      holdMs: 180_000,
+    });
+    await handle.start();
+    handle.close();
+    expect(cancelled).toContain("timer-180000");
+  });
+
   test("a transport the device never answered is not retried and holds nothing", async () => {
     const s = missingSetup([], fakeConn("ynca", [yncaSleep]));
     await s.handle.start();

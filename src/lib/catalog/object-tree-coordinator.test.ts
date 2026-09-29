@@ -1,4 +1,4 @@
-import { coordinateObjectTree } from "./object-tree-coordinator";
+import { coordinateObjectTree, keepsForm } from "./object-tree-coordinator";
 import type { ObjectDef } from "./types";
 
 function state(id: string, name: string, extra: Record<string, unknown> = {}): ObjectDef {
@@ -317,5 +317,38 @@ describe("the value the owner reports always stays on an adopted declared list (
       { transport: "xml", objects: [input({ HDMI1: "HDMI1", AV1: "AV1" }, { declaredStates: true })] },
     ]);
     expect(same.objects.find(o => o.id === "input")?.common.states).toEqual({ HDMI1: "HDMI1", AV1: "AV1" });
+  });
+});
+
+// The form a datapoint keeps while a transport the device has is missing (audit 2026-09-29, D1).
+describe("keepsForm", () => {
+  const live = (common: Partial<ObjectDef["common"]>): ObjectDef => ({
+    id: "sleep",
+    type: "state",
+    common: { name: "Sleep", type: "string", role: "state", read: true, write: true, ...common },
+  });
+  const existing = (
+    common: Partial<ObjectDef["common"]>,
+    type = "state",
+  ): { type: string; common: Partial<ObjectDef["common"]> } => ({
+    type,
+    common: { type: "string", write: true, ...common },
+  });
+
+  test("the same form is kept", () => {
+    expect(keepsForm(existing({ states: { Off: "Off" } }), live({ states: { Off: "Off", "30 min": "30" } }))).toBe(
+      true,
+    );
+  });
+
+  test("another object type, value type or unit is another form", () => {
+    expect(keepsForm(existing({}, "channel"), live({}))).toBe(false);
+    expect(keepsForm(existing({ type: "number" }), live({}))).toBe(false);
+    expect(keepsForm(existing({ unit: "dB" }), live({}))).toBe(false);
+  });
+
+  test("losing the write, or a value of the list, is another form", () => {
+    expect(keepsForm(existing({ write: true }), live({ write: false }))).toBe(false);
+    expect(keepsForm(existing({ states: { HDMI1: "HDMI1" } }), live({ states: { hdmi1: "HDMI1" } }))).toBe(false);
   });
 });

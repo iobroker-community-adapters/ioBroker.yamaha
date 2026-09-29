@@ -3204,6 +3204,21 @@ describe("Yamaha device overview", () => {
   });
 });
 
+describe("Yamaha passes the installation's language on (audit 2026-09-29, C48)", () => {
+  it("hands system.config's language to every device attempt, and nothing for a missing one", async () => {
+    const ctx = setup();
+    ctx.i.foreignObjects.set("system.config", { common: { language: "de" } });
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.calls[0].deps.systemLanguage).toBe("de");
+    const none = setup();
+    none.i.foreignObjects.set("system.config", { common: { language: 7 } });
+    await none.i.onReady();
+    await flush();
+    expect(none.calls[0].deps.systemLanguage).toBeUndefined();
+  });
+});
+
 describe("Yamaha SSDP search", () => {
   /**
    * Run onReady in auto mode with the REAL search/fetch wired into a fake
@@ -4379,6 +4394,30 @@ describe("Yamaha writes only what changed (audit 2026-09-15 — setStateChangedA
     setStateAck("Living_room.volume", -29);
     await flush();
     expect(writesOf(ctx, "Living_room.volume")).toBe(2);
+  });
+
+  // A state only the adapter writes is compared in memory — no database read per repeated value; a
+  // writable one keeps the database compare, which corrects a lost user command (audit 2026-09-29, E3).
+  it("a read-only state asks the database once, then compares in memory", async () => {
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    const deps = ctx.calls[0].deps;
+    const upsert = deps.upsertObject as (id: string, def: unknown) => Promise<void>;
+    const setStateAck = deps.setStateAck as (id: string, value: unknown) => void;
+    await upsert("Living_room.sound.signal.format", {
+      id: "sound.signal.format",
+      type: "state",
+      common: { name: "Format", type: "string", role: "text", read: true, write: false },
+    });
+    setStateAck("Living_room.sound.signal.format", "PCM");
+    await flush();
+    setStateAck("Living_room.sound.signal.format", "PCM");
+    await flush();
+    const changedAsync = (ctx.i as unknown as { setStateChangedAsync: { mock: { calls: unknown[][] } } })
+      .setStateChangedAsync;
+    const asked = changedAsync.mock.calls.filter(c => c[0] === "Living_room.sound.signal.format");
+    expect(asked).toHaveLength(1);
   });
 
   it("confirms a user's write even when the device echoes the value it already had", async () => {

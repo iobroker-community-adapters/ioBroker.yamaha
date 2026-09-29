@@ -1235,6 +1235,7 @@ describe("YxcDeviceController", () => {
       expect(s.client.calls.map(c => c.method)).toEqual(["power", "getStatus"]);
       expect(s.acks).toContainEqual({ id: "living.power", value: true });
       expect(liveness.state).toBe("unknown");
+      expect(s.infos).toEqual([]);
       s.client.status = { ...(s.client.status as Record<string, unknown>), power: "standby" };
       s.controller.handleWrite("power", false);
       await elapse();
@@ -1846,6 +1847,9 @@ describe("YxcDeviceController device name", () => {
       expect.arrayContaining([
         { method: "clearTunerPreset", args: ["fm", 3] },
         { method: "searchTuner", args: ["fm", "auto_up"] },
+        // Without events each is read back where it acts: the stored list, the tuner.
+        { method: "getTunerPresetInfo", args: ["fm"] },
+        { method: "getPlayInfo", args: ["tuner"] },
       ]),
     );
     s.client.calls.length = 0;
@@ -2861,5 +2865,61 @@ describe("nameTextLabels", () => {
       }),
     ).toEqual({ inputs: { hdmi1: "Apple TV" }, soundPrograms: { munich: "Hall in Munich" } });
     expect(nameTextLabels(null)).toEqual({ inputs: {}, soundPrograms: {} });
+  });
+});
+
+describe("MusicCast lists as single datapoints and read-backs (audit 2026-09-29, C30/C38)", () => {
+  test("the playlist names become slot datapoints next to the JSON list", async () => {
+    const features = {
+      response_code: 0,
+      zone: [{ id: "main", func_list: ["power"], input_list: ["hdmi1"] }],
+      netusb: { func_list: ["mc_playlist"] },
+    };
+    const s = setup(features, { response_code: 0, power: "on" });
+    (s.client as unknown as Record<string, unknown>).getMcPlaylistName = (): Promise<unknown> =>
+      Promise.resolve({ response_code: 0, name_list: ["Chill", "Rock"] });
+    await s.controller.start();
+    expect(s.acks).toEqual(
+      expect.arrayContaining([
+        { id: "living.player.netPlayer.playlistNames.1.name", value: "Chill" },
+        { id: "living.player.netPlayer.playlistNames.2.name", value: "Rock" },
+      ]),
+    );
+  });
+
+  test("the group's clients become slot datapoints", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], distribution: { version: 2 } };
+    const s = setup(features, ysp);
+    await s.controller.start();
+    expect(s.acks).toContainEqual({ id: "living.multiroom.group.clients.1.ip", value: "1.2.3.5" });
+  });
+
+  test("the stored stations are also the JSON list", async () => {
+    const features = {
+      zone: [{ id: "main", func_list: ["power"] }],
+      tuner: { func_list: ["fm"], preset: { type: "separate", num: 2 } },
+    };
+    const s = setup(features, ysp);
+    s.client.tunerPresetInfo = { response_code: 0, preset_info: [{ band: "fm", number: 98100, text: "hr3" }] };
+    await s.controller.start();
+    const list = s.acks.find(ack => ack.id === "living.tuner.presets");
+    expect(String(list?.value)).toContain("hr3");
+  });
+
+  test("a transport key is read back from the source the zone plays", async () => {
+    const features = {
+      response_code: 0,
+      zone: [{ id: "main", func_list: ["power", "playback"], input_list: ["net_radio"] }],
+      netusb: { func_list: ["play_queue"] },
+    };
+    const s = setup(features, { response_code: 0, power: "on", input: "net_radio" });
+    // The network player reports what it plays — that is how the zone's input is its source.
+    s.client.playInfo = { response_code: 0, input: "net_radio", playback: "play" };
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleWrite("player.pause", true);
+    await flush();
+    await flush();
+    expect(s.client.calls.some(c => c.method === "getPlayInfo")).toBe(true);
   });
 });
