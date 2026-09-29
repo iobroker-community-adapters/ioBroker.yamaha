@@ -1,5 +1,5 @@
 import { channelCommon, keyedCommon, parentChannels, zoneRole, type ObjectDef } from "../catalog/types";
-import { textWriteProblem, writableNumber } from "../catalog/value-coerce";
+import { coerceBool, textWriteProblem, writableNumber } from "../catalog/value-coerce";
 import { tName } from "../i18n";
 import {
   definiteXmlBody,
@@ -51,6 +51,20 @@ const XML_TRANSPORT_WIRE: Record<string, string> = {
   next: "Skip Fwd",
   prev: "Skip Rev",
 };
+
+/** The all-zones power read (`System,Power_Control,Power`; RX-V6A capture `xml-system-power.xml`). */
+const SYSTEM_POWER_GET = "<Power_Control><Power>GetParam</Power></Power_Control>";
+
+/**
+ * The all-zones power from its answer.
+ *
+ * @param xml the response body
+ * @returns true for On, false for Standby, undefined when the answer carries neither
+ */
+function parseSystemPower(xml: string): boolean | undefined {
+  const power = /<Power_Control>\s*<Power>(On|Standby)<\/Power>/.exec(xml)?.[1];
+  return power === undefined ? undefined : power === "On";
+}
 
 /** The subset of the XML client the controller uses (so tests can inject a fake). */
 export interface XmlClientLike {
@@ -104,6 +118,8 @@ export class XmlDeviceController implements ConnectionHandle {
   private readonly scenesByZone = new Map<string, XmlScene[]>();
   /** Whether the device answers `<Tuner><Play_Info>` (the classic pre-2010 tuner). */
   private hasTuner = false;
+  /** Whether the device answered `System,Power_Control,Power` (the all-zones power; D4). */
+  private hasSystemPower = false;
   /** The amp state ids this controller actually created — the claim-with-proof gate for BOTH ways. */
   private readonly createdStates = new Set<string>();
   /** Channel ids already created — shared by the start-up build and the mid-session growth. */
@@ -267,6 +283,7 @@ export class XmlDeviceController implements ConnectionHandle {
     }
     await this.setupScenes(createdChannels);
     await this.setupTuner(createdChannels);
+    await this.setupSystemPower(createdChannels);
     await this.setupTransportKeys(createdChannels);
     await this.setupZoneNames(createdChannels);
     // Seed from the statuses already fetched during the probe — no second round-trip.
@@ -602,6 +619,73 @@ export class XmlDeviceController implements ConnectionHandle {
   /**
    * Poll the tuner's Play_Info (keepalive) and write the states.
    */
+  /**
+   * The all-zones power: every desc.xml declares `System,Power_Control,Power` (10 of 10, the 2008
+   * RX-V3900 included) and the predecessor switched it; the id is YNCA's `multiroom.masterPower`, so a
+   * receiver without YNCA keeps the switch (audit 2026-09-29, D4). Proven by the device's answer.
+   *
+   * @param createdChannels the channels created so far (parents once)
+   */
+  private async setupSystemPower(createdChannels: Set<string>): Promise<void> {
+    const probe = await this.probeXml("xmlSystemPower", "System", SYSTEM_POWER_GET);
+    const power = parseSystemPower(probe);
+    if (power === undefined) {
+      return;
+    }
+    this.hasSystemPower = true;
+    for (const parent of parentChannels("multiroom.masterPower", createdChannels)) {
+      await this.deps.upsertObject(`${this.deviceId}.${parent.id}`, parent);
+    }
+    await this.deps.upsertObject(`${this.deviceId}.multiroom.masterPower`, {
+      id: "multiroom.masterPower",
+      type: "state",
+      common: {
+        name: tName("masterPowerAllZones"),
+        desc: tName("descMasterPowerAllZones"),
+        type: "boolean",
+        role: "switch.power",
+        read: true,
+        write: true,
+      },
+    });
+    this.createdStates.add("multiroom.masterPower");
+    await this.refreshSystemPower();
+  }
+
+  /** Read the all-zones power and write it (poll and read-back). */
+  private async refreshSystemPower(): Promise<void> {
+    try {
+      const power = parseSystemPower(await this.deps.client.getXml("System", SYSTEM_POWER_GET));
+      if (power !== undefined) {
+        this.emit("multiroom.masterPower", power);
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: system power failed: ${errorMessage(e)}`);
+    }
+  }
+
+  /**
+   * A write to `multiroom.masterPower` → `System,Power_Control,Power` On/Standby.
+   *
+   * @param stateId the state id relative to the device
+   * @param value the written value
+   * @returns true when the id was the all-zones power (handled here)
+   */
+  private handleSystemPowerWrite(stateId: string, value: unknown): boolean {
+    if (stateId !== "multiroom.masterPower") {
+      return false;
+    }
+    const on = coerceBool(value);
+    if (!this.hasSystemPower || on === undefined) {
+      return true;
+    }
+    void this.applyCommand(
+      { zone: "System", inner: `<Power_Control><Power>${on ? "On" : "Standby"}</Power></Power_Control>` },
+      () => this.refreshSystemPower(),
+    );
+    return true;
+  }
+
   private async refreshTuner(): Promise<void> {
     try {
       this.emitTunerInfo(await this.deps.client.getXml("Tuner", "<Play_Info>GetParam</Play_Info>"));
@@ -774,6 +858,9 @@ export class XmlDeviceController implements ConnectionHandle {
     if (this.handleTunerWrite(stateId, value)) {
       return;
     }
+    if (this.handleSystemPowerWrite(stateId, value)) {
+      return;
+    }
     // Claim with proof, on the WRITE way too. Object creation has been proof-gated since
     // 2.0.1 (only fields this device's Basic_Status really delivers), but the write path was
     // not — the comment on `createdStates` claimed otherwise while it guarded the read side
@@ -868,6 +955,9 @@ export class XmlDeviceController implements ConnectionHandle {
       }
       if (this.hasTuner) {
         await this.refreshTuner();
+      }
+      if (this.hasSystemPower) {
+        await this.refreshSystemPower();
       }
       this.dropDetector.record(anyOk);
     } catch (e) {

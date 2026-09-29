@@ -122,8 +122,10 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     },
     statusField: "soundProgram",
     toInner: (value, dialect) =>
+      // The 2008 generation leaves Straight on unless the write turns it off in the same command
+      // (openHAB `ZoneControlXML`, the only source — its desc declares no PUT for `Surr`; D12).
       dialect === "legacy"
-        ? `<Surr><Pgm_Sel><Pgm>${escapeXmlText(value)}</Pgm></Pgm_Sel></Surr>`
+        ? `<Surr><Pgm_Sel><Straight>Off</Straight><Pgm>${escapeXmlText(value)}</Pgm></Pgm_Sel></Surr>`
         : `<Surround><Program_Sel><Current><Sound_Program>${escapeXmlText(value)}</Sound_Program></Current></Program_Sel></Surround>`,
   },
   {

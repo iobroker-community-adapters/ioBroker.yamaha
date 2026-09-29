@@ -175,6 +175,15 @@ describe("parseBasicStatus", () => {
     expect(s.party).toBe(true);
   });
 
+  // RX-A2060: `OUT_n_Info` with On/Off/Unavailable (audit 2026-09-29, D10).
+  test("reads OUT_n_Info too, and Unavailable as no value", () => {
+    const s = parseBasicStatus(
+      "<Sound_Video><HDMI><Output><OUT_1_Info>Unavailable</OUT_1_Info><OUT_2_Info>On</OUT_2_Info></Output></HDMI></Sound_Video>",
+    );
+    expect(s.hdmiOut1).toBeUndefined();
+    expect(s.hdmiOut2).toBe(true);
+  });
+
   test("returns nothing for a malformed response", () => {
     expect(parseBasicStatus("not xml")).toEqual({});
   });

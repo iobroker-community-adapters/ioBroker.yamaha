@@ -1182,7 +1182,7 @@ describe("the 2008 dialect drives every write and is remembered (RX-V3900)", () 
     await new Promise(resolve => setImmediate(resolve));
     const sent = s.client.calls.filter(c => c.method === "send").map(c => c.inner);
     expect(sent).toContain("<Vol><Lvl><Val>-400</Val><Exp>1</Exp><Unit>dB</Unit></Lvl></Vol>");
-    expect(sent).toContain("<Surr><Pgm_Sel><Pgm>Standard</Pgm></Pgm_Sel></Surr>");
+    expect(sent).toContain("<Surr><Pgm_Sel><Straight>Off</Straight><Pgm>Standard</Pgm></Pgm_Sel></Surr>");
     // The dialect is a property of the model — remembered for the next start.
     expect(memory.remembered("xmlDialect")).toBe("legacy");
   });
@@ -1493,5 +1493,38 @@ describe("XmlDeviceController takes the level ranges the description declares pe
     expect(s.client.calls.find(c => c.method === "send")?.inner).toBe(
       "<Volume><Lvl><Val>-300</Val><Exp>1</Exp><Unit>dB</Unit></Lvl></Volume>",
     );
+  });
+});
+
+// Every desc.xml declares `System,Power_Control,Power`; the predecessor switched all zones with it, and a
+// receiver without YNCA had no such switch (audit 2026-09-29, D4).
+describe("XmlDeviceController all-zones power", () => {
+  const POWER = "<Power_Control><Power>GetParam</Power></Power_Control>";
+
+  test("a device that answers the system power gets multiroom.masterPower, read and written on System", async () => {
+    const s = setup({ Main_Zone: { power: true } });
+    s.client.xmlAnswers[`System|${POWER}`] =
+      '<YAMAHA_AV rsp="GET" RC="0"><System><Power_Control><Power>Standby</Power></Power_Control></System></YAMAHA_AV>';
+    await s.controller.start();
+    expect(s.objects).toContain("living.multiroom.masterPower");
+    expect(s.acks).toContainEqual({ id: "living.multiroom.masterPower", value: false });
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.multiroom.masterPower", false, true);
+    await new Promise(resolve => setImmediate(resolve));
+    expect(s.client.calls).toContainEqual({
+      method: "send",
+      zone: "System",
+      inner: "<Power_Control><Power>On</Power></Power_Control>",
+    });
+  });
+
+  test("a device that does not answer it gets no switch, and a write sends nothing", async () => {
+    const s = setup({ Main_Zone: { power: true } });
+    await s.controller.start();
+    expect(s.objects).not.toContain("living.multiroom.masterPower");
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.multiroom.masterPower", false, true);
+    await new Promise(resolve => setImmediate(resolve));
+    expect(s.client.calls.filter(c => c.method === "send")).toEqual([]);
   });
 });

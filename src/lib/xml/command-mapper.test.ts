@@ -205,7 +205,7 @@ describe("stateToXml — the 2008 dialect writes the elements the device itself 
     );
     expect(stateToXml("mute", true, "legacy")?.inner).toBe("<Vol><Mute>On</Mute></Vol>");
     expect(stateToXml("soundProgram", "2ch Stereo", "legacy")?.inner).toBe(
-      "<Surr><Pgm_Sel><Pgm>2ch Stereo</Pgm></Pgm_Sel></Surr>",
+      "<Surr><Pgm_Sel><Straight>Off</Straight><Pgm>2ch Stereo</Pgm></Pgm_Sel></Surr>",
     );
     expect(stateToXml("sound.straight", true, "legacy")?.inner).toBe(
       "<Surr><Pgm_Sel><Straight>On</Straight></Pgm_Sel></Surr>",

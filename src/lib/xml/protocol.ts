@@ -731,11 +731,13 @@ export function parseBasicStatus(body: string): BasicStatus {
   }
   // HDMI outputs, party and dialogue lift — read from the main zone's Basic_Status
   // (Sound_Video/HDMI, Party_Info, Dialogue_Adjust), as the predecessor adapter did.
-  const hdmiOut1 = /<OUT_1>(On|Off)<\/OUT_1>/.exec(xml);
+  // The RX-A2060 reports `OUT_n_Info` (On/Off/Unavailable) where the older models report `OUT_n`;
+  // `Unavailable` says the output cannot be switched now — no value (audit 2026-09-29, D10).
+  const hdmiOut1 = /<OUT_1(?:_Info)?>(On|Off)<\/OUT_1(?:_Info)?>/.exec(xml);
   if (hdmiOut1) {
     status.hdmiOut1 = hdmiOut1[1] === "On";
   }
-  const hdmiOut2 = /<OUT_2>(On|Off)<\/OUT_2>/.exec(xml);
+  const hdmiOut2 = /<OUT_2(?:_Info)?>(On|Off)<\/OUT_2(?:_Info)?>/.exec(xml);
   if (hdmiOut2) {
     status.hdmiOut2 = hdmiOut2[1] === "On";
   }
