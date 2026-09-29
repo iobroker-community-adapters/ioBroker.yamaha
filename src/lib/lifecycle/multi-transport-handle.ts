@@ -1,5 +1,10 @@
 import type { ObjectDef } from "../catalog/types";
-import { canHandOver, coordinateObjectTree, type TransportObjects } from "../catalog/object-tree-coordinator";
+import {
+  canHandOver,
+  coordinateObjectTree,
+  keepsForm,
+  type TransportObjects,
+} from "../catalog/object-tree-coordinator";
 import type { Transport } from "../catalog/owner-policy";
 import type { ConnectionHandle, ControllerLog } from "../controller";
 import { errorMessage } from "../util";
@@ -65,7 +70,20 @@ export interface MultiTransportDeps {
    * unchanged (audit 2026-09-24, A14). The owner of the map drops it whenever it deletes objects.
    */
   writtenObjects?: Map<string, string>;
+  /**
+   * Transports this device has been shown to have (it answered them before) that did not answer
+   * this attempt. They are reconnected like a dropped transport, and until they return the
+   * datapoints a live transport would give another form stay as they are (D1).
+   */
+  missing?: readonly Transport[];
+  /** The device's objects as they stand in the tree (canonical id → object), read when one is missing. */
+  existingObjects?(): Promise<ReadonlyMap<string, { type: string; common: Partial<ObjectDef["common"]> }>>;
+  /** How long the form is held for a missing transport before the live ones take over (ms). */
+  holdMs?: number;
 }
+
+/** How long a missing transport's datapoints keep their form by default — a power return, a port hiccup. */
+export const MISSING_TRANSPORT_HOLD_MS = 180_000;
 
 /**
  * Holds every transport that answered for one device and presents them as a single
@@ -95,6 +113,13 @@ export class MultiTransportHandle implements ConnectionHandle {
    */
   private readonly away = new Map<Transport, readonly ObjectDef[]>();
   private readonly retries = new Map<Transport, { timer: unknown; backoff: { nextDelay(): number } }>();
+  /** The proven transports that have not answered yet this handle (see `MultiTransportDeps.missing`). */
+  private readonly missing: Set<Transport>;
+  /** The tree as it stood, while a transport is missing — the form its datapoints keep (D1). */
+  private existing: ReadonlyMap<string, { type: string; common: Partial<ObjectDef["common"]> }> | undefined;
+  /** The datapoints held in their form right now (writes are dropped with a line). */
+  private held = new Set<string>();
+  private holdTimer: unknown;
   private supervisorDrop: ((reason?: Error) => void) | undefined;
   /** The coordination in flight, so two signals never run `coordinate()` concurrently. */
   private coordinating: Promise<void> = Promise.resolve();
@@ -115,6 +140,7 @@ export class MultiTransportHandle implements ConnectionHandle {
   ) {
     this.live = [...connections];
     this.writtenObjects = deps.writtenObjects ?? new Map<string, string>();
+    this.missing = new Set(deps.missing ?? []);
   }
 
   /**
@@ -124,6 +150,7 @@ export class MultiTransportHandle implements ConnectionHandle {
    *   dropped on the way (a drop latched before start is delivered while arming)
    */
   public async start(): Promise<Transport[]> {
+    await this.holdForMissing();
     await this.coordinate();
     // Over a COPY: a drop latched before start is delivered synchronously while its handler is
     // armed, and handleTransportDrop splices it out of `live` — iterating `live` itself skipped
@@ -136,8 +163,106 @@ export class MultiTransportHandle implements ConnectionHandle {
       connection.onDrop(reason => this.handleTransportDrop(connection, reason));
       this.armShapeChanges(connection);
     }
+    // A transport this device has but that did not answer is brought back like a dropped one —
+    // before, it stayed away for the whole session (audit 2026-09-29, D1).
+    if (this.live.length > 0) {
+      for (const transport of this.missing) {
+        this.deps.log.debug(`${this.deviceId}/${transport}: did not answer this attempt — reconnecting it`);
+        this.scheduleTransportRetry(transport);
+      }
+    }
     this.reportTransports();
     return this.live.map(connection => connection.transport);
+  }
+
+  /**
+   * While a transport this device has is missing, read the tree as it stands: a datapoint the live
+   * transports would give ANOTHER form (a sleep number where it was a text, MusicCast steps where it
+   * was dB) keeps the form it has until that transport returns — or, when it does not, until
+   * `holdMs` passes; then the live transports take over and one line says which datapoints changed
+   * form. Before, the form followed whichever transports happened to answer the start (D1).
+   */
+  private async holdForMissing(): Promise<void> {
+    if (this.missing.size === 0 || !this.deps.existingObjects) {
+      return;
+    }
+    try {
+      this.existing = await this.deps.existingObjects();
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: could not read the tree to hold its form (${errorMessage(e)})`);
+      return;
+    }
+    if (this.deps.schedule) {
+      this.holdTimer = this.deps.schedule(() => this.releaseHold(true), this.deps.holdMs ?? MISSING_TRANSPORT_HOLD_MS);
+    }
+  }
+
+  /**
+   * End the hold — a missing transport returned, or the hold time passed — and re-coordinate.
+   *
+   * @param timedOut whether the hold time passed (the live transports take over, with a line)
+   */
+  private releaseHold(timedOut: boolean): void {
+    if (this.closed || this.existing === undefined) {
+      return;
+    }
+    const changed = [...this.held];
+    this.existing = undefined;
+    this.held = new Set();
+    if (this.holdTimer !== undefined) {
+      this.deps.cancel?.(this.holdTimer);
+      this.holdTimer = undefined;
+    }
+    if (timedOut && changed.length > 0) {
+      const owners = coordinateObjectTree(
+        this.live.map(connection => ({ transport: connection.transport, objects: connection.buildObjects() })),
+      ).ownerByCanonicalId;
+      const carriers = [...new Set(changed.map(id => owners.get(id)).filter(owner => owner !== undefined))];
+      this.deps.log.info(
+        `${this.deviceId}: ${[...this.missing].join("/")} did not return — ${changed.join(", ")} now take the form of ${carriers.join("/")}`,
+      );
+    }
+    this.missing.clear();
+    this.queueCoordination().catch((e: unknown) => {
+      this.deps.log.debug(`${this.deviceId}: re-coordination after the hold failed (${errorMessage(e)})`);
+    });
+  }
+
+  /**
+   * Keep the held datapoints out of the tree write and the ownership: their object stays as the
+   * last run wrote it, no value is seeded, a write is dropped with a line.
+   *
+   * @param coordinated the coordinated tree and owners
+   * @param coordinated.objects the unified tree
+   * @param coordinated.ownerByCanonicalId the owner of each canonical id
+   * @returns the tree and owners without the held datapoints
+   */
+  private withoutHeld(coordinated: { objects: ObjectDef[]; ownerByCanonicalId: Map<string, Transport> }): {
+    objects: ObjectDef[];
+    ownerByCanonicalId: Map<string, Transport>;
+  } {
+    const existing = this.existing;
+    if (existing === undefined) {
+      return coordinated;
+    }
+    const held = new Set<string>();
+    const objects = coordinated.objects.filter(object => {
+      const before = existing.get(object.id);
+      if (object.type !== "state" || before === undefined || keepsForm(before, object)) {
+        return true;
+      }
+      held.add(object.id);
+      return false;
+    });
+    const owners = new Map([...coordinated.ownerByCanonicalId].filter(([id]) => !held.has(id)));
+    const fresh = [...held].filter(id => !this.held.has(id));
+    if (fresh.length > 0) {
+      this.deps.log.debug(
+        `${this.deviceId}: ${fresh.join(", ")} keep their form until ${[...this.missing].join("/")} returns`,
+      );
+    }
+    this.held = held;
+    return { objects, ownerByCanonicalId: owners };
   }
 
   /**
@@ -213,7 +338,7 @@ export class MultiTransportHandle implements ConnectionHandle {
       transport: connection.transport,
       objects: connection.buildObjects(),
     }));
-    const { objects, ownerByCanonicalId } = this.coordinateWithAway(contributions);
+    const { objects, ownerByCanonicalId } = this.withoutHeld(this.coordinateWithAway(contributions));
     // A declared value list is a property of the MODEL, not of the transport that read it. When the
     // declaring transport is away during a re-coordination (XML dropped, MusicCast just returned),
     // the union-carrying owner would take the dropdown back to the catalog list — and hand it over
@@ -408,6 +533,16 @@ export class MultiTransportHandle implements ConnectionHandle {
       if (connected && !this.closed) {
         this.live.push(connection);
         this.away.delete(transport);
+        this.missing.delete(transport);
+        if (this.missing.size === 0) {
+          // The last missing transport is back: its datapoints take the form it gives them.
+          this.existing = undefined;
+          this.held = new Set();
+          if (this.holdTimer !== undefined) {
+            this.deps.cancel?.(this.holdTimer);
+            this.holdTimer = undefined;
+          }
+        }
         connection.onDrop(reason => this.handleTransportDrop(connection, reason));
         this.armShapeChanges(connection);
         // Queued, not direct: an ALREADY live transport keeps its shape-change wiring armed
@@ -480,6 +615,11 @@ export class MultiTransportHandle implements ConnectionHandle {
     const canonicalId = fullStateId.slice(prefix.length);
     const owner = this.ownerByCanonicalId.get(canonicalId);
     if (owner === undefined) {
+      if (this.held.has(canonicalId)) {
+        this.deps.log.debug(
+          `${this.deviceId}: write to ${canonicalId} dropped — it waits for ${[...this.missing].join("/")}`,
+        );
+      }
       return;
     }
     const connection = this.live.find(c => c.transport === owner);
@@ -510,6 +650,10 @@ export class MultiTransportHandle implements ConnectionHandle {
     this.closed = true;
     this.away.clear();
     this.cancelRetries();
+    if (this.holdTimer !== undefined) {
+      this.deps.cancel?.(this.holdTimer);
+      this.holdTimer = undefined;
+    }
     for (const connection of this.live) {
       connection.close();
     }

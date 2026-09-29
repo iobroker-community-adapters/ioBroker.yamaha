@@ -2746,6 +2746,17 @@ export class Yamaha extends utils.Adapter {
         },
         xmlPollIntervalMs: this.xmlPollIntervalMs(),
         writtenObjects: this.writtenObjectsOf(device.id),
+        // Read only while a transport the device has is missing — the form its datapoints keep (D1).
+        existingObjects: async () => {
+          const prefix = `${this.namespace}.${device.id}.`;
+          const listing = await this.getForeignObjectsAsync(`${prefix}*`);
+          return new Map(
+            Object.entries(listing ?? {}).map(([id, object]) => [
+              id.slice(prefix.length),
+              { type: object.type, common: object.common as Partial<ObjectDef["common"]> },
+            ]),
+          );
+        },
         onTransports: names => {
           if (alive()) {
             this.setTransports(device.id, names);

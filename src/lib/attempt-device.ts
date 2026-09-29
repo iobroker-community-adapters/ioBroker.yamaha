@@ -4,7 +4,11 @@ import { YxcDeviceController } from "./yxc/device-controller";
 import { YamahaYxcClient } from "./yxc/http-client";
 import { XmlDeviceController } from "./xml/device-controller";
 import { XmlClient } from "./xml/xml-client";
-import { MultiTransportHandle, type ConnectableTransport } from "./lifecycle/multi-transport-handle";
+import {
+  MultiTransportHandle,
+  type ConnectableTransport,
+  type MultiTransportDeps,
+} from "./lifecycle/multi-transport-handle";
 import { TransportConnectionAdapter } from "./lifecycle/transport-connection-adapter";
 import { ReconnectStrategy } from "./lifecycle/reconnect-strategy";
 import { CommandGate } from "./lifecycle/command-gate";
@@ -80,6 +84,8 @@ export interface AttemptDeps {
   probeMemory?: ProbeMemory;
   /** The object definitions last written for this device (held by the caller, see MultiTransportDeps). */
   writtenObjects?: Map<string, string>;
+  /** The device's objects as they stand in the tree (canonical id → object) — see MultiTransportDeps. */
+  existingObjects?: MultiTransportDeps["existingObjects"];
 }
 
 /** One transport to try: its name and a factory building a FRESH connectable (also for reconnects). */
@@ -107,6 +113,10 @@ export interface ConnectDeps {
   };
   /** The object definitions last written for this device (see MultiTransportDeps). */
   writtenObjects?: Map<string, string>;
+  /** Whether this device has been shown to have a transport — it answered it before (D1). */
+  proven?(transport: Transport): boolean;
+  /** The device's objects as they stand in the tree (see MultiTransportDeps). */
+  existingObjects?: MultiTransportDeps["existingObjects"];
 }
 
 /**
@@ -226,6 +236,13 @@ async function connectBuilt(
     cancel: deps.timers ? handle_ => deps.timers!.cancel(handle_ as ioBroker.Timeout | undefined) : undefined,
     backoffFactory: () => new ReconnectStrategy(TRANSPORT_RECONNECT_BASE_MS, TRANSPORT_RECONNECT_MAX_MS),
     writtenObjects: deps.writtenObjects,
+    // A transport the device has shown before but that did not answer now — reconnected, and its
+    // datapoints keep their form meanwhile (D1). One it never answered is not retried: every
+    // MusicCast-only device would knock on the YNCA port forever.
+    missing: attempts
+      .map(attempt => attempt.transport)
+      .filter(transport => !live.some(conn => conn.transport === transport) && deps.proven?.(transport) === true),
+    existingObjects: deps.existingObjects,
   });
   let running: Transport[];
   try {
@@ -388,6 +405,13 @@ export function attemptDevice(
       onTransports: deps.onTransports,
       timers: deps.timers,
       writtenObjects: deps.writtenObjects,
+      // What the device has answered before: the YNCA capability profile, the MusicCast and XML
+      // identities — each written only once that transport answered (D1).
+      proven: transport =>
+        transport === "ynca"
+          ? deps.probeMemory?.remembered("yncaCapabilities") !== undefined || deps.yncaSubunitCache?.get() !== undefined
+          : deps.probeMemory?.remembered(transport === "yxc" ? "yxcIdentity" : "xmlIdentity") !== undefined,
+      existingObjects: deps.existingObjects,
     },
     signal,
   );

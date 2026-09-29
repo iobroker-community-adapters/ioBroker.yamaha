@@ -423,3 +423,47 @@ describe("attemptDevice builders", () => {
     ).toBe(true);
   });
 });
+
+describe("connectTransports reconnects only what the device has shown (audit 2026-09-29, D1)", () => {
+  /**
+   * Connect with YNCA silent and MusicCast answering, recording the retry timers.
+   *
+   * @param proven which transports the device has answered before
+   * @returns the delays the handle scheduled
+   */
+  const run = async (proven: Transport[]): Promise<number[]> => {
+    const delays: number[] = [];
+    const ynca = fakeConn("ynca", [state("power", "Power")], false);
+    const yxc = fakeConn("yxc", [state("dist.role", "Role")]);
+    const handle = await connectTransports(
+      "living",
+      [
+        { transport: ynca.transport, build: () => ynca },
+        { transport: yxc.transport, build: () => yxc },
+      ],
+      {
+        ...deps(),
+        timers: {
+          schedule: (_handler, ms) => {
+            delays.push(ms);
+            return undefined;
+          },
+          cancel: () => {},
+        },
+        proven: transport => proven.includes(transport),
+      },
+    );
+    handle?.close();
+    return delays;
+  };
+
+  test("a silent YNCA the device answered before is retried", async () => {
+    expect(await run(["ynca", "yxc"])).toHaveLength(1);
+  });
+
+  // Every MusicCast-only device is tried on the YNCA port once per attempt; knocking there for the
+  // whole session would be a connection attempt a minute that can never succeed.
+  test("a silent YNCA the device never answered is not", async () => {
+    expect(await run(["yxc"])).toEqual([]);
+  });
+});

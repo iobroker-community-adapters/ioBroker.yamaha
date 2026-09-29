@@ -137,7 +137,9 @@ export function coordinateObjectTree(contributions: readonly TransportObjects[])
  * Only where the value keeps its meaning: the same object and value type, the same unit, and —
  * where a dropdown is involved — the same wire vocabulary. A decibel bass (YNCA) is not MusicCast's
  * step count, a sleep text is not a number, "HDMI1" is not "hdmi1": those stay with the absent
- * owner, whose writes are dropped with a line, until it returns.
+ * owner, whose writes are dropped with a line, until it returns. A writable datapoint does not go to
+ * a transport that only reads it — `hdmi.out3` and `sound.surroundAI` went to the read-only MusicCast
+ * entry, exactly what `OWNER_OVERRIDES` keeps from happening (audit 2026-09-29, A27).
  *
  * @param from the absent owner and its definition
  * @param from.transport the absent owner
@@ -157,6 +159,36 @@ export function canHandOver(
   if ((from.def.common.unit ?? "") !== (to.def.common.unit ?? "")) {
     return false;
   }
+  if (from.def.common.write && !to.def.common.write) {
+    return false;
+  }
   const dropdown = Boolean(from.def.common.states) || Boolean(to.def.common.states);
   return !dropdown || STATES_VOCABULARY[from.transport] === STATES_VOCABULARY[to.transport];
+}
+
+/**
+ * Whether a live definition keeps the form an EXISTING datapoint has — the object the last run wrote
+ * (D1). The same shape test as {@link canHandOver}, with the tree itself as the memory: which
+ * transport wrote the object is not recorded, so the dropdown test compares the values themselves —
+ * the existing ones must all still be there (a device's list may grow, `HDMI1` is not `hdmi1`).
+ *
+ * @param existing the object as it stands in the tree
+ * @param existing.type its object type
+ * @param existing.common its common
+ * @param live the definition a live transport builds now
+ * @returns whether writing the live definition leaves the datapoint's form unchanged
+ */
+export function keepsForm(existing: { type: string; common: Partial<ObjectDef["common"]> }, live: ObjectDef): boolean {
+  if (existing.type !== live.type || existing.common.type !== live.common.type) {
+    return false;
+  }
+  if ((existing.common.unit ?? "") !== (live.common.unit ?? "")) {
+    return false;
+  }
+  if (existing.common.write && !live.common.write) {
+    return false;
+  }
+  const before = Object.keys(existing.common.states ?? {});
+  const now = new Set(Object.keys(live.common.states ?? {}));
+  return before.every(value => now.has(value));
 }
