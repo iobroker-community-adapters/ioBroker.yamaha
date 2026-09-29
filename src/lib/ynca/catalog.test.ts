@@ -29,6 +29,7 @@ import { capabilitiesFromLines as parseCapabilities } from "../../../test/helper
 import rxA810 from "./__fixtures__/RX-A810.json";
 import zoneEvidence from "./__fixtures__/zone-function-evidence.json";
 import functionEvidence from "./__fixtures__/official-function-evidence.json";
+import playerEvidence from "./__fixtures__/player-function-evidence.json";
 import { YNCA_BROWSE_SOURCES } from "../browse/ynca-browse-driver";
 
 describe("YNCA catalog", () => {
@@ -225,7 +226,7 @@ describe("YNCA catalog", () => {
     // the readable form is a second datapoint fed from the same answer. Before this, YNCA
     // published only the text — so the player had no time at all on a YNCA-only receiver,
     // and the datapoint's TYPE depended on which protocol answered.
-    const cat = buildYncaCatalog().filter(e => e.subunit === "NETRADIO");
+    const cat = buildYncaCatalog().filter(e => e.subunit === "NETRADIO" || e.subunit === "SERVER");
     const elapsed = cat.find(e => e.id === "player.elapsedTime");
     expect(elapsed).toMatchObject({ role: "media.elapsed", write: false });
     expect(elapsed?.spec).toMatchObject({ kind: "number", unit: "s" });
@@ -240,7 +241,8 @@ describe("YNCA catalog", () => {
       id: "player.elapsedTime",
       value: 83,
     });
-    expect(yncaStateUpdate({ subunit: "NETRADIO", func: "TOTALTIME", value: "1:02:03" }, map)).toEqual({
+    // (A radio stream has no total time — no source names NETRADIO:TOTALTIME; a server's track has one.)
+    expect(yncaStateUpdate({ subunit: "SERVER", func: "TOTALTIME", value: "1:02:03" }, map)).toEqual({
       id: "player.totalTime",
       value: 3723,
     });
@@ -366,7 +368,8 @@ describe("YNCA catalog", () => {
     const map = idToEntry(buildYncaCatalog().filter(e => e.subunit === "NETRADIO"));
     expect(yncaCommand("player.playback", 1, map)).toMatchObject({ func: "PLAYBACK", value: "Play" });
     expect(yncaCommand("player.playback", "1", map)).toMatchObject({ func: "PLAYBACK", value: "Play" });
-    expect(yncaCommand("player.repeat", "2", map)).toMatchObject({ func: "REPEAT", value: "All" });
+    const usb = idToEntry(buildYncaCatalog().filter(e => e.subunit === "USB"));
+    expect(yncaCommand("player.repeat", "2", usb)).toMatchObject({ func: "REPEAT", value: "All" });
     expect(yncaCommand("player.playback", null, map)).toBeUndefined();
     expect(yncaCommand("player.playback", "", map)).toBeUndefined();
     expect(yncaCommand("player.playback", "abc", map)).toBeUndefined();
@@ -642,7 +645,9 @@ describe("YNCA catalog", () => {
   test("every player source reports into the ONE flat block; only source-own states keep their path", () => {
     const cat = buildYncaCatalog();
     // One entry per (source, function) — all on the flat id.
-    expect(cat.filter(e => e.id === "player.artist").map(e => e.subunit)).toContain("NETRADIO");
+    expect(cat.filter(e => e.id === "player.artist").map(e => e.subunit)).toContain("SERVER");
+    // …and only what some source names for the subunit: a radio stream has no artist line (B14).
+    expect(cat.filter(e => e.id === "player.artist").map(e => e.subunit)).not.toContain("NETRADIO");
     expect(cat.filter(e => e.id === "player.playback").map(e => e.subunit)).toContain("SPOTIFY");
     expect(cat.filter(e => e.id === "player.track").map(e => e.subunit)).toContain("USB");
     expect(cat.filter(e => e.id === "player.repeat").map(e => e.subunit)).toContain("SERVER");
@@ -1647,6 +1652,34 @@ describe("the catalog reads every word and covers every range the official lists
       browse: declared.has(`${subunit}:LISTINFO`),
     }));
     expect(table).toEqual(lists);
+  });
+
+  // B14 (audit 2026-09-29): the cartesian product of the playback functions and the sources asked 89
+  // pairs no list, log, ynca-python or corpus names — one `@UNDEFINED` and 100 ms each, every sweep.
+  test("a player source asks and writes only the functions some source evidences for it", () => {
+    const evidence = playerEvidence.subunits as Record<string, Record<string, string[]>>;
+    const unproven: string[] = [];
+    for (const entry of YNCA_CATALOG) {
+      const known = evidence[entry.subunit];
+      if (!known || entry.derived) {
+        continue;
+      }
+      const funcs = [
+        ...(entry.writeOnly ? [] : [entry.readFunc ?? entry.func, ...(entry.readAliases ?? [])]),
+        ...(entry.write ? [entry.func] : []),
+      ];
+      for (const func of funcs) {
+        if (!(func in known)) {
+          unproven.push(`${entry.subunit}:${func} (${entry.id})`);
+        }
+      }
+    }
+    expect([...new Set(unproven)].sort()).toEqual([]);
+    // …and the table hides nothing a source does name.
+    const hidden = YNCA_PLAYER_SOURCES.flatMap(source =>
+      source.lacks.filter(func => func in (evidence[source.subunit] ?? {})).map(func => `${source.subunit}:${func}`),
+    );
+    expect(hidden).toEqual([]);
   });
 
   test("every declared range lies inside the datapoint's bounds, on its grid", () => {

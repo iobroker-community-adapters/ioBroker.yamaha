@@ -718,8 +718,8 @@ describe("YncaDeviceController fast restart (persisted capability layer)", () =>
       model: "RX",
       subunits: {
         SYS: { MODELNAME: "RX", VERSION: "1.0" },
-        MAIN: { PWR: "On", INP: "NET RADIO" },
-        NETRADIO: { PLAYBACKINFO: "Play", ELAPSEDTIME: "1:23", TOTALTIME: "1:02:03" },
+        MAIN: { PWR: "On", INP: "SERVER" },
+        SERVER: { PLAYBACKINFO: "Play", ELAPSEDTIME: "1:23", TOTALTIME: "1:02:03" },
       },
     };
     const { acked, deps } = makeDeps(client);

@@ -2620,6 +2620,11 @@ const PLAY_STOP: ValueSpec = {
  *   lists (SIRIUS/SIRIUSIR/RHAP), the RX-A850 list (AIRPLAY/BT/SPOTIFY/SERVER/PANDORA/SIRIUSXM).
  * - `browse`: the label of a source whose list vocabulary (LISTINFO/LISTSEL/LISTCURSOR/LISTPAGE) the
  *   official lists and the all-commands corpus declare.
+ * - `lacks`: the shared playback functions ({@link PLAYER_FUNCS}) no source names for this subunit —
+ *   no official list, device log, ynca-python or the all-commands corpus. They are neither asked nor
+ *   written: the full cartesian product asked 89 such pairs, one `@UNDEFINED` and 100 ms each on every
+ *   sweep and refresh (audit 2026-09-29, B14; generator `build-player-evidence.py`).
+ * - `proof`: the function that proves the source for its write-only keys (default `PLAYBACKINFO`).
  */
 export const YNCA_PLAYER_SOURCES: ReadonlyArray<{
   subunit: string;
@@ -2627,25 +2632,117 @@ export const YNCA_PLAYER_SOURCES: ReadonlyArray<{
   preset?: true;
   mem?: true;
   browse?: string;
+  lacks: readonly string[];
+  proof?: string;
 }> = [
-  { subunit: "NETRADIO", channel: "netRadio", preset: true, mem: true, browse: "Net Radio" },
-  { subunit: "SERVER", channel: "server", preset: true, mem: true, browse: "Media server" },
-  { subunit: "USB", channel: "usb", preset: true, mem: true, browse: "USB" },
-  { subunit: "SPOTIFY", channel: "spotify", preset: true, mem: true },
-  { subunit: "DEEZER", channel: "deezer" },
-  { subunit: "TIDAL", channel: "tidal" },
-  { subunit: "NAPSTER", channel: "napster", preset: true, mem: true, browse: "Napster" },
-  { subunit: "PANDORA", channel: "pandora", preset: true, mem: true, browse: "Pandora" },
-  { subunit: "RHAP", channel: "rhapsody", preset: true, mem: true, browse: "Rhapsody" },
-  { subunit: "SIRIUS", channel: "sirius", preset: true, mem: true },
-  { subunit: "SIRIUSIR", channel: "siriusInternetRadio", preset: true, mem: true, browse: "SIRIUS Internet Radio" },
-  { subunit: "SIRIUSXM", channel: "siriusXm", preset: true, mem: true, browse: "SiriusXM" },
-  { subunit: "AIRPLAY", channel: "airplay", preset: true, mem: true },
-  { subunit: "BT", channel: "bluetooth", preset: true, mem: true },
-  { subunit: "PC", channel: "pc", preset: true, mem: true, browse: "PC" },
-  { subunit: "MCLINK", channel: "musicCastLink" },
-  { subunit: "IPOD", channel: "ipod", browse: "iPod" },
-  { subunit: "IPODUSB", channel: "ipodUsb", browse: "iPod (USB)" },
+  {
+    subunit: "NETRADIO",
+    channel: "netRadio",
+    preset: true,
+    mem: true,
+    browse: "Net Radio",
+    lacks: ["ARTIST", "CHNAME", "REPEAT", "SHUFFLE", "TOTALTIME", "TRACK"],
+  },
+  {
+    subunit: "SERVER",
+    channel: "server",
+    preset: true,
+    mem: true,
+    browse: "Media server",
+    lacks: ["CHNAME", "STATION", "TRACK"],
+  },
+  {
+    subunit: "USB",
+    channel: "usb",
+    preset: true,
+    mem: true,
+    browse: "USB",
+    lacks: ["CHNAME", "STATION", "TOTALTIME", "TRACK"],
+  },
+  {
+    subunit: "SPOTIFY",
+    channel: "spotify",
+    preset: true,
+    mem: true,
+    lacks: ["CHNAME", "ELAPSEDTIME", "SONG", "STATION", "TOTALTIME"],
+  },
+  { subunit: "DEEZER", channel: "deezer", lacks: ["CHNAME", "SONG", "STATION"] },
+  { subunit: "TIDAL", channel: "tidal", lacks: ["CHNAME", "SONG", "STATION"] },
+  {
+    subunit: "NAPSTER",
+    channel: "napster",
+    preset: true,
+    mem: true,
+    browse: "Napster",
+    lacks: ["CHNAME", "ELAPSEDTIME", "TOTALTIME", "TRACK"],
+  },
+  {
+    subunit: "PANDORA",
+    channel: "pandora",
+    preset: true,
+    mem: true,
+    browse: "Pandora",
+    lacks: ["CHNAME", "REPEAT", "SHUFFLE"],
+  },
+  {
+    subunit: "RHAP",
+    channel: "rhapsody",
+    preset: true,
+    mem: true,
+    browse: "Rhapsody",
+    lacks: ["CHNAME", "STATION", "TRACK"],
+  },
+  {
+    subunit: "SIRIUS",
+    channel: "sirius",
+    preset: true,
+    mem: true,
+    lacks: ["ALBUM", "ELAPSEDTIME", "PLAYBACK", "PLAYBACKINFO", "REPEAT", "SHUFFLE", "STATION", "TOTALTIME", "TRACK"],
+    proof: "PRESET",
+  },
+  {
+    subunit: "SIRIUSIR",
+    channel: "siriusInternetRadio",
+    preset: true,
+    mem: true,
+    browse: "SIRIUS Internet Radio",
+    lacks: ["ALBUM", "REPEAT", "SHUFFLE", "STATION", "TOTALTIME", "TRACK"],
+  },
+  {
+    subunit: "SIRIUSXM",
+    channel: "siriusXm",
+    preset: true,
+    mem: true,
+    browse: "SiriusXM",
+    lacks: ["ALBUM", "REPEAT", "SHUFFLE", "STATION", "TOTALTIME", "TRACK"],
+  },
+  {
+    subunit: "AIRPLAY",
+    channel: "airplay",
+    preset: true,
+    mem: true,
+    lacks: ["CHNAME", "REPEAT", "SHUFFLE", "STATION", "TRACK"],
+  },
+  {
+    subunit: "BT",
+    channel: "bluetooth",
+    preset: true,
+    mem: true,
+    lacks: ["CHNAME", "ELAPSEDTIME", "REPEAT", "SHUFFLE", "STATION", "TOTALTIME", "TRACK"],
+  },
+  { subunit: "PC", channel: "pc", preset: true, mem: true, browse: "PC", lacks: ["CHNAME", "TOTALTIME", "TRACK"] },
+  {
+    subunit: "MCLINK",
+    channel: "musicCastLink",
+    lacks: ["CHNAME", "PLAYBACK", "REPEAT", "SHUFFLE", "STATION", "TOTALTIME", "TRACK"],
+  },
+  {
+    subunit: "IPOD",
+    channel: "ipod",
+    browse: "iPod",
+    lacks: ["CHNAME", "ELAPSEDTIME", "STATION", "TOTALTIME", "TRACK"],
+  },
+  { subunit: "IPODUSB", channel: "ipodUsb", browse: "iPod (USB)", lacks: ["CHNAME", "STATION", "TRACK"] },
 ];
 
 /** The playback functions shared by every player source (the __init__ mixin in the lib). */
@@ -2956,6 +3053,12 @@ export function buildYncaCatalog(): YncaEntry[] {
     // below (preset, presetSave, bookmark) keep their per-source paths.
     const ipod = IPOD_SUBUNITS.includes(source.subunit);
     for (const fn of PLAYER_FUNCS) {
+      // Only what some source names for this subunit (B14): a read function it lacks falls away, the
+      // entry with it when none is left; a write it lacks drops the entry.
+      const reads = [fn.readFunc ?? fn.func, ...(fn.readAliases ?? [])].filter(func => !source.lacks.includes(func));
+      if (reads.length === 0 || (fn.write && source.lacks.includes(fn.func))) {
+        continue;
+      }
       entries.push({
         id: `player.${fn.state}`,
         nameKey: fn.nameKey,
@@ -2970,8 +3073,8 @@ export function buildYncaCatalog(): YncaEntry[] {
         role: fn.role,
         subunit: source.subunit,
         func: fn.func,
-        readFunc: fn.readFunc,
-        readAliases: fn.readAliases,
+        readFunc: reads[0] === fn.func ? fn.readFunc : reads[0],
+        readAliases: reads.length > 1 ? reads.slice(1) : undefined,
         wireEncode: ipod && fn.func === "REPEAT" ? repeatWriter("One") : fn.wireEncode,
         wireDecode: fn.wireDecode,
         writeOnly: fn.writeOnly,
@@ -2994,7 +3097,7 @@ export function buildYncaCatalog(): YncaEntry[] {
         role: "level",
         subunit: source.subunit,
         func: "PRESET",
-        readFunc: "PLAYBACKINFO",
+        readFunc: source.proof ?? "PLAYBACKINFO",
         writeOnly: true,
       });
     }
@@ -3010,7 +3113,7 @@ export function buildYncaCatalog(): YncaEntry[] {
         role: "level",
         subunit: source.subunit,
         func: "MEM",
-        readFunc: "PLAYBACKINFO",
+        readFunc: source.proof ?? "PLAYBACKINFO",
         writeOnly: true,
         wireEncode: memSlotWire,
       });
