@@ -40,6 +40,7 @@ import {
 import { ID_SCHEME, modelId, serialId } from "./lib/device-id";
 import { copyDeviceTree, movedId, type DeviceMoveDeps } from "./lib/lifecycle/device-move";
 import { moveAllWithEnums } from "./lib/enum-carry";
+import { ObjectMirror, StateMirror } from "./lib/lifecycle/write-mirror";
 import { DeviceBody, errorMessage } from "./lib/util";
 import { migrateNativeKeys, type NativeKeyMigration } from "./lib/native-key-migration";
 import { tName } from "./lib/i18n";
@@ -361,6 +362,10 @@ export class Yamaha extends utils.Adapter {
   private readonly idChecked = new Set<string>();
   /** The id decisions of this run, one after the other — see checkIdDecision. */
   private idDecisions: Promise<void> = Promise.resolve();
+  /** What the objects database holds — see writeObject (audit 2026-09-29, E2). */
+  private readonly objectMirror = new ObjectMirror();
+  /** What the states database holds — see writeStateNow (audit 2026-09-29, E3). */
+  private readonly stateMirror = new StateMirror();
 
   /**
    * @param options adapter options passed through by js-controller
@@ -381,7 +386,7 @@ export class Yamaha extends utils.Adapter {
   private async onReady(): Promise<void> {
     try {
       this.log.info('starting — a "ready" message will follow for each device');
-      await this.setState("info.connection", { val: false, ack: true });
+      await this.writeStateNow("info.connection", false);
       // Every change to the instance object restarts the instance (js-controller 7.2.2, objects `change`
       // handler: stopInstance, start again after stopTimeout + 2.5 s) — whatever runs after such a write
       // in the same start is cut off. So everything this start has to change in its own settings goes
@@ -433,6 +438,7 @@ export class Yamaha extends utils.Adapter {
       // Before the cleanup and before any device connects — see knownDatapoints. The listing
       // is read once and handed on: the cleanup runs on the very same tree.
       const listing = await this.snapshotExistingDatapoints(unmoved);
+      await this.seedStateMirror();
       await this.cleanupStaleObjects(
         new Set(devices.map(device => device.id)),
         new Set(idle.map(device => device.id)),
@@ -539,7 +545,7 @@ export class Yamaha extends utils.Adapter {
     // Stamp it disconnected BEFORE the first attempt: ioBroker keeps a state's last value
     // forever, so a crash or a power cut would otherwise leave the device green until it
     // reports again — and a device that never answers would stay green for good.
-    await this.setState(`${device.id}.info.connection`, { val: false, ack: true });
+    await this.writeStateNow(`${device.id}.info.connection`, false);
     // The three protocol flags follow the same rule: left at their last value, a crash
     // would show "YNCA connected" on the card next to a red connection dot — for good, if
     // the device never answers again.
@@ -884,7 +890,7 @@ export class Yamaha extends utils.Adapter {
       ];
       for (const id of ids) {
         if (await this.getObjectAsync(id)) {
-          await this.setState(id, { val: false, ack: true });
+          await this.writeStateNow(id, false);
         }
       }
     }
@@ -1129,7 +1135,7 @@ export class Yamaha extends utils.Adapter {
       this.log.debug(`${deviceId}: could not count its datapoints before the delete (${errorMessage(e)})`);
     }
     try {
-      await this.delObjectAsync(deviceId, { recursive: true });
+      await this.deleteObject(deviceId, true);
       this.log.info(`${deviceId}: device deleted — removed ${removed} datapoint(s)`);
     } catch (e) {
       this.log.warn(`could not remove the object tree of "${deviceId}" (${errorMessage(e)})`);
@@ -1347,12 +1353,82 @@ export class Yamaha extends utils.Adapter {
    * @param value the value to write
    */
   private writeState(id: string, value: ioBroker.StateValue): void {
-    this.setStateChangedAsync(id, { val: value, ack: true }).then(
+    void this.writeStateNow(id, value);
+  }
+
+  /**
+   * {@link writeState}, awaitable — for the stamps that must stand before the next step (the start's
+   * disconnected marker, the unload writes). Compared in memory first (see {@link StateMirror}): an
+   * unchanged value is not written and not read back from the database; the first write of a state in
+   * this process lets the database compare (`setStateChangedAsync`). Never rejects.
+   *
+   * @param id the state id (namespace-relative)
+   * @param value the value to write
+   * @returns the write, settled either way
+   */
+  private writeStateNow(id: string, value: ioBroker.StateValue): Promise<void> {
+    // A read-only state only the adapter writes: compared in memory. A writable one keeps the database
+    // compare — it is what corrects a lost user command (CLAUDE_PATTERNS, "Anzeigen nur bei Änderung").
+    const readOnly = this.objectMirror.isReadOnlyState(id);
+    const verdict = readOnly ? this.stateMirror.judge(id, value, true) : "unknown";
+    if (verdict === "unchanged") {
+      return Promise.resolve();
+    }
+    this.stateMirror.holds(id, value, true);
+    const write =
+      verdict === "changed"
+        ? this.setState(id, { val: value, ack: true })
+        : this.setStateChangedAsync(id, { val: value, ack: true });
+    return write.then(
       () => {
         this.stateWritesFailing = false;
       },
-      (e: unknown) => this.noteWriteFailure(`state ${id}`, e),
+      (e: unknown) => {
+        this.stateMirror.deleted(id);
+        this.noteWriteFailure(`state ${id}`, e);
+      },
     );
+  }
+
+  /**
+   * Fill the state mirror with ONE bulk read of the own namespace, so a start compares against what the
+   * database holds instead of writing blind or reading per state (CLAUDE_PATTERNS, round 62).
+   */
+  private async seedStateMirror(): Promise<void> {
+    try {
+      this.stateMirror.seed(await this.getStatesAsync("*"), this.namespace);
+    } catch (e) {
+      this.log.debug(`could not read the states to compare against (${errorMessage(e)})`);
+    }
+  }
+
+  /**
+   * Write an object — only when it would change: the mirror of the objects database says whether the
+   * stored object already carries every field of the patch (audit 2026-09-29, E2).
+   *
+   * @param id the object id (namespace-relative)
+   * @param patch what to merge
+   */
+  private async writeObject(id: string, patch: ioBroker.PartialObject): Promise<void> {
+    const fields = patch as Record<string, unknown>;
+    if (this.objectMirror.carries(id, fields)) {
+      return;
+    }
+    await this.extendObject(id, patch);
+    this.objectMirror.wrote(id, fields);
+  }
+
+  /**
+   * Delete an object (and with `below` everything under it), and forget it in both mirrors — a
+   * mirror that still held it would take its next creation for an unchanged write.
+   *
+   * @param id the object id (namespace-relative)
+   * @param below true for a recursive delete
+   */
+  private async deleteObject(id: string, below = false): Promise<void> {
+    this.objectMirror.deleted(id, below);
+    this.stateMirror.deleted(id, below);
+    await this.delObjectAsync(id, below ? { recursive: true } : undefined);
   }
 
   /**
@@ -1399,10 +1475,7 @@ export class Yamaha extends utils.Adapter {
    */
   private writeDeviceObject(deviceId: string, patch: ioBroker.PartialObject): Promise<void> {
     const previous = this.deviceObjectWrites.get(deviceId) ?? Promise.resolve();
-    const next = previous
-      .catch(() => undefined)
-      .then(() => this.extendObject(deviceId, patch))
-      .then(() => undefined);
+    const next = previous.catch(() => undefined).then(() => this.writeObject(deviceId, patch));
     this.deviceObjectWrites.set(
       deviceId,
       next.catch(() => undefined),
@@ -1491,7 +1564,7 @@ export class Yamaha extends utils.Adapter {
     for (const fullId of [...stale, ...renamed, ...disabled]) {
       this.forgetWritten(fullId);
       try {
-        await this.delObjectAsync(stripNamespace(fullId, this.namespace));
+        await this.deleteObject(stripNamespace(fullId, this.namespace));
       } catch {
         // already removed together with its parent
       }
@@ -1561,7 +1634,7 @@ export class Yamaha extends utils.Adapter {
       for (const id of confirmed) {
         this.forgetWritten(id);
         try {
-          await this.delObjectAsync(id);
+          await this.deleteObject(id);
           purged.push(`${this.namespace}.${id}`);
         } catch {
           // already gone
@@ -1603,7 +1676,7 @@ export class Yamaha extends utils.Adapter {
     for (const fullId of empty) {
       this.forgetWritten(fullId);
       try {
-        await this.delObjectAsync(stripNamespace(fullId, this.namespace));
+        await this.deleteObject(stripNamespace(fullId, this.namespace));
       } catch {
         // already removed together with its parent
       }
@@ -1626,7 +1699,7 @@ export class Yamaha extends utils.Adapter {
   private async clearStaleStates(id: string, next: Record<string, string>): Promise<void> {
     const stored = this.storedStates.get(id);
     if (stored && Object.keys(stored).some(key => !(key in next))) {
-      await this.extendObject(id, { common: { states: null } });
+      await this.writeObject(id, { common: { states: null } });
     }
     this.storedStates.set(id, next);
   }
@@ -1691,6 +1764,7 @@ export class Yamaha extends utils.Adapter {
   private async snapshotExistingDatapoints(read?: AdapterObjects): Promise<AdapterObjects | undefined> {
     try {
       const listing = read ?? (await this.getAdapterObjectsAsync());
+      this.objectMirror.seed(listing, this.namespace);
       for (const [fullId, object] of Object.entries(listing)) {
         if (object?.type === "state") {
           const id = stripNamespace(fullId, this.namespace);
@@ -1804,13 +1878,28 @@ export class Yamaha extends utils.Adapter {
     // then neither a reader nor the consistency gate can see which manifest objects are
     // actually refreshed — and "the call exists" is not the same question as "the call runs
     // for THIS object". This is the one place where that distinction cost a release (2.1.1).
-    await this.extendObject("info", { common: { name: tName("information") } });
-    await this.extendObject("info.connection", {
+    // Each refresh only when the stored object does not carry it yet (CLAUDE_PATTERNS, "Objekte nur bei
+    // Unterschied schreiben"; audit 2026-09-29, E2) — js-controller already wrote every manifest object once
+    // before onReady.
+    const refresh = async (id: string, patch: ioBroker.PartialObject, write: () => Promise<unknown>): Promise<void> => {
+      const fields = patch as Record<string, unknown>;
+      if (!this.objectMirror.carries(id, fields)) {
+        await write();
+        this.objectMirror.wrote(id, fields);
+      }
+    };
+    const info = { common: { name: tName("information") } };
+    await refresh("info", info, () => this.extendObject("info", info));
+    const connection = {
       common: { name: tName("deviceOrServiceConnected"), desc: tName("descDeviceOrServiceConnected") },
-    });
-    await this.extendObject("info.devicesTotal", { common: { name: tName("devicesTotal") } });
-    await this.extendObject("info.devicesOnline", { common: { name: tName("devicesOnline") } });
-    await this.extendObject("info.devicesAllOnline", { common: { name: tName("allDevicesOnline") } });
+    };
+    await refresh("info.connection", connection, () => this.extendObject("info.connection", connection));
+    const total = { common: { name: tName("devicesTotal") } };
+    await refresh("info.devicesTotal", total, () => this.extendObject("info.devicesTotal", total));
+    const online = { common: { name: tName("devicesOnline") } };
+    await refresh("info.devicesOnline", online, () => this.extendObject("info.devicesOnline", online));
+    const all = { common: { name: tName("allDevicesOnline") } };
+    await refresh("info.devicesAllOnline", all, () => this.extendObject("info.devicesAllOnline", all));
   }
 
   /**
@@ -1935,12 +2024,12 @@ export class Yamaha extends utils.Adapter {
       // The record rides along with the name, so the adoption above happens once per device, ever.
       native: { source, volumeAsPercent: percent, ...(label !== undefined ? { label, labelRank } : {}) },
     });
-    await this.extendObject(`${deviceId}.info`, {
+    await this.writeObject(`${deviceId}.info`, {
       type: "channel",
       common: { name: tName("info") },
       native: {},
     });
-    await this.extendObject(`${deviceId}.info.connection`, {
+    await this.writeObject(`${deviceId}.info.connection`, {
       type: "state",
       common: {
         name: tName("connected"),
@@ -1958,7 +2047,7 @@ export class Yamaha extends utils.Adapter {
     // Model name shown on the device-manager card. Filled by whichever transport reports it
     // (YNCA MODELNAME, YXC/XML model); created here so the card's model line binds even for an
     // offline device or a transport that does not report a model.
-    await this.extendObject(`${deviceId}.info.model`, {
+    await this.writeObject(`${deviceId}.info.model`, {
       type: "state",
       common: { name: tName("model"), type: "string", role: "text", read: true, write: false, def: "" },
       native: {},
@@ -1966,22 +2055,22 @@ export class Yamaha extends utils.Adapter {
     // The device's address — for a discovered device it lived only in the adapter's
     // internals, so no diagnosis (log capture, browser access to the device's own pages)
     // could name it without a network search. Refreshed every start: DHCP may move it.
-    await this.extendObject(`${deviceId}.info.ip`, {
+    await this.writeObject(`${deviceId}.info.ip`, {
       type: "state",
       common: { name: tName("ipAddress"), type: "string", role: "info.ip", read: true, write: false, def: "" },
       native: {},
     });
-    await this.setState(`${deviceId}.info.ip`, { val: ip, ack: true });
+    await this.writeStateNow(`${deviceId}.info.ip`, ip);
     // Per-transport connection flags, fed by the live set from connectTransports and read live
     // by the device-manager card indicators. Created here so an offline device's card still
     // renders all three (false) instead of nothing.
-    await this.extendObject(`${deviceId}.info.transports`, {
+    await this.writeObject(`${deviceId}.info.transports`, {
       type: "channel",
       common: { name: tName("transports"), desc: tName("descTransports") },
       native: {},
     });
     for (const proto of TRANSPORT_IDS) {
-      await this.extendObject(`${deviceId}.info.transports.${proto}`, {
+      await this.writeObject(`${deviceId}.info.transports.${proto}`, {
         type: "state",
         common: {
           name: tName("transportConnected", proto.toUpperCase()),
@@ -2622,10 +2711,14 @@ export class Yamaha extends utils.Adapter {
    * @param state the new state (null when deleted)
    */
   private onStateChange(id: string, state: ioBroker.State | null | undefined): void {
+    const relative = stripNamespace(id, this.namespace);
     if (!state) {
+      this.stateMirror.deleted(relative);
       return;
     }
-    const relative = stripNamespace(id, this.namespace);
+    // Every change of the namespace — the adapter's own writes and a user's — keeps the mirror the
+    // next write is judged against (writeStateNow).
+    this.stateMirror.holds(relative, state.val, state.ack);
     // The adapter subscribes to its whole namespace, so every one of its own acked writes
     // comes back here too — during a sweep that is hundreds of events. Route by the id's
     // first segment instead of offering each one to every device in turn.
@@ -2662,18 +2755,19 @@ export class Yamaha extends utils.Adapter {
       //
       // The callback goes LAST, after the writes: reporting "done" straight away loses them,
       // the host tears the process down as soon as it is told.
-      const writes: Promise<unknown>[] = [this.setState("info.connection", { val: false, ack: true })];
+      // Through the mirror: a marker that already says so is not written again (audit 2026-09-29, E3).
+      const writes: Promise<unknown>[] = [this.writeStateNow("info.connection", false)];
       for (const deviceId of this.deviceConnected.keys()) {
         this.deviceConnected.set(deviceId, false);
-        writes.push(this.setState(`${deviceId}.info.connection`, { val: false, ack: true }));
+        writes.push(this.writeStateNow(`${deviceId}.info.connection`, false));
         // The protocol flags on the card go down with the connection — a stopped adapter
         // is connected over no protocol.
         for (const proto of TRANSPORT_IDS) {
-          writes.push(this.setState(`${deviceId}.info.transports.${proto}`, { val: false, ack: true }));
+          writes.push(this.writeStateNow(`${deviceId}.info.transports.${proto}`, false));
         }
       }
-      writes.push(this.setState("info.devicesOnline", { val: 0, ack: true }));
-      writes.push(this.setState("info.devicesAllOnline", { val: false, ack: true }));
+      writes.push(this.writeStateNow("info.devicesOnline", 0));
+      writes.push(this.writeStateNow("info.devicesAllOnline", false));
       // A device memory still inside its coalescing window is written now — a timer on a
       // stopped adapter never fires, and the memory is what the next start rests on.
       for (const deviceId of [...this.pendingNative.keys()]) {
@@ -3038,7 +3132,7 @@ export class Yamaha extends utils.Adapter {
     if (written.type === "state") {
       await this.clearStaleBounds(id, written.common);
     }
-    await this.extendObject(id, { type: written.type, common: written.common, native: {} });
+    await this.writeObject(id, { type: written.type, common: written.common, native: {} });
   }
 
   /**
