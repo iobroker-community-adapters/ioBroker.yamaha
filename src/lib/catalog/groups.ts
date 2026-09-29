@@ -114,7 +114,8 @@ export function groupsOf(stateId: string): GroupId[] {
  * @param config the adapter native config (carries `group_player`, `group_tuner`, … booleans)
  * @returns true if the state's group is enabled
  */
-export function isGroupEnabled(stateId: string, config: Record<string, unknown>): boolean {
+export function isGroupEnabled(stateId: string, config: object): boolean {
+  const switches = config as Record<string, unknown>;
   // ALL of them: a zone's sound datapoint needs Multiroom AND Sound to be on.
-  return groupsOf(stateId).every(group => group === "amp" || config[`group_${group}`] !== false);
+  return groupsOf(stateId).every(group => group === "amp" || switches[`group_${group}`] !== false);
 }

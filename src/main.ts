@@ -1562,7 +1562,7 @@ export class Yamaha extends utils.Adapter {
     const renamed = renamedObjectIds(existing, deviceIds, this.namespace);
     // Objects whose datapoint group the user switched off — remove them so turning a group from
     // on to off cleans up its whole subtree (a toggle change restarts the instance, so this runs).
-    const config = this.config as unknown as Record<string, unknown>;
+    const config = this.config;
     const disabled = existing.filter(full => {
       for (const deviceId of deviceIds) {
         const base = `${this.namespace}.${deviceId}.`;
@@ -2172,6 +2172,7 @@ export class Yamaha extends utils.Adapter {
    * @returns the carried row, undefined when there was nothing to carry
    */
   private carryLegacyDevice(): { name: string; ip: string } | undefined {
+    // The keys read here (`ip`, `IP`) belong to the adapter before 1.0 and are in no type of this one.
     const config = this.config as unknown as Record<string, unknown>;
     const row = legacyDeviceRow(config);
     if (row) {
@@ -2189,6 +2190,7 @@ export class Yamaha extends utils.Adapter {
    * @returns whether the old toggle was on
    */
   private foldGroupZones(): boolean {
+    // `group_zones` is a key of the releases before 0.17.0 and in no type of this one.
     const config = this.config as unknown as Record<string, unknown>;
     const on = config.group_zones === true;
     if (on) {
@@ -2429,7 +2431,7 @@ export class Yamaha extends utils.Adapter {
         }
       }
       if (next) {
-        (this.config as unknown as Record<string, unknown>).devices = next;
+        this.config.devices = next as ioBroker.AdapterConfig["devices"]; // the rows as stored, ids moved
       }
       return { rows: next };
     } catch (e) {
@@ -2598,7 +2600,7 @@ export class Yamaha extends utils.Adapter {
         probeMemory,
         systemLanguage: this.systemLanguage,
         // Group gate for the YNCA sweep: a disabled group's functions are never even fetched.
-        isEntryEnabled: id => isGroupEnabled(id, this.config as unknown as Record<string, unknown>),
+        isEntryEnabled: id => isGroupEnabled(id, this.config),
         log: {
           debug: message => this.log.debug(message),
           info: message => this.log.info(message),
@@ -2610,7 +2612,7 @@ export class Yamaha extends utils.Adapter {
           }
           // Gate on the datapoint group: a switched-off group's objects are not created. The id is
           // "<deviceId>.<relativeId>"; groupOf reads the relative part.
-          if (!isGroupEnabled(id.slice(id.indexOf(".") + 1), this.config as unknown as Record<string, unknown>)) {
+          if (!isGroupEnabled(id.slice(id.indexOf(".") + 1), this.config)) {
             return;
           }
           // A SHRINKING dropdown needs a clearing write first: extendObject merges `common.states`
@@ -2631,7 +2633,7 @@ export class Yamaha extends utils.Adapter {
             return;
           }
           // Same group gate as upsertObject, so a switched-off group seeds no orphan value either.
-          if (!isGroupEnabled(id.slice(id.indexOf(".") + 1), this.config as unknown as Record<string, unknown>)) {
+          if (!isGroupEnabled(id.slice(id.indexOf(".") + 1), this.config)) {
             return;
           }
           this.writeState(id, this.volumeAsShown(id, value));
@@ -3225,7 +3227,7 @@ export class Yamaha extends utils.Adapter {
    * @returns the interval in ms
    */
   private xmlPollIntervalMs(): number {
-    const seconds = Number((this.config as unknown as Record<string, unknown>).xmlPollInterval);
+    const seconds = Number(this.config.xmlPollInterval);
     return (Number.isFinite(seconds) && seconds > 0 ? seconds : 60) * 1000;
   }
 

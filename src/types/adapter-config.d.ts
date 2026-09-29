@@ -1,15 +1,18 @@
 // Augment the ioBroker adapter config with this adapter's native settings.
 // Keep this in sync with io-package.json "native".
+import type { DeviceRow } from "../lib/pure-helpers";
+
 declare global {
   namespace ioBroker {
     interface AdapterConfig {
       /** IP of the network interface to bind discovery to; empty (or 0.0.0.0) = all interfaces. */
       networkInterface: string;
-      /**
-       * Configured Yamaha devices: the object id (stored since 3.0.0), the name the row was typed with
-       * (2.x) or the address (the 0.5.4 migration), and the device address.
-       */
-      devices: { id?: string; name?: string; ip: string }[];
+      /** The MusicCast event port the adapter listens on (fleet listen-port standard). */
+      port: number;
+      /** The address that port is bound to (0.0.0.0 = all). */
+      bind: string;
+      /** Configured Yamaha devices — the one row type (`DeviceRow`), the object id stored since 3.0.0. */
+      devices: DeviceRow[];
       /**
        * Whether the network search runs: `auto` while the device table is empty (the behaviour
        * of every installation before 2.9.0), `always` next to a filled table (mixed operation),
