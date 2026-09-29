@@ -22,7 +22,7 @@ export interface TransportConnection {
   /** Seed the states this transport owns (canonical ids), skipping ids another transport owns. */
   seedOwned(ownedIds: ReadonlySet<string>): void | Promise<void>;
   /** Apply a user write to one of this transport's owned states (the handle guarantees ownership). */
-  handleWrite(canonicalId: string, ack: boolean, value: unknown): void;
+  handleWrite(canonicalId: string, value: unknown): void;
   /** Register a drop handler for this transport. */
   onDrop(cb: (reason?: Error) => void): void;
   /**
@@ -627,7 +627,7 @@ export class MultiTransportHandle implements ConnectionHandle {
       this.deps.log.debug(`${this.deviceId}: write to ${canonicalId} dropped — its transport (${owner}) is offline`);
       return;
     }
-    connection.handleWrite(canonicalId, ack, value);
+    connection.handleWrite(canonicalId, value);
   }
 
   /**

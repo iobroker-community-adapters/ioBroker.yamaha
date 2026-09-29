@@ -53,7 +53,7 @@ import {
 import type { ObjectDef } from "../catalog/types";
 import { tName, type I18nKey } from "../i18n";
 import type { StateValue } from "../types";
-import type { ConnectionHandle, ControllerLog } from "../controller";
+import type { ControllerLog } from "../controller";
 import { errorMessage } from "../util";
 import { coerceBool } from "../catalog/value-coerce";
 import { PollDropDetector } from "../lifecycle/poll-drop-detector";
@@ -290,7 +290,7 @@ function actualVolumeModeOf(status: unknown): string | undefined {
  * registration (the fix for the musiccast "stops updating" bug) and doubles as
  * the poll-only fallback when the push port is unavailable. Create-only.
  */
-export class YxcDeviceController implements ConnectionHandle {
+export class YxcDeviceController {
   private zones: string[] = [];
   private mediaBlocks: string[] = [];
   private cancelKeepalive: (() => void) | undefined;
@@ -754,22 +754,15 @@ export class YxcDeviceController implements ConnectionHandle {
   private readonly slotCounts = new Map<string, number>();
 
   /**
-   * Handle a state change: a user write (ack false) becomes a YXC command; an
-   * acked change (the device's own echo) is ignored to avoid a resend loop.
+   * A user write to one of this controller's states, under the controller's own id relative to the
+   * device — it becomes a YXC command. The multi-transport handle has already dropped acked
+   * echoes and routed only the owner's ids here (audit 2026-09-29, A32: each controller re-checked
+   * both, a path production never took).
    *
-   * @param fullStateId the full state id (device id + "." + state)
-   * @param ack whether the change is acked (device-originated)
-   * @param value the new value
+   * @param stateId the state id relative to the device
+   * @param value the written value
    */
-  public handleStateChange(fullStateId: string, ack: boolean, value: unknown): void {
-    if (ack) {
-      return;
-    }
-    const prefix = `${this.deviceId}.`;
-    if (!fullStateId.startsWith(prefix)) {
-      return;
-    }
-    const stateId = fullStateId.slice(prefix.length);
+  public handleWrite(stateId: string, value: unknown): void {
     if (stateId.startsWith("player.browse.")) {
       this.browseEngine?.handleWrite(stateId, value);
       return;

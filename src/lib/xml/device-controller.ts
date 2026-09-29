@@ -24,7 +24,7 @@ import {
 } from "./protocol";
 import { parseXmlStatus, stateToXml, type XmlCommand } from "./command-mapper";
 import { XML_AMP_CATALOG } from "./catalog";
-import type { ConnectionHandle, ControllerLog } from "../controller";
+import type { ControllerLog } from "../controller";
 import { errorMessage } from "../util";
 import { PollDropDetector } from "../lifecycle/poll-drop-detector";
 import type { ProbeMemory } from "../lifecycle/probe-memory";
@@ -121,7 +121,7 @@ export interface XmlControllerDeps {
  * state, and route commands both ways. XML has no push, so state is refreshed by
  * a keepalive poll. Create-only.
  */
-export class XmlDeviceController implements ConnectionHandle {
+export class XmlDeviceController {
   private zones: XmlZone[] = [];
   private cancelKeepalive: (() => void) | undefined;
   private readonly dropDetector = new PollDropDetector();
@@ -1134,22 +1134,15 @@ export class XmlDeviceController implements ConnectionHandle {
   }
 
   /**
-   * Handle a state change: a user write (ack false) becomes an XML command; an
-   * acked change (the device's own echo) is ignored.
+   * A user write to one of this controller's states, under the controller's own id relative to the
+   * device — it becomes a XML command. The multi-transport handle has already dropped acked
+   * echoes and routed only the owner's ids here (audit 2026-09-29, A32: each controller re-checked
+   * both, a path production never took).
    *
-   * @param fullStateId the full state id (device id + "." + state)
-   * @param ack whether the change is acked (device-originated)
-   * @param value the new value
+   * @param stateId the state id relative to the device
+   * @param value the written value
    */
-  public handleStateChange(fullStateId: string, ack: boolean, value: unknown): void {
-    if (ack) {
-      return;
-    }
-    const prefix = `${this.deviceId}.`;
-    if (!fullStateId.startsWith(prefix)) {
-      return;
-    }
-    const stateId = fullStateId.slice(prefix.length);
+  public handleWrite(stateId: string, value: unknown): void {
     if (this.readOnlyStates.has(stateId)) {
       this.deps.log.debug(`${this.deviceId}: ${stateId} — this device declares no write for it, write dropped`);
       return;

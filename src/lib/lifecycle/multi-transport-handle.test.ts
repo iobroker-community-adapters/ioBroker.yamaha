@@ -36,7 +36,7 @@ function fakeConn(
     seedOwned: (owned: ReadonlySet<string>): void => {
       conn.seeded.push(...owned);
     },
-    handleWrite: (id: string, _ack: boolean, value: unknown): void => {
+    handleWrite: (id: string, value: unknown): void => {
       conn.writes.push({ id, value });
     },
     onDrop: (cb: (reason?: Error) => void): void => {
@@ -132,6 +132,20 @@ describe("MultiTransportHandle", () => {
     expect(yxc.writes).toContainEqual({ id: "volume", value: -30 }); // volume → MusicCast owner
     expect(yxc.writes).toContainEqual({ id: "dist.role", value: "server" }); // dist.role → YXC owner
     expect(ynca.writes).not.toContainEqual({ id: "volume", value: -30 });
+  });
+
+  // The one place that filters echoes and foreign ids: each controller re-checked both, a path
+  // production never took (audit 2026-09-29, A32). "office." is as long as "living." — a slice by
+  // length alone would have read it as this device's id.
+  test("an acked echo and a write meant for another device reach no transport", async () => {
+    const ynca = fakeConn("ynca", [state("power", "Power")]);
+    const { handle } = setup([ynca]);
+    await handle.start();
+    handle.handleStateChange("living.power", true, true);
+    handle.handleStateChange("office.power", false, true);
+    expect(ynca.writes).toEqual([]);
+    handle.handleStateChange("living.power", false, true);
+    expect(ynca.writes).toEqual([{ id: "power", value: true }]);
   });
 
   test("close closes every connection", () => {

@@ -212,7 +212,7 @@ describe("YncaDeviceController", () => {
     const controller = new YncaDeviceController("living", makeDeps(client).deps);
     await controller.start();
     client.sent.length = 0;
-    controller.handleStateChange("living.power", false, true);
+    controller.handleWrite("power", true);
     expect(client.sent).toEqual([{ subunit: "MAIN", func: "PWR", value: "On" }]);
   });
 
@@ -224,7 +224,7 @@ describe("YncaDeviceController", () => {
     const controller = new YncaDeviceController("living", makeDeps(client).deps);
     await controller.start();
     client.gets.length = 0;
-    controller.handleStateChange("living.volume", false, -30);
+    controller.handleWrite("volume", -30);
     expect(client.sent).toContainEqual({ subunit: "MAIN", func: "VOL", value: "-30.0" });
     expect(client.gets).toEqual([{ subunit: "MAIN", func: "VOL" }]);
   });
@@ -240,7 +240,7 @@ describe("YncaDeviceController", () => {
     const controller = new YncaDeviceController("living", deps);
     await controller.start();
     acked.length = 0;
-    controller.handleStateChange("living.volume", false, -30);
+    controller.handleWrite("volume", -30);
     refuse?.("@MAIN:VOL=-30.0", "restricted");
     expect(acked).toEqual([{ id: "living.volume", value: -40 }]);
   });
@@ -253,7 +253,7 @@ describe("YncaDeviceController", () => {
     const controller = new YncaDeviceController("living", makeDeps(client).deps);
     await controller.start();
     client.gets.length = 0;
-    controller.handleStateChange("living.tuner.frequency", false, 98150);
+    controller.handleWrite("tuner.frequency", 98150);
     expect(client.sent).toContainEqual({ subunit: "TUN", func: "FMFREQ", value: "98.15" });
     expect(client.gets).toEqual([{ subunit: "TUN", func: "FMFREQ" }]);
   });
@@ -272,7 +272,7 @@ describe("YncaDeviceController", () => {
     const controller = new YncaDeviceController("living", deps);
     await controller.start();
     acked.length = 0;
-    controller.handleStateChange("living.player.repeat", false, 0);
+    controller.handleWrite("player.repeat", 0);
     refuse?.("@USB:REPEAT=Off", "restricted");
     expect(acked).toContainEqual({ id: "living.player.repeat", value: 2 });
   });
@@ -329,7 +329,7 @@ describe("YncaDeviceController", () => {
       { id: "living.mute", value: true },
     ]);
     client.sent.length = 0;
-    controller.handleStateChange("living.muteLevel", false, "Att -40 dB");
+    controller.handleWrite("muteLevel", "Att -40 dB");
     expect(client.sent).toEqual([{ subunit: "MAIN", func: "MUTE", value: "Att -40 dB" }]);
   });
 
@@ -348,8 +348,8 @@ describe("YncaDeviceController", () => {
     expect(acked).toContainEqual({ id: "living.advanced.initialVolume.level", value: -80.5 });
     expect(objects.find(o => o.id === "living.advanced.initialVolume.mode")?.def.common.write).toBe(true);
     client.sent.length = 0;
-    controller.handleStateChange("living.advanced.initialVolume.mode", false, true);
-    controller.handleStateChange("living.advanced.initialVolume.level", false, -80.5);
+    controller.handleWrite("advanced.initialVolume.mode", true);
+    controller.handleWrite("advanced.initialVolume.level", -80.5);
     expect(client.sent).toEqual([
       { subunit: "MAIN", func: "INITVOLMODE", value: "On" },
       { subunit: "MAIN", func: "INITVOLLVL", value: "Mute" },
@@ -363,15 +363,9 @@ describe("YncaDeviceController", () => {
     // with the same line as any unproven one.
     const client = new FakeClient();
     const { deps, log } = makeDeps(client);
-    new YncaDeviceController("living", deps).handleStateChange("living.power", false, true);
+    new YncaDeviceController("living", deps).handleWrite("power", true);
     expect(client.sent).toEqual([]);
     expect(log.debug).toHaveBeenCalledWith(expect.stringContaining("living: power is not writable on this device"));
-  });
-
-  test("an acked change (device echo) is not sent back", () => {
-    const client = new FakeClient();
-    new YncaDeviceController("living", makeDeps(client).deps).handleStateChange("living.power", true, true);
-    expect(client.sent).toEqual([]);
   });
 
   test("close closes the client", () => {
@@ -559,7 +553,7 @@ describe("YncaDeviceController browse surface (#613)", () => {
     expect(created).toContain("living.player.browse.path");
     // A browse write reaches the driver, not the catalog: opening the source
     // switches the input and reads the list.
-    controller.handleStateChange("living.player.browse.source", false, "netRadio");
+    controller.handleWrite("player.browse.source", "netRadio");
     // The driver paces itself through the gate now, so give the queue a few turns.
     for (let i = 0; i < 6; i++) {
       await flush();
@@ -587,8 +581,8 @@ describe("YncaDeviceController browse surface (#613)", () => {
     expect(created).toContain("living.remote.cursor");
     expect(created).toContain("living.remote.menu");
     client.sent.length = 0;
-    controller.handleStateChange("living.remote.cursor", false, "left");
-    controller.handleStateChange("living.remote.menu", false, "top_menu");
+    controller.handleWrite("remote.cursor", "left");
+    controller.handleWrite("remote.menu", "top_menu");
     for (let i = 0; i < 6; i++) {
       await flush();
     }
@@ -780,7 +774,7 @@ describe("YncaDeviceController fast restart (persisted capability layer)", () =>
     );
     // …and the write by title resolves against the FRESH list.
     client.sent.length = 0;
-    controller.handleStateChange("living.scene.recall", false, "Movie night");
+    controller.handleWrite("scene.recall", "Movie night");
     expect(client.sent).toEqual([{ subunit: "MAIN", func: "SCENE", value: "Scene 1" }]);
   });
 
@@ -804,7 +798,7 @@ describe("YncaDeviceController fast restart (persisted capability layer)", () =>
     const { deps } = makeDeps(client);
     const controller = new YncaDeviceController("living", { ...deps, probeMemory: memory });
     await controller.start();
-    controller.handleStateChange("living.tuner.frequency", false, 100900);
+    controller.handleWrite("tuner.frequency", 100900);
     expect(client.sent).toEqual([{ subunit: "TUN", func: "FMFREQ", value: "100.90" }]);
   });
 
@@ -831,7 +825,7 @@ describe("YncaDeviceController fast restart (persisted capability layer)", () =>
     const { deps } = makeDeps(client);
     const controller = new YncaDeviceController("living", { ...deps, probeMemory: memory });
     await controller.start();
-    controller.handleStateChange("living.player.playback", false, 0);
+    controller.handleWrite("player.playback", 0);
     expect(client.sent).toEqual([{ subunit: "SPOTIFY", func: "PLAYBACK", value: "Pause" }]);
   });
 
@@ -914,11 +908,11 @@ describe("YncaDeviceController write gating + refusal logging (#615 class)", () 
     const controller = new YncaDeviceController("living", deps);
     await controller.start();
     client.sent.length = 0;
-    controller.handleStateChange("living.sound.bass", false, 2);
+    controller.handleWrite("sound.bass", 2);
     expect(client.sent).toEqual([{ subunit: "MAIN", func: "SPBASS", value: "2.0" }]);
     // A state whose function the device never reported is not written at all.
     client.sent.length = 0;
-    controller.handleStateChange("living.sound.treble", false, 1);
+    controller.handleWrite("sound.treble", 1);
     expect(client.sent).toEqual([]);
   });
 
@@ -973,10 +967,10 @@ describe("YncaDeviceController scenes v2.0.0 (titles in the dropdown, one list, 
     const s = sceneSetup();
     await s.controller.start();
     s.client.sent.length = 0;
-    s.controller.handleStateChange("living.scene.recall", false, "tv");
+    s.controller.handleWrite("scene.recall", "tv");
     expect(s.client.sent).toEqual([{ subunit: "MAIN", func: "SCENE", value: "Scene 2" }]);
     s.client.sent.length = 0;
-    s.controller.handleStateChange("living.scene.recall", false, "Gaming");
+    s.controller.handleWrite("scene.recall", "Gaming");
     expect(s.client.sent).toEqual([]);
   });
 });
@@ -997,42 +991,42 @@ describe("YncaDeviceController unified tuner v2.0.0 (band-routed writes)", () =>
   test("a frequency write goes to the active band's wire function on a classic TUN device", async () => {
     const s = await tunerSetup({ MAIN: { PWR: "On" }, TUN: { BAND: "AM", AMFREQ: "1440", FMFREQ: "98.10" } });
     // AM: whole kHz on AMFREQ.
-    s.controller.handleStateChange("living.tuner.frequency", false, 1440);
+    s.controller.handleWrite("tuner.frequency", 1440);
     expect(s.client.sent).toEqual([{ subunit: "TUN", func: "AMFREQ", value: "1440" }]);
     // The device switches to FM (pushed BAND update) — the SAME state now writes
     // FMFREQ in the MHz wire form with two decimals (#612 format rule).
     s.client.emit({ subunit: "TUN", func: "BAND", value: "FM" });
     s.client.sent.length = 0;
-    s.controller.handleStateChange("living.tuner.frequency", false, 98100);
+    s.controller.handleWrite("tuner.frequency", 98100);
     expect(s.client.sent).toEqual([{ subunit: "TUN", func: "FMFREQ", value: "98.10" }]);
   });
 
   test("on a DAB device the FM frequency writes DAB:FMFREQ; in DAB band the write is dropped", async () => {
     const s = await tunerSetup({ MAIN: { PWR: "On" }, DAB: { BAND: "FM", FMFREQ: "98.10" } });
-    s.controller.handleStateChange("living.tuner.frequency", false, 98100);
+    s.controller.handleWrite("tuner.frequency", 98100);
     expect(s.client.sent).toEqual([{ subunit: "DAB", func: "FMFREQ", value: "98.10" }]);
     // DAB tunes by service — there is no frequency command to send.
     s.client.emit({ subunit: "DAB", func: "BAND", value: "DAB" });
     s.client.sent.length = 0;
-    s.controller.handleStateChange("living.tuner.frequency", false, 227360);
+    s.controller.handleWrite("tuner.frequency", 227360);
     expect(s.client.sent).toEqual([]);
   });
 
   test("a band write goes to the subunit that owns that band", async () => {
     const classic = await tunerSetup({ MAIN: { PWR: "On" }, TUN: { BAND: "AM", AMFREQ: "1440" } });
-    classic.controller.handleStateChange("living.tuner.band", false, "AM");
+    classic.controller.handleWrite("tuner.band", "AM");
     expect(classic.client.sent).toEqual([{ subunit: "TUN", func: "BAND", value: "AM" }]);
     classic.client.sent.length = 0;
-    classic.controller.handleStateChange("living.tuner.band", false, "FM");
+    classic.controller.handleWrite("tuner.band", "FM");
     expect(classic.client.sent).toEqual([{ subunit: "TUN", func: "BAND", value: "FM" }]);
 
     // On a DAB device the FM half lives on DAB — that is where its FM frequency and presets are.
     const dab = await tunerSetup({ MAIN: { PWR: "On" }, DAB: { BAND: "DAB", FMFREQ: "98.10" } });
-    dab.controller.handleStateChange("living.tuner.band", false, "FM");
+    dab.controller.handleWrite("tuner.band", "FM");
     expect(dab.client.sent).toEqual([{ subunit: "DAB", func: "BAND", value: "FM" }]);
     dab.client.sent.length = 0;
     // A band this device does not have is dropped instead of going onto the wire.
-    dab.controller.handleStateChange("living.tuner.band", false, "AM");
+    dab.controller.handleWrite("tuner.band", "AM");
     expect(dab.client.sent).toEqual([]);
   });
 
@@ -1044,10 +1038,10 @@ describe("YncaDeviceController unified tuner v2.0.0 (band-routed writes)", () =>
       TUN: { BAND: "AM", AMFREQ: "1440" },
       DAB: { BAND: "DAB", FMFREQ: "98.10" },
     });
-    s.controller.handleStateChange("living.tuner.band", false, "AM");
+    s.controller.handleWrite("tuner.band", "AM");
     expect(s.client.sent).toEqual([{ subunit: "TUN", func: "BAND", value: "AM" }]);
     s.client.sent.length = 0;
-    s.controller.handleStateChange("living.tuner.band", false, "DAB");
+    s.controller.handleWrite("tuner.band", "DAB");
     expect(s.client.sent).toEqual([{ subunit: "DAB", func: "BAND", value: "DAB" }]);
   });
 
@@ -1056,11 +1050,11 @@ describe("YncaDeviceController unified tuner v2.0.0 (band-routed writes)", () =>
       MAIN: { PWR: "On" },
       DAB: { BAND: "DAB", DABPRESET: "No Preset", FMPRESET: "No Preset" },
     });
-    s.controller.handleStateChange("living.tuner.preset", false, 5);
+    s.controller.handleWrite("tuner.preset", 5);
     expect(s.client.sent).toEqual([{ subunit: "DAB", func: "DABPRESET", value: "5" }]);
     s.client.emit({ subunit: "DAB", func: "BAND", value: "FM" });
     s.client.sent.length = 0;
-    s.controller.handleStateChange("living.tuner.preset", false, 4);
+    s.controller.handleWrite("tuner.preset", 4);
     expect(s.client.sent).toEqual([{ subunit: "DAB", func: "FMPRESET", value: "4" }]);
   });
 
@@ -1072,8 +1066,8 @@ describe("YncaDeviceController unified tuner v2.0.0 (band-routed writes)", () =>
       TUN: { BAND: "AM", PRESET: "No Preset" },
       DAB: { BAND: "DAB", DABPRESET: "No Preset", FMPRESET: "No Preset" },
     });
-    dab.controller.handleStateChange("living.tuner.presetSave", false, 0);
-    dab.controller.handleStateChange("living.tuner.presetUp", false, true);
+    dab.controller.handleWrite("tuner.presetSave", 0);
+    dab.controller.handleWrite("tuner.presetUp", true);
     expect(dab.client.sent).toEqual([
       { subunit: "DAB", func: "MEM", value: "Auto" },
       { subunit: "TUN", func: "PRESET", value: "Up" },
@@ -1083,15 +1077,15 @@ describe("YncaDeviceController unified tuner v2.0.0 (band-routed writes)", () =>
       TUN: { BAND: "AM", PRESET: "No Preset" },
       HDRADIO: { BAND: "FM", PRESET: "No Preset" },
     });
-    hd.controller.handleStateChange("living.tuner.presetSave", false, 7);
-    hd.controller.handleStateChange("living.tuner.presetDown", false, true);
+    hd.controller.handleWrite("tuner.presetSave", 7);
+    hd.controller.handleWrite("tuner.presetDown", true);
     expect(hd.client.sent).toEqual([
       { subunit: "HDRADIO", func: "MEM", value: "7" },
       { subunit: "HDRADIO", func: "PRESET", value: "Down" },
     ]);
     const tun = await tunerSetup({ MAIN: { PWR: "On" }, TUN: { BAND: "FM", PRESET: "3" } });
-    tun.controller.handleStateChange("living.tuner.presetSave", false, 12);
-    tun.controller.handleStateChange("living.tuner.preset", false, 0);
+    tun.controller.handleWrite("tuner.presetSave", 12);
+    tun.controller.handleWrite("tuner.preset", 0);
     expect(tun.client.sent).toEqual([{ subunit: "TUN", func: "MEM", value: "12" }]);
   });
 
@@ -1099,11 +1093,11 @@ describe("YncaDeviceController unified tuner v2.0.0 (band-routed writes)", () =>
   // FMFREQ=0.00 sent (audit 2026-09-24, B17).
   test("a tuner write takes only a number — true recalls no preset and tunes no frequency", async () => {
     const dab = await tunerSetup({ MAIN: { PWR: "On" }, DAB: { BAND: "DAB", DABPRESET: "No Preset" } });
-    dab.controller.handleStateChange("living.tuner.preset", false, true);
-    dab.controller.handleStateChange("living.tuner.preset", false, "0x2");
+    dab.controller.handleWrite("tuner.preset", true);
+    dab.controller.handleWrite("tuner.preset", "0x2");
     expect(dab.client.sent).toEqual([]);
     const tun = await tunerSetup({ MAIN: { PWR: "On" }, TUN: { BAND: "FM", FMFREQ: "98.10" } });
-    tun.controller.handleStateChange("living.tuner.frequency", false, true);
+    tun.controller.handleWrite("tuner.frequency", true);
     expect(tun.client.sent).toEqual([]);
   });
 
@@ -1115,14 +1109,14 @@ describe("YncaDeviceController unified tuner v2.0.0 (band-routed writes)", () =>
       SYS: { FREQSTEP: "FM200/AM10" },
       TUN: { BAND: "FM", FMFREQ: "98.10", AMFREQ: "1000" },
     });
-    stepped.controller.handleStateChange("living.tuner.frequency", false, 98130);
+    stepped.controller.handleWrite("tuner.frequency", 98130);
     expect(stepped.client.sent).toEqual([{ subunit: "TUN", func: "FMFREQ", value: "98.10" }]);
     stepped.client.emit({ subunit: "TUN", func: "BAND", value: "AM" });
     stepped.client.sent.length = 0;
-    stepped.controller.handleStateChange("living.tuner.frequency", false, 1004);
+    stepped.controller.handleWrite("tuner.frequency", 1004);
     expect(stepped.client.sent).toEqual([{ subunit: "TUN", func: "AMFREQ", value: "1000" }]);
     const plain = await tunerSetup({ MAIN: { PWR: "On" }, TUN: { BAND: "FM", FMFREQ: "98.10" } });
-    plain.controller.handleStateChange("living.tuner.frequency", false, 98130);
+    plain.controller.handleWrite("tuner.frequency", 98130);
     expect(plain.client.sent).toEqual([{ subunit: "TUN", func: "FMFREQ", value: "98.13" }]);
   });
 });
@@ -1183,7 +1177,7 @@ describe("YncaDeviceController unified player v2.0.0 (input-routed block)", () =
     const write = async (subunits: YncaCapabilities["subunits"]): Promise<unknown[]> => {
       const s = await playerSetup(subunits);
       s.client.sent.length = 0;
-      s.controller.handleStateChange("living.player.repeat", false, 1);
+      s.controller.handleWrite("player.repeat", 1);
       return s.client.sent;
     };
     const usb = { PLAYBACKINFO: "Play", REPEAT: "Off" };
@@ -1210,8 +1204,8 @@ describe("YncaDeviceController unified player v2.0.0 (input-routed block)", () =
       USB: { PLAYBACKINFO: "Play" },
     });
     s.client.sent.length = 0;
-    s.controller.handleStateChange("living.player.playback", false, 0);
-    s.controller.handleStateChange("living.player.next", false, true);
+    s.controller.handleWrite("player.playback", 0);
+    s.controller.handleWrite("player.next", true);
     expect(s.client.sent).toEqual([
       { subunit: "USB", func: "PLAYBACK", value: "Pause" },
       { subunit: "USB", func: "PLAYBACK", value: "Skip Fwd" },
@@ -1219,7 +1213,7 @@ describe("YncaDeviceController unified player v2.0.0 (input-routed block)", () =
     // Not listening to a player source → the write is dropped, nothing goes on the wire.
     s.client.emit({ subunit: "MAIN", func: "INP", value: "HDMI1" });
     s.client.sent.length = 0;
-    s.controller.handleStateChange("living.player.playback", false, 0);
+    s.controller.handleWrite("player.playback", 0);
     expect(s.client.sent).toEqual([]);
   });
 
@@ -1236,7 +1230,7 @@ describe("YncaDeviceController unified player v2.0.0 (input-routed block)", () =
     expect(s.acked).not.toContainEqual({ id: "living.player.station", value: "Radio X" });
     // A zone-prefixed transport write routes over zone2's source.
     s.client.sent.length = 0;
-    s.controller.handleStateChange("living.multiroom.zone2.player.playback", false, 2);
+    s.controller.handleWrite("multiroom.zone2.player.playback", 2);
     expect(s.client.sent).toEqual([{ subunit: "NETRADIO", func: "PLAYBACK", value: "Stop" }]);
   });
 });
@@ -1292,8 +1286,8 @@ describe("YncaDeviceController test-audit hardening (2.0.1)", () => {
     const controller = new YncaDeviceController("living", deps);
     await controller.start();
     client.sent.length = 0;
-    controller.handleStateChange("living.tuner.frequency", false, 98100);
-    controller.handleStateChange("living.tuner.preset", false, 3);
+    controller.handleWrite("tuner.frequency", 98100);
+    controller.handleWrite("tuner.preset", 3);
     expect(client.sent).toEqual([]);
   });
 
@@ -1616,20 +1610,20 @@ describe("HD Radio in the tuner router (coverage audit 2026-09-09)", () => {
       MAIN: { PWR: "On" },
       HDRADIO: { BAND: "FM", FMFREQ: "98.10", AMFREQ: "1440", PRESET: "3", SEARCHMODE: "Preset", PRGSEL: "HD1" },
     });
-    s.controller.handleStateChange("living.tuner.frequency", false, 101300);
+    s.controller.handleWrite("tuner.frequency", 101300);
     expect(s.client.sent).toEqual([{ subunit: "HDRADIO", func: "FMFREQ", value: "101.30" }]);
     s.client.sent.length = 0;
-    s.controller.handleStateChange("living.tuner.band", false, "AM");
+    s.controller.handleWrite("tuner.band", "AM");
     expect(s.client.sent).toEqual([{ subunit: "HDRADIO", func: "BAND", value: "AM" }]);
     s.client.emit({ subunit: "HDRADIO", func: "BAND", value: "AM" });
     s.client.sent.length = 0;
-    s.controller.handleStateChange("living.tuner.frequency", false, 1440);
+    s.controller.handleWrite("tuner.frequency", 1440);
     expect(s.client.sent).toEqual([{ subunit: "HDRADIO", func: "AMFREQ", value: "1440" }]);
     s.client.sent.length = 0;
-    s.controller.handleStateChange("living.tuner.preset", false, 7);
+    s.controller.handleWrite("tuner.preset", 7);
     expect(s.client.sent).toEqual([{ subunit: "HDRADIO", func: "PRESET", value: "7" }]);
     s.client.sent.length = 0;
-    s.controller.handleStateChange("living.tuner.hdRadio.program", false, "HD2");
+    s.controller.handleWrite("tuner.hdRadio.program", "HD2");
     expect(s.client.sent).toEqual([{ subunit: "HDRADIO", func: "PRGSEL", value: "HD2" }]);
   });
 
@@ -1640,10 +1634,10 @@ describe("HD Radio in the tuner router (coverage audit 2026-09-09)", () => {
       TUN: { BAND: "FM", FMFREQ: "98.10" },
       HDRADIO: { BAND: "FM", FMFREQ: "98.10", PRESET: "3" },
     });
-    s.controller.handleStateChange("living.tuner.frequency", false, 101300);
+    s.controller.handleWrite("tuner.frequency", 101300);
     expect(s.client.sent).toEqual([{ subunit: "HDRADIO", func: "FMFREQ", value: "101.30" }]);
     s.client.sent.length = 0;
-    s.controller.handleStateChange("living.tuner.preset", false, 2);
+    s.controller.handleWrite("tuner.preset", 2);
     expect(s.client.sent).toEqual([{ subunit: "HDRADIO", func: "PRESET", value: "2" }]);
   });
 });
@@ -1698,12 +1692,12 @@ describe("the YNCA pad dialect of the 2015 generation (RX-A850: @MAIN:CURSOR/MEN
     const s = await padSetup(zone, { LISTCURSOR: "undefined", CURSOR: "known" });
     expect(s.probes).toEqual([["LISTCURSOR", "CURSOR"]]);
     expect(zone.remembered("yncaPadDialect")).toEqual({ dialect: "zone", proven: true });
-    s.controller.handleStateChange("living.remote.cursor", false, "return");
+    s.controller.handleWrite("remote.cursor", "return");
     expect(s.client.sent).toEqual([{ subunit: "MAIN", func: "CURSOR", value: "Return" }]);
     const list = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
     const t = await padSetup(list, { LISTCURSOR: "known", CURSOR: "undefined" });
     expect(list.remembered("yncaPadDialect")).toEqual({ dialect: "list", proven: true });
-    t.controller.handleStateChange("living.remote.cursor", false, "up");
+    t.controller.handleWrite("remote.cursor", "up");
     expect(t.client.sent).toEqual([{ subunit: "MAIN", func: "LISTCURSOR", value: "Up" }]);
   });
 
@@ -1712,14 +1706,14 @@ describe("the YNCA pad dialect of the 2015 generation (RX-A850: @MAIN:CURSOR/MEN
     const s = await padSetup(memory, { LISTCURSOR: "unclear", CURSOR: "unclear" });
     expect(s.probes).toHaveLength(1);
     expect(memory.remembered("yncaPadDialect")).toBe("zone");
-    s.controller.handleStateChange("living.remote.cursor", false, "up");
+    s.controller.handleWrite("remote.cursor", "up");
     expect(s.client.sent).toEqual([{ subunit: "MAIN", func: "LISTCURSOR", value: "Up" }]);
   });
 
   test("a single refused key never persists a dialect by itself — it only triggers one re-probe", async () => {
     const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
     const s = await padSetup(memory, { LISTCURSOR: "known", CURSOR: "known" });
-    s.controller.handleStateChange("living.remote.cursor", false, "up");
+    s.controller.handleWrite("remote.cursor", "up");
     s.refuse("@MAIN:LISTCURSOR=Up", "restricted");
     s.refuse("@MAIN:LISTCURSOR=Up", "undefined");
     await flush();
@@ -1735,7 +1729,7 @@ describe("the YNCA pad dialect of the 2015 generation (RX-A850: @MAIN:CURSOR/MEN
     const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
     const s = await padSetup(memory, { LISTCURSOR: "unclear", CURSOR: "unclear" });
     s.client.probeKnown = () => Promise.resolve({ LISTCURSOR: "undefined", CURSOR: "known" });
-    s.controller.handleStateChange("living.remote.cursor", false, "up");
+    s.controller.handleWrite("remote.cursor", "up");
     s.refuse("@MAIN:LISTCURSOR=Up", "undefined");
     await flush();
     expect(s.client.sent).toEqual([
@@ -2017,8 +2011,8 @@ describe("the pad of zones 2 and 3 (@ZONE2/@ZONE3:LISTCURSOR/LISTMENU — audit 
     expect(s.objects).toContain("living.multiroom.zone2.remote.menu");
     expect(s.objects).not.toContain("living.multiroom.zone3.remote.cursor");
     expect(memory.remembered("yncaZonePads")).toEqual({ zone2: true, zone3: false });
-    s.controller.handleStateChange("living.multiroom.zone2.remote.cursor", false, "return");
-    s.controller.handleStateChange("living.multiroom.zone2.remote.menu", false, "display");
+    s.controller.handleWrite("multiroom.zone2.remote.cursor", "return");
+    s.controller.handleWrite("multiroom.zone2.remote.menu", "display");
     expect(s.client.sent).toEqual([
       { subunit: "ZONE2", func: "LISTCURSOR", value: "Return" },
       { subunit: "ZONE2", func: "LISTMENU", value: "Display" },

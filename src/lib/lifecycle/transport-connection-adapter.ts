@@ -17,8 +17,8 @@ const INVERSE_DRIFT: Partial<Record<Transport, Readonly<Record<string, string>>>
 export interface AdaptedController {
   /** Connect, probe, and build the object tree (through the injected deps). */
   start(): Promise<boolean>;
-  /** Apply a state change under the controller's own id. */
-  handleStateChange(fullStateId: string, ack: boolean, value: unknown): void;
+  /** Apply a user write under the controller's own id, relative to the device. */
+  handleWrite(stateId: string, value: unknown): void;
   /** Register a drop handler. */
   onDrop(cb: (reason?: Error) => void): void;
   /** Ask the device once, now; report a drop if it does not answer (the polled transports). */
@@ -180,15 +180,14 @@ export class TransportConnectionAdapter implements TransportConnection {
    * Route a user write to the controller under its own (drift-reversed, zone-kept) id.
    *
    * @param canonicalId the canonical state id the user wrote
-   * @param ack whether the write is acked
    * @param value the value written
    */
-  public handleWrite(canonicalId: string, ack: boolean, value: unknown): void {
+  public handleWrite(canonicalId: string, value: unknown): void {
     const own = this.unalias(canonicalId);
     const zone = ZONE_PREFIX.exec(own)?.[0] ?? "";
     const template = own.slice(zone.length);
     const controllerId = zone + (INVERSE_DRIFT[this.transport]?.[template] ?? template);
-    this.controller?.handleStateChange(`${this.deviceId}.${controllerId}`, ack, value);
+    this.controller?.handleWrite(controllerId, value);
   }
 
   /**

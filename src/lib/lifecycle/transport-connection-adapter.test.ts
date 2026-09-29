@@ -8,7 +8,7 @@ function st(id: string): ObjectDef {
 describe("TransportConnectionAdapter", () => {
   test("collects the controller's objects canonicalized, seeds only owned, routes writes back", async () => {
     const acks: Array<{ id: string; value: unknown }> = [];
-    const writes: Array<{ fullId: string; ack: boolean; value: unknown }> = [];
+    const writes: Array<{ stateId: string; value: unknown }> = [];
     const adapter = new TransportConnectionAdapter("yxc", "living", (id, value) => acks.push({ id, value }));
 
     // A fake controller built with the adapter's intercept deps — start() upserts + seeds through them.
@@ -21,7 +21,7 @@ describe("TransportConnectionAdapter", () => {
         adapter.interceptSetStateAck("living.volume", -30);
         return true;
       },
-      handleStateChange: (fullId, ack, value) => writes.push({ fullId, ack, value }),
+      handleWrite: (stateId, value) => writes.push({ stateId, value }),
       onDrop: () => {},
       close: () => {},
     };
@@ -34,8 +34,8 @@ describe("TransportConnectionAdapter", () => {
     adapter.seedOwned(new Set(["volume"]));
     expect(acks).toEqual([{ id: "living.volume", value: -30 }]);
     // handleWrite maps the canonical id back to the controller's own id (sound.subwooferTrim → subwooferVolume)
-    adapter.handleWrite("sound.subwooferTrim", false, 5);
-    expect(writes).toContainEqual({ fullId: "living.subwooferVolume", ack: false, value: 5 });
+    adapter.handleWrite("sound.subwooferTrim", 5);
+    expect(writes).toContainEqual({ stateId: "subwooferVolume", value: 5 });
   });
 
   test("after seedOwned, later pushes are filtered live (only owned reach the adapter's setStateAck)", async () => {
@@ -43,7 +43,7 @@ describe("TransportConnectionAdapter", () => {
     const adapter = new TransportConnectionAdapter("yxc", "living", (id, value) => acks.push({ id, value }));
     adapter.bind({
       start: () => Promise.resolve(true),
-      handleStateChange: () => {},
+      handleWrite: () => {},
       onDrop: () => {},
       close: () => {},
     });
@@ -60,7 +60,7 @@ describe("TransportConnectionAdapter", () => {
     const adapter = new TransportConnectionAdapter("xml", "living", () => {});
     adapter.bind({
       start: () => Promise.resolve(false),
-      handleStateChange: () => {},
+      handleWrite: () => {},
       onDrop: () => {},
       close: () => {
         closed = true;
@@ -74,7 +74,7 @@ describe("TransportConnectionAdapter", () => {
 
 describe("TransportConnectionAdapter within a session (2.7.0 re-collect)", () => {
   const bound = (adapter: TransportConnectionAdapter, start: () => Promise<boolean>): void =>
-    adapter.bind({ start, handleStateChange: () => {}, onDrop: () => {}, close: () => {} });
+    adapter.bind({ start, handleWrite: () => {}, onDrop: () => {}, close: () => {} });
 
   test("an upsert after the first coordination replaces the def by id and signals a shape change — once per real change", async () => {
     const adapter = new TransportConnectionAdapter("ynca", "living", () => {});
@@ -155,7 +155,7 @@ describe("TransportConnectionAdapter — verifyAlive", () => {
     const withProbe = new TransportConnectionAdapter("yxc", "living", () => {});
     withProbe.bind({
       start: () => Promise.resolve(true),
-      handleStateChange: () => {},
+      handleWrite: () => {},
       onDrop: () => {},
       close: () => {},
       verifyAlive: verify,
@@ -167,7 +167,7 @@ describe("TransportConnectionAdapter — verifyAlive", () => {
     const without = new TransportConnectionAdapter("ynca", "living", () => {});
     without.bind({
       start: () => Promise.resolve(true),
-      handleStateChange: () => {},
+      handleWrite: () => {},
       onDrop: () => {},
       close: () => {},
     });
@@ -183,7 +183,7 @@ describe("TransportConnectionAdapter takes over an id with its last value (audit
     const adapter = new TransportConnectionAdapter("xml", "living", (id, value) => acks.push({ id, value }));
     adapter.bind({
       start: () => Promise.resolve(true),
-      handleStateChange: () => {},
+      handleWrite: () => {},
       onDrop: () => {},
       close: () => {},
     });
@@ -220,7 +220,7 @@ describe("TransportConnectionAdapter — a zone folder named as the tree does", 
         adapter.interceptSetStateAck("living.multiroom.zone2.volume", 40);
         return true;
       },
-      handleStateChange: fullId => writes.push(fullId),
+      handleWrite: stateId => writes.push(stateId),
       onDrop: () => {},
       close: () => {},
     });
@@ -234,9 +234,9 @@ describe("TransportConnectionAdapter — a zone folder named as the tree does", 
     expect((objects[0].common.name as Record<string, string>).en).toBe("Zone B");
     adapter.seedOwned(new Set(["multiroom.zoneB.volume"]));
     expect(acks).toEqual([{ id: "living.multiroom.zoneB.volume", value: 40 }]);
-    adapter.handleWrite("multiroom.zoneB.sound.subwooferTrim", false, 1);
-    adapter.handleWrite("multiroom.zoneB.volume", false, 30);
-    expect(writes).toEqual(["living.multiroom.zone2.subwooferVolume", "living.multiroom.zone2.volume"]);
+    adapter.handleWrite("multiroom.zoneB.sound.subwooferTrim", 1);
+    adapter.handleWrite("multiroom.zoneB.volume", 30);
+    expect(writes).toEqual(["multiroom.zone2.subwooferVolume", "multiroom.zone2.volume"]);
     expect(adapter.canonicalId("living.multiroom.zone2.mute")).toBe("multiroom.zoneB.mute");
   });
 });

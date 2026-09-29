@@ -6,7 +6,7 @@ import { playTimeTwin } from "./catalog/play-time";
 import type { ObjectDef } from "./catalog/types";
 import { tName } from "./i18n";
 import { errorMessage } from "./util";
-import type { ConnectionHandle, ControllerLog } from "./controller";
+import type { ControllerLog } from "./controller";
 import {
   SOURCE_INPUTS,
   YNCA_CATALOG,
@@ -358,7 +358,7 @@ export interface ControllerDeps {
  * commands both ways. Create-only — orphan cleanup and legacy migration are
  * separate, gated steps.
  */
-export class YncaDeviceController implements ConnectionHandle {
+export class YncaDeviceController {
   private browseDriver: YncaBrowseDriver | undefined;
   private browseEngine: BrowseEngine | undefined;
   /** The zones whose pad the probe proved, with the generation's key words (B9). */
@@ -1106,22 +1106,15 @@ export class YncaDeviceController implements ConnectionHandle {
   }
 
   /**
-   * Handle a state change: a user write (ack false) becomes a YNCA command; an
-   * acked change (the device's own echo) is ignored to avoid a resend loop.
+   * A user write to one of this controller's states, under the controller's own id relative to the
+   * device — it becomes a YNCA command. The multi-transport handle has already dropped acked
+   * echoes and routed only the owner's ids here (audit 2026-09-29, A32: each controller re-checked
+   * both, a path production never took).
    *
-   * @param fullStateId the full state id (device id + "." + state)
-   * @param ack whether the change is acked (device-originated)
-   * @param value the new value
+   * @param stateId the state id relative to the device
+   * @param value the written value
    */
-  public handleStateChange(fullStateId: string, ack: boolean, value: unknown): void {
-    if (ack) {
-      return;
-    }
-    const prefix = `${this.deviceId}.`;
-    if (!fullStateId.startsWith(prefix)) {
-      return;
-    }
-    const stateId = fullStateId.slice(prefix.length);
+  public handleWrite(stateId: string, value: unknown): void {
     if (stateId.startsWith("remote.")) {
       this.browseEngine?.handleRemoteWrite(stateId, value);
       return;
