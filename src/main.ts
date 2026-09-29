@@ -53,6 +53,7 @@ import { YxcPushReceiver } from "./lib/yxc/push-receiver";
 import { PushLiveness } from "./lib/yxc/push-liveness";
 import { YamahaDeviceManagement } from "./device-management";
 import type { DeviceSource, DeviceRecord } from "./lib/types";
+import { PerDeviceCaches } from "./lib/lifecycle/per-device";
 import { DeviceSupervisor, type ConnectionHandle } from "./lib/lifecycle/device-supervisor";
 import { ReconnectStrategy } from "./lib/lifecycle/reconnect-strategy";
 import type { YncaSubunitCache } from "./lib/ynca/subunit-cache";
@@ -170,15 +171,6 @@ const NOTIFY_RETRY_MS = 5000;
  */
 const DEVICE_PATCH_WINDOW_MS = 4500;
 
-/**
- * A map or set keyed by namespace-relative state ids — the shape {@link YamahaAdapter.forgetUnder}
- * prunes when a device goes. Structural on purpose: `Map<string, T>` and `Set<string>` both fit.
- */
-interface StateKeyedCache {
-  keys(): IterableIterator<string>;
-  delete(key: string): boolean;
-}
-
 /** A device object's patch waiting for its coalescing window to end. */
 interface PendingDevicePatch {
   /** The merged `common` fields (latest value per key wins). */
@@ -202,33 +194,35 @@ interface PendingDevicePatch {
 export class Yamaha extends utils.Adapter {
   private readonly supervisors: DeviceSupervisor[] = [];
   /** deviceId → its supervisor, so a state change goes to ONE device, not to all of them. */
+  /** Every collection kept per device — deleting a device forgets them in one call (A28). */
+  private readonly perDevice = new PerDeviceCaches();
   /**
    * What each volume datapoint declares on the DEVICE'S OWN scale, while percent mode replaces
    * that declaration with 0…100 %. Filled by `upsertObject` — the object is always written before
    * any value for it — and read by both value directions, so the conversion has exactly one
    * source. Keyed by the full state id, so zones and devices never mix.
    */
-  private readonly volumeScales = new Map<string, VolumeBounds>();
+  private readonly volumeScales = this.perDevice.stateMap<VolumeBounds>();
   /**
    * Per volume datapoint, the definition the coordinator produced BEFORE percent had its say —
    * what the live switch rebuilds from, so turning it changes the object without a restart.
    */
-  private readonly volumeDefs = new Map<string, ObjectDef>();
+  private readonly volumeDefs = this.perDevice.stateMap<ObjectDef>();
   /**
    * Per device, whether its volume datapoints read 0…100 %. A device setting, not an instance
    * one: the adapter serves several receivers and 2.8.0's single checkbox hit all of them.
    */
-  private readonly volumePercent = new Map<string, boolean>();
+  private readonly volumePercent = this.perDevice.map<boolean>();
   /**
    * The instance-wide percent switch of 2.8.0, read once per start. It decides what a device
    * that has not been asked yet inherits — see {@link ensureDeviceHeader}.
    */
   private legacyVolumePercent = false;
 
-  private readonly supervisorById = new Map<string, DeviceSupervisor>();
-  private readonly deviceConnected = new Map<string, boolean>();
+  private readonly supervisorById = this.perDevice.map<DeviceSupervisor>();
+  private readonly deviceConnected = this.perDevice.map<boolean>();
   /** deviceId → the record it is currently running with, so an address change is visible. */
-  private readonly deviceRecords = new Map<string, DeviceRecord>();
+  private readonly deviceRecords = this.perDevice.map<DeviceRecord>();
   /** The addresses of all supervised devices — a multiroom group resolves its clients through it. */
   private readonly knownDeviceIps = new Set<string>();
   /**
@@ -237,7 +231,7 @@ export class Yamaha extends utils.Adapter {
    * name, a migrated `yamaha.fritz.box` row was started a second time or warned about as "elsewhere"
    * (audit 2026-09-24, A12).
    */
-  private readonly resolvedHosts = new Map<string, string>();
+  private readonly resolvedHosts = this.perDevice.map<string>();
   /** Whether the network search runs in this instance — see {@link searchesTheNetwork}. */
   private discovering = false;
   /**
@@ -254,18 +248,18 @@ export class Yamaha extends utils.Adapter {
    */
   private mergeChain: Promise<unknown> = Promise.resolve();
   /** The setup of a device in progress (header, profile) — a delete waits for it before it deletes. */
-  private readonly starting = new Map<string, Promise<void>>();
+  private readonly starting = this.perDevice.map<Promise<void>>();
   /**
    * Per device, the object definitions last written — shared by every connection attempt, so a
    * device that comes back as a whole writes only what changed (audit 2026-09-24, A14). Dropped for
    * a device whenever objects of it are deleted, or a returning object would be skipped as unchanged.
    */
-  private readonly writtenObjects = new Map<string, Map<string, string>>();
+  private readonly writtenObjects = this.perDevice.map<Map<string, string>>();
   /**
    * deviceId → the address a MANUAL device was last seen answering at, away from its typed one.
    * The warning is said once per new address, not on every search.
    */
-  private readonly warnedElsewhere = new Map<string, string>();
+  private readonly warnedElsewhere = this.perDevice.map<string>();
   /**
    * The search problems already warned about — a failing interface and an id collision of a find
    * repeat on every search (every five minutes while a device is offline); said once, then debug
@@ -273,11 +267,11 @@ export class Yamaha extends utils.Adapter {
    */
   private readonly warnedSearch = new Set<string>();
   /** The devices whose connection attempt failed at least once in this session — "offline" proven, not assumed. */
-  private readonly failedOnce = new Set<string>();
+  private readonly failedOnce = this.perDevice.set();
   /** deviceId → how many transports it had live at the last report, so a LOSS is visible. */
-  private readonly liveTransportCount = new Map<string, number>();
+  private readonly liveTransportCount = this.perDevice.map<number>();
   /** The offline devices a search already said it could not find — said once per outage. */
-  private readonly reportedMissing = new Set<string>();
+  private readonly reportedMissing = this.perDevice.set();
   /** Armed while an auto-found device is offline: the search that can bring it back. */
   private rediscoverTimer: ioBroker.Timeout | undefined;
   /** When the last background search ran, so the retry cannot become a scan loop. */
@@ -303,13 +297,13 @@ export class Yamaha extends utils.Adapter {
    * role/unit retrofit), so "did the create path run?" is not the same question as "is this
    * datapoint new?".
    */
-  private readonly knownDatapoints = new Set<string>();
+  private readonly knownDatapoints = this.perDevice.stateSet();
   /**
    * The `common.states` map every existing datapoint carried when this run started, then the
    * map last written by this run — what a clearing write has to be judged against (#619).
    * Filled from the same start-up read as {@link knownDatapoints}; no per-state database read.
    */
-  private readonly storedStates = new Map<string, Record<string, string>>();
+  private readonly storedStates = this.perDevice.stateMap<Record<string, string>>();
   /**
    * The numeric bounds every existing datapoint carried when this run started, then the ones
    * last written by this run — judged the same way {@link storedStates} is, from the one
@@ -320,23 +314,23 @@ export class Yamaha extends utils.Adapter {
    * `tuner.frequency`, whose FM-only envelope had to go once a DAB receiver reported 180064 kHz
    * into it — without a clearing write exactly the installations with the problem would keep it.
    */
-  private readonly storedBounds = new Map<string, BoundFields>();
+  private readonly storedBounds = this.perDevice.stateMap<BoundFields>();
   /** State ids (namespace-relative) some transport upserted in THIS run — live claims. */
-  private readonly touchedThisRun = new Set<string>();
+  private readonly touchedThisRun = this.perDevice.stateSet();
   /**
    * Ids (namespace-relative) the never-filled purge recorded for confirmation during THIS process.
    * "Two starts decide" means two PROCESS starts: a later balance pass of the same run (another
    * device settling) must not confirm what an earlier pass only recorded (audit 2026-09-24).
    */
-  private readonly recordedThisRun = new Set<string>();
+  private readonly recordedThisRun = this.perDevice.stateSet();
   /**
    * Ids (namespace-relative) a transport's own declaration proves absent on the device — the
    * MusicCast getFeatures function lists, which do not depend on standby. The purge takes a
    * never-filled, untouched one on the first start instead of waiting for a second.
    */
-  private readonly declaredAbsent = new Set<string>();
+  private readonly declaredAbsent = this.perDevice.stateSet();
   /** Devices that reported connected at least once in this run (gates the orphan purge). */
-  private readonly readyDevices = new Set<string>();
+  private readonly readyDevices = this.perDevice.set();
   private createdDatapoints = 0;
   private removedDatapoints = 0;
   /** Debounce for the balance line, so one config change produces ONE line, not one per device. */
@@ -355,17 +349,17 @@ export class Yamaha extends utils.Adapter {
    */
   private stateWritesFailing = false;
   /** Per device, its capability profile (probe memory, YNCA snapshot, purge marker) — see loadDeviceProfile. */
-  private readonly profiles = new Map<string, DeviceProfileStore>();
+  private readonly profiles = this.perDevice.map<DeviceProfileStore>();
   /** Per device, the native patch inside its coalescing window (see persistDeviceNative). */
-  private readonly pendingDevicePatches = new Map<string, PendingDevicePatch>();
+  private readonly pendingDevicePatches = this.perDevice.map<PendingDevicePatch>();
   /** The installation's system language (`system.config`), read at start — the MusicCast menus' language. */
   private systemLanguage: string | undefined;
   /** Per device, the last write to its device object — the next one waits for it (see writeDeviceObject). */
-  private readonly deviceObjectWrites = new Map<string, Promise<unknown>>();
+  private readonly deviceObjectWrites = this.perDevice.map<Promise<unknown>>();
   /** The devices whose id is final under the 3.0.0 rule (`native.idScheme`) — see checkIdDecision. */
-  private readonly idDecided = new Set<string>();
+  private readonly idDecided = this.perDevice.set();
   /** The devices whose id was already judged in this run — once per process is enough. */
-  private readonly idChecked = new Set<string>();
+  private readonly idChecked = this.perDevice.set();
   /** The id decisions of this run, one after the other — see checkIdDecision. */
   private idDecisions: Promise<void> = Promise.resolve();
   /** What the objects database holds — see writeObject (audit 2026-09-29, E2). */
@@ -1011,24 +1005,6 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
-   * Drop every entry of a state-id-keyed cache that belongs to one device.
-   *
-   * The caches are keyed by namespace-relative state ids (`stripNamespace` in
-   * {@link snapshotExistingDatapoints}), so a device owns exactly the keys under its own prefix.
-   *
-   * @param cache a map or set keyed by namespace-relative state ids
-   * @param deviceId the id-safe device id
-   */
-  private forgetUnder(cache: StateKeyedCache, deviceId: string): void {
-    const prefix = `${deviceId}.`;
-    for (const key of [...cache.keys()]) {
-      if (key.startsWith(prefix)) {
-        cache.delete(key);
-      }
-    }
-  }
-
-  /**
    * Take an identity a transport, the search or the stored object reported for a running device:
    * merge it into the record (the search matches on it), persist it at the device object
    * (`native.identity`, what the delete action reads), and — for a discovered device — write it
@@ -1109,35 +1085,10 @@ export class Yamaha extends utils.Adapter {
       this.knownDeviceIps.delete(resolved);
       this.resolvedHosts.delete(deviceId);
     }
-    this.deviceRecords.delete(deviceId);
-    this.deviceConnected.delete(deviceId);
-    this.readyDevices.delete(deviceId);
-    this.failedOnce.delete(deviceId);
-    this.warnedElsewhere.delete(deviceId);
-    this.liveTransportCount.delete(deviceId);
-    this.reportedMissing.delete(deviceId);
-    this.idDecided.delete(deviceId);
-    this.idChecked.delete(deviceId);
-    // Everything else this device left behind goes with it. A cache that survives makes the
-    // adapter believe it already did the work: re-adding the SAME id finds the icon cache
-    // intact, `updateDeviceIcon` bails on the identity check, and the card keeps the default
-    // silhouette `ensureDeviceHeader` seeds — a soundbar shows a receiver until the next start.
-    this.deviceIcons.delete(deviceId);
-    this.deviceLabels.delete(deviceId);
-    this.deviceObjectWrites.delete(deviceId);
-    this.writtenObjects.delete(deviceId);
-    this.lastModel.delete(deviceId);
-    this.storedModels.delete(deviceId);
-    this.profiles.delete(deviceId);
-    this.forgetUnder(this.knownDatapoints, deviceId);
-    this.forgetUnder(this.storedStates, deviceId);
-    this.forgetUnder(this.storedBounds, deviceId);
-    this.forgetUnder(this.touchedThisRun, deviceId);
-    this.forgetUnder(this.recordedThisRun, deviceId);
-    this.forgetUnder(this.declaredAbsent, deviceId);
-    this.forgetUnder(this.volumeScales, deviceId);
-    this.forgetUnder(this.volumeDefs, deviceId);
-    this.volumePercent.delete(deviceId);
+    // Everything this device left behind goes with it, in one call over the register. A cache that
+    // survives makes the adapter believe it already did the work: re-adding the SAME id found the icon
+    // cache intact and the card kept the default silhouette until the next start.
+    this.perDevice.forget(deviceId);
     // Counted like the datapoint balance — state objects only, not the channels and the device
     // node around them — so the one line below says what the delete took (krobi 2026-09-22).
     let removed = 0;
@@ -2139,7 +2090,7 @@ export class Yamaha extends utils.Adapter {
   }
 
   /** The icon last written per device, so repeated model reports do not re-write the object. */
-  private readonly deviceIcons = new Map<string, string>();
+  private readonly deviceIcons = this.perDevice.map<string>();
 
   /**
    * The model last reported per device in THIS run. The YNCA keepalive reports the model every
@@ -2147,15 +2098,15 @@ export class Yamaha extends utils.Adapter {
    * the first report of a run and on a model change only. Per run, not from the database: a new
    * adapter version with new pictograms must reach every existing device once.
    */
-  private readonly lastModel = new Map<string, string>();
+  private readonly lastModel = this.perDevice.map<string>();
   /**
    * The model each device object remembers from an earlier run (`native.model`, or its profile) —
    * what `orphanOfModel` needs for a device that is off and whose profile a schema bump emptied.
    */
-  private readonly storedModels = new Map<string, string>();
+  private readonly storedModels = this.perDevice.map<string>();
 
   /** The label this adapter wrote per device, with the rank of the source behind it. */
-  private readonly deviceLabels = new Map<string, { name: string; rank: LabelRank }>();
+  private readonly deviceLabels = this.perDevice.map<{ name: string; rank: LabelRank }>();
 
   /**
    * Give the device node a name a user recognises, once the device reports one.
