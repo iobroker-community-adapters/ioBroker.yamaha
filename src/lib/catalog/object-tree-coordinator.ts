@@ -1,4 +1,4 @@
-import { channelCommon, type ObjectDef } from "./types";
+import { parentChannels, type ObjectDef } from "./types";
 import { canonicalIdOf, capabilityKeyOf, pickOwner, STATES_VOCABULARY, type Transport } from "./owner-policy";
 import { translateDeclaredStates } from "./musiccast-vocabulary";
 
@@ -123,14 +123,7 @@ export function coordinateObjectTree(contributions: readonly TransportObjects[])
   // This is the one place that knows the canonical ids, so it is the one place that can close it.
   const present = new Set(resolved.map(object => object.id));
   for (const object of [...resolved]) {
-    const segments = object.id.split(".");
-    for (let i = 1; i < segments.length; i++) {
-      const channelId = segments.slice(0, i).join(".");
-      if (!present.has(channelId)) {
-        present.add(channelId);
-        resolved.push({ id: channelId, type: "channel", common: channelCommon(segments[i - 1]) });
-      }
-    }
+    resolved.push(...parentChannels(object.id, present));
   }
   // Parents before children: shallower id paths (fewer dotted segments) first. Array.sort is
   // stable (ES2019+), so equal-depth objects keep their first-seen order.

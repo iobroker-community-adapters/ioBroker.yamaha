@@ -1,12 +1,17 @@
 import { channelCommon, type ObjectDef } from "../catalog/types";
-import { canonicalIdOf, ZONE_PREFIX, type Transport } from "../catalog/owner-policy";
+import { canonicalIdOf, ID_DRIFT, ZONE_PREFIX, type Transport } from "../catalog/owner-policy";
 import type { TransportConnection } from "./multi-transport-handle";
 
-/** Inverse of the id drifts: canonical template → the transport's own template (for routing writes back). */
-const INVERSE_DRIFT: Partial<Record<Transport, Readonly<Record<string, string>>>> = {
-  yxc: { "sound.subwooferTrim": "subwooferVolume", "multiroom.party": "multiroom.partyEnable" },
-  xml: { "hdmi.out1": "hdmiOut1", "hdmi.out2": "hdmiOut2" },
-};
+/**
+ * Inverse of the id drifts: canonical template → the transport's own template (for routing writes back).
+ * Derived from `ID_DRIFT`, so a new drift cannot be forgotten on the way back (audit 2026-09-29, C46).
+ */
+const INVERSE_DRIFT: Partial<Record<Transport, Readonly<Record<string, string>>>> = Object.fromEntries(
+  Object.entries(ID_DRIFT).map(([transport, drift]) => [
+    transport,
+    Object.fromEntries(Object.entries(drift ?? {}).map(([own, canonical]) => [canonical, own])),
+  ]),
+);
 
 /** The controller shape the adapter drives — a {@link import("../controller").ConnectionHandle} plus its async start. */
 export interface AdaptedController {

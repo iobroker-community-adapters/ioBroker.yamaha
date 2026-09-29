@@ -1,6 +1,6 @@
 import { MEDIA_STATE } from "../catalog/media-state";
 import type { StateValue } from "../types";
-import { YXC_ZONE_IDS, zonePrefix } from "./zones";
+import { splitZone, YXC_ZONE_IDS, zonePrefix } from "./zones";
 import type { I18nKey } from "../i18n";
 import { coerceBool, isWritableValue } from "../catalog/value-coerce";
 import { formatPlayTime } from "../catalog/play-time";
@@ -270,13 +270,7 @@ export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefi
   if (clock) {
     return clock;
   }
-  let zone = "main";
-  let name = stateId;
-  const zoneMatch = /^multiroom\.(zone[234])\.(.+)$/.exec(stateId);
-  if (zoneMatch) {
-    zone = zoneMatch[1];
-    name = zoneMatch[2];
-  }
+  const { zone, name } = splitZone(stateId);
   // Scene recall (#615) and the on-screen remote — zone-scoped, device-verified endpoints.
   if (name === "scene.recall" && isWritableValue(value, true)) {
     const num = Math.round(Number(value));

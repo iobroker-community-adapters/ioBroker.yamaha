@@ -67,7 +67,7 @@ describe("YXC_AMP_CATALOG", () => {
       // Dropping the zone makes every write land in the main zone — the classic
       // "zone 2 volume changes the living room" bug.
       const carriesZone = calls[0].args.includes("zone2");
-      const zoneless = ["multiroom.party", "multiroom.partyEnable"];
+      const zoneless = ["multiroom.party"];
       expect(carriesZone || zoneless.some(z => entry.state.startsWith(z)), `${entry.state} lost its zone`).toBe(true);
     }
   });

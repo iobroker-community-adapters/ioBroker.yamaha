@@ -92,7 +92,6 @@ describe("capabilityKeyOf — the transport-neutral key from a transport's state
     expect(capabilityKeyOf("ynca", "sound.bass")).toBe("sound.bass");
     expect(capabilityKeyOf("ynca", "sound.treble")).toBe("sound.treble");
     expect(capabilityKeyOf("yxc", "subwooferVolume")).toBe("sound.subwooferTrim");
-    expect(capabilityKeyOf("yxc", "multiroom.partyEnable")).toBe("multiroom.party");
     expect(capabilityKeyOf("xml", "hdmiOut1")).toBe("hdmi.out1");
     expect(capabilityKeyOf("xml", "hdmiOut2")).toBe("hdmi.out2");
   });
@@ -114,7 +113,6 @@ describe("canonicalIdOf — the drift-resolved object id, zone prefix kept", () 
   test("resolves the drift but keeps the zone prefix (the per-zone tree node)", () => {
     expect(canonicalIdOf("ynca", "sound.bass")).toBe("sound.bass");
     expect(canonicalIdOf("ynca", "multiroom.zone2.sound.bass")).toBe("multiroom.zone2.sound.bass");
-    expect(canonicalIdOf("yxc", "multiroom.partyEnable")).toBe("multiroom.party");
     expect(canonicalIdOf("xml", "hdmiOut1")).toBe("hdmi.out1");
   });
 

@@ -589,21 +589,8 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     read: { field: "distribution_enable" },
     fromStatus: bool,
   },
-  {
-    state: "multiroom.partyEnable",
-    common: {
-      nameKey: "partyModeAllZones",
-      descKey: "descPartyModeAllZones",
-      type: "boolean",
-      role: "switch",
-      read: true,
-      write: true,
-    },
-    // Only where the device declares party mode (system func_list: 3 of the 22 captures — RX-A2070,
-    // RX-V685, RX-V781); a speaker or soundbar got a party switch that did nothing (C10).
-    create: { kind: "systemFunc", func: "party_mode" },
-    read: { field: "party_enable" },
-    fromStatus: bool,
-    write: { apply: (c, v) => c.setPartyMode(Boolean(v)) },
-  },
+  // Party mode is NOT read here: getStatus `party_enable` and getFuncStatus `party_mode` both fed
+  // `multiroom.party`, refreshed at different moments, so the value could flip between the two. The
+  // system catalog's documented pair (`party_mode` / setPartyMode, YXC Basic Rev 1.10 §4.21/§4.27) is
+  // the one source (audit 2026-09-29, C46).
 ];

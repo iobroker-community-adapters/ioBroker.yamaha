@@ -1,5 +1,5 @@
 import { MEDIA_STATE_LABELS } from "../catalog/media-state";
-import { channelCommon, zoneRole, type ObjectDef } from "../catalog/types";
+import { channelCommon, keyedCommon, parentChannels, zoneRole, type ObjectDef } from "../catalog/types";
 import { YXC_CURSOR_VALUES, YXC_MENU_VALUES } from "./remote";
 import { tName, type I18nKey } from "../i18n";
 import { YXC_ZONE_IDS, zonePrefix } from "./zones";
@@ -221,14 +221,11 @@ function pushPlayerBlock(
 ): void {
   objects.push({ id: prefix, type: "channel", common: { name: channelName } });
   for (const player of PLAYER_STATES) {
-    const { nameKey: playerNameKey, descKey: playerDescKey, ...playerCommon } = player.common;
     objects.push({
       id: `${prefix}.${player.state}`,
       type: "state",
       common: {
-        ...playerCommon,
-        name: tName(playerNameKey),
-        ...(playerDescKey ? { desc: tName(playerDescKey) } : {}),
+        ...keyedCommon(player.common),
         ...(settableModes && (player.state === "repeat" || player.state === "shuffle") ? { write: true } : {}),
       },
     });
@@ -579,26 +576,9 @@ export function mapYxcToObjects(
     // named from the shared CHANNEL_NAMES table (a zone exists only with an entry).
     for (const entry of entries) {
       const fullId = `${zoneDef.prefix}${entry.state}`;
-      const segments = fullId.split(".");
-      for (let i = 1; i < segments.length; i++) {
-        const channelId = segments.slice(0, i).join(".");
-        if (!channels.has(channelId)) {
-          channels.add(channelId);
-          const segment = segments[i - 1];
-          objects.push({
-            id: channelId,
-            type: "channel",
-            common: channelCommon(segment),
-          });
-        }
-      }
-      const { nameKey: entryNameKey, descKey: entryDescKey, ...entryRest } = entry.common;
-      const common: ObjectDef["common"] = {
-        ...entryRest,
-        role: zoneRole(entryRest.role, zoneDef.prefix),
-        name: tName(entryNameKey),
-        ...(entryDescKey ? { desc: tName(entryDescKey) } : {}),
-      };
+      objects.push(...parentChannels(fullId, channels));
+      const keyed = keyedCommon(entry.common);
+      const common: ObjectDef["common"] = { ...keyed, role: zoneRole(keyed.role, zoneDef.prefix) };
       // The device declares the bounds of its own numeric controls in `range_step`; whatever
       // it says wins over anything the catalog could guess. Only `volume` used to be read
       // (audit 2026-09-06) — bass, treble, subwoofer trim, dialogue level/lift, DTS dialogue

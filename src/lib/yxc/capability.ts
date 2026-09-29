@@ -182,34 +182,6 @@ function parseRanges(rangeStep: unknown): Record<string, { min: number; max: num
 }
 
 /**
- * One id's range — {@link parseRanges} for a single lookup.
- *
- * @param rangeStep the `range_step` array
- * @param id the range id to look for
- * @returns the range, or undefined if not reported
- */
-function parseRange(rangeStep: unknown, id: string): { min: number; max: number; step: number } | undefined {
-  if (!Array.isArray(rangeStep)) {
-    return undefined;
-  }
-  for (const entry of rangeStep) {
-    if (typeof entry !== "object" || entry === null) {
-      continue;
-    }
-    const range = entry as Record<string, unknown>;
-    if (
-      range.id === id &&
-      typeof range.min === "number" &&
-      typeof range.max === "number" &&
-      typeof range.step === "number"
-    ) {
-      return { min: range.min, max: range.max, step: range.step };
-    }
-  }
-  return undefined;
-}
-
-/**
  * The getFeatures zone list fields that carry a zone's allowed values, mapped to the
  * unified state id whose dropdown they feed (capture-verified field names).
  */
@@ -291,7 +263,7 @@ function parseClockFeatures(clock: unknown): YxcClockFeatures | undefined {
   return {
     funcs: stringList(obj.func_list),
     alarmModes: stringList(obj.alarm_mode_list),
-    alarmVolumeRange: parseRange(obj.range_step, "alarm_volume"),
+    alarmVolumeRange: parseRanges(obj.range_step).alarm_volume,
   };
 }
 

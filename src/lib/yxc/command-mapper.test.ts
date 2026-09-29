@@ -110,12 +110,13 @@ describe("parseYxcStatus", () => {
     expect(u).toContainEqual({ id: "sound.contentsDisplay", value: true });
   });
 
-  test("reads the always-present getStatus fields (max volume, distribution, party)", () => {
+  test("reads the always-present getStatus fields (max volume, distribution) — party comes from getFuncStatus", () => {
     const status = { max_volume: 161, distribution_enable: true, party_enable: false };
     const u = parseYxcStatus(status, "main");
     expect(u).toContainEqual({ id: "advanced.maxVolume", value: 161 });
     expect(u).toContainEqual({ id: "multiroom.group.streamingEnabled", value: true });
-    expect(u).toContainEqual({ id: "multiroom.partyEnable", value: false });
+    // One party source (audit 2026-09-29, C46).
+    expect(u.map(update => update.id)).not.toContain("multiroom.partyEnable");
   });
 
   test("a zone status never yields zone-prefixed copies of the device-global multiroom states", () => {
@@ -167,7 +168,7 @@ describe("stateToYxc control methods (repeat/shuffle/tray, tuner, party, preset)
     });
   });
 
-  test("tuner band/frequency, preset and party become their control commands", async () => {
+  test("tuner band/frequency and preset become their control commands", () => {
     // The band is declarative too: the controller must record it right away, because a
     // frequency written straight afterwards is sent against the remembered band.
     expect(stateToYxc("tuner.band", "fm")).toEqual({ kind: "tunerBand", band: "fm" });
@@ -176,7 +177,6 @@ describe("stateToYxc control methods (repeat/shuffle/tray, tuner, party, preset)
     // Declarative: a recall also switches its target zone to the source, so the controller
     // picks the zone that is actually listening — the mapper cannot know it.
     expect(stateToYxc("player.netPlayer.preset", 3)).toEqual({ kind: "netusbPreset", value: 3 });
-    expect(await ranCall("multiroom.partyEnable", true)).toEqual(["setPartyMode", [true]]);
   });
 
   test("equalizer bands stay declarative (main and zoned) — the controller supplies the other two", () => {

@@ -210,6 +210,44 @@ export const CHANNEL_NAME_KEYS: Record<string, I18nKey> = {
 };
 
 /**
+ * The channel objects an id still lacks above it, parents first — every builder names its folders from
+ * the one table ({@link channelCommon}); the loop stood five times (audit 2026-09-29, C46).
+ *
+ * @param id the object id
+ * @param seen the ids created (or present) so far — extended with the returned ones
+ * @returns the missing parent channels, shallowest first
+ */
+export function parentChannels(id: string, seen: Set<string>): ObjectDef[] {
+  const parents: ObjectDef[] = [];
+  const segments = id.split(".");
+  for (let i = 1; i < segments.length; i++) {
+    const channelId = segments.slice(0, i).join(".");
+    if (!seen.has(channelId)) {
+      seen.add(channelId);
+      parents.push({ id: channelId, type: "channel", common: channelCommon(segments[i - 1]) });
+    }
+  }
+  return parents;
+}
+
+/**
+ * A catalog `common` with its name and explanation KEYS turned into translation objects — the one
+ * resolution for the MusicCast and XML tables, which carry keys because they are module constants.
+ *
+ * @param common the catalog common (`nameKey`, optional `descKey`, the rest as is)
+ * @param common.nameKey the name key
+ * @param common.descKey the explanation key, absent for a self-explaining datapoint
+ * @returns the object common
+ */
+export function keyedCommon<C extends { nameKey: I18nKey; descKey?: I18nKey }>({
+  nameKey,
+  descKey,
+  ...rest
+}: C): Omit<C, "nameKey" | "descKey"> & { name: ioBroker.StringOrTranslated; desc?: ioBroker.StringOrTranslated } {
+  return { ...rest, name: tName(nameKey), ...(descKey ? { desc: tName(descKey) } : {}) };
+}
+
+/**
  * The role a datapoint takes in its zone: a zone's power switch is `switch.power.zone` (ioBroker state
  * roles), the main zone's stays `switch.power` (audit 2026-09-29, C41). One rule for the three
  * transports, so a zone's switch reads alike whichever owns it.

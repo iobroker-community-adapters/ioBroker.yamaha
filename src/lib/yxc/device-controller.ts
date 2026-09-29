@@ -59,9 +59,9 @@ import { coerceBool } from "../catalog/value-coerce";
 import { PollDropDetector } from "../lifecycle/poll-drop-detector";
 import { YxcRefusalError, YxcTransportError } from "./http-client";
 import type { ProbeMemory } from "../lifecycle/probe-memory";
-import { zonePrefix } from "./zones";
+import { splitZone, zonePrefix } from "./zones";
 import { presentSystemEntries, type YxcSystemEntry } from "./system-catalog";
-import { channelCommon } from "../catalog/types";
+import { keyedCommon, parentChannels } from "../catalog/types";
 import { knownScenes, resolveSceneNumber, sceneListSurface } from "../catalog/scene-titles";
 import type { CommandGate } from "../lifecycle/command-gate";
 import type { BrowseEngine } from "../browse/browse-engine";
@@ -611,24 +611,10 @@ export class YxcDeviceController implements ConnectionHandle {
     }
     const parents = new Set<string>();
     for (const entry of this.systemEntries) {
-      const segments = entry.state.split(".");
-      for (let i = 1; i < segments.length; i++) {
-        const channelId = segments.slice(0, i).join(".");
-        if (!parents.has(channelId)) {
-          parents.add(channelId);
-          await this.deps.upsertObject(`${this.deviceId}.${channelId}`, {
-            id: channelId,
-            type: "channel",
-            common: channelCommon(segments[i - 1]),
-          });
-        }
+      for (const parent of parentChannels(entry.state, parents)) {
+        await this.deps.upsertObject(`${this.deviceId}.${parent.id}`, parent);
       }
-      const { nameKey, descKey, ...rest } = entry.common;
-      const common: ObjectDef["common"] = {
-        ...rest,
-        name: tName(nameKey),
-        ...(descKey ? { desc: tName(descKey) } : {}),
-      };
+      const common: ObjectDef["common"] = keyedCommon(entry.common);
       const range = entry.rangeId ? capabilities.systemRanges?.[entry.rangeId] : undefined;
       if (range) {
         common.min = range.min;
@@ -788,9 +774,8 @@ export class YxcDeviceController implements ConnectionHandle {
     }
     // A scene TITLE resolves to its number via the shared device memory — the titles may
     // have come over XML or YNCA while MusicCast owns the recall.
-    const sceneMatch = /^(?:multiroom\.(zone[234])\.)?scene\.recall$/.exec(stateId);
-    if (sceneMatch && typeof value === "string" && !/^\d+$/.test(value.trim())) {
-      const zoneKey = sceneMatch[1] ?? "main";
+    const { zone: zoneKey, name } = splitZone(stateId);
+    if (name === "scene.recall" && typeof value === "string" && !/^\d+$/.test(value.trim())) {
       const resolved = resolveSceneNumber(value, this.deps.probeMemory, zoneKey);
       if (resolved === undefined) {
         // Same rule as the YNCA side: a write that goes nowhere leaves a trace.
@@ -832,17 +817,21 @@ export class YxcDeviceController implements ConnectionHandle {
     // The on-screen remote: a word the zone DECLARES (cursor_list/menu_list) goes to the device
     // even where the shared vocabulary lacks it — help, mode and the four colour keys exist on
     // some models only. A word in neither list is dropped by the vocabulary check below.
-    const remoteMatch = /^(?:multiroom\.(zone[234])\.)?remote\.(cursor|menu)$/.exec(stateId);
-    if (remoteMatch && typeof value === "string") {
-      const zone = remoteMatch[1] ?? "main";
-      const listId = remoteMatch[2] === "cursor" ? "remote.cursor" : "remote.menu";
-      if (this.zoneValueLists.get(zone)?.[listId]?.includes(value)) {
+    if ((name === "remote.cursor" || name === "remote.menu") && typeof value === "string") {
+      const declared = this.zoneValueLists.get(zoneKey)?.[name];
+      if (declared?.includes(value)) {
         const word = value;
         void this.applyCommand(stateId, {
           kind: "run",
           run: client =>
-            listId === "remote.cursor" ? client.controlCursor(word, zone) : client.controlMenu(word, zone),
+            name === "remote.cursor" ? client.controlCursor(word, zoneKey) : client.controlMenu(word, zoneKey),
         });
+        return;
+      }
+      // A zone that declares its keys takes those and no other — the shared vocabulary below is for a
+      // zone without a list; before, a word the zone does not have still went out (audit 2026-09-29, C46).
+      if (declared !== undefined) {
+        this.deps.log.debug(`${this.deviceId}: ${stateId} "${value}" is not a key this zone declares — not sent`);
         return;
       }
     }
@@ -853,10 +842,9 @@ export class YxcDeviceController implements ConnectionHandle {
     // A function the zone reports not operable right now (YXC Basic §5.1 `disable_flags`: b0 volume,
     // b1 mute, b2 link audio delay — a soundbar in standby reports 3) is not sent: the device would
     // refuse it with a warning; the datapoint gets the device's value back (audit 2026-09-24, C27).
-    const blocked = /^(?:multiroom\.(zone[234])\.)?(volume|mute|sound\.linkAudioDelay)$/.exec(stateId);
-    if (blocked) {
-      const zone = blocked[1] ?? "main";
-      const bit = { volume: 0b1, mute: 0b10, "sound.linkAudioDelay": 0b100 }[blocked[2]] ?? 0;
+    const bit = ({ volume: 0b1, mute: 0b10, "sound.linkAudioDelay": 0b100 } as Record<string, number>)[name];
+    if (bit !== undefined) {
+      const zone = zoneKey;
       if (((this.disabledFlags.get(zone) ?? 0) & bit) !== 0) {
         this.deps.log.debug(`${this.deviceId}: ${stateId} is not operable on the device right now — not sent`);
         this.coalesced(`zone:${zone}`, () => this.refreshZone(zone));
@@ -2313,7 +2301,7 @@ export class YxcDeviceController implements ConnectionHandle {
           }
           return;
         }
-        const zone = /^multiroom\.(zone[234])\./.exec(stateId)?.[1] ?? "main";
+        const { zone } = splitZone(stateId);
         if (this.zones.includes(zone)) {
           await this.refreshZone(zone);
         }

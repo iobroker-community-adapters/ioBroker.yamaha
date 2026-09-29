@@ -320,11 +320,11 @@ function setup(
 describe("YxcDeviceController", () => {
   // The update from 2.12.0 left a speaker's party switch and a zone's maximum volume behind: the
   // controller now says what its declaration proves absent, so the adapter removes them at once.
-  test("start() reports what getFeatures proves absent — a speaker's party switch among it", async () => {
+  test("start() reports what getFeatures proves absent, and builds none of it", async () => {
     const absent: string[] = [];
     const s = setup(wx10, ysp, {}, undefined, { reportDeclaredAbsent: ids => void absent.push(...ids) });
     await s.controller.start();
-    expect(absent).toContain("multiroom.partyEnable");
+    expect(absent.length).toBeGreaterThan(0);
     expect(absent.filter(id => s.objects.includes(`living.${id}`))).toEqual([]);
   });
 
@@ -2557,6 +2557,25 @@ describe("YxcDeviceController cover address", () => {
     expect(await coverAfterPush(2.08, "/YamahaRemoteControl/AlbumART/AlbumART.jpg", 5708)).toBe(
       "http://10.0.0.5/YamahaRemoteControl/AlbumART/AlbumART.jpg?id=5708",
     );
+  });
+});
+
+// A zone that declares its remote keys (`cursor_list`) takes those and no other; the shared vocabulary
+// is for a zone without a list (audit 2026-09-29, C46).
+describe("YxcDeviceController remote keys", () => {
+  test("a declared key goes out, a vocabulary word the zone does not declare is not sent", async () => {
+    const features = {
+      zone: [{ id: "main", func_list: ["power", "cursor"], cursor_list: ["up", "down", "select"] }],
+    };
+    const s = setup(features, ysp);
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.remote.cursor", false, "up");
+    s.controller.handleStateChange("living.remote.cursor", false, "return");
+    await flush();
+    expect(s.client.calls.filter(c => c.method === "controlCursor")).toEqual([
+      { method: "controlCursor", args: ["up", "main"] },
+    ]);
   });
 });
 

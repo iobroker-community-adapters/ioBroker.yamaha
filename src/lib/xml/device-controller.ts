@@ -1,4 +1,4 @@
-import { channelCommon, zoneRole, type ObjectDef } from "../catalog/types";
+import { channelCommon, keyedCommon, parentChannels, zoneRole, type ObjectDef } from "../catalog/types";
 import { textWriteProblem, writableNumber } from "../catalog/value-coerce";
 import { tName } from "../i18n";
 import {
@@ -947,30 +947,16 @@ export class XmlDeviceController implements ConnectionHandle {
         continue;
       }
       const stateId = `${zone.prefix}${entry.state}`;
-      // A dotted state (e.g. scene.recall) needs its parent channel created first.
-      const segments = stateId.split(".");
-      for (let i = 1; i < segments.length; i++) {
-        const channelId = segments.slice(0, i).join(".");
-        if (!createdChannels.has(channelId)) {
-          createdChannels.add(channelId);
-          await this.deps.upsertObject(`${this.deviceId}.${channelId}`, {
-            id: channelId,
-            type: "channel",
-            // Name AND explanation from the one shared table, so the same folder cannot end
-            // up called "sound" here and "Sound" there depending on which transport owns it.
-            common: channelCommon(segments[i - 1]),
-          });
-        }
+      // A dotted state (e.g. scene.recall) needs its parent channel created first — named AND
+      // explained from the one shared table, so the same folder cannot end up called "sound" here
+      // and "Sound" there depending on which transport owns it.
+      for (const parent of parentChannels(stateId, createdChannels)) {
+        await this.deps.upsertObject(`${this.deviceId}.${parent.id}`, parent);
       }
-      const { nameKey, descKey, ...rest } = entry.common;
-      const common: ObjectDef["common"] = {
-        ...rest,
-        role: zoneRole(rest.role, zone.prefix),
-        name: tName(nameKey),
-        // An absent key means the datapoint explains itself — the fleet standard wants the
-        // field empty there rather than filled with invented prose.
-        ...(descKey ? { desc: tName(descKey) } : {}),
-      };
+      // An absent explanation key means the datapoint explains itself — the fleet standard wants
+      // the field empty there rather than filled with invented prose.
+      const keyed = keyedCommon(entry.common);
+      const common: ObjectDef["common"] = { ...keyed, role: zoneRole(keyed.role, zone.prefix) };
       // The device's own lists become the dropdowns — DECLARED, so the coordinator puts them on
       // the YNCA-owned datapoint too (#619): the zone's `Input_Sel_Item` list, and from the
       // device description the sound programs (main zone), the sleep steps and the Adaptive

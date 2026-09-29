@@ -126,16 +126,13 @@ describe("mapYxcToObjects", () => {
     expect(ids).toContain("multiroom.group.streamingEnabled");
   });
 
-  // A party switch on a speaker did nothing; the device declares party mode in its system
-  // func_list (3 of 22 captures), and only there the switch exists (audit 2026-09-24, C10).
-  test("the party switch exists only where the device declares party mode", () => {
+  // The party switch comes from getFuncStatus `party_mode` alone (the system catalog, built where the
+  // device answers the field); the zone status no longer builds a second one (audit 2026-09-29, C46).
+  test("the zone status builds no party switch — the device-wide settings do", () => {
     const zones = [{ id: "main", funcs: ["power"], inputs: [] }];
-    const speaker = mapYxcToObjects({ zones, media: [], systemFuncs: ["dimmer"] }).map(o => o.id);
-    expect(speaker).not.toContain("multiroom.partyEnable");
     const receiver = mapYxcToObjects({ zones, media: [], systemFuncs: ["party_mode"] }).map(o => o.id);
-    expect(receiver).toContain("multiroom.partyEnable");
-    expect(ids(rxA2070)).toContain("multiroom.partyEnable");
-    expect(ids(wx10)).not.toContain("multiroom.partyEnable");
+    expect(receiver).not.toContain("multiroom.partyEnable");
+    expect(ids(rxA2070)).not.toContain("multiroom.partyEnable");
   });
 
   test("a zoned device never gets zone-prefixed copies of the device-global multiroom states", () => {
@@ -334,7 +331,7 @@ describe("yxcDeclaredAbsent", () => {
     expect(receiver).toContain("multiroom.zone4.advanced.maxVolume");
     expect(receiver).not.toContain("advanced.maxVolume");
     const speaker = yxcDeclaredAbsent(parseYxcFeatures(wx10));
-    expect(speaker).toContain("multiroom.partyEnable");
+    expect(speaker).not.toContain("multiroom.partyEnable");
   });
 
   it("never names a datapoint the same declaration builds", () => {

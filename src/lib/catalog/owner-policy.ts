@@ -120,8 +120,8 @@ export const ZONE_PREFIX = /^multiroom\.zone[234]\./;
  * (census §3f, verified against the catalogs). The canonical key is the census left column; the
  * transports not listed already use the canonical id. Zone prefixes are stripped separately.
  */
-const ID_DRIFT: Partial<Record<Transport, Readonly<Record<string, string>>>> = {
-  yxc: { subwooferVolume: "sound.subwooferTrim", "multiroom.partyEnable": "multiroom.party" },
+export const ID_DRIFT: Partial<Record<Transport, Readonly<Record<string, string>>>> = {
+  yxc: { subwooferVolume: "sound.subwooferTrim" },
   xml: { hdmiOut1: "hdmi.out1", hdmiOut2: "hdmi.out2" },
 };
 
