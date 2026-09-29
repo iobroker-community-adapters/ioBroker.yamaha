@@ -6,6 +6,7 @@ import { XmlHttpError, type BasicStatus, type XmlSystemConfig } from "./protocol
 import { CommandGate } from "../lifecycle/command-gate";
 import { ProbeMemory } from "../lifecycle/probe-memory";
 import { DISCOVERY_SCHEMA } from "../lifecycle/discovery-schema";
+import { MEDIA_STATE } from "../catalog/media-state";
 
 /** A real command gate for the controller under test (pacing has its own suite). */
 const testGate = (): CommandGate =>
@@ -131,6 +132,7 @@ function setup(
           warnings.push(line);
         },
       },
+      host: "192.0.2.10",
     },
     pollIntervalMs,
   );
@@ -1564,5 +1566,95 @@ describe("XmlDeviceController all-zones power", () => {
     s.controller.handleStateChange("living.multiroom.masterPower", false, true);
     await new Promise(resolve => setImmediate(resolve));
     expect(s.client.calls.filter(c => c.method === "send")).toEqual([]);
+  });
+});
+
+describe("XmlDeviceController player block from the source's Play_Info (audit 2026-09-29, D3)", () => {
+  const INPUTS = "<Input><Input_Sel_Item>GetParam</Input_Sel_Item></Input>";
+  const PLAY_INFO = "<Play_Info>GetParam</Play_Info>";
+  // The RX-V6A input list shape: every input names the element behind it in <Src_Name>.
+  const inputList =
+    '<YAMAHA_AV rsp="GET" RC="0"><Main_Zone><Input><Input_Sel_Item>' +
+    "<Item_1><Param>NET RADIO</Param><RW>RW</RW><Title></Title><Src_Name>NET_RADIO</Src_Name><Src_Number>1</Src_Number></Item_1>" +
+    "<Item_2><Param>HDMI1</Param><RW>RW</RW><Title></Title><Src_Name></Src_Name><Src_Number>1</Src_Number></Item_2>" +
+    "</Input_Sel_Item></Input></Main_Zone></YAMAHA_AV>";
+  // The RX-V6A NET_RADIO capture shape, with a station playing.
+  const playing =
+    '<YAMAHA_AV rsp="GET" RC="0"><NET_RADIO><Play_Info><Feature_Availability>Ready</Feature_Availability>' +
+    "<Playback_Info>Play</Playback_Info><Time><Elapsed></Elapsed></Time><Meta_Info><Station>Radio &amp; Co</Station>" +
+    "<Album></Album><Song>Blue</Song></Meta_Info><Album_ART><URL>/YamahaRemoteControl/AlbumART/AlbumART.jpg</URL>" +
+    "<ID>41</ID><Format>JPEG</Format></Album_ART></Play_Info></NET_RADIO></YAMAHA_AV>";
+
+  test("a zone on a media input shows what its source plays, under player.*", async () => {
+    const s = setup({ Main_Zone: { power: true, input: "NET RADIO" } });
+    s.client.xmlAnswers[`Main_Zone|${INPUTS}`] = inputList;
+    s.client.xmlAnswers[`NET_RADIO|${PLAY_INFO}`] = playing;
+    await s.controller.start();
+    expect(s.acks).toEqual(
+      expect.arrayContaining([
+        { id: "living.player.source", value: "NET RADIO" },
+        { id: "living.player.playback", value: MEDIA_STATE.play },
+        { id: "living.player.station", value: "Radio & Co" },
+        { id: "living.player.track", value: "Blue" },
+        { id: "living.player.album", value: "" },
+        {
+          id: "living.player.albumArt",
+          value: "http://192.0.2.10/YamahaRemoteControl/AlbumART/AlbumART.jpg?id=41",
+        },
+      ]),
+    );
+    // Claim with proof: NET_RADIO names no artist and reports no play mode, so none is built.
+    expect(s.objects).not.toContain("living.player.artist");
+    expect(s.objects).not.toContain("living.player.repeat");
+    expect(s.objects).toContain("living.player");
+  });
+
+  test("a zone on a socket reads no Play_Info and builds no player block", async () => {
+    const s = setup({ Main_Zone: { power: true, input: "HDMI1" } });
+    s.client.xmlAnswers[`Main_Zone|${INPUTS}`] = inputList;
+    s.client.xmlAnswers[`NET_RADIO|${PLAY_INFO}`] = playing;
+    await s.controller.start();
+    expect(s.client.calls.some(c => c.zone === "NET_RADIO" && c.inner === PLAY_INFO)).toBe(false);
+    expect(s.objects.filter(id => id.startsWith("living.player"))).toEqual([]);
+  });
+
+  test("a zone that leaves its source clears the block on the next poll", async () => {
+    const statuses: Record<string, BasicStatus> = { Main_Zone: { power: true, input: "NET RADIO" } };
+    const s = setup(statuses);
+    s.client.xmlAnswers[`Main_Zone|${INPUTS}`] = inputList;
+    s.client.xmlAnswers[`NET_RADIO|${PLAY_INFO}`] = playing;
+    await s.controller.start();
+    statuses.Main_Zone = { power: true, input: "HDMI1" };
+    s.acks.length = 0;
+    s.fire.keepalive?.();
+    await flush();
+    await flush();
+    expect(s.acks).toEqual(
+      expect.arrayContaining([
+        { id: "living.player.source", value: "" },
+        { id: "living.player.playback", value: MEDIA_STATE.stop },
+        { id: "living.player.station", value: "" },
+        { id: "living.player.track", value: "" },
+        { id: "living.player.albumArt", value: "" },
+      ]),
+    );
+  });
+
+  test("a transport key reads the player block back", async () => {
+    const s = setup({ Main_Zone: { power: true, input: "NET RADIO" } });
+    s.client.xmlAnswers[`Main_Zone|${INPUTS}`] = inputList;
+    s.client.xmlAnswers[`NET_RADIO|${PLAY_INFO}`] = playing;
+    s.client.descriptor =
+      '<Unit><Menu><Cmd_List><Define ID="P24">Main_Zone,Play_Control,Playback</Define></Cmd_List></Menu></Unit>';
+    await s.controller.start();
+    expect(s.defs.has("living.player.pause")).toBe(true);
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.player.pause", false, true);
+    await flush();
+    await flush();
+    await flush();
+    expect(s.client.calls.some(c => c.method === "getXml" && c.zone === "NET_RADIO" && c.inner === PLAY_INFO)).toBe(
+      true,
+    );
   });
 });

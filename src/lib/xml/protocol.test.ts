@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { MEDIA_STATE } from "../catalog/media-state";
 import {
   assertXmlOk,
   encodeGet,
@@ -8,6 +9,8 @@ import {
   parseDescriptor,
   parseInputList,
   parseInputLabels,
+  parseInputSources,
+  parsePlayInfo,
   parseReturnCode,
   parseSceneList,
   parseSystemConfig,
@@ -547,5 +550,88 @@ describe("descriptorRanges", () => {
       Main_Zone: { "Volume,Lvl": { min: -80.5, max: 16.5, step: 0.5 } },
       Zone_2: { "Volume,Lvl": { min: -60, max: 0, step: 1 } },
     });
+  });
+});
+
+describe("the player block's source and Play_Info (audit 2026-09-29, D3)", () => {
+  /**
+   * A real XML answer from an inventory fixture (RX-V6A 2020, RX-V3900 2008).
+   *
+   * @param device the fixture device
+   * @param key the answer key (`<element>/<path>`)
+   * @returns the body
+   */
+  const answer = (device: string, key: string): string =>
+    (
+      JSON.parse(readFileSync(join(__dirname, "../../../test/fixtures/inventory", `${device}.json`), "utf8")) as {
+        xml: { answers: Record<string, string> };
+      }
+    ).xml.answers[key];
+
+  test("each input's source element is the Src_Name the device declares — sockets and the tuner name none", () => {
+    const rxv6a = parseInputSources(answer("rxv6a", "Main_Zone/Input"));
+    expect(rxv6a).toMatchObject({ "NET RADIO": "NET_RADIO", "Amazon Music": "Amazon_Music", SERVER: "SERVER" });
+    expect(rxv6a).not.toHaveProperty("HDMI1");
+    expect(rxv6a).not.toHaveProperty("MusicCast Link");
+    expect(rxv6a).not.toHaveProperty("TUNER"); // DAB: the tuner block reads it
+    const rxv3900 = parseInputSources(answer("rxv3900", "Main_Zone/Input"));
+    expect(rxv3900).toMatchObject({ "NET RADIO": "NET_USB", "PC/MCX": "NET_USB", USB: "NET_USB", iPod: "iPod" });
+    expect(rxv3900).not.toHaveProperty("TUNER");
+    expect(rxv3900).not.toHaveProperty("DOCK");
+  });
+
+  test("a 2020 capture: status, the fields the source carries, and no cover for Yamaha's YMF", () => {
+    expect(parsePlayInfo(answer("rxv6a", "NET_RADIO/Play_Info"))).toEqual({
+      playback: MEDIA_STATE.stop,
+      station: "",
+      album: "",
+      track: "",
+      albumArt: "",
+      albumArtId: "",
+    });
+    expect(parsePlayInfo(answer("rxv6a", "Deezer/Play_Info"))).toEqual({
+      playback: MEDIA_STATE.stop,
+      artist: "",
+      album: "",
+      track: "",
+      repeat: 0,
+      shuffle: false,
+      albumArt: "",
+      albumArtId: "",
+    });
+  });
+
+  test("a playing source: its words decoded, the repeat and shuffle codes, the cover path and id", () => {
+    const body =
+      "<SERVER><Play_Info><Playback_Info>Pause</Playback_Info><Play_Mode><Repeat>All</Repeat><Shuffle>On</Shuffle></Play_Mode>" +
+      "<Meta_Info><Artist>A &amp; B</Artist><Album>Live</Album><Song>Intro</Song></Meta_Info>" +
+      "<Album_ART><URL>/YamahaRemoteControl/AlbumART/AlbumART.jpg</URL><ID>7</ID><Format>JPEG</Format></Album_ART></Play_Info></SERVER>";
+    expect(parsePlayInfo(body)).toEqual({
+      playback: MEDIA_STATE.pause,
+      artist: "A & B",
+      album: "Live",
+      track: "Intro",
+      repeat: 2,
+      shuffle: true,
+      albumArt: "/YamahaRemoteControl/AlbumART/AlbumART.jpg",
+      albumArtId: "7",
+    });
+  });
+
+  // RX-V3900 desc.xml: `Title,Artist`/`Title,Album`/`Title,Song`, `Status`, `Play_Mode,Repeat` Off/Single/All
+  // (NET_USB) or Off/One/All (iPod), Shuffle Off/On or Off/Songs/Albums; the iPod titles
+  // `Not Connected`/`Not Ready` "Stop".
+  test("the 2008 shape: Title, Status and the iPod's own words", () => {
+    expect(
+      parsePlayInfo(
+        "<NET_USB><Play_Info><Title><Artist>X</Artist><Album>Y</Album><Song>Z</Song></Title><Status>Play</Status>" +
+          "<Play_Mode><Repeat>Single</Repeat><Shuffle>On</Shuffle></Play_Mode></Play_Info></NET_USB>",
+      ),
+    ).toEqual({ playback: MEDIA_STATE.play, artist: "X", album: "Y", track: "Z", repeat: 1, shuffle: true });
+    expect(
+      parsePlayInfo(
+        "<iPod><Play_Info><Status>Not Connected</Status><Play_Mode><Repeat>One</Repeat><Shuffle>Albums</Shuffle></Play_Mode></Play_Info></iPod>",
+      ),
+    ).toEqual({ playback: MEDIA_STATE.stop, repeat: 1, shuffle: true });
   });
 });

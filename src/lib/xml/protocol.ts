@@ -1,3 +1,4 @@
+import { MEDIA_STATE } from "../catalog/media-state";
 import { decodeXmlText } from "./entities";
 
 /**
@@ -201,6 +202,99 @@ export interface XmlTunerInfo {
    * `Freq,Val/Exp/Unit` read and written (the 2008 RX-V3900).
    */
   freqForm?: "band" | "flat";
+}
+
+/** What a source's `Play_Info` says about the playback (D3). */
+export interface XmlPlayInfo {
+  /** Play / Pause / Stop as the `media.state` code (catalog/media-state.ts). */
+  playback?: number;
+  /** The artist, as the source names it. */
+  artist?: string;
+  /** The album. */
+  album?: string;
+  /** The track (`Song`, or `Track` on the streaming services). */
+  track?: string;
+  /** The station (radio sources). */
+  station?: string;
+  /** The repeat mode as the `media.mode.repeat` code: 0 off, 1 one, 2 all. */
+  repeat?: number;
+  /** Whether shuffle is on. */
+  shuffle?: boolean;
+  /** The cover path the device serves, unless it is Yamaha's encrypted `YMF`. */
+  albumArt?: string;
+  /** The cover's `ID` — it changes with the cover while the path may stay the same (see C36). */
+  albumArtId?: string;
+}
+
+/**
+ * Parse an `<Input_Sel_Item>` response into the source element behind each input — the `<Src_Name>`
+ * the device declares for it (RX-V6A: `NET RADIO` → `NET_RADIO`, `Amazon Music` → `Amazon_Music`;
+ * RX-V3900: `NET RADIO`, `PC/MCX` and `USB` → `NET_USB`). That element answers `Play_Info` for what
+ * the input plays (D3). A socket names none; the tuner (`Tuner`, `DAB`) has its own block and is left
+ * out.
+ *
+ * @param xml the Input_Sel_Item response body
+ * @returns input value → source element, for every input that has a player source
+ */
+export function parseInputSources(xml: string): Record<string, string> {
+  const sources: Record<string, string> = {};
+  const item = /<Item_\d+>([\s\S]*?)<\/Item_\d+>/g;
+  for (let match = item.exec(xml); match; match = item.exec(xml)) {
+    const param = /<Param>([^<]*)<\/Param>/.exec(match[1]);
+    const source = /<Src_Name>([^<]*)<\/Src_Name>/.exec(match[1])?.[1].trim();
+    if (param && source && source !== "Tuner" && source !== "DAB") {
+      sources[decodeXmlText(param[1])] = source;
+    }
+  }
+  return sources;
+}
+
+/**
+ * Parse a source's `Play_Info` (2009+: `Playback_Info`, `Meta_Info`, `Play_Mode`, `Album_ART`; 2008:
+ * `Status`, `Title`, `Play_Mode`) — what the player block of the listening zones shows (D3).
+ *
+ * @param xml the Play_Info response body
+ * @returns the fields it carries
+ */
+export function parsePlayInfo(xml: string): XmlPlayInfo {
+  const info: XmlPlayInfo = {};
+  // The 2008 iPod reports `Not Connected`/`Not Ready` in the same field and titles both "Stop"
+  // (RX-V3900 desc.xml, iPod `Playback`).
+  const status = /<(?:Playback_Info|Status)>(Play|Pause|Stop|Not Ready|Not Connected)<\/(?:Playback_Info|Status)>/.exec(
+    xml,
+  )?.[1];
+  if (status !== undefined) {
+    info.playback = status === "Play" ? MEDIA_STATE.play : status === "Pause" ? MEDIA_STATE.pause : MEDIA_STATE.stop;
+  }
+  const text = (tag: string): string | undefined => {
+    const match = new RegExp(`<${tag}>([^<]*)</${tag}>`).exec(xml);
+    return match ? decodeXmlText(match[1]) : undefined;
+  };
+  info.artist = text("Artist");
+  info.album = text("Album");
+  info.track = text("Song") ?? text("Track");
+  info.station = text("Station");
+  const repeat = text("Repeat");
+  if (repeat !== undefined) {
+    info.repeat = repeat === "All" ? 2 : repeat === "One" || repeat === "Single" ? 1 : 0;
+  }
+  const shuffle = text("Shuffle");
+  if (shuffle !== undefined) {
+    info.shuffle = shuffle !== "Off";
+  }
+  const art = /<Album_ART>([\s\S]*?)<\/Album_ART>/.exec(xml)?.[1];
+  if (art !== undefined) {
+    const field = (tag: string): string => decodeXmlText(new RegExp(`<${tag}>([^<]*)</${tag}>`).exec(art)?.[1] ?? "");
+    // `YMF` is Yamaha's encrypted cover format no client can show (RX-V6A captures: every source).
+    info.albumArt = field("Format") === "YMF" ? "" : field("URL");
+    info.albumArtId = field("ID");
+  }
+  for (const key of Object.keys(info) as Array<keyof XmlPlayInfo>) {
+    if (info[key] === undefined) {
+      delete info[key];
+    }
+  }
+  return info;
 }
 
 /** One stored station as the device declares it in `Preset_Sel_Item` (D2). */

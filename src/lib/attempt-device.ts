@@ -355,6 +355,7 @@ export function attemptDevice(
           log,
           gate,
           probeMemory: deps.probeMemory,
+          host: device.ip,
         },
         deps.xmlPollIntervalMs,
       ),

@@ -8,13 +8,16 @@ import {
   parseInputList,
   parseInputLabels,
   parseSceneList,
+  parsePlayInfo,
   parsePresetList,
+  parseInputSources,
   parseTunerInfo,
   type BasicStatus,
   type XmlDescriptor,
   type XmlDialect,
   type XmlScene,
   type XmlSystemConfig,
+  type XmlPlayInfo,
   type XmlPresetSlot,
   type XmlTunerInfo,
   type XmlZoneForm,
@@ -39,7 +42,9 @@ import { wireFor } from "../browse/types";
 import { sceneListSurface, sceneNumber } from "../catalog/scene-titles";
 import { splitZone } from "../catalog/zone-id";
 import { XML_ZONES, type XmlZone } from "./zones";
-import { TRANSPORT_KEYS } from "../catalog/media-state";
+import { MEDIA_STATE, TRANSPORT_KEYS } from "../catalog/media-state";
+import { PLAYER_DISPLAY_STATES, PLAYER_STATION_STATE } from "../catalog/player-block";
+import { absoluteDeviceUrl, withAlbumArtId } from "../yxc/command-mapper";
 import { decodeXmlText, escapeXmlText } from "./entities";
 
 /** XML/YNC has no push channel, so the state is polled at this interval by default. */
@@ -105,6 +110,8 @@ export interface XmlControllerDeps {
   gate?: CommandGate;
   /** Per-device memory for answers that do not change while the device runs (see ProbeMemory). */
   probeMemory?: ProbeMemory;
+  /** The device's address, for the cover a source reports as a path on the device (D3). */
+  host?: string;
 }
 
 /**
@@ -123,6 +130,12 @@ export class XmlDeviceController implements ConnectionHandle {
   private readonly scenesByZone = new Map<string, XmlScene[]>();
   /** Whether the device answers `<Tuner><Play_Info>` (the classic pre-2010 tuner). */
   private hasTuner = false;
+  /** Each zone's input as its last status reported it — which source its player block shows (D3). */
+  private readonly zoneInput = new Map<string, string>();
+  /** Per zone: input → the source element the device declares for it (`Src_Name`, D3). */
+  private readonly inputSources = new Map<string, Record<string, string>>();
+  /** The player-block states built so far, per zone (built as a source first reports the field). */
+  private readonly playerStates = new Set<string>();
   /** The slots the tuner declares (`Preset_Sel_Item`) — the values a recall takes (D2). */
   private presetSlots: XmlPresetSlot[] = [];
   /** The band the tuner last reported, and how its frequency is spelled (D6). */
@@ -250,6 +263,7 @@ export class XmlDeviceController implements ConnectionHandle {
       );
       inputsByZone.set(zone.key, parseInputList(body));
       inputLabels.set(zone.key, parseInputLabels(body));
+      this.inputSources.set(zone.key, parseInputSources(body));
     }
     // The device description — the classic generation's own enumeration of programs, sleep
     // steps, Adaptive DRC values and the dialogue range (2012–2017; the 2020 generation has none).
@@ -302,6 +316,8 @@ export class XmlDeviceController implements ConnectionHandle {
         this.seedZone(zone, status);
       }
     }
+    // What each zone's source plays — after the seed, which tells the zone's input (D3).
+    await this.refreshPlayers();
     // The model name (already read by the freshness guard) for the device-manager card.
     // Best-effort — a device that does not report it still connects, the line stays empty.
     if (model) {
@@ -754,6 +770,88 @@ export class XmlDeviceController implements ConnectionHandle {
     return true;
   }
 
+  /**
+   * The "now playing" block of every zone listening to a media source: the source's `Play_Info`
+   * (2009+ one element per source, 2008 `NET_USB`/`iPod`) — artist, album, track, station, status,
+   * repeat, shuffle and cover, under the same `player.*` ids YNCA and MusicCast fill. XML read none of
+   * it, so the 2008 generation had no playback information at all (audit 2026-09-29, D3). A state is
+   * built when a source first reports its field; a zone that leaves its source is cleared.
+   */
+  private async refreshPlayers(): Promise<void> {
+    const answers = new Map<string, XmlPlayInfo | undefined>();
+    for (const zone of this.zones) {
+      const input = this.zoneInput.get(zone.key);
+      const source = input === undefined ? undefined : this.inputSources.get(zone.key)?.[input];
+      const prefix = `${zone.prefix}player`;
+      if (source === undefined) {
+        if (this.playerStates.has(`${prefix}.playback`)) {
+          this.clearPlayer(prefix);
+        }
+        continue;
+      }
+      if (!answers.has(source)) {
+        try {
+          answers.set(source, parsePlayInfo(await this.deps.client.getXml(source, "<Play_Info>GetParam</Play_Info>")));
+        } catch (e) {
+          answers.set(source, undefined);
+          this.deps.log.debug(`${this.deviceId}: ${source} Play_Info failed: ${errorMessage(e)}`);
+        }
+      }
+      const info = answers.get(source);
+      if (info === undefined || info.playback === undefined) {
+        continue;
+      }
+      const values: Record<string, boolean | number | string> = { source: input ?? "", ...info };
+      if (typeof info.albumArt === "string") {
+        values.albumArt = withAlbumArtId(absoluteDeviceUrl(info.albumArt, this.deps.host), info.albumArtId);
+      }
+      for (const [state, value] of Object.entries(values)) {
+        const def = [...PLAYER_DISPLAY_STATES, PLAYER_STATION_STATE].find(entry => entry.state === state);
+        if (!def) {
+          continue;
+        }
+        const id = `${prefix}.${state}`;
+        if (!this.playerStates.has(id)) {
+          for (const parent of parentChannels(id, this.createdChannels)) {
+            await this.deps.upsertObject(`${this.deviceId}.${parent.id}`, parent);
+          }
+          await this.deps.upsertObject(`${this.deviceId}.${id}`, {
+            id,
+            type: "state",
+            common: keyedCommon(def.common),
+          });
+          this.playerStates.add(id);
+          this.createdStates.add(id);
+        }
+        this.emit(id, value);
+      }
+    }
+  }
+
+  /**
+   * Clear a player block whose zone left its media source — its old track must not linger.
+   *
+   * @param prefix the block's id prefix (`player`, `multiroom.zone2.player`)
+   */
+  private clearPlayer(prefix: string): void {
+    const cleared: Record<string, boolean | number | string> = {
+      source: "",
+      playback: MEDIA_STATE.stop,
+      artist: "",
+      album: "",
+      track: "",
+      station: "",
+      repeat: 0,
+      shuffle: false,
+      albumArt: "",
+    };
+    for (const [state, value] of Object.entries(cleared)) {
+      if (this.playerStates.has(`${prefix}.${state}`)) {
+        this.emit(`${prefix}.${state}`, value);
+      }
+    }
+  }
+
   /** Poll the tuner's Play_Info (keepalive, read-back) and write the states. */
   private async refreshTuner(): Promise<void> {
     try {
@@ -962,7 +1060,14 @@ export class XmlDeviceController implements ConnectionHandle {
       // The zone to read back afterwards: the command's own element, or the main zone for a
       // command that goes out on the System element (HDMI outputs, party mode).
       const zone = this.zones.find(candidate => candidate.element === command.zone) ?? this.zones[0];
-      void this.applyCommand(command, () => this.refreshZone(zone));
+      // A new input changes which source the zone's player block shows (D3).
+      const players = /(^|\.)input$/.test(stateId);
+      void this.applyCommand(command, async () => {
+        await this.refreshZone(zone);
+        if (players) {
+          await this.refreshPlayers();
+        }
+      });
     } else {
       this.deps.log.debug(`${this.deviceId}: ${stateId} is not writable on this device — write dropped`);
     }
@@ -1038,6 +1143,7 @@ export class XmlDeviceController implements ConnectionHandle {
       if (this.hasSystemPower) {
         await this.refreshSystemPower();
       }
+      await this.refreshPlayers();
       this.dropDetector.record(anyOk);
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: keepalive poll failed: ${errorMessage(e)}`);
@@ -1151,6 +1257,9 @@ export class XmlDeviceController implements ConnectionHandle {
    * @param status the parsed Basic_Status
    */
   private seedZone(zone: XmlZone, status: BasicStatus): void {
+    if (status.input !== undefined) {
+      this.zoneInput.set(zone.key, status.input);
+    }
     // Where no desc.xml declares the zone's form, its own status shows it (the 2020 generation, D6).
     if (status.zoneForm) {
       this.zoneForms.set(zone.element, { ...this.zoneForms.get(zone.element), ...status.zoneForm });
@@ -1425,6 +1534,12 @@ export class XmlDeviceController implements ConnectionHandle {
     } else {
       const word = XML_TRANSPORT_WIRE[command.slice("player.".length)];
       inner = `<Play_Control><Playback>${word}</Playback></Play_Control>`;
+      // A transport key changes what the player block shows — read it back with the zone (D3).
+      void this.applyCommand({ zone: zone.element, inner }, async () => {
+        await this.refreshZone(zone);
+        await this.refreshPlayers();
+      });
+      return true;
     }
     void this.applyCommand({ zone: zone.element, inner }, () => this.refreshZone(zone));
     return true;

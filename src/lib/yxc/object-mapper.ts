@@ -1,4 +1,4 @@
-import { MEDIA_STATE_LABELS } from "../catalog/media-state";
+import { PLAYER_DISPLAY_STATES } from "../catalog/player-block";
 import { channelCommon, keyedCommon, parentChannels, zoneRole, type ObjectDef } from "../catalog/types";
 import { YXC_CURSOR_VALUES, YXC_MENU_VALUES } from "./remote";
 import { tName, type I18nKey } from "../i18n";
@@ -25,116 +25,7 @@ const PLAYER_STATES: Array<{
   state: string;
   common: Omit<ObjectDef["common"], "name"> & { nameKey: I18nKey; descKey?: I18nKey };
 }> = [
-  {
-    // What the zone is playing (the netusb source name, or `cd`) — read-only display;
-    // switching happens over the zone's `input` state.
-    state: "source",
-    common: {
-      nameKey: "playingSource",
-      descKey: "descPlayingSource",
-      type: "string",
-      role: "text",
-      read: true,
-      write: false,
-    },
-  },
-  {
-    state: "playback",
-    common: {
-      // media.state is a number in the type-detector; the role catalog's coding, shared with the YNCA
-      // player (catalog/media-state.ts).
-      nameKey: "playback",
-      type: "number",
-      role: "media.state",
-      read: true,
-      write: false,
-      states: MEDIA_STATE_LABELS,
-    },
-  },
-  { state: "artist", common: { nameKey: "artist", type: "string", role: "media.artist", read: true, write: false } },
-  { state: "album", common: { nameKey: "album", type: "string", role: "media.album", read: true, write: false } },
-  { state: "track", common: { nameKey: "track", type: "string", role: "media.title", read: true, write: false } },
-  // Read-only playback metadata, typed exactly like the YNCA sources so both players
-  // present the same shape on one device: repeat as the media.mode.repeat number code
-  // (wire off/one/all, captures-verified), shuffle as a media.mode.shuffle boolean
-  // (wire knows only off/on). Writable where the device takes setRepeat/setShuffle (API 1.19+,
-  // `pushPlayerBlock`); below that the toggle buttons are the way.
-  {
-    state: "repeat",
-    common: {
-      nameKey: "repeat",
-      type: "number",
-      role: "media.mode.repeat",
-      read: true,
-      write: false,
-      states: { 0: "Off", 1: "Single", 2: "All" },
-    },
-  },
-  {
-    state: "shuffle",
-    common: { nameKey: "shuffle", type: "boolean", role: "media.mode.shuffle", read: true, write: false },
-  },
-  // Both forms of each time, from the one value the device reports: the seconds fill the
-  // type detector's media-player slot (it takes nothing else), the text is what a
-  // visualisation shows. The YNCA side publishes exactly the same pair, converted the other
-  // way round — so the datapoints mean the same thing on every device.
-  {
-    state: "elapsedTime",
-    common: {
-      nameKey: "elapsedTime",
-      descKey: "descElapsedTime",
-      type: "number",
-      unit: "s",
-      role: "media.elapsed",
-      read: true,
-      write: false,
-    },
-  },
-  {
-    state: "elapsedTimeText",
-    common: {
-      nameKey: "elapsedTimeReadable",
-      descKey: "descElapsedTimeReadable",
-      type: "string",
-      role: "media.elapsed.text",
-      read: true,
-      write: false,
-    },
-  },
-  {
-    state: "totalTime",
-    common: {
-      nameKey: "totalTime",
-      descKey: "descTotalTime",
-      type: "number",
-      unit: "s",
-      role: "media.duration",
-      read: true,
-      write: false,
-    },
-  },
-  {
-    state: "totalTimeText",
-    common: {
-      nameKey: "totalTimeReadable",
-      descKey: "descTotalTimeReadable",
-      type: "string",
-      role: "media.duration.text",
-      read: true,
-      write: false,
-    },
-  },
-  {
-    state: "albumArt",
-    common: {
-      nameKey: "albumArt",
-      descKey: "descAlbumArt",
-      type: "string",
-      role: "media.cover",
-      read: true,
-      write: false,
-    },
-  },
+  ...PLAYER_DISPLAY_STATES,
   // Transport buttons carry the type-detector media-player roles so a MusicCast player's
   // controls are recognised as play/pause/stop/next/prev, not generic buttons.
   { state: "play", common: { nameKey: "play", type: "boolean", role: "button.play", read: false, write: true } },
