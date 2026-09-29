@@ -35,7 +35,8 @@ export type YxcCommand =
   | { kind: "tunerBand"; band: string }
   | { kind: "netusbPreset"; value: number }
   | { kind: "netusbRecent"; value: number }
-  | { kind: "playerTransport"; zone: string; action: PlayerTransport };
+  | { kind: "playerTransport"; zone: string; action: PlayerTransport }
+  | { kind: "playerMode"; zone: string; repeat?: "off" | "one" | "all"; shuffle?: "off" | "on" };
 
 /**
  * Read a catalog entry's raw getStatus value — a flat field or a nested path.
@@ -217,6 +218,16 @@ export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefi
       return { kind: "playerTransport", zone, action: action as PlayerTransport };
     }
   }
+  // Repeat and shuffle set directly (API 1.19+, audit 2026-09-29, C37) — in the codes the datapoints
+  // carry: repeat 0/1/2 = off/one/all, shuffle a switch.
+  if (name === "player.repeat" && isWritableValue(value, true)) {
+    const mode = (["off", "one", "all"] as const)[Number(value)];
+    return mode === undefined ? undefined : { kind: "playerMode", zone, repeat: mode };
+  }
+  if (name === "player.shuffle") {
+    const on = coerceBool(value);
+    return on === undefined ? undefined : { kind: "playerMode", zone, shuffle: on ? "on" : "off" };
+  }
   // Volume is declarative because the datapoint carries what the receiver DISPLAYS while
   // setVolume takes only the raw step count. Converting between the two needs the ratio of the
   // pair the device reports in one status answer, and that lives in the controller.
@@ -345,6 +356,23 @@ export function absoluteDeviceUrl(url: string, host: string | undefined): string
   return `http://${host}/${url.replace(/^\/+/, "")}`;
 }
 
+/**
+ * A cover address that changes when the cover does. Several devices serve every cover under ONE fixed
+ * path (`/YamahaRemoteControl/AlbumART/AlbumART.jpg`, YXC Basic Rev 1.10 §7.2) and say "the album art
+ * changed" only by a new `albumart_id` — the datapoint stayed byte-identical and a widget kept showing the
+ * previous track's cover (audit 2026-09-29, C36). The id rides along as a query, so the address changes.
+ *
+ * @param url the cover address ("" = none)
+ * @param id the reported `albumart_id`
+ * @returns the address, with the id appended where there is one
+ */
+export function withAlbumArtId(url: string, id: unknown): string {
+  if (url === "" || (typeof id !== "number" && typeof id !== "string") || `${id}` === "") {
+    return url;
+  }
+  return `${url}${url.includes("?") ? "&" : "?"}id=${encodeURIComponent(`${id}`)}`;
+}
+
 /** The play time YXC reports when there is none (YXC Basic §7.2: "-60000 (invalid)"). */
 const INVALID_PLAY_TIME = -60000;
 
@@ -415,7 +443,7 @@ export function parseYxcPlayInfo(
   // Album art URL and the elapsed/total play time (renamed from the YXC field names).
   const albumArt = info.albumart_url;
   if (typeof albumArt === "string") {
-    updates.push({ id: "player.albumArt", value: cover(albumArt) });
+    updates.push({ id: "player.albumArt", value: withAlbumArtId(cover(albumArt), info.albumart_id) });
   }
   // Both forms of each time — see catalog/play-time.ts. MusicCast reports the seconds, so
   // the readable text is formatted from them here; the YNCA side parses its text into the

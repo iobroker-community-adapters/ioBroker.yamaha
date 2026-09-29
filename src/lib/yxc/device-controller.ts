@@ -346,14 +346,20 @@ export class YxcDeviceController implements ConnectionHandle {
   private apiVersion: number | undefined;
 
   /**
-   * The address a reported cover path is shown at: absolute on the device's own web server; empty
-   * below API 1.17, whose covers only Yamaha's app can decode (YXC Basic §7.2 "ymf … encrypted").
+   * The address a reported cover path is shown at: absolute on the device's own web server. Below API
+   * 1.17 a cover ON THE DEVICE is Yamaha's encrypted ymf, which only its app decodes (YXC Basic §7.2) —
+   * empty; a service's own web address (`http://static.airable.io/…`, the recent list's example in §7.16)
+   * is a plain image on every API version and shows as it is (audit 2026-09-29, C49).
    *
    * @param url the reported path or address
    * @returns the address to show, or ""
    */
-  private readonly cover = (url: string): string =>
-    this.apiVersion !== undefined && this.apiVersion < 1.17 ? "" : absoluteDeviceUrl(url, this.deps.host);
+  private readonly cover = (url: string): string => {
+    const onDevice = !/^[a-z][a-z0-9+.-]*:\/\//i.test(url);
+    return this.apiVersion !== undefined && this.apiVersion < 1.17 && onDevice
+      ? ""
+      : absoluteDeviceUrl(url, this.deps.host);
+  };
 
   /** Per zone, the `disable_flags` of its last status — the functions it cannot operate right now. */
   private readonly disabledFlags = new Map<string, number>();
@@ -2122,6 +2128,21 @@ export class YxcDeviceController implements ConnectionHandle {
           await this.runTransport(block, command.action);
           break;
         }
+        case "playerMode": {
+          // Only the network player takes the modes directly (API 1.19+); a CD keeps its toggles.
+          const block = this.playerBlockFor(this.lastZoneInput.get(command.zone));
+          if (block !== "netusb" || this.apiVersion === undefined || this.apiVersion < 1.19) {
+            this.deps.log.debug(`${this.deviceId}: ${stateId} ignored — only the network player sets it directly`);
+            break;
+          }
+          if (command.repeat !== undefined) {
+            await this.deps.client.setNetRepeat(command.repeat);
+          }
+          if (command.shuffle !== undefined) {
+            await this.deps.client.setNetShuffle(command.shuffle);
+          }
+          break;
+        }
       }
     } catch (e) {
       this.deps.log.warn(`${this.deviceId}: write to ${stateId} failed: ${errorMessage(e)}`);
@@ -2210,7 +2231,8 @@ export class YxcDeviceController implements ConnectionHandle {
           await this.refreshMediaSource("netusb");
         }
         return;
-      case "playerTransport": {
+      case "playerTransport":
+      case "playerMode": {
         const block = this.playerBlockFor(this.lastZoneInput.get(command.zone));
         if (block !== undefined) {
           await this.refreshMediaSource(block);

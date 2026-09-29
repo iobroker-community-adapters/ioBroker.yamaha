@@ -47,10 +47,10 @@ export const OWNER_OVERRIDES: Record<string, readonly Transport[]> = {
   // YNCA's HDMIOUT3 and SPPATTERN are writable. By modernity MusicCast took both read-only.
   "hdmi.out3": ["ynca", "yxc"],
   "advanced.speakers.pattern": ["ynca", "yxc"],
-  // §3c write loss on the unified player block (v2.0.0): YXC reads playback/repeat/
-  // shuffle but cannot WRITE them (its API has only toggle/transport endpoints, which
-  // stay YXC-owned buttons); YNCA sets all three directly. Zone mirrors collapse to
-  // the same template, so this covers multiroom.zoneN.player.* too.
+  // §3c write loss on the unified player block (v2.0.0): YXC reads playback/repeat/shuffle and
+  // sets repeat/shuffle directly only from API 1.19 and only on the network player (setRepeat/
+  // setShuffle, audit 2026-09-29, C37) — never playback, never a CD; YNCA sets all three on every
+  // source. Zone mirrors collapse to the same template, so this covers multiroom.zoneN.player.* too.
   "player.playback": ["ynca", "yxc"],
   "player.repeat": ["ynca", "yxc"],
   "player.shuffle": ["ynca", "yxc"],

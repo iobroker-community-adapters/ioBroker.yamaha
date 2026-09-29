@@ -2469,13 +2469,18 @@ describe("YxcDeviceController push signals", () => {
 describe("YxcDeviceController cover address", () => {
   const features = { zone: [{ id: "main", func_list: ["power"], input_list: ["net_radio"] }], netusb: {} };
 
-  async function coverAfterPush(apiVersion: number): Promise<unknown> {
+  async function coverAfterPush(
+    apiVersion: number,
+    albumArtUrl = "/YamahaRemoteControl/AlbumART/AlbumART1.jpg",
+    albumArtId?: number,
+  ): Promise<unknown> {
     const s = setup(features, { power: "on", input: "net_radio" }, {}, () => true, { host: "10.0.0.5" });
     s.client.deviceInfo = { model_name: "WX-030", api_version: apiVersion };
     s.client.playInfo = {
       input: "net_radio",
       playback: "play",
-      albumart_url: "/YamahaRemoteControl/AlbumART/AlbumART1.jpg",
+      albumart_url: albumArtUrl,
+      ...(albumArtId !== undefined ? { albumart_id: albumArtId } : {}),
     };
     await s.controller.start();
     s.acks.length = 0;
@@ -2490,6 +2495,55 @@ describe("YxcDeviceController cover address", () => {
 
   test("a device below API 1.17 shows no cover — its format is Yamaha's encrypted one", async () => {
     expect(await coverAfterPush(1.1)).toBe("");
+  });
+
+  // Only a cover ON THE DEVICE is the encrypted form; a service's web address is a plain image (C49).
+  test("below API 1.17 a service's own cover address still shows", async () => {
+    expect(await coverAfterPush(1.1, "http://static.airable.io/43/13/186713.png")).toBe(
+      "http://static.airable.io/43/13/186713.png",
+    );
+  });
+
+  // One fixed cover path for every track: the id says the cover changed (YXC Basic §7.2; C36).
+  test("the album art id rides along, so a new cover under the same path changes the address", async () => {
+    expect(await coverAfterPush(2.08, "/YamahaRemoteControl/AlbumART/AlbumART.jpg", 5708)).toBe(
+      "http://10.0.0.5/YamahaRemoteControl/AlbumART/AlbumART.jpg?id=5708",
+    );
+  });
+});
+
+// setRepeat/setShuffle from API 1.19 on the network player (aiomusiccast, Home Assistant; audit
+// 2026-09-29, C37): the modes are writable there, and only there.
+describe("YxcDeviceController repeat and shuffle set directly", () => {
+  const features = { zone: [{ id: "main", func_list: ["power"], input_list: ["net_radio", "cd"] }], netusb: {} };
+
+  async function started(apiVersion: number, input: string): Promise<ReturnType<typeof setup>> {
+    const s = setup(features, { power: "on", input });
+    s.client.deviceInfo = { model_name: "WX-030", api_version: apiVersion };
+    s.client.playInfo = { input, playback: "play" };
+    await s.controller.start();
+    s.client.calls.length = 0;
+    return s;
+  }
+
+  test("API 1.19+: repeat and shuffle are writable and go out as setRepeat/setShuffle", async () => {
+    const s = await started(2.08, "net_radio");
+    expect(s.defs.get("living.player.repeat")?.common.write).toBe(true);
+    s.controller.handleStateChange("living.player.repeat", false, 2);
+    s.controller.handleStateChange("living.player.shuffle", false, true);
+    await flush();
+    expect(s.client.calls.filter(c => c.method.startsWith("setNet"))).toEqual([
+      { method: "setNetRepeat", args: ["all"] },
+      { method: "setNetShuffle", args: ["on"] },
+    ]);
+  });
+
+  test("below API 1.19 the modes stay read-only, and a write sends nothing", async () => {
+    const s = await started(1.17, "net_radio");
+    expect(s.defs.get("living.player.repeat")?.common.write).toBe(false);
+    s.controller.handleStateChange("living.player.repeat", false, 1);
+    await flush();
+    expect(s.client.calls.filter(c => c.method.startsWith("setNet"))).toEqual([]);
   });
 });
 

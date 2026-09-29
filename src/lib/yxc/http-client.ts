@@ -667,6 +667,28 @@ export class YamahaYxcClient {
   }
 
   /**
+   * Set the network/USB player's repeat mode directly — API 1.19 and later (aiomusiccast
+   * `NetUSB.set_repeat`, used by Home Assistant; the specification names only the toggle).
+   *
+   * @param mode `off` / `one` / `all`
+   * @returns the command response
+   */
+  public setNetRepeat(mode: "off" | "one" | "all"): Promise<unknown> {
+    return this.send(`/netusb/setRepeat?mode=${mode}`);
+  }
+
+  /**
+   * Set the network/USB player's shuffle mode directly — API 1.19 and later (aiomusiccast
+   * `NetUSB.set_shuffle`).
+   *
+   * @param mode `off` / `on`
+   * @returns the command response
+   */
+  public setNetShuffle(mode: "off" | "on"): Promise<unknown> {
+    return this.send(`/netusb/setShuffle?mode=${mode}`);
+  }
+
+  /**
    * Toggle the CD player's repeat mode.
    *
    * @returns the command response

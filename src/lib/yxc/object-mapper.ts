@@ -57,7 +57,8 @@ const PLAYER_STATES: Array<{
   // Read-only playback metadata, typed exactly like the YNCA sources so both players
   // present the same shape on one device: repeat as the media.mode.repeat number code
   // (wire off/one/all, captures-verified), shuffle as a media.mode.shuffle boolean
-  // (wire knows only off/on). Writing stays with the toggle buttons — YXC has no setter.
+  // (wire knows only off/on). Writable where the device takes setRepeat/setShuffle (API 1.19+,
+  // `pushPlayerBlock`); below that the toggle buttons are the way.
   {
     state: "repeat",
     common: {
@@ -172,8 +173,14 @@ const PLAYER_STATES: Array<{
  * @param objects the object list to append to
  * @param prefix the channel/state prefix (e.g. `netPlayer`, `cd`)
  * @param channelName the human-readable channel name
+ * @param settableModes whether repeat and shuffle are written directly (API 1.19+ network player)
  */
-function pushPlayerBlock(objects: ObjectDef[], prefix: string, channelName: ioBroker.StringOrTranslated): void {
+function pushPlayerBlock(
+  objects: ObjectDef[],
+  prefix: string,
+  channelName: ioBroker.StringOrTranslated,
+  settableModes: boolean,
+): void {
   objects.push({ id: prefix, type: "channel", common: { name: channelName } });
   for (const player of PLAYER_STATES) {
     const { nameKey: playerNameKey, descKey: playerDescKey, ...playerCommon } = player.common;
@@ -184,6 +191,7 @@ function pushPlayerBlock(objects: ObjectDef[], prefix: string, channelName: ioBr
         ...playerCommon,
         name: tName(playerNameKey),
         ...(playerDescKey ? { desc: tName(playerDescKey) } : {}),
+        ...(settableModes && (player.state === "repeat" || player.state === "shuffle") ? { write: true } : {}),
       },
     });
   }
@@ -718,10 +726,13 @@ export function mapYxcToObjects(
     // ONE "now playing" block per zone (v2.0.0): the controller feeds it from
     // whichever source the zone is listening to (netusb or cd) and clears it on a
     // source switch. The source folders below keep only their genuinely own states.
-    pushPlayerBlock(objects, "player", tName("mediaPlayer"));
+    // setRepeat/setShuffle exist from API 1.19 on the network player (aiomusiccast, Home Assistant; C37).
+    const settableModes =
+      capabilities.media.includes("netusb") && capabilities.apiVersion !== undefined && capabilities.apiVersion >= 1.19;
+    pushPlayerBlock(objects, "player", tName("mediaPlayer"), settableModes);
     for (const zone of capabilities.zones) {
       if (zone.id !== "main") {
-        pushPlayerBlock(objects, `${zonePrefix(zone.id)}player`, tName("mediaPlayer"));
+        pushPlayerBlock(objects, `${zonePrefix(zone.id)}player`, tName("mediaPlayer"), settableModes);
       }
     }
   }
