@@ -13,9 +13,9 @@ import { DeviceBody, errorMessage } from "../util";
 export function isWriteCommand(command: string): boolean {
   const last = command.split("?")[0].split("/").pop() ?? "";
   // Every write/action verb the endpoint methods below actually use — control
-  // (cursor/menu remote) and switch (tuner preset step) included, so these button
-  // presses queue with USER priority and overtake a running background sweep.
-  return /^(set|recall|toggle|start|stop|manage|prepare|control|switch)/.test(last);
+  // (cursor/menu remote), switch (tuner preset step), store and clear (presets) included, so
+  // these presses queue with USER priority and overtake a running background sweep.
+  return /^(set|recall|toggle|start|stop|manage|prepare|control|switch|store|clear)/.test(last);
 }
 
 /** Timeout for a single YXC HTTP request, so an unresponsive device cannot hang the keepalive. */
@@ -1051,6 +1051,109 @@ export class YamahaYxcClient {
    */
   public setDabService(direction: "next" | "previous"): Promise<unknown> {
     return this.send(`/tuner/setDabService?dir=${q(direction)}`);
+  }
+
+  /**
+   * Store the tuner's current station to a preset slot (YXC Basic Rev 1.10 §6.7).
+   *
+   * @param num the slot, within the range getFeatures declares
+   * @returns the command response
+   */
+  public storeTunerPreset(num: number): Promise<unknown> {
+    return this.send(`/tuner/storePreset?num=${q(num)}`);
+  }
+
+  /**
+   * Clear a tuner preset slot (YXC Basic Rev 1.10 §6.8).
+   *
+   * @param band `common` on a shared list, else `am` / `fm` / `dab`
+   * @param num the slot
+   * @returns the command response
+   */
+  public clearTunerPreset(band: string, num: number): Promise<unknown> {
+    return this.send(`/tuner/clearPreset?band=${q(band)}&num=${q(num)}`);
+  }
+
+  /**
+   * Store the network player's current content to a favourite slot (YXC Basic Rev 1.10 §7.11).
+   *
+   * @param num the slot, within the range getFeatures declares
+   * @returns the command response
+   */
+  public storeNetPreset(num: number): Promise<unknown> {
+    return this.send(`/netusb/storePreset?num=${q(num)}`);
+  }
+
+  /**
+   * Clear a favourite slot (YXC Basic Rev 1.10 §7.12).
+   *
+   * @param num the slot
+   * @returns the command response
+   */
+  public clearNetPreset(num: number): Promise<unknown> {
+    return this.send(`/netusb/clearPreset?num=${q(num)}`);
+  }
+
+  /**
+   * Search the next or previous receivable station on AM/FM (YXC Basic Rev 1.10 §6.4 `tuning`
+   * `auto_up`/`auto_down`; Home Assistant's next/previous station does the same).
+   *
+   * @param band the band to search on (`am` / `fm`)
+   * @param direction the search direction
+   * @returns the command response
+   */
+  public searchTuner(band: string, direction: "auto_up" | "auto_down"): Promise<unknown> {
+    return this.send(`/tuner/setFreq?band=${q(band)}&tuning=${q(direction)}`);
+  }
+
+  /**
+   * Play a CD track by its number (YXC Basic Rev 1.10 §8.2 `track_select`).
+   *
+   * @param num the track, 1…512
+   * @returns the command response
+   */
+  public selectCdTrack(num: number): Promise<unknown> {
+    return this.send(`/cd/setPlayback?playback=track_select&num=${q(num)}`);
+  }
+
+  /**
+   * Jump to a position of the playing track — the media server only (YXC Basic Rev 1.10 §7.4).
+   *
+   * @param seconds the position in seconds
+   * @returns the command response
+   */
+  public setPlayPosition(seconds: number): Promise<unknown> {
+    return this.send(`/netusb/setPlayPosition?position=${q(seconds)}`);
+  }
+
+  /**
+   * Switch the clock's automatic time sync on or off (YXC Basic Rev 1.10 §9.2).
+   *
+   * @param enable whether the clock syncs itself
+   * @returns the command response
+   */
+  public setClockAutoSync(enable: boolean): Promise<unknown> {
+    return this.send(`/clock/setAutoSync?enable=${enable ? "true" : "false"}`);
+  }
+
+  /**
+   * Set the clock's time display (YXC Basic Rev 1.10 §9.4).
+   *
+   * @param format `12h` / `24h`
+   * @returns the command response
+   */
+  public setClockFormat(format: "12h" | "24h"): Promise<unknown> {
+    return this.send(`/clock/setClockFormat?format=${format}`);
+  }
+
+  /**
+   * Change the alarm settings — only the fields given (YXC Basic Rev 1.10 §9.5, POST).
+   *
+   * @param settings the fields to set (`alarm_on`, `volume`, `mode`, `repeat`, `detail`)
+   * @returns the command response
+   */
+  public setAlarmSettings(settings: Record<string, unknown>): Promise<unknown> {
+    return this.send("/clock/setAlarmSettings", JSON.stringify(settings));
   }
 
   /**

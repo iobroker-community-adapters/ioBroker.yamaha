@@ -48,7 +48,7 @@ zwischen zwei `@SYS:VERSION=?`-Markern (der vordere nur nach Hintergrundverkehr)
 der Klammer ist das Urteil über den PUT — gemessen kommt eine Absage bis 1,5 s später, hinter der nächsten
 Zeile; der Pad-Dialekt kommt aus einer geklammerten Probe, nie aus einem Tastendruck.
 YNCA schleust in `writeLine` (send=user, get=background), YXC/XML im Client-Konstruktor
-(Schreibbefehle am Endpunkt-Verb erkannt: `set|recall|toggle|start|stop|manage|prepare`). Deshalb
+(Schreibbefehle am Endpunkt-Verb erkannt: `set|recall|toggle|start|stop|manage|prepare|control|switch|store|clear`). Deshalb
 brauchen die Browse-Treiber KEINE eigene Pause mehr. Vorbild: nut2 `nut-client.ts`-Warteschlange.
 
 ## Architektur (Ist-Stand, Multi-Transport pro Gerät)
@@ -66,7 +66,7 @@ zugeteilten Datenpunkte. Owner je Datenpunkt = das modernste ANWESENDE, aber ver
 Transport laut Zensus); `lib/catalog/object-tree-coordinator.ts` berechnet daraus EINEN Baum, jeder State genau
 einmal, jeder Write an den Owner. **Wiederkehrende Antworten werden pro Gerät gemerkt** (`lib/lifecycle/probe-memory.ts`, gehalten in
 `main.ts` neben dem Subunit-Cache, seit 2.0.0 PERSISTIERT im Geräteobjekt `native.probeCache` —
-s. „Schnellstart" unten): YXC-`getFeatures`/Modell/Name
+s. „Schnellstart" unten): YXC-`getFeatures`/Modell
 und die XML-Browse-Quellen-Probe sind über die Gerätelaufzeit konstant — ein Reconnect fragt sie nicht
 erneut; **vom Nutzer umbenennbare Namen** (MusicCast-`getNameText`, XML-Eingangs-/Szenen-/Zonennamen) werden
 dagegen bei JEDER Verbindung frisch gelesen, das Gedächtnis ist nur Rückfall (`ProbeMemory.refresh`). Der YNCA-Subunit-Cache prüft die Identität jetzt ZUERST (2 Abrufe Modell+Firmware, ~0,2 s) und

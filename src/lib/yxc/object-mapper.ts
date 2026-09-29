@@ -167,6 +167,44 @@ const PLAYER_STATES: Array<{
 ];
 
 /**
+ * A write-only action datapoint: a slot number to act on (store, clear, play) or a key.
+ *
+ * @param id the state id
+ * @param nameKey its name
+ * @param descKey its explanation
+ * @param bounds the slot range for a number; undefined for a key
+ * @param bounds.min the lowest slot
+ * @param bounds.max the highest slot, when declared
+ * @returns the object
+ */
+function actionState(
+  id: string,
+  nameKey: I18nKey,
+  descKey: I18nKey | undefined,
+  bounds?: { min: number; max?: number },
+): ObjectDef {
+  return {
+    id,
+    type: "state",
+    common: {
+      name: tName(nameKey),
+      ...(descKey ? { desc: tName(descKey) } : {}),
+      ...(bounds
+        ? {
+            type: "number",
+            role: "level",
+            read: false,
+            write: true,
+            min: bounds.min,
+            ...(bounds.max !== undefined ? { max: bounds.max } : {}),
+            step: 1,
+          }
+        : { type: "boolean", role: "button", read: false, write: true }),
+    },
+  };
+}
+
+/**
  * Append a media-player block (channel + the shared player states) under a
  * dotted prefix. Used for every player source the device reports.
  *
@@ -778,6 +816,12 @@ export function mapYxcToObjects(
         write: false,
       },
     });
+    // Store and clear a favourite, jump within the track (YXC Basic Rev 1.10 §7.11/§7.12/§7.4; C38).
+    const favourites = { min: 1, max: capabilities.netusbSlots?.presets };
+    objects.push(actionState("player.netPlayer.presetSave", "storeFavourite", "descStoreFavourite", favourites));
+    objects.push(actionState("player.netPlayer.presetClear", "clearFavourite", "descClearFavourite", favourites));
+    const jump = actionState("player.netPlayer.playPosition", "jumpToPosition", "descJumpToPosition", { min: 0 });
+    objects.push({ ...jump, common: { ...jump.common, unit: "s" } });
     objects.push({
       id: "player.netPlayer.recallRecent",
       type: "state",
@@ -885,6 +929,7 @@ export function mapYxcToObjects(
   if (capabilities.media.includes("cd")) {
     // Drive-own states only — what the disc is PLAYING shows in the flat block above.
     objects.push({ id: "player.cd", type: "channel", common: { name: tName("cd") } });
+    objects.push(actionState("player.cd.trackSelect", "playTrackNumber", "descPlayTrackNumber", { min: 1, max: 512 }));
     objects.push({
       id: "player.cd.tray",
       type: "state",
@@ -1012,6 +1057,11 @@ export function mapYxcToObjects(
       presetCommon.max = capabilities.tuner.presetNum;
     }
     objects.push({ id: "tuner.preset", type: "state", common: presetCommon });
+    const stations = { min: 1, max: capabilities.tuner?.presetNum };
+    objects.push(actionState("tuner.presetSave", "storeStationPreset", "descStoreStationPreset", stations));
+    objects.push(actionState("tuner.presetClear", "clearStationPreset", "descClearStationPreset", stations));
+    objects.push(actionState("tuner.searchUp", "searchNextStation", undefined));
+    objects.push(actionState("tuner.searchDown", "searchPreviousStation", undefined));
     // `switchPreset` exists from API 1.17 on (YXC Basic §6.6); an older device refused every press.
     if (capabilities.apiVersion === undefined || capabilities.apiVersion >= 1.17) {
       objects.push({
@@ -1097,9 +1147,9 @@ export function mapYxcToObjects(
     }
   }
   if (capabilities.clock) {
-    // The clock/alarm block, as the musiccast adapter showed it — read-only display
-    // (the predecessor's clock datapoints had no working write path either); the
-    // devices that report it are the desk-audio/clock models.
+    // The clock/alarm block of the desk-audio/clock models. The switches, the volume, the mode and each
+    // day's enable/time/beep are written through the specification's setters (YXC Basic Rev 1.10
+    // §9.2/§9.4/§9.5; audit 2026-09-29, C38); the playback choice of an alarm stays read-only.
     objects.push({
       id: "clock",
       type: "channel",
@@ -1112,9 +1162,10 @@ export function mapYxcToObjects(
         name: tName("automaticTimeSync"),
         desc: tName("descAutomaticTimeSync"),
         type: "boolean",
-        role: "indicator",
+        role: "switch",
         read: true,
-        write: false,
+        // setAutoSync: "Available only when date_and_time exists in clock - func_list" (§9.2).
+        write: capabilities.clock.funcs.includes("date_and_time"),
       },
     });
     // Only where the clock block declares it (YXC Basic §4.2 clock func_list) — a WX-021 has no format
@@ -1129,7 +1180,8 @@ export function mapYxcToObjects(
           type: "string",
           role: "state",
           read: true,
-          write: false,
+          write: true,
+          states: { "12h": "12h", "24h": "24h" },
         },
       });
     }
@@ -1137,18 +1189,19 @@ export function mapYxcToObjects(
     objects.push({
       id: "clock.alarm.on",
       type: "state",
-      common: { name: tName("alarmArmed"), type: "boolean", role: "indicator", read: true, write: false },
+      common: { name: tName("alarmArmed"), type: "boolean", role: "switch", read: true, write: true },
     });
     const volumeCommon: ObjectDef["common"] = {
       name: tName("alarmVolume"),
       type: "number",
-      role: "value",
+      role: "level",
       read: true,
-      write: false,
+      write: true,
     };
     if (capabilities.clock.alarmVolumeRange) {
       volumeCommon.min = capabilities.clock.alarmVolumeRange.min;
       volumeCommon.max = capabilities.clock.alarmVolumeRange.max;
+      volumeCommon.step = capabilities.clock.alarmVolumeRange.step;
     }
     objects.push({ id: "clock.alarm.volume", type: "state", common: volumeCommon });
     objects.push({
@@ -1179,7 +1232,14 @@ export function mapYxcToObjects(
     objects.push({
       id: "clock.alarm.mode",
       type: "state",
-      common: { name: tName("alarmMode"), type: "string", role: "state", read: true, write: false },
+      common: {
+        name: tName("alarmMode"),
+        type: "string",
+        role: "state",
+        read: true,
+        write: true,
+        states: Object.fromEntries(capabilities.clock.alarmModes.map(mode => [mode, mode])),
+      },
     });
     // YXC Basic §9.1: `alarm.repeat` — whether the one-day alarm repeats; not snooze, which the clock
     // block declares on its own (audit 2026-09-29, C35).
@@ -1190,9 +1250,9 @@ export function mapYxcToObjects(
         name: tName("alarmRepeat"),
         desc: tName("descAlarmRepeat"),
         type: "boolean",
-        role: "indicator",
+        role: "switch",
         read: true,
-        write: false,
+        write: true,
       },
     });
     const snooze = capabilities.clock.funcs.includes("snooze");
@@ -1207,16 +1267,17 @@ export function mapYxcToObjects(
         name: ioBroker.StringOrTranslated,
         type: "boolean" | "number" | "string",
         role: string,
+        write = false,
       ): void => {
         objects.push({
           id: `clock.alarm.${channel}.${id}`,
           type: "state",
-          common: { name, type, role, read: true, write: false },
+          common: { name, type, role, read: true, write },
         });
       };
-      detail("enable", tName("enabled"), "boolean", "indicator");
-      detail("time", tName("alarmTime"), "string", "text");
-      detail("beep", tName("beep"), "boolean", "indicator");
+      detail("enable", tName("enabled"), "boolean", "switch", true);
+      detail("time", tName("alarmTime"), "string", "text", true);
+      detail("beep", tName("beep"), "boolean", "switch", true);
       detail("playbackType", tName("playbackType"), "string", "state");
       detail("resumeInput", tName("resumeInput"), "string", "state");
       detail("presetType", tName("presetType"), "string", "state");

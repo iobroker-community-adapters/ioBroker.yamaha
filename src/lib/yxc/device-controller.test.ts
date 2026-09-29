@@ -445,6 +445,23 @@ describe("YxcDeviceController", () => {
     expect(s.client.calls).toContainEqual({ method: "getStatus", args: ["main"] });
   });
 
+  // A knob turned twenty detents sends twenty events; one running refresh plus one after it answer all
+  // of them (audit 2026-09-29, C45).
+  test("a burst of events for one zone costs one running refresh and one after it", async () => {
+    const s = setup(wx10, ysp);
+    await s.controller.start();
+    s.client.calls.length = 0;
+    for (let volume = 20; volume < 40; volume++) {
+      s.fire.push?.({ main: { volume } });
+    }
+    await flush();
+    expect(s.client.calls.filter(c => c.method === "getStatus")).toHaveLength(2);
+    // Later events after the burst settled are refreshed again.
+    s.fire.push?.({ main: { volume: 41 } });
+    await flush();
+    expect(s.client.calls.filter(c => c.method === "getStatus")).toHaveLength(3);
+  });
+
   // The push handler calls refreshZone WITHOUT awaiting it, so a throw on the way into the tree
   // has no receiver at all — and js-controller answers an unhandled rejection by stopping the
   // instance. A failing state write must therefore cost a log line and nothing else.
@@ -1778,6 +1795,37 @@ describe("YxcDeviceController device name", () => {
     s.controller.handleStateChange("living.tuner.preset", false, 7);
     await flush();
     expect(s.client.calls).toContainEqual({ method: "recallTunerPreset", args: ["fm", 7, "main"] });
+  });
+
+  // YXC Basic Rev 1.10 §6.8 clears on the band (separate lists), §6.4 searches AM/FM, DAB steps its
+  // service (§6.15) — the controller supplies the band (audit 2026-09-29, C38).
+  test("a preset is cleared on the current band, and a search follows the band", async () => {
+    const features = {
+      zone: [{ id: "main", func_list: ["power"] }],
+      tuner: { func_list: ["fm", "dab"], preset: { type: "separate", num: 30 } },
+    };
+    const s = setup(features, ysp);
+    await s.controller.start();
+    expect(s.objects).toEqual(
+      expect.arrayContaining(["living.tuner.storedStations", "living.tuner.storedStations.fm.30.frequency"]),
+    );
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.tuner.presetClear", false, 3);
+    s.controller.handleStateChange("living.tuner.searchUp", false, true);
+    await flush();
+    expect(s.client.calls).toEqual(
+      expect.arrayContaining([
+        { method: "clearTunerPreset", args: ["fm", 3] },
+        { method: "searchTuner", args: ["fm", "auto_up"] },
+      ]),
+    );
+    s.client.calls.length = 0;
+    s.client.tunerPlayInfo = { band: "dab", dab: { status: "ready" } };
+    s.controller.handleStateChange("living.tuner.band", false, "dab");
+    await flush();
+    s.controller.handleStateChange("living.tuner.searchDown", false, true);
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "setDabService", args: ["previous"] });
   });
 
   test("a common-preset tuner is fetched and recalled on the shared list", async () => {

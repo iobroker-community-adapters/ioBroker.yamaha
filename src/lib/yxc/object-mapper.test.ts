@@ -464,16 +464,30 @@ describe("mapYxcToObjects tree hygiene", () => {
     );
   });
 
-  test("a clock device gets the read-only clock/alarm block; others get none", () => {
+  test("a clock device gets the clock/alarm block, the settings the specification sets writable; others none", () => {
     const withClock = mapYxcToObjects(parseYxcFeatures(isx18d));
     const ids = withClock.map(o => o.id);
     expect(ids).toEqual(
       expect.arrayContaining(["clock", "clock.autoSync", "clock.alarm.on", "clock.alarm.oneday.time"]),
     );
-    // Every clock state is display-only — the predecessor's clock writes were dead too.
-    for (const obj of withClock.filter(o => o.id.startsWith("clock") && o.type === "state")) {
-      expect(obj.common.write).toBe(false);
-    }
+    // YXC Basic Rev 1.10 §9.2/§9.4/§9.5 (audit 2026-09-29, C38): switches, volume, mode, repeat and each
+    // day's enable/time/beep are written; what an alarm plays stays read-only.
+    const writable = withClock
+      .filter(o => o.type === "state" && o.id.startsWith("clock.") && o.common.write)
+      .map(o => o.id);
+    expect(writable.sort()).toEqual(
+      [
+        "clock.alarm.mode",
+        "clock.alarm.on",
+        "clock.alarm.oneday.beep",
+        "clock.alarm.oneday.enable",
+        "clock.alarm.oneday.time",
+        "clock.alarm.repeat",
+        "clock.alarm.volume",
+        "clock.autoSync",
+        "clock.format",
+      ].filter(id => ids.includes(id)),
+    );
     // The one-day-only ISX gets no weekly day channels.
     expect(ids).not.toContain("clock.alarm.monday");
     expect(mapYxcToObjects(parseYxcFeatures(rxA2070)).map(o => o.id)).not.toContain("clock");
@@ -496,6 +510,7 @@ describe("mapYxcToObjects tree hygiene", () => {
     const volume = objs.find(o => o.id === "clock.alarm.volume");
     expect(volume?.common.min).toBe(5);
     expect(volume?.common.max).toBe(60);
+    expect(volume?.common.step).toBe(1);
   });
 });
 

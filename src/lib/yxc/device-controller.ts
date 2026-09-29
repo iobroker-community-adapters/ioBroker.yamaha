@@ -91,7 +91,9 @@ const PRESET_VERDICT_MS = 30_000;
 /**
  * The main-zone fields every main-zone event carries (YXC Basic Rev 1.00 §10.3) — a keepalive that
  * finds one of them changed with no event since the previous keepalive saw a change nobody announced.
- * Zone 2–4 events are "Reserved" in Rev 1.00, so a zone's silence proves nothing there.
+ * Zone 2–4 events are "Reserved" in Rev 1.00 and documented in Rev 1.10 §11.3 ("same as main zone's");
+ * no source ties a revision to an `api_version`, so a device on Rev 1.00 firmware may stay silent for
+ * its zones, and a zone's silence proves nothing (audit 2026-09-29, C44 — to be settled on a device).
  */
 const ANNOUNCED_MAIN_FIELDS = ["power", "input", "volume", "mute"];
 
@@ -308,13 +310,6 @@ export class YxcDeviceController implements ConnectionHandle {
    */
   private capabilities: YxcCapabilities | undefined;
   private readonly zoneVolumeMode = new Map<string, string | undefined>();
-  /**
-   * Displayed units per raw step, per zone — READ from the device, never computed from the
-   * declared ranges. `volume` (raw step count) and `actual_volume.value` (what the display
-   * shows) arrive in the SAME status answer, so their ratio is a measurement: the RX-V6A
-   * reports 60 / 30.0 in main and 81 / 40.5 in zone 2, both exactly 0.5. The declared ranges
-   * do NOT divide cleanly (0…161 raw against 0…97 displayed), which is why they are not used.
-   */
   /** The source the network player is currently on (netusb `input`, e.g. "net_radio"). */
   private lastNetusbInput = "";
   /** Which source currently feeds each zone's "now playing" block (v2.0.0 routing). */
@@ -323,7 +318,6 @@ export class YxcDeviceController implements ConnectionHandle {
   private readonly lastEqualizer = new Map<string, { low: number; mid: number; high: number }>();
   /** Whether the device reports MusicCast-Link distribution (gates the dist poll and objects). */
   private hasDistribution = false;
-  /** The device's last-seen distribution role (none/server/client), for the leave-group path. */
   /** What the last getDistributionInfo said about this device's group (effective role, roster, status). */
   private dist: DistributionSummary = distributionSummary(undefined);
   /** The tuner features (bands + preset mode) — a preset recall needs the band. */
@@ -761,11 +755,13 @@ export class YxcDeviceController implements ConnectionHandle {
     this.deps.setStateAck(`${this.deviceId}.${relativeId}`, value);
   }
 
-  /** Per state id, the value the device last reported on THIS connection. */
   /** The MusicCast `device_id` this device reported — the events carry it too (see registerPush). */
   private pushDeviceId: string | undefined;
 
+  /** Per state id, the value the device last reported on THIS connection. */
   private readonly deviceValues = new Map<string, boolean | number | string>();
+  /** The refreshes running per key, and whether one more was asked for meanwhile (see `coalesced`). */
+  private readonly refreshes = new Map<string, { again: boolean }>();
   /** How many slots each list folder has objects for (see `publishSlots`). */
   private readonly slotCounts = new Map<string, number>();
 
@@ -863,7 +859,7 @@ export class YxcDeviceController implements ConnectionHandle {
       const bit = { volume: 0b1, mute: 0b10, "sound.linkAudioDelay": 0b100 }[blocked[2]] ?? 0;
       if (((this.disabledFlags.get(zone) ?? 0) & bit) !== 0) {
         this.deps.log.debug(`${this.deviceId}: ${stateId} is not operable on the device right now — not sent`);
-        void this.refreshZone(zone);
+        this.coalesced(`zone:${zone}`, () => this.refreshZone(zone));
         return;
       }
     }
@@ -1000,12 +996,12 @@ export class YxcDeviceController implements ConnectionHandle {
     }
     for (const zone of zonesToRefresh(event)) {
       if (this.zones.includes(zone)) {
-        void this.refreshZone(zone);
+        this.coalesced(`zone:${zone}`, () => this.refreshZone(zone));
       }
     }
     for (const block of mediaToRefresh(event)) {
       if (this.mediaBlocks.includes(block)) {
-        void this.refreshMediaSource(block);
+        this.coalesced(`media:${block}`, () => this.refreshMediaSource(block));
       }
     }
     // The playback clock ticks every second while a source plays: its values go to the player
@@ -1820,6 +1816,39 @@ export class YxcDeviceController implements ConnectionHandle {
    * @returns true if the device answered (with its status, or refusing it — it is there), false if
    *   nothing answered
    */
+  /**
+   * Run a refresh at most once at a time per key, and once more after it when asked meanwhile — never
+   * more. A knob turned twenty detents sends twenty events (YXC Basic Rev 1.10 §11.3); each was one
+   * `getStatus` in the gate's queue, nineteen of them answering a state already gone (audit 2026-09-29,
+   * C45). The last request always gets a fresh answer: it is either the running one's successor or
+   * folded into it.
+   *
+   * @param key what is refreshed (`zone:main`, `media:netusb`)
+   * @param run the refresh — its own failures are its business (both refreshes catch them)
+   */
+  private coalesced(key: string, run: () => Promise<unknown>): void {
+    const state = this.refreshes.get(key);
+    if (state) {
+      state.again = true;
+      return;
+    }
+    const entry = { again: false };
+    this.refreshes.set(key, entry);
+    const loop = async (): Promise<void> => {
+      try {
+        do {
+          entry.again = false;
+          await run();
+        } while (entry.again && !this.deps.gate?.closed);
+      } catch (e) {
+        this.deps.log.debug(`${this.deviceId}: refresh ${key} failed: ${errorMessage(e)}`);
+      } finally {
+        this.refreshes.delete(key);
+      }
+    };
+    void loop();
+  }
+
   private async refreshZone(zone: string): Promise<boolean> {
     const answer = await this.fetchZoneStatus(zone);
     if (answer.kind !== "ok") {
@@ -2100,6 +2129,23 @@ export class YxcDeviceController implements ConnectionHandle {
           await this.deps.client.recallTunerPreset(band, command.value, this.zoneListeningTo("tuner"));
           break;
         }
+        case "tunerClear": {
+          // A shared list is cleared on `common`, a separate one on the current band (Basic §6.8).
+          const band = this.tunerFeatures?.presetType === "common" ? "common" : this.lastTunerBand;
+          await this.deps.client.clearTunerPreset(band, command.value);
+          break;
+        }
+        case "tunerSearch":
+          // AM/FM search the next receivable frequency; DAB steps the service (Basic §6.4/§6.15).
+          if (this.lastTunerBand === "dab") {
+            await this.deps.client.setDabService(command.direction === "up" ? "next" : "previous");
+          } else {
+            await this.deps.client.searchTuner(
+              this.lastTunerBand,
+              command.direction === "up" ? "auto_up" : "auto_down",
+            );
+          }
+          break;
         case "netusbPreset":
           this.lastPresetRecall = { num: command.value, at: Date.now() };
           await this.deps.client.recallPreset(command.value, this.zoneListeningTo(this.lastNetusbInput));
@@ -2171,7 +2217,8 @@ export class YxcDeviceController implements ConnectionHandle {
    * See that the device's datapoint shows what a write did.
    *
    * Without working events, and for a zone 2–4 write (those events are "Reserved" in YXC Basic
-   * Rev 1.00 §10.3), the written area is read back at once. A write of the value the device already
+   * Rev 1.00 §10.3, documented from Rev 1.10 §11.3 — firmware of either revision is in the field), the
+   * written area is read back at once. A write of the value the device already
    * has is read back at once too: the device announces only a CHANGE, so no event would ever confirm
    * it. A changing write of a reported main-zone or tuner value waits for the event; when none comes,
    * the area is read back — and only if that shows the value changed did the device change it without
@@ -2221,9 +2268,13 @@ export class YxcDeviceController implements ConnectionHandle {
       case "tunerFreq":
       case "tunerPreset":
       case "tunerBand":
+      case "tunerSearch":
         if (this.mediaBlocks.includes("tuner")) {
           await this.refreshMediaSource("tuner");
         }
+        return;
+      case "tunerClear":
+        await this.refreshTunerPresets();
         return;
       case "netusbPreset":
       case "netusbRecent":
@@ -2244,6 +2295,18 @@ export class YxcDeviceController implements ConnectionHandle {
         await this.refreshZone(command.zone);
         return;
       case "run": {
+        if (command.source === "clock") {
+          await this.refreshClock();
+          return;
+        }
+        if (command.source === "favourites") {
+          await this.refreshNetusbPresets();
+          return;
+        }
+        if (command.source === "stations") {
+          await this.refreshTunerPresets();
+          return;
+        }
         if (command.source !== undefined) {
           if (this.mediaBlocks.includes(command.source)) {
             await this.refreshMediaSource(command.source);

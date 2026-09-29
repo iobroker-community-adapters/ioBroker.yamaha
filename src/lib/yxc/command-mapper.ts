@@ -26,7 +26,7 @@ export type YxcCommand =
        * tuner step or the CD tray changes `tuner/getPlayInfo` or `cd/getPlayInfo`, never `getStatus`
        * (YXC Basic §6.6/§6.15/§8.3; audit 2026-09-29, C32).
        */
-      source?: "tuner" | "cd";
+      source?: "tuner" | "cd" | "clock" | "favourites" | "stations";
     }
   | { kind: "equalizer"; zone: string; band: "low" | "mid" | "high"; value: number }
   | { kind: "volume"; zone: string; value: number }
@@ -36,7 +36,9 @@ export type YxcCommand =
   | { kind: "netusbPreset"; value: number }
   | { kind: "netusbRecent"; value: number }
   | { kind: "playerTransport"; zone: string; action: PlayerTransport }
-  | { kind: "playerMode"; zone: string; repeat?: "off" | "one" | "all"; shuffle?: "off" | "on" };
+  | { kind: "playerMode"; zone: string; repeat?: "off" | "one" | "all"; shuffle?: "off" | "on" }
+  | { kind: "tunerClear"; value: number }
+  | { kind: "tunerSearch"; direction: "up" | "down" };
 
 /**
  * Read a catalog entry's raw getStatus value — a flat field or a nested path.
@@ -89,6 +91,66 @@ const EQ_CHANNELS: Record<string, "low" | "mid" | "high"> = {
   "sound.equalizer.mid": "mid",
   "sound.equalizer.high": "high",
 };
+
+/** The alarm detail fields a datapoint sets, by id segment → `detail` key (YXC Basic Rev 1.10 §9.5). */
+const ALARM_DETAIL_WRITES: Readonly<Record<string, "enable" | "time" | "beep">> = {
+  enable: "enable",
+  time: "time",
+  beep: "beep",
+};
+
+/**
+ * A clock or alarm write as its setter (YXC Basic Rev 1.10 §9.2/§9.4/§9.5): the clock's auto sync
+ * and time format, and the alarm's switch, volume, mode, repeat and per-day enable/time/beep. A time
+ * is written as the datapoint shows it (`07:30`) and sent as `hhmm`.
+ *
+ * @param stateId the state id relative to the device
+ * @param value the written value
+ * @returns the command, or undefined when the id is none of them or the value does not fit
+ */
+function clockCommand(stateId: string, value: unknown): YxcCommand | undefined {
+  const alarm = (settings: Record<string, unknown>): YxcCommand => ({
+    kind: "run",
+    run: client => client.setAlarmSettings(settings),
+    source: "clock",
+  });
+  if (stateId === "clock.autoSync") {
+    const on = coerceBool(value);
+    return on === undefined ? undefined : { kind: "run", run: client => client.setClockAutoSync(on), source: "clock" };
+  }
+  if (stateId === "clock.format") {
+    return value === "12h" || value === "24h"
+      ? { kind: "run", run: client => client.setClockFormat(value), source: "clock" }
+      : undefined;
+  }
+  if (stateId === "clock.alarm.on" || stateId === "clock.alarm.repeat") {
+    const on = coerceBool(value);
+    return on === undefined ? undefined : alarm({ [stateId === "clock.alarm.on" ? "alarm_on" : "repeat"]: on });
+  }
+  if (stateId === "clock.alarm.volume") {
+    return isWritableValue(value, true) ? alarm({ volume: Math.round(Number(value)) }) : undefined;
+  }
+  if (stateId === "clock.alarm.mode") {
+    return typeof value === "string" && value !== "" ? alarm({ mode: value }) : undefined;
+  }
+  const detail = /^clock\.alarm\.(oneday|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\.(\w+)$/.exec(
+    stateId,
+  );
+  const key = detail ? ALARM_DETAIL_WRITES[detail[2]] : undefined;
+  if (!detail || !key) {
+    return undefined;
+  }
+  if (key === "time") {
+    const time = typeof value === "string" ? /^(\d{1,2}):?(\d{2})$/.exec(value.trim()) : null;
+    const hh = time ? Number(time[1]) : Number.NaN;
+    const mm = time ? Number(time[2]) : Number.NaN;
+    return hh <= 23 && mm <= 59
+      ? alarm({ detail: { day: detail[1], time: `${String(hh).padStart(2, "0")}${String(mm).padStart(2, "0")}` } })
+      : undefined;
+  }
+  const on = coerceBool(value);
+  return on === undefined ? undefined : alarm({ detail: { day: detail[1], [key]: on } });
+}
 
 /**
  * Parse a YXC getStatus response into unified amp state updates for a zone. Only
@@ -178,6 +240,35 @@ export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefi
   }
   if (stateId === "tuner.dab.serviceDown") {
     return { kind: "run", run: client => client.setDabService("previous"), source: "tuner" };
+  }
+  // Spec-covered writes that had no way in (audit 2026-09-29, C38).
+  const slot = isWritableValue(value, true) ? Math.round(Number(value)) : Number.NaN;
+  if (stateId === "tuner.presetSave") {
+    return slot >= 1 ? { kind: "run", run: client => client.storeTunerPreset(slot), source: "stations" } : undefined;
+  }
+  if (stateId === "tuner.presetClear") {
+    return slot >= 1 ? { kind: "tunerClear", value: slot } : undefined;
+  }
+  if (stateId === "tuner.searchUp" || stateId === "tuner.searchDown") {
+    return { kind: "tunerSearch", direction: stateId === "tuner.searchUp" ? "up" : "down" };
+  }
+  if (stateId === "player.netPlayer.presetSave") {
+    return slot >= 1 ? { kind: "run", run: client => client.storeNetPreset(slot), source: "favourites" } : undefined;
+  }
+  if (stateId === "player.netPlayer.presetClear") {
+    return slot >= 1 ? { kind: "run", run: client => client.clearNetPreset(slot), source: "favourites" } : undefined;
+  }
+  if (stateId === "player.cd.trackSelect") {
+    return slot >= 1 && slot <= 512
+      ? { kind: "run", run: client => client.selectCdTrack(slot), source: "cd" }
+      : undefined;
+  }
+  if (stateId === "player.netPlayer.playPosition") {
+    return slot >= 0 ? { kind: "run", run: client => client.setPlayPosition(slot) } : undefined;
+  }
+  const clock = clockCommand(stateId, value);
+  if (clock) {
+    return clock;
   }
   let zone = "main";
   let name = stateId;

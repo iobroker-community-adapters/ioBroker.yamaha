@@ -867,3 +867,40 @@ describe("device lists as slot entries", () => {
     ]);
   });
 });
+
+// Spec-covered writes that had no way in (YXC Basic Rev 1.10 §6.4/§6.7/§6.8/§7.4/§7.11/§7.12/§8.2/
+// §9.2/§9.4/§9.5; audit 2026-09-29, C38).
+describe("stateToYxc — store, clear, search, select, jump, clock", () => {
+  test("presets are stored and cleared by slot; slot 0 is none", async () => {
+    expect(await ranCall("tuner.presetSave", 5)).toEqual(["storeTunerPreset", [5]]);
+    expect(await ranCall("player.netPlayer.presetSave", "3")).toEqual(["storeNetPreset", [3]]);
+    expect(await ranCall("player.netPlayer.presetClear", 2)).toEqual(["clearNetPreset", [2]]);
+    expect(stateToYxc("tuner.presetSave", 0)).toBeUndefined();
+    expect(stateToYxc("tuner.presetClear", 4)).toEqual({ kind: "tunerClear", value: 4 });
+    expect(stateToYxc("tuner.searchUp", true)).toEqual({ kind: "tunerSearch", direction: "up" });
+  });
+
+  test("a CD track is played by number, a position jumped to by seconds", async () => {
+    expect(await ranCall("player.cd.trackSelect", 7)).toEqual(["selectCdTrack", [7]]);
+    expect(stateToYxc("player.cd.trackSelect", 513)).toBeUndefined();
+    expect(await ranCall("player.netPlayer.playPosition", 123)).toEqual(["setPlayPosition", [123]]);
+  });
+
+  test("clock and alarm settings go out through their setters, a time as hhmm", async () => {
+    expect(await ranCall("clock.autoSync", true)).toEqual(["setClockAutoSync", [true]]);
+    expect(await ranCall("clock.format", "24h")).toEqual(["setClockFormat", ["24h"]]);
+    expect(stateToYxc("clock.format", "25h")).toBeUndefined();
+    expect(await ranCall("clock.alarm.on", "false")).toEqual(["setAlarmSettings", [{ alarm_on: false }]]);
+    expect(await ranCall("clock.alarm.volume", 30)).toEqual(["setAlarmSettings", [{ volume: 30 }]]);
+    expect(await ranCall("clock.alarm.oneday.time", "7:30")).toEqual([
+      "setAlarmSettings",
+      [{ detail: { day: "oneday", time: "0730" } }],
+    ]);
+    expect(await ranCall("clock.alarm.monday.enable", true)).toEqual([
+      "setAlarmSettings",
+      [{ detail: { day: "monday", enable: true } }],
+    ]);
+    expect(stateToYxc("clock.alarm.oneday.time", "25:00")).toBeUndefined();
+    expect(stateToYxc("clock.alarm.oneday.presetName", "x")).toBeUndefined();
+  });
+});
