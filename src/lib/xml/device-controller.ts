@@ -43,6 +43,7 @@ import { sceneListSurface, sceneNumber } from "../catalog/scene-titles";
 import { splitZone } from "../catalog/zone-id";
 import { XML_ZONES, type XmlZone } from "./zones";
 import { MEDIA_STATE, TRANSPORT_KEYS } from "../catalog/media-state";
+import { remoteObjectDefs } from "../browse/objects";
 import { PLAYER_DISPLAY_STATES, PLAYER_STATION_STATE } from "../catalog/player-block";
 import { absoluteDeviceUrl, withAlbumArtId } from "../yxc/command-mapper";
 import { decodeXmlText, escapeXmlText } from "./entities";
@@ -1510,29 +1511,14 @@ export class XmlDeviceController implements ConnectionHandle {
         continue;
       }
       await this.ensureChannels(`${zone.prefix}remote.cursor`);
-      const pads: Array<[string, string, readonly string[]]> = [];
-      if (cursor) {
-        pads.push(["cursor", "cursorPad", Object.keys(XML_CURSOR_WIRE)]);
-      }
-      if (menu) {
-        pads.push(["menu", "menuKey", Object.keys(XML_MENU_WIRE)]);
-      }
-      for (const [suffix, nameKey, words] of pads) {
-        const stateId = `${zone.prefix}remote.${suffix}`;
-        await this.deps.upsertObject(`${this.deviceId}.${stateId}`, {
-          id: stateId,
-          type: "state",
-          common: {
-            name: tName(nameKey === "cursorPad" ? "cursorPad" : "menuKey"),
-            desc: tName(nameKey === "cursorPad" ? "descCursorPad" : "descMenuKey"),
-            type: "string",
-            role: "state",
-            read: false,
-            write: true,
-            states: Object.fromEntries(words.map(word => [word, word])),
-          },
-        });
-        this.createdStates.add(stateId);
+      const defs = remoteObjectDefs(
+        cursor ? Object.keys(XML_CURSOR_WIRE) : undefined,
+        menu ? Object.keys(XML_MENU_WIRE) : undefined,
+        zone.prefix,
+      );
+      for (const def of defs.filter(object => object.type === "state")) {
+        await this.deps.upsertObject(`${this.deviceId}.${def.id}`, def);
+        this.createdStates.add(def.id);
       }
     }
   }

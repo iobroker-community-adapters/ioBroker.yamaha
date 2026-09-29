@@ -37,7 +37,14 @@ import type { ProbeMemory } from "./lifecycle/probe-memory";
 import type { BrowseEngine } from "./browse/browse-engine";
 import { createBrowseSurface } from "./browse/surface";
 import { YNCA_STATIC_KEY, sceneListSurface, sceneNumber, yncaSceneTitles } from "./catalog/scene-titles";
-import { YNCA_BROWSE_SOURCES, YncaBrowseDriver, type YncaPadDialect } from "./browse/ynca-browse-driver";
+import {
+  YNCA_BROWSE_SOURCES,
+  YncaBrowseDriver,
+  yncaZonePadWires,
+  type YncaPadDialect,
+} from "./browse/ynca-browse-driver";
+import { remoteObjectDefs } from "./browse/objects";
+import { wireFor, type CursorValue, type MenuValue, type WireTable } from "./browse/types";
 
 // The YNCA catalog and its lookup maps are static — built once for all devices.
 // SYS:MODELNAME is part of the catalog (info.model), so the sweep already covers it.
@@ -142,6 +149,9 @@ const CAPS_KEY = "yncaCapabilities";
  * it counts as unknown and is probed again (audit 2026-09-24, B3).
  */
 const PAD_DIALECT_KEY = "yncaPadDialect";
+
+/** Per zone, whether its pad answered the bracketed probe (`{ zone2: true, zone3: false }`, B9). */
+const ZONE_PAD_KEY = "yncaZonePads";
 
 /**
  * A remembered pad dialect, if a probe proved it.
@@ -350,6 +360,11 @@ export interface ControllerDeps {
 export class YncaDeviceController implements ConnectionHandle {
   private browseDriver: YncaBrowseDriver | undefined;
   private browseEngine: BrowseEngine | undefined;
+  /** The zones whose pad the probe proved, with the generation's key words (B9). */
+  private readonly zonePads = new Map<
+    string,
+    { subunit: string; cursor: WireTable<CursorValue>; menu: WireTable<MenuValue> }
+  >();
   /**
    * Write map filtered to the entries THIS device reported — claim-with-proof for
    * writes: a command is only sent with a wire function the device answered in the
@@ -539,6 +554,7 @@ export class YncaDeviceController implements ConnectionHandle {
       this.handleLiveMessage(message);
     }
     await this.setupBrowse(live);
+    await this.setupZonePads(live);
     // Start the keepalive only now the (fast-path) init is done; on the slow path the
     // sweep already ran, on the fast path the background refresh paces itself through
     // the same gate, so the 30 s poll cannot break the spacing either way.
@@ -1109,6 +1125,11 @@ export class YncaDeviceController implements ConnectionHandle {
       this.browseEngine?.handleRemoteWrite(stateId, value);
       return;
     }
+    const zonePad = /^multiroom\.(zone[234])\.remote\.(cursor|menu)$/.exec(stateId);
+    if (zonePad) {
+      this.handleZonePadWrite(zonePad[1], zonePad[2] as "cursor" | "menu", value);
+      return;
+    }
     if (stateId.startsWith("player.browse.")) {
       this.browseEngine?.handleWrite(stateId, value);
       return;
@@ -1619,6 +1640,73 @@ export class YncaDeviceController implements ConnectionHandle {
         this.deps.setStateAck(`${this.deviceId}.${id}`, value);
       }
     }
+  }
+
+  /**
+   * The on-screen pad of zones 2 and 3 where the device has one (`@ZONE2:LISTCURSOR`/`LISTMENU`, the
+   * 2011/2012 Aventage lists — B9). Write-only keys, so the proof is a bracketed probe: silence is
+   * "known", `@UNDEFINED` "unknown"; an unclear answer (a zone in standby) decides nothing and asks
+   * again on the next start. A definite verdict is remembered per device.
+   *
+   * @param capabilities what the device answered (its subunits and generation)
+   */
+  private async setupZonePads(capabilities: YncaCapabilities): Promise<void> {
+    this.zonePads.clear();
+    const generation = yncaGenerationEvidence(capabilities.subunits);
+    if (!generation.pad) {
+      return;
+    }
+    const stored = this.deps.probeMemory?.remembered<unknown>(ZONE_PAD_KEY);
+    const remembered: Record<string, boolean> =
+      typeof stored === "object" && stored !== null ? { ...(stored as Record<string, boolean>) } : {};
+    let learned = false;
+    for (const zone of YNCA_ZONES) {
+      if (zone.key === "main" || capabilities.subunits[zone.subunit] === undefined) {
+        continue;
+      }
+      let has = typeof remembered[zone.key] === "boolean" ? remembered[zone.key] : undefined;
+      if (has === undefined && this.deps.client.probeKnown) {
+        try {
+          const verdict = (await this.deps.client.probeKnown(zone.subunit, ["LISTCURSOR"])).LISTCURSOR;
+          if (verdict !== "unclear") {
+            has = verdict === "known";
+            remembered[zone.key] = has;
+            learned = true;
+          }
+        } catch (e) {
+          this.deps.log.debug(`${this.deviceId}: probing the ${zone.key} pad failed (${errorMessage(e)})`);
+        }
+      }
+      if (!has) {
+        continue;
+      }
+      const wires = yncaZonePadWires(generation);
+      for (const def of remoteObjectDefs(Object.keys(wires.cursor), Object.keys(wires.menu), zone.prefix)) {
+        await this.deps.upsertObject(`${this.deviceId}.${def.id}`, def);
+      }
+      this.zonePads.set(zone.key, { subunit: zone.subunit, ...wires });
+    }
+    if (learned) {
+      this.deps.probeMemory?.set(ZONE_PAD_KEY, remembered);
+    }
+  }
+
+  /**
+   * A key press on a zone's pad → `@ZONEn:LISTCURSOR` / `LISTMENU` in the generation's word.
+   *
+   * @param zoneKey the zone (`zone2`, `zone3`)
+   * @param pad which pad the key belongs to
+   * @param value the written key word
+   */
+  private handleZonePadWrite(zoneKey: string, pad: "cursor" | "menu", value: unknown): void {
+    const zone = this.zonePads.get(zoneKey);
+    const word = typeof value === "string" ? value : "";
+    const wire = zone ? wireFor<CursorValue | MenuValue>(pad === "cursor" ? zone.cursor : zone.menu, word) : undefined;
+    if (!zone || wire === undefined) {
+      this.deps.log.debug(`${this.deviceId}: ${zoneKey} ${pad} key "${word}" is none this zone has — not sent`);
+      return;
+    }
+    this.deps.client.send(zone.subunit, pad === "cursor" ? "LISTCURSOR" : "LISTMENU", wire);
   }
 
   /**

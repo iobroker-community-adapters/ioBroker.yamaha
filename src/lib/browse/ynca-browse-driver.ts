@@ -83,6 +83,28 @@ const YNCA_ZONE_CURSOR_WIRE = YNCA_RETURN_CURSOR_WIRE;
 const YNCA_ZONE_MENU_WIRE = YNCA_MENU_WIRE;
 
 /**
+ * The pad of a zone (`@ZONE2`/`@ZONE3:LISTCURSOR`, `LISTMENU` — the 2011 and 2012 Aventage lists
+ * RX-A1010/A1020 zone 2, RX-A2010/A2020/A3010/A3020 zones 2 and 3): the main zone's LIST tables with
+ * the generation's words — `Back`/`Back to Home` in 2011, `Return`/`Return to Home` and `Display` in
+ * 2012 (audit 2026-09-29, B9).
+ *
+ * @param generation the device's generation evidence
+ * @param generation.returnWords whether the lists say `Return`
+ * @param generation.display whether the menu has `Display`
+ * @returns the cursor and menu tables
+ */
+export function yncaZonePadWires(generation: { returnWords: boolean; display: boolean }): {
+  cursor: WireTable<CursorValue>;
+  menu: WireTable<MenuValue>;
+} {
+  const menu: WireTable<MenuValue> = { ...YNCA_MENU_WIRE };
+  if (!generation.display) {
+    delete menu.display;
+  }
+  return { cursor: generation.returnWords ? YNCA_RETURN_CURSOR_WIRE : YNCA_CURSOR_WIRE, menu };
+}
+
+/**
  * Which wire functions the main-zone pad uses (see {@link YNCA_ZONE_CURSOR_WIRE}) — or `none`: the
  * device has no pad (a 2010 receiver, or one whose probe knows neither `LISTCURSOR` nor `CURSOR`).
  */

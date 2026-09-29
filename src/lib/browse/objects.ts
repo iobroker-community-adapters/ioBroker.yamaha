@@ -179,15 +179,20 @@ export function browseObjectDefs(sources: Record<string, string>, playLine = fal
  *
  * Lives beside the browsing surface because that is where the proof is: on the main zone a
  * cursor key is proven by the list probe or the pad probe, so a device that proved neither has no
- * pad — the same rule that keeps the menu folder off a receiver that cannot browse (#613). The ids
- * are unprefixed, i.e. the main zone; a zone's own pad (XML `Cursor_Control` of Zone 2, MusicCast
- * `cursor_list`) is built by its transport under the zone's prefix.
+ * pad — the same rule that keeps the menu folder off a receiver that cannot browse (#613). A zone's
+ * own pad (XML `Cursor_Control` of Zone 2, YNCA `@ZONE2:LISTCURSOR`) takes the zone's prefix — one
+ * definition for every transport (audit 2026-09-29, A34).
  *
  * @param cursorValues the cursor words this transport supports (empty/absent = no pad)
  * @param menuValues the menu keys this transport supports (empty/absent = none)
+ * @param prefix the zone prefix (`multiroom.zone2.`), empty for the main zone
  * @returns the channel and state definitions, parents first
  */
-export function remoteObjectDefs(cursorValues?: readonly string[], menuValues?: readonly string[]): ObjectDef[] {
+export function remoteObjectDefs(
+  cursorValues?: readonly string[],
+  menuValues?: readonly string[],
+  prefix = "",
+): ObjectDef[] {
   const states = (values: readonly string[]): Record<string, string> =>
     Object.fromEntries(values.map(value => [value, value]));
   const defs: ObjectDef[] = [];
@@ -195,13 +200,13 @@ export function remoteObjectDefs(cursorValues?: readonly string[], menuValues?: 
     return defs;
   }
   defs.push({
-    id: "remote",
+    id: `${prefix}remote`,
     type: "channel",
     common: channelCommon("remote"),
   });
   if (cursorValues?.length) {
     defs.push({
-      id: "remote.cursor",
+      id: `${prefix}remote.cursor`,
       type: "state",
       common: {
         name: tName("cursorPad"),
@@ -216,7 +221,7 @@ export function remoteObjectDefs(cursorValues?: readonly string[], menuValues?: 
   }
   if (menuValues?.length) {
     defs.push({
-      id: "remote.menu",
+      id: `${prefix}remote.menu`,
       type: "state",
       common: {
         name: tName("menuKey"),

@@ -1970,3 +1970,69 @@ describe("YncaDeviceController — the tree follows the device within the sessio
     expect(objects).toEqual([]);
   });
 });
+
+describe("the pad of zones 2 and 3 (@ZONE2/@ZONE3:LISTCURSOR/LISTMENU — audit 2026-09-29, B9)", () => {
+  /**
+   * A 2012 Aventage (RX-A2020 list: SERVER, zones 2 and 3) whose zones answer the probe as given.
+   *
+   * @param verdicts the probe verdict per zone subunit
+   * @param memory the device's memory
+   */
+  async function zoneSetup(
+    verdicts: Record<string, "known" | "undefined" | "unclear">,
+    memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA }),
+  ): Promise<{ client: FakeClient; controller: YncaDeviceController; objects: string[]; probed: string[] }> {
+    const client = new FakeClient();
+    const probed: string[] = [];
+    client.probeKnown = (subunit: string, funcs: readonly string[]) => {
+      probed.push(`${subunit}:${funcs.join(",")}`);
+      const answer: Record<string, "known" | "undefined" | "unclear"> =
+        subunit === "MAIN" ? {} : { LISTCURSOR: verdicts[subunit] ?? "unclear" };
+      return Promise.resolve(answer);
+    };
+    client.availableSubunits = ["MAIN", "ZONE2", "ZONE3", "SERVER"];
+    client.capabilities = {
+      model: "RX-A2020",
+      subunits: {
+        SYS: { MODELNAME: "RX-A2020", VERSION: "1" },
+        MAIN: { PWR: "On", INP: "HDMI1" },
+        ZONE2: { PWR: "On", INP: "TUNER" },
+        ZONE3: { PWR: "On", INP: "TUNER" },
+        SERVER: { PLAYBACKINFO: "Stop" },
+      },
+    };
+    const { deps, created } = makeDeps(client);
+    deps.gate = testGate();
+    deps.probeMemory = memory;
+    const controller = new YncaDeviceController("living", deps);
+    await controller.start();
+    client.sent.length = 0;
+    return { client, controller, objects: created, probed };
+  }
+
+  test("a zone whose pad the probe proves gets it, in the generation's words, sent to the zone", async () => {
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
+    const s = await zoneSetup({ ZONE2: "known", ZONE3: "undefined" }, memory);
+    expect(s.objects).toContain("living.multiroom.zone2.remote.cursor");
+    expect(s.objects).toContain("living.multiroom.zone2.remote.menu");
+    expect(s.objects).not.toContain("living.multiroom.zone3.remote.cursor");
+    expect(memory.remembered("yncaZonePads")).toEqual({ zone2: true, zone3: false });
+    s.controller.handleStateChange("living.multiroom.zone2.remote.cursor", false, "return");
+    s.controller.handleStateChange("living.multiroom.zone2.remote.menu", false, "display");
+    expect(s.client.sent).toEqual([
+      { subunit: "ZONE2", func: "LISTCURSOR", value: "Return" },
+      { subunit: "ZONE2", func: "LISTMENU", value: "Display" },
+    ]);
+  });
+
+  test("a remembered verdict is not probed again; an unclear one decides nothing", async () => {
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA, yncaZonePads: { zone2: true, zone3: false } });
+    const s = await zoneSetup({}, memory);
+    expect(s.probed.filter(probe => probe.startsWith("ZONE"))).toEqual([]);
+    expect(s.objects).toContain("living.multiroom.zone2.remote.cursor");
+    const fresh = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
+    const t = await zoneSetup({ ZONE2: "unclear", ZONE3: "unclear" }, fresh);
+    expect(t.objects).not.toContain("living.multiroom.zone2.remote.cursor");
+    expect(fresh.remembered("yncaZonePads")).toBeUndefined();
+  });
+});
