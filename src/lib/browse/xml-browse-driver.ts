@@ -65,6 +65,15 @@ export const XML_BROWSE_SOURCES: readonly XmlBrowseSource[] = [
   },
   { id: "NET_USB/USB", element: "NET_USB", key: "usb", label: "USB", input: "USB", list: "List_Info_2" },
   { id: "iPod", element: "iPod", key: "ipod", label: "iPod", input: "iPod", list: "List_Info_2" },
+  // The sources whose desc.xml declares the same `List_Info` form (Menu_Status/Menu_Layer/Current_List
+  // and `List_Control`) — iPod_USB 9 of 10, JUKE 5, Napster/Pandora/Rhapsody 2, SiriusXM 1 (audit
+  // 2026-09-29, D5). The probe decides per device; keys as on YNCA and MusicCast.
+  { id: "iPod_USB", element: "iPod_USB", key: "ipodUsb", label: "iPod (USB)", input: "iPod (USB)", list: "List_Info" },
+  { id: "JUKE", element: "JUKE", key: "juke", label: "JUKE", input: "JUKE", list: "List_Info" },
+  { id: "Napster", element: "Napster", key: "napster", label: "Napster", input: "Napster", list: "List_Info" },
+  { id: "Pandora", element: "Pandora", key: "pandora", label: "Pandora", input: "Pandora", list: "List_Info" },
+  { id: "Rhapsody", element: "Rhapsody", key: "rhapsody", label: "Rhapsody", input: "Rhapsody", list: "List_Info" },
+  { id: "SiriusXM", element: "SiriusXM", key: "siriusXm", label: "SiriusXM", input: "SiriusXM", list: "List_Info" },
 ];
 
 /**

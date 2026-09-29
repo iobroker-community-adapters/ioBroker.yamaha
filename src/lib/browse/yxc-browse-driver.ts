@@ -19,7 +19,8 @@ export const YXC_BROWSE_SOURCES: ReadonlyArray<{ input: string; key: string; lab
   { input: "napster", key: "napster", label: "Napster" },
   { input: "pandora", key: "pandora", label: "Pandora" },
   { input: "rhapsody", key: "rhapsody", label: "Rhapsody" },
-  { input: "siriusxm", key: "sirius", label: "SiriusXM" },
+  // The same key as on YNCA and XML — `player.browse.source` names a source alike whichever owns it.
+  { input: "siriusxm", key: "siriusXm", label: "SiriusXM" },
   { input: "juke", key: "juke", label: "JUKE" },
   { input: "radiko", key: "radiko", label: "radiko" },
   { input: "qobuz", key: "qobuz", label: "Qobuz" },
