@@ -201,15 +201,22 @@ describe("YNCA catalog", () => {
     expect(funcToEntry(cat).get("SPOTIFY:PLAYBACKINFO")?.id).toBe("player.playback");
   });
 
-  test("playback is a numeric media.state coded from PLAYBACKINFO (Play=0)", () => {
+  test("playback is a numeric media.state coded from PLAYBACKINFO as the role catalog says (Play=1)", () => {
     const cat = buildYncaCatalog();
     expect(cat.find(e => e.id === "player.playback")?.role).toBe("media.state");
     // Every source subunit reports into the ONE flat state (v2.0.0) — the controller
     // routes it to the zones listening to that source.
     expect(yncaStateUpdate({ subunit: "SPOTIFY", func: "PLAYBACKINFO", value: "Play" }, funcToEntry(cat))).toEqual({
       id: "player.playback",
-      value: 0,
+      value: 1,
     });
+    // stateroles.md, media.state: 0 - pause, 1 - play, 2 - stop (audit 2026-09-29, B4).
+    expect(yncaStateUpdate({ subunit: "SPOTIFY", func: "PLAYBACKINFO", value: "Pause" }, funcToEntry(cat))?.value).toBe(
+      0,
+    );
+    expect(yncaStateUpdate({ subunit: "SPOTIFY", func: "PLAYBACKINFO", value: "Stop" }, funcToEntry(cat))?.value).toBe(
+      2,
+    );
   });
 
   test("the playback times are seconds, with the readable form beside them", () => {
@@ -293,8 +300,8 @@ describe("YNCA catalog", () => {
     // numeric coded state. That has to reach the device as its command word, while a
     // null/empty/non-numeric write stays dropped.
     const map = idToEntry(buildYncaCatalog().filter(e => e.subunit === "NETRADIO"));
-    expect(yncaCommand("player.playback", 0, map)).toMatchObject({ func: "PLAYBACK", value: "Play" });
-    expect(yncaCommand("player.playback", "0", map)).toMatchObject({ func: "PLAYBACK", value: "Play" });
+    expect(yncaCommand("player.playback", 1, map)).toMatchObject({ func: "PLAYBACK", value: "Play" });
+    expect(yncaCommand("player.playback", "1", map)).toMatchObject({ func: "PLAYBACK", value: "Play" });
     expect(yncaCommand("player.repeat", "2", map)).toMatchObject({ func: "REPEAT", value: "All" });
     expect(yncaCommand("player.playback", null, map)).toBeUndefined();
     expect(yncaCommand("player.playback", "", map)).toBeUndefined();

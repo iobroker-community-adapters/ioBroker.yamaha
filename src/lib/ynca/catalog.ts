@@ -1,3 +1,4 @@
+import { MEDIA_STATE, MEDIA_STATE_LABELS } from "../catalog/media-state";
 import { catalogToObjects, type StatesResolver } from "../catalog/build-objects";
 import type { CatalogEntry, ObjectDef } from "../catalog/types";
 import {
@@ -2576,9 +2577,14 @@ const PLAYER_FUNCS: Array<{
     readFunc: "PLAYBACKINFO",
     state: "playback",
     nameKey: "playback",
-    // media.state must be a number for the type-detector media-player slot; PLAYBACKINFO
-    // reports Play/Pause/Stop (Skip Fwd/Rev are the separate next/prev buttons below).
-    spec: { kind: "code", codes: { Play: 0, Stop: 1, Pause: 2 }, labels: { 0: "Play", 1: "Stop", 2: "Pause" } },
+    // media.state must be a number for the type-detector media-player slot, coded as the role catalog
+    // says (see catalog/media-state.ts); PLAYBACKINFO reports Play/Pause/Stop (Skip Fwd/Rev are the
+    // separate next/prev buttons below).
+    spec: {
+      kind: "code",
+      codes: { Play: MEDIA_STATE.play, Stop: MEDIA_STATE.stop, Pause: MEDIA_STATE.pause },
+      labels: MEDIA_STATE_LABELS,
+    },
     write: true,
     role: "media.state",
   },

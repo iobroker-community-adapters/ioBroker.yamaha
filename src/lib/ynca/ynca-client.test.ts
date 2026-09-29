@@ -643,6 +643,50 @@ describe("YncaClient refusal attribution (#615, bracketed since audit 2026-09-24
   });
 });
 
+describe("YncaClient key presses and read-backs (audit 2026-09-29, B2/B3)", () => {
+  const wait = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
+
+  it("three quick presses of a relative key are three lines — only an absolute number collapses", async () => {
+    const { factory, sockets } = fixtureFactory();
+    const client = new YncaClient("10.0.0.2", testTimers, testGate(), factory);
+    const connect = client.connect();
+    sockets[0].emitConnect();
+    await connect;
+    client.send("MAIN", "LISTCURSOR", "Down");
+    client.send("MAIN", "LISTCURSOR", "Down");
+    client.send("MAIN", "LISTCURSOR", "Down");
+    for (let i = 0; i < 3; i++) {
+      for (let n = 0; n < 50 && sockets[0].written.filter(l => l.startsWith("@SYS")).length <= i; n++) {
+        await wait(10);
+      }
+      sockets[0].emitData("@SYS:VERSION=1.00\r\n");
+    }
+    await wait(150);
+    expect(sockets[0].written.filter(line => line === "@MAIN:LISTCURSOR=Down\r\n")).toHaveLength(3);
+  });
+
+  it("the read-back of a user write opens the next write with a marker", async () => {
+    const { factory, sockets } = fixtureFactory();
+    const client = new YncaClient("10.0.0.2", testTimers, testGate(), factory);
+    const connect = client.connect();
+    sockets[0].emitConnect();
+    await connect;
+    const refusals: string[] = [];
+    client.onRefusal(command => refusals.push(command));
+    // The read-back runs at user priority; its answer may come late — a refusal for a zone in standby.
+    client.get("ZONE2", "VOL", "user");
+    await drain();
+    client.send("MAIN", "VOL", "-40.0");
+    await drain();
+    expect(sockets[0].written).toEqual(["@ZONE2:VOL=?\r\n", "@SYS:VERSION=?\r\n"]);
+    sockets[0].emitData("@RESTRICTED\r\n@SYS:VERSION=1.00\r\n");
+    await wait(250);
+    sockets[0].emitData("@SYS:VERSION=1.00\r\n");
+    await drain();
+    expect(refusals).toEqual([]);
+  });
+});
+
 describe("YncaClient unknown lines (audit 2026-09-24, B14)", () => {
   test("a line that decodes to nothing reaches the unknown-line handler instead of vanishing", async () => {
     const { factory, sockets } = fixtureFactory();

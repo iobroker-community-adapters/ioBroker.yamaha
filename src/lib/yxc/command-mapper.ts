@@ -1,3 +1,4 @@
+import { MEDIA_STATE } from "../catalog/media-state";
 import type { StateValue } from "../types";
 import { YXC_ZONE_IDS, zonePrefix } from "./zones";
 import type { I18nKey } from "../i18n";
@@ -389,9 +390,15 @@ export function parseYxcPlayInfo(
   ) {
     updates.push({ id: "player.shuffle", value: info.shuffle !== "off" });
   }
-  // Playback status → media.state code (the same 0/1/2 numbers as the YNCA player); winding
+  // Playback status → media.state code (the role catalog's, shared with the YNCA player); winding
   // forward or back is still playing.
-  const playbackCode: Record<string, number> = { play: 0, stop: 1, pause: 2, fast_reverse: 0, fast_forward: 0 };
+  const playbackCode: Record<string, number> = {
+    play: MEDIA_STATE.play,
+    stop: MEDIA_STATE.stop,
+    pause: MEDIA_STATE.pause,
+    fast_reverse: MEDIA_STATE.play,
+    fast_forward: MEDIA_STATE.play,
+  };
   if (typeof info.playback === "string" && info.playback in playbackCode) {
     updates.push({ id: "player.playback", value: playbackCode[info.playback] });
   }
@@ -447,7 +454,7 @@ export function parseYxcPlayInfo(
  */
 export const PLAYER_CLEAR: StateValue[] = [
   { id: "player.source", value: "" },
-  { id: "player.playback", value: 1 },
+  { id: "player.playback", value: MEDIA_STATE.stop },
   { id: "player.artist", value: "" },
   { id: "player.album", value: "" },
   { id: "player.track", value: "" },

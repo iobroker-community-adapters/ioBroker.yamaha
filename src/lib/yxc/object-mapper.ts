@@ -1,3 +1,4 @@
+import { MEDIA_STATE_LABELS } from "../catalog/media-state";
 import { channelCommon, type ObjectDef } from "../catalog/types";
 import { YXC_CURSOR_VALUES, YXC_MENU_VALUES } from "./remote";
 import { tName, type I18nKey } from "../i18n";
@@ -40,13 +41,14 @@ const PLAYER_STATES: Array<{
   {
     state: "playback",
     common: {
-      // media.state is a number in the type-detector; the same 0/1/2 coding as the YNCA player.
+      // media.state is a number in the type-detector; the role catalog's coding, shared with the YNCA
+      // player (catalog/media-state.ts).
       nameKey: "playback",
       type: "number",
       role: "media.state",
       read: true,
       write: false,
-      states: { 0: "Play", 1: "Stop", 2: "Pause" },
+      states: MEDIA_STATE_LABELS,
     },
   },
   { state: "artist", common: { nameKey: "artist", type: "string", role: "media.artist", read: true, write: false } },

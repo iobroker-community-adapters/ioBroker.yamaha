@@ -36,9 +36,11 @@ export interface CommandGateTimers {
 /** Construction options. */
 export interface CommandGateOptions {
   /**
-   * Minimum milliseconds between two operations STARTING. YNCA: 100 (specification).
-   * HTTP transports: 0 — there is no documented spacing, but the gate still serialises
-   * so an embedded device never sees a burst of parallel requests.
+   * Minimum milliseconds between two lines on the wire: from the start of an operation, or from the
+   * last line an operation reported with {@link CommandGate.written} — whichever came later. YNCA: 100
+   * (specification, `ynca-python` `protocol.py`: the spacing after EVERY line sent). HTTP transports:
+   * 0 — there is no documented spacing, but the gate still serialises so an embedded device never
+   * sees a burst of parallel requests.
    */
   minSpacingMs: number;
   /** Adapter-managed timers. */
@@ -79,7 +81,8 @@ export class CommandGate {
   private readonly controller = new AbortController();
   private readonly now: () => number;
   private running = false;
-  private lastStart = Number.NEGATIVE_INFINITY;
+  /** When the last line went out — an operation's start, or a line it reported (see {@link written}). */
+  private lastLine = Number.NEGATIVE_INFINITY;
 
   /**
    * @param options spacing, timers and clock
@@ -139,6 +142,15 @@ export class CommandGate {
   }
 
   /**
+   * Report a line the running operation just put on the wire. An operation that writes several lines
+   * (a bracketed YNCA write: marker, line, marker) ends right after its last one's answer — measured
+   * from its start, the next operation went out 6 ms after that last line (audit 2026-09-29, B1).
+   */
+  public written(): void {
+    this.lastLine = this.now();
+  }
+
+  /**
    * Wait out the gate's spacing without occupying it — for pacing that is not itself a
    * command (a settle window, a busy poll). Resolves early and rejects nothing when the
    * gate closes, so a caller's await chain ends instead of hanging on a cancelled timer.
@@ -192,7 +204,7 @@ export class CommandGate {
     // Named `spacingLeft`, not `wait`: the repository checker's S5051 rule looks for a
     // `const wait =` to catch hand-rolled sleep helpers, and would flag this plain number
     // (the adapter hit the same false positive once before, with a `const sleep =`).
-    const spacingLeft = this.options.minSpacingMs - (this.now() - this.lastStart);
+    const spacingLeft = this.options.minSpacingMs - (this.now() - this.lastLine);
     if (spacingLeft > 0) {
       this.running = true;
       this.options.timers.schedule(() => {
@@ -206,7 +218,7 @@ export class CommandGate {
       return;
     }
     this.running = true;
-    this.lastStart = this.now();
+    this.lastLine = this.now();
     void this.execute(entry);
   }
 

@@ -32,6 +32,9 @@ const MAX_ANSWER_MS = 2000;
 /** The specification's minimum spacing between two lines, kept inside a bracketed exchange. */
 const LINE_SPACING_MS = 100;
 
+/** A write value that sets a number outright — the only kind a newer write of the same function may replace. */
+const ABSOLUTE_NUMBER = /^-?\d+(\.\d+)?$/;
+
 /** The closing marker every receiver answers (see {@link MAX_ANSWER_MS}). */
 const VERSION_GET = encodeGet("SYS", "VERSION");
 
@@ -152,8 +155,12 @@ export class YncaClient {
   private readonly versionAnswers: Array<() => void> = [];
   /** Woken when the connection drops or closes — a wait for an answer must not outlive it. */
   private readonly dropWaiters = new Set<() => void>();
-  /** When the last background line went out — a user write after it opens with a marker. */
-  private lastBackgroundAt = Number.NEGATIVE_INFINITY;
+  /**
+   * When the last line outside a bracket went out — a user write after it opens with a marker. Every
+   * such line counts, whatever its priority: the read-back of a user write is refused late just like a
+   * background read, and its refusal landed in the next write's bracket (audit 2026-09-29, B3).
+   */
+  private lastPlainLineAt = Number.NEGATIVE_INFINITY;
   private unknownLineHandler: ((line: string) => void) | undefined;
   /** The refusal window of a bracketed exchange: open between its line and its closing marker. */
   private refusalWindow: { refusal?: "restricted" | "undefined" } | undefined;
@@ -334,7 +341,10 @@ export class YncaClient {
           }
         },
         "user",
-        `${subunit}:${func}`,
+        // Only an ABSOLUTE number collapses with a waiting write to the same function (a volume slider's
+        // burst — the newest value wins). A key press or a step (`Down`, `Up`, `Skip Fwd`, a pad key) is
+        // relative: three presses must be three lines (audit 2026-09-29, B2).
+        ABSOLUTE_NUMBER.test(value) ? `${subunit}:${func}` : undefined,
       )
       .catch((e: unknown) => {
         if (!(e instanceof CommandGateClosedError)) {
@@ -385,7 +395,7 @@ export class YncaClient {
    */
   private async bracketed(bytes: Buffer, alwaysLead: boolean): Promise<"ok" | "restricted" | "undefined" | "unclear"> {
     let certain = true;
-    if (alwaysLead || Date.now() - this.lastBackgroundAt < MAX_ANSWER_MS) {
+    if (alwaysLead || Date.now() - this.lastPlainLineAt < MAX_ANSWER_MS) {
       // Answers to lines sent before this one may still be on their way (1.5 s measured):
       // the leading marker's answer comes after all of them.
       certain = await this.marker();
@@ -395,6 +405,7 @@ export class YncaClient {
     this.refusalWindow = window;
     try {
       this.socket?.write(bytes);
+      this.gate.written();
       await this.gate.delay(LINE_SPACING_MS);
       certain = (await this.marker()) && certain;
     } finally {
@@ -424,6 +435,7 @@ export class YncaClient {
         }
       });
       this.socket?.write(encodeDeviceText(`${VERSION_GET}\r\n`) ?? Buffer.alloc(0));
+      this.gate.written();
       void this.gate.delay(MAX_ANSWER_MS).then(() => {
         if (!settled) {
           settled = true;
@@ -492,10 +504,9 @@ export class YncaClient {
           // A plain read of the version is answered like a marker: its entry keeps the order.
           this.versionAnswers.push(() => {});
         }
-        if (priority === "background") {
-          this.lastBackgroundAt = Date.now();
-        }
+        this.lastPlainLineAt = Date.now();
         this.socket?.write(bytes);
+        this.gate.written();
       }, priority)
       .catch((e: unknown) => {
         if (!(e instanceof CommandGateClosedError)) {

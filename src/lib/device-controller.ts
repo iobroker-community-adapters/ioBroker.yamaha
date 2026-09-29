@@ -1,3 +1,4 @@
+import { MEDIA_STATE } from "./catalog/media-state";
 import { mergeYncaSubunits, type YncaCapabilities } from "./ynca/capability";
 import { formatWireNumber, writableNumber } from "./catalog/value-coerce";
 import { playTimeTwin } from "./catalog/play-time";
@@ -121,7 +122,7 @@ const FLAT_PLAYER_ID = /^player\.[^.]+$/;
  * device actually has before emitting.
  */
 const YNCA_PLAYER_CLEAR: Array<{ id: string; value: number | string | boolean }> = [
-  { id: "player.playback", value: 1 },
+  { id: "player.playback", value: MEDIA_STATE.stop },
   { id: "player.artist", value: "" },
   { id: "player.album", value: "" },
   { id: "player.track", value: "" },
@@ -1279,6 +1280,8 @@ export class YncaDeviceController implements ConnectionHandle {
         continue;
       }
       if (playerSubunitForInput(this.zoneInputs.get(zone.key)) === subunit) {
+        // Per zone, like the datapoint: what a refused source write is put back to (audit 2026-09-29, B10).
+        this.reported.set(`${zone.prefix}${id}`, value);
         this.deps.setStateAck(`${this.deviceId}.${zone.prefix}${id}`, value);
         if (twin) {
           this.deps.setStateAck(`${this.deviceId}.${zone.prefix}${twin.id}`, twin.value);
@@ -1455,6 +1458,11 @@ export class YncaDeviceController implements ConnectionHandle {
       return;
     }
     this.deps.client.send(subunit, func, wire);
+    // The receiver answers a PUT only when the value changed — a frequency snapped onto the station
+    // already playing, or the band already set, stood unacknowledged for good (audit 2026-09-29, B10).
+    this.readBack(
+      this.presentEntries.find(entry => !entry.derived && entry.subunit === subunit && entry.func === func),
+    );
   }
 
   /**
@@ -1585,9 +1593,23 @@ export class YncaDeviceController implements ConnectionHandle {
     const entry = parsed
       ? this.presentEntries.find(e => !e.derived && e.subunit === parsed[1] && e.func === parsed[2])
       : undefined;
-    const value = entry ? this.reported.get(entry.id) : undefined;
-    if (entry && value !== undefined) {
-      this.deps.setStateAck(`${this.deviceId}.${entry.id}`, value);
+    if (!entry) {
+      return;
+    }
+    // A source write names no zone: every zone listening to that source shows it, and each is put back
+    // to the value it showed (audit 2026-09-29, B10).
+    const ids = FLAT_PLAYER_ID.test(entry.id)
+      ? YNCA_ZONES.filter(
+          zone =>
+            this.playerZones.includes(zone.key) &&
+            playerSubunitForInput(this.zoneInputs.get(zone.key)) === entry.subunit,
+        ).map(zone => `${zone.prefix}${entry.id}`)
+      : [entry.id];
+    for (const id of ids) {
+      const value = this.reported.get(id);
+      if (value !== undefined) {
+        this.deps.setStateAck(`${this.deviceId}.${id}`, value);
+      }
     }
   }
 

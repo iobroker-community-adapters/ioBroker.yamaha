@@ -242,7 +242,7 @@ describe("parseYxcPlayInfo", () => {
       { id: "player.artist", value: "A" },
       { id: "player.album", value: "B" },
       { id: "player.track", value: "T" },
-      { id: "player.playback", value: 0 },
+      { id: "player.playback", value: 1 },
     ]);
   });
 
@@ -251,7 +251,7 @@ describe("parseYxcPlayInfo", () => {
       { id: "player.artist", value: "A" },
       { id: "player.album", value: "B" },
       { id: "player.track", value: "T" },
-      { id: "player.playback", value: 0 },
+      { id: "player.playback", value: 1 },
       { id: "player.source", value: "cd" },
     ]);
   });
@@ -307,8 +307,8 @@ describe("parseYxcPlayInfo", () => {
       expect(read({ shuffle }), shuffle).toEqual([true, "cd"]);
     }
     expect(read({ shuffle: "off" })).toEqual([false, "cd"]);
-    expect(read({ playback: "fast_forward" })).toEqual([0, "cd"]);
-    expect(read({ playback: "fast_reverse" })).toEqual([0, "cd"]);
+    expect(read({ playback: "fast_forward" })).toEqual([1, "cd"]);
+    expect(read({ playback: "fast_reverse" })).toEqual([1, "cd"]);
     expect(read({ repeat: "sometimes", shuffle: "maybe", playback: "rewinding" })).toEqual(["cd"]);
   });
 
@@ -326,7 +326,7 @@ describe("parseYxcPlayInfo", () => {
       // Typed like the YNCA sources: repeat as the media.mode.repeat code, shuffle boolean.
       { id: "player.repeat", value: 1 },
       { id: "player.shuffle", value: false },
-      { id: "player.playback", value: 0 },
+      { id: "player.playback", value: 1 },
       { id: "player.albumArt", value: "/cover.jpg" },
       // Both forms of each time, from the one reported value — the seconds fill the
       // media-player slot, the text is what a visualisation shows.

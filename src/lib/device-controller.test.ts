@@ -245,6 +245,38 @@ describe("YncaDeviceController", () => {
     expect(acked).toEqual([{ id: "living.volume", value: -40 }]);
   });
 
+  // A frequency snapped onto the station already playing, or the band already set, is answered by
+  // nothing — the band-routed tuner writes read back too (audit 2026-09-29, B10).
+  test("a band-routed tuner write is followed by a read-back of the function it sent", async () => {
+    const client = new FakeClient();
+    client.capabilities = { model: "RX-V473", subunits: { TUN: { BAND: "FM", FMFREQ: "98.10" } } };
+    const controller = new YncaDeviceController("living", makeDeps(client).deps);
+    await controller.start();
+    client.gets.length = 0;
+    controller.handleStateChange("living.tuner.frequency", false, 98150);
+    expect(client.sent).toContainEqual({ subunit: "TUN", func: "FMFREQ", value: "98.15" });
+    expect(client.gets).toEqual([{ subunit: "TUN", func: "FMFREQ" }]);
+  });
+
+  test("a refused source write puts back the value the listening zone showed", async () => {
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX-A810",
+      subunits: { MAIN: { PWR: "On", INP: "USB" }, USB: { REPEAT: "All", PLAYBACKINFO: "Play" } },
+    };
+    let refuse: ((command: string, verdict: "restricted" | "undefined") => void) | undefined;
+    client.onRefusal = (handler): void => {
+      refuse = handler;
+    };
+    const { acked, deps } = makeDeps(client);
+    const controller = new YncaDeviceController("living", deps);
+    await controller.start();
+    acked.length = 0;
+    controller.handleStateChange("living.player.repeat", false, 0);
+    refuse?.("@USB:REPEAT=Off", "restricted");
+    expect(acked).toContainEqual({ id: "living.player.repeat", value: 2 });
+  });
+
   // Registered only after the tree was built, the live handler lost what the device pushed while
   // ~250 objects were being created (audit 2026-09-24, B12).
   test("a push that arrives while the tree is being built reaches its state", async () => {
@@ -755,7 +787,7 @@ describe("YncaDeviceController fast restart (persisted capability layer)", () =>
     const { deps } = makeDeps(client);
     const controller = new YncaDeviceController("living", { ...deps, probeMemory: memory });
     await controller.start();
-    controller.handleStateChange("living.player.playback", false, 2);
+    controller.handleStateChange("living.player.playback", false, 0);
     expect(client.sent).toEqual([{ subunit: "SPOTIFY", func: "PLAYBACK", value: "Pause" }]);
   });
 
@@ -1066,7 +1098,7 @@ describe("YncaDeviceController unified player v2.0.0 (input-routed block)", () =
     // Switching to a non-player input clears again and empties the source display.
     s.acked.length = 0;
     s.client.emit({ subunit: "MAIN", func: "INP", value: "HDMI1" });
-    expect(s.acked).toContainEqual({ id: "living.player.playback", value: 1 });
+    expect(s.acked).toContainEqual({ id: "living.player.playback", value: 2 });
     expect(s.acked).toContainEqual({ id: "living.player.source", value: "" });
   });
 
@@ -1103,7 +1135,7 @@ describe("YncaDeviceController unified player v2.0.0 (input-routed block)", () =
       USB: { PLAYBACKINFO: "Play" },
     });
     s.client.sent.length = 0;
-    s.controller.handleStateChange("living.player.playback", false, 2);
+    s.controller.handleStateChange("living.player.playback", false, 0);
     s.controller.handleStateChange("living.player.next", false, true);
     expect(s.client.sent).toEqual([
       { subunit: "USB", func: "PLAYBACK", value: "Pause" },
@@ -1129,7 +1161,7 @@ describe("YncaDeviceController unified player v2.0.0 (input-routed block)", () =
     expect(s.acked).not.toContainEqual({ id: "living.player.station", value: "Radio X" });
     // A zone-prefixed transport write routes over zone2's source.
     s.client.sent.length = 0;
-    s.controller.handleStateChange("living.multiroom.zone2.player.playback", false, 1);
+    s.controller.handleStateChange("living.multiroom.zone2.player.playback", false, 2);
     expect(s.client.sent).toEqual([{ subunit: "NETRADIO", func: "PLAYBACK", value: "Stop" }]);
   });
 });
@@ -1172,8 +1204,8 @@ describe("YncaDeviceController player review fixes (2.0.0 pre-release audit)", (
     expect(s.acked).toContainEqual({ id: "living.multiroom.zone2.player.source", value: "" });
     // The idle zone's block is seeded with its cleared shape (only the states the
     // device has), while the playing zone keeps its routed values.
-    expect(s.acked).toContainEqual({ id: "living.multiroom.zone2.player.playback", value: 1 });
-    expect(s.acked).not.toContainEqual({ id: "living.player.playback", value: 1 });
+    expect(s.acked).toContainEqual({ id: "living.multiroom.zone2.player.playback", value: 2 });
+    expect(s.acked).not.toContainEqual({ id: "living.player.playback", value: 2 });
   });
 });
 
@@ -1214,7 +1246,7 @@ describe("YncaDeviceController test-audit hardening (2.0.1)", () => {
     client.emit({ subunit: "MAIN", func: "INP", value: input });
     client.emit({ subunit, func: "PLAYBACKINFO", value: "Play" });
     expect(acked).toContainEqual({ id: "living.player.source", value: input });
-    expect(acked).toContainEqual({ id: "living.player.playback", value: 0 });
+    expect(acked).toContainEqual({ id: "living.player.playback", value: 1 });
   });
 });
 

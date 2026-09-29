@@ -186,3 +186,34 @@ describe("CommandGate coalesces queued writes to one target (audit 2026-09-24, B
     expect(ran).toEqual([9]);
   });
 });
+
+describe("CommandGate spacing from the last line on the wire (audit 2026-09-29, B1)", () => {
+  test("an operation that reports a late line delays the next one by the full spacing from THAT line", async () => {
+    const t = fakeTimers();
+    const gate = new CommandGate({ minSpacingMs: 100, timers: t.timers, now: t.now });
+    const starts: number[] = [];
+    let finishFirst: () => void = () => {};
+    const first = gate.run(async () => {
+      starts.push(t.now());
+      // A bracketed write: its last line (the closing marker) goes out 200 ms into the operation.
+      await new Promise<void>(resolve => (finishFirst = resolve));
+    });
+    const second = gate.run(() => {
+      starts.push(t.now());
+    });
+    await flush();
+    t.advance(200);
+    gate.written();
+    t.advance(5); // the marker's answer: the operation ends 5 ms after its last line
+    finishFirst();
+    await first;
+    await flush();
+    expect(starts).toEqual([0]);
+    t.advance(94);
+    await flush();
+    expect(starts).toEqual([0]);
+    t.advance(1);
+    await second;
+    expect(starts).toEqual([0, 300]);
+  });
+});

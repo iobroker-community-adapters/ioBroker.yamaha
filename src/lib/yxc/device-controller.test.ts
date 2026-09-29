@@ -2023,7 +2023,7 @@ describe("YxcDeviceController player.source seeding", () => {
     await s.controller.start();
     expect(s.acks).toContainEqual({ id: "living.player.source", value: "" });
     expect(s.acks).toContainEqual({ id: "living.player.artist", value: "" });
-    expect(s.acks).toContainEqual({ id: "living.player.playback", value: 1 });
+    expect(s.acks).toContainEqual({ id: "living.player.playback", value: 2 });
     expect(s.acks).toContainEqual({ id: "living.player.elapsedTime", value: 0 });
   });
 
@@ -2065,7 +2065,7 @@ describe("YxcDeviceController seed edge cases (2.0.1 hardening)", () => {
     const s = setup({ zone: [{ id: "main", func_list: ["power"] }], cd: {} }, { power: "on", input: "hdmi1" });
     await s.controller.start();
     expect(s.acks).toContainEqual({ id: "living.player.source", value: "" });
-    expect(s.acks).toContainEqual({ id: "living.player.playback", value: 1 });
+    expect(s.acks).toContainEqual({ id: "living.player.playback", value: 2 });
   });
 });
 
