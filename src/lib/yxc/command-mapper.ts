@@ -651,7 +651,9 @@ export const DAB_FIELDS: Array<{
     nameKey: "bitRate",
     descKey: "descBitRate",
     unit: "kbps",
-    min: 32,
+    // 32–256 for a received service (YXC Basic, getDabInfo); the device reports 0 while none is received
+    // (RX-V6A capture) — the range takes the device's own word, or every idle poll warns.
+    min: 0,
     max: 256,
     role: "media.bitrate",
   },

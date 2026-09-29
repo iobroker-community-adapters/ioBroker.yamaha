@@ -195,7 +195,8 @@ describe("mapYxcToObjects", () => {
 
   test("the DAB fields carry the units and bounds the specification declares", () => {
     const dab = mapYxcToObjects(parseYxcFeatures(rxA2070));
-    expect(dab.find(o => o.id === "tuner.dab.bitRate")?.common).toMatchObject({ unit: "kbps", min: 32, max: 256 });
+    // 32–256 per specification, 0 while no service is received (RX-V6A capture) — the device's own word.
+    expect(dab.find(o => o.id === "tuner.dab.bitRate")?.common).toMatchObject({ unit: "kbps", min: 0, max: 256 });
     expect(dab.find(o => o.id === "tuner.dab.quality")?.common).toMatchObject({ min: 0, max: 100 });
   });
 
