@@ -184,7 +184,8 @@ const EN = JSON.parse(fs.readFileSync(path.join(ADAPTER_DIR, "admin", "i18n", "e
 /** The ids removed in 2.8.0 — none of them may exist anywhere, in main or in any zone. */
 const REMOVED_IN_2_8_0 = ["actualVolume", "actualVolumeMode", "inputText"];
 /** A device-relative `volume` id: the main zone's, or one of zones 2-4. */
-const VOLUME_ID = /^(?:multiroom\.zone[234]\.)?volume$/;
+// Zone B is a zone too (audit 2026-09-29, D13).
+const VOLUME_ID = /^(?:multiroom\.(?:zone[234]|zoneB)\.)?volume$/;
 /** The instance settings every start of the manifest carries, next to what a suite configures. */
 const MANIFEST_NATIVE = require(path.join(ADAPTER_DIR, "io-package.json")).native ?? {};
 /** The room a user put every previous device and one of its datapoints into (upgrade suite). */

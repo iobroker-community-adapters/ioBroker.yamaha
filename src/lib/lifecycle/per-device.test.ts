@@ -28,7 +28,15 @@ describe("PerDeviceCaches (audit 2026-09-29, A28)", () => {
     const source = readFileSync(join(__dirname, "../../main.ts"), "utf8");
     const loose = [...source.matchAll(/private (?:readonly )?(\w+) = new (?:Map|Set)</g)].map(match => match[1]);
     // Not per device: addresses (cleared with the record), the ids deleted this session (must
-    // outlive the delete), the search warnings and the NOTIFY throttle (per address).
-    expect(loose.sort()).toEqual(["knownDeviceIps", "notifyProbed", "removed", "warnedSearch"]);
+    // outlive the delete), the search warnings, the NOTIFY throttle (per address), and the searches
+    // and description fetches in flight (ended on unload).
+    expect(loose.sort()).toEqual([
+      "fetchesInFlight",
+      "knownDeviceIps",
+      "notifyProbed",
+      "removed",
+      "searchesInFlight",
+      "warnedSearch",
+    ]);
   });
 });

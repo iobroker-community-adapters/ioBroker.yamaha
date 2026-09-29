@@ -3269,6 +3269,18 @@ describe("Yamaha SSDP search", () => {
     expect(net.sockets.every(s => s.closed === 1)).toBe(true);
   });
 
+  // js-controller clears the adapter's timers on stop, so the search's own settle timer never fires:
+  // in compact mode its sockets stayed bound and its promise open (audit 2026-09-29, E4).
+  it("a search in flight is ended by the unload — sockets closed, finds handed back", async () => {
+    net.interfaces.value = { en0: [{ address: "192.168.1.5", family: "IPv4", internal: false }] };
+    const { ctx, search } = await withRealSearch();
+    const pending = search("urn:schemas-upnp-org:device:MediaRenderer:1", 3000);
+    expect(net.sockets.every(s => s.closed === 0)).toBe(true);
+    await new Promise<void>(resolve => ctx.i.onUnload(resolve));
+    await expect(pending).resolves.toEqual([]);
+    expect(net.sockets.every(s => s.closed === 1)).toBe(true);
+  });
+
   it("searches only on the configured interface", async () => {
     net.interfaces.value = {
       en0: [{ address: "192.168.1.5", family: "IPv4", internal: false }],

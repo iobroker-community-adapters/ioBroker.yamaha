@@ -196,6 +196,10 @@ interface PendingDevicePatch {
  */
 export class Yamaha extends utils.Adapter {
   private readonly supervisors: DeviceSupervisor[] = [];
+  /** The network searches running now — each one's finish, which `onUnload` calls (E4). */
+  private readonly searchesInFlight = new Set<() => void>();
+  /** The description fetches running now, destroyed by `onUnload` (E4). */
+  private readonly fetchesInFlight = new Set<ReturnType<typeof httpGet>>();
   /** Every collection kept per device — deleting a device forgets them in one call (A28). */
   private readonly perDevice = new PerDeviceCaches();
   /**
@@ -2734,7 +2738,9 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
-   * Synchronous teardown — no await, call the callback immediately (SIGKILL otherwise).
+   * Short teardown: close what runs, write the final markers, and call `callback()` AFTER those
+   * writes — reporting "done" first loses them, the host tears the process down once told
+   * (CLAUDE_CODING.md; the old head line here said the opposite — audit 2026-09-29, E5).
    *
    * @param callback function to invoke once teardown is complete
    */
@@ -2743,6 +2749,16 @@ export class Yamaha extends utils.Adapter {
       this.unloading = true;
       this.clearTimeout(this.balanceTimer);
       this.clearTimeout(this.rediscoverTimer);
+      // A search in flight is ended here: js-controller clears the adapter's timers on stop, so
+      // its own settle timer never fires — in compact mode its sockets stayed bound and its promise
+      // open until the host process restarted (audit 2026-09-29, E4). Open description fetches go
+      // with it.
+      for (const finish of [...this.searchesInFlight]) {
+        finish();
+      }
+      for (const request of [...this.fetchesInFlight]) {
+        request.destroy();
+      }
       this.ssdpListener?.close();
       this.ssdpListener = undefined;
       this.pushReceiver?.close();
@@ -3238,6 +3254,7 @@ export class Yamaha extends utils.Adapter {
           return;
         }
         settled = true;
+        this.searchesInFlight.delete(finish);
         for (const socket of sockets) {
           try {
             socket.close();
@@ -3303,6 +3320,7 @@ export class Yamaha extends utils.Adapter {
           }
         });
       };
+      this.searchesInFlight.add(finish);
       // Configured → that one interface; empty → every non-internal IPv4; none usable → default route.
       if (bindAddrs.length === 0) {
         searchFrom(undefined);
@@ -3338,6 +3356,8 @@ export class Yamaha extends utils.Adapter {
         res.on("error", reject);
         res.on("end", () => resolve(body.text()));
       });
+      this.fetchesInFlight.add(req);
+      req.on("close", () => this.fetchesInFlight.delete(req));
       req.on("error", reject);
       req.setTimeout(FETCH_TIMEOUT_MS, () => req.destroy(new Error(`fetch timed out: ${url}`)));
     });
