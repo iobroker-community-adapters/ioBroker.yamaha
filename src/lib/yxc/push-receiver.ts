@@ -1,6 +1,6 @@
 import { createSocket } from "node:dgram";
 import { isIPv4, resolveIPv4 } from "../network-interfaces";
-import { errorMessage } from "../util";
+import { decodeDeviceText, errorMessage } from "../util";
 
 /** The UDP port MusicCast devices push unsolicited events to. */
 const YXC_PUSH_PORT = 41100;
@@ -40,7 +40,9 @@ function defaultFactory(): YxcPushSocket {
   const socket = createSocket("udp4");
   return {
     onMessage: handler => {
-      socket.on("message", (msg: Buffer, rinfo) => handler(msg.toString(), rinfo.address));
+      // The strict decode every other device text takes: UTF-8, Latin-1 where UTF-8 does not hold
+      // (util.ts; audit 2026-09-29, C50).
+      socket.on("message", (msg: Buffer, rinfo) => handler(decodeDeviceText(msg), rinfo.address));
     },
     onError: handler => {
       socket.on("error", handler);

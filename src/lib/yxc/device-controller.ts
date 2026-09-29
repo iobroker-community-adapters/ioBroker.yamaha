@@ -3,6 +3,7 @@ import { resolveIPv4 } from "../network-interfaces";
 import { parseYxcFeatures, type YxcCapabilities, type YxcTunerFeatures } from "./capability";
 import {
   mapYxcToObjects,
+  NETUSB_PLAY_ERRORS,
   rawVolumeFor,
   shownVolumeFor,
   volumeScaleOf,
@@ -477,7 +478,12 @@ export class YxcDeviceController implements ConnectionHandle {
     // station scan (status stays not_ready before) — seed the documented start state
     // (nothing scanned) so they are not left as valueless read states; a real scan
     // result overwrites them via the tuner play info.
-    if (capabilities.media.includes("tuner") && (capabilities.tuner?.bands ?? []).includes("dab")) {
+    // Only where the tuner declares the scan (`dab_initial_scan`, YXC Basic §6.2 — audit 2026-09-29, C42).
+    if (
+      capabilities.media.includes("tuner") &&
+      (capabilities.tuner?.bands ?? []).includes("dab") &&
+      (capabilities.tuner?.funcs ?? []).includes("dab_initial_scan")
+    ) {
       this.emit("tuner.dab.totalStations", 0);
       this.emit("tuner.dab.scanProgress", 0);
     }
@@ -485,6 +491,7 @@ export class YxcDeviceController implements ConnectionHandle {
     // stand valueless (and are not purged as never filled) before the first report (C18).
     if (capabilities.media.includes("netusb")) {
       this.emit("player.netPlayer.playError", 0);
+      this.emit("player.netPlayer.playErrorText", "");
       this.emit("player.netPlayer.playMessage", "");
     }
     if (model) {
@@ -927,7 +934,7 @@ export class YxcDeviceController implements ConnectionHandle {
       return;
     }
     const inputs = capabilities.zones.find(zone => zone.id === "main")?.inputs ?? [];
-    const driver = new YxcBrowseDriver(this.deps.client, inputs, this.cover);
+    const driver = new YxcBrowseDriver(this.deps.client, inputs, this.cover, input => this.zoneListeningTo(input));
     this.browseDriver = driver;
     this.browseEngine = await createBrowseSurface(driver, this.deviceId, {
       upsertObject: this.deps.upsertObject,
@@ -1209,6 +1216,10 @@ export class YxcDeviceController implements ConnectionHandle {
   private applyNetusbNotice(notice: NetusbNotice): void {
     if (notice.playError !== undefined) {
       this.emit("player.netPlayer.playError", notice.playError);
+      this.emit(
+        "player.netPlayer.playErrorText",
+        (notice.playErrorCodes ?? []).map(code => NETUSB_PLAY_ERRORS[code] ?? String(code)).join(", "),
+      );
     }
     if (notice.playMessage !== undefined) {
       this.emit("player.netPlayer.playMessage", notice.playMessage);
@@ -1746,6 +1757,12 @@ export class YxcDeviceController implements ConnectionHandle {
         this.emit(update.id, asShown);
         continue;
       }
+      // The maximum on the same scale as the volume it limits (audit 2026-09-29, C40).
+      if (update.id === `${zonePrefix(zone)}advanced.maxVolume` && typeof update.value === "number") {
+        const scale = this.volumeScale(zone);
+        this.emit(update.id, scale ? shownVolumeFor(scale, update.value) : update.value);
+        continue;
+      }
       this.emit(update.id, update.value);
       // The EXACT id, not a suffix: this value decides which source a zone's player block
       // and its transport buttons follow. A future status field ending in "input" would
@@ -2084,6 +2101,12 @@ export class YxcDeviceController implements ConnectionHandle {
         await this.refreshZone(command.zone);
         return;
       case "run": {
+        if (command.source !== undefined) {
+          if (this.mediaBlocks.includes(command.source)) {
+            await this.refreshMediaSource(command.source);
+          }
+          return;
+        }
         const zone = /^multiroom\.(zone[234])\./.exec(stateId)?.[1] ?? "main";
         if (this.zones.includes(zone)) {
           await this.refreshZone(zone);

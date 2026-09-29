@@ -17,7 +17,16 @@ import type { YxcClientLike } from "./client-contract";
  * frequency (setFreq needs the current band).
  */
 export type YxcCommand =
-  | { kind: "run"; run: (client: YxcClientLike) => Promise<unknown> }
+  | {
+      kind: "run";
+      run: (client: YxcClientLike) => Promise<unknown>;
+      /**
+       * The media source whose play info the key changes — read back instead of the zone status: a
+       * tuner step or the CD tray changes `tuner/getPlayInfo` or `cd/getPlayInfo`, never `getStatus`
+       * (YXC Basic §6.6/§6.15/§8.3; audit 2026-09-29, C32).
+       */
+      source?: "tuner" | "cd";
+    }
   | { kind: "equalizer"; zone: string; band: "low" | "mid" | "high"; value: number }
   | { kind: "volume"; zone: string; value: number }
   | { kind: "tunerFreq"; value: number }
@@ -123,7 +132,7 @@ export function parseYxcStatus(zoneStatus: unknown, zone: string): StateValue[] 
 export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefined {
   const button = BUTTON_ACTIONS[stateId];
   if (button) {
-    return { kind: "run", run: button };
+    return { kind: "run", run: button, source: "cd" };
   }
   if (stateId === "tuner.band" && isWritableValue(value, false)) {
     // Its own kind, not a plain run: the controller has to remember the band, because a
@@ -157,16 +166,16 @@ export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefi
     return { kind: "tunerPreset", value: Number(value) };
   }
   if (stateId === "tuner.presetUp") {
-    return { kind: "run", run: client => client.switchTunerPreset("next") };
+    return { kind: "run", run: client => client.switchTunerPreset("next"), source: "tuner" };
   }
   if (stateId === "tuner.presetDown") {
-    return { kind: "run", run: client => client.switchTunerPreset("previous") };
+    return { kind: "run", run: client => client.switchTunerPreset("previous"), source: "tuner" };
   }
   if (stateId === "tuner.dab.serviceUp") {
-    return { kind: "run", run: client => client.setDabService("next") };
+    return { kind: "run", run: client => client.setDabService("next"), source: "tuner" };
   }
   if (stateId === "tuner.dab.serviceDown") {
-    return { kind: "run", run: client => client.setDabService("previous") };
+    return { kind: "run", run: client => client.setDabService("previous"), source: "tuner" };
   }
   let zone = "main";
   let name = stateId;
@@ -434,7 +443,7 @@ export function parseYxcPlayInfo(
   }
   // CD drive-own extras (presence-checked, netusb responses carry none of these fields).
   if (typeof info.track_number === "number") {
-    updates.push({ id: "player.cd.trackNumber", value: info.track_number });
+    updates.push({ id: "player.cd.trackNumber", value: Math.max(0, info.track_number) });
   }
   if (typeof info.total_tracks === "number") {
     updates.push({ id: "player.cd.totalTracks", value: info.total_tracks });
@@ -480,6 +489,12 @@ export const DAB_FIELDS: Array<{
   nameKey: I18nKey;
   /** Explanation key — absent means self-explanatory. */
   descKey?: I18nKey;
+  /** The unit and bounds YXC Basic §6.2 declares for the field. */
+  unit?: string;
+  min?: number;
+  max?: number;
+  /** The tuner function (`func_list`) the field needs as proof — §6.2 "Available only when …". */
+  requires?: string;
 }> = [
   {
     field: "service_label",
@@ -513,8 +528,25 @@ export const DAB_FIELDS: Array<{
   // preset and audio_mode are NOT listed here: the active-band parse feeds the
   // unified flat tuner.preset / tuner.audioMode states (v2.0.0).
   { field: "status", id: "tuner.dab.status", type: "string", nameKey: "dabStatus", descKey: "descDabStatus" },
-  { field: "bit_rate", id: "tuner.dab.bitRate", type: "number", nameKey: "bitRate", descKey: "descBitRate" },
-  { field: "quality", id: "tuner.dab.quality", type: "number", nameKey: "signalQuality", descKey: "descSignalQuality" },
+  {
+    field: "bit_rate",
+    id: "tuner.dab.bitRate",
+    type: "number",
+    nameKey: "bitRate",
+    descKey: "descBitRate",
+    unit: "kbps",
+    min: 32,
+    max: 256,
+  },
+  {
+    field: "quality",
+    id: "tuner.dab.quality",
+    type: "number",
+    nameKey: "signalQuality",
+    descKey: "descSignalQuality",
+    min: 0,
+    max: 100,
+  },
   { field: "off_air", id: "tuner.dab.offAir", type: "boolean", nameKey: "offAir", descKey: "descOffAir" },
   { field: "dab_plus", id: "tuner.dab.dabPlus", type: "boolean", nameKey: "dabPlus", descKey: "descDabPlus" },
   {
@@ -530,6 +562,9 @@ export const DAB_FIELDS: Array<{
     type: "number",
     nameKey: "totalStations",
     descKey: "descTotalStations",
+    min: 0,
+    max: 255,
+    requires: "dab_initial_scan",
   },
   {
     field: "initial_scan_progress",
@@ -537,8 +572,20 @@ export const DAB_FIELDS: Array<{
     type: "number",
     nameKey: "initialScanProgress",
     descKey: "descInitialScanProgress",
+    unit: "%",
+    min: 0,
+    max: 100,
+    requires: "dab_initial_scan",
   },
-  { field: "tune_aid", id: "tuner.dab.tuneAid", type: "number", nameKey: "tuneAidLevel", descKey: "descTuneAidLevel" },
+  {
+    field: "tune_aid",
+    id: "tuner.dab.tuneAid",
+    type: "number",
+    nameKey: "tuneAidLevel",
+    descKey: "descTuneAidLevel",
+    min: 0,
+    max: 100,
+  },
 ];
 
 /**
@@ -569,15 +616,26 @@ export function parseYxcTunerInfo(tunerInfo: unknown): StateValue[] {
       if (typeof current.preset === "number") {
         updates.push({ id: "tuner.preset", value: current.preset });
       }
-      if (typeof current.tuned === "boolean") {
-        updates.push({ id: "tuner.tuned", value: current.tuned });
-      }
-      if (typeof current.audio_mode === "string") {
-        updates.push({ id: "tuner.audioMode", value: current.audio_mode });
-      }
+      // A field the active band does not carry is not the old band's any more (YXC Basic §6.2: `am` has
+      // no `audio_mode`, `dab` no `tuned` but a `status`) — until 3.0.1 the FM values stood on after a
+      // switch to AM or DAB (audit 2026-09-29, C39).
+      updates.push({
+        id: "tuner.tuned",
+        value: typeof current.tuned === "boolean" ? current.tuned : band === "dab" ? current.status === "ready" : false,
+      });
+      updates.push({
+        id: "tuner.audioMode",
+        value: typeof current.audio_mode === "string" ? current.audio_mode : "",
+      });
     }
   }
   const rds = info.rds;
+  if ((typeof rds !== "object" || rds === null) && typeof band === "string") {
+    // §6.2: `rds` "Available only when RDS is valid" — gone with the FM station, so is its text.
+    for (const id of ["tuner.rdsText", "tuner.rdsTextB", "tuner.rdsService", "tuner.rdsProgramType"]) {
+      updates.push({ id, value: "" });
+    }
+  }
   if (typeof rds === "object" && rds !== null) {
     const r = rds as Record<string, unknown>;
     if (typeof r.radio_text_a === "string") {
@@ -835,6 +893,9 @@ function parseAlarmDetail(prefix: string, detail: Record<string, unknown>): Stat
   if (typeof detail.playback_type === "string") {
     updates.push({ id: `${prefix}.playbackType`, value: detail.playback_type });
   }
+  if (typeof detail.snooze === "boolean") {
+    updates.push({ id: `${prefix}.snooze`, value: detail.snooze });
+  }
   const resume = detail.resume;
   if (typeof resume === "object" && resume !== null && typeof (resume as { input?: unknown }).input === "string") {
     updates.push({ id: `${prefix}.resumeInput`, value: (resume as { input: string }).input });
@@ -848,8 +909,25 @@ function parseAlarmDetail(prefix: string, detail: Record<string, unknown>): Stat
     if (typeof p.num === "number") {
       updates.push({ id: `${prefix}.presetNumber`, value: p.num });
     }
-    if (typeof p.netusb_input === "string") {
-      updates.push({ id: `${prefix}.presetInput`, value: p.netusb_input });
+    // YXC Basic §9.1: the slot's source and station name under `netusb_info`, its band and frequency under
+    // `tuner_info` — "unknown"/"" /0 when the slot is empty. Until 3.0.1 the adapter read `netusb_input`, a
+    // field no source knows, and the input stood empty for good (audit 2026-09-29, C34).
+    const netusb = p.netusb_info as { input?: unknown; text?: unknown } | undefined;
+    if (netusb && typeof netusb === "object") {
+      if (typeof netusb.input === "string") {
+        updates.push({ id: `${prefix}.presetInput`, value: netusb.input === "unknown" ? "" : netusb.input });
+      }
+      if (typeof netusb.text === "string") {
+        updates.push({ id: `${prefix}.presetName`, value: netusb.text });
+      }
+    }
+    const tuner = p.tuner_info as { band?: unknown; number?: unknown } | undefined;
+    if (tuner && typeof tuner === "object") {
+      const band = typeof tuner.band === "string" && tuner.band !== "unknown" ? tuner.band : "";
+      updates.push({ id: `${prefix}.presetBand`, value: band });
+      // AM/FM carry the frequency in kHz; DAB a station id, which is no frequency.
+      const khz = (band === "am" || band === "fm") && typeof tuner.number === "number" ? tuner.number : 0;
+      updates.push({ id: `${prefix}.presetFrequency`, value: khz });
     }
   }
   return updates;

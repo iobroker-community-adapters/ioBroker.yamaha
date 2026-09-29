@@ -64,11 +64,14 @@ export class YxcBrowseDriver implements BrowseDriver {
    * @param client the YXC client slice (getListInfo + setListControl)
    * @param inputList the device's netusb input list (getFeatures `input_list`)
    * @param cover turns a reported thumbnail path into the address to show (see `absoluteDeviceUrl`)
+   * @param zoneFor the zone that plays a source — the one listening to it, like a favourite's recall
+   *   (YXC Basic §7.8: the play zone switches its input; audit 2026-09-29, C33)
    */
   public constructor(
     private readonly client: YxcBrowseClient,
     private readonly inputList: readonly string[],
     private readonly cover: (url: string) => string = url => url,
+    private readonly zoneFor: (input: string) => string = () => "main",
   ) {}
 
   /**
@@ -114,7 +117,7 @@ export class YxcBrowseDriver implements BrowseDriver {
     }
     const absolute = this.index + line - 1;
     if (row.kind === "item") {
-      await this.client.setListControl("play", absolute, "main");
+      await this.client.setListControl("play", absolute, this.zoneFor(this.active.input));
       await this.fetch();
       return;
     }
@@ -148,7 +151,7 @@ export class YxcBrowseDriver implements BrowseDriver {
     if (!this.active || !row || (row.kind !== "item" && !row.playable)) {
       return;
     }
-    await this.client.setListControl("play", this.index + line - 1, "main");
+    await this.client.setListControl("play", this.index + line - 1, this.zoneFor(this.active.input));
     await this.fetch();
   }
 

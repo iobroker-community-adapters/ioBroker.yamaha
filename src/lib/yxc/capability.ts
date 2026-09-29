@@ -30,6 +30,11 @@ export interface YxcZone {
 export interface YxcTunerFeatures {
   /** The bands the tuner offers (`am`, `fm`, `dab` from func_list). */
   bands: string[];
+  /**
+   * Every function the tuner declares (`func_list`: the bands plus `rds`, `dab_initial_scan`,
+   * `dab_tune_aid`, …) — what the RDS and DAB-scan datapoints need as proof (audit 2026-09-29, C42).
+   */
+  funcs: string[];
   /** Whether presets are one shared list (`common`) or one per band (`separate`). */
   presetType: "common" | "separate";
   /** How many preset slots the device has. */
@@ -40,6 +45,11 @@ export interface YxcTunerFeatures {
 
 /** The clock/alarm block of a YXC getFeatures response, as far as the adapter uses it. */
 export interface YxcClockFeatures {
+  /**
+   * The functions the clock block declares (`func_list`: `date_and_time`, `alarm`, `snooze`, `format`) —
+   * WX-021/WX-051 declare no `format` but `snooze` (audit 2026-09-29, C35/C42).
+   */
+  funcs: string[];
   /** The alarm modes the device offers (`oneday`, `weekly`). */
   alarmModes: string[];
   /** The alarm volume range, if reported. */
@@ -255,6 +265,7 @@ function parseTunerFeatures(tuner: unknown): YxcTunerFeatures | undefined {
   const ranges = parseRanges(obj.range_step);
   return {
     bands,
+    funcs: stringList(obj.func_list),
     presetType: preset.type === "common" ? "common" : "separate",
     presetNum: typeof preset.num === "number" ? preset.num : undefined,
     ...(Object.keys(ranges).length > 0 ? { ranges } : {}),
@@ -273,6 +284,7 @@ function parseClockFeatures(clock: unknown): YxcClockFeatures | undefined {
   }
   const obj = clock as Record<string, unknown>;
   return {
+    funcs: stringList(obj.func_list),
     alarmModes: stringList(obj.alarm_mode_list),
     alarmVolumeRange: parseRange(obj.range_step, "alarm_volume"),
   };

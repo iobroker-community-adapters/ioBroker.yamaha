@@ -382,7 +382,7 @@ export function volumePresentation(
  * The network player's playback error codes, worded as YXC Basic Rev 1.00 §10.3 / Rev 1.10 §11.3
  * word them — the device's own vocabulary, shown as it is (like the speaker patterns).
  */
-const NETUSB_PLAY_ERRORS: Record<number, string> = {
+export const NETUSB_PLAY_ERRORS: Record<number, string> = {
   0: "No Error",
   1: "Access Error",
   2: "Playback Unavailable",
@@ -450,6 +450,17 @@ function declares(
   return zone.funcs.includes(entry.create.func);
 }
 
+/** The RDS block of a tuner (YXC Basic §6.2 `rds`) — created only where the tuner declares `rds`. */
+const RDS_STATES: Array<{ id: string; nameKey: I18nKey; descKey: I18nKey }> = [
+  { id: "tuner.rdsText", nameKey: "rdsText", descKey: "descRdsText" },
+  { id: "tuner.rdsTextB", nameKey: "rdsTextB", descKey: "descRdsTextB" },
+  { id: "tuner.rdsService", nameKey: "rdsStation", descKey: "descRdsStation" },
+  { id: "tuner.rdsProgramType", nameKey: "rdsProgrammeType", descKey: "descRdsProgramType" },
+];
+
+/** The ids of {@link RDS_STATES}. */
+const RDS_IDS = RDS_STATES.map(state => state.id);
+
 /**
  * The datapoints of the zones this device declares whose function the declaration LACKS — the party
  * switch without `party_mode`, a zone's maximum volume without `volume`. getFeatures does not depend
@@ -461,6 +472,18 @@ function declares(
  */
 export function yxcDeclaredAbsent(capabilities: YxcCapabilities): string[] {
   const absent: string[] = [];
+  // What the tuner and clock blocks prove absent — datapoints an earlier version created on every tuner
+  // or clock (audit 2026-09-29, C42).
+  const tunerFuncs = capabilities.tuner?.funcs ?? [];
+  if (capabilities.tuner && !tunerFuncs.includes("rds")) {
+    absent.push(...RDS_IDS);
+  }
+  if (capabilities.tuner?.bands.includes("dab")) {
+    absent.push(...DAB_FIELDS.filter(f => f.requires && !tunerFuncs.includes(f.requires)).map(f => f.id));
+  }
+  if (capabilities.clock && !capabilities.clock.funcs.includes("format")) {
+    absent.push("clock.format");
+  }
   for (const zoneDef of ZONES) {
     const zone = capabilities.zones.find(z => z.id === zoneDef.id);
     if (!zone) {
@@ -544,6 +567,14 @@ export function mapYxcToObjects(
         common.unit = shown.unit;
         common.desc = tName(shown.descKey);
         range = shown.range;
+      } else if (entry.state === "advanced.maxVolume") {
+        // `max_volume` arrives in raw steps (YXC Basic §5.1); the controller shows it on the scale the
+        // zone's volume is shown on, so 161 next to a volume of 0…97 dB reads 16.5 dB (audit
+        // 2026-09-29, C40). Unit only: the maximum's own range is not declared.
+        const scale = volumePresentation(zone, current?.[zone.id]?.actualVolumeMode);
+        if (scale) {
+          common.unit = scale.unit;
+        }
       } else {
         const rangeId = RANGE_BY_STATE[entry.state];
         range = rangeId ? zone.ranges?.[rangeId] : undefined;
@@ -765,6 +796,19 @@ export function mapYxcToObjects(
         states: NETUSB_PLAY_ERRORS,
       },
     });
+    // The error codes in words — every one of them when the device reports several at once (C40).
+    objects.push({
+      id: "player.netPlayer.playErrorText",
+      type: "state",
+      common: {
+        name: tName("playbackErrorText"),
+        desc: tName("descPlaybackErrorText"),
+        type: "string",
+        role: "text",
+        read: true,
+        write: false,
+      },
+    });
     objects.push({
       id: "player.netPlayer.playMessage",
       type: "state",
@@ -827,7 +871,16 @@ export function mapYxcToObjects(
     objects.push({
       id: "player.cd.trackNumber",
       type: "state",
-      common: { name: tName("trackNumber"), type: "number", role: "value", read: true, write: false },
+      // YXC Basic §8.1: -1 while no track plays — shown as 0, no track number (audit 2026-09-29, C40).
+      common: {
+        name: tName("trackNumber"),
+        desc: tName("descTrackNumber"),
+        type: "number",
+        role: "value",
+        min: 0,
+        read: true,
+        write: false,
+      },
     });
     objects.push({
       id: "player.cd.totalTracks",
@@ -862,6 +915,7 @@ export function mapYxcToObjects(
       write: true,
     };
     const bands = capabilities.tuner?.bands ?? [];
+    const tunerFuncs = capabilities.tuner?.funcs ?? [];
     if (bands.length > 0) {
       bandCommon.states = selfMap(bands);
     }
@@ -894,54 +948,25 @@ export function mapYxcToObjects(
       frequencyCommon.max = Math.max(...bandRanges.map(range => range.max));
     }
     objects.push({ id: "tuner.frequency", type: "state", common: frequencyCommon });
-    objects.push({
-      id: "tuner.rdsText",
-      type: "state",
-      common: {
-        name: tName("rdsText"),
-        desc: tName("descRdsText"),
-        type: "string",
-        role: "text",
-        read: true,
-        write: false,
-      },
-    });
-    objects.push({
-      id: "tuner.rdsTextB",
-      type: "state",
-      common: {
-        name: tName("rdsTextB"),
-        desc: tName("descRdsTextB"),
-        type: "string",
-        role: "text",
-        read: true,
-        write: false,
-      },
-    });
-    objects.push({
-      id: "tuner.rdsService",
-      type: "state",
-      common: {
-        name: tName("rdsStation"),
-        desc: tName("descRdsStation"),
-        type: "string",
-        role: "text",
-        read: true,
-        write: false,
-      },
-    });
-    objects.push({
-      id: "tuner.rdsProgramType",
-      type: "state",
-      common: {
-        name: tName("rdsProgrammeType"),
-        desc: tName("descRdsProgramType"),
-        type: "string",
-        role: "text",
-        read: true,
-        write: false,
-      },
-    });
+    // RDS only where the tuner declares it (YXC Basic §4.2 tuner func_list `rds`; §6.2 "Available only
+    // when RDS is valid") — an ISX-18D has none, and its four RDS datapoints stood empty (audit
+    // 2026-09-29, C42).
+    if (tunerFuncs.includes("rds")) {
+      for (const rds of RDS_STATES) {
+        objects.push({
+          id: rds.id,
+          type: "state",
+          common: {
+            name: tName(rds.nameKey),
+            desc: tName(rds.descKey),
+            type: "string",
+            role: "text",
+            read: true,
+            write: false,
+          },
+        });
+      }
+    }
     // The stored-station surface: recall by number (writable), the active slot read back
     // from play info, up/down stepping, and the stored lists (with what the device knows
     // about each slot) as JSON — the selection surface the musiccast adapter offered.
@@ -1010,6 +1035,9 @@ export function mapYxcToObjects(
     if (bands.includes("dab")) {
       objects.push({ id: "tuner.dab", type: "channel", common: { name: tName("dab") } });
       for (const field of DAB_FIELDS) {
+        if (field.requires && !tunerFuncs.includes(field.requires)) {
+          continue;
+        }
         objects.push({
           id: field.id,
           type: "state",
@@ -1018,6 +1046,9 @@ export function mapYxcToObjects(
             ...(field.descKey ? { desc: tName(field.descKey) } : {}),
             type: field.type,
             role: field.type === "boolean" ? "indicator" : field.type === "number" ? "value" : "text",
+            ...(field.unit ? { unit: field.unit } : {}),
+            ...(field.min !== undefined ? { min: field.min } : {}),
+            ...(field.max !== undefined ? { max: field.max } : {}),
             read: true,
             write: false,
           },
@@ -1057,18 +1088,22 @@ export function mapYxcToObjects(
         write: false,
       },
     });
-    objects.push({
-      id: "clock.format",
-      type: "state",
-      common: {
-        name: tName("clockFormat"),
-        desc: tName("descClockFormat"),
-        type: "string",
-        role: "state",
-        read: true,
-        write: false,
-      },
-    });
+    // Only where the clock block declares it (YXC Basic §4.2 clock func_list) — a WX-021 has no format
+    // setting, and the datapoint stood empty for good (audit 2026-09-29, C42).
+    if (capabilities.clock.funcs.includes("format")) {
+      objects.push({
+        id: "clock.format",
+        type: "state",
+        common: {
+          name: tName("clockFormat"),
+          desc: tName("descClockFormat"),
+          type: "string",
+          role: "state",
+          read: true,
+          write: false,
+        },
+      });
+    }
     objects.push({ id: "clock.alarm", type: "channel", common: { name: tName("alarm") } });
     objects.push({
       id: "clock.alarm.on",
@@ -1117,18 +1152,21 @@ export function mapYxcToObjects(
       type: "state",
       common: { name: tName("alarmMode"), type: "string", role: "state", read: true, write: false },
     });
+    // YXC Basic §9.1: `alarm.repeat` — whether the one-day alarm repeats; not snooze, which the clock
+    // block declares on its own (audit 2026-09-29, C35).
     objects.push({
       id: "clock.alarm.repeat",
       type: "state",
       common: {
-        name: tName("repeatSnooze"),
-        desc: tName("descRepeatSnooze"),
+        name: tName("alarmRepeat"),
+        desc: tName("descAlarmRepeat"),
         type: "boolean",
         role: "indicator",
         read: true,
         write: false,
       },
     });
+    const snooze = capabilities.clock.funcs.includes("snooze");
     const detailChannels = ["oneday", ...(capabilities.clock.alarmModes.includes("weekly") ? ALARM_DAYS : [])];
     for (const channel of detailChannels) {
       // The weekday channels are named by the device; only the fixed one-day channel translates.
@@ -1154,7 +1192,38 @@ export function mapYxcToObjects(
       detail("resumeInput", tName("resumeInput"), "string", "state");
       detail("presetType", tName("presetType"), "string", "state");
       detail("presetNumber", tName("presetNumber"), "number", "value");
+      // YXC Basic §9.1: `preset.netusb_info` (input, text) and `preset.tuner_info` (band, frequency in kHz)
+      // (audit 2026-09-29, C34).
       detail("presetInput", tName("presetSource"), "string", "state");
+      detail("presetName", tName("presetName"), "string", "text");
+      detail("presetBand", tName("presetBand"), "string", "state");
+      objects.push({
+        id: `clock.alarm.${channel}.presetFrequency`,
+        type: "state",
+        common: {
+          name: tName("presetFrequency"),
+          desc: tName("descPresetFrequency"),
+          type: "number",
+          unit: "kHz",
+          role: "value",
+          read: true,
+          write: false,
+        },
+      });
+      if (snooze) {
+        objects.push({
+          id: `clock.alarm.${channel}.snooze`,
+          type: "state",
+          common: {
+            name: tName("snooze"),
+            desc: tName("descSnooze"),
+            type: "boolean",
+            role: "indicator",
+            read: true,
+            write: false,
+          },
+        });
+      }
     }
   }
   if (capabilities.hasDistribution) {

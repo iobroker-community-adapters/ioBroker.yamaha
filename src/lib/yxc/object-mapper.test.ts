@@ -4,6 +4,7 @@ import { YXC_MENU_VALUES } from "./remote";
 import rxA2070 from "./__fixtures__/RX_A2070_v1.json";
 import wx10 from "./__fixtures__/WX10_216_208.json";
 import isx18d from "./__fixtures__/ISX_18D_216_208.json";
+import wx21 from "./__fixtures__/WX21_192_211.json";
 
 /**
  * The English half of an object's translated name.
@@ -167,10 +168,38 @@ describe("mapYxcToObjects", () => {
   });
 
   test("creates the tuner channel with band, frequency and RDS when the device offers a tuner", () => {
-    const objs = mapYxcToObjects({ zones: [{ id: "main", funcs: ["power"], inputs: [] }], media: ["tuner"] });
+    const objs = mapYxcToObjects({
+      zones: [{ id: "main", funcs: ["power"], inputs: [] }],
+      media: ["tuner"],
+      tuner: { bands: ["fm"], funcs: ["fm", "rds"], presetType: "common" },
+    });
     const ids = objs.map(o => o.id);
     expect(ids).toContain("tuner");
     expect(ids).toEqual(expect.arrayContaining(["tuner.band", "tuner.frequency", "tuner.rdsText"]));
+  });
+
+  // YXC Basic §4.2/§6.2: RDS only with `rds`, the DAB scan counters only with `dab_initial_scan` — the
+  // ISX-18D declares the scan but no RDS, the DAB receivers RDS but no scan (audit 2026-09-29, C42).
+  test("RDS and the DAB scan counters exist only where the tuner declares them", () => {
+    const isx = mapYxcToObjects(parseYxcFeatures(isx18d));
+    const isxIds = isx.map(o => o.id);
+    expect(isxIds).not.toContain("tuner.rdsText");
+    expect(isxIds).toEqual(expect.arrayContaining(["tuner.dab.totalStations", "tuner.dab.scanProgress"]));
+    expect(isx.find(o => o.id === "tuner.dab.scanProgress")?.common).toMatchObject({ unit: "%", min: 0, max: 100 });
+    const receiver = mapYxcToObjects(parseYxcFeatures(rxA2070)).map(o => o.id);
+    expect(receiver).toContain("tuner.rdsText");
+    expect(receiver).not.toContain("tuner.dab.totalStations");
+    // What a declaration proves absent goes on the first start.
+    expect(yxcDeclaredAbsent(parseYxcFeatures(isx18d))).toEqual(expect.arrayContaining(["tuner.rdsText"]));
+    expect(yxcDeclaredAbsent(parseYxcFeatures(rxA2070))).toEqual(
+      expect.arrayContaining(["tuner.dab.totalStations", "tuner.dab.scanProgress"]),
+    );
+  });
+
+  test("the DAB fields carry the units and bounds the specification declares", () => {
+    const dab = mapYxcToObjects(parseYxcFeatures(rxA2070));
+    expect(dab.find(o => o.id === "tuner.dab.bitRate")?.common).toMatchObject({ unit: "kbps", min: 32, max: 256 });
+    expect(dab.find(o => o.id === "tuner.dab.quality")?.common).toMatchObject({ min: 0, max: 100 });
   });
 
   test("a cd device gets the flat player block plus a slim drive-own cd folder (v2.0.0)", () => {
@@ -450,6 +479,18 @@ describe("mapYxcToObjects tree hygiene", () => {
     expect(mapYxcToObjects(parseYxcFeatures(rxA2070)).map(o => o.id)).not.toContain("clock");
   });
 
+  // The clock block's func_list decides (YXC Basic §4.2): the ISX-18D declares `format`, the WX-021
+  // `snooze` — neither both (audit 2026-09-29, C35/C42).
+  test("the time format and the snooze flag exist only where the clock block declares them", () => {
+    const isx = mapYxcToObjects(parseYxcFeatures(isx18d)).map(o => o.id);
+    expect(isx).toContain("clock.format");
+    expect(isx).not.toContain("clock.alarm.oneday.snooze");
+    const wx = mapYxcToObjects(parseYxcFeatures(wx21)).map(o => o.id);
+    expect(wx).not.toContain("clock.format");
+    expect(wx).toContain("clock.alarm.oneday.snooze");
+    expect(wx).toEqual(expect.arrayContaining(["clock.alarm.oneday.presetName", "clock.alarm.oneday.presetFrequency"]));
+  });
+
   test("the alarm volume carries the device's reported range", () => {
     const objs = mapYxcToObjects(parseYxcFeatures(isx18d));
     const volume = objs.find(o => o.id === "clock.alarm.volume");
@@ -595,6 +636,7 @@ describe("the device's own lists are DECLARED, and the words it reports are alwa
       media: ["tuner"],
       tuner: {
         bands: ["fm", "am"],
+        funcs: ["fm", "am", "rds"],
         presetType: "common",
         ranges: { fm: { min: 87500, max: 108000, step: 50 }, am: { min: 531, max: 1611, step: 9 } },
       },
@@ -616,6 +658,7 @@ describe("the device's own lists are DECLARED, and the words it reports are alwa
       media: ["tuner"],
       tuner: {
         bands: ["fm", "dab"],
+        funcs: ["fm", "rds", "dab"],
         presetType: "separate",
         ranges: { fm: { min: 87500, max: 108000, step: 50 } },
       },
@@ -629,7 +672,7 @@ describe("the device's own lists are DECLARED, and the words it reports are alwa
     const objs = mapYxcToObjects({
       zones: [{ id: "main", funcs: ["power"], inputs: [] }],
       media: ["tuner"],
-      tuner: { bands: ["fm"], presetType: "common" },
+      tuner: { bands: ["fm"], funcs: ["fm"], presetType: "common" },
     });
     const freq = objs.find(o => o.id === "tuner.frequency")?.common;
     expect(freq?.min).toBeUndefined();

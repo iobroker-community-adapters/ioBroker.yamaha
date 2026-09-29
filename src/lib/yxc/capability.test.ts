@@ -105,6 +105,7 @@ describe("parseYxcFeatures", () => {
     const tuner = parseYxcFeatures(isx18d).tuner;
     expect(tuner).toEqual({
       bands: ["fm", "dab"],
+      funcs: ["fm", "dab", "fm_auto_preset", "dab_initial_scan", "dab_tune_aid"],
       presetType: "separate",
       presetNum: 30,
       ranges: { fm: { min: 87500, max: 108000, step: 50 } },
@@ -116,6 +117,7 @@ describe("parseYxcFeatures", () => {
     const tuner = parseYxcFeatures(rxV481).tuner;
     expect(tuner).toEqual({
       bands: ["am", "fm"],
+      funcs: ["am", "fm", "rds"],
       presetType: "common",
       presetNum: 40,
       ranges: { am: { min: 531, max: 1611, step: 9 }, fm: { min: 87500, max: 108000, step: 50 } },

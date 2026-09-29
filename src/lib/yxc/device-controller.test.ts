@@ -980,6 +980,28 @@ describe("YxcDeviceController", () => {
     expect(order.indexOf("getStatus")).toBeGreaterThan(order.indexOf("power"));
   });
 
+  // A tuner step changes the tuner's play info, never the zone status (YXC Basic §6.6/§6.15; audit
+  // 2026-09-29, C32): without push the station stood five minutes old.
+  test("without push, a tuner step is read back from the tuner, not from the zone", async () => {
+    const features = {
+      zone: [{ id: "main", func_list: ["power"] }],
+      tuner: { func_list: ["fm", "rds", "dab"], preset: { type: "separate", num: 40 } },
+    };
+    const s = setup(features, ysp, {}, () => false);
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.controller.handleStateChange("living.tuner.presetUp", false, true);
+    await flush();
+    const order = s.client.calls.map(c => c.method);
+    expect(order.indexOf("switchTunerPreset")).toBeGreaterThanOrEqual(0);
+    const step = order.indexOf("switchTunerPreset");
+    const readBack = s.client.calls.findIndex(
+      (c, i) => i > step && c.method === "getPlayInfo" && c.args[0] === "tuner",
+    );
+    expect(readBack).toBeGreaterThan(step);
+    expect(order).not.toContain("getStatus");
+  });
+
   // The device announces a CHANGE only (YXC Basic §10.3): a write of the value it already has
   // stood unacknowledged for good under push (audit 2026-09-24, C1).
   test("with push working, writing the value the device already has is read back at once", async () => {
@@ -2037,11 +2059,12 @@ describe("YxcDeviceController player.source seeding", () => {
 });
 
 describe("YxcDeviceController seed edge cases (2.0.1 hardening)", () => {
-  test("the DAB scan counters start at zero on a DAB-capable tuner — and only there", async () => {
-    // The RX-V6A getFeatures shape: bands come from tuner.func_list (fm/am/dab).
+  test("the DAB scan counters start at zero where the tuner declares the scan — and only there", async () => {
+    // The ISX-18D getFeatures shape: `dab_initial_scan` in tuner.func_list (YXC Basic §6.2; audit
+    // 2026-09-29, C42). A DAB receiver without it (RX-V6A, RX-A2070) gets no counters.
     const dabFeatures = {
       zone: [{ id: "main", func_list: ["power"] }],
-      tuner: { func_list: ["fm", "rds", "dab"], preset: { type: "separate", num: 40 } },
+      tuner: { func_list: ["fm", "dab", "dab_initial_scan"], preset: { type: "separate", num: 30 } },
     };
     const s = setup(dabFeatures, { power: "on", input: "hdmi1" });
     await s.controller.start();
@@ -2059,6 +2082,15 @@ describe("YxcDeviceController seed edge cases (2.0.1 hardening)", () => {
     );
     await fmOnly.controller.start();
     expect(fmOnly.acks.some(ack => ack.id.startsWith("living.tuner.dab."))).toBe(false);
+    const noScan = setup(
+      {
+        zone: [{ id: "main", func_list: ["power"] }],
+        tuner: { func_list: ["fm", "rds", "dab"], preset: { type: "separate", num: 40 } },
+      },
+      { power: "on", input: "hdmi1" },
+    );
+    await noScan.controller.start();
+    expect(noScan.acks.some(ack => ack.id === "living.tuner.dab.totalStations")).toBe(false);
   });
 
   test("a cd-only device gets the cleared player block too (no netusb required)", async () => {

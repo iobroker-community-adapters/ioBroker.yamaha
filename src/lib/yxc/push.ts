@@ -151,6 +151,11 @@ export function pushSignals(pushEvent: unknown): PushSignals {
 export interface NetusbNotice {
   /** `play_error` (0 = none; the codes of YXC Basic §10.3/§11.3). */
   playError?: number;
+  /**
+   * Every error code behind `play_error` 100 ("Multiple Errors"): the set bits 1…11 of
+   * `multiple_play_errors` (YXC Basic Rev 1.10 §11.3; audit 2026-09-29, C40).
+   */
+  playErrorCodes?: number[];
   /** `play_message`, as the device sends it. */
   playMessage?: string;
   /** `preset_control`: the result of a favourite store, clear or recall. */
@@ -173,6 +178,13 @@ export function netusbNotice(pushEvent: unknown): NetusbNotice {
   const notice: NetusbNotice = {};
   if (typeof fields.play_error === "number") {
     notice.playError = fields.play_error;
+    const bits = fields.multiple_play_errors;
+    notice.playErrorCodes =
+      fields.play_error === 100 && typeof bits === "number"
+        ? Array.from({ length: 11 }, (_, i) => i + 1).filter(code => (bits & (1 << code)) !== 0)
+        : fields.play_error === 0
+          ? []
+          : [fields.play_error];
   }
   if (typeof fields.play_message === "string") {
     notice.playMessage = fields.play_message;

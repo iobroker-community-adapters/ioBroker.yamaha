@@ -132,7 +132,19 @@ describe("netusbNotice", () => {
           preset_control: { type: "recall", num: 2, result: "empty" },
         },
       }),
-    ).toEqual({ playError: 3, playMessage: "Skip limit", presetControl: { type: "recall", num: 2, result: "empty" } });
+    ).toEqual({
+      playError: 3,
+      playErrorCodes: [3],
+      playMessage: "Skip limit",
+      presetControl: { type: "recall", num: 2, result: "empty" },
+    });
+  });
+
+  // YXC Basic Rev 1.10 §11.3: code 100 means several at once, each one a bit of `multiple_play_errors`
+  // (audit 2026-09-29, C40).
+  test("resolves Multiple Errors into the codes the bit field carries", () => {
+    expect(netusbNotice({ netusb: { play_error: 100, multiple_play_errors: 0b1010 } }).playErrorCodes).toEqual([1, 3]);
+    expect(netusbNotice({ netusb: { play_error: 0 } }).playErrorCodes).toEqual([]);
   });
 
   test("ignores mistyped fields and an incomplete preset result", () => {

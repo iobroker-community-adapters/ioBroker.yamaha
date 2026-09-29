@@ -131,6 +131,29 @@ describe("YxcBrowseDriver", () => {
     expect(calls[0]).toEqual({ method: "setListControl", args: ["select", 8, undefined] });
   });
 
+  // YXC Basic §7.8: the play zone switches its input. The zone listening to the source plays it, like a
+  // favourite's recall — not the main zone, torn from its film (audit 2026-09-29, C33).
+  it("plays an item in the zone listening to the source", async () => {
+    const calls: Array<{ method: string; args: unknown[] }> = [];
+    const driver = new YxcBrowseDriver(
+      {
+        getListInfo: () =>
+          Promise.resolve(listResponse({ max_line: 1, list_info: [{ text: "Song", attribute: 0b100 }] })),
+        setListControl: (type, index, zone) => {
+          calls.push({ method: "setListControl", args: [type, index, zone] });
+          return Promise.resolve({ response_code: 0 });
+        },
+      },
+      ["net_radio"],
+      url => url,
+      input => (input === "net_radio" ? "zone2" : "main"),
+    );
+    driver.attach({ onWindow: () => undefined } as unknown as BrowseEngine);
+    await driver.open("netRadio");
+    await driver.select(1);
+    expect(calls[0]).toEqual({ method: "setListControl", args: ["play", 0, "zone2"] });
+  });
+
   it("pages by 8 within the menu bounds", async () => {
     const { driver, calls, respond } = setup(["net_radio"]);
     respond(listResponse({ max_line: 10 }));

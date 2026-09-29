@@ -353,6 +353,8 @@ describe("parseYxcTunerInfo", () => {
       { id: "tuner.frequency", value: 100900 },
       { id: "tuner.preset", value: 0 },
       { id: "tuner.tuned", value: false },
+      // No audio_mode in the block: not the last band's any more (audit 2026-09-29, C39).
+      { id: "tuner.audioMode", value: "" },
       { id: "tuner.rdsText", value: "Hit" },
       { id: "tuner.rdsTextB", value: "" },
     ]);
@@ -361,17 +363,34 @@ describe("parseYxcTunerInfo", () => {
   test("reads the DAB frequency and DAB detail states when the active band is dab", () => {
     // RX-A2070 reports band "dab" with the frequency nested under dab; the dab block's
     // detail fields land on the tuner.dab.* ids shared with the YNCA DAB subunit.
-    expect(parseYxcTunerInfo({ band: "dab", dab: { freq: 180064, service_label: "ENERGY" } })).toEqual([
-      { id: "tuner.band", value: "dab" },
-      { id: "tuner.frequency", value: 180064 },
-      { id: "tuner.dab.serviceLabel", value: "ENERGY" },
-    ]);
+    expect(parseYxcTunerInfo({ band: "dab", dab: { freq: 180064, status: "ready", service_label: "ENERGY" } })).toEqual(
+      [
+        { id: "tuner.band", value: "dab" },
+        { id: "tuner.frequency", value: 180064 },
+        // DAB has no `tuned` — a ready station is tuned; the FM texts go (YXC Basic §6.2, C39).
+        { id: "tuner.tuned", value: true },
+        { id: "tuner.audioMode", value: "" },
+        { id: "tuner.rdsText", value: "" },
+        { id: "tuner.rdsTextB", value: "" },
+        { id: "tuner.rdsService", value: "" },
+        { id: "tuner.rdsProgramType", value: "" },
+        { id: "tuner.dab.serviceLabel", value: "ENERGY" },
+        { id: "tuner.dab.status", value: "ready" },
+      ],
+    );
   });
 
   test("reads the AM frequency when the active band is am, and tolerates a missing rds block", () => {
     expect(parseYxcTunerInfo({ band: "am", am: { freq: 1440 }, fm: { freq: 0 } })).toEqual([
       { id: "tuner.band", value: "am" },
       { id: "tuner.frequency", value: 1440 },
+      { id: "tuner.tuned", value: false },
+      // AM has no audio mode and no RDS: the FM values do not stand on (C39).
+      { id: "tuner.audioMode", value: "" },
+      { id: "tuner.rdsText", value: "" },
+      { id: "tuner.rdsTextB", value: "" },
+      { id: "tuner.rdsService", value: "" },
+      { id: "tuner.rdsProgramType", value: "" },
     ]);
   });
 
@@ -682,6 +701,41 @@ describe("parseYxcClock", () => {
       ]),
     );
     expect(parseYxcClock(null)).toEqual([]);
+  });
+
+  // YXC Basic §9.1: the slot's source and name under `netusb_info`, band and frequency under `tuner_info`;
+  // the WX-021/WX-051 captures carry `snooze` on the day block (audit 2026-09-29, C34/C35).
+  test("reads the preset's source, name, band and frequency, and the snooze flag", () => {
+    const updates = parseYxcClock({
+      alarm: {
+        oneday: {
+          snooze: true,
+          playback_type: "preset",
+          preset: {
+            type: "netusb",
+            num: 3,
+            netusb_info: { input: "net_radio", text: "Radio Paradise" },
+            tuner_info: { band: "fm", number: 98100 },
+          },
+        },
+        tuesday: {
+          preset: { type: "netusb", num: 1, netusb_info: { input: "unknown", text: "" }, tuner_info: { band: "dab" } },
+        },
+      },
+    });
+    expect(updates).toEqual(
+      expect.arrayContaining([
+        { id: "clock.alarm.oneday.snooze", value: true },
+        { id: "clock.alarm.oneday.presetInput", value: "net_radio" },
+        { id: "clock.alarm.oneday.presetName", value: "Radio Paradise" },
+        { id: "clock.alarm.oneday.presetBand", value: "fm" },
+        { id: "clock.alarm.oneday.presetFrequency", value: 98100 },
+        // An empty slot: no source; a DAB slot has a station id, which is no frequency.
+        { id: "clock.alarm.tuesday.presetInput", value: "" },
+        { id: "clock.alarm.tuesday.presetBand", value: "dab" },
+        { id: "clock.alarm.tuesday.presetFrequency", value: 0 },
+      ]),
+    );
   });
 });
 
