@@ -534,6 +534,18 @@ describe("YncaClient on a real TCP socket", () => {
 describe("YncaClient refusal attribution (#615, bracketed since audit 2026-09-24 B3)", () => {
   // Real-time wait: a bracketed exchange keeps the 100 ms line spacing on the gate's timers.
   const wait = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
+  /**
+   * Wait until the condition holds — the gate paces lines 100 ms apart in real time, and a fixed
+   * sleep was too short on a loaded machine (the full suite failed it now and then).
+   *
+   * @param condition what has to hold
+   * @param timeoutMs how long to wait at most
+   */
+  const until = async (condition: () => boolean, timeoutMs = 3000): Promise<void> => {
+    for (let waited = 0; !condition() && waited < timeoutMs; waited += 10) {
+      await wait(10);
+    }
+  };
 
   it("attributes a @RESTRICTED between a user PUT and its closing marker to that command", async () => {
     const { factory, sockets } = fixtureFactory();
@@ -544,7 +556,7 @@ describe("YncaClient refusal attribution (#615, bracketed since audit 2026-09-24
     const refusals: Array<{ command: string; verdict: string }> = [];
     client.onRefusal((command, verdict) => refusals.push({ command, verdict }));
     client.send("MAIN", "SCENE", "Scene 1");
-    await wait(150);
+    await until(() => sockets[0].written.length >= 2);
     expect(sockets[0].written).toEqual(["@MAIN:SCENE=Scene 1\r\n", "@SYS:VERSION=?\r\n"]);
     // The 2012 generation's answer to a scene recall (ynca-python PRACTICALITIES), then the marker.
     sockets[0].emitData("@RESTRICTED\r\n@SYS:VERSION=1.00\r\n");
@@ -569,7 +581,7 @@ describe("YncaClient refusal attribution (#615, bracketed since audit 2026-09-24
     // Background traffic within the last two seconds: the write opens with a marker.
     expect(sockets[0].written).toEqual(["@SYS:HDMIOUT2=?\r\n", "@SYS:VERSION=?\r\n"]);
     sockets[0].emitData("@UNDEFINED\r\n@SYS:VERSION=1.00\r\n");
-    await wait(250);
+    await until(() => sockets[0].written.length >= 4);
     expect(sockets[0].written.slice(2)).toEqual(["@MAIN:LISTCURSOR=Up\r\n", "@SYS:VERSION=?\r\n"]);
     sockets[0].emitData("@SYS:VERSION=1.00\r\n");
     await drain();
@@ -600,7 +612,7 @@ describe("YncaClient refusal attribution (#615, bracketed since audit 2026-09-24
     const refusals: string[] = [];
     client.onRefusal(command => refusals.push(command));
     client.send("MAIN", "SCENE", "Scene 2");
-    await wait(150);
+    await until(() => sockets[0].written.length >= 2);
     sockets[0].emitData("@RESTRICTED\r\n@RESTRICTED\r\n@SYS:VERSION=1.00\r\n");
     await drain();
     expect(refusals).toEqual(["@MAIN:SCENE=Scene 2"]);
@@ -645,6 +657,18 @@ describe("YncaClient refusal attribution (#615, bracketed since audit 2026-09-24
 
 describe("YncaClient key presses and read-backs (audit 2026-09-29, B2/B3)", () => {
   const wait = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
+  /**
+   * Wait until the condition holds — the gate paces lines 100 ms apart in real time, and a fixed
+   * sleep was too short on a loaded machine (the full suite failed it now and then).
+   *
+   * @param condition what has to hold
+   * @param timeoutMs how long to wait at most
+   */
+  const until = async (condition: () => boolean, timeoutMs = 3000): Promise<void> => {
+    for (let waited = 0; !condition() && waited < timeoutMs; waited += 10) {
+      await wait(10);
+    }
+  };
 
   it("three quick presses of a relative key are three lines — only an absolute number collapses", async () => {
     const { factory, sockets } = fixtureFactory();
@@ -661,7 +685,7 @@ describe("YncaClient key presses and read-backs (audit 2026-09-29, B2/B3)", () =
       }
       sockets[0].emitData("@SYS:VERSION=1.00\r\n");
     }
-    await wait(150);
+    await until(() => sockets[0].written.filter(line => line === "@MAIN:LISTCURSOR=Down\r\n").length >= 3);
     expect(sockets[0].written.filter(line => line === "@MAIN:LISTCURSOR=Down\r\n")).toHaveLength(3);
   });
 
@@ -680,7 +704,7 @@ describe("YncaClient key presses and read-backs (audit 2026-09-29, B2/B3)", () =
     await drain();
     expect(sockets[0].written).toEqual(["@ZONE2:VOL=?\r\n", "@SYS:VERSION=?\r\n"]);
     sockets[0].emitData("@RESTRICTED\r\n@SYS:VERSION=1.00\r\n");
-    await wait(250);
+    await until(() => sockets[0].written.length >= 4);
     sockets[0].emitData("@SYS:VERSION=1.00\r\n");
     await drain();
     expect(refusals).toEqual([]);
