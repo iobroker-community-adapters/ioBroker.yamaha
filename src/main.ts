@@ -1470,13 +1470,13 @@ export class Yamaha extends utils.Adapter {
    * and the later one takes the earlier one's fields away. Measured in the inventory run: the id
    * mark (`native.idScheme`) and the display name written in the same instant — the mark was gone
    * on three of eight devices, a different three on each run. Every writer of a device object's
-   * `common`/`native` goes through here.
+   * `common`/`native` goes through here — the device manager's dialogs too (audit 2026-09-29, A37).
    *
    * @param deviceId the device id
    * @param patch what to merge
    * @returns the write
    */
-  private writeDeviceObject(deviceId: string, patch: ioBroker.PartialObject): Promise<void> {
+  public writeDeviceObject(deviceId: string, patch: ioBroker.PartialObject): Promise<void> {
     const previous = this.deviceObjectWrites.get(deviceId) ?? Promise.resolve();
     const next = previous.catch(() => undefined).then(() => this.writeObject(deviceId, patch));
     this.deviceObjectWrites.set(

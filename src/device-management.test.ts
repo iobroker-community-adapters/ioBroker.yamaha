@@ -184,6 +184,18 @@ function mockAdapter(
       }
       return Promise.resolve();
     }),
+    // The adapter's one write chain per device object (A37) — recorded like a foreign write.
+    writeDeviceObject: vi.fn((id: string, patch: Record<string, any>) => {
+      const full = `yamaha.0.${id}`;
+      const previous = (objects[full] ?? {}) as Record<string, any>;
+      objects[full] = {
+        ...previous,
+        ...patch,
+        common: { ...(previous.common ?? {}), ...(patch.common ?? {}) },
+        native: { ...(previous.native ?? {}), ...(patch.native ?? {}) },
+      };
+      return Promise.resolve();
+    }),
     getForeignStateAsync: vi.fn((id: string) =>
       Promise.resolve(id in states ? ({ val: states[id], ack: true } as ioBroker.State) : null),
     ),
@@ -473,6 +485,7 @@ describe("YamahaDeviceManagement", () => {
     it("add and the excluded list say what failed and answer with a reload", async () => {
       const i = make([living]);
       adapter.extendForeignObjectAsync.mockRejectedValue(new Error("objects db read-only"));
+      adapter.writeDeviceObject.mockRejectedValue(new Error("objects db read-only"));
       const ctx = mockContext({ form: { name: "Bedroom", ip: "192.168.1.30" } });
       const add = i.getInstanceInfo().actions.find(action => action.id === "add");
       await expect(add?.handler(ctx)).resolves.toEqual({ refresh: true });
@@ -497,6 +510,7 @@ describe("YamahaDeviceManagement", () => {
       const i = make([living]);
       const ctx = mockContext({ form: { name: "  Bedroom  ", ip: " 192.168.1.50 " } });
       await expect(i.addDevice(ctx)).resolves.toEqual({ refresh: true });
+      adapter._runDeferred();
       // The id is decided now and stored: the typed name as an id segment, since this device
       // answered neither MusicCast nor XML.
       expect(adapter._stored()).toEqual([living, { id: "bedroom", name: "bedroom", ip: "192.168.1.50" }]);
@@ -508,6 +522,7 @@ describe("YamahaDeviceManagement", () => {
     it("stores a typed row whose name is its IP under the address id — it stays a typed row", async () => {
       const i = make([]);
       await i.addDevice(mockContext({ form: { name: "192.168.1.50", ip: "192.168.1.50" } }));
+      adapter._runDeferred();
       expect(adapter._stored()).toEqual([{ id: "192-168-1-50", name: "192-168-1-50", ip: "192.168.1.50" }]);
       expect(parseDevices(adapter._stored())[0]).toMatchObject({ id: "192-168-1-50", source: "manual" });
     });
@@ -516,8 +531,9 @@ describe("YamahaDeviceManagement", () => {
       identify.report = { model: "WX-030", identity: { serial: "0E1A2B3C", mac: "00A0DED4F504" } };
       const i = make([]);
       await i.addDevice(mockContext({ form: { name: "Büro", ip: "192.168.1.30" } }));
+      adapter._runDeferred();
       expect(adapter._stored()).toEqual([{ id: "wx-030-2b3c", name: "wx-030-2b3c", ip: "192.168.1.30" }]);
-      expect(adapter.extendForeignObjectAsync).toHaveBeenCalledWith("yamaha.0.wx-030-2b3c", {
+      expect(adapter.writeDeviceObject).toHaveBeenCalledWith("wx-030-2b3c", {
         common: { name: "Büro" },
         native: { label: "Büro", labelRank: LABEL_RANK.user },
       });
@@ -527,12 +543,14 @@ describe("YamahaDeviceManagement", () => {
       identify.report = { model: "RX-V473" };
       const i = make([{ id: "rx-v473", name: "rx-v473", ip: "192.168.1.20" }]);
       await i.addDevice(mockContext({ form: { name: "Bad", ip: "192.168.1.21" } }));
+      adapter._runDeferred();
       expect(adapter._stored()[1]).toEqual({ id: "rx-v473-2", name: "rx-v473-2", ip: "192.168.1.21" });
     });
 
     it("a device that tells nothing gets its typed name as the id — umlauts written out", async () => {
       const i = make([]);
       await i.addDevice(mockContext({ form: { name: "Küche", ip: "192.168.1.31" } }));
+      adapter._runDeferred();
       expect(adapter._stored()).toEqual([{ id: "kueche", name: "kueche", ip: "192.168.1.31" }]);
     });
 
@@ -540,6 +558,7 @@ describe("YamahaDeviceManagement", () => {
       store.devices = [{ id: "kueche", ip: "192.168.1.40" }];
       const i = make([]);
       await i.addDevice(mockContext({ form: { name: "Küche", ip: "192.168.1.31" } }));
+      adapter._runDeferred();
       expect(adapter._stored()).toEqual([{ id: "kueche-2", name: "kueche-2", ip: "192.168.1.31" }]);
     });
 
@@ -549,6 +568,7 @@ describe("YamahaDeviceManagement", () => {
       const i = make([]);
       const ctx = mockContext({ form: { name: "Büro", ip: "192.168.1.99" } });
       await i.addDevice(ctx);
+      adapter._runDeferred();
       expect(ctx.showMessage).toHaveBeenCalledWith("duplicateDevice");
     });
 
@@ -556,6 +576,7 @@ describe("YamahaDeviceManagement", () => {
       const i = make([]);
       const ctx = mockContext({ form: { name: "X", ip: "not-an-ip" } });
       await i.addDevice(ctx);
+      adapter._runDeferred();
       expect(ctx.showMessage).toHaveBeenCalledWith("invalidIp");
       expect(identify.asked).toEqual([]);
     });
@@ -564,6 +585,7 @@ describe("YamahaDeviceManagement", () => {
       const i = make([living, kitchen]);
       const ctx = mockContext({ form: undefined });
       await i.addDevice(ctx);
+      adapter._runDeferred();
       const schema = ctx.showForm.mock.calls[0][0] as FormSchema;
       expect(schema.items.ip.validator).toContain("192.168.1.10");
       expect(schema.items.ip.validator).toContain("192.168.1.11");
@@ -573,6 +595,7 @@ describe("YamahaDeviceManagement", () => {
       for (const form of [undefined, { ip: "   " }, { name: "X" }, { ip: 42 }]) {
         const i = make([living]);
         await i.addDevice(mockContext({ form }));
+        adapter._runDeferred();
         expect(adapter.extendForeignObjectAsync).not.toHaveBeenCalled();
       }
     });
@@ -581,6 +604,7 @@ describe("YamahaDeviceManagement", () => {
       const i = make([living]);
       const ctx = mockContext({ form: { name: "New", ip: "192.168.1.10" } });
       await i.addDevice(ctx);
+      adapter._runDeferred();
       // The dialog validator can be bypassed; the backend check is what keeps two
       // cards off one receiver.
       expect(ctx.showMessage).toHaveBeenCalledWith("duplicateDevice");
@@ -591,6 +615,7 @@ describe("YamahaDeviceManagement", () => {
       const i = make([]);
       const ctx = mockContext({ form: { name: "X", ip: "not-an-ip" } });
       await i.addDevice(ctx);
+      adapter._runDeferred();
       expect(ctx.showMessage).toHaveBeenCalledWith("invalidIp");
       expect(adapter.extendForeignObjectAsync).not.toHaveBeenCalled();
     });
@@ -601,6 +626,7 @@ describe("YamahaDeviceManagement", () => {
       const i = make([living, kitchen]);
       const ctx = mockContext({ form: { name: "Kitchen", ip: "192.168.1.99" } });
       await expect(i.editDevice("Kitchen", ctx)).resolves.toEqual({ refresh: "devices" });
+      adapter._runDeferred();
       expect(ctx.showForm.mock.calls[0][1]).toMatchObject({ data: { name: "Kitchen", ip: "192.168.1.11" } });
       expect(adapter._stored()).toEqual([living, { id: "Kitchen", name: "Kitchen", ip: "192.168.1.99" }]);
     });
@@ -609,6 +635,7 @@ describe("YamahaDeviceManagement", () => {
       const i = make([living, kitchen]);
       const ctx = mockContext({ form: undefined });
       await i.editDevice("Kitchen", ctx);
+      adapter._runDeferred();
       const schema = ctx.showForm.mock.calls[0][0] as FormSchema;
       // Otherwise opening a device and pressing OK unchanged greys the button out:
       // it clashes with itself and the row can never be edited.
@@ -620,6 +647,7 @@ describe("YamahaDeviceManagement", () => {
       const i = make([living, kitchen]);
       const ok = mockContext({ form: { name: "Kitchen", ip: "192.168.1.11" } });
       await i.editDevice("Kitchen", ok);
+      adapter._runDeferred();
       expect(ok.showMessage).not.toHaveBeenCalled();
 
       const clash = make([living, kitchen]);
@@ -634,6 +662,7 @@ describe("YamahaDeviceManagement", () => {
       const i = make([]);
       const ctx = mockContext({ form: { name: "Living room", ip: "192.168.1.99" } });
       await expect(i.editDevice("rx-v685", ctx)).resolves.toEqual({ refresh: "devices" });
+      adapter._runDeferred();
       // Moved, not copied: left in both stores the next search would carry the found address
       // back over the typed one.
       expect(store.devices).toEqual([]);
@@ -643,7 +672,7 @@ describe("YamahaDeviceManagement", () => {
       // The marker rides in the SAME write: it tells the next start that this is the
       // established name (so the header write does not put the bare id back) and it carries the
       // user rank, which no name a device reports for itself can outrank.
-      expect(adapter.extendForeignObjectAsync).toHaveBeenCalledWith("yamaha.0.rx-v685", {
+      expect(adapter.writeDeviceObject).toHaveBeenCalledWith("rx-v685", {
         common: { name: "Living room" },
         native: { label: "Living room", labelRank: LABEL_RANK.user },
       });
@@ -656,6 +685,7 @@ describe("YamahaDeviceManagement", () => {
       store.devices = [{ id: "192_168_1_20", ip: "192.168.1.20" }];
       const i = make([]);
       await i.editDevice("192_168_1_20", mockContext({ form: { name: "", ip: "192.168.1.99" } }));
+      adapter._runDeferred();
       expect(adapter._stored()).toEqual([{ id: "192_168_1_20", name: "192_168_1_20", ip: "192.168.1.99" }]);
       expect(rowDeviceId(adapter._stored()[0])).toBe("192_168_1_20");
     });
@@ -664,10 +694,11 @@ describe("YamahaDeviceManagement", () => {
       store.devices = [{ id: "rx-v685", ip: "192.168.1.20" }];
       const i = make([]);
       await i.editDevice("rx-v685", mockContext({ form: { name: "Kitchen", ip: "192.168.1.20" } }));
+      adapter._runDeferred();
       // Nothing about the address changed, so there is nothing to pin — only the label moves.
       expect(store.devices).toEqual([{ id: "rx-v685", ip: "192.168.1.20" }]);
       expect(adapter._stored()).toEqual([]);
-      expect(adapter.extendForeignObjectAsync).toHaveBeenCalledWith("yamaha.0.rx-v685", {
+      expect(adapter.writeDeviceObject).toHaveBeenCalledWith("rx-v685", {
         common: { name: "Kitchen" },
         native: { label: "Kitchen", labelRank: LABEL_RANK.user },
       });
@@ -676,10 +707,11 @@ describe("YamahaDeviceManagement", () => {
     it("renaming a manual device does not move its object tree", async () => {
       const i = make([living]);
       await i.editDevice("Living_room", mockContext({ form: { name: "Lounge", ip: "192.168.1.10" } }));
+      adapter._runDeferred();
       // The id comes from the row's name, so the row keeps the id and the new label goes to the
       // device object — before 2.9.0 this renamed the id and left the whole tree behind.
       expect(rowDeviceId(adapter._stored()[0])).toBe("Living_room");
-      expect(adapter.extendForeignObjectAsync).toHaveBeenCalledWith("yamaha.0.Living_room", {
+      expect(adapter.writeDeviceObject).toHaveBeenCalledWith("Living_room", {
         common: { name: "Lounge" },
         native: { label: "Lounge", labelRank: LABEL_RANK.user },
       });
@@ -689,6 +721,7 @@ describe("YamahaDeviceManagement", () => {
       const i = make([living]);
       const ctx = mockContext({ form: { name: "Ghost", ip: "192.168.1.77" } });
       await expect(i.editDevice("ghost", ctx)).resolves.toEqual({ refresh: "devices" });
+      adapter._runDeferred();
       // A stale manager view must not open a form that would then append a device.
       expect(ctx.showForm).not.toHaveBeenCalled();
       expect(adapter.extendForeignObjectAsync).not.toHaveBeenCalled();
@@ -697,7 +730,9 @@ describe("YamahaDeviceManagement", () => {
     it("writes nothing on cancel or a blank IP", async () => {
       const i = make([living]);
       await i.editDevice("Living_room", mockContext({ form: undefined }));
+      adapter._runDeferred();
       await i.editDevice("Living_room", mockContext({ form: { ip: "  " } }));
+      adapter._runDeferred();
       expect(adapter.extendForeignObjectAsync).not.toHaveBeenCalled();
     });
   });
@@ -812,6 +847,7 @@ describe("YamahaDeviceManagement", () => {
       ];
       const i = make([]);
       await i.addDevice(mockContext({ form: { name: "Bedroom", ip: "192.168.1.30" } }));
+      adapter._runDeferred();
       expect(writeIgnored).toHaveBeenCalledWith({}, []);
       expect(writeExcluded).toHaveBeenCalledWith({}, [{ id: "Keep", ip: "192.168.1.31" }]);
     });
@@ -820,6 +856,7 @@ describe("YamahaDeviceManagement", () => {
       store.excluded = [{ id: "Keep", ip: "192.168.1.31" }];
       const i = make([]);
       await i.addDevice(mockContext({ form: { name: "Bedroom", ip: "192.168.1.30" } }));
+      adapter._runDeferred();
       expect(writeExcluded).not.toHaveBeenCalled();
     });
   });
@@ -931,9 +968,10 @@ describe("YamahaDeviceManagement", () => {
       const i = make([]);
       const ctx = mockContext({ form: { name: "Bedroom", ip: "192.168.1.50", volumeAsPercent: true } });
       await i.addDevice(ctx);
+      adapter._runDeferred();
       // No object exists yet, so the dialog seeds one instead of asking the adapter to rebuild
       // datapoints that are not there.
-      expect(adapter.extendForeignObjectAsync).toHaveBeenCalledWith("yamaha.0.bedroom", {
+      expect(adapter.writeDeviceObject).toHaveBeenCalledWith("bedroom", {
         type: "device",
         common: { name: "bedroom" },
         native: { volumeAsPercent: true },
@@ -944,6 +982,7 @@ describe("YamahaDeviceManagement", () => {
       const i = make([living], {}, { "yamaha.0.Living_room": { native: { volumeAsPercent: true } } });
       const ctx = mockContext({ form: { name: "Living room", ip: "192.168.1.10", volumeAsPercent: false } });
       await i.editDevice("Living_room", ctx);
+      adapter._runDeferred();
       expect(ctx.showForm.mock.calls[0][1]).toMatchObject({ data: { volumeAsPercent: true } });
       expect(adapter.setVolumePercent).toHaveBeenCalledWith("Living_room", false);
     });
@@ -956,5 +995,36 @@ describe("YamahaDeviceManagement", () => {
       );
       expect(adapter.setVolumePercent).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("the device manager's own writes (audit 2026-09-29, A37/A38)", () => {
+  // Two extendObject at the same moment each write what they read — a name typed in the dialog could
+  // vanish under a profile write. The device object goes through the adapter's chain, and the table
+  // (which restarts the instance) is written only after the handler answered.
+  it("adds through the write chain and writes the table last, behind the answer", async () => {
+    const adapter = mockAdapter([]);
+    const i = new YamahaDeviceManagement(adapter) as unknown as DmInternals;
+    identify.report = { model: "WX-030", identity: { serial: "0E1A2B3C", mac: "00A0DED4F504" } };
+    await i.addDevice(mockContext({ form: { name: "Büro", ip: "192.168.1.30" } }));
+    expect(adapter.writeDeviceObject).toHaveBeenCalledWith("wx-030-2b3c", {
+      common: { name: "Büro" },
+      native: { label: "Büro", labelRank: LABEL_RANK.user },
+    });
+    expect(adapter._stored()).toEqual([]);
+    adapter._runDeferred();
+    expect(adapter._stored()).toEqual([{ id: "wx-030-2b3c", name: "wx-030-2b3c", ip: "192.168.1.30" }]);
+  });
+
+  it("a failing read answers the details window with the failure instead of nothing", async () => {
+    const adapter = mockAdapter([]);
+    adapter.getForeignObjectAsync.mockRejectedValue(new Error("objects db gone"));
+    const i = new YamahaDeviceManagement(adapter) as unknown as {
+      getDeviceDetails(id: string): Promise<{ id: string; schema: { items: Record<string, unknown> } }>;
+    };
+    const details = await i.getDeviceDetails("living");
+    expect(details.id).toBe("living");
+    expect(Object.keys(details.schema.items)).toEqual(["id", "mac", "serial", "failure"]);
+    expect(adapter.log.error).toHaveBeenCalledWith("device manager: details of living failed (objects db gone)");
   });
 });

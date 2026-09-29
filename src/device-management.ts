@@ -38,6 +38,8 @@ interface DeviceOwner {
   setVolumePercent(deviceId: string, on: boolean): Promise<void>;
   /** Forget the session's deletes of these ids and search the network now. */
   rediscoverNow(lifted: readonly string[]): void;
+  /** Merge into a device object through the adapter's one write chain per device. */
+  writeDeviceObject(deviceId: string, patch: ioBroker.PartialObject): Promise<void>;
 }
 
 /**
@@ -58,9 +60,43 @@ export class YamahaDeviceManagement extends DeviceManagement {
     const candidate = this.adapter as unknown as Partial<DeviceOwner>;
     return typeof candidate.removeDevice === "function" &&
       typeof candidate.setVolumePercent === "function" &&
-      typeof candidate.rediscoverNow === "function"
+      typeof candidate.rediscoverNow === "function" &&
+      typeof candidate.writeDeviceObject === "function"
       ? (candidate as DeviceOwner)
       : undefined;
+  }
+
+  /**
+   * Merge into a device object. Through the adapter's write chain while it runs: two `extendObject`
+   * at the same moment each write what they read, and the later one takes the earlier one's fields
+   * away — a name typed here could vanish under a profile write (audit 2026-09-29, A37).
+   *
+   * @param deviceId the id-safe device id
+   * @param patch what to merge
+   */
+  private async writeDevice(deviceId: string, patch: ioBroker.PartialDeviceObject): Promise<void> {
+    const owner = this.owner;
+    if (owner) {
+      await owner.writeDeviceObject(deviceId, patch);
+    } else {
+      await this.adapter.extendForeignObjectAsync(`${this.adapter.namespace}.${deviceId}`, patch);
+    }
+  }
+
+  /**
+   * Write the device table as the LAST step, behind the handler's answer: writing the instance's
+   * `native` restarts the adapter, and a handler that awaits it never answers; the device-object
+   * writes before it finish first (audit 2026-09-29, A37 — the delete did this already).
+   *
+   * @param rows the table to write
+   * @param what what the write is for, for the error line
+   */
+  private scheduleTableWrite(rows: DeviceRow[], what: string): void {
+    this.adapter.setTimeout(() => {
+      this.writeManual(rows).catch((e: unknown) =>
+        this.adapter.log.error(`could not update the device table ${what} (${errorMessage(e)})`),
+      );
+    }, 0);
   }
 
   /** Read the manual device table (`native.devices`) as raw rows, keeping the name. */
@@ -115,7 +151,7 @@ export class YamahaDeviceManagement extends DeviceManagement {
     }
     // A device just added through the dialog has no object yet — seed the shape
     // `ensureDeviceHeader` completes on the next start, so the answer has somewhere to live.
-    await this.adapter.extendForeignObjectAsync(id, {
+    await this.writeDevice(deviceId, {
       type: "device",
       common: { name: deviceId },
       native: { volumeAsPercent: on },
@@ -336,21 +372,33 @@ export class YamahaDeviceManagement extends DeviceManagement {
    * @returns the panel
    */
   protected async getDeviceDetails(id: string): Promise<DeviceDetails<string>> {
-    const node = await this.adapter.getForeignObjectAsync(`${this.adapter.namespace}.${id}`);
-    const native = (node?.native ?? {}) as Record<string, unknown>;
-    const identity = identityOfDeviceObject(native);
-    const line = (key: "dmDetailsId" | "dmDetailsMac" | "dmDetailsSerial", value: string | undefined): unknown => ({
+    const line = (
+      key: "dmDetailsId" | "dmDetailsMac" | "dmDetailsSerial" | "dmActionFailed",
+      value?: string,
+    ): unknown => ({
       type: "staticText",
       text: tName(key, value ?? "–"),
       newLine: true,
       sm: 12,
     });
+    // Inside the actions' error frame: dm-utils answers nothing when this throws, and the card's
+    // "more" window waited for good with a log line that named neither action nor device (A38).
+    let identity: ReturnType<typeof identityOfDeviceObject>;
+    let failure: string | undefined;
+    try {
+      const node = await this.adapter.getForeignObjectAsync(`${this.adapter.namespace}.${id}`);
+      identity = identityOfDeviceObject((node?.native ?? {}) as Record<string, unknown>);
+    } catch (e) {
+      failure = errorMessage(e);
+      this.adapter.log.error(`device manager: details of ${id} failed (${failure})`);
+    }
     const schema = {
       type: "panel",
       items: {
         id: line("dmDetailsId", id),
         mac: line("dmDetailsMac", identity?.mac?.replace(/(..)(?!$)/g, "$1:")),
         serial: line("dmDetailsSerial", identity?.serial),
+        ...(failure !== undefined ? { failure: line("dmActionFailed", failure) } : {}),
       },
     } as unknown as JsonFormSchema;
     return { id, schema };
@@ -450,17 +498,17 @@ export class YamahaDeviceManagement extends DeviceManagement {
       if (remaining.length !== excluded.length) {
         await writeExcluded(excludedDeps, remaining);
       }
-      await this.writeManual(manual);
       // Written down right away, so the device starts with the answer the user gave instead of
       // inheriting whatever the instance-wide switch of 2.8.0 was left on.
       await this.applyVolumePercent(id, data.volumeAsPercent === true);
       if (name !== "") {
         // The name the user typed is the display name from the start — the id no longer carries it.
-        await this.adapter.extendForeignObjectAsync(`${this.adapter.namespace}.${id}`, {
+        await this.writeDevice(id, {
           common: { name: typedName },
           native: { label: typedName, labelRank: LABEL_RANK.user },
         });
       }
+      this.scheduleTableWrite(manual, `after adding "${id}"`);
     }
     return { refresh: true };
   }
@@ -560,9 +608,10 @@ export class YamahaDeviceManagement extends DeviceManagement {
       await context.showMessage(clash);
       return { refresh: "devices" };
     }
+    let tableChanged = false;
     if (index >= 0) {
       manual[index] = row;
-      await this.writeManual(manual);
+      tableChanged = true;
     } else if (ip !== card.ip) {
       const store = discoveredStoreDeps(this.adapter);
       const discovered = await readDiscovered(store);
@@ -571,20 +620,23 @@ export class YamahaDeviceManagement extends DeviceManagement {
         discovered.filter((entry: DeviceRecord) => entry.id !== cardId),
       );
       manual.push(row);
-      await this.writeManual(manual);
+      tableChanged = true;
     }
     if (name !== shownName) {
       // The marker rides along with the name, at the rank only this dialog writes: it tells the
       // next start that THIS name is the established one (`ensureDeviceHeader` writes it back
       // instead of the bare id) and it outranks every name a device reports for itself, so a
       // MusicCast zone name can no longer overwrite what the user typed here.
-      await this.adapter.extendForeignObjectAsync(`${this.adapter.namespace}.${cardId}`, {
+      await this.writeDevice(cardId, {
         common: { name: name || cardId },
         native: { label: name || cardId, labelRank: LABEL_RANK.user },
       });
     }
     if ((data.volumeAsPercent === true) !== percent) {
       await this.applyVolumePercent(cardId, data.volumeAsPercent === true);
+    }
+    if (tableChanged) {
+      this.scheduleTableWrite(manual, `after editing "${cardId}"`);
     }
     return { refresh: "devices" };
   }
