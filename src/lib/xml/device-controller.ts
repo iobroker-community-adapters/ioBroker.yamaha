@@ -1,4 +1,4 @@
-import { channelCommon, type ObjectDef } from "../catalog/types";
+import { channelCommon, zoneRole, type ObjectDef } from "../catalog/types";
 import { textWriteProblem, writableNumber } from "../catalog/value-coerce";
 import { tName } from "../i18n";
 import {
@@ -965,6 +965,7 @@ export class XmlDeviceController implements ConnectionHandle {
       const { nameKey, descKey, ...rest } = entry.common;
       const common: ObjectDef["common"] = {
         ...rest,
+        role: zoneRole(rest.role, zone.prefix),
         name: tName(nameKey),
         // An absent key means the datapoint explains itself — the fleet standard wants the
         // field empty there rather than filled with invented prose.

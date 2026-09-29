@@ -1,5 +1,5 @@
 import { MEDIA_STATE_LABELS } from "../catalog/media-state";
-import { channelCommon, type ObjectDef } from "../catalog/types";
+import { channelCommon, zoneRole, type ObjectDef } from "../catalog/types";
 import { YXC_CURSOR_VALUES, YXC_MENU_VALUES } from "./remote";
 import { tName, type I18nKey } from "../i18n";
 import { YXC_ZONE_IDS, zonePrefix } from "./zones";
@@ -595,6 +595,7 @@ export function mapYxcToObjects(
       const { nameKey: entryNameKey, descKey: entryDescKey, ...entryRest } = entry.common;
       const common: ObjectDef["common"] = {
         ...entryRest,
+        role: zoneRole(entryRest.role, zoneDef.prefix),
         name: tName(entryNameKey),
         ...(entryDescKey ? { desc: tName(entryDescKey) } : {}),
       };
@@ -1124,7 +1125,7 @@ export function mapYxcToObjects(
             name: tName(field.nameKey),
             ...(field.descKey ? { desc: tName(field.descKey) } : {}),
             type: field.type,
-            role: field.type === "boolean" ? "indicator" : field.type === "number" ? "value" : "text",
+            role: field.role ?? (field.type === "boolean" ? "indicator" : field.type === "number" ? "value" : "text"),
             ...(field.unit ? { unit: field.unit } : {}),
             ...(field.min !== undefined ? { min: field.min } : {}),
             ...(field.max !== undefined ? { max: field.max } : {}),

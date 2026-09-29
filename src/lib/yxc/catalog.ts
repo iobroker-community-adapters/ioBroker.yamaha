@@ -175,7 +175,15 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
   {
     state: "sound.bass",
     // unit "": an installation from before 2.5.0 still carries "dB" here (see subwooferVolume, C9).
-    common: { nameKey: "bass", descKey: "descBass", type: "number", unit: "", role: "level", read: true, write: true },
+    common: {
+      nameKey: "bass",
+      descKey: "descBass",
+      type: "number",
+      unit: "",
+      role: "level.bass",
+      read: true,
+      write: true,
+    },
     create: { kind: "func", func: "tone_control" },
     read: { path: ["tone_control", "bass"] },
     fromStatus: num,
@@ -203,7 +211,7 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
       descKey: "descTreble",
       type: "number",
       unit: "",
-      role: "level",
+      role: "level.treble",
       read: true,
       write: true,
     },
@@ -219,7 +227,7 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
       descKey: "descSleepTimer",
       type: "number",
       unit: "min",
-      role: "level",
+      role: "level.timer.sleep",
       read: true,
       write: true,
       // The five values YXC Basic §5.1/§5.4 declares, as a HINT for the dropdown — a value outside

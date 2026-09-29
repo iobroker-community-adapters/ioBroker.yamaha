@@ -361,6 +361,19 @@ describe("YNCA catalog", () => {
     ).toMatchObject({ func: "TVAUDIN1", value: "AUDIO4" });
   });
 
+  // The specific ioBroker roles (audit 2026-09-29, C41): a zone's power, the tone controls, the bit rate.
+  test("zone power, bass, treble and the DAB bit rate carry their specific roles", () => {
+    const role = (id: string): string | undefined => YNCA_CATALOG.find(e => e.id === id)?.role;
+    expect(role("power")).toBe("switch.power");
+    expect(role("multiroom.zone2.power")).toBe("switch.power.zone");
+    expect(role("sound.bass")).toBe("level.bass");
+    expect(role("multiroom.zone2.sound.treble")).toBe("level.treble");
+    expect(YNCA_CATALOG.find(e => e.id === "tuner.dab.bitRate")).toMatchObject({
+      role: "media.bitrate",
+      spec: { unit: "kbps" },
+    });
+  });
+
   test("a coded write accepts the number as text, and still refuses junk", () => {
     // ioBroker lets anything write a state: a VIS widget or a script may send "0" for a
     // numeric coded state. That has to reach the device as its command word, while a

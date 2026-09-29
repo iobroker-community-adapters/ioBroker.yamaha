@@ -615,6 +615,8 @@ export const DAB_FIELDS: Array<{
   max?: number;
   /** The tuner function (`func_list`) the field needs as proof — §6.2 "Available only when …". */
   requires?: string;
+  /** A role more specific than the type's default (`media.bitrate` — audit 2026-09-29, C41). */
+  role?: string;
 }> = [
   {
     field: "service_label",
@@ -657,6 +659,7 @@ export const DAB_FIELDS: Array<{
     unit: "kbps",
     min: 32,
     max: 256,
+    role: "media.bitrate",
   },
   {
     field: "quality",

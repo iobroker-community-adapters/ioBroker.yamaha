@@ -1,6 +1,6 @@
 import { MEDIA_STATE, MEDIA_STATE_LABELS } from "../catalog/media-state";
 import { catalogToObjects, type StatesResolver } from "../catalog/build-objects";
-import type { CatalogEntry, ObjectDef } from "../catalog/types";
+import { zoneRole, type CatalogEntry, type ObjectDef } from "../catalog/types";
 import {
   coerceBool,
   decode,
@@ -621,7 +621,7 @@ const AMP_FUNCS: FuncDef[] = [
     descKey: "descBass",
     spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5, decimals: 1 },
     write: true,
-    role: "level",
+    role: "level.bass",
   },
   {
     func: "SPTREBLE",
@@ -630,7 +630,7 @@ const AMP_FUNCS: FuncDef[] = [
     descKey: "descTreble",
     spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5, decimals: 1 },
     write: true,
-    role: "level",
+    role: "level.treble",
   },
   // The MusicCast generation's tone dialect: it does not know SPBASS/SPTREBLE and
   // answers TONEBASS/TONETREBLE instead ("0.0" — RX-V6A full sweep, 2026-09-01), on
@@ -644,7 +644,7 @@ const AMP_FUNCS: FuncDef[] = [
     descKey: "descBass",
     spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5, decimals: 1 },
     write: true,
-    role: "level",
+    role: "level.bass",
   },
   {
     func: "TONETREBLE",
@@ -653,7 +653,7 @@ const AMP_FUNCS: FuncDef[] = [
     descKey: "descTreble",
     spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5, decimals: 1 },
     write: true,
-    role: "level",
+    role: "level.treble",
   },
   // Read-only: only "Auto" is attested (RX-V6A ZONE2), the write vocabulary is
   // documented nowhere — no blind write offer (the Scene_Load lesson).
@@ -1186,7 +1186,7 @@ const ZONE_ONLY_FUNCS: FuncDef[] = [
     descKey: "descBass",
     spec: { kind: "number", unit: "dB", min: -10, max: 10, step: 2, decimals: 1 },
     write: true,
-    role: "level",
+    role: "level.bass",
   },
   {
     func: "TREBLE",
@@ -1195,7 +1195,7 @@ const ZONE_ONLY_FUNCS: FuncDef[] = [
     descKey: "descTreble",
     spec: { kind: "number", unit: "dB", min: -10, max: 10, step: 2, decimals: 1 },
     write: true,
-    role: "level",
+    role: "level.treble",
   },
   {
     func: "SCENE",
@@ -2244,9 +2244,9 @@ const DAB_FUNCS: FuncDef[] = [
     state: "dab.bitRate",
     nameKey: "bitRate",
     descKey: "descBitRate",
-    spec: { kind: "number", decimals: 0 },
+    spec: { kind: "number", unit: "kbps", decimals: 0 },
     write: false,
-    role: "value",
+    role: "media.bitrate",
   },
   {
     func: "DABDATETIME",
@@ -2910,7 +2910,7 @@ function fnEntries(fns: readonly FuncDef[], subunit: string, prefix = ""): YncaE
     descKey: fn.descKey,
     spec: fn.spec,
     write: fn.write,
-    role: fn.role,
+    role: zoneRole(fn.role, prefix),
     subunit,
     func: fn.func,
     wireEncode: fn.wireEncode,

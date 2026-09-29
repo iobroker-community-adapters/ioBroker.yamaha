@@ -210,6 +210,19 @@ export const CHANNEL_NAME_KEYS: Record<string, I18nKey> = {
 };
 
 /**
+ * The role a datapoint takes in its zone: a zone's power switch is `switch.power.zone` (ioBroker state
+ * roles), the main zone's stays `switch.power` (audit 2026-09-29, C41). One rule for the three
+ * transports, so a zone's switch reads alike whichever owns it.
+ *
+ * @param role the catalog role
+ * @param zonePrefix the zone's id prefix ("" = the main zone)
+ * @returns the role to use
+ */
+export function zoneRole<R extends string | undefined>(role: R, zonePrefix: string): R | "switch.power.zone" {
+  return role === "switch.power" && zonePrefix !== "" ? "switch.power.zone" : role;
+}
+
+/**
  * The `common` of a channel object: its translated name, plus its explanation where one
  * exists. THE one place that answers both questions — the four object builders (the shared
  * catalog path, the MusicCast object mapper, the XML controller and the browsing surface) all
