@@ -2,6 +2,8 @@ import type { StateValue } from "../types";
 import type { BasicStatus, XmlDialect, XmlZoneForm } from "./protocol";
 import { coerceBool, isWritableValue } from "../catalog/value-coerce";
 import { XML_AMP_CATALOG } from "./catalog";
+import { xmlZone } from "./zones";
+import { splitZone } from "../catalog/zone-id";
 
 /** A zone-scoped XML command: the zone element and the inner command XML. */
 export interface XmlCommand {
@@ -10,14 +12,6 @@ export interface XmlCommand {
   /** The inner command XML to wrap in a PUT envelope. */
   inner: string;
 }
-
-const ZONE_ELEMENT: Record<string, string> = { main: "Main_Zone", zone2: "Zone_2", zone3: "Zone_3", zone4: "Zone_4" };
-const ZONE_PREFIX: Record<string, string> = {
-  main: "",
-  zone2: "multiroom.zone2.",
-  zone3: "multiroom.zone3.",
-  zone4: "multiroom.zone4.",
-};
 
 /**
  * Map a unified state write to a zone-scoped XML command, via {@link XML_AMP_CATALOG}.
@@ -35,13 +29,7 @@ export function stateToXml(
   dialect?: XmlDialect,
   form?: XmlZoneForm,
 ): XmlCommand | undefined {
-  let zoneKey = "main";
-  let name = stateId;
-  const zoneMatch = /^multiroom\.(zone[234])\.(.+)$/.exec(stateId);
-  if (zoneMatch) {
-    zoneKey = zoneMatch[1];
-    name = zoneMatch[2];
-  }
+  const { zone: zoneKey, name } = splitZone(stateId);
   const entry = XML_AMP_CATALOG.find(e => e.state === name);
   if (
     !entry?.toInner ||
@@ -52,9 +40,7 @@ export function stateToXml(
     return undefined;
   }
   // HDMI outputs and party are written on the System element, not the zone.
-  // (`!zone` cannot fire today — the regex above only ever yields main/zone2..4,
-  // all of which ZONE_ELEMENT covers. It guards the map against a future zone.)
-  const zone = entry.writeZone ?? ZONE_ELEMENT[zoneKey];
+  const zone = entry.writeZone ?? xmlZone(zoneKey)?.element;
   if (!zone) {
     return undefined;
   }
@@ -76,7 +62,7 @@ export function stateToXml(
  * @returns the state updates, empty if the zone is unknown
  */
 export function parseXmlStatus(status: BasicStatus, zone: string): StateValue[] {
-  const prefix = ZONE_PREFIX[zone];
+  const prefix = xmlZone(zone)?.prefix;
   if (prefix === undefined) {
     return [];
   }

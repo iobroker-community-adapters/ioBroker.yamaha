@@ -35,20 +35,13 @@ import {
 } from "../browse/xml-browse-driver";
 import { wireFor } from "../browse/types";
 import { sceneListSurface, sceneNumber } from "../catalog/scene-titles";
+import { splitZone } from "../catalog/zone-id";
+import { XML_ZONES, type XmlZone } from "./zones";
 import { TRANSPORT_KEYS } from "../catalog/media-state";
 import { decodeXmlText, escapeXmlText } from "./entities";
 
 /** XML/YNC has no push channel, so the state is polled at this interval by default. */
 const DEFAULT_POLL_INTERVAL_MS = 60 * 1000;
-
-interface XmlZone {
-  /** Unified zone key (`main`, `zone2`, …). */
-  key: string;
-  /** XML zone element — also the key of its `Feature_Existence` flag in System/Config. */
-  element: "Main_Zone" | "Zone_2" | "Zone_3" | "Zone_4";
-  /** State-id prefix for the zone. */
-  prefix: string;
-}
 
 /** The transport keys of `Play_Control,Playback` and their wire words (desc.xml, RX-V675 & co). */
 const XML_TRANSPORT_WIRE: Record<string, string> = {
@@ -58,15 +51,6 @@ const XML_TRANSPORT_WIRE: Record<string, string> = {
   next: "Skip Fwd",
   prev: "Skip Rev",
 };
-
-/** The transport keys' display names (the player block's own keys). */
-
-const XML_ZONES: XmlZone[] = [
-  { key: "main", element: "Main_Zone", prefix: "" },
-  { key: "zone2", element: "Zone_2", prefix: "multiroom.zone2." },
-  { key: "zone3", element: "Zone_3", prefix: "multiroom.zone3." },
-  { key: "zone4", element: "Zone_4", prefix: "multiroom.zone4." },
-];
 
 /** The subset of the XML client the controller uses (so tests can inject a fake). */
 export interface XmlClientLike {
@@ -659,11 +643,10 @@ export class XmlDeviceController implements ConnectionHandle {
    * @returns true when the id was a scene recall (handled here)
    */
   private handleSceneWrite(stateId: string, value: unknown): boolean {
-    const match = /^(?:multiroom\.(zone[234])\.)?scene\.recall$/.exec(stateId);
-    if (!match) {
+    const { zone: zoneKey, name } = splitZone(stateId);
+    if (name !== "scene.recall") {
       return false;
     }
-    const zoneKey = match[1] ?? "main";
     const zone = this.zones.find(z => z.key === zoneKey);
     const scenes = this.scenesByZone.get(zoneKey);
     // A TITLE is as valid a write as a number ("Movie Viewing" → Scene 1) — the one resolver (D16).
@@ -802,7 +785,7 @@ export class XmlDeviceController implements ConnectionHandle {
       this.deps.log.debug(`${this.deviceId}: ${stateId} was not reported by this device — write dropped`);
       return;
     }
-    const zoneKey = /^multiroom\.(zone[234])\./.exec(stateId)?.[1] ?? "main";
+    const { zone: zoneKey } = splitZone(stateId);
     const element = this.zones.find(candidate => candidate.key === zoneKey)?.element ?? "Main_Zone";
     const command = stateToXml(stateId, value, this.dialect, this.zoneForms.get(element));
     if (command && /(^|\.)sound\.dialogueLevel$/.test(stateId) && !this.zoneCommands.dialogue.has(command.zone)) {
@@ -1222,18 +1205,17 @@ export class XmlDeviceController implements ConnectionHandle {
    * @returns true when the id was a zone command (handled here, sent or refused)
    */
   private handleZoneCommandWrite(stateId: string, value: unknown): boolean {
-    const match =
-      /^(?:multiroom\.(zone[234])\.)?(remote\.(?:cursor|menu)|player\.(?:play|pause|stop|next|prev)|zoneName)$/.exec(
-        stateId,
-      );
-    if (!match || !this.createdStates.has(stateId)) {
+    const { zone: zoneKey, name: command } = splitZone(stateId);
+    if (
+      !/^(remote\.(?:cursor|menu)|player\.(?:play|pause|stop|next|prev)|zoneName)$/.test(command) ||
+      !this.createdStates.has(stateId)
+    ) {
       return false;
     }
-    const zone = this.zones.find(candidate => candidate.key === (match[1] ?? "main"));
+    const zone = this.zones.find(candidate => candidate.key === zoneKey);
     if (!zone) {
       return false;
     }
-    const command = match[2];
     let inner: string | undefined;
     if (command === "remote.cursor" || command === "remote.menu") {
       const word = typeof value === "string" ? value : "";
