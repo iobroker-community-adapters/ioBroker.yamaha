@@ -25,6 +25,7 @@ import {
   yncaCommand,
   yncaObjectsFor,
   yncaStateUpdate,
+  YNCA_ZONES,
   type InputEvidence,
   type YncaEntry,
 } from "./ynca/catalog";
@@ -35,6 +36,7 @@ import type { CommandGate } from "./lifecycle/command-gate";
 import type { ProbeMemory } from "./lifecycle/probe-memory";
 import type { BrowseEngine } from "./browse/browse-engine";
 import { createBrowseSurface } from "./browse/surface";
+import { YNCA_STATIC_KEY, yncaSceneTitles } from "./catalog/scene-titles";
 import { YNCA_BROWSE_SOURCES, YncaBrowseDriver, type YncaPadDialect } from "./browse/ynca-browse-driver";
 
 // The YNCA catalog and its lookup maps are static — built once for all devices.
@@ -59,14 +61,6 @@ const PROBED_SUBUNITS: ReadonlySet<string> = new Set(AVAIL_PROBE.map(get => get.
  * fast-restart rework and the comment was left behind.)
  */
 const STATIC_FUNC = /^(INPNAME|SCENE\d+NAME$)/;
-
-/** The zones whose player/input surface the controller routes (v2.0.0 player unification). */
-const YNCA_ZONES: Array<{ key: string; subunit: string; prefix: string }> = [
-  { key: "main", subunit: "MAIN", prefix: "" },
-  { key: "zone2", subunit: "ZONE2", prefix: "multiroom.zone2." },
-  { key: "zone3", subunit: "ZONE3", prefix: "multiroom.zone3." },
-  { key: "zone4", subunit: "ZONE4", prefix: "multiroom.zone4." },
-];
 
 /**
  * The normalised form an INP value is looked up by: uppercase, alphanumerics only
@@ -137,7 +131,7 @@ const YNCA_PLAYER_CLEAR: Array<{ id: string; value: number | string | boolean }>
 ];
 
 /** Memory key for the remembered static values. */
-const STATIC_KEY = "yncaStaticValues";
+const STATIC_KEY = YNCA_STATIC_KEY;
 
 /** Memory key for the persisted capability shape (the fast-restart layer). */
 const CAPS_KEY = "yncaCapabilities";
@@ -276,9 +270,9 @@ function isCachedCapabilities(value: unknown): value is CachedCapabilities {
 const LIST_PROOF = /^(LISTLAYER|LISTLAYERNAME|CURRLINE|MAXLINE|LINE[1-8](TXT|ATRIB))$/;
 
 /**
- * The scenes a device declares, read from its `SCENExNAME` answers on MAIN. Used both by
- * the init and by the background refresh, so a scene renamed at the receiver reaches the
- * running session instead of waiting for the next start.
+ * The scenes a device declares, read from its `SCENExNAME` answers. Used both by the init and by
+ * the background refresh, so a scene renamed at the receiver reaches the running session instead
+ * of waiting for the next start.
  *
  * @param subunits the swept subunit→function map
  * @param subunit the zone subunit whose scenes to read (MAIN, ZONE2 …)
@@ -288,16 +282,7 @@ function sceneTitlesOf(
   subunits: Record<string, Record<string, string>>,
   subunit = "MAIN",
 ): Array<{ num: number; title: string }> {
-  const answers = subunits[subunit] ?? {};
-  const scenes: Array<{ num: number; title: string }> = [];
-  // MAIN declares up to twelve scenes, a zone four (official lists).
-  for (let n = 1; n <= (subunit === "MAIN" ? 12 : 4); n++) {
-    const title = answers[`SCENE${n}NAME`];
-    if (typeof title === "string" && title.length > 0) {
-      scenes.push({ num: n, title });
-    }
-  }
-  return scenes;
+  return yncaSceneTitles(subunits[subunit], subunit);
 }
 
 /** The subset of the YNCA client the controller uses (so tests can inject a fake). */
@@ -380,11 +365,11 @@ export class YncaDeviceController implements ConnectionHandle {
   private sceneTitles: Array<{ num: number; title: string }> = [];
   /** The zones' own scene titles (ZONEn SCENE1–4NAME), keyed by zone (`zone2` …). */
   private readonly zoneSceneTitles = new Map<string, Array<{ num: number; title: string }>>();
-  /** The tuner's current band (AM/FM/DAB), for the band-dependent frequency/preset writes. */
   /** The value the device last reported per state id — what a refused write is put back to (B4). */
   private readonly reported = new Map<string, boolean | number | string>();
   /** Whether a refused pad key already triggered its one re-probe of the dialect this session. */
   private padReprobed = false;
+  /** The tuner's current band (AM/FM/DAB), for the band-dependent frequency/preset writes. */
   private tunerBand = "";
 
   /** The tuner grid the device declares (`@SYS:FREQSTEP`), when it declares one — see snapTunerFrequency. */

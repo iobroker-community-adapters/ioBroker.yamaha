@@ -51,7 +51,19 @@ describe("title source precedence", () => {
     memory.set("yncaStaticValues", { MAIN: { SCENE1NAME: "YNCA Movie", SCENE2NAME: "YNCA TV" } });
     // The per-zone XML declaration is the richer, zone-aware source — it must win.
     expect(knownScenes(memory, "main")).toEqual([{ num: 1, title: "XML Movie" }]);
-    // A zone the XML never declared falls back to nothing (YNCA names are main-only).
+    // A zone neither transport named has no titles.
     expect(knownScenes(memory, "zone2")).toEqual([]);
+  });
+
+  // A MusicCast-owned `multiroom.zone2.scene.recall` resolves a title only YNCA reported (B16).
+  test("a zone falls back to its own four YNCA scene names", () => {
+    const memory = new ProbeMemory();
+    memory.set("yncaStaticValues", {
+      MAIN: { SCENE1NAME: "Main Movie" },
+      ZONE2: { SCENE2NAME: "Patio", SCENE5NAME: "beyond the four" },
+    });
+    expect(knownScenes(memory, "zone2")).toEqual([{ num: 2, title: "Patio" }]);
+    expect(resolveSceneNumber("patio", memory, "zone2")).toBe(2);
+    expect(knownScenes(memory, "zone3")).toEqual([]);
   });
 });

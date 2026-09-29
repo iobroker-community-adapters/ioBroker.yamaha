@@ -9,34 +9,24 @@ import {
   type WireTable,
 } from "./types";
 import type { BrowseEngine } from "./browse-engine";
-import type { YncaGenerationEvidence } from "../ynca/catalog";
+import { SOURCE_INPUTS, YNCA_PLAYER_SOURCES, type YncaGenerationEvidence } from "../ynca/catalog";
 import { errorMessage } from "../util";
 
 /** Collect a burst of list lines for this long before rendering the window. */
 const BURST_SETTLE_MS = 200;
 
 /**
- * The browsable YNCA subunits (official RX-V671 command list + the all-commands
- * corpus: every one carries LISTINFO/LISTSEL/LISTCURSOR/LISTPAGE), with the
- * transport-neutral source key and the `@MAIN:INP` wire value that activates the
- * source (browsing follows the active input, like the remote).
+ * The browsable YNCA subunits — the sources {@link YNCA_PLAYER_SOURCES} marks `browse`, with the
+ * transport-neutral source key (the player channel) and the `@MAIN:INP` wire value that activates
+ * the source (browsing follows the active input, like the remote), from {@link SOURCE_INPUTS}.
  */
-export const YNCA_BROWSE_SOURCES: ReadonlyArray<{ subunit: string; key: string; label: string; input: string }> = [
-  { subunit: "NETRADIO", key: "netRadio", label: "Net Radio", input: "NET RADIO" },
-  { subunit: "SERVER", key: "server", label: "Media server", input: "SERVER" },
-  { subunit: "PC", key: "pc", label: "PC", input: "PC" },
-  { subunit: "USB", key: "usb", label: "USB", input: "USB" },
-  { subunit: "IPOD", key: "ipod", label: "iPod", input: "iPod" },
-  { subunit: "IPODUSB", key: "ipodUsb", label: "iPod (USB)", input: "iPod (USB)" },
-  { subunit: "NAPSTER", key: "napster", label: "Napster", input: "Napster" },
-  { subunit: "PANDORA", key: "pandora", label: "Pandora", input: "Pandora" },
-  { subunit: "RHAP", key: "rhapsody", label: "Rhapsody", input: "Rhapsody" },
-  { subunit: "SIRIUS", key: "sirius", label: "SIRIUS", input: "SIRIUS" },
-  // The official 2010–2011 lists give SIRIUS Internet Radio the full list vocabulary, the
-  // RX-A850 list SiriusXM.
-  { subunit: "SIRIUSIR", key: "siriusInternetRadio", label: "SIRIUS Internet Radio", input: "SIRIUS InternetRadio" },
-  { subunit: "SIRIUSXM", key: "siriusXm", label: "SiriusXM", input: "SiriusXM" },
-];
+export const YNCA_BROWSE_SOURCES: ReadonlyArray<{ subunit: string; key: string; label: string; input: string }> =
+  YNCA_PLAYER_SOURCES.flatMap(source => {
+    const input = SOURCE_INPUTS.find(candidate => candidate.subunits.includes(source.subunit))?.value;
+    return source.browse !== undefined && input !== undefined
+      ? [{ subunit: source.subunit, key: source.channel, label: source.browse, input }]
+      : [];
+  });
 
 /** The client surface the driver needs (a slice of the YNCA client). */
 export interface YncaBrowseClient {
@@ -84,27 +74,13 @@ const YNCA_MENU_WIRE: WireTable<MenuValue> = {
 
 /**
  * The same pad in the ZONE dialect of the 2015 generation (RX-A850 official list): `@MAIN:CURSOR`
- * with `Return` / `Return to Home` where the list dialect says `Back`, and `@MAIN:MENU`. The
- * receiver answers `@UNDEFINED` to a list-dialect key — that verdict (unknown function on this
- * model, unlike `@RESTRICTED` = not now) is what switches a device over, once, and for good.
+ * with the 2012 words (`Return` / `Return to Home`) and `@MAIN:MENU` with the list dialect's menu
+ * words — the tables are the same, only the functions differ (audit 2026-09-29, B16). The receiver
+ * answers `@UNDEFINED` to a list-dialect key — that verdict (unknown function on this model, unlike
+ * `@RESTRICTED` = not now) is what switches a device over, once, and for good.
  */
-const YNCA_ZONE_CURSOR_WIRE: WireTable<CursorValue> = {
-  up: "Up",
-  down: "Down",
-  left: "Left",
-  right: "Right",
-  select: "Sel",
-  return: "Return",
-  home: "Return to Home",
-};
-
-const YNCA_ZONE_MENU_WIRE: WireTable<MenuValue> = {
-  on_screen: "On Screen",
-  top_menu: "Top Menu",
-  menu: "Menu",
-  option: "Option",
-  display: "Display",
-};
+const YNCA_ZONE_CURSOR_WIRE = YNCA_RETURN_CURSOR_WIRE;
+const YNCA_ZONE_MENU_WIRE = YNCA_MENU_WIRE;
 
 /**
  * Which wire functions the main-zone pad uses (see {@link YNCA_ZONE_CURSOR_WIRE}) — or `none`: the
@@ -186,9 +162,7 @@ export class YncaBrowseDriver implements BrowseDriver {
    */
   public resend(func: string, wire: string): void {
     const cursor = func === "LISTCURSOR" || func === "CURSOR";
-    const tables = cursor
-      ? [YNCA_CURSOR_WIRE, YNCA_RETURN_CURSOR_WIRE, YNCA_ZONE_CURSOR_WIRE]
-      : [YNCA_MENU_WIRE, YNCA_ZONE_MENU_WIRE];
+    const tables = cursor ? [YNCA_CURSOR_WIRE, YNCA_RETURN_CURSOR_WIRE] : [YNCA_MENU_WIRE];
     for (const table of tables) {
       const word = Object.keys(table).find(key => wireFor(table as WireTable<string>, key) === wire);
       if (word !== undefined) {
@@ -267,9 +241,10 @@ export class YncaBrowseDriver implements BrowseDriver {
   /**
    * Go one menu level back.
    *
-   * Always `Back`, never a learned substitute: a refusal is not proof that the model lacks the
-   * step — `@RESTRICTED` also comes back while the receiver is in standby, and switching the
-   * whole device to `Left` on that would break the receivers where `Back` is the right word.
+   * The generation's word (`Back` on the 2010/2011 lists, `Return` from 2012), never a learned
+   * substitute: a refusal is not proof that the model lacks the step — `@RESTRICTED` also comes
+   * back while the receiver is in standby, and switching the whole device to `Left` on that would
+   * break the receivers where the listed word is the right one.
    * A model that only knows `Left` (RX-V473, issue #613) is served by `remote.cursor`, which
    * offers every value the official command list declares, including `Left`.
    */

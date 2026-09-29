@@ -432,7 +432,6 @@ const DECODER_STATES = selfMap([
   "DTS NEO:6 Music",
 ]);
 
-/** Amplifier functions shared by MAIN and each zone: state id + YNCA func + value spec. */
 /** A per-function catalog definition, before its zone/subunit prefix and id are applied. */
 interface FuncDef {
   func: string;
@@ -496,6 +495,7 @@ const PRESET_SLOT: Pick<FuncDef, "nameKey" | "descKey" | "spec" | "write" | "rol
   wireDecode: wire => (wire === "No Preset" ? "0" : wire),
 };
 
+/** Amplifier functions shared by MAIN and each zone: state id + YNCA func + value spec. */
 const AMP_FUNCS: FuncDef[] = [
   {
     func: "PWR",
@@ -819,7 +819,9 @@ const AMP_FUNCS: FuncDef[] = [
     },
     spec: { kind: "number", unit: "dB", min: -80.5, max: 16.5, step: 0.5, decimals: 1 },
     write: true,
-    role: "level.volume",
+    // A start value, not the sound volume: `level.volume` would let a device mapping take it for the
+    // zone's volume control (audit 2026-09-29, B17).
+    role: "level",
   },
   {
     func: "MAXVOL",
@@ -831,7 +833,8 @@ const AMP_FUNCS: FuncDef[] = [
     wireEncode: value => (Number(value) === 16.5 ? "16.5" : formatWireNumber(Number(value), 1, 5)),
     spec: { kind: "number", unit: "dB", min: -30, max: 16.5, step: 5 },
     write: true,
-    role: "level.volume",
+    // A limit, not the sound volume (B17) — turning "the volume" here would cap the receiver.
+    role: "level",
   },
   // Lip sync is an HDMI property (v2.0.0): both offsets live in the hdmi folder,
   // the former lipSync folder is gone.
@@ -882,9 +885,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     nameKey: "subwooferTrim",
     descKey: "descSubwooferTrim",
     // The wire form carries one decimal (`0.0`, `3.0` in the CX-A5100/RX-V583/RX-V673/TSR-7810
-    // protocols). The BOUNDS are the ones this adapter's XML catalog already uses for the same
-    // physical trim — the RX-V671 list does not carry the function, so nothing tighter is
-    // documented; the number stays readable either way.
+    // protocols); the bounds are the ones the official lists declare (-6.0…6.0, step 0.5).
     spec: { kind: "number", unit: "dB", min: -6, max: 6, step: 0.5, decimals: 1 },
     write: true,
     role: "level",
@@ -992,9 +993,11 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     write: true,
     role: "level",
   },
+  // The output whose lip-sync setting applies: on MAIN in the 2010/2011 lists, on SYS from 2012 (with
+  // `Disable`) — the same move as HDMIRESOL/HDMIASPECT, so ONE id (audit 2026-09-29, B15).
   {
     func: "LIPSYNCSELINFO",
-    state: "hdmi.lipSyncSource",
+    state: "hdmi.lipSyncOutput",
     nameKey: "lipSyncActiveOutput",
     descKey: "descLipSyncActiveOutput",
     spec: { kind: "enum", states: selfMap(["Analog", "HDMI1 Auto", "HDMI1 Manual", "HDMI2 Auto", "HDMI2 Manual"]) },
@@ -1139,12 +1142,15 @@ const BAND_STATES = selfMap(["AM", "FM"]);
 const TUN_SEARCHMODE_STATES = selfMap(["Preset", "Tuning"]);
 const DAB_BAND_STATES = selfMap(["DAB", "FM"]);
 
-/** The zones the catalog maps: MAIN flat, ZONE2-4 each under their own prefix. */
-const ZONES: Array<{ subunit: string; prefix: string }> = [
-  { subunit: "MAIN", prefix: "" },
-  { subunit: "ZONE2", prefix: "multiroom.zone2." },
-  { subunit: "ZONE3", prefix: "multiroom.zone3." },
-  { subunit: "ZONE4", prefix: "multiroom.zone4." },
+/**
+ * The zones the catalog maps — MAIN flat, ZONE2-4 each under their own prefix — and the controller routes
+ * by (`key`); one table for both (audit 2026-09-29, B16).
+ */
+export const YNCA_ZONES: ReadonlyArray<{ key: string; subunit: string; prefix: string }> = [
+  { key: "main", subunit: "MAIN", prefix: "" },
+  { key: "zone2", subunit: "ZONE2", prefix: "multiroom.zone2." },
+  { key: "zone3", subunit: "ZONE3", prefix: "multiroom.zone3." },
+  { key: "zone4", subunit: "ZONE4", prefix: "multiroom.zone4." },
 ];
 
 /**
@@ -1606,8 +1612,8 @@ const SYS_FUNCS: FuncDef[] = [
   {
     func: "LIPSYNCSELINFO",
     state: "hdmi.lipSyncOutput",
-    nameKey: "lipSyncOutput",
-    descKey: "descLipSyncOutput",
+    nameKey: "lipSyncActiveOutput",
+    descKey: "descLipSyncActiveOutput",
     spec: {
       kind: "enum",
       states: selfMap(["Disable", "Analog", "HDMI1 Auto", "HDMI1 Manual", "HDMI2 Auto", "HDMI2 Manual"]),
@@ -1704,11 +1710,6 @@ const INPUT_NAME_KEYS = [
 ];
 
 /**
- * How an input key is written in the datapoint's NAME. The two that are not simply the
- * upper-cased key are spelled the way the device itself lists them in the input dropdown
- * ({@link INPUT_STATES}), so the name and the selectable value read alike.
- */
-/**
  * The inputs the 21 official command lists give a `TRIG1INP<INPUT>` / `TRIG2INP<INPUT>` function
  * (their union, 2010–2015). Not the same set as {@link INPUT_NAME_KEYS}: a trigger can follow a
  * NETWORK source that carries no renameable input name. Claim with proof keeps a device's tree
@@ -1757,6 +1758,11 @@ const TRIGGER_INPUT_KEYS = [
   "vaux",
 ];
 
+/**
+ * How an input key is written in the datapoint's NAME. The ones that are not simply the
+ * upper-cased key are spelled the way the device itself lists them in the input dropdown
+ * ({@link INPUT_STATES}), so the name and the selectable value read alike.
+ */
 const INPUT_NAME_LABELS: Readonly<Record<string, string>> = {
   vaux: "V-AUX",
   multich: "MULTI CH",
@@ -2273,8 +2279,9 @@ const DAB_FUNCS: FuncDef[] = [
   {
     func: "FMRDSCLOCK",
     state: "rdsClock",
-    nameKey: "rdsClock",
-    descKey: "descRdsClock",
+    // One name for `tuner.rdsClock` on TUN and on the DAB subunit's FM half (B15).
+    nameKey: "rdsClockTime",
+    descKey: "descRdsClockTime",
     spec: { kind: "text" },
     write: false,
     role: "text",
@@ -2589,10 +2596,6 @@ export function repeatWord(
 }
 
 /**
- * Network/media player sources — each a subunit, mapped under its own channel. Only
- * the entries a device reports are created, so listing every source is safe.
- */
-/**
  * The sources whose PLAYBACK knows no `Pause`: NETRADIO and SIRIUSIR say `Play/Stop` in every official
  * list, SIRIUSXM in the RX-A850 list, NAPSTER `Play/Stop` and the skip keys (audit 2026-09-29, B7).
  */
@@ -2605,68 +2608,44 @@ const PLAY_STOP: ValueSpec = {
   labels: MEDIA_STATE_LABELS,
 };
 
-const PLAYER_SOURCES: Array<{ subunit: string; channel: string }> = [
-  { subunit: "NETRADIO", channel: "netRadio" },
-  { subunit: "SERVER", channel: "server" },
-  { subunit: "USB", channel: "usb" },
-  { subunit: "SPOTIFY", channel: "spotify" },
+/**
+ * The network/media player sources — ONE row per subunit (audit 2026-09-29, B16: four tables had
+ * drifted apart, SIRIUS stored no preset and browsed without a list declaring it). Each is mapped
+ * under its own channel; only the entries a device reports are created, so listing every source is
+ * safe.
+ *
+ * - `preset`: a PRESET recall — ynca-python's preset mixin (NETRADIO/NAPSTER/PANDORA/PC/RHAP/SIRIUS/
+ *   USB), the 2010–2011 lists (SIRIUSIR), the RX-A850 list (AIRPLAY/BT/SPOTIFY/SERVER/SIRIUSXM).
+ * - `mem`: a preset STORE (`@<SUB>:MEM`) — the RX-V671 list (NETRADIO/NAPSTER/PC/USB), the 2010–2011
+ *   lists (SIRIUS/SIRIUSIR/RHAP), the RX-A850 list (AIRPLAY/BT/SPOTIFY/SERVER/PANDORA/SIRIUSXM).
+ * - `browse`: the label of a source whose list vocabulary (LISTINFO/LISTSEL/LISTCURSOR/LISTPAGE) the
+ *   official lists and the all-commands corpus declare.
+ */
+export const YNCA_PLAYER_SOURCES: ReadonlyArray<{
+  subunit: string;
+  channel: string;
+  preset?: true;
+  mem?: true;
+  browse?: string;
+}> = [
+  { subunit: "NETRADIO", channel: "netRadio", preset: true, mem: true, browse: "Net Radio" },
+  { subunit: "SERVER", channel: "server", preset: true, mem: true, browse: "Media server" },
+  { subunit: "USB", channel: "usb", preset: true, mem: true, browse: "USB" },
+  { subunit: "SPOTIFY", channel: "spotify", preset: true, mem: true },
   { subunit: "DEEZER", channel: "deezer" },
   { subunit: "TIDAL", channel: "tidal" },
-  { subunit: "NAPSTER", channel: "napster" },
-  { subunit: "PANDORA", channel: "pandora" },
-  { subunit: "RHAP", channel: "rhapsody" },
-  { subunit: "SIRIUS", channel: "sirius" },
-  { subunit: "SIRIUSIR", channel: "siriusInternetRadio" },
-  { subunit: "SIRIUSXM", channel: "siriusXm" },
-  { subunit: "AIRPLAY", channel: "airplay" },
-  { subunit: "BT", channel: "bluetooth" },
-  { subunit: "PC", channel: "pc" },
+  { subunit: "NAPSTER", channel: "napster", preset: true, mem: true, browse: "Napster" },
+  { subunit: "PANDORA", channel: "pandora", preset: true, mem: true, browse: "Pandora" },
+  { subunit: "RHAP", channel: "rhapsody", preset: true, mem: true, browse: "Rhapsody" },
+  { subunit: "SIRIUS", channel: "sirius", preset: true, mem: true },
+  { subunit: "SIRIUSIR", channel: "siriusInternetRadio", preset: true, mem: true, browse: "SIRIUS Internet Radio" },
+  { subunit: "SIRIUSXM", channel: "siriusXm", preset: true, mem: true, browse: "SiriusXM" },
+  { subunit: "AIRPLAY", channel: "airplay", preset: true, mem: true },
+  { subunit: "BT", channel: "bluetooth", preset: true, mem: true },
+  { subunit: "PC", channel: "pc", preset: true, mem: true, browse: "PC" },
   { subunit: "MCLINK", channel: "musicCastLink" },
-  { subunit: "IPOD", channel: "ipod" },
-  { subunit: "IPODUSB", channel: "ipodUsb" },
-];
-
-/**
- * The player-source subunits with a PRESET recall: the preset mixin in ynca-python's
- * `subunits/*.py` (NETRADIO/NAPSTER/PANDORA/PC/RHAP/SIRIUS/USB), the official 2010–2011 lists
- * (SIRIUSIR) and the RX-A850 list of 2015 (AIRPLAY, BT, SPOTIFY, SERVER, SIRIUSXM).
- */
-const PRESET_SUBUNITS = [
-  "NETRADIO",
-  "NAPSTER",
-  "PANDORA",
-  "PC",
-  "RHAP",
-  "SIRIUS",
-  "SIRIUSIR",
-  "SIRIUSXM",
-  "USB",
-  "AIRPLAY",
-  "BT",
-  "SPOTIFY",
-  "SERVER",
-];
-
-/**
- * The player-source subunits with a preset STORE command (`@<SUB>:MEM` — official RX-V671
- * list NETRADIO/NAPSTER/PC/USB, the 2010–2011 lists SIRIUS/SIRIUSIR/RHAP, the RX-A850 list AIRPLAY/BT/
- * SPOTIFY/SERVER/PANDORA/SIRIUSXM). A slot number stores the current station/item there, 0
- * stores to the first free slot ("Auto").
- */
-const MEM_SUBUNITS = [
-  "NETRADIO",
-  "NAPSTER",
-  "PC",
-  "USB",
-  "RHAP",
-  "SIRIUS",
-  "SIRIUSIR",
-  "SIRIUSXM",
-  "AIRPLAY",
-  "BT",
-  "SPOTIFY",
-  "SERVER",
-  "PANDORA",
+  { subunit: "IPOD", channel: "ipod", browse: "iPod" },
+  { subunit: "IPODUSB", channel: "ipodUsb", browse: "iPod (USB)" },
 ];
 
 /** The playback functions shared by every player source (the __init__ mixin in the lib). */
@@ -2860,7 +2839,7 @@ function fnEntries(fns: readonly FuncDef[], subunit: string, prefix = ""): YncaE
  */
 export function bundleGets(present: ReadonlySet<string>): Array<{ subunit: string; func: string }> {
   const gets: Array<{ subunit: string; func: string }> = [];
-  for (const zone of ZONES) {
+  for (const zone of YNCA_ZONES) {
     if (present.has(zone.subunit)) {
       gets.push({ subunit: zone.subunit, func: "BASIC" }, { subunit: zone.subunit, func: "SCENENAME" });
     }
@@ -2873,7 +2852,7 @@ export function bundleGets(present: ReadonlySet<string>): Array<{ subunit: strin
       gets.push({ subunit, func: "SIGINFO" });
     }
   }
-  for (const source of PLAYER_SOURCES) {
+  for (const source of YNCA_PLAYER_SOURCES) {
     if (present.has(source.subunit)) {
       gets.push({ subunit: source.subunit, func: "METAINFO" });
     }
@@ -2893,7 +2872,7 @@ export function bundleGets(present: ReadonlySet<string>): Array<{ subunit: strin
  */
 export function buildYncaCatalog(): YncaEntry[] {
   const entries: YncaEntry[] = [];
-  for (const zone of ZONES) {
+  for (const zone of YNCA_ZONES) {
     entries.push(...fnEntries(AMP_FUNCS, zone.subunit, zone.prefix));
     if (zone.subunit !== "MAIN") {
       entries.push(...fnEntries(ZONE_ONLY_FUNCS, zone.subunit, zone.prefix));
@@ -2970,7 +2949,7 @@ export function buildYncaCatalog(): YncaEntry[] {
   // After DAB and TUN on purpose: on a receiver with TUN and HDRADIO the per-device write map
   // (last entry per id wins) hands the shared tuner ids to the HD-capable subunit.
   entries.push(...fnEntries(HDRADIO_FUNCS, "HDRADIO", "tuner."));
-  for (const source of PLAYER_SOURCES) {
+  for (const source of YNCA_PLAYER_SOURCES) {
     // v2.0.0 player unification: every source's playback functions land on the ONE
     // flat player block — the controller routes reads and writes by which source
     // each zone is listening to (INPUT → subunit). Only genuinely source-own states
@@ -3004,7 +2983,7 @@ export function buildYncaCatalog(): YncaEntry[] {
     // Write-only — these sources do not answer a PRESET read (spec: only TUN/SIRIUS
     // do) — and gated on PLAYBACKINFO like the transport buttons, so the datapoint
     // appears exactly where the source exists.
-    if (PRESET_SUBUNITS.includes(source.subunit)) {
+    if (source.preset) {
       entries.push({
         id: `player.${source.channel}.preset`,
         nameKey: "recallPreset",
@@ -3021,7 +3000,7 @@ export function buildYncaCatalog(): YncaEntry[] {
     }
     // Favourite STORE (#613 companion): save the current station/item to a preset
     // slot from ioBroker instead of at the device.
-    if (MEM_SUBUNITS.includes(source.subunit)) {
+    if (source.mem) {
       entries.push({
         id: `player.${source.channel}.presetSave`,
         nameKey: "saveToPreset0FirstFreeSlot",

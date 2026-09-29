@@ -454,6 +454,8 @@ export const RENAMED_STATE_IDS = [
   // channel itself is in RENAMED_CHANNELS); the A/B toggles joined the speakers.
   "advanced.speakerA",
   "advanced.speakerB",
+  // v3.1.0: the 2010/2011 receivers' lip-sync output joined the one id the 2012+ ones use.
+  "hdmi.lipSyncSource",
 ];
 
 /**

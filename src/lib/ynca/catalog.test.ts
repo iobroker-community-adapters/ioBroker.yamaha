@@ -18,6 +18,7 @@ import {
   yncaObjectsFor,
   yncaStateUpdate,
   zoneFunctionAsked,
+  YNCA_PLAYER_SOURCES,
   type YncaEntry,
 } from "./catalog";
 import { CHANNEL_NAME_KEYS } from "../catalog/types";
@@ -1627,6 +1628,25 @@ describe("the catalog reads every word and covers every range the official lists
       }
     }
     expect(missing).toEqual([]);
+  });
+
+  // One source table (B16): its preset, store and browse marks are exactly what the lists declare —
+  // PRESET/MEM/LISTINFO per subunit; SIRIUS's MEM had drifted out, its browse had no list behind it.
+  test("each player source recalls, stores and browses exactly where the official lists declare it", () => {
+    const declared = new Set([...functionEvidence.readable, ...functionEvidence.writeOnly]);
+    const table = YNCA_PLAYER_SOURCES.map(source => ({
+      subunit: source.subunit,
+      preset: source.preset === true,
+      mem: source.mem === true,
+      browse: source.browse !== undefined,
+    }));
+    const lists = YNCA_PLAYER_SOURCES.map(({ subunit }) => ({
+      subunit,
+      preset: declared.has(`${subunit}:PRESET`),
+      mem: declared.has(`${subunit}:MEM`),
+      browse: declared.has(`${subunit}:LISTINFO`),
+    }));
+    expect(table).toEqual(lists);
   });
 
   test("every declared range lies inside the datapoint's bounds, on its grid", () => {

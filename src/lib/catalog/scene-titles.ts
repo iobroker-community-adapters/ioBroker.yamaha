@@ -18,12 +18,44 @@ export interface SceneListEntry {
   title: string;
 }
 
-/** The probe-memory shape of the YNCA static values (see device-controller STATIC_KEY). */
+/** The probe-memory key the YNCA controller keeps its never-changing answers under (input and scene names). */
+export const YNCA_STATIC_KEY = "yncaStaticValues";
+
+/** The probe-memory shape of the YNCA static values: subunit → function → answer. */
 type YncaStatics = Record<string, Record<string, string>>;
+
+/** The YNCA subunit of each zone key. */
+const YNCA_ZONE_SUBUNITS: Readonly<Record<string, string>> = {
+  main: "MAIN",
+  zone2: "ZONE2",
+  zone3: "ZONE3",
+  zone4: "ZONE4",
+};
+
+/**
+ * The scenes a YNCA zone declares, read from its `SCENExNAME` answers: MAIN up to twelve, a zone
+ * four (official lists). The one reader for the YNCA controller and for {@link knownScenes}.
+ *
+ * @param answers the zone subunit's function → answer map
+ * @param subunit the zone subunit (MAIN, ZONE2 …)
+ * @returns the declared scenes, lowest number first
+ */
+export function yncaSceneTitles(answers: Record<string, string> | undefined, subunit: string): SceneListEntry[] {
+  const scenes: SceneListEntry[] = [];
+  for (let n = 1; n <= (subunit === "MAIN" ? 12 : 4); n++) {
+    const title = answers?.[`SCENE${n}NAME`];
+    if (typeof title === "string" && title.length > 0) {
+      scenes.push({ num: n, title });
+    }
+  }
+  return scenes;
+}
 
 /**
  * The known scenes of a zone, from whichever transport reported titles: the XML
- * declaration first (per zone), the YNCA scene names as the fallback (main only).
+ * declaration first (per zone), the YNCA scene names as the fallback — the main zone's twelve and
+ * each zone's four (`ZONE2:SCENE1NAME` …), so a MusicCast-owned zone recall resolves a title only
+ * YNCA knows (audit 2026-09-29, B16).
  *
  * @param memory the device's shared probe memory
  * @param zoneKey the zone (`main`, `zone2`, …)
@@ -41,19 +73,11 @@ export function knownScenes(memory: ProbeMemory | undefined, zoneKey: string): S
       return scenes;
     }
   }
-  if (zoneKey === "main") {
-    const statics = memory.remembered<YncaStatics>("yncaStaticValues");
-    const main = statics?.MAIN ?? {};
-    const scenes: SceneListEntry[] = [];
-    for (let n = 1; n <= 12; n++) {
-      const title = main[`SCENE${n}NAME`];
-      if (typeof title === "string" && title.length > 0) {
-        scenes.push({ num: n, title });
-      }
-    }
-    return scenes;
+  const subunit = YNCA_ZONE_SUBUNITS[zoneKey];
+  if (subunit === undefined) {
+    return [];
   }
-  return [];
+  return yncaSceneTitles(memory.remembered<YncaStatics>(YNCA_STATIC_KEY)?.[subunit], subunit);
 }
 
 /**
