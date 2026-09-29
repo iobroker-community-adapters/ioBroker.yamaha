@@ -295,6 +295,26 @@ describe("YNCA catalog", () => {
     expect(yncaCommand("power", "maybe", map)).toBeUndefined();
   });
 
+  // GET-only words stay readable and are never written; a source without Pause gets no Pause (B7).
+  test("a word the device only reports, and a pause its source does not have, are never written", () => {
+    const main = idToEntry(buildYncaCatalog().filter(e => e.subunit === "MAIN"));
+    expect(yncaCommand("sound.decoderSelect", "Unavailable", main)).toBeUndefined();
+    expect(yncaCommand("sound.decoderSelect", "DTS", main)).toMatchObject({ func: "DECODERSEL", value: "DTS" });
+    const netRadio = idToEntry(buildYncaCatalog().filter(e => e.subunit === "NETRADIO"));
+    expect(yncaCommand("player.playback", 0, netRadio)).toBeUndefined();
+    expect(yncaCommand("player.playback", 2, netRadio)).toMatchObject({ func: "PLAYBACK", value: "Stop" });
+    const usb = idToEntry(buildYncaCatalog().filter(e => e.subunit === "USB"));
+    expect(yncaCommand("player.playback", 0, usb)).toMatchObject({ func: "PLAYBACK", value: "Pause" });
+    // `No Preset` reads 0 — and a 0 is never sent as a recall.
+    const tun = idToEntry(buildYncaCatalog().filter(e => e.subunit === "TUN"));
+    expect(
+      yncaStateUpdate({ subunit: "TUN", func: "PRESET", value: "No Preset" }, funcToEntry(YNCA_CATALOG))?.value,
+    ).toBe(0);
+    expect(yncaCommand("tuner.preset", 0, tun)).toBeUndefined();
+    expect(yncaCommand("tuner.preset", 5, tun)).toMatchObject({ func: "PRESET", value: "5" });
+    expect(yncaCommand("advanced.audioSelect", "Unavailable", main)).toBeUndefined();
+  });
+
   test("a coded write accepts the number as text, and still refuses junk", () => {
     // ioBroker lets anything write a state: a VIS widget or a script may send "0" for a
     // numeric coded state. That has to reach the device as its command word, while a
@@ -1058,10 +1078,11 @@ describe("the 2010–2015 command lists, completed (coverage audit 2026-09-09)",
       "Front & Rear",
       "Monaural x2",
     ]);
+    // The RX-A850 list's own words (audit 2026-09-29, B7).
     expect(Object.keys((find("SYS", "SPPATTERN1FPLAYOUT")?.spec as EnumSpec).states)).toEqual([
-      "Front",
+      "Front Height",
       "Overhead",
-      "Dolby",
+      "Dolby Enabled SP",
     ]);
     expect(Object.keys((find("SYS", "SPPATTERN1SURLAYOUT")?.spec as EnumSpec).states)).toEqual(["Rear", "Front"]);
     expect(Object.keys((find("SYS", "SPPATTERN1FPRESCNFG")?.spec as EnumSpec).states)).toEqual([
@@ -1433,7 +1454,10 @@ describe("yncaGenerationEvidence (audit 2026-09-24, B16/B6)", () => {
 });
 
 describe("the catalog reads every word and covers every range the official lists declare (audit 2026-09-24, B10)", () => {
-  const params = functionEvidence.params as Record<string, { values: string[]; ranges: number[][] }>;
+  const params = functionEvidence.params as Record<
+    string,
+    { values: string[]; ranges: number[][]; getOnly?: string[] }
+  >;
 
   /**
    * The entry in the form a device takes that answered it (and nothing else) — a zone's tone
@@ -1481,6 +1505,57 @@ describe("the catalog reads every word and covers every range the official lists
       }
     }
     expect(unread).toEqual([]);
+  });
+
+  // Both directions (audit 2026-09-29, B7): a GET-only word of a writable function is kept off the
+  // wire, and nothing is marked read-only that a list lets a PUT carry.
+  test("every word the lists mark GET Only for a writable function is read-only, and only those", () => {
+    const wrong: string[] = [];
+    for (const entry of YNCA_CATALOG) {
+      if (!entry.write || entry.writeOnly || (entry.spec.kind !== "enum" && entry.spec.kind !== "number")) {
+        continue;
+      }
+      const evidence = params[`${entry.subunit}:${entry.func}`];
+      if (!evidence) {
+        continue;
+      }
+      const marked = entry.spec.readOnly ?? [];
+      for (const word of evidence.getOnly ?? []) {
+        if (!marked.includes(word)) {
+          wrong.push(`${entry.subunit}:${entry.func}=${word} is GET Only, the datapoint would write it`);
+        }
+      }
+      for (const word of marked) {
+        if (!(evidence.getOnly ?? []).includes(word)) {
+          wrong.push(`${entry.subunit}:${entry.func}=${word} is marked read-only, no list says GET Only`);
+        }
+      }
+    }
+    expect(wrong).toEqual([]);
+  });
+
+  test("every word a writable choice offers is one the official lists declare for it", () => {
+    // `5ch Stereo` is the entry class's own program, declared in its desc.xml (SOUNDPRG_STATES).
+    const declaredElsewhere: Record<string, string[]> = { "MAIN:SOUNDPRG": ["5ch Stereo"] };
+    const invented: string[] = [];
+    for (const entry of YNCA_CATALOG) {
+      // The input list is not a fixed dropdown: each device gets the inputs it reports
+      // (`deviceInputStates`), across generations the lists do not cover.
+      if (!entry.write || entry.writeOnly || entry.spec.kind !== "enum" || entry.func === "INP") {
+        continue;
+      }
+      const pair = `${entry.subunit}:${entry.func}`;
+      const declared = params[pair]?.values;
+      if (!declared?.length) {
+        continue;
+      }
+      for (const word of Object.keys(entry.spec.states)) {
+        if (!declared.includes(word) && !declaredElsewhere[pair]?.includes(word)) {
+          invented.push(`${entry.subunit}:${entry.func}=${word}`);
+        }
+      }
+    }
+    expect(invented).toEqual([]);
   });
 
   test("every declared range lies inside the datapoint's bounds, on its grid", () => {

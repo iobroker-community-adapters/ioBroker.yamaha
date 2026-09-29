@@ -23,6 +23,11 @@ export interface EnumSpec {
   kind: "enum";
   /** Wire value → display label (usually identical for YNCA). */
   states: Record<string, string>;
+  /**
+   * Words the device REPORTS but no list lets anyone set ("GET Only": `Unavailable`, `---`) — they stay
+   * in the dropdown so a reported value is shown, and are never written (audit 2026-09-29, B7).
+   */
+  readOnly?: readonly string[];
 }
 
 /** A numeric value → a number state with an optional unit and range. */
@@ -44,7 +49,8 @@ export interface NumberSpec {
    * and formats with exactly this many decimals, mirroring ynca-python's
    * number_to_string_with_stepsize. Unset keeps the plain String(value) form.
    */
-  decimals?: number;
+  decimals?: number; /** List words the device reports but never takes (`No Preset`, read as 0) — see {@link EnumSpec.readOnly}. */
+  readOnly?: readonly string[];
 }
 
 /** A free-text value → a string state. */

@@ -816,7 +816,7 @@
     "ZONE3:SCENE",
     "ZONE4:SCENE"
   ],
-  "paramsNote": "params = per pair, merged over every list: the words a device may REPORT (a PUT-only parameter is left out) and every declared numeric range as [min, max, step].",
+  "paramsNote": "params = per pair, merged over every list: the words a device may REPORT (a PUT-only parameter is left out) and every declared numeric range as [min, max, step]; getOnly = the words of a writable pair no structured list lets a PUT carry (\"GET Only\").",
   "params": {
     "AIRPLAY:AVAIL": {
       "values": ["Not Ready", "Ready"],
@@ -916,7 +916,8 @@
     },
     "HDRADIO:PRESET": {
       "values": ["No Preset"],
-      "ranges": [[1, 40, 1]]
+      "ranges": [[1, 40, 1]],
+      "getOnly": ["No Preset"]
     },
     "HDRADIO:PRGNUM": {
       "values": ["---", "HD1", "HD2", "HD3", "HD4", "HD5", "HD6", "HD7", "HD8"],
@@ -924,7 +925,8 @@
     },
     "HDRADIO:PRGSEL": {
       "values": ["---", "HD1", "HD2", "HD3", "HD4", "HD5", "HD6", "HD7", "HD8"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["---"]
     },
     "HDRADIO:SEARCHMODE": {
       "values": ["Preset", "Tuning"],
@@ -956,31 +958,38 @@
     },
     "IPOD:LINE2ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "IPOD:LINE3ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "IPOD:LINE4ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "IPOD:LINE5ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "IPOD:LINE6ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "IPOD:LINE7ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "IPOD:LINE8ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "IPOD:LISTCURSOR": {
       "values": ["Back to Home"],
@@ -1107,7 +1116,8 @@
     },
     "MAIN:AUDSEL": {
       "values": ["Analog", "Auto", "Coax/Opt", "HDMI", "Unavailable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Unavailable"]
     },
     "MAIN:AVAIL": {
       "values": ["Not Ready", "Ready"],
@@ -1123,7 +1133,8 @@
     },
     "MAIN:DECODERSEL": {
       "values": ["Auto", "DTS", "Unavailable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Unavailable"]
     },
     "MAIN:DIALOGUELVL": {
       "values": [],
@@ -1472,31 +1483,38 @@
     },
     "NETRADIO:LINE2ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "NETRADIO:LINE3ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "NETRADIO:LINE4ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "NETRADIO:LINE5ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "NETRADIO:LINE6ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "NETRADIO:LINE7ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "NETRADIO:LINE8ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "NETRADIO:LISTCURSOR": {
       "values": ["Back to Home"],
@@ -1556,31 +1574,38 @@
     },
     "PC:LINE2ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "PC:LINE3ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "PC:LINE4ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "PC:LINE5ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "PC:LINE6ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "PC:LINE7ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "PC:LINE8ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "PC:LISTCURSOR": {
       "values": ["Back to Home"],
@@ -1628,31 +1653,38 @@
     },
     "RHAP:LINE2ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "RHAP:LINE3ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "RHAP:LINE4ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "RHAP:LINE5ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "RHAP:LINE6ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "RHAP:LINE7ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "RHAP:LINE8ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "RHAP:LISTCURSOR": {
       "values": ["Return", "Return to Home"],
@@ -1784,7 +1816,8 @@
     },
     "SIRIUS:PRESET": {
       "values": ["No Preset"],
-      "ranges": [[1, 40, 1]]
+      "ranges": [[1, 40, 1]],
+      "getOnly": ["No Preset"]
     },
     "SIRIUS:SEARCHMODE": {
       "values": ["All Ch", "Category", "Preset"],
@@ -1804,31 +1837,38 @@
     },
     "SIRIUSIR:LINE2ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "SIRIUSIR:LINE3ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "SIRIUSIR:LINE4ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "SIRIUSIR:LINE5ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "SIRIUSIR:LINE6ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "SIRIUSIR:LINE7ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "SIRIUSIR:LINE8ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "SIRIUSIR:LISTLAYER": {
       "values": [],
@@ -2469,7 +2509,8 @@
     },
     "TUN:PRESET": {
       "values": ["No Preset"],
-      "ranges": [[1, 40, 1]]
+      "ranges": [[1, 40, 1]],
+      "getOnly": ["No Preset"]
     },
     "TUN:RDSPRGTYPE": {
       "values": [
@@ -2522,31 +2563,38 @@
     },
     "USB:LINE2ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "USB:LINE3ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "USB:LINE4ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "USB:LINE5ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "USB:LINE6ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "USB:LINE7ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "USB:LINE8ATRIB": {
       "values": ["Container", "Item", "Unplayable Item", "Unselectable"],
-      "ranges": []
+      "ranges": [],
+      "getOnly": ["Container", "Item", "Unplayable Item", "Unselectable"]
     },
     "USB:LISTCURSOR": {
       "values": ["Back to Home"],

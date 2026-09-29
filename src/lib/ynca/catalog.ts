@@ -457,6 +457,19 @@ interface FuncDef {
   derive?: (wire: string) => boolean | number | string;
 }
 
+/**
+ * A stored-station slot, read and recalled by number (TUN, DAB, FM, HD Radio). `No Preset` — GET Only in
+ * every list — reads 0, and a write of 0 recalls nothing, so it is never sent (audit 2026-09-29, B7).
+ */
+const PRESET_SLOT: Pick<FuncDef, "nameKey" | "descKey" | "spec" | "write" | "role" | "wireDecode"> = {
+  nameKey: "presetRecallByNumber",
+  descKey: "descPresetRecallByNumber",
+  spec: { kind: "number", min: 0, max: 40, step: 1, decimals: 0, readOnly: ["No Preset"] },
+  write: true,
+  role: "level",
+  wireDecode: wire => (wire === "No Preset" ? "0" : wire),
+};
+
 const AMP_FUNCS: FuncDef[] = [
   {
     func: "PWR",
@@ -937,7 +950,8 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     state: "sound.decoderSelect",
     nameKey: "decoderSelect",
     descKey: "descDecoderSelect",
-    spec: { kind: "enum", states: selfMap(["Auto", "DTS", "Unavailable"]) },
+    // `Unavailable` is GET Only in every list (audit 2026-09-29, B7).
+    spec: { kind: "enum", states: selfMap(["Auto", "DTS", "Unavailable"]), readOnly: ["Unavailable"] },
     write: true,
     role: "state",
   },
@@ -973,13 +987,13 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     role: "state",
   },
   // Audio select (9 lists): which terminal's sound the current input uses. `Unavailable` is
-  // GET-only and reaches the dropdown as an observed value.
+  // GET-only: it reaches the dropdown as an observed value and is never written.
   {
     func: "AUDSEL",
     state: "advanced.audioSelect",
     nameKey: "audioSelect",
     descKey: "descAudioSelect",
-    spec: { kind: "enum", states: selfMap(["Auto", "HDMI", "Coax/Opt", "Analog"]) },
+    spec: { kind: "enum", states: selfMap(["Auto", "HDMI", "Coax/Opt", "Analog"]), readOnly: ["Unavailable"] },
     write: true,
     role: "state",
   },
@@ -1155,12 +1169,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     subunit: "TUN",
     func: "PRESET",
     state: "tuner.preset",
-    nameKey: "presetRecallByNumber",
-    descKey: "descPresetRecallByNumber",
-    spec: { kind: "number", min: 0, max: 40, step: 1, decimals: 0 },
-    write: true,
-    role: "level",
-    wireDecode: wire => (wire === "No Preset" ? "0" : wire),
+    ...PRESET_SLOT,
   },
   {
     subunit: "TUN",
@@ -1962,7 +1971,9 @@ const SPEAKER_PATTERN_FUNCS: ReadonlyArray<{
     state: "FrontPresenceLayout",
     nameKey: "speakerPatternFrontPresenceLayout",
     descKey: "descSpeakerPatternFrontPresenceLayout",
-    spec: { kind: "enum", states: selfMap(["Front", "Overhead", "Dolby"]) },
+    // The RX-A850 list's words (`@SYS:SPPATTERN1FPLAYOUT=Front Height/Overhead/Dolby Enabled SP`) — `Front`
+    // and `Dolby` stood here, words no list, no log and ynca-python know (audit 2026-09-29, B7).
+    spec: { kind: "enum", states: selfMap(["Front Height", "Overhead", "Dolby Enabled SP"]) },
   },
   {
     suffix: "FPRESCNFG",
@@ -2066,12 +2077,7 @@ const DAB_FUNCS: FuncDef[] = [
   {
     func: "DABPRESET",
     state: "preset",
-    nameKey: "presetRecallByNumber",
-    descKey: "descPresetRecallByNumber",
-    spec: { kind: "number", min: 0, max: 40, step: 1, decimals: 0 },
-    write: true,
-    role: "level",
-    wireDecode: wire => (wire === "No Preset" ? "0" : wire),
+    ...PRESET_SLOT,
   },
   {
     func: "DABPRGTYPE",
@@ -2085,12 +2091,7 @@ const DAB_FUNCS: FuncDef[] = [
   {
     func: "FMPRESET",
     state: "preset",
-    nameKey: "presetRecallByNumber",
-    descKey: "descPresetRecallByNumber",
-    spec: { kind: "number", min: 0, max: 40, step: 1, decimals: 0 },
-    write: true,
-    role: "level",
-    wireDecode: wire => (wire === "No Preset" ? "0" : wire),
+    ...PRESET_SLOT,
   },
   {
     func: "FMRDSPRGSERVICE",
@@ -2253,12 +2254,7 @@ const HDRADIO_FUNCS: FuncDef[] = [
   {
     func: "PRESET",
     state: "preset",
-    nameKey: "presetRecallByNumber",
-    descKey: "descPresetRecallByNumber",
-    spec: { kind: "number", min: 0, max: 40, step: 1, decimals: 0 },
-    write: true,
-    role: "level",
-    wireDecode: wire => (wire === "No Preset" ? "0" : wire),
+    ...PRESET_SLOT,
   },
   {
     func: "PRESET",
@@ -2337,7 +2333,12 @@ const HDRADIO_FUNCS: FuncDef[] = [
     state: "hdRadio.program",
     nameKey: "hdRadioProgram",
     descKey: "descHdRadioProgram",
-    spec: { kind: "enum", states: selfMap(["---", "HD1", "HD2", "HD3", "HD4", "HD5", "HD6", "HD7", "HD8"]) },
+    // `---` (no programme) is GET Only in every list (audit 2026-09-29, B7).
+    spec: {
+      kind: "enum",
+      states: selfMap(["---", "HD1", "HD2", "HD3", "HD4", "HD5", "HD6", "HD7", "HD8"]),
+      readOnly: ["---"],
+    },
     write: true,
     role: "state",
     readAliases: ["PRGNUM"],
@@ -2488,6 +2489,19 @@ export function repeatWord(
  * Network/media player sources — each a subunit, mapped under its own channel. Only
  * the entries a device reports are created, so listing every source is safe.
  */
+/**
+ * The sources whose PLAYBACK knows no `Pause`: NETRADIO and SIRIUSIR say `Play/Stop` in every official
+ * list, SIRIUSXM in the RX-A850 list, NAPSTER `Play/Stop` and the skip keys (audit 2026-09-29, B7).
+ */
+const NO_PAUSE_SUBUNITS = ["NETRADIO", "SIRIUSIR", "SIRIUSXM", "NAPSTER"];
+
+/** The playback code of a source without `Pause` — the media.state coding, without its pause word. */
+const PLAY_STOP: ValueSpec = {
+  kind: "code",
+  codes: { Play: MEDIA_STATE.play, Stop: MEDIA_STATE.stop },
+  labels: MEDIA_STATE_LABELS,
+};
+
 const PLAYER_SOURCES: Array<{ subunit: string; channel: string }> = [
   { subunit: "NETRADIO", channel: "netRadio" },
   { subunit: "SERVER", channel: "server" },
@@ -2863,7 +2877,12 @@ export function buildYncaCatalog(): YncaEntry[] {
         id: `player.${fn.state}`,
         nameKey: fn.nameKey,
         descKey: fn.descKey,
-        spec: ipod && fn.func === "SHUFFLE" ? IPOD_SHUFFLE : fn.spec,
+        spec:
+          ipod && fn.func === "SHUFFLE"
+            ? IPOD_SHUFFLE
+            : fn.state === "playback" && NO_PAUSE_SUBUNITS.includes(source.subunit)
+              ? PLAY_STOP
+              : fn.spec,
         write: fn.write,
         role: fn.role,
         subunit: source.subunit,
@@ -3459,9 +3478,20 @@ export function yncaCommand(
   if (input === undefined) {
     return undefined;
   }
+  // A code this subunit has no word for never goes on the wire — the encoder would have sent the bare
+  // digit (audit 2026-09-29, B7).
+  if (entry.spec.kind === "code" && !entry.wireEncode && !Object.values(entry.spec.codes).includes(Number(input))) {
+    return undefined;
+  }
   const wire = entry.wireEncode
     ? entry.wireEncode(input as boolean | number | string)
     : encode(entry.spec, input as boolean | number | string);
+  // A word the device only reports ("GET Only") is never written — nor the value it is read as (`No
+  // Preset` reads 0; a PUT of 0 recalls nothing) (audit 2026-09-29, B7).
+  const reported = entry.spec.kind === "enum" || entry.spec.kind === "number" ? entry.spec.readOnly : undefined;
+  if (reported?.some(word => wire === word || wire === entry.wireDecode?.(word))) {
+    return undefined;
+  }
   const charset = entry.spec.kind === "text" ? entry.spec.charset : undefined;
   return { subunit: entry.subunit, func: entry.func, value: wire, ...(charset ? { charset } : {}) };
 }
