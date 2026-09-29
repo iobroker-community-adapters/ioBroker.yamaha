@@ -51,7 +51,7 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
 
 - Node.js >= 22
 - js-controller >= 7.2.2
-- admin >= 8.0.11
+- admin >= 8.0.14
 
 > The adapter CANNOT be installed via GitHub: The adapter must be installed via the ioBroker repository (stable or latest).
 

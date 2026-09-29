@@ -39,3 +39,7 @@ build/
 
 # Session memory of the note-taking hook — never repository content
 .remember/
+
+# Value dumps of the inventory run (readable-values judge) — generated, never committed
+test/states.inventory.json
+test/objects.inventory.de.json

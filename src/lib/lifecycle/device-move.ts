@@ -14,17 +14,17 @@ import { ID_SCHEME } from "../device-id";
  * - every value, with its `ack`, `ts` and `lc`, so nothing reads as changed;
  * - the rooms and functions (enum members) the objects belonged to — NOT here: deleting the old tree
  *   removes its ids from every enum, written back from the adapter's enum cache, and would take an id
- *   written before it away again. The caller deletes through the fleet helper `moveWithEnums`
+ *   written before it away again. The caller deletes through the fleet helper `moveAllWithEnums`
  *   (`enum-carry.ts`), which reads the memberships first, deletes, and writes the new ids last;
- *   {@link enumMembersUnder} names the ids it has to carry;
  * - aliases whose target lies in the tree (`alias.*`, `common.alias.id`);
  * - the continuity of recorded history: an enabled recording without an alias id of its own gets
  *   the OLD id as `aliasId` — influxdb, history and sql then store and query the series under the
  *   id it has always had.
  *
- * The OLD tree is deleted by the caller, after everything that points at the device (the device
- * table, the discovery store) was rewritten: until then the old device object carries
- * `native.movingTo` as a journal, and an interrupted move is completed on the next start.
+ * The OLD tree is deleted by the caller: everything below the device first (with its enum
+ * memberships carried), the old device object only after everything that points at the device (the
+ * device table, the discovery store) was rewritten — until then it carries `native.movingTo` as a
+ * journal, and an interrupted move is completed on the next start.
  */
 
 /** What a move reads and writes — the adapter's own object and state calls, injectable for tests. */
@@ -57,6 +57,8 @@ export interface MoveReport {
   aliases: number;
   /** Recordings that keep their series under the old id (`aliasId`). */
   history: number;
+  /** The copy was already whole — a start that finishes a move an earlier start began. */
+  resumed: boolean;
 }
 
 /**
@@ -190,31 +192,9 @@ export function movedAliasTarget(target: unknown, fromFull: string, toFull: stri
 }
 
 /**
- * The ids of the moved tree that some room or function lists — what the delete of the old tree has
- * to carry to the new id.
- *
- * @param enums the enum objects, as `getForeignObjectsAsync("enum.*", "enum")` returns them
- * @param fromFull the old device id, namespace included
- * @returns the old full ids, sorted
- */
-export function enumMembersUnder(enums: Record<string, unknown> | null | undefined, fromFull: string): string[] {
-  const ids = new Set<string>();
-  for (const obj of Object.values(enums ?? {})) {
-    const members = (obj as { common?: { members?: unknown } } | null)?.common?.members;
-    if (Array.isArray(members)) {
-      for (const member of members) {
-        if (typeof member === "string" && (member === fromFull || member.startsWith(`${fromFull}.`))) {
-          ids.add(member);
-        }
-      }
-    }
-  }
-  return [...ids].sort();
-}
-
-/**
  * Copy a device's tree to its new id and point everything that referred to it there — objects,
- * values, alias targets (the enum members follow at the delete, see the module note). The old tree stays (see the module note). Repeatable: every
+ * values, alias targets (the enum members follow at the delete, see the module note). The old tree
+ * stays (see the module note). Repeatable: every
  * write replaces, so an interrupted copy is simply done again; the new device object is marked
  * final (`native.idScheme`) only after everything below it is written, so a device object with the
  * mark is a complete copy.
@@ -227,10 +207,10 @@ export function enumMembersUnder(enums: Record<string, unknown> | null | undefin
 export async function copyDeviceTree(deps: DeviceMoveDeps, from: string, to: string): Promise<MoveReport> {
   const fromFull = `${deps.namespace}.${from}`;
   const toFull = `${deps.namespace}.${to}`;
-  const report: MoveReport = { datapoints: 0, enums: 0, aliases: 0, history: 0 };
   const all = await deps.objects();
   const target = all[toFull];
   const complete = (target?.native as { idScheme?: unknown } | undefined)?.idScheme === ID_SCHEME;
+  const report: MoveReport = { datapoints: 0, enums: 0, aliases: 0, history: 0, resumed: complete };
   if (!complete) {
     // Shallow first, the device object itself LAST: its mark says the copy is whole.
     const tree = Object.entries(all)

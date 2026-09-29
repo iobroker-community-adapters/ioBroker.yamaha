@@ -1,11 +1,4 @@
-import {
-  copyDeviceTree,
-  enumMembersUnder,
-  movedAliasTarget,
-  movedId,
-  rewriteMovedObject,
-  type DeviceMoveDeps,
-} from "./device-move";
+import { copyDeviceTree, movedAliasTarget, movedId, rewriteMovedObject, type DeviceMoveDeps } from "./device-move";
 
 const NS = "yamaha.0";
 
@@ -206,7 +199,7 @@ describe("copyDeviceTree", () => {
     });
     const report = await copyDeviceTree(deps, "B_ro", "WX-030_00A0DED4F504");
     const to = `${NS}.WX-030_00A0DED4F504`;
-    expect(report).toEqual({ datapoints: 2, enums: 0, aliases: 2, history: 1 });
+    expect(report).toEqual({ datapoints: 2, enums: 0, aliases: 2, history: 1, resumed: false });
     expect(db.objects.get(to)?.native).toMatchObject({ idScheme: 3, identity: { mac: "00A0DED4F504" } });
     expect(db.objects.get(`${to}.info`)?.type).toBe("channel");
     expect(db.states.get(`${to}.volume`)).toEqual({ val: 42, ack: true, ts: 1000, lc: 900, q: 0 });
@@ -259,14 +252,5 @@ describe("copyDeviceTree", () => {
     const report = await copyDeviceTree(deps, "B_ro", "W");
     expect(report.datapoints).toBe(2);
     expect(db.objects.get(`${NS}.W`)?.native).toMatchObject({ idScheme: 3 });
-  });
-});
-
-describe("enumMembersUnder", () => {
-  test("names every id of the moved tree that a room or function lists, and nothing else", () => {
-    const enums = upgradedTree();
-    expect(enumMembersUnder(enums, `${NS}.B_ro`)).toEqual([`${NS}.B_ro`, `${NS}.B_ro.volume`]);
-    expect(enumMembersUnder({ "enum.x": { common: { members: [`${NS}.B_roth.power`] } } }, `${NS}.B_ro`)).toEqual([]);
-    expect(enumMembersUnder(undefined, `${NS}.B_ro`)).toEqual([]);
   });
 });

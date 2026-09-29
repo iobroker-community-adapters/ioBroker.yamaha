@@ -1,3 +1,4 @@
+/* global describe, it, before, after */
 "use strict";
 // Generates the adapter's complete object inventory from fixtures and proves that
 // an update reaches every object of an existing installation.
@@ -9,9 +10,12 @@
 //   then dump every yamaha.0.* object to test/objects.inventory.json in the ioBroker
 //   object-structure bot's format, and prove two dropdown rules on it: every dropdown carries the
 //   value the device reports, and none offers a value the device did not declare.
-// Suite 2 "upgrade from the previous release" (only when INVENTORY_PREVIOUS is set — pre-release.py
+// Suite 2 "second system language": the same run in German, dumped for the readable-values judge.
+// Suite 3 "volume as percent": the second position of the volume switch on the same fixtures.
+// Suite 4 "upgrade from the previous release" (only when INVENTORY_PREVIOUS is set — pre-release.py
 //   exports the last tag's inventory): seed the previous objects BEFORE start, start, feed, then
-//   assert that every object carries the current name/desc/role/type and that removed ones are gone.
+//   assert that every object carries the current common (every field) and object type, that removed
+//   ones are gone, and that a room assignment survives a device-id move.
 const fs = require("node:fs");
 const path = require("node:path");
 const assert = require("node:assert");
@@ -26,17 +30,19 @@ const {
 const ADAPTER_DIR = path.join(__dirname, "..");
 const ADAPTER = require(path.join(ADAPTER_DIR, "io-package.json")).common.name;
 const NS = `${ADAPTER}.0.`;
+// An object is written at most three times in one start: created, its name refreshed, enriched once after
+// discovery. More is churn — every write goes to the database and to every subscriber (round 60, measured
+// 2026-09-28 over the fleet: 1-3 everywhere, 251 for an object whose stored key flipped on every resync).
+const MAX_OBJECT_WRITES = 3;
 const INVENTORY = path.join(__dirname, "objects.inventory.json");
+// Value dumps for the readable-values judge (`iobroker-adapter-checks values`, gate D08 + CI job): the states
+// after the fixture run, and the objects once more from a run in a second system language. Generated, not
+// committed (.gitignore) — timestamps and counters would make a golden file drift on every run.
+const STATES_INVENTORY = path.join(__dirname, "states.inventory.json");
+const OBJECTS_SECOND_LANGUAGE = path.join(__dirname, "objects.inventory.de.json");
+const FIRST_LANGUAGE = "en";
+const SECOND_LANGUAGE = "de";
 const VOLATILE = ["ts", "from", "user", "acl"];
-/**
- * The fields an update must bring to EVERY existing object. `states`, `min`, `max` and `step`
- * joined on 2026-09-09: a dropdown or a bound that stays stale on an existing installation is
- * exactly the defect of #619 (54 catalog inputs kept although the receiver declares 21), and
- * without them the upgrade suite could not fail on it. `icon` joined on 2026-09-24: the device
- * pictogram is healed on start from the remembered model, and nothing else noticed a device that
- * kept a stale one.
- */
-const COMPARED = ["name", "desc", "role", "type", "unit", "states", "min", "max", "step", "icon"];
 // Key order carries no meaning in an ioBroker object: extendObject keeps the key order an existing
 // object already has, while adapter-core's I18n.getTranslatedObject builds its own — the same eleven
 // texts in another order are the same name. Arrays keep their order.
@@ -50,6 +56,127 @@ const canonical = v =>
         )
       : x,
   );
+// How long the upgrade suite keeps watching after its verdict: a write in that window means the wait ended before
+// the adapter did (round 61, measured 2026-09-29 over the fleet: none in 10 s at HEAD; parcelapp's old wait judged
+// 5 ms before the first of 187 writes).
+const SETTLE_MS = 10000;
+const INSTANCE_OBJECTS = new Set(
+  (require(path.join(ADAPTER_DIR, "io-package.json")).instanceObjects ?? []).map(o => `${NS}${o._id}`),
+);
+// Round 62: every adapter start loads test/resource-probe.js (fleet master) FIRST; at its exit it records what the
+// adapter or one of its libraries left open after onUnload, and the run fails on any of it (the after() at the end).
+const RESOURCE_PROBE = path.join(__dirname, "resource-probe.js");
+const RESOURCE_DIR = fs.mkdtempSync(path.join(require("node:os").tmpdir(), `${ADAPTER}-resources-`));
+// Round 62: the adapter's read-only states (`common.write: false`) — only the adapter writes them, so it compares them
+// in memory; a database read of one in the quiet window after the verdict is a finding.
+const READ_ONLY = new Set();
+
+/**
+ * The environment of every adapter start: the resource probe first, then the test hooks of this adapter.
+ *
+ * @param {...string} hooks absolute paths of `--require` hooks (fixture servers, DNS)
+ */
+function adapterEnv(...hooks) {
+  return {
+    NODE_OPTIONS: [RESOURCE_PROBE, ...hooks].map(file => `--require ${file}`).join(" "),
+    RESOURCE_PROBE_DIR: RESOURCE_DIR,
+    RESOURCE_PROBE_NS: NS,
+  };
+}
+
+/**
+ * The fixture hook: it rewrites the device addresses to the fixture servers inside the adapter process. The
+ * routing table reaches it through `YAMAHA_FIXTURE_ROUTES` in the environment — set in THIS process before a
+ * start, because @iobroker/testing hands `process.env` on to the adapter (`{ ...process.env, ...env }`), the
+ * restart the harness plays included. The adapter has no test seam.
+ */
+const HOOK = path.join(__dirname, "inventory-hook.cjs");
+
+/**
+ * Every object write of the adapter in this suite, and which of them changed nothing (round 61). An unchanged
+ * rewrite still goes to the database and to every subscriber — the adapter writes only what differs. The FIRST
+ * write of an `instanceObjects` entry is js-controller's own (`_createInstancesObjects` extends every entry before
+ * `onReady`, 7.2.2) and not the adapter's choice. Called as the suite's first await, so the start is watched from
+ * its first write; the known content comes from the database, a seed included.
+ *
+ * @param {import("@iobroker/testing").IntegrationTestHarness} harness
+ */
+async function watchObjectWrites(harness) {
+  const watch = { writes: new Map(), peak: new Map(), unchanged: [], deleted: [], times: [], unchangedIndicators: [] };
+  const known = new Map();
+  const roles = new Map();
+  const states = new Map();
+  const content = obj => {
+    const { ts, from, user, ...rest } = obj;
+    return canonical(rest);
+  };
+  harness.on("objectChange", (id, obj) => {
+    if (!id.startsWith(NS)) {
+      return;
+    }
+    if (!obj) {
+      watch.deleted.push(id);
+      known.delete(id);
+      roles.delete(id);
+      return;
+    }
+    roles.set(id, obj.common?.role);
+    if (obj.type === "state" && obj.common?.write === false) {
+      READ_ONLY.add(id);
+    } else {
+      READ_ONLY.delete(id);
+    }
+    const now = content(obj);
+    if (obj.from === `system.adapter.${ADAPTER}.0`) {
+      const n = (watch.writes.get(id) ?? 0) + 1;
+      watch.writes.set(id, n);
+      watch.peak.set(id, Math.max(watch.peak.get(id) ?? 0, n));
+      watch.times.push([id, Date.now()]);
+      if (known.get(id) === now && !(n === 1 && INSTANCE_OBJECTS.has(id))) {
+        watch.unchanged.push(id);
+      }
+    }
+    known.set(id, now);
+  });
+  // Round 62: an indicator state (`indicator.*`) is written only on a change (read-only: compared in memory,
+  // writable: setStateChangedAsync) — a write that changes nothing is a finding. Compared is what js-controller
+  // 7.2.2 compares in setStateChangedAsync: val strictly, ack, q, c; an object value always counts as changed.
+  harness.on("stateChange", (id, state) => {
+    if (!id.startsWith(NS) || !state || state.from !== `system.adapter.${ADAPTER}.0`) {
+      return;
+    }
+    const now =
+      state.val !== null && typeof state.val === "object" ? null : canonical([state.val, state.ack, state.q, state.c]);
+    if (now !== null && states.get(id) === now && String(roles.get(id)).startsWith("indicator")) {
+      watch.unchangedIndicators.push(id);
+    }
+    states.set(id, now);
+  });
+  // Round 64: a restart the harness plays (playControllerRestarts) is a new start — the per-start counts begin again,
+  // the known object content stays (it is the database's).
+  watch.newStart = () => {
+    watch.writes.clear();
+    states.clear();
+  };
+  const list = await harness.objects.getObjectListAsync({ startkey: NS, endkey: `${NS}香` });
+  for (const row of list.rows) {
+    if (row.value) {
+      known.set(row.id, content(row.value));
+      roles.set(row.id, row.value.common?.role);
+      if (row.value.type === "state" && row.value.common?.write === false) {
+        READ_ONLY.add(row.id);
+      }
+    }
+  }
+  return watch;
+}
+
+/**
+ * The fields an update must bring to EVERY existing object — what the settle loop compares. Since round 61 the
+ * upgrade assertion compares every field of `common`; the settle loop keeps this list: a second transport that
+ * joins late refreshes these without adding a row.
+ */
+const COMPARED = ["name", "desc", "role", "type", "unit", "states", "min", "max", "step", "icon"];
 /** How many fixture devices devices.json lists — every one of them must build a tree. */
 const FIXTURE_DEVICES = loadFixtures().length;
 /** The English texts, to prove a datapoint carries the explanation its MODE deserves. */
@@ -58,6 +185,10 @@ const EN = JSON.parse(fs.readFileSync(path.join(ADAPTER_DIR, "admin", "i18n", "e
 const REMOVED_IN_2_8_0 = ["actualVolume", "actualVolumeMode", "inputText"];
 /** A device-relative `volume` id: the main zone's, or one of zones 2-4. */
 const VOLUME_ID = /^(?:multiroom\.zone[234]\.)?volume$/;
+/** The instance settings every start of the manifest carries, next to what a suite configures. */
+const MANIFEST_NATIVE = require(path.join(ADAPTER_DIR, "io-package.json")).native ?? {};
+/** The room a user put every previous device and one of its datapoints into (upgrade suite). */
+const SEEDED_ROOM = "enum.rooms.inventory_upgrade";
 
 /**
  * Device `native` fields that record what THIS run learned (probe answers, the sweep's
@@ -70,49 +201,252 @@ const RUN_STATE_NATIVE = ["capabilityProfile", "probeCache", "yncaAvail", "purge
 let fixtures;
 
 /**
- * Bring up the fake devices and point the adapter at them.
+ * Bring up the fake devices and point the adapter at them. The throwaway js-controller keeps its instance
+ * object between suites, and changeAdapterConfig only EXTENDS native — a key an older version wrote (or an
+ * earlier suite set) would survive and trigger the start-up settings migration, and with it a host restart,
+ * in every suite. Every key that is neither the manifest's nor this suite's is nulled (null is the
+ * post-migration state of a dropped key).
  *
- * @param {import("@iobroker/testing").TestHarness} harness the running harness
+ * @param {import("@iobroker/testing").IntegrationTestHarness} harness the harness
  * @param {Record<string, unknown>} [extraNative] instance settings on top of the manifest defaults
  * @param {boolean} [legacyRows] configure the device table as 2.x held it (address only, the id
  *   derived from it) instead of as 3.0.0 writes it (the id stored)
  */
-async function startWithFixtures(harness, extraNative = {}, legacyRows = false) {
+async function startFixtures(harness, extraNative = {}, legacyRows = false) {
   fixtures = await startFixtureDevices();
-  const devices = legacyRows ? fixtures.legacyDevices : fixtures.devices;
-  await harness.changeAdapterConfig(ADAPTER, { native: { devices, ...extraNative } });
-  await startAdapter(harness);
+  process.env.YAMAHA_FIXTURE_ROUTES = JSON.stringify(fixtures.routes);
+  const native = { devices: legacyRows ? fixtures.legacyDevices : fixtures.devices, ...extraNative };
+  const instance = await harness.objects.getObjectAsync(`system.adapter.${ADAPTER}.0`);
+  const stale = {};
+  for (const key of Object.keys(instance?.native ?? {})) {
+    if (!Object.hasOwn(native, key) && !Object.hasOwn(MANIFEST_NATIVE, key)) {
+      stale[key] = null;
+    }
+  }
+  await harness.changeAdapterConfig(ADAPTER, { native: { ...MANIFEST_NATIVE, ...stale, ...native } });
 }
 
 /**
- * Start the adapter process against the running fixture devices — also a second time, the way the
- * host starts an instance again: the device table stays what the previous run left in the instance.
+ * Wait until the adapter has DONE its work: every fixture device built a tree, reported connected in the CURRENT
+ * process, and the tree is quiet.
  *
- * @param {import("@iobroker/testing").TestHarness} harness the running harness
+ * A YNCA sweep is paced at the 100 ms the specification demands, so a receiver needs the better part of a minute;
+ * the datapoint balance then settles for another five seconds before the tree is final.
+ *
+ * ⚠️ On a SEEDED tree (the upgrade suite) the old conditions were true one second after the start: every device
+ * already had its states, and the row count of an existing tree does not grow when the adapter merely refreshes
+ * it. Three conditions close that: a device counts only once it REPORTS connected, the report must come from the
+ * running process (its `info.connection` changed after the instance's `alive` last turned true — a start the
+ * harness plays after an instance-object write, or a second start, leaves the previous process's `true` behind),
+ * and the quiet loop compares object CONTENT, not the row count.
+ *
+ * @param {import("@iobroker/testing").IntegrationTestHarness} harness the harness
  */
-async function startAdapter(harness) {
-  // `@iobroker/testing` refuses a second start of a stopped adapter ("This test harness has
-  // already been used") — it remembers the exit in `_adapterExit`. A second start is exactly what
-  // the upgrade suite has to prove (a move written at the first contact runs at the next start),
-  // and a new harness would bring a fresh database. Forgetting the exit is all the refusal needs.
-  if (harness.didAdapterStop() && !harness.isAdapterRunning()) {
-    harness._adapterExit = undefined;
-    // The adapter refuses to start while its instance still counts as alive ("yamaha.0 already
-    // running", exit 7) — the stopped process clears that flag a moment after it is gone.
-    for (let i = 0; i < 30; i++) {
-      const alive = await harness.states.getStateAsync(`system.adapter.${ADAPTER}.0.alive`);
-      if (alive?.val !== true) {
-        break;
+async function waitForAdapterWork(harness) {
+  const deviceCount = fixtures.devices.length;
+  const deadline = Date.now() + 300000;
+  // Built and connected in the running process. The adapter's OWN `yamaha.0.info.*` branch sits at the same
+  // depth as a device's header and must be excluded by its first segment; a device that has ONLY its header is
+  // not connected.
+  let connected = 0;
+  for (;;) {
+    const alive = await harness.states.getStateAsync(`system.adapter.${ADAPTER}.0.alive`);
+    const list = await harness.objects.getObjectListAsync({ startkey: NS, endkey: `${NS}香` });
+    const devices = new Set();
+    for (const row of list.rows) {
+      const rest = row.id.slice(NS.length).split(".");
+      if (rest.length > 1 && rest[0] !== "info" && rest[1] !== "info" && row.value?.type === "state") {
+        devices.add(rest[0]);
       }
-      await new Promise(done => setTimeout(done, 1000));
+    }
+    connected = 0;
+    if (alive?.val === true && harness.isAdapterRunning()) {
+      for (const id of devices) {
+        const state = await harness.states.getStateAsync(`${NS}${id}.info.connection`);
+        if (state?.val === true && typeof state.lc === "number" && state.lc >= alive.lc) {
+          connected++;
+        }
+      }
+    }
+    if (connected >= deviceCount) {
+      break;
+    }
+    assert.ok(Date.now() < deadline, `only ${connected} of ${deviceCount} fixture devices connected`);
+    await new Promise(done => setTimeout(done, 1000));
+  }
+  // Then quiet: the datapoint balance settles five seconds after the last device, and the object tree is only
+  // final once that has passed.
+  let previous = "";
+  let stable = 0;
+  for (let i = 0; i < 60 && stable < 8; i++) {
+    await new Promise(done => setTimeout(done, 1000));
+    const list = await harness.objects.getObjectListAsync({ startkey: NS, endkey: `${NS}香` });
+    const fingerprint = JSON.stringify(
+      list.rows
+        .map(row => [row.id, row.value?.type, ...COMPARED.map(field => row.value?.common?.[field])])
+        .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+    );
+    stable = fingerprint === previous && list.rows.length > 0 ? stable + 1 : 0;
+    previous = fingerprint;
+  }
+  assert.ok(previous.length > 2, "no objects created — the fixture devices did not reach the adapter");
+}
+
+/**
+ * @param {import("@iobroker/testing").IntegrationTestHarness} harness the harness
+ * @returns {Promise<Record<string, any>>} every adapter object, bot dump format
+ */
+async function dumpObjects(harness) {
+  // The range starts at "yamaha.0." — the instance root object itself is not part of the tree.
+  const list = await harness.objects.getObjectListAsync({ startkey: NS, endkey: `${NS}香` });
+  const out = {};
+  for (const row of list.rows.sort((a, b) => a.id.localeCompare(b.id))) {
+    const obj = { ...row.value };
+    for (const key of VOLATILE) {
+      delete obj[key];
+    }
+    if (obj.native) {
+      obj.native = { ...obj.native };
+      for (const key of RUN_STATE_NATIVE) {
+        delete obj.native[key];
+      }
+    }
+    out[row.id] = obj;
+  }
+  return out;
+}
+
+/**
+ * Set the throwaway controller's system language — what the adapter reads from `system.config`.
+ *
+ * @param {import("@iobroker/testing").IntegrationTestHarness} harness
+ * @param {string} language an ioBroker language code
+ */
+async function setSystemLanguage(harness, language) {
+  const config = await harness.objects.getObject("system.config");
+  config.common.language = language;
+  await harness.objects.setObject("system.config", config);
+}
+
+/**
+ * Dump the value of every state of the instance: `{ "<id>": { val, ack } }`, sorted. The states client has no
+ * `getKeysAsync` — `getKeys`/`getStates` (like `getObject`/`setObject`) return a promise without a callback.
+ *
+ * @param {import("@iobroker/testing").IntegrationTestHarness} harness
+ */
+async function dumpStates(harness) {
+  const keys = (await harness.states.getKeys(`${NS}*`)).sort();
+  const values = await harness.states.getStates(keys);
+  const out = {};
+  keys.forEach((key, i) => {
+    if (values[i]) {
+      out[key] = { val: values[i].val, ack: values[i].ack };
+    }
+  });
+  return out;
+}
+
+/**
+ * js-controller 7.2.2 restarts an instance on EVERY change of its instance object while it runs (controller main.ts,
+ * objects `change` handler: `stopInstance`, then `startInstance` after `stopTimeout` + 2.5 s) — whoever wrote it, the
+ * adapter's own settings migration or device table included. The harness has no host; this plays it (round 64): the
+ * first change while the adapter runs stops it and starts it once more with the same hooks, so what the adapter did
+ * after that write in the same start is cut off here as it is on a real host. A change after that restart is a finding:
+ * on a host the instance would restart again, for good.
+ *
+ * @param {import("@iobroker/testing").IntegrationTestHarness} harness
+ * @param {object | null} watch the suite's write watcher (watchObjectWrites), null in a suite without one
+ * @param {...string} hooks the test hooks the suite starts the adapter with (as for adapterEnv)
+ */
+function playControllerRestarts(harness, watch, ...hooks) {
+  const restarts = { count: 0, again: [], done: Promise.resolve() };
+  harness.on("objectChange", id => {
+    if (id !== `system.adapter.${ADAPTER}.0` || !harness.isAdapterRunning()) {
+      return;
+    }
+    if (restarts.count > 0) {
+      restarts.again.push(Date.now());
+      return;
+    }
+    restarts.count++;
+    restarts.done = (async () => {
+      await harness.stopAdapter();
+      watch?.newStart();
+      // What the host does when the process exits: `alive` false (a start that still sees it true ends with
+      // ADAPTER_ALREADY_RUNNING, exit code 7), then the start after stopTimeout + 2.5 s.
+      await harness.states.setState(`system.adapter.${ADAPTER}.0.alive`, {
+        val: false,
+        ack: true,
+        from: "system.host.testing",
+      });
+      await new Promise(resolve => setTimeout(resolve, RESTART_DELAY_MS));
+      // @iobroker/testing refuses a second start of one harness ("already been used"); the host starts the same
+      // instance again — reset the exit marker, and fail loudly should the harness no longer keep it there.
+      harness._adapterExit = undefined;
+      assert.ok(
+        !harness.didAdapterStop(),
+        "@iobroker/testing changed its exit marker — the restart play needs a new form",
+      );
+      await harness.startAdapterAndWait(false, adapterEnv(...hooks));
+    })();
+  });
+  return restarts;
+}
+
+/** Round 64: the host's wait before it starts a stopped instance again (controller main.ts, `stopTimeout || 500` + 2.5 s). */
+const RESTART_DELAY_MS = (require(path.join(ADAPTER_DIR, "io-package.json")).common.stopTimeout || 500) + 2500;
+/** Round 64: the recording marker every seeded state carries in `common.custom`, naming the id it was seeded under. */
+const RECORDING = "inventory-recording.0";
+
+/**
+ * Seed the previous release's objects before the start. Every state carries a recording marker (round 64): what hangs
+ * on a datapoint is the user's — it goes on with the SAME datapoint (its id, or the one id a move gives it), never onto
+ * a new datapoint, and never decides what the adapter creates, keeps or deletes (that shows up as a leftover or a
+ * missing object against the committed inventory).
+ *
+ * @param {import("@iobroker/testing").IntegrationTestHarness} harness
+ * @param {Record<string, ioBroker.Object>} previous the previous release's inventory
+ */
+async function seedPrevious(harness, previous) {
+  for (const [id, obj] of Object.entries(previous)) {
+    const common =
+      obj.type === "state"
+        ? { ...obj.common, custom: { ...obj.common?.custom, [RECORDING]: { enabled: true, origin: id } } }
+        : obj.common;
+    await harness.objects.setObjectAsync(id, { ...obj, common });
+  }
+}
+
+/**
+ * The room a user built on the previous release: every previous device and its first datapoint. A device-id move
+ * deletes the old tree, and js-controller takes every deleted id out of every enum (7.2.2 `_deleteObjects` →
+ * `removeIdFromAllEnums`) — the move has to carry each membership to the new id, and an interrupted move (the
+ * restart its own device-table write causes) must not lose them.
+ *
+ * @param {import("@iobroker/testing").IntegrationTestHarness} harness
+ * @param {Record<string, ioBroker.Object>} previous the previous release's inventory
+ * @returns {Promise<string[]>} the seeded members
+ */
+async function seedRoom(harness, previous) {
+  const members = [];
+  for (const [id, obj] of Object.entries(previous)) {
+    if (obj.type !== "device") {
+      continue;
+    }
+    members.push(id);
+    const first = Object.keys(previous)
+      .filter(other => other.startsWith(`${id}.`) && previous[other].type === "state")
+      .sort()[0];
+    if (first) {
+      members.push(first);
     }
   }
-  // The routing table reaches the adapter process through its environment; the require hook
-  // rewrites the device addresses to the fixture servers there. The adapter has no test seam.
-  await harness.startAdapterAndWait(false, {
-    NODE_OPTIONS: `--require ${path.join(__dirname, "inventory-hook.cjs")}`,
-    YAMAHA_FIXTURE_ROUTES: JSON.stringify(fixtures.routes),
+  await harness.objects.setObjectAsync(SEEDED_ROOM, {
+    type: "enum",
+    common: { name: "Inventory upgrade room", members },
+    native: {},
   });
+  return members;
 }
 
 /**
@@ -138,108 +472,10 @@ function devicesNotFinal(objects) {
 }
 
 /**
- * Wait until the object tree stops growing. A YNCA sweep is paced at the 100 ms the
- * specification demands, so a receiver needs the better part of a minute; the datapoint
- * balance then settles for another five seconds before the tree is final.
+ * Join the fixtures to the device objects the adapter built for them — the `info.ip` datapoint the adapter
+ * writes for every device is the one reliable join.
  *
- * ⚠️ On a SEEDED tree (the upgrade suite) both of the old conditions were true one second
- * after the start: every device already had its states, and the row count of an existing
- * tree does not grow when the adapter merely refreshes it. The dump was therefore taken
- * while the three YNCA receivers were still sweeping, and the suite compared the SEED with
- * itself — it reported "everything reached" for 174 datapoints the run had not touched yet.
- * Two conditions close that: a device counts as built only once it REPORTS connected (the
- * supervisor flips that flag after `attempt()` has written the tree), and the quiet loop
- * compares the object CONTENT, not the row count, so a refreshed description resets it.
- *
- * @param {import("@iobroker/testing").TestHarness} harness the running harness
- */
-async function waitForSettledTree(harness, deviceCount) {
-  // Two conditions, in this order. A device that has ONLY its `info.*` header is not connected —
-  // and a tree of nothing but headers looks perfectly "stable", which is how an empty inventory
-  // passes a naive count check. The header is exactly the `info.` subtree, so "carries a
-  // datapoint outside info." is the precise question, not a threshold that has to be guessed.
-  // The adapter's OWN `yamaha.0.info.*` branch sits at the same depth as a device's header and
-  // must be excluded by its first segment — counted as a device it inflates the tally by one,
-  // which lets the loop leave while a real device is still missing and fails the assert once
-  // every device has in fact arrived.
-  let withTree = 0;
-  let built = new Set();
-  for (let i = 0; i < 240 && withTree < deviceCount; i++) {
-    await new Promise(done => setTimeout(done, 1000));
-    const list = await harness.objects.getObjectListAsync({ startkey: NS, endkey: `${NS}香` });
-    const devices = new Set();
-    for (const row of list.rows) {
-      const rest = row.id.slice(NS.length).split(".");
-      if (rest.length > 1 && rest[0] !== "info" && rest[1] !== "info" && row.value?.type === "state") {
-        devices.add(rest[0]);
-      }
-    }
-    withTree = devices.size;
-    built = devices;
-  }
-  assert.strictEqual(withTree, deviceCount, `only ${withTree} of ${deviceCount} fixture devices built a tree`);
-  // Then connected: a tree can be there and still be the OLD one. The supervisor reports a
-  // device connected only after `attempt()` has built its objects, so this is the signal that
-  // the run has actually touched them — the only one a seeded tree does not fake (the states
-  // database starts empty even when the objects are pre-filled).
-  const deviceIds = [...built];
-  let connected = 0;
-  for (let i = 0; i < 240 && connected < deviceCount; i++) {
-    await new Promise(done => setTimeout(done, 1000));
-    const states = await Promise.all(deviceIds.map(id => harness.states.getStateAsync(`${NS}${id}.info.connection`)));
-    connected = states.filter(state => state?.val === true).length;
-  }
-  assert.strictEqual(connected, deviceCount, `only ${connected} of ${deviceCount} fixture devices connected`);
-  // Then quiet: the datapoint balance settles five seconds after the last device, and the
-  // object tree is only final once that has passed. Compared is the CONTENT of the fields the
-  // upgrade assertion reads — a second transport that joins late refreshes texts without
-  // adding a row, and a row count would call that "quiet".
-  let previous = "";
-  let stable = 0;
-  for (let i = 0; i < 60 && stable < 8; i++) {
-    await new Promise(done => setTimeout(done, 1000));
-    const list = await harness.objects.getObjectListAsync({ startkey: NS, endkey: `${NS}香` });
-    const fingerprint = JSON.stringify(
-      list.rows
-        .map(row => [row.id, row.value?.type, ...COMPARED.map(field => row.value?.common?.[field])])
-        .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
-    );
-    stable = fingerprint === previous && list.rows.length > 0 ? stable + 1 : 0;
-    previous = fingerprint;
-  }
-  assert.ok(previous.length > 2, "no objects created — the fixture devices did not reach the adapter");
-}
-
-/**
- * @param {import("@iobroker/testing").TestHarness} harness the running harness
- * @returns {Promise<Record<string, any>>} every adapter object, bot dump format
- */
-async function dumpObjects(harness) {
-  // The range starts at "yamaha.0." — the instance root object itself is not part of the tree.
-  const list = await harness.objects.getObjectListAsync({ startkey: NS, endkey: `${NS}香` });
-  const out = {};
-  for (const row of list.rows.sort((a, b) => a.id.localeCompare(b.id))) {
-    const obj = { ...row.value };
-    for (const key of VOLATILE) {
-      delete obj[key];
-    }
-    if (obj.native) {
-      obj.native = { ...obj.native };
-      for (const key of RUN_STATE_NATIVE) {
-        delete obj.native[key];
-      }
-    }
-    out[row.id] = obj;
-  }
-  return out;
-}
-
-/**
- * Join the fixtures to the device objects the adapter built for them. The device id derives from
- * the CONFIGURED address (10.10.0.13 → 10_10_0_13), not from the fixture's name, so the `info.ip`
- * datapoint the adapter writes for every device is the only reliable join.
- *
- * @param {import("@iobroker/testing").TestHarness} harness the running harness
+ * @param {import("@iobroker/testing").IntegrationTestHarness} harness the harness
  * @param {Record<string, any>} objects a dump of the object tree
  * @returns {Promise<Map<string, string>>} configured address → device object id
  */
@@ -282,11 +518,19 @@ tests.integration(ADAPTER_DIR, {
   defineAdditionalTests({ suite }) {
     suite("object inventory", getHarness => {
       let harness;
+      let watch;
+      let restarts;
       before(async function () {
-        this.timeout(240000);
+        this.timeout(600000);
         harness = getHarness();
-        await startWithFixtures(harness);
-        await waitForSettledTree(harness, fixtures.devices.length);
+        watch = await watchObjectWrites(harness);
+        await setSystemLanguage(harness, FIRST_LANGUAGE);
+        await startFixtures(harness);
+        restarts = playControllerRestarts(harness, watch, HOOK);
+        await harness.startAdapterAndWait(false, adapterEnv(HOOK));
+        await waitForAdapterWork(harness);
+        await restarts.done;
+        await waitForAdapterWork(harness);
       });
 
       after(async function () {
@@ -302,6 +546,32 @@ tests.integration(ADAPTER_DIR, {
         const objects = await dumpObjects(harness);
         assert.ok(Object.keys(objects).length > 0, "no objects created — fixtures did not reach the adapter");
         fs.writeFileSync(INVENTORY, `${JSON.stringify(objects, null, 2)}\n`);
+      });
+
+      it("writes test/states.inventory.json", async function () {
+        this.timeout(30000);
+        const states = await dumpStates(harness);
+        assert.ok(Object.keys(states).length > 0, "no states written — fixtures did not reach the adapter");
+        fs.writeFileSync(STATES_INVENTORY, `${JSON.stringify(states, null, 2)}\n`);
+      });
+
+      it("writes no object more than MAX_OBJECT_WRITES times", function () {
+        const churn = [...watch.peak].filter(([, n]) => n > MAX_OBJECT_WRITES).map(([id, n]) => `${id} ×${n}`);
+        assert.deepStrictEqual(churn, [], `objects written more than ${MAX_OBJECT_WRITES} times in one start`);
+      });
+
+      it("rewrites no object unchanged", function () {
+        const idle = [...new Set(watch.unchanged)];
+        assert.deepStrictEqual(idle, [], `objects written without a change:\n${idle.join("\n")}`);
+      });
+
+      it("rewrites no indicator state unchanged", function () {
+        const idle = [...new Set(watch.unchangedIndicators)];
+        assert.deepStrictEqual(idle, [], `indicator states written without a change:\n${idle.join("\n")}`);
+      });
+
+      it("restarts at most once for its own instance object", function () {
+        assert.deepStrictEqual(restarts.again, [], "the instance object changed again after the restart it caused");
       });
 
       it("runs every device under its final id — model and serial, the model alone without one", async function () {
@@ -353,7 +623,6 @@ tests.integration(ADAPTER_DIR, {
           assert.ok(profile.length < 40000, `${row.id}: capability profile is ${profile.length} bytes (limit 40000)`);
         }
         assert.ok(sizes.length >= FIXTURE_DEVICES, `only ${sizes.length} device profiles found`);
-        console.log(`capability profile sizes:\n  ${sizes.join("\n  ")}`);
       });
 
       it("covers every device class the adapter distinguishes", async function () {
@@ -394,18 +663,9 @@ tests.integration(ADAPTER_DIR, {
         // a YNCA-owned datapoint in the classic spelling, through the SAME dictionary the adapter
         // uses — an id the dictionary refuses fails here loudly instead of passing by vacuity.
         const objects = await dumpObjects(harness);
-        // The dictionary module exists from 2.6.0 on; a build without it (the RED run before the
-        // dictionary landed) translates nothing, so a MusicCast list on a YNCA-owned datapoint
-        // fails as undeclared — which is the truth of that build.
-        let translateDeclaredStates = (_key, _states) => undefined;
-        try {
-          ({ translateDeclaredStates } = require(path.join(ADAPTER_DIR, "build/lib/catalog/musiccast-vocabulary.js")));
-        } catch {
-          // no dictionary in this build
-        }
-        // The device object's id derives from the configured address (10.10.0.13 → 10_10_0_13),
-        // not from the fixture's name — map fixtures to devices through the `info.ip` datapoint
-        // the adapter writes for every device, and refuse to pass on a device that was not found.
+        const { translateDeclaredStates } = require(
+          path.join(ADAPTER_DIR, "build/lib/catalog/musiccast-vocabulary.js"),
+        );
         const byIp = await deviceIdByIp(harness, objects);
         const violations = [];
         for (const fixture of loadFixtures()) {
@@ -525,6 +785,42 @@ tests.integration(ADAPTER_DIR, {
       });
     });
 
+    // The same run once more in a second system language: a label that stays the same in both was never
+    // translated. A suite of its own — the harness starts an adapter only once per suite (a second
+    // startAdapterAndWait in the same suite never resolves), and every suite gets a fresh database.
+    suite("second system language", getHarness => {
+      let harness;
+      let restarts;
+      before(async function () {
+        this.timeout(600000);
+        harness = getHarness();
+        await setSystemLanguage(harness, SECOND_LANGUAGE);
+        await startFixtures(harness);
+        restarts = playControllerRestarts(harness, null, HOOK);
+        await harness.startAdapterAndWait(false, adapterEnv(HOOK));
+        await waitForAdapterWork(harness);
+        await restarts.done;
+        await waitForAdapterWork(harness);
+      });
+
+      after(async function () {
+        this.timeout(60000);
+        await harness?.stopAdapter();
+        await fixtures?.stop();
+      });
+
+      it("restarts at most once for its own instance object", function () {
+        assert.deepStrictEqual(restarts.again, [], "the instance object changed again after the restart it caused");
+      });
+
+      it("writes test/objects.inventory.de.json", async function () {
+        this.timeout(30000);
+        const objects = await dumpObjects(harness);
+        assert.ok(Object.keys(objects).length > 0, "no objects created — fixtures did not reach the adapter");
+        fs.writeFileSync(OBJECTS_SECOND_LANGUAGE, `${JSON.stringify(objects, null, 2)}\n`);
+      });
+    });
+
     // The second switch position, on the same eight fixtures. Unit tests cover the mapping; only
     // a full run proves that EVERY device class — dB receiver, numeric receiver, speaker,
     // soundbar, CD system, and the YNCA-only and XML-only receivers — actually reaches the
@@ -535,17 +831,27 @@ tests.integration(ADAPTER_DIR, {
     // both at once: the inheritance, and the presentation on every device class.
     suite("volume as percent", getHarness => {
       let harness;
+      let restarts;
       before(async function () {
-        this.timeout(240000);
+        this.timeout(600000);
         harness = getHarness();
-        await startWithFixtures(harness, { volumeAsPercent: true });
-        await waitForSettledTree(harness, fixtures.devices.length);
+        await setSystemLanguage(harness, FIRST_LANGUAGE);
+        await startFixtures(harness, { volumeAsPercent: true });
+        restarts = playControllerRestarts(harness, null, HOOK);
+        await harness.startAdapterAndWait(false, adapterEnv(HOOK));
+        await waitForAdapterWork(harness);
+        await restarts.done;
+        await waitForAdapterWork(harness);
       });
 
       after(async function () {
         this.timeout(60000);
         await harness?.stopAdapter();
         await fixtures?.stop();
+      });
+
+      it("restarts at most once for its own instance object", function () {
+        assert.deepStrictEqual(restarts.again, [], "the instance object changed again after the restart it caused");
       });
 
       it("every device took the inherited switch down as its own answer", async function () {
@@ -610,26 +916,56 @@ tests.integration(ADAPTER_DIR, {
     if (previousFile && fs.existsSync(previousFile)) {
       suite("upgrade from the previous release", getHarness => {
         let harness;
+        let watch;
+        let restarts;
+        let verdictAt;
+        let roomMembers = [];
         const previous = JSON.parse(fs.readFileSync(previousFile, "utf8"));
         before(async function () {
-          this.timeout(240000);
+          this.timeout(900000);
           harness = getHarness();
-          // The harness registers its own before() (fresh DB) ahead of this one, so the seed
-          // survives and the adapter starts on top of the OLD objects.
-          for (const [id, obj] of Object.entries(previous)) {
-            await harness.objects.setObjectAsync(id, obj);
-          }
+          watch = await watchObjectWrites(harness);
+          // The harness registers its own before() (fresh DB) ahead of this one,
+          // so the seed survives and the adapter starts on top of the OLD objects.
+          await seedPrevious(harness, previous);
+          roomMembers = await seedRoom(harness, previous);
           // The device table in the form the previous release left it. From 2.x that is the
           // address only (the id derived from it): a device whose model and serial the stored tree
           // knows moves to its 3.0.0 id at this start; the others tell theirs at the first contact
           // and move at the next start — the second one below, as the host gives it after an update
           // or a reboot. From 3.0.0 on the table carries the final id next to the address; a 3.x tree
           // started with 2.x rows is a state no installation reaches.
-          await startWithFixtures(harness, {}, devicesNotFinal(previous).length > 0);
-          await waitForSettledTree(harness, fixtures.devices.length);
+          await startFixtures(harness, {}, devicesNotFinal(previous).length > 0);
+          // The inventory was written in FIRST_LANGUAGE: labels an adapter localises itself (`states`)
+          // only compare in the same language.
+          await setSystemLanguage(harness, FIRST_LANGUAGE);
+          restarts = playControllerRestarts(harness, watch, HOOK);
+          await harness.startAdapterAndWait(false, adapterEnv(HOOK));
+          await waitForAdapterWork(harness);
+          await restarts.done;
+          await waitForAdapterWork(harness);
+          // The next start, days later on a real host (an update, a reboot): what the first contact decided
+          // moves now. A new start plays its own restart — the one its move's table write causes.
           await harness.stopAdapter();
-          await startAdapter(harness);
-          await waitForSettledTree(harness, fixtures.devices.length);
+          watch.newStart();
+          await harness.states.setState(`system.adapter.${ADAPTER}.0.alive`, {
+            val: false,
+            ack: true,
+            from: "system.host.testing",
+          });
+          harness._adapterExit = undefined;
+          restarts = playControllerRestarts(harness, watch, HOOK);
+          await harness.startAdapterAndWait(false, adapterEnv(HOOK));
+          await waitForAdapterWork(harness);
+          // A migration that wrote the instance object restarts the instance (round 64) — the verdict
+          // comes after the second start has done its work.
+          await restarts.done;
+          await waitForAdapterWork(harness);
+          verdictAt = Date.now();
+          fs.writeFileSync(
+            path.join(RESOURCE_DIR, "window.json"),
+            JSON.stringify({ start: verdictAt, end: verdictAt + SETTLE_MS }),
+          );
         });
 
         after(async function () {
@@ -649,14 +985,19 @@ tests.integration(ADAPTER_DIR, {
               stale.push(`${id}: missing after upgrade`);
               continue;
             }
-            for (const f of COMPARED) {
+            // Every field of `common`, not a chosen few: an adapter writes only what differs (round 61),
+            // so every changed field must reach an existing installation.
+            for (const f of new Set([...Object.keys(obj.common ?? {}), ...Object.keys(got.common ?? {})])) {
+              if (f === "custom") {
+                continue; // the user's recording — judged on its own below (round 64)
+              }
               if (canonical(got.common?.[f]) !== canonical(obj.common?.[f])) {
                 stale.push(`${id}: ${f} still ${JSON.stringify(got.common?.[f])}`);
               }
             }
             // The object's KIND (state/channel/device/folder) sits one level above `common`;
-            // the `type` in COMPARED is the VALUE type and something else entirely — they only
-            // share a name. Without this comparison a failed type migration passes green.
+            // `common.type` is the VALUE type and something else entirely — they only share a
+            // name. Without this comparison a failed type migration passes green.
             if (got.type !== obj.type) {
               stale.push(`${id}: type still ${JSON.stringify(got.type)}, want ${JSON.stringify(obj.type)}`);
             }
@@ -712,6 +1053,22 @@ tests.integration(ADAPTER_DIR, {
           assert.deepStrictEqual(devices, expected, "the device ids after the update are not the 3.0.0 ones");
         });
 
+        // A move carries every room assignment to the new ids, through the restart its own table write causes
+        // (audit 2026-09-29, A23): the room lists as many members as it did, and every one of them exists.
+        it("keeps every room assignment through a device-id move", async function () {
+          this.timeout(60000);
+          const room = await harness.objects.getObjectAsync(SEEDED_ROOM);
+          const members = room?.common?.members ?? [];
+          const live = await dumpObjects(harness);
+          const dead = members.filter(id => !(id in live));
+          assert.deepStrictEqual(dead, [], `room members that point nowhere:\n${dead.join("\n")}`);
+          assert.strictEqual(
+            members.length,
+            roomMembers.length,
+            `the room lists ${members.length} of the ${roomMembers.length} seeded members`,
+          );
+        });
+
         it("objects the release removed are gone (no leftovers)", async function () {
           this.timeout(60000);
           const current = JSON.parse(fs.readFileSync(INVENTORY, "utf8"));
@@ -719,7 +1076,103 @@ tests.integration(ADAPTER_DIR, {
           const leftovers = Object.keys(previous).filter(id => !(id in current) && id in live);
           assert.deepStrictEqual(leftovers, [], `leftover objects:\n${leftovers.join("\n")}`);
         });
+
+        it("rewrites no object unchanged", function () {
+          const idle = [...new Set(watch.unchanged)];
+          assert.deepStrictEqual(idle, [], `objects written without a change:\n${idle.join("\n")}`);
+        });
+
+        it("rewrites no indicator state unchanged", function () {
+          const idle = [...new Set(watch.unchangedIndicators)];
+          assert.deepStrictEqual(idle, [], `indicator states written without a change:\n${idle.join("\n")}`);
+        });
+
+        // A kept object that is deleted and created anew makes the suite judge a fresh object, not the
+        // upgraded one (hassemu v1.43.1: the stale cleanup removed 18 seeded clients before the dump).
+        it("deletes no object the release keeps", function () {
+          const current = JSON.parse(fs.readFileSync(INVENTORY, "utf8"));
+          const lost = [...new Set(watch.deleted)].filter(id => id in previous && id in current);
+          assert.deepStrictEqual(lost, [], `kept objects deleted during the upgrade:\n${lost.join("\n")}`);
+        });
+
+        it("a recording goes on only with its own datapoint", async function () {
+          this.timeout(30000);
+          const live = await dumpObjects(harness);
+          const carriers = new Map();
+          for (const [id, obj] of Object.entries(live)) {
+            const origin = obj.common?.custom?.[RECORDING]?.origin;
+            if (origin) {
+              carriers.set(origin, [...(carriers.get(origin) ?? []), id]);
+            }
+          }
+          const wrong = [];
+          for (const [origin, ids] of carriers) {
+            if (ids.length > 1) {
+              wrong.push(`${origin} → ${ids.join(", ")}: one recording on several datapoints`);
+            } else if (ids[0] !== origin && origin in live) {
+              wrong.push(`${origin} → ${ids[0]}: copied while ${origin} lives on`);
+            } else if (ids[0] !== origin && live[ids[0]].common?.type !== previous[origin]?.common?.type) {
+              wrong.push(`${origin} → ${ids[0]}: another value type — a new datapoint, not the same one moved`);
+            }
+          }
+          // A state that lives on keeps what hangs on it — the recording is the user's, never destroyed.
+          for (const [id, obj] of Object.entries(previous)) {
+            if (obj.type === "state" && live[id]?.type === "state" && !carriers.get(id)?.includes(id)) {
+              wrong.push(`${id}: its recording is gone although the datapoint lives on`);
+            }
+          }
+          assert.deepStrictEqual(wrong, [], `recordings that left their datapoint:\n${wrong.join("\n")}`);
+        });
+
+        // What a fresh installation does not have, an upgrade must not have either — whatever made it (round 64:
+        // a datapoint created because the old one was recorded is exactly that).
+        it("creates nothing a fresh installation lacks", async function () {
+          this.timeout(30000);
+          const current = JSON.parse(fs.readFileSync(INVENTORY, "utf8"));
+          const live = await dumpObjects(harness);
+          const extra = Object.keys(live).filter(id => !(id in current));
+          assert.deepStrictEqual(extra, [], `objects a fresh installation does not have:\n${extra.join("\n")}`);
+        });
+
+        it("restarts at most once for its own instance object", function () {
+          assert.deepStrictEqual(restarts.again, [], "the instance object changed again after the restart it caused");
+        });
+
+        // Last in the suite: a write after the verdict means waitForAdapterWork ended before the adapter did.
+        it("writes nothing after the verdict", async function () {
+          this.timeout(SETTLE_MS + 5000);
+          await new Promise(resolve => setTimeout(resolve, Math.max(0, verdictAt + SETTLE_MS - Date.now())));
+          const late = [...new Set(watch.times.filter(([, t]) => t > verdictAt).map(([id]) => id))];
+          assert.deepStrictEqual(late, [], `objects written after the verdict:\n${late.join("\n")}`);
+        });
       });
     }
   },
+});
+
+// Round 62: after every suite, every adapter process of this run has exited — what it left open after onUnload fails
+// the run. Every start leaves a marker: no marker means a start without adapterEnv(), a marker without a report a
+// process that never reached its exit (killed after a hanging onUnload, or crashed).
+after(function () {
+  const files = fs.readdirSync(RESOURCE_DIR);
+  const starts = files.filter(f => f.endsWith(".start")).map(f => f.slice(0, -".start".length));
+  const silent = starts.filter(pid => !files.includes(`${pid}.json`));
+  const reports = starts
+    .filter(pid => !silent.includes(pid))
+    .map(pid => JSON.parse(fs.readFileSync(path.join(RESOURCE_DIR, `${pid}.json`), "utf8")));
+  const left = reports.flatMap(r => r.left);
+  const reread = reports.flatMap(r =>
+    Object.entries(r.quiet)
+      .filter(([id]) => READ_ONLY.has(id))
+      .map(([id, n]) => `${id} ×${n}`),
+  );
+  fs.rmSync(RESOURCE_DIR, { recursive: true, force: true });
+  assert.ok(starts.length > 0, "no adapter start loaded the resource probe — a start without adapterEnv()");
+  assert.deepStrictEqual(silent, [], "adapter processes that never reached their exit (killed or crashed)");
+  assert.deepStrictEqual(left, [], `left open after onUnload:\n${left.join("\n")}`);
+  assert.deepStrictEqual(
+    reread,
+    [],
+    `read-only states read back from the database while nothing changed:\n${reread.join("\n")}`,
+  );
 });

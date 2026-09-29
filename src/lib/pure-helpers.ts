@@ -68,6 +68,37 @@ export function rowDeviceId(row: { id?: unknown; name?: unknown; ip: string }): 
 }
 
 /**
+ * The device table with the rows of moved devices pointing at their new ids — undefined when no row
+ * changed. A typed row gets the new id as its name too, so a return to 2.x finds the tree it expects;
+ * a row the 0.5.4 migration wrote keeps its address as the name, which is what makes it follow the
+ * device (`parseDevices`).
+ *
+ * @param rows the rows as read
+ * @param renamed old device id → new device id
+ * @returns the rows to store, or undefined when none changed
+ */
+export function renamedTableRows(
+  rows: readonly unknown[],
+  renamed: ReadonlyMap<string, string>,
+): unknown[] | undefined {
+  let changed = false;
+  const next = rows.map(row => {
+    const entry = row as { id?: unknown; name?: unknown; ip?: unknown };
+    if (typeof entry.ip !== "string" || entry.ip === "") {
+      return row;
+    }
+    const to = renamed.get(rowDeviceId({ ...entry, ip: entry.ip }));
+    if (to === undefined) {
+      return row;
+    }
+    changed = true;
+    const migrated = typeof entry.name === "string" && isDottedQuad(entry.name);
+    return { ...entry, id: to, ...(migrated ? {} : { name: to }) };
+  });
+  return changed ? next : undefined;
+}
+
+/**
  * An IPv4 address in dotted form — the shape only the 0.5.4 migration writes into a row's
  * NAME (`legacyDeviceRow`). A name that is an address marks a migrated row.
  *

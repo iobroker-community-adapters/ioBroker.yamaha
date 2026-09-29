@@ -112,6 +112,16 @@ vi.mock("@iobroker/adapter-core", () => {
       }
       return Promise.resolve();
     });
+    /** Deletes ONE object by its full id — the form a move uses for everything below a device. */
+    public delForeignObjectAsync = vi.fn((id: string) => {
+      const prefix = `${this.namespace}.`;
+      if (id.startsWith(prefix)) {
+        this.objects.delete(id.slice(prefix.length));
+      } else {
+        this.foreignObjects.delete(id);
+      }
+      return Promise.resolve();
+    });
     public getStatesAsync = vi.fn(() => {
       const out: Record<string, { val: unknown; ack: boolean }> = {};
       for (const [k, v] of this.states) {
@@ -584,6 +594,33 @@ function setup(config: Record<string, unknown> = {}, opts: { failIds?: string[];
 
 /** Let the supervisor's async attempt chain settle. */
 const flush = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 5));
+
+/**
+ * The start js-controller gives the instance after a write to its instance object (7.2.2: stopInstance,
+ * then a new start): the same databases, and `config` read from the instance object — a key the write
+ * nulled is gone.
+ *
+ * @param prev the start that wrote
+ * @param opts which device ids fail to connect or never answer
+ * @param opts.failIds Device ids whose fake attempt reports failure
+ * @param opts.hangIds Device ids whose fake attempt never answers (stays pending)
+ * @returns the next start, not yet run
+ */
+function nextStart(prev: Ctx, opts: { failIds?: string[]; hangIds?: string[] } = {}): Ctx {
+  const native = (prev.i.foreignObjects.get("system.adapter.yamaha.0")?.native ?? {}) as Record<string, unknown>;
+  const next = setup({}, opts);
+  next.i.config = Object.fromEntries(Object.entries(native).filter(([, v]) => v !== null && v !== undefined));
+  for (const [id, obj] of prev.i.objects) {
+    next.i.objects.set(id, obj);
+  }
+  for (const [id, state] of prev.i.states) {
+    next.i.states.set(id, state);
+  }
+  for (const [id, obj] of prev.i.foreignObjects) {
+    next.i.foreignObjects.set(id, obj);
+  }
+  return next;
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -1960,76 +1997,123 @@ describe("Yamaha auto-discovery", () => {
 });
 
 describe("Yamaha migrations", () => {
-  it("carries the previous adapter's single device over into the table", async () => {
+  // Every change to the instance object restarts the instance (js-controller 7.2.2) — a start that
+  // changes its settings does it in ONE write and ends there; the next start runs the devices
+  // (audit 2026-09-29, A23/A36).
+  it("carries the previous adapter's single device over into the table, in one write that ends the start", async () => {
     const ctx = setup({ devices: [], ip: "192.168.1.30" });
-    ctx.i.foreignObjects.set("system.adapter.yamaha.0", { native: {} });
+    ctx.i.foreignObjects.set("system.adapter.yamaha.0", { native: { devices: [], ip: "192.168.1.30" } });
     await ctx.i.onReady();
+    await flush();
+    expect(ctx.calls).toEqual([]);
+    const native = ctx.i.foreignObjects.get("system.adapter.yamaha.0")?.native as Record<string, unknown>;
+    expect(native.devices).toEqual([{ name: "192.168.1.30", ip: "192.168.1.30" }]);
+    expect(native.ip).toBeNull();
+    expect(
+      (ctx.i as unknown as { extendForeignObjectAsync: ReturnType<typeof vi.fn> }).extendForeignObjectAsync,
+    ).toHaveBeenCalledTimes(1);
+
+    const next = nextStart(ctx);
+    await next.i.onReady();
     await flush();
     // Without this an upgraded instance starts with an empty table and silently
     // stops driving the receiver it had.
-    expect(ctx.calls.map(c => c.device.ip)).toEqual(["192.168.1.30"]);
-    expect(
-      (ctx.i.foreignObjects.get("system.adapter.yamaha.0")?.native as { devices?: unknown[] }).devices,
-    ).toHaveLength(1);
+    expect(next.calls.map(c => c.device.ip)).toEqual(["192.168.1.30"]);
     // The migrated row is not a typed one: the search stays on (in the background, behind the
     // row) — it is what follows the receiver to a new address.
     expect(mocks.discoverYamaha).toHaveBeenCalledTimes(1);
+    // The next start finds nothing to migrate: it writes the instance object no more.
+    expect(
+      (
+        next.i as unknown as { extendForeignObjectAsync: ReturnType<typeof vi.fn> }
+      ).extendForeignObjectAsync.mock.calls.filter(call => call[0] === "system.adapter.yamaha.0"),
+    ).toEqual([]);
   });
 
   it("runs the migrated device even when the table cannot be persisted", async () => {
     const ctx = setup({ devices: [], ip: "192.168.1.30" });
-    ctx.i.foreignObjects.set("system.adapter.yamaha.0", { native: { ip: "192.168.1.30" } });
-    (ctx.i as unknown as { setForeignObject: ReturnType<typeof vi.fn> }).setForeignObject.mockRejectedValue(
-      new Error("objects db read-only"),
-    );
+    ctx.i.foreignObjects.set("system.adapter.yamaha.0", { native: { devices: [], ip: "192.168.1.30" } });
+    (
+      ctx.i as unknown as { extendForeignObjectAsync: ReturnType<typeof vi.fn> }
+    ).extendForeignObjectAsync.mockRejectedValue(new Error("objects db read-only"));
     await ctx.i.onReady();
     await flush();
-    // Persisting is a convenience for the admin view, not a precondition.
+    // Persisting is a convenience for the admin view, not a precondition — the start goes on.
     expect(ctx.calls.map(c => c.device.ip)).toEqual(["192.168.1.30"]);
-    expect(ctx.i.log.warn).toHaveBeenCalledWith(expect.stringContaining("could not persist the migrated device table"));
+    expect(ctx.i.log.warn).toHaveBeenCalledWith(expect.stringContaining("Settings migration could not be stored"));
   });
 
   // js-controller never removes a native key: left in place, the old address brought a deleted
   // migrated device back on the next start (audit 2026-09-24, A5).
-  it("drops the previous adapter's address key in the same write that carries the device over", async () => {
-    const ctx = setup({ devices: [], ip: "192.168.1.30" });
-    ctx.i.foreignObjects.set("system.adapter.yamaha.0", { native: { ip: "192.168.1.30", IP: "192.168.1.30" } });
-    await ctx.i.onReady();
-    await flush();
-    const native = ctx.i.foreignObjects.get("system.adapter.yamaha.0")?.native as Record<string, unknown>;
-    expect(native.devices).toHaveLength(1);
-    expect("ip" in native).toBe(false);
-    expect("IP" in native).toBe(false);
-    expect("ip" in ctx.i.config).toBe(false);
-  });
-
-  it("removes a leftover address key next to a filled table, and a deleted device does not come back", async () => {
-    const ctx = setup({ devices: [{ name: "Living room", ip: "192.168.1.10" }], ip: "192.168.1.30" });
+  it("drops the previous adapter's address keys in the same write that carries the device over", async () => {
+    const ctx = setup({ devices: [], ip: "192.168.1.30", IP: "192.168.1.30" });
     ctx.i.foreignObjects.set("system.adapter.yamaha.0", {
-      native: { devices: [{ name: "Living room", ip: "192.168.1.10" }], ip: "192.168.1.30" },
+      native: { devices: [], ip: "192.168.1.30", IP: "192.168.1.30" },
     });
     await ctx.i.onReady();
     await flush();
     const native = ctx.i.foreignObjects.get("system.adapter.yamaha.0")?.native as Record<string, unknown>;
-    expect("ip" in native).toBe(false);
+    expect(native.devices).toHaveLength(1);
+    expect(native.ip).toBeNull();
+    expect(native.IP).toBeNull();
+    const next = nextStart(ctx);
+    expect("ip" in next.i.config).toBe(false);
+    await next.i.onReady();
+    await flush();
+    expect(next.calls.map(c => c.device.ip)).toEqual(["192.168.1.30"]);
+  });
+
+  it("removes a leftover address key next to a filled table, and a deleted device does not come back", async () => {
+    const row = { name: "Living room", ip: "192.168.1.10" };
+    const ctx = setup({ devices: [row], ip: "192.168.1.30" });
+    ctx.i.foreignObjects.set("system.adapter.yamaha.0", { native: { devices: [row], ip: "192.168.1.30" } });
+    await ctx.i.onReady();
+    await flush();
+    const native = ctx.i.foreignObjects.get("system.adapter.yamaha.0")?.native as Record<string, unknown>;
+    expect(native.ip).toBeNull();
+    expect(native.devices).toEqual([row]);
+    const next = nextStart(ctx);
+    await next.i.onReady();
+    await flush();
     // The table the next start reads: emptied by a delete, nothing to migrate back.
-    expect(ctx.calls.map(c => c.device.ip)).toEqual(["192.168.1.10"]);
+    expect(next.calls.map(c => c.device.ip)).toEqual(["192.168.1.10"]);
   });
 
   it("folds the removed zones toggle into the multiroom group", async () => {
     const ctx = setup({ group_zones: true, group_multiroom: false });
     ctx.i.foreignObjects.set("system.adapter.yamaha.0", {
-      native: { group_zones: true, group_multiroom: false },
+      native: { devices: ctx.i.config.devices, group_zones: true, group_multiroom: false },
     });
     await ctx.i.onReady();
     await flush();
     // Users who had zones on but multiroom off would otherwise lose every zone
     // datapoint on the update.
-    expect(ctx.i.config.group_multiroom).toBe(true);
-    expect("group_zones" in ctx.i.config).toBe(false);
     const native = ctx.i.foreignObjects.get("system.adapter.yamaha.0")?.native as Record<string, unknown>;
     expect(native.group_multiroom).toBe(true);
-    expect("group_zones" in native).toBe(false);
+    expect(native.group_zones).toBeNull();
+    const next = nextStart(ctx);
+    expect(next.i.config.group_multiroom).toBe(true);
+    expect("group_zones" in next.i.config).toBe(false);
+  });
+
+  it("puts every settings change of one start into one write", async () => {
+    const ctx = setup({ devices: [], ip: "192.168.1.30", group_zones: true, group_multiroom: false });
+    ctx.i.foreignObjects.set("system.adapter.yamaha.0", {
+      native: { devices: [], ip: "192.168.1.30", group_zones: true, group_multiroom: false, intervall: 30 },
+    });
+    await ctx.i.onReady();
+    await flush();
+    const writes = (
+      ctx.i as unknown as { extendForeignObjectAsync: ReturnType<typeof vi.fn> }
+    ).extendForeignObjectAsync.mock.calls.filter(call => call[0] === "system.adapter.yamaha.0");
+    expect(writes).toHaveLength(1);
+    expect(ctx.i.foreignObjects.get("system.adapter.yamaha.0")?.native).toMatchObject({
+      devices: [{ name: "192.168.1.30", ip: "192.168.1.30" }],
+      ip: null,
+      group_multiroom: true,
+      group_zones: null,
+      intervall: null,
+    });
   });
 
   it("leaves multiroom alone when zones were off", async () => {
@@ -4106,59 +4190,81 @@ describe("switching one device to percent while the adapter runs", () => {
 
   it("a device's own answer beats the instance switch it once inherited", async () => {
     const ctx = setup();
-    ctx.i.foreignObjects.set("system.adapter.yamaha.0", { native: { volumeAsPercent: true } });
+    ctx.i.foreignObjects.set("system.adapter.yamaha.0", {
+      native: { devices: ctx.i.config.devices, volumeAsPercent: true },
+    });
     // The user turned THIS device back to the scale its receiver shows. The instance value from
-    // 2.8.0 is still sitting in the instance object and must not undo that on every start.
+    // 2.8.0 is still sitting in the instance object and must not undo that.
     ctx.i.objects.set("Living_room", { type: "device", common: {}, native: { volumeAsPercent: false } });
     await ctx.i.onReady();
     await flush();
-    const upsert = ctx.calls[0].deps.upsertObject as (id: string, def: unknown) => Promise<void>;
+    // Every known device carries its own answer: the old key goes (one write, the start ends).
+    expect(
+      (ctx.i.foreignObjects.get("system.adapter.yamaha.0")?.native as Record<string, unknown>).volumeAsPercent,
+    ).toBeNull();
+    const next = nextStart(ctx);
+    await next.i.onReady();
+    await flush();
+    const upsert = next.calls[0].deps.upsertObject as (id: string, def: unknown) => Promise<void>;
     await upsert("Living_room.volume", dbVolume);
-    expect(ctx.i.objects.get("Living_room.volume")?.common).toMatchObject({ unit: "dB" });
-    expect((ctx.i.objects.get("Living_room")?.native as { volumeAsPercent?: boolean }).volumeAsPercent).toBe(false);
+    expect(next.i.objects.get("Living_room.volume")?.common).toMatchObject({ unit: "dB" });
+    expect((next.i.objects.get("Living_room")?.native as { volumeAsPercent?: boolean }).volumeAsPercent).toBe(false);
   });
 
   // js-controller never deletes a native key: every key an earlier release declared stayed in
-  // every installation for good. They go once, AFTER every device wrote the percent switch down —
-  // dropped first, the inheritance above would have nothing left to inherit (round 38, 2026-09-24).
-  it("the settings an earlier release declared are removed once the devices took the percent switch down", async () => {
+  // every installation for good. The old percent switch goes once every known device carries its
+  // own answer — dropped first, the inheritance would have nothing left to inherit (round 38).
+  it("the settings an earlier release declared go at once, the percent switch once every device took it down", async () => {
     const ctx = setup();
     ctx.i.foreignObjects.set("system.adapter.yamaha.0", {
       native: {
+        devices: ctx.i.config.devices,
         volumeAsPercent: true,
         intervall: 30,
         useRealtime: true,
         hasXmlDevice: false,
         webserverPort: 8080,
-        devices: [],
       },
     });
     await ctx.i.onReady();
     await flush();
-    expect((ctx.i.objects.get("Living_room")?.native as { volumeAsPercent?: boolean }).volumeAsPercent).toBe(true);
+    // The device has no object yet — nothing to write its answer to; the switch stays this time.
     const native = (ctx.i.foreignObjects.get("system.adapter.yamaha.0") as { native: Record<string, unknown> }).native;
     expect(native).toMatchObject({
-      volumeAsPercent: null,
+      volumeAsPercent: true,
       intervall: null,
       useRealtime: null,
       hasXmlDevice: null,
       webserverPort: null,
     });
-    expect(native.devices).toEqual([]);
+    expect(native.devices).toEqual(ctx.i.config.devices);
+    // The next start runs the device, which writes the inherited switch down at its header...
+    const second = nextStart(ctx);
+    await second.i.onReady();
+    await flush();
+    expect((second.i.objects.get("Living_room")?.native as { volumeAsPercent?: boolean }).volumeAsPercent).toBe(true);
+    // ...and the one after that drops the key.
+    const third = nextStart(second);
+    await third.i.onReady();
+    await flush();
+    expect(
+      (third.i.foreignObjects.get("system.adapter.yamaha.0")?.native as Record<string, unknown>).volumeAsPercent,
+    ).toBeNull();
   });
 
-  it("the old percent switch stays while a device that is not running has not taken it down yet", async () => {
+  it("an idle device takes the old percent switch down at its object, and the key goes", async () => {
     mocks.discoveredStore.devices = [{ id: "Found_one", ip: "192.168.1.99" }];
-    const ctx = setup({ discovery: "never" });
-    ctx.i.foreignObjects.set("system.adapter.yamaha.0", { native: { volumeAsPercent: true, intervall: 30 } });
+    const ctx = setup({ devices: [], discovery: "never" });
+    ctx.i.foreignObjects.set("system.adapter.yamaha.0", {
+      native: { devices: [], discovery: "never", volumeAsPercent: true, intervall: 30 },
+    });
     ctx.i.objects.set("Found_one", { type: "device", common: {}, native: {} });
     await ctx.i.onReady();
     await flush();
     const native = (ctx.i.foreignObjects.get("system.adapter.yamaha.0") as { native: Record<string, unknown> }).native;
     expect(native.intervall).toBeNull();
-    expect(native.volumeAsPercent).toBe(true);
-    // An idle device is not written to — it takes the switch down the next time it runs.
-    expect(ctx.i.objects.get("Found_one")?.native).toEqual({});
+    expect(native.volumeAsPercent).toBeNull();
+    expect(ctx.i.objects.get("Found_one")?.native).toEqual({ volumeAsPercent: true });
   });
 
   it("an upgraded instance hands its old instance-wide switch to every device, once", async () => {
@@ -4332,9 +4438,11 @@ describe("device ids since 3.0.0 — the one-time move", () => {
     const ctx = upgradedOffice();
     await ctx.i.onReady();
     await flush();
-    expect(ctx.calls.map(call => call.device.id)).toEqual([office]);
-    expect(ctx.i.objects.has("B_ro")).toBe(false);
+    // The table row changes, and the instance object write restarts the instance: this start ends
+    // after the ONE write, with everything below the old device moved and carried.
+    expect(ctx.calls).toEqual([]);
     expect(ctx.i.objects.has("B_ro.volume")).toBe(false);
+    expect(ctx.i.objects.get("B_ro")?.native).toMatchObject({ movingTo: office });
     expect(ctx.i.states.get(`${office}.volume`)).toEqual({ val: 25, ack: true });
     expect(ctx.i.objects.get(office)?.native).toMatchObject({ idScheme: 3, label: "Büro", labelRank: 2 });
     expect(ctx.i.objects.get(office)?.common).toMatchObject({
@@ -4344,6 +4452,7 @@ describe("device ids since 3.0.0 — the one-time move", () => {
     expect((ctx.i.objects.get(`${office}.volume`)?.common as { custom: unknown }).custom).toEqual({
       "influxdb.0": { enabled: true, aliasId: "yamaha.0.B_ro.volume" },
     });
+    // The room is carried BEFORE the write that restarts the instance — the device object's own entry too.
     expect(
       [...((ctx.i.foreignObjects.get("enum.rooms.office")?.common as { members: string[] }).members ?? [])].sort(),
     ).toEqual(["hm-rpc.0.X.STATE", `yamaha.0.${office}`]);
@@ -4352,7 +4461,6 @@ describe("device ids since 3.0.0 — the one-time move", () => {
     });
     // The typed row carries the new id — as its id AND its name, so a return to 2.x finds the tree.
     const row = { name: office, ip: "192.168.1.30", id: office };
-    expect(ctx.i.config.devices).toEqual([row]);
     expect((ctx.i.foreignObjects.get("system.adapter.yamaha.0")?.native as { devices: unknown }).devices).toEqual([
       row,
     ]);
@@ -4360,6 +4468,41 @@ describe("device ids since 3.0.0 — the one-time move", () => {
       `B_ro: device id is now ${office} — moved 1 datapoint(s) with 1 room/function entry, 1 alias(es); 1 recording(s) keep their history`,
     );
     expect(ctx.i.restart).not.toHaveBeenCalled();
+
+    // The restart: the journal finds the copy whole, the old device object goes, the device runs.
+    const next = nextStart(ctx);
+    await next.i.onReady();
+    await flush();
+    expect(next.calls.map(call => call.device.id)).toEqual([office]);
+    expect(next.i.objects.has("B_ro")).toBe(false);
+    expect(next.i.config.devices).toEqual([row]);
+    expect(next.i.log.info).not.toHaveBeenCalledWith(expect.stringContaining("device id is now"));
+    expect(
+      [...((next.i.foreignObjects.get("enum.rooms.office")?.common as { members: string[] }).members ?? [])].sort(),
+    ).toEqual(["hm-rpc.0.X.STATE", `yamaha.0.${office}`]);
+  });
+
+  it("a start cut off right after the move's table write loses no room", async () => {
+    // The write restarts the instance: whatever this start would have done after it never happens. Every
+    // assignment must already stand under the new id when the table is written (audit 2026-09-29, A23).
+    const ctx = upgradedOffice();
+    ctx.i.foreignObjects.set("enum.functions.audio", {
+      type: "enum",
+      common: { name: "Audio", members: ["yamaha.0.B_ro.volume"] },
+      native: {},
+    });
+    const write = (ctx.i as unknown as { extendForeignObjectAsync: ReturnType<typeof vi.fn> }).extendForeignObjectAsync;
+    let membersAtWrite: string[] = [];
+    const original = write.getMockImplementation() as (id: string, patch: Record<string, unknown>) => Promise<void>;
+    write.mockImplementation((id: string, patch: Record<string, unknown>) => {
+      if (id === "system.adapter.yamaha.0") {
+        membersAtWrite = (ctx.i.foreignObjects.get("enum.functions.audio")?.common as { members: string[] }).members;
+      }
+      return original(id, patch);
+    });
+    await ctx.i.onReady();
+    await flush();
+    expect(membersAtWrite).toEqual([`yamaha.0.${office}.volume`]);
   });
 
   it("keeps the room when the delete writes the enums back from a stale cache", async () => {
@@ -4369,14 +4512,14 @@ describe("device ids since 3.0.0 — the one-time move", () => {
     const stale = JSON.parse(JSON.stringify(ctx.i.foreignObjects.get("enum.rooms.office"))) as {
       common: { members: string[] };
     };
-    const del = (ctx.i as unknown as { delObjectAsync: ReturnType<typeof vi.fn> }).delObjectAsync;
-    const original = del.getMockImplementation() as (id: string, options?: { recursive?: boolean }) => Promise<void>;
-    del.mockImplementation((id: string, options?: { recursive?: boolean }) => {
-      if (id === "B_ro") {
+    const del = (ctx.i as unknown as { delForeignObjectAsync: ReturnType<typeof vi.fn> }).delForeignObjectAsync;
+    const original = del.getMockImplementation() as (id: string) => Promise<void>;
+    del.mockImplementation((id: string) => {
+      if (id === "yamaha.0.B_ro.volume") {
         stale.common.members = stale.common.members.filter(member => !member.startsWith("yamaha.0.B_ro"));
         ctx.i.foreignObjects.set("enum.rooms.office", JSON.parse(JSON.stringify(stale)) as Record<string, unknown>);
       }
-      return original(id, options);
+      return original(id);
     });
     await ctx.i.onReady();
     await flush();
@@ -4450,10 +4593,31 @@ describe("device ids since 3.0.0 — the one-time move", () => {
     ctx.i.objects.set(`${office}.volume`, { type: "state", common: { name: "Volume" }, native: {} });
     await ctx.i.onReady();
     await flush();
-    expect(ctx.calls.map(call => call.device.id)).toEqual([office]);
-    expect(ctx.i.objects.has("B_ro")).toBe(false);
-    expect(ctx.i.objects.get(office)?.native).toMatchObject({ idScheme: 3 });
-    expect(ctx.i.objects.get(office)?.native).not.toHaveProperty("movingTo");
+    const next = nextStart(ctx);
+    await next.i.onReady();
+    await flush();
+    expect(next.calls.map(call => call.device.id)).toEqual([office]);
+    expect(next.i.objects.has("B_ro")).toBe(false);
+    expect(next.i.objects.get(office)?.native).toMatchObject({ idScheme: 3 });
+    expect(next.i.objects.get(office)?.native).not.toHaveProperty("movingTo");
+  });
+
+  it("two journals naming one target: the second is counted on, never copied onto the first", async () => {
+    // Written before 3.0.2 by two devices of one model without a serial, decided in the same run (A24).
+    mocks.discoveredStore.devices = [
+      { id: "K_che", ip: "192.168.1.50" },
+      { id: "Bad", ip: "192.168.1.51" },
+    ];
+    const ctx = setup({ devices: [] });
+    ctx.i.objects.set("Bad", { type: "device", common: { name: "Bad" }, native: { movingTo: "rx-v473" } });
+    ctx.i.objects.set("Bad.power", { type: "state", common: { name: "Power", type: "boolean" }, native: {} });
+    ctx.i.objects.set("K_che", { type: "device", common: { name: "Küche" }, native: { movingTo: "rx-v473" } });
+    ctx.i.objects.set("K_che.power", { type: "state", common: { name: "Power", type: "boolean" }, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    expect(mocks.discoveredStore.devices.map(record => record.id).sort()).toEqual(["rx-v473", "rx-v473-2"]);
+    expect(ctx.i.objects.has("rx-v473.power")).toBe(true);
+    expect(ctx.i.objects.has("rx-v473-2.power")).toBe(true);
   });
 
   it("a device that told its model only now: journal at its first contact, moved at the next start", async () => {
@@ -4540,8 +4704,29 @@ describe("device ids since 3.0.0 — the one-time move", () => {
     });
     await ctx.i.onReady();
     await flush();
-    expect(ctx.i.config.devices).toEqual([{ name: "192.168.1.50", ip: "192.168.1.50", id: "rx-v475-2b3c" }]);
-    expect(ctx.i.deviceRecords.get("rx-v475-2b3c")?.source).toBe("migrated");
+    const next = nextStart(ctx);
+    expect(next.i.config.devices).toEqual([{ name: "192.168.1.50", ip: "192.168.1.50", id: "rx-v475-2b3c" }]);
+    await next.i.onReady();
+    await flush();
+    expect(next.i.deviceRecords.get("rx-v475-2b3c")?.source).toBe("migrated");
+  });
+
+  it("two devices of one model without a serial, deciding in parallel, get two ids", async () => {
+    const ctx = setup({
+      devices: [
+        { name: "Küche", ip: "192.168.1.50" },
+        { name: "Bad", ip: "192.168.1.51" },
+      ],
+    });
+    ctx.i.objects.set("K_che", { type: "device", common: { name: "Küche" }, native: {} });
+    ctx.i.objects.set("Bad", { type: "device", common: { name: "Bad" }, native: {} });
+    ctx.i.rememberedModelOf = () => "RX-V473";
+    await ctx.i.onReady();
+    await flush();
+    const targets = ["K_che", "Bad"].map(
+      id => (ctx.i.objects.get(id)?.native as { movingTo?: string } | undefined)?.movingTo,
+    );
+    expect(targets.sort()).toEqual(["rx-v473", "rx-v473-2"]);
   });
 
   it("a first contact whose short id another device holds takes the whole serial", async () => {
