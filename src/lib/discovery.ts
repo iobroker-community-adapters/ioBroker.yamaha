@@ -58,7 +58,8 @@ export interface DiscoveryDeps {
 
 /**
  * Recognise a Yamaha device from its UPnP description XML and keep what it says about itself:
- * the friendly name (the object id is derived from it), the model, the serial and MAC (its
+ * the friendly name (the display name; the object id comes from model and serial), the model, the
+ * serial and MAC (its
  * identity for life), and which control services it speaks. Everything but the name is
  * optional — an older description may carry none of it.
  *

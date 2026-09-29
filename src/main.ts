@@ -106,8 +106,8 @@ const SSDP_SEARCH_INTERVAL_MS = 1000;
  * Instance settings an earlier release declared and this one no longer reads. js-controller adds a
  * missing key on an update but never removes one, so each stayed in every installation for good.
  * Where the code still takes a value over, that happens BEFORE the drop: `ip` becomes the device
- * table row (`migrateLegacyDevice`), `group_zones` folds into `group_multiroom`
- * (`migrateGroupZones`), and every device writes the 2.8.0 `volumeAsPercent` switch down as its own
+ * table row (`carryLegacyDevice`), `group_zones` folds into `group_multiroom`
+ * (`foldGroupZones`), and every device writes the 2.8.0 `volumeAsPercent` switch down as its own
  * answer (`ensureDeviceHeader`) — which is why the drop runs after the devices were set up.
  */
 const NATIVE_KEY_MIGRATIONS: NativeKeyMigration[] = [
@@ -196,7 +196,6 @@ interface PendingDevicePatch {
  */
 export class Yamaha extends utils.Adapter {
   private readonly supervisors: DeviceSupervisor[] = [];
-  /** deviceId → its supervisor, so a state change goes to ONE device, not to all of them. */
   /** Every collection kept per device — deleting a device forgets them in one call (A28). */
   private readonly perDevice = new PerDeviceCaches();
   /**
@@ -222,6 +221,7 @@ export class Yamaha extends utils.Adapter {
    */
   private legacyVolumePercent = false;
 
+  /** deviceId → its supervisor, so a state change goes to ONE device, not to all of them. */
   private readonly supervisorById = this.perDevice.map<DeviceSupervisor>();
   private readonly deviceConnected = this.perDevice.map<boolean>();
   /** deviceId → the record it is currently running with, so an address change is visible. */
@@ -2107,8 +2107,8 @@ export class Yamaha extends utils.Adapter {
    *
    * An instance upgraded from the previous adapter carries the receiver's ip as its
    * device name — that adapter knew nothing but an ip, so the migration had nothing
-   * else to call it. The object id stays that ip for good (history and visualisation
-   * bindings hang off it), but the displayed name does not have to.
+   * else to call it. The object id is decided once (model and serial, see `device-id.ts`) and
+   * stored; the displayed name follows what the device reports.
    *
    * A name the user typed is never touched, and the model never replaces a name the
    * device reported for itself — see {@link nextDeviceLabel}.

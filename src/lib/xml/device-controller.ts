@@ -165,13 +165,13 @@ export class XmlDeviceController implements ConnectionHandle {
   private dialect: XmlDialect | undefined;
   /** Per zone: the Basic_Status fields this device is known to deliver (persisted union). */
   private readonly zoneFields = new Map<string, Set<string>>();
+  /** Per zone element, the command form it uses where that differs from the main zone's (D6). */
+  private readonly zoneForms = new Map<string, XmlZoneForm>();
   /**
    * The zone commands desc.xml declares (zone elements): the zone-wide cursor pad and menu keys,
    * the transport keys. Read from the device description, so a receiver that declares none
    * (the 2012 entry class) offers none.
    */
-  /** Per zone element, the command form it uses where that differs from the main zone's (D6). */
-  private readonly zoneForms = new Map<string, XmlZoneForm>();
   private zoneCommands: { cursor: Set<string>; menu: Set<string>; playback: Set<string> } = {
     cursor: new Set(),
     menu: new Set(),
@@ -342,22 +342,6 @@ export class XmlDeviceController implements ConnectionHandle {
   }
 
   /**
-   * Read one element's list once per device: the answer is a property of the MODEL
-   * (input lists, scene declarations), so reconnects reuse it via the probe memory.
-   *
-   * Only a DEFINITE answer is remembered: a body, or the model's own "no such node"
-   * (bodyless HTTP 400 / return code 2, both captured on the RX-V6A) as "declares none".
-   * A transient failure — timeout, connection error, HTTP 5xx, or a state-dependent
-   * refusal (return code 3/4, "not now") — is NOT remembered: before this, one busy
-   * moment during the first contact recorded "no scenes" for that device for good, until
-   * the model changed. Now it is simply asked again on the next connect.
-   *
-   * @param key the probe-memory key
-   * @param element the XML element to ask
-   * @param inner the inner GET request
-   * @returns the raw response body, or "" when the device (definitely or for now) has none
-   */
-  /**
    * The list the device declares for a state, if any: the zone's `Input_Sel_Item` inputs, the
    * description's programs (main zone — the classic generation runs one program), its sleep
    * steps (every zone, same words) and its Adaptive DRC values.
@@ -424,14 +408,22 @@ export class XmlDeviceController implements ConnectionHandle {
   }
 
   /**
-   * One XML probe, remembered per device.
+   * Read one element's list once per device: the answer is a property of the MODEL
+   * (input lists, scene declarations), so reconnects reuse it via the probe memory.
    *
-   * @param key the memory key
-   * @param element the element asked
-   * @param inner the request
+   * Only a DEFINITE answer is remembered: a body, or the model's own "no such node"
+   * (bodyless HTTP 400 / return code 2, both captured on the RX-V6A) as "declares none".
+   * A transient failure — timeout, connection error, HTTP 5xx, or a state-dependent
+   * refusal (return code 3/4, "not now") — is NOT remembered: before this, one busy
+   * moment during the first contact recorded "no scenes" for that device for good, until
+   * the model changed. Now it is simply asked again on the next connect.
+   *
+   * @param key the probe-memory key
+   * @param element the XML element to ask
+   * @param inner the inner GET request
    * @param fresh ask again on every connection (a name the user can change — D8), the memory only
    *   the fallback
-   * @returns the body, or "" when the model has no such node or nothing answered
+   * @returns the raw response body, or "" when the device (definitely or for now) has none
    */
   private async probeXml(key: string, element: string, inner: string, fresh = false): Promise<string> {
     const probe = (): Promise<string> =>

@@ -155,13 +155,11 @@ export function parseXmlListInfo(xml: string): XmlListInfo {
 }
 
 /**
- * The pad in XML wire words is the shared `RETURN_CURSOR_WIRE` / `MENU_WIRE` (browse/types.ts): used
- * inside `List_Control` (the menu-bound pad of the 2012 entry class) and, where desc.xml declares
- * `Cursor_Control,Cursor`/`Menu_Control` for the zone (RX-V479/V579/V675/V775, TSR-5810, RX-A2060,
- * RX-S601D, HTR-4069 — 7 of the 10 captured descriptors), inside the zone-wide `Cursor_Control`.
+ * Which zone-wide pad commands the receiver's desc.xml declares for the main zone. The words are the
+ * shared `RETURN_CURSOR_WIRE` / `MENU_WIRE` — inside `List_Control` (the menu-bound pad of the 2012
+ * entry class) and, where desc.xml declares `Cursor_Control,Cursor`/`Menu_Control` (7 of the 10
+ * captured descriptors), inside the zone-wide `Cursor_Control`.
  */
-
-/** Which zone-wide pad commands the receiver's desc.xml declares for the main zone. */
 export interface XmlZoneWidePad {
   /** `Main_Zone,Cursor_Control,Cursor` declared. */
   cursor: boolean;

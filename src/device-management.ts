@@ -564,7 +564,7 @@ export class YamahaDeviceManagement extends DeviceManagement {
    *
    * Two rules make this safe, and both were learned from what the adapter does elsewhere:
    *
-   * 1. **The object id never changes.** It is derived from the table row's name, and a changed
+   * 1. **The object id never changes.** It is stored in the row (since 3.0.0), and a changed
    *    id would leave the whole object tree behind for `cleanupStaleObjects` to delete —
    *    history and VIS bindings with it. The row therefore carries the id as its name, and what
    *    the user typed becomes the DISPLAY name at the device object, where `nextDeviceLabel`

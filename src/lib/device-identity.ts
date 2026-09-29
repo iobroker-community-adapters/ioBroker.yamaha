@@ -4,9 +4,9 @@
  * Three sources agree on it (measured on the RX-V6A, 2026-09-01 capture): the UPnP
  * description's `<serialNumber>` and the MAC in its `<UDN>`, MusicCast `getDeviceInfo`
  * `system_id`/`device_id`, and the XML transport's `System_ID`. Only YNCA has no serial
- * function. The object-tree id stays what it always was (derived from the name the device
- * advertised when it was first found) — this identity is the match key NEXT to it, never a
- * replacement: an id that moves takes the whole tree with it.
+ * function. The object-tree id is decided once — model and the last four characters of the serial
+ * (`device-id.ts`) — and stored, never derived again; this identity is the match key NEXT to it:
+ * an id that moves takes the whole tree with it.
  */
 export interface DeviceIdentity {
   /** The serial number (hex, `0A1B2C3D`). */

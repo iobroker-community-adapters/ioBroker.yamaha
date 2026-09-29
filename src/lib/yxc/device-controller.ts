@@ -1823,13 +1823,6 @@ export class YxcDeviceController implements ConnectionHandle {
   }
 
   /**
-   * Fetch a zone's status and write its amp states with ack.
-   *
-   * @param zone the zone to refresh
-   * @returns true if the device answered (with its status, or refusing it — it is there), false if
-   *   nothing answered
-   */
-  /**
    * Run a refresh at most once at a time per key, and once more after it when asked meanwhile — never
    * more. A knob turned twenty detents sends twenty events (YXC Basic Rev 1.10 §11.3); each was one
    * `getStatus` in the gate's queue, nineteen of them answering a state already gone (audit 2026-09-29,
@@ -1862,6 +1855,13 @@ export class YxcDeviceController implements ConnectionHandle {
     void loop();
   }
 
+  /**
+   * Fetch a zone's status and write its amp states with ack.
+   *
+   * @param zone the zone to refresh
+   * @returns true if the device answered (with its status, or refusing it — it is there), false if
+   *   nothing answered
+   */
   private async refreshZone(zone: string): Promise<boolean> {
     const answer = await this.fetchZoneStatus(zone);
     if (answer.kind !== "ok") {

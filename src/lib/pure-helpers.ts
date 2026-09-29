@@ -339,12 +339,6 @@ export function staleObjects(
 }
 
 /**
- * Relative state ids an earlier version created under a different path and that this
- * version has renamed or moved. On start-up the old object is deleted so it does not
- * linger orphaned beside the new one — {@link staleObjects} only removes whole
- * non-configured device trees, not renamed states inside a device that is kept.
- */
-/**
  * The per-source playback-block states of the pre-2.0.0 tree — the same 19 states
  * used to sit under every player source folder, almost all permanently empty. In
  * 2.0.0 ONE flat block per zone replaces them; these copies are removed on the
@@ -393,6 +387,12 @@ const V2_SLIMMED_SOURCES = [
   "spotify",
 ];
 
+/**
+ * Relative state ids an earlier version created under a different path and that this
+ * version has renamed or moved. On start-up the old object is deleted so it does not
+ * linger orphaned beside the new one — {@link staleObjects} only removes whole
+ * non-configured device trees, not renamed states inside a device that is kept.
+ */
 export const RENAMED_STATE_IDS = [
   // v2.8.0: the volume datapoint now carries the scale the receiver itself displays, so the two
   // derived states are gone — `actualVolume` was an exact duplicate of `volume` on every device
