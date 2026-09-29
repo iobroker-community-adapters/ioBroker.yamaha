@@ -1,4 +1,4 @@
-import { identityFrom, type DeviceIdentity } from "../device-identity";
+import { identityFrom, mergeIdentity, type DeviceIdentity } from "../device-identity";
 import { DISCOVERY_SCHEMA } from "./discovery-schema";
 import { memorySchemaOf, ProbeMemory, SCHEMA_KEY } from "./probe-memory";
 import {
@@ -231,6 +231,59 @@ export interface DeviceProfileDeps {
 }
 
 /**
+ * The model a device remembers — the one resolver (audit 2026-09-29, A29): the transports' identities
+ * in the profile (the same name on all three, any half will do; an empty half does not stop the
+ * search), else `native.model`, which sits beside the profile and outlives a discovery-schema bump.
+ * Two resolvers stood side by side, one stopping at an empty MusicCast model the other skipped.
+ *
+ * @param memory the profile's probe memory
+ * @param nativeModel the device object's `native.model` (untrusted)
+ * @returns the model name, or undefined
+ */
+export function modelFrom(memory: Record<string, unknown>, nativeModel: unknown): string | undefined {
+  const identity = profileIdentityOf(memory);
+  const stored = typeof nativeModel === "string" && nativeModel.length > 0 ? nativeModel : undefined;
+  return identity.ynca?.model || identity.yxc?.model || identity.xml?.model || stored;
+}
+
+/**
+ * The identity the transports left in a profile's memory — XML `System_ID` and MusicCast `system_id`
+ * are the same serial (measured on the RX-V6A), `device_id` is the MAC. Each source is judged on its
+ * own: a scrubbed XML System_ID ("00000000") used to win the `||` and hide MusicCast's valid serial
+ * (audit 2026-09-24, A10).
+ *
+ * @param memory the profile's probe memory
+ * @returns the identity, or undefined
+ */
+function identityOfMemory(memory: Record<string, unknown>): DeviceIdentity | undefined {
+  const identity = profileIdentityOf(memory);
+  const serial = identityFrom({ serial: identity.xml?.systemId })?.serial ?? identity.yxc?.serial;
+  return identityFrom({ serial, mac: identity.yxc?.mac });
+}
+
+/**
+ * Everything a device object says about the device's identity: its own `native.identity`, the
+ * profile's (only a profile of the current discovery schema), and — where there is one — a record's.
+ * One function for the move decision and the device card (audit 2026-09-29, A30); both built a
+ * throwaway profile store for it.
+ *
+ * @param native the device object's native part (untrusted)
+ * @param record an identity known besides (the discovery record)
+ * @returns the merged identity, or undefined
+ */
+export function identityOfDeviceObject(
+  native: Record<string, unknown> | undefined,
+  record?: DeviceIdentity,
+): DeviceIdentity | undefined {
+  const stored =
+    typeof native?.identity === "object" && native.identity !== null ? identityFrom(native.identity) : undefined;
+  const loaded = loadCapabilityProfile(native);
+  const kept = loaded.memory !== undefined && memorySchemaOf(loaded.memory) === DISCOVERY_SCHEMA;
+  const profile = kept ? identityOfMemory(withoutSchema(loaded.memory!)) : undefined;
+  return mergeIdentity(mergeIdentity(record, stored), profile);
+}
+
+/**
  * One device's capability profile, held by the adapter across reconnect attempts (the
  * controllers are rebuilt per attempt): the {@link ProbeMemory} and the YNCA subunit cache
  * persist through it into ONE JSON string, together with the never-filled purge marker and the
@@ -249,6 +302,8 @@ export class DeviceProfileStore {
   private pending: string[];
   private readonly learnedAt: string;
   private legacy: boolean;
+  /** The device object's `native.model` — the model beside the profile (see {@link modelFrom}). */
+  private nativeModel: unknown;
 
   /**
    * @param deviceId the id-safe device id (for the log line)
@@ -261,6 +316,7 @@ export class DeviceProfileStore {
     private readonly deps: DeviceProfileDeps,
   ) {
     const loaded = loadCapabilityProfile(native);
+    this.nativeModel = native?.model;
     const kept = loaded.memory !== undefined && memorySchemaOf(loaded.memory) === DISCOVERY_SCHEMA;
     if (loaded.storedSchema !== undefined && !kept) {
       deps.log?.(
@@ -322,8 +378,21 @@ export class DeviceProfileStore {
    * @returns the model name, or undefined while no transport ever answered
    */
   public model(): string | undefined {
-    const identity = profileIdentityOf(this.memory);
-    return identity.ynca?.model || identity.yxc?.model || identity.xml?.model || undefined;
+    return modelFrom(this.memory, this.nativeModel);
+  }
+
+  /**
+   * Take the model the device just reported (kept as `native.model` beside the profile).
+   *
+   * @param model the reported model name
+   * @returns true when it differs from the one remembered
+   */
+  public noteModel(model: string): boolean {
+    if (this.nativeModel === model) {
+      return false;
+    }
+    this.nativeModel = model;
+    return true;
   }
 
   /**
@@ -334,11 +403,7 @@ export class DeviceProfileStore {
    * @returns the identity, or undefined
    */
   public identity(): DeviceIdentity | undefined {
-    const identity = profileIdentityOf(this.memory);
-    // Each source judged on its own: a scrubbed XML System_ID ("00000000") used to win the `||`
-    // and hide MusicCast's valid serial (audit 2026-09-24, A10).
-    const serial = identityFrom({ serial: identity.xml?.systemId })?.serial ?? identity.yxc?.serial;
-    return identityFrom({ serial, mac: identity.yxc?.mac });
+    return identityOfMemory(this.memory);
   }
 
   /** Write the profile now (through the adapter's coalescing persist). */

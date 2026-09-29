@@ -58,7 +58,12 @@ import { DeviceSupervisor, type ConnectionHandle } from "./lib/lifecycle/device-
 import { ReconnectStrategy } from "./lib/lifecycle/reconnect-strategy";
 import type { YncaSubunitCache } from "./lib/ynca/subunit-cache";
 import type { ProbeMemory } from "./lib/lifecycle/probe-memory";
-import { DeviceProfileStore, loadCapabilityProfile, profileIdentityOf } from "./lib/lifecycle/capability-profile";
+import {
+  DeviceProfileStore,
+  identityOfDeviceObject,
+  loadCapabilityProfile,
+  modelFrom,
+} from "./lib/lifecycle/capability-profile";
 
 /** Supervisor reconnect backoff bounds (exponential: 1s, 2s … capped at 60s). */
 const RECONNECT_BASE_MS = 1000;
@@ -81,11 +86,8 @@ const CURRENT_PICTOGRAMS: ReadonlySet<string> = new Set(Object.values(DEVICE_TYP
  */
 function rememberedModel(native: Record<string, unknown> | undefined): string | undefined {
   try {
-    const identity = profileIdentityOf(loadCapabilityProfile(native).memory ?? {});
-    const fromProfile = identity.ynca?.model ?? identity.yxc?.model ?? identity.xml?.model;
-    // `native.model` sits next to the identity, outside the capability profile: a discovery-schema
-    // bump empties the profile, the model stays (audit 2026-09-24, A22).
-    return fromProfile ?? (typeof native?.model === "string" && native.model.length > 0 ? native.model : undefined);
+    // The one resolver (A29); `native.model` outlives a discovery-schema bump (A22).
+    return modelFrom(loadCapabilityProfile(native).memory ?? {}, native?.model);
   } catch {
     return undefined;
   }
@@ -1973,10 +1975,6 @@ export class Yamaha extends utils.Adapter {
       if (native?.idScheme === ID_SCHEME) {
         this.idDecided.add(deviceId);
       }
-      const model = rememberedModel(existing?.native);
-      if (model) {
-        this.storedModels.set(deviceId, model);
-      }
       const storedIdentity = identityFrom(
         typeof native?.identity === "object" && native.identity !== null ? native.identity : {},
       );
@@ -2099,11 +2097,6 @@ export class Yamaha extends utils.Adapter {
    * adapter version with new pictograms must reach every existing device once.
    */
   private readonly lastModel = this.perDevice.map<string>();
-  /**
-   * The model each device object remembers from an earlier run (`native.model`, or its profile) —
-   * what `orphanOfModel` needs for a device that is off and whose profile a schema bump emptied.
-   */
-  private readonly storedModels = this.perDevice.map<string>();
 
   /** The label this adapter wrote per device, with the rank of the source behind it. */
   private readonly deviceLabels = this.perDevice.map<{ name: string; rank: LabelRank }>();
@@ -2487,14 +2480,7 @@ export class Yamaha extends utils.Adapter {
     native: Record<string, unknown>,
     record: DeviceRecord | undefined,
   ): DeviceIdentity | undefined {
-    const stored =
-      typeof native.identity === "object" && native.identity !== null ? identityFrom(native.identity) : undefined;
-    const profile = new DeviceProfileStore(deviceId, native, {
-      adapterVersion: this.version ?? "",
-      now: () => new Date().toISOString(),
-      persist: () => undefined,
-    }).identity();
-    return mergeIdentity(mergeIdentity(record?.identity, stored), profile);
+    return identityOfDeviceObject(native, record?.identity);
   }
 
   /**
@@ -2650,8 +2636,7 @@ export class Yamaha extends utils.Adapter {
             const reporting = id.slice(0, id.indexOf("."));
             if (this.lastModel.get(reporting) !== value) {
               this.lastModel.set(reporting, value);
-              if (this.storedModels.get(reporting) !== value) {
-                this.storedModels.set(reporting, value);
+              if (this.profiles.get(reporting)?.noteModel(value) !== false) {
                 this.persistDeviceNative(reporting, { model: value });
               }
               this.updateDeviceIcon(reporting, value);
@@ -2890,7 +2875,7 @@ export class Yamaha extends utils.Adapter {
    * @returns the model name, or undefined
    */
   private rememberedModelOf(deviceId: string): string | undefined {
-    return this.profiles.get(deviceId)?.model() ?? this.storedModels.get(deviceId);
+    return this.profiles.get(deviceId)?.model();
   }
 
   /**

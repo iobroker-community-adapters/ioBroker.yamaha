@@ -1,7 +1,9 @@
 import {
   DeviceProfileStore,
+  identityOfDeviceObject,
   LEGACY_PROFILE_KEYS,
   loadCapabilityProfile,
+  modelFrom,
   PROFILE_KEY,
   profileIdentityOf,
   serializeCapabilityProfile,
@@ -372,5 +374,44 @@ describe("DeviceProfileStore", () => {
     expect(profileOf(d.patches[0]).memory).toEqual({});
     expect(profileOf(d.patches[0]).purgeVersion).toBe("2.5.2");
     expect(d.patches[0]).toMatchObject({ probeCache: null, yncaAvail: null, purgeVersion: null });
+  });
+});
+
+describe("one model resolver, one identity function (audit 2026-09-29, A29/A30)", () => {
+  // A MusicCast device whose getDeviceInfo carried no model_name leaves "|<version>": an empty half
+  // must not stop the search while XML knows the model — one resolver stopped there, the other not.
+  test("an empty MusicCast model does not hide the XML one, and native.model is the last resort", () => {
+    expect(modelFrom({ yxcIdentity: "|1.60", xmlIdentity: "RX-V6A|0A1B|1.0" }, undefined)).toBe("RX-V6A");
+    expect(modelFrom({}, "RX-V473")).toBe("RX-V473");
+    expect(modelFrom({}, "")).toBeUndefined();
+    expect(modelFrom({}, 42)).toBeUndefined();
+  });
+
+  test("the store resolves the same way and takes a reported model", () => {
+    const store = new DeviceProfileStore(
+      "living",
+      { model: "RX-V473" },
+      { adapterVersion: "3.0.1", now: () => "2026-09-29T12:00:00.000Z", persist: () => undefined },
+    );
+    expect(store.model()).toBe("RX-V473");
+    expect(store.noteModel("RX-V473")).toBe(false);
+    expect(store.noteModel("RX-V475")).toBe(true);
+    expect(store.model()).toBe("RX-V475");
+  });
+
+  test("a device object's identity: its own, the profile's of the current schema, and a record's", () => {
+    const profile = serializeCapabilityProfile(
+      {
+        memory: { __schema: DISCOVERY_SCHEMA, yxcDeviceIds: { serial: "0B587C1D", mac: "00A0DE112233" } },
+        pendingPurge: [],
+      },
+      { adapterVersion: "3.0.1", learnedAt: "2026-09-29T10:00:00.000Z" },
+    );
+    expect(identityOfDeviceObject({ [PROFILE_KEY]: profile })).toEqual({ serial: "0B587C1D", mac: "00A0DE112233" });
+    expect(identityOfDeviceObject({ identity: { serial: "ABCD1234" } }, { mac: "00A0DE445566" })).toEqual({
+      serial: "ABCD1234",
+      mac: "00A0DE445566",
+    });
+    expect(identityOfDeviceObject(undefined)).toBeUndefined();
   });
 });

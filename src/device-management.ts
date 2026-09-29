@@ -23,9 +23,9 @@ import type { DeviceRecord } from "./lib/types";
 import { errorMessage } from "./lib/util";
 import { LABEL_RANK, sanitizeId, unionDevices } from "./lib/pure-helpers";
 import { deviceIdFor } from "./lib/device-id";
-import { identityFrom, mergeIdentity, sameDevice } from "./lib/device-identity";
+import { sameDevice } from "./lib/device-identity";
 import { identifyDevice } from "./lib/identify-device";
-import { DeviceProfileStore } from "./lib/lifecycle/capability-profile";
+import { identityOfDeviceObject } from "./lib/lifecycle/capability-profile";
 import {
   TRANSPORTS,
   buildDeviceForm,
@@ -345,14 +345,7 @@ export class YamahaDeviceManagement extends DeviceManagement {
   protected async getDeviceDetails(id: string): Promise<DeviceDetails<string>> {
     const node = await this.adapter.getForeignObjectAsync(`${this.adapter.namespace}.${id}`);
     const native = (node?.native ?? {}) as Record<string, unknown>;
-    const stored =
-      typeof native.identity === "object" && native.identity !== null ? identityFrom(native.identity) : undefined;
-    const profile = new DeviceProfileStore(id, native, {
-      adapterVersion: "",
-      now: () => "",
-      persist: () => undefined,
-    }).identity();
-    const identity = mergeIdentity(stored, profile);
+    const identity = identityOfDeviceObject(native);
     const line = (key: "dmDetailsId" | "dmDetailsMac" | "dmDetailsSerial", value: string | undefined): unknown => ({
       type: "staticText",
       text: tName(key, value ?? "–"),
