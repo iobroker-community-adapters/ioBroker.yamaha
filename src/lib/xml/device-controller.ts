@@ -31,14 +31,8 @@ import type { ProbeMemory } from "../lifecycle/probe-memory";
 import type { CommandGate } from "../lifecycle/command-gate";
 import type { BrowseEngine } from "../browse/browse-engine";
 import { createBrowseSurface } from "../browse/surface";
-import {
-  provesMenu,
-  XML_BROWSE_SOURCES,
-  XML_CURSOR_WIRE,
-  XML_MENU_WIRE,
-  XmlBrowseDriver,
-} from "../browse/xml-browse-driver";
-import { wireFor } from "../browse/types";
+import { provesMenu, XML_BROWSE_SOURCES, XmlBrowseDriver } from "../browse/xml-browse-driver";
+import { MENU_WIRE, RETURN_CURSOR_WIRE, wireFor } from "../browse/types";
 import { sceneListSurface, sceneNumber } from "../catalog/scene-titles";
 import { splitZone } from "../catalog/zones";
 import { XML_ZONES, type XmlZone } from "./zones";
@@ -1512,8 +1506,8 @@ export class XmlDeviceController implements ConnectionHandle {
       }
       await this.ensureChannels(`${zone.prefix}remote.cursor`);
       const defs = remoteObjectDefs(
-        cursor ? Object.keys(XML_CURSOR_WIRE) : undefined,
-        menu ? Object.keys(XML_MENU_WIRE) : undefined,
+        cursor ? Object.keys(RETURN_CURSOR_WIRE) : undefined,
+        menu ? Object.keys(MENU_WIRE) : undefined,
         zone.prefix,
       );
       for (const def of defs.filter(object => object.type === "state")) {
@@ -1679,7 +1673,7 @@ export class XmlDeviceController implements ConnectionHandle {
     let inner: string | undefined;
     if (command === "remote.cursor" || command === "remote.menu") {
       const word = typeof value === "string" ? value : "";
-      const wire = command === "remote.cursor" ? wireFor(XML_CURSOR_WIRE, word) : wireFor(XML_MENU_WIRE, word);
+      const wire = command === "remote.cursor" ? wireFor(RETURN_CURSOR_WIRE, word) : wireFor(MENU_WIRE, word);
       if (wire === undefined) {
         this.deps.log.debug(`${this.deviceId}: ${stateId} "${word}" is no key this receiver declares — write dropped`);
         return true;

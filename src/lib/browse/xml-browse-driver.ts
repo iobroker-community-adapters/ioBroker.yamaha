@@ -1,11 +1,10 @@
 import {
+  MENU_WIRE,
+  RETURN_CURSOR_WIRE,
   ROW_KIND_BY_ATTRIBUTE,
   wireFor,
   type BrowseDriver,
   type BrowseRow,
-  type CursorValue,
-  type MenuValue,
-  type WireTable,
 } from "./types";
 import type { BrowseEngine } from "./browse-engine";
 import type { ControllerLog } from "../controller";
@@ -156,33 +155,11 @@ export function parseXmlListInfo(xml: string): XmlListInfo {
 }
 
 /**
- * The pad in XML wire words. Same seven keys as YNCA's main zone, two of them spelled
- * differently (`Return`, `Return to Home`). Used inside `List_Control` (the menu-bound pad of
- * the 2012 entry class) and, where desc.xml declares `Cursor_Control,Cursor` for the zone
- * (RX-V479/V579/V675/V775, TSR-5810, RX-A2060, RX-S601D, HTR-4069 — 7 of the 10 captured
- * descriptors), inside the zone-wide `Cursor_Control`.
+ * The pad in XML wire words is the shared `RETURN_CURSOR_WIRE` / `MENU_WIRE` (browse/types.ts): used
+ * inside `List_Control` (the menu-bound pad of the 2012 entry class) and, where desc.xml declares
+ * `Cursor_Control,Cursor`/`Menu_Control` for the zone (RX-V479/V579/V675/V775, TSR-5810, RX-A2060,
+ * RX-S601D, HTR-4069 — 7 of the 10 captured descriptors), inside the zone-wide `Cursor_Control`.
  */
-export const XML_CURSOR_WIRE: WireTable<CursorValue> = {
-  up: "Up",
-  down: "Down",
-  left: "Left",
-  right: "Right",
-  select: "Sel",
-  return: "Return",
-  home: "Return to Home",
-};
-
-/**
- * The menu keys of the zone-wide `Cursor_Control,Menu_Control` (desc.xml, same 7 descriptors):
- * `On Screen`, `Top Menu`, `Menu`, `Option`, `Display` — no `home` here, that is a cursor key.
- */
-export const XML_MENU_WIRE: WireTable<MenuValue> = {
-  on_screen: "On Screen",
-  top_menu: "Top Menu",
-  menu: "Menu",
-  option: "Option",
-  display: "Display",
-};
 
 /** Which zone-wide pad commands the receiver's desc.xml declares for the main zone. */
 export interface XmlZoneWidePad {
@@ -219,9 +196,9 @@ export class XmlBrowseDriver implements BrowseDriver {
     private readonly log?: ControllerLog,
     private readonly zoneWide: XmlZoneWidePad = { cursor: false, menu: false },
   ) {
-    this.menuValues = zoneWide.menu ? Object.keys(XML_MENU_WIRE) : undefined;
+    this.menuValues = zoneWide.menu ? Object.keys(MENU_WIRE) : undefined;
     this.legacy = XML_BROWSE_SOURCES.some(source => source.list === "List_Info_2" && available.has(source.id));
-    this.cursorValues = this.legacy ? LEGACY_CURSOR_VALUES : Object.keys(XML_CURSOR_WIRE);
+    this.cursorValues = this.legacy ? LEGACY_CURSOR_VALUES : Object.keys(RETURN_CURSOR_WIRE);
   }
 
   /** The menu keys — only where desc.xml declares the zone-wide `Menu_Control`. */
@@ -233,7 +210,7 @@ export class XmlBrowseDriver implements BrowseDriver {
    * @param value one of {@link menuValues}
    */
   public async menu(value: string): Promise<void> {
-    const wire = wireFor(XML_MENU_WIRE, value);
+    const wire = wireFor(MENU_WIRE, value);
     if (wire === undefined || !this.zoneWide.menu) {
       return;
     }
@@ -352,7 +329,7 @@ export class XmlBrowseDriver implements BrowseDriver {
    * @param value one of {@link cursorValues}
    */
   public async cursor(value: string): Promise<void> {
-    const wire = wireFor(XML_CURSOR_WIRE, value);
+    const wire = wireFor(RETURN_CURSOR_WIRE, value);
     if (wire === undefined || !this.cursorValues.includes(value)) {
       return;
     }

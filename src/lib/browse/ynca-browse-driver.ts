@@ -1,4 +1,6 @@
 import {
+  MENU_WIRE,
+  RETURN_CURSOR_WIRE,
   ROW_KIND_BY_ATTRIBUTE,
   wireFor,
   type BrowseDriver,
@@ -37,50 +39,17 @@ export interface YncaBrowseClient {
 }
 
 /**
- * The main-zone pad in wire words, LIST dialect (2010–2012 generation): `@MAIN:LISTCURSOR`
- * declares all seven keys, `@MAIN:LISTMENU` five of the six menu keys — `home` has no menu
- * wire word and stays out of the dropdown instead of being mapped onto something else.
- * Sources: the official command lists (RX-V671 2011; `Display` from the RX-A3020 2012 list).
+ * The pad's cursor keys in the 2011 lists (RX-V671 and its class): `Back` / `Back to Home` where the
+ * 2012+ lists say `Return` (`RETURN_CURSOR_WIRE`, eight of the fifteen lists with the list dialect —
+ * audit 2026-09-24, B16). The word comes from the generation evidence, never from a refused key. The
+ * menu keys are the shared `MENU_WIRE`; the ZONE dialect of the 2015 generation (`@MAIN:CURSOR`/`MENU`,
+ * RX-A850) takes the 2012 words — the tables are the same, only the functions differ (B16).
  */
-const YNCA_CURSOR_WIRE: WireTable<CursorValue> = {
-  up: "Up",
-  down: "Down",
-  left: "Left",
-  right: "Right",
-  select: "Sel",
+const BACK_CURSOR_WIRE: WireTable<CursorValue> = {
+  ...RETURN_CURSOR_WIRE,
   return: "Back",
   home: "Back to Home",
 };
-
-/**
- * The LIST dialect of the 2012 generation: the same keys, but `Return` / `Return to Home` — eight of
- * the fifteen official lists with the list dialect (HTR-7065, RX-A720/820/1020/2020/3020, RX-V673/773)
- * and the source subunits of the 2012 and 2015 lists (audit 2026-09-24, B16). The 2011 lists say
- * `Back`. The word comes from the generation evidence, never from a refused key.
- */
-const YNCA_RETURN_CURSOR_WIRE: WireTable<CursorValue> = {
-  ...YNCA_CURSOR_WIRE,
-  return: "Return",
-  home: "Return to Home",
-};
-
-const YNCA_MENU_WIRE: WireTable<MenuValue> = {
-  on_screen: "On Screen",
-  top_menu: "Top Menu",
-  menu: "Menu",
-  option: "Option",
-  display: "Display",
-};
-
-/**
- * The same pad in the ZONE dialect of the 2015 generation (RX-A850 official list): `@MAIN:CURSOR`
- * with the 2012 words (`Return` / `Return to Home`) and `@MAIN:MENU` with the list dialect's menu
- * words — the tables are the same, only the functions differ (audit 2026-09-29, B16). The receiver
- * answers `@UNDEFINED` to a list-dialect key — that verdict (unknown function on this model, unlike
- * `@RESTRICTED` = not now) is what switches a device over, once, and for good.
- */
-const YNCA_ZONE_CURSOR_WIRE = YNCA_RETURN_CURSOR_WIRE;
-const YNCA_ZONE_MENU_WIRE = YNCA_MENU_WIRE;
 
 /**
  * The pad of a zone (`@ZONE2`/`@ZONE3:LISTCURSOR`, `LISTMENU` — the 2011 and 2012 Aventage lists
@@ -97,15 +66,15 @@ export function yncaZonePadWires(generation: { returnWords: boolean; display: bo
   cursor: WireTable<CursorValue>;
   menu: WireTable<MenuValue>;
 } {
-  const menu: WireTable<MenuValue> = { ...YNCA_MENU_WIRE };
+  const menu: WireTable<MenuValue> = { ...MENU_WIRE };
   if (!generation.display) {
     delete menu.display;
   }
-  return { cursor: generation.returnWords ? YNCA_RETURN_CURSOR_WIRE : YNCA_CURSOR_WIRE, menu };
+  return { cursor: generation.returnWords ? RETURN_CURSOR_WIRE : BACK_CURSOR_WIRE, menu };
 }
 
 /**
- * Which wire functions the main-zone pad uses (see {@link YNCA_ZONE_CURSOR_WIRE}) — or `none`: the
+ * Which wire functions the main-zone pad uses (the LIST or the ZONE dialect) — or `none`: the
  * device has no pad (a 2010 receiver, or one whose probe knows neither `LISTCURSOR` nor `CURSOR`).
  */
 export type YncaPadDialect = "list" | "zone" | "none";
@@ -149,15 +118,13 @@ export class YncaBrowseDriver implements BrowseDriver {
     public padDialect: YncaPadDialect = "list",
     generation: YncaGenerationEvidence = { returnWords: false, display: true, pad: true },
   ) {
-    this.listCursorWire = generation.returnWords ? YNCA_RETURN_CURSOR_WIRE : YNCA_CURSOR_WIRE;
+    this.listCursorWire = generation.returnWords ? RETURN_CURSOR_WIRE : BACK_CURSOR_WIRE;
     this.homeWord = generation.pad;
     // No pad on the device: no cursor or menu datapoints — every key would come back @UNDEFINED
     // (audit 2026-09-29, B5; the rule "no claim without proof").
     const pad = generation.pad && padDialect !== "none";
-    this.cursorValues = pad ? Object.keys(YNCA_CURSOR_WIRE) : undefined;
-    this.menuValues = pad
-      ? Object.keys(YNCA_MENU_WIRE).filter(key => generation.display || key !== "display")
-      : undefined;
+    this.cursorValues = pad ? Object.keys(RETURN_CURSOR_WIRE) : undefined;
+    this.menuValues = pad ? Object.keys(MENU_WIRE).filter(key => generation.display || key !== "display") : undefined;
   }
 
   /** Whether the sources' lists know `Back to Home` (every list from 2011 on). */
@@ -184,7 +151,7 @@ export class YncaBrowseDriver implements BrowseDriver {
    */
   public resend(func: string, wire: string): void {
     const cursor = func === "LISTCURSOR" || func === "CURSOR";
-    const tables = cursor ? [YNCA_CURSOR_WIRE, YNCA_RETURN_CURSOR_WIRE] : [YNCA_MENU_WIRE];
+    const tables = cursor ? [BACK_CURSOR_WIRE, RETURN_CURSOR_WIRE] : [MENU_WIRE];
     for (const table of tables) {
       const word = Object.keys(table).find(key => wireFor(table as WireTable<string>, key) === wire);
       if (word !== undefined) {
@@ -314,7 +281,7 @@ export class YncaBrowseDriver implements BrowseDriver {
       return;
     }
     if (this.padDialect === "zone") {
-      this.send("CURSOR", wireFor(YNCA_ZONE_CURSOR_WIRE, value));
+      this.send("CURSOR", wireFor(RETURN_CURSOR_WIRE, value));
       return;
     }
     this.send("LISTCURSOR", wireFor(this.listCursorWire, value));
@@ -330,10 +297,10 @@ export class YncaBrowseDriver implements BrowseDriver {
       return;
     }
     if (this.padDialect === "zone") {
-      this.send("MENU", wireFor(YNCA_ZONE_MENU_WIRE, value));
+      this.send("MENU", wireFor(MENU_WIRE, value));
       return;
     }
-    this.send("LISTMENU", wireFor(YNCA_MENU_WIRE, value));
+    this.send("LISTMENU", wireFor(MENU_WIRE, value));
   }
 
   /**

@@ -128,6 +128,34 @@ export type MenuValue = (typeof MENU_VALUES)[number];
 export type WireTable<K extends string> = Partial<Record<K, string>>;
 
 /**
+ * The pad's cursor keys on the wire of the 2012+ YNCA lists (`LISTCURSOR` of HTR-7065,
+ * RX-A720/820/1020/2020/3020, RX-V673/773 and the source subunits; `CURSOR` of the RX-A850) and of
+ * desc.xml (`List_Control` and `Cursor_Control,Cursor`, 7 of the 10 captured descriptors): `Sel`,
+ * `Return`, `Return to Home`. ONE table — it stood three times in the drivers (audit 2026-09-29, A33).
+ */
+export const RETURN_CURSOR_WIRE: WireTable<CursorValue> = {
+  up: "Up",
+  down: "Down",
+  left: "Left",
+  right: "Right",
+  select: "Sel",
+  return: "Return",
+  home: "Return to Home",
+};
+
+/**
+ * The menu keys on the wire of YNCA (`LISTMENU`/`MENU`) and desc.xml (`Cursor_Control,Menu_Control`):
+ * no `home` — that is a cursor key. The 2010/2011 YNCA lists have no `Display`; the driver drops it there.
+ */
+export const MENU_WIRE: WireTable<MenuValue> = {
+  on_screen: "On Screen",
+  top_menu: "Top Menu",
+  menu: "Menu",
+  option: "Option",
+  display: "Display",
+};
+
+/**
  * The wire spelling a transport has for one written word, or undefined when it has none.
  * Takes a plain string because that is what arrives from a state write — the lookup is the
  * validation.
