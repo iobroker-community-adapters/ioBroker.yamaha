@@ -315,6 +315,49 @@ describe("YNCA catalog", () => {
     expect(yncaCommand("advanced.audioSelect", "Unavailable", main)).toBeUndefined();
   });
 
+  // The lists declare these writable; they stood read-only under a "write structure unconfirmed" note (B8).
+  test("dialogue level, contents display and the AirPlay volume interlock are written as the lists declare", () => {
+    const main = idToEntry(buildYncaCatalog().filter(e => e.subunit === "MAIN"));
+    expect(yncaCommand("sound.dialogueLevel", 2, main)).toEqual({ subunit: "MAIN", func: "DIALOGUELVL", value: "2" });
+    expect(main.get("sound.dialogueLevel")?.spec).toMatchObject({ min: 0, max: 3, step: 1 });
+    expect(yncaCommand("sound.contentsDisplay", false, main)).toEqual({
+      subunit: "MAIN",
+      func: "CONTENTSDISP",
+      value: "Off",
+    });
+    const airplay = idToEntry(buildYncaCatalog().filter(e => e.subunit === "AIRPLAY"));
+    expect(yncaCommand("player.airplay.volumeInterlock", "Limited", airplay)).toEqual({
+      subunit: "AIRPLAY",
+      func: "VOLINTERLOCK",
+      value: "Limited",
+    });
+  });
+
+  // Declared PUTs that had no way to be written (audit 2026-09-29, B9/B11).
+  test("volume steps, mute levels, preset stores and the step keys go out as the lists declare them", () => {
+    const catalog = buildYncaCatalog();
+    const on = (subunit: string): Map<string, YncaEntry> => idToEntry(catalog.filter(e => e.subunit === subunit));
+    const main = on("MAIN");
+    expect(yncaCommand("volumeUp", true, main)).toMatchObject({ func: "VOL", value: "Up" });
+    expect(yncaCommand("volumeDown", true, main)).toMatchObject({ func: "VOL", value: "Down" });
+    expect(yncaCommand("muteLevel", "Att -40 dB", main)).toMatchObject({ func: "MUTE", value: "Att -40 dB" });
+    const muteLevel = catalog.find(e => e.subunit === "MAIN" && e.id === "muteLevel");
+    expect(muteLevel?.derive?.("Att -20 dB")).toBe("Att -20 dB");
+    expect(yncaCommand("multiroom.zone2.volumeUp", true, on("ZONE2"))).toMatchObject({ subunit: "ZONE2", value: "Up" });
+    expect(yncaCommand("player.sirius.presetSave", 0, on("SIRIUS"))).toMatchObject({ func: "MEM", value: "Auto" });
+    expect(yncaCommand("tuner.presetSave", 3, on("DAB"))).toMatchObject({ subunit: "DAB", func: "MEM", value: "3" });
+    expect(yncaCommand("tuner.hdRadio.programUp", true, on("HDRADIO"))).toMatchObject({ func: "PRGSEL", value: "Up" });
+    expect(yncaCommand("player.pandora.bookmarkTrack", true, on("PANDORA"))).toMatchObject({
+      func: "BOOKMARK",
+      value: "Track",
+    });
+    // A recall names a slot 1…40 — 0 is no slot.
+    expect(on("NETRADIO").get("player.netRadio.preset")?.spec).toMatchObject({ min: 1, max: 40 });
+    expect(
+      yncaCommand("advanced.tvAudioIn1", "AUDIO4", idToEntry(catalog.filter(e => e.subunit === "MAIN"))),
+    ).toMatchObject({ func: "TVAUDIN1", value: "AUDIO4" });
+  });
+
   test("a coded write accepts the number as text, and still refuses junk", () => {
     // ioBroker lets anything write a state: a VIS widget or a script may send "0" for a
     // numeric coded state. That has to reach the device as its command word, while a
@@ -1556,6 +1599,34 @@ describe("the catalog reads every word and covers every range the official lists
       }
     }
     expect(invented).toEqual([]);
+  });
+
+  test("every word the official lists let a writable choice take is offered", () => {
+    // The surround decoders offer the nine-value core of every list; the 2015 words (`Dolby Surround`,
+    // RX-A850) reach the dropdown as observed values, so no older receiver is offered one it refuses.
+    const coreOnly = new Set(["MAIN:2CHDECODER"]);
+    const missing: string[] = [];
+    for (const entry of YNCA_CATALOG) {
+      // An empty dropdown (the speaker pattern's amp assignment: model-specific strings, no common core)
+      // holds exactly what the device reported.
+      if (
+        !entry.write ||
+        entry.writeOnly ||
+        entry.spec.kind !== "enum" ||
+        entry.func === "INP" ||
+        Object.keys(entry.spec.states).length === 0 ||
+        coreOnly.has(`${entry.subunit}:${entry.func}`)
+      ) {
+        continue;
+      }
+      const evidence = params[`${entry.subunit}:${entry.func}`];
+      for (const word of evidence?.values ?? []) {
+        if (!(evidence?.getOnly ?? []).includes(word) && !(word in entry.spec.states)) {
+          missing.push(`${entry.subunit}:${entry.func}=${word}`);
+        }
+      }
+    }
+    expect(missing).toEqual([]);
   });
 
   test("every declared range lies inside the datapoint's bounds, on its grid", () => {

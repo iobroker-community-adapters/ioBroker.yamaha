@@ -313,6 +313,26 @@ describe("YncaDeviceController", () => {
     ]);
   });
 
+  // The mute level reads the same MUTE line as `mute`, and writes all four words (audit 2026-09-29, B9).
+  test("a dampened mute shows its level next to the mute switch, and a level is written as its word", async () => {
+    const client = new FakeClient();
+    client.capabilities = { model: "RX-A810", subunits: { MAIN: { PWR: "On", MUTE: "Off" } } };
+    const { acked, objects, deps } = makeDeps(client);
+    const controller = new YncaDeviceController("living", deps);
+    await controller.start();
+    expect(acked).toContainEqual({ id: "living.muteLevel", value: "Off" });
+    expect(objects.find(o => o.id === "living.muteLevel")?.def.common.write).toBe(true);
+    acked.length = 0;
+    client.emit({ subunit: "MAIN", func: "MUTE", value: "Att -20 dB" });
+    expect(acked).toEqual([
+      { id: "living.muteLevel", value: "Att -20 dB" },
+      { id: "living.mute", value: true },
+    ]);
+    client.sent.length = 0;
+    controller.handleStateChange("living.muteLevel", false, "Att -40 dB");
+    expect(client.sent).toEqual([{ subunit: "MAIN", func: "MUTE", value: "Att -40 dB" }]);
+  });
+
   test("a device that answers INITVOLMODE keeps its own mode — the level never overwrites it", async () => {
     const client = new FakeClient();
     client.capabilities = {
@@ -1018,6 +1038,37 @@ describe("YncaDeviceController unified tuner v2.0.0 (band-routed writes)", () =>
     s.client.sent.length = 0;
     s.controller.handleStateChange("living.tuner.preset", false, 4);
     expect(s.client.sent).toEqual([{ subunit: "DAB", func: "FMPRESET", value: "4" }]);
+  });
+
+  // The preset keys follow the preset: DAB stores through `@DAB:MEM`, HD Radio steps its own bank, and a
+  // TUN-only receiver keeps TUN (audit 2026-09-29, B9).
+  test("the preset store and step keys go to the subunit that holds the presets", async () => {
+    const dab = await tunerSetup({
+      MAIN: { PWR: "On" },
+      TUN: { BAND: "AM", PRESET: "No Preset" },
+      DAB: { BAND: "DAB", DABPRESET: "No Preset", FMPRESET: "No Preset" },
+    });
+    dab.controller.handleStateChange("living.tuner.presetSave", false, 0);
+    dab.controller.handleStateChange("living.tuner.presetUp", false, true);
+    expect(dab.client.sent).toEqual([
+      { subunit: "DAB", func: "MEM", value: "Auto" },
+      { subunit: "TUN", func: "PRESET", value: "Up" },
+    ]);
+    const hd = await tunerSetup({
+      MAIN: { PWR: "On" },
+      TUN: { BAND: "AM", PRESET: "No Preset" },
+      HDRADIO: { BAND: "FM", PRESET: "No Preset" },
+    });
+    hd.controller.handleStateChange("living.tuner.presetSave", false, 7);
+    hd.controller.handleStateChange("living.tuner.presetDown", false, true);
+    expect(hd.client.sent).toEqual([
+      { subunit: "HDRADIO", func: "MEM", value: "7" },
+      { subunit: "HDRADIO", func: "PRESET", value: "Down" },
+    ]);
+    const tun = await tunerSetup({ MAIN: { PWR: "On" }, TUN: { BAND: "FM", PRESET: "3" } });
+    tun.controller.handleStateChange("living.tuner.presetSave", false, 12);
+    tun.controller.handleStateChange("living.tuner.preset", false, 0);
+    expect(tun.client.sent).toEqual([{ subunit: "TUN", func: "MEM", value: "12" }]);
   });
 
   // A switch widget bound to a tuner datapoint by mistake: Number(true) is 1 — preset 1 recalled,

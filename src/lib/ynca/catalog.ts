@@ -396,7 +396,11 @@ const SOUNDPRG_STATES = selfMap([
 ]);
 
 const SLEEP_STATES = selfMap(["Off", "30 min", "60 min", "90 min", "120 min"]);
+// The TV audio input on SYS (RX-A850 list): AV1…AV6 and AUDIO1…2.
 const TVAUDIN_STATES = selfMap(["AV1", "AV2", "AV3", "AV4", "AV5", "AV6", "AUDIO1", "AUDIO2"]);
+// On MAIN (2010/2011 lists) the 2011 Aventage class adds AUDIO3/AUDIO4 (RX-A810…A3010) — the union,
+// like the other per-class words (audit 2026-09-29, B9).
+const TVAUDIN_MAIN_STATES = selfMap(["AV1", "AV2", "AV3", "AV4", "AV5", "AV6", "AUDIO1", "AUDIO2", "AUDIO3", "AUDIO4"]);
 // The HDMI video resolutions, per generation and measured from the 21 official lists: the
 // 2010/2011 class (12 lists, `@MAIN:HDMIRESOL`) declares six values, the 2012-and-later class
 // (8 lists, `@SYS:HDMIRESOL`) the same six plus 4K. One shared list would offer 4K on receivers
@@ -458,6 +462,28 @@ interface FuncDef {
 }
 
 /**
+ * A MEM write: a slot number stores the current station there, 0 stores to the first free slot
+ * (`Auto`, ynca-python `MemFunctionMixin`).
+ *
+ * @param value the written slot
+ * @returns the wire word
+ */
+function memSlotWire(value: boolean | number | string): string {
+  return Number(value) === 0 ? "Auto" : String(Math.round(Number(value)));
+}
+
+/**
+ * The FM frequency the wire carries in MHz with two decimals, read as kHz — the one unit of
+ * `tuner.frequency` on every transport.
+ *
+ * @param wire the wire value (`98.10`)
+ * @returns the frequency in kHz, as the decoder's text
+ */
+function fmFrequencyKhz(wire: string): string {
+  return String(Math.round(Number.parseFloat(wire) * 1000));
+}
+
+/**
  * A stored-station slot, read and recalled by number (TUN, DAB, FM, HD Radio). `No Preset` — GET Only in
  * every list — reads 0, and a write of 0 recalls nothing, so it is never sent (audit 2026-09-29, B7).
  */
@@ -497,6 +523,43 @@ const AMP_FUNCS: FuncDef[] = [
     spec: { kind: "onoff", on: "On", off: "Off", alsoOn: ["Att -20 dB", "Att -40 dB"] },
     write: true,
     role: "media.mute",
+  },
+  // The same MUTE with all four words every list declares as PUT and GET: a script can dampen by 20 or
+  // 40 dB instead of only muting (audit 2026-09-29, B9). Read from the MUTE line next to `mute`.
+  {
+    func: "MUTE",
+    state: "muteLevel",
+    nameKey: "muteLevel",
+    descKey: "descMuteLevel",
+    spec: { kind: "enum", states: selfMap(["Off", "On", "Att -20 dB", "Att -40 dB"]) },
+    write: true,
+    role: "state",
+    derived: true,
+    derive: wire => wire,
+  },
+  // One volume step up or down (`VOL=Up`/`Down`, every list; ynca-python `vol_up`/`vol_down`) — the
+  // receiver's own step, without a script computing the absolute value (B9).
+  {
+    func: "VOL",
+    state: "volumeUp",
+    nameKey: "volumeUp",
+    spec: { kind: "button" },
+    write: true,
+    role: "button.volume.up",
+    readFunc: "VOL",
+    writeOnly: true,
+    wireEncode: () => "Up",
+  },
+  {
+    func: "VOL",
+    state: "volumeDown",
+    nameKey: "volumeDown",
+    spec: { kind: "button" },
+    write: true,
+    role: "button.volume.down",
+    readFunc: "VOL",
+    writeOnly: true,
+    wireEncode: () => "Down",
   },
   {
     func: "INP",
@@ -606,17 +669,18 @@ const AMP_FUNCS: FuncDef[] = [
     // them happens to own it.
     role: "state",
   },
-  // Dialogue level / DTS dialogue control / contents display / the AirPlay volume
-  // interlock: reported by the MusicCast generation (RX-V6A sweep), write structure
-  // unconfirmed → read-only, like the XML dialogue level.
+  // Dialogue level: PUT and GET in the 2012 lists (0…3, step 1; the RX-A850 list 0…2) — the envelope
+  // of the declared ranges; a value the device does not take is refused and read back (audit
+  // 2026-09-29, B8). DTS dialogue control is known only from the MusicCast generation's sweep, with no
+  // list declaring a PUT, so it stays read-only.
   {
     func: "DIALOGUELVL",
     state: "sound.dialogueLevel",
     nameKey: "dialogueLevel",
     descKey: "descDialogueLevel",
-    spec: { kind: "number", decimals: 0 },
-    write: false,
-    role: "value",
+    spec: { kind: "number", min: 0, max: 3, step: 1, decimals: 0 },
+    write: true,
+    role: "level",
   },
   {
     func: "DTSDIALOGUECONTROL",
@@ -627,14 +691,15 @@ const AMP_FUNCS: FuncDef[] = [
     write: false,
     role: "value",
   },
+  // Contents display: PUT `On/Off` in the RX-A850 list (B8); MusicCast only reports it.
   {
     func: "CONTENTSDISP",
     state: "sound.contentsDisplay",
     nameKey: "contentsDisplay",
     descKey: "descContentsDisplay",
     spec: { kind: "onoff", on: "On", off: "Off" },
-    write: false,
-    role: "indicator",
+    write: true,
+    role: "switch",
   },
   {
     func: "HDMIOUT",
@@ -972,7 +1037,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     state: "advanced.tvAudioIn1",
     nameKey: "tvAudioReturnInput",
     descKey: "descTvAudioReturnInput",
-    spec: { kind: "enum", states: TVAUDIN_STATES },
+    spec: { kind: "enum", states: TVAUDIN_MAIN_STATES },
     write: true,
     role: "state",
   },
@@ -982,7 +1047,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     state: "advanced.tvAudioIn2",
     nameKey: "tvAudioReturnInput2",
     descKey: "descTvAudioReturnInput2",
-    spec: { kind: "enum", states: TVAUDIN_STATES },
+    spec: { kind: "enum", states: TVAUDIN_MAIN_STATES },
     write: true,
     role: "state",
   },
@@ -1248,7 +1313,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     spec: { kind: "number", unit: "kHz", decimals: 0 },
     write: true,
     role: "level",
-    wireDecode: wire => String(Math.round(Number.parseFloat(wire) * 1000)),
+    wireDecode: fmFrequencyKhz,
   },
   {
     subunit: "TUN",
@@ -1326,7 +1391,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     role: "level",
     readFunc: "PRESET",
     writeOnly: true,
-    wireEncode: value => (Number(value) === 0 ? "Auto" : String(Math.round(Number(value)))),
+    wireEncode: memSlotWire,
   },
   // The 2012 generation moved the HDMI video settings and the TV audio return input from MAIN to
   // SYS. Measured over the 21 official command lists: HDMIASPECT and HDMIRESOL sit on MAIN in 12
@@ -2079,6 +2144,21 @@ const DAB_FUNCS: FuncDef[] = [
     state: "preset",
     ...PRESET_SLOT,
   },
+  // Store the current DAB or FM station (`@DAB:MEM`, ynca-python `MemFunctionMixin`; audit 2026-09-29,
+  // B9) — shown where the DAB subunit reports a preset.
+  {
+    func: "MEM",
+    state: "presetSave",
+    nameKey: "saveToPreset0FirstFreeSlot",
+    descKey: "descSaveToPreset0FirstFreeSlot",
+    spec: { kind: "number", min: 0, max: 40, step: 1 },
+    write: true,
+    role: "level",
+    readFunc: "DABPRESET",
+    readAliases: ["FMPRESET"],
+    writeOnly: true,
+    wireEncode: memSlotWire,
+  },
   {
     func: "DABPRGTYPE",
     state: "dab.programType",
@@ -2138,7 +2218,7 @@ const DAB_FUNCS: FuncDef[] = [
     spec: { kind: "number", unit: "kHz", decimals: 0 },
     write: true,
     role: "level",
-    wireDecode: wire => String(Math.round(Number.parseFloat(wire) * 1000)),
+    wireDecode: fmFrequencyKhz,
   },
   // DAB/FM detail answered by the RX-V6A full sweep (2026-09-01) — read-only status.
   // audioMode goes to the flat tuner state (band-scoped like frequency); bitRate and
@@ -2249,7 +2329,7 @@ const HDRADIO_FUNCS: FuncDef[] = [
     spec: { kind: "number", unit: "kHz", decimals: 0 },
     write: true,
     role: "level",
-    wireDecode: wire => String(Math.round(Number.parseFloat(wire) * 1000)),
+    wireDecode: fmFrequencyKhz,
   },
   {
     func: "PRESET",
@@ -2288,7 +2368,7 @@ const HDRADIO_FUNCS: FuncDef[] = [
     role: "level",
     readFunc: "PRESET",
     writeOnly: true,
-    wireEncode: value => (Number(value) === 0 ? "Auto" : String(Math.round(Number(value)))),
+    wireEncode: memSlotWire,
   },
   {
     func: "SEARCHMODE",
@@ -2342,6 +2422,29 @@ const HDRADIO_FUNCS: FuncDef[] = [
     write: true,
     role: "state",
     readAliases: ["PRGNUM"],
+  },
+  // Step through the station's programmes (`PRGSEL=Up/Down`, seven lists; audit 2026-09-29, B9).
+  {
+    func: "PRGSEL",
+    state: "hdRadio.programUp",
+    nameKey: "nextHdRadioProgram",
+    spec: { kind: "button" },
+    write: true,
+    role: "button",
+    readFunc: "PRGSEL",
+    writeOnly: true,
+    wireEncode: () => "Up",
+  },
+  {
+    func: "PRGSEL",
+    state: "hdRadio.programDown",
+    nameKey: "previousHdRadioProgram",
+    spec: { kind: "button" },
+    write: true,
+    role: "button",
+    readFunc: "PRGSEL",
+    writeOnly: true,
+    wireEncode: () => "Down",
   },
   // The programme type: PRGTYPE on the 2010 lists, CATEGORY on the 2012 lists — same text.
   {
@@ -2546,7 +2649,7 @@ const PRESET_SUBUNITS = [
 
 /**
  * The player-source subunits with a preset STORE command (`@<SUB>:MEM` — official RX-V671
- * list NETRADIO/NAPSTER/PC/USB, the 2010–2011 lists SIRIUSIR/RHAP, the RX-A850 list AIRPLAY/BT/
+ * list NETRADIO/NAPSTER/PC/USB, the 2010–2011 lists SIRIUS/SIRIUSIR/RHAP, the RX-A850 list AIRPLAY/BT/
  * SPOTIFY/SERVER/PANDORA/SIRIUSXM). A slot number stores the current station/item there, 0
  * stores to the first free slot ("Auto").
  */
@@ -2556,6 +2659,7 @@ const MEM_SUBUNITS = [
   "PC",
   "USB",
   "RHAP",
+  "SIRIUS",
   "SIRIUSIR",
   "SIRIUSXM",
   "AIRPLAY",
@@ -2905,7 +3009,8 @@ export function buildYncaCatalog(): YncaEntry[] {
         id: `player.${source.channel}.preset`,
         nameKey: "recallPreset",
         descKey: "descRecallPreset",
-        spec: { kind: "number", min: 0, max: 40, step: 1, decimals: 0 },
+        // Every list declares slots 1…40; a 0 would go out as `PRESET=0` and be refused (B11).
+        spec: { kind: "number", min: 1, max: 40, step: 1, decimals: 0 },
         write: true,
         role: "level",
         subunit: source.subunit,
@@ -2928,7 +3033,7 @@ export function buildYncaCatalog(): YncaEntry[] {
         func: "MEM",
         readFunc: "PLAYBACKINFO",
         writeOnly: true,
-        wireEncode: value => (Number(value) === 0 ? "Auto" : String(Math.round(Number(value)))),
+        wireEncode: memSlotWire,
       });
     }
   }
@@ -3063,6 +3168,20 @@ export function buildYncaCatalog(): YncaEntry[] {
     readFunc: "PLAYBACKINFO",
     writeOnly: true,
   });
+  // Pandora's track bookmark (`@PANDORA:BOOKMARK=Track`, RX-A850 list; audit 2026-09-29, B9).
+  entries.push({
+    id: "player.pandora.bookmarkTrack",
+    nameKey: "bookmarkTrack",
+    descKey: "descBookmarkTrack",
+    spec: { kind: "button" },
+    write: true,
+    role: "button",
+    subunit: "PANDORA",
+    func: "BOOKMARK",
+    readFunc: "PLAYBACKINFO",
+    writeOnly: true,
+    wireEncode: () => "Track",
+  });
   // Pandora's thumb rating (@PANDORA:FEEDBACK, RX-A850 list): readable AND writable, unlike the
   // net-radio bookmark above. The rot guard over the official lists found it — the hand-written
   // audit did not.
@@ -3135,13 +3254,14 @@ export function buildYncaCatalog(): YncaEntry[] {
       subunit: "BT",
       func: "DEVICENAME",
     },
+    // PUT and GET `Off/Limited/Full` in nine 2012+ lists (audit 2026-09-29, B8).
     {
       id: "player.airplay.volumeInterlock",
       nameKey: "volumeInterlock",
       descKey: "descVolumeInterlock",
-      spec: { kind: "text" },
-      write: false,
-      role: "text",
+      spec: { kind: "enum", states: selfMap(["Off", "Limited", "Full"]) },
+      write: true,
+      role: "state",
       subunit: "AIRPLAY",
       func: "VOLINTERLOCK",
     },

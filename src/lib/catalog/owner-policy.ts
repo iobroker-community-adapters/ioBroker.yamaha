@@ -75,6 +75,9 @@ export const OWNER_OVERRIDES: Record<string, readonly Transport[]> = {
   // Surround:AI joined MusicCast on 2026-09-09 (the RX-A3080 declares `surround_ai` and reports it
   // in getStatus) as a read-only indicator; YNCA's SURROUNDAI switch is the writable one.
   "sound.surroundAI": ["ynca", "yxc"],
+  // Same class (audit 2026-09-29, B8): MusicCast reports `contents_display`, no specification names a
+  // setter; the RX-A850 list declares YNCA's CONTENTSDISP writable.
+  "sound.contentsDisplay": ["ynca", "yxc"],
   // `sound.dialogueLift` left this table on 2026-09-24: MusicCast writes it now (YXC Basic §5.17)
   // with the device's declared range, so it is no longer the poorer transport (C8).
   // Write-proof beats modernity rank for the scene TRIGGER (#615): YXC declares the

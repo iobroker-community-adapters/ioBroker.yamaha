@@ -52,7 +52,7 @@ describe("pickOwner — which transport owns a shared capability", () => {
   // drop or add a second one and every behavioural test above would still pass — each of them
   // asks about one key. Pinning the whole table makes any further change a visible, deliberate
   // edit of this list.
-  it("pins the override table — nineteen keys since MusicCast writes dialogue lift (2026-09-24)", () => {
+  it("pins the override table — twenty keys since YNCA writes the contents display (2026-09-29)", () => {
     expect(Object.keys(OWNER_OVERRIDES).sort()).toEqual([
       "advanced.maxVolume",
       "advanced.speakers.pattern",
@@ -66,6 +66,7 @@ describe("pickOwner — which transport owns a shared capability", () => {
       "sleep",
       "sound.adaptiveDrc",
       "sound.bass",
+      "sound.contentsDisplay",
       "sound.extraBass",
       "sound.subwooferTrim",
       "sound.surroundAI",
@@ -74,7 +75,7 @@ describe("pickOwner — which transport owns a shared capability", () => {
       "soundProgram",
       "tuner.band",
     ]);
-    expect(Object.keys(OWNER_OVERRIDES)).toHaveLength(19);
+    expect(Object.keys(OWNER_OVERRIDES)).toHaveLength(20);
     expect(OWNER_OVERRIDES).not.toHaveProperty("volume");
   });
 

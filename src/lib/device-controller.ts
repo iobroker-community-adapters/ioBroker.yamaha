@@ -1441,6 +1441,20 @@ export class YncaDeviceController implements ConnectionHandle {
       }
       return true;
     }
+    if (stateId === "tuner.presetSave" || stateId === "tuner.presetUp" || stateId === "tuner.presetDown") {
+      // The preset keys follow the preset itself: HD Radio's bank replaces TUN's, DAB stores its DAB and
+      // FM stations (`@DAB:MEM`) and has no step keys — before, whichever entry was mapped last took the
+      // write (audit 2026-09-29, B9).
+      const subunit = this.hasHdRadio ? "HDRADIO" : this.hasDab && stateId === "tuner.presetSave" ? "DAB" : "TUN";
+      const entry = this.presentEntries.find(candidate => candidate.id === stateId && candidate.subunit === subunit);
+      const triple = entry ? yncaCommand(stateId, value, new Map([[stateId, entry]])) : undefined;
+      if (triple) {
+        this.sendProven(triple.subunit, triple.func, triple.value);
+      } else {
+        this.deps.log.debug(`${this.deviceId}: ${stateId} is not available on ${subunit} — write dropped`);
+      }
+      return true;
+    }
     return false;
   }
 
