@@ -3,6 +3,10 @@ import { connectTransports, partnerClient, type ConnectableTransport } from "./a
 import { YamahaYxcClient } from "./yxc/http-client";
 import type { ObjectDef } from "./catalog/types";
 import type { Transport } from "./catalog/owner-policy";
+import { createSubunitCache } from "./ynca/subunit-cache";
+import { ProbeMemory } from "./lifecycle/probe-memory";
+import { PushLiveness } from "./yxc/push-liveness";
+import { DISCOVERY_SCHEMA } from "./lifecycle/discovery-schema";
 
 const silentLog = { debug: (): void => {}, info: (): void => {}, warn: (): void => {} };
 
@@ -336,6 +340,9 @@ describe("attemptDevice builders", () => {
       onTransports: () => {},
       knownDeviceIps: new Set(["192.168.1.10"]),
       isEntryEnabled: () => true,
+      yncaSubunitCache: createSubunitCache(undefined, () => undefined),
+      probeMemory: new ProbeMemory({ __schema: DISCOVERY_SCHEMA }),
+      pushLiveness: new PushLiveness(),
     };
   }
   // MusicCast requests by URL string, XML by an options object — the recorder keeps each as is.
@@ -406,6 +413,9 @@ describe("attemptDevice builders", () => {
         onTransports: () => {},
         knownDeviceIps: new Set(["192.168.1.10"]),
         isEntryEnabled: () => true,
+        yncaSubunitCache: createSubunitCache(undefined, () => undefined),
+        probeMemory: new ProbeMemory({ __schema: DISCOVERY_SCHEMA }),
+        pushLiveness: new PushLiveness(),
       },
     );
 

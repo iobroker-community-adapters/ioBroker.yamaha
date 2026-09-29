@@ -253,6 +253,9 @@ function setup(
     clientFor: ip => linkTargets[ip],
     partnerIps: () => Object.keys(linkTargets),
     pushActive,
+    gate: testGate(),
+    probeMemory: new ProbeMemory({ __schema: DISCOVERY_SCHEMA }),
+    pushLiveness: new PushLiveness(),
     ...extra,
     registerPush: (onPush, deviceId) => {
       fire.push = onPush;
@@ -1601,6 +1604,7 @@ describe("YxcDeviceController reachability (a remembered device must still answe
       setStateAck: () => {},
       log: silentLog,
       gate: testGate(),
+      pushLiveness: new PushLiveness(),
       probeMemory: memory,
     });
     expect(await controller.start()).toBe(true);
@@ -1622,6 +1626,7 @@ describe("YxcDeviceController reachability (a remembered device must still answe
       setStateAck: () => {},
       log: silentLog,
       gate: testGate(),
+      pushLiveness: new PushLiveness(),
       probeMemory: memory,
     });
     await controller.start();
@@ -1634,6 +1639,7 @@ describe("YxcDeviceController reachability (a remembered device must still answe
     // five-minute poll.
     const client = makeFakeClient(oneZone, { power: "on" });
     const controller = new YxcDeviceController("living", {
+      probeMemory: new ProbeMemory({ __schema: DISCOVERY_SCHEMA }),
       client,
       registerPush: () => () => {},
       scheduleKeepalive: () => () => {},
@@ -1641,6 +1647,7 @@ describe("YxcDeviceController reachability (a remembered device must still answe
       setStateAck: () => {},
       log: silentLog,
       gate: testGate(),
+      pushLiveness: new PushLiveness(),
     });
     expect(await controller.start()).toBe(true);
     const drop = vi.fn();
@@ -1665,6 +1672,7 @@ describe("YxcDeviceController reachability (a remembered device must still answe
         setStateAck: () => {},
         log: silentLog,
         gate: testGate(),
+        pushLiveness: new PushLiveness(),
         probeMemory: memory,
       });
 
@@ -1696,6 +1704,7 @@ describe("YxcDeviceController reachability (a remembered device must still answe
         setStateAck: () => {},
         log: silentLog,
         gate: testGate(),
+        pushLiveness: new PushLiveness(),
         probeMemory: memory,
       });
 
@@ -1915,6 +1924,7 @@ describe("YxcDeviceController browse surface (#613)", () => {
     const client = makeFakeClient(features, { response_code: 0 });
     const objects: string[] = [];
     const controller = new YxcDeviceController("living", {
+      probeMemory: new ProbeMemory({ __schema: DISCOVERY_SCHEMA }),
       client,
       registerPush: () => () => {},
       scheduleKeepalive: () => () => {},
@@ -1925,6 +1935,7 @@ describe("YxcDeviceController browse surface (#613)", () => {
       setStateAck: () => {},
       log: silentLog,
       gate: testGate(),
+      pushLiveness: new PushLiveness(),
     });
     return { controller, client, objects };
   }
@@ -1964,6 +1975,9 @@ describe("YxcDeviceController recall routing (which zone gets the favourite)", (
     const client = makeFakeClient(twoZones, { response_code: 0 });
     // getStatus answers per zone via the recorded call; the controller stores each zone's input.
     const controller = new YxcDeviceController("living", {
+      gate: testGate(),
+      pushLiveness: new PushLiveness(),
+      probeMemory: new ProbeMemory({ __schema: DISCOVERY_SCHEMA }),
       client,
       registerPush: () => () => {},
       scheduleKeepalive: () => () => {},
@@ -2779,6 +2793,8 @@ describe("YxcDeviceController names from the MusicCast app", () => {
     const run = async (): Promise<string[]> => {
       const names: string[] = [];
       const controller = new YxcDeviceController("living", {
+        gate: testGate(),
+        pushLiveness: new PushLiveness(),
         client,
         registerPush: () => () => {},
         scheduleKeepalive: () => () => {},

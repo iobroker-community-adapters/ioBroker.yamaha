@@ -107,6 +107,8 @@ function setup(
   const controller = new XmlDeviceController(
     "living",
     {
+      gate: testGate(),
+      probeMemory: new ProbeMemory({ __schema: DISCOVERY_SCHEMA }),
       client,
       scheduleKeepalive: (handler, ms) => {
         fire.keepalive = handler;
@@ -806,6 +808,7 @@ describe("XmlDeviceController browse surface (#613)", () => {
     };
     const objects: string[] = [];
     const controller = new XmlDeviceController("living", {
+      probeMemory: new ProbeMemory({ __schema: DISCOVERY_SCHEMA }),
       client,
       scheduleKeepalive: () => () => {},
       upsertObject: id => {

@@ -107,11 +107,11 @@ export interface XmlControllerDeps {
   /**
    * The device's command gate: every request is paced through it, and its signal is the
    * connection's shutdown flag — a closed gate ends pending waits and stops state writes
-   * from a poll that was already in flight. Absent in older tests → no browsing.
+   * from a poll that was already in flight.
    */
-  gate?: CommandGate;
+  gate: CommandGate;
   /** Per-device memory for answers that do not change while the device runs (see ProbeMemory). */
-  probeMemory?: ProbeMemory;
+  probeMemory: ProbeMemory;
   /** The device's address, for the cover a source reports as a path on the device (D3). */
   host?: string;
 }
@@ -215,7 +215,7 @@ export class XmlDeviceController {
     // identity this transport can read. A different (or updated) device behind the address
     // drops the remembered XML declarations (scenes, inputs, descriptor, tuner, browse
     // sources); a device that reports no model keeps them — the YNCA/YXC guards catch a swap.
-    if (this.deps.probeMemory && config.model !== undefined) {
+    if (config.model !== undefined) {
       const identity = `${config.model}|${config.systemId ?? ""}|${config.version ?? ""}`;
       if (this.deps.probeMemory.remembered("xmlIdentity") !== identity) {
         // Every XML-owned memory key carries the xml prefix (xmlBrowseSources, xmlScenes:*,
@@ -229,7 +229,7 @@ export class XmlDeviceController {
         this.deps.probeMemory.set("xmlConfig", config);
       }
     }
-    const rememberedDialect = this.deps.probeMemory?.remembered("xmlDialect");
+    const rememberedDialect = this.deps.probeMemory.remembered("xmlDialect");
     if (rememberedDialect === "classic" || rememberedDialect === "legacy") {
       this.dialect = rememberedDialect;
     }
@@ -291,12 +291,12 @@ export class XmlDeviceController {
     // later standby start — which may report fewer fields — cannot shrink the tree).
     for (const { zone, status } of answered) {
       const key = `xmlStatusFields:${zone.key}`;
-      const remembered = this.deps.probeMemory?.remembered<string[]>(key);
+      const remembered = this.deps.probeMemory.remembered<string[]>(key);
       const fields = new Set<string>(Array.isArray(remembered) ? remembered : []);
       for (const field of Object.keys(status ?? {})) {
         fields.add(field);
       }
-      this.deps.probeMemory?.set(key, [...fields]);
+      this.deps.probeMemory.set(key, [...fields]);
       this.zoneFields.set(zone.key, fields);
     }
     // Every parent — the zone channels included — is created by the per-state loop below
@@ -398,7 +398,7 @@ export class XmlDeviceController {
     };
     try {
       // `:v3` since the parse carries every declared write command (2026-09-29, D18) — an older parse lacks them.
-      return this.deps.probeMemory ? await this.deps.probeMemory.once("xmlDescriptor:v3", probe) : await probe();
+      return await this.deps.probeMemory.once("xmlDescriptor:v3", probe);
     } catch (e) {
       this.deps.log.debug(
         `${this.deviceId}: desc.xml probe failed, asking again on the next connect (${errorMessage(e)})`,
@@ -430,9 +430,6 @@ export class XmlDeviceController {
       definiteXmlBody(() => this.deps.client.getXml(element, inner), `${element} probe`);
     const memory = this.deps.probeMemory;
     try {
-      if (!memory) {
-        return await probe();
-      }
       return fresh ? await memory.refresh(key, probe) : await memory.once(key, probe);
     } catch (e) {
       this.deps.log.debug(
@@ -1057,13 +1054,10 @@ export class XmlDeviceController {
   /**
    * Create the browsing surface (#613) when at least one source answers a List_Info
    * probe (NET_RADIO/SERVER/USB — the menus the predecessor adapter's users drove
-   * via `Realtime.*.LINE1TXT` + `xmlCommand`). Skipped without a delay dep (older tests).
+   * via `Realtime.*.LINE1TXT` + `xmlCommand`).
    */
   private async setupBrowse(): Promise<void> {
     const gate = this.deps.gate;
-    if (!gate) {
-      return;
-    }
     const delay = (ms: number): Promise<void> => gate.delay(ms);
     // Which sources have a menu is a property of the MODEL, not of this connection — ask
     // once per device instead of costing three extra requests (up to five seconds on a
@@ -1095,7 +1089,7 @@ export class XmlDeviceController {
     try {
       available = new Set(
         // `:v2` since the answers are source ids (2026-09-24, D5) — the old key held keys.
-        this.deps.probeMemory ? await this.deps.probeMemory.once("xmlBrowseSources:v2", probe) : await probe(),
+        await this.deps.probeMemory.once("xmlBrowseSources:v2", probe),
       );
     } catch (e) {
       this.deps.log.debug(
@@ -1127,7 +1121,7 @@ export class XmlDeviceController {
    * @param value the value to write
    */
   private emit(relativeId: string, value: boolean | number | string): void {
-    if (this.deps.gate?.closed) {
+    if (this.deps.gate.closed) {
       return;
     }
     this.deps.setStateAck(`${this.deviceId}.${relativeId}`, value);
@@ -1217,7 +1211,7 @@ export class XmlDeviceController {
     this.browseEngine?.close();
     // Closing the gate empties its queue and aborts its signal: queued requests are
     // dropped and every pending wait ends, so nothing writes after the teardown.
-    this.deps.gate?.close();
+    this.deps.gate.close();
     this.cancelKeepalive?.();
     this.cancelKeepalive = undefined;
   }
@@ -1419,7 +1413,7 @@ export class XmlDeviceController {
     }
     if (status.dialect !== undefined && status.dialect !== this.dialect) {
       this.dialect = status.dialect;
-      this.deps.probeMemory?.set("xmlDialect", status.dialect);
+      this.deps.probeMemory.set("xmlDialect", status.dialect);
     }
     // A field the device delivers for the FIRST time mid-run has no object yet
     // (claim-with-proof creates only proven fields at start): remember it — the next
@@ -1434,7 +1428,7 @@ export class XmlDeviceController {
         }
       }
       if (grew) {
-        this.deps.probeMemory?.set(`xmlStatusFields:${zone.key}`, [...known]);
+        this.deps.probeMemory.set(`xmlStatusFields:${zone.key}`, [...known]);
         // 2.7.0: the objects for the new fields are built NOW and their values written right
         // after, instead of appearing one start later. The transport adapter signals the handle,
         // which re-coordinates the unified tree. A field that VANISHES from a later poll removes

@@ -234,14 +234,14 @@ export interface YxcControllerDeps {
    * Whether this device's events actually arrive (held per device by the adapter, so the verdict
    * survives a reconnect). Absent = trust the bound socket, as before (audit 2026-09-24, C1).
    */
-  pushLiveness?: PushLiveness;
+  pushLiveness: PushLiveness;
   /**
    * The device's address as configured — a cover path it reports is fetched from it (C6). Absent =
    * addresses stay as reported.
    */
   host?: string;
   /** Per-device memory for answers that do not change while the device runs (see ProbeMemory). */
-  probeMemory?: ProbeMemory;
+  probeMemory: ProbeMemory;
   /** Schedule the keepalive handler; returns a function that cancels it. */
   scheduleKeepalive(handler: () => void, ms: number): () => void;
   /** Create or update an object in the device tree. */
@@ -257,9 +257,9 @@ export interface YxcControllerDeps {
   /**
    * The device's command gate: every request is paced through it, and its signal is the
    * connection's shutdown flag — a closed gate ends pending waits and stops state writes
-   * from a poll that was already in flight. Absent in older tests → no browsing.
+   * from a poll that was already in flight.
    */
-  gate?: CommandGate;
+  gate: CommandGate;
 }
 
 /**
@@ -400,7 +400,7 @@ export class YxcDeviceController {
       this.apiVersion = typeof api === "number" ? api : undefined;
       const version = (info as { system_version?: unknown } | null)?.system_version;
       const identity = `${model ?? ""}|${typeof version === "number" || typeof version === "string" ? version : ""}`;
-      if (this.deps.probeMemory && this.deps.probeMemory.remembered("yxcIdentity") !== identity) {
+      if (this.deps.probeMemory.remembered("yxcIdentity") !== identity) {
         this.deps.probeMemory.drop(key => key === "features" || key === "model" || key === "yxcIdentity");
         this.deps.probeMemory.set("yxcIdentity", identity);
       }
@@ -410,7 +410,7 @@ export class YxcDeviceController {
       // the profile (`DeviceProfileStore.identity`).
       const ids = info as { system_id?: unknown; device_id?: unknown } | null;
       this.pushDeviceId = typeof ids?.device_id === "string" && ids.device_id.length > 0 ? ids.device_id : undefined;
-      if (this.deps.probeMemory && (typeof ids?.system_id === "string" || typeof ids?.device_id === "string")) {
+      if (typeof ids?.system_id === "string" || typeof ids?.device_id === "string") {
         this.deps.probeMemory.set("yxcDeviceIds", {
           ...(typeof ids.system_id === "string" ? { serial: ids.system_id } : {}),
           ...(typeof ids.device_id === "string" ? { mac: ids.device_id } : {}),
@@ -473,7 +473,7 @@ export class YxcDeviceController {
     // The names the user gave the device, its inputs and its sound programs — read FRESH on every
     // connection: they are the user's, and a rename in the app froze here for good while they rode in
     // the probe memory (audit 2026-09-24, C12). The memory's old copy is dropped once.
-    this.deps.probeMemory?.drop(key => key === "name");
+    this.deps.probeMemory.drop(key => key === "name");
     const nameText = await this.readNameText();
     // getFeatures carries neither the API version nor the names; the tree depends on both.
     this.capabilities = {
@@ -692,7 +692,7 @@ export class YxcDeviceController {
    * @returns the remembered or freshly fetched value
    */
   private remember<T>(key: string, probe: () => Promise<T>, isUsable?: (value: T) => boolean): Promise<T> {
-    return this.deps.probeMemory ? this.deps.probeMemory.once(key, probe, isUsable) : probe();
+    return this.deps.probeMemory.once(key, probe, isUsable);
   }
 
   /**
@@ -732,7 +732,7 @@ export class YxcDeviceController {
    * @param value the value to write
    */
   private emit(relativeId: string, value: boolean | number | string): void {
-    if (this.deps.gate?.closed) {
+    if (this.deps.gate.closed) {
       return;
     }
     // Every reported value is handed on, changed or not: the database write compares
@@ -930,13 +930,13 @@ export class YxcDeviceController {
   /**
    * Create the browsing surface (#613) when the device has the netusb block: the
    * `netusb/getListInfo` + `setListControl` API drives an 8-line window under
-   * `player.browse.*`. Skipped without a delay dep (older tests).
+   * `player.browse.*`.
    *
    * @param capabilities the parsed getFeatures capabilities
    */
   private async setupBrowse(capabilities: YxcCapabilities): Promise<void> {
     const gate = this.deps.gate;
-    if (!gate || !capabilities.media.includes("netusb")) {
+    if (!capabilities.media.includes("netusb")) {
       return;
     }
     const inputs = capabilities.zones.find(zone => zone.id === "main")?.inputs ?? [];
@@ -961,7 +961,7 @@ export class YxcDeviceController {
     this.browseEngine?.close();
     // Closing the gate empties its queue and aborts its signal: queued requests are
     // dropped and every pending wait ends, so nothing writes after the teardown.
-    this.deps.gate?.close();
+    this.deps.gate.close();
     this.cancelKeepalive?.();
     this.cancelKeepalive = undefined;
     // Unregister from the shared push receiver — otherwise a push arriving after
@@ -980,7 +980,7 @@ export class YxcDeviceController {
    */
   private onPush(event: unknown): void {
     this.pushEvents++;
-    if (this.deps.pushLiveness?.noteEvent()) {
+    if (this.deps.pushLiveness.noteEvent()) {
       this.deps.log.info(`${this.deviceId}: MusicCast events arrive again`);
     }
     for (const zone of zonesToRefresh(event)) {
@@ -1838,7 +1838,7 @@ export class YxcDeviceController {
         do {
           entry.again = false;
           await run();
-        } while (entry.again && !this.deps.gate?.closed);
+        } while (entry.again && !this.deps.gate.closed);
       } catch (e) {
         this.deps.log.debug(`${this.deviceId}: refresh ${key} failed: ${errorMessage(e)}`);
       } finally {
@@ -2206,7 +2206,7 @@ export class YxcDeviceController {
 
   /** Whether events are to be relied on: the socket is bound and this device's events arrive. */
   private pushWorking(): boolean {
-    return this.deps.pushActive?.() === true && this.deps.pushLiveness?.state !== "dead";
+    return this.deps.pushActive?.() === true && this.deps.pushLiveness.state !== "dead";
   }
 
   /**
@@ -2214,7 +2214,7 @@ export class YxcDeviceController {
    * bound — without it no event can come, and the poll covers everything anyway.
    */
   private noteMiss(): void {
-    if (this.deps.pushActive?.() && this.deps.pushLiveness?.noteMiss()) {
+    if (this.deps.pushActive?.() && this.deps.pushLiveness.noteMiss()) {
       this.deps.log.info(`${this.deviceId}: MusicCast events are not arriving — polling and reading writes back`);
     }
   }
@@ -2249,9 +2249,6 @@ export class YxcDeviceController {
       return;
     }
     const gate = this.deps.gate;
-    if (!gate) {
-      return;
-    }
     const events = this.pushEvents;
     await gate.delay(PUSH_EXPECT_MS);
     if (gate.closed || this.pushEvents !== events) {

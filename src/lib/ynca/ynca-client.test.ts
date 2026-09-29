@@ -133,13 +133,12 @@ function fixtureFactory(): { factory: (host: string, port: number) => YncaSocket
 }
 
 describe("YncaClient", () => {
-  test("resolves connect on the socket connect event and is reachable", async () => {
+  test("resolves connect on the socket connect event", async () => {
     const { factory, sockets } = fixtureFactory();
     const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
     const connected = client.connect();
     sockets[0].emitConnect();
     await expect(connected).resolves.toBeUndefined();
-    expect(client.isReachable()).toBe(true);
   });
 
   test("sends a command as a CRLF-terminated YNCA line", async () => {
@@ -208,7 +207,6 @@ describe("YncaClient", () => {
     await connected;
     client.close();
     expect(sockets[0].destroyed).toBe(true);
-    expect(client.isReachable()).toBe(false);
   });
 
   test("fires onDrop after an unexpected close and destroys the old socket, without reopening itself", async () => {
@@ -222,7 +220,6 @@ describe("YncaClient", () => {
 
     sockets[0].emitClose();
 
-    expect(client.isReachable()).toBe(false);
     expect(sockets[0].destroyed).toBe(true); // old socket closed (1 connection/receiver)
     expect(dropped).toBe(1); // the supervisor owns reconnect now
     expect(sockets).toHaveLength(1); // the client does not reopen on its own

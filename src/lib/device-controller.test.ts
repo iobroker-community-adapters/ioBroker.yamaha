@@ -46,11 +46,18 @@ class FakeClient implements YncaClientLike {
   public requests: Array<Array<{ subunit: string; func: string }>> = [];
   /** Every bundle GET asked (`SUBUNIT:FUNC`), in order. */
   public bundlesAsked: string[] = [];
-  /** The bracketed probe, when a test gives the fake one. */
-  public probeKnown?: (
+  /**
+   * The bracketed probe — a test replaces it; by default the device says nothing definite.
+   *
+   * @param _subunit the subunit asked
+   * @param funcs the functions asked
+   * @returns an unclear verdict for each
+   */
+  public probeKnown: (
     subunit: string,
     funcs: readonly string[],
-  ) => Promise<Record<string, "known" | "undefined" | "unclear">>;
+  ) => Promise<Record<string, "known" | "undefined" | "unclear">> = (_subunit, funcs) =>
+    Promise.resolve(Object.fromEntries(funcs.map(func => [func, "unclear" as const])));
   private handler?: (message: Msg) => void;
 
   public async connect(): Promise<void> {}
@@ -97,8 +104,10 @@ class FakeClient implements YncaClientLike {
     this.handler = handler;
   }
   public onDrop(): void {}
-  /** Optional like the contract — replaced per test to capture the registered handler. */
-  public onRefusal?: (handler: (command: string, verdict: "restricted" | "undefined") => void) => void;
+  /** Replaced per test to capture the registered handler. */
+  public onRefusal: (handler: (command: string, verdict: "restricted" | "undefined") => void) => void = () => undefined;
+  /** Lines that decode to nothing — ignored by the fake. */
+  public onUnknownLine: (handler: (line: string) => void) => void = () => undefined;
   public startKeepalive(): void {
     this.keepaliveStarted = true;
   }
@@ -137,6 +146,9 @@ function makeDeps(client: FakeClient): {
         acked.push({ id, value });
       },
       log,
+      gate: testGate(),
+      probeMemory: new ProbeMemory({ __schema: DISCOVERY_SCHEMA }),
+      subunitCache: createSubunitCache(undefined, () => undefined),
     },
   };
 }
@@ -1535,8 +1547,9 @@ describe("the completed command lists in the controller (coverage audit 2026-09-
       expect.arrayContaining(["MAIN:BASIC", "MAIN:SCENENAME", "TUN:SIGINFO", "TUN:RDSINFO", "NETRADIO:METAINFO"]),
     );
     expect(client.bundlesAsked.some(pair => pair.startsWith("ZONE2:"))).toBe(false);
-    // One request list carried them all (identity, probe, bundles, sweep).
-    expect(client.requests).toHaveLength(4);
+    // One request list carried them all (identity, probe, bundles, sweep) — the fifth is the menu probe.
+    expect(client.requests).toHaveLength(5);
+    expect(client.requests[4].every(get => get.func === "LISTINFO")).toBe(true);
   });
 
   test("a zone's scenes get their titles on the dropdown and a list of their own", async () => {

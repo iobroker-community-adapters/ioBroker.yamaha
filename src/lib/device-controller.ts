@@ -307,12 +307,12 @@ export interface YncaClientLike {
   onMessage(handler: (message: { subunit: string; func: string; value: string }) => void): void;
   /** Register the socket-drop handler the supervisor reconnects on. */
   onDrop(handler: (reason?: Error) => void): void;
-  /** Register the refusal handler for user commands the device rejects (optional in older tests). */
-  onRefusal?(handler: (command: string, verdict: "restricted" | "undefined") => void): void;
-  /** Register the handler for lines that decode to nothing (optional in older tests). */
-  onUnknownLine?(handler: (line: string) => void): void;
-  /** Ask, without changing anything, whether the device knows some functions (optional in older tests). */
-  probeKnown?(subunit: string, funcs: readonly string[]): Promise<Record<string, "known" | "undefined" | "unclear">>;
+  /** Register the refusal handler for user commands the device rejects. */
+  onRefusal(handler: (command: string, verdict: "restricted" | "undefined") => void): void;
+  /** Register the handler for lines that decode to nothing. */
+  onUnknownLine(handler: (line: string) => void): void;
+  /** Ask, without changing anything, whether the device knows some functions. */
+  probeKnown(subunit: string, funcs: readonly string[]): Promise<Record<string, "known" | "undefined" | "unclear">>;
   /** Start the keepalive poll — called after the init sweep, not on connect. */
   startKeepalive(): void;
   /** Close the connection synchronously. */
@@ -342,15 +342,15 @@ export interface ControllerDeps {
    * With a valid cache the probe phase is skipped and the targeted sweep runs directly;
    * a model/firmware mismatch after the sweep invalidates it and re-probes.
    */
-  subunitCache?: YncaSubunitCache;
+  subunitCache: YncaSubunitCache;
   /**
    * The device's command gate: every line this controller puts on the wire is already
    * paced through it, and its signal is the connection's shutdown flag (a closed gate
-   * ends pending waits and stops state writes). Absent in older tests → no browsing.
+   * ends pending waits and stops state writes).
    */
-  gate?: CommandGate;
+  gate: CommandGate;
   /** Per-device memory for answers that stay constant while the device runs (see ProbeMemory). */
-  probeMemory?: ProbeMemory;
+  probeMemory: ProbeMemory;
 }
 
 /**
@@ -480,7 +480,7 @@ export class YncaDeviceController {
     // A user command the device rejects must leave a trace: @RESTRICTED (not allowed /
     // not possible right now) and @UNDEFINED (unknown on this model) were silently
     // dropped before — the class of invisible failures behind #615.
-    this.deps.client.onRefusal?.((command, verdict) => {
+    this.deps.client.onRefusal((command, verdict) => {
       this.deps.log.warn(`${this.deviceId}: device refused "${command}" (@${verdict.toUpperCase()})`);
       this.restoreRefused(command);
       // A pad key the device does not know: the dialect may be wrong — asked again, once per
@@ -492,7 +492,7 @@ export class YncaDeviceController {
       }
     });
     let unknownLines = 0;
-    this.deps.client.onUnknownLine?.(line => {
+    this.deps.client.onUnknownLine(line => {
       unknownLines++;
       if (unknownLines <= UNKNOWN_LINES_LOGGED) {
         this.deps.log.debug(`${this.deviceId}: unrecognised line from the device: ${line}`);
@@ -596,11 +596,11 @@ export class YncaDeviceController {
     ]);
     const model = identity.model;
     const firmware = identity.subunits.SYS?.VERSION ?? "";
-    const remembered = this.deps.probeMemory?.remembered(CAPS_KEY);
+    const remembered = this.deps.probeMemory.remembered(CAPS_KEY);
     if (model && isCachedCapabilities(remembered) && remembered.model === model && remembered.firmware === firmware) {
       // The remembered subunit snapshot is proof for narrowing ONLY from the same identity: a
       // snapshot of another firmware says nothing about which sources this device has now.
-      const cached = this.deps.subunitCache?.get();
+      const cached = this.deps.subunitCache.get();
       if (cached && cached.model === model && cached.firmware === firmware) {
         // Only what the snapshot ASKED is judged: a subunit the catalog gained later was never
         // probed and must not read as absent (audit 2026-09-24, B11).
@@ -614,14 +614,14 @@ export class YncaDeviceController {
       // A different (or updated) device behind this address: its remembered YNCA
       // answers are void — the observed values too. The other transports guard their own portions.
       // An EMPTY model is no identity at all (a lost first command), not another device.
-      this.deps.probeMemory?.drop(
+      this.deps.probeMemory.drop(
         key => key === CAPS_KEY || key === STATIC_KEY || key === OBSERVED_KEY || key === PAD_DIALECT_KEY,
       );
     }
     this.loadObserved();
     const capabilities = await this.sweepDevice(catalog, model, firmware);
     if (capabilities.model) {
-      this.deps.probeMemory?.set(CAPS_KEY, {
+      this.deps.probeMemory.set(CAPS_KEY, {
         model: capabilities.model,
         firmware: capabilities.subunits.SYS?.VERSION ?? firmware,
         subunits: capabilities.subunits,
@@ -631,7 +631,7 @@ export class YncaDeviceController {
       // remembered. The statics (input and scene names) are written by the sweep regardless,
       // so leaving them behind froze those names for good on a device that does not answer
       // SYS:MODELNAME. The two keys live and die together.
-      this.deps.probeMemory?.drop(key => key === STATIC_KEY);
+      this.deps.probeMemory.drop(key => key === STATIC_KEY);
     }
     return { capabilities, fromCache: false };
   }
@@ -692,7 +692,7 @@ export class YncaDeviceController {
    */
   private async refreshInBackground(catalog: readonly YncaEntry[]): Promise<void> {
     try {
-      const cached = this.deps.subunitCache?.get();
+      const cached = this.deps.subunitCache.get();
       const gets = sweepGets(catalog).filter(
         get => get.subunit === "SYS" || !cached || cached.subunits.includes(get.subunit),
       );
@@ -711,17 +711,17 @@ export class YncaDeviceController {
           }
         }
       }
-      this.deps.probeMemory?.set(STATIC_KEY, statics);
+      this.deps.probeMemory.set(STATIC_KEY, statics);
       // UNION with the remembered shape (same identity — the fast path proved it):
       // a refresh while the device stands by answers many functions @RESTRICTED and
       // must not strip abilities it proved while awake; a lean standby FIRST capture
       // heals on the next awake refresh instead of staying lean forever (datapoint
       // review finding, 2.0.2).
-      const remembered = this.deps.probeMemory?.remembered(CAPS_KEY);
+      const remembered = this.deps.probeMemory.remembered(CAPS_KEY);
       const subunits = isCachedCapabilities(remembered)
         ? mergeYncaSubunits(remembered.subunits, fresh.subunits)
         : fresh.subunits;
-      this.deps.probeMemory?.set(CAPS_KEY, {
+      this.deps.probeMemory.set(CAPS_KEY, {
         model: fresh.model,
         firmware: fresh.subunits.SYS?.VERSION ?? "",
         subunits,
@@ -783,7 +783,7 @@ export class YncaDeviceController {
    * @returns the assembled capabilities
    */
   private async sweepDevice(catalog: readonly YncaEntry[], model: string, firmware: string): Promise<YncaCapabilities> {
-    const cached = this.deps.subunitCache?.get();
+    const cached = this.deps.subunitCache.get();
     // An empty model is no identity (a lost first command, B1): the cache is neither used nor
     // cleared — a fresh probe runs and its result replaces it.
     if (cached && model) {
@@ -801,7 +801,7 @@ export class YncaDeviceController {
           for (const subunit of Object.keys(extra.subunits)) {
             present.add(subunit);
           }
-          this.deps.subunitCache?.set({ subunits: [...present], probed: [...PROBED_SUBUNITS], model, firmware });
+          this.deps.subunitCache.set({ subunits: [...present], probed: [...PROBED_SUBUNITS], model, firmware });
         }
         this.probedSubunits = PROBED_SUBUNITS;
         this.presentSubunits = present;
@@ -809,7 +809,7 @@ export class YncaDeviceController {
       }
       // The device behind this IP changed (swap or firmware update) — re-probe.
       this.deps.log.debug(`${this.deviceId}: cached subunit set is stale (model/firmware changed), re-probing`);
-      this.deps.subunitCache?.clear();
+      this.deps.subunitCache.clear();
     }
     const probe = await this.deps.client.readCapabilities(AVAIL_PROBE);
     const present = new Set(Object.keys(probe.subunits));
@@ -822,7 +822,7 @@ export class YncaDeviceController {
     this.presentSubunits = present;
     const capabilities = await this.targetedSweep(catalog, present);
     if (capabilities.model) {
-      this.deps.subunitCache?.set({
+      this.deps.subunitCache.set({
         subunits: [...present],
         probed: [...PROBED_SUBUNITS],
         model: capabilities.model,
@@ -857,7 +857,7 @@ export class YncaDeviceController {
     const gets = sweepGets(catalog).filter(
       get => (get.subunit === "SYS" || present.has(get.subunit)) && !answered.has(`${get.subunit}:${get.func}`),
     );
-    const remembered = this.deps.probeMemory?.remembered<Record<string, Record<string, string>>>(STATIC_KEY);
+    const remembered = this.deps.probeMemory.remembered<Record<string, Record<string, string>>>(STATIC_KEY);
     // The zone table, the absent sources and the SYS families decide what is worth sending
     // (2.7.0, `planSweep`); a function a bundle answered is proof already, whatever the table
     // says. Second connect onwards the statics are skipped too and the remembered answers put
@@ -885,7 +885,7 @@ export class YncaDeviceController {
         }
       }
     }
-    this.deps.probeMemory?.set(STATIC_KEY, statics);
+    this.deps.probeMemory.set(STATIC_KEY, statics);
     return capabilities;
   }
 
@@ -961,7 +961,7 @@ export class YncaDeviceController {
    * dropped store is not read back).
    */
   private loadObserved(): void {
-    const remembered = this.deps.probeMemory?.remembered(OBSERVED_KEY);
+    const remembered = this.deps.probeMemory.remembered(OBSERVED_KEY);
     this.observed = isObservedValues(remembered) ? remembered : {};
   }
 
@@ -996,7 +996,7 @@ export class YncaDeviceController {
       return;
     }
     list.push(value);
-    this.deps.probeMemory?.set(OBSERVED_KEY, this.observed);
+    this.deps.probeMemory.set(OBSERVED_KEY, this.observed);
     // The dropdown follows within the SESSION (2.7.0): the object is rebuilt with the grown list
     // and re-upserted; the handle re-coordinates and writes only what really changed. Before, an
     // observed value reached the dropdown one start later.
@@ -1059,7 +1059,7 @@ export class YncaDeviceController {
     return {
       present,
       probed: this.probedSubunits,
-      ...xmlInputEvidence(this.deps.probeMemory?.remembered("xmlConfig")),
+      ...xmlInputEvidence(this.deps.probeMemory.remembered("xmlConfig")),
     };
   }
 
@@ -1472,14 +1472,13 @@ export class YncaDeviceController {
   /**
    * Create the browsing surface (#613) when the device reports a browsable media
    * subunit: the official YNCA list vocabulary (LISTINFO/LISTSEL/LISTPAGE/LISTCURSOR)
-   * drives an 8-line window under `player.browse.*`. Skipped without a delay dep
-   * (older tests) and when the playback group is switched off.
+   * drives an 8-line window under `player.browse.*`. Skipped when the playback group is switched off.
    *
    * @param capabilities the device's swept capabilities
    */
   private async setupBrowse(capabilities: YncaCapabilities): Promise<void> {
     const gate = this.deps.gate;
-    if (!gate || this.deps.isEntryEnabled?.("player.browse.source") === false) {
+    if (this.deps.isEntryEnabled?.("player.browse.source") === false) {
       return;
     }
     const delay = (ms: number): Promise<void> => gate.delay(ms);
@@ -1649,7 +1648,7 @@ export class YncaDeviceController {
     if (!generation.pad) {
       return;
     }
-    const stored = this.deps.probeMemory?.remembered<unknown>(ZONE_PAD_KEY);
+    const stored = this.deps.probeMemory.remembered<unknown>(ZONE_PAD_KEY);
     const remembered: Record<string, boolean> =
       typeof stored === "object" && stored !== null ? { ...(stored as Record<string, boolean>) } : {};
     let learned = false;
@@ -1658,10 +1657,10 @@ export class YncaDeviceController {
         continue;
       }
       let has = typeof remembered[zone.key] === "boolean" ? remembered[zone.key] : undefined;
-      if (has === undefined && this.deps.client.probeKnown) {
+      if (has === undefined) {
         try {
           const verdict = (await this.deps.client.probeKnown(zone.subunit, ["LISTCURSOR"])).LISTCURSOR;
-          if (verdict !== "unclear") {
+          if (verdict === "known" || verdict === "undefined") {
             has = verdict === "known";
             remembered[zone.key] = has;
             learned = true;
@@ -1680,7 +1679,7 @@ export class YncaDeviceController {
       this.zonePads.set(zone.key, { subunit: zone.subunit, ...wires });
     }
     if (learned) {
-      this.deps.probeMemory?.set(ZONE_PAD_KEY, remembered);
+      this.deps.probeMemory.set(ZONE_PAD_KEY, remembered);
     }
   }
 
@@ -1710,11 +1709,11 @@ export class YncaDeviceController {
    * @returns the dialect to drive the pad with
    */
   private async padDialect(proven: boolean): Promise<YncaPadDialect> {
-    const remembered = provenPadDialect(this.deps.probeMemory?.remembered(PAD_DIALECT_KEY));
+    const remembered = provenPadDialect(this.deps.probeMemory.remembered(PAD_DIALECT_KEY));
     if (remembered) {
       return remembered;
     }
-    if (!proven || !this.deps.client.probeKnown) {
+    if (!proven) {
       return "list";
     }
     const verdicts = await this.deps.client.probeKnown("MAIN", ["LISTCURSOR", "CURSOR"]);
@@ -1730,7 +1729,7 @@ export class YncaDeviceController {
     if (!dialect) {
       return "list";
     }
-    this.deps.probeMemory?.set(PAD_DIALECT_KEY, { dialect, proven: true });
+    this.deps.probeMemory.set(PAD_DIALECT_KEY, { dialect, proven: true });
     return dialect;
   }
 
@@ -1743,12 +1742,12 @@ export class YncaDeviceController {
    */
   private async reprobePad(func: string, wire: string): Promise<void> {
     const driver = this.browseDriver;
-    if (!driver || !this.deps.client.probeKnown) {
+    if (!driver) {
       return;
     }
     try {
       const before = driver.padDialect;
-      this.deps.probeMemory?.drop(key => key === PAD_DIALECT_KEY);
+      this.deps.probeMemory.drop(key => key === PAD_DIALECT_KEY);
       const after = await this.padDialect(true);
       if (after !== before) {
         driver.usePadDialect(after);

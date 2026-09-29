@@ -588,8 +588,8 @@ export class Yamaha extends utils.Adapter {
           this.knownDeviceIps,
           subunitCache,
           probeMemory,
-          signal,
           pushLiveness,
+          signal,
         );
         failedInARow = handle ? 0 : failedInARow + 1;
         return handle;
@@ -2569,8 +2569,8 @@ export class Yamaha extends utils.Adapter {
    * @param knownDeviceIps IPs of all configured devices, for resolving a multiroom client
    * @param yncaSubunitCache per-device cache of the YNCA AVAIL probe (skips the probe on reconnects)
    * @param probeMemory per-device memory for constant device answers (skips re-asking on reconnects)
-   * @param signal aborted when the device's supervisor is closed while this attempt runs
    * @param pushLiveness whether the device's MusicCast events arrive (held per device)
+   * @param signal aborted when the device's supervisor is closed while this attempt runs
    * @returns a connection handle, or null when no transport connected
    */
   private attemptDevice(
@@ -2579,8 +2579,8 @@ export class Yamaha extends utils.Adapter {
     knownDeviceIps: Set<string>,
     yncaSubunitCache: YncaSubunitCache,
     probeMemory: ProbeMemory,
+    pushLiveness: PushLiveness,
     signal?: AbortSignal,
-    pushLiveness?: PushLiveness,
   ): Promise<ConnectionHandle | null> {
     // Whether this attempt may still write. A delete or a move closes the supervisor (which aborts
     // the signal) while its attempt can still be sweeping; what it wrote afterwards survived as an

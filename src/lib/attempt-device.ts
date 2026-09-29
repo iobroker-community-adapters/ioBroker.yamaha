@@ -60,7 +60,7 @@ export interface AttemptDeps {
   /** Whether the shared push receiver is listening (decides how much the keepalive polls). */
   pushActive?(): boolean;
   /** Whether this device's MusicCast events actually arrive (held by the caller across reconnects). */
-  pushLiveness?: PushLiveness;
+  pushLiveness: PushLiveness;
   /** Schedule a repeating keepalive; returns a function that cancels it. */
   scheduleKeepalive(handler: () => void, ms: number): () => void;
   /** How often to poll an XML/YNC device for state (ms). */
@@ -79,9 +79,9 @@ export interface AttemptDeps {
   /** Datapoint-group gate for the YNCA sweep — a disabled group's functions are never fetched. */
   isEntryEnabled?(id: string): boolean;
   /** Per-device cache of the YNCA AVAIL probe, held by the caller across reconnects. */
-  yncaSubunitCache?: YncaSubunitCache;
+  yncaSubunitCache: YncaSubunitCache;
   /** Per-device memory for device answers that stay constant while it runs (held by the caller). */
-  probeMemory?: ProbeMemory;
+  probeMemory: ProbeMemory;
   /** The object definitions last written for this device (held by the caller, see MultiTransportDeps). */
   writtenObjects?: Map<string, string>;
   /** The device's objects as they stand in the tree (canonical id → object) — see MultiTransportDeps. */
@@ -409,8 +409,8 @@ export function attemptDevice(
       // identities — each written only once that transport answered (D1).
       proven: transport =>
         transport === "ynca"
-          ? deps.probeMemory?.remembered("yncaCapabilities") !== undefined || deps.yncaSubunitCache?.get() !== undefined
-          : deps.probeMemory?.remembered(transport === "yxc" ? "yxcIdentity" : "xmlIdentity") !== undefined,
+          ? deps.probeMemory.remembered("yncaCapabilities") !== undefined || deps.yncaSubunitCache.get() !== undefined
+          : deps.probeMemory.remembered(transport === "yxc" ? "yxcIdentity" : "xmlIdentity") !== undefined,
       existingObjects: deps.existingObjects,
     },
     signal,

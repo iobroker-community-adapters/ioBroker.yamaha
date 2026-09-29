@@ -640,11 +640,6 @@ export class YncaClient {
     }
   }
 
-  /** Whether the connection is currently up. */
-  public isReachable(): boolean {
-    return this.reachable;
-  }
-
   /**
    * Close the connection permanently (no reconnect). Synchronous — safe to call from
    * onUnload. Closing the gate empties its queue and aborts its signal, so a sweep or a
