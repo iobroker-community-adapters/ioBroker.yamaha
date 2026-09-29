@@ -11,7 +11,13 @@ describe("volume percent mode", () => {
     // Every other id carrying "volume" is a different quantity on a different scale: a limit, a
     // calibration offset, a line-output mode, a button.
     test("matches main and every zone, and nothing else", () => {
-      for (const id of ["volume", "multiroom.zone2.volume", "multiroom.zone3.volume", "multiroom.zone4.volume"]) {
+      for (const id of [
+        "volume",
+        "multiroom.zone2.volume",
+        "multiroom.zone3.volume",
+        "multiroom.zone4.volume",
+        "multiroom.zoneB.volume",
+      ]) {
         expect(isAmpVolumeId(id), id).toBe(true);
       }
       for (const id of [

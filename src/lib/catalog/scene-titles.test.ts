@@ -1,4 +1,4 @@
-import { knownScenes, resolveSceneNumber, sceneListSurface } from "./scene-titles";
+import { knownScenes, resolveSceneNumber, sceneListSurface, sceneNumber } from "./scene-titles";
 import { ProbeMemory } from "../lifecycle/probe-memory";
 import { DISCOVERY_SCHEMA } from "../lifecycle/discovery-schema";
 
@@ -93,5 +93,25 @@ describe("the scene list surface", () => {
       { id: "multiroom.zone2.scene.title1", value: "Movie" },
       { id: "multiroom.zone2.scene.title2", value: "" },
     ]);
+  });
+});
+
+// One resolution for all three transports: "1.5" was scene 2 on XML and YNCA and nothing on MusicCast
+// (audit 2026-09-29, D16).
+describe("sceneNumber", () => {
+  const scenes = [
+    { num: 1, title: "Movie" },
+    { num: 2, title: "Radio" },
+  ];
+  test("takes whole numbers and titles, and nothing else", () => {
+    expect(sceneNumber(2, scenes)).toBe(2);
+    expect(sceneNumber(" 3 ", scenes)).toBe(3);
+    expect(sceneNumber("radio", scenes)).toBe(2);
+    expect(sceneNumber("1.5", scenes)).toBeUndefined();
+    expect(sceneNumber(1.5, scenes)).toBeUndefined();
+    expect(sceneNumber(0, scenes)).toBeUndefined();
+    expect(sceneNumber(true, scenes)).toBeUndefined();
+    expect(sceneNumber("0x1", scenes)).toBeUndefined();
+    expect(sceneNumber("Party", scenes)).toBeUndefined();
   });
 });

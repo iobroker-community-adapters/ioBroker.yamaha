@@ -1,6 +1,7 @@
 import type { ProbeMemory } from "../lifecycle/probe-memory";
 import { parseSceneList } from "../xml/protocol";
 import { tName } from "../i18n";
+import { writableNumber } from "./value-coerce";
 import type { ObjectDef } from "./types";
 
 /**
@@ -98,19 +99,28 @@ export function resolveSceneNumber(
   memory: ProbeMemory | undefined,
   zoneKey: string,
 ): number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return Math.round(value);
+  return sceneNumber(value, knownScenes(memory, zoneKey));
+}
+
+/**
+ * The one resolution of a scene-recall write, for all three transports: a whole number through the
+ * one number gate (`writableNumber` — `true` or `"0x1"` are no scene), or a TITLE, case-insensitive.
+ * "1.5" was scene 2 on XML and YNCA and nothing on MusicCast (audit 2026-09-29, D16).
+ *
+ * @param value the written value
+ * @param scenes the scenes the zone declares
+ * @returns the scene number, or undefined when the value names none
+ */
+export function sceneNumber(value: unknown, scenes: readonly SceneListEntry[]): number | undefined {
+  const num = writableNumber(value);
+  if (num !== undefined) {
+    return Number.isInteger(num) && num >= 1 ? num : undefined;
   }
   if (typeof value !== "string") {
     return undefined;
   }
-  const trimmed = value.trim();
-  if (/^\d+$/.test(trimmed)) {
-    return Number(trimmed);
-  }
-  const needle = trimmed.toLowerCase();
-  const match = knownScenes(memory, zoneKey).find(scene => scene.title.toLowerCase() === needle);
-  return match?.num;
+  const needle = value.trim().toLowerCase();
+  return scenes.find(scene => scene.title.toLowerCase() === needle)?.num;
 }
 
 /**

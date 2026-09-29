@@ -12,3 +12,17 @@ export const MEDIA_STATE_LABELS: Record<number, string> = {
   [MEDIA_STATE.play]: "Play",
   [MEDIA_STATE.stop]: "Stop",
 };
+
+/**
+ * The transport keys of a player block, with the name and the media-player role each carries — the
+ * ioBroker state roles `button.play/pause/stop/next/prev` fill the type detector's slots. One table for
+ * the transports that build the keys themselves; the XML keys stood as plain `button` while the same
+ * ids were `button.play` under MusicCast (audit 2026-09-29, D9).
+ */
+export const TRANSPORT_KEYS = {
+  play: { nameKey: "play", role: "button.play" },
+  pause: { nameKey: "pause", role: "button.pause" },
+  stop: { nameKey: "stop", role: "button.stop" },
+  next: { nameKey: "next", role: "button.next" },
+  prev: { nameKey: "previous", role: "button.prev" },
+} as const;

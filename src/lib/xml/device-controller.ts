@@ -34,7 +34,8 @@ import {
   XmlBrowseDriver,
 } from "../browse/xml-browse-driver";
 import { wireFor } from "../browse/types";
-import { sceneListSurface } from "../catalog/scene-titles";
+import { sceneListSurface, sceneNumber } from "../catalog/scene-titles";
+import { TRANSPORT_KEYS } from "../catalog/media-state";
 import { decodeXmlText, escapeXmlText } from "./entities";
 
 /** XML/YNC has no push channel, so the state is polled at this interval by default. */
@@ -59,13 +60,6 @@ const XML_TRANSPORT_WIRE: Record<string, string> = {
 };
 
 /** The transport keys' display names (the player block's own keys). */
-const XML_TRANSPORT_NAME_KEYS: Record<string, "play" | "pause" | "stop" | "next" | "previous"> = {
-  play: "play",
-  pause: "pause",
-  stop: "stop",
-  next: "next",
-  prev: "previous",
-};
 
 const XML_ZONES: XmlZone[] = [
   { key: "main", element: "Main_Zone", prefix: "" },
@@ -672,12 +666,8 @@ export class XmlDeviceController implements ConnectionHandle {
     const zoneKey = match[1] ?? "main";
     const zone = this.zones.find(z => z.key === zoneKey);
     const scenes = this.scenesByZone.get(zoneKey);
-    // A TITLE is as valid a write as a number ("Movie Viewing" → Scene 1).
-    const byTitle =
-      typeof value === "string" && !/^\d+$/.test(value.trim())
-        ? scenes?.find(scene => scene.title.toLowerCase() === value.trim().toLowerCase())?.num
-        : undefined;
-    const num = byTitle ?? Math.round(writableNumber(value) ?? Number.NaN);
+    // A TITLE is as valid a write as a number ("Movie Viewing" → Scene 1) — the one resolver (D16).
+    const num = sceneNumber(value, scenes ?? []);
     if (!zone || !scenes || !scenes.some(scene => scene.num === num)) {
       return true;
     }
@@ -1139,12 +1129,12 @@ export class XmlDeviceController implements ConnectionHandle {
           common: channelCommon("player"),
         });
       }
-      for (const [key, nameKey] of Object.entries(XML_TRANSPORT_NAME_KEYS)) {
+      for (const [key, { nameKey, role }] of Object.entries(TRANSPORT_KEYS)) {
         const stateId = `${zone.prefix}player.${key}`;
         await this.deps.upsertObject(`${this.deviceId}.${stateId}`, {
           id: stateId,
           type: "state",
-          common: { name: tName(nameKey), type: "boolean", role: "button", read: false, write: true },
+          common: { name: tName(nameKey), type: "boolean", role, read: false, write: true },
         });
         this.createdStates.add(stateId);
       }

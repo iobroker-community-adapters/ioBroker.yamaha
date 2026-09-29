@@ -1,6 +1,7 @@
 import type { BrowseDriver, BrowseRow, BrowseWindow } from "./types";
 import type { ControllerLog } from "../controller";
 import { errorMessage } from "../util";
+import { writableNumber } from "../catalog/value-coerce";
 
 /** Poll interval while waiting for the device to deliver a fresh window. */
 const WAIT_POLL_MS = 250;
@@ -181,16 +182,18 @@ export class BrowseEngine {
         }
         return;
       case "selectLine": {
-        const line = Number(value);
-        if (Number.isInteger(line) && line >= 1 && line <= 8) {
+        // The one number gate of every write (`writableNumber`): a switch widget's `true` is no line 1
+        // (audit 2026-09-29, D14).
+        const line = writableNumber(value);
+        if (line !== undefined && Number.isInteger(line) && line >= 1 && line <= 8) {
           void this.run(`select line ${line}`, () => this.driver.select(line));
         }
         return;
       }
       case "playLine": {
-        const line = Number(value);
+        const line = writableNumber(value);
         const play = this.driver.playContainer?.bind(this.driver);
-        if (play && Number.isInteger(line) && line >= 1 && line <= 8) {
+        if (play && line !== undefined && Number.isInteger(line) && line >= 1 && line <= 8) {
           void this.run(`play line ${line}`, () => play(line));
         }
         return;

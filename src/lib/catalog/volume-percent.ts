@@ -39,8 +39,8 @@ export interface VolumeBounds {
 /**
  * Whether a canonical state id is the amp volume — main's or any zone's.
  *
- * Measured against the built tree: only `volume` and `multiroom.zoneN.volume` carry the loudness
- * of a zone. `advanced.maxVolume` (a limit), `sound.ypaoVolume` (a calibration offset),
+ * Measured against the built tree: only `volume`, `multiroom.zoneN.volume` and `multiroom.zoneB.volume`
+ * carry the loudness of a zone. `advanced.maxVolume` (a limit), `sound.ypaoVolume` (a calibration offset),
  * `subwooferVolume`, `multiroom.zone2.volumeOutput`, `multiroom.partyVolumeUp/Down` and
  * `player.airplay.volumeInterlock` are other quantities on other scales and stay untouched.
  *
@@ -48,7 +48,9 @@ export interface VolumeBounds {
  * @returns true when the id is a zone's volume datapoint
  */
 export function isAmpVolumeId(stateId: string): boolean {
-  return stateId.replace(ZONE_PREFIX, "") === "volume";
+  // Zone B is a zone too, on the same decibel scale (audit 2026-09-29, D13) — it stood in dB beside a
+  // main zone in percent.
+  return stateId.replace(ZONE_PREFIX, "").replace(/^multiroom\.zoneB\./, "") === "volume";
 }
 
 /**

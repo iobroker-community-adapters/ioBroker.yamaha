@@ -36,7 +36,7 @@ import type { CommandGate } from "./lifecycle/command-gate";
 import type { ProbeMemory } from "./lifecycle/probe-memory";
 import type { BrowseEngine } from "./browse/browse-engine";
 import { createBrowseSurface } from "./browse/surface";
-import { YNCA_STATIC_KEY, sceneListSurface, yncaSceneTitles } from "./catalog/scene-titles";
+import { YNCA_STATIC_KEY, sceneListSurface, sceneNumber, yncaSceneTitles } from "./catalog/scene-titles";
 import { YNCA_BROWSE_SOURCES, YncaBrowseDriver, type YncaPadDialect } from "./browse/ynca-browse-driver";
 
 // The YNCA catalog and its lookup maps are static — built once for all devices.
@@ -1116,19 +1116,18 @@ export class YncaDeviceController implements ConnectionHandle {
     // A scene TITLE is as valid a recall write as its number ("Movie Viewing" → 1) — on the
     // main zone and on a zone with scenes of its own.
     const sceneTitles = this.sceneTitlesFor(stateId);
-    if (sceneTitles !== undefined && typeof value === "string" && !/^\d+$/.test(value.trim())) {
-      const needle = value.trim().toLowerCase();
-      const match = sceneTitles.find(scene => scene.title.toLowerCase() === needle);
-      if (match === undefined) {
+    if (sceneTitles !== undefined) {
+      const num = sceneNumber(value, sceneTitles);
+      if (num === undefined) {
         // A dead button has to leave a trace — this was the one write path in the adapter
         // that dropped a user action without a word (#615's lesson, applied to itself).
         this.deps.log.debug(
-          `${this.deviceId}: scene "${value}" is not one this device declares — write dropped ` +
+          `${this.deviceId}: scene "${String(value)}" is not one this device declares — write dropped ` +
             `(known: ${sceneTitles.map(scene => scene.title).join(", ") || "none yet"})`,
         );
         return;
       }
-      value = match.num;
+      value = num;
     }
     // The unified player writes go to the subunit the ZONE is listening to (v2.0.0) —
     // routed here, BEFORE the generic path.

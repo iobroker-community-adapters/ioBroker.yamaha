@@ -147,6 +147,9 @@ describe("BrowseEngine", () => {
     engine.handleWrite("player.browse.selectLine", 3);
     await flush();
     engine.handleWrite("player.browse.selectLine", 9); // out of window → ignored
+    // A switch widget's `true` and a hex string are no line numbers (the one number gate; audit 2026-09-29, D14).
+    engine.handleWrite("player.browse.selectLine", true);
+    engine.handleWrite("player.browse.selectLine", "0x1");
     engine.handleWrite("player.browse.pageDown", true);
     await flush();
     engine.handleWrite("player.browse.back", true);
