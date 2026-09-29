@@ -1735,6 +1735,35 @@ describe("YxcDeviceController device name", () => {
     });
   });
 
+  // Beside the JSON: a channel per declared slot, a datapoint per field, an empty slot read empty (C30).
+  test("the favourites and recent lists also land as slots, as many as the device declares", async () => {
+    const features = {
+      zone: [{ id: "main", func_list: ["power"] }],
+      netusb: { preset: { num: 3 }, recent_info: { num: 2 } },
+    };
+    const s = setup(features, ysp);
+    s.client.presetInfo = {
+      response_code: 0,
+      preset_info: [
+        { input: "unknown", text: "" },
+        { input: "net_radio", text: "hr3" },
+      ],
+    };
+    s.client.recentInfo = { response_code: 0, recent_info: [{ input: "spotify", text: "Mix" }] };
+    await s.controller.start();
+    expect(s.objects.filter(id => id.startsWith("living.player.netPlayer.favourites."))).toHaveLength(3 * 3);
+    expect(s.acks).toEqual(
+      expect.arrayContaining([
+        { id: "living.player.netPlayer.favourites.1.name", value: "" },
+        { id: "living.player.netPlayer.favourites.2.name", value: "hr3" },
+        { id: "living.player.netPlayer.favourites.2.input", value: "net_radio" },
+        { id: "living.player.netPlayer.favourites.3.input", value: "" },
+        { id: "living.player.netPlayer.recentItems.1.name", value: "Mix" },
+        { id: "living.player.netPlayer.recentItems.2.name", value: "" },
+      ]),
+    );
+  });
+
   test("a separate-preset tuner is fetched per band; a preset recall uses the current band", async () => {
     const features = {
       zone: [{ id: "main", func_list: ["power"] }],

@@ -851,6 +851,24 @@ export function mapYxcToObjects(
           write: false,
         },
       });
+      // Its length and position as values of their own — the list shows the first eight (C30).
+      for (const [id, nameKey, descKey] of [
+        ["player.netPlayer.queueLength", "queueLength", "descQueueLength"],
+        ["player.netPlayer.queuePosition", "queuePosition", "descQueuePosition"],
+      ] as const) {
+        objects.push({
+          id,
+          type: "state",
+          common: {
+            name: tName(nameKey),
+            desc: tName(descKey),
+            type: "number",
+            role: "value",
+            read: true,
+            write: false,
+          },
+        });
+      }
     }
   }
   if (capabilities.media.includes("cd")) {

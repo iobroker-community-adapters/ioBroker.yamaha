@@ -27,9 +27,20 @@ import {
   parseYxcTunerPresetLists,
   PLAYER_CLEAR,
   stateToYxc,
+  CLIENT_SLOT_FIELDS,
+  clientSlotEntries,
+  NETUSB_SLOT_FIELDS,
+  netusbSlotEntries,
+  PLAYLIST_SLOT_FIELDS,
+  playlistSlotEntries,
+  playQueueCounters,
+  STATION_SLOT_FIELDS,
+  stationSlotEntries,
   type PlayerTransport,
+  type SlotEntry,
   type YxcCommand,
 } from "./command-mapper";
+import { slotListObjects, slotListValues, type SlotField } from "../catalog/list-slots";
 import {
   mediaTimeUpdates,
   mediaToRefresh,
@@ -40,7 +51,7 @@ import {
   type NetusbNotice,
 } from "./push";
 import type { ObjectDef } from "../catalog/types";
-import { tName } from "../i18n";
+import { tName, type I18nKey } from "../i18n";
 import type { StateValue } from "../types";
 import type { ConnectionHandle, ControllerLog } from "../controller";
 import { errorMessage } from "../util";
@@ -749,6 +760,8 @@ export class YxcDeviceController implements ConnectionHandle {
   private pushDeviceId: string | undefined;
 
   private readonly deviceValues = new Map<string, boolean | number | string>();
+  /** How many slots each list folder has objects for (see `publishSlots`). */
+  private readonly slotCounts = new Map<string, number>();
 
   /**
    * Handle a state change: a user write (ack false) becomes a YXC command; an
@@ -1114,12 +1127,53 @@ export class YxcDeviceController implements ConnectionHandle {
     await this.refreshSignalInfo();
   }
 
-  /** Fetch the MusicCast playlist names and write the JSON list state. */
+  /**
+   * Put a device list in the tree as slots — a channel per slot, a datapoint per field — beside its JSON
+   * state (C30, `catalog/list-slots.ts`). The objects are built when the slot count grows (a declared
+   * count once; a list whose length varies — playlists, linked devices — up to the longest seen, so an
+   * entry that goes is cleared, not deleted and rebuilt).
+   *
+   * @param folder the list's folder id
+   * @param folderName the folder's name
+   * @param fields the fields of a slot
+   * @param entries the entries by slot
+   * @param declared the slot count the device declares, when it declares one
+   * @param folderDesc the folder's explanation
+   * @param folderArg the value of the folder name's placeholder, when it has one
+   */
+  private async publishSlots(
+    folder: string,
+    folderName: I18nKey,
+    fields: readonly SlotField[],
+    entries: readonly SlotEntry[],
+    declared?: number,
+    folderDesc?: I18nKey,
+    folderArg?: string,
+  ): Promise<void> {
+    const built = this.slotCounts.get(folder) ?? 0;
+    const count = Math.max(declared ?? 0, entries.length, built);
+    if (count > built) {
+      for (const object of slotListObjects(folder, folderName, count, fields, folderDesc, folderArg)) {
+        await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
+      }
+      this.slotCounts.set(folder, count);
+    }
+    for (const { id, value } of slotListValues(folder, count, fields, entries)) {
+      this.emit(id, value);
+    }
+  }
+
+  /** Fetch the MusicCast playlist names and write the JSON list state and the playlist slots. */
   private async refreshPlaylists(): Promise<void> {
     try {
-      const update = parseYxcPlaylistNames(await this.deps.client.getMcPlaylistName());
+      const info = await this.deps.client.getMcPlaylistName();
+      const update = parseYxcPlaylistNames(info);
       if (update) {
         this.emit(update.id, update.value);
+      }
+      const entries = playlistSlotEntries(info);
+      if (entries) {
+        await this.publishSlots("player.netPlayer.playlistNames", "musiccastPlaylists", PLAYLIST_SLOT_FIELDS, entries);
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getMcPlaylistName failed: ${errorMessage(e)}`);
@@ -1129,9 +1183,13 @@ export class YxcDeviceController implements ConnectionHandle {
   /** Fetch the network player's play queue and write the JSON state. */
   private async refreshPlayQueue(): Promise<void> {
     try {
-      const update = parseYxcPlayQueue(await this.deps.client.getPlayQueue());
+      const info = await this.deps.client.getPlayQueue();
+      const update = parseYxcPlayQueue(info);
       if (update) {
         this.emit(update.id, update.value);
+      }
+      for (const counter of playQueueCounters(info)) {
+        this.emit(counter.id, counter.value);
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getPlayQueue failed: ${errorMessage(e)}`);
@@ -1250,9 +1308,21 @@ export class YxcDeviceController implements ConnectionHandle {
   /** Fetch the stored netusb favourites and write the JSON list state. */
   private async refreshNetusbPresets(): Promise<void> {
     try {
-      const update = parseYxcPresetList(await this.deps.client.getPresetInfo());
+      const info = await this.deps.client.getPresetInfo();
+      const update = parseYxcPresetList(info);
       if (update) {
         this.emit(update.id, update.value);
+      }
+      const entries = netusbSlotEntries((info as { preset_info?: unknown } | null)?.preset_info);
+      if (entries) {
+        await this.publishSlots(
+          "player.netPlayer.favourites",
+          "favourites",
+          NETUSB_SLOT_FIELDS,
+          entries,
+          this.capabilities?.netusbSlots?.presets,
+          "descFavourites",
+        );
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getPresetInfo failed: ${errorMessage(e)}`);
@@ -1262,9 +1332,20 @@ export class YxcDeviceController implements ConnectionHandle {
   /** Fetch the recently-played list and write the JSON list state. */
   private async refreshNetusbRecent(): Promise<void> {
     try {
-      const update = parseYxcRecentList(await this.deps.client.getRecentInfo(), this.cover);
+      const info = await this.deps.client.getRecentInfo();
+      const update = parseYxcRecentList(info, this.cover);
       if (update) {
         this.emit(update.id, update.value);
+      }
+      const entries = netusbSlotEntries((info as { recent_info?: unknown } | null)?.recent_info);
+      if (entries) {
+        await this.publishSlots(
+          "player.netPlayer.recentItems",
+          "recentlyPlayed",
+          NETUSB_SLOT_FIELDS,
+          entries,
+          this.capabilities?.netusbSlots?.recent,
+        );
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getRecentInfo failed: ${errorMessage(e)}`);
@@ -1276,18 +1357,46 @@ export class YxcDeviceController implements ConnectionHandle {
    * devices with separate lists — and write the JSON state.
    */
   private async refreshTunerPresets(): Promise<void> {
-    const bands = this.tunerFeatures?.presetType === "common" ? ["common"] : (this.tunerFeatures?.bands ?? ["fm"]);
-    const byBand: Record<string, unknown> = {};
-    for (const band of bands) {
-      try {
-        byBand[band] = await this.deps.client.getTunerPresetInfo(band);
-      } catch (e) {
-        this.deps.log.debug(`${this.deviceId}: getTunerPresetInfo(${band}) failed: ${errorMessage(e)}`);
+    try {
+      const common = this.tunerFeatures?.presetType === "common";
+      const bands = common ? ["common"] : (this.tunerFeatures?.bands ?? ["fm"]);
+      const byBand: Record<string, unknown> = {};
+      for (const band of bands) {
+        try {
+          byBand[band] = await this.deps.client.getTunerPresetInfo(band);
+        } catch (e) {
+          this.deps.log.debug(`${this.deviceId}: getTunerPresetInfo(${band}) failed: ${errorMessage(e)}`);
+        }
       }
-    }
-    const update = parseYxcTunerPresetLists(byBand);
-    if (update) {
-      this.emit(update.id, update.value);
+      const update = parseYxcTunerPresetLists(byBand);
+      if (update) {
+        this.emit(update.id, update.value);
+      }
+      // One slot folder per list: the shared list flat, a separate band's list in a folder of its own.
+      if (!common && !this.slotCounts.has("tuner.storedStations")) {
+        await this.deps.upsertObject(`${this.deviceId}.tuner.storedStations`, {
+          id: "tuner.storedStations",
+          type: "channel",
+          common: { name: tName("storedStations"), desc: tName("descStoredStations") },
+        });
+        this.slotCounts.set("tuner.storedStations", 0);
+      }
+      for (const [band, info] of Object.entries(byBand)) {
+        const entries = stationSlotEntries(info);
+        if (entries) {
+          await this.publishSlots(
+            common ? "tuner.storedStations" : `tuner.storedStations.${band}`,
+            common ? "storedStations" : "storedStationsBand",
+            STATION_SLOT_FIELDS,
+            entries,
+            this.tunerFeatures?.presetNum,
+            common ? "descStoredStations" : undefined,
+            common ? undefined : band.toUpperCase(),
+          );
+        }
+      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: stored stations failed: ${errorMessage(e)}`);
     }
   }
 
@@ -1476,6 +1585,10 @@ export class YxcDeviceController implements ConnectionHandle {
       this.dist = distributionSummary(info);
       for (const update of parseYxcDistribution(info)) {
         this.emit(update.id, update.value);
+      }
+      const clients = clientSlotEntries(info);
+      if (clients) {
+        await this.publishSlots("multiroom.group.clients", "linkedDevices", CLIENT_SLOT_FIELDS, clients);
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getDistributionInfo failed: ${errorMessage(e)}`);

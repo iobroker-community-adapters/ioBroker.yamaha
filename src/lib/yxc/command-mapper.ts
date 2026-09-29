@@ -4,6 +4,7 @@ import { YXC_ZONE_IDS, zonePrefix } from "./zones";
 import type { I18nKey } from "../i18n";
 import { coerceBool, isWritableValue } from "../catalog/value-coerce";
 import { formatPlayTime } from "../catalog/play-time";
+import type { SlotField } from "../catalog/list-slots";
 import { YXC_AMP_CATALOG } from "./catalog";
 import { isRemoteWord, YXC_CURSOR_VALUES, YXC_MENU_VALUES } from "./remote";
 import type { YxcClientLike } from "./client-contract";
@@ -986,6 +987,128 @@ export function parseYxcClock(settings: unknown): StateValue[] {
         updates.push(...parseAlarmDetail(`clock.alarm.${day}`, detail as Record<string, unknown>));
       }
     }
+  }
+  return updates;
+}
+
+/** One entry of a device list, by field (see `catalog/list-slots.ts`). */
+export type SlotEntry = Record<string, string | number> | undefined;
+
+/** The fields of a favourite and of a recently-played entry: its name and the source it plays. */
+export const NETUSB_SLOT_FIELDS: readonly SlotField[] = [
+  { key: "name", nameKey: "entryName", descKey: "descSlotName", type: "string", role: "text" },
+  { key: "input", nameKey: "input", descKey: "descSlotInput", type: "string", role: "text" },
+];
+
+/** The field of a MusicCast playlist: its name. */
+export const PLAYLIST_SLOT_FIELDS: readonly SlotField[] = [
+  { key: "name", nameKey: "entryName", descKey: "descSlotName", type: "string", role: "text" },
+];
+
+/** The fields of a stored station: its band, name and — AM/FM — frequency in kHz (Basic §6.1 `number`). */
+export const STATION_SLOT_FIELDS: readonly SlotField[] = [
+  { key: "band", nameKey: "band", descKey: "descSlotBand", type: "string", role: "text" },
+  { key: "name", nameKey: "entryName", descKey: "descSlotName", type: "string", role: "text" },
+  { key: "frequency", nameKey: "frequency", descKey: "descSlotFrequency", type: "number", role: "value", unit: "kHz" },
+];
+
+/** The field of a linked device: its address (Advanced §5.1 `client_list[].ip_address`). */
+export const CLIENT_SLOT_FIELDS: readonly SlotField[] = [
+  { key: "ip", nameKey: "ipAddress", descKey: "descSlotIp", type: "string", role: "info.ip" },
+];
+
+/**
+ * A netusb list (`preset_info` of getPresetInfo, `recent_info` of getRecentInfo) as slot entries:
+ * name and source; a slot is empty when its source is `unknown` or it has no text.
+ *
+ * @param list the raw list
+ * @returns the entries by slot, undefined when the list is malformed
+ */
+export function netusbSlotEntries(list: unknown): SlotEntry[] | undefined {
+  if (!Array.isArray(list)) {
+    return undefined;
+  }
+  return list.map(entry => {
+    const { input, text } = (entry ?? {}) as { input?: unknown; text?: unknown };
+    return typeof input === "string" && input !== "unknown" && typeof text === "string" && text.length > 0
+      ? { name: text, input }
+      : undefined;
+  });
+}
+
+/**
+ * The MusicCast playlist names (`name_list` of getMcPlaylistName) as slot entries.
+ *
+ * @param info the getMcPlaylistName response
+ * @returns the entries by slot, undefined when malformed
+ */
+export function playlistSlotEntries(info: unknown): SlotEntry[] | undefined {
+  const names = (info as { name_list?: unknown } | null)?.name_list;
+  return Array.isArray(names) ? names.map(name => (typeof name === "string" ? { name } : undefined)) : undefined;
+}
+
+/**
+ * One band's stored stations (`preset_info` of `/tuner/getPresetInfo`) as slot entries. `number` is the
+ * frequency in kHz on AM/FM and a service id on DAB (Basic §6.1) — only the frequency becomes one.
+ *
+ * @param info the getPresetInfo response of one band
+ * @returns the entries by slot, undefined when malformed
+ */
+export function stationSlotEntries(info: unknown): SlotEntry[] | undefined {
+  const list = (info as { preset_info?: unknown } | null)?.preset_info;
+  if (!Array.isArray(list)) {
+    return undefined;
+  }
+  return list.map(entry => {
+    const slot = (typeof entry === "object" && entry !== null ? entry : {}) as Record<string, unknown>;
+    if (isEmptyTunerPreset(slot)) {
+      return undefined;
+    }
+    const band = typeof slot.band === "string" ? slot.band : "";
+    return {
+      band,
+      name: typeof slot.text === "string" ? slot.text : "",
+      frequency: (band === "fm" || band === "am") && typeof slot.number === "number" ? slot.number : 0,
+    };
+  });
+}
+
+/**
+ * The linked devices of a MusicCast Link server (`client_list` of getDistributionInfo) as slot entries.
+ *
+ * @param info the getDistributionInfo response
+ * @returns the entries by slot, undefined when the response carries no list
+ */
+export function clientSlotEntries(info: unknown): SlotEntry[] | undefined {
+  const list = (info as { client_list?: unknown } | null)?.client_list;
+  if (!Array.isArray(list)) {
+    return undefined;
+  }
+  return list.map(entry => {
+    const ip = (entry as { ip_address?: unknown } | null)?.ip_address;
+    return typeof ip === "string" ? { ip } : undefined;
+  });
+}
+
+/**
+ * The play queue's length and position (`max_line`, `playing_index` of getPlayQueue) as their own
+ * datapoints: the JSON list holds only the first eight entries while the queue may declare 200
+ * (audit 2026-09-29, C30). Position counts from 1; 0 while nothing plays.
+ *
+ * @param info the getPlayQueue response
+ * @returns the two values, empty when malformed
+ */
+export function playQueueCounters(info: unknown): StateValue[] {
+  if (typeof info !== "object" || info === null) {
+    return [];
+  }
+  const q = info as { playing_index?: unknown; max_line?: unknown };
+  const updates: StateValue[] = [];
+  if (typeof q.max_line === "number") {
+    updates.push({ id: "player.netPlayer.queueLength", value: q.max_line });
+  }
+  if (typeof q.playing_index === "number") {
+    updates.push({ id: "player.netPlayer.queuePosition", value: q.playing_index >= 0 ? q.playing_index + 1 : 0 });
   }
   return updates;
 }

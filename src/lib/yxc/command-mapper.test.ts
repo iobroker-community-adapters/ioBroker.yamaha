@@ -1,4 +1,7 @@
 import {
+  clientSlotEntries,
+  playQueueCounters,
+  stationSlotEntries,
   absoluteDeviceUrl,
   distributionSummary,
   parseYxcClock,
@@ -824,5 +827,43 @@ describe("signal info / playlists / play queue parsers (capture-verified shapes)
       tracks: [{ text: "A" }, { text: "B" }],
     });
     expect(parseYxcPlayQueue({ response_code: 0 })).toBeUndefined();
+  });
+});
+
+// The lists as slot entries (audit 2026-09-29, C30).
+describe("device lists as slot entries", () => {
+  test("a stored station reads band, name and — AM/FM only — its frequency; an unused slot is empty", () => {
+    expect(
+      stationSlotEntries({
+        preset_info: [
+          { band: "fm", number: 98100, text: "hr3" },
+          { band: "dab", number: 12345, text: "Bayern 3" },
+          { band: "unknown", number: 0, text: "" },
+        ],
+      }),
+    ).toEqual([
+      { band: "fm", name: "hr3", frequency: 98100 },
+      { band: "dab", name: "Bayern 3", frequency: 0 },
+      undefined,
+    ]);
+    expect(stationSlotEntries({})).toBeUndefined();
+  });
+
+  test("a linked device reads its address (Advanced §5.1)", () => {
+    expect(clientSlotEntries({ client_list: [{ ip_address: "192.168.0.5", data_type: "base" }] })).toEqual([
+      { ip: "192.168.0.5" },
+    ]);
+    expect(clientSlotEntries({ role: "client" })).toBeUndefined();
+  });
+
+  test("the play queue's length and 1-based position are values of their own", () => {
+    expect(playQueueCounters({ max_line: 200, playing_index: 4, track_info: [] })).toEqual([
+      { id: "player.netPlayer.queueLength", value: 200 },
+      { id: "player.netPlayer.queuePosition", value: 5 },
+    ]);
+    expect(playQueueCounters({ max_line: 0, playing_index: -1 })).toEqual([
+      { id: "player.netPlayer.queueLength", value: 0 },
+      { id: "player.netPlayer.queuePosition", value: 0 },
+    ]);
   });
 });
