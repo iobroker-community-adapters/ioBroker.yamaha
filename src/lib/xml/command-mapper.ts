@@ -3,7 +3,7 @@ import type { BasicStatus, XmlDialect, XmlZoneForm } from "./protocol";
 import { coerceBool, isWritableValue } from "../catalog/value-coerce";
 import { XML_AMP_CATALOG } from "./catalog";
 import { xmlZone } from "./zones";
-import { splitZone } from "../catalog/zone-id";
+import { splitZone } from "../catalog/zones";
 
 /** A zone-scoped XML command: the zone element and the inner command XML. */
 export interface XmlCommand {

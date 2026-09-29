@@ -1,3 +1,4 @@
+import { ZONE_PREFIX } from "./zones";
 /** The transports the adapter speaks. Ordered most-modern-first — the default ownership rank. */
 export type Transport = "yxc" | "ynca" | "xml";
 
@@ -110,13 +111,11 @@ export const OWNER_OVERRIDES: Record<string, readonly Transport[]> = {
 };
 
 /**
- * A zoned state id's folder prefix. All three transports place their zones under
- * `multiroom.zoneN.` (`yxc/zones.ts` `zonePrefix`, the YNCA catalog's zone table, the XML zone
- * table) — the bare `zoneN.` form of the pre-v0.18.1 tree cannot be produced any more and is
- * therefore NOT matched here. It still lives on in `pure-helpers.renamedObjectIds`, which has to
- * recognise it to clean an upgraded instance's old tree; that is the one place it belongs.
+ * A zoned state id's folder prefix, from the one zone table (`catalog/zones.ts`). The bare `zoneN.` form
+ * of the pre-v0.18.1 tree cannot be produced any more and is NOT matched here; the upgrade cleanup
+ * recognises it through `ANY_ZONE_PREFIX`.
  */
-export const ZONE_PREFIX = /^multiroom\.zone[234]\./;
+export { ZONE_PREFIX } from "./zones";
 
 /**
  * Per-transport state-id → canonical capability key, for the ids that drift between transports

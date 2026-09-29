@@ -40,7 +40,7 @@ import {
 } from "../browse/xml-browse-driver";
 import { wireFor } from "../browse/types";
 import { sceneListSurface, sceneNumber } from "../catalog/scene-titles";
-import { splitZone } from "../catalog/zone-id";
+import { splitZone } from "../catalog/zones";
 import { XML_ZONES, type XmlZone } from "./zones";
 import { MEDIA_STATE, TRANSPORT_KEYS } from "../catalog/media-state";
 import { remoteObjectDefs } from "../browse/objects";

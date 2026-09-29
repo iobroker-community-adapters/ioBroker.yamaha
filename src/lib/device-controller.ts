@@ -1,4 +1,5 @@
 import { MEDIA_STATE } from "./catalog/media-state";
+import { splitZone } from "./catalog/zones";
 import { mergeYncaSubunits, type YncaCapabilities } from "./ynca/capability";
 import { formatWireNumber, writableNumber } from "./catalog/value-coerce";
 import { playTimeTwin } from "./catalog/play-time";
@@ -948,11 +949,11 @@ export class YncaDeviceController implements ConnectionHandle {
    * @returns the titles, or undefined when the id is no scene recall
    */
   private sceneTitlesFor(stateId: string): Array<{ num: number; title: string }> | undefined {
-    const match = /^(?:multiroom\.(zone[234])\.)?scene\.recall$/.exec(stateId);
-    if (!match) {
+    const { zone, name } = splitZone(stateId);
+    if (name !== "scene.recall") {
       return undefined;
     }
-    return match[1] ? (this.zoneSceneTitles.get(match[1]) ?? []) : this.sceneTitles;
+    return zone === "main" ? this.sceneTitles : (this.zoneSceneTitles.get(zone) ?? []);
   }
 
   /**
@@ -1125,9 +1126,9 @@ export class YncaDeviceController implements ConnectionHandle {
       this.browseEngine?.handleRemoteWrite(stateId, value);
       return;
     }
-    const zonePad = /^multiroom\.(zone[234])\.remote\.(cursor|menu)$/.exec(stateId);
-    if (zonePad) {
-      this.handleZonePadWrite(zonePad[1], zonePad[2] as "cursor" | "menu", value);
+    const zoned = splitZone(stateId);
+    if (zoned.zone !== "main" && (zoned.name === "remote.cursor" || zoned.name === "remote.menu")) {
+      this.handleZonePadWrite(zoned.zone, zoned.name === "remote.cursor" ? "cursor" : "menu", value);
       return;
     }
     if (stateId.startsWith("player.browse.")) {
@@ -1152,9 +1153,8 @@ export class YncaDeviceController implements ConnectionHandle {
     }
     // The unified player writes go to the subunit the ZONE is listening to (v2.0.0) —
     // routed here, BEFORE the generic path.
-    const playerWrite = /^(?:multiroom\.(zone[234])\.)?player\.(playback|repeat|shuffle|next|prev)$/.exec(stateId);
-    if (playerWrite) {
-      this.handlePlayerWrite(playerWrite[1] ?? "main", `player.${playerWrite[2]}`, value);
+    if (/^player\.(playback|repeat|shuffle|next|prev)$/.test(zoned.name)) {
+      this.handlePlayerWrite(zoned.zone, zoned.name, value);
       return;
     }
     // The unified tuner writes are band-dependent (v2.0.0) and routed here, BEFORE the

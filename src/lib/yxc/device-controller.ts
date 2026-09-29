@@ -2243,7 +2243,7 @@ export class YxcDeviceController implements ConnectionHandle {
    * @param written the written value, when the state mirrors a device value
    */
   private async confirmWrite(stateId: string, command: YxcCommand, written: unknown): Promise<void> {
-    if (!this.pushWorking() || /^multiroom\.zone[234]\./.test(stateId)) {
+    if (!this.pushWorking() || splitZone(stateId).zone !== "main") {
       await this.readBackAfter(stateId, command);
       return;
     }

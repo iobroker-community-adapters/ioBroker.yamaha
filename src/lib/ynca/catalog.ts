@@ -1,4 +1,5 @@
 import { MEDIA_STATE, MEDIA_STATE_LABELS } from "../catalog/media-state";
+import { ZONES, type ZoneKey } from "../catalog/zones";
 import { catalogToObjects, type StatesResolver } from "../catalog/build-objects";
 import { zoneRole, type CatalogEntry, type ObjectDef } from "../catalog/types";
 import {
@@ -1147,12 +1148,11 @@ const DAB_BAND_STATES = selfMap(["DAB", "FM"]);
  * The zones the catalog maps — MAIN flat, ZONE2-4 each under their own prefix — and the controller routes
  * by (`key`); one table for both (audit 2026-09-29, B16).
  */
-export const YNCA_ZONES: ReadonlyArray<{ key: string; subunit: string; prefix: string }> = [
-  { key: "main", subunit: "MAIN", prefix: "" },
-  { key: "zone2", subunit: "ZONE2", prefix: "multiroom.zone2." },
-  { key: "zone3", subunit: "ZONE3", prefix: "multiroom.zone3." },
-  { key: "zone4", subunit: "ZONE4", prefix: "multiroom.zone4." },
-];
+export const YNCA_ZONES: ReadonlyArray<{ key: ZoneKey; subunit: string; prefix: string }> = ZONES.map(zone => ({
+  key: zone.key,
+  subunit: zone.ynca,
+  prefix: zone.prefix,
+}));
 
 /**
  * Functions the official lists give the ZONES only, never MAIN: the pre-out level mode and the

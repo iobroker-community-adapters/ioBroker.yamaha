@@ -1,4 +1,5 @@
 import type { DeviceRecord } from "./types";
+import { ANY_ZONE_PREFIX } from "./catalog/zones";
 import type { DiscoveredDevice } from "./discovery";
 import { contradicts, mergeIdentity, sameDevice } from "./device-identity";
 import { deviceIdFor, idSegment, RESERVED_DEVICE_IDS } from "./device-id";
@@ -669,7 +670,7 @@ export function renamedObjectIds(existing: string[], deviceIds: Set<string>, nam
       // (e.g. "straight") catches both the MAIN state and its zoned copies — the old flat
       // "zone2." form and today's "multiroom.zone2." form alike (v2.0.0 renames live in
       // zoned folders, e.g. multiroom.zone2.scene.name1).
-      const zone = /^(?:multiroom\.)?zone[234]\./.exec(rel)?.[0] ?? "";
+      const zone = ANY_ZONE_PREFIX.exec(rel)?.[0] ?? "";
       const template = rel.slice(zone.length);
       const renamedState = RENAMED_STATE_IDS.includes(rel) || RENAMED_STATE_IDS.includes(template);
       const underRenamedChannel = RENAMED_CHANNELS.some(
