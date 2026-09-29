@@ -515,7 +515,7 @@ function internalOf(adapter: Yamaha): {
   removeDevice(deviceId: string): Promise<void>;
   persistDeviceNative(deviceId: string, native: Record<string, unknown>): void;
   setVolumePercent(deviceId: string, on: boolean): Promise<void>;
-  pendingNative: Map<string, { timer?: unknown; native: Record<string, unknown> }>;
+  pendingDevicePatches: Map<string, { timer?: unknown; native: Record<string, unknown> }>;
   profiles: Map<string, { identity: () => { serial?: string; mac?: string } | undefined }>;
   rememberedModelOf: (deviceId: string) => string | undefined;
   discoverAdditionalDevices(pushReceiver: unknown): Promise<void>;
@@ -594,6 +594,22 @@ function setup(config: Record<string, unknown> = {}, opts: { failIds?: string[];
 
 /** Let the supervisor's async attempt chain settle. */
 const flush = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 5));
+
+/**
+ * End every device object's coalescing window now: name, icon and caches go out as one write per
+ * window (`DEVICE_PATCH_WINDOW_MS`), whose timer the mocked adapter never fires by itself.
+ *
+ * @param ctx the test context
+ * @returns once the writes settled
+ */
+const flushPatches = async (ctx: Ctx): Promise<void> => {
+  // A name decision reads the device object first — let it arrive before its window is ended.
+  await flush();
+  for (const call of ctx.i.setTimeout.mock.calls.filter(c => c[1] === 4500)) {
+    (call[0] as () => void)();
+  }
+  await flush();
+};
 
 /**
  * The start js-controller gives the instance after a write to its instance object (7.2.2: stopInstance,
@@ -773,6 +789,7 @@ describe("Yamaha onReady — configured devices", () => {
     await (
       ctx.i as unknown as { updateDeviceLabel(id: string, name: string, rank: number): Promise<void> }
     ).updateDeviceLabel("Living_room", "Wohnzimmer", LABEL_RANK.deviceName);
+    await flushPatches(ctx);
 
     const stored = ctx.i.objects.get("Living_room") as Record<string, unknown>;
     expect((stored.common as Record<string, unknown>).name).toBe("Wohnzimmer");
@@ -1006,7 +1023,7 @@ describe("Yamaha auto-discovery", () => {
     ctx.i.profiles.get("RX-V685")!.identity = () => ({ serial: "0E897553" });
     ctx.i.reportConnection("RX-V685", true);
     await flush();
-    expect(ctx.i.pendingNative.get("RX-V685")?.native).toEqual({ identity: { serial: "0E897553" } });
+    expect(ctx.i.pendingDevicePatches.get("RX-V685")?.native).toEqual({ identity: { serial: "0E897553" } });
     expect(mocks.discoveredStore.devices).toEqual([
       { id: "RX-V685", ip: "192.168.1.20", identity: { serial: "0E897553" } },
     ]);
@@ -1741,17 +1758,19 @@ describe("Yamaha auto-discovery", () => {
     await flush();
     const setStateAck = ctx.calls[0].deps.setStateAck as (id: string, value: unknown) => void;
     setStateAck("RX-V685.info.model", "YSP-1600");
-    await flush();
+    await flushPatches(ctx);
     const soundbar = (ctx.i.objects.get("RX-V685")?.common as { icon?: string }).icon;
     expect(soundbar).toBe(iconForModel("YSP-1600"));
 
+    const record = ctx.i.deviceRecords.get("RX-V685")!;
     await ctx.i.removeDevice("RX-V685");
     // The user adds the same device back. `ensureDeviceHeader` seeds the default silhouette;
     // if the icon cache survived the removal, `updateDeviceIcon` would see the model as
     // unchanged and the soundbar would keep showing a receiver until the next restart.
+    ctx.i.deviceRecords.set("RX-V685", record);
     ctx.i.objects.set("RX-V685", { type: "device", common: { icon: iconForModel(undefined) }, native: {} });
     setStateAck("RX-V685.info.model", "YSP-1600");
-    await flush();
+    await flushPatches(ctx);
     expect((ctx.i.objects.get("RX-V685")?.common as { icon?: string }).icon).toBe(soundbar);
   });
 
@@ -1762,14 +1781,14 @@ describe("Yamaha auto-discovery", () => {
     await flush();
     expect(ctx.i.objects.has("RX-V685")).toBe(true);
 
-    // The capability profile persists through a 250 ms coalescing window. Its timer would fire
+    // The capability profile persists through a coalescing window. Its timer would fire
     // AFTER the delete and recreate the device object as a bare orphan nothing owns.
     ctx.i.persistDeviceNative("RX-V685", { capabilityProfile: "{}" });
-    const timer = ctx.i.pendingNative.get("RX-V685")?.timer;
+    const timer = ctx.i.pendingDevicePatches.get("RX-V685")?.timer;
     expect(timer).toBeDefined();
 
     await ctx.i.removeDevice("RX-V685");
-    expect(ctx.i.pendingNative.has("RX-V685")).toBe(false);
+    expect(ctx.i.pendingDevicePatches.has("RX-V685")).toBe(false);
     expect(ctx.i.clearTimeout).toHaveBeenCalledWith(timer);
     expect(ctx.i.objects.has("RX-V685")).toBe(false);
   });
@@ -1804,6 +1823,26 @@ describe("Yamaha auto-discovery", () => {
     expect(ctx.i.objects.has("RX-V685.volume")).toBe(false);
   });
 
+  // A first connect learns over tens of seconds; each partial write was one more write of the device
+  // object — four to seven per start in the inventory run (audit 2026-09-29, E2).
+  it("holds a device's patches until its first connect ends, then writes them as one", async () => {
+    mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+    const ctx = setup({ devices: [] });
+    // The first attempt is still running (a YNCA sweep takes tens of seconds at the listed pace).
+    mocks.attemptDevice.mockImplementation(() => new Promise<null>(() => undefined));
+    await ctx.i.onReady();
+    await flush();
+    const windows = (): unknown[] => ctx.i.setTimeout.mock.calls.filter(c => c[1] === 4500);
+    ctx.i.persistDeviceNative("RX-V685", { model: "RX-V685" });
+    ctx.i.persistDeviceNative("RX-V685", { capabilityProfile: "{}" });
+    expect(windows()).toHaveLength(0);
+    expect(ctx.i.pendingDevicePatches.get("RX-V685")?.native).toEqual({ model: "RX-V685", capabilityProfile: "{}" });
+    ctx.i.reportConnection("RX-V685", true);
+    expect(windows()).toHaveLength(1);
+    await flushPatches(ctx);
+    expect(ctx.i.objects.get("RX-V685")?.native).toMatchObject({ model: "RX-V685", capabilityProfile: "{}" });
+  });
+
   it("drops a native patch that arrives after the device was removed", async () => {
     mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
     const ctx = setup({ devices: [] });
@@ -1814,7 +1853,7 @@ describe("Yamaha auto-discovery", () => {
     extendObject.mockClear();
     ctx.i.setTimeout.mockClear();
     ctx.i.persistDeviceNative("RX-V685", { capabilityProfile: "{}" });
-    expect(ctx.i.pendingNative.has("RX-V685")).toBe(false);
+    expect(ctx.i.pendingDevicePatches.has("RX-V685")).toBe(false);
     expect(ctx.i.setTimeout).not.toHaveBeenCalled();
     await flush();
     expect(extendObject).not.toHaveBeenCalled();
@@ -2723,7 +2762,7 @@ describe("Yamaha search warnings and the remembered model (audit 2026-09-24, A15
     await ctx.i.onReady();
     await flush();
     (ctx.calls[0].deps.setStateAck as (id: string, value: unknown) => void)("Living_room.info.model", "RX-A2070");
-    for (const call of ctx.i.setTimeout.mock.calls.filter(c => c[1] === 250)) {
+    for (const call of ctx.i.setTimeout.mock.calls.filter(c => c[1] === 4500)) {
       (call[0] as () => void)();
     }
     await flush();
@@ -2811,7 +2850,7 @@ describe("Yamaha transport plumbing", () => {
     // Fresh from the migration the node is called by its id — which is the receiver's ip.
     expect((ctx.i.objects.get("Living_room")?.common as { name?: string }).name).toBe("Living_room");
     setStateAck("Living_room.info.model", "RX-V481");
-    await flush();
+    await flushPatches(ctx);
     expect((ctx.i.objects.get("Living_room")?.common as { name?: string }).name).toBe("RX-V481");
   });
 
@@ -2826,12 +2865,12 @@ describe("Yamaha transport plumbing", () => {
     deps.setStateAck("Living_room.info.model", "RX-V481");
     await flush();
     deps.onDeviceName?.("Wohnzimmer");
-    await flush();
+    await flushPatches(ctx);
     expect((ctx.i.objects.get("Living_room")?.common as { name?: string }).name).toBe("Wohnzimmer");
 
     // And a later model report does not drag it back to the model designation.
     deps.setStateAck("Living_room.info.model", "RX-V481");
-    await flush();
+    await flushPatches(ctx);
     expect((ctx.i.objects.get("Living_room")?.common as { name?: string }).name).toBe("Wohnzimmer");
   });
 
@@ -3404,7 +3443,7 @@ describe("Yamaha never-filled purge (once per adapter version, after connect)", 
    * @param ctx the test context
    */
   const flushNative = (ctx: Ctx): void => {
-    for (const call of ctx.i.setTimeout.mock.calls.filter(c => c[1] === 250)) {
+    for (const call of ctx.i.setTimeout.mock.calls.filter(c => c[1] === 4500)) {
       (call[0] as () => void)();
     }
   };
@@ -4618,6 +4657,13 @@ describe("device ids since 3.0.0 — the one-time move", () => {
     expect(mocks.discoveredStore.devices.map(record => record.id).sort()).toEqual(["rx-v473", "rx-v473-2"]);
     expect(ctx.i.objects.has("rx-v473.power")).toBe(true);
     expect(ctx.i.objects.has("rx-v473-2.power")).toBe(true);
+    // A journal that already names its target is not written again; a recounted one is (audit 2026-09-29,
+    // E2 — the upgrade run found the resumed journal rewritten unchanged).
+    const extendObject = (ctx.i as unknown as { extendObject: ReturnType<typeof vi.fn> }).extendObject;
+    const journals = extendObject.mock.calls.filter(
+      call => (call[1] as { native?: { movingTo?: unknown } }).native?.movingTo !== undefined,
+    );
+    expect(journals.map(call => call[0])).toEqual(["K_che"]);
   });
 
   it("a device that told its model only now: journal at its first contact, moved at the next start", async () => {

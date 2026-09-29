@@ -163,10 +163,12 @@ const NOTIFY_PROBE_THROTTLE_MS = 60000;
 const NOTIFY_RETRY_MS = 5000;
 
 /**
- * How long a device object's native writes are collected before ONE extendObject carries them
- * (the probe memory persists on every change — dozens within a first connect's first second).
+ * How long a device object's later writes are collected before ONE extendObject carries them: the
+ * probe memory persists on every change (dozens within a first connect's first second), and name,
+ * icon, identity and the id mark each arrive on their own a moment apart — one write each was four
+ * to seven writes of the device object per start in the inventory run (audit 2026-09-29, E2).
  */
-const NATIVE_PERSIST_WINDOW_MS = 250;
+const DEVICE_PATCH_WINDOW_MS = 4500;
 
 /**
  * A map or set keyed by namespace-relative state ids — the shape {@link YamahaAdapter.forgetUnder}
@@ -177,9 +179,11 @@ interface StateKeyedCache {
   delete(key: string): boolean;
 }
 
-/** A device's native patch waiting for its coalescing window to end. */
-interface PendingNative {
-  /** The merged patch (latest value per key wins). */
+/** A device object's patch waiting for its coalescing window to end. */
+interface PendingDevicePatch {
+  /** The merged `common` fields (latest value per key wins). */
+  common: Record<string, unknown>;
+  /** The merged `native` fields (latest value per key wins). */
   native: Record<string, unknown>;
   /** The window timer; undefined when the adapter refused one (shutdown) and the write ran at once. */
   timer?: ioBroker.Timeout;
@@ -353,7 +357,7 @@ export class Yamaha extends utils.Adapter {
   /** Per device, its capability profile (probe memory, YNCA snapshot, purge marker) — see loadDeviceProfile. */
   private readonly profiles = new Map<string, DeviceProfileStore>();
   /** Per device, the native patch inside its coalescing window (see persistDeviceNative). */
-  private readonly pendingNative = new Map<string, PendingNative>();
+  private readonly pendingDevicePatches = new Map<string, PendingDevicePatch>();
   /** Per device, the last write to its device object — the next one waits for it (see writeDeviceObject). */
   private readonly deviceObjectWrites = new Map<string, Promise<unknown>>();
   /** The devices whose id is final under the 3.0.0 rule (`native.idScheme`) — see checkIdDecision. */
@@ -1079,12 +1083,12 @@ export class Yamaha extends utils.Adapter {
     // survives as an orphan. Wait for it; the cap is a safety net, every transport attempt ends
     // by its own timeout well within it.
     await this.awaitSettled(supervisor);
-    // A native patch still inside its coalescing window would fire AFTER the delete below and
-    // recreate the device object as a bare orphan — cancel it before anything else.
-    const pendingNative = this.pendingNative.get(deviceId);
-    if (pendingNative) {
-      this.clearTimeout(pendingNative.timer);
-      this.pendingNative.delete(deviceId);
+    // A patch still inside its coalescing window would fire AFTER the delete below and recreate the
+    // device object as a bare orphan — cancel it before anything else.
+    const pendingPatch = this.pendingDevicePatches.get(deviceId);
+    if (pendingPatch) {
+      this.clearTimeout(pendingPatch.timer);
+      this.pendingDevicePatches.delete(deviceId);
     }
     const record = this.deviceRecords.get(deviceId);
     if (record) {
@@ -1281,6 +1285,8 @@ export class Yamaha extends utils.Adapter {
     } else {
       this.failedOnce.add(deviceId);
     }
+    // The first connect (or its failure) ends the hold on the device object's patch.
+    this.armDevicePatch(deviceId);
     this.deviceConnected.set(deviceId, connected);
     this.writeState(`${deviceId}.info.connection`, connected);
     // A drop clears the per-transport flags; a (re)connect sets them again via onTransports.
@@ -1439,25 +1445,58 @@ export class Yamaha extends utils.Adapter {
    * @param native the native fields to merge into the object
    */
   private persistDeviceNative(deviceId: string, native: Record<string, unknown>): void {
+    this.patchDevice(deviceId, { native });
+  }
+
+  /**
+   * Merge into an existing device object — coalesced per device: everything that arrives within
+   * {@link DEVICE_PATCH_WINDOW_MS} of the first patch goes out as ONE write (latest value per key
+   * wins). Only the header that creates the object writes at once ({@link writeDeviceObject}).
+   *
+   * @param deviceId the device object id
+   * @param patch the `common` and `native` fields to merge
+   * @param patch.common the `common` fields
+   * @param patch.native the `native` fields
+   */
+  private patchDevice(
+    deviceId: string,
+    patch: { common?: Record<string, unknown>; native?: Record<string, unknown> },
+  ): void {
     // A device that was removed has no object to patch any more — a late write from its last
     // attempt would recreate the device object as a bare orphan.
     if (!this.deviceRecords.has(deviceId)) {
       return;
     }
-    // Coalesced per device: the probe memory persists on EVERY change, and a first connect
-    // changes it dozens of times within a second (every observed enum value, every declared
-    // list) — each was one extendObject on the device object. Latest wins, one write per window.
-    const pending = this.pendingNative.get(deviceId);
+    const pending = this.pendingDevicePatches.get(deviceId);
     if (pending) {
-      Object.assign(pending.native, native);
+      Object.assign(pending.common, patch.common);
+      Object.assign(pending.native, patch.native);
       return;
     }
-    const entry: PendingNative = { native: { ...native } };
-    this.pendingNative.set(deviceId, entry);
+    const entry: PendingDevicePatch = { common: { ...patch.common }, native: { ...patch.native } };
+    this.pendingDevicePatches.set(deviceId, entry);
+    // Until the device's first connect of this process has ended (either way), nothing is written: a
+    // first connect learns over tens of seconds — a YNCA sweep at the specification's pace — and each
+    // partial write was one more write of the device object (inventory run, audit 2026-09-29, E2).
+    if (this.readyDevices.has(deviceId) || this.failedOnce.has(deviceId)) {
+      this.armDevicePatch(deviceId);
+    }
+  }
+
+  /**
+   * Start a pending device patch's coalescing window (once).
+   *
+   * @param deviceId the device object id
+   */
+  private armDevicePatch(deviceId: string): void {
+    const entry = this.pendingDevicePatches.get(deviceId);
+    if (!entry || entry.timer) {
+      return;
+    }
     // this.setTimeout refuses during shutdown (returns undefined) — then write at once.
-    entry.timer = this.setTimeout(() => this.flushDeviceNative(deviceId), NATIVE_PERSIST_WINDOW_MS);
+    entry.timer = this.setTimeout(() => this.flushDevicePatch(deviceId), DEVICE_PATCH_WINDOW_MS);
     if (!entry.timer) {
-      void this.flushDeviceNative(deviceId);
+      void this.flushDevicePatch(deviceId);
     }
   }
 
@@ -1490,14 +1529,18 @@ export class Yamaha extends utils.Adapter {
    * @param deviceId the id-safe device id
    * @returns the write, for the unload path to wait on
    */
-  private flushDeviceNative(deviceId: string): Promise<void> {
-    const pending = this.pendingNative.get(deviceId);
+  private flushDevicePatch(deviceId: string): Promise<void> {
+    const pending = this.pendingDevicePatches.get(deviceId);
     if (!pending) {
       return Promise.resolve();
     }
-    this.pendingNative.delete(deviceId);
+    this.pendingDevicePatches.delete(deviceId);
     this.clearTimeout(pending.timer);
-    return this.writeDeviceObject(deviceId, { native: pending.native }).then(
+    const patch: ioBroker.PartialObject = {
+      ...(Object.keys(pending.common).length > 0 ? { common: pending.common } : {}),
+      ...(Object.keys(pending.native).length > 0 ? { native: pending.native } : {}),
+    };
+    return this.writeDeviceObject(deviceId, patch).then(
       () => {
         this.stateWritesFailing = false;
       },
@@ -2135,7 +2178,7 @@ export class Yamaha extends utils.Adapter {
       // The marker rides in the SAME write as the name: a name in the tree without the record
       // behind it would read as a stranger's on the next start, and `ensureDeviceHeader` would
       // put the bare id back (that is the defect the record exists to close).
-      await this.writeDeviceObject(deviceId, { common: { name: label }, native: { label, labelRank: rank } });
+      this.patchDevice(deviceId, { common: { name: label }, native: { label, labelRank: rank } });
       this.deviceLabels.set(deviceId, { name: label, rank });
       this.log.debug(`${deviceId}: device name set to "${label}"`);
     } catch (e) {
@@ -2150,17 +2193,13 @@ export class Yamaha extends utils.Adapter {
    * @param deviceId the id-safe device id
    * @param model the reported model name
    */
-  private async updateDeviceIcon(deviceId: string, model: string): Promise<void> {
+  private updateDeviceIcon(deviceId: string, model: string): void {
     const icon = iconForModel(model);
     if (this.deviceIcons.get(deviceId) === icon) {
       return;
     }
     this.deviceIcons.set(deviceId, icon);
-    try {
-      await this.writeDeviceObject(deviceId, { common: { icon } });
-    } catch (e) {
-      this.log.debug(`${deviceId}: setting device icon failed (${errorMessage(e)})`);
-    }
+    this.patchDevice(deviceId, { common: { icon } });
   }
 
   /**
@@ -2328,7 +2367,7 @@ export class Yamaha extends utils.Adapter {
         }
       }
       const taken = new Set([...devices.keys(), ...known]);
-      const moves: Array<{ from: string; to: string }> = [];
+      const moves: Array<{ from: string; to: string; journaled?: true }> = [];
       const candidates: Array<{ id: string; model?: string; identity?: DeviceIdentity }> = [];
       // Journals first, by id: two journals naming the same target (two devices of one model without a
       // serial decided in the same run — audit 2026-09-29, A24) must not both move there; the second
@@ -2344,7 +2383,7 @@ export class Yamaha extends utils.Adapter {
           }
           claimed.add(target);
           taken.add(target);
-          moves.push({ from: id, to: target });
+          moves.push({ from: id, to: target, ...(target === journal ? { journaled: true as const } : {}) });
           continue;
         }
         // Only a device this instance runs: a tree the cleanup is about to delete is not moved first.
@@ -2384,7 +2423,10 @@ export class Yamaha extends utils.Adapter {
       const done: Array<{ from: string; to: string }> = [];
       for (const move of moves) {
         try {
-          await this.extendObject(move.from, { native: { movingTo: move.to } });
+          // A resumed move keeps the journal it already carries — writing it again changes nothing.
+          if (!move.journaled) {
+            await this.extendObject(move.from, { native: { movingTo: move.to } });
+          }
           const report = await copyDeviceTree(this.moveDeps(), move.from, move.to);
           report.enums = await this.moveBelow(move.from, move.to);
           done.push(move);
@@ -2424,7 +2466,7 @@ export class Yamaha extends utils.Adapter {
       const named = new Set(parseDevices(rows).map(device => device.id));
       for (const { from } of done) {
         if (!named.has(from)) {
-          await this.delObjectAsync(from);
+          await this.deleteObject(from);
         }
       }
       if (next) {
@@ -2549,7 +2591,7 @@ export class Yamaha extends utils.Adapter {
       const target = serialId(model, identity, others) ?? modelId(model, others);
       if (target === undefined || target === deviceId) {
         this.idDecided.add(deviceId);
-        await this.writeDeviceObject(deviceId, { native: { idScheme: ID_SCHEME } });
+        this.patchDevice(deviceId, { native: { idScheme: ID_SCHEME } });
         return;
       }
       if (this.deviceRecords.has(target) || claimed.includes(target) || (await this.getObjectAsync(target))) {
@@ -2558,6 +2600,7 @@ export class Yamaha extends utils.Adapter {
         );
         return;
       }
+      // At once, not coalesced: the next decision counts the journals it reads as claimed ids.
       await this.writeDeviceObject(deviceId, { native: { movingTo: target } });
       this.log.info(`${deviceId}: the device told who it is — its objects move to ${target} at the next start`);
     } catch (e) {
@@ -2649,7 +2692,7 @@ export class Yamaha extends utils.Adapter {
                 this.storedModels.set(reporting, value);
                 this.persistDeviceNative(reporting, { model: value });
               }
-              void this.updateDeviceIcon(reporting, value);
+              this.updateDeviceIcon(reporting, value);
               void this.updateDeviceLabel(reporting, value, LABEL_RANK.model);
               // YNCA reports the model in its sweep, AFTER the connect report — the id is decided
               // now. Only for a connected device: by then every transport of the attempt has told
@@ -2768,10 +2811,10 @@ export class Yamaha extends utils.Adapter {
       }
       writes.push(this.writeStateNow("info.devicesOnline", 0));
       writes.push(this.writeStateNow("info.devicesAllOnline", false));
-      // A device memory still inside its coalescing window is written now — a timer on a
-      // stopped adapter never fires, and the memory is what the next start rests on.
-      for (const deviceId of [...this.pendingNative.keys()]) {
-        writes.push(this.flushDeviceNative(deviceId));
+      // A device patch still inside its coalescing window is written now — a timer on a stopped
+      // adapter never fires, and the memory is what the next start rests on.
+      for (const deviceId of [...this.pendingDevicePatches.keys()]) {
+        writes.push(this.flushDevicePatch(deviceId));
       }
       void Promise.all(writes)
         .catch(() => {
