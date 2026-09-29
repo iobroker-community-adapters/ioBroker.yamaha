@@ -5,8 +5,11 @@ declare global {
     interface AdapterConfig {
       /** IP of the network interface to bind discovery to; empty (or 0.0.0.0) = all interfaces. */
       networkInterface: string;
-      /** Configured Yamaha devices: a display name and the device IP address. */
-      devices: { name: string; ip: string }[];
+      /**
+       * Configured Yamaha devices: the object id (stored since 3.0.0), the name the row was typed with
+       * (2.x) or the address (the 0.5.4 migration), and the device address.
+       */
+      devices: { id?: string; name?: string; ip: string }[];
       /**
        * Whether the network search runs: `auto` while the device table is empty (the behaviour
        * of every installation before 2.9.0), `always` next to a filled table (mixed operation),

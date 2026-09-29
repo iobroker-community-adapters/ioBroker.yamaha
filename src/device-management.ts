@@ -21,21 +21,14 @@ import {
 import { discoveredStoreDeps, excludedStoreDeps, ignoredStoreDeps } from "./lib/discovered-store-deps";
 import type { DeviceRecord } from "./lib/types";
 import { errorMessage } from "./lib/util";
-import { LABEL_RANK, sanitizeId, unionDevices } from "./lib/pure-helpers";
-import { deviceIdFor } from "./lib/device-id";
+import { LABEL_RANK, rowDeviceId, sanitizeId, unionDevices, type DeviceRow } from "./lib/pure-helpers";
+import { deviceIdFor, RESERVED_DEVICE_IDS } from "./lib/device-id";
 import { sameDevice } from "./lib/device-identity";
 import { identifyDevice } from "./lib/identify-device";
 import { identityOfDeviceObject } from "./lib/lifecycle/capability-profile";
-import {
-  TRANSPORTS,
-  buildDeviceForm,
-  buildExcludedForm,
-  findClash,
-  isValidIp,
-  rowId,
-  type CardDevice,
-  type ManualRow,
-} from "./device-management-helpers";
+import { buildDeviceForm, buildExcludedForm, findClash, type CardDevice } from "./device-management-helpers";
+import { isIPv4 } from "./lib/network-interfaces";
+import { TRANSPORT_LABELS } from "./lib/ready-line";
 
 /** The adapter methods this backend needs beyond the plain ioBroker surface. */
 interface DeviceOwner {
@@ -71,14 +64,14 @@ export class YamahaDeviceManagement extends DeviceManagement {
   }
 
   /** Read the manual device table (`native.devices`) as raw rows, keeping the name. */
-  private async readManual(): Promise<ManualRow[]> {
+  private async readManual(): Promise<DeviceRow[]> {
     const obj = await this.adapter.getForeignObjectAsync(this.objId);
     const devices = (obj?.native as { devices?: unknown } | undefined)?.devices;
     if (!Array.isArray(devices)) {
       return [];
     }
     return devices.filter(
-      (d): d is ManualRow => !!d && typeof (d as ManualRow).ip === "string" && (d as ManualRow).ip.length > 0,
+      (d): d is DeviceRow => !!d && typeof (d as DeviceRow).ip === "string" && (d as DeviceRow).ip.length > 0,
     );
   }
 
@@ -87,7 +80,7 @@ export class YamahaDeviceManagement extends DeviceManagement {
    *
    * @param rows the manual rows to store
    */
-  private async writeManual(rows: ManualRow[]): Promise<void> {
+  private async writeManual(rows: DeviceRow[]): Promise<void> {
     await this.adapter.extendForeignObjectAsync(this.objId, { native: { devices: rows } });
   }
 
@@ -139,9 +132,9 @@ export class YamahaDeviceManagement extends DeviceManagement {
     const names = new Map<string, string>();
     const manualRecords: DeviceRecord[] = [];
     for (const row of await this.readManual()) {
-      const id = rowId(row);
+      const id = rowDeviceId(row);
       // "info" is the adapter's own channel — a device may never claim it.
-      if (id === "info" || names.has(id)) {
+      if (RESERVED_DEVICE_IDS.has(id) || names.has(id)) {
         continue;
       }
       names.set(id, row.name && row.name.length > 0 ? row.name : row.ip);
@@ -294,7 +287,7 @@ export class YamahaDeviceManagement extends DeviceManagement {
       // only the protocols this device is connected over. Own glyphs go in as data URLs, drawn
       // with `currentColor` so they take the indicator's colour (see device-type.ts).
       indicators: [
-        ...TRANSPORTS.map(tr => ({
+        ...TRANSPORT_LABELS.map(tr => ({
           id: `transport-${tr.id}`,
           value: { stateId: `${base}.info.transports.${tr.id}` },
           text: tr.label,
@@ -411,7 +404,7 @@ export class YamahaDeviceManagement extends DeviceManagement {
     if (data && typeof data.ip === "string" && data.ip.trim()) {
       const ip = data.ip.trim();
       const typedName = typeof data.name === "string" ? data.name.trim() : "";
-      if (!isValidIp(ip)) {
+      if (!isIPv4(ip)) {
         await context.showMessage(tName("invalidIp"));
         return { refresh: true };
       }
@@ -424,11 +417,11 @@ export class YamahaDeviceManagement extends DeviceManagement {
         await context.showMessage(tName("duplicateDevice"));
         return { refresh: true };
       }
-      const taken = new Set([...manual.map(entry => rowId(entry)), ...found.map(record => record.id)]);
+      const taken = new Set([...manual.map(entry => rowDeviceId(entry)), ...found.map(record => record.id)]);
       const id = deviceIdFor({ model: report.model, identity: report.identity, name, ip }, taken);
       // The row carries the id as its name too: a return to 2.x derives the id from the name, and
       // then finds the tree where it is (and a typed row never reads as a migrated one).
-      const row: ManualRow = { id, name: id, ip };
+      const row: DeviceRow = { id, name: id, ip };
       const clash = findClash(manual, row, -1, new Set(found.map(record => record.id)));
       if (clash) {
         await context.showMessage(clash);
@@ -559,9 +552,9 @@ export class YamahaDeviceManagement extends DeviceManagement {
     const ip = data.ip.trim();
     const name = typeof data.name === "string" ? data.name.trim() : "";
     const manual = await this.readManual();
-    const index = manual.findIndex(entry => rowId(entry) === cardId);
+    const index = manual.findIndex(entry => rowDeviceId(entry) === cardId);
     // The row keeps the card's id — stored, and as its name for a return to 2.x.
-    const row: ManualRow = { id: cardId, name: cardId, ip };
+    const row: DeviceRow = { id: cardId, name: cardId, ip };
     const clash = findClash(manual, row, index);
     if (clash) {
       await context.showMessage(clash);
@@ -615,7 +608,7 @@ export class YamahaDeviceManagement extends DeviceManagement {
    */
   private async deleteDevice(cardId: string): Promise<{ delete: string }> {
     const manual = await this.readManual();
-    const index = manual.findIndex(r => rowId(r) === cardId);
+    const index = manual.findIndex(r => rowDeviceId(r) === cardId);
     const store = discoveredStoreDeps(this.adapter);
     const discovered = await readDiscovered(store);
     const record = discovered.find((d: DeviceRecord) => d.id === cardId);

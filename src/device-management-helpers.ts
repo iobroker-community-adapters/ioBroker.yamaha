@@ -1,36 +1,9 @@
 import type { JsonFormSchema } from "@iobroker/dm-utils";
 import { tName } from "./lib/i18n";
-import { rowDeviceId } from "./lib/pure-helpers";
-import { TRANSPORT_LABELS } from "./lib/ready-line";
+import { RESERVED_DEVICE_IDS } from "./lib/device-id";
+import { IPV4_RE } from "./lib/network-interfaces";
+import { rowDeviceId, type DeviceRow } from "./lib/pure-helpers";
 import type { DeviceSource } from "./lib/types";
-
-/** Object-id segments the adapter reserves for its own tree — a device may not take them. */
-const RESERVED_IDS = new Set(["info"]);
-/** IPv4 dotted-quad — the single source for both the frontend validator and the backend check. */
-const IP_RE = /^(\d{1,3}\.){3}\d{1,3}$/;
-
-/** The transports shown as card indicators — the single source shared with the ready-log line. */
-export const TRANSPORTS = TRANSPORT_LABELS;
-
-/** One raw manual device row from `native.devices` (name and id are optional). */
-export interface ManualRow {
-  /** The object id, stored since 3.0.0 — a row without one carries the id 2.x derived from its name. */
-  id?: string;
-  /** The name the row was typed with (2.x), the address (0.5.4 migration), or the id itself. */
-  name?: string;
-  /** The device IP address. */
-  ip: string;
-}
-
-/**
- * Whether a typed address is an IPv4 dotted quad — checked before the device is asked who it is.
- *
- * @param ip the typed address
- * @returns whether it is one
- */
-export function isValidIp(ip: string): boolean {
-  return IP_RE.test(ip);
-}
 
 /** A running device as shown on a card, plus which source it came from (routes edit/delete). */
 export interface CardDevice {
@@ -42,17 +15,6 @@ export interface CardDevice {
   name: string;
   /** Where it lives: the manual `native.devices` table, or the auto-discovery store. */
   source: DeviceSource;
-}
-
-/**
- * The id the object tree uses for a manual row: the one it stores, or — for a row written before
- * 3.0.0 — its name, or the ip when the name is blank (see `rowDeviceId`).
- *
- * @param row the manual device row
- * @returns the id-safe device id
- */
-export function rowId(row: ManualRow): string {
-  return rowDeviceId(row);
 }
 
 /**
@@ -79,7 +41,7 @@ export function buildDeviceForm(usedIps: readonly string[]): JsonFormSchema {
       ip: {
         type: "text",
         label: tName("columnIp"),
-        validator: `!!(data.ip && ${IP_RE.toString()}.test(data.ip)) && !${ipList}.includes(data.ip)`,
+        validator: `!!(data.ip && ${IPV4_RE.toString()}.test(data.ip)) && !${ipList}.includes(data.ip)`,
         validatorErrorText: tName("invalidIp"),
         validatorNoSaveOnError: true,
         sm: 12,
@@ -116,16 +78,16 @@ export function buildDeviceForm(usedIps: readonly string[]): JsonFormSchema {
  * @returns a translated clash message, or null when the row is fine
  */
 export function findClash(
-  rows: readonly ManualRow[],
-  candidate: ManualRow,
+  rows: readonly DeviceRow[],
+  candidate: DeviceRow,
   exceptIndex: number,
   otherIds: ReadonlySet<string> = new Set(),
 ): ioBroker.StringOrTranslated | null {
-  if (!IP_RE.test(candidate.ip)) {
+  if (!IPV4_RE.test(candidate.ip)) {
     return tName("invalidIp");
   }
-  const id = rowId(candidate);
-  if (id === "" || RESERVED_IDS.has(id)) {
+  const id = rowDeviceId(candidate);
+  if (id === "" || RESERVED_DEVICE_IDS.has(id)) {
     return tName("invalidName");
   }
   if (otherIds.has(id)) {
@@ -135,7 +97,7 @@ export function findClash(
     if (i === exceptIndex) {
       continue;
     }
-    if (rows[i].ip === candidate.ip || rowId(rows[i]) === id) {
+    if (rows[i].ip === candidate.ip || rowDeviceId(rows[i]) === id) {
       return tName("duplicateDevice");
     }
   }

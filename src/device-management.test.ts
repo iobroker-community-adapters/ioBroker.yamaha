@@ -47,10 +47,11 @@ vi.mock("./lib/discovered-store-deps", () => ({
   excludedStoreDeps: () => ({}),
 }));
 
-import { buildDeviceForm, findClash, rowId } from "./device-management-helpers";
+import { buildDeviceForm, findClash } from "./device-management-helpers";
+import { IPV4_RE } from "./lib/network-interfaces";
 import { YamahaDeviceManagement } from "./device-management";
 import { writeDiscovered, writeExcluded, writeIgnored } from "./lib/discovered-store";
-import { LABEL_RANK, parseDevices } from "./lib/pure-helpers";
+import { LABEL_RANK, parseDevices, rowDeviceId } from "./lib/pure-helpers";
 
 /**
  * What a read stub answers with: a COPY of the stored value, never the stored object itself.
@@ -122,7 +123,7 @@ describe("buildDeviceForm", () => {
     expect(form.items.ip.validator).toContain("192.168.1.10");
     // the embedded IP regex must be the correct single-backslash form, not an over-escaped copy
     // that would match a literal "\d" and permanently disable the OK button
-    expect(form.items.ip.validator).toContain("/^(\\d{1,3}\\.){3}\\d{1,3}$/");
+    expect(form.items.ip.validator).toContain(IPV4_RE.toString());
     expect(form.items.ip.validator).not.toContain("\\\\d");
   });
 });
@@ -656,7 +657,7 @@ describe("YamahaDeviceManagement", () => {
       const i = make([]);
       await i.editDevice("192_168_1_20", mockContext({ form: { name: "", ip: "192.168.1.99" } }));
       expect(adapter._stored()).toEqual([{ id: "192_168_1_20", name: "192_168_1_20", ip: "192.168.1.99" }]);
-      expect(rowId(adapter._stored()[0])).toBe("192_168_1_20");
+      expect(rowDeviceId(adapter._stored()[0])).toBe("192_168_1_20");
     });
 
     it("a found device whose name alone changes stays discovered", async () => {
@@ -677,7 +678,7 @@ describe("YamahaDeviceManagement", () => {
       await i.editDevice("Living_room", mockContext({ form: { name: "Lounge", ip: "192.168.1.10" } }));
       // The id comes from the row's name, so the row keeps the id and the new label goes to the
       // device object — before 2.9.0 this renamed the id and left the whole tree behind.
-      expect(rowId(adapter._stored()[0])).toBe("Living_room");
+      expect(rowDeviceId(adapter._stored()[0])).toBe("Living_room");
       expect(adapter.extendForeignObjectAsync).toHaveBeenCalledWith("yamaha.0.Living_room", {
         common: { name: "Lounge" },
         native: { label: "Lounge", labelRank: LABEL_RANK.user },

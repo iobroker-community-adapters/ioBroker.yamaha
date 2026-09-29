@@ -3,6 +3,7 @@ import { ANY_ZONE_PREFIX } from "./catalog/zones";
 import type { DiscoveredDevice } from "./discovery";
 import { contradicts, mergeIdentity, sameDevice } from "./device-identity";
 import { deviceIdFor, idSegment, RESERVED_DEVICE_IDS } from "./device-id";
+import { isIPv4 } from "./network-interfaces";
 
 /** One row of the instance's device table (`native.devices`). */
 export interface DeviceRow {
@@ -107,7 +108,7 @@ export function renamedTableRows(
  * @returns whether it is an IPv4 address
  */
 export function isDottedQuad(text: string): boolean {
-  return /^\d{1,3}(\.\d{1,3}){3}$/.test(text);
+  return isIPv4(text);
 }
 
 /**
@@ -139,7 +140,7 @@ export function parseDevices(raw: unknown, onCollision?: (dropped: string, taken
     return [];
   }
   const records: DeviceRecord[] = [];
-  const taken = new Set<string>(["info"]); // reserved: the adapter's own info channel
+  const taken = new Set<string>(RESERVED_DEVICE_IDS); // the adapter's own info channel
   for (const entry of raw) {
     if (!isConfiguredDevice(entry)) {
       continue;
@@ -332,7 +333,7 @@ export function staleObjects(
   }
   const isKept = (fullId: string): boolean => {
     const top = stripNamespace(fullId, namespace).split(".")[0];
-    return top === "info" || deviceIds.has(top) || remembered.has(top);
+    return RESERVED_DEVICE_IDS.has(top) || deviceIds.has(top) || remembered.has(top);
   };
   return existing.filter(id => !isKept(id)).sort((a, b) => b.length - a.length);
 }

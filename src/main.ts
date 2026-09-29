@@ -37,7 +37,8 @@ import {
   staleObjects,
   stripNamespace,
 } from "./lib/pure-helpers";
-import { ID_SCHEME, modelId, serialId } from "./lib/device-id";
+import { ID_SCHEME, modelId, RESERVED_DEVICE_IDS, serialId } from "./lib/device-id";
+import { TRANSPORT_LABELS } from "./lib/ready-line";
 import { copyDeviceTree, movedId, type DeviceMoveDeps } from "./lib/lifecycle/device-move";
 import { moveAllWithEnums } from "./lib/enum-carry";
 import { ObjectMirror, StateMirror } from "./lib/lifecycle/write-mirror";
@@ -129,7 +130,7 @@ const NATIVE_KEY_MIGRATIONS: NativeKeyMigration[] = [
 ];
 
 /** The three transports in attempt order — also the per-transport `info.transports.*` state ids. */
-const TRANSPORT_IDS = ["ynca", "yxc", "xml"] as const;
+const TRANSPORT_IDS = TRANSPORT_LABELS.map(({ id }) => id);
 
 /**
  * How long the datapoint balance waits for quiet before it logs. Devices connect
@@ -2310,13 +2311,13 @@ export class Yamaha extends utils.Adapter {
       const listing = await this.getAdapterObjectsAsync();
       const store = discoveredStoreDeps(this);
       const discovered = await readDiscovered(store);
-      const rows = Array.isArray(this.config.devices) ? (this.config.devices as unknown[]) : [];
+      const rows = Array.isArray(this.config.devices) ? this.config.devices : [];
       const known = new Set([...parseDevices(rows).map(device => device.id), ...discovered.map(device => device.id)]);
       const devices = new Map<string, ioBroker.Object>();
       const prefix = `${this.namespace}.`;
       for (const [fullId, obj] of Object.entries(listing)) {
         const id = fullId.slice(prefix.length);
-        if (obj?.type === "device" && !id.includes(".") && id !== "info") {
+        if (obj?.type === "device" && !id.includes(".") && !RESERVED_DEVICE_IDS.has(id)) {
           devices.set(id, obj);
         }
       }

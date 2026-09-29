@@ -35,8 +35,22 @@ export function searchInterfaces(
   return addresses;
 }
 
-/** A dotted IPv4 address (no hostname). */
-const IPV4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+/**
+ * A dotted IPv4 address, every part 0–255 — the one rule for the add dialog's validator, the backend
+ * check, the migration marker and the resolver. Three copies stood, and all three took
+ * `999.999.999.999` (audit 2026-09-29, A35).
+ */
+export const IPV4_RE = /^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
+
+/**
+ * Whether a text is a dotted IPv4 address (see {@link IPV4_RE}).
+ *
+ * @param text the text
+ * @returns whether it is one
+ */
+export function isIPv4(text: string): boolean {
+  return IPV4_RE.test(text);
+}
 
 /**
  * The IPv4 address a configured host stands for. A table row may carry a hostname (the 0.5.x
@@ -52,7 +66,7 @@ export async function resolveIPv4(
   host: string,
   resolve: (name: string) => Promise<{ address: string }> = name => lookup(name, { family: 4 }),
 ): Promise<string | undefined> {
-  if (IPV4.test(host)) {
+  if (isIPv4(host)) {
     return host;
   }
   try {
@@ -60,14 +74,4 @@ export async function resolveIPv4(
   } catch {
     return undefined;
   }
-}
-
-/**
- * Whether a configured address is already a dotted IPv4 address.
- *
- * @param host the configured address or hostname
- * @returns true for a dotted IPv4 address
- */
-export function isIPv4(host: string): boolean {
-  return IPV4.test(host);
 }

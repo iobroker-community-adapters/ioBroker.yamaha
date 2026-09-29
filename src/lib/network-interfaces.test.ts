@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { NetworkInterfaceInfo } from "node:os";
-import { resolveIPv4, searchInterfaces } from "./network-interfaces";
+import { isIPv4, resolveIPv4, searchInterfaces } from "./network-interfaces";
 
 /**
  * Shorthand for a network-interface entry — only the fields searchInterfaces reads.
@@ -56,5 +56,19 @@ describe("resolveIPv4 (audit 2026-09-24, A12)", () => {
       "192.168.1.20",
     );
     await expect(resolveIPv4("nowhere.invalid", () => Promise.reject(new Error("ENOTFOUND")))).resolves.toBeUndefined();
+  });
+});
+
+// One rule for the add dialog, the backend check, the migration marker and the resolver; the three
+// copies it replaced all took 999.999.999.999 (audit 2026-09-29, A35).
+describe("isIPv4", () => {
+  it("takes a dotted address with every part 0-255 and nothing else", () => {
+    expect(isIPv4("192.168.1.20")).toBe(true);
+    expect(isIPv4("0.0.0.0")).toBe(true);
+    expect(isIPv4("255.255.255.255")).toBe(true);
+    expect(isIPv4("999.999.999.999")).toBe(false);
+    expect(isIPv4("192.168.1.256")).toBe(false);
+    expect(isIPv4("192.168.1")).toBe(false);
+    expect(isIPv4("rx-v6a.local")).toBe(false);
   });
 });
