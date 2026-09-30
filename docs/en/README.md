@@ -51,16 +51,16 @@ adapter is not running is only found again by the next network search.
   card removes a device for good. A list holding only the row carried over from the previous
   adapter (its name is an IP address) counts as empty: nobody typed that address, so the search
   stays on and follows that receiver to a new address.
-- **Network interface** — keep "all addresses" (0.0.0.0) and the search leaves through every network
+- **Network Interface** — keep "all addresses" (0.0.0.0) and the search leaves through every network
   card of your ioBroker machine. Only set it if your server sits in several networks and the search
   should use a particular one. It has no effect on the receivers themselves.
 - **MusicCast event port** — shown, not editable: MusicCast devices push their changes to UDP
   port 41100, the protocol fixes it. It is there so the Admin can warn you when a second
   instance on the same host would take the port.
-- **Poll interval (older devices)** — how often a receiver from before 2010 is asked for its
+- **XML query interval** — how often a receiver from before 2010 is asked for its
   state. Those models cannot report changes by themselves. 60 seconds is a sensible default;
   a shorter interval means more network traffic for little gain.
-- **Datapoint groups** — see below.
+- **Data points** — see below.
 
 ### On each device card
 

@@ -53,16 +53,16 @@ umzieht, während der Adapter nicht läuft, findet aber erst die nächste Netzwe
   Karte. Eine Liste, die nur die aus dem Vorgänger-Adapter übernommene Zeile enthält (ihr Name
   ist eine IP-Adresse), gilt als leer: diese Adresse hat niemand getippt, die Suche bleibt an
   und folgt dem Receiver zu einer neuen Adresse.
-- **Netzwerk-Schnittstelle** — auf „alle Adressen“ (0.0.0.0) lassen, dann verlässt die Suche jede
+- **Netzwerk-Interface** — auf „alle Adressen“ (0.0.0.0) lassen, dann verlässt die Suche jede
   Netzwerkkarte deines ioBroker-Rechners. Nur setzen, wenn dein Server in mehreren Netzen hängt und die Suche eine
   bestimmte nehmen soll. Auf die Receiver selbst hat die Einstellung keine Wirkung.
 - **MusicCast-Ereignisport** — wird angezeigt, ist nicht änderbar: MusicCast-Geräte melden ihre
   Änderungen an den UDP-Port 41100, das legt das Protokoll fest. Das Feld ist da, damit der Admin
   warnen kann, wenn eine zweite Instanz auf demselben Rechner den Port belegen würde.
-- **Abfrageintervall (ältere Geräte)** — wie oft ein Receiver von vor 2010 nach seinem Zustand
+- **XML-Abfrageintervall** — wie oft ein Receiver von vor 2010 nach seinem Zustand
   gefragt wird. Diese Modelle können Änderungen nicht von sich aus melden. 60 Sekunden sind
   sinnvoll; ein kürzeres Intervall erzeugt mehr Netzverkehr bei wenig Gewinn.
-- **Datenpunktgruppen** — siehe unten.
+- **Datenpunkte** — siehe unten.
 
 ### Auf jeder Gerätekarte
 
@@ -217,7 +217,7 @@ möglich“. Der Datenpunkt zeigt danach wieder den Wert des Geräts.
 
 - **Das Gerät wird nicht gefunden.** Ältere Geräte antworten auf keine Suche — trag sie
   über ihre IP-Adresse ein. Ansonsten prüf, ob ioBroker und Receiver im selben Netzabschnitt
-  liegen, und setz die Netzwerk-Schnittstelle einmal ausdrücklich.
+  liegen, und setz das Netzwerk-Interface einmal ausdrücklich.
 - **Das Gerät bleibt offline.** Prüf die Adresse, und ob der Receiver überhaupt erreichbar ist
   (seine eigene Webseite antwortet meist unter `http://<Adresse>`). Der Adapter versucht es
   von selbst weiter, mit wachsenden Pausen. Hat der Receiver eine neue Adresse bekommen, folgt
