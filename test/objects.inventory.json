@@ -322,22 +322,22 @@
         "zh-cn": "输入"
       },
       "states": {
-        "napster": "napster",
-        "spotify": "spotify",
-        "juke": "juke",
-        "qobuz": "qobuz",
-        "tidal": "tidal",
-        "deezer": "deezer",
-        "airplay": "airplay",
-        "mc_link": "mc_link",
-        "server": "server",
-        "net_radio": "net_radio",
-        "bluetooth": "bluetooth",
-        "usb": "usb",
-        "tuner": "tuner",
-        "cd": "cd",
+        "napster": "Napster",
+        "spotify": "Spotify",
+        "juke": "JUKE",
+        "qobuz": "Qobuz",
+        "tidal": "TIDAL",
+        "deezer": "Deezer",
+        "airplay": "AirPlay",
+        "mc_link": "MusicCast Link",
+        "server": "SERVER",
+        "net_radio": "NET RADIO",
+        "bluetooth": "Bluetooth",
+        "usb": "USB",
+        "tuner": "TUNER",
+        "cd": "CD",
         "digital": "digital",
-        "aux": "aux"
+        "aux": "AUX"
       }
     },
     "native": {},
@@ -626,7 +626,12 @@
       "type": "string",
       "role": "state",
       "read": true,
-      "write": false
+      "write": false,
+      "states": {
+        "server": "Server (sends)",
+        "client": "Client (receives)",
+        "none": "Not in a group"
+      }
     },
     "native": {},
     "_id": "yamaha.0.cd-nt670d.multiroom.group.role"
@@ -648,9 +653,15 @@
         "zh-cn": "服务器区域（为群组供源）"
       },
       "type": "string",
-      "role": "text",
+      "role": "state",
       "read": true,
-      "write": false
+      "write": false,
+      "states": {
+        "main": "Main zone",
+        "zone2": "Zone 2",
+        "zone3": "Zone 3",
+        "zone4": "Zone 4"
+      }
     },
     "native": {},
     "_id": "yamaha.0.cd-nt670d.multiroom.group.serverZone"
@@ -689,9 +700,9 @@
       "read": true,
       "write": false,
       "states": {
-        "building": "building",
-        "working": "working",
-        "deleting": "deleting"
+        "building": "Being built",
+        "working": "Running",
+        "deleting": "Being removed"
       }
     },
     "native": {},
@@ -1663,7 +1674,7 @@
       "read": true,
       "write": true,
       "states": {
-        "netRadio": "Net Radio",
+        "netRadio": "Internet radio",
         "server": "Media server",
         "usb": "USB",
         "napster": "Napster",
@@ -1842,19 +1853,19 @@
       "read": true,
       "write": false,
       "states": {
-        "0": "No Error",
-        "1": "Access Error",
-        "2": "Playback Unavailable",
-        "3": "Skip Limit Reached",
-        "4": "Invalid Session",
-        "5": "High-Resolution File Not Playable at MusicCast Leaf",
-        "6": "User Uncredentialed",
-        "7": "Track Restricted by Right Holders",
-        "8": "Sample Restricted by Right Holders",
-        "9": "Genre Restricted by Streaming Credentials",
-        "10": "Application Restricted by Streaming Credentials",
-        "11": "Intent Restricted by Streaming Credentials",
-        "100": "Multiple Errors"
+        "0": "No error",
+        "1": "Access error",
+        "2": "Playback unavailable",
+        "3": "Skip limit reached",
+        "4": "Invalid session",
+        "5": "High-resolution file not playable at the MusicCast link receiver",
+        "6": "No credentials for the service",
+        "7": "Track restricted by the rights holders",
+        "8": "Sample restricted by the rights holders",
+        "9": "Genre restricted by the streaming account",
+        "10": "Application restricted by the streaming account",
+        "11": "Intent restricted by the streaming account",
+        "100": "Several errors"
       }
     },
     "native": {},
@@ -2002,7 +2013,7 @@
       },
       "type": "number",
       "role": "level",
-      "read": false,
+      "read": true,
       "write": true,
       "min": 0,
       "step": 1,
@@ -2081,7 +2092,7 @@
       },
       "type": "number",
       "role": "level",
-      "read": false,
+      "read": true,
       "write": true,
       "min": 1,
       "max": 40,
@@ -2158,7 +2169,7 @@
       },
       "type": "number",
       "role": "level",
-      "read": false,
+      "read": true,
       "write": true,
       "min": 1,
       "max": 40,
@@ -2434,9 +2445,9 @@
       "read": true,
       "write": false,
       "states": {
-        "0": "Pause",
-        "1": "Play",
-        "2": "Stop"
+        "0": "Paused",
+        "1": "Playing",
+        "2": "Stopped"
       },
       "name": {
         "en": "Playback",
@@ -2487,9 +2498,9 @@
       "read": true,
       "write": true,
       "states": {
-        "0": "Off",
-        "1": "Single",
-        "2": "All"
+        "0": "No repeat",
+        "1": "Repeat one",
+        "2": "Repeat all"
       },
       "name": {
         "en": "Repeat",
@@ -2802,11 +2813,11 @@
       "max": 120,
       "step": 30,
       "states": {
-        "0": "Off",
-        "30": "30 min",
-        "60": "60 min",
-        "90": "90 min",
-        "120": "120 min"
+        "0": "No sleep timer",
+        "30": "30 minutes",
+        "60": "60 minutes",
+        "90": "90 minutes",
+        "120": "120 minutes"
       },
       "name": {
         "en": "Sleep timer",
@@ -2892,9 +2903,9 @@
         "zh-cn": "向联动设备串流时在稳定性与延迟之间取舍。"
       },
       "states": {
-        "speed": "speed",
-        "standard": "standard",
-        "stability": "stability"
+        "speed": "Speed first",
+        "standard": "Standard link",
+        "stability": "Stability first"
       }
     },
     "native": {},
@@ -3094,7 +3105,11 @@
       "type": "string",
       "role": "state",
       "read": true,
-      "write": false
+      "write": false,
+      "states": {
+        "mono": "Mono",
+        "stereo": "Stereo"
+      }
     },
     "native": {},
     "_id": "yamaha.0.cd-nt670d.tuner.audioMode"
@@ -3120,8 +3135,8 @@
       "read": true,
       "write": true,
       "states": {
-        "fm": "fm",
-        "dab": "dab"
+        "fm": "FM (VHF)",
+        "dab": "DAB (digital radio)"
       }
     },
     "native": {},
@@ -3230,7 +3245,11 @@
         "zh-cn": "这是电台的主服务还是附属服务。"
       },
       "type": "string",
-      "role": "text",
+      "role": "state",
+      "states": {
+        "primary": "Primary service",
+        "secondary": "Secondary service"
+      },
       "read": true,
       "write": false
     },
@@ -3613,7 +3632,13 @@
         "zh-cn": "数字广播的调谐或搜台进行到哪一步。"
       },
       "type": "string",
-      "role": "text",
+      "role": "state",
+      "states": {
+        "not_ready": "Not ready",
+        "initial_scan": "First station scan",
+        "tune_aid": "Reception aid",
+        "ready": "Ready"
+      },
       "read": true,
       "write": false
     },
@@ -3754,7 +3779,7 @@
       },
       "type": "number",
       "role": "level",
-      "read": false,
+      "read": true,
       "write": true,
       "min": 1,
       "max": 30,
@@ -3855,7 +3880,7 @@
       },
       "type": "number",
       "role": "level",
-      "read": false,
+      "read": true,
       "write": true,
       "min": 1,
       "max": 30,
@@ -4052,6 +4077,19 @@
         "uk": "Шукати попередню станцію",
         "zh-cn": "搜索上一个电台"
       },
+      "desc": {
+        "en": "Searches down the band: AM and FM for the previous receivable frequency, DAB for the previous service.",
+        "de": "Sucht abwärts im Band: bei AM und UKW die vorige empfangbare Frequenz, bei DAB das vorige Programm.",
+        "ru": "Поиск вниз по диапазону: AM и FM — предыдущая принимаемая частота, DAB — предыдущая служба.",
+        "pt": "Procura abaixo na banda: em AM e FM a frequência recebível anterior, em DAB o serviço anterior.",
+        "nl": "Zoekt omlaag in de band: bij AM en FM de vorige ontvangbare frequentie, bij DAB het vorige programma.",
+        "fr": "Recherche vers le bas de la bande : en AM et FM la fréquence captée précédente, en DAB le service précédent.",
+        "it": "Cerca verso il basso nella banda: in AM e FM la frequenza ricevibile precedente, in DAB il servizio precedente.",
+        "es": "Busca hacia abajo en la banda: en AM y FM la frecuencia recibible anterior, en DAB el servicio anterior.",
+        "pl": "Szuka w dół pasma: w AM i FM poprzedniej odbieralnej częstotliwości, w DAB poprzedniej usługi.",
+        "uk": "Пошук униз діапазоном: AM і FM — попередня частота, що приймається, DAB — попередня служба.",
+        "zh-cn": "向下搜索：AM 和 FM 为上一个可接收频率，DAB 为上一个服务。"
+      },
       "type": "boolean",
       "role": "button",
       "read": false,
@@ -4075,6 +4113,19 @@
         "pl": "Szukaj następnej stacji",
         "uk": "Шукати наступну станцію",
         "zh-cn": "搜索下一个电台"
+      },
+      "desc": {
+        "en": "Searches up the band: AM and FM for the next receivable frequency, DAB for the next service.",
+        "de": "Sucht aufwärts im Band: bei AM und UKW die nächste empfangbare Frequenz, bei DAB das nächste Programm.",
+        "ru": "Поиск вверх по диапазону: AM и FM — следующая принимаемая частота, DAB — следующая служба.",
+        "pt": "Procura acima na banda: em AM e FM a próxima frequência recebível, em DAB o próximo serviço.",
+        "nl": "Zoekt omhoog in de band: bij AM en FM de volgende ontvangbare frequentie, bij DAB het volgende programma.",
+        "fr": "Recherche vers le haut de la bande : en AM et FM la prochaine fréquence captée, en DAB le service suivant.",
+        "it": "Cerca verso l'alto nella banda: in AM e FM la prossima frequenza ricevibile, in DAB il servizio successivo.",
+        "es": "Busca hacia arriba en la banda: en AM y FM la siguiente frecuencia recibible, en DAB el siguiente servicio.",
+        "pl": "Szuka w górę pasma: w AM i FM następnej odbieralnej częstotliwości, w DAB następnej usługi.",
+        "uk": "Пошук угору діапазоном: AM і FM — наступна частота, що приймається, DAB — наступна служба.",
+        "zh-cn": "向上搜索：AM 和 FM 为下一个可接收频率，DAB 为下一个服务。"
       },
       "type": "boolean",
       "role": "button",
@@ -4768,10 +4819,10 @@
       "read": true,
       "write": true,
       "states": {
-        "Off": "Off",
-        "On": "On",
-        "Att -20 dB": "Att -20 dB",
-        "Att -40 dB": "Att -40 dB"
+        "Off": "Not muted",
+        "On": "Muted",
+        "Att -20 dB": "Lowered by 20 dB",
+        "Att -40 dB": "Lowered by 40 dB"
       }
     },
     "native": {},
@@ -5705,7 +5756,7 @@
       "read": true,
       "write": true,
       "states": {
-        "netRadio": "Net Radio",
+        "netRadio": "Internet radio",
         "server": "Media server",
         "usb": "USB",
         "ipodUsb": "iPod (USB)"
@@ -5933,9 +5984,9 @@
       "read": true,
       "write": true,
       "states": {
-        "0": "Pause",
-        "1": "Play",
-        "2": "Stop"
+        "0": "Paused",
+        "1": "Playing",
+        "2": "Stopped"
       }
     },
     "native": {},
@@ -5986,9 +6037,9 @@
       "read": true,
       "write": true,
       "states": {
-        "0": "Off",
-        "1": "Single",
-        "2": "All"
+        "0": "No repeat",
+        "1": "Repeat one",
+        "2": "Repeat all"
       }
     },
     "native": {},
@@ -6494,13 +6545,13 @@
       "read": false,
       "write": true,
       "states": {
-        "up": "up",
-        "down": "down",
-        "left": "left",
-        "right": "right",
-        "select": "select",
-        "return": "return",
-        "home": "home"
+        "up": "Up",
+        "down": "Down",
+        "left": "Left",
+        "right": "Right",
+        "select": "Select (OK)",
+        "return": "Back",
+        "home": "Home"
       }
     },
     "native": {},
@@ -6540,11 +6591,11 @@
       "read": false,
       "write": true,
       "states": {
-        "on_screen": "on_screen",
-        "top_menu": "top_menu",
-        "menu": "menu",
-        "option": "option",
-        "display": "display"
+        "on_screen": "On-screen menu",
+        "top_menu": "Top menu",
+        "menu": "Menu",
+        "option": "Options",
+        "display": "Display"
       }
     },
     "native": {},
@@ -6848,11 +6899,11 @@
       "read": true,
       "write": true,
       "states": {
-        "Off": "Off",
-        "30 min": "30 min",
-        "60 min": "60 min",
-        "90 min": "90 min",
-        "120 min": "120 min"
+        "Off": "No sleep timer",
+        "30 min": "30 minutes",
+        "60 min": "60 minutes",
+        "90 min": "90 minutes",
+        "120 min": "120 minutes"
       }
     },
     "native": {},
@@ -6899,8 +6950,8 @@
       "read": true,
       "write": true,
       "states": {
-        "AM": "AM",
-        "FM": "FM"
+        "AM": "AM (medium wave)",
+        "FM": "FM (VHF)"
       }
     },
     "native": {},
@@ -8109,7 +8160,12 @@
       "type": "string",
       "role": "state",
       "read": true,
-      "write": false
+      "write": false,
+      "states": {
+        "server": "Server (sends)",
+        "client": "Client (receives)",
+        "none": "Not in a group"
+      }
     },
     "native": {},
     "_id": "yamaha.0.rx-a2a-e7d3.multiroom.group.role"
@@ -8131,9 +8187,15 @@
         "zh-cn": "服务器区域（为群组供源）"
       },
       "type": "string",
-      "role": "text",
+      "role": "state",
       "read": true,
-      "write": false
+      "write": false,
+      "states": {
+        "main": "Main zone",
+        "zone2": "Zone 2",
+        "zone3": "Zone 3",
+        "zone4": "Zone 4"
+      }
     },
     "native": {},
     "_id": "yamaha.0.rx-a2a-e7d3.multiroom.group.serverZone"
@@ -8172,9 +8234,9 @@
       "read": true,
       "write": false,
       "states": {
-        "building": "building",
-        "working": "working",
-        "deleting": "deleting"
+        "building": "Being built",
+        "working": "Running",
+        "deleting": "Being removed"
       }
     },
     "native": {},
@@ -8566,10 +8628,10 @@
       "read": true,
       "write": true,
       "states": {
-        "Off": "Off",
-        "On": "On",
-        "Att -20 dB": "Att -20 dB",
-        "Att -40 dB": "Att -40 dB"
+        "Off": "Not muted",
+        "On": "Muted",
+        "Att -20 dB": "Lowered by 20 dB",
+        "Att -40 dB": "Lowered by 40 dB"
       }
     },
     "native": {},
@@ -8861,9 +8923,9 @@
       "read": true,
       "write": true,
       "states": {
-        "0": "Pause",
-        "1": "Play",
-        "2": "Stop"
+        "0": "Paused",
+        "1": "Playing",
+        "2": "Stopped"
       }
     },
     "native": {},
@@ -8914,9 +8976,9 @@
       "read": true,
       "write": true,
       "states": {
-        "0": "Off",
-        "1": "Single",
-        "2": "All"
+        "0": "No repeat",
+        "1": "Repeat one",
+        "2": "Repeat all"
       }
     },
     "native": {},
@@ -9295,12 +9357,12 @@
       "read": false,
       "write": true,
       "states": {
-        "up": "up",
-        "down": "down",
-        "left": "left",
-        "right": "right",
-        "select": "select",
-        "return": "return"
+        "up": "Up",
+        "down": "Down",
+        "left": "Left",
+        "right": "Right",
+        "select": "Select (OK)",
+        "return": "Back"
       }
     },
     "native": {},
@@ -9598,11 +9660,11 @@
       "read": true,
       "write": true,
       "states": {
-        "Off": "Off",
-        "30 min": "30 min",
-        "60 min": "60 min",
-        "90 min": "90 min",
-        "120 min": "120 min"
+        "Off": "No sleep timer",
+        "30 min": "30 minutes",
+        "60 min": "60 minutes",
+        "90 min": "90 minutes",
+        "120 min": "120 minutes"
       }
     },
     "native": {},
@@ -9814,8 +9876,8 @@
         "zh-cn": "向联动设备串流时使用的音质。"
       },
       "states": {
-        "compressed": "compressed",
-        "uncompressed": "uncompressed"
+        "compressed": "Compressed",
+        "uncompressed": "Uncompressed"
       }
     },
     "native": {},
@@ -9855,9 +9917,9 @@
         "zh-cn": "向联动设备串流时在稳定性与延迟之间取舍。"
       },
       "states": {
-        "speed": "speed",
-        "standard": "standard",
-        "stability": "stability"
+        "speed": "Speed first",
+        "standard": "Standard link",
+        "stability": "Stability first"
       }
     },
     "native": {},
@@ -9897,9 +9959,9 @@
         "zh-cn": "低音和高音是手动设置还是交给接收机；写入低音或高音值会切换到手动。"
       },
       "states": {
-        "manual": "manual",
-        "auto": "auto",
-        "bypass": "bypass"
+        "manual": "Manual",
+        "auto": "Automatic",
+        "bypass": "Bypassed"
       }
     },
     "native": {},
@@ -10147,29 +10209,29 @@
         "zh-cn": "输入"
       },
       "states": {
-        "napster": "napster",
-        "spotify": "spotify",
-        "juke": "juke",
-        "qobuz": "qobuz",
-        "tidal": "tidal",
-        "deezer": "deezer",
-        "airplay": "airplay",
-        "mc_link": "mc_link",
-        "server": "server",
-        "net_radio": "net_radio",
-        "bluetooth": "bluetooth",
-        "usb": "usb",
-        "tuner": "tuner",
-        "av1": "av1",
-        "av2": "av2",
-        "av3": "av3",
-        "av4": "av4",
-        "audio1": "audio1",
-        "audio2": "audio2",
-        "audio3": "audio3",
-        "phono": "phono",
-        "v_aux": "v_aux",
-        "main_sync": "main_sync"
+        "napster": "Napster",
+        "spotify": "Spotify",
+        "juke": "JUKE",
+        "qobuz": "Qobuz",
+        "tidal": "TIDAL",
+        "deezer": "Deezer",
+        "airplay": "AirPlay",
+        "mc_link": "MusicCast Link",
+        "server": "SERVER",
+        "net_radio": "NET RADIO",
+        "bluetooth": "Bluetooth",
+        "usb": "USB",
+        "tuner": "TUNER",
+        "av1": "AV1",
+        "av2": "AV2",
+        "av3": "AV3",
+        "av4": "AV4",
+        "audio1": "AUDIO1",
+        "audio2": "AUDIO2",
+        "audio3": "AUDIO3",
+        "phono": "PHONO",
+        "v_aux": "V-AUX",
+        "main_sync": "Main Zone Sync"
       }
     },
     "native": {},
@@ -10472,9 +10534,9 @@
       "read": true,
       "write": false,
       "states": {
-        "0": "Pause",
-        "1": "Play",
-        "2": "Stop"
+        "0": "Paused",
+        "1": "Playing",
+        "2": "Stopped"
       },
       "name": {
         "en": "Playback",
@@ -10525,9 +10587,9 @@
       "read": true,
       "write": true,
       "states": {
-        "0": "Off",
-        "1": "Single",
-        "2": "All"
+        "0": "No repeat",
+        "1": "Repeat one",
+        "2": "Repeat all"
       },
       "name": {
         "en": "Repeat",
@@ -11098,11 +11160,11 @@
       "max": 120,
       "step": 30,
       "states": {
-        "0": "Off",
-        "30": "30 min",
-        "60": "60 min",
-        "90": "90 min",
-        "120": "120 min"
+        "0": "No sleep timer",
+        "30": "30 minutes",
+        "60": "60 minutes",
+        "90": "90 minutes",
+        "120": "120 minutes"
       },
       "name": {
         "en": "Sleep timer",
@@ -11266,9 +11328,9 @@
         "zh-cn": "低音和高音是手动设置还是交给接收机；写入低音或高音值会切换到手动。"
       },
       "states": {
-        "manual": "manual",
-        "auto": "auto",
-        "bypass": "bypass"
+        "manual": "Manual",
+        "auto": "Automatic",
+        "bypass": "Bypassed"
       }
     },
     "native": {},
@@ -11397,14 +11459,14 @@
         "zh-cn": "输入"
       },
       "states": {
-        "av1": "av1",
-        "av2": "av2",
-        "av3": "av3",
-        "av4": "av4",
-        "av5": "av5",
-        "av6": "av6",
-        "av7": "av7",
-        "v_aux": "v_aux"
+        "av1": "AV1",
+        "av2": "AV2",
+        "av3": "AV3",
+        "av4": "AV4",
+        "av5": "AV5",
+        "av6": "AV6",
+        "av7": "AV7",
+        "v_aux": "V-AUX"
       }
     },
     "native": {},
@@ -11683,9 +11745,9 @@
       "read": true,
       "write": false,
       "states": {
-        "0": "Pause",
-        "1": "Play",
-        "2": "Stop"
+        "0": "Paused",
+        "1": "Playing",
+        "2": "Stopped"
       },
       "name": {
         "en": "Playback",
@@ -11736,9 +11798,9 @@
       "read": true,
       "write": true,
       "states": {
-        "0": "Off",
-        "1": "Single",
-        "2": "All"
+        "0": "No repeat",
+        "1": "Repeat one",
+        "2": "Repeat all"
       },
       "name": {
         "en": "Repeat",
@@ -12309,11 +12371,11 @@
       "max": 120,
       "step": 30,
       "states": {
-        "0": "Off",
-        "30": "30 min",
-        "60": "60 min",
-        "90": "90 min",
-        "120": "120 min"
+        "0": "No sleep timer",
+        "30": "30 minutes",
+        "60": "60 minutes",
+        "90": "90 minutes",
+        "120": "120 minutes"
       },
       "name": {
         "en": "Sleep timer",
@@ -12403,10 +12465,10 @@
       "read": true,
       "write": true,
       "states": {
-        "Off": "Off",
-        "On": "On",
-        "Att -20 dB": "Att -20 dB",
-        "Att -40 dB": "Att -40 dB"
+        "Off": "Not muted",
+        "On": "Muted",
+        "Att -20 dB": "Lowered by 20 dB",
+        "Att -40 dB": "Lowered by 40 dB"
       }
     },
     "native": {},
@@ -13417,7 +13479,7 @@
       "read": true,
       "write": true,
       "states": {
-        "netRadio": "Net Radio",
+        "netRadio": "Internet radio",
         "server": "Media server",
         "usb": "USB",
         "napster": "Napster",
@@ -13696,19 +13758,19 @@
       "read": true,
       "write": false,
       "states": {
-        "0": "No Error",
-        "1": "Access Error",
-        "2": "Playback Unavailable",
-        "3": "Skip Limit Reached",
-        "4": "Invalid Session",
-        "5": "High-Resolution File Not Playable at MusicCast Leaf",
-        "6": "User Uncredentialed",
-        "7": "Track Restricted by Right Holders",
-        "8": "Sample Restricted by Right Holders",
-        "9": "Genre Restricted by Streaming Credentials",
-        "10": "Application Restricted by Streaming Credentials",
-        "11": "Intent Restricted by Streaming Credentials",
-        "100": "Multiple Errors"
+        "0": "No error",
+        "1": "Access error",
+        "2": "Playback unavailable",
+        "3": "Skip limit reached",
+        "4": "Invalid session",
+        "5": "High-resolution file not playable at the MusicCast link receiver",
+        "6": "No credentials for the service",
+        "7": "Track restricted by the rights holders",
+        "8": "Sample restricted by the rights holders",
+        "9": "Genre restricted by the streaming account",
+        "10": "Application restricted by the streaming account",
+        "11": "Intent restricted by the streaming account",
+        "100": "Several errors"
       }
     },
     "native": {},
@@ -13856,7 +13918,7 @@
       },
       "type": "number",
       "role": "level",
-      "read": false,
+      "read": true,
       "write": true,
       "min": 0,
       "step": 1,
@@ -13935,7 +13997,7 @@
       },
       "type": "number",
       "role": "level",
-      "read": false,
+      "read": true,
       "write": true,
       "min": 1,
       "max": 40,
@@ -14012,7 +14074,7 @@
       },
       "type": "number",
       "role": "level",
-      "read": false,
+      "read": true,
       "write": true,
       "min": 1,
       "max": 40,
@@ -14438,9 +14500,9 @@
       "read": true,
       "write": true,
       "states": {
-        "0": "Pause",
-        "1": "Play",
-        "2": "Stop"
+        "0": "Paused",
+        "1": "Playing",
+        "2": "Stopped"
       }
     },
     "native": {},
@@ -14491,9 +14553,9 @@
       "read": true,
       "write": true,
       "states": {
-        "0": "Off",
-        "1": "Single",
-        "2": "All"
+        "0": "No repeat",
+        "1": "Repeat one",
+        "2": "Repeat all"
       }
     },
     "native": {},
@@ -15172,12 +15234,12 @@
       "read": false,
       "write": true,
       "states": {
-        "up": "up",
-        "down": "down",
-        "left": "left",
-        "right": "right",
-        "select": "select",
-        "return": "return"
+        "up": "Up",
+        "down": "Down",
+        "left": "Left",
+        "right": "Right",
+        "select": "Select (OK)",
+        "return": "Back"
       }
     },
     "native": {},
@@ -15217,15 +15279,15 @@
       "read": false,
       "write": true,
       "states": {
-        "on_screen": "on_screen",
-        "top_menu": "top_menu",
-        "menu": "menu",
-        "option": "option",
-        "display": "display",
-        "red": "red",
-        "green": "green",
-        "yellow": "yellow",
-        "blue": "blue"
+        "on_screen": "On-screen menu",
+        "top_menu": "Top menu",
+        "menu": "Menu",
+        "option": "Options",
+        "display": "Display",
+        "red": "Red",
+        "green": "Green",
+        "yellow": "Yellow",
+        "blue": "Blue"
       }
     },
     "native": {},
@@ -15819,11 +15881,11 @@
       "read": true,
       "write": true,
       "states": {
-        "Off": "Off",
-        "30 min": "30 min",
-        "60 min": "60 min",
-        "90 min": "90 min",
-        "120 min": "120 min"
+        "Off": "No sleep timer",
+        "30 min": "30 minutes",
+        "60 min": "60 minutes",
+        "90 min": "90 minutes",
+        "120 min": "120 minutes"
       }
     },
     "native": {},
@@ -15883,8 +15945,8 @@
       "read": true,
       "write": true,
       "states": {
-        "Off": "Off",
-        "Auto": "Auto"
+        "Off": "Switched off",
+        "Auto": "Automatic"
       }
     },
     "native": {},
@@ -15924,11 +15986,11 @@
         "zh-cn": "当前输入使用哪个端子的声音：自动、HDMI、同轴/光纤或模拟。"
       },
       "states": {
-        "auto": "auto",
-        "hdmi": "hdmi",
-        "coax_opt": "coax_opt",
-        "analog": "analog",
-        "unavailable": "unavailable"
+        "auto": "Automatic",
+        "hdmi": "HDMI",
+        "coax_opt": "Coaxial/optical",
+        "analog": "Analog",
+        "unavailable": "Not available"
       }
     },
     "native": {},
@@ -16197,8 +16259,8 @@
         "zh-cn": "联动设备优先唇形同步还是音频对齐。"
       },
       "states": {
-        "audio_sync": "audio_sync",
-        "lip_sync": "lip_sync"
+        "audio_sync": "Audio sync",
+        "lip_sync": "Lip sync"
       }
     },
     "native": {},
@@ -16238,8 +16300,8 @@
         "zh-cn": "向联动设备串流时使用的音质。"
       },
       "states": {
-        "compressed": "compressed",
-        "uncompressed": "uncompressed"
+        "compressed": "Compressed",
+        "uncompressed": "Uncompressed"
       }
     },
     "native": {},
@@ -16279,9 +16341,9 @@
         "zh-cn": "向联动设备串流时在稳定性与延迟之间取舍。"
       },
       "states": {
-        "speed": "speed",
-        "standard": "standard",
-        "stability": "stability"
+        "speed": "Speed first",
+        "standard": "Standard link",
+        "stability": "Stability first"
       }
     },
     "native": {},
@@ -16537,7 +16599,7 @@
       "read": true,
       "write": true,
       "states": {
-        "Auto": "Auto",
+        "Auto": "Automatic",
         "Dolby Surround": "Dolby Surround",
         "DTS Neural:X": "DTS Neural:X",
         "DTS NEO:6 Cinema": "DTS NEO:6 Cinema",
@@ -16581,8 +16643,8 @@
         "zh-cn": "低音和高音是手动设置还是交给接收机；写入低音或高音值会切换到手动。"
       },
       "states": {
-        "manual": "manual",
-        "auto": "auto"
+        "manual": "Manual",
+        "auto": "Automatic"
       }
     },
     "native": {},
@@ -16746,7 +16808,11 @@
       "type": "string",
       "role": "state",
       "read": true,
-      "write": false
+      "write": false,
+      "states": {
+        "mono": "Mono",
+        "stereo": "Stereo"
+      }
     },
     "native": {},
     "_id": "yamaha.0.rx-a2a-e7d3.tuner.audioMode"
@@ -16772,8 +16838,8 @@
       "read": true,
       "write": true,
       "states": {
-        "DAB": "DAB",
-        "FM": "FM"
+        "DAB": "DAB (digital radio)",
+        "FM": "FM (VHF)"
       }
     },
     "native": {},
@@ -16882,7 +16948,11 @@
         "zh-cn": "这是电台的主服务还是附属服务。"
       },
       "type": "string",
-      "role": "text",
+      "role": "state",
+      "states": {
+        "primary": "Primary service",
+        "secondary": "Secondary service"
+      },
       "read": true,
       "write": false
     },
@@ -17265,7 +17335,13 @@
         "zh-cn": "数字广播的调谐或搜台进行到哪一步。"
       },
       "type": "string",
-      "role": "text",
+      "role": "state",
+      "states": {
+        "not_ready": "Not ready",
+        "initial_scan": "First station scan",
+        "tune_aid": "Reception aid",
+        "ready": "Ready"
+      },
       "read": true,
       "write": false
     },
@@ -17406,7 +17482,7 @@
       },
       "type": "number",
       "role": "level",
-      "read": false,
+      "read": true,
       "write": true,
       "min": 1,
       "max": 40,
@@ -17507,7 +17583,7 @@
       },
       "type": "number",
       "role": "level",
-      "read": false,
+      "read": true,
       "write": true,
       "min": 1,
       "max": 40,
@@ -17741,6 +17817,19 @@
         "uk": "Шукати попередню станцію",
         "zh-cn": "搜索上一个电台"
       },
+      "desc": {
+        "en": "Searches down the band: AM and FM for the previous receivable frequency, DAB for the previous service.",
+        "de": "Sucht abwärts im Band: bei AM und UKW die vorige empfangbare Frequenz, bei DAB das vorige Programm.",
+        "ru": "Поиск вниз по диапазону: AM и FM — предыдущая принимаемая частота, DAB — предыдущая служба.",
+        "pt": "Procura abaixo na banda: em AM e FM a frequência recebível anterior, em DAB o serviço anterior.",
+        "nl": "Zoekt omlaag in de band: bij AM en FM de vorige ontvangbare frequentie, bij DAB het vorige programma.",
+        "fr": "Recherche vers le bas de la bande : en AM et FM la fréquence captée précédente, en DAB le service précédent.",
+        "it": "Cerca verso il basso nella banda: in AM e FM la frequenza ricevibile precedente, in DAB il servizio precedente.",
+        "es": "Busca hacia abajo en la banda: en AM y FM la frecuencia recibible anterior, en DAB el servicio anterior.",
+        "pl": "Szuka w dół pasma: w AM i FM poprzedniej odbieralnej częstotliwości, w DAB poprzedniej usługi.",
+        "uk": "Пошук униз діапазоном: AM і FM — попередня частота, що приймається, DAB — попередня служба.",
+        "zh-cn": "向下搜索：AM 和 FM 为上一个可接收频率，DAB 为上一个服务。"
+      },
       "type": "boolean",
       "role": "button",
       "read": false,
@@ -17764,6 +17853,19 @@
         "pl": "Szukaj następnej stacji",
         "uk": "Шукати наступну станцію",
         "zh-cn": "搜索下一个电台"
+      },
+      "desc": {
+        "en": "Searches up the band: AM and FM for the next receivable frequency, DAB for the next service.",
+        "de": "Sucht aufwärts im Band: bei AM und UKW die nächste empfangbare Frequenz, bei DAB das nächste Programm.",
+        "ru": "Поиск вверх по диапазону: AM и FM — следующая принимаемая частота, DAB — следующая служба.",
+        "pt": "Procura acima na banda: em AM e FM a próxima frequência recebível, em DAB o próximo serviço.",
+        "nl": "Zoekt omhoog in de band: bij AM en FM de volgende ontvangbare frequentie, bij DAB het volgende programma.",
+        "fr": "Recherche vers le haut de la bande : en AM et FM la prochaine fréquence captée, en DAB le service suivant.",
+        "it": "Cerca verso l'alto nella banda: in AM e FM la prossima frequenza ricevibile, in DAB il servizio successivo.",
+        "es": "Busca hacia arriba en la banda: en AM y FM la siguiente frecuencia recibible, en DAB el siguiente servicio.",
+        "pl": "Szuka w górę pasma: w AM i FM następnej odbieralnej częstotliwości, w DAB następnej usługi.",
+        "uk": "Пошук угору діапазоном: AM і FM — наступна частота, що приймається, DAB — наступна служба.",
+        "zh-cn": "向上搜索：AM 和 FM 为下一个可接收频率，DAB 为下一个服务。"
       },
       "type": "boolean",
       "role": "button",
@@ -18199,8 +18301,8 @@
         "zh-cn": "静音"
       },
       "states": {
-        "On": "On",
-        "Off": "Off"
+        "On": "Muted",
+        "Off": "Not muted"
       }
     },
     "native": {},
@@ -18986,7 +19088,7 @@
       "read": true,
       "write": true,
       "states": {
-        "netRadio": "Net Radio",
+        "netRadio": "Internet radio",
         "server": "Media server",
         "usb": "USB"
       }
@@ -19052,8 +19154,8 @@
         "zh-cn": "电源"
       },
       "states": {
-        "On": "On",
-        "Standby": "Standby"
+        "On": "Switched on",
+        "Standby": "In standby"
       }
     },
     "native": {},
@@ -19126,11 +19228,11 @@
       "read": false,
       "write": true,
       "states": {
-        "up": "up",
-        "down": "down",
-        "left": "left",
-        "right": "right",
-        "select": "select"
+        "up": "Up",
+        "down": "Down",
+        "left": "Left",
+        "right": "Right",
+        "select": "Select (OK)"
       }
     },
     "native": {},
@@ -19170,11 +19272,11 @@
         "zh-cn": "该区域自动进入待机前的时间：MusicCast 以分钟计，两种文本协议给出功放自带的固定档位。"
       },
       "states": {
-        "30": "30",
-        "60": "60",
-        "90": "90",
-        "120": "120",
-        "Off": "Off"
+        "30": "30 minutes",
+        "60": "60 minutes",
+        "90": "90 minutes",
+        "120": "120 minutes",
+        "Off": "No sleep timer"
       }
     },
     "native": {},
@@ -20228,10 +20330,10 @@
       "read": true,
       "write": true,
       "states": {
-        "Off": "Off",
-        "On": "On",
-        "Att -20 dB": "Att -20 dB",
-        "Att -40 dB": "Att -40 dB"
+        "Off": "Not muted",
+        "On": "Muted",
+        "Att -20 dB": "Lowered by 20 dB",
+        "Att -40 dB": "Lowered by 40 dB"
       }
     },
     "native": {},
@@ -21165,7 +21267,7 @@
       "read": true,
       "write": true,
       "states": {
-        "netRadio": "Net Radio",
+        "netRadio": "Internet radio",
         "server": "Media server",
         "usb": "USB",
         "ipodUsb": "iPod (USB)"
@@ -21393,9 +21495,9 @@
       "read": true,
       "write": true,
       "states": {
-        "0": "Pause",
-        "1": "Play",
-        "2": "Stop"
+        "0": "Paused",
+        "1": "Playing",
+        "2": "Stopped"
       }
     },
     "native": {},
@@ -21446,9 +21548,9 @@
       "read": true,
       "write": true,
       "states": {
-        "0": "Off",
-        "1": "Single",
-        "2": "All"
+        "0": "No repeat",
+        "1": "Repeat one",
+        "2": "Repeat all"
       }
     },
     "native": {},
@@ -21854,13 +21956,13 @@
       "read": false,
       "write": true,
       "states": {
-        "up": "up",
-        "down": "down",
-        "left": "left",
-        "right": "right",
-        "select": "select",
-        "return": "return",
-        "home": "home"
+        "up": "Up",
+        "down": "Down",
+        "left": "Left",
+        "right": "Right",
+        "select": "Select (OK)",
+        "return": "Back",
+        "home": "Home"
       }
     },
     "native": {},
@@ -21900,11 +22002,11 @@
       "read": false,
       "write": true,
       "states": {
-        "on_screen": "on_screen",
-        "top_menu": "top_menu",
-        "menu": "menu",
-        "option": "option",
-        "display": "display"
+        "on_screen": "On-screen menu",
+        "top_menu": "Top menu",
+        "menu": "Menu",
+        "option": "Options",
+        "display": "Display"
       }
     },
     "native": {},
@@ -22208,11 +22310,11 @@
       "read": true,
       "write": true,
       "states": {
-        "Off": "Off",
-        "30 min": "30 min",
-        "60 min": "60 min",
-        "90 min": "90 min",
-        "120 min": "120 min"
+        "Off": "No sleep timer",
+        "30 min": "30 minutes",
+        "60 min": "60 minutes",
+        "90 min": "90 minutes",
+        "120 min": "120 minutes"
       }
     },
     "native": {},
@@ -22272,8 +22374,8 @@
       "read": true,
       "write": true,
       "states": {
-        "Off": "Off",
-        "Auto": "Auto"
+        "Off": "Switched off",
+        "Auto": "Automatic"
       }
     },
     "native": {},
@@ -22616,8 +22718,8 @@
       "read": true,
       "write": true,
       "states": {
-        "AM": "AM",
-        "FM": "FM"
+        "AM": "AM (medium wave)",
+        "FM": "FM (VHF)"
       }
     },
     "native": {},
@@ -23321,8 +23423,8 @@
       "read": true,
       "write": true,
       "states": {
-        "Lo": "Lo",
-        "Hi": "Hi"
+        "Lo": "Low",
+        "Hi": "High"
       }
     },
     "native": {},
@@ -23456,9 +23558,9 @@
         "zh-cn": "功放待机时是否将 HDMI 信号直通至电视：关、开或自动。"
       },
       "states": {
-        "off": "off",
-        "on": "on",
-        "auto": "auto"
+        "off": "Switched off",
+        "on": "Switched on",
+        "auto": "Automatic"
       }
     },
     "native": {},
@@ -24053,7 +24155,12 @@
       "type": "string",
       "role": "state",
       "read": true,
-      "write": false
+      "write": false,
+      "states": {
+        "server": "Server (sends)",
+        "client": "Client (receives)",
+        "none": "Not in a group"
+      }
     },
     "native": {},
     "_id": "yamaha.0.rx-v6a.multiroom.group.role"
@@ -24075,9 +24182,15 @@
         "zh-cn": "服务器区域（为群组供源）"
       },
       "type": "string",
-      "role": "text",
+      "role": "state",
       "read": true,
-      "write": false
+      "write": false,
+      "states": {
+        "main": "Main zone",
+        "zone2": "Zone 2",
+        "zone3": "Zone 3",
+        "zone4": "Zone 4"
+      }
     },
     "native": {},
     "_id": "yamaha.0.rx-v6a.multiroom.group.serverZone"
@@ -24116,9 +24229,9 @@
       "read": true,
       "write": false,
       "states": {
-        "building": "building",
-        "working": "working",
-        "deleting": "deleting"
+        "building": "Being built",
+        "working": "Running",
+        "deleting": "Being removed"
       }
     },
     "native": {},
@@ -24504,10 +24617,10 @@
       "read": true,
       "write": true,
       "states": {
-        "Off": "Off",
-        "On": "On",
-        "Att -20 dB": "Att -20 dB",
-        "Att -40 dB": "Att -40 dB"
+        "Off": "Not muted",
+        "On": "Muted",
+        "Att -20 dB": "Lowered by 20 dB",
+        "Att -40 dB": "Lowered by 40 dB"
       }
     },
     "native": {},
@@ -24799,9 +24912,9 @@
       "read": true,
       "write": true,
       "states": {
-        "0": "Pause",
-        "1": "Play",
-        "2": "Stop"
+        "0": "Paused",
+        "1": "Playing",
+        "2": "Stopped"
       }
     },
     "native": {},
@@ -24852,9 +24965,9 @@
       "read": true,
       "write": true,
       "states": {
-        "0": "Off",
-        "1": "Single",
-        "2": "All"
+        "0": "No repeat",
+        "1": "Repeat one",
+        "2": "Repeat all"
       }
     },
     "native": {},
@@ -25616,11 +25729,11 @@
       "read": true,
       "write": true,
       "states": {
-        "Off": "Off",
-        "30 min": "30 min",
-        "60 min": "60 min",
-        "90 min": "90 min",
-        "120 min": "120 min"
+        "Off": "No sleep timer",
+        "30 min": "30 minutes",
+        "60 min": "60 minutes",
+        "90 min": "90 minutes",
+        "120 min": "120 minutes"
       }
     },
     "native": {},
@@ -25835,9 +25948,9 @@
         "zh-cn": "向联动设备串流时在稳定性与延迟之间取舍。"
       },
       "states": {
-        "speed": "speed",
-        "standard": "standard",
-        "stability": "stability"
+        "speed": "Speed first",
+        "standard": "Standard link",
+        "stability": "Stability first"
       }
     },
     "native": {},
@@ -25951,9 +26064,9 @@
         "zh-cn": "低音和高音是手动设置还是交给接收机；写入低音或高音值会切换到手动。"
       },
       "states": {
-        "manual": "manual",
-        "auto": "auto",
-        "bypass": "bypass"
+        "manual": "Manual",
+        "auto": "Automatic",
+        "bypass": "Bypassed"
       }
     },
     "native": {},
@@ -26073,8 +26186,8 @@
       "read": true,
       "write": true,
       "states": {
-        "Variable": "Variable",
-        "Fixed": "Fixed"
+        "Variable": "Variable level",
+        "Fixed": "Fixed level"
       },
       "name": {
         "en": "Pre-out level",
@@ -26225,10 +26338,10 @@
       "read": true,
       "write": true,
       "states": {
-        "Off": "Off",
-        "On": "On",
-        "Att -20 dB": "Att -20 dB",
-        "Att -40 dB": "Att -40 dB"
+        "Off": "Not muted",
+        "On": "Muted",
+        "Att -20 dB": "Lowered by 20 dB",
+        "Att -40 dB": "Lowered by 40 dB"
       }
     },
     "native": {},
@@ -26401,9 +26514,9 @@
       "read": true,
       "write": true,
       "states": {
-        "Off": "Off",
-        "Limited": "Limited",
-        "Full": "Full"
+        "Off": "Not linked",
+        "Limited": "Linked, limited",
+        "Full": "Fully linked"
       }
     },
     "native": {},
@@ -27501,7 +27614,7 @@
       "read": true,
       "write": true,
       "states": {
-        "netRadio": "Net Radio",
+        "netRadio": "Internet radio",
         "server": "Media server",
         "usb": "USB",
         "napster": "Napster",
@@ -31573,19 +31686,19 @@
       "read": true,
       "write": false,
       "states": {
-        "0": "No Error",
-        "1": "Access Error",
-        "2": "Playback Unavailable",
-        "3": "Skip Limit Reached",
-        "4": "Invalid Session",
-        "5": "High-Resolution File Not Playable at MusicCast Leaf",
-        "6": "User Uncredentialed",
-        "7": "Track Restricted by Right Holders",
-        "8": "Sample Restricted by Right Holders",
-        "9": "Genre Restricted by Streaming Credentials",
-        "10": "Application Restricted by Streaming Credentials",
-        "11": "Intent Restricted by Streaming Credentials",
-        "100": "Multiple Errors"
+        "0": "No error",
+        "1": "Access error",
+        "2": "Playback unavailable",
+        "3": "Skip limit reached",
+        "4": "Invalid session",
+        "5": "High-resolution file not playable at the MusicCast link receiver",
+        "6": "No credentials for the service",
+        "7": "Track restricted by the rights holders",
+        "8": "Sample restricted by the rights holders",
+        "9": "Genre restricted by the streaming account",
+        "10": "Application restricted by the streaming account",
+        "11": "Intent restricted by the streaming account",
+        "100": "Several errors"
       }
     },
     "native": {},
@@ -32038,7 +32151,7 @@
       },
       "type": "number",
       "role": "level",
-      "read": false,
+      "read": true,
       "write": true,
       "min": 0,
       "step": 1,
@@ -32117,7 +32230,7 @@
       },
       "type": "number",
       "role": "level",
-      "read": false,
+      "read": true,
       "write": true,
       "min": 1,
       "max": 40,
@@ -32194,7 +32307,7 @@
       },
       "type": "number",
       "role": "level",
-      "read": false,
+      "read": true,
       "write": true,
       "min": 1,
       "max": 40,
@@ -36400,9 +36513,9 @@
       "read": true,
       "write": true,
       "states": {
-        "0": "Pause",
-        "1": "Play",
-        "2": "Stop"
+        "0": "Paused",
+        "1": "Playing",
+        "2": "Stopped"
       }
     },
     "native": {},
@@ -36453,9 +36566,9 @@
       "read": true,
       "write": true,
       "states": {
-        "0": "Off",
-        "1": "Single",
-        "2": "All"
+        "0": "No repeat",
+        "1": "Repeat one",
+        "2": "Repeat all"
       }
     },
     "native": {},
@@ -37134,12 +37247,12 @@
       "read": false,
       "write": true,
       "states": {
-        "up": "up",
-        "down": "down",
-        "left": "left",
-        "right": "right",
-        "select": "select",
-        "return": "return"
+        "up": "Up",
+        "down": "Down",
+        "left": "Left",
+        "right": "Right",
+        "select": "Select (OK)",
+        "return": "Back"
       }
     },
     "native": {},
@@ -37179,18 +37292,18 @@
       "read": false,
       "write": true,
       "states": {
-        "on_screen": "on_screen",
-        "top_menu": "top_menu",
-        "menu": "menu",
-        "option": "option",
-        "display": "display",
-        "help": "help",
-        "home": "home",
-        "mode": "mode",
-        "red": "red",
-        "green": "green",
-        "yellow": "yellow",
-        "blue": "blue"
+        "on_screen": "On-screen menu",
+        "top_menu": "Top menu",
+        "menu": "Menu",
+        "option": "Options",
+        "display": "Display",
+        "help": "Help",
+        "home": "Home",
+        "mode": "Mode",
+        "red": "Red",
+        "green": "Green",
+        "yellow": "Yellow",
+        "blue": "Blue"
       }
     },
     "native": {},
@@ -37646,11 +37759,11 @@
       "read": true,
       "write": true,
       "states": {
-        "Off": "Off",
-        "30 min": "30 min",
-        "60 min": "60 min",
-        "90 min": "90 min",
-        "120 min": "120 min"
+        "Off": "No sleep timer",
+        "30 min": "30 minutes",
+        "60 min": "60 minutes",
+        "90 min": "90 minutes",
+        "120 min": "120 minutes"
       }
     },
     "native": {},
@@ -37710,8 +37823,8 @@
       "read": true,
       "write": true,
       "states": {
-        "Off": "Off",
-        "Auto": "Auto"
+        "Off": "Switched off",
+        "Auto": "Automatic"
       }
     },
     "native": {},
@@ -38060,9 +38173,9 @@
         "zh-cn": "联动设备优先唇形同步还是音频对齐。"
       },
       "states": {
-        "audio_sync": "audio_sync",
-        "balanced": "balanced",
-        "lip_sync": "lip_sync"
+        "audio_sync": "Audio sync",
+        "balanced": "Balanced",
+        "lip_sync": "Lip sync"
       }
     },
     "native": {},
@@ -38102,9 +38215,9 @@
         "zh-cn": "向联动设备串流时在稳定性与延迟之间取舍。"
       },
       "states": {
-        "speed": "speed",
-        "standard": "standard",
-        "stability": "stability"
+        "speed": "Speed first",
+        "standard": "Standard link",
+        "stability": "Stability first"
       }
     },
     "native": {},
@@ -38401,7 +38514,7 @@
       "read": true,
       "write": true,
       "states": {
-        "Auto": "Auto",
+        "Auto": "Automatic",
         "Dolby Surround": "Dolby Surround",
         "DTS Neural:X": "DTS Neural:X",
         "DTS NEO:6 Cinema": "DTS NEO:6 Cinema",
@@ -38445,7 +38558,7 @@
         "zh-cn": "低音和高音是手动设置还是交给接收机；写入低音或高音值会切换到手动。"
       },
       "states": {
-        "manual": "manual"
+        "manual": "Manual"
       }
     },
     "native": {},
@@ -38639,7 +38752,11 @@
       "type": "string",
       "role": "state",
       "read": true,
-      "write": false
+      "write": false,
+      "states": {
+        "mono": "Mono",
+        "stereo": "Stereo"
+      }
     },
     "native": {},
     "_id": "yamaha.0.rx-v6a.tuner.audioMode"
@@ -38665,8 +38782,8 @@
       "read": true,
       "write": true,
       "states": {
-        "DAB": "DAB",
-        "FM": "FM"
+        "DAB": "DAB (digital radio)",
+        "FM": "FM (VHF)"
       }
     },
     "native": {},
@@ -38775,7 +38892,11 @@
         "zh-cn": "这是电台的主服务还是附属服务。"
       },
       "type": "string",
-      "role": "text",
+      "role": "state",
+      "states": {
+        "primary": "Primary service",
+        "secondary": "Secondary service"
+      },
       "read": true,
       "write": false
     },
@@ -39195,7 +39316,13 @@
         "zh-cn": "数字广播的调谐或搜台进行到哪一步。"
       },
       "type": "string",
-      "role": "text",
+      "role": "state",
+      "states": {
+        "not_ready": "Not ready",
+        "initial_scan": "First station scan",
+        "tune_aid": "Reception aid",
+        "ready": "Ready"
+      },
       "read": true,
       "write": false
     },
@@ -39336,7 +39463,7 @@
       },
       "type": "number",
       "role": "level",
-      "read": false,
+      "read": true,
       "write": true,
       "min": 1,
       "max": 40,
@@ -39437,7 +39564,7 @@
       },
       "type": "number",
       "role": "level",
-      "read": false,
+      "read": true,
       "write": true,
       "min": 1,
       "max": 40,
@@ -39671,6 +39798,19 @@
         "uk": "Шукати попередню станцію",
         "zh-cn": "搜索上一个电台"
       },
+      "desc": {
+        "en": "Searches down the band: AM and FM for the previous receivable frequency, DAB for the previous service.",
+        "de": "Sucht abwärts im Band: bei AM und UKW die vorige empfangbare Frequenz, bei DAB das vorige Programm.",
+        "ru": "Поиск вниз по диапазону: AM и FM — предыдущая принимаемая частота, DAB — предыдущая служба.",
+        "pt": "Procura abaixo na banda: em AM e FM a frequência recebível anterior, em DAB o serviço anterior.",
+        "nl": "Zoekt omlaag in de band: bij AM en FM de vorige ontvangbare frequentie, bij DAB het vorige programma.",
+        "fr": "Recherche vers le bas de la bande : en AM et FM la fréquence captée précédente, en DAB le service précédent.",
+        "it": "Cerca verso il basso nella banda: in AM e FM la frequenza ricevibile precedente, in DAB il servizio precedente.",
+        "es": "Busca hacia abajo en la banda: en AM y FM la frecuencia recibible anterior, en DAB el servicio anterior.",
+        "pl": "Szuka w dół pasma: w AM i FM poprzedniej odbieralnej częstotliwości, w DAB poprzedniej usługi.",
+        "uk": "Пошук униз діапазоном: AM і FM — попередня частота, що приймається, DAB — попередня служба.",
+        "zh-cn": "向下搜索：AM 和 FM 为上一个可接收频率，DAB 为上一个服务。"
+      },
       "type": "boolean",
       "role": "button",
       "read": false,
@@ -39694,6 +39834,19 @@
         "pl": "Szukaj następnej stacji",
         "uk": "Шукати наступну станцію",
         "zh-cn": "搜索下一个电台"
+      },
+      "desc": {
+        "en": "Searches up the band: AM and FM for the next receivable frequency, DAB for the next service.",
+        "de": "Sucht aufwärts im Band: bei AM und UKW die nächste empfangbare Frequenz, bei DAB das nächste Programm.",
+        "ru": "Поиск вверх по диапазону: AM и FM — следующая принимаемая частота, DAB — следующая служба.",
+        "pt": "Procura acima na banda: em AM e FM a próxima frequência recebível, em DAB o próximo serviço.",
+        "nl": "Zoekt omhoog in de band: bij AM en FM de volgende ontvangbare frequentie, bij DAB het volgende programma.",
+        "fr": "Recherche vers le haut de la bande : en AM et FM la prochaine fréquence captée, en DAB le service suivant.",
+        "it": "Cerca verso l'alto nella banda: in AM e FM la prossima frequenza ricevibile, in DAB il servizio successivo.",
+        "es": "Busca hacia arriba en la banda: en AM y FM la siguiente frecuencia recibible, en DAB el siguiente servicio.",
+        "pl": "Szuka w górę pasma: w AM i FM następnej odbieralnej częstotliwości, w DAB następnej usługi.",
+        "uk": "Пошук угору діапазоном: AM і FM — наступна частота, що приймається, DAB — наступна служба.",
+        "zh-cn": "向上搜索：AM 和 FM 为下一个可接收频率，DAB 为下一个服务。"
       },
       "type": "boolean",
       "role": "button",
@@ -51200,7 +51353,12 @@
       "type": "string",
       "role": "state",
       "read": true,
-      "write": false
+      "write": false,
+      "states": {
+        "server": "Server (sends)",
+        "client": "Client (receives)",
+        "none": "Not in a group"
+      }
     },
     "native": {},
     "_id": "yamaha.0.wx-030-7553.multiroom.group.role"
@@ -51222,9 +51380,15 @@
         "zh-cn": "服务器区域（为群组供源）"
       },
       "type": "string",
-      "role": "text",
+      "role": "state",
       "read": true,
-      "write": false
+      "write": false,
+      "states": {
+        "main": "Main zone",
+        "zone2": "Zone 2",
+        "zone3": "Zone 3",
+        "zone4": "Zone 4"
+      }
     },
     "native": {},
     "_id": "yamaha.0.wx-030-7553.multiroom.group.serverZone"
@@ -51263,9 +51427,9 @@
       "read": true,
       "write": false,
       "states": {
-        "building": "building",
-        "working": "working",
-        "deleting": "deleting"
+        "building": "Being built",
+        "working": "Running",
+        "deleting": "Being removed"
       }
     },
     "native": {},
@@ -52237,7 +52401,7 @@
       "read": true,
       "write": true,
       "states": {
-        "netRadio": "Net Radio",
+        "netRadio": "Internet radio",
         "server": "Media server",
         "napster": "Napster",
         "juke": "JUKE",
@@ -56207,19 +56371,19 @@
       "read": true,
       "write": false,
       "states": {
-        "0": "No Error",
-        "1": "Access Error",
-        "2": "Playback Unavailable",
-        "3": "Skip Limit Reached",
-        "4": "Invalid Session",
-        "5": "High-Resolution File Not Playable at MusicCast Leaf",
-        "6": "User Uncredentialed",
-        "7": "Track Restricted by Right Holders",
-        "8": "Sample Restricted by Right Holders",
-        "9": "Genre Restricted by Streaming Credentials",
-        "10": "Application Restricted by Streaming Credentials",
-        "11": "Intent Restricted by Streaming Credentials",
-        "100": "Multiple Errors"
+        "0": "No error",
+        "1": "Access error",
+        "2": "Playback unavailable",
+        "3": "Skip limit reached",
+        "4": "Invalid session",
+        "5": "High-resolution file not playable at the MusicCast link receiver",
+        "6": "No credentials for the service",
+        "7": "Track restricted by the rights holders",
+        "8": "Sample restricted by the rights holders",
+        "9": "Genre restricted by the streaming account",
+        "10": "Application restricted by the streaming account",
+        "11": "Intent restricted by the streaming account",
+        "100": "Several errors"
       }
     },
     "native": {},
@@ -56367,7 +56531,7 @@
       },
       "type": "number",
       "role": "level",
-      "read": false,
+      "read": true,
       "write": true,
       "min": 0,
       "step": 1,
@@ -56446,7 +56610,7 @@
       },
       "type": "number",
       "role": "level",
-      "read": false,
+      "read": true,
       "write": true,
       "min": 1,
       "max": 40,
@@ -56523,7 +56687,7 @@
       },
       "type": "number",
       "role": "level",
-      "read": false,
+      "read": true,
       "write": true,
       "min": 1,
       "max": 40,
@@ -60579,9 +60743,9 @@
       "read": true,
       "write": false,
       "states": {
-        "0": "Pause",
-        "1": "Play",
-        "2": "Stop"
+        "0": "Paused",
+        "1": "Playing",
+        "2": "Stopped"
       },
       "name": {
         "en": "Playback",
@@ -60632,9 +60796,9 @@
       "read": true,
       "write": true,
       "states": {
-        "0": "Off",
-        "1": "Single",
-        "2": "All"
+        "0": "No repeat",
+        "1": "Repeat one",
+        "2": "Repeat all"
       },
       "name": {
         "en": "Repeat",
@@ -60947,11 +61111,11 @@
       "max": 120,
       "step": 30,
       "states": {
-        "0": "Off",
-        "30": "30 min",
-        "60": "60 min",
-        "90": "90 min",
-        "120": "120 min"
+        "0": "No sleep timer",
+        "30": "30 minutes",
+        "60": "60 minutes",
+        "90": "90 minutes",
+        "120": "120 minutes"
       },
       "name": {
         "en": "Sleep timer",
@@ -61151,7 +61315,7 @@
         "zh-cn": "均衡器是自动运行，还是按您的设定。"
       },
       "states": {
-        "manual": "manual"
+        "manual": "Manual"
       }
     },
     "native": {},
@@ -61191,8 +61355,8 @@
         "zh-cn": "向联动设备串流时使用的音质。"
       },
       "states": {
-        "compressed": "compressed",
-        "uncompressed": "uncompressed"
+        "compressed": "Compressed",
+        "uncompressed": "Uncompressed"
       }
     },
     "native": {},
@@ -61232,9 +61396,9 @@
         "zh-cn": "向联动设备串流时在稳定性与延迟之间取舍。"
       },
       "states": {
-        "speed": "speed",
-        "standard": "standard",
-        "stability": "stability"
+        "speed": "Speed first",
+        "standard": "Standard link",
+        "stability": "Stability first"
       }
     },
     "native": {},
@@ -62089,7 +62253,12 @@
       "type": "string",
       "role": "state",
       "read": true,
-      "write": false
+      "write": false,
+      "states": {
+        "server": "Server (sends)",
+        "client": "Client (receives)",
+        "none": "Not in a group"
+      }
     },
     "native": {},
     "_id": "yamaha.0.ysp-1600-7073.multiroom.group.role"
@@ -62111,9 +62280,15 @@
         "zh-cn": "服务器区域（为群组供源）"
       },
       "type": "string",
-      "role": "text",
+      "role": "state",
       "read": true,
-      "write": false
+      "write": false,
+      "states": {
+        "main": "Main zone",
+        "zone2": "Zone 2",
+        "zone3": "Zone 3",
+        "zone4": "Zone 4"
+      }
     },
     "native": {},
     "_id": "yamaha.0.ysp-1600-7073.multiroom.group.serverZone"
@@ -62152,9 +62327,9 @@
       "read": true,
       "write": false,
       "states": {
-        "building": "building",
-        "working": "working",
-        "deleting": "deleting"
+        "building": "Being built",
+        "working": "Running",
+        "deleting": "Being removed"
       }
     },
     "native": {},
@@ -63126,7 +63301,7 @@
       "read": true,
       "write": true,
       "states": {
-        "netRadio": "Net Radio",
+        "netRadio": "Internet radio",
         "server": "Media server",
         "napster": "Napster",
         "juke": "JUKE",
@@ -67096,19 +67271,19 @@
       "read": true,
       "write": false,
       "states": {
-        "0": "No Error",
-        "1": "Access Error",
-        "2": "Playback Unavailable",
-        "3": "Skip Limit Reached",
-        "4": "Invalid Session",
-        "5": "High-Resolution File Not Playable at MusicCast Leaf",
-        "6": "User Uncredentialed",
-        "7": "Track Restricted by Right Holders",
-        "8": "Sample Restricted by Right Holders",
-        "9": "Genre Restricted by Streaming Credentials",
-        "10": "Application Restricted by Streaming Credentials",
-        "11": "Intent Restricted by Streaming Credentials",
-        "100": "Multiple Errors"
+        "0": "No error",
+        "1": "Access error",
+        "2": "Playback unavailable",
+        "3": "Skip limit reached",
+        "4": "Invalid session",
+        "5": "High-resolution file not playable at the MusicCast link receiver",
+        "6": "No credentials for the service",
+        "7": "Track restricted by the rights holders",
+        "8": "Sample restricted by the rights holders",
+        "9": "Genre restricted by the streaming account",
+        "10": "Application restricted by the streaming account",
+        "11": "Intent restricted by the streaming account",
+        "100": "Several errors"
       }
     },
     "native": {},
@@ -67256,7 +67431,7 @@
       },
       "type": "number",
       "role": "level",
-      "read": false,
+      "read": true,
       "write": true,
       "min": 0,
       "step": 1,
@@ -67335,7 +67510,7 @@
       },
       "type": "number",
       "role": "level",
-      "read": false,
+      "read": true,
       "write": true,
       "min": 1,
       "max": 40,
@@ -67412,7 +67587,7 @@
       },
       "type": "number",
       "role": "level",
-      "read": false,
+      "read": true,
       "write": true,
       "min": 1,
       "max": 40,
@@ -71468,9 +71643,9 @@
       "read": true,
       "write": false,
       "states": {
-        "0": "Pause",
-        "1": "Play",
-        "2": "Stop"
+        "0": "Paused",
+        "1": "Playing",
+        "2": "Stopped"
       },
       "name": {
         "en": "Playback",
@@ -71521,9 +71696,9 @@
       "read": true,
       "write": true,
       "states": {
-        "0": "Off",
-        "1": "Single",
-        "2": "All"
+        "0": "No repeat",
+        "1": "Repeat one",
+        "2": "Repeat all"
       },
       "name": {
         "en": "Repeat",
@@ -71915,8 +72090,8 @@
         "zh-cn": "联动设备优先唇形同步还是音频对齐。"
       },
       "states": {
-        "audio_sync": "audio_sync",
-        "lip_sync": "lip_sync"
+        "audio_sync": "Audio sync",
+        "lip_sync": "Lip sync"
       }
     },
     "native": {},
@@ -71956,8 +72131,8 @@
         "zh-cn": "向联动设备串流时使用的音质。"
       },
       "states": {
-        "compressed": "compressed",
-        "uncompressed": "uncompressed"
+        "compressed": "Compressed",
+        "uncompressed": "Uncompressed"
       }
     },
     "native": {},
@@ -71997,9 +72172,9 @@
         "zh-cn": "向联动设备串流时在稳定性与延迟之间取舍。"
       },
       "states": {
-        "speed": "speed",
-        "standard": "standard",
-        "stability": "stability"
+        "speed": "Speed first",
+        "standard": "Standard link",
+        "stability": "Stability first"
       }
     },
     "native": {},

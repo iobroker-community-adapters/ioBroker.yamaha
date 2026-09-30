@@ -13,7 +13,7 @@ const MAX_SEARCH_PAGES = 32;
 /** The adapter-bound callbacks the engine drives. */
 export interface BrowseEngineDeps {
   /** Write a browse state (id relative to the device, e.g. `player.browse.line1`) with ack. */
-  emit(id: string, value: boolean | number | string): void;
+  emit(id: string, value: boolean | number | string | null): void;
   /** Adapter log. */
   log: ControllerLog;
   /** Adapter-managed delay (so no native timer outlives onUnload). */
@@ -87,7 +87,7 @@ export class BrowseEngine {
   public seed(): void {
     this.deps.emit("player.browse.busy", false);
     // No menu is open, so no source is either — the last session's source stood there (D15).
-    this.deps.emit("player.browse.source", "");
+    this.deps.emit("player.browse.source", null);
     this.deps.emit("player.browse.path", "");
     this.deps.emit("player.browse.menuName", "");
     this.deps.emit("player.browse.layer", 0);

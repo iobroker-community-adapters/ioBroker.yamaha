@@ -37,7 +37,7 @@ export interface AdaptedController {
 export class TransportConnectionAdapter implements TransportConnection {
   /** Canonical id → the def last collected for it (a later upsert of the same id replaces it). */
   private readonly collected = new Map<string, ObjectDef>();
-  private readonly buffered: Array<{ canonicalId: string; value: boolean | number | string }> = [];
+  private readonly buffered: Array<{ canonicalId: string; value: boolean | number | string | null }> = [];
   private owned: ReadonlySet<string> | undefined;
   private controller: AdaptedController | undefined;
   private shapeChanged: (() => void) | undefined;
@@ -48,7 +48,7 @@ export class TransportConnectionAdapter implements TransportConnection {
    * hands this transport an id it did not own (another transport dropped), the controller will not
    * repeat an unchanged value — it is delivered from here at once (audit 2026-09-24, C21).
    */
-  private readonly latest = new Map<string, boolean | number | string>();
+  private readonly latest = new Map<string, boolean | number | string | null>();
   /**
    * A zone folder this transport names differently from the tree (`zone2` → `zoneB`): MusicCast serves a
    * Zone B as its zone2 (YXC Basic Rev 1.10 §4.2), YNCA and the tree call it Zone B (audit 2026-09-29, C29).
@@ -63,7 +63,7 @@ export class TransportConnectionAdapter implements TransportConnection {
   public constructor(
     public readonly transport: Transport,
     private readonly deviceId: string,
-    private readonly setStateAck: (id: string, value: boolean | number | string) => void,
+    private readonly setStateAck: (id: string, value: boolean | number | string | null) => void,
   ) {}
 
   /**
@@ -103,7 +103,7 @@ export class TransportConnectionAdapter implements TransportConnection {
    * @param fullId the controller's full state id
    * @param value the state value the controller wrote
    */
-  public readonly interceptSetStateAck = (fullId: string, value: boolean | number | string): void => {
+  public readonly interceptSetStateAck = (fullId: string, value: boolean | number | string | null): void => {
     const canonicalId = this.canonical(this.relative(fullId));
     this.latest.set(canonicalId, value);
     if (this.owned?.has(canonicalId)) {

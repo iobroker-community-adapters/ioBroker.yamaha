@@ -29,10 +29,13 @@ export interface DeviceRecord {
   services?: DeviceServices;
 }
 
+/** A device value as a datapoint takes it: `null` is "none right now" — never `""` on a list. */
+export type DeviceValue = boolean | number | string | null;
+
 /** A unified state id and its typed value (catalog / status-parser form). */
 export interface StateValue {
   /** State id relative to the device (e.g. `power`, `zone2.volume`). */
   id: string;
-  /** Typed value for the state. */
-  value: boolean | number | string;
+  /** Typed value for the state — `null` where there is none (a list value the device does not report now). */
+  value: DeviceValue;
 }

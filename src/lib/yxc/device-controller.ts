@@ -34,6 +34,7 @@ import {
   PLAYLIST_SLOT_FIELDS,
   playlistSlotEntries,
   playQueueCounters,
+  playQueueSlotEntries,
   STATION_SLOT_FIELDS,
   stationSlotEntries,
   type PlayerTransport,
@@ -111,7 +112,7 @@ type ZoneAnswer = { kind: "ok"; status: unknown } | { kind: "refused"; reason: s
  * @param written the value that was written
  * @returns true when the write asks for what the device already has
  */
-function sameValue(reported: boolean | number | string | undefined, written: unknown): boolean {
+function sameValue(reported: boolean | number | string | null | undefined, written: unknown): boolean {
   if (typeof reported === "boolean") {
     return coerceBool(written) === reported;
   }
@@ -247,7 +248,7 @@ export interface YxcControllerDeps {
   /** Create or update an object in the device tree. */
   upsertObject(id: string, def: ObjectDef): Promise<void>;
   /** Write a state value with ack (device-originated). */
-  setStateAck(id: string, value: boolean | number | string): void;
+  setStateAck(id: string, value: boolean | number | string | null): void;
   /** Report the name the device carries for itself, for the device object's label. */
   reportDeviceName?(name: string): void;
   /** Report the datapoints this device's getFeatures proves absent (see {@link yxcDeclaredAbsent}). */
@@ -731,7 +732,7 @@ export class YxcDeviceController {
    * @param relativeId the state id relative to the device
    * @param value the value to write
    */
-  private emit(relativeId: string, value: boolean | number | string): void {
+  private emit(relativeId: string, value: boolean | number | string | null): void {
     if (this.deps.gate.closed) {
       return;
     }
@@ -747,7 +748,7 @@ export class YxcDeviceController {
   private pushDeviceId: string | undefined;
 
   /** Per state id, the value the device last reported on THIS connection. */
-  private readonly deviceValues = new Map<string, boolean | number | string>();
+  private readonly deviceValues = new Map<string, boolean | number | string | null>();
   /** The refreshes running per key, and whether one more was asked for meanwhile (see `coalesced`). */
   private readonly refreshes = new Map<string, { again: boolean }>();
   /** How many slots each list folder has objects for (see `publishSlots`). */
@@ -1182,6 +1183,18 @@ export class YxcDeviceController {
       for (const counter of playQueueCounters(info)) {
         this.emit(counter.id, counter.value);
       }
+      // The tracks as single datapoints beside the JSON (fleet rule: a list only in addition).
+      const entries = playQueueSlotEntries(info);
+      if (entries) {
+        await this.publishSlots(
+          "player.netPlayer.queueTracks",
+          "queueTracks",
+          PLAYLIST_SLOT_FIELDS,
+          entries,
+          undefined,
+          "descQueueTracks",
+        );
+      }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getPlayQueue failed: ${errorMessage(e)}`);
     }
@@ -1431,9 +1444,10 @@ export class YxcDeviceController {
       const source: "netusb" | "cd" = block === "cd" ? "cd" : "netusb";
       const updates = parseYxcPlayInfo(info, source, this.cover);
       if (source === "netusb") {
-        const active = updates.find(update => update.id === "player.source");
-        if (typeof active?.value === "string") {
-          this.lastNetusbInput = active.value;
+        // The id, not the datapoint: `player.source` shows the input's name (C40), the zones match ids.
+        const active = (info as { input?: unknown } | null)?.input;
+        if (typeof active === "string") {
+          this.lastNetusbInput = active;
         }
       }
       this.routePlayerBlock(source, updates);

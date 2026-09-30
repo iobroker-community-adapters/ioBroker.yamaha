@@ -1,0 +1,67 @@
+{
+  "*.input": {
+    "label-repeats-key": "The receiver's own input words (AUDIO1, HDMI1, NET RADIO): the value is what the device calls the input and what a write sends; the label is the name the user gave it where the device reports one.",
+    "label-language": "Input names are the device's texts — the names the user gave in the MusicCast app, or the receiver's own input words — in the language the device was set up in, not the adapter's."
+  },
+  "*.multiroom.*.input": {
+    "label-repeats-key": "The same input words once per zone: the value is what the device calls the input and what a write sends.",
+    "label-language": "The same device-given input names once per zone, in the language the device was set up in."
+  },
+  "*.soundProgram": {
+    "label-repeats-key": "Yamaha's DSP program names (Hall in Munich, The Roxy Theatre, 7ch Stereo) are the receiver's own words — the value it reports and a write sends; they are proper names, the same in every manual.",
+    "label-language": "The program names a MusicCast device reports for its own list (getNameText), in the language the device chooses."
+  },
+  "*.sound.surroundDecoder": {
+    "label-repeats-key": "The decoders are trademarks (Dolby Surround, DTS Neural:X, DTS NEO:6) and the receiver's own words; the automatic choice carries a label of its own."
+  },
+  "*.advanced.speakers.pattern1Amp": {
+    "label-repeats-key": "The receiver's own amp-assignment names (Basic, 7.1 +1ZONE, …) exactly as its setup menu and manual show them."
+  },
+  "*.scene.recall": {
+    "label-language": "Scene titles are the names the device carries for its scenes (BD/DVD, TV, NET, RADIO, or what the user renamed them to)."
+  },
+  "*.player.browse.rows": {
+    "encoded-value": "The menu window for visualisations, next to its eight single line datapoints (line1 to line8) that a script reads."
+  },
+  "*.scene.list": {
+    "encoded-value": "The scene list for visualisations, next to the single title datapoints and the recall dropdown labelled with the same titles."
+  },
+  "*.multiroom.*.scene.list": {
+    "encoded-value": "The zone's scene list for visualisations, next to its single title datapoints and its recall dropdown."
+  },
+  "*.multiroom.group.linkedDevices": {
+    "encoded-value": "The group's client list for visualisations, next to one clients.<n>.ip datapoint per linked device."
+  },
+  "*.player.netPlayer.playlists": {
+    "encoded-value": "The playlist list for visualisations, next to one playlistNames.<n>.name datapoint per playlist."
+  },
+  "*.player.netPlayer.presets": {
+    "encoded-value": "The favourites list for visualisations, next to one favourites.<n> channel with name and source per slot."
+  },
+  "*.player.netPlayer.recent": {
+    "encoded-value": "The recently played list for visualisations, next to one recentItems.<n> channel with name and source per entry."
+  },
+  "*.player.netPlayer.queue": {
+    "encoded-value": "The play queue for visualisations, next to queueLength, queuePosition and one queueTracks.<n>.name datapoint per track."
+  },
+  "*.tuner.presets": {
+    "encoded-value": "The stored stations per band for visualisations, next to one storedStations channel per stored station (per band where the device keeps a list per band)."
+  },
+  "$sameInEveryLanguage": {
+    "USB": "The connector's name, written the same in every language.",
+    "HDMI": "The connector standard's name, written the same in every language.",
+    "Analog": "German, Dutch and Polish-speaking manuals write the analog input the same way as English.",
+    "iPod (USB)": "A product name and a connector, written the same in every language.",
+    "Napster": "A streaming service's brand name.",
+    "JUKE": "A streaming service's brand name.",
+    "Qobuz": "A streaming service's brand name.",
+    "Deezer": "A streaming service's brand name.",
+    "TIDAL": "A streaming service's brand name.",
+    "Amazon Music": "A streaming service's brand name.",
+    "Mono": "The audio term is written the same in German as in English.",
+    "Stereo": "The audio term is written the same in German as in English.",
+    "Zone 2": "German writes a receiver zone the same way as English.",
+    "Zone 3": "German writes a receiver zone the same way as English.",
+    "Zone 4": "German writes a receiver zone the same way as English."
+  }
+}

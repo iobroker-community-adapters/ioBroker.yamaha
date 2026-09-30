@@ -45,6 +45,7 @@ import { ObjectMirror, StateMirror } from "./lib/lifecycle/write-mirror";
 import { DeviceBody, errorMessage } from "./lib/util";
 import { migrateNativeKeys, type NativeKeyMigration } from "./lib/native-key-migration";
 import { tName } from "./lib/i18n";
+import { withValueLabels } from "./lib/catalog/state-labels";
 import { discoverYamaha, probeDescription, type DiscoveredDevice } from "./lib/discovery";
 import { SsdpListener, type SsdpNotify } from "./lib/ssdp-listener";
 import { isExcluded, readDiscovered, readExcluded, readIgnored, writeDiscovered } from "./lib/discovered-store";
@@ -3143,7 +3144,12 @@ export class Yamaha extends utils.Adapter {
    * @param def the definition the coordinator produced
    */
   private async writePresented(id: string, def: ObjectDef): Promise<void> {
-    const written = this.presentVolume(id, def);
+    // The value words in the system language, after the owner is chosen — one table for every transport.
+    const written = withValueLabels(
+      id.slice(id.indexOf(".") + 1),
+      this.presentVolume(id, def),
+      this.systemLanguage ?? "en",
+    );
     if (written.type === "state") {
       await this.clearStaleBounds(id, written.common);
     }
@@ -3189,7 +3195,7 @@ export class Yamaha extends utils.Adapter {
    * @param value the value the transport reported, on the device's own scale
    * @returns the value to store
    */
-  private volumeAsShown(id: string, value: boolean | number | string): boolean | number | string {
+  private volumeAsShown(id: string, value: boolean | number | string | null): boolean | number | string | null {
     const bounds = this.percentFor(id) ? this.volumeScales.get(id) : undefined;
     return bounds && typeof value === "number" ? toPercent(value, bounds) : value;
   }

@@ -6,6 +6,7 @@ import { coerceBool, isWritableValue } from "../catalog/value-coerce";
 import { formatPlayTime } from "../catalog/play-time";
 import type { SlotField } from "../catalog/list-slots";
 import { YXC_AMP_CATALOG } from "./catalog";
+import { musicCastInputName } from "../catalog/musiccast-vocabulary";
 import { isRemoteWord, YXC_CURSOR_VALUES, YXC_MENU_VALUES } from "./remote";
 import type { YxcClientLike } from "./client-contract";
 
@@ -353,7 +354,8 @@ export function parseYxcDistribution(info: unknown): StateValue[] {
   const summary = distributionSummary(info);
   if (typeof d.role === "string") {
     updates.push({ id: "multiroom.group.role", value: summary.role });
-    updates.push({ id: "multiroom.group.status", value: summary.status ?? "" });
+    // Only a server reports a construction state (Advanced §5.1) — none, not a word outside the list.
+    updates.push({ id: "multiroom.group.status", value: summary.status ?? null });
   }
   if (typeof d.group_id === "string") {
     updates.push({ id: "multiroom.group.id", value: d.group_id });
@@ -551,9 +553,9 @@ export function parseYxcPlayInfo(
   // The playing source: netusb reports its active input ("spotify", "net_radio", …);
   // the CD block IS its source.
   if (block === "cd") {
-    updates.push({ id: "player.source", value: "cd" });
+    updates.push({ id: "player.source", value: musicCastInputName("cd") });
   } else if (typeof info.input === "string") {
-    updates.push({ id: "player.source", value: info.input });
+    updates.push({ id: "player.source", value: musicCastInputName(info.input) });
   }
   // CD drive-own extras (presence-checked, netusb responses carry none of these fields).
   if (typeof info.track_number === "number") {
@@ -611,6 +613,8 @@ export const DAB_FIELDS: Array<{
   requires?: string;
   /** A role more specific than the type's default (`media.bitrate` — audit 2026-09-29, C41). */
   role?: string;
+  /** Every value §6.2 declares for a word field — its list, labelled where the object is written. */
+  states?: readonly string[];
 }> = [
   {
     field: "service_label",
@@ -643,7 +647,15 @@ export const DAB_FIELDS: Array<{
   },
   // preset and audio_mode are NOT listed here: the active-band parse feeds the
   // unified flat tuner.preset / tuner.audioMode states (v2.0.0).
-  { field: "status", id: "tuner.dab.status", type: "string", nameKey: "dabStatus", descKey: "descDabStatus" },
+  {
+    field: "status",
+    id: "tuner.dab.status",
+    type: "string",
+    nameKey: "dabStatus",
+    descKey: "descDabStatus",
+    role: "state",
+    states: ["not_ready", "initial_scan", "tune_aid", "ready"],
+  },
   {
     field: "bit_rate",
     id: "tuner.dab.bitRate",
@@ -674,6 +686,8 @@ export const DAB_FIELDS: Array<{
     type: "string",
     nameKey: "serviceCategory",
     descKey: "descServiceCategory",
+    role: "state",
+    states: ["primary", "secondary"],
   },
   {
     field: "total_station_num",
@@ -744,7 +758,7 @@ export function parseYxcTunerInfo(tunerInfo: unknown): StateValue[] {
       });
       updates.push({
         id: "tuner.audioMode",
-        value: typeof current.audio_mode === "string" ? current.audio_mode : "",
+        value: typeof current.audio_mode === "string" ? current.audio_mode : null,
       });
     }
   }
@@ -1149,8 +1163,28 @@ export function netusbSlotEntries(list: unknown): SlotEntry[] | undefined {
   return list.map(entry => {
     const { input, text } = (entry ?? {}) as { input?: unknown; text?: unknown };
     return typeof input === "string" && input !== "unknown" && typeof text === "string" && text.length > 0
-      ? { name: text, input }
+      ? { name: text, input: musicCastInputName(input) }
       : undefined;
+  });
+}
+
+/**
+ * The play queue's tracks (`track_info` of getPlayQueue) as slot entries: the name each track is shown with.
+ * The spec leaves the queue "Reserved"; its answer has the list form of getMcPlaylist (`index`, `max_line`,
+ * `track_info`), whose entries carry `text`, `input`, `thumbnail` and `attribute` (Grenton's MusicCast
+ * knowledge base). An entry without a text is an empty slot.
+ *
+ * @param info the getPlayQueue response
+ * @returns the entries by slot, undefined when malformed
+ */
+export function playQueueSlotEntries(info: unknown): SlotEntry[] | undefined {
+  const tracks = (info as { track_info?: unknown } | null)?.track_info;
+  if (!Array.isArray(tracks)) {
+    return undefined;
+  }
+  return tracks.map(track => {
+    const text = (track as { text?: unknown } | null)?.text;
+    return typeof text === "string" && text.length > 0 ? { name: text } : undefined;
   });
 }
 

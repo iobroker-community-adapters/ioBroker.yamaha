@@ -47,7 +47,7 @@ export interface AttemptDeps {
   /** Create or update an object in the device tree. */
   upsertObject(id: string, def: ObjectDef): Promise<void>;
   /** Write a state value with ack (device-originated). */
-  setStateAck(id: string, value: boolean | number | string): void;
+  setStateAck(id: string, value: boolean | number | string | null): void;
   /** Adapter-managed timers (YNCA pacing + per-transport reconnects). */
   timers: {
     /** Schedule a one-shot timer. */

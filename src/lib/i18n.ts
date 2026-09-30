@@ -80,3 +80,18 @@ function translated(key: I18nKey, args: (string | number | boolean | null)[]): i
 export function tName(key: I18nKey, ...args: (string | number | boolean | null)[]): ioBroker.StringOrTranslated {
   return translated(key, args);
 }
+
+/**
+ * A text in ONE language — a value label (`common.states`), which the admin shows as it stands: a label is a
+ * plain string in the system language (a translation object there crashes the object browser), resolved once
+ * when the object is written. An unknown language reads English.
+ *
+ * @param language the system language (`system.config.language`)
+ * @param key the translation key in `admin/i18n/en.json`
+ * @param args values substituted into the key's `%s` placeholders
+ * @returns the text in that language
+ */
+export function tIn(language: string, key: I18nKey, ...args: (string | number | boolean | null)[]): string {
+  const all = translated(key, args) as Record<string, string>;
+  return all[language] ?? all.en;
+}

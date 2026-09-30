@@ -206,7 +206,8 @@ describe("parseYxcDistribution", () => {
       }),
     ).toEqual([
       { id: "multiroom.group.role", value: "server" },
-      { id: "multiroom.group.status", value: "" },
+      // Only a server of API 2.00 reports a construction state — none here, not a word outside its list.
+      { id: "multiroom.group.status", value: null },
       { id: "multiroom.group.id", value: "abc" },
       { id: "multiroom.group.name", value: "Kitchen" },
       { id: "multiroom.group.serverZone", value: "main" },
@@ -255,7 +256,7 @@ describe("parseYxcPlayInfo", () => {
       { id: "player.album", value: "B" },
       { id: "player.track", value: "T" },
       { id: "player.playback", value: 1 },
-      { id: "player.source", value: "cd" },
+      { id: "player.source", value: "CD" },
     ]);
   });
 
@@ -304,15 +305,15 @@ describe("parseYxcPlayInfo", () => {
   // The specification's words outside the old tables (YXC Basic §7.2, §8.1; audit 2026-09-24, C14).
   test("every repeat, shuffle and playback word of the specification is read", () => {
     const read = (info: Record<string, unknown>): unknown[] => parseYxcPlayInfo(info, "cd").map(u => u.value);
-    expect(read({ repeat: "folder" })).toEqual([2, "cd"]);
-    expect(read({ repeat: "a-b" })).toEqual([1, "cd"]);
+    expect(read({ repeat: "folder" })).toEqual([2, "CD"]);
+    expect(read({ repeat: "a-b" })).toEqual([1, "CD"]);
     for (const shuffle of ["on", "songs", "albums", "folder", "program"]) {
-      expect(read({ shuffle }), shuffle).toEqual([true, "cd"]);
+      expect(read({ shuffle }), shuffle).toEqual([true, "CD"]);
     }
-    expect(read({ shuffle: "off" })).toEqual([false, "cd"]);
-    expect(read({ playback: "fast_forward" })).toEqual([1, "cd"]);
-    expect(read({ playback: "fast_reverse" })).toEqual([1, "cd"]);
-    expect(read({ repeat: "sometimes", shuffle: "maybe", playback: "rewinding" })).toEqual(["cd"]);
+    expect(read({ shuffle: "off" })).toEqual([false, "CD"]);
+    expect(read({ playback: "fast_forward" })).toEqual([1, "CD"]);
+    expect(read({ playback: "fast_reverse" })).toEqual([1, "CD"]);
+    expect(read({ repeat: "sometimes", shuffle: "maybe", playback: "rewinding" })).toEqual(["CD"]);
   });
 
   test("reads repeat, shuffle, elapsed/total time and album art (verified against captures)", () => {
@@ -357,7 +358,7 @@ describe("parseYxcTunerInfo", () => {
       { id: "tuner.preset", value: 0 },
       { id: "tuner.tuned", value: false },
       // No audio_mode in the block: not the last band's any more (audit 2026-09-29, C39).
-      { id: "tuner.audioMode", value: "" },
+      { id: "tuner.audioMode", value: null },
       { id: "tuner.rdsText", value: "Hit" },
       { id: "tuner.rdsTextB", value: "" },
     ]);
@@ -372,7 +373,7 @@ describe("parseYxcTunerInfo", () => {
         { id: "tuner.frequency", value: 180064 },
         // DAB has no `tuned` — a ready station is tuned; the FM texts go (YXC Basic §6.2, C39).
         { id: "tuner.tuned", value: true },
-        { id: "tuner.audioMode", value: "" },
+        { id: "tuner.audioMode", value: null },
         { id: "tuner.rdsText", value: "" },
         { id: "tuner.rdsTextB", value: "" },
         { id: "tuner.rdsService", value: "" },
@@ -389,7 +390,7 @@ describe("parseYxcTunerInfo", () => {
       { id: "tuner.frequency", value: 1440 },
       { id: "tuner.tuned", value: false },
       // AM has no audio mode and no RDS: the FM values do not stand on (C39).
-      { id: "tuner.audioMode", value: "" },
+      { id: "tuner.audioMode", value: null },
       { id: "tuner.rdsText", value: "" },
       { id: "tuner.rdsTextB", value: "" },
       { id: "tuner.rdsService", value: "" },
@@ -636,7 +637,8 @@ describe("preset/recent selection (musiccast-adapter parity)", () => {
 describe("netusb source and CD detail parsing", () => {
   test("the active network source lands on player.source", () => {
     const updates = parseYxcPlayInfo({ input: "spotify", playback: "play" });
-    expect(updates).toContainEqual({ id: "player.source", value: "spotify" });
+    // The name, as the YNCA and XML side of a receiver show it — never MusicCast's id (C40).
+    expect(updates).toContainEqual({ id: "player.source", value: "Spotify" });
   });
 
   test("cd extras: track number, totals, disc time and drive status stay drive-own", () => {

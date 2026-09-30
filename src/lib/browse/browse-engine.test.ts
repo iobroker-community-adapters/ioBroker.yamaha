@@ -88,7 +88,8 @@ describe("BrowseEngine", () => {
     engine.seed();
     const byId = Object.fromEntries(emitted.map(e => [e.id, e.value]));
     expect(byId["player.browse.busy"]).toBe(false);
-    expect(byId["player.browse.source"]).toBe(""); // audit 2026-09-24, D15
+    // No source, not "" — a value outside the source list (audit 2026-09-24, D15; lesbare Werte 2026-09-30).
+    expect(byId["player.browse.source"]).toBeNull();
     expect(byId["player.browse.path"]).toBe("");
     expect(byId["player.browse.menuName"]).toBe("");
     expect(byId["player.browse.layer"]).toBe(0);

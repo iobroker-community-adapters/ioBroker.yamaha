@@ -53,8 +53,6 @@
   "*.tuner.frequency": "The unit on the datapoint is the whole statement: every band reports kilohertz.",
   "*.tuner.presetUp": "A key whose name IS its function: on to the next stored station.",
   "*.tuner.presetDown": "A key whose name IS its function: back to the previous stored station.",
-  "*.tuner.hdRadio.programUp": "A key whose name IS its function: on to the station's next digital programme.",
-  "*.tuner.hdRadio.programDown": "A key whose name IS its function: back to the station's previous digital programme.",
   "*.tuner.dab.serviceUp": "A key whose name IS its function: on to the next DAB station.",
   "*.tuner.dab.serviceDown": "A key whose name IS its function: back to the previous DAB station.",
   "*.sound.signal.format": "The receiver's own wording about the incoming stream; the signal channel explains the folder.",

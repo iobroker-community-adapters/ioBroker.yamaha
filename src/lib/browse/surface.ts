@@ -9,7 +9,7 @@ export interface BrowseSurfaceDeps {
   /** Create or update an object in the device tree. */
   upsertObject(id: string, def: ObjectDef): Promise<void>;
   /** Write a browse state with ack (already guarded against a closed connection). */
-  emit(relativeId: string, value: boolean | number | string): void;
+  emit(relativeId: string, value: boolean | number | string | null): void;
   /** Adapter log. */
   log: ControllerLog;
   /** Adapter-managed delay that ends when the connection closes. */

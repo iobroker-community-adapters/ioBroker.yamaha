@@ -101,6 +101,7 @@ Details on all settings and the object tree are in the
 - (krobipd) New: More menu sources on older receivers, TIDAL on MusicCast, menus in your ioBroker language, and remote pads for zones 2 and 3 of 2011/2012 AVENTAGE
 - (krobipd) Fixed: A MusicCast Zone B shows as Zone B and joins a group with Zone A, and the cover changes with the track
 - (krobipd) Fixed: Deleting a device, renaming it in the dialog or stopping the adapter no longer loses a name or leaves a network search running
+- (krobipd) Improved: Value lists show readable words in your ioBroker language, player.source names the input, and the play queue's tracks are datapoints
 
 ### 3.0.1 (2026-09-27)
 

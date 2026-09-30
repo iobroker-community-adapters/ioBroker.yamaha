@@ -328,7 +328,7 @@ export interface ControllerDeps {
   /** Create or update an object in the device tree. */
   upsertObject(id: string, def: ObjectDef): Promise<void>;
   /** Write a state value with ack (device-originated). */
-  setStateAck(id: string, value: boolean | number | string): void;
+  setStateAck(id: string, value: boolean | number | string | null): void;
   /** Adapter log. */
   log: ControllerLog;
   /**
@@ -379,7 +379,7 @@ export class YncaDeviceController {
   /** The zones' own scene titles (ZONEn SCENE1–4NAME), keyed by zone (`zone2` …). */
   private readonly zoneSceneTitles = new Map<string, Array<{ num: number; title: string }>>();
   /** The value the device last reported per state id — what a refused write is put back to (B4). */
-  private readonly reported = new Map<string, boolean | number | string>();
+  private readonly reported = new Map<string, boolean | number | string | null>();
   /** Whether a refused pad key already triggered its one re-probe of the dialect this session. */
   private padReprobed = false;
   /** The tuner's current band (AM/FM/DAB), for the band-dependent frequency/preset writes. */
@@ -1261,7 +1261,7 @@ export class YncaDeviceController {
    * @param value the decoded value
    * @param none true when the device reported no value (the twin then reads "")
    */
-  private routePlayerUpdate(subunit: string, id: string, value: boolean | number | string, none = false): void {
+  private routePlayerUpdate(subunit: string, id: string, value: boolean | number | string | null, none = false): void {
     // A playback time is published in both forms, from this one value: the seconds fill
     // the media-player slot, the readable text is what a visualisation shows.
     const twin = playTimeTwin(id, none ? Number.NaN : value);

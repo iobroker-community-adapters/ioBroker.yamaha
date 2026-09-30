@@ -81,7 +81,10 @@ export const PLAY_TIME_TWINS: Readonly<Record<string, string>> = {
  * @param value the value written to it
  * @returns the twin's id and text, or undefined when the id carries no time
  */
-export function playTimeTwin(id: string, value: boolean | number | string): { id: string; value: string } | undefined {
+export function playTimeTwin(
+  id: string,
+  value: boolean | number | string | null,
+): { id: string; value: string } | undefined {
   const twin = PLAY_TIME_TWINS[id];
   if (twin === undefined) {
     return undefined;

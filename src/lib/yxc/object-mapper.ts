@@ -1,4 +1,5 @@
 import { PLAYER_DISPLAY_STATES } from "../catalog/player-block";
+import { MUSICCAST_INPUT_NAMES } from "../catalog/musiccast-vocabulary";
 import { channelCommon, keyedCommon, parentChannels, zoneRole, type ObjectDef } from "../catalog/types";
 import { YXC_CURSOR_VALUES, YXC_MENU_VALUES } from "./remote";
 import { tName, type I18nKey } from "../i18n";
@@ -83,8 +84,9 @@ function actionState(
       ...(bounds
         ? {
             type: "number",
+            // A `level` is readable by its role (repochecker E1010): it keeps the slot last written.
             role: "level",
-            read: false,
+            read: true,
             write: true,
             min: bounds.min,
             ...(bounds.max !== undefined ? { max: bounds.max } : {}),
@@ -117,6 +119,17 @@ function pushPlayerBlock(objects: ObjectDef[], prefix: string, settableModes: bo
       },
     });
   }
+}
+
+/**
+ * A value list whose labels are its values — the words are said where the object is written
+ * (`catalog/state-labels.ts`), in the system language.
+ *
+ * @param values the values the spec declares
+ * @returns the list
+ */
+function selfLabelled(values: readonly string[]): Record<string, string> {
+  return Object.fromEntries(values.map(value => [value, value]));
 }
 
 /**
@@ -506,10 +519,11 @@ export function mapYxcToObjects(
       // not leave the admin with a raw value nobody can pick again.
       let declared = false;
       // The value stays the device's id; the label is the name the user gave it in the MusicCast app
-      // (getNameText) — an input list read "hdmi1, hdmi2, …" where the app says "Apple TV" (C24).
+      // (getNameText) — an input list read "hdmi1, hdmi2, …" where the app says "Apple TV" (C24). An input
+      // the app names nothing keeps its classic spelling (`net_radio` → "NET RADIO"), never the bare id.
       const labels =
         entry.state === "input"
-          ? capabilities.names?.inputs
+          ? { ...MUSICCAST_INPUT_NAMES, ...capabilities.names?.inputs }
           : entry.state === "soundProgram"
             ? capabilities.names?.soundPrograms
             : undefined;
@@ -928,8 +942,8 @@ export function mapYxcToObjects(
     const stations = { min: 1, max: capabilities.tuner?.presetNum };
     objects.push(actionState("tuner.presetSave", "storeStationPreset", "descStoreStationPreset", stations));
     objects.push(actionState("tuner.presetClear", "clearStationPreset", "descClearStationPreset", stations));
-    objects.push(actionState("tuner.searchUp", "searchNextStation", undefined));
-    objects.push(actionState("tuner.searchDown", "searchPreviousStation", undefined));
+    objects.push(actionState("tuner.searchUp", "searchNextStation", "descSearchNextStation"));
+    objects.push(actionState("tuner.searchDown", "searchPreviousStation", "descSearchPreviousStation"));
     // `switchPreset` exists from API 1.17 on (YXC Basic §6.6); an older device refused every press.
     if (capabilities.apiVersion === undefined || capabilities.apiVersion >= 1.17) {
       objects.push({
@@ -977,6 +991,8 @@ export function mapYxcToObjects(
         role: "state",
         read: true,
         write: false,
+        // YXC Basic §6.2 `audio_mode`; none on AM.
+        states: selfLabelled(["mono", "stereo"]),
       },
     });
     if (bands.includes("dab")) {
@@ -996,6 +1012,7 @@ export function mapYxcToObjects(
             ...(field.unit ? { unit: field.unit } : {}),
             ...(field.min !== undefined ? { min: field.min } : {}),
             ...(field.max !== undefined ? { max: field.max } : {}),
+            ...(field.states ? { states: selfLabelled(field.states) } : {}),
             read: true,
             write: false,
           },
@@ -1190,14 +1207,24 @@ export function mapYxcToObjects(
       name: ioBroker.StringOrTranslated,
       role: string,
       desc?: ioBroker.StringOrTranslated,
+      values?: readonly string[],
     ): void => {
       objects.push({
         id: `multiroom.group.${id}`,
         type: "state",
-        common: { name, ...(desc ? { desc } : {}), type: "string", role, read: true, write: false },
+        common: {
+          name,
+          ...(desc ? { desc } : {}),
+          type: "string",
+          role,
+          read: true,
+          write: false,
+          ...(values ? { states: selfLabelled(values) } : {}),
+        },
       });
     };
-    distState("role", tName("roleServerClient"), "state", tName("descRoleServerClient"));
+    // YXC Advanced §5.1: `role` server / client / none, `server_zone` main to zone4.
+    distState("role", tName("roleServerClient"), "state", tName("descRoleServerClient"), ["server", "client", "none"]);
     distState("id", tName("groupID"), "text", tName("descGroupID"));
     // YXC Advanced §5.1 — reported by the server from API 2.00 on; building a group can take up to
     // three minutes (§9.1.8-3), and this is how long (audit 2026-09-24, C7).
@@ -1227,7 +1254,7 @@ export function mapYxcToObjects(
         write: true,
       },
     });
-    distState("serverZone", tName("serverZoneFeedsTheGroup"), "text");
+    distState("serverZone", tName("serverZoneFeedsTheGroup"), "state", undefined, ["main", "zone2", "zone3", "zone4"]);
     distState("linkedDevices", tName("linkedDevices"), "json", tName("descLinkedDevices"));
     objects.push({
       id: "multiroom.group.leave",

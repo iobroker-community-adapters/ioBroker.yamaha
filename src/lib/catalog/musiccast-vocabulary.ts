@@ -69,6 +69,18 @@ export const MUSICCAST_INPUT_NAMES: Readonly<Record<string, string>> = {
 };
 
 /**
+ * The name a MusicCast input id is shown with where the value itself is a display: the classic spelling
+ * (`net_radio` → "NET RADIO"), the id where there is none (a soundbar's `bd_dvd`). The same datapoint shows
+ * "NET RADIO" on a receiver whose YNCA or XML side owns it — MusicCast's id there read as a code (C40).
+ *
+ * @param id the MusicCast input id
+ * @returns the name to show
+ */
+export function musicCastInputName(id: string): string {
+  return MUSICCAST_INPUT_NAMES[id] ?? id;
+}
+
+/**
  * MusicCast sound program id → the YNCA SOUNDPRG name. A spelling rule ("Hall in Munich" →
  * `munich`, "The Roxy Theatre" → `roxy_theatre`, "2ch Stereo" → `2ch_stereo`) with two
  * exceptions, checked three ways (analysis 2026-09-08): Home Assistant's transcription of the

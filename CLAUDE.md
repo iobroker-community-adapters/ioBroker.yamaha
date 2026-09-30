@@ -23,6 +23,10 @@ Funktionalität (voller MusicCast-Reichtum). Vorbild-Adapter (Multi-Transport): 
   genau dort schreibbar, wo sie einen seiner `putPaths` für die Zone deklariert, mit den dort deklarierten Grenzen
   (`descriptorPuts`); ohne Beschreibung (2020er Generation) gilt die Katalogregel. Die Wiedergabe liest XML aus dem
   `Play_Info` der Quelle, die das Gerät je Eingang als `Src_Name` deklariert.
+- **Wertebeschriftungen kommen aus EINER Tabelle** (`catalog/state-labels.ts`, angewandt in `main.ts` `writePresented`
+  in der Systemsprache): die Transporte deklarieren, WELCHE Werte ein Datenpunkt nimmt, die Tabelle sagt, wie sie
+  heißen; Gerätewörter (Eingänge, Szenentitel, DSP-Programme, Marken) behalten ihren Text mit Begründung in
+  `test/readable-values.json`, und ein Listenwert, den das Gerät gerade nicht meldet, ist `null`, nie `""`.
 - **XML/YNC** (`<YAMAHA_AV>`, HTTP :80) — Steuer-API der Geräte vor ~2010; **dritter, gleichberechtigter
   Transport** (Fallback, wenn weder YNCA noch YXC antworten).
 - YNCA + YXC laufen auf einem MusicCast-AVR **parallel** (kein Konflikt) — pro Gerät/Fähigkeit geroutet.

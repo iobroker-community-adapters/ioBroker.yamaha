@@ -398,7 +398,7 @@ describe("mapYxcToObjects tree hygiene", () => {
   test("device-reported value lists become dropdowns on their states", () => {
     const objs = mapYxcToObjects(parseYxcFeatures(rxA2070));
     const common = (id: string): Record<string, unknown> | undefined => objs.find(o => o.id === id)?.common;
-    expect(common("input")?.states).toMatchObject({ av1: "av1", airplay: "airplay" });
+    expect(common("input")?.states).toMatchObject({ av1: "AV1", airplay: "AirPlay" });
     expect(common("soundProgram")?.states).toMatchObject({ munich: "munich" });
     expect(common("sound.toneMode")?.states).toEqual({ manual: "manual" });
   });
@@ -583,7 +583,7 @@ describe("the device's own lists are DECLARED, and the words it reports are alwa
       media: [],
     });
     const input = objs.find(o => o.id === "input");
-    expect(input?.common.states).toEqual({ hdmi1: "hdmi1", net_radio: "net_radio" });
+    expect(input?.common.states).toEqual({ hdmi1: "HDMI1", net_radio: "NET RADIO" });
     expect(input?.declaredStates).toBe(true);
     expect(objs.find(o => o.id === "soundProgram")?.declaredStates).toBe(true);
     // A state without a device list is not declared.
@@ -638,7 +638,7 @@ describe("the device's own lists are DECLARED, and the words it reports are alwa
       { main: { "sound.toneMode": "auto", input: "av1" } },
     );
     expect(objs.find(o => o.id === "sound.toneMode")?.common.states).toEqual({ manual: "manual", auto: "auto" });
-    expect(objs.find(o => o.id === "input")?.common.states).toEqual({ hdmi1: "hdmi1", av1: "av1" });
+    expect(objs.find(o => o.id === "input")?.common.states).toEqual({ hdmi1: "HDMI1", av1: "AV1" });
     // Still the device's declaration — what it reports is as good as what it lists.
     expect(objs.find(o => o.id === "sound.toneMode")?.declaredStates).toBe(true);
   });
@@ -801,5 +801,58 @@ describe("the device's own lists are DECLARED, and the words it reports are alwa
     const objs = mapYxcToObjects(quieterZone2, { main: { actualVolumeMode: "db" }, zone2: { actualVolumeMode: "db" } });
     expect(objs.find(o => o.id === "volume")?.common.max).toBe(16.5);
     expect(objs.find(o => o.id === "multiroom.zone2.volume")?.common.max).toBe(10);
+  });
+});
+
+describe("value lists for the words MusicCast reports (readable values, 2026-09-30)", () => {
+  const common = (objs: ReturnType<typeof mapYxcToObjects>, id: string): Record<string, unknown> | undefined =>
+    objs.find(o => o.id === id)?.common;
+
+  test("the tuner's audio mode and the DAB status and category carry every value the spec declares", () => {
+    const objs = mapYxcToObjects({
+      zones: [{ id: "main", funcs: ["power"], inputs: [] }],
+      media: ["tuner"],
+      tuner: { bands: ["fm", "dab"], funcs: ["fm", "dab"], presetType: "separate" },
+    });
+    expect(Object.keys(common(objs, "tuner.audioMode")?.states as object)).toEqual(["mono", "stereo"]);
+    expect(Object.keys(common(objs, "tuner.dab.status")?.states as object)).toEqual([
+      "not_ready",
+      "initial_scan",
+      "tune_aid",
+      "ready",
+    ]);
+    expect(common(objs, "tuner.dab.status")?.role).toBe("state");
+    expect(Object.keys(common(objs, "tuner.dab.category")?.states as object)).toEqual(["primary", "secondary"]);
+    // A text field of the same block stays a text without a list.
+    expect(common(objs, "tuner.dab.serviceLabel")?.states).toBeUndefined();
+  });
+
+  test("the group's role and server zone carry their lists", () => {
+    const objs = mapYxcToObjects({
+      zones: [{ id: "main", funcs: ["power"], inputs: [] }],
+      media: [],
+      hasDistribution: true,
+    });
+    expect(Object.keys(common(objs, "multiroom.group.role")?.states as object)).toEqual(["server", "client", "none"]);
+    expect(Object.keys(common(objs, "multiroom.group.serverZone")?.states as object)).toEqual([
+      "main",
+      "zone2",
+      "zone3",
+      "zone4",
+    ]);
+    expect(common(objs, "multiroom.group.serverZone")?.role).toBe("state");
+    expect(common(objs, "multiroom.group.id")?.states).toBeUndefined();
+  });
+
+  test("a slot a user writes is a readable level, and the station search explains itself", () => {
+    const objs = mapYxcToObjects({
+      zones: [{ id: "main", funcs: ["power"], inputs: [] }],
+      media: ["tuner"],
+      tuner: { bands: ["fm"], funcs: ["fm"], presetType: "common" },
+    });
+    // repochecker E1010: a `level` is readable.
+    expect(common(objs, "tuner.presetSave")).toMatchObject({ role: "level", read: true, write: true });
+    expect(common(objs, "tuner.searchUp")?.desc).toBeDefined();
+    expect(common(objs, "tuner.searchDown")?.desc).toBeDefined();
   });
 });

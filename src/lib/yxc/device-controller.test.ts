@@ -395,7 +395,8 @@ describe("YxcDeviceController", () => {
     });
     await s.controller.start();
     expect(s.defs.get("living.sound.toneMode")?.common.states).toEqual({ manual: "manual", auto: "auto" });
-    expect(s.defs.get("living.input")?.common.states).toEqual({ hdmi1: "hdmi1", av1: "av1" });
+    // The classic names where the app gives none — never the bare id.
+    expect(s.defs.get("living.input")?.common.states).toEqual({ hdmi1: "HDMI1", av1: "AV1" });
     // Still one status request per zone at start — the seed reuses the same answer.
     expect(s.client.calls.filter(call => call.method === "getStatus")).toHaveLength(1);
     expect(s.acks).toContainEqual({ id: "living.sound.toneMode", value: "auto" });
@@ -709,7 +710,7 @@ describe("YxcDeviceController", () => {
     expect(s.client.calls).toContainEqual({ method: "getPlayInfo", args: ["cd"] });
     expect(s.client.calls).toContainEqual({ method: "getPlayInfo", args: ["tuner"] });
     expect(s.acks).toContainEqual({ id: "living.player.track", value: "Track 1" });
-    expect(s.acks).toContainEqual({ id: "living.player.source", value: "cd" });
+    expect(s.acks).toContainEqual({ id: "living.player.source", value: "CD" });
     expect(s.acks).toContainEqual({ id: "living.tuner.frequency", value: 100900 });
   });
 
@@ -726,7 +727,7 @@ describe("YxcDeviceController", () => {
     s.client.playInfo = { input: "net_radio", playback: "play", artist: "BBC" };
     await s.controller.start();
     expect(s.acks).toContainEqual({ id: "living.player.artist", value: "BBC" });
-    expect(s.acks).toContainEqual({ id: "living.player.source", value: "net_radio" });
+    expect(s.acks).toContainEqual({ id: "living.player.source", value: "NET RADIO" });
     // The zone switches to HDMI — the next refresh clears the stale metadata.
     s.client.status = { power: "on", input: "hdmi1" };
     s.acks.length = 0;
@@ -1803,7 +1804,7 @@ describe("YxcDeviceController device name", () => {
       expect.arrayContaining([
         { id: "living.player.netPlayer.favourites.1.name", value: "" },
         { id: "living.player.netPlayer.favourites.2.name", value: "hr3" },
-        { id: "living.player.netPlayer.favourites.2.input", value: "net_radio" },
+        { id: "living.player.netPlayer.favourites.2.input", value: "NET RADIO" },
         { id: "living.player.netPlayer.favourites.3.input", value: "" },
         { id: "living.player.netPlayer.recentItems.1.name", value: "Mix" },
         { id: "living.player.netPlayer.recentItems.2.name", value: "" },
@@ -2171,7 +2172,7 @@ describe("YxcDeviceController player review fixes (2.0.0 pre-release audit)", ()
     s.fire.keepalive?.();
     await flush();
     expect(s.acks).toContainEqual({ id: "living.player.artist", value: "BBC" });
-    expect(s.acks).toContainEqual({ id: "living.player.source", value: "net_radio" });
+    expect(s.acks).toContainEqual({ id: "living.player.source", value: "NET RADIO" });
   });
 
   test("scene.list exists on a MusicCast-only device: every declared slot, titles empty without a title source", async () => {
@@ -2204,7 +2205,7 @@ describe("YxcDeviceController player.source seeding", () => {
     s.client.playInfo = { input: "net_radio", playback: "play" };
     await s.controller.start();
     const sources = s.acks.filter(ack => ack.id === "living.player.source").map(ack => ack.value);
-    expect(sources).toEqual(["net_radio"]);
+    expect(sources).toEqual(["NET RADIO"]);
   });
 });
 
@@ -2269,7 +2270,7 @@ describe("YxcDeviceController test-audit hardening (2.0.1)", () => {
     s.client.playInfo = { input: "net_radio", playback: "play", artist: "BBC" };
     await s.controller.start();
     expect(s.acks).toContainEqual({ id: "living.multiroom.zone2.player.artist", value: "BBC" });
-    expect(s.acks).toContainEqual({ id: "living.multiroom.zone2.player.source", value: "net_radio" });
+    expect(s.acks).toContainEqual({ id: "living.multiroom.zone2.player.source", value: "NET RADIO" });
     expect(s.acks).not.toContainEqual({ id: "living.player.artist", value: "BBC" });
     // Main (on HDMI) got its cleared resting shape instead.
     expect(s.acks).toContainEqual({ id: "living.player.artist", value: "" });
@@ -2830,8 +2831,8 @@ describe("YxcDeviceController names from the MusicCast app", () => {
     await s.controller.start();
     expect(s.defs.get("living.input")?.common.states).toEqual({
       hdmi1: "Apple TV",
-      hdmi2: "hdmi2",
-      net_radio: "net_radio",
+      hdmi2: "HDMI2",
+      net_radio: "NET RADIO",
     });
     expect(s.defs.get("living.soundProgram")?.common.states).toEqual({
       straight: "straight",
@@ -2921,5 +2922,34 @@ describe("MusicCast lists as single datapoints and read-backs (audit 2026-09-29,
     await flush();
     await flush();
     expect(s.client.calls.some(c => c.method === "getPlayInfo")).toBe(true);
+  });
+});
+
+describe("the play queue as single datapoints (readable values, 2026-09-30)", () => {
+  test("the queue's tracks become slot datapoints beside its JSON; a track without a name is an empty slot", async () => {
+    const features = {
+      response_code: 0,
+      zone: [{ id: "main", func_list: ["power"], input_list: ["net_radio"] }],
+      netusb: { func_list: ["play_queue"] },
+    };
+    const s = setup(features, { response_code: 0, power: "on" });
+    (s.client as unknown as Record<string, unknown>).getPlayQueue = (): Promise<unknown> =>
+      Promise.resolve({ response_code: 0, max_line: 2, playing_index: 0, track_info: [{ text: "One" }, {}] });
+    await s.controller.start();
+    expect(s.acks).toEqual(
+      expect.arrayContaining([
+        { id: "living.player.netPlayer.queueTracks.1.name", value: "One" },
+        { id: "living.player.netPlayer.queueTracks.2.name", value: "" },
+      ]),
+    );
+  });
+
+  test("the zone still recognises its network source when player.source shows the input's name", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], netusb: {} };
+    const s = setup(features, { power: "on", input: "spotify" });
+    s.client.playInfo = { input: "spotify", playback: "play", artist: "Band" };
+    await s.controller.start();
+    expect(s.acks).toContainEqual({ id: "living.player.source", value: "Spotify" });
+    expect(s.acks).toContainEqual({ id: "living.player.artist", value: "Band" });
   });
 });
