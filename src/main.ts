@@ -1076,13 +1076,6 @@ export class Yamaha extends utils.Adapter {
     // survives as an orphan. Wait for it; the cap is a safety net, every transport attempt ends
     // by its own timeout well within it.
     await this.awaitSettled(supervisor);
-    // A patch still inside its coalescing window would fire AFTER the delete below and recreate the
-    // device object as a bare orphan — cancel it before anything else.
-    const pendingPatch = this.pendingDevicePatches.get(deviceId);
-    if (pendingPatch) {
-      this.clearTimeout(pendingPatch.timer);
-      this.pendingDevicePatches.delete(deviceId);
-    }
     const record = this.deviceRecords.get(deviceId);
     if (record) {
       this.knownDeviceIps.delete(record.ip);
@@ -1094,7 +1087,9 @@ export class Yamaha extends utils.Adapter {
     }
     // Everything this device left behind goes with it, in one call over the register. A cache that
     // survives makes the adapter believe it already did the work: re-adding the SAME id found the icon
-    // cache intact and the card kept the default silhouette until the next start.
+    // cache intact and the card kept the default silhouette until the next start. A device patch still
+    // inside its coalescing window goes too — its timer then flushes nothing, where it would otherwise
+    // recreate the deleted device object as a bare orphan.
     this.perDevice.forget(deviceId);
     // Counted like the datapoint balance — state objects only, not the channels and the device
     // node around them — so the one line below says what the delete took (krobi 2026-09-22).
