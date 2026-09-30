@@ -579,6 +579,30 @@ function volumeStatesOf(objects) {
   return byDevice;
 }
 
+/** Round 67: the text a dump puts where the adapter stored a secret encrypted with its installation's secret. */
+const ENCRYPTED_MARKER = "<encrypted with the installation secret>";
+
+/**
+ * Round 67: adapter-specific like the fixture feed. The previous release's dump carries ENCRYPTED_MARKER wherever the
+ * adapter stored a secret encrypted with its installation's secret — no other controller can read that cipher. This
+ * adapter stores no secret, its dump masks nothing: empty.
+ *
+ * @param {import("@iobroker/testing").IntegrationTestHarness} harness
+ */
+async function restoreMaskedSecrets(harness) {}
+
+/**
+ * Round 67: the objects of the namespace that still carry ENCRYPTED_MARKER — read raw from the database, never through
+ * dumpObjects. Checked right after the restore, before the start: later the adapter may have rewritten or deleted the
+ * object, and a clean result would prove nothing about the seeded one.
+ *
+ * @param {import("@iobroker/testing").IntegrationTestHarness} harness
+ */
+async function maskedSecretsLeft(harness) {
+  const list = await harness.objects.getObjectList({ startkey: NS, endkey: `${NS}香` });
+  return list.rows.filter(row => JSON.stringify(row.value).includes(ENCRYPTED_MARKER)).map(row => row.id);
+}
+
 tests.integration(ADAPTER_DIR, {
   controllerVersion: "stable",
   defineAdditionalTests({ suite }) {
@@ -986,6 +1010,7 @@ tests.integration(ADAPTER_DIR, {
         let restarts;
         let verdictAt;
         let roomMembers = [];
+        let maskedLeft;
         const previous = JSON.parse(fs.readFileSync(previousFile, "utf8"));
         before(async function () {
           this.timeout(900000);
@@ -994,6 +1019,8 @@ tests.integration(ADAPTER_DIR, {
           // The harness registers its own before() (fresh DB) ahead of this one,
           // so the seed survives and the adapter starts on top of the OLD objects.
           await seedPrevious(harness, previous);
+          await restoreMaskedSecrets(harness);
+          maskedLeft = await maskedSecretsLeft(harness);
           roomMembers = await seedRoom(harness, previous);
           // The device table in the form the previous release left it. From 2.x that is the
           // address only (the id derived from it): a device whose model and serial the stored tree
@@ -1159,6 +1186,14 @@ tests.integration(ADAPTER_DIR, {
           const current = JSON.parse(fs.readFileSync(INVENTORY, "utf8"));
           const lost = [...new Set(watch.deleted)].filter(id => id in previous && id in current);
           assert.deepStrictEqual(lost, [], `kept objects deleted during the upgrade:\n${lost.join("\n")}`);
+        });
+
+        it("starts on no masked secret from the previous dump", function () {
+          assert.deepStrictEqual(
+            maskedLeft,
+            [],
+            `seeded objects still carry ${ENCRYPTED_MARKER}:\n${maskedLeft.join("\n")}`,
+          );
         });
 
         it("a recording goes on only with its own datapoint", async function () {
