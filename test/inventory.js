@@ -206,6 +206,8 @@ const SEEDED_ROOM = "enum.rooms.inventory_upgrade";
  * could differ over nothing that describes the object tree.
  */
 const RUN_STATE_NATIVE = ["capabilityProfile", "probeCache", "yncaAvail", "purgeVersion"];
+/** How long a YNCA device's background value refresh may take after it came up (measured ~24 s, with margin). */
+const YNCA_REFRESH_MS = 40000;
 
 let fixtures;
 
@@ -273,6 +275,8 @@ async function waitForAdapterWork(harness) {
   // depth as a device's header and must be excluded by its first segment; a device that has ONLY its header is
   // not connected.
   let connected = 0;
+  /** When each device connected over YNCA in the running process (its connection's `lc`). */
+  let yncaUp = [];
   for (;;) {
     const alive = await harness.states.getStateAsync(`system.adapter.${ADAPTER}.0.alive`);
     const list = await harness.objects.getObjectListAsync({ startkey: NS, endkey: `${NS}香` });
@@ -284,11 +288,16 @@ async function waitForAdapterWork(harness) {
       }
     }
     connected = 0;
+    yncaUp = [];
     if (alive?.val === true && harness.isAdapterRunning()) {
       for (const id of devices) {
         const state = await harness.states.getStateAsync(`${NS}${id}.info.connection`);
         if (state?.val === true && typeof state.lc === "number" && state.lc >= alive.lc) {
           connected++;
+          const ynca = await harness.states.getStateAsync(`${NS}${id}.info.transports.ynca`);
+          if (ynca?.val === true) {
+            yncaUp.push(state.lc);
+          }
         }
       }
     }
@@ -296,6 +305,14 @@ async function waitForAdapterWork(harness) {
       break;
     }
     assert.ok(Date.now() < deadline, `only ${connected} of ${deviceCount} fixture devices connected`);
+    await new Promise(done => setTimeout(done, 1000));
+  }
+  // A YNCA device that came up on its remembered shape re-asks every function in the background (100 ms per line,
+  // the specification's pace) and writes its device object when that taught it something — the tree is final only
+  // after it. Measured 2026-09-30: the refresh ends about 24 s after the ready line; the upgrade verdict came 8 s after
+  // it, and a refresh that learned something wrote the device object after the verdict.
+  const refreshEnd = Math.max(0, ...yncaUp.map(lc => lc + YNCA_REFRESH_MS));
+  while (Date.now() < refreshEnd) {
     await new Promise(done => setTimeout(done, 1000));
   }
   // Then quiet: the datapoint balance settles five seconds after the last device, and the object tree is only
