@@ -119,7 +119,7 @@ PFLICHT-Zahlenformat** (`NumberSpec.decimals` + Step-Raster in `encode`, Referen
 `VOL=-38` kam als −3,8 dB an (Issue #612; MAXVOL hat den 16.5-Sonderfall per `wireEncode`, FMFREQ ist auf dem DRAHT MHz mit
 zwei Nachkommastellen — der Datenpunkt `tuner.frequency` ist seit v2.0.0 einheitlich kHz). **Preset-/Favoriten-Oberfläche (#613, Parität zum alten musiccast-Adapter):** YNCA
 `TUN.PRESET` lesbar+schreibbar (Sentinel „No Preset"→0 via `wireDecode`) + Up/Down-Buttons, DAB-/FM-Presets
-schreibbar, Quellen-Abruf `player.<src>.preset` nur auf den Preset-fähigen Subunits (`PRESET_SUBUNITS`, Spec
+schreibbar, Quellen-Abruf `player.<src>.preset` nur auf den Preset-fähigen Subunits (`YNCA_PLAYER_SOURCES` mit `preset: true`, Spec
 ynca-python-Mixins; write-only, PLAYBACKINFO-gegated). YXC: Favoriten-/Zuletzt-/Senderlisten als Einzel-Datenpunkte je Platz
 (`catalog/list-slots.ts`, JSON nur daneben) + Abruf-Nummern, Tuner-Presets je Band (`getFeatures tuner.preset.type` common/separate steuert Abruf-Band),
 Geräte-eigene Wertelisten aus `getFeatures` werden Dropdowns (`YxcZone.valueLists`), Wecker-Block `clock.*`
@@ -236,10 +236,11 @@ das Modell mit `-2`/`-3` (`modelId`); ohne Modell der getippte Name oder die IP 
 nach einer Rückkehr denselben Baum findet), gefundene Geräte die Id in `discovered.json`; `rowDeviceId` fällt nur für
 Zeilen ohne `id` auf die 2.x-Formel `sanitizeId` zurück. **Umzug** (`migrateDeviceIds`, VOR allem anderen in `onReady`):
 Journal `native.movingTo` am alten Gerät → `copyDeviceTree` (Objekte samt `custom`, Werte, Alias-Ziele,
-`aliasId` = alte Id für aktive Aufzeichnungen, Gerätobjekt zuletzt mit `native.idScheme = 3`) → Zeilen/Fundspeicher
-→ alter Baum weg über `deleteMovedTree`, das Räume und Funktionen per Flotten-Helfer `moveWithEnums` (`enum-carry.ts`)
+`aliasId` = alte Id für aktive Aufzeichnungen, Gerätobjekt zuletzt mit `native.idScheme = 3`) → alles UNTER dem alten Gerät
+weg über den Flotten-Helfer `moveAllWithEnums` (`enum-carry.ts`, `moveBelow`), der Räume und Funktionen in einem Durchgang
 mitnimmt: erst lesen, dann löschen, dann schreiben — das Löschen schreibt die Enums aus dem Cache zurück und nähme eine
-vorher geschriebene neue Id wieder weg; wiederholbar. Was der Start nicht entscheiden kann, entscheidet `checkIdDecision` beim ersten
+vorher geschriebene neue Id wieder weg → Fundspeicher → Tabellenzeilen im einen Einstellungs-Schreibvorgang des Starts; das
+alte Geräteobjekt samt Journal bleibt, bis der nächste Start den Umzug fertig findet und es löscht; jeder Schritt wiederholbar. Was der Start nicht entscheiden kann, entscheidet `checkIdDecision` beim ersten
 Kontakt und schreibt NUR das Journal — der Umzug läuft beim nächsten Start; nie ein eigener Neustart (Wegwerf-Umgebungen
 starten nicht neu, ein gescheiterter Umzug hieße Neustart-Schleife). Belege: `.claude/dev-history.md` 2026-09-25.
 
@@ -411,7 +412,7 @@ archiviert; Historie beider Linien steckt via ours-Merge im master.
 **v1.0.0 = Übernahme-Release** mit `common.messages`-Update-Warndialog (oldVersion<1.0.0, warn,
 agree/cancel): Komplett-Neubau, Objektbaum neu, Alt-Datenpunkte werden entfernt, IP wird übernommen.
 Der Upgrade-Pfad vom Ur-Adapter 0.5.4 ist test-bewiesen (`pure-helpers.test.ts` „upgrade path"):
-`migrateLegacyDevice` (config.ip/IP, Hostname ok, `:port`-Suffix wird gestrippt) + `cleanupStaleObjects`
+`legacyDeviceRow` (config.ip/IP, Hostname ok, `:port`-Suffix wird gestrippt) + `cleanupStaleObjects`
 räumt den KOMPLETTEN Alt-Baum (47 Instanz-Objekte + dynamische `Realtime.*`/`SystemConfig.*`/`inputEnum`).
 
 **Update-Meldungen (`common.messages`, sechs: 1.0.0, 2.0.0, 2.2.0, 2.8.0, 3.0.0, 3.1.0 — `player.playback` nach Rollenkatalog) folgen seit 2026-09-27 der Flotten-Form:**
@@ -495,7 +496,7 @@ in ein öffentliches Repo.
   nachgezogen, die sie führt, ebenso jeder `EQUIVALENT`-Vermerk. Nadeln sind exakte Quellzeilen — nach Prettier
   oder einem Umbau ZUERST `mutation-test.py <tabelle> --check` (jede Nadel genau 1×), nie `build_mutations.py`
   blind. Jede neue Entscheidung seit dem Vorgänger-Tag braucht eine Nadel in ihrer Region (D09); ein
-  Überlebender ist eine Testlücke. Die Wellen-Chronik (1–20, IDs, Zählstände) steht in `.claude/dev-history.md`.
+  Überlebender ist eine Testlücke. Die Wellen-Chronik (IDs, Zählstände je Welle) steht in `.claude/dev-history.md`.
 - **HW-freies Testen:** `ynca`-Python bringt debug-server + echte Geräte-Logs → YNCA-Client dagegen testbar.
 - **Test-Helfer liegen in `test/helpers/`, nie unter `src/**/__fixtures__`** — der Build übersetzt jedes `.ts`
   unter `src/` außer `*.test.ts`, npm liefert es aus (`src/lib/build-scope.test.ts` wird rot). JSON-Fixtures
