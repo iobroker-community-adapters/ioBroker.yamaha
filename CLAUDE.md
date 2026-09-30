@@ -84,8 +84,9 @@ Cache). Die Ausfall-Erkennung der beiden Poll-Transporte liegt gemeinsam in
 die frühere Mehrfach-Pflege hatte den Zonen-Equalizer-Cache gebrochen). `coordinate()` schreibt nur noch
 GEÄNDERTE Objekt-Definitionen (Fingerabdruck je Id, die Karte hält `main.ts` je Gerät über Reconnects;
 jede Purge-/Aufräum-Id fällt heraus, sonst fehlt einem zurückkehrenden Kind der Elternkanal) — ein flackerndes
-Gerät schrieb sonst alle paar Minuten ~250 unveränderte Objekte neu. **Werte entdoppelt die Datenbank, nie der
-Controller:** jeder Controller liefert jeden Wert (`setStateChangedAsync` vergleicht), und der
+Gerät schrieb sonst alle paar Minuten ~250 unveränderte Objekte neu. **Werte entdoppelt `main.ts`, nie der
+Controller:** jeder Controller liefert jeden Wert; schreibgeschützte Zustände vergleicht der Speicher-Spiegel
+(`lifecycle/write-mirror.ts`), beschreibbare `setStateChangedAsync`, und der
 Transport-Adapter liefert einer neu gewonnenen Id sofort ihren letzten Wert nach. **Reconnect ist zweistufig:** Der Ausfall EINES Transports schließt nur ihn und
 koordiniert sofort neu — ein lebender Transport übernimmt jede Id, die er VERTRÄGLICH baut (gleicher Typ,
 gleiche Einheit, verträgliche Werteliste, kein schreibbarer Punkt an einen nur lesenden Transport; `sleep`, `input`,
@@ -304,8 +305,8 @@ entfernt — `info.connection` trägt den Zustand.
 **Löschen ist endgültig** (`device-management.ts` `deleteDevice`): Bestätigung in der UI VOR dem Handler
 (dm-utils `confirmation` am Deskriptor, Text nennt die Datenpunkte — `showConfirmation` im Handler wartete
 ohne Timeout, und der Tabellen-Write des manuellen Zweigs startete die Instanz mitten im Handler neu: der
-Balken), dann Ausschluss ZUERST (`excluded.json` `{id, ip, identity}` neben dem rollback-sicheren `string[]`
-`ignored.json`; `isExcluded`: Id, Identität, oder Adresse NUR bei Eintrag ohne Identität), Fund-Speicher,
+Balken), dann Ausschluss ZUERST (`excluded.json` `{id, ip, identity}`; das 2.x-`string[]` `ignored.json` wird nur
+noch gelesen und beim Wiederzulassen gekürzt, A31; `isExcluded`: Id, Identität, oder Adresse NUR bei Eintrag ohne Identität), Fund-Speicher,
 `removeDevice` (Stopp + Baum, beide Zweige; EINE `info`-Zeile „device deleted — removed N datapoint(s)", gezählt wie
 die Bilanz: nur `state`-Objekte — krobi 2026-09-22 nach dem Server-Test), Antwort `{ delete }`, und der Tabellen-Write erst DANACH per
 `setTimeout(0)`. `main.ts` `removed` hält ein in dieser Sitzung gelöschtes Gerät aus einer bereits laufenden
