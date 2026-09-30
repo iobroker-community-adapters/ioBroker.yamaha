@@ -1,9 +1,22 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "3.0.1",
+    "version": "3.1.0",
     "nogit": true,
     "news": {
+      "3.1.0": {
+        "en": "Receivers from before 2010 show what is playing; every list entry is its own datapoint; dropdowns show names in your ioBroker language; player.playback uses the ioBroker codes.",
+        "de": "Receiver vor 2010 zeigen, was läuft; jeder Listeneintrag ist ein eigener Datenpunkt; Auswahllisten zeigen Namen in deiner ioBroker-Sprache; player.playback nutzt die ioBroker-Codes.",
+        "ru": "Ресиверы до 2010 года показывают, что играет; каждая запись списка — отдельная точка; списки выбора на языке ioBroker; player.playback использует коды ioBroker.",
+        "pt": "Recetores anteriores a 2010 mostram o que toca; cada entrada de lista é um ponto próprio; as listas mostram nomes no idioma do ioBroker; player.playback usa os códigos ioBroker.",
+        "nl": "Receivers van vóór 2010 tonen wat er speelt; elk lijstitem is een eigen datapunt; keuzelijsten tonen namen in je ioBroker-taal; player.playback gebruikt de ioBroker-codes.",
+        "fr": "Les amplis d'avant 2010 montrent ce qui joue ; chaque entrée de liste est un point à part ; les listes affichent des noms dans la langue d'ioBroker ; player.playback suit ses codes.",
+        "it": "I ricevitori prima del 2010 mostrano cosa suona; ogni voce di lista è un punto proprio; gli elenchi mostrano nomi nella lingua di ioBroker; player.playback usa i codici ioBroker.",
+        "es": "Los receptores anteriores a 2010 muestran qué suena; cada entrada de lista es un punto propio; las listas muestran nombres en tu idioma de ioBroker; player.playback usa sus códigos.",
+        "pl": "Amplitunery sprzed 2010 pokazują, co gra; każdy wpis listy to osobny punkt danych; listy wyboru w języku ioBroker; player.playback używa kodów ioBroker.",
+        "uk": "Ресивери до 2010 року показують, що грає; кожен запис списку — окрема точка даних; списки вибору мовою ioBroker; player.playback використовує коди ioBroker.",
+        "zh-cn": "2010 年前的功放可显示正在播放的内容；每个列表条目都是独立数据点；下拉列表以 ioBroker 语言显示名称；player.playback 使用 ioBroker 代码。"
+      },
       "3.0.1": {
         "en": "The notes the Admin shows before an update are short now: what changes, one example old → new, and a link to the details.",
         "de": "Die Hinweise, die der Admin vor einem Update zeigt, sind jetzt kurz: was sich ändert, ein Beispiel alt → neu und ein Link zu den Details.",
@@ -81,19 +94,6 @@
         "pl": "Odłączony lub milczący amplituner jest teraz uznawany za rozłączony po sekundach zamiast po wielu minutach, a zapisana wartość jest potwierdzana, gdy tylko ją przyjmie.",
         "uk": "Вимкнений або замовклий ресивер тепер вважається відключеним за секунди, а не за багато хвилин, а записане значення підтверджується, щойно ресивер його прийняв.",
         "zh-cn": "拔掉电源或不再响应的接收机，现在几秒内就会显示为断开，而不再是许多分钟；写入的值在接收机接受后立即得到确认。"
-      },
-      "2.9.2": {
-        "en": "The card now shows a 0–100 % badge while a receiver's volume is in percent. The setting itself moved back to one place: the device's edit dialog.",
-        "de": "Die Karte zeigt jetzt ein 0–100-%-Abzeichen, solange die Lautstärke eines Receivers in Prozent läuft. Gesetzt wird die Einstellung nur noch im Bearbeiten-Dialog.",
-        "ru": "На карточке теперь есть значок 0–100 %, пока громкость ресивера в процентах. Сама настройка задаётся только в диалоге редактирования устройства.",
-        "pt": "O cartão mostra agora um emblema 0–100 % enquanto o volume de um recetor estiver em percentagem. A definição passa a ser feita só no diálogo de edição.",
-        "nl": "De kaart toont nu een 0–100 %-badge zolang het volume van een receiver in procenten staat. De instelling zelf zet u alleen nog in het bewerkvenster.",
-        "fr": "La carte affiche désormais un badge 0–100 % tant que le volume d'un ampli est en pourcentage. Le réglage se fait uniquement dans la boîte de dialogue de l'appareil.",
-        "it": "La scheda mostra ora un distintivo 0–100 % finché il volume di un ricevitore è in percentuale. L'impostazione si cambia solo nella finestra di modifica.",
-        "es": "La tarjeta muestra ahora una insignia 0–100 % mientras el volumen de un receptor esté en porcentaje. El ajuste se cambia solo en el diálogo de edición.",
-        "pl": "Kafelek pokazuje teraz odznakę 0–100 %, dopóki głośność amplitunera jest w procentach. Samo ustawienie zmienia się już tylko w oknie edycji.",
-        "uk": "Картка тепер показує позначку 0–100 %, поки гучність ресивера у відсотках. Саме налаштування задається лише в діалозі редагування пристрою.",
-        "zh-cn": "当功放音量以百分比显示时，卡片现在会显示一个 0–100 % 标记。该设置本身只在设备的编辑对话框中更改。"
       }
     },
     "titleLang": {

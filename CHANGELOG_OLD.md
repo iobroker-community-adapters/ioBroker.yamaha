@@ -1,4 +1,11 @@
 # Older changes
+## 2.11.0 (2026-09-17) — stable
+
+- (krobipd) Fixed: The adapter no longer stops when the object database is briefly unavailable while a receiver reports a change
+- (krobipd) Fixed: A datapoint whose value range a receiver no longer reports keeps its value, its history and its room and function assignments
+- (krobipd) Fixed: A receiver that is switched off keeps its name after a restart
+- (krobipd) Fixed: A name you type on a device card now wins over every name the receiver reports for itself
+- (krobipd) Improved: When something goes wrong, the log names the cause instead of a placeholder
 
 ## 2.10.0 (2026-09-15)
 

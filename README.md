@@ -89,8 +89,7 @@ Details on all settings and the object tree are in the
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
-
-### **WORK IN PROGRESS**
+### 3.1.0 (2026-09-30)
 
 - (krobipd) Changed: player.playback follows the ioBroker standard now — 0 pause, 1 play, 2 stop; repeat and shuffle can be set directly where the device allows it
 - (krobipd) New: Receivers from before 2010 show what is playing — artist, album, track, station, status and cover — and 2008 models get their zone names
@@ -144,14 +143,6 @@ Details on all settings and the object tree are in the
 - (krobipd) Changed: A row carried over from the old adapter (name = IP) follows the receiver to a new address; a device entered by hand stays where it was typed, the log says if it answers elsewhere
 - (krobipd) Improved: Switching a receiver off no longer fills the log with warnings, and every search the log announces also tells you what it found — or that nothing answered
 - (krobipd) Improved: Less network noise while a receiver stays unreachable: the retries knock only on the protocols that device actually speaks, not on all three
-
-### 2.11.0 (2026-09-17) — stable
-
-- (krobipd) Fixed: The adapter no longer stops when the object database is briefly unavailable while a receiver reports a change
-- (krobipd) Fixed: A datapoint whose value range a receiver no longer reports keeps its value, its history and its room and function assignments
-- (krobipd) Fixed: A receiver that is switched off keeps its name after a restart
-- (krobipd) Fixed: A name you type on a device card now wins over every name the receiver reports for itself
-- (krobipd) Improved: When something goes wrong, the log names the cause instead of a placeholder
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 
