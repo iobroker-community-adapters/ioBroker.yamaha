@@ -1,9 +1,22 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "3.1.1",
+    "version": "3.1.2",
     "nogit": true,
     "news": {
+      "3.1.2": {
+        "en": "The sleep timer lists the receiver's own values again (Off, 30 min …) instead of MusicCast's minutes, so a picked value is one the receiver accepts.",
+        "de": "Der Einschlaf-Timer zeigt wieder die eigenen Werte des Receivers (Aus, 30 min …) statt der MusicCast-Minuten, ein gewählter Wert wird also angenommen.",
+        "ru": "Таймер сна снова показывает собственные значения ресивера (Off, 30 min …) вместо минут MusicCast, поэтому выбранное значение принимается.",
+        "pt": "O temporizador volta a listar os valores do próprio recetor (Off, 30 min …) em vez dos minutos do MusicCast, e o valor escolhido é aceite.",
+        "nl": "De slaaptimer toont weer de eigen waarden van de receiver (Off, 30 min …) in plaats van MusicCast-minuten, dus een gekozen waarde wordt aangenomen.",
+        "fr": "La minuterie affiche à nouveau les valeurs propres de l'ampli (Off, 30 min …) au lieu des minutes MusicCast : la valeur choisie est acceptée.",
+        "it": "Il timer torna a mostrare i valori propri del ricevitore (Off, 30 min …) invece dei minuti MusicCast, quindi il valore scelto viene accettato.",
+        "es": "El temporizador vuelve a mostrar los valores propios del receptor (Off, 30 min …) en lugar de los minutos de MusicCast; el valor elegido se acepta.",
+        "pl": "Wyłącznik czasowy znów pokazuje własne wartości amplitunera (Off, 30 min …) zamiast minut MusicCast, więc wybrana wartość jest przyjmowana.",
+        "uk": "Таймер сну знову показує власні значення ресивера (Off, 30 min …) замість хвилин MusicCast, тож вибране значення приймається.",
+        "zh-cn": "睡眠定时重新列出接收机自己的取值（Off、30 min …），不再是 MusicCast 的分钟数，所选的值会被接收机接受。"
+      },
       "3.1.1": {
         "en": "A receiver that replaces another at the same address is asked again whether zones 2 and 3 have an on-screen remote, instead of inheriting the old answer.",
         "de": "Ein Receiver, der einen anderen unter derselben Adresse ersetzt, wird neu gefragt, ob Zone 2 und 3 eine Bildschirm-Fernbedienung haben, statt die alte Antwort zu erben.",
@@ -81,19 +94,6 @@
         "pl": "Usunięcie urządzenia jest ostateczne, amplituner jest rozpoznawany po numerze seryjnym i podąża za nowym adresem IP w sekundy, a odłączony od prądu jest offline po około 90 sekundach.",
         "uk": "Видалення пристрою остаточне, ресивер відомий за серійним номером і слідує за новою IP-адресою за секунди, а знеструмлений позначається офлайн приблизно за 90 секунд.",
         "zh-cn": "删除设备是最终操作，接收机通过序列号被识别并在几秒内跟随新的 IP 地址，断电的接收机约 90 秒后显示为离线。"
-      },
-      "2.11.0": {
-        "en": "A brief database hiccup no longer stops the adapter, and a receiver that is switched off keeps its name after a restart.",
-        "de": "Ein kurzer Datenbank-Aussetzer stoppt den Adapter nicht mehr, und ein ausgeschalteter Receiver behält nach einem Neustart seinen Namen.",
-        "ru": "Кратковременный сбой базы данных больше не останавливает адаптер, а выключенный ресивер сохраняет своё имя после перезапуска.",
-        "pt": "Uma falha breve da base de dados já não para o adaptador, e um recetor desligado mantém o seu nome após um reinício.",
-        "nl": "Een korte hapering van de database stopt de adapter niet meer, en een uitgeschakelde receiver behoudt zijn naam na een herstart.",
-        "fr": "Une brève interruption de la base de données n'arrête plus l'adaptateur, et un ampli-tuner éteint conserve son nom après un redémarrage.",
-        "it": "Una breve interruzione del database non arresta più l'adattatore e un sintoamplificatore spento mantiene il suo nome dopo un riavvio.",
-        "es": "Un breve fallo de la base de datos ya no detiene el adaptador, y un receptor apagado conserva su nombre tras un reinicio.",
-        "pl": "Krótka awaria bazy danych nie zatrzymuje już adaptera, a wyłączony amplituner zachowuje swoją nazwę po ponownym uruchomieniu.",
-        "uk": "Короткий збій бази даних більше не зупиняє адаптер, а вимкнений ресивер зберігає свою назву після перезапуску.",
-        "zh-cn": "数据库短暂故障不再停止适配器，已关闭的接收机在重启后保留其名称。"
       }
     },
     "titleLang": {
