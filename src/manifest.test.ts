@@ -50,7 +50,7 @@ describe("io-package.json manifest", () => {
 
 describe("every datapoint has a description decision", () => {
   /**
-   * The fleet standard (`feedback_beschreibung_ist_erklaerung`) wants `common.desc` to be a real
+   * The fleet standard (a description is an explanation, never a key) wants `common.desc` to be a real
    * explanation where the adapter has something to say, and EMPTY where it does not — an invented
    * sentence is worse than nothing. A gate therefore cannot simply demand a description everywhere.
    *
@@ -113,7 +113,7 @@ describe("every datapoint has a description decision", () => {
 
   it("no catalog entry is left undecided", () => {
     const undecided: string[] = [];
-    // ALL four catalogs, and BOTH entry shapes. The YNCA table carries `nameKey`/`descKey` on the
+    // The four zone/tuner tables (the device-wide YXC_SYSTEM_CATALOG is not walked here), and BOTH entry shapes. The YNCA table carries `nameKey`/`descKey` on the
     // entry itself; the MusicCast and XML tables carry them inside `common`. A first version of
     // this test only read the top level — so it silently skipped every MusicCast and XML entry
     // and reported "all decided" while 29 of them had no explanation. Measured on the live tree:
@@ -166,7 +166,7 @@ describe("every datapoint has a description decision", () => {
 
 describe("no object is built without the explanation that exists for it", () => {
   /**
-   * The catalog invariant above walks the four TABLES. It cannot see the objects that the
+   * The catalog invariant above walks the four zone/tuner TABLES. It cannot see the objects that the
    * MusicCast and XML controllers build inline with `tName("someKey")` — and those were exactly
    * the ones left without a description twice in a row: first because the insertion only matched
    * table entries, then because `ObjectDef["common"]` had no `desc` field at all, so the key had

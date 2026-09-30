@@ -10,12 +10,12 @@ export const SCHEMA_KEY = "__schema";
  * not rare (a receiver briefly off the network, a single transport dropping).
  *
  * The memory lives with the CALLER (one per device, held across reconnect attempts) exactly
- * like the YNCA subunit cache and the reachability dedup, because the controllers
+ * like the YNCA subunit cache, because the controllers
  * themselves are rebuilt on every attempt. Since the fast-restart rework it also PERSISTS
  * (at the device object, like the subunit cache): an adapter restart starts from the
  * remembered answers instead of re-asking everything — that was the restart's 15–20 s.
  * Freshness is guarded per transport: each controller validates its portion against a LIVE
- * identity read (YNCA model+firmware, YXC model+version, XML model) and drops its keys on a
+ * identity read (YNCA model+firmware, YXC model+version, XML model+System_ID+version) and drops its keys on a
  * mismatch, so a swapped or updated device is re-probed, never served from a stale memory.
  */
 export class ProbeMemory {

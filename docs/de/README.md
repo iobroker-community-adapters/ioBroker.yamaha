@@ -83,8 +83,8 @@ Jeder Receiver wird ein Gerät. Darunter:
 
 - **info** — ob das Gerät verbunden ist, sein Modell, die Firmware, die Adresse und welches
   der drei Protokolle gerade lebt.
-- **power, volume, mute, input, soundProgram, sleep** — der Verstärker-Kern. Immer vorhanden,
-  nicht abschaltbar.
+- **power, volume, mute, input, soundProgram, sleep** — der Verstärker-Kern. Nicht abschaltbar;
+  ein Gerät bekommt die, die es hat (ein Lautsprecher hat kein Klangprogramm).
 - **player** — was gerade läuft: Quelle, Interpret, Album, Titel, Titelbild, abgelaufene und
   Gesamtzeit, Wiederholung und Zufall sowie die Transporttasten. Ein Block je Zone.
 - **tuner** — Band, Frequenz in Kilohertz, Speicherplatz, RDS und die DAB-Details, wo das

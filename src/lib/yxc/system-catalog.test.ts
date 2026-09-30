@@ -16,7 +16,7 @@ const RX_A3080 = {
 };
 
 describe("the device-wide MusicCast settings (coverage audit 2026-09-09)", () => {
-  test("every field a captured getFuncStatus carries has an entry; nothing is invented beyond the captures", () => {
+  test("every field a captured getFuncStatus carries has an entry; nothing is invented beyond the captures and the specification", () => {
     const states = presentSystemEntries(RX_A3080).map(entry => entry.state);
     expect(states).toEqual(
       expect.arrayContaining([
@@ -30,7 +30,7 @@ describe("the device-wide MusicCast settings (coverage audit 2026-09-09)", () =>
         "hdmi.videoPreset",
       ]),
     );
-    // The fields no capture ever showed (ypao_volume, zone_b_volume_sync, network_standby, …)
+    // Fields neither a capture nor the specification's setter list shows (ypao_volume, network_standby, …)
     // have no entry — a capability list is a promise, the answer is the evidence.
     expect(YXC_SYSTEM_CATALOG.some(entry => entry.field === "ypao_volume")).toBe(false);
   });

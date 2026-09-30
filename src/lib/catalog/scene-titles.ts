@@ -6,7 +6,7 @@ import type { ObjectDef } from "./types";
 
 /**
  * Scene titles, cross-transport. The device reports its scene titles over XML
- * (`Scene_Sel_Item`, per zone) and/or YNCA (`SCENExNAME`, main zone) — while the
+ * (`Scene_Sel_Item`, per zone) and/or YNCA (`SCENExNAME`: the main zone's twelve, each zone's four) — while the
  * scene RECALL may be owned by a third transport (MusicCast). Both title sources
  * land in the shared per-device probe memory, so every controller can resolve a
  * written title to its number and render the one `scene.list` state, regardless
@@ -84,8 +84,8 @@ export function knownScenes(memory: ProbeMemory | undefined, zoneKey: string): S
 }
 
 /**
- * Resolve a scene-recall write to its number: a number (or numeric string) passes
- * through, a TITLE is looked up case-insensitively in the zone's known scenes —
+ * Resolve a scene-recall write to its number: a whole number ≥ 1 (or such a numeric string)
+ * passes through, a TITLE is looked up case-insensitively in the zone's known scenes —
  * so `scene.recall = "Movie Viewing"` works wherever the device reported titles
  * (the govee dual-write pattern).
  *

@@ -59,7 +59,8 @@ const PLAYER_STATES: Array<{
 ];
 
 /**
- * A write-only action datapoint: a slot number to act on (store, clear, play) or a key.
+ * An action datapoint: a slot number to act on (store, clear, play — a readable `level` that keeps
+ * the slot last written) or a write-only key.
  *
  * @param id the state id
  * @param nameKey its name
@@ -98,8 +99,8 @@ function actionState(
 }
 
 /**
- * Append a media-player block (channel + the shared player states) under a
- * dotted prefix. Used for every player source the device reports.
+ * Append a zone's "now playing" block (channel + the shared player states) under a
+ * dotted prefix — once for the main zone and once per further zone.
  *
  * @param objects the object list to append to
  * @param prefix the channel/state prefix (`player`, `multiroom.zone2.player`)
@@ -275,7 +276,8 @@ function declaredDisplayRange(
  * regardless was wrong on both counts: the unit lied, and js-controller warned on every poll because
  * the value sat outside the decibel bounds (measured on an RX-V6A, 2026-09-09).
  *
- * Without a reported mode nothing is assumed: no bounds until one arrives, never a fallback to dB.
+ * A zone that declares one scale is on that one; a zone that declares both and reports neither gets
+ * the envelope of the two without a unit — never an assumed dB.
  *
  * @param zone the zone whose declared ranges are read
  * @param mode the display mode the zone reports right now, if any
@@ -405,8 +407,9 @@ const RDS_STATES: Array<{ id: string; nameKey: I18nKey; descKey: I18nKey }> = [
 const RDS_IDS = RDS_STATES.map(state => state.id);
 
 /**
- * The datapoints of the zones this device declares whose function the declaration LACKS — the party
- * switch without `party_mode`, a zone's maximum volume without `volume`. getFeatures does not depend
+ * The datapoints this device's getFeatures proves absent — a zone's catalog entry whose function the
+ * zone does not declare (a zone's maximum volume without `volume`), the RDS and DAB states of a tuner
+ * that does not declare them, and the clock format without `format`. getFeatures does not depend
  * on standby, so an earlier version's copy of such a datapoint is proven absent on the first start
  * (audit 2026-09-24: the upgrade from 2.12.0 left both behind).
  *
@@ -473,7 +476,7 @@ export function mapYxcToObjects(
       continue;
     }
     // Every parent — the zone channel included — is created by the per-state loop and
-    // named from the shared CHANNEL_NAMES table (a zone exists only with an entry).
+    // named from the shared CHANNEL_NAME_KEYS table (a zone exists only with an entry).
     for (const entry of entries) {
       const fullId = `${zoneDef.prefix}${entry.state}`;
       objects.push(...parentChannels(fullId, channels));
@@ -496,7 +499,7 @@ export function mapYxcToObjects(
         range = shown.range;
       } else if (entry.state === "advanced.maxVolume") {
         // `max_volume` arrives in raw steps (YXC Basic §5.1); the controller shows it on the scale the
-        // zone's volume is shown on, so 161 next to a volume of 0…97 dB reads 16.5 dB (audit
+        // zone's volume is shown on, so 161 next to a volume of −80.5…16.5 dB reads 0.0 dB (audit
         // 2026-09-29, C40). Unit only: the maximum's own range is not declared.
         const scale = volumePresentation(zone, current?.[zone.id]?.actualVolumeMode);
         if (scale) {

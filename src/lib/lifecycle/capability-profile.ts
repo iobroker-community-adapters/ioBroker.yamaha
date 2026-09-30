@@ -12,7 +12,7 @@ import {
 export const PROFILE_KEY = "capabilityProfile";
 
 /**
- * The three keys the profile replaces (2.5.2/2.6.0: `probeCache` JSON string, `yncaAvail` object,
+ * The three keys the profile replaces (releases before 2.7.0: `probeCache` JSON string, `yncaAvail` object,
  * `purgeVersion` string). Read once by {@link loadCapabilityProfile} and deleted on the first
  * persist, so a device object does not carry both shapes forever.
  */

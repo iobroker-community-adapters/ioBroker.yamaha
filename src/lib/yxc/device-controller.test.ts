@@ -238,7 +238,7 @@ function setup(
   const defs = new Map<string, ObjectDef>();
   const acks: Array<{ id: string; value: unknown }> = [];
   const trace: Array<{ kind: "object" | "value"; id: string }> = [];
-  /** Set by a test to hold one upsert open; see `holdUpsert` on the returned setup. */
+  /** Set by a test to hold one upsert open; see `hold` on the returned setup. */
   const hold: { fn?: (id: string) => Promise<void> | undefined } = {};
   const names: string[] = [];
   const fire: { push?: (event: unknown) => void; keepalive?: () => void; pushDeviceId?: string } = {};
@@ -321,8 +321,8 @@ function setup(
 }
 
 describe("YxcDeviceController", () => {
-  // The update from 2.12.0 left a speaker's party switch and a zone's maximum volume behind: the
-  // controller now says what its declaration proves absent, so the adapter removes them at once.
+  // The update from 2.12.0 left a zone's maximum volume behind where the zone has no volume: the
+  // controller now says what its declaration proves absent, so the adapter removes it at once.
   test("start() reports what getFeatures proves absent, and builds none of it", async () => {
     const absent: string[] = [];
     const s = setup(wx10, ysp, {}, undefined, { reportDeclaredAbsent: ids => void absent.push(...ids) });

@@ -1,7 +1,7 @@
 /**
  * MusicCast input id → the classic spelling YNCA and the XML API share ("hdmi1" → "HDMI1",
- * "net_radio" → "NET RADIO"). Every pair is evidenced — the analysis with the per-pair table:
- * `Ressourcen/yamaha/analyse-eingaenge-klangprogramme-2026-09-08.md`.
+ * "net_radio" → "NET RADIO"). Every pair is evidenced — the per-pair table is the maintainer's
+ * analysis of 2026-09-08, kept with the research notes outside this repo.
  *
  * - One receiver read both lists seconds apart (RX-V6A harvest 2026-09-01, 27 + 20 inputs) — the
  *   fixture beside the test; JUKE, MusicCast Link, AUX, Qobuz come from the XML lists of the

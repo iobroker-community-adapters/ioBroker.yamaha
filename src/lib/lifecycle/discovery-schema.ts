@@ -1,7 +1,7 @@
 /**
  * The version of the adapter's DISCOVERY LOGIC — how it turns device answers into objects,
- * dropdowns and bounds. Persisted with every per-device memory (`native.probeCache`,
- * `native.yncaAvail`); a memory learned under another schema is discarded on load, so the
+ * dropdowns and bounds. Persisted as the `schema` of every per-device capability profile
+ * (`native.capabilityProfile`); a memory learned under another schema is discarded on load, so the
  * device is re-learned on its next connect with the current logic (cold path, ≤ 32 s over
  * YNCA, objects correct in the same start). A memory without the field is schema 0 — every
  * installation before 2.6.0 — and is re-learned once by the first release that carries this.

@@ -260,7 +260,7 @@ describe("YNCA catalog", () => {
     const english = objects.map(o => (o.common.name as Record<string, string>).en);
     expect(new Set(english).size).toBe(29);
     expect(english).toContain("Input name (HDMI1)");
-    // The two that are not simply the upper-cased key follow the device's own spelling.
+    // The ones that are not simply the upper-cased key follow the device's own spelling.
     expect(english).toContain("Input name (V-AUX)");
     expect(english).toContain("Input name (MULTI CH)");
     expect(english).toContain("Input name (MusicCast Link)");

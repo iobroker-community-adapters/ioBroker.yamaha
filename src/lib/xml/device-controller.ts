@@ -271,7 +271,7 @@ export class XmlDeviceController {
       this.inputSources.set(zone.key, parseInputSources(body));
     }
     // The device description — the classic generation's own enumeration of programs, sleep
-    // steps, Adaptive DRC values and the dialogue range (2012–2017; the 2020 generation has none).
+    // steps, Adaptive DRC values and the declared write commands (2008–2017; the 2020 generation has none).
     const descriptor = await this.probeDescriptor();
     this.zoneCommands = {
       cursor: new Set(descriptor.cursorZones ?? []),
@@ -497,8 +497,8 @@ export class XmlDeviceController {
    * Build the classic tuner surface (pre-2010 devices, where XML is the ONLY
    * transport — the predecessor served their tuner, the rewrite had dropped it).
    * Existence is probed once per device; the preset write is the openHAB-verified
-   * `<Play_Control><Preset><Preset_Sel>`; frequency/RDS/tuned are read-only from
-   * Play_Info. On newer devices YNCA/YXC own these ids via the owner policy.
+   * `<Play_Control><Preset><Preset_Sel>`, band and frequency are written through `Tuning`
+   * (handleTuningWrite); RDS, tuned and stereo are read-only from Play_Info. On newer devices YNCA/YXC own these ids via the owner policy.
    */
   private async setupTuner(): Promise<void> {
     const probe = await this.probeXml("xmlTuner", "Tuner", "<Play_Info>GetParam</Play_Info>");
@@ -992,11 +992,12 @@ export class XmlDeviceController {
   }
 
   /**
-   * A user write to `tuner.preset` → the openHAB-verified preset recall.
+   * A user write to a tuner state: `tuner.preset` → the openHAB-verified preset recall,
+   * `tuner.band`/`tuner.frequency` → handleTuningWrite.
    *
    * @param stateId the state id relative to the device
    * @param value the written value
-   * @returns true when the id was the tuner preset (handled here)
+   * @returns true when the id was a tuner state (handled here)
    */
   private handleTunerWrite(stateId: string, value: unknown): boolean {
     if (stateId === "tuner.band" || stateId === "tuner.frequency") {
@@ -1052,15 +1053,15 @@ export class XmlDeviceController {
   }
 
   /**
-   * Create the browsing surface (#613) when at least one source answers a List_Info
-   * probe (NET_RADIO/SERVER/USB — the menus the predecessor adapter's users drove
-   * via `Realtime.*.LINE1TXT` + `xmlCommand`).
+   * Create the browsing surface (#613) when at least one source's menu answers its probe
+   * (`List_Info`, or the 2008 `List_Info_2` — see XML_BROWSE_SOURCES; the menus the
+   * predecessor adapter's users drove via `Realtime.*.LINE1TXT` + `xmlCommand`).
    */
   private async setupBrowse(): Promise<void> {
     const gate = this.deps.gate;
     const delay = (ms: number): Promise<void> => gate.delay(ms);
     // Which sources have a menu is a property of the MODEL, not of this connection — ask
-    // once per device instead of costing three extra requests (up to five seconds on a
+    // once per device instead of one request per menu element (each up to five seconds on a
     // receiver that has no menus at all) on every single reconnect.
     // One request per menu element — the 2008 generation's three network inputs share one NET_USB
     // menu (D5). The proven sources are remembered by id.
@@ -1308,7 +1309,7 @@ export class XmlDeviceController {
     const inputsByZone = this.inputsByZone;
     const descriptor = this.deviceDescriptor;
     for (const entry of XML_AMP_CATALOG) {
-      // Main/system-wide features (scenes, HDMI outputs, party) exist only on the main zone;
+      // Main/system-wide features (HDMI outputs, party, speaker terminals, Zone B) exist only on the main zone;
       // the pre-out level mode only on the zones.
       if ((entry.mainOnly && zone.key !== "main") || (entry.zonesOnly && zone.key === "main")) {
         continue;
@@ -1318,7 +1319,7 @@ export class XmlDeviceController {
         continue;
       }
       const stateId = `${zone.prefix}${entry.state}`;
-      // A dotted state (e.g. scene.recall) needs its parent channel created first — named AND
+      // A dotted state (e.g. sound.bass) needs its parent channel created first — named AND
       // explained from the one shared table, so the same folder cannot end up called "sound" here
       // and "Sound" there depending on which transport owns it.
       await this.ensureChannels(stateId);
@@ -1416,8 +1417,9 @@ export class XmlDeviceController {
       this.deps.probeMemory.set("xmlDialect", status.dialect);
     }
     // A field the device delivers for the FIRST time mid-run has no object yet
-    // (claim-with-proof creates only proven fields at start): remember it — the next
-    // start creates it — and skip the write, so no state lands without an object.
+    // (claim-with-proof creates only proven fields at start): remember it, build its object
+    // now and write it once the object exists — the write below skips it, so no state lands
+    // without an object.
     const known = this.zoneFields.get(zone.key);
     if (known) {
       let grew = false;
@@ -1523,7 +1525,7 @@ export class XmlDeviceController {
   /**
    * Every zone's own name from `<Config><Name><Zone>` (desc.xml `Config,Name,Zone`, 5+4+1+1
    * zones over the captured descriptors) — read on every connection (the user can rename a zone at
-   * the device, D8) with `xmlZoneName:<zone>` as the fallback; a zone that declares none gets no datapoint. Same id as
+   * the device, D8) with `xmlZoneNames:<zone>` as the fallback; a zone that declares none gets no datapoint. Same id as
    * YNCA's ZONENAME, so an XML-only receiver finally shows the names its owner gave the zones.
    */
   private async setupZoneNames(): Promise<void> {

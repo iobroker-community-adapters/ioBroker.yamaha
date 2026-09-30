@@ -46,8 +46,8 @@ interface DeviceOwner {
  * ioBroker device-manager backend: the Yamaha receivers as cards showing the live model,
  * the IP, and which protocols (YNCA/MusicCast/XML) are connected right now, with a manual
  * add-by-IP dialog. The card list follows the running set — the manual `native.devices`
- * table when it is filled, otherwise the auto-discovered devices — so it matches exactly
- * what the adapter runs. "Yamaha" is never a card line: it is the whole adapter.
+ * table plus the auto-discovered devices (`unionDevices`, a manual entry wins) — so it
+ * matches exactly what the adapter runs. "Yamaha" is never a card line: it is the whole adapter.
  */
 export class YamahaDeviceManagement extends DeviceManagement {
   /** The instance object id whose `native` holds the manual device table. */
@@ -55,7 +55,7 @@ export class YamahaDeviceManagement extends DeviceManagement {
     return `system.adapter.${this.adapter.namespace}`;
   }
 
-  /** The running adapter, for the one action that has to reach into it (delete a device). */
+  /** The running adapter, for the actions that have to reach into it (delete, the percent switch, re-admission, device-object writes). */
   private get owner(): DeviceOwner | undefined {
     const candidate = this.adapter as unknown as Partial<DeviceOwner>;
     return typeof candidate.removeDevice === "function" &&
@@ -256,11 +256,9 @@ export class YamahaDeviceManagement extends DeviceManagement {
       this.adapter.getForeignStateAsync(`${this.adapter.namespace}.${card.id}.info.model`),
       this.adapter.getForeignObjectAsync(`${this.adapter.namespace}.${card.id}`),
     ]);
-    // The card title follows the device object's name, not the table entry. On an
-    // instance upgraded from the previous adapter the table entry is the receiver's
-    // ip — the object carries the readable name the adapter learned from the device.
-    // The table entry itself must stay put: the object id is derived from it, and
-    // changing that would move the whole tree.
+    // The card title follows the device object's name, not the table entry: the row carries
+    // the stored id (3.0.0), a migrated row the receiver's ip — the object carries the
+    // readable name the adapter learned from the device or the user typed.
     const label = typeof node?.common?.name === "string" ? node.common.name : undefined;
     // The percent answer comes from the object read above — no extra round-trip for the badge.
     const percent = (node?.native as { volumeAsPercent?: unknown } | undefined)?.volumeAsPercent === true;
@@ -646,8 +644,8 @@ export class YamahaDeviceManagement extends DeviceManagement {
    * is the fix for "I deleted it and it came back":
    *
    * 1. The exclusion is written FIRST — a search running right now must not put the device
-   *    back: `excluded.json`, with address and identity. The plain id list (`ignored.json`) is only
-   *    read now — an id this version writes there never matched on a rollback, 2.x derives its ids
+   *    back: `excluded.json`, with address and identity. The plain id list (`ignored.json`) is no
+   *    longer appended to — only read, and pruned when a device is admitted again; an id this version writes there never matched on a rollback, 2.x derives its ids
    *    from the name (audit 2026-09-29, A31).
    * 2. A discovered record leaves the store; the running adapter stops the device and deletes
    *    its tree (`removeDevice`) — for a manual card too, so nothing waits for the restart.

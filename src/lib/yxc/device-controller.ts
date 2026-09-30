@@ -233,7 +233,7 @@ export interface YxcControllerDeps {
   pushActive?(): boolean;
   /**
    * Whether this device's events actually arrive (held per device by the adapter, so the verdict
-   * survives a reconnect). Absent = trust the bound socket, as before (audit 2026-09-24, C1).
+   * survives a reconnect; audit 2026-09-24, C1).
    */
   pushLiveness: PushLiveness;
   /**
@@ -445,7 +445,7 @@ export class YxcDeviceController {
     // zone stuck in its timeout must not hold up the device's readiness): the value a zone
     // reports right now belongs in its dropdown even where the device's own list omits it (the
     // RX-A2070 capture lists only "manual" as tone-control mode and answers "auto"), and the
-    // list has to carry it from the start (a later widening is possible since 2.7.0, but a
+    // list has to carry it from the start (a later widening is possible since 2.7.1, but a
     // dropdown must not be wrong in between). One request per zone, reused below as the seed.
     const answers = await Promise.all(this.zones.map(zone => this.fetchZoneStatus(zone)));
     const statuses = answers.map(answer => (answer.kind === "ok" ? answer.status : undefined));
@@ -973,9 +973,10 @@ export class YxcDeviceController {
 
   /**
    * Handle a device push: each named zone is re-fetched via getStatus, each named
-   * media source via getPlayInfo (the push itself is a change signal, not a value
-   * carrier). Refreshing only the named sources keeps a track-change push from
-   * re-polling every source.
+   * media source via getPlayInfo, each announced list with its own request. A few values
+   * ride in the push itself and are written directly: the playback clock, the network
+   * player's error, message and preset verdict, and the CD drive state. Refreshing only
+   * the named sources keeps a track-change push from re-polling every source.
    *
    * @param event the parsed push event
    */
@@ -1045,8 +1046,10 @@ export class YxcDeviceController {
   }
 
   /**
-   * Poll every zone (which renews the push registration and refreshes state) and the
-   * media sources. If every zone poll fails for three consecutive failed runs in a row,
+   * Poll every zone (which renews the push registration and refreshes state); the media
+   * sources, lists, device-wide settings and distribution follow on every run without
+   * working push, and on every PUSH_MODE_FULL_SWEEP_EVERY-th run with it. If every zone
+   * poll fails for three consecutive failed runs in a row,
    * the device is judged gone and a drop is reported so the supervisor can flip
    * info.connection and reconnect.
    */
@@ -1404,7 +1407,7 @@ export class YxcDeviceController {
     }
   }
 
-  /** Fetch the clock/alarm settings and write the read-only clock states. */
+  /** Fetch the clock/alarm settings and write the clock states. */
   private async refreshClock(): Promise<void> {
     try {
       for (const update of parseYxcClock(await this.deps.client.getClockSettings())) {
@@ -2062,9 +2065,9 @@ export class YxcDeviceController {
   }
 
   /**
-   * Apply a mapped command. A plain command runs its client call directly; the two
-   * commands that need controller-cached state (equalizer bands, tuner band) are
-   * completed here — the only place that state lives.
+   * Apply a mapped command: put it on the wire ({@link sendCommand}, which completes the
+   * declarative kinds from controller-held state), then see that the datapoint shows what
+   * the device did — confirmed by its event or read back, and read back after a refusal too.
    *
    * @param stateId the written state id, for the failure log line
    * @param command the YXC command to apply
@@ -2340,9 +2343,8 @@ export class YxcDeviceController {
   }
 
   /**
-   * Run one transport action on the given player source. The CD transport routes
-   * through the one `setCDPlayback(action)` method (not the per-action helpers, one
-   * of which sends the wrong command in the library).
+   * Run one transport action on the given player source. The CD transport goes through
+   * the one `setCDPlayback(action)` endpoint, repeat and shuffle through their toggles.
    *
    * @param block the source the zone is playing
    * @param action the transport action

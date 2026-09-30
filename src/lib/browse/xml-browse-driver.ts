@@ -351,7 +351,7 @@ export class XmlBrowseDriver implements BrowseDriver {
 
   /**
    * Send a List_Control command to the active source — WITHOUT reading the window back,
-   * so a caller can tell a device refusal from a failed follow-up read (see {@link back}).
+   * for a caller that reads the window itself (see {@link home}).
    *
    * @param inner the List_Control payload (Direct_Sel, Cursor, Jump_Line)
    */

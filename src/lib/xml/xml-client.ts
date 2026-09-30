@@ -118,7 +118,7 @@ export class XmlClient {
    * @param ip the receiver IP
    * @param post the XML poster (defaults to a node:http POST)
    * @param gate the device's command gate — when given, every request runs through it, so
-   *   these 1990s-era HTTP stacks never face parallel requests and a stopped adapter
+   *   these embedded 2008+ HTTP stacks never face parallel requests and a stopped adapter
    *   cancels what is still queued
    * @param get the plain-file getter for the device description (defaults to a node:http GET)
    */
@@ -136,7 +136,7 @@ export class XmlClient {
 
   /**
    * Read the device description (`/YamahaRemoteControl/desc.xml`) — the classic generation's
-   * own enumeration of programs, sleep steps, value lists and ranges (2012–2017). A model without
+   * own enumeration of programs, sleep steps, value lists and ranges (2008–2017). A model without
    * one answers HTTP 404, which travels as a permanent {@link XmlHttpError}.
    *
    * @returns the raw description body
@@ -183,7 +183,7 @@ export class XmlClient {
 
   /**
    * Read an element's inner GET request and return the raw response body — the
-   * browse driver reads `<List_Info>` from source elements (NET_RADIO, SERVER, USB)
+   * browse driver reads the menu lists (`List_Info`/`List_Info_2`) from source elements
    * with it.
    *
    * @param element the XML element (a zone or a source)

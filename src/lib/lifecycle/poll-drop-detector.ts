@@ -26,7 +26,7 @@ export class PollDropDetector {
   public constructor(private readonly maxFailures: number = MAX_POLL_FAILURES) {}
 
   /**
-   * Register the supervisor's drop handler.
+   * Register the drop handler (the multi-transport handle's, through the controller).
    *
    * @param cb invoked once when the device is judged gone
    */

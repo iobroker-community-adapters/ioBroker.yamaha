@@ -2,7 +2,7 @@ import { asPercentObject, fromPercent, isAmpVolumeId, toPercent, volumeBoundsOf 
 import type { ObjectDef } from "./types";
 
 describe("volume percent mode", () => {
-  /** The two scales the fleet actually meets: MusicCast decibels and the YNCA catalog's. */
+  /** Two scales the fleet meets: the receiver decibel scale (−80.5…16.5 in 0.5) and a MusicCast speaker's step count (0…60). */
   const musicCastDb = { min: -80.5, max: 16.5, step: 0.5 };
   const speaker = { min: 0, max: 60, step: 1 };
 
@@ -82,7 +82,7 @@ describe("volume percent mode", () => {
 
     // The whole point of percent mode: a value the user writes has to come back as the value they
     // wrote. That holds only while the percent grid is at least as fine as the device's own — 201
-    // percent values against 161 raw steps on the widest receiver in the captures.
+    // percent values against at most 195 device values (the YNCA decibel scale) in the captures.
     test("round-trips every step the device offers", () => {
       for (const bounds of [musicCastDb, speaker]) {
         const steps = Math.round((bounds.max - bounds.min) / bounds.step);

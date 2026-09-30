@@ -713,7 +713,7 @@ describe("XmlDeviceController object tree and drop handling", () => {
     expect(s.objects).toContain("living.multiroom.zone3");
     // Rewriting the shared parent for every zone churns the object DB on each start.
     expect(s.objects.filter(id => id === "living.multiroom")).toHaveLength(1);
-    // The zone channel carries its readable name from the shared CHANNEL_NAMES table.
+    // The zone channel carries its readable name from the shared CHANNEL_NAME_KEYS table.
     // Channel names are translation objects — the English half is what this test cares about.
     expect((s.defs.get("living.multiroom.zone2")?.common?.name as { en?: string }).en).toBe("Zone 2");
   });
@@ -1266,8 +1266,6 @@ describe("the zone commands desc.xml declares: pads, transport keys, zone names 
 
   test("with a menu source and the zone-wide pad declared, a main-zone key press goes zone-wide even with no menu open", async () => {
     const s = setup(statuses);
-    // The browse surface needs the command gate (no gate = no menus, as in the older tests).
-    (s.controller as unknown as { deps: { gate?: CommandGate } }).deps.gate = testGate();
     s.client.descriptor = DECLARES;
     s.client.xmlAnswers["NET_RADIO|<List_Info>GetParam</List_Info>"] =
       '<YAMAHA_AV rsp="GET" RC="0"><NET_RADIO><List_Info><Menu_Status>Ready</Menu_Status><Menu_Layer>1</Menu_Layer><Menu_Name>NET RADIO</Menu_Name><Current_List><Line_1><Txt>Bookmarks</Txt><Attribute>Container</Attribute></Line_1></Current_List><Cursor_Position><Current_Line>1</Current_Line><Max_Line>1</Max_Line></Cursor_Position></List_Info></NET_RADIO></YAMAHA_AV>';

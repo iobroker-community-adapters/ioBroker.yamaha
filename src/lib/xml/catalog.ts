@@ -18,7 +18,7 @@ export interface XmlAmpEntry {
    * module-level constant, so the controller resolves the key when it creates the object.
    */
   common: Omit<ObjectDef["common"], "name"> & { nameKey: I18nKey; descKey?: I18nKey };
-  /** The Basic_Status field this state reads from; absent for a write-only command (e.g. scene recall). */
+  /** The Basic_Status field this state reads from; absent would mean a write-only command (every entry reads one). */
   statusField?: Exclude<keyof BasicStatus, "zoneForm">;
   /**
    * Build the inner PUT XML for a written value; absent means read-only. The dialect is the
@@ -28,7 +28,7 @@ export interface XmlAmpEntry {
    * renamed entry cannot fall back to 0.5 unnoticed (audit 2026-09-29, D19).
    */
   toInner?: (value: unknown, dialect?: XmlDialect, form?: XmlZoneForm, step?: number) => string;
-  /** Only exists on the main zone (a system/main-wide feature like scenes, HDMI outputs, party). */
+  /** Only exists on the main zone (a system/main-wide feature like HDMI outputs, party, speaker terminals, Zone B). */
   mainOnly?: boolean;
   /** Only exists on zones 2–4 (the pre-out level mode). */
   zonesOnly?: boolean;
@@ -352,7 +352,8 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
   // The zone commands desc.xml declares and Basic_Status reports on the 2012–2017 generation
   // (coverage audit 2026-09-09): the enhancer and CINEMA DSP 3D (9 of 10 descriptors), the
   // speaker terminals A/B and Zone B (HTR-4069 class), the pre-out level mode of zones 2–4.
-  // Same ids as the YNCA entries, so one datapoint serves both transports.
+  // Same ids as the YNCA entries, so one datapoint serves both transports (the Zone B interlock is
+  // XML-only).
   {
     state: "sound.enhancer",
     common: { nameKey: "enhancer", descKey: "descEnhancer", type: "boolean", role: "switch", read: true, write: true },

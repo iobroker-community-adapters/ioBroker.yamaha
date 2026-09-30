@@ -327,7 +327,7 @@ describe("mapYxcToObjects", () => {
 // What getFeatures proves absent is removed on the first start after an update — the party switch
 // and the zone-4 maximum volume that 2.12.0 created on every device stayed behind (audit 2026-09-24).
 describe("yxcDeclaredAbsent", () => {
-  it("names a zone's maximum volume without `volume`, and the party switch without `party_mode`", () => {
+  it("names a zone's maximum volume without `volume`, and no party switch (it comes from getFuncStatus alone)", () => {
     const receiver = yxcDeclaredAbsent(parseYxcFeatures(rxA2070));
     expect(receiver).toContain("multiroom.zone4.advanced.maxVolume");
     expect(receiver).not.toContain("advanced.maxVolume");

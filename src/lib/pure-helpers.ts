@@ -469,7 +469,7 @@ export const RENAMED_STATE_IDS = [
 export const RENAMED_CHANNELS = [
   // pre-0.11 system folder
   "system",
-  // v0.18.1 multiroom regroup: zone2/3/4, zoneB, flat multiroom states moved under multiroom/.
+  // v0.19.0 multiroom regroup: zone2/3/4, zoneB, flat multiroom states moved under multiroom/.
   "zone2",
   "zone3",
   "zone4",
@@ -560,9 +560,11 @@ export const RENAMED_CHANNELS = [
  * value (no value, no last-change). They are over-declarations of an earlier adapter
  * version — today's claim-with-proof creation would not make them — and deleting them
  * is lossless: there is no value and no history to lose, and anything a transport
- * legitimately claims is recreated right after, when the device connects. Runs once
- * per adapter version (the caller keeps a marker), so a freshly created state that is
- * merely waiting for its first value does not flap on every start. Excluded: buttons
+ * legitimately claims is recreated right after, when the device connects. The caller
+ * examines a device once per adapter version and while it holds recorded candidates, and
+ * deletes an id only when a later process start still finds it untouched (or a transport's
+ * declaration proves it absent) — so a state merely waiting for its first value, or refused
+ * with `@RESTRICTED` in standby, is not deleted. Excluded: buttons
  * and other write-only states (naturally valueless) and the `info.` header the adapter
  * itself maintains for every device, connected or not. A recording setting
  * (`common.custom`) is deliberately NO factor: whether anyone records a datapoint is
@@ -607,8 +609,8 @@ export function neverWrittenStateIds(
  *
  * Both existing sweeps miss these on purpose: {@link staleObjects} only knows whole device trees
  * and named paths, and {@link neverWrittenStateIds} filters on `type === "state"`. So a folder
- * whose datapoints the v2.0.0 migration deleted (`player.server` — the SERVER source keeps no own
- * datapoint in the new tree) survives as an empty promise in the object tree, and every future
+ * whose datapoints a migration deleted (`player.server` after v2.0.0, until the RX-A850 presets
+ * gave the SERVER source datapoints of its own again) survives as an empty promise in the object tree, and every future
  * rework that empties a folder instead of listing it would leave the same kind of leftover.
  *
  * Nested empties resolve by themselves: a channel counts as filled only when a STATE exists
@@ -762,8 +764,8 @@ export function isUsefulDeviceName(candidate: string | undefined): boolean {
  *
  * An upgraded instance carries the IP as its device name: the previous adapter knew
  * only an IP, so the migration had nothing else to call the device, and the object id
- * — which must not change, every history and visualisation binding hangs off it —
- * became that IP. This decides when the adapter may replace that placeholder with
+ * became that address (dots as underscores) — since 3.0.0 it moves once to model and
+ * serial, with every binding carried along. This decides when the adapter may replace that placeholder with
  * something a user recognises.
  *
  * Two things must never be overwritten: a name the user typed, and a better name by a

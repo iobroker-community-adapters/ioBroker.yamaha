@@ -29,7 +29,7 @@ import {
 const readFixture = (name: string): string => readFileSync(join(__dirname, "__fixtures__", name), "utf8");
 
 describe("parseSystemConfig — what a classic receiver declares about itself", () => {
-  test("a 2020 receiver: identity, two zones, 23 feature flags, 20 named inputs", () => {
+  test("a 2020 receiver: identity, two zones, 19 feature flags, 20 named inputs", () => {
     const config = parseSystemConfig(readFixture("system-config-rx-v6a.xml"));
     expect(config).toMatchObject({ model: "RX-V6A", systemId: "00000000", version: "1.80/3.14" });
     expect(config.zones).toEqual({ Main_Zone: true, Zone_2: true, Zone_3: false, Zone_4: false });

@@ -96,9 +96,6 @@ export const YXC_SYSTEM_CATALOG: YxcSystemEntry[] = [
     fromStatus: value => Boolean(value),
     write: { apply: (client, value) => client.setHdmiOut2(Boolean(value)) },
   },
-  // The fields the captured getFuncStatus answers carry beyond those four (RX-V685, RX-A3080,
-  // RX-V6A — coverage audit 2026-09-09). Read-only where no setter is known (HDMI OUT 3, the
-  // headphone jack, the video preset); party mode writes through `setPartyMode`.
   // The four getFuncStatus fields YXC Basic Rev 1.10 §4.21 names together with their setters
   // (§4.23–4.25, §4.27). The field names come from the specification, not from a guess — the old
   // comment here kept them out as unseen; like every entry they appear only where the device
@@ -145,6 +142,10 @@ export const YXC_SYSTEM_CATALOG: YxcSystemEntry[] = [
     fromStatus: value => Boolean(value),
     write: { apply: (client, value) => client.setZoneBVolumeSync(Boolean(value)) },
   },
+  // The fields the captured getFuncStatus answers carry beyond those four (RX-V685, RX-A3080,
+  // RX-V6A — coverage audit 2026-09-09). Read-only where no setter is known (HDMI OUT 3, HDMI
+  // standby through, the headphone jack, the video preset); party mode writes through
+  // `setPartyMode`, the speaker pattern through `setSpeakerPattern`.
   {
     state: "hdmi.out3",
     field: "hdmi_out_3",

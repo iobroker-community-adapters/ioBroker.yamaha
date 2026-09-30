@@ -116,7 +116,7 @@ describe("MultiTransportHandle", () => {
     // one node per capability, under the device id
     expect(objects).toEqual(expect.arrayContaining(["living.volume", "living.power", "living.dist.role"]));
     expect(objects.filter(id => id === "living.volume").length).toBe(1);
-    // volume owned by YNCA (dB), power + dist.role by YXC (modern / exclusive)
+    // volume owned by MusicCast (it alone reports the displayed scale), power by modernity, dist.role exclusive to YXC
     expect(yxc.seeded).toContain("volume");
     expect(yxc.seeded).toEqual(expect.arrayContaining(["power", "dist.role"]));
     expect(ynca.seeded).not.toContain("volume");

@@ -26,7 +26,7 @@ describe("i18n — the eleven admin languages from the admin's own files", () =>
 
   test("a language that lacks a key falls back to the ENGLISH text, never to the key", () => {
     // The keys are identifiers (fleet standard); a fallback to the key would put
-    // "soundAdaptiveDrc" in front of the user. Proven on a key removed from one language.
+    // "adaptiveDRC" in front of the user. Proven on a key removed from one language.
     const key = "volumeAsPercent" as const;
     const original = (de as Record<string, string>)[key];
     delete (de as Record<string, string>)[key];

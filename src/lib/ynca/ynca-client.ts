@@ -69,10 +69,6 @@ export interface YncaTimers {
   cancel(handle: ioBroker.Timeout | undefined): void;
 }
 
-// YncaMessage is the canonical shape defined in ./protocol; re-exported so existing
-// importers keep resolving it from the client.
-export type { YncaMessage };
-
 /** The minimal socket surface the client needs — abstracted so tests can inject a fake. */
 export interface YncaSocket {
   /** Write raw data to the socket. */
@@ -102,8 +98,9 @@ export type SocketFactory = (host: string, port: number) => YncaSocket;
 function defaultFactory(host: string, port: number): YncaSocket {
   const socket = connect({ host, port });
   // Guard the initial connect: a device that never answers (a MusicCast-only
-  // speaker has no YNCA port) must fail fast so main.ts can fall back to YXC
-  // instead of hanging onReady. Cleared on connect; reconnect covers later drops.
+  // speaker has no YNCA port) must fail fast, so the parallel connect attempt
+  // (attempt-device.ts) settles on the transports that answered instead of waiting for
+  // the OS connect timeout. Cleared on connect; reconnect covers later drops.
   socket.setTimeout(CONNECT_TIMEOUT_MS);
   socket.on("timeout", () => socket.destroy(new Error("connect timeout")));
   socket.on("connect", () => {
@@ -140,7 +137,9 @@ function defaultFactory(host: string, port: number): YncaSocket {
 /**
  * A YNCA transport client for one receiver over TCP. Only one YNCA connection per
  * receiver is allowed, so a dropped connection is fully closed before a fresh one
- * is opened; reconnect and its backoff live one level up, in the supervisor.
+ * is opened; reconnect and its backoff live above this client: the multi-transport
+ * handle rebuilds this transport alone while others are live, the supervisor reconnects
+ * the whole set once none is.
  */
 export class YncaClient {
   private socket: YncaSocket | undefined;
@@ -261,14 +260,14 @@ export class YncaClient {
       return;
     }
     // Fully close the old socket — the receiver allows only one YNCA connection, so
-    // a lingering one would refuse the fresh connection. Reconnect lives one level
-    // up in the supervisor (single level): report the drop and let it re-attempt,
-    // which rebuilds/re-seeds through a fresh controller.
+    // a lingering one would refuse the fresh connection. Reconnect lives above this
+    // client (multi-transport handle, then supervisor): report the drop and let it
+    // re-attempt, which rebuilds/re-seeds through a fresh controller.
     this.socket?.destroy();
     this.socket = undefined;
     // Only a genuine drop (we were connected) fires onDrop; a socket that never
     // connected already rejected connect() and must not also signal a drop. If the
-    // supervisor has not wired onDrop yet (its multi-transport boot registers it only
+    // multi-transport handle has not wired onDrop yet (its start() registers it only
     // after every transport connected and the tree was built), latch the drop so it is
     // delivered the moment onDrop registers — otherwise this transport dies unnoticed.
     if (this.everReachable) {
@@ -483,7 +482,7 @@ export class YncaClient {
    * the specification's spacing. NEVER rejects: a closed gate is the normal teardown path,
    * and a socket write that fails reports through the socket's own error/close handlers
    * (the drop the supervisor reconnects on). A rejection here would surface as an
-   * unhandled promise rejection in the fire-and-forget send()/get() callers — and
+   * unhandled promise rejection in the fire-and-forget get() caller — and
    * js-controller stops the adapter on those.
    *
    * @param line the encoded YNCA line (without the terminator)

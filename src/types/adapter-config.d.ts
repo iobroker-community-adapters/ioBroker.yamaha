@@ -7,15 +7,15 @@ declare global {
     interface AdapterConfig {
       /** IP of the network interface to bind discovery to; empty (or 0.0.0.0) = all interfaces. */
       networkInterface: string;
-      /** The MusicCast event port the adapter listens on (fleet listen-port standard). */
+      /** The MusicCast event port, declared for the admin's port-conflict check (fleet listen-port standard); the receiver always listens on 41100. */
       port: number;
-      /** The address that port is bound to (0.0.0.0 = all). */
+      /** The address declared for that port (0.0.0.0 = all); the receiver binds all addresses. */
       bind: string;
       /** Configured Yamaha devices — the one row type (`DeviceRow`), the object id stored since 3.0.0. */
       devices: DeviceRow[];
       /**
-       * Whether the network search runs: `auto` while the device table is empty (the behaviour
-       * of every installation before 2.9.0), `always` next to a filled table (mixed operation),
+       * Whether the network search runs: `auto` while the device table holds no row the user typed
+       * (migrated rows do not count; the behaviour of every installation before 2.9.0), `always` next to a filled table (mixed operation),
        * `never` not at all. Three-valued so an upgrade needs no written value to keep behaving
        * exactly as it did.
        */

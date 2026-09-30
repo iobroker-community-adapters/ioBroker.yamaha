@@ -43,11 +43,11 @@ const LANGUAGES: Record<string, Record<string, string>> = {
  * `%s` placeholders are filled in EVERY language (as adapter-core does), so a name with a
  * number or a protocol in it stays translated. A language missing the key falls back to the
  * ENGLISH text, never to the key: the keys are identifiers (fleet standard, gate
- * `audit_i18n_keys`), so falling back to the key would put `soundAdaptiveDrc` in front of the
+ * `audit_i18n_keys`), so falling back to the key would put `adaptiveDRC` in front of the
  * user. Before 2026-09-03 the keys WERE the English text and `?? key` happened to read
  * correctly — that is exactly the coincidence that hid the deviation.
  *
- * @param key the English text, which is also its translation key
+ * @param key the translation key (an identifier in `admin/i18n/en.json`)
  * @param args values substituted into the key's `%s` placeholders, in order
  * @returns the text in all eleven languages
  */

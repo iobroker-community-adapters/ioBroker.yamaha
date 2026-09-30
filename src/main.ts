@@ -108,8 +108,9 @@ const SSDP_SEARCH_INTERVAL_MS = 1000;
  * missing key on an update but never removes one, so each stayed in every installation for good.
  * Where the code still takes a value over, that happens BEFORE the drop: `ip` becomes the device
  * table row (`carryLegacyDevice`), `group_zones` folds into `group_multiroom`
- * (`foldGroupZones`), and every device writes the 2.8.0 `volumeAsPercent` switch down as its own
- * answer (`ensureDeviceHeader`) — which is why the drop runs after the devices were set up.
+ * (`foldGroupZones`), and the 2.8.0 `volumeAsPercent` switch is first written down at every existing
+ * device object as its own answer (`handOverVolumePercent`) — while a known device has no object yet,
+ * the key stays and is dropped on a later start.
  */
 const NATIVE_KEY_MIGRATIONS: NativeKeyMigration[] = [
   { drop: "elapsedInterval" }, // 0.1.x — the play-time poll
@@ -236,7 +237,7 @@ export class Yamaha extends utils.Adapter {
   /**
    * deviceId → the IPv4 address a row's HOSTNAME resolves to. Every packet the adapter matches (an
    * SSDP answer, a NOTIFY, a MusicCast event) carries the numeric source address; compared with the
-   * name, a migrated `yamaha.fritz.box` row was started a second time or warned about as "elsewhere"
+   * name, a `yamaha.fritz.box` row (typed, or carried over from 0.5.4) was started a second time or warned about as "elsewhere"
    * (audit 2026-09-24, A12).
    */
   private readonly resolvedHosts = this.perDevice.map<string>();
@@ -390,7 +391,7 @@ export class Yamaha extends utils.Adapter {
     this.deviceManagement = new YamahaDeviceManagement(this);
   }
 
-  /** Start a supervisor for each configured device, then subscribe to state changes. */
+  /** Migrate settings and ids, clean up, subscribe to state changes, then start a supervisor for each device. */
   private async onReady(): Promise<void> {
     try {
       this.log.info('starting — a "ready" message will follow for each device');
@@ -1061,8 +1062,8 @@ export class Yamaha extends utils.Adapter {
    *
    * Driven by the device manager's delete action. Deleting a discovered device used to only
    * empty the remembered list — the supervisor kept the connection, the tree stayed, and the card
-   * came back on the next start. Now the delete is what it says; the id is additionally kept in
-   * the ignored list (device manager) so a later search does not put the device back.
+   * came back on the next start. Now the delete is what it says; the device manager records it in
+   * the exclusion list (`excluded.json`: id, address, identity) so a later search does not put it back.
    *
    * @param deviceId the id-safe device id
    */
@@ -1311,8 +1312,9 @@ export class Yamaha extends utils.Adapter {
    * instance. The failure lands in the log instead — once per outage at warn, then at
    * debug until a write succeeds again; during teardown it is expected and stays silent.
    *
-   * Written through `setStateChangedAsync`: js-controller compares against the database and
-   * writes only when the value or the ack flag differs. That is what keeps a failed reconnect
+   * Written only on a change: a read-only state is compared against the in-memory mirror (skipped
+   * when unchanged); a writable or not yet mirrored state goes through `setStateChangedAsync`, where
+   * js-controller compares against the database and writes only when the value or the ack flag differs. That is what keeps a failed reconnect
    * attempt (eight identical markers every minute), a 60-s XML poll, the ~200-value YNCA
    * refresh after a reconnect and the 30-s model keepalive out of the history — and it still
    * confirms a user's write, because that one sits at ack:false and the echo's ack:true IS the
@@ -1328,9 +1330,9 @@ export class Yamaha extends utils.Adapter {
 
   /**
    * {@link writeState}, awaitable — for the stamps that must stand before the next step (the start's
-   * disconnected marker, the unload writes). Compared in memory first (see {@link StateMirror}): an
-   * unchanged value is not written and not read back from the database; the first write of a state in
-   * this process lets the database compare (`setStateChangedAsync`). Never rejects.
+   * disconnected marker, the unload writes). A read-only state is compared in memory first (see
+   * {@link StateMirror}): an unchanged value is not written. A writable state, or one the mirror does
+   * not hold, lets the database compare (`setStateChangedAsync`). Never rejects.
    *
    * @param id the state id (namespace-relative)
    * @param value the value to write
@@ -1413,9 +1415,10 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
-   * Merge into an existing device object — coalesced per device: everything that arrives within
-   * {@link DEVICE_PATCH_WINDOW_MS} of the first patch goes out as ONE write (latest value per key
-   * wins). Only the header that creates the object writes at once ({@link writeDeviceObject}).
+   * Merge into an existing device object — coalesced per device: patches are held until the device's
+   * first connect of this process has ended, then everything within {@link DEVICE_PATCH_WINDOW_MS}
+   * goes out as ONE write (latest value per key wins). Writes that must stand at once (the header, the
+   * id journal, the percent switch, the card dialogs) go through {@link writeDeviceObject} directly.
    *
    * @param deviceId the device object id
    * @param patch the `common` and `native` fields to merge
@@ -1469,8 +1472,9 @@ export class Yamaha extends utils.Adapter {
    * object, merges and writes it back; two of them at the same moment each write what they read,
    * and the later one takes the earlier one's fields away. Measured in the inventory run: the id
    * mark (`native.idScheme`) and the display name written in the same instant — the mark was gone
-   * on three of eight devices, a different three on each run. Every writer of a device object's
-   * `common`/`native` goes through here — the device manager's dialogs too (audit 2026-09-29, A37).
+   * on three of eight devices, a different three on each run. Every writer of a running device's object
+   * `common`/`native` goes through here — the device manager's dialogs too (audit 2026-09-29, A37); the
+   * start-time id move writes directly, before any device runs.
    *
    * @param deviceId the device id
    * @param patch what to merge
@@ -1669,9 +1673,9 @@ export class Yamaha extends utils.Adapter {
    * Remove folders that hold no datapoint any more, under the devices that connected this run.
    *
    * The two sweeps above only ever delete datapoints, so a folder emptied by a tree rework stays
-   * behind and promises content it can never get — `player.server` is the live case: the v2.0.0
-   * migration deletes the SERVER source's playback copies, and the new tree gives that source no
-   * datapoint of its own. Runs on every start, not once per version: an empty folder is wrong
+   * behind and promises content it can never get — `player.server` was the case after the v2.0.0
+   * migration deleted the SERVER source's playback copies, until the RX-A850 presets gave that
+   * source datapoints of its own again. Runs on every start, not once per version: an empty folder is wrong
    * whenever it is found, and re-reading the objects after the orphan purge catches the ones that
    * purge just emptied. Not counted in the datapoint balance — a folder is not a datapoint.
    */
@@ -2186,7 +2190,7 @@ export class Yamaha extends utils.Adapter {
    * @returns whether the old toggle was on
    */
   private foldGroupZones(): boolean {
-    // `group_zones` is a key of the releases before 0.17.0 and in no type of this one.
+    // `group_zones` is a key of the releases up to 0.17.0 and in no type of this one.
     const config = this.config as unknown as Record<string, unknown>;
     const on = config.group_zones === true;
     if (on) {
@@ -2633,8 +2637,8 @@ export class Yamaha extends utils.Adapter {
             return;
           }
           this.writeState(id, this.volumeAsShown(id, value));
-          // A model report also decides the device-class icon on the device node — and, for a
-          // device still carrying the ip it was migrated with, its readable name.
+          // A model report also decides the device-class icon on the device node, and the display
+          // name of a device that still shows its id placeholder or the adapter's own earlier label.
           if (id.endsWith(".info.model") && typeof value === "string" && value.length > 0) {
             const reporting = id.slice(0, id.indexOf("."));
             if (this.lastModel.get(reporting) !== value) {
@@ -2708,8 +2712,8 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
-   * Route a state change to every device's supervisor (each forwards to its
-   * active controller, which ignores ids outside its subtree and its acked echoes).
+   * Route a state change to the supervisor of the device its id names (first segment); that
+   * supervisor forwards it to its handle, which ignores its own acked echoes.
    *
    * @param id the full state id
    * @param state the new state (null when deleted)
@@ -3071,7 +3075,7 @@ export class Yamaha extends utils.Adapter {
    * (probe memory, YNCA subunit snapshot, purge marker) — from its device object's native
    * part, wrapped so every change persists back there through the coalescing writer. The
    * device object is the right home: writing an instance object's native restarts the
-   * adapter, a device object's does not. Legacy keys of 2.5.2/2.6.0 are converted at load.
+   * adapter, a device object's does not. Legacy keys of the releases before 2.7.0 are converted at load.
    *
    * @param deviceId the id-safe device id
    * @returns the per-device profile store

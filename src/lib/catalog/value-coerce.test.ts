@@ -97,7 +97,7 @@ describe("specToCommon", () => {
 });
 
 describe("decode", () => {
-  test("on/off decodes the on-value to true and anything else to false", () => {
+  test("on/off decodes the on-value to true and the off-value to false", () => {
     const spec = { kind: "onoff", on: "On", off: "Off" } as const;
     expect(decode(spec, "On")).toBe(true);
     expect(decode(spec, "Off")).toBe(false);

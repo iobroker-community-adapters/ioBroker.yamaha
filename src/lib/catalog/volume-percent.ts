@@ -41,7 +41,7 @@ export interface VolumeBounds {
  *
  * Measured against the built tree: only `volume`, `multiroom.zoneN.volume` and `multiroom.zoneB.volume`
  * carry the loudness of a zone. `advanced.maxVolume` (a limit), `sound.ypaoVolume` (a calibration offset),
- * `subwooferVolume`, `multiroom.zone2.volumeOutput`, `multiroom.partyVolumeUp/Down` and
+ * `sound.subwooferTrim`, `multiroom.zone2.volumeOutput`, `multiroom.partyVolumeUp/Down` and
  * `player.airplay.volumeInterlock` are other quantities on other scales and stay untouched.
  *
  * @param stateId the canonical state id, without the device prefix

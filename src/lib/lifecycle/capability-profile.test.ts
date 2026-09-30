@@ -349,7 +349,7 @@ describe("DeviceProfileStore", () => {
   });
 
   test("both halves changed inside one coalescing window land in the LAST profile string", () => {
-    // The adapter merges native patches by key inside a 250 ms window (last writer wins the whole
+    // The adapter merges native patches by key inside a coalescing window (DEVICE_PATCH_WINDOW_MS; last writer wins the whole
     // string). Every persist serializes EVERY field, so the last string is always complete.
     const d = deps();
     const store = new DeviceProfileStore("living", {}, d.deps);

@@ -80,8 +80,8 @@ Each receiver becomes one device. Under it:
 
 - **info** — whether the device is connected, its model, firmware, address, and which of the
   three protocols is live right now.
-- **power, volume, mute, input, soundProgram, sleep** — the amplifier core. Always present,
-  cannot be switched off.
+- **power, volume, mute, input, soundProgram, sleep** — the amplifier core. It cannot be switched
+  off; a device gets those it has (a speaker has no sound program).
 - **player** — what is playing right now: source, artist, album, track, cover, elapsed and
   total time, repeat and shuffle, and the transport buttons. One block per zone.
 - **tuner** — band, frequency in kilohertz, preset, RDS, and the DAB detail where the device

@@ -183,7 +183,7 @@ const FIXTURE_DEVICES = loadFixtures().length;
 const EN = JSON.parse(fs.readFileSync(path.join(ADAPTER_DIR, "admin", "i18n", "en.json"), "utf8"));
 /** The ids removed in 2.8.0 — none of them may exist anywhere, in main or in any zone. */
 const REMOVED_IN_2_8_0 = ["actualVolume", "actualVolumeMode", "inputText"];
-/** A device-relative `volume` id: the main zone's, or one of zones 2-4. */
+/** A device-relative `volume` id: the main zone's, one of zones 2-4, or Zone B's. */
 // Zone B is a zone too (audit 2026-09-29, D13).
 const VOLUME_ID = /^(?:multiroom\.(?:zone[234]|zoneB)\.)?volume$/;
 /** The instance settings every start of the manifest carries, next to what a suite configures. */
@@ -577,7 +577,7 @@ async function deviceIdByIp(harness, objects) {
 
 /**
  * Every amplifier `volume` state in a dump, grouped by the device it belongs to — the main
- * zone's and zones 2–4. `advanced.maxVolume`, `sound.subwooferVolume` and the rest are other
+ * zone's, zones 2–4 and Zone B. `advanced.maxVolume`, `sound.subwooferTrim` and the rest are other
  * datapoints on other scales and are none of this grouping's business.
  *
  * @param {Record<string, any>} objects a dump of the object tree
@@ -1116,7 +1116,7 @@ tests.integration(ADAPTER_DIR, {
         });
 
         // The discovery-schema jump of an update drops every device's learned memory
-        // (`native.probeCache`) — the device's own settings and what it is known by live in their
+        // (`native.capabilityProfile`) — the device's own settings and what it is known by live in their
         // own keys next to it and must come through unchanged; the model is kept outside the
         // memory so an offline migrated receiver is still recognised by it (audit 2026-09-24, A22).
         it("every device keeps its settings, identity and label, and carries its model", async function () {

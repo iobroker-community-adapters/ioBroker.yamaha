@@ -114,7 +114,7 @@ describe("the pictograms follow the object-tree rules (fleet recipe, measured at
     expect(uris).not.toContain(volumeIndicatorIcon(true));
   });
 
-  test("the volume glyphs: a speaker with a percent sign for percent mode, the speaker alone otherwise", () => {
+  test("the volume glyphs: a speaker with a percent sign for percent mode, a speaker with sound waves otherwise", () => {
     const percent = decode(volumeIndicatorIcon(true));
     const device = decode(volumeIndicatorIcon(false));
     // The percent sign is two circles and a slash; the device-scale glyph carries sound waves instead.

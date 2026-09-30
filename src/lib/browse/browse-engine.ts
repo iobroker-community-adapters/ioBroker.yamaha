@@ -113,7 +113,7 @@ export class BrowseEngine {
   public onWindow(window: BrowseWindow): void {
     // A fetch that was already in flight when the connection closed must not paint stale
     // rows into a tree that is being torn down (the XML driver polls a busy menu for up
-    // to five seconds).
+    // to twenty seconds).
     if (this.closed) {
       return;
     }

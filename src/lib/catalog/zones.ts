@@ -58,6 +58,6 @@ export function splitZone(stateId: string): { zone: ZoneKey; name: string } {
 
 /**
  * The prefix of a zoned id in either tree form — today's `multiroom.zone2.` and the flat `zone2.` of the
- * trees before v0.18.1, which only the upgrade cleanup still has to recognise.
+ * trees before v0.19.0, which only the upgrade cleanup still has to recognise.
  */
 export const ANY_ZONE_PREFIX = new RegExp(`^(?:multiroom\\.)?(?:${ZONED.map(zone => zone.key).join("|")})\\.`);

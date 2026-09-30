@@ -139,7 +139,7 @@ function distributionOf(block: Record<string, unknown>): { version?: number; com
 }
 
 // Only true media-player sources — subsystems that report play info and
-// transport. The `clock` block (alarm/timer) and `dist` (MusicCast link) are
+// transport. The `clock` block (alarm/timer) and `distribution` (MusicCast Link) are
 // getFeatures top-level keys too, but they are not players and get no media tree.
 const MEDIA_BLOCKS = ["netusb", "tuner", "cd"];
 

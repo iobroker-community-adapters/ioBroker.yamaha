@@ -253,20 +253,22 @@ function q(value: string | number): string {
  * A minimal HTTP client for the Yamaha Extended Control (MusicCast) API. Replaces the
  * `yamaha-yxc-nodejs` library, which pulled vulnerable transitive dependencies
  * (`simple-ssdp`, `@root/request`) in through an SSDP-discovery path this adapter never
- * used — the adapter only ever called these HTTP command methods. Each method builds the
- * exact command URL the library built (unit-verified against its source) and GETs it.
+ * used — the adapter only ever called these HTTP command methods. Each method builds its
+ * command URL — the library's where it had one (unit-verified against its source), otherwise
+ * per the YXC specification or the aiomusiccast/pyamaha reference — and sends it as a GET, or as
+ * a POST with a JSON body where the API requires one.
  */
 export class YamahaYxcClient {
   private readonly send: YxcSend;
 
   /**
    * @param ip the device IP or hostname
-   * @param send transport seam (defaults to a node:http GET); injected in tests
+   * @param send transport seam (defaults to node:http: GET, POST when a body is given); injected in tests
    * @param gate the device's command gate — when given, every request runs through it, so
    *   an embedded device never sees a burst of parallel requests and a stopped adapter
-   *   cancels what is still queued. Commands that CHANGE something (`set…`, `recall…`,
-   *   `toggle…`, `start/stop…`, `manage…` — the API names them consistently) are queued
-   *   with user priority so a button press overtakes background polling.
+   *   cancels what is still queued. Commands that CHANGE something (the verbs `isWriteCommand`
+   *   recognises: set, recall, toggle, start, stop, manage, prepare, control, switch, store,
+   *   clear) are queued with user priority so a button press overtakes background polling.
    */
   public constructor(ip: string, send: YxcSend = defaultSend(ip), gate?: CommandGate) {
     this.send = gate

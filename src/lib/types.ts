@@ -4,8 +4,9 @@ import type { DeviceServices } from "./discovery";
 /**
  * Where a device's address came from. A manual device carries an address the user typed, so it
  * stays there for good; a discovered one answered the network search and may move; a migrated
- * one is the row the 0.5.4 upgrade wrote (its NAME is the address — nobody typed it), and it
- * follows the device like a discovered one.
+ * one is the row the 0.5.4 upgrade wrote with a numeric address as its NAME (nobody typed it), and
+ * it follows the device like a discovered one. A carried-over hostname row counts as manual: the
+ * name server follows the device for it.
  */
 export type DeviceSource = "manual" | "migrated" | "discovered";
 
@@ -34,7 +35,7 @@ export type DeviceValue = boolean | number | string | null;
 
 /** A unified state id and its typed value (catalog / status-parser form). */
 export interface StateValue {
-  /** State id relative to the device (e.g. `power`, `zone2.volume`). */
+  /** State id relative to the device (e.g. `power`, `multiroom.zone2.volume`). */
   id: string;
   /** Typed value for the state — `null` where there is none (a list value the device does not report now). */
   value: DeviceValue;

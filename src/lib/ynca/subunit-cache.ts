@@ -27,8 +27,8 @@ export interface YncaAvailSnapshot {
 
 /**
  * Per-device cache of the AVAIL probe result, held ACROSS reconnect attempts (the
- * controller is rebuilt per attempt, so the cache lives with the caller — the
- * ReachabilityDedup pattern) and persisted so an adapter restart also skips the
+ * controller is rebuilt per attempt, so the cache lives with the caller, in main.ts
+ * per device) and persisted so an adapter restart also skips the
  * probe. A reconnect or restart then goes straight to the targeted sweep; the sweep
  * itself always runs (values must be fresh), only the probe phase is saved.
  */

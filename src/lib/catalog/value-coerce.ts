@@ -105,7 +105,7 @@ export interface StateCommon {
   type: "boolean" | "number" | "string";
   /** ioBroker role. */
   role: string;
-  /** Always readable. */
+  /** Whether the state is readable — false only for a write-only button. */
   read: boolean;
   /** Whether the state accepts writes. */
   write: boolean;

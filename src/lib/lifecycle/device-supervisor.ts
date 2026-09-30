@@ -73,8 +73,8 @@ export class DeviceSupervisor {
 
   /**
    * Resolves once the attempt in flight (if any) has finished — connected, failed or closed.
-   * `close()` only marks the supervisor; an attempt that is already past its `await` still
-   * builds the device's object tree to the end. Deleting that tree while it is being built
+   * `close()` aborts the attempt's signal, but a tree write already in flight (`handle.start()` →
+   * `coordinate()`) still runs to the end. Deleting that tree while it is being built
    * leaves orphans behind, so `removeDevice` waits here first.
    *
    * @returns a promise that settles with the running attempt, or at once when none runs

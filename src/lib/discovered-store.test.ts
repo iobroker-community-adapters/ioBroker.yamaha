@@ -65,8 +65,8 @@ describe("writeDiscovered", () => {
   });
 });
 
-// The ignored store is what makes the delete button stick: without it the next network search
-// finds the receiver again and the adapter undoes the user's own delete. Both halves used to be
+// The 2.x id list (`ignored.json`): read for the exclusions 2.x left behind and shrunk when the user
+// admits one again (a delete writes `excluded.json` since 2.12.0). Both halves used to be
 // replaced by a mock in each of their two callers, so nothing ever ran this code.
 describe("readIgnored", () => {
   test("returns the stored ids", async () => {
@@ -104,7 +104,7 @@ describe("writeIgnored", () => {
     expect(deps.written).toEqual([JSON.stringify(["Living", "Kitchen"])]);
   });
 
-  test("stores each id once — a device deleted twice may not grow the file forever", async () => {
+  test("stores each id once — a rewrite never duplicates an entry", async () => {
     const deps = fakeDeps();
     await writeIgnored(deps, ["Living", "Kitchen", "Living"]);
     expect(deps.written).toEqual([JSON.stringify(["Living", "Kitchen"])]);

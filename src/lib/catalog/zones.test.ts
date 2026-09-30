@@ -24,7 +24,7 @@ describe("the one zone table", () => {
     expect(splitZone("volume")).toEqual({ zone: "main", name: "volume" });
     expect(ZONE_PREFIX.exec("multiroom.zone4.sleep")?.[0]).toBe("multiroom.zone4.");
     expect(ZONE_PREFIX.test("zone2.sleep")).toBe(false);
-    // The upgrade cleanup still recognises the flat form of the trees before v0.18.1.
+    // The upgrade cleanup still recognises the flat form of the trees before v0.19.0.
     expect(ANY_ZONE_PREFIX.exec("zone2.sleep")?.[0]).toBe("zone2.");
     expect(ANY_ZONE_PREFIX.exec("multiroom.zone2.sleep")?.[0]).toBe("multiroom.zone2.");
   });

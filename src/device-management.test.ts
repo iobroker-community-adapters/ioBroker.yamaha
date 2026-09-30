@@ -1,6 +1,6 @@
 import { volumeIndicatorIcon } from "./lib/device-type";
 import type { Mock } from "vitest";
-// t() returns the key (with its arguments when it has any) so the tests assert on
+// tName() returns the key (with its arguments when it has any) so the tests assert on
 // the message CHOICE, not on wording.
 vi.mock("./lib/i18n", () => ({ tName: (key: string, ...args: unknown[]) => (args.length ? { key, args } : key) }));
 
@@ -472,7 +472,7 @@ describe("YamahaDeviceManagement", () => {
     expect((await cards([]))[0].indicators.map(i => i.id)).not.toContain("device-source");
   });
 
-  it("declares the v3 API and a single add action", () => {
+  it("declares the v3 API and the add and excluded-devices actions", () => {
     const info = make([]).getInstanceInfo();
     expect(info.apiVersion).toBe("v3");
     expect(info.identifierLabel).toBe("ipLabel");
@@ -861,8 +861,8 @@ describe("YamahaDeviceManagement", () => {
     });
   });
 
-  it("an adapter that lacks one of the three owner methods gets no owner — the backend never calls into a partial surface", async () => {
-    // The device manager reaches into the running adapter for three things; a partial surface
+  it("an adapter that lacks one of the four owner methods gets no owner — the backend never calls into a partial surface", async () => {
+    // The device manager reaches into the running adapter for four things; a partial surface
     // (an older adapter build, a test double) must not pass as the owner and then throw.
     store.excluded = [{ id: "Kitchen", ip: "192.168.1.11" }];
     const i = make([]);

@@ -13,19 +13,22 @@ import type { YxcClientLike } from "./client-contract";
 /**
  * A mapped YXC write. Almost every command is a ready-to-run client call (`run`) built
  * from the catalog's `write.apply` or the transport/toggle tables — no method-name
- * string, no dispatch switch, no "unknown command" runtime path. The two commands that
- * need controller-cached state stay declarative: the equalizer (the device sets all
- * three bands in one call, the other two come from the cached status) and the tuner
- * frequency (setFreq needs the current band).
+ * string, no dispatch switch, no "unknown command" runtime path. The commands that need
+ * controller-held state stay declarative: the equalizer (the device sets all three bands in
+ * one call, the other two come from the cached status), the volume (the zone's display
+ * scale), the tuner band, frequency, preset, clear and search (the current band), the
+ * favourite and recent recalls (the listening zone), and the player block's transport and
+ * modes (the source the zone plays).
  */
 export type YxcCommand =
   | {
       kind: "run";
       run: (client: YxcClientLike) => Promise<unknown>;
       /**
-       * The media source whose play info the key changes — read back instead of the zone status: a
-       * tuner step or the CD tray changes `tuner/getPlayInfo` or `cd/getPlayInfo`, never `getStatus`
-       * (YXC Basic §6.6/§6.15/§8.3; audit 2026-09-29, C32).
+       * What the key changes, read back instead of the zone status: a media source's play info (a
+       * tuner step or the CD tray changes `tuner/getPlayInfo` or `cd/getPlayInfo`, never `getStatus`;
+       * YXC Basic §6.6/§6.15/§8.3; audit 2026-09-29, C32), the clock settings, or the stored
+       * favourites/stations list.
        */
       source?: "tuner" | "cd" | "clock" | "favourites" | "stations";
     }
@@ -72,9 +75,8 @@ function readStatusField(
 }
 
 /**
- * Button states → their client call. The CD transport routes through the one
- * `setCDPlayback(action)` method (not the per-action `pauseCD()` helpers, one of
- * which sends the wrong command in the library).
+ * Button states → their client call (the CD tray; the transport buttons go through the
+ * controller's `runTransport`).
  */
 const BUTTON_ACTIONS: Record<string, (client: YxcClientLike) => Promise<unknown>> = {
   "player.cd.tray": client => client.toggleTray(),
@@ -315,8 +317,8 @@ export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefi
     return on === undefined ? undefined : { kind: "playerMode", zone, shuffle: on ? "on" : "off" };
   }
   // Volume is declarative because the datapoint carries what the receiver DISPLAYS while
-  // setVolume takes only the raw step count. Converting between the two needs the ratio of the
-  // pair the device reports in one status answer, and that lives in the controller.
+  // setVolume takes only the raw step count. Converting between the two needs the zone's declared
+  // scale and the display mode it currently reports, and both live in the controller.
   if (name === "volume" && isWritableValue(value, true)) {
     return { kind: "volume", zone, value: Number(value) };
   }
@@ -340,7 +342,7 @@ export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefi
 }
 
 /**
- * Parse a getDistributionInfo response into the read-only multiroom (dist) states.
+ * Parse a getDistributionInfo response into the multiroom group states.
  *
  * @param info the getDistributionInfo response object
  * @returns the dist state updates, or an empty list if malformed
@@ -1070,7 +1072,7 @@ function parseAlarmDetail(prefix: string, detail: Record<string, unknown>): Stat
 export const ALARM_DAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
 /**
- * Parse a `/clock/getSettings` response into the read-only clock/alarm states
+ * Parse a `/clock/getSettings` response into the clock/alarm states
  * (capture-verified shape: auto_sync/format plus the nested alarm block).
  *
  * @param settings the getSettings response object

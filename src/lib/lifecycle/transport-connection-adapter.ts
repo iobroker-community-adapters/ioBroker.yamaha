@@ -13,7 +13,7 @@ const INVERSE_DRIFT: Partial<Record<Transport, Readonly<Record<string, string>>>
   ]),
 );
 
-/** The controller shape the adapter drives — a {@link import("../controller").ConnectionHandle} plus its async start. */
+/** The controller shape the adapter drives: start, a device-relative user write, the drop handler, an optional liveness check, and close. */
 export interface AdaptedController {
   /** Connect, probe, and build the object tree (through the injected deps). */
   start(): Promise<boolean>;

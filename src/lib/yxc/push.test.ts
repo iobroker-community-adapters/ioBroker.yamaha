@@ -14,6 +14,16 @@ describe("mediaToRefresh", () => {
     expect(mediaToRefresh({ netusb: { play_time: 12, play_info_updated: true } })).toEqual(["netusb"]);
     expect(mediaToRefresh({ cd: { play_time: 3 }, tuner: {} })).toEqual(["tuner"]);
   });
+
+  test("ignores zone keys and unknown keys", () => {
+    expect(mediaToRefresh({ main: { power: "on" }, zone2: {} })).toEqual([]);
+    expect(mediaToRefresh({ clock: {}, dist: {} })).toEqual([]);
+  });
+
+  test("returns empty for a malformed event", () => {
+    expect(mediaToRefresh(null)).toEqual([]);
+    expect(mediaToRefresh("nope")).toEqual([]);
+  });
 });
 
 describe("mediaTimeUpdates", () => {
@@ -35,16 +45,6 @@ describe("mediaTimeUpdates", () => {
     expect(mediaTimeUpdates(null)).toEqual([]);
     expect(mediaTimeUpdates("nope")).toEqual([]);
     expect(mediaTimeUpdates({ netusb: "12" })).toEqual([]);
-  });
-
-  test("ignores zone keys and unknown keys", () => {
-    expect(mediaToRefresh({ main: { power: "on" }, zone2: {} })).toEqual([]);
-    expect(mediaToRefresh({ clock: {}, dist: {} })).toEqual([]);
-  });
-
-  test("returns empty for a malformed event", () => {
-    expect(mediaToRefresh(null)).toEqual([]);
-    expect(mediaToRefresh("nope")).toEqual([]);
   });
 });
 

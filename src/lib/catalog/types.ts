@@ -15,11 +15,11 @@ import { tName, type I18nKey } from "../i18n";
  * reads only the object fields below and ignores the protocol key.
  */
 export interface CatalogEntry {
-  /** State id relative to the device — dotted for a channel (e.g. `power`, `sound.bass`, `zone2.power`). */
+  /** State id relative to the device — dotted for a channel (e.g. `power`, `sound.bass`, `multiroom.zone2.power`). */
   id: string;
   /**
-   * The object's display name, as its translation KEY (the English text, which is also the key
-   * in `admin/i18n`). The catalogs are module-level constants, built before the adapter starts
+   * The object's display name, as its translation KEY (an identifier in `admin/i18n`, whose
+   * `en.json` entry holds the English text). The catalogs are module-level constants, built before the adapter starts
    * — so they carry the key and {@link catalogToObjects} resolves it into all eleven languages.
    */
   nameKey: I18nKey;

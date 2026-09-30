@@ -38,7 +38,9 @@ export interface YxcAmpEntry {
   /** Convert a raw getStatus value into the typed state value. */
   fromStatus: (value: unknown) => boolean | number | string;
   /**
-   * Write mapping — absent means the state is read-only (no library setter). The entry
+   * Write mapping — absent means either the state is read-only (`common.write: false`) or the
+   * controller owns its write path (volume, the equalizer bands — the value needs controller
+   * state). The entry
    * calls the client DIRECTLY (value coercion inline), so there is no method-name string
    * to keep in sync with a dispatch switch and no "unknown command" runtime path.
    */
@@ -571,8 +573,8 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     read: { field: "max_volume" },
     fromStatus: num,
   },
-  // The two device-global entries: their id starts with "multiroom." (no zone prefix ever
-  // applies), so the mapper and the status parser emit them for the main zone only.
+  // The device-global entry: its id starts with "multiroom." (no zone prefix ever applies),
+  // so the mapper and the status parser emit it for the main zone only.
   {
     // distribution_enable says the zone MAY be used for Link streaming — proven on a live
     // device reporting true while in no group (role none) — not that it streams right now.
@@ -591,6 +593,6 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
   },
   // Party mode is NOT read here: getStatus `party_enable` and getFuncStatus `party_mode` both fed
   // `multiroom.party`, refreshed at different moments, so the value could flip between the two. The
-  // system catalog's documented pair (`party_mode` / setPartyMode, YXC Basic Rev 1.10 §4.21/§4.27) is
+  // system catalog's documented pair (`party_mode` / setPartyMode — pyamaha; YXC Basic Rev 1.10 does not document the pair) is
   // the one source (audit 2026-09-29, C46).
 ];

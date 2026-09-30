@@ -58,11 +58,11 @@ const PROBED_SUBUNITS: ReadonlySet<string> = new Set(AVAIL_PROBE.map(get => get.
 
 /**
  * Functions whose VALUE cannot change while the device runs: the 29 assignable input names
- * and the 12 scene names. They cost 41 paced reads of a targeted sweep (4.1 s at the
- * specification's mandatory 100 ms spacing) and answer the same thing every time, so
- * a reconnect reuses what the first connect learned.
+ * and the scene names (12 on the main zone, SCENE1–4NAME on each of zones 2–4). They answer
+ * the same thing every time, so a reconnect reuses what the first connect learned instead of
+ * asking them again at the specification's mandatory 100 ms spacing.
  *
- * They live in the PERSISTED probe memory (the device object's `native.probeCache`), so the
+ * They live in the PERSISTED probe memory (the device object's `native.capabilityProfile`), so the
  * saving survives a restart too — the freshness guard is the device identity, and a renamed
  * input heals through the background refresh, which re-reads them. (This used to be
  * documented as "per adapter run, not persisted"; that stopped being true with the
@@ -339,8 +339,9 @@ export interface ControllerDeps {
   isEntryEnabled?(id: string): boolean;
   /**
    * Per-device cache of the AVAIL probe result, held across reconnects and restarts.
-   * With a valid cache the probe phase is skipped and the targeted sweep runs directly;
-   * a model/firmware mismatch after the sweep invalidates it and re-probes.
+   * With a valid cache (same model and firmware, read live BEFORE any sweep) only the subunits
+   * the snapshot never asked are probed and the targeted sweep runs directly; a model/firmware
+   * mismatch clears the cache and re-probes.
    */
   subunitCache: YncaSubunitCache;
   /**
@@ -575,7 +576,7 @@ export class YncaDeviceController {
 
   /**
    * The device's capabilities — from the persisted fast-restart layer when the LIVE
-   * identity (model + firmware, two paced reads, ~0.2 s) matches what the layer was
+   * identity (model + firmware, three paced reads with the wake-up read, ~0.3 s) matches what the layer was
    * captured from, else from the full two-pass sweep. The identity read doubles as the
    * liveness proof the ready line rests on: a cached shape alone must never present a
    * dead device as connected (the v1.5.0 honesty rule).
@@ -612,10 +613,15 @@ export class YncaDeviceController {
     }
     if (remembered !== undefined && model) {
       // A different (or updated) device behind this address: its remembered YNCA
-      // answers are void — the observed values too. The other transports guard their own portions.
-      // An EMPTY model is no identity at all (a lost first command), not another device.
+      // answers are void — the observed values and the pad verdicts too. The other transports guard
+      // their own portions. An EMPTY model is no identity at all (a lost first command), not another device.
       this.deps.probeMemory.drop(
-        key => key === CAPS_KEY || key === STATIC_KEY || key === OBSERVED_KEY || key === PAD_DIALECT_KEY,
+        key =>
+          key === CAPS_KEY ||
+          key === STATIC_KEY ||
+          key === OBSERVED_KEY ||
+          key === PAD_DIALECT_KEY ||
+          key === ZONE_PAD_KEY,
       );
     }
     this.loadObserved();
@@ -651,7 +657,7 @@ export class YncaDeviceController {
    * - the player's transport buttons are routed by the zone's input, so a stale input
    *   sends play/pause to the source the zone listened to LAST time.
    *
-   * Six reads at most (~0.6 s through the gate), once per connect. A drop during them
+   * Eight reads at most (~0.8 s through the gate), once per connect. A drop during them
    * fails the connect — which is honest: the device is gone.
    *
    * @param remembered the capability shape from the persisted layer
@@ -772,7 +778,8 @@ export class YncaDeviceController {
    * catalogued subunit with `AVAIL=?` (~2 s); pass 2 sweeps only the subunits that
    * answered, plus SYS (which never answers AVAIL) — on a typical receiver that
    * saves a third or more of the ~39 s blind sweep. A cached probe result (per
-   * device, surviving reconnects and restarts) skips pass 1 entirely; a device
+   * device, surviving reconnects and restarts) skips pass 1 except for the subunits the
+   * snapshot never asked; a device
    * whose model or firmware no longer matches the cache re-probes. A device that
    * answers no AVAIL at all falls back to the full blind sweep, so an unknown
    * firmware loses speed, never features.
@@ -787,8 +794,8 @@ export class YncaDeviceController {
     // An empty model is no identity (a lost first command, B1): the cache is neither used nor
     // cleared — a fresh probe runs and its result replaces it.
     if (cached && model) {
-      // The device's IDENTITY was already read by resolveCapabilities (two reads,
-      // ~0.2 s) — checking it BEFORE sweeping is what keeps a stale cache from costing
+      // The device's IDENTITY was already read by resolveCapabilities (three reads,
+      // ~0.3 s) — checking it BEFORE sweeping is what keeps a stale cache from costing
       // a full targeted sweep, then the probe, then a second sweep (~40 s).
       if (model === cached.model && firmware === cached.firmware) {
         // A subunit the catalog gained after the snapshot was never asked — asked now, and only
@@ -1163,8 +1170,8 @@ export class YncaDeviceController {
     }
     const triple = yncaCommand(stateId, value, this.writeMap);
     if (!triple) {
-      // The one write path that still dropped a user action without a word. Every special
-      // route above (scene, player, tuner, sendProven) says why it did nothing; this is the
+      // The one write path that still dropped a user action without a word. The special
+      // routes above (scene, player, tuner, sendProven) handle their own ids; this is the
       // generic one, and it carries the majority of the writes — power, volume, input, sound
       // programme. `yncaCommand` returns nothing when this device never reported the function
       // or when the entry is read-only, and both are worth a line (audit 2026-09-06).
@@ -1358,7 +1365,7 @@ export class YncaDeviceController {
   /**
    * Route the band-dependent tuner writes (v2.0.0 unification): ONE frequency state
    * in kHz and ONE preset state, sent to the wire function of the ACTIVE band —
-   * AM/FM on the classic TUN subunit, FM/DAB on the DAB subunit (whose FM half
+   * AM/FM on the classic TUN subunit (HDRADIO on the US models), FM/DAB on the DAB subunit (whose FM half
    * shares the flat ids). A DAB frequency write is dropped: DAB tunes by service,
    * the device has no frequency command there.
    *
@@ -1382,7 +1389,7 @@ export class YncaDeviceController {
         return true;
       }
       // The HD Radio subunit carries the AM/FM tuner of the US models — with TUN beside it or
-      // (four of the seven official lists) alone.
+      // (six of the seven official lists) alone.
       const amFm = this.hasHdRadio ? "HDRADIO" : "TUN";
       if (this.tunerBand === "AM") {
         this.sendProven(amFm, "AMFREQ", String(Math.round(khz)));
@@ -1392,8 +1399,8 @@ export class YncaDeviceController {
       return true;
     }
     if (stateId === "tuner.band") {
-      // Two subunits feed this one dropdown: AM lives only on TUN, DAB only on DAB, and FM on
-      // both — on a device that has DAB its FM half lives there too (that is where its FM
+      // Up to three subunits feed this one dropdown: on an HD Radio model every band goes to
+      // HDRADIO; otherwise AM lives only on TUN, DAB only on DAB, and FM on both — on a device that has DAB its FM half lives there too (that is where its FM
       // frequency and presets are). Routing by the written VALUE keeps a dual-subunit device
       // honest instead of sending every band to whichever entry happened to be mapped last.
       const band = typeof value === "string" ? value : "";
@@ -1591,7 +1598,7 @@ export class YncaDeviceController {
   /**
    * After a user write of a READABLE function, ask the device for its value: the receiver answers
    * a PUT only when the value changed, and not at all in standby — the written value stood
-   * unacknowledged for good (audit 2026-09-24, B4; the flotten rule: a value with a writable twin is
+   * unacknowledged for good (audit 2026-09-24, B4; the fleet rule: a value with a writable twin is
    * mirrored). Asked at user priority, so it does not wait behind a background refresh.
    *
    * @param entry the entry that was written

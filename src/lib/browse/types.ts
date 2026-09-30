@@ -103,7 +103,7 @@ export interface BrowseDriver {
  * translates, so the datapoint means the same thing on a 2009 receiver and on a 2024 one.
  *
  * A transport publishes only the words it really has: the YNCA source subunits know no
- * Left/Right, and XML declares its menu keys per device (`XML_MENU_WIRE`). A missing word is left
+ * Left/Right, and XML has menu keys only where desc.xml declares the zone-wide `Menu_Control`. A missing word is left
  * out of that device's dropdown rather than mapped onto something that merely looks similar.
  */
 export const CURSOR_VALUES = ["up", "down", "left", "right", "select", "return", "home"] as const;
@@ -119,8 +119,8 @@ export type MenuValue = (typeof MENU_VALUES)[number];
 
 /**
  * A transport's translation table: the words it really has, mapped to its own wire spelling.
- * `Partial` because no transport has to carry the whole vocabulary — YNCA has no wire word for
- * `display`/`home` on the menu, MusicCast has no `home` on the cursor. What the type DOES enforce is that a table can only contain words from the vocabulary
+ * `Partial` because no transport has to carry the whole vocabulary — no menu table has `home` (it is a
+ * cursor key), the 2010/2011 YNCA lists have no `display`, MusicCast has no `home` on the cursor. What the type DOES enforce is that a table can only contain words from the vocabulary
  * above: until 2026-09-06 the three transports each kept a private literal list and
  * {@link CURSOR_VALUES} was read by nobody, so the lists had already drifted apart without
  * anything noticing (audit 2026-09-06).

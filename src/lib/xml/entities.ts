@@ -3,7 +3,7 @@
  *
  * The XML transport reads values with regular expressions and writes them by string
  * interpolation, so entities have to be handled explicitly — the predecessor adapter got
- * this for free from its XML parser (`legacy/soef.js` used xml2js), which makes a missing
+ * this for free from its XML parser (its `soef.js` helper used xml2js), which makes a missing
  * conversion a regression against the surface those users had. It shows up wherever device
  * content carries a `&`: an internet-radio folder "Rock & Pop" arrives as `Rock &amp; Pop`
  * and the browse path never matches it, and a renamed input written back unescaped

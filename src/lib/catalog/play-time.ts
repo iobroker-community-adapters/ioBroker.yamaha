@@ -74,8 +74,9 @@ export const PLAY_TIME_TWINS: Readonly<Record<string, string>> = {
 /**
  * The readable twin of a numeric playback-time state, when the id has one.
  *
- * Both transports route their player values through one funnel per transport, and this is
- * what those funnels use to write the second form alongside the first.
+ * The YNCA controller routes its player values through one funnel, and this is what it uses to
+ * write the second form alongside the first; MusicCast writes the text form directly
+ * (`formatPlayTime` in yxc/command-mapper.ts).
  *
  * @param id the flat player state id
  * @param value the value written to it

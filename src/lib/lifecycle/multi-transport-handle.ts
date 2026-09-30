@@ -271,8 +271,8 @@ export class MultiTransportHandle implements ConnectionHandle {
    * grown by an observed value). Runs SERIALIZED behind whatever coordination is in flight —
    * `coordinate()` awaits its upserts and then swaps the ownership map, so two concurrent runs
    * could arm a transport with a half-built map. Additive by nature: a re-coordination writes only
-   * changed definitions, and a transport that DROPPED does not trigger one, so nothing shrinks
-   * within a session — removals stay a start-time decision.
+   * changed definitions, and a transport that DROPPED keeps its objects in the coordination
+   * (`away`), so nothing shrinks within a session — removals stay a start-time decision.
    *
    * @param connection the transport to listen to
    */

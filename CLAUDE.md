@@ -279,7 +279,7 @@ verbunden" ist nicht offline) und deren gemerktes Modell (`DeviceProfileStore.mo
 Fünf-Minuten-Polls — bis 15 min. Seit demselben Tag fragt `MultiTransportHandle.handleTransportDrop` beim ersten
 Abriss die übrigen Transporte sofort (`TransportConnection.verifyAlive?()`, optional; YXC + XML: EINE Statusabfrage
 der ersten Zone, Fehlschlag = `dropDetector.report()`, gleichzeitige Frager teilen eine Frage; YNCA urteilt selbst
-über sein Keepalive) — ein stromloses Gerät ist damit ~95 s nach dem Stecker offline (YNCA 90 s + eine Abfrage),
+über sein Keepalive) — ein stromloses Gerät ist damit ~93 s nach dem Stecker offline (gemessen; YNCA 90 s + eine Abfrage),
 und die schnelle Suche hängt sich dahinter. Nadeln Y30–Y32.
 
 **Umgezogen oder aus:** Der Verlust EINES Transports (`setTransports` schrumpft) stellt die Suche mit kurzer
@@ -357,9 +357,9 @@ MusicCast-Deklaration (`getFeatures`) beweisbar nicht trägt (`yxcDeclaredAbsent
 `common.name` jedes States und Kanals ist ein Objekt über **elf Sprachen**, nie ein fester String
 (Kernteam-Linie mcm1957, nut2 #15; ioBroker löst selbst in die Sprache des Lesers auf). Umgesetzt
 in `lib/i18n.ts`: `tName(key, …args)` baut das Objekt aus **`admin/i18n/<lang>.json`** — denselben
-Dateien, aus denen die Konfigurationsseite liest. **Der Schlüssel IST der englische Name**, deshalb
-liest ein Schlüssel ohne Übersetzungseintrag trotzdem richtig, und der Typ `I18nKey` macht einen
-Tippfehler zum Compile-Fehler.
+Dateien, aus denen die Konfigurationsseite liest. **Der Schlüssel ist ein Bezeichner** (`adaptiveDRC`, seit
+2026-09-03 Flottenstandard), eine Sprache ohne Eintrag fällt auf den ENGLISCHEN Text zurück, nie auf den Schlüssel, und
+der Typ `I18nKey` macht einen Tippfehler zum Compile-Fehler.
 
 - **Bewusst NICHT adapter-core `I18n`:** dessen `getTranslatedObject` **wirft**, solange `init()`
   nicht lief — damit hinge jeder Objektname an der Startreihenfolge, und die reinen Katalogmodule

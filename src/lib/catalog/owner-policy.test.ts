@@ -22,15 +22,15 @@ describe("pickOwner — which transport owns a shared capability", () => {
     expect(pickOwner("volume", ["xml"])).toBe("xml");
   });
 
-  test("write-loss keys stay with YNCA/XML where YXC is read-only (census §3c)", () => {
+  test("keys whose YNCA write is documented or complete stay with YNCA/XML (census §3c, C8, C37)", () => {
     expect(pickOwner("advanced.maxVolume", ["yxc", "ynca"])).toBe("ynca");
     expect(pickOwner("sound.extraBass", ["yxc", "ynca"])).toBe("ynca");
     // MusicCast writes dialogue lift since 2026-09-24 (YXC Basic §5.17, C8): plain modernity.
     expect(pickOwner("sound.dialogueLift", ["yxc", "xml"])).toBe("yxc");
     // The unified tuner.preset (v2.0.0) is writable on BOTH — no override, modernity wins.
     expect(pickOwner("tuner.preset", ["yxc", "ynca"])).toBe("yxc");
-    // The unified player block's settable states (v2.0.0): YXC is read-only there
-    // (toggles/buttons only), YNCA writes them directly — write-proof beats modernity.
+    // The unified player block (v2.0.0): YXC never sets playback and sets repeat/shuffle only from
+    // API 1.19 on the network player; YNCA sets all three on every source.
     expect(pickOwner("player.playback", ["yxc", "ynca"])).toBe("ynca");
     expect(pickOwner("player.repeat", ["yxc", "ynca"])).toBe("ynca");
     expect(pickOwner("player.shuffle", ["yxc", "ynca"])).toBe("ynca");
@@ -38,14 +38,14 @@ describe("pickOwner — which transport owns a shared capability", () => {
     expect(pickOwner("player.playback", ["yxc"])).toBe("yxc");
   });
 
-  test("dropdown-rich keys stay with YNCA so the enum states survive (census §3d)", () => {
+  test("input and soundProgram stay with YNCA — instant report and the classic spelling scripts write", () => {
     expect(pickOwner("input", ["yxc", "ynca"])).toBe("ynca");
     expect(pickOwner("soundProgram", ["yxc", "ynca"])).toBe("ynca");
   });
 
-  test("an override falls back to modernity when none of its preferred transports are present", () => {
-    expect(pickOwner("volume", ["yxc"])).toBe("yxc");
+  test("without YNCA, an override's next entry decides", () => {
     expect(pickOwner("input", ["yxc", "xml"])).toBe("yxc");
+    expect(pickOwner("hdmi.out3", ["yxc"])).toBe("yxc");
   });
 
   // The 2.8.0 change was to remove EXACTLY ONE override. Without this guard a later edit could
@@ -125,16 +125,17 @@ describe("canonicalIdOf — the drift-resolved object id, zone prefix kept", () 
 
 describe("pickOwner fallbacks", () => {
   it("falls back to modernity when the override lists no present transport", () => {
-    // "sound.dialogueLift" prefers XML then YXC. On a device where only YNCA
+    // "sound.surroundDecoder" prefers YNCA then YXC. On a device where only XML
     // offers it, an override-only lookup would leave the datapoint ownerless and
     // the whole tree coordination would throw.
-    expect(pickOwner("sound.dialogueLift", ["ynca"])).toBe("ynca");
     expect(pickOwner("sound.surroundDecoder", ["xml"])).toBe("xml");
+    expect(pickOwner("hdmi.out3", ["xml"])).toBe("xml");
   });
 
   it("uses modernity for a key with no override at all", () => {
     expect(pickOwner("power", ["xml", "ynca", "yxc"])).toBe("yxc");
     expect(pickOwner("power", ["xml", "ynca"])).toBe("ynca");
+    expect(pickOwner("sound.dialogueLift", ["ynca"])).toBe("ynca");
   });
 });
 

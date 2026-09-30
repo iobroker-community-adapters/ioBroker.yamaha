@@ -398,8 +398,8 @@ describe("YncaDeviceController two-pass sweep", () => {
     client.capabilities = { model: "RX", subunits: { MAIN: { PWR: "On" }, TUN: { BAND: "FM" } } };
     await new YncaDeviceController("living", makeDeps(client).deps).start();
     // Request 0 is the identity read (model + firmware) that keys every cached layer
-    // and doubles as the fast path's liveness proof; then the probe, then the BASIC bundle
-    // of every present zone (2026-09-09), then the sweep.
+    // and doubles as the fast path's liveness proof; then the probe, then the bundle GETs
+    // of every present subunit (BASIC, SCENENAME, SIGINFO, RDSINFO, METAINFO), then the sweep.
     expect(client.requests).toHaveLength(4);
     expect(client.requests[0].map(get => get.func)).toEqual(["MODELNAME", "MODELNAME", "VERSION"]);
     expect(client.requests[1].every(get => get.func === "AVAIL")).toBe(true);
@@ -445,8 +445,8 @@ describe("YncaDeviceController two-pass sweep", () => {
     );
     const { deps } = makeDeps(client);
     await new YncaDeviceController("living", { ...deps, subunitCache: cache }).start();
-    // Three requests: the cheap identity check (model + firmware, ~0.2 s), the BASIC bundle
-    // of the cached zones, then the targeted sweep. No AVAIL probe, no cache rewrite. Checking
+    // Three requests: the cheap identity check (model + firmware, three reads, ~0.3 s), the bundle
+    // GETs of the cached subunits, then the targeted sweep. No AVAIL probe, no cache rewrite. Checking
     // identity FIRST is what keeps a stale cache from costing a wasted full sweep before the
     // mismatch shows.
     expect(client.requests).toHaveLength(3);
@@ -474,7 +474,7 @@ describe("YncaDeviceController two-pass sweep", () => {
     );
     const { deps } = makeDeps(client);
     await new YncaDeviceController("living", { ...deps, subunitCache: cache }).start();
-    // Identity (mismatch → cache cleared), probe, BASIC bundles, fresh targeted sweep.
+    // Identity (mismatch → cache cleared), probe, bundle GETs, fresh targeted sweep.
     expect(client.requests).toHaveLength(4);
     expect(client.requests[1].every(get => get.func === "AVAIL")).toBe(true);
     // clear() persisted undefined, then set() persisted the fresh snapshot.
@@ -537,7 +537,7 @@ describe("YncaDeviceController two-pass sweep", () => {
       isEntryEnabled: id => !id.startsWith("player."),
     }).start();
     // SPOTIFY answered AVAIL, but with the player group off none of its functions are fetched…
-    // (request 0 = identity, 1 = AVAIL probe, 2 = the BASIC bundles, 3 = the sweep)
+    // (request 0 = identity, 1 = AVAIL probe, 2 = the bundle GETs, 3 = the sweep)
     const sweptSubunits = new Set(client.requests[3].map(get => get.subunit));
     expect(sweptSubunits.has("SPOTIFY")).toBe(false);
     // …and no player object is created.
@@ -857,7 +857,7 @@ describe("YncaDeviceController fast restart (persisted capability layer)", () =>
     expect(firstSweep.some(get => get.func === "INPNAMEHDMI1")).toBe(true);
 
     // Second connect (same device, memory kept — a reconnect or, persisted, a restart):
-    // start() itself asks ONLY the identity (the liveness proof). The tree stands from
+    // start() itself asks only the identity (the liveness proof) and the few values it decides from. The tree stands from
     // the remembered shape; stale values are NOT seeded — the states hold them anyway.
     client.requests.length = 0;
     const { created, acked, deps: deps2 } = makeDeps(client);
@@ -2053,5 +2053,18 @@ describe("the pad of zones 2 and 3 (@ZONE2/@ZONE3:LISTCURSOR/LISTMENU — audit 
     const t = await zoneSetup({ ZONE2: "unclear", ZONE3: "unclear" }, fresh);
     expect(t.objects).not.toContain("living.multiroom.zone2.remote.cursor");
     expect(fresh.remembered("yncaZonePads")).toBeUndefined();
+  });
+
+  test("another device behind the address voids the remembered verdicts and probes again", async () => {
+    // The memory of an RX-V6A said zone 2 has no pad; the RX-A2020 now answering there has one.
+    const memory = new ProbeMemory({
+      __schema: DISCOVERY_SCHEMA,
+      yncaCapabilities: { model: "RX-V6A", firmware: "1.80", subunits: { SYS: { MODELNAME: "RX-V6A" } } },
+      yncaZonePads: { zone2: false, zone3: false },
+    });
+    const s = await zoneSetup({ ZONE2: "known", ZONE3: "undefined" }, memory);
+    expect(s.probed.filter(probe => probe.startsWith("ZONE"))).toEqual(["ZONE2:LISTCURSOR", "ZONE3:LISTCURSOR"]);
+    expect(s.objects).toContain("living.multiroom.zone2.remote.cursor");
+    expect(memory.remembered("yncaZonePads")).toEqual({ zone2: true, zone3: false });
   });
 });

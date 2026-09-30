@@ -3,7 +3,7 @@
  * of them in one call. The collections stood as loose fields, and deleting a device had to clear each
  * by hand: once nine of thirteen were missed, and the pending device-object patch recreated the
  * deleted device as a bare orphan (audit 2026-09-29, A28). A collection made here is forgotten
- * without anyone remembering to; `main.test.ts` keeps a loose one from being added.
+ * without anyone remembering to; `per-device.test.ts` keeps a loose one from being added to main.ts.
  */
 export class PerDeviceCaches {
   /** Collections keyed by the device id. */

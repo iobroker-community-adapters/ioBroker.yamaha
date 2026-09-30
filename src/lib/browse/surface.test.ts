@@ -64,7 +64,7 @@ describe("createBrowseSurface — the remote pad", () => {
     expect(created.get("living.remote.menu")?.common.states).toEqual({ menu: "menu" });
   });
 
-  it("creates no menu key where the protocol has none (XML)", async () => {
+  it("creates no menu key where the transport declares none (an XML receiver without Menu_Control)", async () => {
     const created = await build(driverStub({ cursorValues: ["up"] }));
     expect(created.has("living.remote.cursor")).toBe(true);
     expect(created.has("living.remote.menu")).toBe(false);

@@ -5,7 +5,7 @@ import type { ObjectDef } from "./types";
  * The words the adapter shows for a value — ONE table for all three transports, applied where every object is
  * written (`main.ts`, after the coordinator picked the owner). The transports keep declaring WHICH values a
  * datapoint takes (the keys of `common.states`, the device's own words or the spec's ids); what a value is
- * CALLED is said here, in the system language (fleet rule "Lesbare Werte", round 59: a label is more than its
+ * CALLED is said here, in the system language (fleet rule "readable values", round 59: a label is more than its
  * key, and a plain string in the reader's language — `{ Off: "Off" }` is the deprecated array form, and an
  * English-only label stays English for every user).
  *
@@ -107,7 +107,8 @@ export const STATE_LABELS: Readonly<Record<string, Readonly<Record<string, Label
     Limited: "labelInterlockLimited",
     Full: "labelInterlockFull",
   },
-  // The browse sources are the transport-neutral keys (`browse/types.ts`); the services keep their brand.
+  // The browse sources are the transport-neutral keys of the drivers' source tables (browse/sources.test.ts
+  // holds them together); the services keep their brand.
   "player.browse.source": { netRadio: "labelNetRadio", server: "labelMediaServer" },
   // YXC Basic §7.2 `play_error`, by code.
   "player.netPlayer.playError": {

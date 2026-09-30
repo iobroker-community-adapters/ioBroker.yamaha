@@ -1882,7 +1882,7 @@ describe("Yamaha auto-discovery", () => {
     await ctx.i.onReady();
     await flush();
     // Relative to the last search, so a little under the 20 s constant — and clear of every other
-    // delay the adapter schedules (250 ms native window, 1–5 s SSDP/balance, 30 s keepalive).
+    // delay the adapter schedules (4.5 s native coalescing window, 1–5 s SSDP/balance, 30 s keepalive).
     const quick = (): unknown[] =>
       ctx.i.setTimeout.mock.calls.filter(c => Number(c[1]) > 5000 && Number(c[1]) <= 20000);
     ctx.i.setTransports("RX-V685", ["ynca", "yxc", "xml"]);
@@ -2171,9 +2171,10 @@ describe("Yamaha migrations", () => {
     // Writing an instance object's native RESTARTS the adapter. Running the
     // migration unconditionally would restart the instance on every single start.
     expect(
-      (ctx.i as unknown as { setForeignObject: ReturnType<typeof vi.fn> }).setForeignObject,
-    ).not.toHaveBeenCalled();
-    expect(ctx.i.log.info).not.toHaveBeenCalledWith(expect.stringContaining("migrated group_zones"));
+      (
+        ctx.i as unknown as { extendForeignObjectAsync: ReturnType<typeof vi.fn> }
+      ).extendForeignObjectAsync.mock.calls.filter(call => call[0] === "system.adapter.yamaha.0"),
+    ).toEqual([]);
   });
 });
 
@@ -2842,12 +2843,12 @@ describe("Yamaha transport plumbing", () => {
     expect((ctx.i.objects.get("Living_room")?.common as { icon?: string }).icon).toBe(iconForModel(undefined));
   });
 
-  it("replaces the ip an upgraded instance carries as the device name with the model", async () => {
+  it("replaces the placeholder name (the device id) with the reported model", async () => {
     const ctx = setup();
     await ctx.i.onReady();
     await flush();
     const setStateAck = ctx.calls[0].deps.setStateAck as (id: string, value: unknown) => void;
-    // Fresh from the migration the node is called by its id — which is the receiver's ip.
+    // Fresh from the start the node is called by its id — the adapter's own placeholder.
     expect((ctx.i.objects.get("Living_room")?.common as { name?: string }).name).toBe("Living_room");
     setStateAck("Living_room.info.model", "RX-V481");
     await flushPatches(ctx);
@@ -3465,7 +3466,7 @@ describe("Yamaha never-filled purge (once per adapter version, after connect)", 
     (call?.[0] as (() => void) | undefined)?.();
   };
   /**
-   * Let every armed native coalescing window (250 ms) fire — the profile is written then, not at once.
+   * Let every armed native coalescing window (DEVICE_PATCH_WINDOW_MS, 4.5 s) fire — the profile is written then, not at once.
    *
    * @param ctx the test context
    */
@@ -3507,7 +3508,7 @@ describe("Yamaha never-filled purge (once per adapter version, after connect)", 
     ctx.i.objects.set("Living_room", { type: "device", common: {}, native: {} });
     // Orphan of an earlier version: readable, no value ever.
     ctx.i.objects.set("Living_room.sound.direct", { type: "state", common: { read: true }, native: {} });
-    // A filled state, a button and a user-linked state must survive.
+    // A filled state and a button must survive; a recording setting does not save a never-filled one.
     ctx.i.objects.set("Living_room.volume", { type: "state", common: { read: true }, native: {} });
     ctx.i.states.set("Living_room.volume", { val: -40, ack: true, lc: 5 } as never);
     ctx.i.objects.set("Living_room.player.play", { type: "state", common: { read: false, write: true }, native: {} });
@@ -4693,7 +4694,7 @@ describe("device ids since 3.0.0 — the one-time move", () => {
   });
 
   it("two journals naming one target: the second is counted on, never copied onto the first", async () => {
-    // Written before 3.0.2 by two devices of one model without a serial, decided in the same run (A24).
+    // Written before 3.1.0 by two devices of one model without a serial, decided in the same run (A24).
     mocks.discoveredStore.devices = [
       { id: "K_che", ip: "192.168.1.50" },
       { id: "Bad", ip: "192.168.1.51" },

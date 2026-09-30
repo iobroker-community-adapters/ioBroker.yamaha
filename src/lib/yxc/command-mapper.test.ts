@@ -426,7 +426,7 @@ describe("stateToYxc", () => {
     expect(stateToYxc("sound.contentsDisplay", true)).toBeUndefined();
   });
 
-  test("runs the writable amp fields through their YXC setter; read-only ones yield no command", async () => {
+  test("runs the writable amp fields through their YXC setter", async () => {
     expect(await ranCall("sound.direct", true)).toEqual(["setDirect", [true, "main"]]);
     expect(await ranCall("sound.balance", 3)).toEqual(["setBalance", [3, "main"]]);
     expect(await ranCall("sound.bassExtension", true)).toEqual(["setBassExtension", [true, "main"]]);
@@ -541,7 +541,7 @@ describe("stateToYxc button actions", () => {
   test("a button fires on any UNACKED write — the ack filter upstream is the guard", () => {
     // Documented as-is: the mapper does not look at the value. What keeps the
     // momentary reset from re-firing the action is the controller's ack filter
-    // (device-controller.handleStateChange returns early for ack:true), because
+    // (multi-transport-handle.handleStateChange returns early for ack:true), because
     // the reset is written with ack:true. Should that filter ever move, this
     // test says where the second guard would have to go.
     expect(stateToYxc("player.cd.tray", false)).toMatchObject({ kind: "run" });

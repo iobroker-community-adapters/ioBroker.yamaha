@@ -59,7 +59,7 @@ export const OWNER_OVERRIDES: Record<string, readonly Transport[]> = {
   // half-decibels (−12…+12 in 25 steps over the same range the YNCA spec calls −6…+6 dB in 25
   // steps of 0.5, measured across 19 device captures). Both scales are correct for their own
   // protocol, but only one of them is decibels — so the documented dB scale wins wherever it is
-  // present, exactly like `volume`. A MusicCast-only device keeps its own scale and its own
+  // present (unlike `volume`, which MusicCast owns by modernity since 2.8.0). A MusicCast-only device keeps its own scale and its own
   // declared bounds, without a unit claim.
   "sound.bass": ["ynca", "xml", "yxc"],
   "sound.treble": ["ynca", "xml", "yxc"],
@@ -112,7 +112,7 @@ export const OWNER_OVERRIDES: Record<string, readonly Transport[]> = {
 
 /**
  * A zoned state id's folder prefix, from the one zone table (`catalog/zones.ts`). The bare `zoneN.` form
- * of the pre-v0.18.1 tree cannot be produced any more and is NOT matched here; the upgrade cleanup
+ * of the pre-v0.19.0 tree cannot be produced any more and is NOT matched here; the upgrade cleanup
  * recognises it through `ANY_ZONE_PREFIX`.
  */
 export { ZONE_PREFIX } from "./zones";
@@ -128,7 +128,7 @@ export const ID_DRIFT: Partial<Record<Transport, Readonly<Record<string, string>
 };
 
 /**
- * The transport-neutral capability key for a transport's state id: strip a `zone2/3/4.` prefix
+ * The transport-neutral capability key for a transport's state id: strip a `multiroom.zone2/3/4.` prefix
  * to the per-zone template, then resolve any id drift to the canonical key. Two transports that
  * express the same capability under different ids therefore map to the same key.
  *

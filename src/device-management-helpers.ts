@@ -5,7 +5,7 @@ import { IPV4_RE } from "./lib/network-interfaces";
 import { rowDeviceId, type DeviceRow } from "./lib/pure-helpers";
 import type { DeviceSource } from "./lib/types";
 
-/** A running device as shown on a card, plus which source it came from (routes edit/delete). */
+/** A running device as shown on a card, plus which source it came from. */
 export interface CardDevice {
   /** The id-safe device id (object-tree path segment). */
   id: string;

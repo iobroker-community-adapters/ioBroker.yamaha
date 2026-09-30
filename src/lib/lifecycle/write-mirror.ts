@@ -11,9 +11,10 @@
  * the patch does not name, and copies `null`.
  *
  * States: the mirror holds the last value and ack of every state of the namespace — the adapter
- * subscribes to all of them, so a user's write reaches it as well. The first write of a state in a
- * process has nothing to compare with and asks the database (`setStateChangedAsync`); every later one
- * is decided here, and a read-only state is never read back while nothing changes.
+ * subscribes to all of them, so a user's write reaches it as well. It is seeded from one bulk read of
+ * the namespace at start. A read-only state is decided here and never read back while nothing
+ * changes; a writable state, and one the mirror does not know yet, is compared by the database
+ * (`setStateChangedAsync`).
  */
 
 /**

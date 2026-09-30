@@ -90,9 +90,9 @@ export async function readIgnored(deps: DiscoveredStoreDeps): Promise<string[]> 
 }
 
 /**
- * Persist the ignored device ids. A write failure is logged and swallowed for the same reason
- * as the discovered store's: it costs the exclusion until the next successful run, it must not
- * break startup or the delete action.
+ * Persist the ignored device ids. A write failure is logged and swallowed: it only leaves a
+ * re-admitted id on the list until the next successful write, and must not break the add or
+ * re-admit action.
  *
  * @param deps file access and logger
  * @param ids the device ids to keep out of auto-discovery
@@ -176,7 +176,7 @@ export async function writeExcluded(deps: DiscoveredStoreDeps, entries: readonly
  * @param ignoredIds the plain id list (`ignored.json`)
  * @param excluded the exclusion entries (`excluded.json`)
  * @param candidate the found device
- * @param candidate.id its object-tree id (derived from the name it advertises)
+ * @param candidate.id its object-tree id (the stored one: model and serial under the 3.0.0 rule)
  * @param candidate.ip the address it answered at
  * @param candidate.identity its serial/MAC when the description carried one
  * @returns whether the candidate stays out

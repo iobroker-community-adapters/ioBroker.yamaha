@@ -88,7 +88,7 @@ describe("BrowseEngine", () => {
     engine.seed();
     const byId = Object.fromEntries(emitted.map(e => [e.id, e.value]));
     expect(byId["player.browse.busy"]).toBe(false);
-    // No source, not "" — a value outside the source list (audit 2026-09-24, D15; lesbare Werte 2026-09-30).
+    // No source, not "" — a value outside the source list (audit 2026-09-24, D15; readable values 2026-09-30).
     expect(byId["player.browse.source"]).toBeNull();
     expect(byId["player.browse.path"]).toBe("");
     expect(byId["player.browse.menuName"]).toBe("");
@@ -256,7 +256,7 @@ describe("BrowseEngine", () => {
     expect(waited).toEqual([250]);
   });
 
-  it("pages forward while searching a segment and stops at the menu's tail", async () => {
+  it("pages forward while searching a segment until the row appears", async () => {
     const { engine, driver } = setup();
     driver.onOp.home = window({
       layer: 1,

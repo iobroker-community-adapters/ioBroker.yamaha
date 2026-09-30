@@ -158,7 +158,7 @@ export const PHYSICAL_INPUTS: readonly string[] = [
  * `Feature_Existence` flag(s) that prove it absent. `subunits: []` = not judgeable over YNCA
  * (the 2015+ streaming services have no YNCA subunit); `xmlFlags: []` = not judgeable over XML.
  * The tuner input has three subunits: the AM/FM `TUN`, the `DAB` of the European DAB+ models and
- * the `HDRADIO` of the US models (7 of the 21 official lists, 4 of them WITHOUT `TUN`).
+ * the `HDRADIO` of the US models (7 of the 21 official lists, 6 of them WITHOUT `TUN`).
  * A source is absent when its subunits were ALL probed and none answered, or when ALL its XML
  * flags are 0 — the tuner input covers three flags, and `Tuner=0` next to `DAB=1` keeps TUNER
  * (RX-V6A, measured). Wire values and subunit names follow ynca-python's `Input` enum.
@@ -358,9 +358,9 @@ export function sysFamilyMemberOf(func: string): { head: string; prefix: string 
 
 /**
  * The sound programs of the classic (YNCA) generation — the union of the 21 official command
- * lists 2010–2015 (26 names; the entry class carries 19 of them, the Aventage class all 26) plus
+ * lists 2010–2015 (26 names; the entry class carries 19 of them, each Aventage list 25) plus
  * `5ch Stereo`, which the entry class declares in its `desc.xml`. A device's own additions
- * (`Enhanced`, `All-Ch Stereo`, `9ch Stereo` and the 2015+ MusicCast generation's names) reach
+ * (`Enhanced`, `All-Ch Stereo` and the 2015+ MusicCast generation's names) reach
  * the dropdown as OBSERVED values — every program the device ever reported is offered — or as
  * the declared `sound_program_list` through the MusicCast dictionary. The fifteen names the
  * list used to carry beyond these (`Disco`, `Pavilion`, `Hall in USA A`, …) were never on any
@@ -404,7 +404,7 @@ const TVAUDIN_STATES = selfMap(["AV1", "AV2", "AV3", "AV4", "AV5", "AV6", "AUDIO
 const TVAUDIN_MAIN_STATES = selfMap(["AV1", "AV2", "AV3", "AV4", "AV5", "AV6", "AUDIO1", "AUDIO2", "AUDIO3", "AUDIO4"]);
 // The HDMI video resolutions, per generation and measured from the 21 official lists: the
 // 2010/2011 class (12 lists, `@MAIN:HDMIRESOL`) declares six values, the 2012-and-later class
-// (8 lists, `@SYS:HDMIRESOL`) the same six plus 4K. One shared list would offer 4K on receivers
+// (9 lists, `@SYS:HDMIRESOL`) the same six plus 4K. One shared list would offer 4K on receivers
 // that predate it — the device would refuse the write, and the dropdown would lie.
 const HDMIRESOL_CLASSIC_STATES = selfMap(["Auto", "480p / 576p", "720p", "1080i", "1080p", "Through"]);
 const HDMIRESOL_STATES = selfMap(["Auto", "480p / 576p", "720p", "1080i", "1080p", "4K", "Through"]);
@@ -874,8 +874,9 @@ const ZONEB_AVAIL_STATES = selfMap(["Not Connected", "Not Ready", "Ready"]);
 
 /**
  * MAIN-only amplifier functions: the Zone-B sub-zone (a second output area only
- * the main subunit exposes), the A/B speaker toggles, and the 12 scene names.
- * Kept out of AMP_FUNCS so they are not created for ZONE2-4.
+ * the main subunit exposes), the A/B speaker toggles, and the setup surface of the
+ * 2010 generation (subwoofer trim, YPAO, HDMI and lip-sync settings, decoders, TV
+ * audio input, audio select). Kept out of AMP_FUNCS so they are not created for ZONE2-4.
  */
 const MAIN_ONLY_FUNCS: FuncDef[] = [
   // --- Setup surface of the 2010 generation (audit 2026-09-06): answered by real receivers in
@@ -1301,8 +1302,8 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
   // same state means the same thing on every generation. Both wire functions read
   // into it (AM answers whole kHz, FM answers MHz with two decimals → ×1000). The
   // WRITE is band-dependent (AMFREQ vs FMFREQ vs the DAB subunit's FMFREQ) and is
-  // routed by the controller BEFORE the generic write path — handleStateChange
-  // intercepts tuner.frequency, so these entries' write flag only shapes the object.
+  // routed by the controller BEFORE the generic write path — `handleTunerWrite` (from
+  // `handleWrite`) intercepts tuner.frequency, so these entries' write flag only shapes the object.
   {
     subunit: "TUN",
     func: "AMFREQ",
@@ -1514,8 +1515,6 @@ const SYS_FUNCS: FuncDef[] = [
     write: true,
     role: "state",
   },
-  // Amp-assign for speaker pattern 1 (official RX-V671 list: PUT+GET with the three
-  // documented values; the RX-V6A answers "Basic").
   // --- Setup surface of the 2010 generation and later (audit 2026-09-06). Measured against the
   // 15 bundled device protocols: these functions are ANSWERED by real receivers and had no
   // datapoint at all. Values come from the official command list
@@ -2091,9 +2090,9 @@ function speakerPatternEntries(pattern: 1 | 2): YncaEntry[] {
 }
 
 /**
- * DAB tuner functions (the `@DAB` subunit on DAB+-capable receivers). Mapped under
- * a `dab` channel of their own so DAB/FM labels never collide with the AM/FM `@TUN`
- * tuner's `tuner.*` states. The subunit also carries an FM frequency (FMFREQ).
+ * DAB tuner functions (the `@DAB` subunit on DAB+-capable receivers), mapped under
+ * `tuner.`: the FM half and the shared tuner values land on the same flat `tuner.*`
+ * ids as the `@TUN` tuner; only DAB-specific detail lives under `tuner.dab`.
  */
 const DAB_FUNCS: FuncDef[] = [
   // v2.0.0 tuner unification: the DAB subunit's FM half IS the same tuner every
@@ -2308,7 +2307,7 @@ const DAB_FUNCS: FuncDef[] = [
 ];
 
 /**
- * The HD Radio tuner of the US models (`@HDRADIO`, 7 of the 21 official lists 2010–2012, four of
+ * The HD Radio tuner of the US models (`@HDRADIO`, 7 of the 21 official lists 2010–2012, six of
  * them without `TUN` — those receivers had NO tuner in the adapter before 2026-09-09). Like DAB,
  * its AM/FM half lands on the flat `tuner.*` ids (band, frequency, presets, search mode, tuned,
  * stereo); what is HD Radio's own lives under `tuner.hdRadio`. Values from the lists.
@@ -3032,8 +3031,8 @@ export function buildYncaCatalog(): YncaEntry[] {
     const upper = key.toUpperCase();
     entries.push({
       id: `advanced.inputNames.${key}`,
-      // Each of the 23 carries the input it names — they all read "Input names" before,
-      // the folder's own label, so the object tree showed the folder and 23 children with
+      // Each of the 29 carries the input it names — they all read "Input names" before,
+      // the folder's own label, so the object tree showed the folder and its children with
       // one and the same text and only the id told them apart.
       nameKey: "inputName",
       descKey: "descInputName",
@@ -3084,11 +3083,10 @@ export function buildYncaCatalog(): YncaEntry[] {
         derived: fn.derived,
       });
     }
-    // Favourite recall (#613): PRESET is writable on the sources whose spec subunit
-    // carries the preset mixin (ynca-python; NETRADIO/USB/PC/…, not Spotify & co).
-    // Write-only — these sources do not answer a PRESET read (spec: only TUN/SIRIUS
-    // do) — and gated on PLAYBACKINFO like the transport buttons, so the datapoint
-    // appears exactly where the source exists.
+    // Favourite recall (#613): PRESET on every source the table marks `preset` (ynca-python's
+    // preset mixin plus the 2010–2011 and RX-A850 lists). Write-only, and gated on the source's
+    // proof function (PLAYBACKINFO unless the table names another), so the datapoint appears
+    // exactly where the source exists.
     if (source.preset) {
       entries.push({
         id: `player.${source.channel}.preset`,
@@ -3518,9 +3516,9 @@ function forThisDevice(entry: YncaEntry, capabilities: YncaCapabilities): YncaEn
  * Give entries that share one state id the SAME dropdown, built from the union of their
  * options.
  *
- * `tuner.band` is fed by two subunits: TUN offers {AM, FM}, DAB offers {DAB, FM}. Every one of
- * the sixteen reference device logs answers on one subunit or the other, so today the two never
- * meet — but if a device ever answered both, the object tree would keep whichever definition was
+ * `tuner.band` is fed by up to three subunits: TUN and HDRADIO offer {AM, FM}, DAB offers {DAB, FM}.
+ * Every one of the sixteen reference device logs answers on one AM/FM subunit or DAB, so today they
+ * never meet — but if a device ever answered both, the object tree would keep whichever definition was
  * written last and AM would silently vanish from a receiver that has it. Unioning the options
  * costs nothing on a single-subunit device (the union of one list is that list) and keeps the
  * dropdown honest on a dual one; which subunit a band write actually goes to is decided by the
