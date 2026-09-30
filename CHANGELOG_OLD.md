@@ -1,4 +1,5 @@
 # Older changes
+
 ## 2.11.0 (2026-09-17) — stable
 
 - (krobipd) Fixed: The adapter no longer stops when the object database is briefly unavailable while a receiver reports a change
