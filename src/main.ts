@@ -1342,7 +1342,7 @@ export class Yamaha extends utils.Adapter {
    */
   private writeStateNow(id: string, value: ioBroker.StateValue): Promise<void> {
     // A read-only state only the adapter writes: compared in memory. A writable one keeps the database
-    // compare — it is what corrects a lost user command (CLAUDE_PATTERNS, "Anzeigen nur bei Änderung").
+    // compare — it is what corrects a lost user command (fleet pattern: displays are written only on a change).
     const readOnly = this.objectMirror.isReadOnlyState(id);
     const verdict = readOnly ? this.stateMirror.judge(id, value, true) : "unknown";
     if (verdict === "unchanged") {
@@ -1889,8 +1889,8 @@ export class Yamaha extends utils.Adapter {
     // then neither a reader nor the consistency gate can see which manifest objects are
     // actually refreshed — and "the call exists" is not the same question as "the call runs
     // for THIS object". This is the one place where that distinction cost a release (2.1.1).
-    // Each refresh only when the stored object does not carry it yet (CLAUDE_PATTERNS, "Objekte nur bei
-    // Unterschied schreiben"; audit 2026-09-29, E2) — js-controller already wrote every manifest object once
+    // Each refresh only when the stored object does not carry it yet (fleet pattern: objects are written
+    // only where they differ; audit 2026-09-29, E2) — js-controller already wrote every manifest object once
     // before onReady.
     const refresh = async (id: string, patch: ioBroker.PartialObject, write: () => Promise<unknown>): Promise<void> => {
       const fields = patch as Record<string, unknown>;

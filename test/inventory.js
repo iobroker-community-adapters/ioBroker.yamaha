@@ -188,6 +188,14 @@ const REMOVED_IN_2_8_0 = ["actualVolume", "actualVolumeMode", "inputText"];
 const VOLUME_ID = /^(?:multiroom\.(?:zone[234]|zoneB)\.)?volume$/;
 /** The instance settings every start of the manifest carries, next to what a suite configures. */
 const MANIFEST_NATIVE = require(path.join(ADAPTER_DIR, "io-package.json")).native ?? {};
+/** The config the fixtures need: the manifest's settings; the device table is added per run (fixtureNative). */
+const FIXTURE_NATIVE = { ...MANIFEST_NATIVE };
+/**
+ * Round 66: every datapoint of the previous release this release moves under a new id — previous full id → current
+ * full id. The recording is the user's and goes on with the moved datapoint (krobi 2026-09-02); the upgrade suite
+ * checks that it arrived there. This release moves no datapoint.
+ */
+const MOVES = {};
 /** The room a user put every previous device and one of its datapoints into (upgrade suite). */
 const SEEDED_ROOM = "enum.rooms.inventory_upgrade";
 
@@ -202,29 +210,44 @@ const RUN_STATE_NATIVE = ["capabilityProfile", "probeCache", "yncaAvail", "purge
 let fixtures;
 
 /**
- * Bring up the fake devices and point the adapter at them. The throwaway js-controller keeps its instance
- * object between suites, and changeAdapterConfig only EXTENDS native — a key an older version wrote (or an
- * earlier suite set) would survive and trigger the start-up settings migration, and with it a host restart,
- * in every suite. Every key that is neither the manifest's nor this suite's is nulled (null is the
- * post-migration state of a dropped key).
+ * Bring up the fake devices and route the adapter to them.
  *
- * @param {import("@iobroker/testing").IntegrationTestHarness} harness the harness
- * @param {Record<string, unknown>} [extraNative] instance settings on top of the manifest defaults
+ * @param {Record<string, unknown>} [extraNative] instance settings on top of the fixture config
  * @param {boolean} [legacyRows] configure the device table as 2.x held it (address only, the id
  *   derived from it) instead of as 3.0.0 writes it (the id stored)
+ * @returns {Promise<Record<string, unknown>>} the instance's native for this start (for resetInstanceNative)
  */
-async function startFixtures(harness, extraNative = {}, legacyRows = false) {
+async function fixtureNative(extraNative = {}, legacyRows = false) {
   fixtures = await startFixtureDevices();
   process.env.YAMAHA_FIXTURE_ROUTES = JSON.stringify(fixtures.routes);
-  const native = { devices: legacyRows ? fixtures.legacyDevices : fixtures.devices, ...extraNative };
-  const instance = await harness.objects.getObjectAsync(`system.adapter.${ADAPTER}.0`);
+  return { ...FIXTURE_NATIVE, devices: legacyRows ? fixtures.legacyDevices : fixtures.devices, ...extraNative };
+}
+
+/**
+ * The throwaway js-controller keeps its instance object between runs, and changeAdapterConfig only
+ * EXTENDS native — a key that an older version of this adapter wrote would survive and trigger the
+ * start-up key migration and with it a host restart (played since round 64) in every suite. Null every key the
+ * fixture does not know, then apply the fixture (null is the post-migration state of a renamed key).
+ * changeAdapterConfig encrypts the `encryptedNative` keys, but merges with alcalzone-shared `extend` (round 66):
+ * a list goes element-wise into the one already there (the old tail stays, an empty list resets nothing), and
+ * under a new key it becomes an object with numeric keys. Every key but an encrypted one goes in again as a whole.
+ *
+ * @param {import("@iobroker/testing").IntegrationTestHarness} harness
+ * @param {Record<string, unknown>} native the instance's native for this start (FIXTURE_NATIVE, or one computed per run)
+ */
+async function resetInstanceNative(harness, native = FIXTURE_NATIVE) {
+  const id = `system.adapter.${ADAPTER}.0`;
+  const instance = await harness.objects.getObjectAsync(id);
   const stale = {};
   for (const key of Object.keys(instance?.native ?? {})) {
-    if (!Object.hasOwn(native, key) && !Object.hasOwn(MANIFEST_NATIVE, key)) {
-      stale[key] = null;
-    }
+    if (!Object.hasOwn(native, key)) stale[key] = null;
   }
-  await harness.changeAdapterConfig(ADAPTER, { native: { ...MANIFEST_NATIVE, ...stale, ...native } });
+  await harness.changeAdapterConfig(ADAPTER, { native: { ...stale, ...native } });
+  const written = await harness.objects.getObjectAsync(id);
+  for (const [key, value] of Object.entries(native)) {
+    if (!written.encryptedNative?.includes(key)) written.native[key] = value;
+  }
+  await harness.objects.setObjectAsync(id, written);
 }
 
 /**
@@ -351,9 +374,11 @@ async function dumpStates(harness) {
  * js-controller 7.2.2 restarts an instance on EVERY change of its instance object while it runs (controller main.ts,
  * objects `change` handler: `stopInstance`, then `startInstance` after `stopTimeout` + 2.5 s) — whoever wrote it, the
  * adapter's own settings migration or device table included. The harness has no host; this plays it (round 64): the
- * first change while the adapter runs stops it and starts it once more with the same hooks, so what the adapter did
- * after that write in the same start is cut off here as it is on a real host. A change after that restart is a finding:
- * on a host the instance would restart again, for good.
+ * adapter's first own write while it runs stops it and starts it once more with the same hooks, so what the adapter did
+ * after that write in the same start is cut off here as it is on a real host. An own write after that restart is a
+ * finding: on a host the instance would restart again, for good. Only the adapter's own writes count (round 66): the
+ * suite's resetInstanceNative writes before the start, but on a slow runner its event arrived after the start and
+ * stopped a start midway. Each step has a deadline (withinDeadline).
  *
  * @param {import("@iobroker/testing").IntegrationTestHarness} harness
  * @param {object | null} watch the suite's write watcher (watchObjectWrites), null in a suite without one
@@ -361,8 +386,12 @@ async function dumpStates(harness) {
  */
 function playControllerRestarts(harness, watch, ...hooks) {
   const restarts = { count: 0, again: [], done: Promise.resolve() };
-  harness.on("objectChange", id => {
-    if (id !== `system.adapter.${ADAPTER}.0` || !harness.isAdapterRunning()) {
+  harness.on("objectChange", (id, obj) => {
+    if (
+      id !== `system.adapter.${ADAPTER}.0` ||
+      obj?.from !== `system.adapter.${ADAPTER}.0` ||
+      !harness.isAdapterRunning()
+    ) {
       return;
     }
     if (restarts.count > 0) {
@@ -371,7 +400,11 @@ function playControllerRestarts(harness, watch, ...hooks) {
     }
     restarts.count++;
     restarts.done = (async () => {
-      await harness.stopAdapter();
+      await withinDeadline(
+        harness.stopAdapter(),
+        STOP_DEADLINE_MS,
+        "the adapter did not stop after it changed its instance object",
+      );
       watch?.newStart();
       // What the host does when the process exits: `alive` false (a start that still sees it true ends with
       // ADAPTER_ALREADY_RUNNING, exit code 7), then the start after stopTimeout + 2.5 s.
@@ -388,14 +421,46 @@ function playControllerRestarts(harness, watch, ...hooks) {
         !harness.didAdapterStop(),
         "@iobroker/testing changed its exit marker — the restart play needs a new form",
       );
-      await harness.startAdapterAndWait(false, adapterEnv(...hooks));
+      await withinDeadline(
+        harness.startAdapterAndWait(false, adapterEnv(...hooks)),
+        START_DEADLINE_MS,
+        "the adapter did not come back after the restart",
+      );
     })();
+    // Awaited by the suite later — a wait before that fails first on an adapter that hangs in its stop, so a missed
+    // deadline is logged the moment it happens (and never counts as an unhandled rejection).
+    restarts.done.catch(err => console.error(`restart play failed: ${err.message}`));
   });
   return restarts;
 }
 
+/**
+ * Round 66: the promise's value, or an error naming what hung once the deadline has passed.
+ *
+ * @param {Promise<unknown> | undefined} promise the harness call
+ * @param {number} ms the deadline
+ * @param {string} what what did not happen, in the failure message
+ */
+async function withinDeadline(promise, ms, what) {
+  let timer;
+  const expired = new Promise((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} (deadline ${ms} ms)`)), ms);
+  });
+  try {
+    return await Promise.race([promise, expired]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Round 64: the host's wait before it starts a stopped instance again (controller main.ts, `stopTimeout || 500` + 2.5 s). */
 const RESTART_DELAY_MS = (require(path.join(ADAPTER_DIR, "io-package.json")).common.stopTimeout || 500) + 2500;
+/**
+ * Round 66: the restart's deadlines — stopTimeout, the 500 ms the adapter gives pending writes, and the exit; then a start
+ * as the harness waits for it (`alive` true). Both together stay far below the suites' before() timeout.
+ */
+const STOP_DEADLINE_MS = RESTART_DELAY_MS + 2500;
+const START_DEADLINE_MS = 30000;
 /** Round 64: the recording marker every seeded state carries in `common.custom`, naming the id it was seeded under. */
 const RECORDING = "inventory-recording.0";
 
@@ -525,8 +590,8 @@ tests.integration(ADAPTER_DIR, {
         this.timeout(600000);
         harness = getHarness();
         watch = await watchObjectWrites(harness);
+        await resetInstanceNative(harness, await fixtureNative());
         await setSystemLanguage(harness, FIRST_LANGUAGE);
-        await startFixtures(harness);
         restarts = playControllerRestarts(harness, watch, HOOK);
         await harness.startAdapterAndWait(false, adapterEnv(HOOK));
         await waitForAdapterWork(harness);
@@ -795,8 +860,8 @@ tests.integration(ADAPTER_DIR, {
       before(async function () {
         this.timeout(600000);
         harness = getHarness();
+        await resetInstanceNative(harness, await fixtureNative());
         await setSystemLanguage(harness, SECOND_LANGUAGE);
-        await startFixtures(harness);
         restarts = playControllerRestarts(harness, null, HOOK);
         await harness.startAdapterAndWait(false, adapterEnv(HOOK));
         await waitForAdapterWork(harness);
@@ -836,8 +901,8 @@ tests.integration(ADAPTER_DIR, {
       before(async function () {
         this.timeout(600000);
         harness = getHarness();
+        await resetInstanceNative(harness, await fixtureNative({ volumeAsPercent: true }));
         await setSystemLanguage(harness, FIRST_LANGUAGE);
-        await startFixtures(harness, { volumeAsPercent: true });
         restarts = playControllerRestarts(harness, null, HOOK);
         await harness.startAdapterAndWait(false, adapterEnv(HOOK));
         await waitForAdapterWork(harness);
@@ -936,7 +1001,7 @@ tests.integration(ADAPTER_DIR, {
           // and move at the next start — the second one below, as the host gives it after an update
           // or a reboot. From 3.0.0 on the table carries the final id next to the address; a 3.x tree
           // started with 2.x rows is a state no installation reaches.
-          await startFixtures(harness, {}, devicesNotFinal(previous).length > 0);
+          await resetInstanceNative(harness, await fixtureNative({}, devicesNotFinal(previous).length > 0));
           // The inventory was written in FIRST_LANGUAGE: labels an adapter localises itself (`states`)
           // only compare in the same language.
           await setSystemLanguage(harness, FIRST_LANGUAGE);
@@ -1120,6 +1185,12 @@ tests.integration(ADAPTER_DIR, {
           for (const [id, obj] of Object.entries(previous)) {
             if (obj.type === "state" && live[id]?.type === "state" && !carriers.get(id)?.includes(id)) {
               wrong.push(`${id}: its recording is gone although the datapoint lives on`);
+            }
+          }
+          // A state the release moves under a new id (MOVES) takes its recording along (krobi 2026-09-02).
+          for (const [from, to] of Object.entries(MOVES)) {
+            if (previous[from]?.type === "state" && !carriers.get(from)?.includes(to)) {
+              wrong.push(`${from} → ${to}: its recording did not move with the datapoint`);
             }
           }
           assert.deepStrictEqual(wrong, [], `recordings that left their datapoint:\n${wrong.join("\n")}`);
