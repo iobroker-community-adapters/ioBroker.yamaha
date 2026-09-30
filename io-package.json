@@ -1,9 +1,22 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "3.1.0",
+    "version": "3.1.1",
     "nogit": true,
     "news": {
+      "3.1.1": {
+        "en": "A receiver that replaces another at the same address is asked again whether zones 2 and 3 have an on-screen remote, instead of inheriting the old answer.",
+        "de": "Ein Receiver, der einen anderen unter derselben Adresse ersetzt, wird neu gefragt, ob Zone 2 und 3 eine Bildschirm-Fernbedienung haben, statt die alte Antwort zu erben.",
+        "ru": "Ресивер, заменивший другой по тому же адресу, снова опрашивается, есть ли у зон 2 и 3 экранный пульт, а не наследует старый ответ.",
+        "pt": "Um recetor que substitui outro no mesmo endereço volta a ser questionado se as zonas 2 e 3 têm comando no ecrã, em vez de herdar a resposta antiga.",
+        "nl": "Een receiver die een andere op hetzelfde adres vervangt, wordt opnieuw gevraagd of zone 2 en 3 een schermafstandsbediening hebben, in plaats van het oude antwoord te erven.",
+        "fr": "Un récepteur qui en remplace un autre à la même adresse est à nouveau interrogé sur la télécommande à l'écran des zones 2 et 3, au lieu d'hériter de l'ancienne réponse.",
+        "it": "Un ricevitore che ne sostituisce un altro allo stesso indirizzo viene interrogato di nuovo sul telecomando a schermo delle zone 2 e 3, invece di ereditare la vecchia risposta.",
+        "es": "Un receptor que sustituye a otro en la misma dirección vuelve a ser consultado sobre el mando en pantalla de las zonas 2 y 3, en lugar de heredar la respuesta anterior.",
+        "pl": "Amplituner, który zastępuje inny pod tym samym adresem, jest ponownie pytany, czy strefy 2 i 3 mają pilota ekranowego, zamiast dziedziczyć starą odpowiedź.",
+        "uk": "Ресивер, що замінив інший за тією ж адресою, знову опитується, чи мають зони 2 і 3 екранний пульт, а не успадковує стару відповідь.",
+        "zh-cn": "在同一地址替换另一台设备的接收器会重新询问区域 2 和 3 是否有屏幕遥控，而不是沿用旧的答复。"
+      },
       "3.1.0": {
         "en": "Receivers from before 2010 show what is playing; every list entry is its own datapoint; dropdowns show names in your ioBroker language; player.playback uses the ioBroker codes.",
         "de": "Receiver vor 2010 zeigen, was läuft; jeder Listeneintrag ist ein eigener Datenpunkt; Auswahllisten zeigen Namen in deiner ioBroker-Sprache; player.playback nutzt die ioBroker-Codes.",
@@ -81,19 +94,6 @@
         "pl": "Krótka awaria bazy danych nie zatrzymuje już adaptera, a wyłączony amplituner zachowuje swoją nazwę po ponownym uruchomieniu.",
         "uk": "Короткий збій бази даних більше не зупиняє адаптер, а вимкнений ресивер зберігає свою назву після перезапуску.",
         "zh-cn": "数据库短暂故障不再停止适配器，已关闭的接收机在重启后保留其名称。"
-      },
-      "2.10.0": {
-        "en": "A receiver that is unplugged or stops answering now shows as disconnected within seconds instead of many minutes, and a written value is confirmed as soon as the receiver took it.",
-        "de": "Ein ausgesteckter oder verstummter Receiver gilt jetzt nach Sekunden statt nach vielen Minuten als getrennt, und ein geschriebener Wert wird bestätigt, sobald der Receiver ihn übernommen hat.",
-        "ru": "Отключённый или переставший отвечать ресивер теперь считается отсоединённым через секунды, а не минуты, а записанное значение подтверждается, как только ресивер его принял.",
-        "pt": "Um recetor desligado ou que deixa de responder passa a constar como desligado em segundos em vez de muitos minutos, e um valor escrito é confirmado logo que o recetor o aceita.",
-        "nl": "Een uitgeschakelde of zwijgende receiver geldt nu binnen seconden in plaats van vele minuten als verbroken, en een geschreven waarde wordt bevestigd zodra de receiver die overnam.",
-        "fr": "Un ampli débranché ou muet est signalé déconnecté en quelques secondes au lieu de longues minutes, et une valeur écrite est confirmée dès que l'ampli l'a prise en compte.",
-        "it": "Un ricevitore scollegato o che tace risulta disconnesso in pochi secondi invece che dopo molti minuti, e un valore scritto viene confermato non appena il ricevitore lo accetta.",
-        "es": "Un receptor desenchufado o que deja de responder aparece como desconectado en segundos en lugar de muchos minutos, y un valor escrito se confirma en cuanto el receptor lo acepta.",
-        "pl": "Odłączony lub milczący amplituner jest teraz uznawany za rozłączony po sekundach zamiast po wielu minutach, a zapisana wartość jest potwierdzana, gdy tylko ją przyjmie.",
-        "uk": "Вимкнений або замовклий ресивер тепер вважається відключеним за секунди, а не за багато хвилин, а записане значення підтверджується, щойно ресивер його прийняв.",
-        "zh-cn": "拔掉电源或不再响应的接收机，现在几秒内就会显示为断开，而不再是许多分钟；写入的值在接收机接受后立即得到确认。"
       }
     },
     "titleLang": {
