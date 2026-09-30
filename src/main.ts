@@ -2618,9 +2618,10 @@ export class Yamaha extends utils.Adapter {
           // A SHRINKING dropdown needs a clearing write first: extendObject merges `common.states`
           // key by key, so the old entries would survive every update (#619 — the reporter would
           // have seen no change at all). Only when the stored map carries a key the new one lacks;
-          // an unchanged or growing map is one write, as before.
-          if (def.type === "state" && def.common.states) {
-            await this.clearStaleStates(id, def.common.states);
+          // an unchanged or growing map is one write, as before. A datapoint that has no list any
+          // more is the same case with an empty map — its stored list is cleared, not kept.
+          if (def.type === "state") {
+            await this.clearStaleStates(id, def.common.states ?? {});
           }
           await this.writePresented(id, def);
           if (def.type === "state") {

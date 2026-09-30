@@ -96,6 +96,63 @@ describe("dropdown borrowing (v2.0.0 — labels from a non-owning transport)", (
     });
   });
 
+  test("a claimant of another value type lends no map: MusicCast's sleep minutes stay off the XML text timer", () => {
+    const { objects, ownerByCanonicalId } = coordinateObjectTree([
+      {
+        transport: "yxc",
+        objects: [
+          {
+            id: "sleep",
+            type: "state",
+            common: {
+              name: "Sleep",
+              type: "number",
+              role: "level.timer.sleep",
+              unit: "min",
+              read: true,
+              write: true,
+              states: { 0: "Off", 30: "30 min", 60: "60 min", 90: "90 min", 120: "120 min" },
+            },
+          },
+        ],
+      },
+      {
+        transport: "xml",
+        objects: [
+          {
+            id: "sleep",
+            type: "state",
+            common: { name: "Sleep", type: "string", role: "state", read: true, write: true },
+          },
+        ],
+      },
+    ]);
+    expect(ownerByCanonicalId.get("sleep")).toBe("xml");
+    expect(objects.find(o => o.id === "sleep")?.common.states).toBeUndefined();
+  });
+
+  test("a MusicCast text list reaches a classic owner without one only through the dictionary", () => {
+    const text = (id: string, states?: Record<string, string>): ObjectDef => ({
+      id,
+      type: "state",
+      common: { name: id, type: "string", role: "state", read: true, write: true, ...(states ? { states } : {}) },
+    });
+    const { objects } = coordinateObjectTree([
+      { transport: "ynca", objects: [text("input"), text("tuner.band")] },
+      {
+        transport: "yxc",
+        objects: [
+          text("input", { hdmi1: "hdmi1", net_radio: "net_radio" }),
+          text("tuner.band", { am: "am", fm: "fm" }),
+        ],
+      },
+    ]);
+    // The input dictionary is evidenced: the classic spellings the YNCA owner sends.
+    expect(objects.find(o => o.id === "input")?.common.states).toEqual({ HDMI1: "HDMI1", "NET RADIO": "NET RADIO" });
+    // No dictionary for the band: MusicCast's `am` is not a YNCA value, so no list at all.
+    expect(objects.find(o => o.id === "tuner.band")?.common.states).toBeUndefined();
+  });
+
   test("an owner with its own states map keeps it", () => {
     const { objects } = coordinateObjectTree([
       {

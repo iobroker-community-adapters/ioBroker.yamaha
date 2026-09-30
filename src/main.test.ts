@@ -2416,6 +2416,22 @@ describe("Yamaha datapoint balance in the log", () => {
     expect(states).toEqual({ HDMI1: "HDMI1" });
   });
 
+  it("a datapoint that has no list any more loses the stored one", async () => {
+    const ctx = setup();
+    // Written by an earlier run with a list borrowed from another transport (live RX-V6A 2026-09-30).
+    ctx.i.objects.set("Living_room.sleep", {
+      type: "state",
+      common: { name: "s", type: "string", states: { 0: "Off", 30: "30 min" } },
+      native: {},
+    });
+    await ctx.i.onReady();
+    await flush();
+    await upsertOf(ctx)("Living_room.sleep", { type: "state", common: { name: "s", type: "string" } });
+    expect((ctx.i.objects.get("Living_room.sleep")?.common as { states?: unknown }).states ?? undefined).toBe(
+      undefined,
+    );
+  });
+
   it("an unchanged or growing dropdown is written once, without the clearing write", async () => {
     const ctx = setup();
     ctx.i.objects.set("Living_room.input", {

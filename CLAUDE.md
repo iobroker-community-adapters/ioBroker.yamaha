@@ -72,7 +72,9 @@ fängt ihre `upsertObject`/`setStateAck`-deps ab, kanonisiert die IDs und filter
 zugeteilten Datenpunkte. Owner je Datenpunkt = das modernste ANWESENDE, aber verlustfreie Protokoll
 (`lib/catalog/owner-policy.ts`: Rang YXC > YNCA > XML, überstimmt vom reicheren/schreibbaren/korrekt-skalierten
 Transport laut Zensus); `lib/catalog/object-tree-coordinator.ts` berechnet daraus EINEN Baum, jeder State genau
-einmal, jeder Write an den Owner. **Wiederkehrende Antworten werden pro Gerät gemerkt** (`lib/lifecycle/probe-memory.ts`, gehalten in
+einmal, jeder Write an den Owner. Ein Owner ohne eigene Werteliste leiht nur eine mit SEINEN Schlüsseln (`lentStates`:
+gleicher Werttyp, bei Text gleicher Wortschatz oder das belegte Wörterbuch), und ein Datenpunkt ohne Liste löscht die
+gespeicherte. **Wiederkehrende Antworten werden pro Gerät gemerkt** (`lib/lifecycle/probe-memory.ts`, gehalten in
 `main.ts` neben dem Subunit-Cache, seit 2.0.0 PERSISTIERT im Geräteobjekt `native.probeCache` —
 s. „Schnellstart" unten): YXC-`getFeatures`/Modell
 und die XML-Browse-Quellen-Probe sind über die Gerätelaufzeit konstant — ein Reconnect fragt sie nicht

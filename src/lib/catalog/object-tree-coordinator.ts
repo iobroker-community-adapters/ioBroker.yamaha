@@ -27,6 +27,38 @@ function withReported(states: Record<string, string>, reported: string | undefin
 }
 
 /**
+ * The value list a claimant lends an owner that has none. The labels are presentation, but the
+ * keys are what the owner's write path will send and what it reports, so they must be the
+ * owner's own values: the same value type, and for text the same wire vocabulary — or a MusicCast
+ * list the evidenced dictionary translates in full. MusicCast's sleep minutes (`30`) on the
+ * XML-owned text timer (`30 min`) were keys that receiver never reports and refuses (live
+ * RX-V6A 2026-09-30: the value `Off` outside its own list).
+ *
+ * @param key the transport-neutral capability key
+ * @param owner the owning transport
+ * @param ownerDef the owner's definition
+ * @param transport the claimant
+ * @param def the claimant's definition
+ * @returns the map to adopt, or undefined when its keys are not the owner's values
+ */
+function lentStates(
+  key: string,
+  owner: Transport,
+  ownerDef: ObjectDef,
+  transport: Transport,
+  def: ObjectDef,
+): Record<string, string> | undefined {
+  const states = def.common.states;
+  if (!states || def.common.type !== ownerDef.common.type) {
+    return undefined;
+  }
+  if (def.common.type !== "string" || STATES_VOCABULARY[transport] === STATES_VOCABULARY[owner]) {
+    return states;
+  }
+  return STATES_VOCABULARY[owner] === "classic" ? translateDeclaredStates(key, states) : undefined;
+}
+
+/**
  * Merge the present transports' catalogs into one unified object tree. Each capability appears
  * exactly once, emitted by its owning transport (see {@link pickOwner}) under the canonical id;
  * drifting ids and per-zone duplicates across transports collapse to one node. Objects are
@@ -71,17 +103,18 @@ export function coordinateObjectTree(contributions: readonly TransportObjects[])
       throw new Error(`coordinateObjectTree: owner ${owner} has no def for ${canonicalId}`);
     }
     // Dropdown borrowing, two cases. (a) The owner has no labels at all: another claimant's map
-    // is pure presentation and is taken as is (the scene titles over XML/YNCA while MusicCast owns
-    // the recall). (b) The owner carries a catalog UNION and another transport carries the
+    // is taken for its labels (the scene titles over XML/YNCA while MusicCast owns the recall) —
+    // see lentStates for when its keys fit the owner. (b) The owner carries a catalog UNION and another transport carries the
     // device's OWN declaration: the declaration wins (#619 — the XML input list on the YNCA-owned
     // input), but only within one wire vocabulary, because the map's KEYS are what the owner's
     // write path will be asked to send. Borrowing never changes routing; borrowed in
     // modernity-independent claim order (first with one).
     const resolvedDef: ObjectDef = { ...ownerDef, id: canonicalId };
     if (!resolvedDef.common.states) {
-      for (const def of entry.defs.values()) {
-        if (def.common.states) {
-          resolvedDef.common = { ...resolvedDef.common, states: def.common.states };
+      for (const [transport, def] of entry.defs) {
+        const lent = lentStates(entry.key, owner, ownerDef, transport, def);
+        if (lent) {
+          resolvedDef.common = { ...resolvedDef.common, states: lent };
           break;
         }
       }
