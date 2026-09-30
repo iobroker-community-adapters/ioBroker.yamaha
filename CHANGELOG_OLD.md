@@ -1,4 +1,5 @@
 # Older changes
+
 ## 2.13.0 (2026-09-25)
 
 - (krobipd) Fixed: A value a receiver refuses no longer stays on the datapoint — every write is read back, and the log names the device's reason
