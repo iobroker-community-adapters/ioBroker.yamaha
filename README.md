@@ -76,10 +76,10 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
 ### **WORK IN PROGRESS**
 
 - (krobipd) Fixed: Dropdown lists such as sound program, sleep timer and Adaptive DRC no longer go empty when the receiver loses power; lists emptied that way come back
-- (krobipd) Changed: Once read in, a receiver's datapoints stay as they are; they are rebuilt only after an adapter or firmware update, with the receiver switched on
+- (krobipd) Changed: Your datapoints stay exactly as they are while the adapter runs, also when a receiver goes offline; they change only after an adapter or firmware update
 - (krobipd) New: A command the receiver refuses over one protocol, or one sent while that protocol is offline, goes out over another protocol that understands it
 - (krobipd) New: A firmware update of the receiver is noticed and logged; the adapter reads the receiver again and reports it ready once that is done
-- (krobipd) Fixed: Objects of found devices are no longer deleted at start when the list of found devices cannot be read or a typed entry uses the same address
+- (krobipd) Fixed: Datapoints of found receivers are no longer deleted at adapter start when the receiver list cannot be read or an entered receiver has the same address
 
 ### 3.1.3 (2026-10-02)
 
