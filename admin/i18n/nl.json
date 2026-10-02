@@ -3,7 +3,7 @@
   "columnName": "Naam",
   "columnIp": "IP-adres",
   "label_xmlPollInterval": "XML-opvraaginterval (seconden)",
-  "tooltip_xmlPollInterval": "Hoe vaak de adapter receivers met het oude XML-protocol opvraagt (modellen van vóór ~2010). Deze apparaten melden wijzigingen niet zelf. Geen effect op YNCA- of MusicCast-apparaten.",
+  "tooltip_xmlPollInterval": "Hoe vaak de adapter een receiver via het XML-protocol opvraagt, dat wijzigingen niet zelf meldt. Bij modellen van vóór ~2010 geldt dat voor alle waarden, bij receivers met YNCA of MusicCast alleen voor de datapunten die XML levert.",
   "volumeAsPercent": "Volume als 0–100 %",
   "volumeAsPercent_help": "Uit: de volume-datapunten van dit apparaat gebruiken de schaal die de receiver zelf toont — decibel of zijn eigen stappen. Aan: ze gebruiken 0–100 %, de hoofdzone en elke andere zone van dit apparaat, het bereik dat de meeste VIS-widgets verwachten. De adapter rekent beide kanten op om.",
   "supportHeader": "Ontwikkeling steunen",

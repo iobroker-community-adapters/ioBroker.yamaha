@@ -3,7 +3,7 @@
   "columnName": "Nom",
   "columnIp": "Adresse IP",
   "label_xmlPollInterval": "Intervalle d'interrogation XML (secondes)",
-  "tooltip_xmlPollInterval": "Fréquence d'interrogation des amplis utilisant l'ancien protocole XML (modèles avant ~2010). Ces appareils ne signalent pas les changements d'eux-mêmes. Sans effet sur YNCA ou MusicCast.",
+  "tooltip_xmlPollInterval": "Fréquence à laquelle l'adaptateur interroge un ampli via le protocole XML, qui ne signale pas les changements de lui-même. Avant ~2010 cela couvre toutes les valeurs ; avec YNCA ou MusicCast, seulement les points de données fournis par XML.",
   "volumeAsPercent": "Volume en 0–100 %",
   "volumeAsPercent_help": "Désactivé : les points de données de volume de cet appareil utilisent l'échelle affichée par l'ampli — décibels ou son propre nombre de pas. Activé : ils utilisent 0–100 %, la zone principale comme toutes les autres zones de cet appareil, la plage attendue par la plupart des widgets VIS. L'adaptateur convertit dans les deux sens.",
   "supportHeader": "Soutenir le développement",

@@ -3,7 +3,7 @@
   "columnName": "名称",
   "columnIp": "IP 地址",
   "label_xmlPollInterval": "XML 查询间隔（秒）",
-  "tooltip_xmlPollInterval": "适配器轮询使用旧 XML 协议的功放（约 2010 年前的型号）的频率。这些设备不会自行报告更改。对 YNCA 或 MusicCast 设备无影响。",
+  "tooltip_xmlPollInterval": "适配器通过 XML 协议查询接收机的频率，该协议不会自行报告更改。约 2010 年前的型号涉及所有数值；同时支持 YNCA 或 MusicCast 的接收机只涉及由 XML 提供的数据点。",
   "volumeAsPercent": "音量显示为 0–100 %",
   "volumeAsPercent_help": "关闭：本设备的音量数据点使用功放自身显示的刻度——分贝或其步进计数。开启：改用 0–100 %，主区与本设备的每个分区都一样，这是多数 VIS 控件所期望的范围。适配器双向换算。",
   "supportHeader": "支持开发",

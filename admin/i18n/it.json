@@ -3,7 +3,7 @@
   "columnName": "Nome",
   "columnIp": "Indirizzo IP",
   "label_xmlPollInterval": "Intervallo di interrogazione XML (secondi)",
-  "tooltip_xmlPollInterval": "Con quale frequenza l'adattatore interroga i ricevitori con il vecchio protocollo XML (modelli prima del ~2010). Questi dispositivi non segnalano da soli le modifiche. Nessun effetto su YNCA o MusicCast.",
+  "tooltip_xmlPollInterval": "Con quale frequenza l'adattatore interroga un ricevitore tramite il protocollo XML, che non segnala da solo le modifiche. Sui modelli prima del ~2010 riguarda tutti i valori; con YNCA o MusicCast solo i punti dati forniti da XML.",
   "volumeAsPercent": "Volume come 0–100 %",
   "volumeAsPercent_help": "Disattivato: i datapoint del volume di questo dispositivo usano la scala mostrata dal ricevitore — decibel o il suo conteggio di passi. Attivato: usano 0–100 %, la zona principale e ogni altra zona di questo dispositivo, l'intervallo che la maggior parte dei widget VIS si aspetta. L'adattatore converte in entrambe le direzioni.",
   "supportHeader": "Sostieni lo sviluppo",
