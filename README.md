@@ -72,6 +72,7 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+
 ### 3.2.0 (2026-10-02)
 
 - (krobipd) Fixed: Dropdown lists such as sound program, sleep timer and Adaptive DRC no longer go empty when the receiver loses power; lists emptied that way come back
