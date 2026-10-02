@@ -77,6 +77,7 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
 
 - (krobipd) Fixed: Menu lines fill again after switching player.browse.source, also on receivers that were in standby when the adapter started
 - (krobipd) Fixed: On receivers that offer their menus only over XML (models from before 2010), the menu lines no longer stay empty after a source switch
+- (krobipd) Changed: A new instance starts switched off and waits until you have set it up; existing instances keep their own setting
 
 ### 3.1.2 (2026-09-30)
 
