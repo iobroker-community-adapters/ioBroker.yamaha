@@ -92,8 +92,8 @@ Details on all settings and the object tree are in the
 
 ### **WORK IN PROGRESS**
 
-- (krobipd) Fixed: The menu lines fill again after a source switch on receivers that speak YNCA and XML — the receiver's menu proof is remembered and caught up when it is switched on, instead of being lost to a standby at connect
-- (krobipd) Fixed: An empty menu right after a source switch over XML is read again until its lines come
+- (krobipd) Fixed: Menu lines fill again after switching player.browse.source, also on receivers that were in standby when the adapter started
+- (krobipd) Fixed: A menu that is still empty right after a source switch is read again for up to 20 seconds until its lines appear
 
 ### 3.1.2 (2026-09-30)
 
