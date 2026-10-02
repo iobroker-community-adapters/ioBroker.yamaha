@@ -463,6 +463,41 @@ Titel = die Warnung, Text je Sprache ≤ 200 Zeichen mit einem Beispiel alt → 
 - **Manifest bleibt auf der released Version** — den Bump macht `npm run release`.
 - **Sentry seit v1.5.0** auf krobis eigenem power-dreams-Projekt (de.sentry.io, EU) — dieselbe DSN wie die übrigen Adapter, NICHT der geerbte community-DSN (der wurde bei der Übernahme entfernt). Details: Memory `reference_sentry_integration`.
 
+<!-- core-decisions:begin (generated from the sealed register — change only through the Werkbank) -->
+
+## Core decisions (sealed)
+
+krobi's decisions for this adapter. The register with his verbatim words lives in the locked Werkbank tool tree; a change is a request to the Werkbank, never an edit here. Each guarded rule has a test under `src/decisions/`.
+
+- **Y-01** A receiver that has been read in stays as it is: running code never deletes or empties a datapoint, a value list or a limit. Only an adapter update may change them.
+- **Y-02** What a receiver can do is determined once and stored, never recomputed on every connect; it is queried again at most after an adapter update.
+- **Y-03** An outage means the power is gone and all protocols drop together; which protocol owns a datapoint does not change back and forth at runtime.
+- **Y-04** A command goes through the most modern protocol that can carry it first (MusicCast before YNCA before XML); if it fails there, through the next one; if it never works, the device cannot do it.
+- **Y-05** Volume is one datapoint, volume: it shows what the receiver reports and sends what the receiver expects, with no display twins and no conversion of its own. The only conversion is the percent switch in the admin: it turns the same datapoint into 0–100 %, per device for all zones, set in one place only.
+- **Y-07** When the device reports a minimum and a maximum, those are the limits; a zone that reports other values is handled on its own.
+- **Y-08** Back is sent as Back. If a device cannot do it, the adapter does not switch to another key on its own; the cursor keys are there for the user.
+- **Y-09** The device id is always the model plus the last four characters of the serial number, set once and never derived again; only in the exceptional case does the -2, -3 fallback apply.
+- **Y-10** The old adapters (musiccast) are neither a yardstick nor a priority; existing users of this adapter are carried along on upgrades.
+- **Y-11** No adapter uninstalls another one; that musiccast must be removed before the update is stated in the documentation.
+- **Y-13** Before a device is deleted the admin asks for confirmation and says that its datapoints go with it; afterwards it is gone for good, and one log line names the device and the number of deleted datapoints.
+- **Y-14** All three protocols (YNCA, MusicCast, XML) are fully supported, always; none of them is optional.
+- **Y-15** Every device command passes one central command gate, one per device and protocol.
+- **Y-16** yamaha is a new development: the old code and the old datapoints are gone, the object tree is cut anew.
+- **Y-17** Multiroom is fully built in: forming groups is part of the adapter and needs no switch of its own, and the multiroom datapoints are created with the default settings; switching zones is multiroom.
+- **Y-18** Playback and browsing share one admin switch (`player.*`); there is no separate browse switch.
+- **Y-19** The logo keeps its circle-and-tuning-fork motif and works in light and dark mode; a technical fix never changes the motif.
+- **Y-20** Error reports go to krobi's own Sentry project, not to the community one.
+- **Y-21** When the receiver reports new firmware, the adapter reads it in again; its own log line announces this, and at the end the same ready line as at startup appears.
+- **Y-22** With 3.0.0 every existing device moves to its new id automatically on the first start, after a warning dialog.
+- **Y-23** The adapter finds out by itself, quickly and robustly, what the connected device can do, and creates datapoints only for that.
+- **Y-24** What the adapter remembers about a device never becomes a datapoint.
+- **Y-25** Inputs carry the names the user gave them in the receiver; there is no second datapoint with the same content (inputText is gone).
+- **Y-26** Play time exists as a number (for media players and voice assistants) and as text (for VIS).
+- **Y-27** Device search is set in the admin: mixed, manual only (no automatic search) or automatic only. How a device got into the list does not matter; there is no marker for it.
+- **Y-28** A device with a new IP address is not offline: the adapter tells the two apart and finds it again at the new address. Whoever enters an IP by hand bears the full consequence.
+
+<!-- core-decisions:end -->
+
 ## Objekt-Inventar aus Fixtures (`npm run test:inventory`)
 
 Der Nachweis, dass ein Update JEDEN Datenpunkt einer bestehenden Installation erreicht — ohne
