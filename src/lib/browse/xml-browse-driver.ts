@@ -18,6 +18,13 @@ import { decodeXmlText } from "../xml/entities";
 const BUSY_POLL_MS = 1000;
 const MAX_BUSY_POLLS = 20;
 
+/**
+ * How often, and how many times, an EMPTY window after a source switch is read again — once a
+ * second for up to 20 reads, the rhythm rxv re-reads in after an input switch (see `open`).
+ */
+const EMPTY_READ_MS = 1000;
+const MAX_EMPTY_READS = 20;
+
 /** One XML/YNC source with a menu. */
 export interface XmlBrowseSource {
   /** Unique id — what the start-up probe remembers. */
@@ -238,6 +245,14 @@ export class XmlBrowseDriver implements BrowseDriver {
   /**
    * Open a source's menu: switch the main-zone input to it and read the window.
    *
+   * A window without a single line right after the switch is not the menu yet: on the reporter's
+   * receiver the lines stayed empty after a source switch until `pageUp` — on the first page a
+   * `Jump_Line 1` plus a read, a list command that moves nothing (forum 85413). So the same command
+   * goes out (`Page Up` on the 2008 generation, its declared page key, which `pageUp` sends too), and
+   * the window is read again, once a second, as rxv re-reads after an input switch (`net_radio`),
+   * until lines come — or {@link MAX_EMPTY_READS} reads later the empty window stands (an empty USB
+   * stick has no lines).
+   *
    * @param source the source key (from {@link sources})
    */
   public async open(source: string): Promise<void> {
@@ -247,7 +262,24 @@ export class XmlBrowseDriver implements BrowseDriver {
     }
     this.active = entry;
     await this.client.send("Main_Zone", `<Input><Input_Sel>${entry.input}</Input_Sel></Input>`);
-    await this.fetch();
+    const first = await this.readWindow();
+    if (!first || first.rows.length > 0) {
+      this.render(first);
+      return;
+    }
+    await this.send(entry.list === "List_Info_2" ? "<Page>Up</Page>" : "<Jump_Line>1</Jump_Line>");
+    let window = first;
+    for (let read = 0; read < MAX_EMPTY_READS && window.rows.length === 0; read++) {
+      if (read > 0) {
+        await this.delay(EMPTY_READ_MS);
+      }
+      const next = await this.readWindow();
+      if (!next) {
+        break;
+      }
+      window = next;
+    }
+    this.render(window);
   }
 
   /**
@@ -394,7 +426,15 @@ export class XmlBrowseDriver implements BrowseDriver {
 
   /** Read the window (polling while busy) and render it to the engine. */
   private async fetch(): Promise<void> {
-    const window = await this.readWindow();
+    this.render(await this.readWindow());
+  }
+
+  /**
+   * Render a window to the engine (nothing when there is none — a read that stayed busy).
+   *
+   * @param window the parsed window
+   */
+  private render(window: XmlListInfo | undefined): void {
     if (window) {
       this.lastTotal = window.totalItems;
       this.engine?.onWindow({

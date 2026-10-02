@@ -90,6 +90,11 @@ Details on all settings and the object tree are in the
     ### **WORK IN PROGRESS**
 -->
 
+### **WORK IN PROGRESS**
+
+- (krobipd) Fixed: The menu lines fill again after a source switch on receivers that speak YNCA and XML — the receiver's menu proof is remembered and caught up when it is switched on, instead of being lost to a standby at connect
+- (krobipd) Fixed: An empty menu right after a source switch over XML is read again until its lines come
+
 ### 3.1.2 (2026-09-30)
 
 - (krobipd) Fixed: The sleep timer lists the receiver's own values again (Off, 30 min …) instead of MusicCast's minutes, so a picked value is one the receiver accepts

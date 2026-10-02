@@ -55,12 +55,13 @@ export interface ObjectDef {
    * presence alone. The object-tree coordinator then prefers a transport that DID prove it,
    * whatever the modernity rank says.
    *
-   * The one case today is the YNCA menu claim: a receiver in standby answers `@RESTRICTED` to
-   * every media subunit, which is indistinguishable from "cannot browse", so the claim is kept
-   * rather than stripping the menus off a device that serves them once it is on. A receiver
-   * spends most of its life in standby, so that unproven claim is the NORMAL state at adapter
-   * start — and ranking above XML it displaced the transport that does probe. That is issue
-   * #613, reached through the standby door (audit 2026-09-06). Never written to the object.
+   * The one case today is the YNCA menu claim of a receiver that has not proved its menus YET: in
+   * standby it answers `@RESTRICTED` to every media subunit, which is indistinguishable from
+   * "cannot browse", so the claim is kept rather than stripping the menus off a device that serves
+   * them once it is on. Ranking above XML it displaced the transport that does probe — issue #613,
+   * reached through the standby door (audit 2026-09-06). The proof is remembered per device once
+   * given and caught up when the receiver is switched on (forum 85413), so the mark stands only
+   * until then. Never written to the object.
    */
   unproven?: boolean;
   /**

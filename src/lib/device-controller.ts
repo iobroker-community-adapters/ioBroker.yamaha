@@ -167,6 +167,38 @@ function provenPadDialect(remembered: unknown): YncaPadDialect | undefined {
     : undefined;
 }
 
+/**
+ * Memory key for the menu sources a LISTINFO answer proved: `{ subunits, proven: true }`. Remembered
+ * like every other ability of the device (the XML menu probe, the pad dialect): what a receiver can
+ * browse does not change when it stands by, and it stands by most of the time — asked only at
+ * connect, the proof was missing on most starts and XML took the menus over (forum 85413,
+ * 2026-10-02). Only a proof is remembered: a source that answered nothing is asked again.
+ */
+const BROWSE_PROOF_KEY = "yncaBrowseSources";
+
+/**
+ * The menu sources a remembered proof names (API boundary — the persisted memory is untrusted).
+ *
+ * @param remembered what the memory holds under {@link BROWSE_PROOF_KEY}
+ * @returns the proven source subunits, empty without a proof
+ */
+function provenBrowseSources(remembered: unknown): string[] {
+  const entry = remembered as { subunits?: unknown; proven?: unknown } | undefined;
+  if (entry?.proven !== true || !Array.isArray(entry.subunits)) {
+    return [];
+  }
+  // Only strings; a name this device does not carry is dropped against its candidates (probeBrowseSubunits).
+  return entry.subunits.filter((subunit): subunit is string => typeof subunit === "string");
+}
+
+/**
+ * When a proof still missing at connect is asked for after the receiver reports `PWR=On` — waits
+ * between the attempts (5, 15 and 30 s after the line). How long a network module needs after
+ * power-on is not measured; a list line the device sends on its own proves a source at once anyway,
+ * and every later power-on tries again.
+ */
+const POWER_ON_PROOF_WAITS_MS = [5_000, 10_000, 15_000];
+
 /** Unknown lines logged per connection before they are only counted (see the onUnknownLine handler). */
 const UNKNOWN_LINES_LOGGED = 3;
 
@@ -414,6 +446,20 @@ export class YncaDeviceController {
   private shape: YncaCapabilities = { model: "", subunits: {} };
   /** Object id → the definition last upserted, so a republish writes only what really changed. */
   private readonly published = new Map<string, string>();
+  /** The live capabilities the menus and the pads were set up from (generation evidence, zones). */
+  private browseShape: YncaCapabilities = { model: "", subunits: {} };
+  /** The menu sources the surface was built for. */
+  private browsePresent: ReadonlySet<string> = new Set();
+  /** The menu sources claimed WITHOUT a proof (standby at connect, nothing remembered) — empty once proven. */
+  private unprovenBrowse: ReadonlySet<string> = new Set();
+  /** The zones whose pad probe came back unclear (a receiver in standby) — asked again once it is on. */
+  private readonly unclearZonePads = new Set<string>();
+  /** The catch-up of missing proofs (power-on, a list line) — one at a time, in order. */
+  private catchUp: Promise<void> = Promise.resolve();
+  /** Whether a power-on catch-up is queued or running, so a second `PWR=On` adds none. */
+  private powerOnCatchUp = false;
+  /** Set by {@link close} — a catch-up still queued or waiting ends there. */
+  private closed = false;
 
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
@@ -555,6 +601,7 @@ export class YncaDeviceController {
     for (const message of early.splice(0)) {
       this.handleLiveMessage(message);
     }
+    this.browseShape = live;
     await this.setupBrowse(live);
     await this.setupZonePads(live);
     // Start the keepalive only now the (fast-path) init is done; on the slow path the
@@ -613,7 +660,7 @@ export class YncaDeviceController {
     }
     if (remembered !== undefined && model) {
       // A different (or updated) device behind this address: its remembered YNCA
-      // answers are void — the observed values and the pad verdicts too. The other transports guard
+      // answers are void — the observed values, the pad verdicts and the menu proof too. The other transports guard
       // their own portions. An EMPTY model is no identity at all (a lost first command), not another device.
       this.deps.probeMemory.drop(
         key =>
@@ -621,7 +668,8 @@ export class YncaDeviceController {
           key === STATIC_KEY ||
           key === OBSERVED_KEY ||
           key === PAD_DIALECT_KEY ||
-          key === ZONE_PAD_KEY,
+          key === ZONE_PAD_KEY ||
+          key === BROWSE_PROOF_KEY,
       );
     }
     this.loadObserved();
@@ -1484,11 +1532,9 @@ export class YncaDeviceController {
    * @param capabilities the device's swept capabilities
    */
   private async setupBrowse(capabilities: YncaCapabilities): Promise<void> {
-    const gate = this.deps.gate;
     if (this.deps.isEntryEnabled?.("player.browse.source") === false) {
       return;
     }
-    const delay = (ms: number): Promise<void> => gate.delay(ms);
     const { subunits: present, proven } = await this.probeBrowseSubunits(capabilities);
     if (present.size === 0) {
       // Leaving the states uncreated is what hands browsing to another transport: the owner
@@ -1498,14 +1544,34 @@ export class YncaDeviceController {
       this.deps.log.debug(`${this.deviceId}: no YNCA source answers LISTINFO — leaving menus to another transport`);
       return;
     }
+    this.unprovenBrowse = proven ? new Set() : present;
+    await this.buildBrowse(present, proven);
+  }
+
+  /**
+   * Build the menu surface for the given sources — at connect, and again when a proof missing at
+   * connect arrives later in the session. Its objects then come without the `unproven` mark, the
+   * transport adapter reports the changed definitions, and the handle re-coordinates: YNCA takes
+   * the menus over from the transport that held them meanwhile (forum 85413).
+   *
+   * @param present the menu sources to offer
+   * @param proven whether a LISTINFO answer proved them (now or remembered)
+   */
+  private async buildBrowse(present: ReadonlySet<string>, proven: boolean): Promise<void> {
+    const gate = this.deps.gate;
+    const delay = (ms: number): Promise<void> => gate.delay(ms);
+    this.browseEngine?.close();
+    this.browseDriver?.close();
+    this.browseEngine = undefined;
+    this.browseDriver = undefined;
     const driver = new YncaBrowseDriver(
       this.deps.client,
       present,
       delay,
       await this.padDialect(proven),
-      yncaGenerationEvidence(capabilities.subunits),
+      yncaGenerationEvidence(this.browseShape.subunits),
     );
-    this.browseEngine = await createBrowseSurface(
+    const engine = await createBrowseSurface(
       driver,
       this.deviceId,
       {
@@ -1516,9 +1582,166 @@ export class YncaDeviceController {
       },
       !proven,
     );
-    if (this.browseEngine) {
+    this.browsePresent = present;
+    if (engine) {
+      this.browseEngine = engine;
       this.browseDriver = driver;
     }
+  }
+
+  /**
+   * A line the device sent may settle a proof still missing from the connect: a list field of a
+   * source claimed without proof IS that proof (the receiver sends its menu lines on its own — the
+   * predecessor adapter never asked for them and showed them all the same), and `MAIN:PWR=On` is
+   * the moment to ask for every proof a standby connect could not get.
+   *
+   * @param message the decoded line
+   */
+  private noticeProofs(message: YncaMessage): void {
+    if (this.ended()) {
+      return;
+    }
+    if (this.unprovenBrowse.has(message.subunit) && LIST_PROOF.test(message.func)) {
+      // A burst of lines queues one step per line; every one after the first finds the proof taken.
+      this.queueCatchUp(() => this.adoptBrowseProof(new Set([message.subunit])));
+      return;
+    }
+    if (message.subunit === "MAIN" && message.func === "PWR" && message.value === "On" && this.proofsMissing()) {
+      if (!this.powerOnCatchUp) {
+        this.powerOnCatchUp = true;
+        this.queueCatchUp(async () => {
+          try {
+            await this.catchUpAfterPowerOn();
+          } finally {
+            this.powerOnCatchUp = false;
+          }
+        });
+      }
+    }
+  }
+
+  /**
+   * Run one catch-up step after the ones already queued. Never rejects: a failure lands in the
+   * debug log, and the next power-on tries again.
+   *
+   * @param step the step
+   */
+  private queueCatchUp(step: () => Promise<void>): void {
+    this.catchUp = this.catchUp.then(async () => {
+      if (this.ended()) {
+        return;
+      }
+      try {
+        await step();
+      } catch (e) {
+        this.deps.log.debug(`${this.deviceId}: catching up a missing proof failed (${errorMessage(e)})`);
+      }
+    });
+  }
+
+  /** @returns whether the connection is closed (the controller's own close, or its gate) */
+  private ended(): boolean {
+    return this.closed || this.deps.gate.closed;
+  }
+
+  /** @returns whether a proof the connect could not get is still missing */
+  private proofsMissing(): boolean {
+    return this.unprovenBrowse.size > 0 || this.unclearZonePads.size > 0 || this.padDialectMissing();
+  }
+
+  /** @returns whether the menus are proven but the pad dialect was not proven yet (a standby connect) */
+  private padDialectMissing(): boolean {
+    return (
+      this.browseDriver !== undefined &&
+      this.unprovenBrowse.size === 0 &&
+      yncaGenerationEvidence(this.browseShape.subunits).pad &&
+      provenPadDialect(this.deps.probeMemory.remembered(PAD_DIALECT_KEY)) === undefined
+    );
+  }
+
+  /**
+   * The receiver was switched on: ask for what the standby connect could not prove — the menu
+   * sources, the pad dialect, the zone pads. Up to three times ({@link POWER_ON_PROOF_WAITS_MS}),
+   * ending early once nothing is missing.
+   */
+  private async catchUpAfterPowerOn(): Promise<void> {
+    for (const wait of POWER_ON_PROOF_WAITS_MS) {
+      await this.deps.gate.delay(wait);
+      if (this.ended()) {
+        return;
+      }
+      if (this.unprovenBrowse.size > 0) {
+        const fresh = await this.proveBrowseSources([...this.unprovenBrowse]);
+        if (fresh.size > 0) {
+          await this.adoptBrowseProof(fresh);
+        }
+      }
+      const driver = this.browseDriver;
+      if (driver && this.padDialectMissing()) {
+        // Proven now, the dialect is remembered (padDialect). LIST and ZONE offer the same keys, so the
+        // driver just switches; NONE offers no pad at all — that surface is built once more without it.
+        const dialect = await this.padDialect(true);
+        if (dialect === "none" && driver.padDialect !== "none") {
+          await this.buildBrowse(this.browsePresent, true);
+        } else if (dialect !== driver.padDialect) {
+          driver.usePadDialect(dialect);
+        }
+      }
+      if (this.unclearZonePads.size > 0) {
+        await this.setupZonePads(this.browseShape, new Set(this.unclearZonePads));
+      }
+      if (!this.proofsMissing()) {
+        return;
+      }
+    }
+  }
+
+  /**
+   * Take a proof that arrived after the connect: remember it, and rebuild the surface for the
+   * proven sources (plus the ones remembered) — no longer marked unproven.
+   *
+   * @param proven the sources just proven
+   */
+  private async adoptBrowseProof(proven: ReadonlySet<string>): Promise<void> {
+    if (this.unprovenBrowse.size === 0 || this.ended()) {
+      return;
+    }
+    const sources = this.rememberBrowseProof(proven);
+    this.unprovenBrowse = new Set();
+    this.deps.log.debug(`${this.deviceId}: menus proven over YNCA (${[...sources].join(", ")}) — taking them over`);
+    await this.buildBrowse(sources, true);
+  }
+
+  /**
+   * Ask the candidate sources for their list (`LISTINFO=?`) and keep the ones that answer with list
+   * fields. Both refusals — `@UNDEFINED` (function unknown) and `@RESTRICTED` (not usable right now)
+   * — carry no subunit, so they cannot be attributed to one request; it is the ABSENCE of an
+   * answer that excludes a source.
+   *
+   * @param candidates the source subunits to ask
+   * @returns the sources that answered with list data
+   */
+  private async proveBrowseSources(candidates: readonly string[]): Promise<Set<string>> {
+    const answer = await this.deps.client.readCapabilities(candidates.map(subunit => ({ subunit, func: "LISTINFO" })));
+    return new Set(
+      candidates.filter(subunit => Object.keys(answer.subunits[subunit] ?? {}).some(func => LIST_PROOF.test(func))),
+    );
+  }
+
+  /**
+   * Remember proven menu sources together with the ones already remembered — a source proven once
+   * stays proven; a refusal later (standby, a network module not ready yet) takes nothing away.
+   *
+   * @param proven the sources just proven
+   * @returns every proven source (remembered and new)
+   */
+  private rememberBrowseProof(proven: ReadonlySet<string>): Set<string> {
+    const remembered = provenBrowseSources(this.deps.probeMemory.remembered(BROWSE_PROOF_KEY));
+    const all = new Set([...remembered, ...proven]);
+    if (all.size > 0 && all.size !== remembered.length) {
+      this.deps.probeMemory.set(BROWSE_PROOF_KEY, { subunits: [...all], proven: true });
+    }
+    return all;
   }
 
   /**
@@ -1531,6 +1754,7 @@ export class YncaDeviceController {
     // The browse driver sees every line first: list lines (LINE1TXT…, LISTINFO
     // bursts, auto-feedback) are not catalogued and would otherwise be dropped.
     this.browseDriver?.handleMessage(message);
+    this.noticeProofs(message);
     // A value never seen before joins the observed store, and since 2.7.0 its dropdown too —
     // the object is rebuilt and the handle re-coordinates within the session (before, the
     // dropdown followed one start later). The state gets the value at once either way.
@@ -1644,13 +1868,18 @@ export class YncaDeviceController {
   /**
    * The on-screen pad of zones 2 and 3 where the device has one (`@ZONE2:LISTCURSOR`/`LISTMENU`, the
    * 2011/2012 Aventage lists — B9). Write-only keys, so the proof is a bracketed probe: silence is
-   * "known", `@UNDEFINED` "unknown"; an unclear answer (a zone in standby) decides nothing and asks
-   * again on the next start. A definite verdict is remembered per device.
+   * "known", `@UNDEFINED` "unknown"; an unclear answer (a zone in standby) decides nothing and is
+   * asked again once the receiver reports `PWR=On` (noticeProofs). A definite verdict is remembered
+   * per device.
    *
    * @param capabilities what the device answered (its subunits and generation)
+   * @param only the zones to set up — the unclear ones of the connect, when caught up later
    */
-  private async setupZonePads(capabilities: YncaCapabilities): Promise<void> {
-    this.zonePads.clear();
+  private async setupZonePads(capabilities: YncaCapabilities, only?: ReadonlySet<string>): Promise<void> {
+    if (!only) {
+      this.zonePads.clear();
+      this.unclearZonePads.clear();
+    }
     const generation = yncaGenerationEvidence(capabilities.subunits);
     if (!generation.pad) {
       return;
@@ -1660,7 +1889,7 @@ export class YncaDeviceController {
       typeof stored === "object" && stored !== null ? { ...(stored as Record<string, boolean>) } : {};
     let learned = false;
     for (const zone of YNCA_ZONES) {
-      if (zone.key === "main" || capabilities.subunits[zone.subunit] === undefined) {
+      if (zone.key === "main" || capabilities.subunits[zone.subunit] === undefined || (only && !only.has(zone.key))) {
         continue;
       }
       let has = typeof remembered[zone.key] === "boolean" ? remembered[zone.key] : undefined;
@@ -1676,6 +1905,11 @@ export class YncaDeviceController {
           this.deps.log.debug(`${this.deviceId}: probing the ${zone.key} pad failed (${errorMessage(e)})`);
         }
       }
+      if (has === undefined) {
+        this.unclearZonePads.add(zone.key);
+        continue;
+      }
+      this.unclearZonePads.delete(zone.key);
       if (!has) {
         continue;
       }
@@ -1776,41 +2010,42 @@ export class YncaDeviceController {
    * XML driver has always probed (`List_Info` → `<Menu_Status>`); YNCA claimed the states on
    * presence alone and, ranking higher, silently displaced the transport that could deliver.
    *
+   * A proof is remembered per device ({@link BROWSE_PROOF_KEY}) and stands from then on — in
+   * standby too, which is where a receiver spends most of its time (forum 85413).
+   *
    * @param capabilities the device's swept capabilities
-   * @returns the subunits that answered with list data, and whether that answer is a PROOF
+   * @returns the subunits that proved their menus, and whether that is a PROOF
    */
   private async probeBrowseSubunits(
     capabilities: YncaCapabilities,
   ): Promise<{ subunits: ReadonlySet<string>; proven: boolean }> {
-    const candidates = YNCA_BROWSE_SOURCES.filter(source => source.subunit in capabilities.subunits);
+    const candidates = YNCA_BROWSE_SOURCES.filter(source => source.subunit in capabilities.subunits).map(
+      source => source.subunit,
+    );
     if (candidates.length === 0) {
       return { subunits: new Set(), proven: true };
     }
-    // A receiver in standby answers @RESTRICTED for its media subunits, which is
-    // indistinguishable from "cannot browse" and would strip the menus off a device that
-    // serves them perfectly once it is on. Nobody browses a sleeping receiver, so keep the
-    // claim and let the next connect — with the device awake — do the real probe.
-    if (capabilities.subunits.MAIN?.PWR !== "On") {
-      // Claimed, but NOT proven: the coordinator hands the surface to a transport that could
-      // prove it (XML probes at any power state). Without that, a receiver that was in standby
-      // at adapter start — the normal case — displaced the driver that actually works on the
-      // 2012 generation, for the whole run (#613 through the standby door, audit 2026-09-06).
-      return { subunits: new Set(candidates.map(source => source.subunit)), proven: false };
-    }
-    const answer = await this.deps.client.readCapabilities(
-      candidates.map(source => ({ subunit: source.subunit, func: "LISTINFO" })),
-    );
-    // Only a real list answer counts. Both refusals — `@UNDEFINED` (function unknown) and
-    // `@RESTRICTED` (source not usable right now) — carry no subunit, so they cannot be
-    // attributed to one request; it is the ABSENCE of an answer that excludes a subunit.
-    return {
-      subunits: new Set(
-        candidates
-          .map(source => source.subunit)
-          .filter(subunit => Object.keys(answer.subunits[subunit] ?? {}).some(func => LIST_PROOF.test(func))),
+    const remembered = new Set(
+      provenBrowseSources(this.deps.probeMemory.remembered(BROWSE_PROOF_KEY)).filter(subunit =>
+        candidates.includes(subunit),
       ),
-      proven: true,
-    };
+    );
+    // A receiver in standby answers @RESTRICTED for its media subunits, which is
+    // indistinguishable from "cannot browse" — it is not asked. A remembered proof stands.
+    if (capabilities.subunits.MAIN?.PWR !== "On") {
+      if (remembered.size > 0) {
+        return { subunits: remembered, proven: true };
+      }
+      // Nothing proven yet: claimed, but NOT proven — the coordinator hands the surface to a
+      // transport that could prove it (XML probes at any power state) until the receiver is
+      // switched on and the proof is caught up (noticeProofs). Claimed as proven, a receiver in
+      // standby at adapter start displaced the driver that works on the 2012 generation
+      // (#613 through the standby door, audit 2026-09-06).
+      return { subunits: new Set(candidates), proven: false };
+    }
+    // Only a real list answer counts; together with the remembered proof, which a refusal now
+    // (a network module not ready yet) does not take away.
+    return { subunits: this.rememberBrowseProof(await this.proveBrowseSources(candidates)), proven: true };
   }
 
   /**
@@ -1825,6 +2060,7 @@ export class YncaDeviceController {
 
   /** Close the client. Synchronous — safe to call from onUnload. */
   public close(): void {
+    this.closed = true;
     this.browseEngine?.close();
     this.browseDriver?.close();
     this.deps.client.close();

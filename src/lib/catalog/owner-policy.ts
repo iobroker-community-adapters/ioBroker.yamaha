@@ -165,8 +165,9 @@ export function canonicalIdOf(transport: Transport, stateId: string): string {
  *
  * A transport that could not PROVE it serves the capability is only chosen when no proven
  * candidate exists — a proof beats both the modernity rank and an override. That is what keeps
- * a receiver in standby (whose YNCA menu claim cannot be probed) from displacing the XML driver
- * that answered a real `List_Info` (#613, audit 2026-09-06).
+ * a receiver in standby whose YNCA menus are not proven yet from displacing the XML driver that
+ * answered a real `List_Info` (#613, audit 2026-09-06); once the proof comes, the transport
+ * re-publishes its claim without the mark and the next coordination hands the key over.
  *
  * @param key the transport-neutral capability key (the unified state id)
  * @param candidates the present transports that offer this key (non-empty)

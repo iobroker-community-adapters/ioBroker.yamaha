@@ -2068,3 +2068,237 @@ describe("the pad of zones 2 and 3 (@ZONE2/@ZONE3:LISTCURSOR/LISTMENU — audit 
     expect(memory.remembered("yncaZonePads")).toEqual({ zone2: true, zone3: false });
   });
 });
+
+describe("YncaDeviceController — what the receiver proved stays proven, and a standby connect catches up (forum 85413)", () => {
+  /** Lets the queued catch-up steps and their (instant) waits run out. */
+  const settle = async (): Promise<void> => {
+    for (let i = 0; i < 60; i++) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+  };
+
+  /**
+   * A 2012 receiver (SERVER present) with net radio and a zone 2, as the test asks.
+   *
+   * @param options how the device stands and what it remembers
+   * @param options.power the main zone's power at connect
+   * @param options.memory the device's memory
+   * @param options.lists the sources that answer LISTINFO with a list
+   * @param options.model the model the device reports
+   */
+  async function proofSetup(options: {
+    power: "On" | "Standby";
+    memory?: ProbeMemory;
+    lists?: string[];
+    model?: string;
+  }): Promise<{
+    client: FakeClient;
+    controller: YncaDeviceController;
+    objects: Array<{ id: string; def: ObjectDef }>;
+    memory: ProbeMemory;
+    waits: number[];
+    listProbes: () => number;
+  }> {
+    const model = options.model ?? "RX-V475";
+    const client = new FakeClient();
+    client.listSubunits = options.lists ?? [];
+    client.capabilities = {
+      model,
+      subunits: {
+        SYS: { MODELNAME: model, VERSION: "1.0" },
+        MAIN: { PWR: options.power, INP: "HDMI1" },
+        ZONE2: { PWR: "Standby", INP: "TUNER" },
+        NETRADIO: { PLAYBACKINFO: "Stop" },
+        SERVER: { PLAYBACKINFO: "Stop" },
+      },
+    };
+    const waits: number[] = [];
+    const memory = options.memory ?? new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
+    const { deps, objects } = makeDeps(client);
+    deps.gate = new CommandGate({
+      minSpacingMs: 0,
+      timers: {
+        schedule: (h, ms) => {
+          if (ms > 0) {
+            waits.push(ms);
+          }
+          return setTimeout(h, 0);
+        },
+        cancel: t => clearTimeout(t as ReturnType<typeof setTimeout>),
+      },
+    });
+    deps.probeMemory = memory;
+    const controller = new YncaDeviceController("living", deps);
+    await controller.start();
+    const listProbes = (): number => client.requests.filter(gets => gets.every(get => get.func === "LISTINFO")).length;
+    return { client, controller, objects, memory, waits, listProbes };
+  }
+
+  /**
+   * The definition last written for an object.
+   *
+   * @param objects every upsert, in order
+   * @param id the full object id
+   * @returns the last definition, if any
+   */
+  const lastDef = (objects: Array<{ id: string; def: ObjectDef }>, id: string): ObjectDef | undefined =>
+    objects.filter(entry => entry.id === id).at(-1)?.def;
+
+  test("a remembered proof stands in standby: not asked again, claimed as proven", async () => {
+    const memory = new ProbeMemory({
+      __schema: DISCOVERY_SCHEMA,
+      yncaBrowseSources: { subunits: ["NETRADIO"], proven: true },
+    });
+    const s = await proofSetup({ power: "Standby", memory });
+    expect(s.listProbes()).toBe(0);
+    const source = lastDef(s.objects, "living.player.browse.source");
+    expect(source?.unproven).toBeUndefined();
+    expect(Object.keys(source?.common.states ?? {})).toEqual(["netRadio"]);
+  });
+
+  test("a garbled memory is no proof", async () => {
+    const memory = new ProbeMemory({
+      __schema: DISCOVERY_SCHEMA,
+      yncaBrowseSources: { subunits: ["NETRADIO", 7, "NOSUCH"], proven: "yes" },
+    });
+    const s = await proofSetup({ power: "Standby", memory });
+    expect(lastDef(s.objects, "living.player.browse.source")?.unproven).toBe(true);
+  });
+
+  test("an awake receiver's proof is remembered", async () => {
+    const s = await proofSetup({ power: "On", lists: ["NETRADIO"] });
+    expect(s.memory.remembered("yncaBrowseSources")).toEqual({ subunits: ["NETRADIO"], proven: true });
+  });
+
+  test("no list answer is remembered as nothing — the next awake connect asks again", async () => {
+    const s = await proofSetup({ power: "On", lists: [] });
+    expect(s.memory.remembered("yncaBrowseSources")).toBeUndefined();
+    expect(s.objects.some(entry => entry.id.includes("player.browse"))).toBe(false);
+  });
+
+  test("a source proven once stays offered when it refuses now", async () => {
+    const memory = new ProbeMemory({
+      __schema: DISCOVERY_SCHEMA,
+      yncaBrowseSources: { subunits: ["NETRADIO", "SERVER"], proven: true },
+    });
+    const s = await proofSetup({ power: "On", lists: ["NETRADIO"], memory });
+    expect(s.listProbes()).toBe(1);
+    const source = lastDef(s.objects, "living.player.browse.source");
+    expect(Object.keys(source?.common.states ?? {}).sort()).toEqual(["netRadio", "server"]);
+  });
+
+  test("another device behind the address voids the remembered proof", async () => {
+    const memory = new ProbeMemory({
+      __schema: DISCOVERY_SCHEMA,
+      yncaCapabilities: { model: "RX-V6A", firmware: "1.80", subunits: { SYS: { MODELNAME: "RX-V6A" } } },
+      yncaBrowseSources: { subunits: ["NETRADIO"], proven: true },
+    });
+    const s = await proofSetup({ power: "Standby", memory });
+    expect(s.memory.remembered("yncaBrowseSources")).toBeUndefined();
+    expect(lastDef(s.objects, "living.player.browse.source")?.unproven).toBe(true);
+  });
+
+  test("switched on, the receiver proves its menus: remembered, re-published as proven, and they work", async () => {
+    const s = await proofSetup({ power: "Standby" });
+    expect(lastDef(s.objects, "living.player.browse.source")?.unproven).toBe(true);
+    s.client.listSubunits = ["NETRADIO"];
+    s.client.emit({ subunit: "MAIN", func: "PWR", value: "On" });
+    // A second power-on line while the catch-up waits adds no second one.
+    s.client.emit({ subunit: "MAIN", func: "PWR", value: "On" });
+    await settle();
+    // One catch-up: proven at the first attempt; the pad dialect stays unclear (the fake's default), so
+    // the attempts run out — once, not once per power-on line.
+    expect(s.waits.filter(ms => ms >= 5000)).toEqual([5000, 10000, 15000]);
+    expect(s.listProbes()).toBe(1);
+    expect(s.memory.remembered("yncaBrowseSources")).toEqual({ subunits: ["NETRADIO"], proven: true });
+    const source = lastDef(s.objects, "living.player.browse.source");
+    expect(source?.unproven).toBeUndefined();
+    expect(Object.keys(source?.common.states ?? {})).toEqual(["netRadio"]);
+    // The rebuilt surface drives the menu.
+    s.client.sent.length = 0;
+    s.client.gets.length = 0;
+    s.controller.handleWrite("player.browse.source", "netRadio");
+    await settle();
+    expect(s.client.sent).toContainEqual({ subunit: "MAIN", func: "INP", value: "NET RADIO" });
+    expect(s.client.gets).toContainEqual({ subunit: "NETRADIO", func: "LISTINFO" });
+  });
+
+  test("a list line the receiver sends on its own proves the source at once", async () => {
+    const s = await proofSetup({ power: "Standby" });
+    s.client.emit({ subunit: "NETRADIO", func: "LINE1TXT", value: "Bookmarks" });
+    s.client.emit({ subunit: "NETRADIO", func: "LINE2TXT", value: "Countries" });
+    await settle();
+    expect(s.waits).not.toContain(5000);
+    expect(s.listProbes()).toBe(0);
+    expect(s.memory.remembered("yncaBrowseSources")).toEqual({ subunits: ["NETRADIO"], proven: true });
+    expect(lastDef(s.objects, "living.player.browse.source")?.unproven).toBeUndefined();
+  });
+
+  test("a line of a source nobody claimed, or a line once proven, proves nothing more", async () => {
+    const s = await proofSetup({ power: "Standby" });
+    s.client.emit({ subunit: "TUN", func: "LINE1TXT", value: "x" });
+    s.client.emit({ subunit: "NETRADIO", func: "PLAYBACKINFO", value: "Play" });
+    await settle();
+    expect(s.memory.remembered("yncaBrowseSources")).toBeUndefined();
+  });
+
+  test("a receiver that still proves nothing is asked three times, then left to the next power-on", async () => {
+    const s = await proofSetup({ power: "Standby" });
+    s.client.emit({ subunit: "MAIN", func: "PWR", value: "On" });
+    await settle();
+    expect(s.listProbes()).toBe(3);
+    expect(s.waits.filter(ms => ms >= 5000)).toEqual([5000, 10000, 15000]);
+    expect(s.memory.remembered("yncaBrowseSources")).toBeUndefined();
+    expect(lastDef(s.objects, "living.player.browse.source")?.unproven).toBe(true);
+    // The next power-on tries again.
+    s.client.listSubunits = ["SERVER"];
+    s.client.emit({ subunit: "MAIN", func: "PWR", value: "On" });
+    await settle();
+    expect(s.memory.remembered("yncaBrowseSources")).toEqual({ subunits: ["SERVER"], proven: true });
+  });
+
+  test("standby or a closed connection starts no catch-up", async () => {
+    const s = await proofSetup({ power: "Standby" });
+    s.client.emit({ subunit: "MAIN", func: "PWR", value: "Standby" });
+    await settle();
+    expect(s.listProbes()).toBe(0);
+    const t = await proofSetup({ power: "Standby" });
+    t.controller.close();
+    t.client.listSubunits = ["NETRADIO"];
+    t.client.emit({ subunit: "MAIN", func: "PWR", value: "On" });
+    await settle();
+    expect(t.listProbes()).toBe(0);
+    expect(t.memory.remembered("yncaBrowseSources")).toBeUndefined();
+  });
+
+  test("the pad dialect and a zone pad, unclear in standby, are proven after the power-on", async () => {
+    const memory = new ProbeMemory({
+      __schema: DISCOVERY_SCHEMA,
+      yncaBrowseSources: { subunits: ["NETRADIO"], proven: true },
+    });
+    const s = await proofSetup({ power: "Standby", memory });
+    // In standby the probes answer nothing definite (the fake's default): nothing remembered, no zone pad.
+    expect(memory.remembered("yncaPadDialect")).toBeUndefined();
+    expect(s.objects.some(entry => entry.id === "living.multiroom.zone2.remote.cursor")).toBe(false);
+    s.client.probeKnown = (subunit: string, funcs: readonly string[]) =>
+      Promise.resolve(
+        Object.fromEntries(
+          funcs.map(func => [
+            func,
+            subunit === "MAIN" && func === "CURSOR" ? ("undefined" as const) : ("known" as const),
+          ]),
+        ),
+      );
+    s.client.emit({ subunit: "MAIN", func: "PWR", value: "On" });
+    await settle();
+    expect(memory.remembered("yncaPadDialect")).toEqual({ dialect: "list", proven: true });
+    expect(memory.remembered("yncaZonePads")).toEqual({ zone2: true });
+    expect(s.objects.some(entry => entry.id === "living.multiroom.zone2.remote.cursor")).toBe(true);
+    // Everything proven: the next power-on asks nothing.
+    const probesBefore = s.listProbes();
+    s.client.emit({ subunit: "MAIN", func: "PWR", value: "On" });
+    await settle();
+    expect(s.listProbes()).toBe(probesBefore);
+    expect(s.waits.filter(ms => ms >= 5000)).toEqual([5000]);
+  });
+});

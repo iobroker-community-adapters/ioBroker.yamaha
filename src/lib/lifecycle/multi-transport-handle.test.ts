@@ -623,6 +623,29 @@ describe("MultiTransportHandle — a tree that follows the device within a sessi
     expect(ynca.writes).toContainEqual({ id: "mute", value: true });
   });
 
+  test("a menu claim proven later in the session takes the menus over from the transport that held them (forum 85413)", async () => {
+    // A receiver in standby at connect: YNCA claims the menus without proof, XML proved them, so
+    // XML owns them. Switched on, YNCA proves its menus and re-publishes the claim without the mark.
+    const browse = (unproven: boolean): ObjectDef => ({
+      ...state("player.browse.source", "Source", { type: "string" }),
+      ...(unproven ? { unproven: true } : {}),
+    });
+    const yncaObjects = [browse(true)];
+    const ynca = fakeConn("ynca", yncaObjects);
+    const xml = fakeConn("xml", [browse(false)]);
+    const { handle } = setup([ynca, xml]);
+    await handle.start();
+    handle.handleStateChange("living.player.browse.source", false, "netRadio");
+    expect(xml.writes).toEqual([{ id: "player.browse.source", value: "netRadio" }]);
+    expect(ynca.writes).toEqual([]);
+    yncaObjects[0] = browse(false);
+    ynca.changeShape();
+    await flush();
+    handle.handleStateChange("living.player.browse.source", false, "server");
+    expect(ynca.writes).toEqual([{ id: "player.browse.source", value: "server" }]);
+    expect(xml.writes).toHaveLength(1);
+  });
+
   test("a shape signal without a real change writes nothing", async () => {
     const ynca = fakeConn("ynca", [state("volume", "Volume dB")]);
     const { handle, objects } = setup([ynca]);

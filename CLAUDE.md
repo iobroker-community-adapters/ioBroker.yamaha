@@ -337,7 +337,11 @@ Beleg: Chat-Analyse 2026-09-22 + vier Advisor-Runden + Server-Test, Mutationswel
 
 **1) Kein Anspruch ohne Nachweis (#613):** ein Transport beansprucht `player.browse.*` erst, wenn eine Probe es
 belegt (YNCA `LISTINFO=?` mit Listen-Feldern; die Absagen `@UNDEFINED`/`@RESTRICTED` tragen keinen Subunit — es zählt
-das AUSBLEIBEN einer Antwort), und bei `MAIN:PWR != On` wird nicht geprobt. **2) Gemerktes darf keine Verbindung
+das AUSBLEIBEN einer Antwort), und bei `MAIN:PWR != On` wird nicht geprobt. **YNCA-Fähigkeitsbeweise (Menü,
+Tasten-Dialekt, Zonen-Tastenfelder) werden gemerkt wie die XML-Probe (`yncaBrowseSources`, ein Beweis wird nie durch eine
+spätere Absage verkleinert); fehlt einer beim Verbinden, holt `PWR=On` oder eine vom Gerät selbst gesendete Listenzeile ihn
+nach, und YNCA übernimmt das Menü in derselben Sitzung.** Ein leeres XML-Menüfenster direkt nach dem Quellenwechsel gilt
+nicht als Menü: `Jump_Line 1` (2008er: `Page Up`), dann bis 20 × 1 s nachlesen. **2) Gemerktes darf keine Verbindung
 vortäuschen:** der YXC-Start ist nur erfolgreich, wenn eine Zone wirklich antwortet — der Zonen-Status ist die
 einzige Start-Anfrage, die immer ans Gerät geht. Belege und Prüfstand in `.claude/dev-history.md`.
 

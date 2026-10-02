@@ -522,4 +522,81 @@ describe("XmlBrowseDriver on the 2008 generation (List_Info_2)", () => {
     ]);
     expect(windows.at(-1)?.layer).toBe(1);
   });
+
+  it("an empty window after the switch is answered with the declared page key, then read again", async () => {
+    const { driver, calls, windows } = legacySetup([list2(1, []), list2(1, [["Folder", "True"]])]);
+    await driver.open("usb");
+    expect(calls.filter(c => c.method === "send").map(c => c.inner)).toEqual([
+      "<Input><Input_Sel>USB</Input_Sel></Input>",
+      "<List_Control><Page>Up</Page></List_Control>",
+    ]);
+    expect(windows).toHaveLength(1);
+    expect(windows[0].rows[0].text).toBe("Folder");
+  });
+});
+
+describe("XmlBrowseDriver — an empty window right after a source switch is not the menu yet (forum 85413)", () => {
+  // The reporter's receiver left the lines empty after a source switch until pageUp — on the first
+  // page a Jump_Line 1 plus a read. rxv re-reads after an input switch the same way (net_radio).
+  it("sends Jump_Line 1 and reads again until the lines come", async () => {
+    const { driver, calls, windows } = setup([
+      listBody({}),
+      listBody({}),
+      listBody({ lines: [["Bookmarks", "Container"]] }),
+    ]);
+    await driver.open("netRadio");
+    expect(calls.filter(c => c.method === "send").map(c => c.inner)).toEqual([
+      "<Input><Input_Sel>NET RADIO</Input_Sel></Input>",
+      "<List_Control><Jump_Line>1</Jump_Line></List_Control>",
+    ]);
+    expect(calls.filter(c => c.method === "getXml")).toHaveLength(3);
+    // One window, the filled one — the empty ones are never painted over the lines.
+    expect(windows).toHaveLength(1);
+    expect(windows[0].rows[0].text).toBe("Bookmarks");
+  });
+
+  it("a window with lines at once stays one read, with no list command", async () => {
+    const { driver, calls } = setup([listBody({ lines: [["Bookmarks", "Container"]] })]);
+    await driver.open("netRadio");
+    expect(calls.filter(c => c.method === "send")).toHaveLength(1);
+    expect(calls.filter(c => c.method === "getXml")).toHaveLength(1);
+  });
+
+  it("a menu that stays empty is shown empty after twenty more reads, once a second", async () => {
+    const waits: number[] = [];
+    const calls: Array<{ method: string; inner: string }> = [];
+    const driver = new XmlBrowseDriver(
+      {
+        send: (_element, inner) => {
+          calls.push({ method: "send", inner });
+          return Promise.resolve();
+        },
+        getXml: (_element, inner) => {
+          calls.push({ method: "getXml", inner });
+          return Promise.resolve(listBody({}));
+        },
+      },
+      new Set(["NET_RADIO"]),
+      ms => {
+        waits.push(ms);
+        return Promise.resolve();
+      },
+    );
+    const windows: BrowseWindow[] = [];
+    driver.attach({ onWindow: (window: BrowseWindow) => windows.push(window) } as unknown as BrowseEngine);
+    await driver.open("netRadio");
+    // The first read, then twenty after the Jump_Line — with a one-second pause between two of them.
+    expect(calls.filter(c => c.method === "getXml")).toHaveLength(21);
+    expect(waits).toEqual(Array(19).fill(1000));
+    expect(windows).toHaveLength(1);
+    expect(windows[0].rows).toEqual([]);
+  });
+
+  it("a menu still busy after the Jump_Line leaves the empty first window", async () => {
+    const busy = listBody({ busy: true });
+    const { driver, windows } = setup([listBody({}), ...Array<string>(30).fill(busy)]);
+    await driver.open("netRadio");
+    expect(windows).toHaveLength(1);
+    expect(windows[0].rows).toEqual([]);
+  });
 });
