@@ -72,6 +72,7 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+
 ### 3.1.3 (2026-10-02)
 
 - (krobipd) Fixed: Menu lines fill again after switching player.browse.source, also on receivers that were in standby when the adapter started
