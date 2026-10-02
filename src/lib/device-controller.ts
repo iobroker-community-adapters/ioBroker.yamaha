@@ -1598,9 +1598,7 @@ export class YncaDeviceController {
    * @param message the decoded line
    */
   private noticeProofs(message: YncaMessage): void {
-    if (this.ended()) {
-      return;
-    }
+    // No closed-check here: every step re-checks when it runs (adoptBrowseProof, catchUpAfterPowerOn).
     if (this.unprovenBrowse.has(message.subunit) && LIST_PROOF.test(message.func)) {
       // A burst of lines queues one step per line; every one after the first finds the proof taken.
       this.queueCatchUp(() => this.adoptBrowseProof(new Set([message.subunit])));
@@ -1628,9 +1626,6 @@ export class YncaDeviceController {
    */
   private queueCatchUp(step: () => Promise<void>): void {
     this.catchUp = this.catchUp.then(async () => {
-      if (this.ended()) {
-        return;
-      }
       try {
         await step();
       } catch (e) {

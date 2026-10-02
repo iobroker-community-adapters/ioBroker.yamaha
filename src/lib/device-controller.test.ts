@@ -2085,12 +2085,14 @@ describe("YncaDeviceController — what the receiver proved stays proven, and a 
    * @param options.memory the device's memory
    * @param options.lists the sources that answer LISTINFO with a list
    * @param options.model the model the device reports
+   * @param options.zone3 whether the receiver has a zone 3 too
    */
   async function proofSetup(options: {
     power: "On" | "Standby";
     memory?: ProbeMemory;
     lists?: string[];
     model?: string;
+    zone3?: boolean;
   }): Promise<{
     client: FakeClient;
     controller: YncaDeviceController;
@@ -2108,6 +2110,7 @@ describe("YncaDeviceController — what the receiver proved stays proven, and a 
         SYS: { MODELNAME: model, VERSION: "1.0" },
         MAIN: { PWR: options.power, INP: "HDMI1" },
         ZONE2: { PWR: "Standby", INP: "TUNER" },
+        ...(options.zone3 ? { ZONE3: { PWR: "Standby", INP: "TUNER" } } : {}),
         NETRADIO: { PLAYBACKINFO: "Stop" },
         SERVER: { PLAYBACKINFO: "Stop" },
       },
@@ -2300,5 +2303,41 @@ describe("YncaDeviceController — what the receiver proved stays proven, and a 
     await settle();
     expect(s.listProbes()).toBe(probesBefore);
     expect(s.waits.filter(ms => ms >= 5000)).toEqual([5000]);
+  });
+  test("a pad the power-on probe finds missing is taken away, not kept on the list words", async () => {
+    const memory = new ProbeMemory({
+      __schema: DISCOVERY_SCHEMA,
+      yncaBrowseSources: { subunits: ["NETRADIO"], proven: true },
+    });
+    const s = await proofSetup({ power: "Standby", memory });
+    // Switched on, the device knows neither LISTCURSOR nor CURSOR on MAIN: no pad.
+    s.client.probeKnown = (_subunit: string, funcs: readonly string[]) =>
+      Promise.resolve(Object.fromEntries(funcs.map(func => [func, "undefined" as const])));
+    s.client.emit({ subunit: "MAIN", func: "PWR", value: "On" });
+    await settle();
+    expect(memory.remembered("yncaPadDialect")).toEqual({ dialect: "none", proven: true });
+    s.client.sent.length = 0;
+    s.controller.handleWrite("remote.cursor", "up");
+    await settle();
+    expect(s.client.sent.filter(m => /CURSOR/.test(m.func))).toEqual([]);
+  });
+
+  test("catching up one zone's pad keeps the pad of a zone proven before", async () => {
+    const memory = new ProbeMemory({
+      __schema: DISCOVERY_SCHEMA,
+      yncaBrowseSources: { subunits: ["NETRADIO"], proven: true },
+      yncaPadDialect: { dialect: "list", proven: true },
+      yncaZonePads: { zone3: true },
+    });
+    const s = await proofSetup({ power: "Standby", memory, zone3: true });
+    s.client.probeKnown = (_subunit: string, funcs: readonly string[]) =>
+      Promise.resolve(Object.fromEntries(funcs.map(func => [func, "known" as const])));
+    s.client.emit({ subunit: "MAIN", func: "PWR", value: "On" });
+    await settle();
+    expect(memory.remembered("yncaZonePads")).toEqual({ zone3: true, zone2: true });
+    s.client.sent.length = 0;
+    s.controller.handleWrite("multiroom.zone3.remote.cursor", "up");
+    s.controller.handleWrite("multiroom.zone2.remote.cursor", "up");
+    expect(s.client.sent.map(m => m.subunit)).toEqual(["ZONE3", "ZONE2"]);
   });
 });

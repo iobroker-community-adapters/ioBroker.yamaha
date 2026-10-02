@@ -789,6 +789,24 @@ describe("YncaClient write failures (audit 2026-09-02)", () => {
     expect(reason?.message).toBe("write after end");
   });
 
+  test("a send whose write throws keeps the error as the drop reason, without a rejection", async () => {
+    const { factory, sockets } = fixtureFactory();
+    const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
+    const connected = client.connect();
+    sockets[0].emitConnect();
+    await connected;
+    sockets[0].write = (): void => {
+      throw new Error("send after end");
+    };
+    // A send alone: its own path through the gate (the bracketed exchange) must keep the reason.
+    client.send("MAIN", "PWR", "On");
+    await drain();
+    let reason: Error | undefined;
+    client.onDrop(r => (reason = r));
+    sockets[0].emitClose();
+    expect(reason?.message).toBe("send after end");
+  });
+
   test("a read whose write throws keeps the error as the drop reason, without a rejection", async () => {
     const { factory, sockets } = fixtureFactory();
     const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
