@@ -620,6 +620,43 @@ async function maskedSecretsLeft(harness) {
   return list.rows.filter(row => JSON.stringify(row.value).includes(ENCRYPTED_MARKER)).map(row => row.id);
 }
 
+/**
+ * Round 71: @iobroker/testing empties only the database and the log per suite — the instance data folder survives every
+ * suite and every run. A fresh installation has no data folder, so each suite starts without one; the second start of
+ * `playControllerRestarts` keeps it, as a real host does.
+ *
+ * @param {import("@iobroker/testing").IntegrationTestHarness} harness
+ */
+function clearInstanceData(harness) {
+  if (typeof harness.testDir !== "string") {
+    throw new Error("the harness no longer carries testDir — clearInstanceData cannot find the instance data folder");
+  }
+  fs.rmSync(path.join(harness.testDir, "iobroker-data", `${ADAPTER}.0`), { recursive: true, force: true });
+}
+
+/**
+ * A device the user of the previous release deleted from its card: the delete writes it to `excluded.json` in the
+ * instance data folder (id, address, identity — the 2.12.0 form), and it must stay deleted after the update. Not a
+ * fixture device — nothing answers at its address.
+ */
+const EXCLUDED_BEFORE = { id: "rx-v685-0a1b", ip: "127.0.0.250", identity: { serial: "0a1b2c3d" } };
+
+/**
+ * Round 75: adapter-specific like the fixture feed. The previous release's dump carries objects only; what it kept in
+ * the instance data folder is not in it, and clearInstanceData has just emptied the folder. The fixture devices are
+ * table rows, so the previous release found none by searching (`discovered.json` stays unwritten) — what it does hold
+ * is the exclusion list of a user who deleted a device.
+ *
+ * @param {import("@iobroker/testing").IntegrationTestHarness} harness
+ * @param {object} previous the previous release's dump
+ */
+async function seedInstanceData(harness, previous) {
+  void previous;
+  const dir = path.join(harness.testDir, "iobroker-data", `${ADAPTER}.0`);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "excluded.json"), JSON.stringify([EXCLUDED_BEFORE]));
+}
+
 tests.integration(ADAPTER_DIR, {
   controllerVersion: "stable",
   defineAdditionalTests({ suite }) {
@@ -630,6 +667,7 @@ tests.integration(ADAPTER_DIR, {
       before(async function () {
         this.timeout(600000);
         harness = getHarness();
+        clearInstanceData(harness);
         watch = await watchObjectWrites(harness);
         await resetInstanceNative(harness, await fixtureNative());
         await setSystemLanguage(harness, FIRST_LANGUAGE);
@@ -901,6 +939,7 @@ tests.integration(ADAPTER_DIR, {
       before(async function () {
         this.timeout(600000);
         harness = getHarness();
+        clearInstanceData(harness);
         await resetInstanceNative(harness, await fixtureNative());
         await setSystemLanguage(harness, SECOND_LANGUAGE);
         restarts = playControllerRestarts(harness, null, HOOK);
@@ -942,6 +981,7 @@ tests.integration(ADAPTER_DIR, {
       before(async function () {
         this.timeout(600000);
         harness = getHarness();
+        clearInstanceData(harness);
         await resetInstanceNative(harness, await fixtureNative({ volumeAsPercent: true }));
         await setSystemLanguage(harness, FIRST_LANGUAGE);
         restarts = playControllerRestarts(harness, null, HOOK);
@@ -1032,10 +1072,12 @@ tests.integration(ADAPTER_DIR, {
         before(async function () {
           this.timeout(900000);
           harness = getHarness();
+          clearInstanceData(harness);
           watch = await watchObjectWrites(harness);
           // The harness registers its own before() (fresh DB) ahead of this one,
           // so the seed survives and the adapter starts on top of the OLD objects.
           await seedPrevious(harness, previous);
+          await seedInstanceData(harness, previous);
           await restoreMaskedSecrets(harness);
           maskedLeft = await maskedSecretsLeft(harness);
           roomMembers = await seedRoom(harness, previous);
@@ -1205,6 +1247,15 @@ tests.integration(ADAPTER_DIR, {
           assert.deepStrictEqual(lost, [], `kept objects deleted during the upgrade:\n${lost.join("\n")}`);
         });
 
+        it("keeps a device the user deleted before the update deleted", function () {
+          const file = path.join(harness.testDir, "iobroker-data", `${ADAPTER}.0`, "excluded.json");
+          const excluded = JSON.parse(fs.readFileSync(file, "utf8"));
+          assert.ok(
+            excluded.some(entry => entry.id === EXCLUDED_BEFORE.id),
+            `the exclusion of ${EXCLUDED_BEFORE.id} did not survive the update: ${JSON.stringify(excluded)}`,
+          );
+        });
+
         it("starts on no masked secret from the previous dump", function () {
           assert.deepStrictEqual(
             maskedLeft,
@@ -1290,6 +1341,11 @@ after(function () {
       .filter(([id]) => READ_ONLY.has(id))
       .map(([id, n]) => `${id} ×${n}`),
   );
+  const single = reports.flatMap(r =>
+    Object.entries(r.single)
+      .filter(([id]) => READ_ONLY.has(id))
+      .map(([id, n]) => `${id} ×${n}`),
+  );
   fs.rmSync(RESOURCE_DIR, { recursive: true, force: true });
   assert.ok(starts.length > 0, "no adapter start loaded the resource probe — a start without adapterEnv()");
   assert.deepStrictEqual(silent, [], "adapter processes that never reached their exit (killed or crashed)");
@@ -1298,5 +1354,10 @@ after(function () {
     reread,
     [],
     `read-only states read back from the database while nothing changed:\n${reread.join("\n")}`,
+  );
+  assert.deepStrictEqual(
+    single,
+    [],
+    `read-only states read one by one from the database (one bulk getStatesAsync at the start, then compare in memory):\n${single.join("\n")}`,
   );
 });

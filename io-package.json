@@ -155,6 +155,7 @@
     "compact": true,
     "connectionType": "local",
     "dataSource": "push",
+    "dataFolder": "yamaha.%INSTANCE%",
     "type": "multimedia",
     "enabled": true,
     "authors": [

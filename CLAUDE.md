@@ -490,13 +490,15 @@ in ein öffentliches Repo.
 
 ## Tests
 
-- **Zwei getrennte Läufe, und `npm test` fährt seit 2.2.0 BEIDE.** `test:ts` = vitest über
-  `src/**/*.test.ts` + `test/standards/` — darin ist auch `src/main.test.ts`, das den
-  Adapter GEMOCKT hochfährt, nicht echt. Der echte Boot-Test ist `test/integration.js`
-  (`@iobroker/testing` startet js-controller + Instanz, ~30 s) und hängt an `test:integration`;
-  bis 2.1.1 lief er lokal nie mit, obwohl die CI ihn fährt (`testing-action-adapter` ruft
-  `test:unit` UND `test:integration`). `passWithNoTests` ist raus — ein nicht mehr greifendes
-  `include` muss rot melden, nicht grün.
+- **Zwei getrennte Läufe; `npm test` ist seit 3.1.3 der Flotten-Standard `test:ts && test:package`.** `test:ts` =
+  vitest über `src/**/*.test.ts` + `test/standards/` — darin ist auch `src/main.test.ts`, das den Adapter GEMOCKT
+  hochfährt, nicht echt. Der echte Boot-Test ist `test/integration.js` (`@iobroker/testing` startet js-controller +
+  Instanz, ~30 s) an `test:integration`: die CI fährt ihn (`testing-action-adapter` ruft `test:unit` UND
+  `test:integration`), im Release-Vorlauf ersetzt ihn `test:inventory` (dieselbe Startsuite). `passWithNoTests` ist
+  raus — ein nicht mehr greifendes `include` muss rot melden, nicht grün.
+- **Datenordner der Instanz** (`discovered.json`, `excluded.json`, `ignored.json`) ist seit 3.1.3 als
+  `common.dataFolder` deklariert, damit js-controller ihn sichert; die Inventar-Suiten leeren ihn vor jedem Start
+  (`clearInstanceData`), die Aufstiegs-Suite legt eine Ausschlussliste des Vorgängers zurück (`seedInstanceData`).
 - **Mutationstabellen** (`../../Ressourcen/iobroker-entwicklung/mutation-testing/`, ROOT = dieser Adapter):
   JEDE Tabelle mit diesem `ROOT` zählt für D09 — die fünf Wellen-Originale `mutations_yamaha.py` … `…5.py` leben
   NEBEN der Sammeltabelle `mutations_yamaha_all.py` und tragen dieselben Regeln: eine Nadel wird in JEDER Tabelle

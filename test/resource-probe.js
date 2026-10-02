@@ -117,6 +117,53 @@ if (dir) {
     }
     return write.call(this, chunk, ...args);
   };
+  // Round 77: the single reads the ADAPTER asks for — getState/getForeignState, and setStateChanged/
+  // setForeignStateChanged, which read the state before they write (js-controller 7.2.2 _setStateChangedHelper), also
+  // through their …Async forms (promisify in js-controller-common-db, 7.2.2). A read js-controller makes for itself —
+  // extendObject or setObjectNotExists read a state to set its `def` — runs through js-controller-adapter frames and does
+  // not count. A bulk read
+  // (getStatesAsync) is no single read.
+  const singleReads = new Map();
+  const Module = require("node:module");
+  const load = Module._load;
+  const WRAPPED = Symbol("resourceProbeWrapped");
+  const askedByAdapter = () => {
+    const stack = new Error().stack || "";
+    for (const line of stack.split("\n").slice(3)) {
+      const m = line.match(/\(?((?:file:\/\/)?\/[^():]+):\d+/);
+      if (!m || line.includes("node:") || /\/@iobroker\/js-controller-common(-db)?\//.test(m[1])) {
+        continue;
+      }
+      return !m[1].includes("/@iobroker/js-controller-adapter/");
+    }
+    return false;
+  };
+  Module._load = function (...args) {
+    const exported = load.apply(this, args);
+    const cls = exported && typeof exported === "object" ? exported.AdapterClass : undefined;
+    if (typeof cls === "function" && !cls.prototype[WRAPPED]) {
+      cls.prototype[WRAPPED] = true;
+      for (const [method, foreign] of [
+        ["getState", false],
+        ["getForeignState", true],
+        ["setStateChanged", false],
+        ["setForeignStateChanged", true],
+      ]) {
+        const original = cls.prototype[method];
+        if (typeof original !== "function") {
+          continue;
+        }
+        cls.prototype[method] = function (id, ...rest) {
+          if (typeof id === "string" && askedByAdapter()) {
+            const full = foreign || id.startsWith(`${this.namespace}.`) ? id : `${this.namespace}.${id}`;
+            singleReads.set(full, (singleReads.get(full) || 0) + 1);
+          }
+          return original.call(this, id, ...rest);
+        };
+      }
+    }
+    return exported;
+  };
   const mine = o => o.startsWith("adapter ") || o.startsWith("library ");
   process.on("exit", () => {
     let quiet = {};
@@ -143,6 +190,9 @@ if (dir) {
         left.push(`${h.constructor.name} from ${h[OWNER]}`);
       }
     }
-    fs.writeFileSync(path.join(dir, `${process.pid}.json`), JSON.stringify({ left, quiet }));
+    fs.writeFileSync(
+      path.join(dir, `${process.pid}.json`),
+      JSON.stringify({ left, quiet, single: Object.fromEntries(singleReads) }),
+    );
   });
 }

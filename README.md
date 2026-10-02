@@ -6,6 +6,9 @@
 
 **Support:** [![Ko-fi](https://img.shields.io/badge/Ko--fi-Support-ff5e5b?logo=ko-fi)](https://ko-fi.com/krobipd) [![PayPal](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://paypal.me/krobipd)
 
+> [!IMPORTANT]
+> This adapter cannot be installed from github
+
 Controls [Yamaha](https://www.yamaha.com/) AV receivers and MusicCast devices from
 ioBroker over the local network. It unites the three protocols Yamaha speaks —
 YNCA (the text control protocol of the networked receivers), MusicCast / Yamaha
@@ -53,8 +56,6 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
 - js-controller >= 7.2.2
 - admin >= 8.0.14
 
-> The adapter CANNOT be installed via GitHub: The adapter must be installed via the ioBroker repository (stable or latest).
-
 ## Ports
 
 | Port | Protocol | Direction | Purpose |
@@ -64,24 +65,6 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
 | 1900 (multicast 239.255.255.250) | UDP | outgoing | the network search |
 | 50000 | TCP | outgoing | YNCA control of the receivers |
 | 80 and the port a device announces | TCP | outgoing | MusicCast and XML control, the device description |
-
-## Configuration
-
-Devices are managed in the admin as cards. **Leave the list empty** and the adapter finds Yamaha
-network devices by itself at startup, or add devices by IP via the **"+" dialog**. Older
-receivers (before ~2010) do not announce themselves and must be added by hand.
-
-The network search runs **Automatically** (while the list is empty), **Always** (next to the devices
-you entered) or **Never**. With **Never** the adapter opens no listener on UDP port 1900 and controls
-the devices in your list by their address.
-
-The **Data points** section switches whole groups of datapoints on or off; the amplifier core (power,
-volume, mute, input, sound program, sleep) always stays on. **Volume as 0–100 %** is set per device,
-in the add/edit dialog of its card, and turns that receiver's volume datapoints into a percentage —
-the range most VIS widgets expect.
-
-Details on all settings and the object tree are in the
-[Wiki](https://github.com/iobroker-community-adapters/ioBroker.yamaha/wiki/Setup).
 
 ## Changelog
 
