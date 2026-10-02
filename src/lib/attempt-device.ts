@@ -16,7 +16,7 @@ import type { YncaSubunitCache } from "./ynca/subunit-cache";
 import type { ProbeMemory } from "./lifecycle/probe-memory";
 import type { Transport } from "./catalog/owner-policy";
 import { readyLine } from "./ready-line";
-import { errorMessage } from "./util";
+import { errText } from "./err-text";
 import type { ConnectionHandle, ControllerLog } from "./controller";
 import type { ObjectDef } from "./catalog/types";
 import type { DeviceRecord } from "./types";
@@ -207,7 +207,7 @@ async function connectBuilt(
           return conn;
         }
       } catch (e) {
-        deps.log.debug(`${deviceId}/${conn.transport}: transport did not connect (${errorMessage(e)})`);
+        deps.log.debug(`${deviceId}/${conn.transport}: transport did not connect (${errText(e)})`);
       }
       conn.close();
       return null;

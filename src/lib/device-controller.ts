@@ -5,7 +5,7 @@ import { formatWireNumber, writableNumber } from "./catalog/value-coerce";
 import { playTimeTwin } from "./catalog/play-time";
 import type { ObjectDef } from "./catalog/types";
 import { tName } from "./i18n";
-import { errorMessage } from "./util";
+import { errText } from "./err-text";
 import type { ControllerLog } from "./controller";
 import {
   SOURCE_INPUTS,
@@ -817,7 +817,7 @@ export class YncaDeviceController {
       }
       this.deps.log.debug(`${this.deviceId}: background value refresh done (YNCA)`);
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: background value refresh failed: ${errorMessage(e)}`);
+      this.deps.log.debug(`${this.deviceId}: background value refresh failed: ${errText(e)}`);
     }
   }
 
@@ -1082,7 +1082,7 @@ export class YncaDeviceController {
         await this.upsertTracked(object);
       }
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: could not republish the object tree: ${errorMessage(e)}`);
+      this.deps.log.debug(`${this.deviceId}: could not republish the object tree: ${errText(e)}`);
     }
   }
 
@@ -1634,7 +1634,7 @@ export class YncaDeviceController {
       try {
         await step();
       } catch (e) {
-        this.deps.log.debug(`${this.deviceId}: catching up a missing proof failed (${errorMessage(e)})`);
+        this.deps.log.debug(`${this.deviceId}: catching up a missing proof failed (${errText(e)})`);
       }
     });
   }
@@ -1902,7 +1902,7 @@ export class YncaDeviceController {
             learned = true;
           }
         } catch (e) {
-          this.deps.log.debug(`${this.deviceId}: probing the ${zone.key} pad failed (${errorMessage(e)})`);
+          this.deps.log.debug(`${this.deviceId}: probing the ${zone.key} pad failed (${errText(e)})`);
         }
       }
       if (has === undefined) {
@@ -1998,7 +1998,7 @@ export class YncaDeviceController {
         driver.resend(func, wire);
       }
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: probing the pad dialect failed (${errorMessage(e)})`);
+      this.deps.log.debug(`${this.deviceId}: probing the pad dialect failed (${errText(e)})`);
     }
   }
 

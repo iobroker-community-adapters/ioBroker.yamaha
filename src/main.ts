@@ -1,4 +1,5 @@
 import * as utils from "@iobroker/adapter-core";
+import { join } from "node:path";
 import { createSocket } from "node:dgram";
 import { get as httpGet } from "node:http";
 import { networkInterfaces } from "node:os";
@@ -42,7 +43,8 @@ import { TRANSPORT_LABELS } from "./lib/ready-line";
 import { copyDeviceTree, movedId, type DeviceMoveDeps } from "./lib/lifecycle/device-move";
 import { moveAllWithEnums } from "./lib/enum-carry";
 import { ObjectMirror, StateMirror } from "./lib/lifecycle/write-mirror";
-import { DeviceBody, errorMessage } from "./lib/util";
+import { DeviceBody } from "./lib/util";
+import { errText } from "./lib/err-text";
 import { migrateNativeKeys, type NativeKeyMigration } from "./lib/native-key-migration";
 import { tName } from "./lib/i18n";
 import { withValueLabels } from "./lib/catalog/state-labels";
@@ -298,7 +300,8 @@ export class Yamaha extends utils.Adapter {
    */
   private unloading = false;
   /** Device-manager backend: the receivers as cards with add/edit/delete. */
-  private readonly deviceManagement: YamahaDeviceManagement;
+  /** The device cards — built in onReady after I18n.init (dm-utils listens for messages from its constructor on). */
+  private deviceManagement: YamahaDeviceManagement | undefined;
   /**
    * Every datapoint that existed when this run started, filled ONCE before the cleanup and
    * before any device connects. Without it the balance below would report the whole tree as
@@ -388,12 +391,16 @@ export class Yamaha extends utils.Adapter {
     this.on("ready", this.onReady.bind(this));
     this.on("stateChange", this.onStateChange.bind(this));
     this.on("unload", this.onUnload.bind(this));
-    this.deviceManagement = new YamahaDeviceManagement(this);
   }
 
   /** Migrate settings and ids, clean up, subscribe to state changes, then start a supervisor for each device. */
   private async onReady(): Promise<void> {
     try {
+      // First: js-controller delivers messages before onReady has finished, and the device manager listens for them
+      // from its constructor on — it is built only once I18n stands (fleet check i18n-before-messages). The names
+      // still come from the own tName (lib/i18n.ts); this only makes adapter-core's I18n usable for any caller.
+      await utils.I18n.init(join(__dirname, "..", "admin"), this);
+      this.deviceManagement = new YamahaDeviceManagement(this);
       this.log.info('starting — a "ready" message will follow for each device');
       await this.writeStateNow("info.connection", false);
       // Every change to the instance object restarts the instance (js-controller 7.2.2, objects `change`
@@ -489,7 +496,7 @@ export class Yamaha extends utils.Adapter {
         try {
           await this.startDevice(device, pushReceiver);
         } catch (e) {
-          this.log.error(`${device.id}: could not be set up (${errorMessage(e)}) — the other devices continue`);
+          this.log.error(`${device.id}: could not be set up (${errText(e)}) — the other devices continue`);
         }
       }
       // After the table rows, like the search: an announcement is read against the RUNNING set —
@@ -505,7 +512,7 @@ export class Yamaha extends utils.Adapter {
       }
       this.scheduleIdleSearch();
     } catch (e) {
-      this.log.error(`onReady failed: ${errorMessage(e)}`);
+      this.log.error(`onReady failed: ${errText(e)}`);
     }
   }
 
@@ -653,7 +660,7 @@ export class Yamaha extends utils.Adapter {
         }
       }
     } catch (e) {
-      this.log.warn(`background discovery failed: ${errorMessage(e)}`);
+      this.log.warn(`background discovery failed: ${errText(e)}`);
     }
     this.scheduleIdleSearch();
   }
@@ -708,7 +715,7 @@ export class Yamaha extends utils.Adapter {
         }
       } catch (e) {
         // Same rule as the start-up loop: one device must not end the round for the others.
-        this.log.error(`${device.id}: could not be set up (${errorMessage(e)}) — the other devices continue`);
+        this.log.error(`${device.id}: could not be set up (${errText(e)}) — the other devices continue`);
       }
     }
     if (touched.size > 0) {
@@ -768,7 +775,7 @@ export class Yamaha extends utils.Adapter {
     } catch (e) {
       listener.close();
       this.log.warn(
-        `SSDP listener unavailable (${errorMessage(e)}) — address changes are found by the periodic search only`,
+        `SSDP listener unavailable (${errText(e)}) — address changes are found by the periodic search only`,
       );
     }
   }
@@ -793,7 +800,7 @@ export class Yamaha extends utils.Adapter {
     }
     this.notifyProbed.set(address, now);
     this.absorbNotify(notify.location, address).catch((e: unknown) =>
-      this.log.debug(`SSDP alive from ${address}: not absorbed (${errorMessage(e)})`),
+      this.log.debug(`SSDP alive from ${address}: not absorbed (${errText(e)})`),
     );
   }
 
@@ -1035,7 +1042,7 @@ export class Yamaha extends utils.Adapter {
     this.persistDeviceNative(deviceId, { identity: merged });
     if (record.source === "discovered" && merged) {
       this.rememberIdentity(deviceId, merged).catch((e: unknown) =>
-        this.log.debug(`${deviceId}: could not store the identity (${errorMessage(e)})`),
+        this.log.debug(`${deviceId}: could not store the identity (${errText(e)})`),
       );
     }
   }
@@ -1101,13 +1108,13 @@ export class Yamaha extends utils.Adapter {
       const listing = await this.getAdapterObjectsAsync();
       removed = Object.entries(listing).filter(([id, obj]) => id.startsWith(prefix) && obj?.type === "state").length;
     } catch (e) {
-      this.log.debug(`${deviceId}: could not count its datapoints before the delete (${errorMessage(e)})`);
+      this.log.debug(`${deviceId}: could not count its datapoints before the delete (${errText(e)})`);
     }
     try {
       await this.deleteObject(deviceId, true);
       this.log.info(`${deviceId}: device deleted — removed ${removed} datapoint(s)`);
     } catch (e) {
-      this.log.warn(`could not remove the object tree of "${deviceId}" (${errorMessage(e)})`);
+      this.log.warn(`could not remove the object tree of "${deviceId}" (${errText(e)})`);
     }
     this.writeState("info.connection", [...this.deviceConnected.values()].some(Boolean));
     this.writeDeviceOverview();
@@ -1220,7 +1227,7 @@ export class Yamaha extends utils.Adapter {
       await this.subscribeStatesAsync("*");
     } catch (e) {
       this.log.error(
-        `could not subscribe to state changes (${errorMessage(e)}) — the tree still updates, ` +
+        `could not subscribe to state changes (${errText(e)}) — the tree still updates, ` +
           `but writes to datapoints will not reach the device until the instance is restarted`,
       );
     }
@@ -1370,7 +1377,7 @@ export class Yamaha extends utils.Adapter {
     try {
       this.stateMirror.seed(await this.getStatesAsync("*"), this.namespace);
     } catch (e) {
-      this.log.debug(`could not read the states to compare against (${errorMessage(e)})`);
+      this.log.debug(`could not read the states to compare against (${errText(e)})`);
     }
   }
 
@@ -1527,7 +1534,7 @@ export class Yamaha extends utils.Adapter {
     if (this.unloading) {
       return;
     }
-    const message = `could not write ${what} (${errorMessage(e)})`;
+    const message = `could not write ${what} (${errText(e)})`;
     if (this.stateWritesFailing) {
       this.log.debug(message);
       return;
@@ -1757,7 +1764,7 @@ export class Yamaha extends utils.Adapter {
     } catch (e) {
       // Nothing is lost — the object still stands as it was — but the stale bound stays, so it
       // belongs in the log rather than passing silently.
-      this.log.debug(`${id}: could not drop the stale bound(s) ${gone.join(", ")} (${errorMessage(e)})`);
+      this.log.debug(`${id}: could not drop the stale bound(s) ${gone.join(", ")} (${errText(e)})`);
       return;
     }
     // Only a written object may advance the snapshot: remembering bounds that never reached the
@@ -1793,7 +1800,7 @@ export class Yamaha extends utils.Adapter {
     } catch (e) {
       // Without the snapshot the balance would call every datapoint new; better to stay
       // silent about it than to log a wrong number.
-      this.log.debug(`could not read the existing datapoints (${errorMessage(e)}); balance line disabled`);
+      this.log.debug(`could not read the existing datapoints (${errText(e)}); balance line disabled`);
       this.balanceDisabled = true;
       return undefined;
     }
@@ -1847,13 +1854,13 @@ export class Yamaha extends utils.Adapter {
         try {
           await this.purgeNeverFilled();
         } catch (e) {
-          this.log.debug(`orphan purge failed (${errorMessage(e)}); skipped for this run`);
+          this.log.debug(`orphan purge failed (${errText(e)}); skipped for this run`);
         }
         // Then the folders those removals (or an earlier version's tree rework) left empty.
         try {
           await this.purgeChildlessChannels();
         } catch (e) {
-          this.log.debug(`empty-folder purge failed (${errorMessage(e)}); skipped for this run`);
+          this.log.debug(`empty-folder purge failed (${errText(e)}); skipped for this run`);
         }
         const parts: string[] = [];
         if (this.createdDatapoints > 0) {
@@ -2141,7 +2148,7 @@ export class Yamaha extends utils.Adapter {
       this.deviceLabels.set(deviceId, { name: label, rank });
       this.log.debug(`${deviceId}: device name set to "${label}"`);
     } catch (e) {
-      this.log.debug(`${deviceId}: setting the device name failed (${errorMessage(e)})`);
+      this.log.debug(`${deviceId}: setting the device name failed (${errText(e)})`);
     }
   }
 
@@ -2234,7 +2241,7 @@ export class Yamaha extends utils.Adapter {
     if (native.volumeAsPercent === true && !(await this.handOverVolumePercent())) {
       migrations = migrations.filter(m => !("drop" in m && m.drop === "volumeAsPercent"));
     }
-    return migrateNativeKeys(this, migrations, errorMessage);
+    return migrateNativeKeys(this, migrations, errText);
   }
 
   /**
@@ -2405,9 +2412,7 @@ export class Yamaha extends utils.Adapter {
           }
         } catch (e) {
           // The journal stays: the next start tries again, and this run keeps the device where it was.
-          this.log.warn(
-            `${move.from}: could not move to ${move.to} (${errorMessage(e)}) — tried again on the next start`,
-          );
+          this.log.warn(`${move.from}: could not move to ${move.to} (${errText(e)}) — tried again on the next start`);
         }
       }
       if (done.length === 0) {
@@ -2435,7 +2440,7 @@ export class Yamaha extends utils.Adapter {
       }
       return { rows: next };
     } catch (e) {
-      this.log.error(`moving the device ids failed (${errorMessage(e)}) — the devices run under their current ids`);
+      this.log.error(`moving the device ids failed (${errText(e)}) — the devices run under their current ids`);
     }
     return {};
   }
@@ -2468,7 +2473,7 @@ export class Yamaha extends utils.Adapter {
           await this.delForeignObjectAsync(id);
         }
       },
-      errorMessage,
+      errText,
     );
     return carried.reduce((sum, entry) => sum + entry.newIds.length, 0);
   }
@@ -2558,7 +2563,7 @@ export class Yamaha extends utils.Adapter {
       await this.writeDeviceObject(deviceId, { native: { movingTo: target } });
       this.log.info(`${deviceId}: the device told who it is — its objects move to ${target} at the next start`);
     } catch (e) {
-      this.log.debug(`${deviceId}: deciding its device id failed (${errorMessage(e)}) — tried again on the next start`);
+      this.log.debug(`${deviceId}: deciding its device id failed (${errText(e)}) — tried again on the next start`);
     }
   }
 
@@ -2883,7 +2888,7 @@ export class Yamaha extends utils.Adapter {
         log: { debug: message => this.log.debug(message), warn: message => this.log.warn(message) },
       });
     } catch (e) {
-      this.log.warn(`auto-discovery scan failed, using the remembered devices: ${errorMessage(e)}`);
+      this.log.warn(`auto-discovery scan failed, using the remembered devices: ${errText(e)}`);
     }
     return found;
   }
@@ -3289,7 +3294,7 @@ export class Yamaha extends utils.Adapter {
           // resolves whatever the rest found.
           this.warnSearchOnce(
             `socket|${bindAddr ?? ""}`,
-            `discovery socket failed${bindAddr ? ` on interface ${bindAddr}` : ""}: ${errorMessage(err)}${
+            `discovery socket failed${bindAddr ? ` on interface ${bindAddr}` : ""}: ${errText(err)}${
               bindAddr ? " — check the Network Interface setting" : ""
             }`,
           );

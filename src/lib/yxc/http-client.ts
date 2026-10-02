@@ -1,6 +1,7 @@
 import { get as httpGet, request as httpRequest, type IncomingMessage } from "node:http";
 import type { CommandGate } from "../lifecycle/command-gate";
-import { DeviceBody, errorMessage } from "../util";
+import { DeviceBody } from "../util";
+import { errText } from "../err-text";
 
 /**
  * Whether a command path changes something on the device (as opposed to reading). The
@@ -68,7 +69,7 @@ export class YxcTransportError extends Error {
   public constructor(command: string, cause: Error) {
     // Through the helper (an empty-message AggregateError still says its code, E14); the command is
     // added only where the cause does not already name it.
-    const reason = errorMessage(cause);
+    const reason = errText(cause);
     super(reason.includes(command) ? reason : `${reason} (${command})`, { cause });
     this.name = "YxcTransportError";
   }
@@ -183,7 +184,7 @@ function defaultSend(ip: string): YxcSend {
           try {
             resolve(assertOk(JSON.parse(body.text()), command));
           } catch (e) {
-            reject(e instanceof Error ? e : new Error(errorMessage(e)));
+            reject(e instanceof Error ? e : new Error(errText(e)));
           }
         });
       };

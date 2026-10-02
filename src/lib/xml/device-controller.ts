@@ -25,7 +25,7 @@ import {
 import { parseXmlStatus, stateToXml, type XmlCommand } from "./command-mapper";
 import { XML_AMP_CATALOG } from "./catalog";
 import type { ControllerLog } from "../controller";
-import { errorMessage } from "../util";
+import { errText } from "../err-text";
 import { PollDropDetector } from "../lifecycle/poll-drop-detector";
 import type { ProbeMemory } from "../lifecycle/probe-memory";
 import type { CommandGate } from "../lifecycle/command-gate";
@@ -209,7 +209,7 @@ export class XmlDeviceController {
     try {
       config = await this.deps.client.getSystemConfig();
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: System/Config failed (${errorMessage(e)})`);
+      this.deps.log.debug(`${this.deviceId}: System/Config failed (${errText(e)})`);
     }
     // Freshness guard for the (persisted) probe memory: model + system id + firmware are the
     // identity this transport can read. A different (or updated) device behind the address
@@ -400,9 +400,7 @@ export class XmlDeviceController {
       // `:v3` since the parse carries every declared write command (2026-09-29, D18) — an older parse lacks them.
       return await this.deps.probeMemory.once("xmlDescriptor:v3", probe);
     } catch (e) {
-      this.deps.log.debug(
-        `${this.deviceId}: desc.xml probe failed, asking again on the next connect (${errorMessage(e)})`,
-      );
+      this.deps.log.debug(`${this.deviceId}: desc.xml probe failed, asking again on the next connect (${errText(e)})`);
       return empty;
     }
   }
@@ -432,9 +430,7 @@ export class XmlDeviceController {
     try {
       return fresh ? await memory.refresh(key, probe) : await memory.once(key, probe);
     } catch (e) {
-      this.deps.log.debug(
-        `${this.deviceId}: ${key} probe failed, asking again on the next connect (${errorMessage(e)})`,
-      );
+      this.deps.log.debug(`${this.deviceId}: ${key} probe failed, asking again on the next connect (${errText(e)})`);
       return "";
     }
   }
@@ -716,7 +712,7 @@ export class XmlDeviceController {
         this.emit("multiroom.masterPower", power);
       }
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: system power failed: ${errorMessage(e)}`);
+      this.deps.log.debug(`${this.deviceId}: system power failed: ${errText(e)}`);
     }
   }
 
@@ -809,7 +805,7 @@ export class XmlDeviceController {
       const word = /<Contents_Display>\s*(On|Off)\s*<\/Contents_Display>/.exec(body)?.[1];
       return word === undefined ? undefined : word === "On";
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: ${zone.element} contents display failed: ${errorMessage(e)}`);
+      this.deps.log.debug(`${this.deviceId}: ${zone.element} contents display failed: ${errText(e)}`);
       return undefined;
     }
   }
@@ -926,7 +922,7 @@ export class XmlDeviceController {
           answers.set(source, parsePlayInfo(await this.deps.client.getXml(source, "<Play_Info>GetParam</Play_Info>")));
         } catch (e) {
           answers.set(source, undefined);
-          this.deps.log.debug(`${this.deviceId}: ${source} Play_Info failed: ${errorMessage(e)}`);
+          this.deps.log.debug(`${this.deviceId}: ${source} Play_Info failed: ${errText(e)}`);
         }
       }
       const info = answers.get(source);
@@ -987,7 +983,7 @@ export class XmlDeviceController {
     try {
       this.emitTunerInfo(await this.deps.client.getXml("Tuner", "<Play_Info>GetParam</Play_Info>"));
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: tuner Play_Info failed: ${errorMessage(e)}`);
+      this.deps.log.debug(`${this.deviceId}: tuner Play_Info failed: ${errText(e)}`);
     }
   }
 
@@ -1093,9 +1089,7 @@ export class XmlDeviceController {
         await this.deps.probeMemory.once("xmlBrowseSources:v2", probe),
       );
     } catch (e) {
-      this.deps.log.debug(
-        `${this.deviceId}: browse probe failed, asking again on the next connect (${errorMessage(e)})`,
-      );
+      this.deps.log.debug(`${this.deviceId}: browse probe failed, asking again on the next connect (${errText(e)})`);
       return;
     }
     if (available.size === 0) {
@@ -1240,7 +1234,7 @@ export class XmlDeviceController {
         this.dropDetector.report("liveness check unanswered");
       }
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: liveness probe failed: ${errorMessage(e)}`);
+      this.deps.log.debug(`${this.deviceId}: liveness probe failed: ${errText(e)}`);
       this.dropDetector.report("liveness check unanswered");
     }
   }
@@ -1271,7 +1265,7 @@ export class XmlDeviceController {
       await this.refreshPlayers();
       this.dropDetector.record(anyOk);
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: keepalive poll failed: ${errorMessage(e)}`);
+      this.deps.log.debug(`${this.deviceId}: keepalive poll failed: ${errText(e)}`);
     }
   }
 
@@ -1292,7 +1286,7 @@ export class XmlDeviceController {
       // The read-back after a user write reaches this without an awaiting caller (see
       // applyCommand), so a throw would be an unhandled rejection — and that stops the
       // instance. Like the MusicCast twin, the answer stays "the device answered".
-      this.deps.log.warn(`${this.deviceId}: could not apply the ${zone.key} status (${errorMessage(e)})`);
+      this.deps.log.warn(`${this.deviceId}: could not apply the ${zone.key} status (${errText(e)})`);
     }
     return true;
   }
@@ -1444,7 +1438,7 @@ export class XmlDeviceController {
             }
           })
           .catch((e: unknown) => {
-            this.deps.log.debug(`${this.deviceId}: could not create the new status fields: ${errorMessage(e)}`);
+            this.deps.log.debug(`${this.deviceId}: could not create the new status fields: ${errText(e)}`);
           });
       }
     }
@@ -1465,7 +1459,7 @@ export class XmlDeviceController {
     try {
       return await this.deps.client.getStatus(element);
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: getStatus(${element}) failed: ${errorMessage(e)}`);
+      this.deps.log.debug(`${this.deviceId}: getStatus(${element}) failed: ${errText(e)}`);
       return undefined;
     }
   }
@@ -1623,7 +1617,7 @@ export class XmlDeviceController {
         ? await this.deps.probeMemory.refresh(`xmlZoneNames:${zone.key}`, probe)
         : await probe();
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: ${zone.element} name probe failed (${errorMessage(e)})`);
+      this.deps.log.debug(`${this.deviceId}: ${zone.element} name probe failed (${errText(e)})`);
       return { zone: "", zoneB: "" };
     }
   }
@@ -1721,7 +1715,7 @@ export class XmlDeviceController {
       await this.sendCommand(command);
       await readBack?.();
     } catch (e) {
-      this.deps.log.warn(`${this.deviceId}: reading back after an XML command failed: ${errorMessage(e)}`);
+      this.deps.log.warn(`${this.deviceId}: reading back after an XML command failed: ${errText(e)}`);
     }
   }
 
@@ -1734,7 +1728,7 @@ export class XmlDeviceController {
     try {
       await this.deps.client.send(command.zone, command.inner);
     } catch (e) {
-      this.deps.log.warn(`${this.deviceId}: XML command failed: ${errorMessage(e)}`);
+      this.deps.log.warn(`${this.deviceId}: XML command failed: ${errText(e)}`);
     }
   }
 }

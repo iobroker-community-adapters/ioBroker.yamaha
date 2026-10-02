@@ -1,5 +1,5 @@
 import type { ConnectionHandle } from "../controller";
-import { errorMessage } from "../util";
+import { errText } from "../err-text";
 
 // Re-exported so existing importers (main.ts) keep resolving it from here.
 export type { ConnectionHandle };
@@ -125,7 +125,7 @@ export class DeviceSupervisor {
     } catch (e) {
       // Never let an attempt failure vanish silently — without this line a repeatable
       // error (e.g. object creation failing) becomes an invisible endless retry loop.
-      this.deps.log.debug(`${this.prefix}connection attempt failed, retrying: ${errorMessage(e)}`);
+      this.deps.log.debug(`${this.prefix}connection attempt failed, retrying: ${errText(e)}`);
       handle = null;
     }
     if (this.attemptAbort === abort) {
@@ -153,7 +153,7 @@ export class DeviceSupervisor {
       return;
     }
     if (reason) {
-      this.deps.log.debug(`${this.prefix}connection dropped, reconnecting: ${errorMessage(reason)}`);
+      this.deps.log.debug(`${this.prefix}connection dropped, reconnecting: ${errText(reason)}`);
     }
     // Release the dropped connection's resources (keepalive timer, push registration,
     // socket) before reconnecting — not every transport self-cleans on drop.

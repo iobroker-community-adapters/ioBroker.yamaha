@@ -157,7 +157,7 @@
     "dataSource": "push",
     "dataFolder": "yamaha.%INSTANCE%",
     "type": "multimedia",
-    "enabled": true,
+    "enabled": false,
     "authors": [
       "krobi <krobi@power-dreams.com>",
       "soef <soef@gmx.net>",

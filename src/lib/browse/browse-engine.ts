@@ -1,6 +1,6 @@
 import type { BrowseDriver, BrowseRow, BrowseWindow } from "./types";
 import type { ControllerLog } from "../controller";
-import { errorMessage } from "../util";
+import { errText } from "../err-text";
 import { writableNumber } from "../catalog/value-coerce";
 
 /** Poll interval while waiting for the device to deliver a fresh window. */
@@ -159,7 +159,7 @@ export class BrowseEngine {
       try {
         await press.run();
       } catch (e) {
-        this.deps.log.warn(`browse: ${press.what} failed: ${errorMessage(e)}`);
+        this.deps.log.warn(`browse: ${press.what} failed: ${errText(e)}`);
       }
     })();
   }
@@ -241,7 +241,7 @@ export class BrowseEngine {
     try {
       await op();
     } catch (e) {
-      this.deps.log.warn(`browse: ${what} failed: ${errorMessage(e)}`);
+      this.deps.log.warn(`browse: ${what} failed: ${errText(e)}`);
     } finally {
       this.running = false;
       if (!this.closed) {

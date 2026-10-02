@@ -1,6 +1,7 @@
 import { createSocket } from "node:dgram";
 import { isIPv4, resolveIPv4 } from "../network-interfaces";
-import { decodeDeviceText, errorMessage } from "../util";
+import { decodeDeviceText } from "../util";
+import { errText } from "../err-text";
 
 /** The UDP port MusicCast devices push unsolicited events to. */
 const YXC_PUSH_PORT = 41100;
@@ -183,7 +184,7 @@ export class YxcPushReceiver {
     if (!this.listening) {
       // Bind-time failure: another MusicCast consumer holds the port. Expected — said once,
       // then tried again quietly until the port is free.
-      const line = `YXC push port :${YXC_PUSH_PORT} unavailable — MusicCast devices are polled, not pushed: ${errorMessage(err)}`;
+      const line = `YXC push port :${YXC_PUSH_PORT} unavailable — MusicCast devices are polled, not pushed: ${errText(err)}`;
       if (this.bindFailed) {
         this.deps.log.debug(line);
       } else {
@@ -196,7 +197,7 @@ export class YxcPushReceiver {
     // Runtime error on a socket that was listening — not normal; rebind after a delay
     // (registrations survive). listening resets so a failed rebind falls back cleanly.
     this.listening = false;
-    this.deps.log.warn(`YXC push socket error, rebinding in ${REBIND_DELAY_MS / 1000}s: ${errorMessage(err)}`);
+    this.deps.log.warn(`YXC push socket error, rebinding in ${REBIND_DELAY_MS / 1000}s: ${errText(err)}`);
     this.retryTimer = this.deps.schedule(() => this.start(), REBIND_DELAY_MS);
   }
 

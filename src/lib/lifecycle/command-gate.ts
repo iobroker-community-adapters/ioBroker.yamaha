@@ -20,7 +20,7 @@
  * - **The timeout budget belongs to the running operation**, never to queue-waiting — the
  *   nut2 client's queue makes the same distinction for the same reason.
  */
-import { errorMessage } from "../util";
+import { errText } from "../err-text";
 
 /** What a queued operation is worth: a user write outranks background polling. */
 export type CommandPriority = "user" | "background";
@@ -235,7 +235,7 @@ export class CommandGate {
         follower.resolve(result);
       }
     } catch (e) {
-      const error = e instanceof Error ? e : new Error(errorMessage(e));
+      const error = e instanceof Error ? e : new Error(errText(e));
       entry.reject(error);
       for (const follower of entry.followers ?? []) {
         follower.reject(error);

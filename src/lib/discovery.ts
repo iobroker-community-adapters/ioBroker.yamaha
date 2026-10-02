@@ -1,5 +1,5 @@
 import { identityFrom, macFromUdn, type DeviceIdentity } from "./device-identity";
-import { errorMessage } from "./util";
+import { errText } from "./err-text";
 
 const YAMAHA_MANUFACTURER = /<manufacturer>[^<]*yamaha[^<]*<\/manufacturer>/i;
 const FRIENDLY_NAME = /<friendlyName>([^<]*)<\/friendlyName>/;
@@ -119,7 +119,7 @@ export async function probeDescription(
     const yamaha = parseYamahaDescription(await deps.fetch(location));
     return yamaha ? { ip: address, ...yamaha } : null;
   } catch (e) {
-    deps.log.debug(`discovery: ${address} description fetch failed: ${errorMessage(e)}`);
+    deps.log.debug(`discovery: ${address} description fetch failed: ${errText(e)}`);
     return undefined;
   }
 }

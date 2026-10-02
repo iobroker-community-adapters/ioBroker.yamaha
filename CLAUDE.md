@@ -370,8 +370,11 @@ der Typ `I18nKey` macht einen Tippfehler zum Compile-Fehler.
 
 - **Bewusst NICHT adapter-core `I18n`:** dessen `getTranslatedObject` **wirft**, solange `init()`
   nicht lief — damit hinge jeder Objektname an der Startreihenfolge, und die reinen Katalogmodule
-  (samt ihrer Unit-Tests) zögen die ganze Adapter-Laufzeit mit herein. Der `I18n.init()`-Aufruf in
-  `onReady` ist deshalb entfallen.
+  (samt ihrer Unit-Tests) zögen die ganze Adapter-Laufzeit mit herein. **Seit 3.1.3 läuft `await I18n.init()`
+  trotzdem als ERSTE Anweisung in `onReady`, und erst danach entsteht der Gerätemanager** (Flotten-Prüfung
+  `i18n-before-messages`: js-controller liefert Nachrichten vor dem Ende von `onReady`, dm-utils hört ab seinem
+  Konstruktor) — die Namen bauen weiter über `tName`. Fehlertexte über den Flotten-Master `lib/err-text.ts` (`errText`),
+  der frühere Zwilling `errorMessage` in `util.ts` ist weg.
 - **Zwei Wege, je nachdem WANN der Name gebraucht wird.** Die drei Protokoll-Kataloge sind
   Modul-Konstanten (vor jedem Adapterstart ausgewertet) → sie tragen den **Schlüssel** (`nameKey`
   auf `CatalogEntry`, `common.nameKey` bei XML/YXC, `CHANNEL_NAME_KEYS`), und die Objekt-Bauer

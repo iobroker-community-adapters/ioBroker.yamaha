@@ -1,5 +1,5 @@
 import { createSocket, type Socket } from "node:dgram";
-import { errorMessage } from "./util";
+import { errText } from "./err-text";
 
 /**
  * Passive SSDP: hear the `NOTIFY ssdp:alive` a UPnP device multicasts when it comes up. A
@@ -137,7 +137,7 @@ export class SsdpListener {
         socket.addMembership(MULTICAST_ADDR, iface);
       } catch (e) {
         this.deps.log.warn(
-          `SSDP multicast join failed on ${iface ?? "the default interface"}: ${errorMessage(e)} — address changes on that network are found by the periodic search only`,
+          `SSDP multicast join failed on ${iface ?? "the default interface"}: ${errText(e)} — address changes on that network are found by the periodic search only`,
         );
       }
     }
@@ -153,9 +153,7 @@ export class SsdpListener {
       return;
     }
     this.failed = true;
-    this.deps.log.warn(
-      `SSDP listener failed: ${errorMessage(err)} — address changes are found by the periodic search only`,
-    );
+    this.deps.log.warn(`SSDP listener failed: ${errText(err)} — address changes are found by the periodic search only`);
   }
 
   /**
@@ -173,7 +171,7 @@ export class SsdpListener {
       this.deps.onAlive(notify, address);
     } catch (e) {
       // The callback is the adapter's; a throw there must not end the socket's message loop.
-      this.deps.log.warn(`SSDP listener: alive from ${address} not handled (${errorMessage(e)})`);
+      this.deps.log.warn(`SSDP listener: alive from ${address} not handled (${errText(e)})`);
     }
   }
 }

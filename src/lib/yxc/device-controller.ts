@@ -55,7 +55,7 @@ import type { ObjectDef } from "../catalog/types";
 import { tName, type I18nKey } from "../i18n";
 import type { StateValue } from "../types";
 import type { ControllerLog } from "../controller";
-import { errorMessage } from "../util";
+import { errText } from "../err-text";
 import { coerceBool } from "../catalog/value-coerce";
 import { PollDropDetector } from "../lifecycle/poll-drop-detector";
 import { YxcRefusalError, YxcTransportError } from "./http-client";
@@ -418,7 +418,7 @@ export class YxcDeviceController {
         });
       }
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: getDeviceInfo failed (${errorMessage(e)})`);
+      this.deps.log.debug(`${this.deviceId}: getDeviceInfo failed (${errText(e)})`);
     }
     // Capabilities and name are constant while the device runs, so on a reconnect —
     // and, persisted, on a restart — they come from the per-device memory instead of
@@ -605,7 +605,7 @@ export class YxcDeviceController {
       status = await this.deps.client.getFuncStatus();
     } catch (e) {
       // A device that does not answer simply keeps no device-wide settings this run.
-      this.deps.log.debug(`${this.deviceId}: getFuncStatus failed (${errorMessage(e)})`);
+      this.deps.log.debug(`${this.deviceId}: getFuncStatus failed (${errText(e)})`);
       return;
     }
     this.systemEntries = presentSystemEntries(status);
@@ -680,7 +680,7 @@ export class YxcDeviceController {
     try {
       this.applySystemStatus(await this.deps.client.getFuncStatus());
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: getFuncStatus refresh failed (${errorMessage(e)})`);
+      this.deps.log.debug(`${this.deviceId}: getFuncStatus refresh failed (${errText(e)})`);
     }
   }
 
@@ -869,7 +869,7 @@ export class YxcDeviceController {
       try {
         await entry.write?.apply(this.deps.client, input);
       } catch (e) {
-        this.deps.log.warn(`${this.deviceId}: ${entry.state} could not be set (${errorMessage(e)})`);
+        this.deps.log.warn(`${this.deviceId}: ${entry.state} could not be set (${errText(e)})`);
         this.checkAliveAfter(e);
         // A refused setting is read back like a taken one — the datapoint shows what the device
         // kept (audit 2026-09-24, C28); a write nobody answered leaves it to the liveness check.
@@ -879,7 +879,7 @@ export class YxcDeviceController {
       }
       this.applySystemStatus(await this.deps.client.getFuncStatus());
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: reading ${entry.state} back failed (${errorMessage(e)})`);
+      this.deps.log.debug(`${this.deviceId}: reading ${entry.state} back failed (${errText(e)})`);
     }
   }
 
@@ -1092,7 +1092,7 @@ export class YxcDeviceController {
       }
       this.dropDetector.record(anyOk);
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: keepalive poll failed: ${errorMessage(e)}`);
+      this.deps.log.debug(`${this.deviceId}: keepalive poll failed: ${errText(e)}`);
     }
   }
 
@@ -1171,7 +1171,7 @@ export class YxcDeviceController {
         await this.publishSlots("player.netPlayer.playlistNames", "musiccastPlaylists", PLAYLIST_SLOT_FIELDS, entries);
       }
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: getMcPlaylistName failed: ${errorMessage(e)}`);
+      this.deps.log.debug(`${this.deviceId}: getMcPlaylistName failed: ${errText(e)}`);
     }
   }
 
@@ -1199,7 +1199,7 @@ export class YxcDeviceController {
         );
       }
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: getPlayQueue failed: ${errorMessage(e)}`);
+      this.deps.log.debug(`${this.deviceId}: getPlayQueue failed: ${errText(e)}`);
     }
   }
 
@@ -1221,7 +1221,7 @@ export class YxcDeviceController {
         this.emit(update.id, update.value);
       }
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: getSignalInfo(${zone}) failed: ${errorMessage(e)}`);
+      this.deps.log.debug(`${this.deviceId}: getSignalInfo(${zone}) failed: ${errText(e)}`);
     }
   }
 
@@ -1234,7 +1234,7 @@ export class YxcDeviceController {
     try {
       return await this.deps.client.getNameText();
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: getNameText failed (${errorMessage(e)})`);
+      this.deps.log.debug(`${this.deviceId}: getNameText failed (${errText(e)})`);
       return undefined;
     }
   }
@@ -1276,7 +1276,7 @@ export class YxcDeviceController {
         }
       }
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: re-reading the names failed (${errorMessage(e)})`);
+      this.deps.log.debug(`${this.deviceId}: re-reading the names failed (${errText(e)})`);
     }
   }
 
@@ -1332,7 +1332,7 @@ export class YxcDeviceController {
         );
       }
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: getPresetInfo failed: ${errorMessage(e)}`);
+      this.deps.log.debug(`${this.deviceId}: getPresetInfo failed: ${errText(e)}`);
     }
   }
 
@@ -1355,7 +1355,7 @@ export class YxcDeviceController {
         );
       }
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: getRecentInfo failed: ${errorMessage(e)}`);
+      this.deps.log.debug(`${this.deviceId}: getRecentInfo failed: ${errText(e)}`);
     }
   }
 
@@ -1372,7 +1372,7 @@ export class YxcDeviceController {
         try {
           byBand[band] = await this.deps.client.getTunerPresetInfo(band);
         } catch (e) {
-          this.deps.log.debug(`${this.deviceId}: getTunerPresetInfo(${band}) failed: ${errorMessage(e)}`);
+          this.deps.log.debug(`${this.deviceId}: getTunerPresetInfo(${band}) failed: ${errText(e)}`);
         }
       }
       const update = parseYxcTunerPresetLists(byBand);
@@ -1403,7 +1403,7 @@ export class YxcDeviceController {
         }
       }
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: stored stations failed: ${errorMessage(e)}`);
+      this.deps.log.debug(`${this.deviceId}: stored stations failed: ${errText(e)}`);
     }
   }
 
@@ -1414,7 +1414,7 @@ export class YxcDeviceController {
         this.emit(update.id, update.value);
       }
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: getClockSettings failed: ${errorMessage(e)}`);
+      this.deps.log.debug(`${this.deviceId}: getClockSettings failed: ${errText(e)}`);
     }
   }
 
@@ -1455,7 +1455,7 @@ export class YxcDeviceController {
       }
       this.routePlayerBlock(source, updates);
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: getPlayInfo(${arg ?? ""}) failed: ${errorMessage(e)}`);
+      this.deps.log.debug(`${this.deviceId}: getPlayInfo(${arg ?? ""}) failed: ${errText(e)}`);
     }
   }
 
@@ -1599,7 +1599,7 @@ export class YxcDeviceController {
         await this.publishSlots("multiroom.group.clients", "linkedDevices", CLIENT_SLOT_FIELDS, clients);
       }
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: getDistributionInfo failed: ${errorMessage(e)}`);
+      this.deps.log.debug(`${this.deviceId}: getDistributionInfo failed: ${errText(e)}`);
     }
   }
 
@@ -1623,7 +1623,7 @@ export class YxcDeviceController {
       }
       await this.refreshDistribution();
     } catch (e) {
-      this.deps.log.warn(`${this.deviceId}: renaming the group failed: ${errorMessage(e)}`);
+      this.deps.log.warn(`${this.deviceId}: renaming the group failed: ${errText(e)}`);
       await this.refreshDistribution();
     }
   }
@@ -1657,7 +1657,7 @@ export class YxcDeviceController {
       await this.refreshDistribution();
     } catch (e) {
       // A user action failing must be visible — warn, like every other write command.
-      this.deps.log.warn(`${this.deviceId}: leaveGroup failed: ${errorMessage(e)}`);
+      this.deps.log.warn(`${this.deviceId}: leaveGroup failed: ${errText(e)}`);
     }
   }
 
@@ -1708,7 +1708,7 @@ export class YxcDeviceController {
       await this.leaveAsClient();
       await this.refreshDistribution();
     } catch (e) {
-      this.deps.log.warn(`${this.deviceId}: leaving the group after the input change failed: ${errorMessage(e)}`);
+      this.deps.log.warn(`${this.deviceId}: leaving the group after the input change failed: ${errText(e)}`);
     }
   }
 
@@ -1732,7 +1732,7 @@ export class YxcDeviceController {
     try {
       return distributionSummary(await client.getDistributionInfo());
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: a partner's getDistributionInfo failed: ${errorMessage(e)}`);
+      this.deps.log.debug(`${this.deviceId}: a partner's getDistributionInfo failed: ${errText(e)}`);
       return undefined;
     }
   }
@@ -1812,7 +1812,7 @@ export class YxcDeviceController {
       await this.awaitGroupBuilt();
     } catch (e) {
       // A user action failing must be visible — warn, like every other write command.
-      this.deps.log.warn(`${this.deviceId}: linkClient(${target}) failed: ${errorMessage(e)}`);
+      this.deps.log.warn(`${this.deviceId}: linkClient(${target}) failed: ${errText(e)}`);
     }
   }
 
@@ -1857,7 +1857,7 @@ export class YxcDeviceController {
           await run();
         } while (entry.again && !this.deps.gate.closed);
       } catch (e) {
-        this.deps.log.debug(`${this.deviceId}: refresh ${key} failed: ${errorMessage(e)}`);
+        this.deps.log.debug(`${this.deviceId}: refresh ${key} failed: ${errText(e)}`);
       } finally {
         this.refreshes.delete(key);
       }
@@ -1884,7 +1884,7 @@ export class YxcDeviceController {
       // receiver at all — js-controller turns an unhandled rejection into an adapter stop.
       // The return value answers "did the DEVICE answer", and it did: writing its answer into
       // the tree failing says nothing about the connection, so this must not report a drop.
-      this.deps.log.warn(`${this.deviceId}: could not apply the ${zone} status (${errorMessage(e)})`);
+      this.deps.log.warn(`${this.deviceId}: could not apply the ${zone} status (${errText(e)})`);
     }
     return true;
   }
@@ -1899,8 +1899,8 @@ export class YxcDeviceController {
     try {
       return { kind: "ok", status: await this.deps.client.getStatus(zone) };
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: getStatus(${zone}) failed: ${errorMessage(e)}`);
-      return e instanceof YxcRefusalError ? { kind: "refused", reason: errorMessage(e) } : { kind: "unreachable" };
+      this.deps.log.debug(`${this.deviceId}: getStatus(${zone}) failed: ${errText(e)}`);
+      return e instanceof YxcRefusalError ? { kind: "refused", reason: errText(e) } : { kind: "unreachable" };
     }
   }
 
@@ -1986,7 +1986,7 @@ export class YxcDeviceController {
       await this.deps.upsertObject(`${this.deviceId}.${id}`, def);
       this.deps.log.debug(`${this.deviceId}: ${zone} now displays its volume as ${mode}`);
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: could not reshape ${id}: ${errorMessage(e)}`);
+      this.deps.log.debug(`${this.deviceId}: could not reshape ${id}: ${errText(e)}`);
     }
   }
 
@@ -2085,7 +2085,7 @@ export class YxcDeviceController {
         await this.readBackAfter(stateId, command);
       }
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: confirming the write to ${stateId} failed: ${errorMessage(e)}`);
+      this.deps.log.debug(`${this.deviceId}: confirming the write to ${stateId} failed: ${errText(e)}`);
     }
   }
 
@@ -2214,7 +2214,7 @@ export class YxcDeviceController {
         }
       }
     } catch (e) {
-      this.deps.log.warn(`${this.deviceId}: write to ${stateId} failed: ${errorMessage(e)}`);
+      this.deps.log.warn(`${this.deviceId}: write to ${stateId} failed: ${errText(e)}`);
       this.checkAliveAfter(e);
       return e instanceof YxcRefusalError ? "refused" : "failed";
     }

@@ -1,6 +1,6 @@
 import { sameDevice, type DeviceIdentity } from "./device-identity";
 import type { DeviceRecord } from "./types";
-import { errorMessage } from "./util";
+import { errText } from "./err-text";
 
 /**
  * File access for the discovered-devices store, injected so the pure logic can be
@@ -44,7 +44,7 @@ export async function readDiscovered(deps: DiscoveredStoreDeps): Promise<DeviceR
     const parsed: unknown = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed.filter(isRecord) : [];
   } catch (e) {
-    deps.log.debug(`discovered store: read failed, starting empty (${errorMessage(e)})`);
+    deps.log.debug(`discovered store: read failed, starting empty (${errText(e)})`);
     return [];
   }
 }
@@ -61,7 +61,7 @@ export async function writeDiscovered(deps: DiscoveredStoreDeps, devices: Device
   try {
     await deps.write(JSON.stringify(devices));
   } catch (e) {
-    deps.log.debug(`discovered store: write failed (${errorMessage(e)})`);
+    deps.log.debug(`discovered store: write failed (${errText(e)})`);
   }
 }
 
@@ -84,7 +84,7 @@ export async function readIgnored(deps: DiscoveredStoreDeps): Promise<string[]> 
     const parsed: unknown = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
   } catch (e) {
-    deps.log.debug(`ignored store: read failed, starting empty (${errorMessage(e)})`);
+    deps.log.debug(`ignored store: read failed, starting empty (${errText(e)})`);
     return [];
   }
 }
@@ -101,7 +101,7 @@ export async function writeIgnored(deps: DiscoveredStoreDeps, ids: readonly stri
   try {
     await deps.write(JSON.stringify([...new Set(ids)]));
   } catch (e) {
-    deps.log.debug(`ignored store: write failed (${errorMessage(e)})`);
+    deps.log.debug(`ignored store: write failed (${errText(e)})`);
   }
 }
 
@@ -143,7 +143,7 @@ export async function readExcluded(deps: DiscoveredStoreDeps): Promise<ExcludedE
     const parsed: unknown = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed.filter(isExcludedEntry) : [];
   } catch (e) {
-    deps.log.debug(`excluded store: read failed, starting empty (${errorMessage(e)})`);
+    deps.log.debug(`excluded store: read failed, starting empty (${errText(e)})`);
     return [];
   }
 }
@@ -163,7 +163,7 @@ export async function writeExcluded(deps: DiscoveredStoreDeps, entries: readonly
   try {
     await deps.write(JSON.stringify([...byId.values()]));
   } catch (e) {
-    deps.log.debug(`excluded store: write failed (${errorMessage(e)})`);
+    deps.log.debug(`excluded store: write failed (${errText(e)})`);
   }
 }
 

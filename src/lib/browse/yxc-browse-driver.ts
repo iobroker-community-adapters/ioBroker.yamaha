@@ -1,6 +1,6 @@
 import type { BrowseDriver, BrowseRow } from "./types";
 import type { BrowseEngine } from "./browse-engine";
-import { errorMessage } from "../util";
+import { errText } from "../err-text";
 
 /** The engine's page size — YXC serves any window, we keep the device's 8-line form. */
 const PAGE_SIZE = 8;
@@ -207,7 +207,7 @@ export class YxcBrowseDriver implements BrowseDriver {
     try {
       await this.fetch();
     } catch (e) {
-      this.engine?.log.debug(`menu refresh after a list change failed: ${errorMessage(e)}`);
+      this.engine?.log.debug(`menu refresh after a list change failed: ${errText(e)}`);
     }
   }
 

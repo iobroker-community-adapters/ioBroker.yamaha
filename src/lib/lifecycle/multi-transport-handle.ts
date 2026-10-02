@@ -7,7 +7,7 @@ import {
 } from "../catalog/object-tree-coordinator";
 import type { Transport } from "../catalog/owner-policy";
 import type { ConnectionHandle, ControllerLog } from "../controller";
-import { errorMessage } from "../util";
+import { errText } from "../err-text";
 
 /**
  * One transport's live connection, as the {@link MultiTransportHandle} drives it. The transport
@@ -189,7 +189,7 @@ export class MultiTransportHandle implements ConnectionHandle {
     try {
       this.existing = await this.deps.existingObjects();
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: could not read the tree to hold its form (${errorMessage(e)})`);
+      this.deps.log.debug(`${this.deviceId}: could not read the tree to hold its form (${errText(e)})`);
       return;
     }
     if (this.deps.schedule) {
@@ -224,7 +224,7 @@ export class MultiTransportHandle implements ConnectionHandle {
     }
     this.missing.clear();
     this.queueCoordination().catch((e: unknown) => {
-      this.deps.log.debug(`${this.deviceId}: re-coordination after the hold failed (${errorMessage(e)})`);
+      this.deps.log.debug(`${this.deviceId}: re-coordination after the hold failed (${errText(e)})`);
     });
   }
 
@@ -289,7 +289,7 @@ export class MultiTransportHandle implements ConnectionHandle {
           await this.coordinate();
         } catch (e) {
           this.deps.log.debug(
-            `${this.deviceId}/${connection.transport}: re-coordination after a shape change failed (${errorMessage(e)})`,
+            `${this.deviceId}/${connection.transport}: re-coordination after a shape change failed (${errText(e)})`,
           );
         }
       });
@@ -469,19 +469,19 @@ export class MultiTransportHandle implements ConnectionHandle {
     this.reportTransports();
     this.deps.log.debug(
       `${this.deviceId}/${connection.transport}: transport dropped, reconnecting it` +
-        `${reason ? ` (${errorMessage(reason)})` : ""} — other transports keep running`,
+        `${reason ? ` (${errText(reason)})` : ""} — other transports keep running`,
     );
     // The first drop is the question to the others: a device that lost power has every
     // transport dead, but a polled one notices only at its own cadence. Asked now, it reports
     // its drop through the same path and the device is judged gone within seconds.
     for (const other of [...this.live]) {
       other.verifyAlive?.().catch((e: unknown) => {
-        this.deps.log.debug(`${this.deviceId}/${other.transport}: liveness check failed (${errorMessage(e)})`);
+        this.deps.log.debug(`${this.deviceId}/${other.transport}: liveness check failed (${errText(e)})`);
       });
     }
     // Hand what the dropped transport owned to a live one where it can carry it unchanged.
     this.queueCoordination().catch((e: unknown) => {
-      this.deps.log.debug(`${this.deviceId}: re-coordination after a drop failed (${errorMessage(e)})`);
+      this.deps.log.debug(`${this.deviceId}: re-coordination after a drop failed (${errText(e)})`);
     });
     this.scheduleTransportRetry(connection.transport);
   }
@@ -521,7 +521,7 @@ export class MultiTransportHandle implements ConnectionHandle {
       // those by stopping the instance. Everything below already sat inside a try.
       connection = this.deps.rebuild(transport);
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}/${transport}: could not rebuild the transport (${errorMessage(e)})`);
+      this.deps.log.debug(`${this.deviceId}/${transport}: could not rebuild the transport (${errText(e)})`);
       if (!this.closed) {
         this.scheduleTransportRetry(transport);
       }
@@ -555,7 +555,7 @@ export class MultiTransportHandle implements ConnectionHandle {
         return;
       }
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}/${transport}: reconnect attempt failed (${errorMessage(e)})`);
+      this.deps.log.debug(`${this.deviceId}/${transport}: reconnect attempt failed (${errText(e)})`);
       const index = this.live.indexOf(connection);
       if (index >= 0) {
         this.live.splice(index, 1);

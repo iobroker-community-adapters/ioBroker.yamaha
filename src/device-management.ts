@@ -20,7 +20,7 @@ import {
 } from "./lib/discovered-store";
 import { discoveredStoreDeps, excludedStoreDeps, ignoredStoreDeps } from "./lib/discovered-store-deps";
 import type { DeviceRecord } from "./lib/types";
-import { errorMessage } from "./lib/util";
+import { errText } from "./lib/err-text";
 import { LABEL_RANK, rowDeviceId, sanitizeId, unionDevices, type DeviceRow } from "./lib/pure-helpers";
 import { deviceIdFor, RESERVED_DEVICE_IDS } from "./lib/device-id";
 import { sameDevice } from "./lib/device-identity";
@@ -94,7 +94,7 @@ export class YamahaDeviceManagement extends DeviceManagement {
   private scheduleTableWrite(rows: DeviceRow[], what: string): void {
     this.adapter.setTimeout(() => {
       this.writeManual(rows).catch((e: unknown) =>
-        this.adapter.log.error(`could not update the device table ${what} (${errorMessage(e)})`),
+        this.adapter.log.error(`could not update the device table ${what} (${errText(e)})`),
       );
     }, 0);
   }
@@ -195,7 +195,7 @@ export class YamahaDeviceManagement extends DeviceManagement {
     try {
       cards = await this.cards();
     } catch (e) {
-      this.adapter.log.error(`device manager: could not list the devices (${errorMessage(e)})`);
+      this.adapter.log.error(`device manager: could not list the devices (${errText(e)})`);
       return;
     }
     for (const card of cards) {
@@ -203,7 +203,7 @@ export class YamahaDeviceManagement extends DeviceManagement {
       try {
         await this.addCard(context, card);
       } catch (e) {
-        this.adapter.log.error(`device manager: ${card.id} could not be shown (${errorMessage(e)})`);
+        this.adapter.log.error(`device manager: ${card.id} could not be shown (${errText(e)})`);
       }
     }
   }
@@ -231,11 +231,9 @@ export class YamahaDeviceManagement extends DeviceManagement {
     try {
       return await run();
     } catch (e) {
-      this.adapter.log.error(
-        `device manager: ${action}${deviceId ? ` of ${deviceId}` : ""} failed (${errorMessage(e)})`,
-      );
+      this.adapter.log.error(`device manager: ${action}${deviceId ? ` of ${deviceId}` : ""} failed (${errText(e)})`);
       try {
-        await context?.showMessage(tName("dmActionFailed", errorMessage(e)));
+        await context?.showMessage(tName("dmActionFailed", errText(e)));
       } catch {
         // the dialog is already gone — the log line above carries it
       }
@@ -387,7 +385,7 @@ export class YamahaDeviceManagement extends DeviceManagement {
       const node = await this.adapter.getForeignObjectAsync(`${this.adapter.namespace}.${id}`);
       identity = identityOfDeviceObject((node?.native ?? {}) as Record<string, unknown>);
     } catch (e) {
-      failure = errorMessage(e);
+      failure = errText(e);
       this.adapter.log.error(`device manager: details of ${id} failed (${failure})`);
     }
     const schema = {
@@ -689,7 +687,7 @@ export class YamahaDeviceManagement extends DeviceManagement {
           // The tree is gone and the id is excluded, but the row still stands: the next start
           // would run the device from the table again, with a fresh tree — say so, loudly.
           this.adapter.log.error(
-            `could not update the device table after deleting "${cardId}" (${errorMessage(e)}) — the device is still listed in the table, delete it once more`,
+            `could not update the device table after deleting "${cardId}" (${errText(e)}) — the device is still listed in the table, delete it once more`,
           ),
         );
       }, 0);
