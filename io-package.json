@@ -1,9 +1,22 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "3.1.3",
+    "version": "3.2.0",
     "nogit": true,
     "news": {
+      "3.2.0": {
+        "en": "Dropdown lists no longer go empty when the receiver loses power. A receiver keeps its datapoints until an adapter or firmware update; refused commands try another protocol.",
+        "de": "Auswahllisten werden nicht mehr leer, wenn der Receiver stromlos wird. Datenpunkte bleiben bis zu einem Adapter- oder Firmware-Update; abgelehnte Befehle gehen über ein anderes Protokoll.",
+        "ru": "Списки выбора больше не пустеют при отключении ресивера. Точки данных сохраняются до обновления адаптера или прошивки; отклонённые команды идут через другой протокол.",
+        "pt": "As listas de seleção já não ficam vazias quando o recetor perde energia. Os pontos de dados mantêm-se até uma atualização; comandos recusados usam outro protocolo.",
+        "nl": "Keuzelijsten worden niet meer leeg als de receiver zonder stroom valt. Datapunten blijven tot een adapter- of firmware-update; geweigerde opdrachten gaan via een ander protocol.",
+        "fr": "Les listes de choix ne se vident plus quand le récepteur perd le courant. Les points de données restent jusqu'à une mise à jour ; une commande refusée passe par un autre protocole.",
+        "it": "Gli elenchi di scelta non si svuotano più quando il ricevitore perde corrente. I datapoint restano fino a un aggiornamento; i comandi rifiutati passano per un altro protocollo.",
+        "es": "Las listas de selección ya no se vacían cuando el receptor pierde la corriente. Los puntos de datos se mantienen hasta una actualización; un comando rechazado usa otro protocolo.",
+        "pl": "Listy wyboru nie są już puste po odcięciu zasilania amplitunera. Punkty danych zostają do aktualizacji adaptera lub firmware; odrzucone polecenia idą innym protokołem.",
+        "uk": "Списки вибору більше не порожніють, коли ресивер знеструмлено. Точки даних лишаються до оновлення адаптера чи прошивки; відхилені команди йдуть іншим протоколом.",
+        "zh-cn": "接收器断电后下拉列表不再被清空。数据点在适配器或固件更新前保持不变；被拒绝的命令改用其他协议发送。"
+      },
       "3.1.3": {
         "en": "Menu lines fill again after a source switch, also on receivers that were in standby when the adapter started. New instances start switched off until they are set up.",
         "de": "Die Menüzeilen füllen sich nach einem Quellenwechsel wieder, auch bei Receivern, die beim Start des Adapters im Standby waren. Neue Instanzen starten ausgeschaltet, bis sie eingerichtet sind.",
@@ -81,19 +94,6 @@
         "pl": "ID obiektu każdego urządzenia to teraz model i koniec numeru seryjnego, np. wx-030-2b3c; dwa urządzenia jednego modelu mają osobne drzewa; skrypty i VIS potrzebują nowych ID.",
         "uk": "ID об'єкта кожного пристрою тепер — модель і кінець серійного номера, напр. wx-030-2b3c; два пристрої однієї моделі мають окремі дерева; скриптам і VIS потрібні нові ID.",
         "zh-cn": "每台设备的对象 ID 现为型号加序列号末尾，例如 wx-030-2b3c；同型号的两台设备各有对象树；脚本和 VIS 需改用新 ID。"
-      },
-      "2.13.0": {
-        "en": "Every write is read back, a refused one shows the device value again; MusicCast writes more settings and builds Link groups as specified; umlauts arrive intact.",
-        "de": "Jeder Schreibvorgang wird zurückgelesen, ein abgelehnter zeigt wieder den Gerätewert; MusicCast schreibt mehr Einstellungen, bildet Link-Gruppen nach Spec; Umlaute kommen heil an.",
-        "ru": "Каждая запись считывается обратно, отклонённая снова показывает значение устройства; MusicCast пишет больше настроек и строит группы Link по спецификации; умлауты целы.",
-        "pt": "Cada escrita é relida, uma recusada volta a mostrar o valor do aparelho; o MusicCast escreve mais definições e forma grupos Link conforme a norma; acentos chegam intactos.",
-        "nl": "Elke schrijfactie wordt teruggelezen, een geweigerde toont weer de apparaatwaarde; MusicCast schrijft meer instellingen en vormt Link-groepen volgens spec; umlauten blijven heel.",
-        "fr": "Chaque écriture est relue, une écriture refusée réaffiche la valeur de l'appareil ; MusicCast écrit plus de réglages et forme les groupes Link selon la norme ; accents intacts.",
-        "it": "Ogni scrittura viene riletta, una rifiutata mostra di nuovo il valore del dispositivo; MusicCast scrive più impostazioni e forma i gruppi Link a norma; accenti integri.",
-        "es": "Cada escritura se relee, una rechazada vuelve a mostrar el valor del equipo; MusicCast escribe más ajustes y forma grupos Link según la norma; los acentos llegan intactos.",
-        "pl": "Każdy zapis jest odczytywany ponownie, odrzucony znów pokazuje wartość urządzenia; MusicCast zapisuje więcej ustawień i tworzy grupy Link wg specyfikacji; znaki całe.",
-        "uk": "Кожен запис зчитується назад, відхилений знову показує значення пристрою; MusicCast пише більше налаштувань і будує групи Link за специфікацією; умлаути цілі.",
-        "zh-cn": "每次写入都会回读，被拒绝的写入会重新显示设备值；MusicCast 可写入更多设置并按规范组建 Link 组；变音字符完整到达。"
       }
     },
     "titleLang": {

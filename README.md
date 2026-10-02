@@ -72,8 +72,7 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
-
-### **WORK IN PROGRESS**
+### 3.2.0 (2026-10-02)
 
 - (krobipd) Fixed: Dropdown lists such as sound program, sleep timer and Adaptive DRC no longer go empty when the receiver loses power; lists emptied that way come back
 - (krobipd) Changed: Your datapoints stay exactly as they are while the adapter runs, also when a receiver goes offline; they change only after an adapter or firmware update
@@ -107,10 +106,6 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
 - (krobipd) Fixed: A MusicCast Zone B shows as Zone B and joins a group with Zone A, and the cover changes with the track
 - (krobipd) Fixed: Deleting a device, renaming it in the dialog or stopping the adapter no longer loses a name or leaves a network search running
 - (krobipd) Improved: Dropdowns show readable names in your ioBroker language, the playing source shows the input's name, and each queued track is its own datapoint
-
-### 3.0.1 (2026-09-27)
-
-- (krobipd) Improved: The notes the Admin shows before an update are short now: what changes, one example old → new, and a link to the details
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 
