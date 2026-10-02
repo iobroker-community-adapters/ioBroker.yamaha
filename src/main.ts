@@ -378,6 +378,8 @@ export class Yamaha extends utils.Adapter {
   private readonly objectMirror = new ObjectMirror();
   /** What the states database holds — see writeStateNow (audit 2026-09-29, E3). */
   private readonly stateMirror = new StateMirror();
+  /** See {@link instanceReadOnlyStates}. */
+  private manifestReadOnly: ReadonlySet<string> | undefined;
 
   /**
    * @param options adapter options passed through by js-controller
@@ -402,6 +404,9 @@ export class Yamaha extends utils.Adapter {
       await utils.I18n.init(join(__dirname, "..", "admin"), this);
       this.deviceManagement = new YamahaDeviceManagement(this);
       this.log.info('starting — a "ready" message will follow for each device');
+      // The bulk read before the first write: the start marker below is compared in memory, never read
+      // back one by one (round 77 resource check); the seed after the migrations refreshes it.
+      await this.seedStateMirror();
       await this.writeStateNow("info.connection", false);
       // Every change to the instance object restarts the instance (js-controller 7.2.2, objects `change`
       // handler: stopInstance, start again after stopTimeout + 2.5 s) — whatever runs after such a write
@@ -1348,7 +1353,7 @@ export class Yamaha extends utils.Adapter {
   private writeStateNow(id: string, value: ioBroker.StateValue): Promise<void> {
     // A read-only state only the adapter writes: compared in memory. A writable one keeps the database
     // compare — it is what corrects a lost user command (fleet pattern: displays are written only on a change).
-    const readOnly = this.objectMirror.isReadOnlyState(id);
+    const readOnly = this.objectMirror.isReadOnlyState(id) || this.instanceReadOnlyStates().has(id);
     const verdict = readOnly ? this.stateMirror.judge(id, value, true) : "unknown";
     if (verdict === "unchanged") {
       return Promise.resolve();
@@ -1367,6 +1372,25 @@ export class Yamaha extends utils.Adapter {
         this.noteWriteFailure(`state ${id}`, e);
       },
     );
+  }
+
+  /**
+   * The manifest's own read-only states (`instanceObjects`, `common.write: false` — `info.connection` and the
+   * device counts): read-only before the object listing is mirrored, which the start reads only after the
+   * migrations.
+   *
+   * @returns the namespace-relative ids
+   */
+  private instanceReadOnlyStates(): ReadonlySet<string> {
+    if (!this.manifestReadOnly) {
+      const declared = (this.ioPack as unknown as { instanceObjects?: unknown } | undefined)?.instanceObjects;
+      this.manifestReadOnly = new Set(
+        (Array.isArray(declared) ? (declared as ioBroker.Object[]) : [])
+          .filter(o => o?.type === "state" && (o.common as { write?: unknown } | undefined)?.write === false)
+          .map(o => o._id),
+      );
+    }
+    return this.manifestReadOnly;
   }
 
   /**

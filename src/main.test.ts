@@ -4413,9 +4413,26 @@ describe("Yamaha writes only what changed (audit 2026-09-15 — setStateChangedA
     expect(writesOf(ctx, "Living_room.volume")).toBe(2);
   });
 
-  // A state only the adapter writes is compared in memory — no database read per repeated value; a
+  // A state only the adapter writes is compared in memory — never a database read, not even the first time:
+  // after the start's bulk read a state the mirror does not hold has no value (round 77 resource check); a
   // writable one keeps the database compare, which corrects a lost user command (audit 2026-09-29, E3).
-  it("a read-only state asks the database once, then compares in memory", async () => {
+  it("the start marker info.connection is compared in memory — the manifest declares it read-only", async () => {
+    const ctx = setup();
+    (ctx.i as unknown as { ioPack: unknown }).ioPack = {
+      instanceObjects: [
+        { _id: "info.connection", type: "state", common: { write: false } },
+        { _id: "info.devicesTotal", type: "state", common: { write: true } },
+      ],
+    };
+    ctx.i.states.set("info.connection", { val: false, ack: true });
+    await ctx.i.onReady();
+    await flush();
+    const changedAsync = (ctx.i as unknown as { setStateChangedAsync: { mock: { calls: unknown[][] } } })
+      .setStateChangedAsync;
+    expect(changedAsync.mock.calls.filter(c => c[0] === "info.connection")).toHaveLength(0);
+  });
+
+  it("a read-only state never asks the database, and is written once", async () => {
     const ctx = setup();
     await ctx.i.onReady();
     await flush();
@@ -4434,7 +4451,8 @@ describe("Yamaha writes only what changed (audit 2026-09-15 — setStateChangedA
     const changedAsync = (ctx.i as unknown as { setStateChangedAsync: { mock: { calls: unknown[][] } } })
       .setStateChangedAsync;
     const asked = changedAsync.mock.calls.filter(c => c[0] === "Living_room.sound.signal.format");
-    expect(asked).toHaveLength(1);
+    expect(asked).toHaveLength(0);
+    expect(writesOf(ctx, "Living_room.sound.signal.format")).toBe(1);
   });
 
   it("confirms a user's write even when the device echoes the value it already had", async () => {

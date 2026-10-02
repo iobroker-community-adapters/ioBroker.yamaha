@@ -156,6 +156,12 @@ export class ObjectMirror {
 /** The state half of the mirror (namespace-relative ids): the last value and ack of each state. */
 export class StateMirror {
   private readonly states = new Map<string, string>();
+  /**
+   * Whether the bulk read of the namespace went in: from then on a state the mirror does not hold has
+   * no value in the database — its first write is a change, and `setStateChangedAsync` would only read
+   * it one by one to learn that (forum 85413 release run, round 77 resource check).
+   */
+  private seeded = false;
 
   /**
    * Take the states one bulk read returned (`getStatesAsync` of the own namespace) — a restart then
@@ -165,6 +171,7 @@ export class StateMirror {
    * @param namespace the adapter namespace (`yamaha.0`)
    */
   public seed(states: Record<string, unknown>, namespace: string): void {
+    this.seeded = true;
     const prefix = `${namespace}.`;
     for (const [fullId, state] of Object.entries(states)) {
       const s = state as { val?: unknown; ack?: unknown } | null | undefined;
@@ -188,7 +195,8 @@ export class StateMirror {
 
   /**
    * What a write of this value would be: `unchanged` (skip it), `changed` (write it), or `unknown` —
-   * nothing mirrored yet in this process, the database decides.
+   * the bulk read did not go in, the database decides. After the bulk read a state the mirror does not
+   * hold has no value: `changed`.
    *
    * @param id the namespace-relative state id
    * @param val the value to write
@@ -198,7 +206,7 @@ export class StateMirror {
   public judge(id: string, val: unknown, ack: boolean): "unchanged" | "changed" | "unknown" {
     const stored = this.states.get(id);
     if (stored === undefined) {
-      return "unknown";
+      return this.seeded ? "changed" : "unknown";
     }
     const key = StateMirror.key(val, ack);
     return key !== undefined && key === stored ? "unchanged" : "changed";

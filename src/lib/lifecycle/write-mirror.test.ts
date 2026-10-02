@@ -97,6 +97,12 @@ describe("StateMirror (audit 2026-09-29, E3)", () => {
     expect(mirror.judge("dev.info.model", "RX-V6A", true)).toBe("changed");
   });
 
+  test("after the bulk read, a state it did not return has no value — its first write is a change", () => {
+    const mirror = new StateMirror();
+    mirror.seed({ "yamaha.0.dev.info.model": { val: "RX-V6A", ack: true } }, "yamaha.0");
+    expect(mirror.judge("dev.player.netPlayer.playError", 0, true)).toBe("changed");
+  });
+
   test("an object value never counts as unchanged", () => {
     const mirror = new StateMirror();
     mirror.holds("dev.x", { a: 1 }, true);
