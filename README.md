@@ -93,7 +93,7 @@ Details on all settings and the object tree are in the
 ### **WORK IN PROGRESS**
 
 - (krobipd) Fixed: Menu lines fill again after switching player.browse.source, also on receivers that were in standby when the adapter started
-- (krobipd) Fixed: A menu that is still empty right after a source switch is read again for up to 20 seconds until its lines appear
+- (krobipd) Fixed: On receivers that offer their menus only over XML (models from before 2010), the menu lines no longer stay empty after a source switch
 
 ### 3.1.2 (2026-09-30)
 
