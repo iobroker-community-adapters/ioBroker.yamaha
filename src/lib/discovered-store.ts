@@ -36,16 +36,29 @@ function isRecord(entry: unknown): entry is DeviceRecord {
  * @returns the remembered device records (empty when none/unreadable)
  */
 export async function readDiscovered(deps: DiscoveredStoreDeps): Promise<DeviceRecord[]> {
+  return (await readDiscoveredChecked(deps)).records;
+}
+
+/**
+ * The remembered device records, and whether the store could be read at all. An unreadable store is
+ * not an empty one: it must never be the reason a remembered device's tree is deleted.
+ *
+ * @param deps file access and logger
+ * @returns the records (empty when none/unreadable) and whether the read succeeded
+ */
+export async function readDiscoveredChecked(
+  deps: DiscoveredStoreDeps,
+): Promise<{ records: DeviceRecord[]; readable: boolean }> {
   try {
     const raw = await deps.read();
     if (!raw) {
-      return [];
+      return { records: [], readable: true };
     }
     const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter(isRecord) : [];
+    return { records: Array.isArray(parsed) ? parsed.filter(isRecord) : [], readable: Array.isArray(parsed) };
   } catch (e) {
     deps.log.debug(`discovered store: read failed, starting empty (${errText(e)})`);
-    return [];
+    return { records: [], readable: false };
   }
 }
 

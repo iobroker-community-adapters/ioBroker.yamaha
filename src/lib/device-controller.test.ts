@@ -224,7 +224,7 @@ describe("YncaDeviceController", () => {
     const controller = new YncaDeviceController("living", makeDeps(client).deps);
     await controller.start();
     client.sent.length = 0;
-    controller.handleWrite("power", true);
+    void controller.handleWrite("power", true);
     expect(client.sent).toEqual([{ subunit: "MAIN", func: "PWR", value: "On" }]);
   });
 
@@ -236,7 +236,7 @@ describe("YncaDeviceController", () => {
     const controller = new YncaDeviceController("living", makeDeps(client).deps);
     await controller.start();
     client.gets.length = 0;
-    controller.handleWrite("volume", -30);
+    void controller.handleWrite("volume", -30);
     expect(client.sent).toContainEqual({ subunit: "MAIN", func: "VOL", value: "-30.0" });
     expect(client.gets).toEqual([{ subunit: "MAIN", func: "VOL" }]);
   });
@@ -252,7 +252,7 @@ describe("YncaDeviceController", () => {
     const controller = new YncaDeviceController("living", deps);
     await controller.start();
     acked.length = 0;
-    controller.handleWrite("volume", -30);
+    void controller.handleWrite("volume", -30);
     refuse?.("@MAIN:VOL=-30.0", "restricted");
     expect(acked).toEqual([{ id: "living.volume", value: -40 }]);
   });
@@ -265,7 +265,7 @@ describe("YncaDeviceController", () => {
     const controller = new YncaDeviceController("living", makeDeps(client).deps);
     await controller.start();
     client.gets.length = 0;
-    controller.handleWrite("tuner.frequency", 98150);
+    void controller.handleWrite("tuner.frequency", 98150);
     expect(client.sent).toContainEqual({ subunit: "TUN", func: "FMFREQ", value: "98.15" });
     expect(client.gets).toEqual([{ subunit: "TUN", func: "FMFREQ" }]);
   });
@@ -284,7 +284,7 @@ describe("YncaDeviceController", () => {
     const controller = new YncaDeviceController("living", deps);
     await controller.start();
     acked.length = 0;
-    controller.handleWrite("player.repeat", 0);
+    void controller.handleWrite("player.repeat", 0);
     refuse?.("@USB:REPEAT=Off", "restricted");
     expect(acked).toContainEqual({ id: "living.player.repeat", value: 2 });
   });
@@ -341,7 +341,7 @@ describe("YncaDeviceController", () => {
       { id: "living.mute", value: true },
     ]);
     client.sent.length = 0;
-    controller.handleWrite("muteLevel", "Att -40 dB");
+    void controller.handleWrite("muteLevel", "Att -40 dB");
     expect(client.sent).toEqual([{ subunit: "MAIN", func: "MUTE", value: "Att -40 dB" }]);
   });
 
@@ -360,8 +360,8 @@ describe("YncaDeviceController", () => {
     expect(acked).toContainEqual({ id: "living.advanced.initialVolume.level", value: -80.5 });
     expect(objects.find(o => o.id === "living.advanced.initialVolume.mode")?.def.common.write).toBe(true);
     client.sent.length = 0;
-    controller.handleWrite("advanced.initialVolume.mode", true);
-    controller.handleWrite("advanced.initialVolume.level", -80.5);
+    void controller.handleWrite("advanced.initialVolume.mode", true);
+    void controller.handleWrite("advanced.initialVolume.level", -80.5);
     expect(client.sent).toEqual([
       { subunit: "MAIN", func: "INITVOLMODE", value: "On" },
       { subunit: "MAIN", func: "INITVOLLVL", value: "Mute" },
@@ -375,7 +375,7 @@ describe("YncaDeviceController", () => {
     // with the same line as any unproven one.
     const client = new FakeClient();
     const { deps, log } = makeDeps(client);
-    new YncaDeviceController("living", deps).handleWrite("power", true);
+    void new YncaDeviceController("living", deps).handleWrite("power", true);
     expect(client.sent).toEqual([]);
     expect(log.debug).toHaveBeenCalledWith(expect.stringContaining("living: power is not writable on this device"));
   });
@@ -565,7 +565,7 @@ describe("YncaDeviceController browse surface (#613)", () => {
     expect(created).toContain("living.player.browse.path");
     // A browse write reaches the driver, not the catalog: opening the source
     // switches the input and reads the list.
-    controller.handleWrite("player.browse.source", "netRadio");
+    void controller.handleWrite("player.browse.source", "netRadio");
     // The driver paces itself through the gate now, so give the queue a few turns.
     for (let i = 0; i < 6; i++) {
       await flush();
@@ -593,8 +593,8 @@ describe("YncaDeviceController browse surface (#613)", () => {
     expect(created).toContain("living.remote.cursor");
     expect(created).toContain("living.remote.menu");
     client.sent.length = 0;
-    controller.handleWrite("remote.cursor", "left");
-    controller.handleWrite("remote.menu", "top_menu");
+    void controller.handleWrite("remote.cursor", "left");
+    void controller.handleWrite("remote.menu", "top_menu");
     for (let i = 0; i < 6; i++) {
       await flush();
     }
@@ -786,7 +786,7 @@ describe("YncaDeviceController fast restart (persisted capability layer)", () =>
     );
     // …and the write by title resolves against the FRESH list.
     client.sent.length = 0;
-    controller.handleWrite("scene.recall", "Movie night");
+    void controller.handleWrite("scene.recall", "Movie night");
     expect(client.sent).toEqual([{ subunit: "MAIN", func: "SCENE", value: "Scene 1" }]);
   });
 
@@ -810,7 +810,7 @@ describe("YncaDeviceController fast restart (persisted capability layer)", () =>
     const { deps } = makeDeps(client);
     const controller = new YncaDeviceController("living", { ...deps, probeMemory: memory });
     await controller.start();
-    controller.handleWrite("tuner.frequency", 100900);
+    void controller.handleWrite("tuner.frequency", 100900);
     expect(client.sent).toEqual([{ subunit: "TUN", func: "FMFREQ", value: "100.90" }]);
   });
 
@@ -837,7 +837,7 @@ describe("YncaDeviceController fast restart (persisted capability layer)", () =>
     const { deps } = makeDeps(client);
     const controller = new YncaDeviceController("living", { ...deps, probeMemory: memory });
     await controller.start();
-    controller.handleWrite("player.playback", 0);
+    void controller.handleWrite("player.playback", 0);
     expect(client.sent).toEqual([{ subunit: "SPOTIFY", func: "PLAYBACK", value: "Pause" }]);
   });
 
@@ -920,11 +920,11 @@ describe("YncaDeviceController write gating + refusal logging (#615 class)", () 
     const controller = new YncaDeviceController("living", deps);
     await controller.start();
     client.sent.length = 0;
-    controller.handleWrite("sound.bass", 2);
+    void controller.handleWrite("sound.bass", 2);
     expect(client.sent).toEqual([{ subunit: "MAIN", func: "SPBASS", value: "2.0" }]);
     // A state whose function the device never reported is not written at all.
     client.sent.length = 0;
-    controller.handleWrite("sound.treble", 1);
+    void controller.handleWrite("sound.treble", 1);
     expect(client.sent).toEqual([]);
   });
 
@@ -979,10 +979,10 @@ describe("YncaDeviceController scenes v2.0.0 (titles in the dropdown, one list, 
     const s = sceneSetup();
     await s.controller.start();
     s.client.sent.length = 0;
-    s.controller.handleWrite("scene.recall", "tv");
+    void s.controller.handleWrite("scene.recall", "tv");
     expect(s.client.sent).toEqual([{ subunit: "MAIN", func: "SCENE", value: "Scene 2" }]);
     s.client.sent.length = 0;
-    s.controller.handleWrite("scene.recall", "Gaming");
+    void s.controller.handleWrite("scene.recall", "Gaming");
     expect(s.client.sent).toEqual([]);
   });
 });
@@ -1003,42 +1003,42 @@ describe("YncaDeviceController unified tuner v2.0.0 (band-routed writes)", () =>
   test("a frequency write goes to the active band's wire function on a classic TUN device", async () => {
     const s = await tunerSetup({ MAIN: { PWR: "On" }, TUN: { BAND: "AM", AMFREQ: "1440", FMFREQ: "98.10" } });
     // AM: whole kHz on AMFREQ.
-    s.controller.handleWrite("tuner.frequency", 1440);
+    void s.controller.handleWrite("tuner.frequency", 1440);
     expect(s.client.sent).toEqual([{ subunit: "TUN", func: "AMFREQ", value: "1440" }]);
     // The device switches to FM (pushed BAND update) — the SAME state now writes
     // FMFREQ in the MHz wire form with two decimals (#612 format rule).
     s.client.emit({ subunit: "TUN", func: "BAND", value: "FM" });
     s.client.sent.length = 0;
-    s.controller.handleWrite("tuner.frequency", 98100);
+    void s.controller.handleWrite("tuner.frequency", 98100);
     expect(s.client.sent).toEqual([{ subunit: "TUN", func: "FMFREQ", value: "98.10" }]);
   });
 
   test("on a DAB device the FM frequency writes DAB:FMFREQ; in DAB band the write is dropped", async () => {
     const s = await tunerSetup({ MAIN: { PWR: "On" }, DAB: { BAND: "FM", FMFREQ: "98.10" } });
-    s.controller.handleWrite("tuner.frequency", 98100);
+    void s.controller.handleWrite("tuner.frequency", 98100);
     expect(s.client.sent).toEqual([{ subunit: "DAB", func: "FMFREQ", value: "98.10" }]);
     // DAB tunes by service — there is no frequency command to send.
     s.client.emit({ subunit: "DAB", func: "BAND", value: "DAB" });
     s.client.sent.length = 0;
-    s.controller.handleWrite("tuner.frequency", 227360);
+    void s.controller.handleWrite("tuner.frequency", 227360);
     expect(s.client.sent).toEqual([]);
   });
 
   test("a band write goes to the subunit that owns that band", async () => {
     const classic = await tunerSetup({ MAIN: { PWR: "On" }, TUN: { BAND: "AM", AMFREQ: "1440" } });
-    classic.controller.handleWrite("tuner.band", "AM");
+    void classic.controller.handleWrite("tuner.band", "AM");
     expect(classic.client.sent).toEqual([{ subunit: "TUN", func: "BAND", value: "AM" }]);
     classic.client.sent.length = 0;
-    classic.controller.handleWrite("tuner.band", "FM");
+    void classic.controller.handleWrite("tuner.band", "FM");
     expect(classic.client.sent).toEqual([{ subunit: "TUN", func: "BAND", value: "FM" }]);
 
     // On a DAB device the FM half lives on DAB — that is where its FM frequency and presets are.
     const dab = await tunerSetup({ MAIN: { PWR: "On" }, DAB: { BAND: "DAB", FMFREQ: "98.10" } });
-    dab.controller.handleWrite("tuner.band", "FM");
+    void dab.controller.handleWrite("tuner.band", "FM");
     expect(dab.client.sent).toEqual([{ subunit: "DAB", func: "BAND", value: "FM" }]);
     dab.client.sent.length = 0;
     // A band this device does not have is dropped instead of going onto the wire.
-    dab.controller.handleWrite("tuner.band", "AM");
+    void dab.controller.handleWrite("tuner.band", "AM");
     expect(dab.client.sent).toEqual([]);
   });
 
@@ -1050,10 +1050,10 @@ describe("YncaDeviceController unified tuner v2.0.0 (band-routed writes)", () =>
       TUN: { BAND: "AM", AMFREQ: "1440" },
       DAB: { BAND: "DAB", FMFREQ: "98.10" },
     });
-    s.controller.handleWrite("tuner.band", "AM");
+    void s.controller.handleWrite("tuner.band", "AM");
     expect(s.client.sent).toEqual([{ subunit: "TUN", func: "BAND", value: "AM" }]);
     s.client.sent.length = 0;
-    s.controller.handleWrite("tuner.band", "DAB");
+    void s.controller.handleWrite("tuner.band", "DAB");
     expect(s.client.sent).toEqual([{ subunit: "DAB", func: "BAND", value: "DAB" }]);
   });
 
@@ -1062,11 +1062,11 @@ describe("YncaDeviceController unified tuner v2.0.0 (band-routed writes)", () =>
       MAIN: { PWR: "On" },
       DAB: { BAND: "DAB", DABPRESET: "No Preset", FMPRESET: "No Preset" },
     });
-    s.controller.handleWrite("tuner.preset", 5);
+    void s.controller.handleWrite("tuner.preset", 5);
     expect(s.client.sent).toEqual([{ subunit: "DAB", func: "DABPRESET", value: "5" }]);
     s.client.emit({ subunit: "DAB", func: "BAND", value: "FM" });
     s.client.sent.length = 0;
-    s.controller.handleWrite("tuner.preset", 4);
+    void s.controller.handleWrite("tuner.preset", 4);
     expect(s.client.sent).toEqual([{ subunit: "DAB", func: "FMPRESET", value: "4" }]);
   });
 
@@ -1078,8 +1078,8 @@ describe("YncaDeviceController unified tuner v2.0.0 (band-routed writes)", () =>
       TUN: { BAND: "AM", PRESET: "No Preset" },
       DAB: { BAND: "DAB", DABPRESET: "No Preset", FMPRESET: "No Preset" },
     });
-    dab.controller.handleWrite("tuner.presetSave", 0);
-    dab.controller.handleWrite("tuner.presetUp", true);
+    void dab.controller.handleWrite("tuner.presetSave", 0);
+    void dab.controller.handleWrite("tuner.presetUp", true);
     expect(dab.client.sent).toEqual([
       { subunit: "DAB", func: "MEM", value: "Auto" },
       { subunit: "TUN", func: "PRESET", value: "Up" },
@@ -1089,15 +1089,15 @@ describe("YncaDeviceController unified tuner v2.0.0 (band-routed writes)", () =>
       TUN: { BAND: "AM", PRESET: "No Preset" },
       HDRADIO: { BAND: "FM", PRESET: "No Preset" },
     });
-    hd.controller.handleWrite("tuner.presetSave", 7);
-    hd.controller.handleWrite("tuner.presetDown", true);
+    void hd.controller.handleWrite("tuner.presetSave", 7);
+    void hd.controller.handleWrite("tuner.presetDown", true);
     expect(hd.client.sent).toEqual([
       { subunit: "HDRADIO", func: "MEM", value: "7" },
       { subunit: "HDRADIO", func: "PRESET", value: "Down" },
     ]);
     const tun = await tunerSetup({ MAIN: { PWR: "On" }, TUN: { BAND: "FM", PRESET: "3" } });
-    tun.controller.handleWrite("tuner.presetSave", 12);
-    tun.controller.handleWrite("tuner.preset", 0);
+    void tun.controller.handleWrite("tuner.presetSave", 12);
+    void tun.controller.handleWrite("tuner.preset", 0);
     expect(tun.client.sent).toEqual([{ subunit: "TUN", func: "MEM", value: "12" }]);
   });
 
@@ -1105,11 +1105,11 @@ describe("YncaDeviceController unified tuner v2.0.0 (band-routed writes)", () =>
   // FMFREQ=0.00 sent (audit 2026-09-24, B17).
   test("a tuner write takes only a number — true recalls no preset and tunes no frequency", async () => {
     const dab = await tunerSetup({ MAIN: { PWR: "On" }, DAB: { BAND: "DAB", DABPRESET: "No Preset" } });
-    dab.controller.handleWrite("tuner.preset", true);
-    dab.controller.handleWrite("tuner.preset", "0x2");
+    void dab.controller.handleWrite("tuner.preset", true);
+    void dab.controller.handleWrite("tuner.preset", "0x2");
     expect(dab.client.sent).toEqual([]);
     const tun = await tunerSetup({ MAIN: { PWR: "On" }, TUN: { BAND: "FM", FMFREQ: "98.10" } });
-    tun.controller.handleWrite("tuner.frequency", true);
+    void tun.controller.handleWrite("tuner.frequency", true);
     expect(tun.client.sent).toEqual([]);
   });
 
@@ -1121,14 +1121,14 @@ describe("YncaDeviceController unified tuner v2.0.0 (band-routed writes)", () =>
       SYS: { FREQSTEP: "FM200/AM10" },
       TUN: { BAND: "FM", FMFREQ: "98.10", AMFREQ: "1000" },
     });
-    stepped.controller.handleWrite("tuner.frequency", 98130);
+    void stepped.controller.handleWrite("tuner.frequency", 98130);
     expect(stepped.client.sent).toEqual([{ subunit: "TUN", func: "FMFREQ", value: "98.10" }]);
     stepped.client.emit({ subunit: "TUN", func: "BAND", value: "AM" });
     stepped.client.sent.length = 0;
-    stepped.controller.handleWrite("tuner.frequency", 1004);
+    void stepped.controller.handleWrite("tuner.frequency", 1004);
     expect(stepped.client.sent).toEqual([{ subunit: "TUN", func: "AMFREQ", value: "1000" }]);
     const plain = await tunerSetup({ MAIN: { PWR: "On" }, TUN: { BAND: "FM", FMFREQ: "98.10" } });
-    plain.controller.handleWrite("tuner.frequency", 98130);
+    void plain.controller.handleWrite("tuner.frequency", 98130);
     expect(plain.client.sent).toEqual([{ subunit: "TUN", func: "FMFREQ", value: "98.13" }]);
   });
 });
@@ -1189,7 +1189,7 @@ describe("YncaDeviceController unified player v2.0.0 (input-routed block)", () =
     const write = async (subunits: YncaCapabilities["subunits"]): Promise<unknown[]> => {
       const s = await playerSetup(subunits);
       s.client.sent.length = 0;
-      s.controller.handleWrite("player.repeat", 1);
+      void s.controller.handleWrite("player.repeat", 1);
       return s.client.sent;
     };
     const usb = { PLAYBACKINFO: "Play", REPEAT: "Off" };
@@ -1216,8 +1216,8 @@ describe("YncaDeviceController unified player v2.0.0 (input-routed block)", () =
       USB: { PLAYBACKINFO: "Play" },
     });
     s.client.sent.length = 0;
-    s.controller.handleWrite("player.playback", 0);
-    s.controller.handleWrite("player.next", true);
+    void s.controller.handleWrite("player.playback", 0);
+    void s.controller.handleWrite("player.next", true);
     expect(s.client.sent).toEqual([
       { subunit: "USB", func: "PLAYBACK", value: "Pause" },
       { subunit: "USB", func: "PLAYBACK", value: "Skip Fwd" },
@@ -1225,7 +1225,7 @@ describe("YncaDeviceController unified player v2.0.0 (input-routed block)", () =
     // Not listening to a player source → the write is dropped, nothing goes on the wire.
     s.client.emit({ subunit: "MAIN", func: "INP", value: "HDMI1" });
     s.client.sent.length = 0;
-    s.controller.handleWrite("player.playback", 0);
+    void s.controller.handleWrite("player.playback", 0);
     expect(s.client.sent).toEqual([]);
   });
 
@@ -1242,7 +1242,7 @@ describe("YncaDeviceController unified player v2.0.0 (input-routed block)", () =
     expect(s.acked).not.toContainEqual({ id: "living.player.station", value: "Radio X" });
     // A zone-prefixed transport write routes over zone2's source.
     s.client.sent.length = 0;
-    s.controller.handleWrite("multiroom.zone2.player.playback", 2);
+    void s.controller.handleWrite("multiroom.zone2.player.playback", 2);
     expect(s.client.sent).toEqual([{ subunit: "NETRADIO", func: "PLAYBACK", value: "Stop" }]);
   });
 });
@@ -1298,8 +1298,8 @@ describe("YncaDeviceController test-audit hardening (2.0.1)", () => {
     const controller = new YncaDeviceController("living", deps);
     await controller.start();
     client.sent.length = 0;
-    controller.handleWrite("tuner.frequency", 98100);
-    controller.handleWrite("tuner.preset", 3);
+    void controller.handleWrite("tuner.frequency", 98100);
+    void controller.handleWrite("tuner.preset", 3);
     expect(client.sent).toEqual([]);
   });
 
@@ -1623,20 +1623,20 @@ describe("HD Radio in the tuner router (coverage audit 2026-09-09)", () => {
       MAIN: { PWR: "On" },
       HDRADIO: { BAND: "FM", FMFREQ: "98.10", AMFREQ: "1440", PRESET: "3", SEARCHMODE: "Preset", PRGSEL: "HD1" },
     });
-    s.controller.handleWrite("tuner.frequency", 101300);
+    void s.controller.handleWrite("tuner.frequency", 101300);
     expect(s.client.sent).toEqual([{ subunit: "HDRADIO", func: "FMFREQ", value: "101.30" }]);
     s.client.sent.length = 0;
-    s.controller.handleWrite("tuner.band", "AM");
+    void s.controller.handleWrite("tuner.band", "AM");
     expect(s.client.sent).toEqual([{ subunit: "HDRADIO", func: "BAND", value: "AM" }]);
     s.client.emit({ subunit: "HDRADIO", func: "BAND", value: "AM" });
     s.client.sent.length = 0;
-    s.controller.handleWrite("tuner.frequency", 1440);
+    void s.controller.handleWrite("tuner.frequency", 1440);
     expect(s.client.sent).toEqual([{ subunit: "HDRADIO", func: "AMFREQ", value: "1440" }]);
     s.client.sent.length = 0;
-    s.controller.handleWrite("tuner.preset", 7);
+    void s.controller.handleWrite("tuner.preset", 7);
     expect(s.client.sent).toEqual([{ subunit: "HDRADIO", func: "PRESET", value: "7" }]);
     s.client.sent.length = 0;
-    s.controller.handleWrite("tuner.hdRadio.program", "HD2");
+    void s.controller.handleWrite("tuner.hdRadio.program", "HD2");
     expect(s.client.sent).toEqual([{ subunit: "HDRADIO", func: "PRGSEL", value: "HD2" }]);
   });
 
@@ -1647,10 +1647,10 @@ describe("HD Radio in the tuner router (coverage audit 2026-09-09)", () => {
       TUN: { BAND: "FM", FMFREQ: "98.10" },
       HDRADIO: { BAND: "FM", FMFREQ: "98.10", PRESET: "3" },
     });
-    s.controller.handleWrite("tuner.frequency", 101300);
+    void s.controller.handleWrite("tuner.frequency", 101300);
     expect(s.client.sent).toEqual([{ subunit: "HDRADIO", func: "FMFREQ", value: "101.30" }]);
     s.client.sent.length = 0;
-    s.controller.handleWrite("tuner.preset", 2);
+    void s.controller.handleWrite("tuner.preset", 2);
     expect(s.client.sent).toEqual([{ subunit: "HDRADIO", func: "PRESET", value: "2" }]);
   });
 });
@@ -1705,12 +1705,12 @@ describe("the YNCA pad dialect of the 2015 generation (RX-A850: @MAIN:CURSOR/MEN
     const s = await padSetup(zone, { LISTCURSOR: "undefined", CURSOR: "known" });
     expect(s.probes).toEqual([["LISTCURSOR", "CURSOR"]]);
     expect(zone.remembered("yncaPadDialect")).toEqual({ dialect: "zone", proven: true });
-    s.controller.handleWrite("remote.cursor", "return");
+    void s.controller.handleWrite("remote.cursor", "return");
     expect(s.client.sent).toEqual([{ subunit: "MAIN", func: "CURSOR", value: "Return" }]);
     const list = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
     const t = await padSetup(list, { LISTCURSOR: "known", CURSOR: "undefined" });
     expect(list.remembered("yncaPadDialect")).toEqual({ dialect: "list", proven: true });
-    t.controller.handleWrite("remote.cursor", "up");
+    void t.controller.handleWrite("remote.cursor", "up");
     expect(t.client.sent).toEqual([{ subunit: "MAIN", func: "LISTCURSOR", value: "Up" }]);
   });
 
@@ -1719,7 +1719,7 @@ describe("the YNCA pad dialect of the 2015 generation (RX-A850: @MAIN:CURSOR/MEN
       const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA, yncaPadDialect: { dialect, proven: true } });
       const s = await padSetup(memory, { LISTCURSOR: "known", CURSOR: "known" });
       expect(s.probes).toEqual([]);
-      s.controller.handleWrite("remote.cursor", "up");
+      void s.controller.handleWrite("remote.cursor", "up");
       expect(s.client.sent).toEqual([
         { subunit: "MAIN", func: dialect === "list" ? "LISTCURSOR" : "CURSOR", value: "Up" },
       ]);
@@ -1731,14 +1731,14 @@ describe("the YNCA pad dialect of the 2015 generation (RX-A850: @MAIN:CURSOR/MEN
     const s = await padSetup(memory, { LISTCURSOR: "unclear", CURSOR: "unclear" });
     expect(s.probes).toHaveLength(1);
     expect(memory.remembered("yncaPadDialect")).toBe("zone");
-    s.controller.handleWrite("remote.cursor", "up");
+    void s.controller.handleWrite("remote.cursor", "up");
     expect(s.client.sent).toEqual([{ subunit: "MAIN", func: "LISTCURSOR", value: "Up" }]);
   });
 
   test("a single refused key never persists a dialect by itself — it only triggers one re-probe", async () => {
     const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
     const s = await padSetup(memory, { LISTCURSOR: "known", CURSOR: "known" });
-    s.controller.handleWrite("remote.cursor", "up");
+    void s.controller.handleWrite("remote.cursor", "up");
     s.refuse("@MAIN:LISTCURSOR=Up", "restricted");
     s.refuse("@MAIN:LISTCURSOR=Up", "undefined");
     await flush();
@@ -1754,13 +1754,24 @@ describe("the YNCA pad dialect of the 2015 generation (RX-A850: @MAIN:CURSOR/MEN
     const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
     const s = await padSetup(memory, { LISTCURSOR: "unclear", CURSOR: "unclear" });
     s.client.probeKnown = () => Promise.resolve({ LISTCURSOR: "undefined", CURSOR: "known" });
-    s.controller.handleWrite("remote.cursor", "up");
+    void s.controller.handleWrite("remote.cursor", "up");
     s.refuse("@MAIN:LISTCURSOR=Up", "undefined");
     await flush();
     expect(s.client.sent).toEqual([
       { subunit: "MAIN", func: "LISTCURSOR", value: "Up" },
       { subunit: "MAIN", func: "CURSOR", value: "Up" },
     ]);
+    expect(memory.remembered("yncaPadDialect")).toEqual({ dialect: "zone", proven: true });
+  });
+
+  // A re-probe that comes back unclear proves nothing — the dialect proven before stays remembered (2026-10-02).
+  test("an unclear re-probe keeps the dialect proven before", async () => {
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA, yncaPadDialect: { dialect: "zone", proven: true } });
+    const s = await padSetup(memory, {});
+    s.client.probeKnown = () => Promise.resolve({ LISTCURSOR: "unclear", CURSOR: "unclear" });
+    void s.controller.handleWrite("remote.cursor", "up");
+    s.refuse("@MAIN:CURSOR=Up", "undefined");
+    await flush();
     expect(memory.remembered("yncaPadDialect")).toEqual({ dialect: "zone", proven: true });
   });
 });
@@ -2036,8 +2047,8 @@ describe("the pad of zones 2 and 3 (@ZONE2/@ZONE3:LISTCURSOR/LISTMENU — audit 
     expect(s.objects).toContain("living.multiroom.zone2.remote.menu");
     expect(s.objects).not.toContain("living.multiroom.zone3.remote.cursor");
     expect(memory.remembered("yncaZonePads")).toEqual({ zone2: true, zone3: false });
-    s.controller.handleWrite("multiroom.zone2.remote.cursor", "return");
-    s.controller.handleWrite("multiroom.zone2.remote.menu", "display");
+    void s.controller.handleWrite("multiroom.zone2.remote.cursor", "return");
+    void s.controller.handleWrite("multiroom.zone2.remote.menu", "display");
     expect(s.client.sent).toEqual([
       { subunit: "ZONE2", func: "LISTCURSOR", value: "Return" },
       { subunit: "ZONE2", func: "LISTMENU", value: "Display" },
@@ -2068,6 +2079,17 @@ describe("the pad of zones 2 and 3 (@ZONE2/@ZONE3:LISTCURSOR/LISTMENU — audit 
     expect(memory.remembered("yncaZonePads")).toEqual({ zone2: true, zone3: false });
   });
 });
+
+/**
+ * The waits of the menu-proof catch-up after `PWR=On` — without the one wait of the read that completes a standby
+ * read-in (30 s, beside the proofs), which a power-on also starts.
+ *
+ * @param waits every gate wait the controller made
+ * @returns the proof waits
+ */
+function proofWaits(waits: readonly number[]): number[] {
+  return waits.filter(ms => ms >= 5000 && ms !== 30_000);
+}
 
 describe("YncaDeviceController — what the receiver proved stays proven, and a standby connect catches up (forum 85413)", () => {
   /** Lets the queued catch-up steps and their (instant) waits run out. */
@@ -2147,6 +2169,167 @@ describe("YncaDeviceController — what the receiver proved stays proven, and a 
   const lastDef = (objects: Array<{ id: string; def: ObjectDef }>, id: string): ObjectDef | undefined =>
     objects.filter(entry => entry.id === id).at(-1)?.def;
 
+  // 2026-10-02: a receiver in standby refuses many functions — a read then is incomplete. Switched on, the
+  // functions are asked again and ADDED (never one taken away), and the read becomes complete.
+  test("a standby read-in is completed after PWR=On: what standby refused is added, and the read says complete", async () => {
+    const s = await proofSetup({ power: "Standby" });
+    expect(s.controller.readComplete()).toBe(false);
+    let completed = 0;
+    s.controller.onReadComplete(() => completed++);
+    // Switched on, the receiver answers what standby refused.
+    s.client.capabilities = {
+      model: "RX-V475",
+      subunits: {
+        ...s.client.capabilities.subunits,
+        MAIN: { PWR: "On", INP: "HDMI1", VOL: "-40.0", MUTE: "Off" },
+      },
+    };
+    s.client.emit({ subunit: "MAIN", func: "PWR", value: "On" });
+    await settle();
+    expect(s.controller.readComplete()).toBe(true);
+    expect(completed).toBe(1);
+    expect(s.objects.map(entry => entry.id)).toContain("living.volume");
+    const caps = s.memory.remembered<{ awake?: boolean; subunits: Record<string, Record<string, string>> }>(
+      "yncaCapabilities",
+    );
+    expect(caps?.awake).toBe(true);
+    expect(caps?.subunits.NETRADIO).toBeDefined();
+  });
+
+  /**
+   * How many full reads of the main zone the controller made (a sweep or a refresh asks MAIN:VOL).
+   *
+   * @param client the fake client
+   * @returns the number of requests that asked MAIN:VOL
+   */
+  const reads = (client: FakeClient): number =>
+    client.requests.filter(gets => gets.some(get => get.subunit === "MAIN" && get.func === "VOL")).length;
+
+  test("two PWR=On lines in a row start one read, not two", async () => {
+    const s = await proofSetup({ power: "Standby" });
+    const before = reads(s.client);
+    s.client.capabilities = {
+      model: "RX-V475",
+      subunits: { ...s.client.capabilities.subunits, MAIN: { PWR: "On", INP: "HDMI1", VOL: "-40.0" } },
+    };
+    // The receiver answers slowly, as a real one does: the first read is still running when the second line's
+    // wait has passed.
+    let release = (): void => {};
+    const held = new Promise<void>(resolve => (release = resolve));
+    const real = s.client.readCapabilities.bind(s.client);
+    s.client.readCapabilities = gets => {
+      const answer = real(gets);
+      return held.then(() => answer);
+    };
+    s.client.emit({ subunit: "MAIN", func: "PWR", value: "On" });
+    s.client.emit({ subunit: "MAIN", func: "PWR", value: "On" });
+    await settle();
+    release();
+    await settle();
+    expect(reads(s.client) - before).toBe(1);
+  });
+
+  test("a read that became complete in the meantime is not read again after PWR=On", async () => {
+    const s = await proofSetup({ power: "Standby" });
+    s.client.capabilities = {
+      model: "RX-V475",
+      subunits: { ...s.client.capabilities.subunits, MAIN: { PWR: "On", INP: "HDMI1", VOL: "-40.0" } },
+    };
+    s.client.emit({ subunit: "MAIN", func: "PWR", value: "On" });
+    await settle();
+    expect(s.controller.readComplete()).toBe(true);
+    const before = reads(s.client);
+    // Complete now: another power-on asks nothing again.
+    (s.controller as unknown as { awakeReadQueued: boolean }).awakeReadQueued = false;
+    (s.controller as unknown as { queueAwakeRead(): void }).queueAwakeRead();
+    await settle();
+    expect(reads(s.client)).toBe(before);
+  });
+
+  test("an AVAIL probe of the same receiver adds to the subunits it remembered, never replaces them", async () => {
+    const client = new FakeClient();
+    client.availableSubunits = ["MAIN"];
+    client.capabilities = {
+      model: "RX-V475",
+      subunits: { SYS: { MODELNAME: "RX-V475", VERSION: "1.0" }, MAIN: { PWR: "Standby", INP: "HDMI1" } },
+    };
+    const real = client.readCapabilities.bind(client);
+    let first = true;
+    client.readCapabilities = gets => {
+      if (first) {
+        first = false;
+        client.requests.push(gets);
+        return Promise.resolve({ model: "", subunits: {} });
+      }
+      return real(gets);
+    };
+    const { deps } = makeDeps(client);
+    deps.subunitCache = createSubunitCache(
+      {
+        schema: DISCOVERY_SCHEMA,
+        subunits: ["MAIN", "TUN"],
+        probed: ["MAIN", "TUN"],
+        model: "RX-V475",
+        firmware: "1.0",
+      },
+      () => undefined,
+    );
+    await new YncaDeviceController("living", deps).start();
+    expect(deps.subunitCache.get()?.subunits).toEqual(expect.arrayContaining(["MAIN", "TUN"]));
+  });
+
+  test("a read-in with the receiver switched on is complete at once", async () => {
+    const s = await proofSetup({ power: "On" });
+    expect(s.controller.readComplete()).toBe(true);
+    expect(s.controller.firmware()).toBe("1.0");
+  });
+
+  // The identity read lost its first answer (an empty model), so the fast path did not run and the receiver was
+  // swept again — in standby. What it proved before stays; until 3.1.3 the smaller sweep replaced it.
+  test("a sweep of the same receiver adds to what it proved before, never replaces it", async () => {
+    const memory = new ProbeMemory({
+      __schema: DISCOVERY_SCHEMA,
+      yncaCapabilities: {
+        model: "RX-V475",
+        firmware: "1.0",
+        subunits: { SYS: { MODELNAME: "RX-V475" }, MAIN: { PWR: "On" }, TUN: { BAND: "FM" } },
+        awake: true,
+      },
+    });
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX-V475",
+      subunits: { SYS: { MODELNAME: "RX-V475", VERSION: "1.0" }, MAIN: { PWR: "Standby", INP: "HDMI1" } },
+    };
+    const real = client.readCapabilities.bind(client);
+    let first = true;
+    client.readCapabilities = gets => {
+      if (first) {
+        first = false;
+        client.requests.push(gets);
+        return Promise.resolve({ model: "", subunits: {} });
+      }
+      return real(gets);
+    };
+    const { deps } = makeDeps(client);
+    deps.probeMemory = memory;
+    await new YncaDeviceController("living", deps).start();
+    const caps = memory.remembered<{ awake?: boolean; subunits: Record<string, Record<string, string>> }>(
+      "yncaCapabilities",
+    );
+    expect(caps?.subunits.TUN).toEqual({ BAND: "FM" });
+    expect(caps?.awake).toBe(true);
+  });
+
+  test("a write says what the device made of it — taken, refused, or not sendable", async () => {
+    const s = await proofSetup({ power: "On" });
+    const verdicts: Array<"ok" | "restricted" | "undefined" | "unclear" | "skipped"> = ["ok", "restricted"];
+    (s.client as unknown as { send: () => Promise<string> }).send = () => Promise.resolve(verdicts.shift()!);
+    await expect(Promise.resolve(s.controller.handleWrite("power", true))).resolves.toBe("sent");
+    await expect(Promise.resolve(s.controller.handleWrite("power", false))).resolves.toBe("refused");
+    await expect(Promise.resolve(s.controller.handleWrite("no.such.state", 1))).resolves.toBe("unavailable");
+  });
+
   test("a remembered proof stands in standby: not asked again, claimed as proven", async () => {
     const memory = new ProbeMemory({
       __schema: DISCOVERY_SCHEMA,
@@ -2211,7 +2394,7 @@ describe("YncaDeviceController — what the receiver proved stays proven, and a 
     await settle();
     // One catch-up: proven at the first attempt; the pad dialect stays unclear (the fake's default), so
     // the attempts run out — once, not once per power-on line.
-    expect(s.waits.filter(ms => ms >= 5000)).toEqual([5000, 10000, 15000]);
+    expect(proofWaits(s.waits)).toEqual([5000, 10000, 15000]);
     expect(s.listProbes()).toBe(1);
     expect(s.memory.remembered("yncaBrowseSources")).toEqual({ subunits: ["NETRADIO"], proven: true });
     const source = lastDef(s.objects, "living.player.browse.source");
@@ -2220,7 +2403,7 @@ describe("YncaDeviceController — what the receiver proved stays proven, and a 
     // The rebuilt surface drives the menu.
     s.client.sent.length = 0;
     s.client.gets.length = 0;
-    s.controller.handleWrite("player.browse.source", "netRadio");
+    void s.controller.handleWrite("player.browse.source", "netRadio");
     await settle();
     expect(s.client.sent).toContainEqual({ subunit: "MAIN", func: "INP", value: "NET RADIO" });
     expect(s.client.gets).toContainEqual({ subunit: "NETRADIO", func: "LISTINFO" });
@@ -2250,7 +2433,7 @@ describe("YncaDeviceController — what the receiver proved stays proven, and a 
     s.client.emit({ subunit: "MAIN", func: "PWR", value: "On" });
     await settle();
     expect(s.listProbes()).toBe(3);
-    expect(s.waits.filter(ms => ms >= 5000)).toEqual([5000, 10000, 15000]);
+    expect(proofWaits(s.waits)).toEqual([5000, 10000, 15000]);
     expect(s.memory.remembered("yncaBrowseSources")).toBeUndefined();
     expect(lastDef(s.objects, "living.player.browse.source")?.unproven).toBe(true);
     // The next power-on tries again.
@@ -2302,7 +2485,7 @@ describe("YncaDeviceController — what the receiver proved stays proven, and a 
     s.client.emit({ subunit: "MAIN", func: "PWR", value: "On" });
     await settle();
     expect(s.listProbes()).toBe(probesBefore);
-    expect(s.waits.filter(ms => ms >= 5000)).toEqual([5000]);
+    expect(proofWaits(s.waits)).toEqual([5000]);
   });
   test("a pad the power-on probe finds missing is taken away, not kept on the list words", async () => {
     const memory = new ProbeMemory({
@@ -2317,7 +2500,7 @@ describe("YncaDeviceController — what the receiver proved stays proven, and a 
     await settle();
     expect(memory.remembered("yncaPadDialect")).toEqual({ dialect: "none", proven: true });
     s.client.sent.length = 0;
-    s.controller.handleWrite("remote.cursor", "up");
+    void s.controller.handleWrite("remote.cursor", "up");
     await settle();
     expect(s.client.sent.filter(m => /CURSOR/.test(m.func))).toEqual([]);
   });
@@ -2336,8 +2519,8 @@ describe("YncaDeviceController — what the receiver proved stays proven, and a 
     await settle();
     expect(memory.remembered("yncaZonePads")).toEqual({ zone3: true, zone2: true });
     s.client.sent.length = 0;
-    s.controller.handleWrite("multiroom.zone3.remote.cursor", "up");
-    s.controller.handleWrite("multiroom.zone2.remote.cursor", "up");
+    void s.controller.handleWrite("multiroom.zone3.remote.cursor", "up");
+    void s.controller.handleWrite("multiroom.zone2.remote.cursor", "up");
     expect(s.client.sent.map(m => m.subunit)).toEqual(["ZONE3", "ZONE2"]);
   });
 });

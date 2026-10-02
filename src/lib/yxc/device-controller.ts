@@ -61,10 +61,11 @@ import { PollDropDetector } from "../lifecycle/poll-drop-detector";
 import { YxcRefusalError, YxcTransportError } from "./http-client";
 import type { ProbeMemory } from "../lifecycle/probe-memory";
 import { splitZone, zonePrefix } from "./zones";
-import { presentSystemEntries, type YxcSystemEntry } from "./system-catalog";
+import { presentSystemEntries, YXC_SYSTEM_CATALOG, type YxcSystemEntry } from "./system-catalog";
 import { keyedCommon, parentChannels } from "../catalog/types";
 import { knownScenes, resolveSceneNumber, sceneListSurface } from "../catalog/scene-titles";
 import type { CommandGate } from "../lifecycle/command-gate";
+import type { WriteOutcome } from "../lifecycle/multi-transport-handle";
 import type { BrowseEngine } from "../browse/browse-engine";
 import { createBrowseSurface } from "../browse/surface";
 import { YxcBrowseDriver, yxcListLanguage } from "../browse/yxc-browse-driver";
@@ -198,6 +199,11 @@ export function zoneNameFrom(nameText: unknown): string | undefined {
 
 import type { YxcClientLike } from "./client-contract";
 
+/** Probe-memory key: per zone, the display scale (`db`/`numeric`) its `volume` datapoint was read in on. */
+const VOLUME_MODE_KEY = "yxcVolumeMode";
+/** Probe-memory key: the device-wide settings (getFuncStatus) this receiver has delivered — never shrunk. */
+const SYSTEM_ENTRIES_KEY = "yxcSystemEntries";
+
 // Re-exported so existing importers (the tests' fakes) keep resolving it from here.
 export type { YxcClientLike };
 
@@ -306,10 +312,9 @@ export class YxcDeviceController {
   /** Each zone's declared value lists (getFeatures), for the on-screen remote's write guard. */
   private readonly zoneValueLists = new Map<string, Readonly<Record<string, string[]>>>();
   /**
-   * The capability report of this connect and the display scale each zone reported when its
-   * objects were built. `volume` declares the bounds of the scale the device is SHOWING
-   * (`actual_volume.mode`); switching that at the device has to reshape the datapoint, and this
-   * controller writes its objects only once, at connect.
+   * The capability report of this connect and the display scale each zone's `volume` is presented on —
+   * decided once per receiver and remembered ({@link VOLUME_MODE_KEY}); a status on the other scale is
+   * converted from the raw step count.
    */
   private capabilities: YxcCapabilities | undefined;
   private readonly zoneVolumeMode = new Map<string, string | undefined>();
@@ -341,6 +346,8 @@ export class YxcDeviceController {
   private browseEngine: BrowseEngine | undefined;
   /** `api_version` from getDeviceInfo — below 1.17 a cover comes only as Yamaha's encrypted ymf. */
   private apiVersion: number | undefined;
+  /** `system_version` from getDeviceInfo — the firmware this connection read. */
+  private systemVersion: string | undefined;
 
   /**
    * The address a reported cover path is shown at: absolute on the device's own web server. Below API
@@ -400,9 +407,20 @@ export class YxcDeviceController {
       const api = (info as { api_version?: unknown } | null)?.api_version;
       this.apiVersion = typeof api === "number" ? api : undefined;
       const version = (info as { system_version?: unknown } | null)?.system_version;
-      const identity = `${model ?? ""}|${typeof version === "number" || typeof version === "string" ? version : ""}`;
-      if (this.deps.probeMemory.remembered("yxcIdentity") !== identity) {
-        this.deps.probeMemory.drop(key => key === "features" || key === "model" || key === "yxcIdentity");
+      const firmware = typeof version === "number" || typeof version === "string" ? String(version) : "";
+      this.systemVersion = firmware || undefined;
+      const identity = `${model ?? ""}|${firmware}`;
+      // An answer without a model is no identity at all (YNCA and XML guard the same way): it must not throw
+      // away what this receiver declared.
+      if (model && this.deps.probeMemory.remembered("yxcIdentity") !== identity) {
+        this.deps.probeMemory.drop(
+          key =>
+            key === "features" ||
+            key === "model" ||
+            key === "yxcIdentity" ||
+            key === VOLUME_MODE_KEY ||
+            key === SYSTEM_ENTRIES_KEY,
+        );
         this.deps.probeMemory.set("yxcIdentity", identity);
       }
       // Serial (`system_id`) and MAC (`device_id`) — the device's identity for life. Their own
@@ -482,8 +500,25 @@ export class YxcDeviceController {
       ...(this.apiVersion !== undefined ? { apiVersion: this.apiVersion } : {}),
       ...(nameText !== undefined ? { names: nameTextLabels(nameText) } : {}),
     };
+    // The display scale `volume` is presented on is decided once per receiver and kept: a datapoint does not
+    // change its unit and bounds because someone switched the receiver's display (krobi 2026-10-02 — a
+    // read-in receiver keeps its tree). A value on the other scale is converted from the raw step count.
+    const learnedModes = { ...this.deps.probeMemory.remembered<Record<string, string>>(VOLUME_MODE_KEY) };
+    let modesLearned = false;
     for (const zone of this.zones) {
-      this.zoneVolumeMode.set(zone, reported[zone]?.actualVolumeMode);
+      const reportedMode = reported[zone]?.actualVolumeMode;
+      const mode = learnedModes[zone] ?? reportedMode;
+      if (learnedModes[zone] === undefined && reportedMode !== undefined) {
+        learnedModes[zone] = reportedMode;
+        modesLearned = true;
+      }
+      this.zoneVolumeMode.set(zone, mode);
+      if (reported[zone] !== undefined && mode !== undefined) {
+        reported[zone].actualVolumeMode = mode;
+      }
+    }
+    if (modesLearned) {
+      this.deps.probeMemory.set(VOLUME_MODE_KEY, learnedModes);
     }
     const objects = mapYxcToObjects(this.capabilities, reported);
     if (objects.length === 0) {
@@ -534,7 +569,7 @@ export class YxcDeviceController {
         zonesAnswered.push(false);
         continue;
       }
-      await this.applyZoneStatus(this.zones[index], status);
+      this.applyZoneStatus(this.zones[index], status);
       zonesAnswered.push(true);
     }
     // The zone status is the one request of this start that ALWAYS goes to the device: the
@@ -604,11 +639,16 @@ export class YxcDeviceController {
     try {
       status = await this.deps.client.getFuncStatus();
     } catch (e) {
-      // A device that does not answer simply keeps no device-wide settings this run.
+      // The settings this receiver delivered before stay: one unanswered request is no proof they are gone.
       this.deps.log.debug(`${this.deviceId}: getFuncStatus failed (${errText(e)})`);
-      return;
+      status = undefined;
     }
-    this.systemEntries = presentSystemEntries(status);
+    const remembered = new Set(this.deps.probeMemory.remembered<string[]>(SYSTEM_ENTRIES_KEY) ?? []);
+    const present = new Set(presentSystemEntries(status).map(entry => entry.state));
+    this.systemEntries = YXC_SYSTEM_CATALOG.filter(entry => present.has(entry.state) || remembered.has(entry.state));
+    if ([...present].some(state => !remembered.has(state))) {
+      this.deps.probeMemory.set(SYSTEM_ENTRIES_KEY, [...new Set([...remembered, ...present])]);
+    }
     if (this.systemEntries.length === 0) {
       return;
     }
@@ -763,7 +803,7 @@ export class YxcDeviceController {
    * @param stateId the state id relative to the device
    * @param value the written value
    */
-  public handleWrite(stateId: string, value: unknown): void {
+  public handleWrite(stateId: string, value: unknown): Promise<WriteOutcome> | WriteOutcome | void {
     if (stateId.startsWith("player.browse.")) {
       this.browseEngine?.handleWrite(stateId, value);
       return;
@@ -833,7 +873,7 @@ export class YxcDeviceController {
     }
     const command = stateToYxc(stateId, value);
     if (!command) {
-      return;
+      return "unavailable";
     }
     // A function the zone reports not operable right now (YXC Basic §5.1 `disable_flags`: b0 volume,
     // b1 mute, b2 link audio delay — a soundbar in standby reports 3) is not sent: the device would
@@ -847,7 +887,12 @@ export class YxcDeviceController {
         return;
       }
     }
-    void this.applyCommand(stateId, command, value);
+    return this.applyCommand(stateId, command, value).then(outcome => (outcome === "failed" ? "unavailable" : outcome));
+  }
+
+  /** @returns the firmware (`system_version`) read on this connection, if any */
+  public firmware(): string | undefined {
+    return this.systemVersion;
   }
 
   /**
@@ -1878,7 +1923,7 @@ export class YxcDeviceController {
       return answer.kind === "refused";
     }
     try {
-      await this.applyZoneStatus(zone, answer.status);
+      this.applyZoneStatus(zone, answer.status);
     } catch (e) {
       // A push handler calls this without awaiting it, so a rejection here would have no
       // receiver at all — js-controller turns an unhandled rejection into an adapter stop.
@@ -1910,7 +1955,7 @@ export class YxcDeviceController {
    * @param zone the zone the status belongs to
    * @param status the raw getStatus answer
    */
-  private async applyZoneStatus(zone: string, status: unknown): Promise<void> {
+  private applyZoneStatus(zone: string, status: unknown): void {
     const flags = (status as { disable_flags?: unknown } | null)?.disable_flags;
     this.disabledFlags.set(zone, typeof flags === "number" ? flags : 0);
     // The display scale decides the BOUNDS and the unit of the volume datapoint, so the object
@@ -1919,13 +1964,13 @@ export class YxcDeviceController {
     // that loop (and as a fire-and-forget promise) let a numeric value land in an object still
     // declaring decibels, which is the js-controller warning 2.7.2 set out to end. So the mode is
     // read from the RAW answer first and the reshape is awaited.
+    // The datapoint keeps the scale it was read in on (see start); a status on the other scale — the display
+    // was switched at the receiver — is converted from the raw step count instead of rebuilding the datapoint.
     const mode = actualVolumeModeOf(status);
-    if (mode !== undefined && this.zoneVolumeMode.get(zone) !== mode) {
-      this.zoneVolumeMode.set(zone, mode);
-      await this.reshapeVolume(zone, mode);
-    }
+    const learned = this.zoneVolumeMode.get(zone);
+    const otherScale = mode !== undefined && learned !== undefined && mode !== learned;
+    const asShown = this.displayedVolumeIn(zone, status, otherScale);
     const updates = parseYxcStatus(status, zone);
-    const asShown = this.displayedVolumeIn(zone, status);
     for (const update of updates) {
       // A zone can declare a display scale and still answer a status without `actual_volume` —
       // the RX-A2070 declares decibels for all three zones and reports them for main only. The
@@ -1934,6 +1979,11 @@ export class YxcDeviceController {
       // own declared step says what 66 reads as on the scale it declares.
       if (asShown !== undefined && update.id === `${zonePrefix(zone)}volume`) {
         this.emit(update.id, asShown);
+        continue;
+      }
+      // On the other scale and without a raw step count to convert from: no value rather than one in the
+      // wrong unit.
+      if (otherScale && update.id === `${zonePrefix(zone)}volume`) {
         continue;
       }
       // The maximum on the same scale as the volume it limits (audit 2026-09-29, C40).
@@ -1965,32 +2015,6 @@ export class YxcDeviceController {
   }
 
   /**
-   * Rewrite a zone's `volume` object for the display scale the device now reports.
-   *
-   * The object is rebuilt through the same mapper the connect uses, so name, unit and bounds stay
-   * one decision in one place; only that single definition is written.
-   *
-   * @param zone the zone whose display scale changed
-   * @param mode the scale the zone reports now (`db` / `numeric`)
-   */
-  private async reshapeVolume(zone: string, mode: string): Promise<void> {
-    if (!this.capabilities) {
-      return;
-    }
-    const id = `${zonePrefix(zone)}volume`;
-    const def = mapYxcToObjects(this.capabilities, { [zone]: { actualVolumeMode: mode } }).find(o => o.id === id);
-    if (!def) {
-      return;
-    }
-    try {
-      await this.deps.upsertObject(`${this.deviceId}.${id}`, def);
-      this.deps.log.debug(`${this.deviceId}: ${zone} now displays its volume as ${mode}`);
-    } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: could not reshape ${id}: ${errText(e)}`);
-    }
-  }
-
-  /**
    * A zone's raw step count expressed on the scale it declares, for a status that omits
    * `actual_volume`.
    *
@@ -2000,15 +2024,16 @@ export class YxcDeviceController {
    *
    * @param zone the zone the status belongs to
    * @param status the raw getStatus answer
+   * @param otherScale the zone reports the scale its datapoint was NOT read in on — converted from the raw count
    * @returns the displayed value, or undefined when the device already reported one (its own word
    *   comes first) or no scale is settled
    */
-  private displayedVolumeIn(zone: string, status: unknown): number | undefined {
+  private displayedVolumeIn(zone: string, status: unknown, otherScale = false): number | undefined {
     if (typeof status !== "object" || status === null) {
       return undefined;
     }
     const answer = status as { volume?: unknown; actual_volume?: unknown };
-    if (typeof answer.volume !== "number" || typeof answer.actual_volume === "object") {
+    if (typeof answer.volume !== "number" || (typeof answer.actual_volume === "object" && !otherScale)) {
       return undefined;
     }
     const scale = this.volumeScale(zone);
@@ -2073,20 +2098,34 @@ export class YxcDeviceController {
    * @param command the YXC command to apply
    * @param written the value that was written, when the state mirrors a device value
    */
-  private async applyCommand(stateId: string, command: YxcCommand, written?: unknown): Promise<void> {
-    // Dropped with `void` by the write path: nothing may reject out of here.
+  private async applyCommand(
+    stateId: string,
+    command: YxcCommand,
+    written?: unknown,
+  ): Promise<"sent" | "refused" | "failed"> {
+    // Dropped with `void` by most callers: nothing may reject out of here.
+    let outcome: "sent" | "refused" | "failed" = "failed";
     try {
-      const outcome = await this.sendCommand(stateId, command);
-      if (outcome === "sent") {
-        await this.confirmWrite(stateId, command, written);
-      } else if (outcome === "refused") {
-        // The device said no: the datapoint still shows the refused value, and no event will
-        // correct it (nothing changed) — read what the device kept (audit 2026-09-24, C28).
-        await this.readBackAfter(stateId, command);
-      }
+      outcome = await this.sendCommand(stateId, command);
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: confirming the write to ${stateId} failed: ${errText(e)}`);
+      this.deps.log.debug(`${this.deviceId}: write to ${stateId} failed: ${errText(e)}`);
+      return outcome;
     }
+    // Confirmed behind the answer, so the caller learns at once what the device made of the command.
+    void (async () => {
+      try {
+        if (outcome === "sent") {
+          await this.confirmWrite(stateId, command, written);
+        } else if (outcome === "refused") {
+          // The device said no: the datapoint still shows the refused value, and no event will
+          // correct it (nothing changed) — read what the device kept (audit 2026-09-24, C28).
+          await this.readBackAfter(stateId, command);
+        }
+      } catch (e) {
+        this.deps.log.debug(`${this.deviceId}: confirming the write to ${stateId} failed: ${errText(e)}`);
+      }
+    })();
+    return outcome;
   }
 
   /**

@@ -147,7 +147,7 @@ describe("YncaClient", () => {
     const connected = client.connect();
     sockets[0].emitConnect();
     await connected;
-    client.send("MAIN", "PWR", "On");
+    void client.send("MAIN", "PWR", "On");
     expect(sockets[0].written).toContain("@MAIN:PWR=On\r\n");
   });
 
@@ -159,8 +159,8 @@ describe("YncaClient", () => {
     const connected = client.connect();
     sockets[0].emitConnect();
     await connected;
-    client.send("MAIN", "ZONENAME", "Küche", "latin1");
-    client.send("MAIN", "ZONENAME", "A\r\n@MAIN:PWR=Standby");
+    void client.send("MAIN", "ZONENAME", "Küche", "latin1");
+    void client.send("MAIN", "ZONENAME", "A\r\n@MAIN:PWR=Standby");
     await drain();
     expect(sockets[0].writtenBytes).toEqual([Buffer.from("@MAIN:ZONENAME=Küche\r\n", "latin1")]);
   });
@@ -552,7 +552,7 @@ describe("YncaClient refusal attribution (#615, bracketed since audit 2026-09-24
     await connect;
     const refusals: Array<{ command: string; verdict: string }> = [];
     client.onRefusal((command, verdict) => refusals.push({ command, verdict }));
-    client.send("MAIN", "SCENE", "Scene 1");
+    void client.send("MAIN", "SCENE", "Scene 1");
     await until(() => sockets[0].written.length >= 2);
     expect(sockets[0].written).toEqual(["@MAIN:SCENE=Scene 1\r\n", "@SYS:VERSION=?\r\n"]);
     // The 2012 generation's answer to a scene recall (ynca-python PRACTICALITIES), then the marker.
@@ -573,7 +573,7 @@ describe("YncaClient refusal attribution (#615, bracketed since audit 2026-09-24
     client.onRefusal(command => refusals.push(command));
     client.get("SYS", "HDMIOUT2");
     await drain();
-    client.send("MAIN", "LISTCURSOR", "Up");
+    void client.send("MAIN", "LISTCURSOR", "Up");
     await drain();
     // Background traffic within the last two seconds: the write opens with a marker.
     expect(sockets[0].written).toEqual(["@SYS:HDMIOUT2=?\r\n", "@SYS:VERSION=?\r\n"]);
@@ -608,7 +608,7 @@ describe("YncaClient refusal attribution (#615, bracketed since audit 2026-09-24
     await connect;
     const refusals: string[] = [];
     client.onRefusal(command => refusals.push(command));
-    client.send("MAIN", "SCENE", "Scene 2");
+    void client.send("MAIN", "SCENE", "Scene 2");
     await until(() => sockets[0].written.length >= 2);
     sockets[0].emitData("@RESTRICTED\r\n@RESTRICTED\r\n@SYS:VERSION=1.00\r\n");
     await drain();
@@ -673,9 +673,9 @@ describe("YncaClient key presses and read-backs (audit 2026-09-29, B2/B3)", () =
     const connect = client.connect();
     sockets[0].emitConnect();
     await connect;
-    client.send("MAIN", "LISTCURSOR", "Down");
-    client.send("MAIN", "LISTCURSOR", "Down");
-    client.send("MAIN", "LISTCURSOR", "Down");
+    void client.send("MAIN", "LISTCURSOR", "Down");
+    void client.send("MAIN", "LISTCURSOR", "Down");
+    void client.send("MAIN", "LISTCURSOR", "Down");
     for (let i = 0; i < 3; i++) {
       for (let n = 0; n < 50 && sockets[0].written.filter(l => l.startsWith("@SYS")).length <= i; n++) {
         await wait(10);
@@ -697,7 +697,7 @@ describe("YncaClient key presses and read-backs (audit 2026-09-29, B2/B3)", () =
     // The read-back runs at user priority; its answer may come late — a refusal for a zone in standby.
     client.get("ZONE2", "VOL", "user");
     await drain();
-    client.send("MAIN", "VOL", "-40.0");
+    void client.send("MAIN", "VOL", "-40.0");
     await drain();
     expect(sockets[0].written).toEqual(["@ZONE2:VOL=?\r\n", "@SYS:VERSION=?\r\n"]);
     sockets[0].emitData("@RESTRICTED\r\n@SYS:VERSION=1.00\r\n");
@@ -780,7 +780,7 @@ describe("YncaClient write failures (audit 2026-09-02)", () => {
     // send()/get() are fire-and-forget: a rejection out of the gate would be an unhandled
     // promise rejection — vitest fails the run on those, exactly as js-controller stops the
     // adapter. The failure is kept as the drop reason instead.
-    client.send("MAIN", "PWR", "On");
+    void client.send("MAIN", "PWR", "On");
     client.get("SYS", "MODELNAME");
     await drain();
     let reason: Error | undefined;
@@ -799,7 +799,7 @@ describe("YncaClient write failures (audit 2026-09-02)", () => {
       throw new Error("send after end");
     };
     // A send alone: its own path through the gate (the bracketed exchange) must keep the reason.
-    client.send("MAIN", "PWR", "On");
+    void client.send("MAIN", "PWR", "On");
     await drain();
     let reason: Error | undefined;
     client.onDrop(r => (reason = r));

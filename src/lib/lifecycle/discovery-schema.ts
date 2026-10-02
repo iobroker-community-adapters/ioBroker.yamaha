@@ -13,7 +13,7 @@
  * fails — with the stamp `test/discovery-schema.json`. (2.6.0: the adapter-VERSION trigger was
  * rejected in the advisor round — every patch release would re-sweep every device for a result
  * the schema bump already guarantees when discovery really changed. Since 2.7.0 a transport can
- * ask for a re-coordination within the session, so a late object does materialise — but that is
+ * add what it learns within the session, so a late object does materialise — but that is
  * ADDITIVE; a changed discovery LOGIC still needs the cold re-learn this constant triggers.)
  */
 export const DISCOVERY_SCHEMA = 5;

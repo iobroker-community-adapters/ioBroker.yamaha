@@ -163,6 +163,50 @@ describe("XmlDeviceController", () => {
     expect(s.acks).toContainEqual({ id: "living.info.model", value: "RX-V1900" });
   });
 
+  // One missed Basic_Status is no proof a zone is gone (2026-10-02): the zone the receiver answered on before
+  // keeps its states; until 3.1.3 it was left out for the whole session.
+  test("a zone answered before stays when its status fails once", async () => {
+    const probeMemory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
+    const first = setup({ Main_Zone: { power: true }, Zone_2: { power: true, volume: -40 } });
+    (first.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = probeMemory;
+    await first.controller.start();
+    expect(first.objects).toContain("living.multiroom.zone2.power");
+    const again = setup({ Main_Zone: { power: true } });
+    (again.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = probeMemory;
+    await again.controller.start();
+    expect(again.objects).toContain("living.multiroom.zone2.power");
+  });
+
+  test("the configuration is laid over what the receiver declared before, never in its place", async () => {
+    const probeMemory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
+    const first = setup({ Main_Zone: { power: true } });
+    (first.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = probeMemory;
+    first.client.config = { model: "RX-V1900", version: "1.0", inputNames: { HDMI1: "TV" }, features: { Tuner: true } };
+    await first.controller.start();
+    expect(first.controller.firmware()).toBe("1.0");
+    const again = setup({ Main_Zone: { power: true } });
+    (again.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = probeMemory;
+    again.client.config = { model: "RX-V1900", version: "1.0", inputNames: { AV1: "Blu-ray" } };
+    await again.controller.start();
+    expect(probeMemory.remembered("xmlConfig")).toEqual({
+      model: "RX-V1900",
+      version: "1.0",
+      inputNames: { HDMI1: "TV", AV1: "Blu-ray" },
+      features: { Tuner: true },
+    });
+  });
+
+  test("a write says what the device made of it — taken, refused, or not sendable", async () => {
+    const s = setup({ Main_Zone: { power: true, volume: -40 } });
+    await s.controller.start();
+    await expect(Promise.resolve(s.controller.handleWrite("power", false))).resolves.toBe("sent");
+    s.client.sendError = new Error("device refused <Main_Zone> (RC=3)");
+    await expect(Promise.resolve(s.controller.handleWrite("power", true))).resolves.toBe("refused");
+    s.client.sendError = new Error("ECONNRESET");
+    await expect(Promise.resolve(s.controller.handleWrite("power", true))).resolves.toBe("unavailable");
+    await expect(Promise.resolve(s.controller.handleWrite("no.such.state", 1))).resolves.toBe("unavailable");
+  });
+
   describe("System/Config is the receiver's own declaration (2026-09-09)", () => {
     const withMemory = (s: ReturnType<typeof setup>, memory: ProbeMemory): void => {
       (s.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
@@ -285,7 +329,7 @@ describe("XmlDeviceController", () => {
     const s = setup({ Main_Zone: { power: true } });
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("power", true);
+    void s.controller.handleWrite("power", true);
     await flush();
     expect(s.client.calls).toContainEqual({
       method: "send",
@@ -308,7 +352,7 @@ describe("XmlDeviceController", () => {
     try {
       s.client.statuses.Main_Zone = { power: false, volume: 12 };
       s.breakAcks.on = true;
-      s.controller.handleWrite("power", true);
+      void s.controller.handleWrite("power", true);
       await flush();
       await flush();
     } finally {
@@ -375,7 +419,7 @@ describe("XmlDeviceController", () => {
     ]);
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("scene.recall", 4);
+    void s.controller.handleWrite("scene.recall", 4);
     await flush();
     expect(s.client.calls).toContainEqual({
       method: "send",
@@ -386,11 +430,11 @@ describe("XmlDeviceController", () => {
     expect(s.client.calls.at(-1)).toMatchObject({ method: "getStatus", zone: "Main_Zone" });
     // A number the device did not declare is not sent at all.
     s.client.calls.length = 0;
-    s.controller.handleWrite("scene.recall", 7);
+    void s.controller.handleWrite("scene.recall", 7);
     await flush();
     expect(s.client.calls).toEqual([]);
     // A switch bound here by mistake: Number(true) is 1 — it recalled Scene 1 (audit 2026-09-24, D20).
-    s.controller.handleWrite("scene.recall", true);
+    void s.controller.handleWrite("scene.recall", true);
     await flush();
     expect(s.client.calls).toEqual([]);
   });
@@ -410,7 +454,7 @@ describe("XmlDeviceController", () => {
     expect(s.acks).toContainEqual({ id: "living.tuner.tuned", value: true });
     expect(s.acks).toContainEqual({ id: "living.tuner.rdsService", value: "Radio X" });
     s.client.calls.length = 0;
-    s.controller.handleWrite("tuner.preset", 5);
+    void s.controller.handleWrite("tuner.preset", 5);
     await flush();
     expect(s.client.calls).toContainEqual({
       method: "send",
@@ -425,7 +469,7 @@ describe("XmlDeviceController", () => {
     });
     // Number(true) is 1 — a switch bound here recalled preset 1 (audit 2026-09-24, D20).
     s.client.calls.length = 0;
-    s.controller.handleWrite("tuner.preset", true);
+    void s.controller.handleWrite("tuner.preset", true);
     await flush();
     expect(s.client.calls).toEqual([]);
   });
@@ -455,10 +499,10 @@ describe("XmlDeviceController", () => {
       states: { 3: "hr3", 9: "SWR3" },
     });
     s.client.calls.length = 0;
-    s.controller.handleWrite("tuner.preset", 9);
-    s.controller.handleWrite("tuner.preset", 5); // not declared → not sent
-    s.controller.handleWrite("tuner.frequency", 98130); // → 98150 on the 50 kHz grid
-    s.controller.handleWrite("tuner.band", "AM");
+    void s.controller.handleWrite("tuner.preset", 9);
+    void s.controller.handleWrite("tuner.preset", 5); // not declared → not sent
+    void s.controller.handleWrite("tuner.frequency", 98130); // → 98150 on the 50 kHz grid
+    void s.controller.handleWrite("tuner.band", "AM");
     await flush();
     const sent = s.client.calls.filter(c => c.method === "send").map(c => c.inner);
     expect(sent).toEqual([
@@ -526,13 +570,13 @@ describe("XmlDeviceController", () => {
     expect(s.objects).toContain("living.volume");
     expect(s.objects).not.toContain("living.sound.bass");
     s.client.calls.length = 0;
-    s.controller.handleWrite("volume", -25);
+    void s.controller.handleWrite("volume", -25);
     await flush();
     expect(s.client.calls.some(c => c.method === "send")).toBe(true);
 
     // …and the one the device never reported goes nowhere.
     s.client.calls.length = 0;
-    s.controller.handleWrite("sound.bass", 3);
+    void s.controller.handleWrite("sound.bass", 3);
     await flush();
     expect(s.client.calls).toEqual([]);
   });
@@ -649,7 +693,7 @@ describe("desc.xml — the classic generation's own enumerations (2026-09-09)", 
     const def = s.defs.get("living.sound.dialogueLevel") as Def | undefined;
     expect(def?.common).toMatchObject({ write: true, role: "level" });
     s.client.calls.length = 0;
-    s.controller.handleWrite("sound.dialogueLevel", 2);
+    void s.controller.handleWrite("sound.dialogueLevel", 2);
     await flush();
     expect(s.client.calls).toContainEqual({
       method: "send",
@@ -665,7 +709,7 @@ describe("desc.xml — the classic generation's own enumerations (2026-09-09)", 
     const def = s.defs.get("living.sound.dialogueLevel") as Def | undefined;
     expect(def?.common).toMatchObject({ write: false, role: "value" });
     s.client.calls.length = 0;
-    s.controller.handleWrite("sound.dialogueLevel", 2);
+    void s.controller.handleWrite("sound.dialogueLevel", 2);
     await flush();
     expect(s.client.calls.filter(c => c.method === "send")).toEqual([]);
   });
@@ -839,7 +883,7 @@ describe("XmlDeviceController browse surface (#613)", () => {
     const { controller, client } = browseSetup({ NET_RADIO: listBody });
     await controller.start();
     client.calls.length = 0;
-    controller.handleWrite("player.browse.source", "netRadio");
+    void controller.handleWrite("player.browse.source", "netRadio");
     await flush();
     expect(client.calls).toContainEqual({
       method: "send",
@@ -1164,7 +1208,7 @@ describe("the 2008 dialect drives every write and is remembered (RX-V3900)", () 
     s.client.calls.length = 0;
     s.acks.length = 0;
     s.client.statuses.Zone_2 = { power: true, volume: -25 };
-    s.controller.handleWrite("multiroom.zone2.volume", -25);
+    void s.controller.handleWrite("multiroom.zone2.volume", -25);
     await new Promise(resolve => setImmediate(resolve));
     const order = s.client.calls.map(c => `${c.method}:${c.zone}`);
     expect(order.indexOf("send:Zone_2")).toBeGreaterThanOrEqual(0);
@@ -1183,7 +1227,7 @@ describe("the 2008 dialect drives every write and is remembered (RX-V3900)", () 
     s.client.calls.length = 0;
     s.acks.length = 0;
     s.client.sendError = new Error("device refused Main_Zone (RC=3)");
-    s.controller.handleWrite("volume", -40);
+    void s.controller.handleWrite("volume", -40);
     await new Promise(resolve => setImmediate(resolve));
     expect(s.client.calls.map(c => `${c.method}:${c.zone}`)).toEqual(["send:Main_Zone", "getStatus:Main_Zone"]);
     expect(s.acks).toContainEqual({ id: "living.volume", value: legacyMain.volume });
@@ -1194,8 +1238,8 @@ describe("the 2008 dialect drives every write and is remembered (RX-V3900)", () 
     const s = setup({ Main_Zone: legacyMain });
     withMemory(s, memory);
     await s.controller.start();
-    s.controller.handleWrite("volume", -40);
-    s.controller.handleWrite("soundProgram", "Standard");
+    void s.controller.handleWrite("volume", -40);
+    void s.controller.handleWrite("soundProgram", "Standard");
     await new Promise(resolve => setImmediate(resolve));
     const sent = s.client.calls.filter(c => c.method === "send").map(c => c.inner);
     expect(sent).toContain("<Vol><Lvl><Val>-400</Val><Exp>1</Exp><Unit>dB</Unit></Lvl></Vol>");
@@ -1210,7 +1254,7 @@ describe("the 2008 dialect drives every write and is remembered (RX-V3900)", () 
     const s = setup({ Main_Zone: { power: false, mute: false } });
     withMemory(s, memory);
     await s.controller.start();
-    s.controller.handleWrite("mute", true);
+    void s.controller.handleWrite("mute", true);
     await new Promise(resolve => setImmediate(resolve));
     expect(s.client.calls.filter(c => c.method === "send").map(c => c.inner)).toContain("<Vol><Mute>On</Mute></Vol>");
   });
@@ -1220,7 +1264,7 @@ describe("the 2008 dialect drives every write and is remembered (RX-V3900)", () 
     const s = setup({ Main_Zone: { power: true, volume: -30, mute: false, dialect: "classic" } });
     withMemory(s, memory);
     await s.controller.start();
-    s.controller.handleWrite("volume", -25);
+    void s.controller.handleWrite("volume", -25);
     await new Promise(resolve => setImmediate(resolve));
     expect(s.client.calls.filter(c => c.method === "send").map(c => c.inner)).toContain(
       "<Volume><Lvl><Val>-250</Val><Exp>1</Exp><Unit>dB</Unit></Lvl></Volume>",
@@ -1254,9 +1298,9 @@ describe("the zone commands desc.xml declares: pads, transport keys, zone names 
     expect(s.defs.has("living.remote.cursor")).toBe(true);
     const menu = s.defs.get("living.remote.menu") as { common?: { states?: Record<string, string> } };
     expect(Object.keys(menu?.common?.states ?? {})).toEqual(["on_screen", "top_menu", "menu", "option", "display"]);
-    s.controller.handleWrite("multiroom.zone2.remote.cursor", "up");
-    s.controller.handleWrite("remote.menu", "on_screen");
-    s.controller.handleWrite("remote.cursor", "sideways"); // no such key
+    void s.controller.handleWrite("multiroom.zone2.remote.cursor", "up");
+    void s.controller.handleWrite("remote.menu", "on_screen");
+    void s.controller.handleWrite("remote.cursor", "sideways"); // no such key
     await tick();
     expect(sent(s)).toEqual([
       { zone: "Zone_2", inner: "<Cursor_Control><Cursor>Up</Cursor></Cursor_Control>" },
@@ -1272,7 +1316,7 @@ describe("the zone commands desc.xml declares: pads, transport keys, zone names 
     await s.controller.start();
     expect(s.defs.has("living.player.browse.source")).toBe(true);
     expect(s.defs.has("living.remote.menu")).toBe(true);
-    s.controller.handleWrite("remote.cursor", "up");
+    void s.controller.handleWrite("remote.cursor", "up");
     await tick();
     expect(sent(s)).toEqual([{ zone: "Main_Zone", inner: "<Cursor_Control><Cursor>Up</Cursor></Cursor_Control>" }]);
   });
@@ -1293,8 +1337,8 @@ describe("the zone commands desc.xml declares: pads, transport keys, zone names 
       expect(s.defs.has(`living.player.${key}`), key).toBe(true);
       expect(s.defs.has(`living.multiroom.zone2.player.${key}`), key).toBe(true);
     }
-    s.controller.handleWrite("multiroom.zone2.player.next", true);
-    s.controller.handleWrite("player.pause", true);
+    void s.controller.handleWrite("multiroom.zone2.player.next", true);
+    void s.controller.handleWrite("player.pause", true);
     await tick();
     expect(sent(s)).toEqual([
       { zone: "Zone_2", inner: "<Play_Control><Playback>Skip Fwd</Playback></Play_Control>" },
@@ -1314,7 +1358,7 @@ describe("the zone commands desc.xml declares: pads, transport keys, zone names 
     expect(s.acks).toContainEqual({ id: "living.zoneName", value: "Living" });
     expect(s.acks).toContainEqual({ id: "living.multiroom.zone2.zoneName", value: "Kitchen" });
     expect(memory.remembered("xmlZoneNames:zone2")).toEqual({ zone: "Kitchen", zoneB: "" });
-    s.controller.handleWrite("multiroom.zone2.zoneName", "Küche");
+    void s.controller.handleWrite("multiroom.zone2.zoneName", "Küche");
     // The device takes the name: its Config carries it from now on.
     s.client.xmlAnswers["Zone_2|<Config>GetParam</Config>"] =
       '<YAMAHA_AV rsp="GET" RC="0"><Zone_2><Config><Name><Zone>Küche</Zone></Name></Config></Zone_2></YAMAHA_AV>';
@@ -1358,11 +1402,11 @@ describe("the zone commands desc.xml declares: pads, transport keys, zone names 
       '<YAMAHA_AV rsp="GET" RC="0"><Zone_2><Config><Name><Zone>Kitchen</Zone></Name></Config></Zone_2></YAMAHA_AV>';
     await s.controller.start();
     for (const name of ["Living Room", "A\r\nB", "Küche ♥"]) {
-      s.controller.handleWrite("multiroom.zone2.zoneName", name);
+      void s.controller.handleWrite("multiroom.zone2.zoneName", name);
     }
     await tick();
     expect(sent(s)).toEqual([]);
-    s.controller.handleWrite("multiroom.zone2.zoneName", "Küche");
+    void s.controller.handleWrite("multiroom.zone2.zoneName", "Küche");
     await tick();
     expect(sent(s)).toEqual([{ zone: "Zone_2", inner: "<Config><Name><Zone>Küche</Zone></Name></Config>" }]);
   });
@@ -1381,7 +1425,7 @@ describe("the zone commands desc.xml declares: pads, transport keys, zone names 
     process.on("unhandledRejection", onRejection);
     try {
       s.breakAcks.on = true;
-      s.controller.handleWrite("multiroom.zone2.zoneName", "Küche");
+      void s.controller.handleWrite("multiroom.zone2.zoneName", "Küche");
       await tick();
       await tick();
     } finally {
@@ -1402,7 +1446,7 @@ describe("the zone commands desc.xml declares: pads, transport keys, zone names 
     await s.controller.start();
     s.acks.length = 0;
     s.client.sendError = new Error("device refused Zone_2 (RC=3)");
-    s.controller.handleWrite("multiroom.zone2.zoneName", "Küche");
+    void s.controller.handleWrite("multiroom.zone2.zoneName", "Küche");
     await tick();
     expect(s.acks.filter(ack => ack.id === "living.multiroom.zone2.zoneName")).toEqual([
       { id: "living.multiroom.zone2.zoneName", value: "Kitchen" },
@@ -1474,9 +1518,9 @@ describe("XmlDeviceController writes a zone in the form its status shows", () =>
     await s.controller.start();
     expect(s.acks).toContainEqual({ id: "living.multiroom.zone2.sound.toneMode", value: "Auto" });
     s.client.calls.length = 0;
-    s.controller.handleWrite("multiroom.zone2.sound.bass", 2);
-    s.controller.handleWrite("multiroom.zone2.sound.enhancer", false);
-    s.controller.handleWrite("sound.bass", 2);
+    void s.controller.handleWrite("multiroom.zone2.sound.bass", 2);
+    void s.controller.handleWrite("multiroom.zone2.sound.enhancer", false);
+    void s.controller.handleWrite("sound.bass", 2);
     await flush();
     const sends = s.client.calls.filter(c => c.method === "send").map(c => `${c.zone}:${c.inner}`);
     expect(sends).toEqual([
@@ -1506,7 +1550,7 @@ describe("XmlDeviceController takes the level ranges the description declares pe
     const main = s.defs.get("living.volume") as Def | undefined;
     expect(main?.common).toMatchObject({ min: -80.5, max: 16.5, step: 0.5 });
     s.client.calls.length = 0;
-    s.controller.handleWrite("multiroom.zone2.volume", -30.4);
+    void s.controller.handleWrite("multiroom.zone2.volume", -30.4);
     await flush();
     expect(s.client.calls.find(c => c.method === "send")?.inner).toBe(
       "<Volume><Lvl><Val>-300</Val><Exp>1</Exp><Unit>dB</Unit></Lvl></Volume>",
@@ -1527,7 +1571,7 @@ describe("XmlDeviceController all-zones power", () => {
     expect(s.objects).toContain("living.multiroom.masterPower");
     expect(s.acks).toContainEqual({ id: "living.multiroom.masterPower", value: false });
     s.client.calls.length = 0;
-    s.controller.handleWrite("multiroom.masterPower", true);
+    void s.controller.handleWrite("multiroom.masterPower", true);
     await new Promise(resolve => setImmediate(resolve));
     expect(s.client.calls).toContainEqual({
       method: "send",
@@ -1555,7 +1599,7 @@ describe("XmlDeviceController all-zones power", () => {
     await s.controller.start();
     expect(s.objects).not.toContain("living.multiroom.masterPower");
     s.client.calls.length = 0;
-    s.controller.handleWrite("multiroom.masterPower", true);
+    void s.controller.handleWrite("multiroom.masterPower", true);
     await new Promise(resolve => setImmediate(resolve));
     expect(s.client.calls.filter(c => c.method === "send")).toEqual([]);
   });
@@ -1640,7 +1684,7 @@ describe("XmlDeviceController player block from the source's Play_Info (audit 20
     await s.controller.start();
     statuses.Main_Zone = { power: true, input: "NET RADIO" };
     s.client.calls.length = 0;
-    s.controller.handleWrite("input", "NET RADIO");
+    void s.controller.handleWrite("input", "NET RADIO");
     await flush();
     await flush();
     await flush();
@@ -1656,7 +1700,7 @@ describe("XmlDeviceController player block from the source's Play_Info (audit 20
     await s.controller.start();
     expect(s.defs.has("living.player.pause")).toBe(true);
     s.client.calls.length = 0;
-    s.controller.handleWrite("player.pause", true);
+    void s.controller.handleWrite("player.pause", true);
     await flush();
     await flush();
     await flush();
@@ -1680,7 +1724,7 @@ describe("the device description decides what is writable (audit 2026-09-29, D11
     await s.controller.start();
     expect((s.defs.get("living.hdmiOut1") as Def | undefined)?.common?.write).toBe(false);
     s.client.calls.length = 0;
-    s.controller.handleWrite("hdmiOut1", false);
+    void s.controller.handleWrite("hdmiOut1", false);
     await flush();
     expect(s.client.calls.filter(c => c.method === "send")).toEqual([]);
   });
@@ -1690,7 +1734,7 @@ describe("the device description decides what is writable (audit 2026-09-29, D11
     s.client.descriptor = readFixture("desc-rx-a2060.xml");
     await s.controller.start();
     expect((s.defs.get("living.hdmiOut2") as Def | undefined)?.common?.write).toBe(true);
-    s.controller.handleWrite("hdmiOut2", false);
+    void s.controller.handleWrite("hdmiOut2", false);
     await flush();
     expect(s.client.calls).toContainEqual({
       method: "send",
@@ -1706,7 +1750,7 @@ describe("the device description decides what is writable (audit 2026-09-29, D11
     await s.controller.start();
     const def = s.defs.get("living.multiroom.zone2.sound.toneMode") as Def | undefined;
     expect(def?.common).toMatchObject({ write: true, states: { Auto: "Auto", Bypass: "Bypass", Manual: "Manual" } });
-    s.controller.handleWrite("multiroom.zone2.sound.toneMode", "Bypass");
+    void s.controller.handleWrite("multiroom.zone2.sound.toneMode", "Bypass");
     await flush();
     expect(s.client.calls).toContainEqual({
       method: "send",
@@ -1761,7 +1805,7 @@ describe("declared functions YNCA and MusicCast carry under the same ids (audit 
       max: 6,
     });
     expect(s.acks).toContainEqual({ id: "living.sound.dtsDialogueControl", value: 2 });
-    s.controller.handleWrite("sound.dtsDialogueControl", 4);
+    void s.controller.handleWrite("sound.dtsDialogueControl", 4);
     await flush();
     expect(sends(s)).toContainEqual({
       zone: "Main_Zone",
@@ -1777,7 +1821,7 @@ describe("declared functions YNCA and MusicCast carry under the same ids (audit 
       '<YAMAHA_AV rsp="GET" RC="0"><Main_Zone><Cursor_Control><Contents_Display>On</Contents_Display></Cursor_Control></Main_Zone></YAMAHA_AV>';
     await s.controller.start();
     expect(s.acks).toContainEqual({ id: "living.sound.contentsDisplay", value: true });
-    s.controller.handleWrite("sound.contentsDisplay", false);
+    void s.controller.handleWrite("sound.contentsDisplay", false);
     await flush();
     expect(sends(s)).toContainEqual({
       zone: "Main_Zone",
@@ -1801,7 +1845,7 @@ describe("declared functions YNCA and MusicCast carry under the same ids (audit 
       type: "boolean",
       role: "button",
     });
-    s.controller.handleWrite("multiroom.partyVolumeDown", true);
+    void s.controller.handleWrite("multiroom.partyVolumeDown", true);
     await flush();
     expect(sends(s)).toContainEqual({
       zone: "System",
@@ -1819,7 +1863,7 @@ describe("declared functions YNCA and MusicCast carry under the same ids (audit 
     s.client.xmlAnswers["Main_Zone|<Config>GetParam</Config>"] =
       '<YAMAHA_AV rsp="GET" RC="0"><Main_Zone><Config><Name><Zone>Living</Zone><Zone_B>Garden</Zone_B></Name></Config></Main_Zone></YAMAHA_AV>';
     s.acks.length = 0;
-    s.controller.handleWrite("multiroom.zoneB.name", "Garden");
+    void s.controller.handleWrite("multiroom.zoneB.name", "Garden");
     await flush();
     await flush();
     expect(sends(s)).toContainEqual({
@@ -1843,7 +1887,7 @@ describe("declared functions YNCA and MusicCast carry under the same ids (audit 
       '<YAMAHA_AV rsp="GET" RC="0"><Main_Zone><Rename><Rename_Latin_1>Den</Rename_Latin_1></Rename></Main_Zone></YAMAHA_AV>';
     await s.controller.start();
     expect(s.acks).toContainEqual({ id: "living.zoneName", value: "Den" });
-    s.controller.handleWrite("zoneName", "Cinema");
+    void s.controller.handleWrite("zoneName", "Cinema");
     await flush();
     expect(sends(s)).toContainEqual({
       zone: "Main_Zone",

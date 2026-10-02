@@ -1,6 +1,12 @@
-import { MultiTransportHandle, type ConnectableTransport, type TransportConnection } from "./multi-transport-handle";
+import {
+  MultiTransportHandle,
+  type ConnectableTransport,
+  type TransportConnection,
+  type WriteOutcome,
+} from "./multi-transport-handle";
 import type { ObjectDef } from "../catalog/types";
 import type { Transport } from "../catalog/owner-policy";
+import { emptyLearnedTree, type LearnedTree } from "./learned-tree";
 
 const silentLog = { debug: (): void => {}, info: (): void => {}, warn: (): void => {} };
 
@@ -21,6 +27,7 @@ function fakeConn(
   seeded: string[];
   writes: Array<{ id: string; value: unknown }>;
   closed: boolean;
+  outcome: WriteOutcome;
   drop: (reason?: Error) => void;
   changeShape: () => void;
 } {
@@ -31,13 +38,15 @@ function fakeConn(
     seeded: [] as string[],
     writes: [] as Array<{ id: string; value: unknown }>,
     closed: false,
+    outcome: "sent" as WriteOutcome,
     connect: (): Promise<boolean> => Promise.resolve(true),
     buildObjects: (): readonly ObjectDef[] => objects,
     seedOwned: (owned: ReadonlySet<string>): void => {
       conn.seeded.push(...owned);
     },
-    handleWrite: (id: string, value: unknown): void => {
+    handleWrite: (id: string, value: unknown): Promise<WriteOutcome> => {
       conn.writes.push({ id, value });
+      return Promise.resolve(conn.outcome);
     },
     onDrop: (cb: (reason?: Error) => void): void => {
       dropHandler = cb;
@@ -255,9 +264,9 @@ describe("MultiTransportHandle per-transport reconnect", () => {
     expect(freshYnca.writes).toContainEqual({ id: "sound.bass", value: -3 });
   });
 
-  // The adapter's rule is "owner = the most modern PRESENT protocol": a dropped owner froze its
-  // values and dropped every write although a live transport had the same capability (A19).
-  test("a drop hands a datapoint the live transport can carry unchanged to it, and back on return", async () => {
+  // krobi 2026-10-02: "probiert man immer das modernste, falls der Befehl damit nicht geht dann eben das nächste" —
+  // the owner stays; only the write takes the next transport that carries it unchanged.
+  test("while the owner is offline, a write goes through the next transport that carries it unchanged", async () => {
     const ynca = fakeConn("ynca", [state("power", "Power", { type: "boolean", role: "switch.power" })]);
     const xml = fakeConn("xml", [state("power", "Power", { type: "boolean", role: "switch.power" })]);
     const freshYnca = fakeConn("ynca", [state("power", "Power", { type: "boolean", role: "switch.power" })]);
@@ -534,71 +543,417 @@ describe("MultiTransportHandle per-transport backoff", () => {
   });
 });
 
-describe("MultiTransportHandle object write economy", () => {
-  test("re-coordination writes only what actually changed", async () => {
-    const written: string[] = [];
-    const objects = [
-      { id: "power", type: "state" as const, common: { name: "Power" } },
-      { id: "volume", type: "state" as const, common: { name: "Volume" } },
-    ];
-    const connection = {
-      transport: "ynca" as const,
-      buildObjects: () => objects,
-      seedOwned: () => {},
-      handleWrite: () => {},
-      onDrop: () => {},
-      close: () => {},
-    };
-    const handle = new MultiTransportHandle("living", [connection], {
-      upsertObject: id => {
-        written.push(id);
-        return Promise.resolve();
-      },
-      log: { debug: () => {}, info: () => {}, warn: () => {} },
-    });
-    await handle.start();
-    expect(written).toEqual(["living.power", "living.volume"]);
+describe("MultiTransportHandle — a read-in receiver keeps its tree (krobi 2026-10-02)", () => {
+  const flush = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
 
-    // A transport returning re-coordinates the tree. Nothing changed, so nothing is
-    // rewritten — a flaky device must not churn the object database every few minutes.
-    written.length = 0;
-    await (handle as unknown as { coordinate(): Promise<void> }).coordinate();
-    expect(written).toEqual([]);
-
-    // A genuinely changed definition IS written again.
-    objects[1] = { id: "volume", type: "state" as const, common: { name: "Volume (dB)" } };
-    await (handle as unknown as { coordinate(): Promise<void> }).coordinate();
-    expect(written).toEqual(["living.volume"]);
-  });
-
-  test("a declared list survives a re-coordination while its transport is away (#619)", async () => {
-    const input = (states: Record<string, string>, declared = false): ObjectDef => ({
-      id: "input",
-      type: "state",
-      ...(declared ? { declaredStates: true } : {}),
-      common: { name: "Input", type: "string", role: "media.input", read: true, write: true, states },
-    });
-    const ynca = fakeConn("ynca", [input({ HDMI1: "HDMI1", Spotify: "Spotify" })]);
-    const yxc = fakeConn("yxc", [state("sound.equalizer.low", "EQ low")]);
-    const xml = fakeConn("xml", [input({ HDMI1: "HDMI1" }, true)]);
-    const written: Array<{ id: string; def: ObjectDef }> = [];
+  // 2026-10-01 23:49: the RX-V6A lost its power. YNCA dropped first, MusicCast five seconds later, and for 18 ms
+  // XML was the only transport left — it took the datapoints over and wrote its definitions without a list.
+  test("a power cut — YNCA, then MusicCast, then XML drop — writes nothing and moves no datapoint", async () => {
+    const program = (states?: Record<string, string>): ObjectDef =>
+      state("soundProgram", "Program", { type: "string", role: "state", ...(states ? { states } : {}) });
+    const ynca = fakeConn("ynca", [program({ Straight: "Straight", Jazz: "Jazz" })]);
+    const yxc = fakeConn("yxc", [state("dist.role", "Role")]);
+    const xml = fakeConn("xml", [program()]);
+    const timers: Array<() => void> = [];
+    const objects: string[] = [];
     const handle = new MultiTransportHandle("living", [ynca, yxc, xml], {
-      upsertObject: (id, def) => {
-        written.push({ id, def });
+      upsertObject: id => {
+        objects.push(id);
         return Promise.resolve();
       },
       log: silentLog,
+      rebuild: transport => fakeConn(transport, []),
+      schedule: cb => {
+        timers.push(cb);
+        return timers.length;
+      },
+      cancel: () => {},
+      backoffFactory: () => ({ nextDelay: () => 1000, reset: () => {} }),
     });
     await handle.start();
-    expect(written.find(w => w.id === "living.input")?.def.common.states).toEqual({ HDMI1: "HDMI1" });
+    objects.length = 0;
+    xml.seeded.length = 0;
+    ynca.drop(new Error("socket closed"));
+    await flush();
+    yxc.drop(new Error("3 polls failed"));
+    await flush();
+    expect(objects).toEqual([]);
+    expect(xml.seeded).toEqual([]);
+    xml.drop(new Error("3 polls failed"));
+    await flush();
+    expect(objects).toEqual([]);
+  });
 
-    // XML drops (no rebuild deps → it stays away); MusicCast's return re-coordinates the tree.
+  test("a transport that comes back with the same objects writes nothing", async () => {
+    const ynca = fakeConn("ynca", [state("sound.bass", "Bass dB", { unit: "dB" })]);
+    const yxc = fakeConn("yxc", [state("dist.role", "Role")]);
+    const fresh = fakeConn("ynca", [state("sound.bass", "Bass dB", { unit: "dB" })]);
+    const { handle, objects, fireTimers } = reconnectSetup([ynca, yxc], { ynca: () => fresh });
+    await handle.start();
+    objects.length = 0;
+    ynca.drop(new Error("socket reset"));
+    await fireTimers();
+    expect(objects).toEqual([]);
+    expect(fresh.seeded).toContain("sound.bass");
+  });
+
+  test("what a transport learned later is added — a new datapoint written, nothing else touched", async () => {
+    const yncaObjects = [state("volume", "Volume dB", { unit: "dB" })];
+    const ynca = fakeConn("ynca", yncaObjects);
+    const { handle, objects } = setup([ynca]);
+    await handle.start();
+    objects.length = 0;
+    yncaObjects.push(state("mute", "Mute"));
+    ynca.changeShape();
+    await flush();
+    expect(objects).toEqual(["living.mute"]);
+  });
+});
+
+/**
+ * A handle with a learned tree, an adapter version and the read-in completion recorded.
+ *
+ * @param connections the transports that answered
+ * @param options what the device is known for
+ * @param options.tree the learned tree to start from
+ * @param options.version the running adapter version
+ * @param options.missing the known transports that did not answer
+ * @param options.existing the tree as it stands (canonical id → object)
+ * @param options.rebuilds per-transport factories for a reconnect
+ */
+function learnSetup(
+  connections: ConnectableTransport[],
+  options: {
+    tree?: LearnedTree;
+    version?: string;
+    missing?: Transport[];
+    existing?: Record<string, { type: string; common: Partial<ObjectDef["common"]> }>;
+    rebuilds?: Partial<Record<Transport, () => ConnectableTransport>>;
+  } = {},
+): {
+  handle: MultiTransportHandle;
+  writes: Array<{ id: string; def: ObjectDef; settle: boolean }>;
+  tree: () => LearnedTree;
+  settled: Array<ReadonlySet<string>>;
+  info: string[];
+  debug: string[];
+  timers: Array<() => void>;
+  fireTimers: () => Promise<void>;
+} {
+  let tree = options.tree ?? emptyLearnedTree();
+  const writes: Array<{ id: string; def: ObjectDef; settle: boolean }> = [];
+  const settled: Array<ReadonlySet<string>> = [];
+  const info: string[] = [];
+  const debug: string[] = [];
+  const timers: Array<() => void> = [];
+  const handle = new MultiTransportHandle("living", connections, {
+    upsertObject: (id, def, settle) => {
+      writes.push({ id, def, settle: settle === true });
+      return Promise.resolve();
+    },
+    log: { ...silentLog, info: (m: string) => info.push(m), debug: (m: string) => debug.push(m) },
+    tree: { get: () => tree, set: next => (tree = next) },
+    adapterVersion: options.version,
+    missing: options.missing,
+    existing: id => options.existing?.[id],
+    settleTree: built => {
+      settled.push(built);
+      return Promise.resolve();
+    },
+    rebuild: transport => options.rebuilds![transport]!(),
+    schedule: cb => {
+      timers.push(cb);
+      return timers.length;
+    },
+    cancel: () => {},
+    backoffFactory: () => ({ nextDelay: () => 1000, reset: () => {} }),
+  });
+  const fireTimers = async (): Promise<void> => {
+    for (const cb of timers.splice(0)) {
+      cb();
+    }
+    await new Promise(resolve => setTimeout(resolve, 0));
+  };
+  return { handle, writes, tree: () => tree, settled, info, debug, timers, fireTimers };
+}
+
+describe("MultiTransportHandle — who serves a datapoint is learned once and kept", () => {
+  // The RX-V6A shape of `sleep`: a text dropdown over YNCA, a minute number over MusicCast.
+  const yncaSleep = state("sleep", "Sleep", { type: "string", role: "state", states: { Off: "Off", "30 min": "30" } });
+  const yxcSleep = state("sleep", "Sleep", { type: "number", role: "level.timer.sleep", unit: "min" });
+
+  test("a start with a known transport missing keeps the learned owner — no hold, no form change, ever", async () => {
+    const tree: LearnedTree = { shared: { sleep: ["ynca", "yxc"] }, transports: ["ynca", "yxc"], firmware: {} };
+    const yxc = fakeConn("yxc", [yxcSleep, state("volume", "Volume")]);
+    const fresh = fakeConn("ynca", [yncaSleep]);
+    const s = learnSetup([yxc], { tree, version: "3.2.0", missing: ["ynca"], rebuilds: { ynca: () => fresh } });
+    await s.handle.start();
+    // Only the reconnect is scheduled — there is no hold any more that could run out.
+    expect(s.timers).toHaveLength(1);
+    expect(s.writes.map(w => w.id)).not.toContain("living.sleep");
+    expect(yxc.seeded).not.toContain("sleep");
+    await s.fireTimers();
+    expect(fresh.seeded).toContain("sleep");
+    // Back, the owner hands in its own definition — never MusicCast's number.
+    expect(s.writes.filter(w => w.id === "living.sleep").every(w => w.def.common.type === "string")).toBe(true);
+    s.handle.handleStateChange("living.sleep", false, "30 min");
+    expect(fresh.writes).toContainEqual({ id: "sleep", value: "30 min" });
+  });
+
+  test("a more modern transport learned later with another form stays a fallback — the owner keeps its form", async () => {
+    const yncaObjects = [yncaSleep];
+    const ynca = fakeConn("ynca", yncaObjects);
+    const s = learnSetup([ynca], {
+      tree: { shared: {}, transports: ["ynca"], firmware: {} },
+      existing: { sleep: { type: "state", common: yncaSleep.common } },
+      rebuilds: { yxc: () => fakeConn("yxc", [yxcSleep]) },
+    });
+    await s.handle.start();
+    // MusicCast arrives (it was not there at the read-in) and builds sleep as a number.
+    const yxc = fakeConn("yxc", [yxcSleep]);
+    (s.handle as unknown as { live: TransportConnection[] }).live.push(yxc);
+    yncaObjects.splice(0);
+    yncaObjects.push(yncaSleep);
+    ynca.changeShape();
+    await new Promise(resolve => setImmediate(resolve));
+    s.handle.handleStateChange("living.sleep", false, "Off");
+    expect(ynca.writes).toContainEqual({ id: "sleep", value: "Off" });
+    expect(yxc.writes).toEqual([]);
+    expect(s.writes.filter(w => w.id === "living.sleep").every(w => w.def.common.type === "string")).toBe(true);
+  });
+
+  test("a refused write goes to the next transport that carries it; an incompatible one is skipped", async () => {
+    const power = state("power", "Power", { type: "boolean", role: "switch.power" });
+    const ynca = fakeConn("ynca", [power, state("sound.bass", "Bass dB", { unit: "dB" })]);
+    const xml = fakeConn("xml", [power]);
+    const yxc = fakeConn("yxc", [state("sound.bass", "Bass raw")]);
+    const s = learnSetup([ynca, xml, yxc]);
+    await s.handle.start();
+    ynca.outcome = "refused";
+    s.handle.handleStateChange("living.power", false, true);
+    await new Promise(resolve => setImmediate(resolve));
+    expect(xml.writes).toContainEqual({ id: "power", value: true });
+    s.handle.handleStateChange("living.sound.bass", false, -3);
+    await new Promise(resolve => setImmediate(resolve));
+    expect(yxc.writes).toEqual([]);
+  });
+
+  test("no second send after an unclear answer, and never for a key that cannot be read", async () => {
+    const power = state("power", "Power", { type: "boolean", role: "switch.power" });
+    const key = state("remote.cursor", "Cursor", { type: "string", role: "button", read: false });
+    const ynca = fakeConn("ynca", [power, key]);
+    const xml = fakeConn("xml", [power, key]);
+    const s = learnSetup([ynca, xml]);
+    await s.handle.start();
+    ynca.outcome = "unclear";
+    s.handle.handleStateChange("living.power", false, true);
+    await new Promise(resolve => setImmediate(resolve));
+    expect(xml.writes).toEqual([]);
+    ynca.outcome = "refused";
+    s.handle.handleStateChange("living.remote.cursor", false, "Up");
+    await new Promise(resolve => setImmediate(resolve));
+    expect(xml.writes).toEqual([]);
+  });
+
+  // Forum 85413 (bilberry): in standby YNCA cannot prove its menus, XML serves them. Once YNCA proves them it
+  // takes them over — one way, learned, and a drop, a return or a restart in standby changes nothing again.
+  test("the YNCA menu proof takes the menus over once and for good", async () => {
+    const browse = (unproven: boolean): ObjectDef => ({
+      ...state("player.browse.source", "Source", { type: "string" }),
+      ...(unproven ? { unproven: true } : {}),
+    });
+    const yncaObjects = [browse(true)];
+    const ynca = fakeConn("ynca", yncaObjects);
+    const xml = fakeConn("xml", [browse(false)]);
+    const s = learnSetup([ynca, xml], { rebuilds: { xml: () => fakeConn("xml", [browse(false)]) } });
+    await s.handle.start();
+    expect(s.tree().shared["player.browse.source"]).toBeUndefined();
+    yncaObjects[0] = browse(false);
+    ynca.changeShape();
+    await new Promise(resolve => setImmediate(resolve));
+    expect(s.tree().shared["player.browse.source"]?.[0]).toBe("ynca");
     xml.drop();
-    written.length = 0;
-    await (handle as unknown as { coordinate(): Promise<void> }).coordinate();
-    // The list is a property of the MODEL, not of the transport that read it: the input keeps the
-    // declared 1-entry list, nothing is rewritten — no grow-and-shrink with every transport hiccup.
-    expect(written.filter(w => w.id === "living.input")).toEqual([]);
+    await s.fireTimers();
+    s.handle.handleStateChange("living.player.browse.source", false, "server");
+    expect(ynca.writes).toContainEqual({ id: "player.browse.source", value: "server" });
+    // A restart in standby: YNCA claims without proof again, the learned owner stands — in the tree AND in the
+    // routing of this session.
+    const standbyYnca = fakeConn("ynca", [browse(true)]);
+    const awakeXml = fakeConn("xml", [browse(false)]);
+    const again = learnSetup([standbyYnca, awakeXml], { tree: s.tree() });
+    await again.handle.start();
+    expect(again.tree().shared["player.browse.source"]?.[0]).toBe("ynca");
+    again.handle.handleStateChange("living.player.browse.source", false, "netRadio");
+    expect(standbyYnca.writes).toContainEqual({ id: "player.browse.source", value: "netRadio" });
+    expect(awakeXml.writes).toEqual([]);
+    expect(standbyYnca.seeded).toContain("player.browse.source");
+  });
+});
+
+describe("MultiTransportHandle — learned owners and the write fallback in detail", () => {
+  const power = state("power", "Power", { type: "boolean", role: "switch.power" });
+  const flush = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
+
+  test("a transport that ranks before a learned owner and proves the datapoint takes it over — one way", async () => {
+    const browse = state("player.browse.source", "Source", { type: "string" });
+    const ynca = fakeConn("ynca", [browse]);
+    const xml = fakeConn("xml", [browse]);
+    const s = learnSetup([ynca, xml], {
+      tree: { shared: { "player.browse.source": ["xml", "ynca"] }, transports: ["ynca", "xml"], firmware: {} },
+    });
+    await s.handle.start();
+    s.handle.handleStateChange("living.player.browse.source", false, "server");
+    expect(ynca.writes).toContainEqual({ id: "player.browse.source", value: "server" });
+    expect(xml.writes).toEqual([]);
+    expect(s.tree().shared["player.browse.source"]).toEqual(["ynca", "xml"]);
+  });
+
+  test("a datapoint already in the tree is owned by the transport that keeps its form, not by the ranking", async () => {
+    // sleep ranks YNCA first; the tree holds MusicCast's number form from an earlier version.
+    const yncaSleep = state("sleep", "Sleep", { type: "string", role: "state", states: { Off: "Off" } });
+    const yxcSleep = state("sleep", "Sleep", { type: "number", role: "level.timer.sleep", unit: "min" });
+    const ynca = fakeConn("ynca", [yncaSleep]);
+    const yxc = fakeConn("yxc", [yxcSleep]);
+    const s = learnSetup([ynca, yxc], { existing: { sleep: { type: "state", common: yxcSleep.common } } });
+    await s.handle.start();
+    s.handle.handleStateChange("living.sleep", false, 30);
+    expect(yxc.writes).toContainEqual({ id: "sleep", value: 30 });
+    expect(ynca.writes).toEqual([]);
+  });
+
+  test("the fallback skips a transport that is offline and takes the next one that is live", async () => {
+    // power ranks MusicCast first, then YNCA, then XML.
+    const yxc = fakeConn("yxc", [power]);
+    const ynca = fakeConn("ynca", [power]);
+    const xml = fakeConn("xml", [power]);
+    const s = learnSetup([yxc, ynca, xml]);
+    await s.handle.start();
+    yxc.drop();
+    ynca.drop();
+    s.handle.handleStateChange("living.power", false, true);
+    await flush();
+    expect(xml.writes).toContainEqual({ id: "power", value: true });
+  });
+
+  test("a write the owner could not send takes the fallback too, and the line says why", async () => {
+    const ynca = fakeConn("ynca", [power]);
+    const xml = fakeConn("xml", [power]);
+    const s = learnSetup([ynca, xml]);
+    await s.handle.start();
+    ynca.outcome = "unavailable";
+    s.handle.handleStateChange("living.power", false, true);
+    await flush();
+    expect(xml.writes).toContainEqual({ id: "power", value: true });
+    expect(s.debug).toContain("living: power — ynca could not send it, sent through xml");
+    ynca.outcome = "refused";
+    s.handle.handleStateChange("living.power", false, false);
+    await flush();
+    expect(s.debug).toContain("living: power — ynca refused it, sent through xml");
+  });
+
+  test("a returning transport whose objects cannot be built is not taken in — its retry goes on", async () => {
+    const ynca = fakeConn("ynca", [power]);
+    const yxc = fakeConn("yxc", [state("dist.role", "Role")]);
+    const broken = fakeConn("ynca", [power]);
+    broken.buildObjects = (): readonly ObjectDef[] => {
+      throw new Error("garbled answer");
+    };
+    const { handle, transportsReports, fireTimers, timers } = reconnectSetup([ynca, yxc], { ynca: () => broken });
+    await handle.start();
+    ynca.drop();
+    await fireTimers();
+    expect(transportsReports.at(-1)).toEqual(["yxc"]);
+    expect(broken.closed).toBe(true);
+    expect(timers).toHaveLength(1);
+  });
+
+  test("a known transport missing at this start keeps the read-in open", async () => {
+    const s = learnSetup([fakeConn("yxc", [state("volume", "Volume")])], { version: "3.2.0", missing: ["ynca"] });
+    await s.handle.start();
+    expect(s.settled).toEqual([]);
+  });
+});
+
+describe("MultiTransportHandle — the read-in completes once, with the receiver on (2026-10-02)", () => {
+  test("not before every known transport answers and every read comes from a switched-on receiver", async () => {
+    const ynca = fakeConn("ynca", [state("power", "Power")]);
+    let complete = false;
+    let onComplete: (() => void) | undefined;
+    Object.assign(ynca, {
+      readComplete: () => complete,
+      onReadComplete: (cb: () => void) => (onComplete = cb),
+    });
+    const s = learnSetup([ynca], { version: "3.2.0" });
+    await s.handle.start();
+    expect(s.settled).toEqual([]);
+    expect(s.tree().settledVersion).toBeUndefined();
+    expect(s.writes.every(w => !w.settle)).toBe(true);
+    complete = true;
+    onComplete?.();
+    await new Promise(resolve => setImmediate(resolve));
+    expect(s.settled).toHaveLength(1);
+    expect([...s.settled[0]]).toContain("power");
+    expect(s.tree().settledVersion).toBe("3.2.0");
+    expect(s.writes.some(w => w.settle)).toBe(true);
+  });
+
+  test("a known transport that does not answer keeps the read-in open", async () => {
+    const s = learnSetup([fakeConn("yxc", [state("volume", "Volume")])], {
+      version: "3.2.0",
+      tree: { shared: {}, transports: ["ynca", "yxc"], firmware: {} },
+    });
+    await s.handle.start();
+    expect(s.settled).toEqual([]);
+  });
+
+  test("a completed read-in of this version does not run again", async () => {
+    const s = learnSetup([fakeConn("ynca", [state("power", "Power")])], {
+      version: "3.2.0",
+      tree: { shared: {}, transports: ["ynca"], firmware: {}, settledVersion: "3.2.0" },
+    });
+    await s.handle.start();
+    expect(s.settled).toEqual([]);
+  });
+
+  test("a new firmware opens the read-in again, with one line, and its completion says ready", async () => {
+    const ynca = fakeConn("ynca", [state("power", "Power")]);
+    Object.assign(ynca, { firmware: () => "1.90" });
+    const s = learnSetup([ynca], {
+      version: "3.2.0",
+      tree: { shared: {}, transports: ["ynca"], firmware: { ynca: "1.80" }, settledVersion: "3.2.0" },
+    });
+    await s.handle.start();
+    expect(s.info).toEqual([
+      "living: new firmware found (1.80 → 1.90) — reading the receiver again, this can take a few minutes",
+      "living: ready — YNCA ✓",
+    ]);
+    expect(s.settled).toHaveLength(1);
+    expect(s.tree().firmware.ynca).toBe("1.90");
+  });
+
+  test("an empty firmware is no update, and the same new firmware says nothing a second time", async () => {
+    const quiet = fakeConn("ynca", [state("power", "Power")]);
+    Object.assign(quiet, { firmware: () => "" });
+    const first = learnSetup([quiet], { tree: { shared: {}, transports: [], firmware: { ynca: "1.80" } } });
+    await first.handle.start();
+    expect(first.info).toEqual([]);
+    const same = fakeConn("ynca", [state("power", "Power")]);
+    Object.assign(same, { firmware: () => "1.80" });
+    const second = learnSetup([same], { tree: first.tree() });
+    await second.handle.start();
+    expect(second.info).toEqual([]);
+  });
+
+  test("in standby the firmware line stands, the ready line waits for the switched-on read", async () => {
+    const ynca = fakeConn("ynca", [state("power", "Power")]);
+    Object.assign(ynca, { firmware: () => "1.90", readComplete: () => false });
+    const s = learnSetup([ynca], {
+      version: "3.2.0",
+      tree: { shared: {}, transports: ["ynca"], firmware: { ynca: "1.80" }, settledVersion: "3.2.0" },
+    });
+    await s.handle.start();
+    expect(s.info).toHaveLength(1);
+    expect(s.settled).toEqual([]);
   });
 });
 
@@ -746,156 +1101,8 @@ describe("MultiTransportHandle — coordination is serialized against a reconnec
   });
 });
 
-describe("MultiTransportHandle — a transport missing at start (audit 2026-09-29, D1)", () => {
-  // The RX-V6A shape of `sleep`: a text dropdown over YNCA, a minute number over MusicCast.
-  const yncaSleep = state("sleep", "Sleep", { type: "string", role: "state", states: { Off: "Off", "30 min": "30" } });
-  const yxcSleep = state("sleep", "Sleep", { type: "number", role: "level.timer.sleep", unit: "min" });
-  const existingTree = new Map([["sleep", { type: "state", common: yncaSleep.common }]]);
-
-  /**
-   * A handle over the live MusicCast transport while YNCA is missing, with manual timers.
-   *
-   * @param missing the transports the device has shown before but that did not answer
-   * @param fresh the YNCA a reconnect builds
-   */
-  function missingSetup(
-    missing: Transport[],
-    fresh: ConnectableTransport,
-  ): {
-    handle: MultiTransportHandle;
-    yxc: ReturnType<typeof fakeConn>;
-    objects: string[];
-    timers: Array<{ cb: () => void; ms: number }>;
-    debug: string[];
-    info: string[];
-    settle: () => Promise<void>;
-  } {
-    const yxc = fakeConn("yxc", [yxcSleep, state("volume", "Volume")]);
-    const objects: string[] = [];
-    const timers: Array<{ cb: () => void; ms: number }> = [];
-    const debug: string[] = [];
-    const info: string[] = [];
-    const handle = new MultiTransportHandle("living", [yxc], {
-      upsertObject: id => {
-        objects.push(id);
-        return Promise.resolve();
-      },
-      log: { ...silentLog, debug: (m: string) => debug.push(m), info: (m: string) => info.push(m) },
-      rebuild: () => fresh,
-      schedule: (cb, ms) => {
-        timers.push({ cb, ms });
-        return timers.length;
-      },
-      cancel: () => {},
-      backoffFactory: () => ({ nextDelay: () => 1000, reset: () => {} }),
-      missing,
-      existingObjects: () => Promise.resolve(existingTree),
-      holdMs: 180_000,
-    });
-    const settle = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0));
-    return { handle, yxc, objects, timers, debug, info, settle };
-  }
-
-  test("a transport the device has shown is reconnected from the start, not left away for the session", async () => {
-    const fresh = fakeConn("ynca", [yncaSleep]);
-    const s = missingSetup(["ynca"], fresh);
-    await s.handle.start();
-    expect(s.timers.map(timer => timer.ms)).toEqual([180_000, 1000]);
-    s.timers.find(timer => timer.ms === 1000)!.cb();
-    await s.settle();
-    expect(fresh.seeded).toContain("sleep");
-    s.handle.handleStateChange("living.sleep", false, "30 min");
-    expect(fresh.writes).toContainEqual({ id: "sleep", value: "30 min" });
-  });
-
-  test("while it is missing, a datapoint the live transport would give another form keeps its own", async () => {
-    const s = missingSetup(["ynca"], fakeConn("ynca", [yncaSleep]));
-    await s.handle.start();
-    // Not rewritten as a number, not seeded, and a write waits with a line instead of reaching MusicCast.
-    expect(s.objects).not.toContain("living.sleep");
-    expect(s.objects).toContain("living.volume");
-    expect(s.yxc.seeded).not.toContain("sleep");
-    s.handle.handleStateChange("living.sleep", false, 30);
-    expect(s.yxc.writes).toEqual([]);
-    expect(s.debug.some(line => line.includes("write to sleep dropped"))).toBe(true);
-  });
-
-  test("when it does not return within the hold, the live transport takes over — with one line", async () => {
-    const s = missingSetup(["ynca"], fakeConn("ynca", [yncaSleep]));
-    await s.handle.start();
-    s.timers.find(timer => timer.ms === 180_000)!.cb();
-    await s.settle();
-    expect(s.objects).toContain("living.sleep");
-    expect(s.yxc.seeded).toContain("sleep");
-    expect(s.info).toEqual(["living: ynca did not return — sleep now take the form of yxc"]);
-  });
-
-  test("when the missing transport returns, the hold ends: the datapoint takes its form and the timer goes", async () => {
-    // The tree still carries an older form than either transport builds (a switch left by an earlier version).
-    const oldTree = new Map([["sleep", { type: "state", common: { type: "boolean" as const, write: true } }]]);
-    const cancelled: unknown[] = [];
-    const timers: Array<{ cb: () => void; ms: number }> = [];
-    const objects: string[] = [];
-    const fresh = fakeConn("ynca", [yncaSleep]);
-    const handle = new MultiTransportHandle("living", [fakeConn("yxc", [yxcSleep])], {
-      upsertObject: id => {
-        objects.push(id);
-        return Promise.resolve();
-      },
-      log: silentLog,
-      rebuild: () => fresh,
-      schedule: (cb, ms) => {
-        timers.push({ cb, ms });
-        return `timer-${ms}`;
-      },
-      cancel: handle_ => {
-        cancelled.push(handle_);
-      },
-      backoffFactory: () => ({ nextDelay: () => 1000, reset: () => {} }),
-      missing: ["ynca"],
-      existingObjects: () => Promise.resolve(oldTree),
-      holdMs: 180_000,
-    });
-    await handle.start();
-    expect(objects).not.toContain("living.sleep");
-    timers.find(timer => timer.ms === 1000)!.cb();
-    await new Promise(resolve => setTimeout(resolve, 0));
-    expect(objects).toContain("living.sleep");
-    expect(fresh.seeded).toContain("sleep");
-    expect(cancelled).toContain("timer-180000");
-  });
-
-  test("closing the handle cancels the hold timer", async () => {
-    const cancelled: unknown[] = [];
-    const handle = new MultiTransportHandle("living", [fakeConn("yxc", [yxcSleep])], {
-      upsertObject: () => Promise.resolve(),
-      log: silentLog,
-      rebuild: () => fakeConn("ynca", [yncaSleep]),
-      schedule: (_cb, ms) => `timer-${ms}`,
-      cancel: handle_ => {
-        cancelled.push(handle_);
-      },
-      backoffFactory: () => ({ nextDelay: () => 1000, reset: () => {} }),
-      missing: ["ynca"],
-      existingObjects: () => Promise.resolve(existingTree),
-      holdMs: 180_000,
-    });
-    await handle.start();
-    handle.close();
-    expect(cancelled).toContain("timer-180000");
-  });
-
-  test("a transport the device never answered is not retried and holds nothing", async () => {
-    const s = missingSetup([], fakeConn("ynca", [yncaSleep]));
-    await s.handle.start();
-    expect(s.timers).toEqual([]);
-    expect(s.objects).toContain("living.sleep");
-    expect(s.yxc.seeded).toContain("sleep");
-  });
-});
-
-describe("canHandOver keeps a writable datapoint off a read-only transport (audit 2026-09-29, A27)", () => {
-  test("a drop leaves hdmi.out3 with its writable owner instead of the read-only MusicCast entry", async () => {
+describe("canCarryWrite keeps a write off a read-only transport (audit 2026-09-29, A27)", () => {
+  test("with its owner offline, a write to hdmi.out3 does not go to the read-only MusicCast entry", async () => {
     const out = (write: boolean): ObjectDef =>
       state("hdmi.out3", "HDMI OUT 3", { type: "boolean", role: "switch", write });
     const ynca = fakeConn("ynca", [out(true)]);

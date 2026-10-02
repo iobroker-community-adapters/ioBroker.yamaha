@@ -36,7 +36,7 @@ function fakeConn(
     seedOwned: (owned: ReadonlySet<string>): void => {
       conn.seeded.push(...owned);
     },
-    handleWrite: (): void => {},
+    handleWrite: (): Promise<"sent"> => Promise.resolve("sent"),
     onDrop: (): void => {},
     close: (): void => {
       conn.closed = true;

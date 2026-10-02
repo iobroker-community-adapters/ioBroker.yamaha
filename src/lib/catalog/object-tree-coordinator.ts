@@ -64,10 +64,17 @@ function lentStates(
  * drifting ids and per-zone duplicates across transports collapse to one node. Objects are
  * ordered parents-before-children so the intermediate channels exist before their states.
  *
+ * An owner the adapter already learned for an id ({@link LearnedTree}) is kept as long as it is one of the
+ * contributors — ownership is decided once and stored, not computed again from whoever answered this time.
+ *
  * @param contributions the objects each present transport offers
+ * @param learnedOwners the owners already learned, by canonical id — they win over the ranking
  * @returns the deduplicated tree and the owner of each canonical id (for write routing)
  */
-export function coordinateObjectTree(contributions: readonly TransportObjects[]): {
+export function coordinateObjectTree(
+  contributions: readonly TransportObjects[],
+  learnedOwners?: ReadonlyMap<string, Transport>,
+): {
   objects: ObjectDef[];
   ownerByCanonicalId: Map<string, Transport>;
 } {
@@ -93,7 +100,11 @@ export function coordinateObjectTree(contributions: readonly TransportObjects[])
   const ownerByCanonicalId = new Map<string, Transport>();
   const resolved: ObjectDef[] = [...byId].map(([canonicalId, entry]) => {
     const unproven = new Set([...entry.defs].filter(([, def]) => def.unproven).map(([transport]) => transport));
-    const owner = pickOwner(entry.key, [...entry.defs.keys()], unproven);
+    const learned = learnedOwners?.get(canonicalId);
+    const owner =
+      learned !== undefined && entry.defs.has(learned)
+        ? learned
+        : pickOwner(entry.key, [...entry.defs.keys()], unproven);
     ownerByCanonicalId.set(canonicalId, owner);
     const ownerDef = entry.defs.get(owner);
     // Internal invariant, not a reachable state: pickOwner always returns one of the
@@ -165,24 +176,23 @@ export function coordinateObjectTree(contributions: readonly TransportObjects[])
 }
 
 /**
- * Whether a datapoint whose owner dropped out may be handed to a transport that is still live
- * (audit 2026-09-24, A19 — the adapter's rule is "owner = the most modern PRESENT protocol").
- * Only where the value keeps its meaning: the same object and value type, the same unit, and —
- * where a dropdown is involved — the same wire vocabulary. A decibel bass (YNCA) is not MusicCast's
- * step count, a sleep text is not a number, "HDMI1" is not "hdmi1": those stay with the absent
- * owner, whose writes are dropped with a line, until it returns. A writable datapoint does not go to
- * a transport that only reads it — `hdmi.out3` and `sound.surroundAI` went to the read-only MusicCast
- * entry, exactly what `OWNER_OVERRIDES` keeps from happening (audit 2026-09-29, A27).
+ * Whether a user write meant for a datapoint's owner may be sent through another transport instead —
+ * when the owner is offline or the device refused the command there (krobi 2026-10-02: "probiert man
+ * immer das modernste, falls der Befehl damit nicht geht dann eben das nächste"). The ownership itself
+ * does not move. Only where the value keeps its meaning: the same object and value type, the same unit,
+ * and — where a dropdown is involved — the same wire vocabulary. A decibel bass (YNCA) is not MusicCast's
+ * step count, a sleep text is not a number, "HDMI1" is not "hdmi1". A transport that only reads the
+ * datapoint cannot carry a write (`hdmi.out3`, `sound.surroundAI` on MusicCast — audit 2026-09-29, A27).
  *
- * @param from the absent owner and its definition
- * @param from.transport the absent owner
+ * @param from the owner and its definition
+ * @param from.transport the owner
  * @param from.def its definition
- * @param to the live candidate and its definition
- * @param to.transport the live candidate
+ * @param to the other transport and its definition
+ * @param to.transport the other transport
  * @param to.def its definition
- * @returns whether the live transport may take the datapoint over
+ * @returns whether the other transport can carry the write unchanged
  */
-export function canHandOver(
+export function canCarryWrite(
   from: { transport: Transport; def: ObjectDef },
   to: { transport: Transport; def: ObjectDef },
 ): boolean {
@@ -192,7 +202,7 @@ export function canHandOver(
   if ((from.def.common.unit ?? "") !== (to.def.common.unit ?? "")) {
     return false;
   }
-  if (from.def.common.write && !to.def.common.write) {
+  if (!to.def.common.write) {
     return false;
   }
   const dropdown = Boolean(from.def.common.states) || Boolean(to.def.common.states);
@@ -200,12 +210,12 @@ export function canHandOver(
 }
 
 /**
- * Whether a live definition keeps the form an EXISTING datapoint has — the object the last run wrote
- * (D1). The same shape test as {@link canHandOver}, with the tree itself as the memory: which
- * transport wrote the object is not recorded, so the dropdown test compares the values themselves —
- * the existing ones must all still be there (a device's list may grow, `HDMI1` is not `hdmi1`).
+ * Whether a transport learned later may take a datapoint over: its definition must keep the form the
+ * datapoint already has (2026-10-02 — a read-in receiver keeps its tree). The same shape test as
+ * {@link canCarryWrite}, judged on the definitions themselves: the existing dropdown values must all
+ * still be there (a device's list may grow, `HDMI1` is not `hdmi1`).
  *
- * @param existing the object as it stands in the tree
+ * @param existing the datapoint as it stands
  * @param existing.type its object type
  * @param existing.common its common
  * @param live the definition a live transport builds now

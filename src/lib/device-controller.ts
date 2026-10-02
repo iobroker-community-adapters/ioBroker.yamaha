@@ -34,6 +34,7 @@ import type { StatesResolver } from "./catalog/build-objects";
 import type { YncaSubunitCache } from "./ynca/subunit-cache";
 import type { YncaMessage } from "./ynca/protocol";
 import type { CommandGate } from "./lifecycle/command-gate";
+import type { WriteOutcome } from "./lifecycle/multi-transport-handle";
 import type { ProbeMemory } from "./lifecycle/probe-memory";
 import type { BrowseEngine } from "./browse/browse-engine";
 import { createBrowseSurface } from "./browse/surface";
@@ -199,6 +200,12 @@ function provenBrowseSources(remembered: unknown): string[] {
  */
 const POWER_ON_PROOF_WAITS_MS = [5_000, 10_000, 15_000];
 
+/**
+ * How long after `PWR=On` the functions a standby read could not get are asked for — the moment the last
+ * menu-proof attempt is made (5 + 10 + 15 s, {@link POWER_ON_PROOF_WAITS_MS}).
+ */
+const AWAKE_READ_WAIT_MS = POWER_ON_PROOF_WAITS_MS.reduce((sum, wait) => sum + wait, 0);
+
 /** Unknown lines logged per connection before they are only counted (see the onUnknownLine handler). */
 const UNKNOWN_LINES_LOGGED = 3;
 
@@ -282,6 +289,11 @@ interface CachedCapabilities {
    * unions its answers into this shape and never takes one away, so a short first sweep heals.
    */
   subunits: Record<string, Record<string, string>>;
+  /**
+   * Whether this shape was read with the receiver switched on — a receiver in standby answers many functions
+   * `@RESTRICTED`, so a shape read then lacks what it has. Missing (an older profile) counts as not yet.
+   */
+  awake?: boolean;
 }
 
 /**
@@ -332,7 +344,12 @@ export interface YncaClientLike {
   /** Run the init sweep and return the device's capabilities. */
   readCapabilities(gets: Array<{ subunit: string; func: string }>): Promise<YncaCapabilities>;
   /** Send a PUT command. */
-  send(subunit: string, func: string, value: string, charset?: "latin1"): void;
+  send(
+    subunit: string,
+    func: string,
+    value: string,
+    charset?: "latin1",
+  ): void | Promise<"ok" | "restricted" | "undefined" | "unclear" | "skipped">;
   /** Send a GET request (the browse driver reads LISTINFO with it); a read-back asks at user priority. */
   get(subunit: string, func: string, priority?: "user" | "background"): void;
   /** Register a handler for pushed messages. */
@@ -460,6 +477,14 @@ export class YncaDeviceController {
   private powerOnCatchUp = false;
   /** Set by {@link close} — a catch-up still queued or waiting ends there. */
   private closed = false;
+  /** The firmware (`SYS:VERSION`) read on this connection. */
+  private firmwareRead: string | undefined;
+  /** Whether the shape the objects are built from was read with the receiver switched on. */
+  private awakeRead = false;
+  /** Whether the read of a switched-on receiver is queued or running, so a second `PWR=On` adds none. */
+  private awakeReadQueued = false;
+  /** Called once the shape becomes one of a switched-on receiver (see {@link readComplete}). */
+  private readonly readCompleteListeners: Array<() => void> = [];
 
   /**
    * @param deviceId the id-safe device id (object-tree path segment)
@@ -644,6 +669,7 @@ export class YncaDeviceController {
     ]);
     const model = identity.model;
     const firmware = identity.subunits.SYS?.VERSION ?? "";
+    this.firmwareRead = firmware || undefined;
     const remembered = this.deps.probeMemory.remembered(CAPS_KEY);
     if (model && isCachedCapabilities(remembered) && remembered.model === model && remembered.firmware === firmware) {
       // The remembered subunit snapshot is proof for narrowing ONLY from the same identity: a
@@ -656,6 +682,7 @@ export class YncaDeviceController {
         this.presentSubunits = new Set(cached.subunits);
       }
       this.loadObserved();
+      this.awakeRead = remembered.awake === true;
       return { capabilities: { model, subunits: remembered.subunits }, fromCache: true };
     }
     if (remembered !== undefined && model) {
@@ -675,18 +702,27 @@ export class YncaDeviceController {
     this.loadObserved();
     const capabilities = await this.sweepDevice(catalog, model, firmware);
     if (capabilities.model) {
+      const captured = capabilities.subunits.SYS?.VERSION ?? firmware;
+      // The same receiver read again (the identity read lost its first answer, so the fast path did not
+      // run): what it proved before stays — a sweep in standby answers many functions @RESTRICTED.
+      const same =
+        isCachedCapabilities(remembered) && remembered.model === capabilities.model && remembered.firmware === captured;
+      const subunits = same ? mergeYncaSubunits(remembered.subunits, capabilities.subunits) : capabilities.subunits;
+      const awake = (same && remembered.awake === true) || capabilities.subunits.MAIN?.PWR === "On";
       this.deps.probeMemory.set(CAPS_KEY, {
         model: capabilities.model,
-        firmware: capabilities.subunits.SYS?.VERSION ?? firmware,
-        subunits: capabilities.subunits,
+        firmware: captured,
+        subunits,
+        awake,
       } satisfies CachedCapabilities);
-    } else {
-      // No model, no identity — and without an identity nothing can ever invalidate what was
-      // remembered. The statics (input and scene names) are written by the sweep regardless,
-      // so leaving them behind froze those names for good on a device that does not answer
-      // SYS:MODELNAME. The two keys live and die together.
-      this.deps.probeMemory.drop(key => key === STATIC_KEY);
+      this.awakeRead = awake;
+      return { capabilities: { model: capabilities.model, subunits }, fromCache: false };
     }
+    // No model, no identity — and without an identity nothing can ever invalidate what was
+    // remembered. The statics (input and scene names) are written by the sweep regardless,
+    // so leaving them behind froze those names for good on a device that does not answer
+    // SYS:MODELNAME. The two keys live and die together.
+    this.deps.probeMemory.drop(key => key === STATIC_KEY);
     return { capabilities, fromCache: false };
   }
 
@@ -739,8 +775,8 @@ export class YncaDeviceController {
    * so current values arrive within the usual sweep time WITHOUT having gated the
    * ready line. Completion refreshes the persisted layers (capabilities, statics)
    * and the write map; a SHAPE change (a function newly answered) is persisted AND published —
-   * since 2.7.0 the objects are rebuilt from the grown shape and the handle re-coordinates the
-   * unified tree, so the datapoint appears in this session instead of one start later.
+   * the objects are rebuilt from the grown shape and the handle adds what is new to the tree, so the
+   * datapoint appears in this session instead of one start later.
    *
    * @param catalog the (group-filtered) catalog
    */
@@ -765,6 +801,11 @@ export class YncaDeviceController {
           }
         }
       }
+      // The names a refresh did not get back this time stay remembered (a standby refresh answers less).
+      const rememberedStatics = this.deps.probeMemory.remembered<Record<string, Record<string, string>>>(STATIC_KEY);
+      for (const [subunit, funcs] of Object.entries(rememberedStatics ?? {})) {
+        statics[subunit] = { ...funcs, ...statics[subunit] };
+      }
       this.deps.probeMemory.set(STATIC_KEY, statics);
       // UNION with the remembered shape (same identity — the fast path proved it):
       // a refresh while the device stands by answers many functions @RESTRICTED and
@@ -775,10 +816,13 @@ export class YncaDeviceController {
       const subunits = isCachedCapabilities(remembered)
         ? mergeYncaSubunits(remembered.subunits, fresh.subunits)
         : fresh.subunits;
+      const awake =
+        (isCachedCapabilities(remembered) && remembered.awake === true) || fresh.subunits.MAIN?.PWR === "On";
       this.deps.probeMemory.set(CAPS_KEY, {
         model: fresh.model,
         firmware: fresh.subunits.SYS?.VERSION ?? "",
         subunits,
+        awake,
       } satisfies CachedCapabilities);
       // The write map follows the union too — a standby refresh must not shrink the
       // proven write surface until the next restart either.
@@ -786,7 +830,7 @@ export class YncaDeviceController {
       this.writeMap = idToEntry(this.presentEntries);
       // A function the refresh answered for the first time becomes an object in THIS session
       // (2.7.0): the shape the tree is built from grows, the objects are republished, and the
-      // handle re-coordinates. Purely additive — the union above never drops a proven ability.
+      // handle adds them. Purely additive — the union above never drops a proven ability.
       this.shape = { model: fresh.model || this.shape.model, subunits };
       await this.republishObjects();
       // Scene titles are not datapoints any more (v2.0.0), so nothing else carries them
@@ -813,6 +857,12 @@ export class YncaDeviceController {
           if (zoneTitles.length > 0) {
             await this.publishSceneList(`${zone.prefix}scene`, zoneTitles);
           }
+        }
+      }
+      if (awake && !this.awakeRead) {
+        this.awakeRead = true;
+        for (const listener of this.readCompleteListeners) {
+          listener();
         }
       }
       this.deps.log.debug(`${this.deviceId}: background value refresh done (YNCA)`);
@@ -877,11 +927,14 @@ export class YncaDeviceController {
     this.presentSubunits = present;
     const capabilities = await this.targetedSweep(catalog, present);
     if (capabilities.model) {
+      const captured = capabilities.subunits.SYS?.VERSION ?? "";
+      // The same receiver probed again: a subunit it answered before stays — never replaced by a smaller probe.
+      const same = cached !== undefined && cached.model === capabilities.model && cached.firmware === captured;
       this.deps.subunitCache.set({
-        subunits: [...present],
+        subunits: same ? [...new Set([...cached.subunits, ...present])] : [...present],
         probed: [...PROBED_SUBUNITS],
         model: capabilities.model,
-        firmware: capabilities.subunits.SYS?.VERSION ?? "",
+        firmware: captured,
       });
     }
     return capabilities;
@@ -1053,15 +1106,15 @@ export class YncaDeviceController {
     list.push(value);
     this.deps.probeMemory.set(OBSERVED_KEY, this.observed);
     // The dropdown follows within the SESSION (2.7.0): the object is rebuilt with the grown list
-    // and re-upserted; the handle re-coordinates and writes only what really changed. Before, an
-    // observed value reached the dropdown one start later.
+    // and re-upserted; the handle adds what is new. Before, an observed value reached the dropdown
+    // one start later.
     void this.republishObjects();
   }
 
   /**
    * Rebuild this transport's objects from the shape it knows now and upsert them. Idempotent by
    * construction: the transport adapter keeps the last definition per id, so an unchanged object
-   * is neither written nor signalled — only a real change reaches the handle's re-coordination.
+   * is neither written nor signalled — only a real change reaches the handle.
    * Silent before the tree stood (no shape yet) and while nothing is present.
    */
   private async republishObjects(): Promise<void> {
@@ -1089,7 +1142,7 @@ export class YncaDeviceController {
   /**
    * Upsert an object and remember its definition, so the next republish writes only what really
    * changed. A device answering a new value republishes the whole tree; without this every one of
-   * ~250 definitions would be handed on, and the handle would re-coordinate for each of them.
+   * ~250 definitions would be handed on, and the handle would learn again for each of them.
    *
    * @param object the object definition to write
    */
@@ -1169,7 +1222,7 @@ export class YncaDeviceController {
    * @param stateId the state id relative to the device
    * @param value the written value
    */
-  public handleWrite(stateId: string, value: unknown): void {
+  public handleWrite(stateId: string, value: unknown): Promise<WriteOutcome> | WriteOutcome | void {
     if (stateId.startsWith("remote.")) {
       this.browseEngine?.handleRemoteWrite(stateId, value);
       return;
@@ -1214,7 +1267,7 @@ export class YncaDeviceController {
     const problem = target ? writeProblem(target, value) : undefined;
     if (problem) {
       this.deps.log.debug(`${this.deviceId}: ${stateId} not written — ${problem}`);
-      return;
+      return "unavailable";
     }
     const triple = yncaCommand(stateId, value, this.writeMap);
     if (!triple) {
@@ -1227,10 +1280,19 @@ export class YncaDeviceController {
         `${this.deviceId}: ${stateId} is not writable on this device — write dropped ` +
           `(not reported in the sweep, or a read-only function)`,
       );
-      return;
+      return "unavailable";
     }
-    this.deps.client.send(triple.subunit, triple.func, triple.value, triple.charset);
+    const sent = this.deps.client.send(triple.subunit, triple.func, triple.value, triple.charset);
     this.readBack(target);
+    return Promise.resolve(sent).then(verdict =>
+      verdict === "ok"
+        ? "sent"
+        : verdict === "restricted" || verdict === "undefined"
+          ? "refused"
+          : verdict === "skipped"
+            ? "unavailable"
+            : "unclear",
+    );
   }
 
   /**
@@ -1405,7 +1467,7 @@ export class YncaDeviceController {
     }
     const triple = yncaCommand(flatId, value, new Map([[flatId, entry]]));
     if (triple) {
-      this.deps.client.send(triple.subunit, triple.func, triple.value, triple.charset);
+      void this.deps.client.send(triple.subunit, triple.func, triple.value, triple.charset);
       this.readBack(entry);
     }
   }
@@ -1516,7 +1578,7 @@ export class YncaDeviceController {
       this.deps.log.debug(`${this.deviceId}: ${subunit}:${func} not reported by this device — write dropped`);
       return;
     }
-    this.deps.client.send(subunit, func, wire);
+    void this.deps.client.send(subunit, func, wire);
     // The receiver answers a PUT only when the value changed — a frequency snapped onto the station
     // already playing, or the band already set, stood unacknowledged for good (audit 2026-09-29, B10).
     this.readBack(
@@ -1551,8 +1613,8 @@ export class YncaDeviceController {
   /**
    * Build the menu surface for the given sources — at connect, and again when a proof missing at
    * connect arrives later in the session. Its objects then come without the `unproven` mark, the
-   * transport adapter reports the changed definitions, and the handle re-coordinates: YNCA takes
-   * the menus over from the transport that held them meanwhile (forum 85413).
+   * transport adapter reports the changed definitions, and the handle learns the proof: YNCA takes
+   * the menus over from the transport that held them meanwhile, once and for good (forum 85413).
    *
    * @param present the menu sources to offer
    * @param proven whether a LISTINFO answer proved them (now or remembered)
@@ -1604,6 +1666,9 @@ export class YncaDeviceController {
       this.queueCatchUp(() => this.adoptBrowseProof(new Set([message.subunit])));
       return;
     }
+    if (message.subunit === "MAIN" && message.func === "PWR" && message.value === "On" && !this.awakeRead) {
+      this.queueAwakeRead();
+    }
     if (message.subunit === "MAIN" && message.func === "PWR" && message.value === "On" && this.proofsMissing()) {
       if (!this.powerOnCatchUp) {
         this.powerOnCatchUp = true;
@@ -1616,6 +1681,51 @@ export class YncaDeviceController {
         });
       }
     }
+  }
+
+  /**
+   * The receiver was switched on while the shape the tree is built from comes from a standby read: ask every
+   * function again once it is up (the same union refresh the fast path runs), so what standby refused is
+   * added and the read becomes complete. Once per session at a time; the next power-on tries again.
+   */
+  private queueAwakeRead(): void {
+    if (this.awakeReadQueued) {
+      return;
+    }
+    this.awakeReadQueued = true;
+    // Beside the proof catch-up, not behind it: both wait for the receiver to come up, and every command of
+    // the refresh goes through the gate at background priority anyway. Never rejects (the refresh catches).
+    void (async () => {
+      try {
+        await this.deps.gate.delay(AWAKE_READ_WAIT_MS);
+        if (!this.ended() && !this.awakeRead) {
+          await this.refreshInBackground(this.catalog);
+        }
+      } catch (e) {
+        this.deps.log.debug(`${this.deviceId}: reading the switched-on receiver failed (${errText(e)})`);
+      } finally {
+        this.awakeReadQueued = false;
+      }
+    })();
+  }
+
+  /** @returns whether the shape the objects are built from was read with the receiver switched on */
+  public readComplete(): boolean {
+    return this.awakeRead;
+  }
+
+  /**
+   * Register the handler called once the shape becomes one of a switched-on receiver.
+   *
+   * @param cb the handler
+   */
+  public onReadComplete(cb: () => void): void {
+    this.readCompleteListeners.push(cb);
+  }
+
+  /** @returns the firmware (`SYS:VERSION`) read on this connection, if any */
+  public firmware(): string | undefined {
+    return this.firmwareRead;
   }
 
   /**
@@ -1751,8 +1861,8 @@ export class YncaDeviceController {
     this.browseDriver?.handleMessage(message);
     this.noticeProofs(message);
     // A value never seen before joins the observed store, and since 2.7.0 its dropdown too —
-    // the object is rebuilt and the handle re-coordinates within the session (before, the
-    // dropdown followed one start later). The state gets the value at once either way.
+    // the object is rebuilt and the handle adds it within the session (before, the dropdown
+    // followed one start later). The state gets the value at once either way.
     this.recordObserved(message.subunit, message.func, message.value);
     if (message.func === "BAND" && ["TUN", "DAB", "HDRADIO"].includes(message.subunit)) {
       this.tunerBand = message.value.toUpperCase();
@@ -1934,7 +2044,7 @@ export class YncaDeviceController {
       this.deps.log.debug(`${this.deviceId}: ${zoneKey} ${pad} key "${word}" is none this zone has — not sent`);
       return;
     }
-    this.deps.client.send(zone.subunit, pad === "cursor" ? "LISTCURSOR" : "LISTMENU", wire);
+    void this.deps.client.send(zone.subunit, pad === "cursor" ? "LISTCURSOR" : "LISTMENU", wire);
   }
 
   /**
@@ -1983,8 +2093,13 @@ export class YncaDeviceController {
     }
     try {
       const before = driver.padDialect;
+      const known = this.deps.probeMemory.remembered(PAD_DIALECT_KEY);
       this.deps.probeMemory.drop(key => key === PAD_DIALECT_KEY);
       const after = await this.padDialect(true);
+      // An unclear answer proves nothing: the dialect proven before stays remembered.
+      if (known !== undefined && this.deps.probeMemory.remembered(PAD_DIALECT_KEY) === undefined) {
+        this.deps.probeMemory.set(PAD_DIALECT_KEY, known);
+      }
       if (after !== before) {
         driver.usePadDialect(after);
         this.deps.log.info(

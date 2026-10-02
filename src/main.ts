@@ -42,7 +42,8 @@ import { ID_SCHEME, modelId, RESERVED_DEVICE_IDS, serialId } from "./lib/device-
 import { TRANSPORT_LABELS } from "./lib/ready-line";
 import { copyDeviceTree, movedId, type DeviceMoveDeps } from "./lib/lifecycle/device-move";
 import { moveAllWithEnums } from "./lib/enum-carry";
-import { ObjectMirror, StateMirror } from "./lib/lifecycle/write-mirror";
+import { StateMirror } from "./lib/lifecycle/write-mirror";
+import { coveredBy, KnownObjects } from "./lib/known-objects";
 import { DeviceBody } from "./lib/util";
 import { errText } from "./lib/err-text";
 import { migrateNativeKeys, type NativeKeyMigration } from "./lib/native-key-migration";
@@ -50,7 +51,14 @@ import { tName } from "./lib/i18n";
 import { withValueLabels } from "./lib/catalog/state-labels";
 import { discoverYamaha, probeDescription, type DiscoveredDevice } from "./lib/discovery";
 import { SsdpListener, type SsdpNotify } from "./lib/ssdp-listener";
-import { isExcluded, readDiscovered, readExcluded, readIgnored, writeDiscovered } from "./lib/discovered-store";
+import {
+  isExcluded,
+  readDiscovered,
+  readDiscoveredChecked,
+  readExcluded,
+  readIgnored,
+  writeDiscovered,
+} from "./lib/discovered-store";
 import { identityFrom, mergeIdentity, sameDevice, type DeviceIdentity } from "./lib/device-identity";
 import { discoveredStoreDeps, excludedStoreDeps, ignoredStoreDeps } from "./lib/discovered-store-deps";
 import { YxcPushReceiver } from "./lib/yxc/push-receiver";
@@ -68,6 +76,7 @@ import {
   loadCapabilityProfile,
   modelFrom,
 } from "./lib/lifecycle/capability-profile";
+import { emptyLearnedTree } from "./lib/lifecycle/learned-tree";
 
 /** Supervisor reconnect backoff bounds (exponential: 1s, 2s … capped at 60s). */
 const RECONNECT_BASE_MS = 1000;
@@ -327,21 +336,7 @@ export class Yamaha extends utils.Adapter {
    * into it — without a clearing write exactly the installations with the problem would keep it.
    */
   private readonly storedBounds = this.perDevice.stateMap<BoundFields>();
-  /** State ids (namespace-relative) some transport upserted in THIS run — live claims. */
-  private readonly touchedThisRun = this.perDevice.stateSet();
-  /**
-   * Ids (namespace-relative) the never-filled purge recorded for confirmation during THIS process.
-   * "Two starts decide" means two PROCESS starts: a later balance pass of the same run (another
-   * device settling) must not confirm what an earlier pass only recorded (audit 2026-09-24).
-   */
-  private readonly recordedThisRun = this.perDevice.stateSet();
-  /**
-   * Ids (namespace-relative) a transport's own declaration proves absent on the device — the
-   * MusicCast getFeatures function lists, which do not depend on standby. The purge takes a
-   * never-filled, untouched one on the first start instead of waiting for a second.
-   */
-  private readonly declaredAbsent = this.perDevice.stateSet();
-  /** Devices that reported connected at least once in this run (gates the orphan purge). */
+  /** Devices that reported connected at least once in this run. */
   private readonly readyDevices = this.perDevice.set();
   private createdDatapoints = 0;
   private removedDatapoints = 0;
@@ -350,17 +345,11 @@ export class Yamaha extends utils.Adapter {
   /** Set when the start-up snapshot failed — a balance without it would be wrong, so none is written. */
   private balanceDisabled = false;
   /**
-   * True while the settle pass runs. Its own purges report their removals, which used to
-   * re-arm the timer and run the whole pass a second time five seconds later — two more full
-   * reads of the object tree for a round that could only ever remove nothing (audit 2026-09-06).
-   */
-  private balanceSettling = false;
-  /**
    * Latched after the first failed database write, so an outage warns once and the
    * repeats stay at debug until a write goes through again (nut2 `failedUps` pattern).
    */
   private stateWritesFailing = false;
-  /** Per device, its capability profile (probe memory, YNCA snapshot, purge marker) — see loadDeviceProfile. */
+  /** Per device, its capability profile (probe memory, YNCA snapshot, learned tree) — see loadDeviceProfile. */
   private readonly profiles = this.perDevice.map<DeviceProfileStore>();
   /** Per device, the native patch inside its coalescing window (see persistDeviceNative). */
   private readonly pendingDevicePatches = this.perDevice.map<PendingDevicePatch>();
@@ -374,8 +363,25 @@ export class Yamaha extends utils.Adapter {
   private readonly idChecked = this.perDevice.set();
   /** The id decisions of this run, one after the other — see checkIdDecision. */
   private idDecisions: Promise<void> = Promise.resolve();
-  /** What the objects database holds — see writeObject (audit 2026-09-29, E2). */
-  private readonly objectMirror = new ObjectMirror();
+  /**
+   * The adapter's own object tree, read once at start (fleet master `known-objects.ts`): every object write
+   * goes through it and reaches the database only when it changes something.
+   */
+  private readonly known = new KnownObjects({
+    namespace: this.namespace,
+    extendObject: (id, obj) => this.extendObject(id, obj),
+    setForeignObject: (id, obj) => this.setForeignObject(id, obj),
+    delObjectAsync: (id, options) => this.delObjectAsync(id, options),
+    // The tree is read ONCE at start: `snapshotExistingDatapoints` hands the listing it read in here.
+    getObjectListAsync: async params =>
+      this.startListing
+        ? {
+            rows: Object.entries(this.startListing).map(([id, value]) => ({ id, value })),
+          }
+        : this.getObjectListAsync(params),
+  });
+  /** The start-up listing while the object store loads from it (see {@link known}). */
+  private startListing: AdapterObjects | undefined;
   /** What the states database holds — see writeStateNow (audit 2026-09-29, E3). */
   private readonly stateMirror = new StateMirror();
   /** See {@link instanceReadOnlyStates}. */
@@ -464,15 +470,17 @@ export class Yamaha extends utils.Adapter {
       // offline instead. Until 2.9.1 the first hand-entered receiver silently took every found
       // one's object tree with it, recordings and VIS bindings included.
       const idle = this.discovering ? [] : await this.rememberedButIdle(devices);
+      // Every device the discovery store remembers keeps its tree, whether it runs this time or not —
+      // and when the store cannot be read, no remembered tree is judged at all: an unreadable store is no
+      // proof that a device is gone, and a found device whose address a typed row took over is not gone
+      // either (it is in the store, not in the running set).
+      const stored = await readDiscoveredChecked(discoveredStoreDeps(this));
+      const remembered = stored.readable ? new Set(stored.records.map(device => device.id)) : undefined;
       // Before the cleanup and before any device connects — see knownDatapoints. The listing
       // is read once and handed on: the cleanup runs on the very same tree.
       const listing = await this.snapshotExistingDatapoints(unmoved);
       await this.seedStateMirror();
-      await this.cleanupStaleObjects(
-        new Set(devices.map(device => device.id)),
-        new Set(idle.map(device => device.id)),
-        listing,
-      );
+      await this.cleanupStaleObjects(new Set(devices.map(device => device.id)), remembered, listing);
       await this.ensureInstanceInfoObjects();
       await this.markIdleDevicesOffline(idle);
       await this.subscribeToStates();
@@ -1248,8 +1256,7 @@ export class Yamaha extends utils.Adapter {
   private reportConnection(deviceId: string, connected: boolean): void {
     if (connected && !this.readyDevices.has(deviceId)) {
       this.readyDevices.add(deviceId);
-      // Arm the settle pass even when the connect created nothing new — the once-per-
-      // version orphan purge rides the same settled moment as the balance line.
+      // Arm the balance line even when the connect created nothing new: one line once the tree settled.
       this.scheduleDatapointBalance();
     }
     if (connected) {
@@ -1353,7 +1360,7 @@ export class Yamaha extends utils.Adapter {
   private writeStateNow(id: string, value: ioBroker.StateValue): Promise<void> {
     // A read-only state only the adapter writes: compared in memory. A writable one keeps the database
     // compare — it is what corrects a lost user command (fleet pattern: displays are written only on a change).
-    const readOnly = this.objectMirror.isReadOnlyState(id) || this.instanceReadOnlyStates().has(id);
+    const readOnly = this.isReadOnlyState(id) || this.instanceReadOnlyStates().has(id);
     const verdict = readOnly ? this.stateMirror.judge(id, value, true) : "unknown";
     if (verdict === "unchanged") {
       return Promise.resolve();
@@ -1413,12 +1420,7 @@ export class Yamaha extends utils.Adapter {
    * @param patch what to merge
    */
   private async writeObject(id: string, patch: ioBroker.PartialObject): Promise<void> {
-    const fields = patch as Record<string, unknown>;
-    if (this.objectMirror.carries(id, fields)) {
-      return;
-    }
-    await this.extendObject(id, patch);
-    this.objectMirror.wrote(id, fields);
+    await this.known.extend(id, patch);
   }
 
   /**
@@ -1429,9 +1431,8 @@ export class Yamaha extends utils.Adapter {
    * @param below true for a recursive delete
    */
   private async deleteObject(id: string, below = false): Promise<void> {
-    this.objectMirror.deleted(id, below);
     this.stateMirror.deleted(id, below);
-    await this.delObjectAsync(id, below ? { recursive: true } : undefined);
+    await this.known.remove(id, { recursive: below });
   }
 
   /**
@@ -1568,29 +1569,28 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
-   * One-shot startup cleanup: delete every object that does not belong to a
-   * configured device (the previous adapter's whole tree, and any device dropped
-   * from the config). Runs before the devices connect; a configured device's
-   * subtree is kept whether or not it has connected yet.
+   * Start-up cleanup of what the USER removed: a device dropped from the table (and the previous adapter's
+   * whole tree), and the datapoints of a group the user switched off. Runs before the devices connect; a
+   * configured or remembered device's subtree is kept whether or not it has connected yet. What an adapter
+   * update renamed or a receiver no longer has is removed by the completion of its read-in
+   * ({@link settleDeviceTree}), never here.
    *
    * @param deviceIds the ids of the currently configured devices
-   * @param remembered ids the discovery store still holds that are idle this run
+   * @param remembered every id the discovery store holds; undefined when it could not be read — then no
+   *   device tree is deleted at all
    * @param listing the object tree as the datapoint snapshot just read it; read here when absent
    */
   private async cleanupStaleObjects(
     deviceIds: Set<string>,
-    remembered: ReadonlySet<string>,
+    remembered: ReadonlySet<string> | undefined,
     listing?: AdapterObjects,
   ): Promise<void> {
     const allObjects = listing ?? (await this.getAdapterObjectsAsync());
     const existing = Object.keys(allObjects);
-    // Only the DELETION widens to the remembered ids. The two passes below stay on the
-    // running set on purpose: an idle device is not being written to at all this run, so
-    // neither a rename nor a switched-off group has any business reaching into its tree.
-    const stale = staleObjects(existing, deviceIds, this.namespace, remembered);
-    // Old states this version renamed/moved (e.g. system.model -> info.model): delete the
-    // old object so it does not linger orphaned beside the new one under a kept device.
-    const renamed = renamedObjectIds(existing, deviceIds, this.namespace);
+    // Only the DELETION widens to the remembered ids. The pass below stays on the running set on
+    // purpose: an idle device is not being written to at all this run, so a switched-off group has
+    // no business reaching into its tree.
+    const stale = remembered ? staleObjects(existing, deviceIds, this.namespace, remembered) : [];
     // Objects whose datapoint group the user switched off — remove them so turning a group from
     // on to off cleans up its whole subtree (a toggle change restarts the instance, so this runs).
     const config = this.config;
@@ -1603,7 +1603,7 @@ export class Yamaha extends utils.Adapter {
       }
       return false;
     });
-    for (const fullId of [...stale, ...renamed, ...disabled]) {
+    for (const fullId of [...stale, ...disabled]) {
       this.forgetWritten(fullId);
       try {
         await this.deleteObject(stripNamespace(fullId, this.namespace));
@@ -1616,115 +1616,65 @@ export class Yamaha extends utils.Adapter {
     if (stale.length > 0) {
       this.log.debug(`removed ${stale.length} object(s) from a previous configuration`);
     }
-    if (renamed.length > 0) {
-      this.log.debug(`removed ${renamed.length} renamed object(s) from an earlier version`);
-    }
     if (disabled.length > 0) {
       this.log.debug(`removed ${disabled.length} object(s) from switched-off datapoint groups`);
     }
     // Channels and device nodes go with them, but only datapoints are counted — that is what
     // the user switched on or off, and what they look for in the object tree.
-    this.noteDatapointsRemoved(
-      [...stale, ...renamed, ...disabled].filter(fullId => allObjects[fullId]?.type === "state"),
-    );
+    this.noteDatapointsRemoved([...stale, ...disabled].filter(fullId => allObjects[fullId]?.type === "state"));
   }
 
   /**
-   * Remove read-capable states under a CONNECTED device that never carried a value and were not
-   * (re)created by this run's transports — over-declarations of an earlier adapter version that
-   * today's claim-with-proof creation no longer makes. Deleting them is lossless (no value, no
-   * history). Runs after the tree settled, so a device that has not connected in this run keeps
-   * its tree untouched — its sweep happens on the first start that reaches it.
+   * The completion of a device's read-in — after an installation, an adapter update or a firmware update,
+   * with the receiver switched on and every transport it has answering: the one moment its tree may shrink
+   * (krobi 2026-10-02: "Höchstens beim updaten vom Adapter"). Removes, under this device only:
+   * - the datapoints this version renamed (`renamedObjectIds`),
+   * - the datapoints no transport built that never carried a value — an earlier version's over-declarations,
+   *   a function a firmware update took away. A datapoint that carries a value stays: some are built only when
+   *   the device first reports them (an XML source's playback fields, a MusicCast list slot);
+   * - then the folders left without a datapoint.
+   * The device's header (`info.*`) is the adapter's own, never a transport's.
    *
-   * TWO starts decide, not one (2.7.0): a receiver in standby answers many functions
-   * `@RESTRICTED`, so one run seeing a datapoint untouched is no proof the device lost it. The
-   * first run RECORDS the candidates in the device's capability profile (`pendingPurge`), the
-   * next run deletes those still untouched and still never filled, and forgets the rest. A device
-   * is examined once per adapter version (`purgeVersion`) OR whenever it carries a recorded
-   * candidate — the confirmation has to reach its second start even without a new version.
-   * "Run" is a PROCESS start: an id recorded during this process waits for the next one, however
-   * many balance passes this one makes. A datapoint a transport's declaration proves absent
-   * ({@link declaredAbsent}) needs no second start — the declaration is no standby answer.
+   * @param deviceId the id-safe device id
+   * @param built the canonical ids the transports built at the completion
    */
-  private async purgeNeverFilled(): Promise<void> {
-    const candidates: string[] = [];
-    for (const deviceId of this.readyDevices) {
-      const profile = this.profiles.get(deviceId);
-      const declared = [...this.declaredAbsent].some(id => id.startsWith(`${deviceId}.`));
-      if (profile?.purgeVersion !== this.version || (profile?.pendingPurge.length ?? 0) > 0 || declared) {
-        candidates.push(deviceId);
-      }
-    }
-    if (candidates.length === 0) {
-      return;
-    }
-    const allObjects = await this.getAdapterObjectsAsync();
-    const states = await this.getStatesAsync("*");
-    const untouched = neverWrittenStateIds(allObjects, states, new Set(candidates), this.namespace).filter(
-      fullId => !this.touchedThisRun.has(stripNamespace(fullId, this.namespace)),
-    );
-    const purged: string[] = [];
-    for (const deviceId of candidates) {
-      const profile = this.profiles.get(deviceId);
-      const seenNow = untouched
-        .filter(fullId => fullId.startsWith(`${this.namespace}.${deviceId}.`))
-        .map(fullId => stripNamespace(fullId, this.namespace));
-      const recorded = new Set(profile?.pendingPurge ?? []);
-      const confirmed = seenNow.filter(
-        id => (recorded.has(id) && !this.recordedThisRun.has(id)) || this.declaredAbsent.has(id),
-      );
-      for (const id of confirmed) {
-        this.forgetWritten(id);
+  private async settleDeviceTree(deviceId: string, built: ReadonlySet<string>): Promise<void> {
+    try {
+      const base = `${this.namespace}.${deviceId}.`;
+      const objects = await this.getAdapterObjectsAsync();
+      const states = await this.getStatesAsync(`${deviceId}.*`);
+      const renamed = renamedObjectIds(Object.keys(objects), new Set([deviceId]), this.namespace);
+      const unbuilt = neverWrittenStateIds(objects, states, new Set([deviceId]), this.namespace).filter(fullId => {
+        const id = fullId.slice(base.length);
+        return !built.has(id) && !id.startsWith("info.");
+      });
+      const gone = [...new Set([...renamed, ...unbuilt])].sort((a, b) => b.length - a.length);
+      for (const fullId of gone) {
+        this.forgetWritten(fullId);
         try {
-          await this.deleteObject(id);
-          purged.push(`${this.namespace}.${id}`);
+          await this.deleteObject(stripNamespace(fullId, this.namespace));
         } catch {
-          // already gone
+          // already removed together with its parent
         }
       }
-      // Whatever is untouched THIS run and was not just deleted waits for the next process start.
-      const waiting = seenNow.filter(id => !confirmed.includes(id));
-      for (const id of waiting) {
-        if (!recorded.has(id)) {
-          this.recordedThisRun.add(id);
+      const remaining = Object.fromEntries(Object.entries(objects).filter(([fullId]) => !gone.includes(fullId)));
+      const empty = childlessChannelIds(remaining, new Set([deviceId]), this.namespace);
+      for (const fullId of empty) {
+        this.forgetWritten(fullId);
+        try {
+          await this.deleteObject(stripNamespace(fullId, this.namespace));
+        } catch {
+          // already removed together with its parent
         }
       }
-      profile?.setPendingPurge(waiting);
-      profile?.markPurged(this.version ?? "");
-    }
-    if (purged.length > 0) {
-      this.log.debug(
-        `removed ${purged.length} never-filled object(s) — confirmed over two starts or declared absent by the device`,
-      );
-      this.noteDatapointsRemoved(purged);
-    }
-  }
-
-  /**
-   * Remove folders that hold no datapoint any more, under the devices that connected this run.
-   *
-   * The two sweeps above only ever delete datapoints, so a folder emptied by a tree rework stays
-   * behind and promises content it can never get — `player.server` was the case after the v2.0.0
-   * migration deleted the SERVER source's playback copies, until the RX-A850 presets gave that
-   * source datapoints of its own again. Runs on every start, not once per version: an empty folder is wrong
-   * whenever it is found, and re-reading the objects after the orphan purge catches the ones that
-   * purge just emptied. Not counted in the datapoint balance — a folder is not a datapoint.
-   */
-  private async purgeChildlessChannels(): Promise<void> {
-    if (this.readyDevices.size === 0) {
-      return;
-    }
-    const empty = childlessChannelIds(await this.getAdapterObjectsAsync(), this.readyDevices, this.namespace);
-    for (const fullId of empty) {
-      this.forgetWritten(fullId);
-      try {
-        await this.deleteObject(stripNamespace(fullId, this.namespace));
-      } catch {
-        // already removed together with its parent
+      if (gone.length + empty.length > 0) {
+        this.log.debug(
+          `${deviceId}: read-in complete — removed ${gone.length} datapoint(s) and ${empty.length} empty folder(s) the device no longer has`,
+        );
       }
-    }
-    if (empty.length > 0) {
-      this.log.debug(`removed ${empty.length} empty folder(s) left over from an earlier object tree`);
+      this.noteDatapointsRemoved(gone.filter(fullId => objects[fullId]?.type === "state"));
+    } catch (e) {
+      this.log.debug(`${deviceId}: clearing what the device no longer has failed (${errText(e)}) — kept`);
     }
   }
 
@@ -1773,18 +1723,18 @@ export class Yamaha extends utils.Adapter {
     // from every enum, so the user's room and function assignments go with it and nothing the
     // re-create writes brings them back (fleet rule, krobi 2026-09-12; `setObject` is the
     // checker's S5054, `setForeignObject` is not).
-    const object = await this.getObjectAsync(id);
+    const object = this.known.get(id) as ioBroker.StateObject | undefined;
     if (object?.type !== "state") {
       return;
     }
-    // The READ object rides along whole — `common.custom` (the user's logging), `native` and the
+    // The STORED object rides along whole — `common.custom` (the user's logging), `native` and the
     // acl survive the rewrite because nothing but the dropped bounds is left out.
     const common = { ...object.common } as ioBroker.StateCommon & Record<string, unknown>;
     for (const field of gone) {
       delete common[field];
     }
     try {
-      await this.setForeignObject(`${this.namespace}.${id}`, { ...object, common });
+      await this.known.replace(`${this.namespace}.${id}`, { ...object, common });
     } catch (e) {
       // Nothing is lost — the object still stands as it was — but the stale bound stays, so it
       // belongs in the log rather than passing silently.
@@ -1806,7 +1756,12 @@ export class Yamaha extends utils.Adapter {
   private async snapshotExistingDatapoints(read?: AdapterObjects): Promise<AdapterObjects | undefined> {
     try {
       const listing = read ?? (await this.getAdapterObjectsAsync());
-      this.objectMirror.seed(listing, this.namespace);
+      this.startListing = listing;
+      try {
+        await this.known.load();
+      } finally {
+        this.startListing = undefined;
+      }
       for (const [fullId, object] of Object.entries(listing)) {
         if (object?.type === "state") {
           const id = stripNamespace(fullId, this.namespace);
@@ -1865,42 +1820,25 @@ export class Yamaha extends utils.Adapter {
    * user made ONE change and reads ONE result.
    */
   private scheduleDatapointBalance(): void {
-    if (this.balanceDisabled || this.balanceSettling) {
+    if (this.balanceDisabled) {
       return;
     }
     this.clearTimeout(this.balanceTimer);
     this.balanceTimer = this.setTimeout(() => {
       this.balanceTimer = undefined;
-      void (async () => {
-        this.balanceSettling = true;
-        // The tree has settled: sweep the never-filled orphans FIRST, so their
-        // removals land in the same balance line the user is about to read.
-        try {
-          await this.purgeNeverFilled();
-        } catch (e) {
-          this.log.debug(`orphan purge failed (${errText(e)}); skipped for this run`);
-        }
-        // Then the folders those removals (or an earlier version's tree rework) left empty.
-        try {
-          await this.purgeChildlessChannels();
-        } catch (e) {
-          this.log.debug(`empty-folder purge failed (${errText(e)}); skipped for this run`);
-        }
-        const parts: string[] = [];
-        if (this.createdDatapoints > 0) {
-          parts.push(`created ${this.createdDatapoints} datapoint(s)`);
-        }
-        if (this.removedDatapoints > 0) {
-          parts.push(`removed ${this.removedDatapoints} datapoint(s)`);
-        }
-        this.createdDatapoints = 0;
-        this.removedDatapoints = 0;
-        // Silent when nothing changed: a plain restart must not write a line.
-        if (parts.length > 0) {
-          this.log.info(`Object tree updated: ${parts.join(", ")}`);
-        }
-        this.balanceSettling = false;
-      })();
+      const parts: string[] = [];
+      if (this.createdDatapoints > 0) {
+        parts.push(`created ${this.createdDatapoints} datapoint(s)`);
+      }
+      if (this.removedDatapoints > 0) {
+        parts.push(`removed ${this.removedDatapoints} datapoint(s)`);
+      }
+      this.createdDatapoints = 0;
+      this.removedDatapoints = 0;
+      // Silent when nothing changed: a plain restart must not write a line.
+      if (parts.length > 0) {
+        this.log.info(`Object tree updated: ${parts.join(", ")}`);
+      }
     }, DATAPOINT_BALANCE_SETTLE_MS);
   }
 
@@ -1924,10 +1862,8 @@ export class Yamaha extends utils.Adapter {
     // only where they differ; audit 2026-09-29, E2) — js-controller already wrote every manifest object once
     // before onReady.
     const refresh = async (id: string, patch: ioBroker.PartialObject, write: () => Promise<unknown>): Promise<void> => {
-      const fields = patch as Record<string, unknown>;
-      if (!this.objectMirror.carries(id, fields)) {
+      if (!coveredBy(patch, this.known.get(id))) {
         await write();
-        this.objectMirror.wrote(id, fields);
       }
     };
     const info = { common: { name: tName("information") } };
@@ -2635,7 +2571,7 @@ export class Yamaha extends utils.Adapter {
           info: message => this.log.info(message),
           warn: message => this.log.warn(message),
         },
-        upsertObject: async (id, def) => {
+        upsertObject: async (id, def, settle) => {
           if (!alive()) {
             return;
           }
@@ -2644,18 +2580,21 @@ export class Yamaha extends utils.Adapter {
           if (!isGroupEnabled(id.slice(id.indexOf(".") + 1), this.config)) {
             return;
           }
-          // A SHRINKING dropdown needs a clearing write first: extendObject merges `common.states`
-          // key by key, so the old entries would survive every update (#619 — the reporter would
-          // have seen no change at all). Only when the stored map carries a key the new one lacks;
-          // an unchanged or growing map is one write, as before. A datapoint that has no list any
-          // more is the same case with an empty map — its stored list is cleared, not kept.
-          if (def.type === "state") {
-            await this.clearStaleStates(id, def.common.states ?? {});
+          if (settle) {
+            // The completion of a read-in (installation, adapter or firmware update, receiver on): the
+            // one moment a definition may lose something. A SHRINKING dropdown needs a clearing write
+            // first — extendObject merges `common.states` key by key, so the old entries would survive
+            // (#619) — and a datapoint without a list any more has its stored list cleared.
+            if (def.type === "state") {
+              await this.clearStaleStates(id, def.common.states ?? {});
+            }
+            await this.writePresented(id, def);
+          } else {
+            // Running: a read-in receiver keeps its tree (krobi 2026-10-02) — only what was learned is added.
+            await this.writeLearned(id, def);
           }
-          await this.writePresented(id, def);
           if (def.type === "state") {
             this.noteDatapointCreated(id);
-            this.touchedThisRun.add(id);
           }
         },
         setStateAck: (id, value) => {
@@ -2692,13 +2631,6 @@ export class Yamaha extends utils.Adapter {
             void this.updateDeviceLabel(device.id, name, LABEL_RANK.deviceName);
           }
         },
-        onDeclaredAbsent: ids => {
-          if (alive()) {
-            for (const id of ids) {
-              this.declaredAbsent.add(`${device.id}.${id}`);
-            }
-          }
-        },
         timers: {
           schedule: (handler, ms) => (this.unloading ? undefined : this.setTimeout(handler, ms)),
           cancel: handle => this.clearTimeout(handle),
@@ -2719,16 +2651,23 @@ export class Yamaha extends utils.Adapter {
         },
         xmlPollIntervalMs: this.xmlPollIntervalMs(),
         writtenObjects: this.writtenObjectsOf(device.id),
-        // Read only while a transport the device has is missing — the form its datapoints keep (D1).
-        existingObjects: async () => {
-          const prefix = `${this.namespace}.${device.id}.`;
-          const listing = await this.getForeignObjectsAsync(`${prefix}*`);
-          return new Map(
-            Object.entries(listing ?? {}).map(([id, object]) => [
-              id.slice(prefix.length),
-              { type: object.type, common: object.common as Partial<ObjectDef["common"]> },
-            ]),
-          );
+        tree: {
+          get: () => this.profiles.get(device.id)?.tree ?? emptyLearnedTree(),
+          set: tree => this.profiles.get(device.id)?.setTree(tree),
+        },
+        adapterVersion: this.version,
+        // From the one start-up read and what this run wrote since — never a database read.
+        existing: id => {
+          const object = this.known.get(`${device.id}.${id}`) as
+            { type?: unknown; common?: Partial<ObjectDef["common"]> } | undefined;
+          return typeof object?.type === "string" && object.common
+            ? { type: object.type, common: object.common }
+            : undefined;
+        },
+        settleTree: async built => {
+          if (alive()) {
+            await this.settleDeviceTree(device.id, built);
+          }
         },
         onTransports: names => {
           if (alive()) {
@@ -3102,7 +3041,7 @@ export class Yamaha extends utils.Adapter {
 
   /**
    * Load a device's capability profile — the one persisted memory of what the device told us
-   * (probe memory, YNCA subunit snapshot, purge marker) — from its device object's native
+   * (probe memory, YNCA subunit snapshot, learned tree) — from its device object's native
    * part, wrapped so every change persists back there through the coalescing writer. The
    * device object is the right home: writing an instance object's native restarts the
    * adapter, a device object's does not. Legacy keys of the releases before 2.7.0 are converted at load.
@@ -3140,10 +3079,9 @@ export class Yamaha extends utils.Adapter {
   /**
    * Turn percent presentation on or off for ONE device, at once.
    *
-   * Called from the device manager, which runs inside this process. The datapoint is rebuilt
-   * before its value follows — the same order `reshapeVolume` keeps when a receiver changes the
-   * scale it displays, and for the same reason: a value written against the old definition is
-   * out of range and the js-controller logs it on every refresh.
+   * Called from the device manager, which runs inside this process — the user's own change of the
+   * datapoint's form. The datapoint is rebuilt before its value follows: a value written against the
+   * old definition is out of range and the js-controller logs it on every refresh.
    *
    * @param deviceId the id-safe device id
    * @param on whether its volume datapoints should read 0…100 %
@@ -3168,6 +3106,70 @@ export class Yamaha extends utils.Adapter {
         this.writeState(id, on ? toPercent(state.val, bounds) : fromPercent(state.val, bounds));
       }
     }
+  }
+
+  /**
+   * Add what a transport learned to a datapoint — never take anything away (krobi 2026-10-02: a receiver
+   * that was read in keeps its tree; only the completion of a read-in may shrink it). A new object is written
+   * as built. An existing state keeps its type, unit, write flag, names and bounds; it only gains the
+   * dropdown entries and the bounds it did not have. A transport that drops or comes back therefore changes
+   * nothing, and an incomplete definition (a standby answer, a transport without the list) clears nothing.
+   *
+   * @param id the full object id (`<deviceId>.<relativeId>`)
+   * @param def the definition the transports built
+   */
+  private async writeLearned(id: string, def: ObjectDef): Promise<void> {
+    const stored = this.known.get(id) as { type?: unknown; common?: Record<string, unknown> } | undefined;
+    if (!stored?.common) {
+      await this.writePresented(id, def);
+      return;
+    }
+    const common: Record<string, unknown> = {};
+    // An explanation the object does not carry yet is added — it changes nothing about the datapoint's form (a
+    // folder the device header created first gets the one its transports declare).
+    if (stored.common.desc === undefined && def.common.desc !== undefined) {
+      common.desc = def.common.desc;
+    }
+    if (def.type !== "state" || stored.type !== "state") {
+      if (Object.keys(common).length > 0) {
+        await this.writeObject(id, { common });
+      }
+      return;
+    }
+    const written = withValueLabels(
+      id.slice(id.indexOf(".") + 1),
+      this.presentVolume(id, def),
+      this.systemLanguage ?? "en",
+    );
+    const before = stored.common.states;
+    const kept = before !== null && typeof before === "object" ? (before as Record<string, string>) : {};
+    const added = Object.fromEntries(Object.entries(written.common.states ?? {}).filter(([key]) => !(key in kept)));
+    if (Object.keys(added).length > 0) {
+      common.states = added;
+      this.storedStates.set(id, { ...kept, ...added });
+    }
+    for (const field of BOUND_FIELDS) {
+      if (stored.common[field] === undefined && written.common[field] !== undefined) {
+        common[field] = written.common[field];
+      }
+    }
+    if (Object.keys(common).length === 0) {
+      return;
+    }
+    await this.writeObject(id, { common });
+    this.storedBounds.set(id, boundsOfCommon({ ...stored.common, ...common }));
+  }
+
+  /**
+   * Whether a state is one only the adapter writes (`common.write: false`) — judged on the object store,
+   * in memory; a writable state keeps the database compare, which also corrects a lost user command.
+   *
+   * @param id the namespace-relative object id
+   * @returns true for a known read-only state
+   */
+  private isReadOnlyState(id: string): boolean {
+    const stored = this.known.get(id) as { type?: unknown; common?: { write?: unknown } } | undefined;
+    return stored?.type === "state" && stored.common?.write === false;
   }
 
   /**

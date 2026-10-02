@@ -1,5 +1,6 @@
 import { identityFrom, mergeIdentity, type DeviceIdentity } from "../device-identity";
 import { DISCOVERY_SCHEMA } from "./discovery-schema";
+import { emptyLearnedTree, hasLearned, parseLearnedTree, type LearnedTree } from "./learned-tree";
 import { memorySchemaOf, ProbeMemory, SCHEMA_KEY } from "./probe-memory";
 import {
   createSubunitCache,
@@ -34,10 +35,8 @@ export interface ProfileParts {
   memory: Record<string, unknown>;
   /** The YNCA AVAIL snapshot, if any (its schema is the profile's). */
   yncaAvail?: Omit<YncaAvailSnapshot, "schema">;
-  /** The adapter version whose never-filled purge ran for this device. */
-  purgeVersion?: string;
-  /** Never-filled datapoints seen missing once — deleted when still missing on the next start. */
-  pendingPurge: string[];
+  /** Which transport serves and owns which datapoint (see {@link LearnedTree}). */
+  tree?: LearnedTree;
 }
 
 /** What loading a device object's native part yields — the guards of the two memories stay downstream. */
@@ -46,10 +45,8 @@ export interface LoadedProfile {
   memory: Record<string, unknown> | undefined;
   /** The AVAIL snapshot in the CURRENT schema, or undefined (another schema, another shape, none). */
   yncaAvail: YncaAvailSnapshot | undefined;
-  /** The adapter version whose never-filled purge ran for this device, if any. */
-  purgeVersion: string | undefined;
-  /** Never-filled datapoints seen missing once (see {@link ProfileParts.pendingPurge}). */
-  pendingPurge: string[];
+  /** The learned ownership as stored — the store keeps it only under the current discovery schema. */
+  tree: LearnedTree;
   /** When the profile was first learned under its schema (kept across persists). */
   learnedAt: string | undefined;
   /** The schema the stored memory was learned under (for the re-learn log line); undefined = no memory. */
@@ -79,8 +76,7 @@ export function loadCapabilityProfile(native: Record<string, unknown> | undefine
     return {
       memory,
       yncaAvail: isAvailSnapshot(snapshot) ? snapshot : undefined,
-      purgeVersion: profile.purgeVersion,
-      pendingPurge: profile.pendingPurge,
+      tree: profile.tree,
       learnedAt: profile.learnedAt,
       storedSchema: profile.schema,
       legacy,
@@ -91,8 +87,7 @@ export function loadCapabilityProfile(native: Record<string, unknown> | undefine
   return {
     memory,
     yncaAvail: isAvailSnapshot(avail) ? avail : undefined,
-    purgeVersion: typeof native?.purgeVersion === "string" ? native.purgeVersion : undefined,
-    pendingPurge: [],
+    tree: emptyLearnedTree(),
     learnedAt: undefined,
     storedSchema: memory ? memorySchemaOf(memory) : undefined,
     legacy,
@@ -127,8 +122,7 @@ export function serializeCapabilityProfile(
     identity: profileIdentityOf(memory),
     memory,
     ...(parts.yncaAvail ? { yncaAvail: parts.yncaAvail } : {}),
-    ...(parts.purgeVersion !== undefined ? { purgeVersion: parts.purgeVersion } : {}),
-    ...(parts.pendingPurge.length > 0 ? { pendingPurge: parts.pendingPurge } : {}),
+    ...(parts.tree && hasLearned(parts.tree) ? { tree: parts.tree } : {}),
   });
 }
 
@@ -172,8 +166,7 @@ interface StoredProfile {
   learnedAt: string | undefined;
   memory: Record<string, unknown>;
   yncaAvail: Omit<YncaAvailSnapshot, "schema"> | undefined;
-  purgeVersion: string | undefined;
-  pendingPurge: string[];
+  tree: LearnedTree;
 }
 
 function parseProfile(raw: unknown): StoredProfile | undefined {
@@ -195,10 +188,7 @@ function parseProfile(raw: unknown): StoredProfile | undefined {
     learnedAt: typeof parsed.learnedAt === "string" ? parsed.learnedAt : undefined,
     memory: parsed.memory,
     yncaAvail: isPlainObject(avail) ? (avail as unknown as Omit<YncaAvailSnapshot, "schema">) : undefined,
-    purgeVersion: typeof parsed.purgeVersion === "string" ? parsed.purgeVersion : undefined,
-    pendingPurge: Array.isArray(parsed.pendingPurge)
-      ? parsed.pendingPurge.filter((id): id is string => typeof id === "string")
-      : [],
+    tree: parseLearnedTree(parsed.tree),
   };
 }
 
@@ -286,8 +276,8 @@ export function identityOfDeviceObject(
 /**
  * One device's capability profile, held by the adapter across reconnect attempts (the
  * controllers are rebuilt per attempt): the {@link ProbeMemory} and the YNCA subunit cache
- * persist through it into ONE JSON string, together with the never-filled purge marker and the
- * ids awaiting their purge confirmation. Legacy keys found at load are converted at once — one
+ * persist through it into ONE JSON string, together with the learned tree (who serves which
+ * datapoint). Legacy keys found at load are converted at once — one
  * patch with the profile and the three deletions — so the migration needs no device traffic and
  * the object never carries both shapes.
  */
@@ -298,8 +288,7 @@ export class DeviceProfileStore {
   public readonly subunitCache: YncaSubunitCache;
   private memory: Record<string, unknown>;
   private yncaAvail: Omit<YncaAvailSnapshot, "schema"> | undefined;
-  private purgeVersionValue: string | undefined;
-  private pending: string[];
+  private learnedTree: LearnedTree;
   private readonly learnedAt: string;
   private legacy: boolean;
   /** The device object's `native.model` — the model beside the profile (see {@link modelFrom}). */
@@ -326,8 +315,7 @@ export class DeviceProfileStore {
     this.memory = kept ? withoutSchema(loaded.memory!) : {};
     this.learnedAt = kept && loaded.learnedAt ? loaded.learnedAt : deps.now();
     this.yncaAvail = loaded.yncaAvail ? withoutSnapshotSchema(loaded.yncaAvail) : undefined;
-    this.purgeVersionValue = loaded.purgeVersion;
-    this.pending = loaded.pendingPurge;
+    this.learnedTree = kept ? loaded.tree : emptyLearnedTree();
     this.legacy = loaded.legacy;
     this.probeMemory = new ProbeMemory(loaded.memory, entries => {
       this.memory = withoutSchema(entries);
@@ -342,33 +330,18 @@ export class DeviceProfileStore {
     }
   }
 
-  /** The adapter version whose never-filled purge ran for this device, if any. */
-  public get purgeVersion(): string | undefined {
-    return this.purgeVersionValue;
+  /** Which transport serves and owns which datapoint of this device (see {@link LearnedTree}). */
+  public get tree(): LearnedTree {
+    return this.learnedTree;
   }
 
   /**
-   * Record that the never-filled purge ran under a version.
+   * Keep a new learned tree — written with the rest of the profile, through the coalescing persist.
    *
-   * @param version the adapter version
+   * @param tree the tree as the device handle learned it
    */
-  public markPurged(version: string): void {
-    this.purgeVersionValue = version;
-    this.persistNow();
-  }
-
-  /** Never-filled datapoints seen missing once — candidates for the next start's confirmation. */
-  public get pendingPurge(): readonly string[] {
-    return this.pending;
-  }
-
-  /**
-   * Replace the pending-purge list.
-   *
-   * @param ids the datapoint ids (namespace-relative)
-   */
-  public setPendingPurge(ids: readonly string[]): void {
-    this.pending = [...ids];
+  public setTree(tree: LearnedTree): void {
+    this.learnedTree = tree;
     this.persistNow();
   }
 
@@ -413,8 +386,7 @@ export class DeviceProfileStore {
         {
           memory: this.memory,
           yncaAvail: this.yncaAvail,
-          purgeVersion: this.purgeVersionValue,
-          pendingPurge: this.pending,
+          tree: this.learnedTree,
         },
         { adapterVersion: this.deps.adapterVersion, learnedAt: this.learnedAt },
       ),

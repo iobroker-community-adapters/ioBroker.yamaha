@@ -244,6 +244,8 @@ const mocks = vi.hoisted(() => ({
     }>,
     ignored: [] as string[],
     excluded: [] as Array<{ id: string; ip?: string; identity?: { serial?: string; mac?: string } }>,
+    /** When true, the store cannot be read at all (a damaged file) — not the same as an empty one. */
+    unreadable: false,
   },
   pushReceivers: [] as Array<{
     start: ReturnType<typeof vi.fn>;
@@ -286,6 +288,13 @@ vi.mock("./lib/discovered-store", async importOriginal => {
   return {
     isExcluded: actual.isExcluded,
     readDiscovered: vi.fn(() => Promise.resolve(mocks.discoveredStore.devices)),
+    readDiscoveredChecked: vi.fn(() =>
+      Promise.resolve(
+        mocks.discoveredStore.unreadable
+          ? { records: [], readable: false }
+          : { records: mocks.discoveredStore.devices, readable: true },
+      ),
+    ),
     writeDiscovered: vi.fn((_d: unknown, devices: Array<{ id: string; ip: string }>) => {
       mocks.discoveredStore.devices = devices;
       return Promise.resolve();
@@ -643,6 +652,7 @@ beforeEach(() => {
   mocks.discoveredStore.devices = [];
   mocks.discoveredStore.ignored = [];
   mocks.discoveredStore.excluded = [];
+  mocks.discoveredStore.unreadable = false;
   mocks.pushReceivers.length = 0;
   mocks.listeners.length = 0;
   mocks.listenerBindFails = false;
@@ -2190,6 +2200,30 @@ describe("Yamaha stale-object cleanup", () => {
     expect(ctx.i.log.debug).toHaveBeenCalledWith(expect.stringContaining("from a previous configuration"));
   });
 
+  // An unreadable store is no proof a remembered device is gone (2026-10-02): readDiscovered gave [] on
+  // any failure, and the cleanup then deleted the whole tree of every found device that did not run.
+  it("deletes no device tree when the discovery store cannot be read", async () => {
+    mocks.discoveredStore.unreadable = true;
+    const ctx = setup();
+    ctx.i.objects.set("Found_one", { type: "device", common: {}, native: {} });
+    ctx.i.objects.set("Found_one.volume", { type: "state", common: {}, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.i.objects.has("Found_one.volume")).toBe(true);
+  });
+
+  // A found device whose address a typed row took over does not run (the typed row owns the address), but it
+  // is in the store — it is not gone, and its tree stays.
+  it("keeps the tree of a found device whose address a typed row took over", async () => {
+    mocks.discoveredStore.devices = [{ id: "Found_one", ip: "192.168.1.10" }];
+    const ctx = setup({ discovery: "always" });
+    ctx.i.objects.set("Found_one", { type: "device", common: {}, native: {} });
+    ctx.i.objects.set("Found_one.volume", { type: "state", common: {}, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.i.objects.has("Found_one.volume")).toBe(true);
+  });
+
   // 2.9.1: the device list and the discovery store are two stores, and only one of them was
   // consulted when the run decided what to delete. With the default search setting the first
   // hand-entered receiver silently took every found device's tree with it.
@@ -2334,8 +2368,8 @@ describe("Yamaha datapoint balance in the log", () => {
    */
   const upsertOf = (ctx: {
     calls: Array<{ deps: Record<string, unknown> }>;
-  }): ((id: string, def: unknown) => Promise<void>) =>
-    ctx.calls[0].deps.upsertObject as (id: string, def: unknown) => Promise<void>;
+  }): ((id: string, def: unknown, settle?: boolean) => Promise<void>) =>
+    ctx.calls[0].deps.upsertObject as (id: string, def: unknown, settle?: boolean) => Promise<void>;
 
   it("reports the datapoints a device brought into the tree", async () => {
     const ctx = setup();
@@ -2398,7 +2432,7 @@ describe("Yamaha datapoint balance in the log", () => {
     expect(ctx.i.log.info).toHaveBeenCalledWith("Object tree updated: removed 1 datapoint(s)");
   });
 
-  it("a shrinking dropdown loses its stale entries on an existing object (#619)", async () => {
+  it("at the completion of a read-in, a shrinking dropdown loses its stale entries (#619)", async () => {
     const ctx = setup();
     // The object exists from an earlier version with the old, wider list — read at start.
     ctx.i.objects.set("Living_room.input", {
@@ -2408,15 +2442,119 @@ describe("Yamaha datapoint balance in the log", () => {
     });
     await ctx.i.onReady();
     await flush();
-    await upsertOf(ctx)("Living_room.input", {
-      type: "state",
-      common: { name: "i", type: "string", states: { HDMI1: "HDMI1" } },
-    });
+    await upsertOf(ctx)(
+      "Living_room.input",
+      {
+        type: "state",
+        common: { name: "i", type: "string", states: { HDMI1: "HDMI1" } },
+      },
+      true,
+    );
     const states = (ctx.i.objects.get("Living_room.input")?.common as { states: Record<string, string> }).states;
     expect(states).toEqual({ HDMI1: "HDMI1" });
   });
 
-  it("a datapoint that has no list any more loses the stored one", async () => {
+  // krobi 2026-10-02: a receiver that was read in keeps its tree — a transport that drops, comes back or answers
+  // in standby takes nothing away. On 2026-10-01 a power cut left XML alone for 18 ms, and its definition without a
+  // list emptied soundProgram, sleep, zone 2 sleep and Adaptive DRC.
+  it("running, a shorter list or none at all takes nothing away, and a longer one adds", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room.soundProgram", {
+      type: "state",
+      common: { name: "p", type: "string", states: { Straight: "Straight", Jazz: "Jazz" } },
+      native: {},
+    });
+    await ctx.i.onReady();
+    await flush();
+    const upsert = upsertOf(ctx);
+    await upsert("Living_room.soundProgram", { type: "state", common: { name: "p", type: "string" } });
+    await upsert("Living_room.soundProgram", {
+      type: "state",
+      common: { name: "p", type: "string", states: { Straight: "Straight" } },
+    });
+    expect(
+      (ctx.i.objects.get("Living_room.soundProgram")?.common as { states: Record<string, string> }).states,
+    ).toEqual({ Straight: "Straight", Jazz: "Jazz" });
+    await upsert("Living_room.soundProgram", {
+      type: "state",
+      common: { name: "p", type: "string", states: { Straight: "Straight", Drama: "Drama" } },
+    });
+    expect(
+      (ctx.i.objects.get("Living_room.soundProgram")?.common as { states: Record<string, string> }).states,
+    ).toEqual({ Straight: "Straight", Jazz: "Jazz", Drama: "Drama" });
+  });
+
+  it("running, a folder or datapoint gains the explanation it does not carry yet — nothing else", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room.info", { type: "channel", common: { name: "Info" }, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    await upsertOf(ctx)("Living_room.info", { type: "channel", common: { name: "Information", desc: "What it is" } });
+    const common = ctx.i.objects.get("Living_room.info")?.common as { name: unknown; desc: unknown };
+    expect(common.desc).toBe("What it is");
+    // The name stays the one the device header gave it.
+    expect(common.name).not.toBe("Information");
+  });
+
+  it("running, a stored bound stays — only a missing one is added", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room.sound.bass", {
+      type: "state",
+      common: { name: "b", type: "number", min: -6, max: 6 },
+      native: {},
+    });
+    await ctx.i.onReady();
+    await flush();
+    await upsertOf(ctx)("Living_room.sound.bass", {
+      type: "state",
+      common: { name: "b", type: "number", min: -12, max: 12, step: 0.5 },
+    });
+    const common = ctx.i.objects.get("Living_room.sound.bass")?.common as Record<string, unknown>;
+    expect([common.min, common.max, common.step]).toEqual([-6, 6, 0.5]);
+  });
+
+  it("running, a datapoint whose stored object is no state gets no list", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room.input", { type: "channel", common: { name: "i" }, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    await upsertOf(ctx)("Living_room.input", {
+      type: "state",
+      common: { name: "i", type: "string", states: { HDMI1: "HDMI1" } },
+    });
+    expect((ctx.i.objects.get("Living_room.input")?.common as { states?: unknown }).states).toBeUndefined();
+  });
+
+  it("shows the handle a datapoint as it stands in the tree — from the start-up read", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room.sleep", { type: "state", common: { name: "s", type: "number" }, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    const existing = ctx.calls[0].deps.existing as (id: string) => unknown;
+    expect(existing("sleep")).toEqual({ type: "state", common: { name: "s", type: "number" } });
+    expect(existing("nothing.here")).toBeUndefined();
+  });
+
+  it("running, a list emptied by an earlier version comes back with the next definition that carries it", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room.sleep", {
+      type: "state",
+      common: { name: "s", type: "string", states: null },
+      native: {},
+    });
+    await ctx.i.onReady();
+    await flush();
+    await upsertOf(ctx)("Living_room.sleep", {
+      type: "state",
+      common: { name: "s", type: "string", states: { Off: "Off", "30 min": "30 min" } },
+    });
+    // The labels come from the value table (system language); what matters here are the values.
+    expect(
+      Object.keys((ctx.i.objects.get("Living_room.sleep")?.common as { states: Record<string, string> }).states),
+    ).toEqual(["Off", "30 min"]);
+  });
+
+  it("at the completion of a read-in, a datapoint that has no list any more loses the stored one", async () => {
     const ctx = setup();
     // Written by an earlier run with a list borrowed from another transport (live RX-V6A 2026-09-30).
     ctx.i.objects.set("Living_room.sleep", {
@@ -2426,7 +2564,7 @@ describe("Yamaha datapoint balance in the log", () => {
     });
     await ctx.i.onReady();
     await flush();
-    await upsertOf(ctx)("Living_room.sleep", { type: "state", common: { name: "s", type: "string" } });
+    await upsertOf(ctx)("Living_room.sleep", { type: "state", common: { name: "s", type: "string" } }, true);
     expect((ctx.i.objects.get("Living_room.sleep")?.common as { states?: unknown }).states ?? undefined).toBe(
       undefined,
     );
@@ -2459,14 +2597,22 @@ describe("Yamaha datapoint balance in the log", () => {
     await ctx.i.onReady();
     await flush();
     const upsert = upsertOf(ctx);
-    await upsert("Living_room.input", {
-      type: "state",
-      common: { name: "i", type: "string", states: { HDMI1: "HDMI1", AV1: "AV1", Spotify: "Spotify" } },
-    });
-    await upsert("Living_room.input", {
-      type: "state",
-      common: { name: "i", type: "string", states: { HDMI1: "HDMI1" } },
-    });
+    await upsert(
+      "Living_room.input",
+      {
+        type: "state",
+        common: { name: "i", type: "string", states: { HDMI1: "HDMI1", AV1: "AV1", Spotify: "Spotify" } },
+      },
+      true,
+    );
+    await upsert(
+      "Living_room.input",
+      {
+        type: "state",
+        common: { name: "i", type: "string", states: { HDMI1: "HDMI1" } },
+      },
+      true,
+    );
     expect((ctx.i.objects.get("Living_room.input")?.common as { states: Record<string, string> }).states).toEqual({
       HDMI1: "HDMI1",
     });
@@ -2490,14 +2636,26 @@ describe("Yamaha bounds an update no longer declares", () => {
     });
     await ctx.i.onReady();
     await flush();
-    const upsert = ctx.calls[0].deps.upsertObject as (id: string, def: unknown) => Promise<void>;
+    const upsert = ctx.calls[0].deps.upsertObject as (id: string, def: unknown, settle?: boolean) => Promise<void>;
     const deleted = (ctx.i as unknown as { delObjectAsync: ReturnType<typeof vi.fn> }).delObjectAsync;
     const before = deleted.mock.calls.filter(c => String(c[0]).includes("tuner.frequency")).length;
 
+    // Running, a definition without the bounds takes nothing away (2026-10-02).
     await upsert("Living_room.tuner.frequency", {
       type: "state",
       common: { name: "f", type: "number", unit: "kHz", role: "level", read: true, write: true },
     });
+    expect((ctx.i.objects.get("Living_room.tuner.frequency")?.common as Record<string, unknown>).max).toBe(108000);
+
+    // The completion of a read-in drops them.
+    await upsert(
+      "Living_room.tuner.frequency",
+      {
+        type: "state",
+        common: { name: "f", type: "number", unit: "kHz", role: "level", read: true, write: true },
+      },
+      true,
+    );
 
     const stored = ctx.i.objects.get("Living_room.tuner.frequency") as Record<string, unknown>;
     const common = stored.common as Record<string, unknown>;
@@ -2519,10 +2677,14 @@ describe("Yamaha bounds an update no longer declares", () => {
     // every single upsert of that datapoint, for the life of the instance.
     const wrote = (ctx.i as unknown as { setForeignObject: ReturnType<typeof vi.fn> }).setForeignObject;
     const calls = wrote.mock.calls.length;
-    await upsert("Living_room.tuner.frequency", {
-      type: "state",
-      common: { name: "f", type: "number", unit: "kHz", role: "level", read: true, write: true },
-    });
+    await upsert(
+      "Living_room.tuner.frequency",
+      {
+        type: "state",
+        common: { name: "f", type: "number", unit: "kHz", role: "level", read: true, write: true },
+      },
+      true,
+    );
     expect(wrote.mock.calls.length, "the bound repair ran a second time").toBe(calls);
   });
 
@@ -2538,7 +2700,7 @@ describe("Yamaha bounds an update no longer declares", () => {
     });
     await ctx.i.onReady();
     await flush();
-    const upsert = ctx.calls[0].deps.upsertObject as (id: string, def: unknown) => Promise<void>;
+    const upsert = ctx.calls[0].deps.upsertObject as (id: string, def: unknown, settle?: boolean) => Promise<void>;
     const wrote = (ctx.i as unknown as { setForeignObject: ReturnType<typeof vi.fn> }).setForeignObject;
     wrote.mockRejectedValueOnce(new Error("objects db read-only"));
     const shrunk = {
@@ -2546,9 +2708,9 @@ describe("Yamaha bounds an update no longer declares", () => {
       common: { name: "f", type: "number", unit: "kHz", role: "level", read: true, write: true },
     };
 
-    await upsert("Living_room.tuner.frequency", shrunk);
+    await upsert("Living_room.tuner.frequency", shrunk, true);
     const after = wrote.mock.calls.length;
-    await upsert("Living_room.tuner.frequency", shrunk);
+    await upsert("Living_room.tuner.frequency", shrunk, true);
 
     expect(wrote.mock.calls.length, "the failed repair was never retried").toBe(after + 1);
   });
@@ -3476,347 +3638,85 @@ describe("Yamaha description fetch", () => {
   });
 });
 
-describe("Yamaha never-filled purge (once per adapter version, after connect)", () => {
+describe("Yamaha removes what a device no longer has only when its read-in completes (2026-10-02)", () => {
   const settle = (ctx: { i: { setTimeout: ReturnType<typeof vi.fn> } }): void => {
     const call = ctx.i.setTimeout.mock.calls.filter(c => c[1] === 5000).at(-1);
     (call?.[0] as (() => void) | undefined)?.();
   };
-  /**
-   * Let every armed native coalescing window (DEVICE_PATCH_WINDOW_MS, 4.5 s) fire — the profile is written then, not at once.
-   *
-   * @param ctx the test context
-   */
-  const flushNative = (ctx: Ctx): void => {
-    for (const call of ctx.i.setTimeout.mock.calls.filter(c => c[1] === 4500)) {
-      (call[0] as () => void)();
-    }
-  };
-  /**
-   * The datapoints recorded for the next start's purge confirmation (2.7.0).
-   *
-   * @param ctx the test context
-   * @param deviceId the device object id
-   * @returns the recorded ids
-   */
-  const pendingPurgeOf = (ctx: Ctx, deviceId: string): string[] => {
-    const native = (ctx.i.objects.get(deviceId)?.native ?? {}) as { capabilityProfile?: string };
-    return typeof native.capabilityProfile === "string"
-      ? ((JSON.parse(native.capabilityProfile) as { pendingPurge?: string[] }).pendingPurge ?? [])
-      : [];
-  };
-  /**
-   * The purge marker as the device object carries it: in the capability profile (2.7.0), else the legacy key.
-   *
-   * @param ctx the test context
-   * @param deviceId the device object id
-   * @returns the marker, or undefined
-   */
-  const purgeVersionOf = (ctx: Ctx, deviceId: string): string | undefined => {
-    const native = (ctx.i.objects.get(deviceId)?.native ?? {}) as { capabilityProfile?: string; purgeVersion?: string };
-    if (typeof native.capabilityProfile === "string") {
-      return (JSON.parse(native.capabilityProfile) as { purgeVersion?: string }).purgeVersion;
-    }
-    return native.purgeVersion;
-  };
 
-  it("records the never-filled orphans on the first start and deletes them on the second", async () => {
-    const ctx = setup();
-    ctx.i.objects.set("Living_room", { type: "device", common: {}, native: {} });
-    // Orphan of an earlier version: readable, no value ever.
-    ctx.i.objects.set("Living_room.sound.direct", { type: "state", common: { read: true }, native: {} });
-    // A filled state and a button must survive; a recording setting does not save a never-filled one.
-    ctx.i.objects.set("Living_room.volume", { type: "state", common: { read: true }, native: {} });
-    ctx.i.states.set("Living_room.volume", { val: -40, ack: true, lc: 5 } as never);
-    ctx.i.objects.set("Living_room.player.play", { type: "state", common: { read: false, write: true }, native: {} });
-    ctx.i.objects.set("Living_room.multiroom.zone2.soundProgram", {
-      type: "state",
-      common: { read: true, custom: { "history.0": { enabled: true } } },
-      native: {},
-    });
-    await ctx.i.onReady();
-    await flush();
-    settle(ctx);
-    await flush();
-    flushNative(ctx);
-    await flush();
-    // First start: nothing deleted yet — a standby receiver would lose datapoints it still has.
-    expect(ctx.i.objects.has("Living_room.sound.direct")).toBe(true);
-    expect(purgeVersionOf(ctx, "Living_room")).toBe("0.0.0-test");
-    expect(pendingPurgeOf(ctx, "Living_room")).toEqual(
-      expect.arrayContaining(["Living_room.sound.direct", "Living_room.multiroom.zone2.soundProgram"]),
-    );
-
-    // Second start with the same profile: the confirmed ones go, the filled and write-only stay.
-    const second = setup();
-    second.i.objects.set("Living_room", ctx.i.objects.get("Living_room")!);
-    for (const id of [
-      "Living_room.sound.direct",
-      "Living_room.volume",
-      "Living_room.player.play",
-      "Living_room.multiroom.zone2.soundProgram",
-    ]) {
-      second.i.objects.set(id, ctx.i.objects.get(id)!);
-    }
-    second.i.states.set("Living_room.volume", { val: -40, ack: true, lc: 5 } as never);
-    await second.i.onReady();
-    await flush();
-    settle(second);
-    await flush();
-    flushNative(second);
-    await flush();
-    expect(second.i.objects.has("Living_room.sound.direct")).toBe(false);
-    expect(second.i.objects.has("Living_room.volume")).toBe(true);
-    expect(second.i.objects.has("Living_room.player.play")).toBe(true);
-    // A recording setting is user business — never a factor in whether the adapter keeps a datapoint.
-    expect(second.i.objects.has("Living_room.multiroom.zone2.soundProgram")).toBe(false);
-    expect(second.i.log.debug).toHaveBeenCalledWith(expect.stringContaining("never-filled"));
-  });
-
-  it("a never-filled orphan is deleted only on the SECOND start that finds it — the first records it", async () => {
-    // A device in standby answers many functions @RESTRICTED, so ONE start seeing a datapoint
-    // untouched is no proof it is gone. The first start records the candidates in the device's
-    // capability profile, the next one deletes those still untouched (advisor 2026-09-09).
-    const first = setup();
-    first.i.objects.set("Living_room", { type: "device", common: {}, native: {} });
-    first.i.objects.set("Living_room.sound.direct", { type: "state", common: { read: true }, native: {} });
-    await first.i.onReady();
-    await flush();
-    settle(first);
-    await flush();
-    flushNative(first);
-    await flush();
-    expect(first.i.objects.has("Living_room.sound.direct")).toBe(true);
-    expect(pendingPurgeOf(first, "Living_room")).toEqual(["Living_room.sound.direct"]);
-    expect(purgeVersionOf(first, "Living_room")).toBe("0.0.0-test");
-
-    // Second start, same profile: still untouched, still never filled → gone, list cleared.
-    const second = setup();
-    second.i.objects.set("Living_room", {
-      type: "device",
-      common: {},
-      native: (first.i.objects.get("Living_room") as { native: Record<string, unknown> }).native,
-    });
-    second.i.objects.set("Living_room.sound.direct", { type: "state", common: { read: true }, native: {} });
-    await second.i.onReady();
-    await flush();
-    settle(second);
-    await flush();
-    flushNative(second);
-    await flush();
-    expect(second.i.objects.has("Living_room.sound.direct")).toBe(false);
-    const after = JSON.parse(
-      (second.i.objects.get("Living_room")?.native as { capabilityProfile: string }).capabilityProfile,
-    ) as { pendingPurge?: string[] };
-    expect(after.pendingPurge ?? []).toEqual([]);
-  });
-
-  it("a recorded candidate that carries a value by the second start is kept and forgotten", async () => {
-    const first = setup();
-    first.i.objects.set("Living_room", { type: "device", common: {}, native: {} });
-    first.i.objects.set("Living_room.tuner.rdsText", { type: "state", common: { read: true }, native: {} });
-    await first.i.onReady();
-    await flush();
-    settle(first);
-    await flush();
-    flushNative(first);
-    await flush();
-
-    const second = setup();
-    second.i.objects.set("Living_room", {
-      type: "device",
-      common: {},
-      native: (first.i.objects.get("Living_room") as { native: Record<string, unknown> }).native,
-    });
-    second.i.objects.set("Living_room.tuner.rdsText", { type: "state", common: { read: true }, native: {} });
-    // The device filled it in the meantime.
-    second.i.states.set("Living_room.tuner.rdsText", { val: "Radio", ack: true, lc: 9 } as never);
-    await second.i.onReady();
-    await flush();
-    settle(second);
-    await flush();
-    flushNative(second);
-    await flush();
-    expect(second.i.objects.has("Living_room.tuner.rdsText")).toBe(true);
-    const after = JSON.parse(
-      (second.i.objects.get("Living_room")?.native as { capabilityProfile: string }).capabilityProfile,
-    ) as { pendingPurge?: string[] };
-    expect(after.pendingPurge ?? []).toEqual([]);
-  });
-
-  // "Two starts decide" held for two BALANCE PASSES: the first recorded the untouched orphans and a
-  // second pass in the same process — another device settling later — deleted them. A receiver in
-  // standby lost datapoints within one start (audit 2026-09-24, measured in the upgrade suite's log).
-  it("a second balance pass in the SAME start does not delete what the first one only recorded", async () => {
+  // krobi 2026-10-02: "Warum löscht der normale Running Code datenpunkte bzw. leert sie" — a connect, a
+  // reconnect and the balance pass after it delete nothing; until 3.1.3 the never-filled purge ran there.
+  it("a connect and the balance after it delete nothing", async () => {
     const ctx = setup();
     ctx.i.objects.set("Living_room", { type: "device", common: {}, native: {} });
     ctx.i.objects.set("Living_room.sound.direct", { type: "state", common: { read: true }, native: {} });
-    await ctx.i.onReady();
-    await flush();
-    settle(ctx);
-    await flush();
-    flushNative(ctx);
-    await flush();
-    expect(pendingPurgeOf(ctx, "Living_room")).toEqual(["Living_room.sound.direct"]);
-    ctx.i.scheduleDatapointBalance();
-    settle(ctx);
-    await flush();
-    flushNative(ctx);
-    await flush();
-    expect(ctx.i.objects.has("Living_room.sound.direct")).toBe(true);
-    expect(pendingPurgeOf(ctx, "Living_room")).toEqual(["Living_room.sound.direct"]);
-  });
-
-  // A MusicCast declaration (getFeatures) does not depend on standby: what it proves absent is gone
-  // on the FIRST start — the party switch on a speaker without party mode, the maximum volume of a
-  // zone without volume. Two starts left both behind after the update that stopped creating them.
-  it("a never-filled datapoint the device's declaration proves absent goes on the first start, its folder with it", async () => {
-    const ctx = setup();
-    ctx.i.objects.set("Living_room", { type: "device", common: {}, native: {} });
-    ctx.i.objects.set("Living_room.multiroom.party", { type: "state", common: { read: true }, native: {} });
-    ctx.i.objects.set("Living_room.multiroom.zone4.advanced", { type: "channel", common: {}, native: {} });
-    ctx.i.objects.set("Living_room.multiroom.zone4.advanced.maxVolume", {
-      type: "state",
-      common: { read: true },
-      native: {},
-    });
-    await ctx.i.onReady();
-    await flush();
-    ctx.calls[0].deps.onDeclaredAbsent(["multiroom.party", "multiroom.zone4.advanced.maxVolume"] as never);
-    settle(ctx);
-    await flush();
-    flushNative(ctx);
-    await flush();
-    expect(ctx.i.objects.has("Living_room.multiroom.party")).toBe(false);
-    expect(ctx.i.objects.has("Living_room.multiroom.zone4.advanced.maxVolume")).toBe(false);
-    expect(ctx.i.objects.has("Living_room.multiroom.zone4.advanced")).toBe(false);
-    expect(pendingPurgeOf(ctx, "Living_room")).toEqual([]);
-  });
-
-  it("a declared-absent datapoint that carries a value, or that another transport built this start, stays", async () => {
-    const ctx = setup();
-    ctx.i.objects.set("Living_room", { type: "device", common: {}, native: {} });
-    ctx.i.objects.set("Living_room.multiroom.party", { type: "state", common: { read: true }, native: {} });
-    ctx.i.objects.set("Living_room.advanced.maxVolume", { type: "state", common: { read: true }, native: {} });
-    ctx.i.states.set("Living_room.advanced.maxVolume", { val: 16.5, ack: true, lc: 5 } as never);
-    await ctx.i.onReady();
-    await flush();
-    const deps = ctx.calls[0].deps;
-    // YNCA builds the party switch on this receiver — the MusicCast declaration speaks only for itself.
-    await deps.upsertObject(
-      "Living_room.multiroom.party" as never,
-      {
-        id: "multiroom.party",
-        type: "state",
-        common: { type: "boolean", role: "switch", read: true, write: true, name: "Party" },
-      } as never,
-    );
-    deps.onDeclaredAbsent(["multiroom.party", "advanced.maxVolume"] as never);
-    settle(ctx);
-    await flush();
-    flushNative(ctx);
-    await flush();
-    expect(ctx.i.objects.has("Living_room.multiroom.party")).toBe(true);
-    expect(ctx.i.objects.has("Living_room.advanced.maxVolume")).toBe(true);
-  });
-
-  it("removes a folder left empty by the tree rework, even when the version purge already ran", async () => {
-    const ctx = setup();
-    // The stamp says the once-per-version orphan sweep is done — the empty-folder sweep still
-    // has to run, otherwise `player.server` (emptied by the v2.0.0 migration, no datapoint of
-    // its own in the new tree) stays in the tree for good.
-    ctx.i.objects.set("Living_room", { type: "device", common: {}, native: { purgeVersion: "0.0.0-test" } });
-    ctx.i.objects.set("Living_room.player", { type: "channel", common: {}, native: {} });
-    ctx.i.objects.set("Living_room.player.track", { type: "state", common: { read: true }, native: {} });
-    ctx.i.states.set("Living_room.player.track", { val: "", ack: true, lc: 7 } as never);
-    ctx.i.objects.set("Living_room.player.server", { type: "channel", common: {}, native: {} });
-    ctx.i.objects.set("Living_room.player.usb", { type: "channel", common: {}, native: {} });
-    ctx.i.objects.set("Living_room.player.usb.preset", {
-      type: "state",
-      common: { read: false, write: true },
-      native: {},
-    });
-    await ctx.i.onReady();
-    await flush();
-    settle(ctx);
-    await flush();
-    expect(ctx.i.objects.has("Living_room.player.server")).toBe(false);
-    // The folders that still carry datapoints stay.
-    expect(ctx.i.objects.has("Living_room.player")).toBe(true);
-    expect(ctx.i.objects.has("Living_room.player.usb")).toBe(true);
-    expect(ctx.i.log.debug).toHaveBeenCalledWith(expect.stringContaining("empty folder"));
-  });
-
-  it("does not even read the object tree while no device has answered", async () => {
-    // The sweep is skipped outright, not run over an empty device set — an all-offline
-    // instance must not pull the whole object tree out of the database every settle.
-    const ctx = setup({}, { failIds: ["Living_room"] });
-    // A leftover of a device that is gone arms the balance, so the settle really runs.
-    ctx.i.objects.set("Ghost.volume", { type: "state", common: { read: true }, native: {} });
-    await ctx.i.onReady();
-    await flush();
-    const objectsRead = (ctx.i as unknown as { getAdapterObjectsAsync: ReturnType<typeof vi.fn> })
-      .getAdapterObjectsAsync;
-    objectsRead.mockClear();
-    settle(ctx);
-    await flush();
-    expect(objectsRead).not.toHaveBeenCalled();
-  });
-
-  it("leaves an offline device's folders alone — its tree is only swept once it answers", async () => {
-    // No transport answers, so the device never reports connected.
-    const ctx = setup({}, { failIds: ["Living_room"] });
-    ctx.i.objects.set("Living_room", { type: "device", common: {}, native: {} });
     ctx.i.objects.set("Living_room.player.server", { type: "channel", common: {}, native: {} });
     await ctx.i.onReady();
     await flush();
     settle(ctx);
     await flush();
+    expect(ctx.i.objects.has("Living_room.sound.direct")).toBe(true);
     expect(ctx.i.objects.has("Living_room.player.server")).toBe(true);
   });
 
-  it("runs ONCE per version: a device already stamped with the current version is not swept again", async () => {
+  it("the completion removes the renamed and the never-filled datapoints no transport built, and empty folders", async () => {
     const ctx = setup();
-    ctx.i.objects.set("Living_room", { type: "device", common: {}, native: { purgeVersion: "0.0.0-test" } });
-    // Would be purged on a version change — but the stamp says this version already ran,
-    // so a fresh state merely waiting for its first value must not flap on every start.
-    ctx.i.objects.set("Living_room.tuner.rdsText", { type: "state", common: { read: true }, native: {} });
+    ctx.i.objects.set("Living_room", { type: "device", common: {}, native: {} });
+    // Never filled, not built: gone. Filled, not built: stays (some are built only once the device reports them).
+    ctx.i.objects.set("Living_room.sound.direct", { type: "state", common: { read: true }, native: {} });
+    ctx.i.objects.set("Living_room.player.track", { type: "state", common: { read: true }, native: {} });
+    ctx.i.states.set("Living_room.player.track", { val: "Song", ack: true, lc: 7 } as never);
+    // Built: stays, never filled or not.
+    ctx.i.objects.set("Living_room.volume", { type: "state", common: { read: true }, native: {} });
+    // The adapter's own header is never a transport's.
+    ctx.i.objects.set("Living_room.info.model", { type: "state", common: { read: true }, native: {} });
+    // A datapoint this version renamed, filled or not.
+    ctx.i.objects.set("Living_room.inputText", { type: "state", common: { read: true }, native: {} });
+    ctx.i.states.set("Living_room.inputText", { val: "HDMI 1", ack: true, lc: 7 } as never);
+    // A folder left without a datapoint.
+    ctx.i.objects.set("Living_room.player.server", { type: "channel", common: {}, native: {} });
     await ctx.i.onReady();
     await flush();
-    settle(ctx);
+    await (ctx.calls[0].deps.settleTree as (built: ReadonlySet<string>) => Promise<void>)(new Set(["volume"]));
     await flush();
-    expect(ctx.i.objects.has("Living_room.tuner.rdsText")).toBe(true);
-    expect(ctx.i.log.debug).not.toHaveBeenCalledWith(expect.stringContaining("never-filled"));
+    expect(ctx.i.objects.has("Living_room.sound.direct")).toBe(false);
+    expect(ctx.i.objects.has("Living_room.player.track")).toBe(true);
+    expect(ctx.i.objects.has("Living_room.volume")).toBe(true);
+    expect(ctx.i.objects.has("Living_room.info.model")).toBe(true);
+    expect(ctx.i.objects.has("Living_room.inputText")).toBe(false);
+    expect(ctx.i.objects.has("Living_room.player.server")).toBe(false);
+    expect(ctx.i.log.debug).toHaveBeenCalledWith(expect.stringContaining("read-in complete"));
   });
 
-  it("a version CHANGE re-arms the sweep; a device that never connected is left alone", async () => {
-    const ctx = setup(
-      {
-        devices: [
-          { name: "Living room", ip: "192.168.1.10" },
-          { name: "Attic", ip: "192.168.1.11" },
-        ],
-      },
-      { failIds: ["Attic"] },
-    );
-    ctx.i.objects.set("Living_room", { type: "device", common: {}, native: { purgeVersion: "1.7.0" } });
-    ctx.i.objects.set("Living_room.hdmi.out2", { type: "state", common: { read: true }, native: {} });
-    ctx.i.objects.set("Attic", { type: "device", common: {}, native: { purgeVersion: "1.7.0" } });
-    ctx.i.objects.set("Attic.sound.direct", { type: "state", common: { read: true }, native: {} });
+  it("a completion that arrives after the adapter began to stop removes nothing", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room", { type: "device", common: {}, native: {} });
+    ctx.i.objects.set("Living_room.sound.direct", { type: "state", common: { read: true }, native: {} });
     await ctx.i.onReady();
     await flush();
-    settle(ctx);
+    (ctx.i as unknown as { unloading: boolean }).unloading = true;
+    await (ctx.calls[0].deps.settleTree as (built: ReadonlySet<string>) => Promise<void>)(new Set());
     await flush();
-    flushNative(ctx);
+    expect(ctx.i.objects.has("Living_room.sound.direct")).toBe(true);
+  });
+
+  it("the completion touches no other device's tree", async () => {
+    const ctx = setup({
+      devices: [
+        { name: "Living room", ip: "192.168.1.10" },
+        { name: "Attic", ip: "192.168.1.11" },
+      ],
+    });
+    ctx.i.objects.set("Attic", { type: "device", common: {}, native: {} });
+    ctx.i.objects.set("Attic.sound.direct", { type: "state", common: { read: true }, native: {} });
+    ctx.i.objects.set("Attic.inputText", { type: "state", common: { read: true }, native: {} });
+    await ctx.i.onReady();
     await flush();
-    // The version change re-arms the examination; the deletion itself waits for the confirmation.
-    expect(ctx.i.objects.has("Living_room.hdmi.out2")).toBe(true);
-    expect(pendingPurgeOf(ctx, "Living_room")).toContain("Living_room.hdmi.out2");
-    expect(purgeVersionOf(ctx, "Living_room")).toBe("0.0.0-test");
-    // The offline device keeps its tree AND its old stamp — its sweep runs when it connects. The
-    // stamp moved into the capability profile at load (legacy key converted), the value did not.
+    const living = ctx.calls.find(call => call.device.id === "Living_room")!;
+    await (living.deps.settleTree as (built: ReadonlySet<string>) => Promise<void>)(new Set());
+    await flush();
     expect(ctx.i.objects.has("Attic.sound.direct")).toBe(true);
-    expect(purgeVersionOf(ctx, "Attic")).toBe("1.7.0");
-    expect(pendingPurgeOf(ctx, "Attic")).toEqual([]);
+    expect(ctx.i.objects.has("Attic.inputText")).toBe(true);
   });
 });
 
@@ -4430,6 +4330,25 @@ describe("Yamaha writes only what changed (audit 2026-09-15 — setStateChangedA
     const changedAsync = (ctx.i as unknown as { setStateChangedAsync: { mock: { calls: unknown[][] } } })
       .setStateChangedAsync;
     expect(changedAsync.mock.calls.filter(c => c[0] === "info.connection")).toHaveLength(0);
+  });
+
+  it("a writable state keeps the database compare — it corrects a lost user command", async () => {
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    const deps = ctx.calls[0].deps;
+    const upsert = deps.upsertObject as (id: string, def: unknown) => Promise<void>;
+    const setStateAck = deps.setStateAck as (id: string, value: unknown) => void;
+    await upsert("Living_room.sound.direct", {
+      id: "sound.direct",
+      type: "state",
+      common: { name: "Direct", type: "boolean", role: "switch", read: true, write: true },
+    });
+    setStateAck("Living_room.sound.direct", true);
+    await flush();
+    const changedAsync = (ctx.i as unknown as { setStateChangedAsync: { mock: { calls: unknown[][] } } })
+      .setStateChangedAsync;
+    expect(changedAsync.mock.calls.filter(c => c[0] === "Living_room.sound.direct").length).toBeGreaterThan(0);
   });
 
   it("a read-only state never asks the database, and is written once", async () => {

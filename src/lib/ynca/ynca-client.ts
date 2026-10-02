@@ -321,24 +321,31 @@ export class YncaClient {
    * @param func function name (e.g. `PWR`)
    * @param value value to set
    * @param charset `latin1` for a function the specification declares Latin-1 (zone names)
+   * @returns the bracket's verdict on the command — `skipped` when it could not be put on the wire at all
    */
-  public send(subunit: string, func: string, value: string, charset?: "latin1"): void {
+  public send(
+    subunit: string,
+    func: string,
+    value: string,
+    charset?: "latin1",
+  ): Promise<"ok" | "restricted" | "undefined" | "unclear" | "skipped"> {
     // A line break inside the value would end this command and start another one on the wire.
     if (/[\r\n]/.test(value)) {
-      return;
+      return Promise.resolve("skipped");
     }
     const line = encodeCommand(subunit, func, value);
     const bytes = encodeDeviceText(`${line}\r\n`, charset);
     if (!bytes) {
-      return;
+      return Promise.resolve("skipped");
     }
-    this.gate
+    return this.gate
       .run(
         async () => {
           const verdict = await this.bracketed(bytes, false);
           if (verdict === "restricted" || verdict === "undefined") {
             this.refusalHandler?.(line, verdict);
           }
+          return verdict;
         },
         "user",
         // Only an ABSOLUTE number collapses with a waiting write to the same function (a volume slider's
@@ -350,6 +357,7 @@ export class YncaClient {
         if (!(e instanceof CommandGateClosedError)) {
           this.lastError = e instanceof Error ? e : new Error(errText(e));
         }
+        return "skipped" as const;
       });
   }
 

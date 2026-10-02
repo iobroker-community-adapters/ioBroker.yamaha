@@ -21,7 +21,9 @@ describe("TransportConnectionAdapter", () => {
         adapter.interceptSetStateAck("living.volume", -30);
         return true;
       },
-      handleWrite: (stateId, value) => writes.push({ stateId, value }),
+      handleWrite: (stateId, value) => {
+        writes.push({ stateId, value });
+      },
       onDrop: () => {},
       close: () => {},
     };
@@ -34,7 +36,7 @@ describe("TransportConnectionAdapter", () => {
     adapter.seedOwned(new Set(["volume"]));
     expect(acks).toEqual([{ id: "living.volume", value: -30 }]);
     // handleWrite maps the canonical id back to the controller's own id (sound.subwooferTrim → subwooferVolume)
-    adapter.handleWrite("sound.subwooferTrim", 5);
+    void adapter.handleWrite("sound.subwooferTrim", 5);
     expect(writes).toContainEqual({ stateId: "subwooferVolume", value: 5 });
   });
 
@@ -220,7 +222,9 @@ describe("TransportConnectionAdapter — a zone folder named as the tree does", 
         adapter.interceptSetStateAck("living.multiroom.zone2.volume", 40);
         return true;
       },
-      handleWrite: stateId => writes.push(stateId),
+      handleWrite: stateId => {
+        writes.push(stateId);
+      },
       onDrop: () => {},
       close: () => {},
     });
@@ -234,9 +238,45 @@ describe("TransportConnectionAdapter — a zone folder named as the tree does", 
     expect((objects[0].common.name as Record<string, string>).en).toBe("Zone B");
     adapter.seedOwned(new Set(["multiroom.zoneB.volume"]));
     expect(acks).toEqual([{ id: "living.multiroom.zoneB.volume", value: 40 }]);
-    adapter.handleWrite("multiroom.zoneB.sound.subwooferTrim", 1);
-    adapter.handleWrite("multiroom.zoneB.volume", 30);
+    void adapter.handleWrite("multiroom.zoneB.sound.subwooferTrim", 1);
+    void adapter.handleWrite("multiroom.zoneB.volume", 30);
     expect(writes).toEqual(["multiroom.zone2.subwooferVolume", "multiroom.zone2.volume"]);
     expect(adapter.canonicalId("living.multiroom.zone2.mute")).toBe("multiroom.zoneB.mute");
+  });
+});
+
+describe("TransportConnectionAdapter — what the handle asks of a controller (2026-10-02)", () => {
+  test("passes the write outcome, the read completeness and the firmware through", async () => {
+    const adapter = new TransportConnectionAdapter("ynca", "living", () => {});
+    let complete = false;
+    const listeners: Array<() => void> = [];
+    const controller: AdaptedController = {
+      start: () => Promise.resolve(true),
+      handleWrite: () => Promise.resolve("refused" as const),
+      onDrop: () => {},
+      close: () => {},
+      readComplete: () => complete,
+      onReadComplete: cb => listeners.push(cb),
+      firmware: () => "1.80",
+    };
+    adapter.bind(controller);
+    await expect(adapter.handleWrite("power", true)).resolves.toBe("refused");
+    expect(adapter.readComplete()).toBe(false);
+    let called = 0;
+    adapter.onReadComplete(() => called++);
+    complete = true;
+    listeners.forEach(listener => listener());
+    expect(adapter.readComplete()).toBe(true);
+    expect(called).toBe(1);
+    expect(adapter.firmware()).toBe("1.80");
+  });
+
+  test("a controller that says nothing about a write is unclear; one that cannot tell its read counts as complete", async () => {
+    const adapter = new TransportConnectionAdapter("xml", "living", () => {});
+    await expect(adapter.handleWrite("power", true)).resolves.toBe("unavailable");
+    adapter.bind({ start: () => Promise.resolve(true), handleWrite: () => {}, onDrop: () => {}, close: () => {} });
+    await expect(adapter.handleWrite("power", true)).resolves.toBe("unclear");
+    expect(adapter.readComplete()).toBe(true);
+    expect(adapter.firmware()).toBeUndefined();
   });
 });

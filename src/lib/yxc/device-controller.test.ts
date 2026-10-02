@@ -205,6 +205,7 @@ function setup(
     host?: string;
     reportDeclaredAbsent?: (ids: string[]) => void;
     aliasZone?: (from: string, to: string) => void;
+    probeMemory?: ProbeMemory;
   } = {},
 ): {
   /** Every info line the controller logged. */
@@ -360,6 +361,45 @@ describe("YxcDeviceController", () => {
     expect(s.acks).toContainEqual({ id: "living.info.model", value: "WX-010" });
   });
 
+  // An answer without a model is no identity (YNCA and XML guard the same way): until 3.1.3 it threw away what
+  // the receiver had declared (getFeatures) and every remembered setting with it.
+  test("a device info without a model keeps what the receiver declared", async () => {
+    const probeMemory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
+    const first = setup(wx10, ysp, {}, undefined, { probeMemory });
+    first.client.deviceInfo = { model_name: "WX-010", system_version: 2.41 };
+    await first.controller.start();
+    expect(first.controller.firmware()).toBe("2.41");
+    expect(probeMemory.remembered("features")).toBeDefined();
+    const again = setup(wx10, ysp, {}, undefined, { probeMemory });
+    again.client.deviceInfo = { system_version: 2.41 };
+    await again.controller.start();
+    expect(probeMemory.remembered("features")).toBeDefined();
+    expect(probeMemory.remembered("yxcIdentity")).toBe("WX-010|2.41");
+  });
+
+  test("a device-wide setting the receiver delivered before stays when getFuncStatus fails once", async () => {
+    const probeMemory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
+    const first = setup(wx10, ysp, {}, undefined, { probeMemory });
+    first.client.funcStatus = { auto_power_standby: true };
+    await first.controller.start();
+    expect(first.objects).toContain("living.advanced.autoPowerStandby");
+    const again = setup(wx10, ysp, {}, undefined, { probeMemory });
+    (again.client as unknown as { getFuncStatus: () => Promise<never> }).getFuncStatus = () =>
+      Promise.reject(new Error("timeout"));
+    await again.controller.start();
+    expect(again.objects).toContain("living.advanced.autoPowerStandby");
+  });
+
+  test("a write says what the device made of it — taken, refused, or not sendable", async () => {
+    const s = setup(wx10, ysp);
+    await s.controller.start();
+    await expect(Promise.resolve(s.controller.handleWrite("power", true))).resolves.toBe("sent");
+    s.client.failWrites = new YxcRefusalError("/main/setPower", 3);
+    await expect(Promise.resolve(s.controller.handleWrite("power", false))).resolves.toBe("refused");
+    s.client.failWrites = new YxcTransportError("/main/setPower", new Error("timeout"));
+    await expect(Promise.resolve(s.controller.handleWrite("power", true))).resolves.toBe("unavailable");
+  });
+
   test("skips info.model when getDeviceInfo reports no model name", async () => {
     const s = setup(wx10, ysp);
     await s.controller.start();
@@ -412,11 +452,11 @@ describe("YxcDeviceController", () => {
     await s.controller.start();
     expect(Object.keys(s.defs.get("living.remote.menu")?.common.states ?? {})).toEqual(["on_screen", "menu", "red"]);
     s.client.calls.length = 0;
-    s.controller.handleWrite("remote.menu", "red");
+    void s.controller.handleWrite("remote.menu", "red");
     await flush();
     expect(s.client.calls).toContainEqual({ method: "controlMenu", args: ["red", "main"] });
     s.client.calls.length = 0;
-    s.controller.handleWrite("remote.menu", "purple");
+    void s.controller.handleWrite("remote.menu", "purple");
     await flush();
     expect(s.client.calls).toEqual([]);
   });
@@ -425,7 +465,7 @@ describe("YxcDeviceController", () => {
     const s = setup(wx10, ysp);
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("power", true);
+    void s.controller.handleWrite("power", true);
     await flush();
     expect(s.client.calls).toContainEqual({ method: "power", args: [true, "main"] });
   });
@@ -507,70 +547,56 @@ describe("YxcDeviceController", () => {
     expect(drops, "a database hiccup disconnected a reachable receiver").toEqual([]);
   });
 
-  // The RX-V481 declares BOTH display scales; `actual_volume.value` arrives in the one named by
-  // `mode`, and that value IS the volume datapoint. Switching the receiver's display must reshape
-  // the datapoint at once — the MusicCast controller builds its objects only at connect, so the
-  // bounds would otherwise stay on whichever scale was active while connecting.
-  //
-  // The bounds are the zone's own declared min and max for the active scale.
-  test("a change of display scale reshapes volume without a reconnect", async () => {
-    const s = setup(rxV481, { power: "on", actual_volume: { mode: "db", value: -47.5 } });
+  // The RX-V481 declares BOTH display scales; `actual_volume.value` arrives in the one named by `mode`. A receiver
+  // that was read in keeps its datapoints (krobi 2026-10-02): switching its display does not rebuild `volume` —
+  // the value is converted from the raw step count onto the scale the datapoint was read in on.
+  test("a change of display scale keeps the datapoint and converts the value from the raw step count", async () => {
+    const s = setup(rxV481, { power: "on", volume: 60, actual_volume: { mode: "db", value: -50.5 } });
     expect(await s.controller.start()).toBe(true);
-    expect(s.defs.get("living.volume")?.common.min).toBe(-80.5);
-    expect(s.defs.get("living.volume")?.common.max).toBe(16.5);
     expect(s.defs.get("living.volume")?.common.unit).toBe("dB");
 
-    s.client.status = { power: "on", actual_volume: { mode: "numeric", value: 36 } };
-    s.fire.push?.({ main: { volume: 36 } });
+    s.trace.length = 0;
+    s.client.status = { power: "on", volume: 60, actual_volume: { mode: "numeric", value: 30 } };
+    s.fire.push?.({ main: { volume: 60 } });
     await flush();
 
-    expect(s.defs.get("living.volume")?.common.max).toBe(97);
-    expect(s.defs.get("living.volume")?.common.min).toBe(0);
-    expect(s.defs.get("living.volume")?.common.unit).toBe("");
+    expect(s.trace.filter(e => e.kind === "object" && e.id === "living.volume")).toEqual([]);
+    expect(s.defs.get("living.volume")?.common.unit).toBe("dB");
+    expect(s.acks.filter(a => a.id === "living.volume").at(-1)?.value).toBe(-50.5);
   });
 
-  // The ORDER matters, not just the fact that a reshape happens. The status updates are emitted
-  // in catalog order, and the catalog lists the volume value BEFORE `actualVolumeMode` — so the
-  // new value used to land in an object still declaring the OLD scale, and the reshape followed
-  // afterwards as a fire-and-forget promise. A numeric→db switch then wrote a value like 90 into
-  // an object with `max: 16.5`, which is exactly the js-controller warning 2.7.2 set out to end.
-  test("a display-scale switch writes the new object definition BEFORE the new value", async () => {
-    const s = setup(rxV481, { power: "on", actual_volume: { mode: "db", value: -47.5 } });
+  test("on the other scale without a raw step count, no volume value is written", async () => {
+    const s = setup(rxV481, { power: "on", volume: 60, actual_volume: { mode: "db", value: -50.5 } });
     expect(await s.controller.start()).toBe(true);
-
     s.trace.length = 0;
-    s.client.status = { power: "on", actual_volume: { mode: "numeric", value: 90 } };
-    s.fire.push?.({ main: { volume: 90 } });
+    s.client.status = { power: "on", actual_volume: { mode: "numeric", value: 30 } };
+    s.fire.push?.({ main: { volume: 60 } });
     await flush();
-
-    const object = s.trace.findIndex(e => e.kind === "object" && e.id === "living.volume");
-    const value = s.trace.findIndex(e => e.kind === "value" && e.id === "living.volume");
-    expect(object).toBeGreaterThanOrEqual(0);
-    expect(value).toBeGreaterThanOrEqual(0);
-    expect(object).toBeLessThan(value);
-  });
-
-  // `void` instead of `await` keeps the trace order — an async function runs synchronously up to
-  // its first await, so the upsert is still CALLED first. What it loses is the guarantee that the
-  // object write FINISHED: with a slow objects database the value reaches js-controller while the
-  // old definition still stands, which is the warning this release removes. So the upsert is held
-  // open here and the value must not appear until it resolves.
-  test("the new value waits for the object write to COMPLETE, not just to start", async () => {
-    const s = setup(rxV481, { power: "on", actual_volume: { mode: "db", value: -47.5 } });
-    expect(await s.controller.start()).toBe(true);
-
-    let release = (): void => {};
-    const held = new Promise<void>(resolve => (release = resolve));
-    s.hold.fn = id => (id === "living.volume" ? held : undefined);
-    s.trace.length = 0;
-    s.client.status = { power: "on", actual_volume: { mode: "numeric", value: 90 } };
-    s.fire.push?.({ main: { volume: 90 } });
-    await flush();
-
     expect(s.trace.filter(e => e.kind === "value" && e.id === "living.volume")).toEqual([]);
-    release();
-    await flush();
-    expect(s.trace.filter(e => e.kind === "value" && e.id === "living.volume")).toHaveLength(1);
+  });
+
+  test("the scale a zone was read in on is remembered: a restart on the other scale keeps the datapoint", async () => {
+    const probeMemory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
+    const first = setup(
+      rxV481,
+      { power: "on", volume: 60, actual_volume: { mode: "db", value: -50.5 } },
+      {},
+      undefined,
+      {
+        probeMemory,
+      },
+    );
+    await first.controller.start();
+    const again = setup(
+      rxV481,
+      { power: "on", volume: 60, actual_volume: { mode: "numeric", value: 30 } },
+      {},
+      undefined,
+      { probeMemory },
+    );
+    await again.controller.start();
+    expect(again.defs.get("living.volume")?.common.unit).toBe("dB");
+    expect(again.acks.filter(a => a.id === "living.volume").at(-1)?.value).toBe(-50.5);
   });
 
   test("a status without a scale change reshapes nothing", async () => {
@@ -594,7 +620,7 @@ describe("YxcDeviceController", () => {
     expect(await s.controller.start()).toBe(true);
     s.client.calls.length = 0;
 
-    s.controller.handleWrite("volume", 41.5);
+    void s.controller.handleWrite("volume", 41.5);
     await flush();
 
     expect(s.client.calls).toContainEqual({ method: "setVolumeTo", args: [83, "main"] });
@@ -608,7 +634,7 @@ describe("YxcDeviceController", () => {
     await s.controller.start();
     s.client.calls.length = 0;
 
-    s.controller.handleWrite("volume", 41.5);
+    void s.controller.handleWrite("volume", 41.5);
     await flush();
 
     expect(s.client.calls).toContainEqual({ method: "setVolumeTo", args: [83, "main"] });
@@ -625,7 +651,7 @@ describe("YxcDeviceController", () => {
     expect(await s.controller.start()).toBe(true);
     s.client.calls.length = 0;
 
-    s.controller.handleWrite("volume", -40);
+    void s.controller.handleWrite("volume", -40);
     await flush();
 
     expect(s.client.calls).toContainEqual({ method: "setVolumeTo", args: [81, "main"] });
@@ -639,7 +665,7 @@ describe("YxcDeviceController", () => {
     await s.controller.start();
     s.client.calls.length = 0;
 
-    s.controller.handleWrite("volume", 16.5);
+    void s.controller.handleWrite("volume", 16.5);
     await flush();
 
     expect(s.client.calls).toContainEqual({ method: "setVolumeTo", args: [194, "main"] });
@@ -680,7 +706,7 @@ describe("YxcDeviceController", () => {
     await s.controller.start();
     s.client.calls.length = 0;
 
-    s.controller.handleWrite("volume", 42);
+    void s.controller.handleWrite("volume", 42);
     await flush();
 
     expect(s.client.calls).toContainEqual({ method: "setVolumeTo", args: [42, "main"] });
@@ -743,14 +769,14 @@ describe("YxcDeviceController", () => {
     const s = setup(features, { power: "on", input: "cd" });
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("player.play", true);
+    void s.controller.handleWrite("player.play", true);
     await flush();
     expect(s.client.calls).toContainEqual({ method: "setCDPlayback", args: ["play"] });
     // Same button while the zone plays no media source: no transport call goes out.
     const idle = setup(features, { power: "on", input: "hdmi1" });
     await idle.controller.start();
     idle.client.calls.length = 0;
-    idle.controller.handleWrite("player.play", true);
+    void idle.controller.handleWrite("player.play", true);
     await flush();
     expect(idle.client.calls).toEqual([]);
   });
@@ -761,7 +787,7 @@ describe("YxcDeviceController", () => {
     const s = setup(features, status);
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("sound.equalizer.low", 7);
+    void s.controller.handleWrite("sound.equalizer.low", 7);
     await flush();
     // low from the write, mid/high from the cached status, on the main zone.
     expect(s.client.calls).toContainEqual({ method: "setEqualizer", args: [7, 2, 3, "main"] });
@@ -778,7 +804,7 @@ describe("YxcDeviceController", () => {
     const s = setup(features, status);
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("multiroom.zone2.sound.equalizer.mid", -4);
+    void s.controller.handleWrite("multiroom.zone2.sound.equalizer.mid", -4);
     await flush();
     // mid from the write, low/high from the cached zone2 status — not the 0/0 fallback.
     expect(s.client.calls).toContainEqual({ method: "setEqualizer", args: [1, -4, 3, "zone2"] });
@@ -799,7 +825,7 @@ describe("YxcDeviceController", () => {
     const s = setup(features, ysp);
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("multiroom.group.leave", true);
+    void s.controller.handleWrite("multiroom.group.leave", true);
     await flush();
     expect(s.client.calls).toContainEqual({ method: "stopDistribution", args: [] });
   });
@@ -810,7 +836,7 @@ describe("YxcDeviceController", () => {
     s.client.distRole = "client";
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("multiroom.group.leave", true);
+    void s.controller.handleWrite("multiroom.group.leave", true);
     await flush();
     expect(s.client.calls).toContainEqual({ method: "setClientInfo", args: [{ group_id: "" }] });
   });
@@ -825,7 +851,7 @@ describe("YxcDeviceController", () => {
     s.client.distRole = "none";
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("multiroom.group.linkDevice", "1.2.3.9");
+    void s.controller.handleWrite("multiroom.group.linkDevice", "1.2.3.9");
     await flush();
     const join = clientDevice.calls.find(c => c.method === "setClientInfo");
     const add = s.client.calls.find(c => c.method === "setServerInfo");
@@ -862,7 +888,7 @@ describe("YxcDeviceController", () => {
     const s = setup(features, ysp, { "1.2.3.9": clientDevice }, undefined, { host: "1.2.3.4" });
     s.client.distRole = "none";
     await s.controller.start();
-    s.controller.handleWrite("multiroom.group.linkDevice", "1.2.3.9");
+    void s.controller.handleWrite("multiroom.group.linkDevice", "1.2.3.9");
     await flush();
     expect(clientDevice.calls.find(c => c.method === "setClientInfo")?.args[0]).toMatchObject({
       zone: ["main", "zone2"],
@@ -890,7 +916,7 @@ describe("YxcDeviceController", () => {
     const s = setup(features, ysp, { "1.2.3.9": joining, "1.2.3.10": otherServer });
     s.client.distRole = "none";
     await s.controller.start();
-    s.controller.handleWrite("multiroom.group.linkDevice", "1.2.3.9");
+    void s.controller.handleWrite("multiroom.group.linkDevice", "1.2.3.9");
     await flush();
     expect(s.client.calls).toContainEqual({ method: "startDistribution", args: [2] });
   });
@@ -901,7 +927,7 @@ describe("YxcDeviceController", () => {
     joining.distRole = "none";
     const s = setup(features, ysp, { "1.2.3.9": joining });
     await s.controller.start();
-    s.controller.handleWrite("multiroom.group.linkDevice", "1.2.3.9");
+    void s.controller.handleWrite("multiroom.group.linkDevice", "1.2.3.9");
     await flush();
     expect(s.client.calls.find(c => c.method === "setServerInfo")?.args[0]).toMatchObject({
       group_id: "9A237BF5AB80ED3C7251DFF49825CA42",
@@ -918,7 +944,7 @@ describe("YxcDeviceController", () => {
     const joining = makeFakeClient({ distribution: { version: 2.05 } }, {});
     const s = setup(features, ysp, { "1.2.3.9": joining });
     await s.controller.start();
-    s.controller.handleWrite("multiroom.group.linkDevice", "1.2.3.9");
+    void s.controller.handleWrite("multiroom.group.linkDevice", "1.2.3.9");
     await flush();
     expect(joining.calls.filter(c => c.method === "setClientInfo")).toEqual([]);
     expect(s.warnings.some(line => line.includes("MusicCast Link version 2.05"))).toBe(true);
@@ -939,7 +965,7 @@ describe("YxcDeviceController", () => {
       status: " building ",
     };
     s.acks.length = 0;
-    s.controller.handleWrite("multiroom.group.linkDevice", "1.2.3.9");
+    void s.controller.handleWrite("multiroom.group.linkDevice", "1.2.3.9");
     await flush();
     expect(s.acks).toContainEqual({ id: "living.multiroom.group.status", value: "building" });
     s.client.distInfo = { ...(s.client.distInfo as Record<string, unknown>), status: " working " };
@@ -963,7 +989,7 @@ describe("YxcDeviceController", () => {
     const s = setup(features, ysp, { "10.0.0.9": master }, undefined, { host: "10.0.0.5" });
     s.client.distRole = "client";
     await s.controller.start();
-    s.controller.handleWrite("multiroom.group.leave", true);
+    void s.controller.handleWrite("multiroom.group.leave", true);
     await flush();
     expect(s.client.calls).toContainEqual({ method: "setClientInfo", args: [{ group_id: "" }] });
     expect(master.calls).toContainEqual({
@@ -981,7 +1007,7 @@ describe("YxcDeviceController", () => {
     const s = setup(features, ysp, { "10.0.0.9": master }, undefined, { host: "10.0.0.5" });
     s.client.distRole = "client";
     await s.controller.start();
-    s.controller.handleWrite("multiroom.group.leave", true);
+    void s.controller.handleWrite("multiroom.group.leave", true);
     await flush();
     expect(master.calls).toContainEqual({ method: "setServerInfo", args: [{ group_id: "" }] });
     expect(master.calls.filter(c => c.method === "startDistribution")).toEqual([]);
@@ -998,7 +1024,7 @@ describe("YxcDeviceController", () => {
       client_list: [{ ip_address: "10.0.0.7", data_type: "base" }],
     };
     await s.controller.start();
-    s.controller.handleWrite("multiroom.group.leave", true);
+    void s.controller.handleWrite("multiroom.group.leave", true);
     await flush();
     expect(member.calls).toContainEqual({ method: "setClientInfo", args: [{ group_id: "" }] });
   });
@@ -1012,7 +1038,7 @@ describe("YxcDeviceController", () => {
     const old = makeFakeClient({ distribution: {} }, {});
     const s = setup(features, ysp, { "1.2.3.9": old }, undefined, { host: "1.2.3.4" });
     await s.controller.start();
-    s.controller.handleWrite("multiroom.group.linkDevice", "1.2.3.9");
+    void s.controller.handleWrite("multiroom.group.linkDevice", "1.2.3.9");
     await flush();
     expect(old.calls.filter(c => c.method === "setClientInfo")).toEqual([]);
     expect(s.warnings.some(line => line.includes("version 1 is not one this device takes"))).toBe(true);
@@ -1024,7 +1050,7 @@ describe("YxcDeviceController", () => {
     s.client.distInfo = { role: "none", group_id: "9A237BF5AB80ED3C7251DFF49825CA42", client_list: ["1.2.3.5"] };
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("multiroom.group.leave", true);
+    void s.controller.handleWrite("multiroom.group.leave", true);
     await flush();
     expect(s.client.calls).toContainEqual({ method: "stopDistribution", args: [] });
     expect(s.client.calls).toContainEqual({ method: "setServerInfo", args: [{ group_id: "" }] });
@@ -1054,7 +1080,7 @@ describe("YxcDeviceController", () => {
     const s = setup(features, ysp);
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("multiroom.group.linkDevice", "9.9.9.9");
+    void s.controller.handleWrite("multiroom.group.linkDevice", "9.9.9.9");
     await flush();
     expect(s.client.calls).toEqual([]);
   });
@@ -1065,7 +1091,7 @@ describe("YxcDeviceController", () => {
     const s = setup(wx10, ysp, {}, () => false);
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("power", false);
+    void s.controller.handleWrite("power", false);
     await flush();
     const order = s.client.calls.map(c => c.method);
     expect(order.indexOf("power")).toBeGreaterThanOrEqual(0);
@@ -1082,7 +1108,7 @@ describe("YxcDeviceController", () => {
     const s = setup(features, ysp, {}, () => false);
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("tuner.presetUp", true);
+    void s.controller.handleWrite("tuner.presetUp", true);
     await flush();
     const order = s.client.calls.map(c => c.method);
     expect(order.indexOf("switchTunerPreset")).toBeGreaterThanOrEqual(0);
@@ -1100,7 +1126,7 @@ describe("YxcDeviceController", () => {
     const s = setup(wx10, ysp, {}, () => true);
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("power", false);
+    void s.controller.handleWrite("power", false);
     await flush();
     expect(s.client.calls.map(c => c.method)).toEqual(["power", "getStatus"]);
   });
@@ -1111,7 +1137,7 @@ describe("YxcDeviceController", () => {
     const s = setup(wx10, ysp, {}, () => true, { gate, pushLiveness: liveness });
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("power", true);
+    void s.controller.handleWrite("power", true);
     await flush();
     expect(s.client.calls.map(c => c.method)).toEqual(["power"]);
     s.client.status = { ...(ysp as Record<string, unknown>), power: "on" };
@@ -1134,7 +1160,7 @@ describe("YxcDeviceController", () => {
     const s = setup(features, ysp, {}, () => true);
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("multiroom.zone2.power", true);
+    void s.controller.handleWrite("multiroom.zone2.power", true);
     await flush();
     expect(s.client.calls).toContainEqual({ method: "getStatus", args: ["zone2"] });
   });
@@ -1144,7 +1170,7 @@ describe("YxcDeviceController", () => {
     const s = setup(features, { power: "on", input: "tuner" }, {}, () => false);
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("tuner.preset", 3);
+    void s.controller.handleWrite("tuner.preset", 3);
     await flush();
     const order = s.client.calls.map(c => `${c.method}:${typeof c.args[0] === "string" ? c.args[0] : ""}`);
     expect(order.some(call => call.startsWith("recallTunerPreset"))).toBe(true);
@@ -1212,7 +1238,7 @@ describe("YxcDeviceController", () => {
       s.acks.length = 0;
       // A scene recalling a fixed level, a script with a fixed volume: the write produces no
       // CHANGE, so the device sends no event (YXC Basic §10.3) — only reading it back acknowledges it.
-      s.controller.handleWrite("power", false);
+      void s.controller.handleWrite("power", false);
       await flush();
       expect(s.acks).toContainEqual({ id: "living.power", value: false });
     });
@@ -1231,14 +1257,14 @@ describe("YxcDeviceController", () => {
       await s.controller.start();
       s.client.calls.length = 0;
       s.client.status = { ...(ysp as Record<string, unknown>), power: "on" };
-      s.controller.handleWrite("power", true);
+      void s.controller.handleWrite("power", true);
       await elapse();
       expect(s.client.calls.map(c => c.method)).toEqual(["power", "getStatus"]);
       expect(s.acks).toContainEqual({ id: "living.power", value: true });
       expect(liveness.state).toBe("unknown");
       expect(s.infos).toEqual([]);
       s.client.status = { ...(s.client.status as Record<string, unknown>), power: "standby" };
-      s.controller.handleWrite("power", false);
+      void s.controller.handleWrite("power", false);
       await elapse();
       expect(liveness.state).toBe("dead");
       expect(s.infos).toEqual(["living: MusicCast events are not arriving — polling and reading writes back"]);
@@ -1248,7 +1274,7 @@ describe("YxcDeviceController", () => {
       await flush();
       expect(fullSweep(s.client.calls)).toBe(true);
       s.client.calls.length = 0;
-      s.controller.handleWrite("power", true);
+      void s.controller.handleWrite("power", true);
       await flush();
       expect(s.client.calls.map(c => c.method)).toEqual(["power", "getStatus"]);
     });
@@ -1259,9 +1285,9 @@ describe("YxcDeviceController", () => {
       const s = setup(wx10, ysp, {}, () => true, { gate, pushLiveness: liveness });
       await s.controller.start();
       // Accepted, not done (the read-back still says standby): no change, so no event was owed.
-      s.controller.handleWrite("power", true);
+      void s.controller.handleWrite("power", true);
       await elapse();
-      s.controller.handleWrite("power", true);
+      void s.controller.handleWrite("power", true);
       await elapse();
       expect(liveness.state).toBe("unknown");
       expect(s.infos).toEqual([]);
@@ -1409,7 +1435,7 @@ describe("YxcDeviceController", () => {
     s.controller.onDrop(reason => drops.push(reason));
     s.client.failWrites = new YxcTransportError("main/setPower?power=standby", new Error("connect ECONNREFUSED"));
     s.client.failStatus = true;
-    s.controller.handleWrite("power", false);
+    void s.controller.handleWrite("power", false);
     await flush();
     expect(drops).toHaveLength(1);
     expect(s.client.calls.filter(c => c.method === "getStatus").length).toBeGreaterThanOrEqual(1);
@@ -1424,7 +1450,7 @@ describe("YxcDeviceController", () => {
     const before = statusReads();
     s.client.failWrites = new YxcRefusalError("/main/setPower?power=standby", 3);
     s.client.failStatus = true;
-    s.controller.handleWrite("power", false);
+    void s.controller.handleWrite("power", false);
     await flush();
     // The one status read is the read-back of the refused value (C28) — even when it fails, a
     // refusal never judges the device gone.
@@ -1440,7 +1466,7 @@ describe("YxcDeviceController", () => {
     s.acks.length = 0;
     s.client.calls.length = 0;
     s.client.failWrites = new YxcRefusalError("/main/setPower?power=on", 5);
-    s.controller.handleWrite("power", true);
+    void s.controller.handleWrite("power", true);
     await flush();
     expect(s.client.calls.map(c => c.method)).toEqual(["power", "getStatus"]);
     expect(s.acks).toContainEqual({ id: "living.power", value: false });
@@ -1456,7 +1482,7 @@ describe("YxcDeviceController", () => {
     s.acks.length = 0;
     s.client.calls.length = 0;
     s.client.failWrites = new YxcRefusalError("/system/setAutoPowerStandby?enable=false", 5);
-    s.controller.handleWrite("advanced.autoPowerStandby", false);
+    void s.controller.handleWrite("advanced.autoPowerStandby", false);
     await flush();
     expect(s.client.calls.map(c => c.method)).toEqual(["setAutoPowerStandby", "getFuncStatus"]);
     expect(s.acks).toContainEqual({ id: "living.advanced.autoPowerStandby", value: true });
@@ -1499,14 +1525,14 @@ describe("YxcDeviceController", () => {
     let dropped = 0;
     s.controller.onDrop(() => dropped++);
     s.client.failWrites = new YxcTransportError("main/setPower?power=standby", new Error("socket hang up"));
-    s.controller.handleWrite("power", false);
+    void s.controller.handleWrite("power", false);
     await flush();
     expect(dropped).toBe(0);
     // Several failed writes in a row share ONE check — not one probe per write.
     const before = s.client.calls.filter(c => c.method === "getStatus").length;
-    s.controller.handleWrite("power", false);
-    s.controller.handleWrite("mute", true);
-    s.controller.handleWrite("volume", 10);
+    void s.controller.handleWrite("power", false);
+    void s.controller.handleWrite("mute", true);
+    void s.controller.handleWrite("volume", 10);
     await flush();
     expect(s.client.calls.filter(c => c.method === "getStatus").length - before).toBeLessThanOrEqual(1);
   });
@@ -1516,11 +1542,11 @@ describe("YxcDeviceController", () => {
     s.client.funcStatus = { response_code: 0, auto_power_standby: true };
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("advanced.autoPowerStandby", "false");
+    void s.controller.handleWrite("advanced.autoPowerStandby", "false");
     await flush();
     expect(s.client.calls).toContainEqual({ method: "setAutoPowerStandby", args: [false] });
     s.client.calls.length = 0;
-    s.controller.handleWrite("advanced.autoPowerStandby", "maybe");
+    void s.controller.handleWrite("advanced.autoPowerStandby", "maybe");
     await flush();
     expect(s.client.calls.filter(c => c.method === "setAutoPowerStandby")).toEqual([]);
   });
@@ -1534,7 +1560,7 @@ describe("YxcDeviceController", () => {
     s.controller.onDrop(() => dropped++);
     s.client.failWrites = new YxcTransportError("system/setAutoPowerStandby", new Error("EHOSTUNREACH"));
     s.client.failStatus = true;
-    s.controller.handleWrite("advanced.autoPowerStandby", true);
+    void s.controller.handleWrite("advanced.autoPowerStandby", true);
     await flush();
     expect(dropped).toBe(1);
   });
@@ -1576,7 +1602,7 @@ describe("YxcDeviceController guards", () => {
     s.fire.keepalive?.();
     await flush();
     s.client.calls.length = 0;
-    s.controller.handleWrite("sound.equalizer.low", 7);
+    void s.controller.handleWrite("sound.equalizer.low", 7);
     await flush();
     // low from the write, mid from the partial push, high still from the full status.
     // Resetting the cache on every update would send 0 for every band the user did
@@ -1823,7 +1849,7 @@ describe("YxcDeviceController device name", () => {
     expect(s.client.calls).toContainEqual({ method: "getTunerPresetInfo", args: ["dab"] });
     s.client.calls.length = 0;
     // The YSP status fixture leaves the cached band at its default "fm".
-    s.controller.handleWrite("tuner.preset", 7);
+    void s.controller.handleWrite("tuner.preset", 7);
     await flush();
     expect(s.client.calls).toContainEqual({ method: "recallTunerPreset", args: ["fm", 7, "main"] });
   });
@@ -1841,8 +1867,8 @@ describe("YxcDeviceController device name", () => {
       expect.arrayContaining(["living.tuner.storedStations", "living.tuner.storedStations.fm.30.frequency"]),
     );
     s.client.calls.length = 0;
-    s.controller.handleWrite("tuner.presetClear", 3);
-    s.controller.handleWrite("tuner.searchUp", true);
+    void s.controller.handleWrite("tuner.presetClear", 3);
+    void s.controller.handleWrite("tuner.searchUp", true);
     await flush();
     expect(s.client.calls).toEqual(
       expect.arrayContaining([
@@ -1855,9 +1881,9 @@ describe("YxcDeviceController device name", () => {
     );
     s.client.calls.length = 0;
     s.client.tunerPlayInfo = { band: "dab", dab: { status: "ready" } };
-    s.controller.handleWrite("tuner.band", "dab");
+    void s.controller.handleWrite("tuner.band", "dab");
     await flush();
-    s.controller.handleWrite("tuner.searchDown", true);
+    void s.controller.handleWrite("tuner.searchDown", true);
     await flush();
     expect(s.client.calls).toContainEqual({ method: "setDabService", args: ["previous"] });
   });
@@ -1871,7 +1897,7 @@ describe("YxcDeviceController device name", () => {
     await s.controller.start();
     expect(s.client.calls).toContainEqual({ method: "getTunerPresetInfo", args: ["common"] });
     s.client.calls.length = 0;
-    s.controller.handleWrite("tuner.preset", 12);
+    void s.controller.handleWrite("tuner.preset", 12);
     await flush();
     expect(s.client.calls).toContainEqual({ method: "recallTunerPreset", args: ["common", 12, "main"] });
   });
@@ -1881,8 +1907,8 @@ describe("YxcDeviceController device name", () => {
     const s = setup(features, ysp);
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("tuner.presetUp", true);
-    s.controller.handleWrite("player.netPlayer.recallRecent", 2);
+    void s.controller.handleWrite("tuner.presetUp", true);
+    void s.controller.handleWrite("player.netPlayer.recallRecent", 2);
     await flush();
     expect(s.client.calls).toContainEqual({ method: "switchTunerPreset", args: ["next"] });
     expect(s.client.calls).toContainEqual({ method: "recallRecentItem", args: [2, "main"] });
@@ -1950,7 +1976,7 @@ describe("YxcDeviceController browse surface (#613)", () => {
     await controller.start();
     expect(objects).toContain("living.player.browse");
     expect(objects).toContain("living.player.browse.selectLine");
-    controller.handleWrite("player.browse.source", "netRadio");
+    void controller.handleWrite("player.browse.source", "netRadio");
     await flush();
     expect(client.calls).toContainEqual({ method: "getListInfo", args: ["net_radio", 0, 8, "en"] });
   });
@@ -2128,7 +2154,7 @@ describe("YxcDeviceController scene title writes (shared memory)", () => {
     (s.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
     await s.controller.start();
     (s.client.calls as Array<{ method: string }>).length = 0;
-    s.controller.handleWrite("scene.recall", "net audio");
+    void s.controller.handleWrite("scene.recall", "net audio");
     await new Promise(resolve => setImmediate(resolve));
     expect(s.client.calls as Array<{ method: string; args: unknown[] }>).toContainEqual({
       method: "recallScene",
@@ -2136,7 +2162,7 @@ describe("YxcDeviceController scene title writes (shared memory)", () => {
     });
     // An unknown title sends nothing.
     (s.client.calls as Array<{ method: string }>).length = 0;
-    s.controller.handleWrite("scene.recall", "Party");
+    void s.controller.handleWrite("scene.recall", "Party");
     await new Promise(resolve => setImmediate(resolve));
     expect((s.client.calls as Array<{ method: string }>).some(c => c.method === "recallScene")).toBe(false);
   });
@@ -2301,8 +2327,8 @@ describe("YxcDeviceController test-audit hardening (2.0.1)", () => {
     const s = setup(features, { power: "on", input: "tuner" });
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("tuner.band", "am");
-    s.controller.handleWrite("tuner.frequency", 1440);
+    void s.controller.handleWrite("tuner.band", "am");
+    void s.controller.handleWrite("tuner.frequency", 1440);
     await flush();
     expect(s.client.calls).toContainEqual({ method: "setBand", args: ["am"] });
     expect(s.client.calls).toContainEqual({ method: "setFreq", args: ["am", 1440] });
@@ -2314,8 +2340,8 @@ describe("YxcDeviceController test-audit hardening (2.0.1)", () => {
     const s = setup(features, status);
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("sound.equalizer.low", 7);
-    s.controller.handleWrite("sound.equalizer.mid", -4);
+    void s.controller.handleWrite("sound.equalizer.low", 7);
+    void s.controller.handleWrite("sound.equalizer.mid", -4);
     await flush();
     expect(s.client.calls).toContainEqual({ method: "setEqualizer", args: [7, 2, 3, "main"] });
     expect(s.client.calls).toContainEqual({ method: "setEqualizer", args: [7, -4, 3, "main"] });
@@ -2355,7 +2381,7 @@ describe("YxcDeviceController equalizer cache seeding (audit 2026-09-02)", () =>
     };
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("sound.equalizer.low", 7);
+    void s.controller.handleWrite("sound.equalizer.low", 7);
     await flush();
     // Seeding the cache with {low: 0, mid: 9, high: 0} would have sent setEqualizer(7, 9, 0):
     // the user's high band flattened to 0 dB — exactly what the write path's own guard
@@ -2373,7 +2399,7 @@ describe("YxcDeviceController equalizer cache seeding (audit 2026-09-02)", () =>
     s.fire.keepalive?.();
     await flush();
     s.client.calls.length = 0;
-    s.controller.handleWrite("sound.equalizer.low", 7);
+    void s.controller.handleWrite("sound.equalizer.low", 7);
     await flush();
     expect(s.client.calls).toContainEqual({ method: "setEqualizer", args: [7, 2, 5, "main"] });
   });
@@ -2425,7 +2451,7 @@ describe("the device-wide settings with their declarations (coverage audit 2026-
     await s.controller.start();
     expect(s.defs.has("living.multiroom.party")).toBe(true);
     expect(s.defs.has("living.hdmi.standbyThrough")).toBe(false);
-    s.controller.handleWrite("multiroom.party", true);
+    void s.controller.handleWrite("multiroom.party", true);
     await new Promise(resolve => setImmediate(resolve));
     expect(s.client.calls).toContainEqual({ method: "setPartyMode", args: [true] });
   });
@@ -2497,7 +2523,7 @@ describe("YxcDeviceController push signals", () => {
 
   test("a list change re-reads the open menu window", async () => {
     const s = await started();
-    s.controller.handleWrite("player.browse.source", "netRadio");
+    void s.controller.handleWrite("player.browse.source", "netRadio");
     await flush();
     const reads = (): number => s.client.calls.filter(c => c.method === "getListInfo").length;
     const before = reads();
@@ -2531,7 +2557,7 @@ describe("YxcDeviceController push signals", () => {
 
   test("a favourite this adapter recalled and the device could not play is said on warn — another one is not", async () => {
     const s = await started();
-    s.controller.handleWrite("player.netPlayer.preset", 4);
+    void s.controller.handleWrite("player.netPlayer.preset", 4);
     await flush();
     s.fire.push?.({ netusb: { preset_control: { type: "recall", num: 4, result: "empty" } } });
     await flush();
@@ -2609,8 +2635,8 @@ describe("YxcDeviceController remote keys", () => {
     const s = setup(features, ysp);
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("remote.cursor", "up");
-    s.controller.handleWrite("remote.cursor", "return");
+    void s.controller.handleWrite("remote.cursor", "up");
+    void s.controller.handleWrite("remote.cursor", "return");
     await flush();
     expect(s.client.calls.filter(c => c.method === "controlCursor")).toEqual([
       { method: "controlCursor", args: ["up", "main"] },
@@ -2635,8 +2661,8 @@ describe("YxcDeviceController repeat and shuffle set directly", () => {
   test("API 1.19+: repeat and shuffle are writable and go out as setRepeat/setShuffle", async () => {
     const s = await started(2.08, "net_radio");
     expect(s.defs.get("living.player.repeat")?.common.write).toBe(true);
-    s.controller.handleWrite("player.repeat", 2);
-    s.controller.handleWrite("player.shuffle", true);
+    void s.controller.handleWrite("player.repeat", 2);
+    void s.controller.handleWrite("player.shuffle", true);
     await flush();
     expect(s.client.calls.filter(c => c.method.startsWith("setNet"))).toEqual([
       { method: "setNetRepeat", args: ["all"] },
@@ -2647,7 +2673,7 @@ describe("YxcDeviceController repeat and shuffle set directly", () => {
   test("below API 1.19 the modes stay read-only, and a write sends nothing", async () => {
     const s = await started(1.17, "net_radio");
     expect(s.defs.get("living.player.repeat")?.common.write).toBe(false);
-    s.controller.handleWrite("player.repeat", 1);
+    void s.controller.handleWrite("player.repeat", 1);
     await flush();
     expect(s.client.calls.filter(c => c.method.startsWith("setNet"))).toEqual([]);
   });
@@ -2662,7 +2688,7 @@ describe("YxcDeviceController group name", () => {
     const s = setup(features, ysp);
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("multiroom.group.name", "Wohnzimmer & Küche");
+    void s.controller.handleWrite("multiroom.group.name", "Wohnzimmer & Küche");
     await flush();
     expect(s.client.calls).toEqual([
       { method: "setGroupName", args: ["Wohnzimmer & Küche"] },
@@ -2674,7 +2700,7 @@ describe("YxcDeviceController group name", () => {
     const s = setup(features, ysp);
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("multiroom.group.name", "ü".repeat(65));
+    void s.controller.handleWrite("multiroom.group.name", "ü".repeat(65));
     await flush();
     expect(s.client.calls).toEqual([{ method: "getDistributionInfo", args: [] }]);
     expect(s.debugs.some(line => line.includes("longer than 128 bytes"))).toBe(true);
@@ -2695,7 +2721,7 @@ describe("YxcDeviceController tuner on DAB", () => {
     await s.controller.start();
     s.client.calls.length = 0;
     s.acks.length = 0;
-    s.controller.handleWrite("tuner.frequency", 98500);
+    void s.controller.handleWrite("tuner.frequency", 98500);
     await flush();
     expect(s.client.calls.map(c => c.method)).toEqual(["getPlayInfo"]);
     expect(s.acks).toContainEqual({ id: "living.tuner.frequency", value: 180064 });
@@ -2705,7 +2731,7 @@ describe("YxcDeviceController tuner on DAB", () => {
     const s = setup(features, { power: "on", input: "tuner" });
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("tuner.frequency", 98500);
+    void s.controller.handleWrite("tuner.frequency", 98500);
     await flush();
     expect(s.client.calls[0]).toEqual({ method: "setFreq", args: ["fm", 98500] });
   });
@@ -2715,8 +2741,8 @@ describe("YxcDeviceController tuner on DAB", () => {
     await s.controller.start();
     expect(s.objects).toContain("living.tuner.dab.serviceUp");
     s.client.calls.length = 0;
-    s.controller.handleWrite("tuner.dab.serviceUp", true);
-    s.controller.handleWrite("tuner.dab.serviceDown", true);
+    void s.controller.handleWrite("tuner.dab.serviceUp", true);
+    void s.controller.handleWrite("tuner.dab.serviceDown", true);
     await flush();
     expect(s.client.calls.filter(c => c.method === "setDabService")).toEqual([
       { method: "setDabService", args: ["next"] },
@@ -2744,8 +2770,8 @@ describe("YxcDeviceController disable_flags", () => {
     const s = setup(wx10, ysp);
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("volume", 20);
-    s.controller.handleWrite("mute", true);
+    void s.controller.handleWrite("volume", 20);
+    void s.controller.handleWrite("mute", true);
     await flush();
     expect(s.client.calls.map(c => c.method)).toEqual(["getStatus", "getStatus"]);
     expect(s.warnings).toEqual([]);
@@ -2759,7 +2785,7 @@ describe("YxcDeviceController disable_flags", () => {
     s.fire.push?.({ main: { power: "on" } });
     await flush();
     s.client.calls.length = 0;
-    s.controller.handleWrite("mute", true);
+    void s.controller.handleWrite("mute", true);
     await flush();
     expect(s.client.calls[0]).toEqual({ method: "mute", args: [true, "main"] });
   });
@@ -2768,7 +2794,7 @@ describe("YxcDeviceController disable_flags", () => {
     const s = setup(wx10, { ...(ysp as Record<string, unknown>), disable_flags: 0b100 });
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("mute", true);
+    void s.controller.handleWrite("mute", true);
     await flush();
     expect(s.client.calls[0]).toEqual({ method: "mute", args: [true, "main"] });
   });
@@ -2918,7 +2944,7 @@ describe("MusicCast lists as single datapoints and read-backs (audit 2026-09-29,
     s.client.playInfo = { response_code: 0, input: "net_radio", playback: "play" };
     await s.controller.start();
     s.client.calls.length = 0;
-    s.controller.handleWrite("player.pause", true);
+    void s.controller.handleWrite("player.pause", true);
     await flush();
     await flush();
     expect(s.client.calls.some(c => c.method === "getPlayInfo")).toBe(true);

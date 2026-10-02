@@ -81,7 +81,6 @@ export function movedId(id: string, fromFull: string, toFull: string): string | 
  * that name the old id rewritten.
  *
  * - the device object's reachability link (`common.statusStates.onlineId`);
- * - the ids the never-filled purge recorded in the capability profile (`pendingPurge`);
  * - a placeholder name: a device the adapter could not name yet carries its id as its name, and a
  *   copy that kept the OLD id there would read as a name the user gave (`nextDeviceLabel`) and stay
  *   for good;
@@ -123,7 +122,6 @@ export function rewriteMovedObject(
       delete copy.native.label;
       delete copy.native.labelRank;
     }
-    copy.native.capabilityProfile = movedProfile(copy.native.capabilityProfile, from, to);
   }
   const custom = copy.common.custom as Record<string, unknown> | undefined;
   if (obj.type === "state" && custom && typeof custom === "object") {
@@ -138,33 +136,6 @@ export function rewriteMovedObject(
     }
   }
   return { object: copy as unknown as ioBroker.SettableObject, history };
-}
-
-/**
- * The capability profile with the purge's recorded ids moved along — they are namespace-relative
- * ids with the device prefix, and a purge that looks for the old prefix finds nothing any more.
- *
- * @param stored the profile as stored (a JSON string)
- * @param from the old device id
- * @param to the new device id
- * @returns the profile to store
- */
-function movedProfile(stored: unknown, from: string, to: string): unknown {
-  if (typeof stored !== "string") {
-    return stored;
-  }
-  try {
-    const profile = JSON.parse(stored) as { pendingPurge?: unknown };
-    if (!Array.isArray(profile.pendingPurge)) {
-      return stored;
-    }
-    profile.pendingPurge = profile.pendingPurge.map(entry =>
-      typeof entry === "string" && entry.startsWith(`${from}.`) ? `${to}${entry.slice(from.length)}` : entry,
-    );
-    return JSON.stringify(profile);
-  } catch {
-    return stored;
-  }
 }
 
 /**

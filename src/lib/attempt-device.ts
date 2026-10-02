@@ -44,8 +44,8 @@ export interface AttemptDeps {
   systemLanguage?: string;
   /** Adapter log. */
   log: ControllerLog;
-  /** Create or update an object in the device tree. */
-  upsertObject(id: string, def: ObjectDef): Promise<void>;
+  /** Create an object or add to it — `settle` at the completion of a read-in (see MultiTransportDeps). */
+  upsertObject(id: string, def: ObjectDef, settle?: boolean): Promise<void>;
   /** Write a state value with ack (device-originated). */
   setStateAck(id: string, value: boolean | number | string | null): void;
   /** Adapter-managed timers (YNCA pacing + per-transport reconnects). */
@@ -69,11 +69,6 @@ export interface AttemptDeps {
   onTransports?(names: string[]): void;
   /** Report the name the device carries for itself (MusicCast), for the device object's label. */
   onDeviceName?(name: string): void;
-  /**
-   * Report the datapoints (device-relative, canonical) the device's own declaration proves absent —
-   * the MusicCast function lists — so a never-filled leftover of an earlier version goes at once.
-   */
-  onDeclaredAbsent?(ids: string[]): void;
   /** IPs of all configured devices, so a MusicCast group can resolve a client device by IP. */
   knownDeviceIps: Set<string>;
   /** Datapoint-group gate for the YNCA sweep — a disabled group's functions are never fetched. */
@@ -84,8 +79,14 @@ export interface AttemptDeps {
   probeMemory: ProbeMemory;
   /** The object definitions last written for this device (held by the caller, see MultiTransportDeps). */
   writtenObjects?: Map<string, string>;
-  /** The device's objects as they stand in the tree (canonical id → object) — see MultiTransportDeps. */
-  existingObjects?: MultiTransportDeps["existingObjects"];
+  /** The device's learned tree (see MultiTransportDeps). */
+  tree?: MultiTransportDeps["tree"];
+  /** The running adapter version (see MultiTransportDeps). */
+  adapterVersion?: string;
+  /** A datapoint as it stands in the tree (see MultiTransportDeps). */
+  existing?: MultiTransportDeps["existing"];
+  /** Remove what no transport built, at the completion of a read-in (see MultiTransportDeps). */
+  settleTree?: MultiTransportDeps["settleTree"];
 }
 
 /** One transport to try: its name and a factory building a FRESH connectable (also for reconnects). */
@@ -100,8 +101,8 @@ export interface TransportAttempt {
 export interface ConnectDeps {
   /** Adapter log. */
   log: ControllerLog;
-  /** Create or update an object in the device tree. */
-  upsertObject(id: string, def: ObjectDef): Promise<void>;
+  /** Create an object or add to it — `settle` at the completion of a read-in (see MultiTransportDeps). */
+  upsertObject(id: string, def: ObjectDef, settle?: boolean): Promise<void>;
   /** Report the transports that are live after every change — the id-safe names ("ynca"/"yxc"/"xml"). */
   onTransports?(names: string[]): void;
   /** Timers for the per-transport reconnect loops (absent in tests → no per-transport retry). */
@@ -115,8 +116,14 @@ export interface ConnectDeps {
   writtenObjects?: Map<string, string>;
   /** Whether this device has been shown to have a transport — it answered it before (D1). */
   proven?(transport: Transport): boolean;
-  /** The device's objects as they stand in the tree (see MultiTransportDeps). */
-  existingObjects?: MultiTransportDeps["existingObjects"];
+  /** The device's learned tree (see MultiTransportDeps). */
+  tree?: MultiTransportDeps["tree"];
+  /** The running adapter version (see MultiTransportDeps). */
+  adapterVersion?: string;
+  /** A datapoint as it stands in the tree (see MultiTransportDeps). */
+  existing?: MultiTransportDeps["existing"];
+  /** Remove what no transport built, at the completion of a read-in (see MultiTransportDeps). */
+  settleTree?: MultiTransportDeps["settleTree"];
 }
 
 /**
@@ -236,13 +243,16 @@ async function connectBuilt(
     cancel: deps.timers ? handle_ => deps.timers!.cancel(handle_ as ioBroker.Timeout | undefined) : undefined,
     backoffFactory: () => new ReconnectStrategy(TRANSPORT_RECONNECT_BASE_MS, TRANSPORT_RECONNECT_MAX_MS),
     writtenObjects: deps.writtenObjects,
-    // A transport the device has shown before but that did not answer now — reconnected, and its
-    // datapoints keep their form meanwhile (D1). One it never answered is not retried: every
-    // MusicCast-only device would knock on the YNCA port forever.
+    // A transport the device has shown before but that did not answer now — reconnected, and a read-in
+    // does not complete without it. One it never answered is not retried: every MusicCast-only device
+    // would knock on the YNCA port forever.
     missing: attempts
       .map(attempt => attempt.transport)
       .filter(transport => !live.some(conn => conn.transport === transport) && deps.proven?.(transport) === true),
-    existingObjects: deps.existingObjects,
+    tree: deps.tree,
+    adapterVersion: deps.adapterVersion,
+    existing: deps.existing,
+    settleTree: deps.settleTree,
   });
   let running: Transport[];
   try {
@@ -349,7 +359,6 @@ export function attemptDevice(
         upsertObject: yxc.interceptUpsert,
         setStateAck: yxc.interceptSetStateAck,
         reportDeviceName: deps.onDeviceName,
-        reportDeclaredAbsent: ids => deps.onDeclaredAbsent?.(ids.map(id => yxc.canonicalId(id))),
         log,
         gate,
       }),
@@ -411,7 +420,10 @@ export function attemptDevice(
         transport === "ynca"
           ? deps.probeMemory.remembered("yncaCapabilities") !== undefined || deps.yncaSubunitCache.get() !== undefined
           : deps.probeMemory.remembered(transport === "yxc" ? "yxcIdentity" : "xmlIdentity") !== undefined,
-      existingObjects: deps.existingObjects,
+      tree: deps.tree,
+      adapterVersion: deps.adapterVersion,
+      existing: deps.existing,
+      settleTree: deps.settleTree,
     },
     signal,
   );

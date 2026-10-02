@@ -21,6 +21,7 @@ import {
   type XmlPresetSlot,
   type XmlTunerInfo,
   type XmlZoneForm,
+  XmlHttpError,
 } from "./protocol";
 import { parseXmlStatus, stateToXml, type XmlCommand } from "./command-mapper";
 import { XML_AMP_CATALOG } from "./catalog";
@@ -29,6 +30,7 @@ import { errText } from "../err-text";
 import { PollDropDetector } from "../lifecycle/poll-drop-detector";
 import type { ProbeMemory } from "../lifecycle/probe-memory";
 import type { CommandGate } from "../lifecycle/command-gate";
+import type { WriteOutcome } from "../lifecycle/multi-transport-handle";
 import type { BrowseEngine } from "../browse/browse-engine";
 import { createBrowseSurface } from "../browse/surface";
 import { provesMenu, XML_BROWSE_SOURCES, XmlBrowseDriver } from "../browse/xml-browse-driver";
@@ -41,6 +43,9 @@ import { remoteObjectDefs } from "../browse/objects";
 import { PLAYER_DISPLAY_STATES, PLAYER_STATION_STATE } from "../catalog/player-block";
 import { absoluteDeviceUrl, withAlbumArtId } from "../yxc/command-mapper";
 import { decodeXmlText, escapeXmlText } from "./entities";
+
+/** Probe-memory key: the zones this receiver answered on — a zone stays when one Basic_Status fails. */
+const ZONES_KEY = "xmlZones";
 
 /** XML/YNC has no push channel, so the state is polled at this interval by default. */
 const DEFAULT_POLL_INTERVAL_MS = 60 * 1000;
@@ -123,6 +128,8 @@ export interface XmlControllerDeps {
  */
 export class XmlDeviceController {
   private zones: XmlZone[] = [];
+  /** The firmware (`System>Config` version) read on this connection. */
+  private firmwareRead: string | undefined;
   private cancelKeepalive: (() => void) | undefined;
   private readonly dropDetector = new PollDropDetector();
   /** The liveness probe in flight, so concurrent askers share one question. */
@@ -215,6 +222,7 @@ export class XmlDeviceController {
     // identity this transport can read. A different (or updated) device behind the address
     // drops the remembered XML declarations (scenes, inputs, descriptor, tuner, browse
     // sources); a device that reports no model keeps them — the YNCA/YXC guards catch a swap.
+    this.firmwareRead = config.version || undefined;
     if (config.model !== undefined) {
       const identity = `${config.model}|${config.systemId ?? ""}|${config.version ?? ""}`;
       if (this.deps.probeMemory.remembered("xmlIdentity") !== identity) {
@@ -226,7 +234,18 @@ export class XmlDeviceController {
       if (config.zones || config.features || config.inputNames) {
         // Remembered for the other transports: the YNCA input list reads the source flags and
         // the input names as evidence (a flag 0 proves a source absent, a name adds an input).
-        this.deps.probeMemory.set("xmlConfig", config);
+        // Laid over what this receiver declared before, never in its place: an answer that lacks a
+        // block (or a name) takes nothing away (2026-10-02 — a read-in receiver keeps its tree).
+        const before = this.deps.probeMemory.remembered<typeof config>("xmlConfig");
+        this.deps.probeMemory.set("xmlConfig", {
+          ...before,
+          ...config,
+          ...(before?.zones || config.zones ? { zones: { ...before?.zones, ...config.zones } } : {}),
+          ...(before?.features || config.features ? { features: { ...before?.features, ...config.features } } : {}),
+          ...(before?.inputNames || config.inputNames
+            ? { inputNames: { ...before?.inputNames, ...config.inputNames } }
+            : {}),
+        });
       }
     }
     const rememberedDialect = this.deps.probeMemory.remembered("xmlDialect");
@@ -251,7 +270,14 @@ export class XmlDeviceController {
       this.deps.log.debug(`${this.deviceId}: no XML main zone — creating no objects`);
       return false;
     }
-    this.zones = answered.map(probe => probe.zone);
+    // A zone this receiver answered before stays, also when its Basic_Status failed this once — one
+    // missed answer is no proof the zone is gone (2026-10-02). Its states keep the fields it delivered.
+    const rememberedZones = new Set(this.deps.probeMemory.remembered<string[]>(ZONES_KEY) ?? []);
+    const answeredZones = new Set(answered.map(probe => probe.zone.key));
+    this.zones = XML_ZONES.filter(zone => answeredZones.has(zone.key) || rememberedZones.has(zone.key));
+    if ([...answeredZones].some(key => !rememberedZones.has(key))) {
+      this.deps.probeMemory.set(ZONES_KEY, [...new Set([...rememberedZones, ...answeredZones])]);
+    }
     const model = config.model;
     // The zone's own input list (`Input_Sel_Item`, per zone — Main and Zone 2 differ on
     // real hardware): the device says which inputs it accepts, so the input state gets a
@@ -289,7 +315,8 @@ export class XmlDeviceController {
     // objects (hdmi.out2, sound.direct, …) standing on devices without the feature.
     // The delivered field set is a model property, remembered per zone (union, so a
     // later standby start — which may report fewer fields — cannot shrink the tree).
-    for (const { zone, status } of answered) {
+    for (const zone of this.zones) {
+      const status = answered.find(probe => probe.zone.key === zone.key)?.status;
       const key = `xmlStatusFields:${zone.key}`;
       const remembered = this.deps.probeMemory.remembered<string[]>(key);
       const fields = new Set<string>(Array.isArray(remembered) ? remembered : []);
@@ -1131,10 +1158,10 @@ export class XmlDeviceController {
    * @param stateId the state id relative to the device
    * @param value the written value
    */
-  public handleWrite(stateId: string, value: unknown): void {
+  public handleWrite(stateId: string, value: unknown): Promise<WriteOutcome> | WriteOutcome | void {
     if (this.readOnlyStates.has(stateId)) {
       this.deps.log.debug(`${this.deviceId}: ${stateId} — this device declares no write for it, write dropped`);
-      return;
+      return "unavailable";
     }
     if (stateId.startsWith("remote.") && this.browseEngine) {
       this.browseEngine.handleRemoteWrite(stateId, value);
@@ -1169,7 +1196,7 @@ export class XmlDeviceController {
     // it: writing it put a blind command on the wire that the device answers with a refusal.
     if (!this.createdStates.has(stateId)) {
       this.deps.log.debug(`${this.deviceId}: ${stateId} was not reported by this device — write dropped`);
-      return;
+      return "unavailable";
     }
     const { zone: zoneKey } = splitZone(stateId);
     const element = this.zones.find(candidate => candidate.key === zoneKey)?.element ?? "Main_Zone";
@@ -1180,15 +1207,20 @@ export class XmlDeviceController {
       const zone = this.zones.find(candidate => candidate.element === command.zone) ?? this.zones[0];
       // A new input changes which source the zone's player block shows (D3).
       const players = /(^|\.)input$/.test(stateId);
-      void this.applyCommand(command, async () => {
+      return this.applyCommand(command, async () => {
         await this.refreshZone(zone);
         if (players) {
           await this.refreshPlayers();
         }
       });
-    } else {
-      this.deps.log.debug(`${this.deviceId}: ${stateId} is not writable on this device — write dropped`);
     }
+    this.deps.log.debug(`${this.deviceId}: ${stateId} is not writable on this device — write dropped`);
+    return "unavailable";
+  }
+
+  /** @returns the firmware (`System>Config` version) read on this connection, if any */
+  public firmware(): string | undefined {
+    return this.firmwareRead;
   }
 
   /**
@@ -1427,8 +1459,8 @@ export class XmlDeviceController {
         this.deps.probeMemory.set(`xmlStatusFields:${zone.key}`, [...known]);
         // 2.7.0: the objects for the new fields are built NOW and their values written right
         // after, instead of appearing one start later. The transport adapter signals the handle,
-        // which re-coordinates the unified tree. A field that VANISHES from a later poll removes
-        // nothing — `zoneFields` is a union, shrinking stays a start-time decision.
+        // which adds them to the tree. A field that VANISHES from a later poll removes nothing —
+        // `zoneFields` is a union, and only the completion of a read-in may shrink the tree.
         void this.createZoneStates(zone)
           .then(() => {
             for (const update of parseXmlStatus(status, zone.key)) {
@@ -1710,25 +1742,32 @@ export class XmlDeviceController {
    * @param command the zone element and the inner XML to send
    * @param readBack reads the zone, the tuner or the name the command touched
    */
-  private async applyCommand(command: XmlCommand, readBack?: () => Promise<unknown>): Promise<void> {
-    try {
-      await this.sendCommand(command);
-      await readBack?.();
-    } catch (e) {
-      this.deps.log.warn(`${this.deviceId}: reading back after an XML command failed: ${errText(e)}`);
-    }
+  private async applyCommand(command: XmlCommand, readBack?: () => Promise<unknown>): Promise<WriteOutcome> {
+    const outcome = await this.sendCommand(command);
+    // Read back behind the answer, so the caller learns at once what the device made of the command.
+    void (async () => {
+      try {
+        await readBack?.();
+      } catch (e) {
+        this.deps.log.warn(`${this.deviceId}: reading back after an XML command failed: ${errText(e)}`);
+      }
+    })();
+    return outcome;
   }
 
   /**
    * Send one command; a refusal or a transport error is logged, never thrown.
    *
    * @param command the zone element and the inner XML to send
+   * @returns `sent`, `refused` (a return code, an empty answer, an HTTP 400) or `unavailable` (no answer)
    */
-  private async sendCommand(command: XmlCommand): Promise<void> {
+  private async sendCommand(command: XmlCommand): Promise<WriteOutcome> {
     try {
       await this.deps.client.send(command.zone, command.inner);
+      return "sent";
     } catch (e) {
       this.deps.log.warn(`${this.deviceId}: XML command failed: ${errText(e)}`);
+      return e instanceof XmlHttpError || errText(e).startsWith("device refused") ? "refused" : "unavailable";
     }
   }
 }

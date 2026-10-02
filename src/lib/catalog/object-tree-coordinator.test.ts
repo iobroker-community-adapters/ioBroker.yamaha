@@ -1,4 +1,4 @@
-import { coordinateObjectTree, keepsForm } from "./object-tree-coordinator";
+import { canCarryWrite, coordinateObjectTree, keepsForm } from "./object-tree-coordinator";
 import type { ObjectDef } from "./types";
 
 function state(id: string, name: string, extra: Record<string, unknown> = {}): ObjectDef {
@@ -407,5 +407,60 @@ describe("keepsForm", () => {
   test("losing the write, or a value of the list, is another form", () => {
     expect(keepsForm(existing({ write: true }), live({ write: false }))).toBe(false);
     expect(keepsForm(existing({ states: { HDMI1: "HDMI1" } }), live({ states: { hdmi1: "HDMI1" } }))).toBe(false);
+  });
+});
+
+describe("a learned owner and the write fallback (2026-10-02)", () => {
+  test("a learned owner is kept while it builds the datapoint — the ranking does not move it", () => {
+    const { ownerByCanonicalId } = coordinateObjectTree(
+      [
+        { transport: "ynca", objects: [state("volume", "Volume dB", { unit: "dB" })] },
+        { transport: "yxc", objects: [state("volume", "Volume raw")] },
+      ],
+      new Map([["volume", "ynca" as const]]),
+    );
+    expect(ownerByCanonicalId.get("volume")).toBe("ynca");
+  });
+
+  test("a learned owner that did not build the datapoint this time leaves the choice to the ranking", () => {
+    const { ownerByCanonicalId } = coordinateObjectTree(
+      [{ transport: "yxc", objects: [state("volume", "Volume raw")] }],
+      new Map([["volume", "ynca" as const]]),
+    );
+    expect(ownerByCanonicalId.get("volume")).toBe("yxc");
+  });
+
+  test("a write is carried only unchanged: same types and unit, a writer, the same wire vocabulary", () => {
+    const power = state("power", "Power", { type: "boolean" });
+    expect(canCarryWrite({ transport: "ynca", def: power }, { transport: "xml", def: power })).toBe(true);
+    expect(
+      canCarryWrite(
+        { transport: "ynca", def: power },
+        { transport: "yxc", def: state("power", "Power", { type: "boolean", write: false }) },
+      ),
+    ).toBe(false);
+    expect(
+      canCarryWrite(
+        { transport: "ynca", def: state("sound.bass", "Bass", { unit: "dB" }) },
+        { transport: "yxc", def: state("sound.bass", "Bass") },
+      ),
+    ).toBe(false);
+    const input = (states: Record<string, string>): ObjectDef =>
+      state("input", "Input", { type: "string", role: "media.input", states });
+    expect(
+      canCarryWrite(
+        { transport: "ynca", def: input({ HDMI1: "HDMI1" }) },
+        { transport: "yxc", def: input({ hdmi1: "HDMI 1" }) },
+      ),
+    ).toBe(false);
+    expect(
+      canCarryWrite(
+        { transport: "ynca", def: input({ HDMI1: "HDMI1" }) },
+        { transport: "xml", def: input({ HDMI1: "HDMI1" }) },
+      ),
+    ).toBe(true);
+    expect(
+      canCarryWrite({ transport: "ynca", def: power }, { transport: "xml", def: { ...power, type: "channel" } }),
+    ).toBe(false);
   });
 });

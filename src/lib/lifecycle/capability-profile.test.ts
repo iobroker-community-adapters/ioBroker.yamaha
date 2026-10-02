@@ -24,8 +24,6 @@ describe("capability profile — loading", () => {
     });
     expect(loaded.memory).toEqual(memory);
     expect(loaded.yncaAvail).toEqual(avail);
-    expect(loaded.purgeVersion).toBe("2.6.0");
-    expect(loaded.pendingPurge).toEqual([]);
     expect(loaded.legacy).toBe(true);
     expect(loaded.storedSchema).toBe(DISCOVERY_SCHEMA);
   });
@@ -41,7 +39,6 @@ describe("capability profile — loading", () => {
     expect(loaded.storedSchema).toBe(0);
     // The snapshot carries no schema — the same guard that rejected it in 2.6.0 rejects it here.
     expect(loaded.yncaAvail).toBeUndefined();
-    expect(loaded.purgeVersion).toBe("2.5.2");
     expect(loaded.legacy).toBe(true);
   });
 
@@ -50,16 +47,12 @@ describe("capability profile — loading", () => {
       {
         memory: { yncaCapabilities: caps, yxcIdentity: "RX-V473|1.60" },
         yncaAvail: { subunits: ["MAIN", "TUN"], model: "RX-V473", firmware: "1.60/2.02" },
-        purgeVersion: "2.7.0",
-        pendingPurge: ["multiroom.zone2.sound.balance"],
       },
       { adapterVersion: "2.7.0", learnedAt: "2026-09-09T10:00:00.000Z" },
     );
     const loaded = loadCapabilityProfile({ [PROFILE_KEY]: stored });
     expect(loaded.memory).toEqual({ __schema: DISCOVERY_SCHEMA, yncaCapabilities: caps, yxcIdentity: "RX-V473|1.60" });
     expect(loaded.yncaAvail).toEqual(avail);
-    expect(loaded.purgeVersion).toBe("2.7.0");
-    expect(loaded.pendingPurge).toEqual(["multiroom.zone2.sound.balance"]);
     expect(loaded.learnedAt).toBe("2026-09-09T10:00:00.000Z");
     expect(loaded.legacy).toBe(false);
     expect(loaded.storedSchema).toBe(DISCOVERY_SCHEMA);
@@ -67,7 +60,7 @@ describe("capability profile — loading", () => {
 
   test("the profile wins over leftover legacy keys, which are still marked for deletion", () => {
     const stored = serializeCapabilityProfile(
-      { memory: { yncaCapabilities: caps }, purgeVersion: "2.7.0", pendingPurge: [] },
+      { memory: { yncaCapabilities: caps } },
       { adapterVersion: "2.7.0", learnedAt: "2026-09-09T10:00:00.000Z" },
     );
     const loaded = loadCapabilityProfile({
@@ -76,7 +69,6 @@ describe("capability profile — loading", () => {
       purgeVersion: "2.6.0",
     });
     expect(loaded.memory).toEqual({ __schema: DISCOVERY_SCHEMA, yncaCapabilities: caps });
-    expect(loaded.purgeVersion).toBe("2.7.0");
     expect(loaded.legacy).toBe(true);
   });
 
@@ -94,7 +86,6 @@ describe("capability profile — loading", () => {
     expect(loaded.memory?.__schema).toBe(DISCOVERY_SCHEMA + 1);
     expect(loaded.storedSchema).toBe(DISCOVERY_SCHEMA + 1);
     expect(loaded.yncaAvail).toBeUndefined();
-    expect(loaded.purgeVersion).toBe("9.9.9");
   });
 
   test("garbage never throws and loads as an empty profile", () => {
@@ -110,8 +101,6 @@ describe("capability profile — loading", () => {
       const loaded = loadCapabilityProfile(native);
       expect(loaded.memory).toBeUndefined();
       expect(loaded.yncaAvail).toBeUndefined();
-      expect(loaded.purgeVersion).toBeUndefined();
-      expect(loaded.pendingPurge).toEqual([]);
     }
     expect(loadCapabilityProfile({ probeCache: "[]" }).legacy).toBe(true);
     expect(loadCapabilityProfile({ [PROFILE_KEY]: "{not json" }).legacy).toBe(false);
@@ -121,7 +110,7 @@ describe("capability profile — loading", () => {
 describe("capability profile — serializing", () => {
   test("is one JSON string (extendObject replaces a string, but merges a nested object)", () => {
     const stored = serializeCapabilityProfile(
-      { memory: { yncaCapabilities: caps }, purgeVersion: "2.7.0", pendingPurge: [] },
+      { memory: { yncaCapabilities: caps } },
       { adapterVersion: "2.7.0", learnedAt: "2026-09-09T10:00:00.000Z" },
     );
     expect(typeof stored).toBe("string");
@@ -190,6 +179,31 @@ describe("DeviceProfileStore", () => {
   const profileOf = (patch: Record<string, unknown>): Record<string, unknown> =>
     JSON.parse(patch[PROFILE_KEY] as string) as Record<string, unknown>;
 
+  test("keeps the learned tree across a restart, and forgets it with a new discovery schema", () => {
+    const { patches, deps: d } = deps();
+    const store = new DeviceProfileStore("rx", undefined, d);
+    expect(store.tree).toEqual({ shared: {}, transports: [], firmware: {} });
+    store.setTree({ shared: { volume: ["yxc", "ynca"] }, transports: ["ynca", "yxc"], firmware: { ynca: "1.80" } });
+    const native = { [PROFILE_KEY]: patches.at(-1)![PROFILE_KEY] };
+    expect(profileOf(patches.at(-1)!).tree).toEqual({
+      shared: { volume: ["yxc", "ynca"] },
+      transports: ["ynca", "yxc"],
+      firmware: { ynca: "1.80" },
+    });
+    const again = new DeviceProfileStore("rx", native, d);
+    expect(again.tree.shared).toEqual({ volume: ["yxc", "ynca"] });
+    const stale = JSON.parse(native[PROFILE_KEY] as string) as Record<string, unknown>;
+    const older = new DeviceProfileStore("rx", { [PROFILE_KEY]: JSON.stringify({ ...stale, schema: 1 }) }, d);
+    expect(older.tree).toEqual({ shared: {}, transports: [], firmware: {} });
+  });
+
+  test("an empty learned tree is not written into the profile", () => {
+    const { patches, deps: d } = deps();
+    const store = new DeviceProfileStore("rx", undefined, d);
+    store.persistNow();
+    expect(profileOf(patches.at(-1)!).tree).toBeUndefined();
+  });
+
   test("keeps the list of subunits the YNCA probe asked — a restart judges absent sources by it", () => {
     const { patches, deps: d } = deps();
     const store = new DeviceProfileStore("rx", undefined, d);
@@ -216,7 +230,6 @@ describe("DeviceProfileStore", () => {
     const stored = serializeCapabilityProfile(
       {
         memory: { xmlIdentity: "RX-V6A|0A1B2C3D|2.15", yxcDeviceIds: { serial: "0A1B2C3D", mac: "00A0DE0A1B2C" } },
-        pendingPurge: [],
       },
       { adapterVersion: "2.7.0", learnedAt: "2026-09-01T00:00:00.000Z" },
     );
@@ -227,12 +240,12 @@ describe("DeviceProfileStore", () => {
   test("the remembered model comes from whichever transport answered — XML alone is enough", () => {
     const d = deps();
     const xmlOnly = serializeCapabilityProfile(
-      { memory: { xmlIdentity: "RX-V3900|0CE4E483|1.05" }, pendingPurge: [] },
+      { memory: { xmlIdentity: "RX-V3900|0CE4E483|1.05" } },
       { adapterVersion: "2.7.0", learnedAt: "2026-09-01T00:00:00.000Z" },
     );
     expect(new DeviceProfileStore("living", { [PROFILE_KEY]: xmlOnly }, d.deps).model()).toBe("RX-V3900");
     const yxcOnly = serializeCapabilityProfile(
-      { memory: { yxcIdentity: "WX-030|2.1" }, pendingPurge: [] },
+      { memory: { yxcIdentity: "WX-030|2.1" } },
       { adapterVersion: "2.7.0", learnedAt: "2026-09-01T00:00:00.000Z" },
     );
     expect(new DeviceProfileStore("living", { [PROFILE_KEY]: yxcOnly }, d.deps).model()).toBe("WX-030");
@@ -245,7 +258,6 @@ describe("DeviceProfileStore", () => {
     const stored = serializeCapabilityProfile(
       {
         memory: { xmlIdentity: "RX-V6A|00000000|2.15", yxcDeviceIds: { serial: "0A1B2C3D", mac: "00A0DE0A1B2C" } },
-        pendingPurge: [],
       },
       { adapterVersion: "2.7.0", learnedAt: "2026-09-01T00:00:00.000Z" },
     );
@@ -261,7 +273,6 @@ describe("DeviceProfileStore", () => {
     const scrubbed = serializeCapabilityProfile(
       {
         memory: { xmlIdentity: "RX-V6A|00000000|2.15", yxcDeviceIds: { serial: "00000000", mac: "RXV6A0000" } },
-        pendingPurge: [],
       },
       { adapterVersion: "2.7.0", learnedAt: "2026-09-01T00:00:00.000Z" },
     );
@@ -284,7 +295,6 @@ describe("DeviceProfileStore", () => {
     const profile = profileOf(d.patches[0]);
     expect(profile.memory).toEqual({ yncaCapabilities: caps });
     expect(profile.yncaAvail).toEqual({ subunits: ["MAIN", "TUN"], model: "RX-V473", firmware: "1.60/2.02" });
-    expect(profile.purgeVersion).toBe("2.6.0");
     expect(profile.learnedAt).toBe("2026-09-09T12:00:00.000Z");
     expect(d.lines).toEqual([]);
   });
@@ -292,7 +302,7 @@ describe("DeviceProfileStore", () => {
   test("a stored profile is not rewritten at load, and a later change writes only the profile key", () => {
     const d = deps();
     const stored = serializeCapabilityProfile(
-      { memory: { yncaCapabilities: caps }, purgeVersion: "2.7.0", pendingPurge: [] },
+      { memory: { yncaCapabilities: caps } },
       { adapterVersion: "2.7.0", learnedAt: "2026-09-01T00:00:00.000Z" },
     );
     const store = new DeviceProfileStore("living", { [PROFILE_KEY]: stored }, d.deps);
@@ -322,7 +332,6 @@ describe("DeviceProfileStore", () => {
     const store = new DeviceProfileStore("living", { [PROFILE_KEY]: stored }, d.deps);
     expect(store.probeMemory.remembered("yncaCapabilities")).toBeUndefined();
     expect(store.subunitCache.get()).toBeUndefined();
-    expect(store.purgeVersion).toBe("9.9.9");
     expect(d.lines).toEqual([
       `living: discovery logic changed (schema ${DISCOVERY_SCHEMA + 1} → ${DISCOVERY_SCHEMA}) — re-learning the device`,
     ]);
@@ -331,21 +340,17 @@ describe("DeviceProfileStore", () => {
     expect(profileOf(d.patches[0]).memory).toEqual({ k: 1 });
   });
 
-  test("the snapshot, the purge marker and the pending purge persist through the same profile", () => {
+  test("the snapshot and the learned tree persist through the same profile", () => {
     const d = deps();
     const store = new DeviceProfileStore("living", {}, d.deps);
     store.subunitCache.set({ subunits: ["MAIN"], model: "RX-V473", firmware: "1.60/2.02" });
     expect(profileOf(d.patches[0]).yncaAvail).toEqual({ subunits: ["MAIN"], model: "RX-V473", firmware: "1.60/2.02" });
     store.subunitCache.clear();
     expect(profileOf(d.patches[1]).yncaAvail).toBeUndefined();
-    store.markPurged("2.7.0");
-    expect(store.purgeVersion).toBe("2.7.0");
-    expect(profileOf(d.patches[2]).purgeVersion).toBe("2.7.0");
-    store.setPendingPurge(["a.b", "c.d"]);
-    expect(store.pendingPurge).toEqual(["a.b", "c.d"]);
-    expect(profileOf(d.patches[3]).pendingPurge).toEqual(["a.b", "c.d"]);
+    store.setTree({ shared: {}, transports: ["ynca"], firmware: {} });
+    expect(profileOf(d.patches[2]).tree).toEqual({ shared: {}, transports: ["ynca"], firmware: {} });
     // Every profile written under this schema carries the current schema and the identity.
-    expect(profileOf(d.patches[3]).schema).toBe(DISCOVERY_SCHEMA);
+    expect(profileOf(d.patches[2]).schema).toBe(DISCOVERY_SCHEMA);
   });
 
   test("both halves changed inside one coalescing window land in the LAST profile string", () => {
@@ -372,7 +377,6 @@ describe("DeviceProfileStore", () => {
     expect(d.lines).toHaveLength(1);
     expect(d.patches).toHaveLength(1);
     expect(profileOf(d.patches[0]).memory).toEqual({});
-    expect(profileOf(d.patches[0]).purgeVersion).toBe("2.5.2");
     expect(d.patches[0]).toMatchObject({ probeCache: null, yncaAvail: null, purgeVersion: null });
   });
 });
@@ -403,7 +407,6 @@ describe("one model resolver, one identity function (audit 2026-09-29, A29/A30)"
     const profile = serializeCapabilityProfile(
       {
         memory: { __schema: DISCOVERY_SCHEMA, yxcDeviceIds: { serial: "0B587C1D", mac: "00A0DE112233" } },
-        pendingPurge: [],
       },
       { adapterVersion: "3.0.1", learnedAt: "2026-09-29T10:00:00.000Z" },
     );

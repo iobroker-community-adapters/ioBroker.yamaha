@@ -38,6 +38,33 @@ Funktionalität (voller MusicCast-Reichtum). Vorbild-Adapter (Multi-Transport): 
   (`Return`/`One`), PC = 2010/11 (`Back`/`Single`); Zonen-`TONEMODE` = MusicCast-Generation (Zonen-Klang ±6/0,5,
   sonst die offizielle ±10/2). Die Protokollhälfte von `SYS:VERSION` trennt keine Generation (gemessen).
 
+## Einlesen und Eingelesen (krobi 2026-10-02) — ein eingelesener Receiver bleibt stehen
+
+**Grundsatz:** Ein Receiver ändert im Produktleben nicht, was er kann (höchstens per Firmware). Wer welchen Datenpunkt
+bedient, wird EINMAL bestimmt und im Fähigkeitsprofil gespeichert (`lib/lifecycle/learned-tree.ts`: `shared` nur für
+Datenpunkte mit mehr als einem Protokoll, Owner zuerst; `transports`, `settledVersion`, `firmware`). Der laufende Code
+löscht und leert nichts. Belege und Befund: `.claude/dev-history.md` 2026-10-02, `Ressourcen/yamaha/audit-2026-10-02-einlesen-zustaendigkeit.md`.
+
+- **Eingelesen (Normalbetrieb):** `upsertObject` ist additiv (`main.ts` `writeLearned`) — ein neues Objekt wird angelegt,
+  ein bestehendes bekommt nur fehlende Listeneinträge und fehlende Grenzen; Typ, Einheit, Schreibrecht und Namen bleiben.
+  Ein Protokoll, das später einen Datenpunkt bedient, wird zuständig nur, wenn es nach Rang vorn liegt UND die Form hält
+  (`keepsForm`) — eine Richtung, gemerkt (der YNCA-Menübeweis, Forum 85413).
+- **Einlesen:** nach Neuinstallation, Adapter-Update (`settledVersion` ≠ Version) und Firmware-Update. Abgeschlossen bei
+  EINER Verbindung, in der jedes bekannte Protokoll antwortet und jeder Lesevorgang von einem eingeschalteten Receiver
+  stammt (`readComplete`: YNCA `awake` im Profil; MusicCast/XML lesen standby-unabhängig). Nur dieser Abschluss koordiniert
+  voll (`clearStaleStates`/`clearStaleBounds`) und entfernt unter DIESEM Gerät umbenannte Ids, nie gefüllte Datenpunkte,
+  die kein Protokoll baute, und leere Kanäle (`settleDeviceTree`); `info.*` gehört dem Adapter.
+- **Firmware-Update:** ein anderer Stand (YNCA `SYS:VERSION`, MusicCast `system_version`, XML `version`; leer zählt nicht)
+  schreibt `new firmware found (alt → neu) — reading the receiver again, this can take a few minutes` und öffnet das Einlesen;
+  sein Abschluss schreibt dieselbe Bereit-Zeile wie der Start (`readyLine`).
+- **YNCA im Standby:** ein Sweep im Standby ist unvollständig; `PWR=On` liest nach 30 s alle Funktionen vereinigend nach
+  (`refreshInBackground`), `yncaCapabilities`/`yncaAvail`/`yncaStaticValues` werden nie durch Kleineres ersetzt.
+- **MusicCast-Lautstärke:** die Anzeige-Skala (`yxcVolumeMode` je Zone) wird beim Einlesen festgelegt; zeigt der Receiver
+  die andere, rechnet der Adapter aus dem rohen Schrittwert um (ohne rohen Wert: kein Wert), statt den Datenpunkt umzubauen.
+  Systemeinträge (`yxcSystemEntries`) und XML-Zonen (`xmlZones`) werden vereinigt gemerkt, `xmlConfig` darübergelegt.
+- **Start-Aufräumen nur für Nutzeraktionen:** aus der Tabelle entfernte Geräte, abgeschaltete Gruppen. Ein Gerät im
+  Fundspeicher behält seinen Baum, und ist der Fundspeicher nicht lesbar, wird gar kein Gerätebaum gelöscht.
+
 ## Befehls-Schleuse (`lib/lifecycle/command-gate.ts`) — JEDER Gerätebefehl geht hier durch
 
 **Eine Schleuse pro Gerät UND Transport** (krobi 2026-08-26: „global im adapter verankert, wo jeder
@@ -69,12 +96,13 @@ verbindet alle drei **parallel** (`Promise.all` — ein YNCA-Timeout verzögert 
 die lebende Menge + die Factories dem Handle. Die drei Controller (`lib/device-controller.ts` = YNCA,
 `lib/yxc/device-controller.ts`, `lib/xml/device-controller.ts`) bleiben UNVERÄNDERT hinter dem Adapter — er
 fängt ihre `upsertObject`/`setStateAck`-deps ab, kanonisiert die IDs und filtert jeden Transport auf die ihm
-zugeteilten Datenpunkte. Owner je Datenpunkt = das modernste ANWESENDE, aber verlustfreie Protokoll
-(`lib/catalog/owner-policy.ts`: Rang YXC > YNCA > XML, überstimmt vom reicheren/schreibbaren/korrekt-skalierten
+zugeteilten Datenpunkte. Zuständig (Owner) je Datenpunkt = das modernste Protokoll, das ihn beim Einlesen nachweislich
+bedient (`lib/catalog/owner-policy.ts`: Rang YXC > YNCA > XML, überstimmt vom reicheren/schreibbaren/korrekt-skalierten
 Transport laut Zensus); `lib/catalog/object-tree-coordinator.ts` berechnet daraus EINEN Baum, jeder State genau
 einmal, jeder Write an den Owner. Ein Owner ohne eigene Werteliste leiht nur eine mit SEINEN Schlüsseln (`lentStates`:
-gleicher Werttyp, bei Text gleicher Wortschatz oder das belegte Wörterbuch), und ein Datenpunkt ohne Liste löscht die
-gespeicherte. **Wiederkehrende Antworten werden pro Gerät gemerkt** (`lib/lifecycle/probe-memory.ts`, gehalten in
+gleicher Werttyp, bei Text gleicher Wortschatz oder das belegte Wörterbuch). **Die Zuständigkeit wird EINMAL bestimmt und
+gespeichert, nie aus den gerade verbundenen Protokollen neu berechnet** (krobi 2026-10-02, Abschnitt „Einlesen und
+Eingelesen“ unten). **Wiederkehrende Antworten werden pro Gerät gemerkt** (`lib/lifecycle/probe-memory.ts`, gehalten in
 `main.ts` neben dem Subunit-Cache, seit 2.0.0 PERSISTIERT im Geräteobjekt `native.probeCache` —
 s. „Schnellstart" unten): YXC-`getFeatures`/Modell
 und die XML-Browse-Quellen-Probe sind über die Gerätelaufzeit konstant — ein Reconnect fragt sie nicht
@@ -83,23 +111,21 @@ dagegen bei JEDER Verbindung frisch gelesen, das Gedächtnis ist nur Rückfall (
 sweept erst danach; vorher kostete ein veralteter Cache Sweep→Probe→Sweep (~40 s, langsamer als ohne
 Cache). Die Ausfall-Erkennung der beiden Poll-Transporte liegt gemeinsam in
 `lib/lifecycle/poll-drop-detector.ts`, die Zonentabelle in `lib/catalog/zones.ts` (EINE für alle Transporte;
-die frühere Mehrfach-Pflege hatte den Zonen-Equalizer-Cache gebrochen). `coordinate()` schreibt nur noch
-GEÄNDERTE Objekt-Definitionen (Fingerabdruck je Id, die Karte hält `main.ts` je Gerät über Reconnects;
-jede Purge-/Aufräum-Id fällt heraus, sonst fehlt einem zurückkehrenden Kind der Elternkanal) — ein flackerndes
-Gerät schrieb sonst alle paar Minuten ~250 unveränderte Objekte neu. **Werte entdoppelt `main.ts`, nie der
+die frühere Mehrfach-Pflege hatte den Zonen-Equalizer-Cache gebrochen). Das Handle reicht nur GEÄNDERTE Objekt-Definitionen
+weiter (Fingerabdruck je Id, die Karte hält `main.ts` je Gerät über Reconnects; jede gelöschte Id fällt heraus, sonst fehlt
+einem zurückkehrenden Kind der Elternkanal), und `main.ts` schreibt Objekte über den Flotten-Master `KnownObjects`
+(`lib/known-objects.ts`, ein Sammel-Lesen beim Start, Schreiben nur bei Unterschied). **Werte entdoppelt `main.ts`, nie der
 Controller:** jeder Controller liefert jeden Wert; schreibgeschützte Zustände vergleicht der Speicher-Spiegel
 (`lifecycle/write-mirror.ts`; nach der Sammel-Lesung heißt „kein Eintrag“ = kein Wert, nie ein Einzel-Lesen; die Sammel-Lesung
 steht vor der Start-Markierung `info.connection`, die schreibgeschützten `instanceObjects` gelten schon vor der Objekt-Spiegelung als
 schreibgeschützt), beschreibbare `setStateChangedAsync`, und der
-Transport-Adapter liefert einer neu gewonnenen Id sofort ihren letzten Wert nach. **Reconnect ist zweistufig:** Der Ausfall EINES Transports schließt nur ihn und
-koordiniert sofort neu — ein lebender Transport übernimmt jede Id, die er VERTRÄGLICH baut (gleicher Typ,
-gleiche Einheit, verträgliche Werteliste, kein schreibbarer Punkt an einen nur lesenden Transport; `sleep`, `input`,
-`soundProgram`, Bass/Höhen/Subwoofer bleiben beim Abgerissenen und verwerfen Schreibvorgänge) —; das Handle baut ihn
-über seine Factory mit eigenem Backoff neu auf
-und re-koordiniert nach der Rückkehr den Baum (idempotente Upserts, Ownership neu), während die anderen
-Transporte durchlaufen. **Ein Transport, den das Gerät schon einmal beantwortet hat (YNCA-Profil, MusicCast-/XML-Identität),
-der beim Verbinden aber schweigt, wird genauso nachverbunden;** bis zu seiner Rückkehr (höchstens 3 min) behält jeder
-Datenpunkt, dem die lebenden Transporte eine andere Form gäben, die Form aus dem Baum — nie ein stiller Typwechsel. Ein
+Transport-Adapter liefert einer neu gewonnenen Id sofort ihren letzten Wert nach. **Ein Abriss oder eine Rückkehr EINES
+Transports schreibt nichts und verteilt nichts um** (ein Receiver verliert den Strom als Ganzes): das Handle schließt ihn,
+baut ihn über seine Factory mit eigenem Backoff neu auf und lernt nach der Rückkehr nur hinzu. **Ein Schreibbefehl geht an
+den Zuständigen; ist der offline oder lehnt das Gerät ab, an das nächste Protokoll, das den Wert unverändert trägt**
+(`canCarryWrite`: gleicher Typ, gleiche Einheit, schreibbar, bei Listen gleicher Wortschatz) — nie nach einem unklaren
+YNCA-Urteil und nie bei einem nicht lesbaren Datenpunkt (Taste, Schritt). Ein Transport, den das Gerät schon einmal
+beantwortet hat (YNCA-Profil, MusicCast-/XML-Identität), der beim Verbinden aber schweigt, wird genauso nachverbunden; ein
 nie beantworteter Transport wird nicht wiederholt. Erst wenn der LETZTE lebende
 Transport wegfällt, meldet das Handle den Drop an den Supervisor, der die ganze Menge neu verbindet. YXC/XML
 melden Drop nach mehreren erfolglosen Keepalive-Polls, YNCA über das echte Socket-Drop-Event (Drops vor der
@@ -342,7 +368,7 @@ belegt (YNCA `LISTINFO=?` mit Listen-Feldern; die Absagen `@UNDEFINED`/`@RESTRIC
 das AUSBLEIBEN einer Antwort), und bei `MAIN:PWR != On` wird nicht geprobt. **YNCA-Fähigkeitsbeweise (Menü,
 Tasten-Dialekt, Zonen-Tastenfelder) werden gemerkt wie die XML-Probe (`yncaBrowseSources`, ein Beweis wird nie durch eine
 spätere Absage verkleinert); fehlt einer beim Verbinden, holt `PWR=On` oder eine vom Gerät selbst gesendete Listenzeile ihn
-nach, und YNCA übernimmt das Menü in derselben Sitzung.** Ein leeres XML-Menüfenster direkt nach dem Quellenwechsel gilt
+nach, und YNCA übernimmt das Menü in derselben Sitzung — einmal, gemerkt im Fähigkeitsprofil.** Ein leeres XML-Menüfenster direkt nach dem Quellenwechsel gilt
 nicht als Menü: `Jump_Line 1` (2008er: `Page Up`), dann bis 20 × 1 s nachlesen. **2) Gemerktes darf keine Verbindung
 vortäuschen:** der YXC-Start ist nur erfolgreich, wenn eine Zone wirklich antwortet — der Zonen-Status ist die
 einzige Start-Anfrage, die immer ans Gerät geht. Belege und Prüfstand in `.claude/dev-history.md`.
@@ -357,9 +383,8 @@ Anfassen `extendObject` fährt — sonst meldete jeder Neustart den ganzen Baum 
 verbinden asynchron und parallel, deshalb ein 5-Sekunden-Nachlauf (`DATAPOINT_BALANCE_SETTLE_MS`)
 statt einer Zeile je Gerät: EINE Umschaltung, EIN Ergebnis. Gezählt werden NUR `state`-Objekte,
 nicht die Kanäle/Geräteknoten drumherum. Regel-Herkunft: Memory `feedback_datenpunkt_bilanz_im_log`.
-**Aufräumen nie gefüllter Datenpunkte (`purgeNeverFilled`):** erst im zweiten PROZESS-Start, nie im zweiten
-Bilanz-Durchgang desselben Laufs (`recordedThisRun`) — ein Receiver im Standby antwortet `@RESTRICTED`; was die
-MusicCast-Deklaration (`getFeatures`) beweisbar nicht trägt (`yxcDeclaredAbsent`), geht schon im ersten Start.
+**Aufräumen nie gefüllter Datenpunkte:** nur beim Abschluss eines Einlesens (`settleDeviceTree`, Abschnitt „Einlesen und
+Eingelesen“) — nie beim Verbinden, nie im Bilanz-Durchgang.
 
 ## Namen sind Übersetzungsobjekte (2026-09-02, Gate-Pflicht)
 

@@ -139,10 +139,10 @@ describe("rewriteMovedObject", () => {
     const common = object.common as { name: string; statusStates: { onlineId: string } };
     const native = object.native as Record<string, unknown>;
     expect(common.statusStates.onlineId).toBe(`${NS}.WX-030_00A0DED4F504.info.connection`);
-    expect(JSON.parse(native.capabilityProfile as string).pendingPurge).toEqual([
-      "WX-030_00A0DED4F504.tuner.band",
-      "WX-030_00A0DED4F504.info.x",
-    ]);
+    // The profile rides along as stored: what it learned is keyed by ids inside the device, never by the device id.
+    expect(native.capabilityProfile).toBe(
+      JSON.stringify({ schema: 4, pendingPurge: ["B_ro.tuner.band", "B_ro.info.x"] }),
+    );
     expect(native.movingTo).toBeUndefined();
     // A name the device reported travels as it is.
     expect(common.name).toBe("Büro");

@@ -1,6 +1,6 @@
 import { channelCommon, type ObjectDef } from "../catalog/types";
 import { canonicalIdOf, ID_DRIFT, ZONE_PREFIX, type Transport } from "../catalog/owner-policy";
-import type { TransportConnection } from "./multi-transport-handle";
+import type { TransportConnection, WriteOutcome } from "./multi-transport-handle";
 
 /**
  * Inverse of the id drifts: canonical template → the transport's own template (for routing writes back).
@@ -17,10 +17,19 @@ const INVERSE_DRIFT: Partial<Record<Transport, Readonly<Record<string, string>>>
 export interface AdaptedController {
   /** Connect, probe, and build the object tree (through the injected deps). */
   start(): Promise<boolean>;
-  /** Apply a user write under the controller's own id, relative to the device. */
-  handleWrite(stateId: string, value: unknown): void;
+  /**
+   * Apply a user write under the controller's own id, relative to the device. A controller that can say
+   * what became of it returns the outcome; nothing returned means nothing can be said (no fallback).
+   */
+  handleWrite(stateId: string, value: unknown): void | WriteOutcome | Promise<WriteOutcome | void>;
   /** Register a drop handler. */
   onDrop(cb: (reason?: Error) => void): void;
+  /** Whether what the controller built comes from a switched-on receiver (see TransportConnection). */
+  readComplete?(): boolean;
+  /** Register the handler called once the controller's read became complete. */
+  onReadComplete?(cb: () => void): void;
+  /** The firmware version the controller read on this connection. */
+  firmware?(): string | undefined;
   /** Ask the device once, now; report a drop if it does not answer (the polled transports). */
   verifyAlive?(): Promise<void>;
   /** Close the connection. */
@@ -41,12 +50,12 @@ export class TransportConnectionAdapter implements TransportConnection {
   private owned: ReadonlySet<string> | undefined;
   private controller: AdaptedController | undefined;
   private shapeChanged: (() => void) | undefined;
-  /** Ids upserted since the last {@link seedOwned} — their values wait for the re-coordination. */
+  /** Ids upserted since the last {@link seedOwned} — their values wait until the handle learned them. */
   private readonly awaitingOwnership = new Set<string>();
   /**
-   * The last value the controller reported per canonical id, owned or not. When a re-coordination
-   * hands this transport an id it did not own (another transport dropped), the controller will not
-   * repeat an unchanged value — it is delivered from here at once (audit 2026-09-24, C21).
+   * The last value the controller reported per canonical id, owned or not. When the handle hands this
+   * transport an id it did not own (a proof it learned, forum 85413), the controller will not repeat an
+   * unchanged value — it is delivered from here at once (audit 2026-09-24, C21).
    */
   private readonly latest = new Map<string, boolean | number | string | null>();
   /**
@@ -88,8 +97,8 @@ export class TransportConnectionAdapter implements TransportConnection {
     // simply filled — it coordinates once afterwards. Later, a controller that learns something
     // mid-session (a function answered by a background refresh or a push, an XML status field
     // delivered for the first time, a dropdown grown by an observed value) signals the handle,
-    // which re-coordinates the live set. Only a REAL change signals: a controller may re-upsert
-    // the same definition freely, and a signal per push would re-fingerprint the whole tree.
+    // which learns what is new. Only a REAL change signals: a controller may re-upsert the same
+    // definition freely, and a signal per push would re-fingerprint the whole tree.
     if (this.owned && JSON.stringify(previous) !== JSON.stringify(object)) {
       this.awaitingOwnership.add(object.id);
       this.shapeChanged?.();
@@ -111,7 +120,7 @@ export class TransportConnectionAdapter implements TransportConnection {
       return;
     }
     // Before the first ownership arming, and for an object this transport created SINCE that
-    // arming (it is owned only after the handle re-coordinated), the value waits. An id the
+    // arming (it is owned only after the handle learned it), the value waits. An id the
     // adapter never built is another transport's business and is dropped as before.
     if (!this.owned || this.awaitingOwnership.has(canonicalId)) {
       this.buffered.push({ canonicalId, value });
@@ -138,8 +147,8 @@ export class TransportConnectionAdapter implements TransportConnection {
   }
 
   /**
-   * Register the handle's re-coordination callback (2.7.0). Called when an upsert after the
-   * first coordination really changed the shape — never during connect.
+   * Register the handle's learn callback (2.7.0). Called when an upsert after the first
+   * coordination really changed the shape — never during connect.
    *
    * @param cb invoked on every shape change
    */
@@ -181,13 +190,34 @@ export class TransportConnectionAdapter implements TransportConnection {
    *
    * @param canonicalId the canonical state id the user wrote
    * @param value the value written
+   * @returns what the controller made of it — `unclear` when it cannot say
    */
-  public handleWrite(canonicalId: string, value: unknown): void {
+  public async handleWrite(canonicalId: string, value: unknown): Promise<WriteOutcome> {
     const own = this.unalias(canonicalId);
     const zone = ZONE_PREFIX.exec(own)?.[0] ?? "";
     const template = own.slice(zone.length);
     const controllerId = zone + (INVERSE_DRIFT[this.transport]?.[template] ?? template);
-    this.controller?.handleWrite(controllerId, value);
+    const outcome = await this.controller?.handleWrite(controllerId, value);
+    return outcome ?? (this.controller ? "unclear" : "unavailable");
+  }
+
+  /** @returns whether the controller's read comes from a switched-on receiver (true when it cannot tell) */
+  public readComplete(): boolean {
+    return this.controller?.readComplete?.() ?? true;
+  }
+
+  /**
+   * Forward the handle's read-complete handler to the controller.
+   *
+   * @param cb called once the controller's read became complete
+   */
+  public onReadComplete(cb: () => void): void {
+    this.controller?.onReadComplete?.(cb);
+  }
+
+  /** @returns the firmware version the controller read on this connection, if any */
+  public firmware(): string | undefined {
+    return this.controller?.firmware?.();
   }
 
   /**
