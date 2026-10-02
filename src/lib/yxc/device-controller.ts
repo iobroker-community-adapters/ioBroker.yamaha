@@ -1424,17 +1424,19 @@ export class YxcDeviceController {
       if (update) {
         this.emit(update.id, update.value);
       }
-      // One slot folder per list: the shared list flat, a separate band's list in a folder of its own.
-      if (!common && !this.slotCounts.has("tuner.storedStations")) {
-        await this.deps.upsertObject(`${this.deviceId}.tuner.storedStations`, {
-          id: "tuner.storedStations",
-          type: "channel",
-          common: { name: tName("storedStations"), desc: tName("descStoredStations") },
-        });
-        this.slotCounts.set("tuner.storedStations", 0);
-      }
+      // One slot folder per list: the shared list flat, a separate band's list in a folder of its own — the
+      // folder above the band folders only once a band has a list to put in it (an empty folder stood in the
+      // tree for good once the runtime no longer removes anything, 2026-10-02).
       for (const [band, info] of Object.entries(byBand)) {
         const entries = stationSlotEntries(info);
+        if (entries && !common && !this.slotCounts.has("tuner.storedStations")) {
+          await this.deps.upsertObject(`${this.deviceId}.tuner.storedStations`, {
+            id: "tuner.storedStations",
+            type: "channel",
+            common: { name: tName("storedStations"), desc: tName("descStoredStations") },
+          });
+          this.slotCounts.set("tuner.storedStations", 0);
+        }
         if (entries) {
           await this.publishSlots(
             common ? "tuner.storedStations" : `tuner.storedStations.${band}`,

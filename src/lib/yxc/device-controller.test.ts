@@ -1854,6 +1854,26 @@ describe("YxcDeviceController device name", () => {
     expect(s.client.calls).toContainEqual({ method: "recallTunerPreset", args: ["fm", 7, "main"] });
   });
 
+  // A receiver that refuses its preset lists (a CD receiver answers `Guarded`) gets no empty stored-stations
+  // folder: the runtime removes nothing, so an empty folder would stand in the tree for good (2026-10-02).
+  test("no stored-stations folder while no band has a list", async () => {
+    const features = {
+      zone: [{ id: "main", func_list: ["power"] }],
+      tuner: { func_list: ["fm", "dab"], preset: { type: "separate", num: 30 } },
+    };
+    const refused = setup(features, ysp);
+    (refused.client as unknown as { getTunerPresetInfo: () => Promise<never> }).getTunerPresetInfo = () =>
+      Promise.reject(new YxcRefusalError("/tuner/getPresetInfo", 5));
+    await refused.controller.start();
+    expect(refused.objects.filter(id => id.startsWith("living.tuner.storedStations"))).toEqual([]);
+    // An answer without a list is no list either.
+    const empty = setup(features, ysp);
+    (empty.client as unknown as { getTunerPresetInfo: () => Promise<unknown> }).getTunerPresetInfo = () =>
+      Promise.resolve({ response_code: 0 });
+    await empty.controller.start();
+    expect(empty.objects.filter(id => id.startsWith("living.tuner.storedStations"))).toEqual([]);
+  });
+
   // YXC Basic Rev 1.10 §6.8 clears on the band (separate lists), §6.4 searches AM/FM, DAB steps its
   // service (§6.15) — the controller supplies the band (audit 2026-09-29, C38).
   test("a preset is cleared on the current band, and a search follows the band", async () => {
