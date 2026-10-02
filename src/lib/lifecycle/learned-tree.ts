@@ -7,8 +7,8 @@ const TRANSPORTS: readonly Transport[] = ["yxc", "ynca", "xml"];
  * What the adapter learned about ONE receiver's object tree. A receiver does not change what it can over
  * its life — only a firmware update or a new adapter version can — so who serves a datapoint is decided
  * once, kept in the device's capability profile, and read back on every start and every reconnect instead
- * of being computed again from whichever transports happen to answer (krobi 2026-10-02: "wir wissen ja was
- * das Gerät kann").
+ * of being computed again from whichever transports happen to answer (krobi 2026-10-02: "we do know what
+ * the device can do").
  *
  * Only the datapoints more than one transport serves are listed: a datapoint one transport alone builds has
  * no choice to remember, and the profile stays far below its size limit (a few hundred entries instead of

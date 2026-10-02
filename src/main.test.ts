@@ -3644,7 +3644,7 @@ describe("Yamaha removes what a device no longer has only when its read-in compl
     (call?.[0] as (() => void) | undefined)?.();
   };
 
-  // krobi 2026-10-02: "Warum löscht der normale Running Code datenpunkte bzw. leert sie" — a connect, a
+  // krobi 2026-10-02: "why does the normal running code delete or empty datapoints" — a connect, a
   // reconnect and the balance pass after it delete nothing; until 3.1.3 the never-filled purge ran there.
   it("a connect and the balance after it delete nothing", async () => {
     const ctx = setup();

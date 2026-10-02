@@ -177,8 +177,8 @@ export function coordinateObjectTree(
 
 /**
  * Whether a user write meant for a datapoint's owner may be sent through another transport instead —
- * when the owner is offline or the device refused the command there (krobi 2026-10-02: "probiert man
- * immer das modernste, falls der Befehl damit nicht geht dann eben das nächste"). The ownership itself
+ * when the owner is offline or the device refused the command there (krobi 2026-10-02: "always try the
+ * most modern one; if the command does not work with it, then the next one"). The ownership itself
  * does not move. Only where the value keeps its meaning: the same object and value type, the same unit,
  * and — where a dropdown is involved — the same wire vocabulary. A decibel bass (YNCA) is not MusicCast's
  * step count, a sleep text is not a number, "HDMI1" is not "hdmi1". A transport that only reads the

@@ -264,7 +264,7 @@ describe("MultiTransportHandle per-transport reconnect", () => {
     expect(freshYnca.writes).toContainEqual({ id: "sound.bass", value: -3 });
   });
 
-  // krobi 2026-10-02: "probiert man immer das modernste, falls der Befehl damit nicht geht dann eben das nächste" —
+  // krobi 2026-10-02: "always try the most modern one; if the command does not work with it, then the next one" —
   // the owner stays; only the write takes the next transport that carries it unchanged.
   test("while the owner is offline, a write goes through the next transport that carries it unchanged", async () => {
     const ynca = fakeConn("ynca", [state("power", "Power", { type: "boolean", role: "switch.power" })]);

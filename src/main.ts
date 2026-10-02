@@ -1627,7 +1627,7 @@ export class Yamaha extends utils.Adapter {
   /**
    * The completion of a device's read-in — after an installation, an adapter update or a firmware update,
    * with the receiver switched on and every transport it has answering: the one moment its tree may shrink
-   * (krobi 2026-10-02: "Höchstens beim updaten vom Adapter"). Removes, under this device only:
+   * (krobi 2026-10-02: "at most when the adapter is updated"). Removes, under this device only:
    * - the datapoints this version renamed (`renamedObjectIds`),
    * - the datapoints no transport built that never carried a value — an earlier version's over-declarations,
    *   a function a firmware update took away. A datapoint that carries a value stays: some are built only when
