@@ -88,7 +88,9 @@ GEÄNDERTE Objekt-Definitionen (Fingerabdruck je Id, die Karte hält `main.ts` j
 jede Purge-/Aufräum-Id fällt heraus, sonst fehlt einem zurückkehrenden Kind der Elternkanal) — ein flackerndes
 Gerät schrieb sonst alle paar Minuten ~250 unveränderte Objekte neu. **Werte entdoppelt `main.ts`, nie der
 Controller:** jeder Controller liefert jeden Wert; schreibgeschützte Zustände vergleicht der Speicher-Spiegel
-(`lifecycle/write-mirror.ts`), beschreibbare `setStateChangedAsync`, und der
+(`lifecycle/write-mirror.ts`; nach der Sammel-Lesung heißt „kein Eintrag“ = kein Wert, nie ein Einzel-Lesen; die Sammel-Lesung
+steht vor der Start-Markierung `info.connection`, die schreibgeschützten `instanceObjects` gelten schon vor der Objekt-Spiegelung als
+schreibgeschützt), beschreibbare `setStateChangedAsync`, und der
 Transport-Adapter liefert einer neu gewonnenen Id sofort ihren letzten Wert nach. **Reconnect ist zweistufig:** Der Ausfall EINES Transports schließt nur ihn und
 koordiniert sofort neu — ein lebender Transport übernimmt jede Id, die er VERTRÄGLICH baut (gleicher Typ,
 gleiche Einheit, verträgliche Werteliste, kein schreibbarer Punkt an einen nur lesenden Transport; `sleep`, `input`,
