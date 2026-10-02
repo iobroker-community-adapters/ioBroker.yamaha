@@ -72,8 +72,7 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
-
-### **WORK IN PROGRESS**
+### 3.1.3 (2026-10-02)
 
 - (krobipd) Fixed: Menu lines fill again after switching player.browse.source, also on receivers that were in standby when the adapter started
 - (krobipd) Fixed: On receivers that offer their menus only over XML (models from before 2010), the menu lines no longer stay empty after a source switch
@@ -103,15 +102,6 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
 ### 3.0.1 (2026-09-27)
 
 - (krobipd) Improved: The notes the Admin shows before an update are short now: what changes, one example old → new, and a link to the details
-
-### 3.0.0 (2026-09-26)
-
-- (krobipd) Changed: Every device gets a new object ID once — its model and the end of its serial number, e.g. `wx-030-2b3c`; scripts and VIS need the new IDs
-- (krobipd) Changed: The move carries values, recording settings, rooms, functions and aliases along, and recorded history continues in its old series
-- (krobipd) Fixed: A second device of the same model and name is no longer skipped — every device gets its own object tree
-- (krobipd) Fixed: After a restart, the input list of a YNCA receiver offers only the sources the receiver has again, not the whole catalog
-- (krobipd) New: A device added by hand is asked for its model and serial number, and the name you type is its display name from the start
-- (krobipd) New: The device card shows the object ID, the MAC address and the serial number under its details
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 

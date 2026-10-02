@@ -1,9 +1,22 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "3.1.2",
+    "version": "3.1.3",
     "nogit": true,
     "news": {
+      "3.1.3": {
+        "en": "Menu lines fill again after a source switch, also on receivers that were in standby when the adapter started. New instances start switched off until they are set up.",
+        "de": "Die Menüzeilen füllen sich nach einem Quellenwechsel wieder, auch bei Receivern, die beim Start des Adapters im Standby waren. Neue Instanzen starten ausgeschaltet, bis sie eingerichtet sind.",
+        "ru": "Строки меню снова заполняются после смены источника, в том числе у ресиверов, которые были в режиме ожидания при запуске адаптера. Новые экземпляры запускаются выключенными до настройки.",
+        "pt": "As linhas do menu voltam a preencher-se após mudar de fonte, também em recetores que estavam em espera quando o adaptador arrancou. Novas instâncias começam desligadas até serem configuradas.",
+        "nl": "Menuregels vullen zich weer na een bronwissel, ook bij receivers die in stand-by stonden toen de adapter startte. Nieuwe instanties starten uitgeschakeld tot ze zijn ingesteld.",
+        "fr": "Les lignes du menu se remplissent à nouveau après un changement de source, même si l'ampli était en veille au démarrage. Les nouvelles instances démarrent désactivées.",
+        "it": "Le righe del menu si riempiono di nuovo dopo un cambio sorgente, anche sui ricevitori in standby all'avvio dell'adattatore. Le nuove istanze partono disattivate finché non sono configurate.",
+        "es": "Las líneas del menú vuelven a llenarse tras cambiar de fuente, también en receptores que estaban en espera al iniciar el adaptador. Las instancias nuevas arrancan desactivadas hasta configurarlas.",
+        "pl": "Wiersze menu znów się wypełniają po zmianie źródła, także w amplitunerach, które były w trybie czuwania przy starcie adaptera. Nowe instancje startują wyłączone, dopóki nie zostaną skonfigurowane.",
+        "uk": "Рядки меню знову заповнюються після зміни джерела, також у ресиверів, які були в режимі очікування під час запуску адаптера. Нові екземпляри запускаються вимкненими до налаштування.",
+        "zh-cn": "切换音源后菜单行会重新填充，适配器启动时处于待机状态的接收机也是如此。新实例在完成设置前保持关闭。"
+      },
       "3.1.2": {
         "en": "The sleep timer lists the receiver's own values again (Off, 30 min …) instead of MusicCast's minutes, so a picked value is one the receiver accepts.",
         "de": "Der Einschlaf-Timer zeigt wieder die eigenen Werte des Receivers (Aus, 30 min …) statt der MusicCast-Minuten, ein gewählter Wert wird also angenommen.",
@@ -81,19 +94,6 @@
         "pl": "Każdy zapis jest odczytywany ponownie, odrzucony znów pokazuje wartość urządzenia; MusicCast zapisuje więcej ustawień i tworzy grupy Link wg specyfikacji; znaki całe.",
         "uk": "Кожен запис зчитується назад, відхилений знову показує значення пристрою; MusicCast пише більше налаштувань і будує групи Link за специфікацією; умлаути цілі.",
         "zh-cn": "每次写入都会回读，被拒绝的写入会重新显示设备值；MusicCast 可写入更多设置并按规范组建 Link 组；变音字符完整到达。"
-      },
-      "2.12.0": {
-        "en": "Deleting a device is final, a receiver is known by its serial number and follows a new IP address within seconds, and one that lost power is offline in about 90 seconds.",
-        "de": "Löschen ist endgültig, ein Receiver ist an seiner Seriennummer bekannt und folgt einer neuen IP-Adresse in Sekunden, ein stromloser ist nach etwa 90 Sekunden offline.",
-        "ru": "Удаление устройства окончательно, ресивер известен по серийному номеру и следует за новым IP-адресом за секунды, а обесточенный отмечается офлайн примерно через 90 секунд.",
-        "pt": "Eliminar um dispositivo é definitivo, o receptor é reconhecido pelo número de série e segue um novo endereço IP em segundos, e um sem energia fica offline em cerca de 90 segundos.",
-        "nl": "Verwijderen is definitief, een receiver is bekend aan zijn serienummer en volgt een nieuw IP-adres binnen seconden, en een zonder stroom is na ongeveer 90 seconden offline.",
-        "fr": "La suppression est définitive, un ampli est reconnu par son numéro de série et suit une nouvelle adresse IP en quelques secondes, et un ampli hors tension passe hors ligne en 90 secondes.",
-        "it": "L'eliminazione è definitiva, un ricevitore è riconosciuto dal numero di serie e segue un nuovo indirizzo IP in pochi secondi, e uno senza corrente risulta offline in circa 90 secondi.",
-        "es": "Eliminar un dispositivo es definitivo, un receptor se reconoce por su número de serie y sigue una nueva dirección IP en segundos, y uno sin corriente queda fuera de línea en unos 90 segundos.",
-        "pl": "Usunięcie urządzenia jest ostateczne, amplituner jest rozpoznawany po numerze seryjnym i podąża za nowym adresem IP w sekundy, a odłączony od prądu jest offline po około 90 sekundach.",
-        "uk": "Видалення пристрою остаточне, ресивер відомий за серійним номером і слідує за новою IP-адресою за секунди, а знеструмлений позначається офлайн приблизно за 90 секунд.",
-        "zh-cn": "删除设备是最终操作，接收机通过序列号被识别并在几秒内跟随新的 IP 地址，断电的接收机约 90 秒后显示为离线。"
       }
     },
     "titleLang": {
