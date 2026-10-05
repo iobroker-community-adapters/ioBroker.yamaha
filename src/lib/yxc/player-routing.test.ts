@@ -112,6 +112,24 @@ describe("YxcPlayerRouting", () => {
     expect(r.recallZone("net_radio")).toBe("main");
   });
 
+  // Zone 2 in standby still reports the net_radio it was left on: the favourite went into a zone nobody listens
+  // to (review 2026-10-05, A45).
+  test("a zone in standby listens to nothing — the recall goes to a switched-on zone, or to main", () => {
+    const { routing: r } = routing(["main", "zone2", "zone3"]);
+    r.noteInput("main", "hdmi1");
+    r.noteInput("zone2", "net_radio");
+    r.notePower("zone2", false);
+    expect(r.recallZone("net_radio")).toBe("main");
+    r.noteInput("zone3", "net_radio");
+    r.notePower("zone3", true);
+    expect(r.recallZone("net_radio")).toBe("zone3");
+    r.notePower("zone2", true);
+    expect(r.recallZone("net_radio")).toBe("zone2");
+    r.noteInput("main", "net_radio");
+    r.notePower("main", false);
+    expect(r.recallZone("net_radio")).toBe("zone2");
+  });
+
   test("a transport key goes to the source the zone plays; without one nothing is sent", async () => {
     const { routing: r } = routing();
     r.notePlayInfo("netusb", { input: "spotify" });

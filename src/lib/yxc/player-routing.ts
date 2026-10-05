@@ -36,6 +36,8 @@ export type PlayerCall = { run: (client: YxcClientLike) => Promise<unknown>; pla
 export class YxcPlayerRouting {
   /** Each zone's currently selected input, from its status. */
   private readonly zoneInput = new Map<string, string>();
+  /** Each zone's power, from its status: a zone in standby listens to nothing. */
+  private readonly zonePower = new Map<string, boolean>();
   /** Which source currently feeds each zone's block. */
   private readonly zoneBlock = new Map<string, YxcPlayer>();
   /** The source the network player is on (netusb `input`, e.g. "net_radio"). */
@@ -62,6 +64,16 @@ export class YxcPlayerRouting {
     const previous = this.zoneInput.get(zone);
     this.zoneInput.set(zone, input);
     return previous;
+  }
+
+  /**
+   * A zone's status reported its power.
+   *
+   * @param zone the zone
+   * @param on whether it is switched on
+   */
+  public notePower(zone: string, on: boolean): void {
+    this.zonePower.set(zone, on);
   }
 
   /**
@@ -110,7 +122,9 @@ export class YxcPlayerRouting {
   /**
    * The zone a recall should go to: recalling a favourite does not just start it, it also switches THAT zone to
    * the source. The zone actually listening to the source is the right target, main first when several share
-   * it; main is the fallback when nothing matches, which is also every single-zone device.
+   * it; main is the fallback when nothing matches, which is also every single-zone device. Only a switched-on zone
+   * listens: zone 2 in standby still reports the `net_radio` it was left on, and the favourite went there — into a
+   * zone nobody listens to (review 2026-10-05, A45).
    *
    * @param source the input the recall belongs to (a network source, or "tuner")
    * @returns the zone to route the recall to
@@ -119,11 +133,14 @@ export class YxcPlayerRouting {
     if (!source) {
       return "main";
     }
-    if (this.zoneInput.get("main") === source) {
+    // A zone whose power was never reported counts as on, as before.
+    const listening = (zone: string): boolean =>
+      this.zoneInput.get(zone) === source && this.zonePower.get(zone) !== false;
+    if (listening("main")) {
       return "main";
     }
-    for (const [zone, input] of this.zoneInput) {
-      if (input === source) {
+    for (const zone of this.zoneInput.keys()) {
+      if (listening(zone)) {
         return zone;
       }
     }

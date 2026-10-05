@@ -1636,6 +1636,10 @@ export class YxcDeviceController {
         continue;
       }
       this.emit(update.id, update.value);
+      // A zone in standby listens to nothing — a recall must not go there (review 2026-10-05, A45).
+      if (update.id === `${zonePrefix(zone)}power` && typeof update.value === "boolean") {
+        this.routing.notePower(zone, update.value);
+      }
       // The EXACT id, not a suffix: this value decides which source a zone's player block
       // and its transport buttons follow. A future status field ending in "input" would
       // have bent that routing silently.

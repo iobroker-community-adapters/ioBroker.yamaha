@@ -3176,3 +3176,29 @@ describe("MusicCast Link changes wait for each other (review 2026-10-05, A14)", 
     expect(roster).toEqual(["10.0.0.3", "10.0.0.4"]);
   });
 });
+
+// Zone 2 in standby, its input still on the old net_radio: the favourite went to zone 2 (review 2026-10-05, A45).
+describe("a recall goes to a switched-on zone (review 2026-10-05, A45)", () => {
+  test("a favourite does not go to a zone in standby whose old input matches the network source", async () => {
+    const s = setup(rxV481, { power: "on", volume: 60, input: "hdmi1", actual_volume: { mode: "numeric", value: 30 } });
+    s.client.statusByZone = {
+      main: { power: "on", volume: 60, input: "hdmi1", actual_volume: { mode: "numeric", value: 30 } },
+      zone2: { power: "standby", volume: 81, input: "net_radio", actual_volume: { mode: "numeric", value: 40.5 } },
+    };
+    s.client.playInfo = { input: "net_radio", playback: "stop" };
+    await s.controller.start();
+    s.client.calls.length = 0;
+    expect(await s.controller.handleWrite("player.netPlayer.preset", 3)).toBe("sent");
+    expect(s.client.calls.find(c => c.method === "recallPreset")?.args).toEqual([3, "main"]);
+    // Switched on, zone 2 is the one listening.
+    s.client.statusByZone = {
+      ...s.client.statusByZone,
+      zone2: { power: "on", volume: 81, input: "net_radio", actual_volume: { mode: "numeric", value: 40.5 } },
+    };
+    s.fire.push?.({ zone2: { power: "on" } });
+    await flush();
+    s.client.calls.length = 0;
+    await s.controller.handleWrite("player.netPlayer.preset", 3);
+    expect(s.client.calls.find(c => c.method === "recallPreset")?.args).toEqual([3, "zone2"]);
+  });
+});
