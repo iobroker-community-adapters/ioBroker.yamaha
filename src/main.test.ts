@@ -495,7 +495,10 @@ import { DEVICE_TYPE_ICONS, iconForModel } from "./lib/device-type";
 import { MAX_HTTP_BODY_BYTES } from "./lib/util";
 import { LABEL_RANK } from "./lib/pure-helpers";
 import { PushLiveness } from "./lib/yxc/push-liveness";
-import { PROFILE_KEY } from "./lib/lifecycle/capability-profile";
+import { identityOfDeviceObject, PROFILE_KEY } from "./lib/lifecycle/capability-profile";
+import { mergedWith } from "./lib/known-objects";
+import { sameDevice } from "./lib/device-identity";
+import { YamahaDeviceManagement } from "./device-management";
 
 /**
  * What a read stub answers with: a COPY of the stored value, never the stored object itself.
@@ -511,7 +514,7 @@ function copyOf<T>(value: T | undefined): T | null {
   return value === undefined || value === null ? null : structuredClone(value);
 }
 
-import { writeDiscovered } from "./lib/discovered-store";
+import { isExcluded, writeDiscovered } from "./lib/discovered-store";
 import type { ConnectionHandle } from "./lib/controller";
 
 /** A live connection handle the fake attempt hands back. */
@@ -1149,7 +1152,10 @@ describe("Yamaha auto-discovery", () => {
     ctx.i.profiles.get("RX-V685")!.identity = () => ({ serial: "0E897553" });
     ctx.i.reportConnection("RX-V685", true);
     await flush();
-    expect(ctx.i.pendingDevicePatches.get("RX-V685")?.native).toEqual({ identity: { serial: "0E897553" } });
+    // Both fields, the unknown one null: the database merges key by key (review 2026-10-05, A30).
+    expect(ctx.i.pendingDevicePatches.get("RX-V685")?.native).toEqual({
+      identity: { serial: "0E897553", mac: null },
+    });
     expect(mocks.discoveredStore.devices).toEqual([
       { id: "RX-V685", ip: "192.168.1.20", identity: { serial: "0E897553" } },
     ]);
@@ -1183,6 +1189,58 @@ describe("Yamaha auto-discovery", () => {
     await ctx.i.onReady();
     await flush();
     expect(ctx.i.deviceRecords.get("RX-V685")?.identity).toEqual({ serial: "0E897553", mac: "00A0DED4F504" });
+  });
+
+  // Review 2026-10-05, A11 (proof test REVIEW C): the identity the search read was copied into the record and then
+  // "learned" — nothing new, so it never reached the device object, and a delete excluded the device by its address
+  // only: the next receiver that DHCP gave that address stayed out of every search for good.
+  it("the identity the search read reaches the device object, and a delete excludes by it — not by the address", async () => {
+    const identity = { serial: "0A1B2B3C", mac: "00A0DE0A1B2C" };
+    mocks.discoveredStore.devices = [{ id: "rx-v6a-2b3c", ip: "192.168.1.20", identity }];
+    const ctx = setup({ devices: [], discovery: "always" });
+    // Own-namespace objects through the foreign read, as js-controller answers it.
+    (ctx.i as unknown as { getForeignObjectAsync: unknown }).getForeignObjectAsync = vi.fn((id: string) => {
+      const object = id.startsWith("yamaha.0.") ? ctx.i.objects.get(id.slice(9)) : ctx.i.foreignObjects.get(id);
+      return Promise.resolve(object ? structuredClone(object) : null);
+    });
+    await ctx.i.onReady();
+    await flush();
+    await flushPatches(ctx);
+    expect((ctx.i.objects.get("rx-v6a-2b3c")?.native as Record<string, unknown>).identity).toEqual(identity);
+    const dm = new YamahaDeviceManagement(ctx.i as never) as unknown as { deleteDevice(id: string): Promise<unknown> };
+    await dm.deleteDevice("rx-v6a-2b3c");
+    expect(mocks.discoveredStore.excluded).toEqual([{ id: "rx-v6a-2b3c", ip: "192.168.1.20", identity }]);
+    const stranger = { id: "wx-030-9999", ip: "192.168.1.20", identity: { serial: "0FFF9999" } };
+    expect(isExcluded([], mocks.discoveredStore.excluded, stranger)).toBe(false);
+  });
+
+  // Review 2026-10-05, A30 (proof test REVIEW D): a replaced identity, merged into the stored one key by key, kept the
+  // old device's MAC next to the new serial — and the old receiver, found by that MAC, counted as this device's twin.
+  it("an identity that replaces another is stored as it is — no hybrid with the old device's MAC", async () => {
+    const ctx = setup();
+    // The objects database merges a patch key by key (js-controller 7.2.2: extend(true, oldObj, obj)).
+    (ctx.i as unknown as { extendObject: unknown }).extendObject = vi.fn((id: string, obj: Record<string, unknown>) => {
+      const key = id.replace("yamaha.0.", "");
+      ctx.i.objects.set(key, mergedWith(ctx.i.objects.get(key) ?? {}, obj) as Record<string, unknown>);
+      return Promise.resolve();
+    });
+    ctx.i.objects.set("Living_room", {
+      type: "device",
+      common: { name: "Living_room" },
+      native: { identity: { serial: "0A0A0A0A", mac: "00A0DE000001" } },
+    });
+    await ctx.i.onReady();
+    await flush();
+    await flushPatches(ctx);
+    // A replacement receiver at the typed address reports a contradicting serial (XML: serial only).
+    (ctx.i as unknown as { learnIdentity(id: string, identity: unknown): void }).learnIdentity("Living_room", {
+      serial: "0B0B0B0B",
+    });
+    expect(ctx.i.deviceRecords.get("Living_room")?.identity).toEqual({ serial: "0B0B0B0B" });
+    await flushPatches(ctx);
+    const reread = identityOfDeviceObject(ctx.i.objects.get("Living_room")?.native as Record<string, unknown>);
+    expect(reread).toEqual({ serial: "0B0B0B0B" });
+    expect(sameDevice(reread, { mac: "00A0DE000001", serial: "0A0A0A0A" })).toBe(false);
   });
 
   describe("a find and the table rows", () => {

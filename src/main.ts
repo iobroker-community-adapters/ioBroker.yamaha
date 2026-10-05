@@ -53,7 +53,7 @@ import { discoverYamaha, probeDescription, type DiscoveredDevice } from "./lib/d
 import { SsdpListener, type SsdpNotify } from "./lib/ssdp-listener";
 import { isExcluded } from "./lib/discovered-store";
 import { type DeviceStores, deviceStoresOf, rememberedDevices } from "./lib/device-stores";
-import { identityFrom, mergeIdentity, sameDevice, type DeviceIdentity } from "./lib/device-identity";
+import { identityFrom, mergeIdentity, sameDevice, storedIdentity, type DeviceIdentity } from "./lib/device-identity";
 import { YxcPushReceiver } from "./lib/yxc/push-receiver";
 import { PushLiveness } from "./lib/yxc/push-liveness";
 import { YamahaDeviceManagement } from "./device-management";
@@ -722,7 +722,14 @@ export class Yamaha extends utils.Adapter {
     // Both callers check `unloading` after their network search resolves (onReady and
     // discoverAdditionalDevices) — a device handed over after onUnload never gets here.
     this.deviceConnected.set(device.id, false);
-    this.deviceRecords.set(device.id, { ...device });
+    // What the search learned about the device is LEARNED onto the record, so the device object gets it
+    // (persistDeviceNative needs the record) — copied in with the rest, the learning found nothing new and
+    // never stored it: a deleted found device was then excluded by its address only, and the next device
+    // DHCP gave that address stayed out for good (review 2026-10-05, A11). The header read below merges
+    // what the object already carried from earlier runs.
+    const { identity: found, ...record } = device;
+    this.deviceRecords.set(device.id, record);
+    this.learnIdentity(device.id, found);
     this.knownDeviceIps.add(device.ip);
     if (!isIPv4(device.ip)) {
       const resolved = await resolveIPv4(device.ip);
@@ -733,10 +740,6 @@ export class Yamaha extends utils.Adapter {
         this.log.debug(`${device.id}: ${device.ip} does not resolve to an IPv4 address right now`);
       }
     }
-    // What the search learned about the device rides on the record; the device object gets it
-    // now (persistDeviceNative needs the record above), the header read below merges what the
-    // object already carried from earlier runs.
-    this.learnIdentity(device.id, device.identity);
     // ONE read of the device object for the header and the profile (it was read twice per start, review 2026-10-05, E).
     const stored = await this.storedDevice(device.id);
     await this.ensureDeviceHeader(device.id, device.ip, stored);
@@ -1215,12 +1218,13 @@ export class Yamaha extends utils.Adapter {
       return;
     }
     const merged = mergeIdentity(record.identity, identity);
-    if (JSON.stringify(merged) === JSON.stringify(record.identity)) {
+    if (!merged || JSON.stringify(merged) === JSON.stringify(record.identity)) {
       return;
     }
     record.identity = merged;
-    this.persistDeviceNative(deviceId, { identity: merged });
-    if (record.source === "discovered" && merged) {
+    // Stored REPLACING: merged key by key, a replaced identity kept the old device's MAC (review 2026-10-05, A30).
+    this.persistDeviceNative(deviceId, { identity: storedIdentity(merged) });
+    if (record.source === "discovered") {
       this.rememberIdentity(deviceId, merged).catch((e: unknown) =>
         this.log.debug(`${deviceId}: could not store the identity (${errText(e)})`),
       );
