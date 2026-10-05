@@ -596,11 +596,36 @@ export function neverWrittenStateIds(
       continue;
     }
     const state = states[fullId];
-    if (!state || ((state.val === null || state.val === undefined) && !state.lc)) {
+    if (
+      !state ||
+      ((state.val === null || state.val === undefined) && !state.lc) ||
+      isBlankSceneTitle(relative, top, state)
+    ) {
       ids.push(fullId);
     }
   }
   return ids;
+}
+
+/** A scene title datapoint, relative to its device and its zone folder. */
+const SCENE_TITLE = /^scene\.title\d+$/;
+
+/**
+ * A scene title that only ever held a blank: until 3.2.0 the XML transport kept the blank titles a receiver declares
+ * (the RX-V6A declares all eight empty) and built a `scene.titleN` datapoint for each — 16 of them on the RX-V6A. The
+ * transports no longer build them, so at the completion of a read-in such a datapoint is one "never written" — a blank is
+ * no title (review 2026-10-05, A23).
+ *
+ * @param relative the state id relative to the namespace
+ * @param deviceId the device it belongs to
+ * @param state its state
+ * @param state.val its value
+ * @returns whether it is a scene title holding nothing but a blank
+ */
+function isBlankSceneTitle(relative: string, deviceId: string, state: { val?: unknown }): boolean {
+  const rel = relative.slice(deviceId.length + 1);
+  const template = rel.slice((ANY_ZONE_PREFIX.exec(rel)?.[0] ?? "").length);
+  return SCENE_TITLE.test(template) && typeof state.val === "string" && state.val.trim() === "";
 }
 
 /**

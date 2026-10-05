@@ -947,6 +947,29 @@ describe("neverWrittenStateIds (one-time orphan purge per version)", () => {
     ]);
   });
 
+  // Review 2026-10-05 (shared report, A23): the XML transport built a scene.titleN for every blank title a receiver declares
+  // (16 on the RX-V6A); the blank was a "value", so the completion of a read-in never removed them.
+  test("a scene title holding only a blank counts as never written — in the main zone and under zone folders", () => {
+    const objects = {
+      [`${ns}.living.scene.title1`]: stateObj(true),
+      [`${ns}.living.multiroom.zone2.scene.title3`]: stateObj(true),
+      [`${ns}.living.scene.title2`]: stateObj(true), // a real title
+      [`${ns}.living.scene.recall`]: stateObj(true), // not a title
+      [`${ns}.living.tuner.rdsText`]: stateObj(true), // a blank elsewhere is still a value
+    };
+    const states = {
+      [`${ns}.living.scene.title1`]: { val: "", lc: 1 },
+      [`${ns}.living.multiroom.zone2.scene.title3`]: { val: "  ", lc: 1 },
+      [`${ns}.living.scene.title2`]: { val: "Movie", lc: 1 },
+      [`${ns}.living.scene.recall`]: { val: "", lc: 1 },
+      [`${ns}.living.tuner.rdsText`]: { val: "", lc: 1 },
+    };
+    expect(neverWrittenStateIds(objects, states, new Set(["living"]), ns).sort()).toEqual([
+      `${ns}.living.multiroom.zone2.scene.title3`,
+      `${ns}.living.scene.title1`,
+    ]);
+  });
+
   test("edge shapes: missing common counts as readable; lc of 0 counts as never written", () => {
     const objects = {
       [`${ns}.living.hdmi.out2`]: { type: "state" }, // no common at all — still purgeable
