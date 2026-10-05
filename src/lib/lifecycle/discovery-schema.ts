@@ -16,4 +16,4 @@
  * add what it learns within the session, so a late object does materialise — but that is
  * ADDITIVE; a changed discovery LOGIC still needs the cold re-learn this constant triggers.)
  */
-export const DISCOVERY_SCHEMA = 5;
+export const DISCOVERY_SCHEMA = 6;
