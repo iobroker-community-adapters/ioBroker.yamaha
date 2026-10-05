@@ -1,5 +1,5 @@
-import { MEDIA_STATE, MEDIA_STATE_LABELS } from "./media-state";
-import type { ObjectDef } from "./types";
+import { MEDIA_STATE, MEDIA_STATE_LABELS, TRANSPORT_KEYS } from "./media-state";
+import { channelCommon, keyedCommon, type ObjectDef } from "./types";
 import type { I18nKey } from "../i18n";
 import type { StateValue } from "../types";
 
@@ -135,6 +135,55 @@ export const PLAYER_STATION_STATE: PlayerBlockState = {
   state: "station",
   common: { nameKey: "station", type: "string", role: "text", read: true, write: false },
 };
+
+/**
+ * The transport keys of a player block as block states: write-only buttons with the media-player roles of
+ * {@link TRANSPORT_KEYS}. XML read that table while MusicCast wrote the same five buttons out a second time
+ * (review 2026-10-05, E).
+ */
+export const PLAYER_KEY_STATES: readonly PlayerBlockState[] = Object.entries(TRANSPORT_KEYS).map(
+  ([state, { nameKey, role }]) => ({ state, common: { nameKey, type: "boolean", role, read: false, write: true } }),
+);
+
+/**
+ * One state of a zone's player block as its object — named and explained from the table's keys, and writable where
+ * the protocol takes the write although the table shows the state (MusicCast's repeat and shuffle from API 1.19).
+ *
+ * @param prefix the block's channel id (`player`, `multiroom.zone2.player`)
+ * @param state the block state
+ * @param writable whether this protocol takes writes for the state
+ * @returns the state object
+ */
+export function playerStateObject(prefix: string, state: PlayerBlockState, writable = false): ObjectDef {
+  return {
+    id: `${prefix}.${state.state}`,
+    type: "state",
+    common: { ...keyedCommon(state.common), ...(writable ? { write: true } : {}) },
+  };
+}
+
+/**
+ * A zone's whole player block — its channel, named and explained from the one channel table, then one object per
+ * state. The one builder the protocols share that build the block from the tables: MusicCast builds it at once, XML
+ * state by state as the device first reports each ({@link playerStateObject}); the block stood in four builders
+ * (review 2026-10-05, E).
+ *
+ * @param prefix the block's channel id (`player`, `multiroom.zone2.player`)
+ * @param states the block states this protocol serves (from {@link PLAYER_DISPLAY_STATES}, {@link PLAYER_STATION_STATE},
+ *   {@link PLAYER_KEY_STATES} and its own)
+ * @param writable the states this protocol takes writes for although the table shows them
+ * @returns the objects, the channel first
+ */
+export function playerBlockObjects(
+  prefix: string,
+  states: readonly PlayerBlockState[],
+  writable: ReadonlySet<string> = new Set(),
+): ObjectDef[] {
+  return [
+    { id: prefix, type: "channel", common: channelCommon("player") },
+    ...states.map(state => playerStateObject(prefix, state, writable.has(state.state))),
+  ];
+}
 
 /**
  * What a zone's player block shows once the zone left its media source: no metadata, times zero, playback Stop —
