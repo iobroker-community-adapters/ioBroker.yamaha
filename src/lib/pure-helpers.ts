@@ -833,8 +833,11 @@ export function nextDeviceLabel(
   if (!isPlaceholder && !isOurs) {
     return undefined; // the user named this device — theirs wins
   }
-  if (isOurs && ownRank !== undefined && rank < ownRank) {
-    return undefined; // do not fall back from a device name to its model
+  // Do not fall back from a device name to its model — also while the name the adapter chose is still on its way to
+  // the object (the write is batched), where the object still shows the placeholder: MusicCast's zone name and the
+  // model arrive within a second of each other since every protocol reports the model (review 2026-10-05, A5).
+  if (ownRank !== undefined && rank < ownRank) {
+    return undefined;
   }
   return wanted;
 }

@@ -832,6 +832,13 @@ describe("isUsefulDeviceName", () => {
 });
 
 describe("nextDeviceLabel", () => {
+  it("keeps the MusicCast name over the model while that name is still on its way to the object", () => {
+    // The zone name was chosen (rank 2) but the batched write has not landed: the object still shows the id.
+    expect(
+      nextDeviceLabel("wx-030-7553", "wx-030-7553", "WX-030", LABEL_RANK.model, "Badezimmer", LABEL_RANK.deviceName),
+    ).toBeUndefined();
+  });
+
   const id = "192_168_178_25";
 
   it("replaces the ip an upgraded instance carries as the device name", () => {

@@ -2,15 +2,17 @@
   "yamaha.0.cd-nt670d": {
     "type": "device",
     "common": {
-      "name": "cd-nt670d",
-      "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNOSAxOGg0NmE1IDUgMCAwIDEgNSA1djE4YTUgNSAwIDAgMSAtNSA1aC00NmE1IDUgMCAwIDEgLTUgLTV2LTE4YTUgNSAwIDAgMSA1IC01eiIvPjxwYXRoIGQ9Ik0xNCAyN2gxNGEyIDIgMCAwIDEgMiAydjRhMiAyIDAgMCAxIC0yIDJoLTE0YTIgMiAwIDAgMSAtMiAtMnYtNGEyIDIgMCAwIDEgMiAtMnoiLz48Y2lyY2xlIGN4PSI0NiIgY3k9IjMyIiByPSI3Ii8+PHBhdGggZD0iTTE0IDQ2djZNNTAgNDZ2NiIvPjwvc3ZnPg==",
+      "name": "CD-NT670D",
+      "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNOSAxNGg0NmE1IDUgMCAwIDEgNSA1djI2YTUgNSAwIDAgMSAtNSA1aC00NmE1IDUgMCAwIDEgLTUgLTV2LTI2YTUgNSAwIDAgMSA1IC01eiIvPjxjaXJjbGUgY3g9IjMyIiBjeT0iMzIiIHI9IjEwIi8+PGNpcmNsZSBjeD0iMzIiIGN5PSIzMiIgcj0iMi41Ii8+PHBhdGggZD0iTTExIDQ0aDgiLz48L3N2Zz4=",
       "statusStates": {
         "onlineId": "yamaha.0.cd-nt670d.info.connection"
       }
     },
     "native": {
-      "source": "manual",
       "volumeAsPercent": false,
+      "model": "CD-NT670D",
+      "label": "CD-NT670D",
+      "labelRank": 1,
       "idScheme": 3
     },
     "_id": "yamaha.0.cd-nt670d"
@@ -100,6 +102,19 @@
         "pl": "Informacje",
         "uk": "Інформація",
         "zh-cn": "信息"
+      },
+      "desc": {
+        "en": "Model, firmware, address and which of the three protocols are live.",
+        "de": "Modell, Firmware, Adresse und welche der drei Protokolle gerade leben.",
+        "ru": "Модель, прошивка, адрес и какие из трёх протоколов активны.",
+        "pt": "Modelo, firmware, endereço e quais dos três protocolos estão ativos.",
+        "nl": "Model, firmware, adres en welke van de drie protocollen actief zijn.",
+        "fr": "Modèle, micrologiciel, adresse et lesquels des trois protocoles sont actifs.",
+        "it": "Modello, firmware, indirizzo e quali dei tre protocolli sono attivi.",
+        "es": "Modelo, firmware, dirección y cuáles de los tres protocolos están activos.",
+        "pl": "Model, oprogramowanie, adres i które z trzech protokołów są aktywne.",
+        "uk": "Модель, прошивка, адреса та які з трьох протоколів активні.",
+        "zh-cn": "型号、固件、地址，以及三种协议中哪些处于活动状态。"
       }
     },
     "native": {},
@@ -142,6 +157,30 @@
     },
     "native": {},
     "_id": "yamaha.0.cd-nt670d.info.connection"
+  },
+  "yamaha.0.cd-nt670d.info.firmware": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Firmware version",
+        "de": "Firmware-Version",
+        "ru": "Версия прошивки",
+        "pt": "Versão do firmware",
+        "nl": "Firmwareversie",
+        "fr": "Version du micrologiciel",
+        "it": "Versione firmware",
+        "es": "Versión del firmware",
+        "pl": "Wersja oprogramowania",
+        "uk": "Версія прошивки",
+        "zh-cn": "固件版本"
+      },
+      "type": "string",
+      "role": "text",
+      "read": true,
+      "write": false
+    },
+    "native": {},
+    "_id": "yamaha.0.cd-nt670d.info.firmware"
   },
   "yamaha.0.cd-nt670d.info.ip": {
     "type": "state",
@@ -1724,6 +1763,227 @@
     "native": {},
     "_id": "yamaha.0.cd-nt670d.player.browse.totalItems"
   },
+  "yamaha.0.cd-nt670d.player.cd": {
+    "type": "channel",
+    "common": {
+      "name": {
+        "en": "CD",
+        "de": "CD",
+        "ru": "CD",
+        "pt": "CD",
+        "nl": "CD",
+        "fr": "CD",
+        "it": "CD",
+        "es": "CD",
+        "pl": "CD",
+        "uk": "CD",
+        "zh-cn": "CD"
+      }
+    },
+    "native": {},
+    "_id": "yamaha.0.cd-nt670d.player.cd"
+  },
+  "yamaha.0.cd-nt670d.player.cd.deviceStatus": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Drive status",
+        "de": "Laufwerkszustand",
+        "ru": "Состояние привода",
+        "pt": "Estado da unidade",
+        "nl": "Stationstatus",
+        "fr": "État du lecteur",
+        "it": "Stato dell'unità",
+        "es": "Estado de la unidad",
+        "pl": "Stan napędu",
+        "uk": "Стан приводу",
+        "zh-cn": "光驱状态"
+      },
+      "desc": {
+        "en": "What the disc drive is doing right now.",
+        "de": "Was das Laufwerk gerade tut.",
+        "ru": "Что сейчас делает дисковод.",
+        "pt": "O que a unidade de disco está a fazer agora.",
+        "nl": "Wat de discspeler nu doet.",
+        "fr": "Ce que fait le lecteur de disque en ce moment.",
+        "it": "Cosa sta facendo ora il lettore dischi.",
+        "es": "Qué está haciendo ahora la unidad de disco.",
+        "pl": "Co robi teraz napęd płyt.",
+        "uk": "Що зараз робить дисковод.",
+        "zh-cn": "光驱当前的状态。"
+      },
+      "type": "string",
+      "role": "state",
+      "read": true,
+      "write": false
+    },
+    "native": {},
+    "_id": "yamaha.0.cd-nt670d.player.cd.deviceStatus"
+  },
+  "yamaha.0.cd-nt670d.player.cd.discTime": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Disc time",
+        "de": "Disc-Zeit",
+        "ru": "Время диска",
+        "pt": "Tempo do disco",
+        "nl": "Schijftijd",
+        "fr": "Durée du disque",
+        "it": "Durata del disco",
+        "es": "Tiempo del disco",
+        "pl": "Czas płyty",
+        "uk": "Час диска",
+        "zh-cn": "碟片时间"
+      },
+      "type": "number",
+      "unit": "s",
+      "role": "value",
+      "read": true,
+      "write": false
+    },
+    "native": {},
+    "_id": "yamaha.0.cd-nt670d.player.cd.discTime"
+  },
+  "yamaha.0.cd-nt670d.player.cd.totalTracks": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Total tracks",
+        "de": "Titel gesamt",
+        "ru": "Всего треков",
+        "pt": "Total de faixas",
+        "nl": "Aantal tracks",
+        "fr": "Nombre de pistes",
+        "it": "Tracce totali",
+        "es": "Pistas totales",
+        "pl": "Liczba utworów",
+        "uk": "Усього треків",
+        "zh-cn": "曲目总数"
+      },
+      "type": "number",
+      "role": "value",
+      "read": true,
+      "write": false
+    },
+    "native": {},
+    "_id": "yamaha.0.cd-nt670d.player.cd.totalTracks"
+  },
+  "yamaha.0.cd-nt670d.player.cd.trackNumber": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Track number",
+        "de": "Titelnummer",
+        "ru": "Номер трека",
+        "pt": "Número da faixa",
+        "nl": "Tracknummer",
+        "fr": "Numéro de piste",
+        "it": "Numero traccia",
+        "es": "Número de pista",
+        "pl": "Numer utworu",
+        "uk": "Номер треку",
+        "zh-cn": "曲目编号"
+      },
+      "desc": {
+        "en": "The track playing; 0 while no track is loaded or playback is fully stopped.",
+        "de": "Der laufende Titel; 0, solange kein Titel geladen oder die Wiedergabe ganz gestoppt ist.",
+        "ru": "Текущий трек; 0, пока трек не загружен или воспроизведение полностью остановлено.",
+        "pt": "A faixa a tocar; 0 enquanto nenhuma faixa estiver carregada ou a reprodução estiver totalmente parada.",
+        "nl": "Het spelende nummer; 0 zolang er geen nummer geladen is of het afspelen volledig gestopt is.",
+        "fr": "La piste en cours ; 0 tant qu'aucune piste n'est chargée ou que la lecture est complètement arrêtée.",
+        "it": "La traccia in riproduzione; 0 finché nessuna traccia è caricata o la riproduzione è del tutto ferma.",
+        "es": "La pista que suena; 0 mientras no haya ninguna pista cargada o la reproducción esté totalmente detenida.",
+        "pl": "Odtwarzany utwór; 0, dopóki nie załadowano utworu lub odtwarzanie jest całkowicie zatrzymane.",
+        "uk": "Поточний трек; 0, поки трек не завантажено або відтворення повністю зупинено.",
+        "zh-cn": "正在播放的曲目;未加载曲目或完全停止播放时为 0。"
+      },
+      "type": "number",
+      "role": "value",
+      "min": 0,
+      "read": true,
+      "write": false
+    },
+    "native": {},
+    "_id": "yamaha.0.cd-nt670d.player.cd.trackNumber"
+  },
+  "yamaha.0.cd-nt670d.player.cd.trackSelect": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Play track number",
+        "de": "Titelnummer abspielen",
+        "ru": "Воспроизвести трек номер",
+        "pt": "Reproduzir faixa número",
+        "nl": "Nummer afspelen",
+        "fr": "Lire le titre numéro",
+        "it": "Riproduci il brano numero",
+        "es": "Reproducir pista número",
+        "pl": "Odtwórz utwór numer",
+        "uk": "Відтворити трек номер",
+        "zh-cn": "播放曲目编号"
+      },
+      "desc": {
+        "en": "Plays the track of the disc with the number written here.",
+        "de": "Spielt den Titel der CD mit der hier geschriebenen Nummer.",
+        "ru": "Воспроизводит трек диска с указанным здесь номером.",
+        "pt": "Reproduz a faixa do disco com o número aqui escrito.",
+        "nl": "Speelt het nummer van de schijf met het hier geschreven nummer.",
+        "fr": "Lit le titre du disque portant le numéro écrit ici.",
+        "it": "Riproduce il brano del disco con il numero scritto qui.",
+        "es": "Reproduce la pista del disco con el número escrito aquí.",
+        "pl": "Odtwarza utwór z płyty o wpisanym tu numerze.",
+        "uk": "Відтворює трек диска з указаним тут номером.",
+        "zh-cn": "播放此处写入编号的光盘曲目。"
+      },
+      "type": "number",
+      "role": "level",
+      "read": true,
+      "write": true,
+      "min": 1,
+      "max": 512,
+      "step": 1
+    },
+    "native": {},
+    "_id": "yamaha.0.cd-nt670d.player.cd.trackSelect"
+  },
+  "yamaha.0.cd-nt670d.player.cd.tray": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Toggle tray",
+        "de": "Schublade öffnen/schließen",
+        "ru": "Открыть/закрыть лоток",
+        "pt": "Abrir/fechar gaveta",
+        "nl": "Lade openen/sluiten",
+        "fr": "Ouvrir/fermer le tiroir",
+        "it": "Apri/chiudi cassetto",
+        "es": "Abrir/cerrar bandeja",
+        "pl": "Otwórz/zamknij szufladę",
+        "uk": "Відкрити/закрити лоток",
+        "zh-cn": "开合托盘"
+      },
+      "desc": {
+        "en": "Opens or closes the disc tray.",
+        "de": "Öffnet oder schließt die Laufwerksschublade.",
+        "ru": "Открывает или закрывает лоток дисковода.",
+        "pt": "Abre ou fecha a gaveta do disco.",
+        "nl": "Opent of sluit de disclade.",
+        "fr": "Ouvre ou ferme le tiroir de disque.",
+        "it": "Apre o chiude il cassetto del disco.",
+        "es": "Abre o cierra la bandeja del disco.",
+        "pl": "Otwiera lub zamyka szufladę napędu.",
+        "uk": "Відкриває або закриває лоток дисковода.",
+        "zh-cn": "打开或关闭光驱托盘。"
+      },
+      "type": "boolean",
+      "role": "button",
+      "read": false,
+      "write": true
+    },
+    "native": {},
+    "_id": "yamaha.0.cd-nt670d.player.cd.tray"
+  },
   "yamaha.0.cd-nt670d.player.elapsedTime": {
     "type": "state",
     "common": {
@@ -2804,20 +3064,16 @@
   "yamaha.0.cd-nt670d.sleep": {
     "type": "state",
     "common": {
-      "type": "number",
-      "unit": "min",
-      "role": "level.timer.sleep",
+      "type": "string",
+      "role": "state",
       "read": true,
       "write": true,
-      "min": 0,
-      "max": 120,
-      "step": 30,
       "states": {
-        "0": "No sleep timer",
-        "30": "30 minutes",
-        "60": "60 minutes",
-        "90": "90 minutes",
-        "120": "120 minutes"
+        "Off": "No sleep timer",
+        "30 min": "30 minutes",
+        "60 min": "60 minutes",
+        "90 min": "90 minutes",
+        "120 min": "120 minutes"
       },
       "name": {
         "en": "Sleep timer",
@@ -3743,6 +3999,7 @@
       "read": true,
       "write": true,
       "min": 0,
+      "step": 1,
       "max": 30
     },
     "native": {},
@@ -3917,7 +4174,7 @@
     "type": "state",
     "common": {
       "name": {
-        "en": "RDS programme type",
+        "en": "RDS program type",
         "de": "RDS-Programmart",
         "ru": "Тип программы RDS",
         "pt": "Tipo de programa RDS",
@@ -4355,7 +4612,6 @@
       }
     },
     "native": {
-      "source": "manual",
       "volumeAsPercent": false,
       "model": "R-N500",
       "label": "R-N500",
@@ -7431,7 +7687,6 @@
       }
     },
     "native": {
-      "source": "manual",
       "volumeAsPercent": false,
       "model": "RX-A2A",
       "identity": {
@@ -9473,158 +9728,16 @@
       "write": true,
       "min": 1,
       "max": 4,
-      "step": 1
+      "step": 1,
+      "states": {
+        "1": "1",
+        "2": "2",
+        "3": "3",
+        "4": "4"
+      }
     },
     "native": {},
     "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone2.scene.recall"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone2.scene.title1": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 1 title",
-        "de": "Titel von Szene 1",
-        "ru": "Название сцены 1",
-        "pt": "Título da cena 1",
-        "nl": "Titel van scène 1",
-        "fr": "Titre de la scène 1",
-        "it": "Titolo della scena 1",
-        "es": "Título de la escena 1",
-        "pl": "Tytuł sceny 1",
-        "uk": "Назва сцени 1",
-        "zh-cn": "场景 1 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone2.scene.title1"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone2.scene.title2": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 2 title",
-        "de": "Titel von Szene 2",
-        "ru": "Название сцены 2",
-        "pt": "Título da cena 2",
-        "nl": "Titel van scène 2",
-        "fr": "Titre de la scène 2",
-        "it": "Titolo della scena 2",
-        "es": "Título de la escena 2",
-        "pl": "Tytuł sceny 2",
-        "uk": "Назва сцени 2",
-        "zh-cn": "场景 2 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone2.scene.title2"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone2.scene.title3": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 3 title",
-        "de": "Titel von Szene 3",
-        "ru": "Название сцены 3",
-        "pt": "Título da cena 3",
-        "nl": "Titel van scène 3",
-        "fr": "Titre de la scène 3",
-        "it": "Titolo della scena 3",
-        "es": "Título de la escena 3",
-        "pl": "Tytuł sceny 3",
-        "uk": "Назва сцени 3",
-        "zh-cn": "场景 3 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone2.scene.title3"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone2.scene.title4": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 4 title",
-        "de": "Titel von Szene 4",
-        "ru": "Название сцены 4",
-        "pt": "Título da cena 4",
-        "nl": "Titel van scène 4",
-        "fr": "Titre de la scène 4",
-        "it": "Titolo della scena 4",
-        "es": "Título de la escena 4",
-        "pl": "Tytuł sceny 4",
-        "uk": "Назва сцени 4",
-        "zh-cn": "场景 4 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone2.scene.title4"
   },
   "yamaha.0.rx-a2a-e7d3.multiroom.zone2.sleep": {
     "type": "state",
@@ -10995,176 +11108,30 @@
       "write": true,
       "min": 1,
       "max": 4,
-      "step": 1
+      "step": 1,
+      "states": {
+        "1": "1",
+        "2": "2",
+        "3": "3",
+        "4": "4"
+      }
     },
     "native": {},
     "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone3.scene.recall"
   },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone3.scene.title1": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 1 title",
-        "de": "Titel von Szene 1",
-        "ru": "Название сцены 1",
-        "pt": "Título da cena 1",
-        "nl": "Titel van scène 1",
-        "fr": "Titre de la scène 1",
-        "it": "Titolo della scena 1",
-        "es": "Título de la escena 1",
-        "pl": "Tytuł sceny 1",
-        "uk": "Назва сцени 1",
-        "zh-cn": "场景 1 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone3.scene.title1"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone3.scene.title2": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 2 title",
-        "de": "Titel von Szene 2",
-        "ru": "Название сцены 2",
-        "pt": "Título da cena 2",
-        "nl": "Titel van scène 2",
-        "fr": "Titre de la scène 2",
-        "it": "Titolo della scena 2",
-        "es": "Título de la escena 2",
-        "pl": "Tytuł sceny 2",
-        "uk": "Назва сцени 2",
-        "zh-cn": "场景 2 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone3.scene.title2"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone3.scene.title3": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 3 title",
-        "de": "Titel von Szene 3",
-        "ru": "Название сцены 3",
-        "pt": "Título da cena 3",
-        "nl": "Titel van scène 3",
-        "fr": "Titre de la scène 3",
-        "it": "Titolo della scena 3",
-        "es": "Título de la escena 3",
-        "pl": "Tytuł sceny 3",
-        "uk": "Назва сцени 3",
-        "zh-cn": "场景 3 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone3.scene.title3"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone3.scene.title4": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 4 title",
-        "de": "Titel von Szene 4",
-        "ru": "Название сцены 4",
-        "pt": "Título da cena 4",
-        "nl": "Titel van scène 4",
-        "fr": "Titre de la scène 4",
-        "it": "Titolo della scena 4",
-        "es": "Título de la escena 4",
-        "pl": "Tytuł sceny 4",
-        "uk": "Назва сцени 4",
-        "zh-cn": "场景 4 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone3.scene.title4"
-  },
   "yamaha.0.rx-a2a-e7d3.multiroom.zone3.sleep": {
     "type": "state",
     "common": {
-      "type": "number",
-      "unit": "min",
-      "role": "level.timer.sleep",
+      "type": "string",
+      "role": "state",
       "read": true,
       "write": true,
-      "min": 0,
-      "max": 120,
-      "step": 30,
       "states": {
-        "0": "No sleep timer",
-        "30": "30 minutes",
-        "60": "60 minutes",
-        "90": "90 minutes",
-        "120": "120 minutes"
+        "Off": "No sleep timer",
+        "30 min": "30 minutes",
+        "60 min": "60 minutes",
+        "90 min": "90 minutes",
+        "120 min": "120 minutes"
       },
       "name": {
         "en": "Sleep timer",
@@ -11220,7 +11187,7 @@
     "type": "state",
     "common": {
       "type": "number",
-      "unit": "",
+      "unit": "dB",
       "role": "level.bass",
       "read": true,
       "write": true,
@@ -11250,9 +11217,9 @@
         "uk": "Регулювання тембру низьких частот: децибели там, де вказано одиницю, а MusicCast рахує той самий діапазон півдецибелами.",
         "zh-cn": "低频音调调节：标有单位时为分贝，而 MusicCast 用半分贝计同一范围。"
       },
-      "min": -12,
-      "max": 12,
-      "step": 1
+      "min": -6,
+      "max": 6,
+      "step": 0.5
     },
     "native": {},
     "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone3.sound.bass"
@@ -11340,7 +11307,7 @@
     "type": "state",
     "common": {
       "type": "number",
-      "unit": "",
+      "unit": "dB",
       "role": "level.treble",
       "read": true,
       "write": true,
@@ -11370,9 +11337,9 @@
         "uk": "Регулювання тембру високих частот: децибели там, де вказано одиницю, а MusicCast рахує той самий діапазон півдецибелами.",
         "zh-cn": "高频音调调节：标有单位时为分贝，而 MusicCast 用半分贝计同一范围。"
       },
-      "min": -12,
-      "max": 12,
-      "step": 1
+      "min": -6,
+      "max": 6,
+      "step": 0.5
     },
     "native": {},
     "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone3.sound.treble"
@@ -11471,611 +11438,6 @@
     },
     "native": {},
     "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone4.input"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player": {
-    "type": "channel",
-    "common": {
-      "name": {
-        "en": "Media player",
-        "de": "Medienwiedergabe",
-        "ru": "Медиаплеер",
-        "pt": "Leitor de multimédia",
-        "nl": "Mediaspeler",
-        "fr": "Lecteur multimédia",
-        "it": "Lettore multimediale",
-        "es": "Reproductor multimedia",
-        "pl": "Odtwarzacz multimediów",
-        "uk": "Медіаплеєр",
-        "zh-cn": "媒体播放器"
-      },
-      "desc": {
-        "en": "What is playing right now, plus the transport keys.",
-        "de": "Was gerade läuft, dazu die Transporttasten.",
-        "ru": "Что играет сейчас, плюс клавиши управления воспроизведением.",
-        "pt": "O que está a tocar agora, mais as teclas de reprodução.",
-        "nl": "Wat er nu speelt, plus de transporttoetsen.",
-        "fr": "Ce qui est en lecture, avec les touches de transport.",
-        "it": "Cosa è in riproduzione ora, con i tasti di trasporto.",
-        "es": "Lo que suena ahora, más las teclas de reproducción.",
-        "pl": "Co jest odtwarzane teraz, wraz z klawiszami sterowania.",
-        "uk": "Що грає зараз, разом із клавішами відтворення.",
-        "zh-cn": "当前播放内容，以及播放控制键。"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.album": {
-    "type": "state",
-    "common": {
-      "type": "string",
-      "role": "media.album",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Album",
-        "de": "Album",
-        "ru": "Альбом",
-        "pt": "Álbum",
-        "nl": "Album",
-        "fr": "Album",
-        "it": "Album",
-        "es": "Álbum",
-        "pl": "Album",
-        "uk": "Альбом",
-        "zh-cn": "专辑"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.album"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.albumArt": {
-    "type": "state",
-    "common": {
-      "type": "string",
-      "role": "media.cover",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Album art",
-        "de": "Albumbild",
-        "ru": "Обложка альбома",
-        "pt": "Capa do álbum",
-        "nl": "Albumhoes",
-        "fr": "Pochette d'album",
-        "it": "Copertina dell'album",
-        "es": "Carátula del álbum",
-        "pl": "Okładka albumu",
-        "uk": "Обкладинка альбому",
-        "zh-cn": "专辑封面"
-      },
-      "desc": {
-        "en": "The web address of the current track's cover.",
-        "de": "Die Webadresse des Covers des laufenden Titels.",
-        "ru": "Веб-адрес обложки текущего трека.",
-        "pt": "O endereço web da capa da faixa atual.",
-        "nl": "Het webadres van de hoes van het huidige nummer.",
-        "fr": "L'adresse web de la pochette du titre en cours.",
-        "it": "L'indirizzo web della copertina del brano in riproduzione.",
-        "es": "La dirección web de la carátula de la pista actual.",
-        "pl": "Adres internetowy okładki bieżącego utworu.",
-        "uk": "Вебадреса обкладинки поточного треку.",
-        "zh-cn": "当前曲目封面的网址。"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.albumArt"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.artist": {
-    "type": "state",
-    "common": {
-      "type": "string",
-      "role": "media.artist",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Artist",
-        "de": "Interpret",
-        "ru": "Исполнитель",
-        "pt": "Artista",
-        "nl": "Artiest",
-        "fr": "Artiste",
-        "it": "Artista",
-        "es": "Artista",
-        "pl": "Wykonawca",
-        "uk": "Виконавець",
-        "zh-cn": "艺术家"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.artist"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.elapsedTime": {
-    "type": "state",
-    "common": {
-      "type": "number",
-      "unit": "s",
-      "role": "media.elapsed",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Elapsed time",
-        "de": "Gespielte Zeit",
-        "ru": "Прошло времени",
-        "pt": "Tempo decorrido",
-        "nl": "Verstreken tijd",
-        "fr": "Temps écoulé",
-        "it": "Tempo trascorso",
-        "es": "Tiempo transcurrido",
-        "pl": "Czas odtwarzania",
-        "uk": "Минуло часу",
-        "zh-cn": "已播放时间"
-      },
-      "desc": {
-        "en": "In seconds, so it can be calculated with; a readable form sits next to it.",
-        "de": "In Sekunden, damit man damit rechnen kann; die lesbare Form steht daneben.",
-        "ru": "В секундах, чтобы с этим можно было считать; читаемая форма рядом.",
-        "pt": "Em segundos, para poder calcular; a forma legível está ao lado.",
-        "nl": "In seconden, zodat ermee gerekend kan worden; de leesbare vorm staat ernaast.",
-        "fr": "En secondes, pour pouvoir calculer ; la forme lisible est à côté.",
-        "it": "In secondi, così è calcolabile; la forma leggibile è accanto.",
-        "es": "En segundos, para poder calcular; la forma legible está al lado.",
-        "pl": "W sekundach, by dało się liczyć; czytelna forma obok.",
-        "uk": "У секундах, щоб можна було рахувати; зручна форма поруч.",
-        "zh-cn": "以秒为单位便于计算；易读形式在旁边。"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.elapsedTime"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.elapsedTimeText": {
-    "type": "state",
-    "common": {
-      "type": "string",
-      "role": "media.elapsed.text",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Elapsed time (readable)",
-        "de": "Abgelaufene Zeit (lesbar)",
-        "ru": "Прошедшее время (в читаемом виде)",
-        "pt": "Tempo decorrido (legível)",
-        "nl": "Verstreken tijd (leesbaar)",
-        "fr": "Temps écoulé (lisible)",
-        "it": "Tempo trascorso (leggibile)",
-        "es": "Tiempo transcurrido (legible)",
-        "pl": "Czas odtwarzania (czytelnie)",
-        "uk": "Минулий час (у зручному вигляді)",
-        "zh-cn": "已播放时长（易读）"
-      },
-      "desc": {
-        "en": "The same value as a readable time; the number in seconds sits next to it.",
-        "de": "Derselbe Wert als lesbare Zeit; die Zahl in Sekunden steht daneben.",
-        "ru": "То же значение в читаемом виде; число в секундах рядом.",
-        "pt": "O mesmo valor como tempo legível; o número em segundos está ao lado.",
-        "nl": "Dezelfde waarde als leesbare tijd; het getal in seconden staat ernaast.",
-        "fr": "La même valeur en durée lisible ; le nombre en secondes est à côté.",
-        "it": "Lo stesso valore come tempo leggibile; il numero in secondi è accanto.",
-        "es": "El mismo valor como tiempo legible; el número en segundos está al lado.",
-        "pl": "Ta sama wartość jako czytelny czas; liczba w sekundach obok.",
-        "uk": "Те саме значення у зручному вигляді; число в секундах поруч.",
-        "zh-cn": "同一数值的易读时间形式；旁边是以秒为单位的数字。"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.elapsedTimeText"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.next": {
-    "type": "state",
-    "common": {
-      "type": "boolean",
-      "role": "button.next",
-      "read": false,
-      "write": true,
-      "name": {
-        "en": "Next",
-        "de": "Weiter",
-        "ru": "Далее",
-        "pt": "Seguinte",
-        "nl": "Volgende",
-        "fr": "Suivant",
-        "it": "Successivo",
-        "es": "Siguiente",
-        "pl": "Następny",
-        "uk": "Далі",
-        "zh-cn": "下一首"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.next"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.pause": {
-    "type": "state",
-    "common": {
-      "type": "boolean",
-      "role": "button.pause",
-      "read": false,
-      "write": true,
-      "name": {
-        "en": "Pause",
-        "de": "Pause",
-        "ru": "Пауза",
-        "pt": "Pausa",
-        "nl": "Pauze",
-        "fr": "Pause",
-        "it": "Pausa",
-        "es": "Pausa",
-        "pl": "Pauza",
-        "uk": "Пауза",
-        "zh-cn": "暂停"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.pause"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.play": {
-    "type": "state",
-    "common": {
-      "type": "boolean",
-      "role": "button.play",
-      "read": false,
-      "write": true,
-      "name": {
-        "en": "Play",
-        "de": "Wiedergabe",
-        "ru": "Воспроизведение",
-        "pt": "Reproduzir",
-        "nl": "Afspelen",
-        "fr": "Lecture",
-        "it": "Riproduci",
-        "es": "Reproducir",
-        "pl": "Odtwórz",
-        "uk": "Відтворити",
-        "zh-cn": "播放"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.play"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.playback": {
-    "type": "state",
-    "common": {
-      "type": "number",
-      "role": "media.state",
-      "read": true,
-      "write": false,
-      "states": {
-        "0": "Paused",
-        "1": "Playing",
-        "2": "Stopped"
-      },
-      "name": {
-        "en": "Playback",
-        "de": "Wiedergabe",
-        "ru": "Воспроизведение",
-        "pt": "Reprodução",
-        "nl": "Afspelen",
-        "fr": "Lecture",
-        "it": "Riproduzione",
-        "es": "Reproducción",
-        "pl": "Odtwarzanie",
-        "uk": "Відтворення",
-        "zh-cn": "播放"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.playback"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.prev": {
-    "type": "state",
-    "common": {
-      "type": "boolean",
-      "role": "button.prev",
-      "read": false,
-      "write": true,
-      "name": {
-        "en": "Previous",
-        "de": "Zurück",
-        "ru": "Назад",
-        "pt": "Anterior",
-        "nl": "Vorige",
-        "fr": "Précédent",
-        "it": "Precedente",
-        "es": "Anterior",
-        "pl": "Poprzedni",
-        "uk": "Назад",
-        "zh-cn": "上一首"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.prev"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.repeat": {
-    "type": "state",
-    "common": {
-      "type": "number",
-      "role": "media.mode.repeat",
-      "read": true,
-      "write": true,
-      "states": {
-        "0": "No repeat",
-        "1": "Repeat one",
-        "2": "Repeat all"
-      },
-      "name": {
-        "en": "Repeat",
-        "de": "Wiederholen",
-        "ru": "Повтор",
-        "pt": "Repetir",
-        "nl": "Herhalen",
-        "fr": "Répéter",
-        "it": "Ripeti",
-        "es": "Repetir",
-        "pl": "Powtarzanie",
-        "uk": "Повтор",
-        "zh-cn": "重复"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.repeat"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.repeatToggle": {
-    "type": "state",
-    "common": {
-      "type": "boolean",
-      "role": "button",
-      "read": false,
-      "write": true,
-      "name": {
-        "en": "Toggle repeat",
-        "de": "Wiederholen umschalten",
-        "ru": "Переключить повтор",
-        "pt": "Alternar repetição",
-        "nl": "Herhalen omschakelen",
-        "fr": "Basculer la répétition",
-        "it": "Cambia ripetizione",
-        "es": "Alternar repetición",
-        "pl": "Przełącz powtarzanie",
-        "uk": "Перемкнути повтор",
-        "zh-cn": "切换重复"
-      },
-      "desc": {
-        "en": "Steps the repeat mode on — MusicCast has no command to set a mode directly, so there this button is the only way.",
-        "de": "Schaltet den Wiederholmodus weiter — MusicCast kennt keinen Befehl, einen Modus direkt zu setzen; dort geht es nur über diese Taste.",
-        "ru": "Переключает режим повтора дальше: у MusicCast нет команды задать режим напрямую, поэтому там это единственный путь.",
-        "pt": "Avança o modo de repetição — o MusicCast não tem comando para o definir diretamente, por isso ali este botão é o único caminho.",
-        "nl": "Schakelt de herhaalmodus door — MusicCast kent geen commando om een modus direct te zetten, daar is deze knop de enige weg.",
-        "fr": "Fait avancer le mode de répétition : MusicCast n'a pas de commande pour le fixer directement, ce bouton y est le seul moyen.",
-        "it": "Fa avanzare la modalità di ripetizione: MusicCast non ha un comando per impostarla direttamente, lì questo pulsante è l'unica via.",
-        "es": "Avanza el modo de repetición: MusicCast no tiene una orden para fijarlo directamente, allí este botón es el único camino.",
-        "pl": "Przełącza tryb powtarzania dalej — MusicCast nie ma polecenia ustawiającego tryb wprost, więc tam ten przycisk jest jedyną drogą.",
-        "uk": "Перемикає режим повтору далі: MusicCast не має команди задати режим напряму, тож там ця кнопка — єдиний шлях.",
-        "zh-cn": "逐步切换重复模式：MusicCast 没有直接设定模式的命令，在那里只能用这个按钮。"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.repeatToggle"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.shuffle": {
-    "type": "state",
-    "common": {
-      "type": "boolean",
-      "role": "media.mode.shuffle",
-      "read": true,
-      "write": true,
-      "name": {
-        "en": "Shuffle",
-        "de": "Zufall",
-        "ru": "Случайный порядок",
-        "pt": "Aleatório",
-        "nl": "Willekeurig",
-        "fr": "Aléatoire",
-        "it": "Casuale",
-        "es": "Aleatorio",
-        "pl": "Losowo",
-        "uk": "Випадково",
-        "zh-cn": "随机"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.shuffle"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.shuffleToggle": {
-    "type": "state",
-    "common": {
-      "type": "boolean",
-      "role": "button",
-      "read": false,
-      "write": true,
-      "name": {
-        "en": "Toggle shuffle",
-        "de": "Zufall umschalten",
-        "ru": "Переключить случайный порядок",
-        "pt": "Alternar aleatório",
-        "nl": "Willekeurig omschakelen",
-        "fr": "Basculer l'aléatoire",
-        "it": "Cambia casuale",
-        "es": "Alternar aleatorio",
-        "pl": "Przełącz losowanie",
-        "uk": "Перемкнути випадковий порядок",
-        "zh-cn": "切换随机"
-      },
-      "desc": {
-        "en": "Switches shuffle over — MusicCast has no command to set it directly, so there this button is the only way.",
-        "de": "Schaltet die Zufallswiedergabe um — MusicCast kennt keinen Befehl, sie direkt zu setzen; dort geht es nur über diese Taste.",
-        "ru": "Переключает случайный порядок: у MusicCast нет команды задать его напрямую, поэтому там это единственный путь.",
-        "pt": "Alterna a reprodução aleatória — o MusicCast não tem comando para a definir diretamente, por isso ali este botão é o único caminho.",
-        "nl": "Schakelt willekeurig afspelen om — MusicCast kent geen commando om het direct te zetten, daar is deze knop de enige weg.",
-        "fr": "Bascule la lecture aléatoire : MusicCast n'a pas de commande pour la fixer directement, ce bouton y est le seul moyen.",
-        "it": "Commuta la riproduzione casuale: MusicCast non ha un comando per impostarla direttamente, lì questo pulsante è l'unica via.",
-        "es": "Conmuta la reproducción aleatoria: MusicCast no tiene una orden para fijarla directamente, allí este botón es el único camino.",
-        "pl": "Przełącza odtwarzanie losowe — MusicCast nie ma polecenia ustawiającego je wprost, więc tam ten przycisk jest jedyną drogą.",
-        "uk": "Перемикає випадковий порядок: MusicCast не має команди задати його напряму, тож там ця кнопка — єдиний шлях.",
-        "zh-cn": "切换随机播放：MusicCast 没有直接设定它的命令，在那里只能用这个按钮。"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.shuffleToggle"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.source": {
-    "type": "state",
-    "common": {
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Playing source",
-        "de": "Laufende Quelle",
-        "ru": "Текущий источник",
-        "pt": "Fonte em reprodução",
-        "nl": "Actieve bron",
-        "fr": "Source en cours",
-        "it": "Sorgente in riproduzione",
-        "es": "Fuente en reproducción",
-        "pl": "Odtwarzane źródło",
-        "uk": "Поточне джерело",
-        "zh-cn": "当前音源"
-      },
-      "desc": {
-        "en": "The source the receiver is actually playing from, which can differ from the selected input.",
-        "de": "Die Quelle, aus der wirklich abgespielt wird — die kann vom gewählten Eingang abweichen.",
-        "ru": "Источник, из которого идёт воспроизведение; может отличаться от выбранного входа.",
-        "pt": "A fonte de que se está mesmo a reproduzir, que pode diferir da entrada escolhida.",
-        "nl": "De bron waaruit echt wordt afgespeeld; die kan van de gekozen ingang afwijken.",
-        "fr": "La source réellement lue, qui peut différer de l'entrée sélectionnée.",
-        "it": "La sorgente da cui si riproduce davvero, che può differire dall'ingresso scelto.",
-        "es": "La fuente de la que realmente se reproduce, que puede diferir de la entrada elegida.",
-        "pl": "Źródło, z którego faktycznie trwa odtwarzanie; może różnić się od wybranego wejścia.",
-        "uk": "Джерело, з якого справді відтворюється; може відрізнятися від обраного входу.",
-        "zh-cn": "实际播放所用的音源，可能与所选输入不同。"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.source"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.stop": {
-    "type": "state",
-    "common": {
-      "type": "boolean",
-      "role": "button.stop",
-      "read": false,
-      "write": true,
-      "name": {
-        "en": "Stop",
-        "de": "Stopp",
-        "ru": "Стоп",
-        "pt": "Parar",
-        "nl": "Stoppen",
-        "fr": "Arrêt",
-        "it": "Arresta",
-        "es": "Detener",
-        "pl": "Zatrzymaj",
-        "uk": "Стоп",
-        "zh-cn": "停止"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.stop"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.totalTime": {
-    "type": "state",
-    "common": {
-      "type": "number",
-      "unit": "s",
-      "role": "media.duration",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Total time",
-        "de": "Gesamtzeit",
-        "ru": "Общая длительность",
-        "pt": "Duração total",
-        "nl": "Totale tijd",
-        "fr": "Durée totale",
-        "it": "Durata totale",
-        "es": "Duración total",
-        "pl": "Czas całkowity",
-        "uk": "Загальна тривалість",
-        "zh-cn": "总时长"
-      },
-      "desc": {
-        "en": "In seconds, so it can be calculated with; a readable form sits next to it.",
-        "de": "In Sekunden, damit man damit rechnen kann; die lesbare Form steht daneben.",
-        "ru": "В секундах, чтобы с этим можно было считать; читаемая форма рядом.",
-        "pt": "Em segundos, para poder calcular; a forma legível está ao lado.",
-        "nl": "In seconden, zodat ermee gerekend kan worden; de leesbare vorm staat ernaast.",
-        "fr": "En secondes, pour pouvoir calculer ; la forme lisible est à côté.",
-        "it": "In secondi, così è calcolabile; la forma leggibile è accanto.",
-        "es": "En segundos, para poder calcular; la forma legible está al lado.",
-        "pl": "W sekundach, by dało się liczyć; czytelna forma obok.",
-        "uk": "У секундах, щоб можна було рахувати; зручна форма поруч.",
-        "zh-cn": "以秒为单位便于计算；易读形式在旁边。"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.totalTime"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.totalTimeText": {
-    "type": "state",
-    "common": {
-      "type": "string",
-      "role": "media.duration.text",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Total time (readable)",
-        "de": "Gesamtzeit (lesbar)",
-        "ru": "Общее время (в читаемом виде)",
-        "pt": "Tempo total (legível)",
-        "nl": "Totale tijd (leesbaar)",
-        "fr": "Durée totale (lisible)",
-        "it": "Durata totale (leggibile)",
-        "es": "Tiempo total (legible)",
-        "pl": "Czas całkowity (czytelnie)",
-        "uk": "Загальний час (у зручному вигляді)",
-        "zh-cn": "总时长（易读）"
-      },
-      "desc": {
-        "en": "The same value as a readable time; the number in seconds sits next to it.",
-        "de": "Derselbe Wert als lesbare Zeit; die Zahl in Sekunden steht daneben.",
-        "ru": "То же значение в читаемом виде; число в секундах рядом.",
-        "pt": "O mesmo valor como tempo legível; o número em segundos está ao lado.",
-        "nl": "Dezelfde waarde als leesbare tijd; het getal in seconden staat ernaast.",
-        "fr": "La même valeur en durée lisible ; le nombre en secondes est à côté.",
-        "it": "Lo stesso valore come tempo leggibile; il numero in secondi è accanto.",
-        "es": "El mismo valor como tiempo legible; el número en segundos está al lado.",
-        "pl": "Ta sama wartość jako czytelny czas; liczba w sekundach obok.",
-        "uk": "Те саме значення у зручному вигляді; число в секундах поруч.",
-        "zh-cn": "同一数值的易读时间形式；旁边是以秒为单位的数字。"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.totalTimeText"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.track": {
-    "type": "state",
-    "common": {
-      "type": "string",
-      "role": "media.title",
-      "read": true,
-      "write": false,
-      "name": {
-        "en": "Track",
-        "de": "Titel",
-        "ru": "Трек",
-        "pt": "Faixa",
-        "nl": "Track",
-        "fr": "Piste",
-        "it": "Traccia",
-        "es": "Pista",
-        "pl": "Utwór",
-        "uk": "Трек",
-        "zh-cn": "曲目"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone4.player.track"
   },
   "yamaha.0.rx-a2a-e7d3.multiroom.zone4.power": {
     "type": "state",
@@ -12206,176 +11568,30 @@
       "write": true,
       "min": 1,
       "max": 4,
-      "step": 1
+      "step": 1,
+      "states": {
+        "1": "1",
+        "2": "2",
+        "3": "3",
+        "4": "4"
+      }
     },
     "native": {},
     "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone4.scene.recall"
   },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone4.scene.title1": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 1 title",
-        "de": "Titel von Szene 1",
-        "ru": "Название сцены 1",
-        "pt": "Título da cena 1",
-        "nl": "Titel van scène 1",
-        "fr": "Titre de la scène 1",
-        "it": "Titolo della scena 1",
-        "es": "Título de la escena 1",
-        "pl": "Tytuł sceny 1",
-        "uk": "Назва сцени 1",
-        "zh-cn": "场景 1 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone4.scene.title1"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone4.scene.title2": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 2 title",
-        "de": "Titel von Szene 2",
-        "ru": "Название сцены 2",
-        "pt": "Título da cena 2",
-        "nl": "Titel van scène 2",
-        "fr": "Titre de la scène 2",
-        "it": "Titolo della scena 2",
-        "es": "Título de la escena 2",
-        "pl": "Tytuł sceny 2",
-        "uk": "Назва сцени 2",
-        "zh-cn": "场景 2 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone4.scene.title2"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone4.scene.title3": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 3 title",
-        "de": "Titel von Szene 3",
-        "ru": "Название сцены 3",
-        "pt": "Título da cena 3",
-        "nl": "Titel van scène 3",
-        "fr": "Titre de la scène 3",
-        "it": "Titolo della scena 3",
-        "es": "Título de la escena 3",
-        "pl": "Tytuł sceny 3",
-        "uk": "Назва сцени 3",
-        "zh-cn": "场景 3 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone4.scene.title3"
-  },
-  "yamaha.0.rx-a2a-e7d3.multiroom.zone4.scene.title4": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 4 title",
-        "de": "Titel von Szene 4",
-        "ru": "Название сцены 4",
-        "pt": "Título da cena 4",
-        "nl": "Titel van scène 4",
-        "fr": "Titre de la scène 4",
-        "it": "Titolo della scena 4",
-        "es": "Título de la escena 4",
-        "pl": "Tytuł sceny 4",
-        "uk": "Назва сцени 4",
-        "zh-cn": "场景 4 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.multiroom.zone4.scene.title4"
-  },
   "yamaha.0.rx-a2a-e7d3.multiroom.zone4.sleep": {
     "type": "state",
     "common": {
-      "type": "number",
-      "unit": "min",
-      "role": "level.timer.sleep",
+      "type": "string",
+      "role": "state",
       "read": true,
       "write": true,
-      "min": 0,
-      "max": 120,
-      "step": 30,
       "states": {
-        "0": "No sleep timer",
-        "30": "30 minutes",
-        "60": "60 minutes",
-        "90": "90 minutes",
-        "120": "120 minutes"
+        "Off": "No sleep timer",
+        "30 min": "30 minutes",
+        "60 min": "60 minutes",
+        "90 min": "90 minutes",
+        "120 min": "120 minutes"
       },
       "name": {
         "en": "Sleep timer",
@@ -15398,454 +14614,24 @@
       "write": true,
       "min": 1,
       "max": 12,
-      "step": 1
+      "step": 1,
+      "states": {
+        "1": "1",
+        "2": "2",
+        "3": "3",
+        "4": "4",
+        "5": "5",
+        "6": "6",
+        "7": "7",
+        "8": "8",
+        "9": "9",
+        "10": "10",
+        "11": "11",
+        "12": "12"
+      }
     },
     "native": {},
     "_id": "yamaha.0.rx-a2a-e7d3.scene.recall"
-  },
-  "yamaha.0.rx-a2a-e7d3.scene.title1": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 1 title",
-        "de": "Titel von Szene 1",
-        "ru": "Название сцены 1",
-        "pt": "Título da cena 1",
-        "nl": "Titel van scène 1",
-        "fr": "Titre de la scène 1",
-        "it": "Titolo della scena 1",
-        "es": "Título de la escena 1",
-        "pl": "Tytuł sceny 1",
-        "uk": "Назва сцени 1",
-        "zh-cn": "场景 1 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.scene.title1"
-  },
-  "yamaha.0.rx-a2a-e7d3.scene.title10": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 10 title",
-        "de": "Titel von Szene 10",
-        "ru": "Название сцены 10",
-        "pt": "Título da cena 10",
-        "nl": "Titel van scène 10",
-        "fr": "Titre de la scène 10",
-        "it": "Titolo della scena 10",
-        "es": "Título de la escena 10",
-        "pl": "Tytuł sceny 10",
-        "uk": "Назва сцени 10",
-        "zh-cn": "场景 10 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.scene.title10"
-  },
-  "yamaha.0.rx-a2a-e7d3.scene.title11": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 11 title",
-        "de": "Titel von Szene 11",
-        "ru": "Название сцены 11",
-        "pt": "Título da cena 11",
-        "nl": "Titel van scène 11",
-        "fr": "Titre de la scène 11",
-        "it": "Titolo della scena 11",
-        "es": "Título de la escena 11",
-        "pl": "Tytuł sceny 11",
-        "uk": "Назва сцени 11",
-        "zh-cn": "场景 11 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.scene.title11"
-  },
-  "yamaha.0.rx-a2a-e7d3.scene.title12": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 12 title",
-        "de": "Titel von Szene 12",
-        "ru": "Название сцены 12",
-        "pt": "Título da cena 12",
-        "nl": "Titel van scène 12",
-        "fr": "Titre de la scène 12",
-        "it": "Titolo della scena 12",
-        "es": "Título de la escena 12",
-        "pl": "Tytuł sceny 12",
-        "uk": "Назва сцени 12",
-        "zh-cn": "场景 12 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.scene.title12"
-  },
-  "yamaha.0.rx-a2a-e7d3.scene.title2": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 2 title",
-        "de": "Titel von Szene 2",
-        "ru": "Название сцены 2",
-        "pt": "Título da cena 2",
-        "nl": "Titel van scène 2",
-        "fr": "Titre de la scène 2",
-        "it": "Titolo della scena 2",
-        "es": "Título de la escena 2",
-        "pl": "Tytuł sceny 2",
-        "uk": "Назва сцени 2",
-        "zh-cn": "场景 2 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.scene.title2"
-  },
-  "yamaha.0.rx-a2a-e7d3.scene.title3": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 3 title",
-        "de": "Titel von Szene 3",
-        "ru": "Название сцены 3",
-        "pt": "Título da cena 3",
-        "nl": "Titel van scène 3",
-        "fr": "Titre de la scène 3",
-        "it": "Titolo della scena 3",
-        "es": "Título de la escena 3",
-        "pl": "Tytuł sceny 3",
-        "uk": "Назва сцени 3",
-        "zh-cn": "场景 3 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.scene.title3"
-  },
-  "yamaha.0.rx-a2a-e7d3.scene.title4": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 4 title",
-        "de": "Titel von Szene 4",
-        "ru": "Название сцены 4",
-        "pt": "Título da cena 4",
-        "nl": "Titel van scène 4",
-        "fr": "Titre de la scène 4",
-        "it": "Titolo della scena 4",
-        "es": "Título de la escena 4",
-        "pl": "Tytuł sceny 4",
-        "uk": "Назва сцени 4",
-        "zh-cn": "场景 4 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.scene.title4"
-  },
-  "yamaha.0.rx-a2a-e7d3.scene.title5": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 5 title",
-        "de": "Titel von Szene 5",
-        "ru": "Название сцены 5",
-        "pt": "Título da cena 5",
-        "nl": "Titel van scène 5",
-        "fr": "Titre de la scène 5",
-        "it": "Titolo della scena 5",
-        "es": "Título de la escena 5",
-        "pl": "Tytuł sceny 5",
-        "uk": "Назва сцени 5",
-        "zh-cn": "场景 5 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.scene.title5"
-  },
-  "yamaha.0.rx-a2a-e7d3.scene.title6": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 6 title",
-        "de": "Titel von Szene 6",
-        "ru": "Название сцены 6",
-        "pt": "Título da cena 6",
-        "nl": "Titel van scène 6",
-        "fr": "Titre de la scène 6",
-        "it": "Titolo della scena 6",
-        "es": "Título de la escena 6",
-        "pl": "Tytuł sceny 6",
-        "uk": "Назва сцени 6",
-        "zh-cn": "场景 6 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.scene.title6"
-  },
-  "yamaha.0.rx-a2a-e7d3.scene.title7": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 7 title",
-        "de": "Titel von Szene 7",
-        "ru": "Название сцены 7",
-        "pt": "Título da cena 7",
-        "nl": "Titel van scène 7",
-        "fr": "Titre de la scène 7",
-        "it": "Titolo della scena 7",
-        "es": "Título de la escena 7",
-        "pl": "Tytuł sceny 7",
-        "uk": "Назва сцени 7",
-        "zh-cn": "场景 7 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.scene.title7"
-  },
-  "yamaha.0.rx-a2a-e7d3.scene.title8": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 8 title",
-        "de": "Titel von Szene 8",
-        "ru": "Название сцены 8",
-        "pt": "Título da cena 8",
-        "nl": "Titel van scène 8",
-        "fr": "Titre de la scène 8",
-        "it": "Titolo della scena 8",
-        "es": "Título de la escena 8",
-        "pl": "Tytuł sceny 8",
-        "uk": "Назва сцени 8",
-        "zh-cn": "场景 8 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.scene.title8"
-  },
-  "yamaha.0.rx-a2a-e7d3.scene.title9": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 9 title",
-        "de": "Titel von Szene 9",
-        "ru": "Название сцены 9",
-        "pt": "Título da cena 9",
-        "nl": "Titel van scène 9",
-        "fr": "Titre de la scène 9",
-        "it": "Titolo della scena 9",
-        "es": "Título de la escena 9",
-        "pl": "Tytuł sceny 9",
-        "uk": "Назва сцени 9",
-        "zh-cn": "场景 9 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-a2a-e7d3.scene.title9"
   },
   "yamaha.0.rx-a2a-e7d3.sleep": {
     "type": "state",
@@ -15940,14 +14726,10 @@
         "uk": "Вирівнює гучні й тихі місця — корисно на малій гучності.",
         "zh-cn": "平衡强弱段落，低音量时尤其有用。"
       },
-      "type": "string",
-      "role": "state",
+      "type": "boolean",
+      "role": "switch",
       "read": true,
-      "write": true,
-      "states": {
-        "Off": "Switched off",
-        "Auto": "Automatic"
-      }
+      "write": true
     },
     "native": {},
     "_id": "yamaha.0.rx-a2a-e7d3.sound.adaptiveDrc"
@@ -17446,6 +16228,7 @@
       "read": true,
       "write": true,
       "min": 0,
+      "step": 1,
       "max": 40
     },
     "native": {},
@@ -17657,7 +16440,7 @@
     "type": "state",
     "common": {
       "name": {
-        "en": "RDS programme type",
+        "en": "RDS program type",
         "de": "RDS-Programmart",
         "ru": "Тип программы RDS",
         "pt": "Tipo de programa RDS",
@@ -18004,18 +16787,21 @@
   "yamaha.0.rx-v3900-e483": {
     "type": "device",
     "common": {
-      "name": "rx-v3900-e483",
+      "name": "RX-V3900",
       "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNOSAxOGg0NmE1IDUgMCAwIDEgNSA1djE4YTUgNSAwIDAgMSAtNSA1aC00NmE1IDUgMCAwIDEgLTUgLTV2LTE4YTUgNSAwIDAgMSA1IC01eiIvPjxwYXRoIGQ9Ik0xNCAyN2gxNGEyIDIgMCAwIDEgMiAydjRhMiAyIDAgMCAxIC0yIDJoLTE0YTIgMiAwIDAgMSAtMiAtMnYtNGEyIDIgMCAwIDEgMiAtMnoiLz48Y2lyY2xlIGN4PSI0NiIgY3k9IjMyIiByPSI3Ii8+PHBhdGggZD0iTTE0IDQ2djZNNTAgNDZ2NiIvPjwvc3ZnPg==",
       "statusStates": {
         "onlineId": "yamaha.0.rx-v3900-e483.info.connection"
       }
     },
     "native": {
-      "source": "manual",
       "volumeAsPercent": false,
+      "model": "RX-V3900",
       "identity": {
-        "serial": "0CE4E483"
+        "serial": "0CE4E483",
+        "mac": null
       },
+      "label": "RX-V3900",
+      "labelRank": 1,
       "idScheme": 3
     },
     "_id": "yamaha.0.rx-v3900-e483"
@@ -18035,6 +16821,19 @@
         "pl": "Informacje",
         "uk": "Інформація",
         "zh-cn": "信息"
+      },
+      "desc": {
+        "en": "Model, firmware, address and which of the three protocols are live.",
+        "de": "Modell, Firmware, Adresse und welche der drei Protokolle gerade leben.",
+        "ru": "Модель, прошивка, адрес и какие из трёх протоколов активны.",
+        "pt": "Modelo, firmware, endereço e quais dos três protocolos estão ativos.",
+        "nl": "Model, firmware, adres en welke van de drie protocollen actief zijn.",
+        "fr": "Modèle, micrologiciel, adresse et lesquels des trois protocoles sont actifs.",
+        "it": "Modello, firmware, indirizzo e quali dei tre protocolli sono attivi.",
+        "es": "Modelo, firmware, dirección y cuáles de los tres protocolos están activos.",
+        "pl": "Model, oprogramowanie, adres i które z trzech protokołów są aktywne.",
+        "uk": "Модель, прошивка, адреса та які з трьох протоколів активні.",
+        "zh-cn": "型号、固件、地址，以及三种协议中哪些处于活动状态。"
       }
     },
     "native": {},
@@ -18077,6 +16876,30 @@
     },
     "native": {},
     "_id": "yamaha.0.rx-v3900-e483.info.connection"
+  },
+  "yamaha.0.rx-v3900-e483.info.firmware": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Firmware version",
+        "de": "Firmware-Version",
+        "ru": "Версия прошивки",
+        "pt": "Versão do firmware",
+        "nl": "Firmwareversie",
+        "fr": "Version du micrologiciel",
+        "it": "Versione firmware",
+        "es": "Versión del firmware",
+        "pl": "Wersja oprogramowania",
+        "uk": "Версія прошивки",
+        "zh-cn": "固件版本"
+      },
+      "type": "string",
+      "role": "text",
+      "read": true,
+      "write": false
+    },
+    "native": {},
+    "_id": "yamaha.0.rx-v3900-e483.info.firmware"
   },
   "yamaha.0.rx-v3900-e483.info.ip": {
     "type": "state",
@@ -18299,10 +17122,6 @@
         "pl": "Wyciszenie",
         "uk": "Без звуку",
         "zh-cn": "静音"
-      },
-      "states": {
-        "On": "Muted",
-        "Off": "Not muted"
       }
     },
     "native": {},
@@ -19152,10 +17971,6 @@
         "pl": "Zasilanie",
         "uk": "Живлення",
         "zh-cn": "电源"
-      },
-      "states": {
-        "On": "Switched on",
-        "Standby": "In standby"
       }
     },
     "native": {},
@@ -19427,7 +18242,6 @@
       }
     },
     "native": {
-      "source": "manual",
       "volumeAsPercent": false,
       "model": "RX-V473",
       "label": "RX-V473",
@@ -19435,516 +18249,6 @@
       "idScheme": 3
     },
     "_id": "yamaha.0.rx-v473"
-  },
-  "yamaha.0.rx-v473.advanced": {
-    "type": "channel",
-    "common": {
-      "name": {
-        "en": "Advanced",
-        "de": "Erweitert",
-        "ru": "Дополнительно",
-        "pt": "Avançado",
-        "nl": "Geavanceerd",
-        "fr": "Avancé",
-        "it": "Avanzate",
-        "es": "Avanzado",
-        "pl": "Zaawansowane",
-        "uk": "Додатково",
-        "zh-cn": "高级"
-      },
-      "desc": {
-        "en": "Settings you would otherwise reach through the receiver's own setup menu.",
-        "de": "Einstellungen, die sonst nur über das Einrichtungsmenü des Receivers erreichbar sind.",
-        "ru": "Настройки, доступные иначе только через меню настройки ресивера.",
-        "pt": "Definições que de outra forma só se alcançam pelo menu de configuração do recetor.",
-        "nl": "Instellingen die je anders alleen via het instelmenu van de receiver bereikt.",
-        "fr": "Réglages accessibles autrement uniquement par le menu de configuration de l'ampli.",
-        "it": "Impostazioni altrimenti raggiungibili solo dal menu di configurazione del ricevitore.",
-        "es": "Ajustes a los que de otro modo solo se llega por el menú de configuración del receptor.",
-        "pl": "Ustawienia dostępne inaczej tylko przez menu konfiguracji amplitunera.",
-        "uk": "Налаштування, доступні інакше лише через меню налаштування ресивера.",
-        "zh-cn": "通常只能通过功放自身设置菜单访问的选项。"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v473.advanced"
-  },
-  "yamaha.0.rx-v473.advanced.inputNames": {
-    "type": "channel",
-    "common": {
-      "name": {
-        "en": "Input names",
-        "de": "Eingangsnamen",
-        "ru": "Названия входов",
-        "pt": "Nomes das entradas",
-        "nl": "Ingangsnamen",
-        "fr": "Noms des entrées",
-        "it": "Nomi ingressi",
-        "es": "Nombres de las entradas",
-        "pl": "Nazwy wejść",
-        "uk": "Назви входів",
-        "zh-cn": "输入名称"
-      },
-      "desc": {
-        "en": "The label the receiver shows for each input, as you renamed it.",
-        "de": "Die Beschriftung, die der Receiver je Eingang anzeigt — so, wie Sie sie benannt haben.",
-        "ru": "Подпись, которую ресивер показывает для каждого входа, как вы её задали.",
-        "pt": "O nome que o recetor mostra para cada entrada, tal como o renomeou.",
-        "nl": "Het label dat de receiver per ingang toont, zoals u het hebt genoemd.",
-        "fr": "Le libellé affiché par l'ampli pour chaque entrée, tel que vous l'avez renommé.",
-        "it": "L'etichetta che il ricevitore mostra per ogni ingresso, come l'avete rinominata.",
-        "es": "La etiqueta que el receptor muestra para cada entrada, tal como la renombró.",
-        "pl": "Etykieta pokazywana przez amplituner dla każdego wejścia, tak jak ją nazwano.",
-        "uk": "Підпис, який ресивер показує для кожного входу, як ви його назвали.",
-        "zh-cn": "功放为每个输入显示的名称，即您重命名后的标签。"
-      }
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v473.advanced.inputNames"
-  },
-  "yamaha.0.rx-v473.advanced.inputNames.av1": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Input name (AV1)",
-        "de": "Eingangsname (AV1)",
-        "ru": "Название входа (AV1)",
-        "pt": "Nome da entrada (AV1)",
-        "nl": "Ingangsnaam (AV1)",
-        "fr": "Nom de l'entrée (AV1)",
-        "it": "Nome dell'ingresso (AV1)",
-        "es": "Nombre de la entrada (AV1)",
-        "pl": "Nazwa wejścia (AV1)",
-        "uk": "Назва входу (AV1)",
-        "zh-cn": "输入名称（AV1）"
-      },
-      "desc": {
-        "en": "The label this input carries on the receiver, as you renamed it.",
-        "de": "Die Beschriftung dieses Eingangs am Receiver — so, wie Sie sie benannt haben.",
-        "ru": "Подпись этого входа на ресивере, как вы её задали.",
-        "pt": "O nome que esta entrada tem no recetor, tal como o renomeou.",
-        "nl": "Het label van deze ingang op de receiver, zoals u het noemde.",
-        "fr": "Le libellé de cette entrée sur l'ampli, tel que vous l'avez renommé.",
-        "it": "L'etichetta di questo ingresso sul ricevitore, come l'avete rinominata.",
-        "es": "La etiqueta de esta entrada en el receptor, tal como la renombró.",
-        "pl": "Etykieta tego wejścia w amplitunerze, tak jak ją nazwano.",
-        "uk": "Підпис цього входу на ресивері, як ви його назвали.",
-        "zh-cn": "该输入在功放上的名称，即您重命名后的标签。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v473.advanced.inputNames.av1"
-  },
-  "yamaha.0.rx-v473.advanced.inputNames.av2": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Input name (AV2)",
-        "de": "Eingangsname (AV2)",
-        "ru": "Название входа (AV2)",
-        "pt": "Nome da entrada (AV2)",
-        "nl": "Ingangsnaam (AV2)",
-        "fr": "Nom de l'entrée (AV2)",
-        "it": "Nome dell'ingresso (AV2)",
-        "es": "Nombre de la entrada (AV2)",
-        "pl": "Nazwa wejścia (AV2)",
-        "uk": "Назва входу (AV2)",
-        "zh-cn": "输入名称（AV2）"
-      },
-      "desc": {
-        "en": "The label this input carries on the receiver, as you renamed it.",
-        "de": "Die Beschriftung dieses Eingangs am Receiver — so, wie Sie sie benannt haben.",
-        "ru": "Подпись этого входа на ресивере, как вы её задали.",
-        "pt": "O nome que esta entrada tem no recetor, tal como o renomeou.",
-        "nl": "Het label van deze ingang op de receiver, zoals u het noemde.",
-        "fr": "Le libellé de cette entrée sur l'ampli, tel que vous l'avez renommé.",
-        "it": "L'etichetta di questo ingresso sul ricevitore, come l'avete rinominata.",
-        "es": "La etiqueta de esta entrada en el receptor, tal como la renombró.",
-        "pl": "Etykieta tego wejścia w amplitunerze, tak jak ją nazwano.",
-        "uk": "Підпис цього входу на ресивері, як ви його назвали.",
-        "zh-cn": "该输入在功放上的名称，即您重命名后的标签。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v473.advanced.inputNames.av2"
-  },
-  "yamaha.0.rx-v473.advanced.inputNames.av3": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Input name (AV3)",
-        "de": "Eingangsname (AV3)",
-        "ru": "Название входа (AV3)",
-        "pt": "Nome da entrada (AV3)",
-        "nl": "Ingangsnaam (AV3)",
-        "fr": "Nom de l'entrée (AV3)",
-        "it": "Nome dell'ingresso (AV3)",
-        "es": "Nombre de la entrada (AV3)",
-        "pl": "Nazwa wejścia (AV3)",
-        "uk": "Назва входу (AV3)",
-        "zh-cn": "输入名称（AV3）"
-      },
-      "desc": {
-        "en": "The label this input carries on the receiver, as you renamed it.",
-        "de": "Die Beschriftung dieses Eingangs am Receiver — so, wie Sie sie benannt haben.",
-        "ru": "Подпись этого входа на ресивере, как вы её задали.",
-        "pt": "O nome que esta entrada tem no recetor, tal como o renomeou.",
-        "nl": "Het label van deze ingang op de receiver, zoals u het noemde.",
-        "fr": "Le libellé de cette entrée sur l'ampli, tel que vous l'avez renommé.",
-        "it": "L'etichetta di questo ingresso sul ricevitore, come l'avete rinominata.",
-        "es": "La etiqueta de esta entrada en el receptor, tal como la renombró.",
-        "pl": "Etykieta tego wejścia w amplitunerze, tak jak ją nazwano.",
-        "uk": "Підпис цього входу на ресивері, як ви його назвали.",
-        "zh-cn": "该输入在功放上的名称，即您重命名后的标签。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v473.advanced.inputNames.av3"
-  },
-  "yamaha.0.rx-v473.advanced.inputNames.av4": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Input name (AV4)",
-        "de": "Eingangsname (AV4)",
-        "ru": "Название входа (AV4)",
-        "pt": "Nome da entrada (AV4)",
-        "nl": "Ingangsnaam (AV4)",
-        "fr": "Nom de l'entrée (AV4)",
-        "it": "Nome dell'ingresso (AV4)",
-        "es": "Nombre de la entrada (AV4)",
-        "pl": "Nazwa wejścia (AV4)",
-        "uk": "Назва входу (AV4)",
-        "zh-cn": "输入名称（AV4）"
-      },
-      "desc": {
-        "en": "The label this input carries on the receiver, as you renamed it.",
-        "de": "Die Beschriftung dieses Eingangs am Receiver — so, wie Sie sie benannt haben.",
-        "ru": "Подпись этого входа на ресивере, как вы её задали.",
-        "pt": "O nome que esta entrada tem no recetor, tal como o renomeou.",
-        "nl": "Het label van deze ingang op de receiver, zoals u het noemde.",
-        "fr": "Le libellé de cette entrée sur l'ampli, tel que vous l'avez renommé.",
-        "it": "L'etichetta di questo ingresso sul ricevitore, come l'avete rinominata.",
-        "es": "La etiqueta de esta entrada en el receptor, tal como la renombró.",
-        "pl": "Etykieta tego wejścia w amplitunerze, tak jak ją nazwano.",
-        "uk": "Підпис цього входу на ресивері, як ви його назвали.",
-        "zh-cn": "该输入在功放上的名称，即您重命名后的标签。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v473.advanced.inputNames.av4"
-  },
-  "yamaha.0.rx-v473.advanced.inputNames.av5": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Input name (AV5)",
-        "de": "Eingangsname (AV5)",
-        "ru": "Название входа (AV5)",
-        "pt": "Nome da entrada (AV5)",
-        "nl": "Ingangsnaam (AV5)",
-        "fr": "Nom de l'entrée (AV5)",
-        "it": "Nome dell'ingresso (AV5)",
-        "es": "Nombre de la entrada (AV5)",
-        "pl": "Nazwa wejścia (AV5)",
-        "uk": "Назва входу (AV5)",
-        "zh-cn": "输入名称（AV5）"
-      },
-      "desc": {
-        "en": "The label this input carries on the receiver, as you renamed it.",
-        "de": "Die Beschriftung dieses Eingangs am Receiver — so, wie Sie sie benannt haben.",
-        "ru": "Подпись этого входа на ресивере, как вы её задали.",
-        "pt": "O nome que esta entrada tem no recetor, tal como o renomeou.",
-        "nl": "Het label van deze ingang op de receiver, zoals u het noemde.",
-        "fr": "Le libellé de cette entrée sur l'ampli, tel que vous l'avez renommé.",
-        "it": "L'etichetta di questo ingresso sul ricevitore, come l'avete rinominata.",
-        "es": "La etiqueta de esta entrada en el receptor, tal como la renombró.",
-        "pl": "Etykieta tego wejścia w amplitunerze, tak jak ją nazwano.",
-        "uk": "Підпис цього входу на ресивері, як ви його назвали.",
-        "zh-cn": "该输入在功放上的名称，即您重命名后的标签。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v473.advanced.inputNames.av5"
-  },
-  "yamaha.0.rx-v473.advanced.inputNames.av6": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Input name (AV6)",
-        "de": "Eingangsname (AV6)",
-        "ru": "Название входа (AV6)",
-        "pt": "Nome da entrada (AV6)",
-        "nl": "Ingangsnaam (AV6)",
-        "fr": "Nom de l'entrée (AV6)",
-        "it": "Nome dell'ingresso (AV6)",
-        "es": "Nombre de la entrada (AV6)",
-        "pl": "Nazwa wejścia (AV6)",
-        "uk": "Назва входу (AV6)",
-        "zh-cn": "输入名称（AV6）"
-      },
-      "desc": {
-        "en": "The label this input carries on the receiver, as you renamed it.",
-        "de": "Die Beschriftung dieses Eingangs am Receiver — so, wie Sie sie benannt haben.",
-        "ru": "Подпись этого входа на ресивере, как вы её задали.",
-        "pt": "O nome que esta entrada tem no recetor, tal como o renomeou.",
-        "nl": "Het label van deze ingang op de receiver, zoals u het noemde.",
-        "fr": "Le libellé de cette entrée sur l'ampli, tel que vous l'avez renommé.",
-        "it": "L'etichetta di questo ingresso sul ricevitore, come l'avete rinominata.",
-        "es": "La etiqueta de esta entrada en el receptor, tal como la renombró.",
-        "pl": "Etykieta tego wejścia w amplitunerze, tak jak ją nazwano.",
-        "uk": "Підпис цього входу на ресивері, як ви його назвали.",
-        "zh-cn": "该输入在功放上的名称，即您重命名后的标签。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v473.advanced.inputNames.av6"
-  },
-  "yamaha.0.rx-v473.advanced.inputNames.hdmi1": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Input name (HDMI1)",
-        "de": "Eingangsname (HDMI1)",
-        "ru": "Название входа (HDMI1)",
-        "pt": "Nome da entrada (HDMI1)",
-        "nl": "Ingangsnaam (HDMI1)",
-        "fr": "Nom de l'entrée (HDMI1)",
-        "it": "Nome dell'ingresso (HDMI1)",
-        "es": "Nombre de la entrada (HDMI1)",
-        "pl": "Nazwa wejścia (HDMI1)",
-        "uk": "Назва входу (HDMI1)",
-        "zh-cn": "输入名称（HDMI1）"
-      },
-      "desc": {
-        "en": "The label this input carries on the receiver, as you renamed it.",
-        "de": "Die Beschriftung dieses Eingangs am Receiver — so, wie Sie sie benannt haben.",
-        "ru": "Подпись этого входа на ресивере, как вы её задали.",
-        "pt": "O nome que esta entrada tem no recetor, tal como o renomeou.",
-        "nl": "Het label van deze ingang op de receiver, zoals u het noemde.",
-        "fr": "Le libellé de cette entrée sur l'ampli, tel que vous l'avez renommé.",
-        "it": "L'etichetta di questo ingresso sul ricevitore, come l'avete rinominata.",
-        "es": "La etiqueta de esta entrada en el receptor, tal como la renombró.",
-        "pl": "Etykieta tego wejścia w amplitunerze, tak jak ją nazwano.",
-        "uk": "Підпис цього входу на ресивері, як ви його назвали.",
-        "zh-cn": "该输入在功放上的名称，即您重命名后的标签。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v473.advanced.inputNames.hdmi1"
-  },
-  "yamaha.0.rx-v473.advanced.inputNames.hdmi2": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Input name (HDMI2)",
-        "de": "Eingangsname (HDMI2)",
-        "ru": "Название входа (HDMI2)",
-        "pt": "Nome da entrada (HDMI2)",
-        "nl": "Ingangsnaam (HDMI2)",
-        "fr": "Nom de l'entrée (HDMI2)",
-        "it": "Nome dell'ingresso (HDMI2)",
-        "es": "Nombre de la entrada (HDMI2)",
-        "pl": "Nazwa wejścia (HDMI2)",
-        "uk": "Назва входу (HDMI2)",
-        "zh-cn": "输入名称（HDMI2）"
-      },
-      "desc": {
-        "en": "The label this input carries on the receiver, as you renamed it.",
-        "de": "Die Beschriftung dieses Eingangs am Receiver — so, wie Sie sie benannt haben.",
-        "ru": "Подпись этого входа на ресивере, как вы её задали.",
-        "pt": "O nome que esta entrada tem no recetor, tal como o renomeou.",
-        "nl": "Het label van deze ingang op de receiver, zoals u het noemde.",
-        "fr": "Le libellé de cette entrée sur l'ampli, tel que vous l'avez renommé.",
-        "it": "L'etichetta di questo ingresso sul ricevitore, come l'avete rinominata.",
-        "es": "La etiqueta de esta entrada en el receptor, tal como la renombró.",
-        "pl": "Etykieta tego wejścia w amplitunerze, tak jak ją nazwano.",
-        "uk": "Підпис цього входу на ресивері, як ви його назвали.",
-        "zh-cn": "该输入在功放上的名称，即您重命名后的标签。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v473.advanced.inputNames.hdmi2"
-  },
-  "yamaha.0.rx-v473.advanced.inputNames.hdmi3": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Input name (HDMI3)",
-        "de": "Eingangsname (HDMI3)",
-        "ru": "Название входа (HDMI3)",
-        "pt": "Nome da entrada (HDMI3)",
-        "nl": "Ingangsnaam (HDMI3)",
-        "fr": "Nom de l'entrée (HDMI3)",
-        "it": "Nome dell'ingresso (HDMI3)",
-        "es": "Nombre de la entrada (HDMI3)",
-        "pl": "Nazwa wejścia (HDMI3)",
-        "uk": "Назва входу (HDMI3)",
-        "zh-cn": "输入名称（HDMI3）"
-      },
-      "desc": {
-        "en": "The label this input carries on the receiver, as you renamed it.",
-        "de": "Die Beschriftung dieses Eingangs am Receiver — so, wie Sie sie benannt haben.",
-        "ru": "Подпись этого входа на ресивере, как вы её задали.",
-        "pt": "O nome que esta entrada tem no recetor, tal como o renomeou.",
-        "nl": "Het label van deze ingang op de receiver, zoals u het noemde.",
-        "fr": "Le libellé de cette entrée sur l'ampli, tel que vous l'avez renommé.",
-        "it": "L'etichetta di questo ingresso sul ricevitore, come l'avete rinominata.",
-        "es": "La etiqueta de esta entrada en el receptor, tal como la renombró.",
-        "pl": "Etykieta tego wejścia w amplitunerze, tak jak ją nazwano.",
-        "uk": "Підпис цього входу на ресивері, як ви його назвали.",
-        "zh-cn": "该输入在功放上的名称，即您重命名后的标签。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v473.advanced.inputNames.hdmi3"
-  },
-  "yamaha.0.rx-v473.advanced.inputNames.hdmi4": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Input name (HDMI4)",
-        "de": "Eingangsname (HDMI4)",
-        "ru": "Название входа (HDMI4)",
-        "pt": "Nome da entrada (HDMI4)",
-        "nl": "Ingangsnaam (HDMI4)",
-        "fr": "Nom de l'entrée (HDMI4)",
-        "it": "Nome dell'ingresso (HDMI4)",
-        "es": "Nombre de la entrada (HDMI4)",
-        "pl": "Nazwa wejścia (HDMI4)",
-        "uk": "Назва входу (HDMI4)",
-        "zh-cn": "输入名称（HDMI4）"
-      },
-      "desc": {
-        "en": "The label this input carries on the receiver, as you renamed it.",
-        "de": "Die Beschriftung dieses Eingangs am Receiver — so, wie Sie sie benannt haben.",
-        "ru": "Подпись этого входа на ресивере, как вы её задали.",
-        "pt": "O nome que esta entrada tem no recetor, tal como o renomeou.",
-        "nl": "Het label van deze ingang op de receiver, zoals u het noemde.",
-        "fr": "Le libellé de cette entrée sur l'ampli, tel que vous l'avez renommé.",
-        "it": "L'etichetta di questo ingresso sul ricevitore, come l'avete rinominata.",
-        "es": "La etiqueta de esta entrada en el receptor, tal como la renombró.",
-        "pl": "Etykieta tego wejścia w amplitunerze, tak jak ją nazwano.",
-        "uk": "Підпис цього входу на ресивері, як ви його назвали.",
-        "zh-cn": "该输入在功放上的名称，即您重命名后的标签。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v473.advanced.inputNames.hdmi4"
-  },
-  "yamaha.0.rx-v473.advanced.inputNames.usb": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Input name (USB)",
-        "de": "Eingangsname (USB)",
-        "ru": "Название входа (USB)",
-        "pt": "Nome da entrada (USB)",
-        "nl": "Ingangsnaam (USB)",
-        "fr": "Nom de l'entrée (USB)",
-        "it": "Nome dell'ingresso (USB)",
-        "es": "Nombre de la entrada (USB)",
-        "pl": "Nazwa wejścia (USB)",
-        "uk": "Назва входу (USB)",
-        "zh-cn": "输入名称（USB）"
-      },
-      "desc": {
-        "en": "The label this input carries on the receiver, as you renamed it.",
-        "de": "Die Beschriftung dieses Eingangs am Receiver — so, wie Sie sie benannt haben.",
-        "ru": "Подпись этого входа на ресивере, как вы её задали.",
-        "pt": "O nome que esta entrada tem no recetor, tal como o renomeou.",
-        "nl": "Het label van deze ingang op de receiver, zoals u het noemde.",
-        "fr": "Le libellé de cette entrée sur l'ampli, tel que vous l'avez renommé.",
-        "it": "L'etichetta di questo ingresso sul ricevitore, come l'avete rinominata.",
-        "es": "La etiqueta de esta entrada en el receptor, tal como la renombró.",
-        "pl": "Etykieta tego wejścia w amplitunerze, tak jak ją nazwano.",
-        "uk": "Підпис цього входу на ресивері, як ви його назвали.",
-        "zh-cn": "该输入在功放上的名称，即您重命名后的标签。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v473.advanced.inputNames.usb"
-  },
-  "yamaha.0.rx-v473.advanced.inputNames.vaux": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Input name (V-AUX)",
-        "de": "Eingangsname (V-AUX)",
-        "ru": "Название входа (V-AUX)",
-        "pt": "Nome da entrada (V-AUX)",
-        "nl": "Ingangsnaam (V-AUX)",
-        "fr": "Nom de l'entrée (V-AUX)",
-        "it": "Nome dell'ingresso (V-AUX)",
-        "es": "Nombre de la entrada (V-AUX)",
-        "pl": "Nazwa wejścia (V-AUX)",
-        "uk": "Назва входу (V-AUX)",
-        "zh-cn": "输入名称（V-AUX）"
-      },
-      "desc": {
-        "en": "The label this input carries on the receiver, as you renamed it.",
-        "de": "Die Beschriftung dieses Eingangs am Receiver — so, wie Sie sie benannt haben.",
-        "ru": "Подпись этого входа на ресивере, как вы её задали.",
-        "pt": "O nome que esta entrada tem no recetor, tal como o renomeou.",
-        "nl": "Het label van deze ingang op de receiver, zoals u het noemde.",
-        "fr": "Le libellé de cette entrée sur l'ampli, tel que vous l'avez renommé.",
-        "it": "L'etichetta di questo ingresso sul ricevitore, come l'avete rinominata.",
-        "es": "La etiqueta de esta entrada en el receptor, tal como la renombró.",
-        "pl": "Etykieta tego wejścia w amplitunerze, tak jak ją nazwano.",
-        "uk": "Підпис цього входу на ресивері, як ви його назвали.",
-        "zh-cn": "该输入在功放上的名称，即您重命名后的标签。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v473.advanced.inputNames.vaux"
   },
   "yamaha.0.rx-v473.info": {
     "type": "channel",
@@ -22369,14 +20673,10 @@
         "uk": "Вирівнює гучні й тихі місця — корисно на малій гучності.",
         "zh-cn": "平衡强弱段落，低音量时尤其有用。"
       },
-      "type": "string",
-      "role": "state",
+      "type": "boolean",
+      "role": "switch",
       "read": true,
-      "write": true,
-      "states": {
-        "Off": "Switched off",
-        "Auto": "Automatic"
-      }
+      "write": true
     },
     "native": {},
     "_id": "yamaha.0.rx-v473.sound.adaptiveDrc"
@@ -23199,7 +21499,6 @@
       }
     },
     "native": {
-      "source": "manual",
       "volumeAsPercent": false,
       "model": "RX-V6A",
       "label": "RX-V6A",
@@ -25386,314 +23685,18 @@
       "max": 8,
       "step": 1,
       "states": {
-        "1": "",
-        "2": "",
-        "3": "",
-        "4": "",
-        "5": "",
-        "6": "",
-        "7": "",
-        "8": ""
+        "1": "1",
+        "2": "2",
+        "3": "3",
+        "4": "4",
+        "5": "5",
+        "6": "6",
+        "7": "7",
+        "8": "8"
       }
     },
     "native": {},
     "_id": "yamaha.0.rx-v6a.multiroom.zone2.scene.recall"
-  },
-  "yamaha.0.rx-v6a.multiroom.zone2.scene.title1": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 1 title",
-        "de": "Titel von Szene 1",
-        "ru": "Название сцены 1",
-        "pt": "Título da cena 1",
-        "nl": "Titel van scène 1",
-        "fr": "Titre de la scène 1",
-        "it": "Titolo della scena 1",
-        "es": "Título de la escena 1",
-        "pl": "Tytuł sceny 1",
-        "uk": "Назва сцени 1",
-        "zh-cn": "场景 1 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v6a.multiroom.zone2.scene.title1"
-  },
-  "yamaha.0.rx-v6a.multiroom.zone2.scene.title2": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 2 title",
-        "de": "Titel von Szene 2",
-        "ru": "Название сцены 2",
-        "pt": "Título da cena 2",
-        "nl": "Titel van scène 2",
-        "fr": "Titre de la scène 2",
-        "it": "Titolo della scena 2",
-        "es": "Título de la escena 2",
-        "pl": "Tytuł sceny 2",
-        "uk": "Назва сцени 2",
-        "zh-cn": "场景 2 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v6a.multiroom.zone2.scene.title2"
-  },
-  "yamaha.0.rx-v6a.multiroom.zone2.scene.title3": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 3 title",
-        "de": "Titel von Szene 3",
-        "ru": "Название сцены 3",
-        "pt": "Título da cena 3",
-        "nl": "Titel van scène 3",
-        "fr": "Titre de la scène 3",
-        "it": "Titolo della scena 3",
-        "es": "Título de la escena 3",
-        "pl": "Tytuł sceny 3",
-        "uk": "Назва сцени 3",
-        "zh-cn": "场景 3 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v6a.multiroom.zone2.scene.title3"
-  },
-  "yamaha.0.rx-v6a.multiroom.zone2.scene.title4": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 4 title",
-        "de": "Titel von Szene 4",
-        "ru": "Название сцены 4",
-        "pt": "Título da cena 4",
-        "nl": "Titel van scène 4",
-        "fr": "Titre de la scène 4",
-        "it": "Titolo della scena 4",
-        "es": "Título de la escena 4",
-        "pl": "Tytuł sceny 4",
-        "uk": "Назва сцени 4",
-        "zh-cn": "场景 4 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v6a.multiroom.zone2.scene.title4"
-  },
-  "yamaha.0.rx-v6a.multiroom.zone2.scene.title5": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 5 title",
-        "de": "Titel von Szene 5",
-        "ru": "Название сцены 5",
-        "pt": "Título da cena 5",
-        "nl": "Titel van scène 5",
-        "fr": "Titre de la scène 5",
-        "it": "Titolo della scena 5",
-        "es": "Título de la escena 5",
-        "pl": "Tytuł sceny 5",
-        "uk": "Назва сцени 5",
-        "zh-cn": "场景 5 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v6a.multiroom.zone2.scene.title5"
-  },
-  "yamaha.0.rx-v6a.multiroom.zone2.scene.title6": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 6 title",
-        "de": "Titel von Szene 6",
-        "ru": "Название сцены 6",
-        "pt": "Título da cena 6",
-        "nl": "Titel van scène 6",
-        "fr": "Titre de la scène 6",
-        "it": "Titolo della scena 6",
-        "es": "Título de la escena 6",
-        "pl": "Tytuł sceny 6",
-        "uk": "Назва сцени 6",
-        "zh-cn": "场景 6 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v6a.multiroom.zone2.scene.title6"
-  },
-  "yamaha.0.rx-v6a.multiroom.zone2.scene.title7": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 7 title",
-        "de": "Titel von Szene 7",
-        "ru": "Название сцены 7",
-        "pt": "Título da cena 7",
-        "nl": "Titel van scène 7",
-        "fr": "Titre de la scène 7",
-        "it": "Titolo della scena 7",
-        "es": "Título de la escena 7",
-        "pl": "Tytuł sceny 7",
-        "uk": "Назва сцени 7",
-        "zh-cn": "场景 7 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v6a.multiroom.zone2.scene.title7"
-  },
-  "yamaha.0.rx-v6a.multiroom.zone2.scene.title8": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 8 title",
-        "de": "Titel von Szene 8",
-        "ru": "Название сцены 8",
-        "pt": "Título da cena 8",
-        "nl": "Titel van scène 8",
-        "fr": "Titre de la scène 8",
-        "it": "Titolo della scena 8",
-        "es": "Título de la escena 8",
-        "pl": "Tytuł sceny 8",
-        "uk": "Назва сцени 8",
-        "zh-cn": "场景 8 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v6a.multiroom.zone2.scene.title8"
   },
   "yamaha.0.rx-v6a.multiroom.zone2.sleep": {
     "type": "state",
@@ -37416,314 +35419,18 @@
       "max": 8,
       "step": 1,
       "states": {
-        "1": "",
-        "2": "",
-        "3": "",
-        "4": "",
-        "5": "",
-        "6": "",
-        "7": "",
-        "8": ""
+        "1": "1",
+        "2": "2",
+        "3": "3",
+        "4": "4",
+        "5": "5",
+        "6": "6",
+        "7": "7",
+        "8": "8"
       }
     },
     "native": {},
     "_id": "yamaha.0.rx-v6a.scene.recall"
-  },
-  "yamaha.0.rx-v6a.scene.title1": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 1 title",
-        "de": "Titel von Szene 1",
-        "ru": "Название сцены 1",
-        "pt": "Título da cena 1",
-        "nl": "Titel van scène 1",
-        "fr": "Titre de la scène 1",
-        "it": "Titolo della scena 1",
-        "es": "Título de la escena 1",
-        "pl": "Tytuł sceny 1",
-        "uk": "Назва сцени 1",
-        "zh-cn": "场景 1 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v6a.scene.title1"
-  },
-  "yamaha.0.rx-v6a.scene.title2": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 2 title",
-        "de": "Titel von Szene 2",
-        "ru": "Название сцены 2",
-        "pt": "Título da cena 2",
-        "nl": "Titel van scène 2",
-        "fr": "Titre de la scène 2",
-        "it": "Titolo della scena 2",
-        "es": "Título de la escena 2",
-        "pl": "Tytuł sceny 2",
-        "uk": "Назва сцени 2",
-        "zh-cn": "场景 2 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v6a.scene.title2"
-  },
-  "yamaha.0.rx-v6a.scene.title3": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 3 title",
-        "de": "Titel von Szene 3",
-        "ru": "Название сцены 3",
-        "pt": "Título da cena 3",
-        "nl": "Titel van scène 3",
-        "fr": "Titre de la scène 3",
-        "it": "Titolo della scena 3",
-        "es": "Título de la escena 3",
-        "pl": "Tytuł sceny 3",
-        "uk": "Назва сцени 3",
-        "zh-cn": "场景 3 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v6a.scene.title3"
-  },
-  "yamaha.0.rx-v6a.scene.title4": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 4 title",
-        "de": "Titel von Szene 4",
-        "ru": "Название сцены 4",
-        "pt": "Título da cena 4",
-        "nl": "Titel van scène 4",
-        "fr": "Titre de la scène 4",
-        "it": "Titolo della scena 4",
-        "es": "Título de la escena 4",
-        "pl": "Tytuł sceny 4",
-        "uk": "Назва сцени 4",
-        "zh-cn": "场景 4 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v6a.scene.title4"
-  },
-  "yamaha.0.rx-v6a.scene.title5": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 5 title",
-        "de": "Titel von Szene 5",
-        "ru": "Название сцены 5",
-        "pt": "Título da cena 5",
-        "nl": "Titel van scène 5",
-        "fr": "Titre de la scène 5",
-        "it": "Titolo della scena 5",
-        "es": "Título de la escena 5",
-        "pl": "Tytuł sceny 5",
-        "uk": "Назва сцени 5",
-        "zh-cn": "场景 5 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v6a.scene.title5"
-  },
-  "yamaha.0.rx-v6a.scene.title6": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 6 title",
-        "de": "Titel von Szene 6",
-        "ru": "Название сцены 6",
-        "pt": "Título da cena 6",
-        "nl": "Titel van scène 6",
-        "fr": "Titre de la scène 6",
-        "it": "Titolo della scena 6",
-        "es": "Título de la escena 6",
-        "pl": "Tytuł sceny 6",
-        "uk": "Назва сцени 6",
-        "zh-cn": "场景 6 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v6a.scene.title6"
-  },
-  "yamaha.0.rx-v6a.scene.title7": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 7 title",
-        "de": "Titel von Szene 7",
-        "ru": "Название сцены 7",
-        "pt": "Título da cena 7",
-        "nl": "Titel van scène 7",
-        "fr": "Titre de la scène 7",
-        "it": "Titolo della scena 7",
-        "es": "Título de la escena 7",
-        "pl": "Tytuł sceny 7",
-        "uk": "Назва сцени 7",
-        "zh-cn": "场景 7 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v6a.scene.title7"
-  },
-  "yamaha.0.rx-v6a.scene.title8": {
-    "type": "state",
-    "common": {
-      "name": {
-        "en": "Scene 8 title",
-        "de": "Titel von Szene 8",
-        "ru": "Название сцены 8",
-        "pt": "Título da cena 8",
-        "nl": "Titel van scène 8",
-        "fr": "Titre de la scène 8",
-        "it": "Titolo della scena 8",
-        "es": "Título de la escena 8",
-        "pl": "Tytuł sceny 8",
-        "uk": "Назва сцени 8",
-        "zh-cn": "场景 8 标题"
-      },
-      "desc": {
-        "en": "The name the device shows for this scene; empty where it names none.",
-        "de": "Der Name, den das Gerät für diese Szene anzeigt; leer, wo es keinen nennt.",
-        "ru": "Название, которое устройство показывает для этой сцены; пусто, если его нет.",
-        "pt": "O nome que o aparelho mostra para esta cena; vazio quando não indica nenhum.",
-        "nl": "De naam die het apparaat voor deze scène toont; leeg als het er geen noemt.",
-        "fr": "Le nom que l'appareil affiche pour cette scène ; vide s'il n'en indique aucun.",
-        "it": "Il nome che il dispositivo mostra per questa scena; vuoto se non ne indica.",
-        "es": "El nombre que el equipo muestra para esta escena; vacío si no indica ninguno.",
-        "pl": "Nazwa, którą urządzenie pokazuje dla tej sceny; pusta, gdy żadnej nie podaje.",
-        "uk": "Назва, яку пристрій показує для цієї сцени; порожньо, якщо її немає.",
-        "zh-cn": "设备为此场景显示的名称；未提供时为空。"
-      },
-      "type": "string",
-      "role": "text",
-      "read": true,
-      "write": false
-    },
-    "native": {},
-    "_id": "yamaha.0.rx-v6a.scene.title8"
   },
   "yamaha.0.rx-v6a.sleep": {
     "type": "state",
@@ -37818,14 +35525,10 @@
         "uk": "Вирівнює гучні й тихі місця — корисно на малій гучності.",
         "zh-cn": "平衡强弱段落，低音量时尤其有用。"
       },
-      "type": "string",
-      "role": "state",
+      "type": "boolean",
+      "role": "switch",
       "read": true,
-      "write": true,
-      "states": {
-        "Off": "Switched off",
-        "Auto": "Automatic"
-      }
+      "write": true
     },
     "native": {},
     "_id": "yamaha.0.rx-v6a.sound.adaptiveDrc"
@@ -39427,6 +37130,7 @@
       "read": true,
       "write": true,
       "min": 0,
+      "step": 1,
       "max": 40
     },
     "native": {},
@@ -39638,7 +37342,7 @@
     "type": "state",
     "common": {
       "name": {
-        "en": "RDS programme type",
+        "en": "RDS program type",
         "de": "RDS-Programmart",
         "ru": "Тип программы RDS",
         "pt": "Tipo de programa RDS",
@@ -50692,17 +48396,17 @@
   "yamaha.0.wx-030-7553": {
     "type": "device",
     "common": {
-      "name": "Badezimmer",
-      "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNOSAxOGg0NmE1IDUgMCAwIDEgNSA1djE4YTUgNSAwIDAgMSAtNSA1aC00NmE1IDUgMCAwIDEgLTUgLTV2LTE4YTUgNSAwIDAgMSA1IC01eiIvPjxwYXRoIGQ9Ik0xNCAyN2gxNGEyIDIgMCAwIDEgMiAydjRhMiAyIDAgMCAxIC0yIDJoLTE0YTIgMiAwIDAgMSAtMiAtMnYtNGEyIDIgMCAwIDEgMiAtMnoiLz48Y2lyY2xlIGN4PSI0NiIgY3k9IjMyIiByPSI3Ii8+PHBhdGggZD0iTTE0IDQ2djZNNTAgNDZ2NiIvPjwvc3ZnPg==",
+      "name": "WX-030",
+      "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMjIgNmgyMGE1IDUgMCAwIDEgNSA1djQyYTUgNSAwIDAgMSAtNSA1aC0yMGE1IDUgMCAwIDEgLTUgLTV2LTQyYTUgNSAwIDAgMSA1IC01eiIvPjxjaXJjbGUgY3g9IjMyIiBjeT0iMTkiIHI9IjQiLz48Y2lyY2xlIGN4PSIzMiIgY3k9IjQwIiByPSI5Ii8+PC9zdmc+",
       "statusStates": {
         "onlineId": "yamaha.0.wx-030-7553.info.connection"
       }
     },
     "native": {
-      "source": "manual",
       "volumeAsPercent": false,
-      "label": "Badezimmer",
-      "labelRank": 2,
+      "label": "WX-030",
+      "labelRank": 1,
+      "model": "WX-030",
       "identity": {
         "serial": "0E897553",
         "mac": "00A0DED4F504"
@@ -50833,6 +48537,19 @@
         "pl": "Informacje",
         "uk": "Інформація",
         "zh-cn": "信息"
+      },
+      "desc": {
+        "en": "Model, firmware, address and which of the three protocols are live.",
+        "de": "Modell, Firmware, Adresse und welche der drei Protokolle gerade leben.",
+        "ru": "Модель, прошивка, адрес и какие из трёх протоколов активны.",
+        "pt": "Modelo, firmware, endereço e quais dos três protocolos estão ativos.",
+        "nl": "Model, firmware, adres en welke van de drie protocollen actief zijn.",
+        "fr": "Modèle, micrologiciel, adresse et lesquels des trois protocoles sont actifs.",
+        "it": "Modello, firmware, indirizzo e quali dei tre protocolli sono attivi.",
+        "es": "Modelo, firmware, dirección y cuáles de los tres protocolos están activos.",
+        "pl": "Model, oprogramowanie, adres i które z trzech protokołów są aktywne.",
+        "uk": "Модель, прошивка, адреса та які з трьох протоколів активні.",
+        "zh-cn": "型号、固件、地址，以及三种协议中哪些处于活动状态。"
       }
     },
     "native": {},
@@ -50875,6 +48592,30 @@
     },
     "native": {},
     "_id": "yamaha.0.wx-030-7553.info.connection"
+  },
+  "yamaha.0.wx-030-7553.info.firmware": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Firmware version",
+        "de": "Firmware-Version",
+        "ru": "Версия прошивки",
+        "pt": "Versão do firmware",
+        "nl": "Firmwareversie",
+        "fr": "Version du micrologiciel",
+        "it": "Versione firmware",
+        "es": "Versión del firmware",
+        "pl": "Wersja oprogramowania",
+        "uk": "Версія прошивки",
+        "zh-cn": "固件版本"
+      },
+      "type": "string",
+      "role": "text",
+      "read": true,
+      "write": false
+    },
+    "native": {},
+    "_id": "yamaha.0.wx-030-7553.info.firmware"
   },
   "yamaha.0.wx-030-7553.info.ip": {
     "type": "state",
@@ -61102,20 +58843,16 @@
   "yamaha.0.wx-030-7553.sleep": {
     "type": "state",
     "common": {
-      "type": "number",
-      "unit": "min",
-      "role": "level.timer.sleep",
+      "type": "string",
+      "role": "state",
       "read": true,
       "write": true,
-      "min": 0,
-      "max": 120,
-      "step": 30,
       "states": {
-        "0": "No sleep timer",
-        "30": "30 minutes",
-        "60": "60 minutes",
-        "90": "90 minutes",
-        "120": "120 minutes"
+        "Off": "No sleep timer",
+        "30 min": "30 minutes",
+        "60 min": "60 minutes",
+        "90 min": "90 minutes",
+        "120 min": "120 minutes"
       },
       "name": {
         "en": "Sleep timer",
@@ -61589,17 +59326,17 @@
   "yamaha.0.ysp-1600-7073": {
     "type": "device",
     "common": {
-      "name": "Wohnzimmer",
-      "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNOSAxOGg0NmE1IDUgMCAwIDEgNSA1djE4YTUgNSAwIDAgMSAtNSA1aC00NmE1IDUgMCAwIDEgLTUgLTV2LTE4YTUgNSAwIDAgMSA1IC01eiIvPjxwYXRoIGQ9Ik0xNCAyN2gxNGEyIDIgMCAwIDEgMiAydjRhMiAyIDAgMCAxIC0yIDJoLTE0YTIgMiAwIDAgMSAtMiAtMnYtNGEyIDIgMCAwIDEgMiAtMnoiLz48Y2lyY2xlIGN4PSI0NiIgY3k9IjMyIiByPSI3Ii8+PHBhdGggZD0iTTE0IDQ2djZNNTAgNDZ2NiIvPjwvc3ZnPg==",
+      "name": "YSP-1600",
+      "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMTIgMjRoNDBhOCA4IDAgMCAxIDggOHYwYTggOCAwIDAgMSAtOCA4aC00MGE4IDggMCAwIDEgLTggLTh2LTBhOCA4IDAgMCAxIDggLTh6Ii8+PHBhdGggZD0iTTE3IDMyaC4wMU0yNyAzMmguMDFNMzcgMzJoLjAxTTQ3IDMyaC4wMSIgc3Ryb2tlLXdpZHRoPSI1Ii8+PC9zdmc+",
       "statusStates": {
         "onlineId": "yamaha.0.ysp-1600-7073.info.connection"
       }
     },
     "native": {
-      "source": "manual",
       "volumeAsPercent": false,
-      "label": "Wohnzimmer",
-      "labelRank": 2,
+      "label": "YSP-1600",
+      "labelRank": 1,
+      "model": "YSP-1600",
       "identity": {
         "serial": "0B587073",
         "mac": "00A0DED15025"
@@ -61730,6 +59467,19 @@
         "pl": "Informacje",
         "uk": "Інформація",
         "zh-cn": "信息"
+      },
+      "desc": {
+        "en": "Model, firmware, address and which of the three protocols are live.",
+        "de": "Modell, Firmware, Adresse und welche der drei Protokolle gerade leben.",
+        "ru": "Модель, прошивка, адрес и какие из трёх протоколов активны.",
+        "pt": "Modelo, firmware, endereço e quais dos três protocolos estão ativos.",
+        "nl": "Model, firmware, adres en welke van de drie protocollen actief zijn.",
+        "fr": "Modèle, micrologiciel, adresse et lesquels des trois protocoles sont actifs.",
+        "it": "Modello, firmware, indirizzo e quali dei tre protocolli sono attivi.",
+        "es": "Modelo, firmware, dirección y cuáles de los tres protocolos están activos.",
+        "pl": "Model, oprogramowanie, adres i które z trzech protokołów są aktywne.",
+        "uk": "Модель, прошивка, адреса та які з трьох протоколів активні.",
+        "zh-cn": "型号、固件、地址，以及三种协议中哪些处于活动状态。"
       }
     },
     "native": {},
@@ -61772,6 +59522,30 @@
     },
     "native": {},
     "_id": "yamaha.0.ysp-1600-7073.info.connection"
+  },
+  "yamaha.0.ysp-1600-7073.info.firmware": {
+    "type": "state",
+    "common": {
+      "name": {
+        "en": "Firmware version",
+        "de": "Firmware-Version",
+        "ru": "Версия прошивки",
+        "pt": "Versão do firmware",
+        "nl": "Firmwareversie",
+        "fr": "Version du micrologiciel",
+        "it": "Versione firmware",
+        "es": "Versión del firmware",
+        "pl": "Wersja oprogramowania",
+        "uk": "Версія прошивки",
+        "zh-cn": "固件版本"
+      },
+      "type": "string",
+      "role": "text",
+      "read": true,
+      "write": false
+    },
+    "native": {},
+    "_id": "yamaha.0.ysp-1600-7073.info.firmware"
   },
   "yamaha.0.ysp-1600-7073.info.ip": {
     "type": "state",
