@@ -183,6 +183,9 @@ export class MultiTransportHandle implements ConnectionHandle {
     }
     this.learning = this.learn();
     await this.learning;
+    if (this.closed) {
+      return [];
+    }
     // Over a COPY: a drop latched before start is delivered synchronously while its handler is
     // armed, and handleTransportDrop splices it out of `live` — iterating `live` itself skipped
     // the NEXT transport, which then never got a drop handler: a device without power stayed
@@ -291,13 +294,21 @@ export class MultiTransportHandle implements ConnectionHandle {
    * Complete the read-in: coordinate the live transports in full, write every definition as it is now
    * (the one moment a list or a bound may shrink), remember who serves what, and remove what no
    * transport built.
+   *
+   * Every step checks first whether the handle was closed meanwhile — see {@link addLearned}.
    */
   private async settle(): Promise<void> {
     const contributions = this.liveContributions();
     const { objects, ownerByCanonicalId } = coordinateObjectTree(contributions);
     for (const object of objects) {
+      if (this.closed) {
+        return;
+      }
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object, true);
       this.writtenObjects.set(object.id, JSON.stringify(object));
+    }
+    if (this.closed) {
+      return;
     }
     this.tree = {
       shared: this.sharedOf(contributions, ownerByCanonicalId),
@@ -308,6 +319,9 @@ export class MultiTransportHandle implements ConnectionHandle {
     this.deps.tree?.set(this.tree);
     await this.deps.settleTree?.(new Set(objects.map(object => object.id)));
     await this.arm(ownerByCanonicalId);
+    if (this.closed) {
+      return;
+    }
     if (this.firmwareChanged) {
       this.firmwareChanged = false;
       this.deps.log.info(
@@ -324,6 +338,10 @@ export class MultiTransportHandle implements ConnectionHandle {
    * a transport that serves a datapoint as well. Nothing is taken away, and a learned owner stays — unless a
    * transport that proves the datapoint now ranks before it and keeps the datapoint's form (a one-way step:
    * the YNCA menu proof over the XML menus, forum 85413).
+   *
+   * A closed handle writes nothing more, so every write checks first: a delete or a move closes the handle and
+   * removes or rebuilds the tree right after, and a learn that kept going wrote 19 objects into a deleted device
+   * and could, on a move, settle away what the new handle had just created (review 2026-10-05, A6).
    */
   private async addLearned(): Promise<void> {
     const contributions = [...this.built].map(([transport, defs]) => ({ transport, objects: [...defs.values()] }));
@@ -342,8 +360,14 @@ export class MultiTransportHandle implements ConnectionHandle {
       if (this.writtenObjects.get(object.id) === fingerprint) {
         continue;
       }
+      if (this.closed) {
+        return;
+      }
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
       this.writtenObjects.set(object.id, fingerprint);
+    }
+    if (this.closed) {
+      return;
     }
     const shared = { ...this.tree.shared, ...this.sharedOf(contributions, owners) };
     const transports = [...new Set([...this.tree.transports, ...this.live.map(connection => connection.transport)])];
@@ -459,9 +483,18 @@ export class MultiTransportHandle implements ConnectionHandle {
    * @param owners the owner of each canonical id
    */
   private async arm(owners: Map<string, Transport>): Promise<void> {
+    if (this.closed) {
+      return;
+    }
     this.ownerByCanonicalId = owners;
-    for (const connection of this.live) {
-      await connection.seedOwned(this.ownedFor(connection.transport));
+    // Over a copy: a transport may drop while another one is seeded.
+    for (const connection of [...this.live]) {
+      if (this.closed) {
+        return;
+      }
+      if (this.live.includes(connection)) {
+        await connection.seedOwned(this.ownedFor(connection.transport));
+      }
     }
   }
 
@@ -481,7 +514,7 @@ export class MultiTransportHandle implements ConnectionHandle {
    */
   private noteFirmware(connection: TransportConnection): void {
     const firmware = connection.firmware?.();
-    if (!firmware) {
+    if (!firmware || this.closed) {
       return;
     }
     const known = this.tree.firmware[connection.transport];
@@ -517,7 +550,9 @@ export class MultiTransportHandle implements ConnectionHandle {
 
   /** Report the live transport set (device-manager card indicators / info.transports.*). */
   private reportTransports(): void {
-    this.deps.onTransports?.(this.live.map(connection => connection.transport));
+    if (!this.closed) {
+      this.deps.onTransports?.(this.live.map(connection => connection.transport));
+    }
   }
 
   /**
@@ -755,6 +790,17 @@ export class MultiTransportHandle implements ConnectionHandle {
       tree: this.tree,
       captures: captures.filter((capture): capture is TransportCapture => capture !== undefined),
     };
+  }
+
+  /**
+   * Resolves once the learns this handle started have stopped — after {@link close}, at their next write. A delete
+   * removes the tree only then, or a write already on its way would land in the deleted device (review 2026-10-05,
+   * A6).
+   *
+   * @returns settles when no learn of this handle runs any more (never rejects)
+   */
+  public settled(): Promise<void> {
+    return this.learning.catch(() => undefined);
   }
 
   /** Close every transport and stop every reconnect loop. Synchronous — safe from onUnload. */

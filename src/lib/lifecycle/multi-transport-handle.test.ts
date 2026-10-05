@@ -1145,3 +1145,64 @@ describe("MultiTransportHandle capture (diagnostics report)", () => {
     expect(yxc.writes).toEqual([]);
   });
 });
+
+describe("MultiTransportHandle — a closed handle writes nothing more (review 2026-10-05, A6)", () => {
+  // A delete or a move closes the handle and removes or rebuilds the tree right after. The learn in flight wrote
+  // on: 19 objects landed in the deleted device, and on a move its settle could remove what the new handle had
+  // just created.
+  test("a learn in flight stops at its next write: no upsert starts, no transport is seeded after close", async () => {
+    const objects = [state("volume", "Volume")];
+    const ynca = fakeConn("ynca", objects);
+    const started: Array<{ id: string; afterClose: boolean }> = [];
+    let closed = false;
+    let slow = false;
+    const handle = new MultiTransportHandle("living", [ynca], {
+      upsertObject: async id => {
+        started.push({ id, afterClose: closed });
+        if (slow) {
+          await new Promise(resolve => setTimeout(resolve, 5));
+        }
+      },
+      log: silentLog,
+    });
+    await handle.start();
+    started.length = 0;
+    // A refresh adds 20 objects; the learn writes them one by one, each a database round trip.
+    for (let i = 0; i < 20; i++) {
+      objects.push(state(`sound.x${i}`, `X${i}`));
+    }
+    slow = true;
+    ynca.changeShape();
+    await new Promise(resolve => setTimeout(resolve, 12));
+    const seededAtClose = ynca.seeded.length;
+    handle.close();
+    closed = true;
+    await handle.settled();
+    expect(started.length).toBeGreaterThan(0);
+    expect(started.filter(write => write.afterClose)).toEqual([]);
+    expect(ynca.seeded.length).toBe(seededAtClose);
+  });
+
+  test("a read-in completing after close neither writes the tree nor settles it", async () => {
+    let release: () => void = () => undefined;
+    const settled: string[] = [];
+    const trees: LearnedTree[] = [];
+    const handle = new MultiTransportHandle("living", [fakeConn("ynca", [state("power", "Power")])], {
+      upsertObject: () => new Promise<void>(resolve => (release = resolve)),
+      log: silentLog,
+      adapterVersion: "3.2.0",
+      tree: { get: () => emptyLearnedTree(), set: tree => void trees.push(tree) },
+      settleTree: () => {
+        settled.push("settle");
+        return Promise.resolve();
+      },
+    });
+    const starting = handle.start();
+    await new Promise(resolve => setImmediate(resolve));
+    handle.close();
+    release();
+    await expect(starting).resolves.toEqual([]);
+    expect(trees).toEqual([]);
+    expect(settled).toEqual([]);
+  });
+});

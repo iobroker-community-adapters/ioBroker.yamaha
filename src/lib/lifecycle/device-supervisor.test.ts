@@ -1,4 +1,6 @@
 import { DeviceSupervisor } from "./device-supervisor";
+import { MultiTransportHandle, type WriteOutcome } from "./multi-transport-handle";
+import type { ObjectDef } from "../catalog/types";
 
 /** Flush pending microtasks + one macrotask turn so awaited attempts settle. */
 const tick = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
@@ -310,5 +312,138 @@ describe("DeviceSupervisor teardown", () => {
     // otherwise hold its sockets and timers open for good.
     expect(handle.close).toHaveBeenCalledTimes(1);
     expect(handle.onDrop).not.toHaveBeenCalled();
+  });
+});
+
+describe("DeviceSupervisor — the lifetime of the handle an attempt produced (review 2026-10-05, A6)", () => {
+  test("closing the supervisor aborts the lifetime of the running handle, so its writes stop", async () => {
+    let captured: AbortSignal | undefined;
+    const handle = { onDrop: (): void => {}, handleStateChange: (): void => {}, close: (): void => {} };
+    const supervisor = new DeviceSupervisor({
+      attempt: signal => {
+        captured = signal;
+        return Promise.resolve(handle);
+      },
+      schedule: () => 0,
+      cancel: () => {},
+      onConnectionChange: () => {},
+      backoff: fastBackoff(),
+      log: silentLog,
+    });
+    supervisor.start();
+    await supervisor.settled();
+    expect(captured?.aborted).toBe(false);
+    supervisor.close();
+    expect(captured?.aborted).toBe(true);
+  });
+
+  test("a dropped handle's lifetime ends with it; the reconnect gets a lifetime of its own", async () => {
+    const signals: AbortSignal[] = [];
+    let drop: (reason?: Error) => void = () => {};
+    const scheduled: Array<() => void> = [];
+    const supervisor = new DeviceSupervisor({
+      attempt: signal => {
+        signals.push(signal);
+        return Promise.resolve({ onDrop: cb => (drop = cb), handleStateChange: () => {}, close: () => {} });
+      },
+      schedule: cb => {
+        scheduled.push(cb);
+        return scheduled.length;
+      },
+      cancel: () => {},
+      onConnectionChange: () => {},
+      backoff: fastBackoff(),
+      log: silentLog,
+    });
+    supervisor.start();
+    await tick();
+    drop(new Error("power cut"));
+    expect(signals[0].aborted).toBe(true);
+    scheduled.shift()?.();
+    await tick();
+    expect(signals[1].aborted).toBe(false);
+    supervisor.close();
+  });
+
+  test("an attempt that produced nothing ends with its lifetime aborted", async () => {
+    let captured: AbortSignal | undefined;
+    const supervisor = new DeviceSupervisor({
+      attempt: signal => {
+        captured = signal;
+        return Promise.resolve(null);
+      },
+      schedule: () => 0,
+      cancel: () => {},
+      onConnectionChange: () => {},
+      backoff: fastBackoff(),
+      log: silentLog,
+    });
+    supervisor.start();
+    await supervisor.settled();
+    expect(captured?.aborted).toBe(true);
+  });
+
+  // The adapter's write guard is `!signal.aborted` at the start of each write (main.ts alive()). A delete awaits
+  // settled() and then removes the tree: nothing may pass the guard after close, and the write already on its way
+  // must have landed before settled() resolves.
+  test("a delete during a learn: nothing passes the write guard after close, settled() waits for the write in flight", async () => {
+    const objects: ObjectDef[] = [
+      { id: "volume", type: "state", common: { name: "Volume", type: "number", role: "level", read: true } },
+    ];
+    let shape: (() => void) | undefined;
+    const conn = {
+      transport: "ynca" as const,
+      connect: (): Promise<boolean> => Promise.resolve(true),
+      buildObjects: (): readonly ObjectDef[] => objects,
+      seedOwned: (): void => {},
+      handleWrite: (): Promise<WriteOutcome> => Promise.resolve("sent"),
+      onDrop: (): void => {},
+      onShapeChanged: (cb: () => void): void => {
+        shape = cb;
+      },
+      close: (): void => {},
+    };
+    let closed = false;
+    const passedGuardAfterClose: string[] = [];
+    let inFlight = 0;
+    const supervisor = new DeviceSupervisor({
+      attempt: async signal => {
+        const handle = new MultiTransportHandle("dev", [conn], {
+          upsertObject: async id => {
+            if (signal.aborted) {
+              return;
+            }
+            if (closed) {
+              passedGuardAfterClose.push(id);
+            }
+            inFlight++;
+            await new Promise(resolve => setTimeout(resolve, 3));
+            inFlight--;
+          },
+          log: silentLog,
+        });
+        await handle.start();
+        return handle;
+      },
+      schedule: () => 0,
+      cancel: () => {},
+      onConnectionChange: () => {},
+      backoff: fastBackoff(),
+      log: silentLog,
+    });
+    supervisor.start();
+    await supervisor.settled();
+    for (let i = 0; i < 10; i++) {
+      objects.push({ id: `sound.x${i}`, type: "state", common: { name: `X${i}`, type: "number", role: "level" } });
+    }
+    shape?.();
+    await new Promise(resolve => setTimeout(resolve, 8));
+    expect(inFlight).toBe(1); // the learn is writing right now
+    supervisor.close();
+    closed = true;
+    await supervisor.settled();
+    expect(inFlight).toBe(0);
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(passedGuardAfterClose).toEqual([]);
   });
 });
