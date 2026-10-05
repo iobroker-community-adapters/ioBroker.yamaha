@@ -81,6 +81,23 @@ describe("createBrowseSurface — the remote pad", () => {
   });
 });
 
+// A dropped key must be placeable on an installation with several receivers (review 2026-10-05, A56).
+describe("createBrowseSurface — the engine's lines name the device", () => {
+  it("puts the device in front of every line the engine writes", async () => {
+    const debugged: string[] = [];
+    const engine = await createBrowseSurface(driverStub({ cursorValues: ["up"] }), "living", {
+      upsertObject: () => Promise.resolve(),
+      emit: (): void => {},
+      log: { ...silentLog, debug: message => debugged.push(message) },
+      delay: () => Promise.resolve(),
+    });
+    expect(engine?.handleRemoteWrite("remote.cursor", "left")).toBe("unavailable");
+    expect(debugged).toEqual(['living: remote.cursor not written — "left" is not a key this device has (up)']);
+    engine?.log.debug("from a driver");
+    expect(debugged[1]).toBe("living: from a driver");
+  });
+});
+
 // An album is a folder that can also be played as a whole (MusicCast attribute b1 + b2); only a
 // transport that can do that gets the line to do it with (audit 2026-09-24, C13).
 describe("createBrowseSurface — playing a folder line", () => {

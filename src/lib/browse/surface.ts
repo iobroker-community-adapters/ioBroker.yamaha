@@ -17,6 +17,23 @@ export interface BrowseSurfaceDeps {
 }
 
 /**
+ * The controller log with the device in front of every line, as the controllers write theirs. The engine's lines —
+ * and the drivers', which log through the engine — named no device, so on an installation with two receivers a
+ * dropped key or a failed menu step could not be placed (review 2026-10-05, A56).
+ *
+ * @param deviceId the id-safe device id
+ * @param log the controller log
+ * @returns the log that names the device
+ */
+function deviceLog(deviceId: string, log: ControllerLog): ControllerLog {
+  return {
+    debug: message => log.debug(`${deviceId}: ${message}`),
+    info: message => log.info(`${deviceId}: ${message}`),
+    warn: message => log.warn(`${deviceId}: ${message}`),
+  };
+}
+
+/**
  * Create the `player.browse.*` surface for one transport: its objects, the engine that
  * owns the states, and the wiring between them. All three transports need exactly this
  * sequence, so it lives here once instead of being copied into each controller.
@@ -52,7 +69,7 @@ export async function createBrowseSurface(
   }
   const engine = new BrowseEngine(driver, {
     emit: (id, value) => deps.emit(id, value),
-    log: deps.log,
+    log: deviceLog(deviceId, deps.log),
     delay: deps.delay,
   });
   driver.attach(engine);
