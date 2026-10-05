@@ -1,13 +1,26 @@
 import { ZONE_PREFIX } from "./zones";
-/** The transports the adapter speaks. Ordered most-modern-first — the default ownership rank. */
-export type Transport = "yxc" | "ynca" | "xml";
+/**
+ * The transports the adapter speaks — the one list (review 2026-10-05, E: it stood four times). Ordered
+ * most-modern-first, which is the default ownership rank: when several protocols can do the same, the most modern
+ * one serves it (krobi). YXC is push + structured JSON, YNCA the text-poll base, XML the pre-2010 fallback.
+ */
+export const TRANSPORTS = ["yxc", "ynca", "xml"] as const;
+
+/** One of the {@link TRANSPORTS}. */
+export type Transport = (typeof TRANSPORTS)[number];
 
 /**
- * Ownership preference by modernity, used when a shared capability is equally good on each
- * transport (krobi: "when several protocols can do the same, use the most modern one"). YXC is
- * push + structured JSON, YNCA the text-poll base, XML the pre-2010 fallback.
+ * Whether a value (untrusted storage, a request) names a transport.
+ *
+ * @param value the value
+ * @returns true for one of the {@link TRANSPORTS}
  */
-const MODERNITY: readonly Transport[] = ["yxc", "ynca", "xml"];
+export function isTransport(value: unknown): value is Transport {
+  return (TRANSPORTS as readonly unknown[]).includes(value);
+}
+
+/** Ownership preference by modernity — see {@link TRANSPORTS}. */
+const MODERNITY: readonly Transport[] = TRANSPORTS;
 
 /**
  * The wire vocabulary a transport's dropdown VALUES are spelled in. YNCA and the XML API share the

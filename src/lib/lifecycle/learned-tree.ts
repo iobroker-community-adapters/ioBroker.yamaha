@@ -1,7 +1,4 @@
-import type { Transport } from "../catalog/owner-policy";
-
-/** Every transport, in the order the profile writes them. */
-const TRANSPORTS: readonly Transport[] = ["yxc", "ynca", "xml"];
+import { isTransport, TRANSPORTS, type Transport } from "../catalog/owner-policy";
 
 /**
  * What the adapter learned about ONE receiver's object tree. A receiver does not change what it can over
@@ -128,10 +125,6 @@ export function readInDue(
     return false;
   }
   return live.every(connection => connection.readComplete?.() !== false);
-}
-
-function isTransport(value: unknown): value is Transport {
-  return value === "yxc" || value === "ynca" || value === "xml";
 }
 
 function isPlain(value: unknown): value is Record<string, unknown> {
