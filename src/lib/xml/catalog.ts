@@ -415,8 +415,12 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
       `<Speaker_Preout><Speaker_AB><Speaker_B>${value ? "On" : "Off"}</Speaker_B></Speaker_AB></Speaker_Preout>`,
   },
   {
+    // Zone B takes the zone form — the name and role a zone's own switch, mute and volume carry, under the zoneB
+    // folder that names the zone — so the datapoint reads the same whether XML, YNCA or MusicCast (whose zone2 IS
+    // Zone B on such a device) serves it; the zone role comes from the folder (`zoneRole`). It read "Zone B power"
+    // as `switch.power` here and "Power" as `switch.power.zone` on MusicCast (review 2026-10-05, A27).
     state: "multiroom.zoneB.power",
-    common: { nameKey: "zoneBPower", type: "boolean", role: "switch.power", read: true, write: true },
+    common: { nameKey: "power", type: "boolean", role: "switch.power", read: true, write: true },
     statusField: "zoneBPower",
     mainOnly: true,
     putPaths: ["Power_Control,Zone_B_Power"],
@@ -454,7 +458,8 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
   {
     state: "multiroom.zoneB.volume",
     common: {
-      nameKey: "zoneBVolume",
+      nameKey: "volume",
+      descKey: "descVolume",
       type: "number",
       role: "level.volume",
       read: true,
@@ -471,7 +476,7 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
   },
   {
     state: "multiroom.zoneB.mute",
-    common: { nameKey: "zoneBMute", type: "boolean", role: "media.mute", read: true, write: true },
+    common: { nameKey: "mute", type: "boolean", role: "media.mute", read: true, write: true },
     statusField: "zoneBMute",
     mainOnly: true,
     putPaths: ["Volume,Zone_B,Mute"],

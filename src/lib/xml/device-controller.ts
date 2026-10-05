@@ -29,7 +29,7 @@ import { createBrowseSurface } from "../browse/surface";
 import { XmlBrowseDriver } from "../browse/xml-browse-driver";
 import { decideBrowseSources } from "./browse-probe";
 import { sceneListSurface, sceneNumber } from "../catalog/scene-titles";
-import { splitZone } from "../catalog/zones";
+import { splitZone, ZONE_PREFIX } from "../catalog/zones";
 import { XML_ZONES, type XmlZone } from "./zones";
 import { MEMORY_KEY, xmlInputsKey, xmlScenesKey, xmlStatusFieldsKey } from "../lifecycle/memory-keys";
 import { HttpStatusError } from "../util";
@@ -750,7 +750,10 @@ export class XmlDeviceController {
       // An absent explanation key means the datapoint explains itself — the fleet standard wants
       // the field empty there rather than filled with invented prose.
       const keyed = keyedCommon(entry.common);
-      const common: ObjectDef["common"] = { ...keyed, role: zoneRole(keyed.role, zone.prefix) };
+      // The role of the zone folder the datapoint sits in: a zone's, or Zone B's — which XML addresses through the
+      // main zone but the tree shows as a zone like any other (review 2026-10-05, A27).
+      const folder = ZONE_PREFIX.exec(stateId)?.[0] ?? "";
+      const common: ObjectDef["common"] = { ...keyed, role: zoneRole(keyed.role, folder) };
       // The device's own lists become the dropdowns — DECLARED, so the coordinator puts them on
       // the YNCA-owned datapoint too (#619): the zone's `Input_Sel_Item` list, and from the
       // device description the sound programs (main zone), the sleep steps and the Adaptive

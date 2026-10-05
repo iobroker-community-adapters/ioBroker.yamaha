@@ -266,7 +266,7 @@ export class XmlDeclaredCommands {
           id: stateId,
           type: "state",
           common: {
-            name: tName("zoneBName"),
+            name: tName("zoneName"),
             desc: tName("descZoneName"),
             type: "string",
             role: "text",
