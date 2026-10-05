@@ -2356,36 +2356,20 @@ export class YxcDeviceController {
   }
 
   /**
-   * Run one transport action on the given player source. The CD transport goes through
-   * the one `setCDPlayback(action)` endpoint, repeat and shuffle through their toggles.
+   * Run one transport action on the given player source: the playback words through the one
+   * `setPlayback` endpoint of that player, repeat and shuffle through its toggles.
    *
    * @param block the source the zone is playing
    * @param action the transport action
    */
   private async runTransport(block: "netusb" | "cd", action: PlayerTransport): Promise<void> {
     const client = this.deps.client;
-    if (block === "netusb") {
-      const net: Record<PlayerTransport, () => Promise<unknown>> = {
-        play: () => client.playNet(),
-        pause: () => client.pauseNet(),
-        stop: () => client.stopNet(),
-        next: () => client.nextNet(),
-        prev: () => client.prevNet(),
-        repeatToggle: () => client.toggleNetRepeat(),
-        shuffleToggle: () => client.toggleNetShuffle(),
-      };
-      await net[action]();
-      return;
+    if (action === "repeatToggle") {
+      await client.toggleRepeat(block);
+    } else if (action === "shuffleToggle") {
+      await client.toggleShuffle(block);
+    } else {
+      await client.setPlayback(block, action === "prev" ? "previous" : action);
     }
-    const cd: Record<PlayerTransport, () => Promise<unknown>> = {
-      play: () => client.setCDPlayback("play"),
-      pause: () => client.setCDPlayback("pause"),
-      stop: () => client.setCDPlayback("stop"),
-      next: () => client.setCDPlayback("next"),
-      prev: () => client.setCDPlayback("previous"),
-      repeatToggle: () => client.toggleCDRepeat(),
-      shuffleToggle: () => client.toggleCDShuffle(),
-    };
-    await cd[action]();
   }
 }

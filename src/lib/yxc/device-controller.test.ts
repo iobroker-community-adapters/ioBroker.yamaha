@@ -771,7 +771,7 @@ describe("YxcDeviceController", () => {
     s.client.calls.length = 0;
     void s.controller.handleWrite("player.play", true);
     await flush();
-    expect(s.client.calls).toContainEqual({ method: "setCDPlayback", args: ["play"] });
+    expect(s.client.calls).toContainEqual({ method: "setPlayback", args: ["cd", "play"] });
     // Same button while the zone plays no media source: no transport call goes out.
     const idle = setup(features, { power: "on", input: "hdmi1" });
     await idle.controller.start();
