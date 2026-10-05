@@ -198,7 +198,6 @@ interface PendingDevicePatch {
  * by source IP.
  */
 export class Yamaha extends utils.Adapter {
-  private readonly supervisors: DeviceSupervisor[] = [];
   /** The network searches running now — each one's finish, which `onUnload` calls (E4). */
   private readonly searchesInFlight = new Set<() => void>();
   /** The description fetches running now, destroyed by `onUnload` (E4). */
@@ -292,9 +291,6 @@ export class Yamaha extends utils.Adapter {
    * adapter is shutting down", seen live on the 1.7.0 upgrade restart).
    */
   private unloading = false;
-  /** Device-manager backend: the receivers as cards with add/edit/delete. */
-  /** The device cards — built in onReady after I18n.init (dm-utils listens for messages from its constructor on). */
-  private deviceManagement: YamahaDeviceManagement | undefined;
   /**
    * Every datapoint that existed when this run started, filled ONCE before the cleanup and
    * before any device connects. Without it the balance below would report the whole tree as
@@ -486,11 +482,7 @@ export class Yamaha extends utils.Adapter {
       getForeignObjectAsync: id => this.getForeignObjectAsync(id),
       getForeignStateAsync: id => this.getForeignStateAsync(id),
       getObjectViewAsync: (design, search, params) => this.getObjectViewAsync(design, search, params),
-      log: {
-        info: message => this.log.info(message),
-        warn: message => this.log.warn(message),
-        debug: message => this.log.debug(message),
-      },
+      log: this.log,
     };
   }
 
@@ -543,7 +535,8 @@ export class Yamaha extends utils.Adapter {
       // from its constructor on — it is built only once I18n stands (fleet check i18n-before-messages). The names
       // still come from the own tName (lib/i18n.ts); this only makes adapter-core's I18n usable for any caller.
       await utils.I18n.init(join(__dirname, "..", "admin"), this);
-      this.deviceManagement = new YamahaDeviceManagement(this, this.stores);
+      // The device cards — dm-utils registers itself for the admin's messages in its constructor, nothing reads it here.
+      new YamahaDeviceManagement(this, this.stores);
       // From here on the diagnostics report's log ring hears every line, debug included, and the admin's
       // diagnostics card gets its answers.
       this.logRing.hook(this.log);
@@ -797,13 +790,8 @@ export class Yamaha extends utils.Adapter {
       cancel: handle => this.clearTimeout(handle as ioBroker.Timeout | undefined),
       onConnectionChange: connected => this.reportConnection(device.id, connected),
       backoff: new ReconnectStrategy(RECONNECT_BASE_MS, RECONNECT_MAX_MS),
-      log: {
-        debug: message => this.log.debug(message),
-        info: message => this.log.info(message),
-        warn: message => this.log.warn(message),
-      },
+      log: this.log,
     });
-    this.supervisors.push(supervisor);
     this.supervisorById.set(device.id, supervisor);
     supervisor.start();
   }
@@ -948,11 +936,7 @@ export class Yamaha extends utils.Adapter {
   private async startSsdpListener(): Promise<void> {
     const listener = new SsdpListener({
       interfaces: searchInterfaces(this.config.networkInterface, networkInterfaces()),
-      log: {
-        debug: message => this.log.debug(message),
-        info: message => this.log.info(message),
-        warn: message => this.log.warn(message),
-      },
+      log: this.log,
       onAlive: (notify, address) => this.onSsdpAlive(notify, address),
     });
     try {
@@ -1005,7 +989,7 @@ export class Yamaha extends utils.Adapter {
     const found = await probeDescription(
       {
         fetch: url => this.network.fetch(url),
-        log: { debug: message => this.log.debug(message), warn: message => this.log.warn(message) },
+        log: this.log,
       },
       location,
       address,
@@ -1161,13 +1145,24 @@ export class Yamaha extends utils.Adapter {
       0,
       (quick ? REDISCOVER_QUICK_INTERVAL_MS : REDISCOVER_MIN_INTERVAL_MS) - (Date.now() - this.lastRediscovery),
     );
+    this.armSearch(receiver, due);
+  }
+
+  /**
+   * Arm THE background search timer — the one timer the rediscovery and the idle search share (its body stood twice,
+   * review 2026-10-05, E).
+   *
+   * @param receiver the shared YXC push receiver
+   * @param ms when to search
+   */
+  private armSearch(receiver: YxcPushReceiver, ms: number): void {
     this.rediscoverTimer = this.setTimeout(() => {
       this.rediscoverTimer = undefined;
       this.lastRediscovery = Date.now();
       if (!this.unloading) {
         void this.discoverAdditionalDevices(receiver);
       }
-    }, due);
+    }, ms);
   }
 
   /**
@@ -1210,10 +1205,6 @@ export class Yamaha extends utils.Adapter {
     }
     supervisor.close();
     this.supervisorById.delete(deviceId);
-    const index = this.supervisors.indexOf(supervisor);
-    if (index >= 0) {
-      this.supervisors.splice(index, 1);
-    }
   }
 
   /**
@@ -1371,13 +1362,7 @@ export class Yamaha extends utils.Adapter {
     if (!receiver) {
       return;
     }
-    this.rediscoverTimer = this.setTimeout(() => {
-      this.rediscoverTimer = undefined;
-      this.lastRediscovery = Date.now();
-      if (!this.unloading) {
-        void this.discoverAdditionalDevices(receiver);
-      }
-    }, REDISCOVER_MIN_INTERVAL_MS);
+    this.armSearch(receiver, REDISCOVER_MIN_INTERVAL_MS);
   }
 
   /**
@@ -2583,7 +2568,7 @@ export class Yamaha extends utils.Adapter {
         candidates.push({
           id,
           model: rememberedModel(native) ?? record?.model,
-          identity: this.storedIdentityOf(id, native, record),
+          identity: identityOfDeviceObject(native, record?.identity),
         });
       }
       // By serial, so two devices of one model whose serials end alike get the same ids on every
@@ -2704,23 +2689,6 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
-   * Everything a stored tree knows about who the device is: the identity the transports learned
-   * (`native.identity`), the one in the capability profile, and the discovery record's.
-   *
-   * @param deviceId the device id
-   * @param native the device object's native part
-   * @param record its discovery record, if it has one
-   * @returns the identity, or undefined
-   */
-  private storedIdentityOf(
-    deviceId: string,
-    native: Record<string, unknown>,
-    record: DeviceRecord | undefined,
-  ): DeviceIdentity | undefined {
-    return identityOfDeviceObject(native, record?.identity);
-  }
-
-  /**
    * Decide a device's id at its first contact — for a device the start could not decide (it never
    * told its identity before, or it was switched off during the update). Once per run and device.
    *
@@ -2831,11 +2799,7 @@ export class Yamaha extends utils.Adapter {
         systemLanguage: this.systemLanguage,
         // Group gate for the YNCA sweep: a disabled group's functions are never even fetched.
         isEntryEnabled: id => isGroupEnabled(id, this.config),
-        log: {
-          debug: message => this.log.debug(message),
-          info: message => this.log.info(message),
-          warn: message => this.log.warn(message),
-        },
+        log: this.log,
         upsertObject: async (id, def, settle) => {
           if (!alive()) {
             return;
@@ -3000,7 +2964,7 @@ export class Yamaha extends utils.Adapter {
       this.ssdpListener?.close();
       this.ssdpListener = undefined;
       this.pushReceiver?.close();
-      for (const supervisor of this.supervisors) {
+      for (const supervisor of this.supervisorById.values()) {
         supervisor.close();
       }
       // A stopped adapter talks to nothing, so no device may keep claiming to be connected —
@@ -3110,7 +3074,7 @@ export class Yamaha extends utils.Adapter {
       found = await discoverYamaha({
         search: (target, ms) => this.network.search(target, ms),
         fetch: url => this.network.fetch(url),
-        log: { debug: message => this.log.debug(message), warn: message => this.log.warn(message) },
+        log: this.log,
       });
     } catch (e) {
       this.log.warn(`auto-discovery scan failed, using the remembered devices: ${errText(e)}`);

@@ -4111,6 +4111,56 @@ describe("Yamaha protocol flags at start and stop (audit 2026-09-02)", () => {
   });
 });
 
+// Review 2026-10-05, B8: the adapter's message path had no test — the Expert tab waits for its answer.
+describe("Yamaha diagnostics messages", () => {
+  function messaging(): {
+    i: { onMessage(obj: unknown): Promise<void> };
+    handle: ReturnType<typeof vi.fn>;
+    sendTo: ReturnType<typeof vi.fn>;
+    warn: ReturnType<typeof vi.fn>;
+  } {
+    const ctx = setup();
+    const internals = ctx.i as unknown as {
+      onMessage(obj: unknown): Promise<void>;
+      diagnostics: { handle: unknown };
+      sendTo: unknown;
+    };
+    const handle = vi.fn();
+    const sendTo = vi.fn();
+    internals.diagnostics.handle = handle;
+    internals.sendTo = sendTo;
+    return { i: internals, handle, sendTo, warn: ctx.i.log.warn };
+  }
+
+  it("answers the report the handler built", async () => {
+    const m = messaging();
+    m.handle.mockResolvedValue({ devices: ["rx-v6a-2b3c"] });
+    await m.i.onMessage({ command: "diagnostics", message: { action: "list" }, from: "admin.0", callback: { id: 1 } });
+    expect(m.handle).toHaveBeenCalledWith({ action: "list" });
+    expect(m.sendTo).toHaveBeenCalledWith("admin.0", "diagnostics", { devices: ["rx-v6a-2b3c"] }, { id: 1 });
+  });
+
+  it("a failing handler still answers — with the error, so the card stops waiting", async () => {
+    const m = messaging();
+    m.handle.mockRejectedValue(new Error("device not running"));
+    await m.i.onMessage({
+      command: "diagnostics",
+      message: { action: "export" },
+      from: "admin.0",
+      callback: { id: 2 },
+    });
+    expect(m.sendTo).toHaveBeenCalledWith("admin.0", "diagnostics", { error: "device not running" }, { id: 2 });
+    expect(m.warn).toHaveBeenCalledWith(expect.stringContaining("diagnostics message failed: device not running"));
+  });
+
+  it("ignores any other command — the device manager's dm:* go to dm-utils", async () => {
+    const m = messaging();
+    await m.i.onMessage({ command: "dm:loadDevices", message: {}, from: "admin.0", callback: { id: 3 } });
+    expect(m.handle).not.toHaveBeenCalled();
+    expect(m.sendTo).not.toHaveBeenCalled();
+  });
+});
+
 describe("Yamaha start and stop overlapping (review 2026-10-05, A12/A29/A57)", () => {
   // Proof test REVIEW A: the unload came while onReady still ran; push socket and SSDP listener came up behind it and
   // nothing closed them — in compact mode :41100 stayed bound in the host until it restarted.
