@@ -1,14 +1,18 @@
+// Fleet master — the release run copies this file into every adapter's src-admin/ and keeps only the adapter's own
+// Module-Federation name (the jsonConfig of the adapter refers to it); change it in Entwicklung/.consistency-master.
 import react from "@vitejs/plugin-react";
 import commonjs from "vite-plugin-commonjs";
 import { federation } from "@module-federation/vite";
 import { moduleFederationShared } from "@iobroker/gui-components/modulefederation.admin.config";
 import { readFileSync } from "node:fs";
 
-// The admin loads this remote at runtime (jsonConfig `type: custom`, `custom/customComponents.js`);
-// the build output goes to admin/custom via tasks.js. Same set-up as govee-smart's component.
 const config = {
   plugins: [
     federation({
+      // The component imports the adapter's own rules from ../src/lib; the plugin's type step would compile them
+      // under rootDir src-admin/src and fail (TS6059). The admin loads the remote at runtime — nothing consumes
+      // its types.
+      dts: false,
       manifest: true,
       name: "ConfigCustomYamahaSet",
       filename: "customComponents.js",
@@ -17,13 +21,11 @@ const config = {
       },
       remotes: {},
       shared: moduleFederationShared(JSON.parse(readFileSync("./package.json").toString())),
-      // Nobody consumes the remote as a typed module; the plugin's own tsc pass would also trip over
-      // the shared module imported from ../src/lib (outside rootDir).
-      dts: false,
     }),
     react(),
     commonjs(),
   ],
+  // Vite 8 resolves tsconfig paths natively — replaces the vite-tsconfig-paths plugin.
   resolve: {
     tsconfigPaths: true,
   },

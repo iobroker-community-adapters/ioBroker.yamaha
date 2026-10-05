@@ -9,6 +9,13 @@ import { DiagnosticsPanel } from "./DiagnosticsPanel";
  * admin instantiates the exposed class and drives it through `renderItem`.
  */
 export default class DiagnosticsConfig extends ConfigGeneric<ConfigGenericProps, ConfigGenericState> {
+  /**
+   * The card itself; it owns no native field.
+   *
+   * @param _error unused — the card shows its own errors
+   * @param _disabled unused — the card decides itself when its button is free
+   * @returns the diagnostics card
+   */
   renderItem(_error: string, _disabled: boolean): React.JSX.Element {
     const ctx = this.props.oContext;
     return (

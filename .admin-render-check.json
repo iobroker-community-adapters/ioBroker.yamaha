@@ -1,0 +1,14 @@
+{
+  "instance": "yamaha.0",
+  "targets": [
+    {
+      "name": "diagnostics",
+      "tab": "Expert|Experte",
+      "mountSelectors": [
+        "[data-testid=\"diag-export\"]",
+        "[data-testid=\"diag-no-devices\"]",
+        "[data-testid=\"diag-list-failed\"]"
+      ]
+    }
+  ]
+}

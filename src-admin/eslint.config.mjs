@@ -1,31 +1,11 @@
-// ioBroker eslint template configuration file for js and ts files
-// Please note that esm or react based modules need additional modules loaded.
+// Fleet master — the release run copies this file byte for byte into every adapter's src-admin/; change it in
+// Entwicklung/.consistency-master, never in an adapter. No rule is switched off here: the component and its tests
+// are linted like the adapter itself.
 import config from "@iobroker/eslint-config";
 
 export default [
   ...config,
-
   {
-    // specify files to exclude from linting here
-    ignores: [
-      ".__mf__temp/",
-      "admin/",
-      "**/*.test.js",
-      "**/*.test.ts",
-      "**/*.test.tsx",
-      "src/setupTests.ts",
-      "vitest.config.ts",
-      "test/**/*.js",
-      "*.config.mjs",
-      "build/",
-    ],
-  },
-  {
-    rules: {
-      "jsdoc/require-jsdoc": "off",
-      "jsdoc/require-param-description": "off",
-      "jsdoc/require-returns-description": "off",
-      "jsdoc/require-returns-check": "off",
-    },
+    ignores: [".__mf__temp/", "admin/", "build/", "*.config.mjs"],
   },
 ];

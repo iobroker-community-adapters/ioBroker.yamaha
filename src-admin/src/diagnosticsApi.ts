@@ -17,7 +17,9 @@ export interface DiagnosticsDevice {
 
 /** A finished report: the file name and the JSON text. */
 export interface DiagnosticsReport {
+  /** The name the browser saves the file under. */
   fileName: string;
+  /** The report as JSON text. */
   content: string;
 }
 
@@ -29,6 +31,7 @@ export type StateHandler = (id: string, state: { val?: unknown } | null | undefi
 
 /** The admin socket's surface the card uses. */
 export interface DiagnosticsSocket {
+  /** Send a message to the instance and wait for its answer. */
   sendTo(instance: string, command: string, data: unknown): Promise<unknown>;
   /** Watch a state: the admin connection calls the handler with the current value, then on every change. */
   subscribeState?(id: string, handler: StateHandler): Promise<void> | void;
