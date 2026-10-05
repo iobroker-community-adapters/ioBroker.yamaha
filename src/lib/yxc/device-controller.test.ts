@@ -13,6 +13,7 @@ import { CommandGate } from "../lifecycle/command-gate";
 import { ProbeMemory } from "../lifecycle/probe-memory";
 import { DISCOVERY_SCHEMA } from "../lifecycle/discovery-schema";
 import { PushLiveness } from "./push-liveness";
+import { TransportConnectionAdapter } from "../lifecycle/transport-connection-adapter";
 
 /** A real command gate for the controller under test (pacing has its own suite). */
 const testGate = (): CommandGate =>
@@ -221,7 +222,6 @@ function setup(
     pushLiveness?: PushLiveness;
     gate?: CommandGate;
     host?: string;
-    reportDeclaredAbsent?: (ids: string[]) => void;
     aliasZone?: (from: string, to: string) => void;
     probeMemory?: ProbeMemory;
   } = {},
@@ -340,16 +340,6 @@ function setup(
 }
 
 describe("YxcDeviceController", () => {
-  // The update from 2.12.0 left a zone's maximum volume behind where the zone has no volume: the
-  // controller now says what its declaration proves absent, so the adapter removes it at once.
-  test("start() reports what getFeatures proves absent, and builds none of it", async () => {
-    const absent: string[] = [];
-    const s = setup(wx10, ysp, {}, undefined, { reportDeclaredAbsent: ids => void absent.push(...ids) });
-    await s.controller.start();
-    expect(absent.length).toBeGreaterThan(0);
-    expect(absent.filter(id => s.objects.includes(`living.${id}`))).toEqual([]);
-  });
-
   test("builds the object tree from getFeatures", async () => {
     const s = setup(wx10, ysp);
     expect(await s.controller.start()).toBe(true);
@@ -370,13 +360,17 @@ describe("YxcDeviceController", () => {
     expect(empty.fire.pushDeviceId).toBeUndefined();
   });
 
-  test("reports the model from getDeviceInfo into the adapter-created info.model", async () => {
+  // MusicCast reported the model but built no object for it: the transport adapter dropped the value, and every
+  // device without YNCA showed no model and no firmware (review 2026-10-05, A5).
+  test("builds info.model and info.firmware from the shared definition and reports both", async () => {
     const s = setup(wx10, ysp);
-    s.client.deviceInfo = { model_name: "WX-010" };
+    s.client.deviceInfo = { model_name: "WX-010", system_version: 2.16 };
     await s.controller.start();
-    // The object itself is created once by the adapter (ensureDeviceHeader) for every
-    // device, offline ones included — the transport only fills in the value.
     expect(s.acks).toContainEqual({ id: "living.info.model", value: "WX-010" });
+    expect(s.acks).toContainEqual({ id: "living.info.firmware", value: "2.16" });
+    expect(s.defs.get("living.info.model")?.common).toMatchObject({ type: "string", role: "text", write: false });
+    expect(s.defs.get("living.info.firmware")?.common).toMatchObject({ type: "string", role: "text", write: false });
+    expect(s.objects).toContain("living.info");
   });
 
   // An answer without a model is no identity (YNCA and XML guard the same way): until 3.1.3 it threw away what
@@ -3493,5 +3487,39 @@ describe("events during the start are not lost (review 2026-10-05, A47)", () => 
     await flush();
     expect(s.fire.push).toBeDefined();
     expect(s.acks.filter(a => a.id === "living.volume").at(-1)?.value).toBe(42);
+  });
+});
+
+// Under the transport adapter a value without an object of its transport is dropped: info.model never reached a
+// MusicCast-only device (review 2026-10-05, A5 — the info-model proof test, expectation inverted).
+describe("info.model reaches the tree on a MusicCast-only device (review 2026-10-05, A5)", () => {
+  test("the transport adapter builds and passes on the model and the firmware", async () => {
+    const written: Array<[string, unknown]> = [];
+    const adapter = new TransportConnectionAdapter("yxc", "dev", (id, value) => void written.push([id, value]));
+    const client = makeFakeClient(wx10, { response_code: 0, power: "on", volume: 20, input: "net_radio" });
+    client.deviceInfo = { response_code: 0, model_name: "WX-010", system_version: "2.16", api_version: 2.08 };
+    const controller = new YxcDeviceController("dev", {
+      client,
+      registerPush: () => () => {},
+      pushLiveness: new PushLiveness(),
+      probeMemory: new ProbeMemory(undefined),
+      scheduleKeepalive: () => () => {},
+      upsertObject: adapter.interceptUpsert,
+      setStateAck: adapter.interceptSetStateAck,
+      log: silentLog,
+      gate: testGate(),
+    });
+    adapter.bind(controller);
+    expect(await adapter.connect()).toBe(true);
+    const built = adapter.buildObjects().map(object => object.id);
+    expect(built).toEqual(expect.arrayContaining(["info.model", "info.firmware"]));
+    adapter.seedOwned(new Set(built));
+    expect(written).toEqual(
+      expect.arrayContaining([
+        ["dev.info.model", "WX-010"],
+        ["dev.info.firmware", "2.16"],
+      ]),
+    );
+    controller.close();
   });
 });

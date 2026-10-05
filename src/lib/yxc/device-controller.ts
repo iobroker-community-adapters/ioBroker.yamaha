@@ -5,7 +5,6 @@ import {
   rawVolumeFor,
   shownVolumeFor,
   volumeScaleOf,
-  yxcDeclaredAbsent,
   type VolumeScale,
 } from "./object-mapper";
 import { absoluteDeviceUrl } from "../catalog/device-url";
@@ -72,7 +71,7 @@ const KEEPALIVE_MS = 5 * 60 * 1000;
  * How long a changing write waits for the device's event before its effect is read back and, if the
  * device changed the value without telling, counted against the events (see PushLiveness).
  */
-export const PUSH_EXPECT_MS = 5000;
+const PUSH_EXPECT_MS = 5000;
 
 /** How long after a favourite recall the device's `preset_control` verdict is taken as its answer. */
 const PRESET_VERDICT_MS = 30_000;
@@ -187,6 +186,8 @@ export function zoneNameFrom(nameText: unknown): string | undefined {
 import type { YxcClientLike } from "./client-contract";
 import { MEMORY_KEY } from "../lifecycle/memory-keys";
 import { YxcPlayerRouting } from "./player-routing";
+import { INFO_ENTRIES } from "../catalog/info-objects";
+import { catalogToObjects } from "../catalog/build-objects";
 import { LinkGroup } from "./link-group";
 
 /** Probe-memory key: per zone, the display scale (`db`/`numeric`) its `volume` datapoint was read in on. */
@@ -241,8 +242,6 @@ export interface YxcControllerDeps extends ControllerDepsBase {
   scheduleKeepalive(handler: () => void, ms: number): () => void;
   /** Report the name the device carries for itself, for the device object's label. */
   reportDeviceName?(name: string): void;
-  /** Report the datapoints this device's getFeatures proves absent (see {@link yxcDeclaredAbsent}). */
-  reportDeclaredAbsent?(ids: string[]): void;
 }
 
 /**
@@ -527,12 +526,23 @@ export class YxcDeviceController {
     for (const object of objects) {
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
     }
-    this.deps.reportDeclaredAbsent?.(yxcDeclaredAbsent(this.capabilities));
     await this.setupSceneLists(capabilities, objects);
-    if (model) {
-      // The info channel and info.model already exist — the adapter creates them for
-      // every device up front, so the card renders even while the device is offline.
-      this.emit("info.model", model);
+    // The model and the firmware as datapoints, from the ONE definition every transport builds them from. MusicCast
+    // reported the model but built no object for it, so the transport adapter dropped the value: a MusicCast-only
+    // device showed no model and no firmware, and the card, the icon and the remembered model stayed blank (review
+    // 2026-10-05, A5). Only what the device reported on this connection.
+    const info: Array<[string, string | undefined]> = [
+      ["info.model", model],
+      ["info.firmware", this.systemVersion],
+    ];
+    const infoEntries = INFO_ENTRIES.filter(entry => info.some(([id, value]) => id === entry.id && value));
+    for (const object of catalogToObjects([...infoEntries])) {
+      await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
+    }
+    for (const [id, value] of info) {
+      if (value) {
+        this.emit(id, value);
+      }
     }
     // The name the user gave the device in the MusicCast app. Best-effort like the model
     // above: an older device that does not answer getNameText simply keeps its label.
