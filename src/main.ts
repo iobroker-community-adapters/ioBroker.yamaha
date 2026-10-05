@@ -481,6 +481,7 @@ export class Yamaha extends utils.Adapter {
       devices: () => this.diagnosticsDevices(),
       getForeignObjectAsync: id => this.getForeignObjectAsync(id),
       getForeignStateAsync: id => this.getForeignStateAsync(id),
+      getForeignStatesAsync: pattern => this.getForeignStatesAsync(pattern),
       getObjectViewAsync: (design, search, params) => this.getObjectViewAsync(design, search, params),
       log: this.log,
     };
