@@ -130,6 +130,22 @@ describe("DiagnosticsHandler", () => {
     }
   });
 
+  // Review 2026-10-05, B3: an id taken from a typed room name left in the file name and the content.
+  it("names the file after the pseudonymised id when the id was taken from a typed name", async () => {
+    const host = makeHost({
+      devices: [device({ id: "kueche", ip: "192.168.178.41", model: undefined, label: "Küche", identity: undefined })],
+    });
+    host.logRing.add("info", "kueche: no reachable transport");
+    const answer = (await new DiagnosticsHandler(host, () => Date.UTC(2026, 9, 5, 8, 0, 0)).export("kueche")) as {
+      fileName: string;
+      content: string;
+    };
+    expect(answer.fileName).toBe("yamaha_device-1_v3.3.0_2026-10-05_080000.json");
+    expect(answer.content).not.toContain("kueche");
+    expect(answer.content).not.toContain("Küche");
+    expect(answer.content).toContain("device-1: no reachable transport");
+  });
+
   it("says when the device is not connected instead of failing", async () => {
     const host = makeHost({ devices: [device({ connected: false, capture: () => Promise.resolve(undefined) })] });
     const answer = (await new DiagnosticsHandler(host).export("rx-v6a-2b3c")) as { content: string };

@@ -3,8 +3,7 @@ import { errText } from "../err-text";
 import type { HandleCapture } from "./types";
 import type { LogRing } from "./log-ring";
 import {
-  buildDiagnosticsReport,
-  diagnosticsFileName,
+  diagnosticsExport,
   type EnvironmentSnapshot,
   type InstanceInfo,
   type MusiccastStatus,
@@ -185,7 +184,7 @@ export class DiagnosticsHandler {
         this.transports(prefix),
       ]);
       const others = devices.filter(d => d.id !== deviceId).flatMap(d => [d.id, d.ip]);
-      const report = buildDiagnosticsReport({
+      const report = diagnosticsExport({
         adapterVersion: this.host.version,
         now: new Date(this.now()),
         environment,
@@ -207,9 +206,8 @@ export class DiagnosticsHandler {
         objectTree,
         logs: this.host.logRing.about([device.id, device.ip], others),
       });
-      const fileName = diagnosticsFileName(deviceId, this.host.version, new Date(now));
-      this.host.log.info(`${deviceId}: diagnostics report ready (${fileName})`);
-      return { fileName, content: JSON.stringify(report, null, 2) };
+      this.host.log.info(`${deviceId}: diagnostics report ready (${report.fileName})`);
+      return report;
     } catch (e) {
       this.host.log.warn(`${deviceId}: diagnostics report failed: ${errText(e)}`);
       return { error: `report failed: ${errText(e)}` };
