@@ -1,5 +1,21 @@
-import { zoneRole } from "./types";
+import { channelCommon, zoneRole } from "./types";
 import { YNCA_CATALOG } from "../ynca/catalog";
+
+describe("channelCommon", () => {
+  test("names a listed folder from the table and explains it where the table does", () => {
+    const zone = channelCommon("zoneB");
+    expect((zone.name as Record<string, string>).en).toBe("Zone B");
+    expect(zone.desc).toBeDefined();
+  });
+
+  // Review 2026-10-05, A35: a segment can be the device's word (a MusicCast alarm day) — an inherited property name
+  // among them is no key of the tables.
+  test("names an unlisted segment after itself, an inherited property name included", () => {
+    expect(channelCommon("monday")).toEqual({ name: "Monday" });
+    expect(channelCommon("constructor")).toEqual({ name: "Constructor" });
+    expect(channelCommon("toString")).toEqual({ name: "ToString" });
+  });
+});
 
 // A zone's power switch is `switch.power.zone`, the main zone's `switch.power` (audit 2026-09-29, C41) — and a zone is
 // what the tree files as one, Zone B included (review 2026-10-05, A27).

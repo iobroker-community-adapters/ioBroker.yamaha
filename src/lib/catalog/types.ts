@@ -285,8 +285,10 @@ export function zoneRole<R extends string | undefined>(role: R, where: string): 
  * @returns the channel's common (name, and desc where the segment has one)
  */
 export function channelCommon(segment: string): ObjectDef["common"] {
-  const nameKey = CHANNEL_NAME_KEYS[segment];
-  const descKey = CHANNEL_DESC_KEYS[segment];
+  // Own keys only: a segment can be the device's word (a MusicCast alarm day), and an inherited name
+  // (`constructor`) is no key (review 2026-10-05, A35).
+  const nameKey = Object.hasOwn(CHANNEL_NAME_KEYS, segment) ? CHANNEL_NAME_KEYS[segment] : undefined;
+  const descKey = Object.hasOwn(CHANNEL_DESC_KEYS, segment) ? CHANNEL_DESC_KEYS[segment] : undefined;
   return {
     name: nameKey ? tName(nameKey) : segment.charAt(0).toUpperCase() + segment.slice(1),
     ...(descKey ? { desc: tName(descKey) } : {}),

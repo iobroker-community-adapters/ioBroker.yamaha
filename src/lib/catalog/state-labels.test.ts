@@ -47,6 +47,19 @@ describe("withValueLabels (readable values, 2026-09-30)", () => {
     });
   });
 
+  // Review 2026-10-05, A35: a value list the device declares holds the device's words — an inherited property name
+  // among them is no label of the table (it threw on the spread of a function).
+  test("labels a declared value from the table's own entries only", () => {
+    const def = list("sleep", { Off: "Off", toString: "toString", constructor: "constructor" });
+    expect(withValueLabels("sleep", def, "en").common.states).toEqual({
+      Off: "No sleep timer",
+      toString: "toString",
+      constructor: "constructor",
+    });
+    const odd = list("constructor", { a: "a" });
+    expect(withValueLabels("constructor", odd, "en")).toBe(odd);
+  });
+
   test("an unknown system language reads English", () => {
     const def = list("tuner.band", { fm: "fm" });
     expect(withValueLabels("tuner.band", def, "xx").common.states).toEqual({ fm: "FM (VHF)" });

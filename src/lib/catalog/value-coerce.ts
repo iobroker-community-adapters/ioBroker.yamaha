@@ -212,13 +212,11 @@ export function decode(spec: ValueSpec, wire: string): boolean | number | string
     case "enum":
     case "text":
       return wire;
-    case "code": {
+    case "code":
       // A wire token the device does not know maps to no code — report unknown (undefined)
-      // rather than a bogus 0, the same way onoff rejects a third wire value.
-      // (The ternary is for readability — a missing key already yields undefined.)
-      const code = spec.codes[wire];
-      return code === undefined ? undefined : code;
-    }
+      // rather than a bogus 0, the same way onoff rejects a third wire value. Own keys only:
+      // an inherited name (`constructor`) read as a FUNCTION (review 2026-10-05, A35).
+      return Object.hasOwn(spec.codes, wire) ? spec.codes[wire] : undefined;
     case "button":
       return undefined; // write-only action — never read back into a state
   }

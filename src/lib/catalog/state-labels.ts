@@ -188,13 +188,16 @@ export const STATE_LABELS: Readonly<Record<string, Readonly<Record<string, Label
 export function withValueLabels(relativeId: string, def: ObjectDef, language: string): ObjectDef {
   const states = def.type === "state" ? def.common.states : undefined;
   // A zone folder carries the main zone's datapoints (zones 2 to 4 and Zone B).
-  const labels = STATE_LABELS[relativeId.replace(ZONE_PREFIX, "")];
+  const template = relativeId.replace(ZONE_PREFIX, "");
+  const labels = Object.hasOwn(STATE_LABELS, template) ? STATE_LABELS[template] : undefined;
   if (!labels || !states || typeof states !== "object" || Array.isArray(states)) {
     return def;
   }
   const named: Record<string, string> = {};
   for (const [value, shown] of Object.entries(states)) {
-    const label = labels[value];
+    // Own keys only: a value the device declares is its word, and an inherited name (`toString`) is no label —
+    // it threw on the spread below (review 2026-10-05, A35).
+    const label = Object.hasOwn(labels, value) ? labels[value] : undefined;
     named[value] =
       label === undefined ? shown : typeof label === "string" ? tIn(language, label) : tIn(language, ...label);
   }

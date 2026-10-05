@@ -228,6 +228,17 @@ describe("a numeric datapoint takes only a number (audit 2026-09-24, D2)", () =>
   });
 });
 
+// Review 2026-10-05, A35: a plain-object lookup took an inherited name for an entry.
+describe("decode reads a code from the table's own entries only", () => {
+  it("reads an inherited property name the device might send as no code", () => {
+    const spec = { kind: "code", codes: { Play: 0, Stop: 1 }, labels: { 0: "Play", 1: "Stop" } } as const;
+    expect(decode(spec, "constructor")).toBeUndefined();
+    expect(decode(spec, "toString")).toBeUndefined();
+    expect(decode(spec, "__proto__")).toBeUndefined();
+    expect(decode(spec, "Stop")).toBe(1);
+  });
+});
+
 describe("encode maps a written code back to its wire token", () => {
   it("sends the token, not the number", () => {
     const spec = { kind: "code", codes: { Straight: 0, "5ch Stereo": 1 } } as const;
