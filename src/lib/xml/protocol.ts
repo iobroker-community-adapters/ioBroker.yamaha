@@ -19,38 +19,72 @@ export function parseReturnCode(xml: string): number | undefined {
 }
 
 /**
+ * The device answered — and said no: a return code other than 0 in its `<YAMAHA_AV>` answer (2 = the node does not
+ * exist on this model, 3/4 = value refused / not executable right now), or an empty answer to a command. Proof that
+ * the device is there, like MusicCast's `YxcRefusalError`: a refused write is read back, and it is never a reason to
+ * ask whether the device is still alive. The controller told a refusal from a lost connection by the MESSAGE text
+ * (`startsWith("device refused")`), which a reworded message or any other error with those words broke (review
+ * 2026-10-05, E).
+ */
+export class XmlRefusalError extends Error {
+  /**
+   * @param what the request the device refused
+   * @param code the return code, undefined for an empty answer
+   */
+  public constructor(
+    what: string,
+    public readonly code?: number,
+  ) {
+    super(`device refused ${what} (${code === undefined ? "empty response" : `RC=${code}`})`);
+    this.name = "XmlRefusalError";
+  }
+}
+
+/**
+ * The refusal an answer body carries, if any — the ONE reading of the return code, for commands and probes alike
+ * (it stood twice, in `assertXmlOk` and `definiteXmlBody`; review 2026-10-05, E).
+ *
+ * @param xml the response body
+ * @param what the request, for the error message
+ * @returns the refusal, or undefined when the device executed the request (RC 0, or no return code at all)
+ */
+function refusalIn(xml: string, what: string): XmlRefusalError | undefined {
+  const code = parseReturnCode(xml);
+  return code !== undefined && code !== 0 ? new XmlRefusalError(what, code) : undefined;
+}
+
+/**
  * Throw when a response reports a non-zero return code — the device REFUSED the
- * request. An empty body counts as a refusal too: the firmware answers unknown
- * nodes with a bodyless HTTP 400 (captured RX-V6A behaviour).
+ * request. An empty body counts as a refusal too: a command answered with nothing was not executed.
  *
  * @param xml the response body
  * @param what the request, for the error message
  * @returns the body, for chaining
  */
 export function assertXmlOk(xml: string, what: string): string {
-  if (xml.length === 0) {
-    throw new Error(`device refused ${what} (empty response)`);
-  }
-  const code = parseReturnCode(xml);
-  if (code !== undefined && code !== 0) {
-    throw new Error(`device refused ${what} (RC=${code})`);
+  const refusal = xml.length === 0 ? new XmlRefusalError(what) : refusalIn(xml, what);
+  if (refusal) {
+    throw refusal;
   }
   return xml;
 }
 
 /**
- * Whether a failed XML read is the model's permanent verdict (the node does not exist:
- * bodyless HTTP 400) rather than a transient failure (timeout, connection error, HTTP 5xx).
- * A device that was merely busy or asleep must be asked again, or a probe that is
- * remembered per device would record "declares none" for good.
+ * Whether a failed XML request is the model's permanent verdict — the node does not exist (RC 2, or the
+ * bodyless HTTP 400 the firmware answers an unknown node with), or the model has no device description
+ * (HTTP 404) — rather than a transient failure (timeout, connection error, HTTP 5xx, RC 3/4 "not now").
+ * A device that was merely busy or asleep must be asked again, or a probe that is remembered per device
+ * would record "declares none" for good.
  *
  * @param e the caught value
  * @returns true when the refusal is permanent for this model
  */
 export function isPermanentXmlRefusal(e: unknown): boolean {
-  // 400 without a body: an unknown control node. 404: no device description on this model — the
-  // 2020 generation answers exactly that for /YamahaRemoteControl/desc.xml (RX-V6A harvest).
-  return e instanceof HttpStatusError && (e.statusCode === 400 || e.statusCode === 404);
+  // 404: the 2020 generation answers exactly that for /YamahaRemoteControl/desc.xml (RX-V6A harvest).
+  return (
+    (e instanceof HttpStatusError && (e.statusCode === 400 || e.statusCode === 404)) ||
+    (e instanceof XmlRefusalError && e.code === 2)
+  );
 }
 
 /**
@@ -65,23 +99,19 @@ export function isPermanentXmlRefusal(e: unknown): boolean {
  * @returns the body, or "" when the model has no such node
  */
 export async function definiteXmlBody(request: () => Promise<string>, what: string): Promise<string> {
-  let body: string;
   try {
-    body = await request();
+    const body = await request();
+    const refusal = refusalIn(body, what);
+    if (refusal) {
+      throw refusal;
+    }
+    return body;
   } catch (e) {
     if (isPermanentXmlRefusal(e)) {
       return "";
     }
     throw e;
   }
-  const rc = parseReturnCode(body);
-  if (rc !== undefined && rc !== 0) {
-    if (rc === 2) {
-      return "";
-    }
-    throw new Error(`device refused ${what} (RC=${rc})`);
-  }
-  return body;
 }
 
 /** One scene as the device declares it in `<Scene_Sel_Item>`. */

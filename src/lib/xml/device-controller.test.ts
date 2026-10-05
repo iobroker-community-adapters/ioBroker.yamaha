@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { XmlDeviceController } from "./device-controller";
 import type { XmlClientLike } from "./device-controller";
-import { type BasicStatus, type XmlSystemConfig } from "./protocol";
+import { XmlRefusalError, type BasicStatus, type XmlSystemConfig } from "./protocol";
 import { HttpStatusError } from "../util";
 import { CommandGate } from "../lifecycle/command-gate";
 import { ProbeMemory } from "../lifecycle/probe-memory";
@@ -201,8 +201,14 @@ describe("XmlDeviceController", () => {
     const s = setup({ Main_Zone: { power: true, volume: -40 } });
     await s.controller.start();
     await expect(Promise.resolve(s.controller.handleWrite("power", false))).resolves.toBe("sent");
-    s.client.sendError = new Error("device refused <Main_Zone> (RC=3)");
+    s.client.sendError = new XmlRefusalError("<Main_Zone>", 3);
     await expect(Promise.resolve(s.controller.handleWrite("power", true))).resolves.toBe("refused");
+    // An HTTP answer outside 2xx is the device saying no as well (review 2026-10-05, E).
+    s.client.sendError = new HttpStatusError("device refused the request (HTTP 400)", 400);
+    await expect(Promise.resolve(s.controller.handleWrite("power", true))).resolves.toBe("refused");
+    // The TYPE decides, not the words of the message: an error that merely reads like a refusal is no answer.
+    s.client.sendError = new Error("device refused — but nothing answered");
+    await expect(Promise.resolve(s.controller.handleWrite("power", true))).resolves.toBe("unavailable");
     s.client.sendError = new Error("ECONNRESET");
     await expect(Promise.resolve(s.controller.handleWrite("power", true))).resolves.toBe("unavailable");
     await expect(Promise.resolve(s.controller.handleWrite("no.such.state", 1))).resolves.toBe("unavailable");
@@ -1227,7 +1233,7 @@ describe("the 2008 dialect drives every write and is remembered (RX-V3900)", () 
     await s.controller.start();
     s.client.calls.length = 0;
     s.acks.length = 0;
-    s.client.sendError = new Error("device refused Main_Zone (RC=3)");
+    s.client.sendError = new XmlRefusalError("<Main_Zone>", 3);
     void s.controller.handleWrite("volume", -40);
     await new Promise(resolve => setImmediate(resolve));
     expect(s.client.calls.map(c => `${c.method}:${c.zone}`)).toEqual(["send:Main_Zone", "getStatus:Main_Zone"]);
@@ -1446,7 +1452,7 @@ describe("the zone commands desc.xml declares: pads, transport keys, zone names 
       '<YAMAHA_AV rsp="GET" RC="0"><Zone_2><Config><Name><Zone>Kitchen</Zone></Name></Config></Zone_2></YAMAHA_AV>';
     await s.controller.start();
     s.acks.length = 0;
-    s.client.sendError = new Error("device refused Zone_2 (RC=3)");
+    s.client.sendError = new XmlRefusalError("<Zone_2>", 3);
     void s.controller.handleWrite("multiroom.zone2.zoneName", "Küche");
     await tick();
     expect(s.acks.filter(ack => ack.id === "living.multiroom.zone2.zoneName")).toEqual([

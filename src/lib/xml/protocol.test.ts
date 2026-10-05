@@ -1,8 +1,12 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { MEDIA_STATE } from "../catalog/media-state";
+import { HttpStatusError } from "../util";
 import {
   assertXmlOk,
+  definiteXmlBody,
+  isPermanentXmlRefusal,
+  XmlRefusalError,
   encodeGet,
   encodePut,
   parseBasicStatus,
@@ -210,6 +214,50 @@ describe("return codes (the device's own verdict)", () => {
     expect(() => assertXmlOk("", "<X/>")).toThrow("empty response");
     // A body without an RC attribute (some GET answers) is not a refusal.
     expect(assertXmlOk("<Model_Name>RX-V771</Model_Name>", "x")).toBe("<Model_Name>RX-V771</Model_Name>");
+  });
+
+  // A refusal is told from a lost connection by its TYPE, carrying the return code — the controller read the
+  // message text before (review 2026-10-05, E).
+  test("a refusal is an XmlRefusalError with its return code; an empty answer has none", () => {
+    const refused = ((): unknown => {
+      try {
+        assertXmlOk('<YAMAHA_AV rsp="PUT" RC="4"></YAMAHA_AV>', "<Main_Zone><X/>");
+      } catch (e) {
+        return e;
+      }
+      return undefined;
+    })();
+    expect(refused).toBeInstanceOf(XmlRefusalError);
+    expect(refused).toMatchObject({ code: 4, message: "device refused <Main_Zone><X/> (RC=4)" });
+    expect(() => assertXmlOk("", "<X/>")).toThrow(XmlRefusalError);
+  });
+
+  test("RC 2 and a bodyless HTTP 400/404 are the model's permanent verdict; RC 3/4, 5xx and transport errors are not", () => {
+    expect(isPermanentXmlRefusal(new XmlRefusalError("x", 2))).toBe(true);
+    expect(isPermanentXmlRefusal(new HttpStatusError("device refused x (HTTP 400)", 400))).toBe(true);
+    expect(isPermanentXmlRefusal(new HttpStatusError("device refused x (HTTP 404)", 404))).toBe(true);
+    for (const transient of [
+      new XmlRefusalError("x", 3),
+      new XmlRefusalError("x", 4),
+      new XmlRefusalError("x"),
+      new HttpStatusError("device refused x (HTTP 503)", 503),
+      new Error("XML request timeout"),
+    ]) {
+      expect(isPermanentXmlRefusal(transient), transient.message).toBe(false);
+    }
+  });
+
+  test("a remembered probe body: RC 2 and HTTP 400 are a definite empty answer, RC 3/4 throws the refusal", async () => {
+    await expect(definiteXmlBody(() => Promise.resolve('<YAMAHA_AV RC="2"></YAMAHA_AV>'), "p")).resolves.toBe("");
+    await expect(
+      definiteXmlBody(() => Promise.reject(new HttpStatusError("device refused p (HTTP 400)", 400)), "p"),
+    ).resolves.toBe("");
+    await expect(definiteXmlBody(() => Promise.resolve('<YAMAHA_AV RC="4"></YAMAHA_AV>'), "p")).rejects.toMatchObject({
+      name: "XmlRefusalError",
+      code: 4,
+    });
+    const body = '<YAMAHA_AV RC="0"><Scene/></YAMAHA_AV>';
+    await expect(definiteXmlBody(() => Promise.resolve(body), "p")).resolves.toBe(body);
   });
 });
 

@@ -12,6 +12,7 @@ import {
   parsePresetList,
   parseInputSources,
   parseTunerInfo,
+  XmlRefusalError,
   type BasicStatus,
   type XmlDescriptor,
   type XmlDialect,
@@ -1726,7 +1727,9 @@ export class XmlDeviceController {
       return "sent";
     } catch (e) {
       this.deps.log.warn(`${this.deviceId}: XML command failed: ${errText(e)}`);
-      return e instanceof HttpStatusError || errText(e).startsWith("device refused") ? "refused" : "unavailable";
+      // An answer that says no — a return code, or an HTTP status outside 2xx — is a refusal; only a request
+      // nobody answered is "unavailable" (review 2026-10-05, E: the message text decided before).
+      return e instanceof XmlRefusalError || e instanceof HttpStatusError ? "refused" : "unavailable";
     }
   }
 }
