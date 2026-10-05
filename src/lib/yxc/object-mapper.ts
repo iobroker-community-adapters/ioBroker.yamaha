@@ -10,13 +10,13 @@ import { channelCommon, keyedCommon, parentChannels, zoneRole, type ObjectDef } 
 import { YXC_CURSOR_VALUES, YXC_MENU_VALUES } from "./remote";
 import { remoteObjectDefs } from "../browse/objects";
 import { tName, type I18nKey } from "../i18n";
-import { YXC_ZONE_IDS, zonePrefix } from "./zones";
+import { ZONE_KEYS, zonePrefix } from "../catalog/zones";
 import type { YxcCapabilities, YxcZone } from "./capability";
 import { YXC_AMP_CATALOG, type YxcAmpEntry } from "./catalog";
 import { ALARM_DAYS, DAB_FIELDS } from "./command-mapper";
 
 /** The zones the adapter maps: main flat, zone2-4 each under multiroom. */
-const ZONES: Array<{ id: string; prefix: string }> = YXC_ZONE_IDS.map(id => ({ id, prefix: zonePrefix(id) }));
+const ZONES: Array<{ id: string; prefix: string }> = ZONE_KEYS.map(id => ({ id, prefix: zonePrefix(id) }));
 
 /**
  * The "now playing" block's states (v2.0.0, one per zone): the shared display states, the transport keys of the one
