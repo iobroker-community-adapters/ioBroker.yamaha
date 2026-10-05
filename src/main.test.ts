@@ -2724,6 +2724,56 @@ describe("Yamaha datapoint balance in the log", () => {
     ).toEqual({ Straight: "Straight", Jazz: "Jazz", Drama: "Drama" });
   });
 
+  // krobi 2026-10-05: names the user gives in the receiver follow it while the adapter runs (liveLabels). A renamed
+  // input reached the dropdown only after an adapter update, because only missing keys were added.
+  it("running, a list of the receiver's names takes the new labels — and still loses no entry", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room.input", {
+      type: "state",
+      common: { name: "i", type: "string", role: "text", write: true, states: { HDMI1: "Apple TV", AV1: "Phono" } },
+      native: {},
+    });
+    await ctx.i.onReady();
+    await flush();
+    const upsert = upsertOf(ctx);
+    const extend = (ctx.i as unknown as { extendObject: ReturnType<typeof vi.fn> }).extendObject;
+    extend.mockClear();
+    await upsert("Living_room.input", {
+      type: "state",
+      liveLabels: true,
+      common: { name: "x", type: "number", role: "level", write: false, states: { HDMI1: "Kino", HDMI2: "Konsole" } },
+    });
+    const common = ctx.i.objects.get("Living_room.input")?.common as Record<string, unknown>;
+    expect(common.states).toEqual({ HDMI1: "Kino", AV1: "Phono", HDMI2: "Konsole" });
+    // Type, role, write flag and name stay as they were.
+    expect(common).toMatchObject({ name: "i", type: "string", role: "text", write: true });
+    // Nothing changed — nothing written.
+    extend.mockClear();
+    await upsert("Living_room.input", {
+      type: "state",
+      liveLabels: true,
+      common: { name: "x", type: "string", states: { HDMI1: "Kino" } },
+    });
+    expect(extend).not.toHaveBeenCalled();
+  });
+
+  it("running, a list WITHOUT live labels keeps the labels it has", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room.soundProgram", {
+      type: "state",
+      common: { name: "p", type: "string", states: { Straight: "Straight" } },
+      native: {},
+    });
+    await ctx.i.onReady();
+    await flush();
+    await upsertOf(ctx)("Living_room.soundProgram", {
+      type: "state",
+      common: { name: "p", type: "string", states: { Straight: "Direct" } },
+    });
+    const states = (ctx.i.objects.get("Living_room.soundProgram")?.common as { states: Record<string, string> }).states;
+    expect(states).toEqual({ Straight: "Straight" });
+  });
+
   it("running, a folder or datapoint gains the explanation it does not carry yet — nothing else", async () => {
     const ctx = setup();
     ctx.i.objects.set("Living_room.info", { type: "channel", common: { name: "Info" }, native: {} });

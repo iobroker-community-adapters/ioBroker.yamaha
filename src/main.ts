@@ -3385,7 +3385,8 @@ export class Yamaha extends utils.Adapter {
    * Add what a transport learned to a datapoint — never take anything away (krobi 2026-10-02: a receiver
    * that was read in keeps its tree; only the completion of a read-in may shrink it). A new object is written
    * as built. An existing state keeps its type, unit, write flag, names and bounds; it only gains the
-   * dropdown entries and the bounds it did not have. A transport that drops or comes back therefore changes
+   * dropdown entries and the bounds it did not have — and, for a list of names the user gives in the receiver
+   * (`liveLabels`), the new labels of its existing entries. A transport that drops or comes back therefore changes
    * nothing, and an incomplete definition (a standby answer, a transport without the list) clears nothing.
    *
    * @param id the full object id (`<deviceId>.<relativeId>`)
@@ -3416,7 +3417,14 @@ export class Yamaha extends utils.Adapter {
     );
     const before = stored.common.states;
     const kept = before !== null && typeof before === "object" ? (before as Record<string, string>) : {};
-    const added = Object.fromEntries(Object.entries(written.common.states ?? {}).filter(([key]) => !(key in kept)));
+    // New keys are added. For a list whose labels are names the user gives in the receiver (inputs, scenes, sound
+    // programs — `liveLabels`), an existing key also takes its new label: a renamed input reaches the dropdown while the
+    // adapter runs (krobi 2026-10-05). Never a key removed: Y-01 forbids deleting and emptying, not renaming.
+    const added = Object.fromEntries(
+      Object.entries(written.common.states ?? {}).filter(
+        ([key, label]) => !Object.hasOwn(kept, key) || (def.liveLabels === true && kept[key] !== label),
+      ),
+    );
     if (Object.keys(added).length > 0) {
       common.states = added;
       this.storedStates.set(id, { ...kept, ...added });
