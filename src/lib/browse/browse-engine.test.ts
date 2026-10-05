@@ -56,16 +56,34 @@ function window(partial: Partial<BrowseWindow>): BrowseWindow {
   return { menuName: "", layer: 1, totalItems: 0, currentLine: 1, rows: [], ...partial };
 }
 
-function setup(): { engine: BrowseEngine; driver: FakeDriver; emitted: Array<{ id: string; value: unknown }> } {
+function setup(): {
+  engine: BrowseEngine;
+  driver: FakeDriver;
+  emitted: Array<{ id: string; value: unknown }>;
+  debugged: string[];
+  warned: string[];
+} {
   const driver = new FakeDriver();
   const emitted: Array<{ id: string; value: unknown }> = [];
+  const debugged: string[] = [];
+  const warned: string[] = [];
   const engine = new BrowseEngine(driver, {
     emit: (id, value) => emitted.push({ id, value }),
-    log: silentLog,
+    log: { ...silentLog, debug: message => debugged.push(message), warn: message => warned.push(message) },
     delay: instantDelay,
   });
   driver.engine = engine;
-  return { engine, driver, emitted };
+  return { engine, driver, emitted, debugged, warned };
+}
+
+/**
+ * The rows of one menu page.
+ *
+ * @param texts the row texts, line 1 first
+ * @returns the rows, folders
+ */
+function rowsOf(...texts: string[]): BrowseWindow["rows"] {
+  return texts.map((text, i) => ({ line: i + 1, text, kind: "folder" as const }));
 }
 
 const flush = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
@@ -262,7 +280,8 @@ describe("BrowseEngine", () => {
       layer: 1,
       totalItems: 10,
       currentLine: 1,
-      rows: [{ line: 1, text: "A", kind: "folder" }],
+      // A page before the last is a full page — a shorter window is the menu's tail (A22).
+      rows: rowsOf("A", "B", "C", "D", "E", "F", "G", "H"),
     });
     driver.onOp.pageDown = window({
       layer: 1,
@@ -291,15 +310,17 @@ describe("BrowseEngine", () => {
     expect(warned.some(message => message.includes('"Missing" not found'))).toBe(true);
   });
 
-  it("drops a write while another operation runs", async () => {
-    const { engine, driver } = setup();
+  it("drops a write while another operation runs — and keeps it from going to another protocol", async () => {
+    const { engine, driver, debugged } = setup();
     let release: () => void = () => {};
     driver.open = () =>
       new Promise<void>(resolve => {
         release = resolve;
       });
-    engine.handleWrite("player.browse.source", "netRadio");
-    engine.handleWrite("player.browse.back", true);
+    expect(engine.handleWrite("player.browse.source", "netRadio")).toBe("sent");
+    // `unclear`, not `unavailable`: the handle would hand it to the next protocol, whose menu is not on screen.
+    expect(engine.handleWrite("player.browse.back", true)).toBe("unclear");
+    expect(debugged.some(line => line.includes('"back" dropped'))).toBe(true);
     release();
     await flush();
     expect(driver.calls).toEqual([]);
@@ -311,6 +332,156 @@ describe("BrowseEngine", () => {
     await flush();
     const busyValues = emitted.filter(e => e.id === "player.browse.busy").map(e => e.value);
     expect(busyValues).toEqual([true, false]);
+  });
+});
+
+// Review 2026-10-05, A22: `currentLine` is the CURSOR on YNCA and XML, not the window's first row — the search
+// stopped on the first page, searched only forward, and went on in the parent menu when a level did not load.
+describe("BrowseEngine path search — counted pages from the first", () => {
+  it("pages on although the cursor stands on row 3 of the first page", async () => {
+    const { engine, driver, warned } = setup();
+    // Ten entries, the window shows lines 1–8 with the cursor on row 3 (the row entered last).
+    driver.onOp.home = window({ totalItems: 10, currentLine: 3, rows: rowsOf("A", "B", "C", "D", "E", "F", "G", "H") });
+    driver.onOp.pageDown = window({
+      totalItems: 10,
+      currentLine: 9,
+      rows: [
+        { line: 1, text: "I", kind: "folder" },
+        { line: 2, text: "Target", kind: "item" },
+      ],
+    });
+    engine.handleWrite("player.browse.path", "Target");
+    await flush();
+    expect(driver.calls).toEqual(["home", "pageDown", "select:2"]);
+    expect(warned).toEqual([]);
+  });
+
+  it("turns back to the first page when the cursor stands on a later one", async () => {
+    const { engine, driver, warned } = setup();
+    // After Home the device shows the page its cursor is on — page 2 of twenty entries.
+    driver.onOp.home = window({
+      totalItems: 20,
+      currentLine: 11,
+      rows: rowsOf("I", "J", "K", "L", "M", "N", "O", "P"),
+    });
+    driver.onOp.pageUp = window({
+      totalItems: 20,
+      currentLine: 1,
+      rows: rowsOf("A", "B", "C", "D", "E", "F", "G", "H"),
+    });
+    engine.handleWrite("player.browse.path", "B");
+    await flush();
+    expect(driver.calls).toEqual(["home", "pageUp", "select:2"]);
+    expect(warned).toEqual([]);
+  });
+
+  it("ends at the last page by the count of entries, also when that page is full", async () => {
+    const { engine, driver, warned } = setup();
+    driver.onOp.home = window({ totalItems: 16, currentLine: 1, rows: rowsOf("A", "B", "C", "D", "E", "F", "G", "H") });
+    driver.onOp.pageDown = window({
+      totalItems: 16,
+      currentLine: 9,
+      rows: rowsOf("I", "J", "K", "L", "M", "N", "O", "P"),
+    });
+    engine.handleWrite("player.browse.path", "Missing");
+    await flush();
+    expect(driver.calls).toEqual(["home", "pageDown"]);
+    expect(warned.some(message => message.includes('"Missing" not found'))).toBe(true);
+  });
+
+  it("ends at a window shorter than a page, whatever total the device reports", async () => {
+    const { engine, driver } = setup();
+    driver.onOp.home = window({ totalItems: 40, currentLine: 1, rows: rowsOf("A", "B", "C", "D", "E", "F", "G", "H") });
+    driver.onOp.pageDown = window({ totalItems: 40, currentLine: 9, rows: rowsOf("I", "J") });
+    engine.handleWrite("player.browse.path", "Missing");
+    await flush();
+    expect(driver.calls).toEqual(["home", "pageDown"]);
+  });
+
+  it("aborts when a level does not load instead of searching the parent menu", async () => {
+    const { engine, driver, warned } = setup();
+    driver.onOp.home = window({
+      totalItems: 2,
+      rows: [
+        { line: 1, text: "Bookmarks", kind: "folder" },
+        { line: 2, text: "Radio Paradise", kind: "item" },
+      ],
+    });
+    // select produces NO window (a slow catalog service) — the wait for the next level times out.
+    engine.handleWrite("player.browse.path", "Bookmarks>Radio Paradise");
+    for (let i = 0; i < 200; i++) {
+      await flush();
+    }
+    // Line 2 of the ROOT is not the "Radio Paradise" of the Bookmarks level.
+    expect(driver.calls).toEqual(["home", "select:1"]);
+    expect(warned).toEqual(['browse: path "Bookmarks>Radio Paradise" aborted — "Bookmarks" did not open']);
+  });
+
+  it("aborts when a page does not load while searching", async () => {
+    const { engine, driver, warned } = setup();
+    driver.onOp.home = window({ totalItems: 20, currentLine: 1, rows: rowsOf("A", "B", "C", "D", "E", "F", "G", "H") });
+    engine.handleWrite("player.browse.path", "Z");
+    for (let i = 0; i < 200; i++) {
+      await flush();
+    }
+    expect(driver.calls).toEqual(["home", "pageDown"]);
+    expect(warned).toEqual(['browse: path "Z" aborted — the menu stopped answering while "Z" was searched']);
+  });
+});
+
+// Review 2026-10-05, A56: a write the menu does not carry out leaves a trace naming the datapoint and the value, and
+// every write returns a deliberate outcome — never a forgotten undefined.
+describe("BrowseEngine — every write has an outcome, a dropped one a trace", () => {
+  it("names the datapoint and the word a remote key this device lacks", async () => {
+    const { engine, driver, debugged } = setup();
+    expect(engine.handleRemoteWrite("remote.cursor", "right")).toBe("unavailable");
+    expect(engine.handleRemoteWrite("remote.menu", 4)).toBe("unavailable");
+    expect(engine.handleRemoteWrite("remote.something", "up")).toBe("unavailable");
+    expect(engine.handleRemoteWrite("remote.cursor", "up")).toBe("sent");
+    await flush();
+    expect(driver.calls).toEqual(["cursor:up"]);
+    expect(debugged).toEqual([
+      'remote.cursor not written — "right" is not a key this device has (up, left)',
+      "remote.menu not written — 4 is not a key this device has (menu)",
+      "remote.something not written — it is no key of the on-screen remote",
+    ]);
+  });
+
+  it("names the datapoint and the value of a browse write the menu cannot take", () => {
+    const { engine, debugged } = setup();
+    expect(engine.handleWrite("player.browse.source", "spotify")).toBe("unavailable");
+    expect(engine.handleWrite("player.browse.selectLine", 9)).toBe("unavailable");
+    expect(engine.handleWrite("player.browse.playLine", 2)).toBe("unavailable");
+    expect(engine.handleWrite("player.browse.path", " > ")).toBe("unavailable");
+    expect(engine.handleWrite("player.browse.nothing", true)).toBe("unavailable");
+    expect(debugged).toEqual([
+      'player.browse.source not written — "spotify" is not a source this device browses (netRadio, usb)',
+      "player.browse.selectLine not written — 9 is no line of the window (1–8)",
+      "player.browse.playLine not written — this device cannot play a folder as a whole",
+      'player.browse.path not written — " > " names no menu entry',
+      "player.browse.nothing not written — it is no control of the menu",
+    ]);
+  });
+
+  it("takes a line through the one slot gate: 2.5, 0 and a switch's true are no line (A26)", () => {
+    const { engine, driver } = setup();
+    expect(engine.handleWrite("player.browse.selectLine", 2.5)).toBe("unavailable");
+    expect(engine.handleWrite("player.browse.selectLine", 0)).toBe("unavailable");
+    expect(engine.handleWrite("player.browse.selectLine", true)).toBe("unavailable");
+    expect(engine.handleWrite("player.browse.selectLine", " 3 ")).toBe("sent");
+    expect(driver.calls).toEqual(["select:3"]);
+  });
+
+  it("reports nothing sent once the connection closes", () => {
+    const { engine, driver, debugged } = setup();
+    engine.close();
+    expect(engine.handleWrite("player.browse.back", true)).toBe("unavailable");
+    expect(engine.handleRemoteWrite("remote.cursor", "up")).toBe("unavailable");
+    expect(driver.calls).toEqual([]);
+    expect(debugged).toEqual([
+      "player.browse.back not written — the connection is closing",
+      "remote.cursor not written — the connection is closing",
+    ]);
   });
 });
 
