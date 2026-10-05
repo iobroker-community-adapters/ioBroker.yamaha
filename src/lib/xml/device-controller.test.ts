@@ -155,13 +155,16 @@ describe("XmlDeviceController", () => {
     expect(s.fire.keepaliveMs).toBe(60000);
   });
 
-  test("reports the model from System/Config into the adapter-created info.model", async () => {
+  test("reports the model and the firmware from System/Config, each with its object", async () => {
     const s = setup({ Main_Zone: { power: true } });
-    s.client.config = { model: "RX-V1900" };
+    s.client.config = { model: "RX-V1900", version: "1.40" };
     await s.controller.start();
-    // The object itself is created once by the adapter (ensureDeviceHeader) for every
-    // device, offline ones included — the transport only fills in the value.
+    // The adapter creates info.model for every device up front (ensureDeviceHeader, offline ones
+    // included), but a value reaches the tree only through an object a transport built — so XML builds
+    // both from the shared entries (review 2026-10-05, A5).
+    expect(s.objects).toEqual(expect.arrayContaining(["living.info.model", "living.info.firmware"]));
     expect(s.acks).toContainEqual({ id: "living.info.model", value: "RX-V1900" });
+    expect(s.acks).toContainEqual({ id: "living.info.firmware", value: "1.40" });
   });
 
   // One missed Basic_Status is no proof a zone is gone (2026-10-02): the zone the receiver answered on before

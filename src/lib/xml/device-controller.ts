@@ -1,3 +1,5 @@
+import { catalogToObjects } from "../catalog/build-objects";
+import { INFO_ENTRIES } from "../catalog/info-objects";
 import { keyedCommon, parentChannels, zoneRole, type ObjectDef } from "../catalog/types";
 import { selfMap } from "../catalog/value-coerce";
 import { tName } from "../i18n";
@@ -302,13 +304,7 @@ export class XmlDeviceController {
     }
     // What each zone's source plays — after the seed, which tells the zone's input (D3).
     await this.players.refresh(this.zones);
-    // The model name (already read by the freshness guard) for the device-manager card.
-    // Best-effort — a device that does not report it still connects, the line stays empty.
-    if (model) {
-      // The info channel and info.model already exist — the adapter creates them for
-      // every device up front, so the card renders even while the device is offline.
-      this.emit("info.model", model);
-    }
+    await this.setupInfo(model);
     await this.setupBrowse();
     // The zone pads AFTER the browse surface: where a menu source exists the surface owns the
     // main zone's pad (zone-wide through the driver where declared), the controller adds the
@@ -318,6 +314,27 @@ export class XmlDeviceController {
     // The adapter logs one combined "ready" line across all transports; this stays at debug.
     this.deps.log.debug(`${this.deviceId}: Yamaha (XML) device ready (XML)`);
     return true;
+  }
+
+  /**
+   * The model and the firmware (already read from System>Config by the freshness guard) as datapoints, built from the
+   * one definition every protocol uses (`INFO_ENTRIES`) — where the device reports them. XML reported the model but
+   * built no object for it, so the transport adapter dropped the value: on an XML-only receiver (the 2008 RX-V3900)
+   * the device card showed no model, the device icon and the remembered model never followed, and `info.firmware`
+   * never existed (review 2026-10-05, A5).
+   *
+   * @param model the model the device reported, if any
+   */
+  private async setupInfo(model: string | undefined): Promise<void> {
+    const values: Record<string, string | undefined> = { "info.model": model, "info.firmware": this.firmwareRead };
+    for (const object of catalogToObjects(INFO_ENTRIES.filter(entry => values[entry.id]))) {
+      if (object.type === "state") {
+        await this.ensureChannels(object.id);
+        await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
+        this.markWritable(object.id, false);
+        this.emit(object.id, values[object.id]!);
+      }
+    }
   }
 
   /**
