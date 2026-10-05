@@ -1,21 +1,12 @@
 import * as utils from "@iobroker/adapter-core";
 import { join } from "node:path";
-import { createSocket } from "node:dgram";
-import { get as httpGet } from "node:http";
+import type { ClientRequest } from "node:http";
 import { networkInterfaces } from "node:os";
 import { attemptDevice } from "./lib/attempt-device";
 import { isIPv4, resolveIPv4, searchInterfaces } from "./lib/network-interfaces";
 import { isGroupEnabled } from "./lib/catalog/groups";
-import { writableNumber } from "./lib/catalog/value-coerce";
 import type { ObjectDef } from "./lib/catalog/types";
-import {
-  asPercentObject,
-  fromPercent,
-  isAmpVolumeId,
-  toPercent,
-  volumeBoundsOf,
-  type VolumeBounds,
-} from "./lib/catalog/volume-percent";
+import { VolumePresentation } from "./lib/volume-presentation";
 import { DEVICE_TYPE_ICONS, iconForModel } from "./lib/device-type";
 import {
   BOUND_FIELDS,
@@ -43,28 +34,21 @@ import { TRANSPORT_LABELS } from "./lib/ready-line";
 import { copyDeviceTree, movedId, type DeviceMoveDeps } from "./lib/lifecycle/device-move";
 import { moveAllWithEnums } from "./lib/enum-carry";
 import { StateMirror } from "./lib/lifecycle/write-mirror";
-import { coveredBy, KnownObjects } from "./lib/known-objects";
-import { readDeviceResponse } from "./lib/util";
+import { coveredBy, KnownObjects, mergedWith } from "./lib/known-objects";
+import { NetworkSearch } from "./lib/network-search";
 import { errText } from "./lib/err-text";
 import { migrateNativeKeys, type NativeKeyMigration } from "./lib/native-key-migration";
 import { tName } from "./lib/i18n";
 import { withValueLabels } from "./lib/catalog/state-labels";
 import { discoverYamaha, probeDescription, type DiscoveredDevice } from "./lib/discovery";
 import { SsdpListener, type SsdpNotify } from "./lib/ssdp-listener";
-import {
-  isExcluded,
-  readDiscovered,
-  readDiscoveredChecked,
-  readExcluded,
-  readIgnored,
-  writeDiscovered,
-} from "./lib/discovered-store";
-import { identityFrom, mergeIdentity, sameDevice, type DeviceIdentity } from "./lib/device-identity";
-import { discoveredStoreDeps, excludedStoreDeps, ignoredStoreDeps } from "./lib/discovered-store-deps";
+import { isExcluded } from "./lib/discovered-store";
+import { type DeviceStores, deviceStoresOf, rememberedDevices } from "./lib/device-stores";
+import { identityFrom, mergeIdentity, sameDevice, storedIdentity, type DeviceIdentity } from "./lib/device-identity";
 import { YxcPushReceiver } from "./lib/yxc/push-receiver";
 import { PushLiveness } from "./lib/yxc/push-liveness";
 import { YamahaDeviceManagement } from "./device-management";
-import type { DeviceSource, DeviceRecord } from "./lib/types";
+import type { DeviceRecord } from "./lib/types";
 import { PerDeviceCaches } from "./lib/lifecycle/per-device";
 import { DeviceSupervisor, type ConnectionHandle } from "./lib/lifecycle/device-supervisor";
 import { ReconnectStrategy } from "./lib/lifecycle/reconnect-strategy";
@@ -111,14 +95,6 @@ function rememberedModel(native: Record<string, unknown> | undefined): string | 
     return undefined;
   }
 }
-
-/** Abort a discovery description fetch after this long, so a dead device cannot hang it. */
-const FETCH_TIMEOUT_MS = 4000;
-
-/** How often the discovery M-SEARCH is repeated — multicast is lossy, one dropped packet must not hide a receiver. */
-const SSDP_SEARCH_BURST = 3;
-/** Spacing between the repeated M-SEARCH sends, inside the collect window. */
-const SSDP_SEARCH_INTERVAL_MS = 1000;
 
 /**
  * Instance settings an earlier release declared and this one no longer reads. js-controller adds a
@@ -193,6 +169,14 @@ const NOTIFY_RETRY_MS = 5000;
  */
 const DEVICE_PATCH_WINDOW_MS = 4500;
 
+/** A device object as the start read it — or the verdict that it could not be read (see `storedDevice`). */
+interface StoredDevice {
+  /** The object; undefined when the device has none yet. */
+  object: ioBroker.Object | undefined;
+  /** False when the object could not be read — then nothing the user set at it may be written over. */
+  readable: boolean;
+}
+
 /** A device object's patch waiting for its coalescing window to end. */
 interface PendingDevicePatch {
   /** The merged `common` fields (latest value per key wins). */
@@ -214,25 +198,18 @@ interface PendingDevicePatch {
  * by source IP.
  */
 export class Yamaha extends utils.Adapter {
-  private readonly supervisors: DeviceSupervisor[] = [];
   /** The network searches running now — each one's finish, which `onUnload` calls (E4). */
   private readonly searchesInFlight = new Set<() => void>();
   /** The description fetches running now, destroyed by `onUnload` (E4). */
-  private readonly fetchesInFlight = new Set<ReturnType<typeof httpGet>>();
+  private readonly fetchesInFlight = new Set<ClientRequest>();
   /** Every collection kept per device — deleting a device forgets them in one call (A28). */
   private readonly perDevice = new PerDeviceCaches();
-  /**
-   * What each volume datapoint declares on the DEVICE'S OWN scale, while percent mode replaces
-   * that declaration with 0…100 %. Filled by `upsertObject` — the object is always written before
-   * any value for it — and read by both value directions, so the conversion has exactly one
-   * source. Keyed by the full state id, so zones and devices never mix.
-   */
-  private readonly volumeScales = this.perDevice.stateMap<VolumeBounds>();
-  /**
-   * Per volume datapoint, the definition the coordinator produced BEFORE percent had its say —
-   * what the live switch rebuilds from, so turning it changes the object without a restart.
-   */
-  private readonly volumeDefs = this.perDevice.stateMap<ObjectDef>();
+  /** The percent switch of the volume datapoints — objects, both value directions, the switch itself (Y-05). */
+  private readonly volume = new VolumePresentation(
+    id => this.percentFor(id),
+    this.perDevice,
+    message => this.log.debug(message),
+  );
   /**
    * Per device, whether its volume datapoints read 0…100 %. A device setting, not an instance
    * one: the adapter serves several receivers and 2.8.0's single checkbox hit all of them.
@@ -314,9 +291,6 @@ export class Yamaha extends utils.Adapter {
    * adapter is shutting down", seen live on the 1.7.0 upgrade restart).
    */
   private unloading = false;
-  /** Device-manager backend: the receivers as cards with add/edit/delete. */
-  /** The device cards — built in onReady after I18n.init (dm-utils listens for messages from its constructor on). */
-  private deviceManagement: YamahaDeviceManagement | undefined;
   /**
    * Every datapoint that existed when this run started, filled ONCE before the cleanup and
    * before any device connects. Without it the balance below would report the whole tree as
@@ -396,10 +370,42 @@ export class Yamaha extends utils.Adapter {
   });
   /** The start-up listing while the object store loads from it (see {@link known}). */
   private startListing: AdapterObjects | undefined;
+  /** Whether {@link known} holds the start-up read of the tree — then a device object is read from there, never again. */
+  private knownLoaded = false;
+  /**
+   * The devices whose device object could not be read at their setup: their stored profile is not written over with an
+   * empty one, and their tree is not settled from a read-in that only started because nothing was read (review
+   * 2026-10-05, A9).
+   */
+  private readonly unreadDevices = this.perDevice.set();
   /** What the states database holds — see writeStateNow (audit 2026-09-29, E3). */
   private readonly stateMirror = new StateMirror();
   /** See {@link instanceReadOnlyStates}. */
   private manifestReadOnly: ReadonlySet<string> | undefined;
+  /** See {@link stores}. */
+  private storeOwner: DeviceStores | undefined;
+  /** The SSDP M-SEARCH and the description fetch; what is in flight is registered here, for the unload to end. */
+  private readonly network = new NetworkSearch({
+    networkInterface: () => this.config.networkInterface,
+    setTimeout: (callback, ms) => this.setTimeout(callback, ms),
+    log: { info: message => this.log.info(message) },
+    warnOnce: (key, message) => this.warnSearchOnce(key, message),
+    stopping: () => this.unloading,
+    searches: this.searchesInFlight,
+    fetches: this.fetchesInFlight,
+  });
+
+  /**
+   * The ONE owner of the three lists in the instance data directory (found, deleted, 2.x-deleted devices) — for this
+   * adapter and its device manager alike; every read and change goes through its one chain (review 2026-10-05,
+   * A2/A28/A31). Made at first use: the data directory and the log are the adapter's from onReady on.
+   *
+   * @returns the store owner
+   */
+  private get stores(): DeviceStores {
+    this.storeOwner ??= deviceStoresOf(this);
+    return this.storeOwner;
+  }
 
   /**
    * @param options adapter options passed through by js-controller
@@ -475,12 +481,9 @@ export class Yamaha extends utils.Adapter {
       devices: () => this.diagnosticsDevices(),
       getForeignObjectAsync: id => this.getForeignObjectAsync(id),
       getForeignStateAsync: id => this.getForeignStateAsync(id),
+      getForeignStatesAsync: pattern => this.getForeignStatesAsync(pattern),
       getObjectViewAsync: (design, search, params) => this.getObjectViewAsync(design, search, params),
-      log: {
-        info: message => this.log.info(message),
-        warn: message => this.log.warn(message),
-        debug: message => this.log.debug(message),
-      },
+      log: this.log,
     };
   }
 
@@ -533,7 +536,8 @@ export class Yamaha extends utils.Adapter {
       // from its constructor on — it is built only once I18n stands (fleet check i18n-before-messages). The names
       // still come from the own tName (lib/i18n.ts); this only makes adapter-core's I18n usable for any caller.
       await utils.I18n.init(join(__dirname, "..", "admin"), this);
-      this.deviceManagement = new YamahaDeviceManagement(this);
+      // The device cards — dm-utils registers itself for the admin's messages in its constructor, nothing reads it here.
+      new YamahaDeviceManagement(this, this.stores);
       // From here on the diagnostics report's log ring hears every line, debug included, and the admin's
       // diagnostics card gets its answers.
       this.logRing.hook(this.log);
@@ -562,6 +566,12 @@ export class Yamaha extends utils.Adapter {
       // Before anything reads a device id: the table rows and the discovery store come out of it
       // carrying the ids the trees now live under, and the cleanup below never sees an old one.
       const { listing: unmoved, rows: movedRows } = await this.migrateDeviceIds();
+      // Stopped while this start still runs (compact mode: the host process lives on): every section below that
+      // opens something — sockets, subscriptions, devices, timers — is skipped, or it would stay bound in the host
+      // with nothing left to close it (review 2026-10-05, A12). Checked after every wait.
+      if (this.unloading) {
+        return;
+      }
       if (await this.migrateInstanceSettings(legacyRow ? this.config.devices : movedRows, zonesOn)) {
         return; // the host restarts the instance with the migrated settings
       }
@@ -580,8 +590,17 @@ export class Yamaha extends utils.Adapter {
       const instance = await this.getForeignObjectAsync(`system.adapter.${this.namespace}`);
       this.legacyVolumePercent =
         (instance?.native as { volumeAsPercent?: unknown } | undefined)?.volumeAsPercent === true;
+      // One read of the stores for the whole start: the remembered devices the user did not delete, and whether the
+      // discovery store could be read at all (review 2026-10-05, A2/A31).
+      const remembered = await this.loadRemembered();
+      if (this.unloading) {
+        return;
+      }
       this.discovering = this.searchesTheNetwork(configured);
-      const devices = unionDevices(configured, this.discovering ? await this.autoDiscover(configured.length) : []);
+      const start = this.discovering
+        ? await this.autoDiscover(configured.length, remembered.records)
+        : { devices: [], searched: false };
+      const devices = unionDevices(configured, start.devices);
       if (this.unloading) {
         // Stopped during the initial network search: it resolves on its own clock, and
         // everything below — push socket, subscriptions, device sockets and timers —
@@ -598,32 +617,36 @@ export class Yamaha extends utils.Adapter {
       // this time, but the user never deleted them — so their trees stay and they are stamped
       // offline instead. Until 2.9.1 the first hand-entered receiver silently took every found
       // one's object tree with it, recordings and VIS bindings included.
-      const idle = this.discovering ? [] : await this.rememberedButIdle(devices);
+      const runningIds = new Set(devices.map(device => device.id));
+      const idle = this.discovering ? [] : remembered.records.filter(device => !runningIds.has(device.id));
       // Every device the discovery store remembers keeps its tree, whether it runs this time or not —
       // and when the store cannot be read, no remembered tree is judged at all: an unreadable store is no
       // proof that a device is gone, and a found device whose address a typed row took over is not gone
-      // either (it is in the store, not in the running set).
-      const stored = await readDiscoveredChecked(discoveredStoreDeps(this));
-      const remembered = stored.readable ? new Set(stored.records.map(device => device.id)) : undefined;
+      // either (it is in the store, not in the running set). A device the user deleted is not remembered,
+      // even when a failed write left it in the store (review 2026-10-05, A31).
+      const keep = remembered.readable ? new Set(remembered.records.map(device => device.id)) : undefined;
       // Before the cleanup and before any device connects — see knownDatapoints. The listing
       // is read once and handed on: the cleanup runs on the very same tree.
       const listing = await this.snapshotExistingDatapoints(unmoved);
       await this.seedStateMirror();
-      await this.cleanupStaleObjects(new Set(devices.map(device => device.id)), remembered, listing);
+      await this.cleanupStaleObjects(runningIds, keep, listing);
       await this.ensureInstanceInfoObjects();
       await this.markIdleDevicesOffline(idle);
+      if (this.unloading) {
+        return;
+      }
       await this.subscribeToStates();
+      if (this.unloading) {
+        return;
+      }
+      // Created and handed to the field in one step: from here on onUnload closes it.
       const pushReceiver = new YxcPushReceiver({
-        log: {
-          debug: message => this.log.debug(message),
-          info: message => this.log.info(message),
-          warn: message => this.log.warn(message),
-        },
+        log: this.log,
         schedule: (cb, ms) => this.setTimeout(cb, ms),
         cancel: handle => this.clearTimeout(handle),
       });
-      pushReceiver.start();
       this.pushReceiver = pushReceiver;
+      pushReceiver.start();
       if (configured.length > 0) {
         // Routine, so debug: what the adapter is ABOUT to try is not an event — a device that
         // answers says so with its own "ready" line, one that is off says nothing (krobi
@@ -643,13 +666,17 @@ export class Yamaha extends utils.Adapter {
       }
       // After the table rows, like the search: an announcement is read against the RUNNING set —
       // heard before, a moved device was taken for a stranger (audit 2026-09-24, A8).
-      if (this.discovering) {
+      if (this.discovering && !this.unloading) {
         await this.startSsdpListener();
+      }
+      if (this.unloading) {
+        return;
       }
       this.writeDeviceOverview();
       // Auto mode with remembered devices: they started WITHOUT waiting for the network
       // search — it runs behind them, adds newcomers and moves a device that changed address.
-      if (this.discovering && devices.length > 0) {
+      // Not right behind the first-setup search: that one just looked (review 2026-10-05, A57).
+      if (this.discovering && devices.length > 0 && !start.searched) {
         void this.discoverAdditionalDevices(pushReceiver);
       }
       this.scheduleIdleSearch();
@@ -667,6 +694,11 @@ export class Yamaha extends utils.Adapter {
    * @param pushReceiver the shared YXC push receiver
    */
   private async startDevice(device: DeviceRecord, pushReceiver: YxcPushReceiver): Promise<void> {
+    // Deleted (or the adapter stopping) before the start loop reached it: its header would be written again and the
+    // record counted — a delete undone by its own start (Y-13, review 2026-10-05, A29).
+    if (this.unloading || this.removed.has(device.id)) {
+      return;
+    }
     // One supervisor per device: a second start for a running id would put two of them on the
     // same tree and the same YNCA socket (audit 2026-09-24, A2).
     if (this.supervisorById.has(device.id) || this.starting.has(device.id)) {
@@ -692,7 +724,14 @@ export class Yamaha extends utils.Adapter {
     // Both callers check `unloading` after their network search resolves (onReady and
     // discoverAdditionalDevices) — a device handed over after onUnload never gets here.
     this.deviceConnected.set(device.id, false);
-    this.deviceRecords.set(device.id, { ...device });
+    // What the search learned about the device is LEARNED onto the record, so the device object gets it
+    // (persistDeviceNative needs the record) — copied in with the rest, the learning found nothing new and
+    // never stored it: a deleted found device was then excluded by its address only, and the next device
+    // DHCP gave that address stayed out for good (review 2026-10-05, A11). The header read below merges
+    // what the object already carried from earlier runs.
+    const { identity: found, ...record } = device;
+    this.deviceRecords.set(device.id, record);
+    this.learnIdentity(device.id, found);
     this.knownDeviceIps.add(device.ip);
     if (!isIPv4(device.ip)) {
       const resolved = await resolveIPv4(device.ip);
@@ -703,11 +742,9 @@ export class Yamaha extends utils.Adapter {
         this.log.debug(`${device.id}: ${device.ip} does not resolve to an IPv4 address right now`);
       }
     }
-    // What the search learned about the device rides on the record; the device object gets it
-    // now (persistDeviceNative needs the record above), the header read below merges what the
-    // object already carried from earlier runs.
-    this.learnIdentity(device.id, device.identity);
-    await this.ensureDeviceHeader(device.id, device.ip, device.source ?? "discovered");
+    // ONE read of the device object for the header and the profile (it was read twice per start, review 2026-10-05, E).
+    const stored = await this.storedDevice(device.id);
+    await this.ensureDeviceHeader(device.id, device.ip, stored);
     // Stamp it disconnected BEFORE the first attempt: ioBroker keeps a state's last value
     // forever, so a crash or a power cut would otherwise leave the device green until it
     // reports again — and a device that never answers would stay green for good.
@@ -719,7 +756,7 @@ export class Yamaha extends utils.Adapter {
     // Held here, not in the controllers: those are rebuilt on every connection attempt;
     // persisted at the device object (one capability profile), so a restart starts from the
     // remembered answers.
-    const profile = await this.loadDeviceProfile(device.id);
+    const profile = await this.loadDeviceProfile(device.id, stored);
     if (this.unloading || this.removed.has(device.id)) {
       return; // deleted, or the adapter stopped, while the header was written
     }
@@ -754,13 +791,8 @@ export class Yamaha extends utils.Adapter {
       cancel: handle => this.clearTimeout(handle as ioBroker.Timeout | undefined),
       onConnectionChange: connected => this.reportConnection(device.id, connected),
       backoff: new ReconnectStrategy(RECONNECT_BASE_MS, RECONNECT_MAX_MS),
-      log: {
-        debug: message => this.log.debug(message),
-        info: message => this.log.info(message),
-        warn: message => this.log.warn(message),
-      },
+      log: this.log,
     });
-    this.supervisors.push(supervisor);
     this.supervisorById.set(device.id, supervisor);
     supervisor.start();
   }
@@ -905,15 +937,16 @@ export class Yamaha extends utils.Adapter {
   private async startSsdpListener(): Promise<void> {
     const listener = new SsdpListener({
       interfaces: searchInterfaces(this.config.networkInterface, networkInterfaces()),
-      log: {
-        debug: message => this.log.debug(message),
-        info: message => this.log.info(message),
-        warn: message => this.log.warn(message),
-      },
+      log: this.log,
       onAlive: (notify, address) => this.onSsdpAlive(notify, address),
     });
     try {
       await listener.start();
+      if (this.unloading) {
+        // The unload ran while the socket was binding and found no listener to close (review 2026-10-05, A12).
+        listener.close();
+        return;
+      }
       this.ssdpListener = listener;
     } catch (e) {
       listener.close();
@@ -956,8 +989,8 @@ export class Yamaha extends utils.Adapter {
   private async absorbNotify(location: string, address: string): Promise<void> {
     const found = await probeDescription(
       {
-        fetch: url => this.fetchUrl(url),
-        log: { debug: message => this.log.debug(message), warn: message => this.log.warn(message) },
+        fetch: url => this.network.fetch(url),
+        log: this.log,
       },
       location,
       address,
@@ -1020,18 +1053,23 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
-   * The devices the discovery store still remembers that are NOT part of this run: the network
-   * search is off, so nothing looked for them. They keep their objects — switching the search
-   * off is a configuration change, not a delete, and only the card's delete button removes a
-   * device (it takes the record out of the store in the same step).
+   * The devices the discovery store remembers that the user did not delete, read once per start, and whether the store
+   * could be read at all. A record the user deleted that a failed write left in the store is pruned here, whatever the
+   * search mode: only the automatic search used to filter it, and with the search off it came back as an idle device
+   * that kept its tree (review 2026-10-05, A31). A remembered device that does not run this time (search off) keeps its
+   * objects — switching the search off is a configuration change, not a delete; only the card's delete button removes a
+   * device.
    *
-   * @param running the devices this run does start
-   * @returns the remembered records that stay idle
+   * @returns the remembered records, and whether `discovered.json` could be read
    */
-  private async rememberedButIdle(running: readonly DeviceRecord[]): Promise<DeviceRecord[]> {
-    const runningIds = new Set(running.map(device => device.id));
-    const remembered = await readDiscovered(discoveredStoreDeps(this));
-    return remembered.filter(device => !runningIds.has(device.id));
+  private async loadRemembered(): Promise<{ records: DeviceRecord[]; readable: boolean }> {
+    let remembered: { records: DeviceRecord[]; readable: boolean } = { records: [], readable: false };
+    await this.stores.update(now => {
+      const records = rememberedDevices(now);
+      remembered = { records, readable: !now.unreadable.has("discovered") };
+      return records.length === now.discovered.length ? undefined : { discovered: records };
+    });
+    return remembered;
   }
 
   /**
@@ -1108,13 +1146,24 @@ export class Yamaha extends utils.Adapter {
       0,
       (quick ? REDISCOVER_QUICK_INTERVAL_MS : REDISCOVER_MIN_INTERVAL_MS) - (Date.now() - this.lastRediscovery),
     );
+    this.armSearch(receiver, due);
+  }
+
+  /**
+   * Arm THE background search timer — the one timer the rediscovery and the idle search share (its body stood twice,
+   * review 2026-10-05, E).
+   *
+   * @param receiver the shared YXC push receiver
+   * @param ms when to search
+   */
+  private armSearch(receiver: YxcPushReceiver, ms: number): void {
     this.rediscoverTimer = this.setTimeout(() => {
       this.rediscoverTimer = undefined;
       this.lastRediscovery = Date.now();
       if (!this.unloading) {
         void this.discoverAdditionalDevices(receiver);
       }
-    }, due);
+    }, ms);
   }
 
   /**
@@ -1157,10 +1206,6 @@ export class Yamaha extends utils.Adapter {
     }
     supervisor.close();
     this.supervisorById.delete(deviceId);
-    const index = this.supervisors.indexOf(supervisor);
-    if (index >= 0) {
-      this.supervisors.splice(index, 1);
-    }
   }
 
   /**
@@ -1178,12 +1223,13 @@ export class Yamaha extends utils.Adapter {
       return;
     }
     const merged = mergeIdentity(record.identity, identity);
-    if (JSON.stringify(merged) === JSON.stringify(record.identity)) {
+    if (!merged || JSON.stringify(merged) === JSON.stringify(record.identity)) {
       return;
     }
     record.identity = merged;
-    this.persistDeviceNative(deviceId, { identity: merged });
-    if (record.source === "discovered" && merged) {
+    // Stored REPLACING: merged key by key, a replaced identity kept the old device's MAC (review 2026-10-05, A30).
+    this.persistDeviceNative(deviceId, { identity: storedIdentity(merged) });
+    if (record.source === "discovered") {
       this.rememberIdentity(deviceId, merged).catch((e: unknown) =>
         this.log.debug(`${deviceId}: could not store the identity (${errText(e)})`),
       );
@@ -1197,14 +1243,11 @@ export class Yamaha extends utils.Adapter {
    * @param identity the identity to store
    */
   private async rememberIdentity(deviceId: string, identity: DeviceIdentity): Promise<void> {
-    const store = discoveredStoreDeps(this);
-    const known = await readDiscovered(store);
-    const entry = known.find(device => device.id === deviceId);
-    if (!entry || JSON.stringify(entry.identity) === JSON.stringify(identity)) {
-      return;
-    }
-    entry.identity = identity;
-    await writeDiscovered(store, known);
+    await this.stores.update(now =>
+      now.discovered.some(device => device.id === deviceId)
+        ? { discovered: now.discovered.map(device => (device.id === deviceId ? { ...device, identity } : device)) }
+        : undefined,
+    );
   }
 
   /**
@@ -1320,13 +1363,7 @@ export class Yamaha extends utils.Adapter {
     if (!receiver) {
       return;
     }
-    this.rediscoverTimer = this.setTimeout(() => {
-      this.rediscoverTimer = undefined;
-      this.lastRediscovery = Date.now();
-      if (!this.unloading) {
-        void this.discoverAdditionalDevices(receiver);
-      }
-    }, REDISCOVER_MIN_INTERVAL_MS);
+    this.armSearch(receiver, REDISCOVER_MIN_INTERVAL_MS);
   }
 
   /**
@@ -1643,8 +1680,40 @@ export class Yamaha extends utils.Adapter {
    * @returns the write
    */
   public writeDeviceObject(deviceId: string, patch: ioBroker.PartialObject): Promise<void> {
+    return this.chainDeviceWrite(deviceId, () => this.writeObject(deviceId, patch));
+  }
+
+  /**
+   * Write a device object WHOLE, on its write chain — the one way a key leaves an object: `extendObject` merges, so a
+   * stored key outlives every patch without it (fleet check object-rewrite: read it, drop the key from the copy, write
+   * the copy with `setForeignObject`). The room and function assignments and the values stay.
+   *
+   * @param deviceId the device id
+   * @param rewrite the object to write, made from the stored one
+   * @returns the write
+   */
+  private rewriteDeviceObject(
+    deviceId: string,
+    rewrite: (stored: ioBroker.Object) => ioBroker.SettableObject,
+  ): Promise<void> {
+    return this.chainDeviceWrite(deviceId, async () => {
+      const stored = this.known.get(deviceId) as ioBroker.Object | undefined;
+      if (stored) {
+        await this.known.replace(`${this.namespace}.${deviceId}`, rewrite(stored));
+      }
+    });
+  }
+
+  /**
+   * Run one write of a device object behind the one in flight (see {@link writeDeviceObject}).
+   *
+   * @param deviceId the device id
+   * @param write the write
+   * @returns the write
+   */
+  private chainDeviceWrite(deviceId: string, write: () => Promise<void>): Promise<void> {
     const previous = this.deviceObjectWrites.get(deviceId) ?? Promise.resolve();
-    const next = previous.catch(() => undefined).then(() => this.writeObject(deviceId, patch));
+    const next = previous.catch(() => undefined).then(write);
     this.deviceObjectWrites.set(
       deviceId,
       next.catch(() => undefined),
@@ -1838,7 +1907,13 @@ export class Yamaha extends utils.Adapter {
    */
   private async clearStaleBounds(id: string, next: ObjectDef["common"]): Promise<void> {
     const stored = this.storedBounds.get(id);
-    const gone = BOUND_FIELDS.filter(field => stored?.[field] !== undefined && next[field] === undefined);
+    const gone: string[] = BOUND_FIELDS.filter(field => stored?.[field] !== undefined && next[field] === undefined);
+    // Back on the device's own scale, the percent switch's unit goes with the bounds (review 2026-10-05, A24).
+    if (
+      this.volume.dropsUnit(id, next, (this.known.get(id) as { common?: { unit?: unknown } } | undefined)?.common?.unit)
+    ) {
+      gone.push("unit");
+    }
     if (gone.length === 0) {
       this.storedBounds.set(id, { min: next.min, max: next.max, step: next.step });
       return;
@@ -1889,6 +1964,7 @@ export class Yamaha extends utils.Adapter {
       this.startListing = listing;
       try {
         await this.known.load();
+        this.knownLoaded = true;
       } finally {
         this.startListing = undefined;
       }
@@ -2011,6 +2087,31 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
+   * The device object as it stands — from the start-up read of the tree (`known`): every write of a device object goes
+   * through it, so it holds the object as the database does. Before, the header and the profile each read it again, and
+   * one failed read at start passed for a device WITHOUT an object: the user's name became the id, the percent answer
+   * flipped, and the first persist replaced the stored profile with an empty one — learned tree, ownership, settled
+   * version and firmware gone, a new read-in without an adapter update (Y-01/Y-02, review 2026-10-05, A9). Only when
+   * the start-up read failed is the database asked, and a failure there says so instead of answering "none".
+   *
+   * @param deviceId the id-safe device id
+   * @returns the object (undefined when the device has none yet), and whether it could be read
+   */
+  private async storedDevice(deviceId: string): Promise<StoredDevice> {
+    if (this.knownLoaded) {
+      return { object: this.known.get(deviceId) as ioBroker.Object | undefined, readable: true };
+    }
+    try {
+      return { object: (await this.getObjectAsync(deviceId)) ?? undefined, readable: true };
+    } catch (e) {
+      this.log.warn(
+        `${deviceId}: its device object could not be read (${errText(e)}) — its name, its settings and what it was taught are left as they are this run`,
+      );
+      return { object: undefined, readable: false };
+    }
+  }
+
+  /**
    * Create AND refresh a device's header objects (the device node, its info channel and a
    * per-device connection indicator) so its state is visible even while offline.
    *
@@ -2021,113 +2122,33 @@ export class Yamaha extends utils.Adapter {
    * right only because a catalog entry upserts them on top). extendObject merges, so a recording
    * setting a user attached survives.
    *
+   * Nothing at the device object says how the device got into the list (Y-27): the `native.source` 3.2.0 wrote on every
+   * start was read nowhere, and is taken off once (review 2026-10-05, C4).
+   *
    * @param deviceId the id-safe device id
    * @param ip the device's current address (from config or discovery)
-   * @param source where the address came from — kept at the device object so the adapter, the
-   *   card and the edit path all know it without re-deriving it from which table happens to be
-   *   filled (which said the same thing about every device on the instance)
+   * @param stored the device object as {@link storedDevice} read it — when it could not be read, the device object is
+   *   not written at all: neither the user's name nor the percent answer may be guessed over
    */
-  private async ensureDeviceHeader(deviceId: string, ip: string, source: DeviceSource): Promise<void> {
-    // statusStates.onlineId lets the admin paint a green/red reachability symbol on the
-    // device object itself (as govee does), fed by the per-device connection state.
-    // A device that has not reported its model yet would sit in the tree without any
-    // symbol — an upgraded instance shows that on every start before the first report,
-    // and a device that never answers shows it for good. Seed the pictogram of the model the
-    // capability profile remembers (the default silhouette without one) when there is none —
-    // and ALSO when the stored one is an older adapter's drawing: the 2.9.x icons had a fixed
-    // colour and a <rect> body, invisible in the dark themes, and a device that is off during
-    // the update would keep that drawing until it reports its model (2.10.0, seen live). A
-    // current pictogram is left alone: overwriting would flip a soundbar back to the receiver
-    // default for the seconds until its model arrives.
-    let icon: string | undefined;
-    // Percent is a DEVICE setting since 2.9.0. A device that carries no answer yet inherits the
-    // instance-wide switch 2.8.0 had, so an upgrade keeps every receiver exactly as it was, and
-    // the answer is written down here so it never has to be inherited again.
-    let percent = this.legacyVolumePercent;
-    // The display name the adapter established for this device, remembered AT the device object.
-    // Deliberately not `preserve: { common: ["name"] }`: the adapter owns names (fleet rule, krobi
-    // 2026-09-02) and sparing the field would only hide who wrote it. What it must not do is fall
-    // back to the bare id on every start, so the name it wrote LAST is carried in `native.label`
-    // and written again — by the adapter's own record, not by leaving the field out. Both writers
-    // of a display name keep that record: the label updater below and the card's edit dialog, and
-    // the rank says which of them may overrule the other.
-    let label: string | undefined;
-    let labelRank: LabelRank = LABEL_RANK.model;
-    /** A name set on purpose that the adapter cannot have written — it stays untouched. */
-    let foreignName = false;
-    try {
-      const existing = await this.getObjectAsync(deviceId);
-      const stored = existing?.common?.icon;
-      if (typeof stored === "string" && CURRENT_PICTOGRAMS.has(stored)) {
-        // Remembered, so a later model report of the same class writes nothing.
-        this.deviceIcons.set(deviceId, stored);
+  private async ensureDeviceHeader(deviceId: string, ip: string, stored: StoredDevice): Promise<void> {
+    // In memory the device starts with the inherited percent switch; written down only below, from a read object.
+    this.volumePercent.set(deviceId, this.legacyVolumePercent);
+    if (stored.readable) {
+      const header = this.deviceHeader(deviceId, stored.object);
+      if (stored.object?.native && "source" in stored.object.native) {
+        // A key leaves an object only by a write of the whole object without it (`extendObject` merges) — once, with
+        // the header (fleet check object-rewrite).
+        await this.rewriteDeviceObject(deviceId, object => {
+          const merged = mergedWith(object, header) as ioBroker.DeviceObject;
+          const { source: _source, ...native } = merged.native as Record<string, unknown>;
+          return { ...merged, native };
+        });
       } else {
-        icon = iconForModel(rememberedModel(existing?.native));
-        this.deviceIcons.set(deviceId, icon);
+        await this.writeDeviceObject(deviceId, header);
       }
-      const native = existing?.native as
-        | {
-            volumeAsPercent?: unknown;
-            label?: unknown;
-            labelRank?: unknown;
-            identity?: unknown;
-            idScheme?: unknown;
-          }
-        | undefined;
-      if (native?.idScheme === ID_SCHEME) {
-        this.idDecided.add(deviceId);
-      }
-      const storedIdentity = identityFrom(
-        typeof native?.identity === "object" && native.identity !== null ? native.identity : {},
-      );
-      if (storedIdentity) {
-        this.learnIdentity(deviceId, storedIdentity);
-      }
-      const own = native?.volumeAsPercent;
-      if (typeof own === "boolean") {
-        percent = own;
-      }
-      const shown = existing?.common?.name;
-      if (typeof native?.label === "string" && native.label.length > 0) {
-        label = native.label;
-        labelRank = labelRankOf(native.labelRank);
-      } else if (typeof shown === "string" && shown.length > 0 && shown !== deviceId) {
-        // ADOPTION, once per device: an instance upgraded from 2.10.0 or earlier carries a display
-        // name with NO record behind it — writing `label ?? deviceId` without this would put the
-        // bare id back on the first start after the update, and a receiver that is switched off
-        // would keep the id until it next reports. The rank is `user` because the tree cannot tell
-        // the two sources apart any more: the stored name may be a MusicCast zone name the adapter
-        // wrote, or one the owner typed into the card's dialog — and silently replacing the second
-        // is the worse mistake. Every name established from here on carries its true rank.
-        label = shown;
-        labelRank = LABEL_RANK.user;
-      } else if (shown !== undefined && typeof shown !== "string") {
-        // A name that is not a plain string was set on purpose (a translation object typed into
-        // the admin). The adapter only ever writes plain strings, so this is none of its own and
-        // it has nothing better to put there — it writes no name at all. Same rule the label
-        // updater has always followed.
-        foreignName = true;
-      }
-      if (label !== undefined) {
-        // Seeding the in-memory record is what makes the decision survive a restart: without it
-        // the adapter's OWN label reads as a stranger's on the next start (neither the id nor
-        // anything it remembers writing), and a device that renames itself is never followed again.
-        this.deviceLabels.set(deviceId, { name: label, rank: labelRank });
-      }
-    } catch {
-      icon = undefined;
+    } else {
+      this.unreadDevices.add(deviceId);
     }
-    this.volumePercent.set(deviceId, percent);
-    await this.writeDeviceObject(deviceId, {
-      type: "device",
-      common: {
-        ...(foreignName ? {} : { name: label ?? deviceId }),
-        ...(icon ? { icon } : {}),
-        statusStates: { onlineId: `${this.namespace}.${deviceId}.info.connection` },
-      },
-      // The record rides along with the name, so the adoption above happens once per device, ever.
-      native: { source, volumeAsPercent: percent, ...(label !== undefined ? { label, labelRank } : {}) },
-    });
     await this.writeObject(`${deviceId}.info`, {
       type: "channel",
       common: { name: tName("info") },
@@ -2187,6 +2208,102 @@ export class Yamaha extends utils.Adapter {
         native: {},
       });
     }
+  }
+
+  /**
+   * The device object's header patch, built from what the stored object carries — and what the adapter takes into memory
+   * from it (icon, id mark, identity, percent answer, the display name it established).
+   *
+   * @param deviceId the id-safe device id
+   * @param existing the stored device object, undefined for a device that has none yet
+   * @returns the patch to merge into the device object
+   */
+  private deviceHeader(deviceId: string, existing: ioBroker.Object | undefined): ioBroker.PartialObject {
+    // statusStates.onlineId lets the admin paint a green/red reachability symbol on the
+    // device object itself (as govee does), fed by the per-device connection state.
+    // A device that has not reported its model yet would sit in the tree without any
+    // symbol — an upgraded instance shows that on every start before the first report,
+    // and a device that never answers shows it for good. Seed the pictogram of the model the
+    // capability profile remembers (the default silhouette without one) when there is none —
+    // and ALSO when the stored one is an older adapter's drawing: the 2.9.x icons had a fixed
+    // colour and a <rect> body, invisible in the dark themes, and a device that is off during
+    // the update would keep that drawing until it reports its model (2.10.0, seen live). A
+    // current pictogram is left alone: overwriting would flip a soundbar back to the receiver
+    // default for the seconds until its model arrives.
+    let icon: string | undefined;
+    const storedIcon = existing?.common?.icon;
+    if (typeof storedIcon === "string" && CURRENT_PICTOGRAMS.has(storedIcon)) {
+      // Remembered, so a later model report of the same class writes nothing.
+      this.deviceIcons.set(deviceId, storedIcon);
+    } else {
+      icon = iconForModel(rememberedModel(existing?.native));
+      this.deviceIcons.set(deviceId, icon);
+    }
+    const native = existing?.native as
+      | { volumeAsPercent?: unknown; label?: unknown; labelRank?: unknown; identity?: unknown; idScheme?: unknown }
+      | undefined;
+    if (native?.idScheme === ID_SCHEME) {
+      this.idDecided.add(deviceId);
+    }
+    const storedIdentity = identityFrom(
+      typeof native?.identity === "object" && native.identity !== null ? native.identity : {},
+    );
+    if (storedIdentity) {
+      this.learnIdentity(deviceId, storedIdentity);
+    }
+    // Percent is a DEVICE setting since 2.9.0. A device that carries no answer yet inherits the
+    // instance-wide switch 2.8.0 had, so an upgrade keeps every receiver exactly as it was, and
+    // the answer is written down here so it never has to be inherited again.
+    const percent = typeof native?.volumeAsPercent === "boolean" ? native.volumeAsPercent : this.legacyVolumePercent;
+    this.volumePercent.set(deviceId, percent);
+    // The display name the adapter established for this device, remembered AT the device object.
+    // Deliberately not `preserve: { common: ["name"] }`: the adapter owns names (fleet rule, krobi
+    // 2026-09-02) and sparing the field would only hide who wrote it. What it must not do is fall
+    // back to the bare id on every start, so the name it wrote LAST is carried in `native.label`
+    // and written again — by the adapter's own record, not by leaving the field out. Both writers
+    // of a display name keep that record: the label updater below and the card's edit dialog, and
+    // the rank says which of them may overrule the other.
+    let label: string | undefined;
+    let labelRank: LabelRank = LABEL_RANK.model;
+    /** A name set on purpose that the adapter cannot have written — it stays untouched. */
+    let foreignName = false;
+    const shown = existing?.common?.name;
+    if (typeof native?.label === "string" && native.label.length > 0) {
+      label = native.label;
+      labelRank = labelRankOf(native.labelRank);
+    } else if (typeof shown === "string" && shown.length > 0 && shown !== deviceId) {
+      // ADOPTION, once per device: an instance upgraded from 2.10.0 or earlier carries a display
+      // name with NO record behind it — writing `label ?? deviceId` without this would put the
+      // bare id back on the first start after the update, and a receiver that is switched off
+      // would keep the id until it next reports. The rank is `user` because the tree cannot tell
+      // the two sources apart any more: the stored name may be a MusicCast zone name the adapter
+      // wrote, or one the owner typed into the card's dialog — and silently replacing the second
+      // is the worse mistake. Every name established from here on carries its true rank.
+      label = shown;
+      labelRank = LABEL_RANK.user;
+    } else if (shown !== undefined && typeof shown !== "string") {
+      // A name that is not a plain string was set on purpose (a translation object typed into
+      // the admin). The adapter only ever writes plain strings, so this is none of its own and
+      // it has nothing better to put there — it writes no name at all. Same rule the label
+      // updater has always followed.
+      foreignName = true;
+    }
+    if (label !== undefined) {
+      // Seeding the in-memory record is what makes the decision survive a restart: without it
+      // the adapter's OWN label reads as a stranger's on the next start (neither the id nor
+      // anything it remembers writing), and a device that renames itself is never followed again.
+      this.deviceLabels.set(deviceId, { name: label, rank: labelRank });
+    }
+    return {
+      type: "device",
+      common: {
+        ...(foreignName ? {} : { name: label ?? deviceId }),
+        ...(icon ? { icon } : {}),
+        statusStates: { onlineId: `${this.namespace}.${deviceId}.info.connection` },
+      },
+      // The record rides along with the name, so the adoption above happens once per device, ever.
+      native: { volumeAsPercent: percent, ...(label !== undefined ? { label, labelRank } : {}) },
+    };
   }
 
   /** The icon last written per device, so repeated model reports do not re-write the object. */
@@ -2343,7 +2460,7 @@ export class Yamaha extends utils.Adapter {
   private async handOverVolumePercent(): Promise<boolean> {
     const known = [
       ...parseDevices(this.config.devices).map(device => device.id),
-      ...(await readDiscovered(discoveredStoreDeps(this))).map(device => device.id),
+      ...rememberedDevices(await this.stores.read()).map(device => device.id),
     ];
     let all = true;
     for (const id of new Set(known)) {
@@ -2412,8 +2529,8 @@ export class Yamaha extends utils.Adapter {
   private async migrateDeviceIds(): Promise<{ listing?: AdapterObjects; rows?: unknown[] }> {
     try {
       const listing = await this.getAdapterObjectsAsync();
-      const store = discoveredStoreDeps(this);
-      const discovered = await readDiscovered(store);
+      // A device the user deleted is not moved — its tree goes with the start cleanup (review 2026-10-05, A31).
+      const discovered = rememberedDevices(await this.stores.read());
       const rows = Array.isArray(this.config.devices) ? this.config.devices : [];
       const known = new Set([...parseDevices(rows).map(device => device.id), ...discovered.map(device => device.id)]);
       const devices = new Map<string, ioBroker.Object>();
@@ -2452,7 +2569,7 @@ export class Yamaha extends utils.Adapter {
         candidates.push({
           id,
           model: rememberedModel(native) ?? record?.model,
-          identity: this.storedIdentityOf(id, native, record),
+          identity: identityOfDeviceObject(native, record?.identity),
         });
       }
       // By serial, so two devices of one model whose serials end alike get the same ids on every
@@ -2465,6 +2582,11 @@ export class Yamaha extends utils.Adapter {
         }
         if (target === id) {
           await this.extendObject(id, { native: { idScheme: ID_SCHEME } });
+          // The listing this start goes on with (the object store loads from it) holds the object as written.
+          const obj = devices.get(id);
+          if (obj) {
+            obj.native = { ...obj.native, idScheme: ID_SCHEME };
+          }
           continue;
         }
         if (taken.has(target)) {
@@ -2509,12 +2631,11 @@ export class Yamaha extends utils.Adapter {
         return {};
       }
       const renamed = new Map(done.map(move => [move.from, move.to]));
-      const nextDiscovered = discovered.map(record =>
-        renamed.has(record.id) ? { ...record, id: renamed.get(record.id)! } : record,
-      );
-      if (nextDiscovered.some((record, index) => record !== discovered[index])) {
-        await writeDiscovered(store, nextDiscovered);
-      }
+      await this.stores.update(now => ({
+        discovered: now.discovered.map(record =>
+          renamed.has(record.id) ? { ...record, id: renamed.get(record.id)! } : record,
+        ),
+      }));
       const next = renamedTableRows(rows, renamed);
       // The old device object of a device no STORED row names goes now; one a stored row still names
       // keeps its journal until the settings write of this start has stored the new row and the
@@ -2566,23 +2687,6 @@ export class Yamaha extends utils.Adapter {
       errText,
     );
     return carried.reduce((sum, entry) => sum + entry.newIds.length, 0);
-  }
-
-  /**
-   * Everything a stored tree knows about who the device is: the identity the transports learned
-   * (`native.identity`), the one in the capability profile, and the discovery record's.
-   *
-   * @param deviceId the device id
-   * @param native the device object's native part
-   * @param record its discovery record, if it has one
-   * @returns the identity, or undefined
-   */
-  private storedIdentityOf(
-    deviceId: string,
-    native: Record<string, unknown>,
-    record: DeviceRecord | undefined,
-  ): DeviceIdentity | undefined {
-    return identityOfDeviceObject(native, record?.identity);
   }
 
   /**
@@ -2696,11 +2800,7 @@ export class Yamaha extends utils.Adapter {
         systemLanguage: this.systemLanguage,
         // Group gate for the YNCA sweep: a disabled group's functions are never even fetched.
         isEntryEnabled: id => isGroupEnabled(id, this.config),
-        log: {
-          debug: message => this.log.debug(message),
-          info: message => this.log.info(message),
-          warn: message => this.log.warn(message),
-        },
+        log: this.log,
         upsertObject: async (id, def, settle) => {
           if (!alive()) {
             return;
@@ -2710,7 +2810,9 @@ export class Yamaha extends utils.Adapter {
           if (!isGroupEnabled(id.slice(id.indexOf(".") + 1), this.config)) {
             return;
           }
-          if (settle) {
+          // A device whose object could not be read runs a read-in only because nothing was read — it never shrinks
+          // what is stored (review 2026-10-05, A9).
+          if (settle && !this.unreadDevices.has(device.id)) {
             // The completion of a read-in (installation, adapter or firmware update, receiver on): the
             // one moment a definition may lose something. A SHRINKING dropdown needs a clearing write
             // first — extendObject merges `common.states` key by key, so the old entries would survive
@@ -2795,7 +2897,7 @@ export class Yamaha extends utils.Adapter {
             : undefined;
         },
         settleTree: async built => {
-          if (alive()) {
+          if (alive() && !this.unreadDevices.has(device.id)) {
             await this.settleDeviceTree(device.id, built);
           }
         },
@@ -2863,7 +2965,7 @@ export class Yamaha extends utils.Adapter {
       this.ssdpListener?.close();
       this.ssdpListener = undefined;
       this.pushReceiver?.close();
-      for (const supervisor of this.supervisors) {
+      for (const supervisor of this.supervisorById.values()) {
         supervisor.close();
       }
       // A stopped adapter talks to nothing, so no device may keep claiming to be connected —
@@ -2911,20 +3013,15 @@ export class Yamaha extends utils.Adapter {
    * and never appear here.
    *
    * @param configuredCount how many rows the device table holds
-   * @returns the device records to run this session
+   * @param known the remembered devices the user did not delete (`loadRemembered` — the exclusion list rules over them
+   *   too, not only over fresh finds: a delete whose store write failed would otherwise run again)
+   * @returns the device records to run this session, and whether this start already searched the network (then no
+   *   background search follows right behind it — review 2026-10-05, A57)
    */
-  private async autoDiscover(configuredCount: number): Promise<DeviceRecord[]> {
-    const store = discoveredStoreDeps(this);
-    const remembered = await readDiscovered(store);
-    // The exclusion list rules here too, not only over fresh finds: the delete action takes the
-    // record out of this file, but that write swallows its errors — a device recorded as excluded
-    // may still be remembered, and running it from here would undo the delete on the next start.
-    const ignored = await readIgnored(ignoredStoreDeps(this));
-    const excluded = await readExcluded(excludedStoreDeps(this));
-    const known = remembered.filter(device => !isExcluded(ignored, excluded, device));
-    if (known.length !== remembered.length) {
-      await writeDiscovered(store, known);
-    }
+  private async autoDiscover(
+    configuredCount: number,
+    known: readonly DeviceRecord[],
+  ): Promise<{ devices: DeviceRecord[]; searched: boolean }> {
     if (known.length > 0 || configuredCount > 0) {
       // Remembered devices — and the table's rows — start NOW: the network search used to gate
       // every restart by its collect window although the devices were already known. It still
@@ -2939,7 +3036,7 @@ export class Yamaha extends utils.Adapter {
           ? `connecting ${known.length} remembered device(s); the network search runs in the background`
           : "the network search runs in the background, behind the configured devices",
       );
-      return known;
+      return { devices: [...known], searched: false };
     }
     this.log.info("auto-discovery via SSDP (older XML-only devices must be added manually)");
     const merged = await this.runDiscovery();
@@ -2950,7 +3047,7 @@ export class Yamaha extends utils.Adapter {
         ? `network search finished — found ${merged.length} device(s)`
         : "network search finished — no Yamaha device answered (older XML-only devices must be added by hand)",
     );
-    return merged;
+    return { devices: merged, searched: true };
   }
 
   /**
@@ -2976,9 +3073,9 @@ export class Yamaha extends utils.Adapter {
     let found: DiscoveredDevice[] = [];
     try {
       found = await discoverYamaha({
-        search: (target, ms) => this.ssdpSearch(target, ms),
-        fetch: url => this.fetchUrl(url),
-        log: { debug: message => this.log.debug(message), warn: message => this.log.warn(message) },
+        search: (target, ms) => this.network.search(target, ms),
+        fetch: url => this.network.fetch(url),
+        log: this.log,
       });
     } catch (e) {
       this.log.warn(`auto-discovery scan failed, using the remembered devices: ${errText(e)}`);
@@ -3046,19 +3143,6 @@ export class Yamaha extends utils.Adapter {
    * @returns the records to reconcile: new/remembered discovered devices, plus moved table rows
    */
   private async absorbFinds(found: readonly DiscoveredDevice[]): Promise<DeviceRecord[]> {
-    const store = discoveredStoreDeps(this);
-    const known = await readDiscovered(store);
-    const merged = mergeDiscovered(
-      known,
-      [...found],
-      (dropped, takenId) =>
-        this.warnSearchOnce(
-          `collision|${dropped}|${takenId}`,
-          `discovered device "${dropped}" skipped — its address belongs to device "${takenId}"`,
-        ),
-      // A new find never takes an id a table row or a running device holds.
-      new Set([...parseDevices(this.config.devices).map(device => device.id), ...this.deviceRecords.keys()]),
-    );
     const running = [...this.deviceRecords.values()];
     // Whether a record sits at an address — its typed one, or what its typed hostname resolves to.
     const at = (record: DeviceRecord, ip: string): boolean =>
@@ -3077,8 +3161,6 @@ export class Yamaha extends utils.Adapter {
     // and the store would carry the found address back over the typed one (`mergeDiscovered`
     // updates a known id's address). Both the id and the address are matched — the search reads
     // the name off the device, the user typed their own, so the same receiver can carry two ids.
-    const ignored = await readIgnored(ignoredStoreDeps(this));
-    const excluded = await readExcluded(excludedStoreDeps(this));
     const manual = parseDevices(this.config.devices);
     const manualIds = new Set(manual.map(device => device.id));
     const manualIps = new Set(manual.flatMap(device => [device.ip, this.resolvedHosts.get(device.id) ?? device.ip]));
@@ -3086,49 +3168,80 @@ export class Yamaha extends utils.Adapter {
     // name — a find gets its id by the 3.0.0 rule now, so that one is checked too.
     const legacyIdAt = new Map(found.map(find => [find.ip, sanitizeId(find.name || find.ip)]));
     const moved: DeviceRecord[] = [];
-    const kept = merged.filter(device => {
-      const legacyId = legacyIdAt.get(device.ip);
-      if (
-        this.removed.has(device.id) ||
-        isExcluded(ignored, excluded, device) ||
-        (legacyId !== undefined && legacyId !== device.id && ignored.includes(legacyId)) ||
-        manualIds.has(device.id) ||
-        manualIps.has(device.ip)
-      ) {
-        return false;
-      }
-      const twin = running.find(
-        record => record.source !== "discovered" && sameDevice(record.identity, device.identity),
+    let kept: DeviceRecord[] = [];
+    // ONE step on the stores: the merge is computed on what they hold at that moment and written in the same step — a
+    // delete in the device manager can no longer fall between this read and this write and come back with it (review
+    // 2026-10-05, A31). The owner writes nothing unchanged (a search repeats every five minutes while a device is off)
+    // and nothing over a file it could not read (A2).
+    await this.stores.update(now => {
+      // What this run already runs from a search is remembered too, also while the store cannot be read or after a write
+      // failed — otherwise the next search gave the running device a second id: a second tree at the same address.
+      const runningFound = running
+        .filter(record => record.source === "discovered" && !now.discovered.some(known => known.id === record.id))
+        .map(({ source: _source, ...record }) => record);
+      const known = [...now.discovered, ...runningFound];
+      const merged = mergeDiscovered(
+        known,
+        [...found],
+        (dropped, takenId) =>
+          this.warnSearchOnce(
+            `collision|${dropped}|${takenId}`,
+            `discovered device "${dropped}" skipped — its address belongs to device "${takenId}"`,
+          ),
+        // A new find never takes an id a table row or a running device holds.
+        new Set([...manualIds, ...this.deviceRecords.keys()]),
       );
-      if (twin) {
-        if (at(twin, device.ip)) {
+      // While an exclusion list cannot be read, a find the store does not remember yet may be a device the user deleted
+      // — nothing new is taken until the list reads again (review 2026-10-05, A28).
+      const exclusionsRead = !now.unreadable.has("excluded") && !now.unreadable.has("ignored");
+      kept = merged.filter(device => {
+        const legacyId = legacyIdAt.get(device.ip);
+        if (
+          this.removed.has(device.id) ||
+          isExcluded(now.ignored, now.excluded, device) ||
+          (legacyId !== undefined && legacyId !== device.id && now.ignored.includes(legacyId)) ||
+          manualIds.has(device.id) ||
+          manualIps.has(device.ip)
+        ) {
           return false;
         }
-        if (twin.source === "migrated") {
-          moved.push({
-            ...twin,
-            ip: device.ip,
-            identity: mergeIdentity(twin.identity, device.identity),
-            services: device.services,
-          });
+        const twin = running.find(
+          record => record.source !== "discovered" && sameDevice(record.identity, device.identity),
+        );
+        if (twin) {
+          if (at(twin, device.ip)) {
+            return false;
+          }
+          if (twin.source === "migrated") {
+            moved.push({
+              ...twin,
+              ip: device.ip,
+              identity: mergeIdentity(twin.identity, device.identity),
+              services: device.services,
+            });
+            return false;
+          }
+          if (this.warnedElsewhere.get(twin.id) !== device.ip) {
+            this.warnedElsewhere.set(twin.id, device.ip);
+            this.log.warn(
+              `${twin.id}: the device answers at ${device.ip} now, the device table says ${twin.ip} — it stays at the typed address; edit the card to move it`,
+            );
+          }
           return false;
         }
-        if (this.warnedElsewhere.get(twin.id) !== device.ip) {
-          this.warnedElsewhere.set(twin.id, device.ip);
-          this.log.warn(
-            `${twin.id}: the device answers at ${device.ip} now, the device table says ${twin.ip} — it stays at the typed address; edit the card to move it`,
-          );
+        if (!known.some(record => record.id === device.id)) {
+          const orphan = this.orphanOfModel(found.find(find => find.ip === device.ip)?.model);
+          if (orphan) {
+            moved.push({ ...orphan, ip: device.ip, identity: device.identity, services: device.services });
+            return false;
+          }
+          if (!exclusionsRead) {
+            return false;
+          }
         }
-        return false;
-      }
-      if (!known.some(record => record.id === device.id)) {
-        const orphan = this.orphanOfModel(found.find(find => find.ip === device.ip)?.model);
-        if (orphan) {
-          moved.push({ ...orphan, ip: device.ip, identity: device.identity, services: device.services });
-          return false;
-        }
-      }
-      return true;
+        return true;
+      });
+      return { discovered: kept };
     });
     // Two finds that both claim ONE migrated row (a mixed identity, or two devices of the orphan's
     // model): moving it to either would rewrite the table — and restart the instance — on every
@@ -3142,12 +3255,6 @@ export class Yamaha extends utils.Adapter {
       this.log.debug(`${id}: ${claims.get(id)} devices answer for it — not moved`);
     }
     const unambiguous = moved.filter(record => !ambiguous.includes(record.id));
-    // The file only changes when a device appeared, vanished or moved — while a device is
-    // offline the search runs every five minutes, and it must not rewrite an identical file each
-    // time. Compared on the stored form, before the records are stamped below.
-    if (JSON.stringify(kept) !== JSON.stringify(known)) {
-      await writeDiscovered(store, kept);
-    }
     // Stamped HERE, for both callers: onReady unions the result with the device table and stamps
     // again (harmless), the background search hands its result straight to startDevice — and a
     // record without the stamp is one the rediscovery never searches for after it moved.
@@ -3176,20 +3283,26 @@ export class Yamaha extends utils.Adapter {
    * device object is the right home: writing an instance object's native restarts the
    * adapter, a device object's does not. Legacy keys of the releases before 2.7.0 are converted at load.
    *
+   * A profile whose device object could not be read is used in memory and never persisted: written, the empty profile
+   * would replace what the device was taught — the learned tree, the ownership, the settled version (review 2026-10-05,
+   * A9).
+   *
    * @param deviceId the id-safe device id
+   * @param stored the device object as the setup read it; read here when not given
    * @returns the per-device profile store
    */
-  private async loadDeviceProfile(deviceId: string): Promise<DeviceProfileStore> {
-    let native: Record<string, unknown> | undefined;
-    try {
-      native = (await this.getObjectAsync(deviceId))?.native;
-    } catch {
-      native = undefined;
+  private async loadDeviceProfile(deviceId: string, stored?: StoredDevice): Promise<DeviceProfileStore> {
+    const { object, readable } = stored ?? (await this.storedDevice(deviceId));
+    if (!readable) {
+      this.unreadDevices.add(deviceId);
     }
-    const store = new DeviceProfileStore(deviceId, native, {
+    const store = new DeviceProfileStore(deviceId, object?.native, {
       adapterVersion: this.version ?? "",
       now: () => new Date().toISOString(),
-      persist: patch => this.persistDeviceNative(deviceId, patch),
+      persist: patch =>
+        readable
+          ? this.persistDeviceNative(deviceId, patch)
+          : this.log.debug(`${deviceId}: profile not stored — its device object could not be read at the start`),
       log: message => this.log.debug(message),
     });
     this.profiles.set(deviceId, store);
@@ -3222,18 +3335,13 @@ export class Yamaha extends utils.Adapter {
     }
     this.volumePercent.set(deviceId, on);
     await this.writeDeviceObject(deviceId, { native: { volumeAsPercent: on } });
-    for (const [id, def] of [...this.volumeDefs]) {
-      if (!id.startsWith(`${deviceId}.`)) {
-        continue;
-      }
-      const bounds = this.volumeScales.get(id);
+    for (const [id, def] of this.volume.definitionsOf(deviceId)) {
       await this.writePresented(id, def);
-      if (!bounds) {
-        continue;
-      }
       const state = await this.getStateAsync(id);
-      if (typeof state?.val === "number") {
-        this.writeState(id, on ? toPercent(state.val, bounds) : fromPercent(state.val, bounds));
+      // Judged AFTER the read: a report that arrived meanwhile is the value to convert (review 2026-10-05, A34).
+      const value = this.volume.standing(id, on, state?.val);
+      if (value !== undefined) {
+        this.writeState(id, value);
       }
     }
   }
@@ -3242,7 +3350,8 @@ export class Yamaha extends utils.Adapter {
    * Add what a transport learned to a datapoint — never take anything away (krobi 2026-10-02: a receiver
    * that was read in keeps its tree; only the completion of a read-in may shrink it). A new object is written
    * as built. An existing state keeps its type, unit, write flag, names and bounds; it only gains the
-   * dropdown entries and the bounds it did not have. A transport that drops or comes back therefore changes
+   * dropdown entries and the bounds it did not have — and, for a list of names the user gives in the receiver
+   * (`liveLabels`), the new labels of its existing entries. A transport that drops or comes back therefore changes
    * nothing, and an incomplete definition (a standby answer, a transport without the list) clears nothing.
    *
    * @param id the full object id (`<deviceId>.<relativeId>`)
@@ -3273,7 +3382,14 @@ export class Yamaha extends utils.Adapter {
     );
     const before = stored.common.states;
     const kept = before !== null && typeof before === "object" ? (before as Record<string, string>) : {};
-    const added = Object.fromEntries(Object.entries(written.common.states ?? {}).filter(([key]) => !(key in kept)));
+    // New keys are added. For a list whose labels are names the user gives in the receiver (inputs, scenes, sound
+    // programs — `liveLabels`), an existing key also takes its new label: a renamed input reaches the dropdown while the
+    // adapter runs (krobi 2026-10-05). Never a key removed: Y-01 forbids deleting and emptying, not renaming.
+    const added = Object.fromEntries(
+      Object.entries(written.common.states ?? {}).filter(
+        ([key, label]) => !Object.hasOwn(kept, key) || (def.liveLabels === true && kept[key] !== label),
+      ),
+    );
     if (Object.keys(added).length > 0) {
       common.states = added;
       this.storedStates.set(id, { ...kept, ...added });
@@ -3323,35 +3439,14 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
-   * The object definition to write for a datapoint, once percent mode has had its say.
-   *
-   * Applied to the FINISHED definition, after the coordinator picked the owner, so one rule covers
-   * all three transports and every zone: the decibels YNCA and XML declare in their catalogs and
-   * the display scale MusicCast reports are all just "the device's own scale" here. The bounds it
-   * replaces are remembered, because they are what the two value directions convert against.
+   * The object definition to write for a datapoint, once percent mode has had its say (see {@link VolumePresentation}).
    *
    * @param id the full object id
    * @param def the definition the coordinator produced
    * @returns the definition to write
    */
   private presentVolume(id: string, def: ObjectDef): ObjectDef {
-    if (def.type !== "state" || !isAmpVolumeId(id.slice(id.indexOf(".") + 1))) {
-      return def;
-    }
-    const bounds = volumeBoundsOf(def);
-    if (!bounds) {
-      // Nothing declared to convert against. Percent would be a number with no meaning, so the
-      // datapoint keeps the device's own scale even with the switch on, and says so once.
-      this.volumeScales.delete(id);
-      this.volumeDefs.delete(id);
-      if (this.percentFor(id)) {
-        this.log.debug(`${id}: no declared range — keeping the device's own scale instead of percent`);
-      }
-      return def;
-    }
-    this.volumeScales.set(id, bounds);
-    this.volumeDefs.set(id, def);
-    return this.percentFor(id) ? asPercentObject(def) : def;
+    return this.volume.present(id, def);
   }
 
   /**
@@ -3362,29 +3457,18 @@ export class Yamaha extends utils.Adapter {
    * @returns the value to store
    */
   private volumeAsShown(id: string, value: boolean | number | string | null): boolean | number | string | null {
-    const bounds = this.percentFor(id) ? this.volumeScales.get(id) : undefined;
-    return bounds && typeof value === "number" ? toPercent(value, bounds) : value;
+    return this.volume.shown(id, value);
   }
 
   /**
    * A user's write on its way out, converted back to the scale the device expects.
-   *
-   * Only unacked writes reach here: an acked one is the adapter's own echo, already in percent,
-   * and converting it a second time would walk the value down on every poll.
    *
    * @param relativeId the state id without the namespace
    * @param value the value the user wrote
    * @returns the value to hand to the device's supervisor
    */
   private volumeAsDeviceScale(relativeId: string, value: ioBroker.StateValue): ioBroker.StateValue {
-    const bounds = this.percentFor(relativeId) ? this.volumeScales.get(relativeId) : undefined;
-    if (!bounds) {
-      return value;
-    }
-    // A number written as text ("50" from a VIS input or MQTT) is still a percentage — passed on
-    // unconverted it reached a speaker as its raw step 50, 83 % of a 0…60 scale (audit 2026-09-24, D1).
-    const percent = writableNumber(value);
-    return percent === undefined ? null : fromPercent(percent, bounds);
+    return this.volume.toDevice(relativeId, value);
   }
 
   /**
@@ -3396,132 +3480,6 @@ export class Yamaha extends utils.Adapter {
   private xmlPollIntervalMs(): number {
     const seconds = Number(this.config.xmlPollInterval);
     return (Number.isFinite(seconds) && seconds > 0 ? seconds : 60) * 1000;
-  }
-
-  /**
-   * Run an SSDP M-SEARCH and collect the responders' description URL and address.
-   *
-   * With a configured network interface the search leaves exactly that one; left empty it
-   * leaves EVERY non-internal IPv4 interface at once (one socket each), because multicast
-   * egress otherwise follows only the host's default route — on a multi-homed host whose
-   * default route is not the AV network that means the receiver is never reached and nothing
-   * is found. Responders from all interfaces are merged into one list; the caller
-   * de-duplicates by address.
-   *
-   * @param target the search target (device type)
-   * @param timeoutMs how long to collect responses
-   * @returns the responders
-   */
-  private ssdpSearch(target: string, timeoutMs: number): Promise<Array<{ location: string; address: string }>> {
-    return new Promise(resolve => {
-      const bindAddrs = searchInterfaces(this.config.networkInterface, networkInterfaces());
-      const responders: Array<{ location: string; address: string }> = [];
-      const sockets: ReturnType<typeof createSocket>[] = [];
-      let settled = false;
-      const finish = (): void => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        this.searchesInFlight.delete(finish);
-        for (const socket of sockets) {
-          try {
-            socket.close();
-          } catch {
-            // already closed
-          }
-        }
-        resolve(responders);
-      };
-      // Open one search socket bound to a single interface (or the default route when bindAddr
-      // is undefined). Every socket shares the responders list and the one settle timeout.
-      const searchFrom = (bindAddr: string | undefined): void => {
-        const socket = createSocket("udp4");
-        sockets.push(socket);
-        socket.on("message", (msg, rinfo) => {
-          const location = /LOCATION:\s*(\S+)/i.exec(msg.toString());
-          if (location) {
-            responders.push({ location: location[1], address: rinfo.address });
-          }
-        });
-        socket.on("error", err => {
-          // One interface failing (typically a stale selected IP after a DHCP change) must not
-          // kill the search on the others — warn and drop just this socket; the timeout still
-          // resolves whatever the rest found.
-          this.warnSearchOnce(
-            `socket|${bindAddr ?? ""}`,
-            `discovery socket failed${bindAddr ? ` on interface ${bindAddr}` : ""}: ${errText(err)}${
-              bindAddr ? " — check the Network Interface setting" : ""
-            }`,
-          );
-          try {
-            socket.close();
-          } catch {
-            // already closed
-          }
-        });
-        const sendSearch = (): void => {
-          if (settled) {
-            return;
-          }
-          const msearch = `M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: "ssdp:discover"\r\nMX: 3\r\nST: ${target}\r\n\r\n`;
-          try {
-            socket.send(msearch, 1900, "239.255.255.250");
-          } catch {
-            // socket already closed by an error above
-          }
-        };
-        socket.bind(0, bindAddr, () => {
-          // Pin OUTGOING multicast to this interface. bind() only sets the source address; the
-          // egress interface is IP_MULTICAST_IF — without it the OS uses its default route, so
-          // the search can leave the wrong NIC on a multi-homed host (Node dgram docs).
-          if (bindAddr) {
-            try {
-              socket.setMulticastInterface(bindAddr);
-            } catch {
-              this.log.info(`discovery: could not pin multicast egress to ${bindAddr} — using the default interface`);
-            }
-          }
-          // Multicast is lossy and a single request can be dropped — repeat the M-SEARCH a few
-          // times inside the collect window so one lost packet does not hide a receiver.
-          for (let i = 0; i < SSDP_SEARCH_BURST; i++) {
-            this.setTimeout(sendSearch, i * SSDP_SEARCH_INTERVAL_MS);
-          }
-        });
-      };
-      this.searchesInFlight.add(finish);
-      // Configured → that one interface; empty → every non-internal IPv4; none usable → default route.
-      if (bindAddrs.length === 0) {
-        searchFrom(undefined);
-      } else {
-        for (const bindAddr of bindAddrs) {
-          searchFrom(bindAddr);
-        }
-      }
-      this.setTimeout(finish, timeoutMs);
-    });
-  }
-
-  /**
-   * Fetch a URL over HTTP and resolve its body.
-   *
-   * @param url the URL to fetch
-   * @returns the response body
-   */
-  private fetchUrl(url: string): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const req = httpGet(url, res => {
-        // Bytes decoded once (a friendlyName "Küche" split inside a character became "K��che" — and a
-        // second id for the same device, audit 2026-09-24 A20), capped, and the status judged: a booting
-        // receiver's 404/503 is no description, so the NOTIFY retry asks again instead of judging it
-        // "no Yamaha" for good (review 2026-10-05, A32).
-        readDeviceResponse(res, url).then(resolve, reject);
-      });
-      this.fetchesInFlight.add(req);
-      req.on("close", () => this.fetchesInFlight.delete(req));
-      req.on("error", reject);
-      req.setTimeout(FETCH_TIMEOUT_MS, () => req.destroy(new Error(`fetch timed out: ${url}`)));
-    });
   }
 }
 

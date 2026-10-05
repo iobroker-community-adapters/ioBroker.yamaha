@@ -10,7 +10,20 @@ const fsMock = vi.hoisted(() => ({
   files: new Map<string, string>(),
   mkdirs: [] as string[],
   readError: null as Error | null,
+  /** Every step of a write, in order — the atomic replace is temporary file, flush, close, rename. */
+  steps: [] as string[],
+  /** When set, the flush of the temporary file fails (a disk that is full). */
+  syncError: null as Error | null,
 }));
+/**
+ * An fs error as node raises it: the reason in `code`.
+ *
+ * @param code the error code
+ * @returns the error
+ */
+function fsError(code: string): Error {
+  return Object.assign(new Error(`${code}: test`), { code });
+}
 vi.mock("node:fs/promises", () => ({
   readFile: (path: string) => {
     if (fsMock.readError) {
@@ -18,12 +31,36 @@ vi.mock("node:fs/promises", () => ({
     }
     const content = fsMock.files.get(path);
     if (content === undefined) {
-      return Promise.reject(new Error("ENOENT"));
+      return Promise.reject(fsError("ENOENT"));
     }
     return Promise.resolve(content);
   },
-  writeFile: (path: string, content: string) => {
-    fsMock.files.set(path, content);
+  open: (path: string) => {
+    fsMock.steps.push(`open ${path}`);
+    let content = "";
+    return Promise.resolve({
+      writeFile: (text: string) => {
+        content = text;
+        return Promise.resolve();
+      },
+      sync: () => {
+        fsMock.steps.push("sync");
+        return fsMock.syncError ? Promise.reject(fsMock.syncError) : Promise.resolve();
+      },
+      close: () => {
+        fsMock.steps.push("close");
+        fsMock.files.set(path, content);
+        return Promise.resolve();
+      },
+    });
+  },
+  rename: (from: string, to: string) => {
+    fsMock.steps.push(`rename ${from} -> ${to}`);
+    const content = fsMock.files.get(from);
+    fsMock.files.delete(from);
+    if (content !== undefined) {
+      fsMock.files.set(to, content);
+    }
     return Promise.resolve();
   },
   mkdir: (path: string) => {
@@ -51,6 +88,8 @@ beforeEach(() => {
   fsMock.files.clear();
   fsMock.mkdirs.length = 0;
   fsMock.readError = null;
+  fsMock.steps.length = 0;
+  fsMock.syncError = null;
 });
 
 describe("discoveredStoreDeps", () => {
@@ -68,8 +107,34 @@ describe("discoveredStoreDeps", () => {
     // The very first start has no file. A throw would abort onReady before any
     // device is set up.
     await expect(discoveredStoreDeps(adapter).read()).resolves.toBeUndefined();
-    fsMock.readError = new Error("EACCES");
-    await expect(discoveredStoreDeps(adapter).read()).resolves.toBeUndefined();
+  });
+
+  // Review 2026-10-05, A2: EACCES (a backup restored as root), EIO or a directory in the file's place read as "no file",
+  // and the start cleanup deleted every remembered device's tree.
+  it("rejects every other read failure — an unreadable store is not an empty one", async () => {
+    for (const code of ["EACCES", "EIO", "EISDIR"]) {
+      fsMock.readError = fsError(code);
+      await expect(discoveredStoreDeps(adapter).read()).rejects.toThrow(code);
+    }
+  });
+
+  // Review 2026-10-05, A2: writeFile truncates first — a power cut between the truncate and the write left a 0-byte store.
+  it("replaces the file in one step: temporary file, flushed, then renamed over it", async () => {
+    const path = join(dataDir, "discovered.json");
+    fsMock.files.set(path, "[]");
+    await discoveredStoreDeps(adapter).write('[{"id":"wx","ip":"10.0.0.6"}]');
+    expect(fsMock.steps).toEqual([`open ${path}.tmp`, "sync", "close", `rename ${path}.tmp -> ${path}`]);
+    expect(fsMock.files.get(path)).toBe('[{"id":"wx","ip":"10.0.0.6"}]');
+    expect(fsMock.files.has(`${path}.tmp`)).toBe(false);
+  });
+
+  it("a write that fails before the rename leaves the stored file as it was", async () => {
+    const path = join(dataDir, "discovered.json");
+    fsMock.files.set(path, '[{"id":"kept","ip":"10.0.0.5"}]');
+    fsMock.syncError = fsError("ENOSPC");
+    await expect(discoveredStoreDeps(adapter).write("[]")).rejects.toThrow("ENOSPC");
+    expect(fsMock.steps).not.toContain(`rename ${path}.tmp -> ${path}`);
+    expect(fsMock.files.get(path)).toBe('[{"id":"kept","ip":"10.0.0.5"}]');
   });
 
   it("logs through the adapter", () => {

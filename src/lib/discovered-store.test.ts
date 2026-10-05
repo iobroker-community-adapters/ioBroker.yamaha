@@ -3,6 +3,7 @@ import {
   readDiscovered,
   readExcluded,
   readIgnored,
+  readJsonList,
   writeDiscovered,
   writeExcluded,
   writeIgnored,
@@ -20,13 +21,71 @@ function fakeDeps(overrides: Partial<DiscoveredStoreDeps> = {}): DiscoveredStore
   };
 }
 
-describe("readDiscovered", () => {
-  test("returns [] when the store file does not exist", async () => {
-    expect(await readDiscovered(fakeDeps({ read: () => Promise.resolve(undefined) }))).toEqual([]);
+const isString = (entry: unknown): entry is string => typeof entry === "string";
+
+// Review 2026-10-05, A2/A28: every read error and a 0-byte file read as an EMPTY, readable store — and the start cleanup
+// deleted the trees of every remembered device, a broken excluded.json undid every earlier delete on the next write.
+describe("readJsonList — only a missing file is an empty list", () => {
+  test("a missing file is an empty, readable list", async () => {
+    await expect(readJsonList(fakeDeps(), isString)).resolves.toEqual({ items: [], readable: true });
   });
 
-  test("returns [] on corrupt JSON", async () => {
-    expect(await readDiscovered(fakeDeps({ read: () => Promise.resolve("{not json") }))).toEqual([]);
+  test("a file that cannot be read (EACCES, EIO, EISDIR) is unreadable, not empty", async () => {
+    const deps = fakeDeps({
+      read: () => Promise.reject(Object.assign(new Error("permission denied"), { code: "EACCES" })),
+    });
+    await expect(readJsonList(deps, isString)).resolves.toEqual({
+      items: [],
+      readable: false,
+      problem: "permission denied",
+    });
+  });
+
+  test("an empty file is a write cut off, not an empty list", async () => {
+    for (const raw of ["", "  \n"]) {
+      await expect(readJsonList(fakeDeps({ read: () => Promise.resolve(raw) }), isString)).resolves.toEqual({
+        items: [],
+        readable: false,
+        problem: "the file is empty",
+      });
+    }
+  });
+
+  test("a truncated or garbled file is unreadable", async () => {
+    const read = await readJsonList(
+      fakeDeps({ read: () => Promise.resolve('[{"id":"rx-v6a-2b3c","ip":"10.0.0.5"},{"id":"wx-0') }),
+      isString,
+    );
+    expect(read.readable).toBe(false);
+    expect(read.items).toEqual([]);
+  });
+
+  test("a file that holds no list is unreadable", async () => {
+    await expect(readJsonList(fakeDeps({ read: () => Promise.resolve('{"id":"x"}') }), isString)).resolves.toEqual({
+      items: [],
+      readable: false,
+      problem: "the file holds no list",
+    });
+  });
+
+  test("a list keeps its usable entries and is readable", async () => {
+    await expect(
+      readJsonList(fakeDeps({ read: () => Promise.resolve('["a", 1, null, "b"]') }), isString),
+    ).resolves.toEqual({ items: ["a", "b"], readable: true });
+  });
+});
+
+describe("readDiscovered", () => {
+  test("returns [] when the store file does not exist, and says nothing about it", async () => {
+    const unreadable = vi.fn();
+    expect(await readDiscovered(fakeDeps({ read: () => Promise.resolve(undefined) }), unreadable)).toEqual([]);
+    expect(unreadable).not.toHaveBeenCalled();
+  });
+
+  test("returns [] on corrupt JSON — and tells the caller it could not be read", async () => {
+    const unreadable = vi.fn();
+    expect(await readDiscovered(fakeDeps({ read: () => Promise.resolve("{not json") }), unreadable)).toEqual([]);
+    expect(unreadable).toHaveBeenCalledTimes(1);
   });
 
   test("returns the stored records", async () => {
@@ -49,19 +108,19 @@ describe("readDiscovered", () => {
 });
 
 describe("writeDiscovered", () => {
-  test("writes the records as JSON", async () => {
+  test("writes the records as JSON and says so", async () => {
     const deps = fakeDeps();
-    await writeDiscovered(deps, [{ id: "Living", ip: "1.1.1.1" }]);
+    await expect(writeDiscovered(deps, [{ id: "Living", ip: "1.1.1.1" }])).resolves.toBe(true);
     expect(deps.written).toEqual([JSON.stringify([{ id: "Living", ip: "1.1.1.1" }])]);
   });
 
-  test("swallows a write failure", async () => {
+  test("swallows a write failure and reports it", async () => {
     const deps = fakeDeps({
       write: () => {
         return Promise.reject(new Error("disk full"));
       },
     });
-    await expect(writeDiscovered(deps, [{ id: "Living", ip: "1.1.1.1" }])).resolves.toBeUndefined();
+    await expect(writeDiscovered(deps, [{ id: "Living", ip: "1.1.1.1" }])).resolves.toBe(false);
   });
 });
 
@@ -78,13 +137,17 @@ describe("readIgnored", () => {
     expect(await readIgnored(fakeDeps({ read: () => Promise.resolve(undefined) }))).toEqual([]);
   });
 
-  test("returns [] on corrupt JSON", async () => {
-    expect(await readIgnored(fakeDeps({ read: () => Promise.resolve("[not json") }))).toEqual([]);
+  test("returns [] on corrupt JSON, and tells the caller", async () => {
+    const unreadable = vi.fn();
+    expect(await readIgnored(fakeDeps({ read: () => Promise.resolve("[not json") }), unreadable)).toEqual([]);
+    expect(unreadable).toHaveBeenCalledTimes(1);
   });
 
-  test("returns [] when the read itself fails", async () => {
+  test("returns [] when the read itself fails, and tells the caller why", async () => {
+    const unreadable = vi.fn();
     const deps = fakeDeps({ read: () => Promise.reject(new Error("permission denied")) });
-    expect(await readIgnored(deps)).toEqual([]);
+    expect(await readIgnored(deps, unreadable)).toEqual([]);
+    expect(unreadable).toHaveBeenCalledWith("permission denied");
   });
 
   test("returns [] when the content is not an array", async () => {
@@ -100,7 +163,7 @@ describe("readIgnored", () => {
 describe("writeIgnored", () => {
   test("writes the ids as JSON", async () => {
     const deps = fakeDeps();
-    await writeIgnored(deps, ["Living", "Kitchen"]);
+    await expect(writeIgnored(deps, ["Living", "Kitchen"])).resolves.toBe(true);
     expect(deps.written).toEqual([JSON.stringify(["Living", "Kitchen"])]);
   });
 
@@ -110,9 +173,9 @@ describe("writeIgnored", () => {
     expect(deps.written).toEqual([JSON.stringify(["Living", "Kitchen"])]);
   });
 
-  test("swallows a write failure", async () => {
+  test("swallows a write failure and reports it", async () => {
     const deps = fakeDeps({ write: () => Promise.reject(new Error("disk full")) });
-    await expect(writeIgnored(deps, ["Living"])).resolves.toBeUndefined();
+    await expect(writeIgnored(deps, ["Living"])).resolves.toBe(false);
   });
 });
 
@@ -122,14 +185,23 @@ describe("readExcluded", () => {
     await expect(readExcluded(deps)).resolves.toEqual([{ id: "RX-V685", ip: "192.168.1.20" }]);
   });
 
-  test("starts empty on a missing, corrupt or non-list file", async () => {
-    await expect(readExcluded(fakeDeps())).resolves.toEqual([]);
-    await expect(readExcluded(fakeDeps({ read: () => Promise.resolve("{nope") }))).resolves.toEqual([]);
-    await expect(readExcluded(fakeDeps({ read: () => Promise.resolve('{"id":"x"}') }))).resolves.toEqual([]);
+  test("starts empty on a missing, corrupt or non-list file — the last two told as unreadable", async () => {
+    const unreadable = vi.fn();
+    await expect(readExcluded(fakeDeps(), unreadable)).resolves.toEqual([]);
+    expect(unreadable).not.toHaveBeenCalled();
+    await expect(readExcluded(fakeDeps({ read: () => Promise.resolve("{nope") }), unreadable)).resolves.toEqual([]);
+    await expect(readExcluded(fakeDeps({ read: () => Promise.resolve('{"id":"x"}') }), unreadable)).resolves.toEqual(
+      [],
+    );
+    expect(unreadable).toHaveBeenCalledTimes(2);
   });
 
-  test("starts empty when the read itself rejects", async () => {
-    await expect(readExcluded(fakeDeps({ read: () => Promise.reject(new Error("EACCES")) }))).resolves.toEqual([]);
+  test("starts empty when the read itself rejects, and tells the caller", async () => {
+    const unreadable = vi.fn();
+    await expect(
+      readExcluded(fakeDeps({ read: () => Promise.reject(new Error("EACCES")) }), unreadable),
+    ).resolves.toEqual([]);
+    expect(unreadable).toHaveBeenCalledWith("EACCES");
   });
 
   test("drops entries without a string id", async () => {
@@ -150,9 +222,9 @@ describe("writeExcluded", () => {
     expect(deps.written).toEqual([JSON.stringify([{ id: "a", ip: "2.2.2.2" }])]);
   });
 
-  test("swallows a write failure", async () => {
+  test("swallows a write failure and reports it", async () => {
     const deps = fakeDeps({ write: () => Promise.reject(new Error("disk")) });
-    await expect(writeExcluded(deps, [{ id: "a" }])).resolves.toBeUndefined();
+    await expect(writeExcluded(deps, [{ id: "a" }])).resolves.toBe(false);
   });
 });
 

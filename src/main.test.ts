@@ -251,6 +251,8 @@ const mocks = vi.hoisted(() => ({
     excluded: [] as Array<{ id: string; ip?: string; identity?: { serial?: string; mac?: string } }>,
     /** When true, the store cannot be read at all (a damaged file) — not the same as an empty one. */
     unreadable: false,
+    /** When true, `excluded.json` cannot be read (a damaged file). */
+    excludedUnreadable: false,
   },
   pushReceivers: [] as Array<{
     start: ReturnType<typeof vi.fn>;
@@ -288,31 +290,49 @@ vi.mock("./lib/ssdp-listener", () => ({
   },
 }));
 vi.mock("./lib/discovered-store", async importOriginal => {
-  // The pure matcher stays real: the tests prove the adapter's use of it, not a copy.
+  // The pure matcher stays real: the tests prove the adapter's use of it, not a copy. A read answers with a COPY, as a
+  // file does; a file that cannot be read answers empty and says so through the reader's callback.
   const actual = await importOriginal<typeof DiscoveredStoreModule>();
+  const read =
+    <T>(list: () => T[], broken: () => boolean) =>
+    (_d: unknown, unreadable?: (problem: string) => void): Promise<T[]> => {
+      if (broken()) {
+        unreadable?.("Unexpected end of JSON input");
+        return Promise.resolve([]);
+      }
+      return Promise.resolve(structuredClone(list()));
+    };
   return {
     isExcluded: actual.isExcluded,
-    readDiscovered: vi.fn(() => Promise.resolve(mocks.discoveredStore.devices)),
-    readDiscoveredChecked: vi.fn(() =>
-      Promise.resolve(
-        mocks.discoveredStore.unreadable
-          ? { records: [], readable: false }
-          : { records: mocks.discoveredStore.devices, readable: true },
+    readDiscovered: vi.fn(
+      read(
+        () => mocks.discoveredStore.devices,
+        () => mocks.discoveredStore.unreadable,
       ),
     ),
     writeDiscovered: vi.fn((_d: unknown, devices: Array<{ id: string; ip: string }>) => {
       mocks.discoveredStore.devices = devices;
-      return Promise.resolve();
+      return Promise.resolve(true);
     }),
-    readIgnored: vi.fn(() => Promise.resolve(mocks.discoveredStore.ignored)),
+    readIgnored: vi.fn(
+      read(
+        () => mocks.discoveredStore.ignored,
+        () => false,
+      ),
+    ),
     writeIgnored: vi.fn((_d: unknown, ids: string[]) => {
       mocks.discoveredStore.ignored = [...ids];
-      return Promise.resolve();
+      return Promise.resolve(true);
     }),
-    readExcluded: vi.fn(() => Promise.resolve(mocks.discoveredStore.excluded)),
+    readExcluded: vi.fn(
+      read(
+        () => mocks.discoveredStore.excluded,
+        () => mocks.discoveredStore.excludedUnreadable,
+      ),
+    ),
     writeExcluded: vi.fn((_d: unknown, entries: typeof mocks.discoveredStore.excluded) => {
       mocks.discoveredStore.excluded = [...entries];
-      return Promise.resolve();
+      return Promise.resolve(true);
     }),
   };
 });
@@ -475,6 +495,10 @@ import { DEVICE_TYPE_ICONS, iconForModel } from "./lib/device-type";
 import { MAX_HTTP_BODY_BYTES } from "./lib/util";
 import { LABEL_RANK } from "./lib/pure-helpers";
 import { PushLiveness } from "./lib/yxc/push-liveness";
+import { identityOfDeviceObject, PROFILE_KEY } from "./lib/lifecycle/capability-profile";
+import { mergedWith } from "./lib/known-objects";
+import { sameDevice } from "./lib/device-identity";
+import { YamahaDeviceManagement } from "./device-management";
 
 /**
  * What a read stub answers with: a COPY of the stored value, never the stored object itself.
@@ -490,7 +514,7 @@ function copyOf<T>(value: T | undefined): T | null {
   return value === undefined || value === null ? null : structuredClone(value);
 }
 
-import { writeDiscovered } from "./lib/discovered-store";
+import { isExcluded, writeDiscovered } from "./lib/discovered-store";
 import type { ConnectionHandle } from "./lib/controller";
 
 /** A live connection handle the fake attempt hands back. */
@@ -658,6 +682,7 @@ beforeEach(() => {
   mocks.discoveredStore.ignored = [];
   mocks.discoveredStore.excluded = [];
   mocks.discoveredStore.unreadable = false;
+  mocks.discoveredStore.excludedUnreadable = false;
   mocks.pushReceivers.length = 0;
   mocks.listeners.length = 0;
   mocks.listenerBindFails = false;
@@ -829,6 +854,95 @@ describe("Yamaha onReady — configured devices", () => {
     ).updateDeviceLabel("Living_room", "Main Room", LABEL_RANK.deviceName);
     const common = ctx.i.objects.get("Living_room")?.common as Record<string, unknown>;
     expect(common.name).toBe("Cinema");
+  });
+
+  // Review 2026-10-05, A9 (proof test REVIEW H): one failed read of the device object at start made the header write the
+  // bare id over the user's name and flip the percent answer — and the model report then took the "placeholder".
+  it("one failed database read at start changes neither the name nor the percent answer", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room", {
+      type: "device",
+      common: { name: "Wohnzimmer" },
+      native: { label: "Wohnzimmer", labelRank: LABEL_RANK.user, volumeAsPercent: true },
+    });
+    const getObject = (ctx.i as unknown as { getObjectAsync: ReturnType<typeof vi.fn> }).getObjectAsync;
+    const original = getObject.getMockImplementation() as (id: string) => Promise<unknown>;
+    getObject.mockImplementationOnce((id: string) =>
+      id === "Living_room" ? Promise.reject(new Error("objects db timeout")) : original(id),
+    );
+    await ctx.i.onReady();
+    await flush();
+    await flushPatches(ctx);
+    const stored = ctx.i.objects.get("Living_room") as {
+      common: Record<string, unknown>;
+      native: Record<string, unknown>;
+    };
+    expect(stored.common.name).toBe("Wohnzimmer");
+    expect(stored.native.volumeAsPercent).toBe(true);
+    const setStateAck = ctx.calls[0].deps.setStateAck as (id: string, value: unknown) => void;
+    setStateAck("Living_room.info.model", "RX-V6A");
+    await flushPatches(ctx);
+    const after = ctx.i.objects.get("Living_room") as {
+      common: Record<string, unknown>;
+      native: Record<string, unknown>;
+    };
+    expect(after.common.name).toBe("Wohnzimmer");
+    expect(after.native.label).toBe("Wohnzimmer");
+  });
+
+  it("a device object that cannot be read at all is not written over — name, percent and profile stay", async () => {
+    const ctx = setup();
+    const stored = {
+      type: "device",
+      common: { name: "Wohnzimmer" },
+      native: {
+        label: "Wohnzimmer",
+        labelRank: LABEL_RANK.user,
+        volumeAsPercent: true,
+        [PROFILE_KEY]: JSON.stringify({ memory: { yxcIdentity: "RX-V6A|1.0" } }),
+      },
+    };
+    ctx.i.objects.set("Living_room", structuredClone(stored));
+    ctx.i.objects.set("Living_room.soundProgram", {
+      type: "state",
+      common: { name: "p", type: "string", role: "text", states: { Straight: "Straight", Jazz: "Jazz" } },
+      native: {},
+    });
+    const internals = ctx.i as unknown as {
+      getObjectAsync: ReturnType<typeof vi.fn>;
+      getAdapterObjectsAsync: ReturnType<typeof vi.fn>;
+    };
+    // The start-up read of the tree fails (the id move and the snapshot), the cleanup's read succeeds — and the device
+    // object itself cannot be read either.
+    internals.getAdapterObjectsAsync
+      .mockRejectedValueOnce(new Error("objects db timeout"))
+      .mockRejectedValueOnce(new Error("objects db timeout"));
+    internals.getObjectAsync.mockRejectedValue(new Error("objects db timeout"));
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.calls).toHaveLength(1); // the device still runs
+    expect(ctx.i.log.warn).toHaveBeenCalledWith(
+      expect.stringContaining("Living_room: its device object could not be read"),
+    );
+    // What the device was taught is not replaced by an empty profile …
+    (
+      ctx.i.profiles.get("Living_room") as unknown as { probeMemory: { set(k: string, v: string): void } }
+    ).probeMemory.set("xmlIdentity", "RX-V6A|1.0");
+    // … and the read-in it runs only because nothing was read shrinks nothing.
+    const deps = ctx.calls[0].deps as unknown as {
+      upsertObject(id: string, def: unknown, settle?: boolean): Promise<void>;
+      settleTree(built: ReadonlySet<string>): Promise<void>;
+    };
+    await deps.upsertObject(
+      "Living_room.soundProgram",
+      { type: "state", common: { name: "p", type: "string", role: "text", states: { Straight: "Straight" } } },
+      true,
+    );
+    await deps.settleTree(new Set());
+    await flushPatches(ctx);
+    expect(ctx.i.objects.get("Living_room")).toEqual(stored);
+    const program = ctx.i.objects.get("Living_room.soundProgram") as { common: { states: Record<string, string> } };
+    expect(Object.keys(program.common.states).sort()).toEqual(["Jazz", "Straight"]);
   });
 
   it("skips a configured row whose object id is already taken", async () => {
@@ -1038,7 +1152,10 @@ describe("Yamaha auto-discovery", () => {
     ctx.i.profiles.get("RX-V685")!.identity = () => ({ serial: "0E897553" });
     ctx.i.reportConnection("RX-V685", true);
     await flush();
-    expect(ctx.i.pendingDevicePatches.get("RX-V685")?.native).toEqual({ identity: { serial: "0E897553" } });
+    // Both fields, the unknown one null: the database merges key by key (review 2026-10-05, A30).
+    expect(ctx.i.pendingDevicePatches.get("RX-V685")?.native).toEqual({
+      identity: { serial: "0E897553", mac: null },
+    });
     expect(mocks.discoveredStore.devices).toEqual([
       { id: "RX-V685", ip: "192.168.1.20", identity: { serial: "0E897553" } },
     ]);
@@ -1072,6 +1189,58 @@ describe("Yamaha auto-discovery", () => {
     await ctx.i.onReady();
     await flush();
     expect(ctx.i.deviceRecords.get("RX-V685")?.identity).toEqual({ serial: "0E897553", mac: "00A0DED4F504" });
+  });
+
+  // Review 2026-10-05, A11 (proof test REVIEW C): the identity the search read was copied into the record and then
+  // "learned" — nothing new, so it never reached the device object, and a delete excluded the device by its address
+  // only: the next receiver that DHCP gave that address stayed out of every search for good.
+  it("the identity the search read reaches the device object, and a delete excludes by it — not by the address", async () => {
+    const identity = { serial: "0A1B2B3C", mac: "00A0DE0A1B2C" };
+    mocks.discoveredStore.devices = [{ id: "rx-v6a-2b3c", ip: "192.168.1.20", identity }];
+    const ctx = setup({ devices: [], discovery: "always" });
+    // Own-namespace objects through the foreign read, as js-controller answers it.
+    (ctx.i as unknown as { getForeignObjectAsync: unknown }).getForeignObjectAsync = vi.fn((id: string) => {
+      const object = id.startsWith("yamaha.0.") ? ctx.i.objects.get(id.slice(9)) : ctx.i.foreignObjects.get(id);
+      return Promise.resolve(object ? structuredClone(object) : null);
+    });
+    await ctx.i.onReady();
+    await flush();
+    await flushPatches(ctx);
+    expect((ctx.i.objects.get("rx-v6a-2b3c")?.native as Record<string, unknown>).identity).toEqual(identity);
+    const dm = new YamahaDeviceManagement(ctx.i as never) as unknown as { deleteDevice(id: string): Promise<unknown> };
+    await dm.deleteDevice("rx-v6a-2b3c");
+    expect(mocks.discoveredStore.excluded).toEqual([{ id: "rx-v6a-2b3c", ip: "192.168.1.20", identity }]);
+    const stranger = { id: "wx-030-9999", ip: "192.168.1.20", identity: { serial: "0FFF9999" } };
+    expect(isExcluded([], mocks.discoveredStore.excluded, stranger)).toBe(false);
+  });
+
+  // Review 2026-10-05, A30 (proof test REVIEW D): a replaced identity, merged into the stored one key by key, kept the
+  // old device's MAC next to the new serial — and the old receiver, found by that MAC, counted as this device's twin.
+  it("an identity that replaces another is stored as it is — no hybrid with the old device's MAC", async () => {
+    const ctx = setup();
+    // The objects database merges a patch key by key (js-controller 7.2.2: extend(true, oldObj, obj)).
+    (ctx.i as unknown as { extendObject: unknown }).extendObject = vi.fn((id: string, obj: Record<string, unknown>) => {
+      const key = id.replace("yamaha.0.", "");
+      ctx.i.objects.set(key, mergedWith(ctx.i.objects.get(key) ?? {}, obj) as Record<string, unknown>);
+      return Promise.resolve();
+    });
+    ctx.i.objects.set("Living_room", {
+      type: "device",
+      common: { name: "Living_room" },
+      native: { identity: { serial: "0A0A0A0A", mac: "00A0DE000001" } },
+    });
+    await ctx.i.onReady();
+    await flush();
+    await flushPatches(ctx);
+    // A replacement receiver at the typed address reports a contradicting serial (XML: serial only).
+    (ctx.i as unknown as { learnIdentity(id: string, identity: unknown): void }).learnIdentity("Living_room", {
+      serial: "0B0B0B0B",
+    });
+    expect(ctx.i.deviceRecords.get("Living_room")?.identity).toEqual({ serial: "0B0B0B0B" });
+    await flushPatches(ctx);
+    const reread = identityOfDeviceObject(ctx.i.objects.get("Living_room")?.native as Record<string, unknown>);
+    expect(reread).toEqual({ serial: "0B0B0B0B" });
+    expect(sameDevice(reread, { mac: "00A0DE000001", serial: "0A0A0A0A" })).toBe(false);
   });
 
   describe("a find and the table rows", () => {
@@ -2217,6 +2386,72 @@ describe("Yamaha stale-object cleanup", () => {
     expect(ctx.i.objects.has("Found_one.volume")).toBe(true);
   });
 
+  // Review 2026-10-05, A2 (proof test store-guard-chain): with the table empty the start search read the broken store as
+  // empty and WROTE its finds over it before the guard read it — the guard then saw a readable store, and the device in
+  // deep standby lost its tree in the same start.
+  it("a store that cannot be read is not written over by the start search, and no remembered tree goes", async () => {
+    mocks.discoveredStore.unreadable = true;
+    mocks.discoverYamaha.mockResolvedValue([
+      { ip: "10.0.0.5", name: "Wohnzimmer", model: "RX-V6A", identity: { serial: "0A1B2B3C" } },
+    ]);
+    const ctx = setup({ devices: [] });
+    ctx.i.objects.set("wx-030-f504", { type: "device", common: {}, native: {} });
+    ctx.i.objects.set("wx-030-f504.volume", { type: "state", common: {}, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    expect(writeDiscovered).not.toHaveBeenCalled();
+    expect(ctx.i.objects.has("wx-030-f504.volume")).toBe(true);
+    // The find runs all the same — it is only not remembered until the store reads again.
+    expect(ctx.calls.map(c => c.device.ip)).toEqual(["10.0.0.5"]);
+    expect(ctx.i.log.warn).toHaveBeenCalledWith(expect.stringContaining("discovered.json cannot be read"));
+  });
+
+  it("while the store cannot be read, a later search does not start a running found device a second time", async () => {
+    mocks.discoveredStore.unreadable = true;
+    const find = { ip: "10.0.0.5", name: "Wohnzimmer", model: "RX-V6A", identity: { serial: "0A1B2B3C" } };
+    mocks.discoverYamaha.mockResolvedValue([find]);
+    const ctx = setup({ devices: [] });
+    await ctx.i.onReady();
+    await flush();
+    await ctx.i.discoverAdditionalDevices(ctx.i.pushReceiver);
+    await flush();
+    expect([...ctx.i.deviceRecords.keys()]).toEqual(["rx-v6a-2b3c"]);
+    expect(ctx.calls.filter(c => c.device.ip === "10.0.0.5")).toHaveLength(1);
+  });
+
+  // Review 2026-10-05, A31 (proof test REVIEW I): the exclusion filter ran on the automatic path only — with the search
+  // off, a deleted device a failed store write left behind was listed idle and kept its tree.
+  it("a deleted device a failed write left in the store is neither idle nor kept when the search is off", async () => {
+    mocks.discoveredStore.devices = [{ id: "deleted-one", ip: "192.168.1.40" }];
+    mocks.discoveredStore.excluded = [{ id: "deleted-one", ip: "192.168.1.40" }];
+    const ctx = setup({ discovery: "never" });
+    ctx.i.objects.set("deleted-one", { type: "device", common: {}, native: {} });
+    ctx.i.objects.set("deleted-one.info.connection", { type: "state", common: { write: false }, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    const lines = ctx.i.log.info.mock.calls.map(c => String(c[0]));
+    expect(lines.some(line => line.includes("stay idle"))).toBe(false);
+    expect(ctx.i.objects.has("deleted-one")).toBe(false);
+    // And the store is brought back in step, whatever the search mode.
+    expect(mocks.discoveredStore.devices).toEqual([]);
+  });
+
+  // Review 2026-10-05, A28: with excluded.json unreadable every earlier delete is unknown — a new find may be one of them.
+  it("while the exclusion list cannot be read, the search takes no new device — a remembered one still moves", async () => {
+    mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+    mocks.discoveredStore.excludedUnreadable = true;
+    mocks.discoverYamaha.mockResolvedValue([
+      { ip: "192.168.1.25", name: "RX-V685" },
+      { ip: "192.168.1.30", name: "WX-030" },
+    ]);
+    const ctx = setup({ devices: [] });
+    await ctx.i.onReady();
+    await flush();
+    expect(mocks.discoveredStore.devices).toEqual([{ id: "RX-V685", ip: "192.168.1.25" }]);
+    expect(ctx.calls.map(c => c.device.ip)).toEqual(["192.168.1.20", "192.168.1.25"]);
+    expect(ctx.i.log.warn).toHaveBeenCalledWith(expect.stringContaining("excluded.json cannot be read"));
+  });
+
   // A found device whose address a typed row took over does not run (the typed row owns the address), but it
   // is in the store — it is not gone, and its tree stays.
   it("keeps the tree of a found device whose address a typed row took over", async () => {
@@ -2487,6 +2722,56 @@ describe("Yamaha datapoint balance in the log", () => {
     expect(
       (ctx.i.objects.get("Living_room.soundProgram")?.common as { states: Record<string, string> }).states,
     ).toEqual({ Straight: "Straight", Jazz: "Jazz", Drama: "Drama" });
+  });
+
+  // krobi 2026-10-05: names the user gives in the receiver follow it while the adapter runs (liveLabels). A renamed
+  // input reached the dropdown only after an adapter update, because only missing keys were added.
+  it("running, a list of the receiver's names takes the new labels — and still loses no entry", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room.input", {
+      type: "state",
+      common: { name: "i", type: "string", role: "text", write: true, states: { HDMI1: "Apple TV", AV1: "Phono" } },
+      native: {},
+    });
+    await ctx.i.onReady();
+    await flush();
+    const upsert = upsertOf(ctx);
+    const extend = (ctx.i as unknown as { extendObject: ReturnType<typeof vi.fn> }).extendObject;
+    extend.mockClear();
+    await upsert("Living_room.input", {
+      type: "state",
+      liveLabels: true,
+      common: { name: "x", type: "number", role: "level", write: false, states: { HDMI1: "Kino", HDMI2: "Konsole" } },
+    });
+    const common = ctx.i.objects.get("Living_room.input")?.common as Record<string, unknown>;
+    expect(common.states).toEqual({ HDMI1: "Kino", AV1: "Phono", HDMI2: "Konsole" });
+    // Type, role, write flag and name stay as they were.
+    expect(common).toMatchObject({ name: "i", type: "string", role: "text", write: true });
+    // Nothing changed — nothing written.
+    extend.mockClear();
+    await upsert("Living_room.input", {
+      type: "state",
+      liveLabels: true,
+      common: { name: "x", type: "string", states: { HDMI1: "Kino" } },
+    });
+    expect(extend).not.toHaveBeenCalled();
+  });
+
+  it("running, a list WITHOUT live labels keeps the labels it has", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room.soundProgram", {
+      type: "state",
+      common: { name: "p", type: "string", states: { Straight: "Straight" } },
+      native: {},
+    });
+    await ctx.i.onReady();
+    await flush();
+    await upsertOf(ctx)("Living_room.soundProgram", {
+      type: "state",
+      common: { name: "p", type: "string", states: { Straight: "Direct" } },
+    });
+    const states = (ctx.i.objects.get("Living_room.soundProgram")?.common as { states: Record<string, string> }).states;
+    expect(states).toEqual({ Straight: "Straight" });
   });
 
   it("running, a folder or datapoint gains the explanation it does not carry yet — nothing else", async () => {
@@ -3826,6 +4111,156 @@ describe("Yamaha protocol flags at start and stop (audit 2026-09-02)", () => {
   });
 });
 
+// Review 2026-10-05, B8: the adapter's message path had no test — the Expert tab waits for its answer.
+describe("Yamaha diagnostics messages", () => {
+  function messaging(): {
+    i: { onMessage(obj: unknown): Promise<void> };
+    handle: ReturnType<typeof vi.fn>;
+    sendTo: ReturnType<typeof vi.fn>;
+    warn: ReturnType<typeof vi.fn>;
+  } {
+    const ctx = setup();
+    const internals = ctx.i as unknown as {
+      onMessage(obj: unknown): Promise<void>;
+      diagnostics: { handle: unknown };
+      sendTo: unknown;
+    };
+    const handle = vi.fn();
+    const sendTo = vi.fn();
+    internals.diagnostics.handle = handle;
+    internals.sendTo = sendTo;
+    return { i: internals, handle, sendTo, warn: ctx.i.log.warn };
+  }
+
+  it("answers the report the handler built", async () => {
+    const m = messaging();
+    m.handle.mockResolvedValue({ devices: ["rx-v6a-2b3c"] });
+    await m.i.onMessage({ command: "diagnostics", message: { action: "list" }, from: "admin.0", callback: { id: 1 } });
+    expect(m.handle).toHaveBeenCalledWith({ action: "list" });
+    expect(m.sendTo).toHaveBeenCalledWith("admin.0", "diagnostics", { devices: ["rx-v6a-2b3c"] }, { id: 1 });
+  });
+
+  it("a failing handler still answers — with the error, so the card stops waiting", async () => {
+    const m = messaging();
+    m.handle.mockRejectedValue(new Error("device not running"));
+    await m.i.onMessage({
+      command: "diagnostics",
+      message: { action: "export" },
+      from: "admin.0",
+      callback: { id: 2 },
+    });
+    expect(m.sendTo).toHaveBeenCalledWith("admin.0", "diagnostics", { error: "device not running" }, { id: 2 });
+    expect(m.warn).toHaveBeenCalledWith(expect.stringContaining("diagnostics message failed: device not running"));
+  });
+
+  it("ignores any other command — the device manager's dm:* go to dm-utils", async () => {
+    const m = messaging();
+    await m.i.onMessage({ command: "dm:loadDevices", message: {}, from: "admin.0", callback: { id: 3 } });
+    expect(m.handle).not.toHaveBeenCalled();
+    expect(m.sendTo).not.toHaveBeenCalled();
+  });
+});
+
+describe("Yamaha start and stop overlapping (review 2026-10-05, A12/A29/A57)", () => {
+  // Proof test REVIEW A: the unload came while onReady still ran; push socket and SSDP listener came up behind it and
+  // nothing closed them — in compact mode :41100 stayed bound in the host until it restarted.
+  it("an unload while the start still runs opens no push socket and no SSDP listener", async () => {
+    const ctx = setup({ discovery: "always" });
+    let stopping = false;
+    // js-controller refuses new timers once the stop began (adapter.js setTimeout: _stopInProgress).
+    ctx.i.setTimeout.mockImplementation(() => (stopping ? undefined : { kind: "timeout" }));
+    let unloaded = false;
+    (ctx.i as unknown as { subscribeStatesAsync: unknown }).subscribeStatesAsync = vi.fn(async () => {
+      stopping = true;
+      await new Promise<void>(resolve =>
+        ctx.i.onUnload(() => {
+          unloaded = true;
+          resolve();
+        }),
+      );
+    });
+    await ctx.i.onReady();
+    await flush();
+    expect(unloaded).toBe(true);
+    expect(mocks.pushReceivers).toHaveLength(0);
+    expect(mocks.listeners).toHaveLength(0);
+    expect(ctx.calls).toHaveLength(0);
+  });
+
+  it("a listener whose bind finishes after the unload is closed at once", async () => {
+    const ctx = setup({ discovery: "always" });
+    mocks.listenerStart = () => ctx.i.onUnload(() => undefined);
+    try {
+      await ctx.i.onReady();
+      await flush();
+    } finally {
+      mocks.listenerStart = undefined;
+    }
+    expect(mocks.listeners).toHaveLength(1);
+    expect(mocks.listeners[0].close).toHaveBeenCalled();
+  });
+
+  it("a search asked for while the adapter stops opens no socket and fetches nothing", async () => {
+    const ctx = setup();
+    let search: ((target: string, ms: number) => Promise<unknown[]>) | undefined;
+    let fetch: ((url: string) => Promise<string>) | undefined;
+    mocks.discoverYamaha.mockImplementation((deps: unknown) => {
+      ({ search, fetch } = deps as { search: typeof search; fetch: typeof fetch });
+      return Promise.resolve([]);
+    });
+    ctx.i.config = { devices: [] };
+    await ctx.i.onReady();
+    await flush();
+    ctx.i.onUnload(() => undefined);
+    net.sockets.length = 0;
+    await expect(search!("upnp:rootdevice", 5000)).resolves.toEqual([]);
+    expect(net.sockets).toHaveLength(0);
+    await expect(fetch!("http://192.168.1.20/desc.xml")).rejects.toThrow(/stopping/);
+  });
+
+  // Proof test REVIEW B: a device deleted while the start loop had not reached it yet was set up again — header back,
+  // counted in the overview.
+  it("a device deleted before the start loop reaches it is not set up again", async () => {
+    mocks.discoveredStore.devices = [{ id: "found-one", ip: "192.168.1.20" }];
+    const ctx = setup({ discovery: "always" });
+    let deleted = false;
+    // The user deletes the found card while the first (table) device's header is being written.
+    const extend = (ctx.i as unknown as { extendObject: ReturnType<typeof vi.fn> }).extendObject;
+    const real = extend.getMockImplementation() as (id: string, obj: unknown) => Promise<unknown>;
+    extend.mockImplementation(async (id: string, obj: unknown) => {
+      if (id === "Living_room.info.connection" && !deleted) {
+        deleted = true;
+        await ctx.i.removeDevice("found-one");
+      }
+      return real(id, obj);
+    });
+    await ctx.i.onReady();
+    await flush();
+    expect(deleted).toBe(true);
+    expect(ctx.i.objects.has("found-one")).toBe(false);
+    expect(ctx.i.deviceRecords.has("found-one")).toBe(false);
+    expect(ctx.calls.map(c => c.device.id)).toEqual(["Living_room"]);
+    expect(ctx.i.states.get("info.devicesTotal")?.val).toBe(1);
+  });
+
+  // Proof test REVIEW J: the first setup searched the network, and the background search ran right behind it.
+  it("the first setup searches the network once", async () => {
+    mocks.discoverYamaha.mockResolvedValue([
+      {
+        ip: "192.168.1.20",
+        name: "Wohnzimmer",
+        model: "WX-030",
+        identity: { serial: "0A1B2B3C", mac: "00A0DE0A1B2C" },
+      },
+    ]);
+    const ctx = setup({ devices: [] });
+    await ctx.i.onReady();
+    await flush();
+    expect(mocks.discoverYamaha).toHaveBeenCalledTimes(1);
+    expect(ctx.calls.map(c => c.device.ip)).toEqual(["192.168.1.20"]);
+  });
+});
+
 describe("Yamaha teardown races (audit 2026-09-02)", () => {
   it("does not start a device the background search hands over after unload", async () => {
     mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
@@ -4103,13 +4538,26 @@ describe("the device table and the network search side by side", () => {
     expect(objectsRead).toHaveBeenCalledTimes(1);
   });
 
-  it("records where each device came from, at the device object", async () => {
+  // Review 2026-10-05, C4 / Y-27: `native.source` was written on every start and read nowhere — exactly the "how a device
+  // got into the list" marker Y-27 rules out. In memory the origin still drives behaviour (a typed address is the user's).
+  it("marks nowhere how a device got into the list, and takes an old marker off once", async () => {
     mocks.discoveredStore.devices = [{ id: "Found", ip: "192.168.1.20" }];
     const ctx = setup({ devices: [{ name: "Typed", ip: "192.168.1.10" }], discovery: "always" });
+    ctx.i.objects.set("Found", {
+      type: "device",
+      common: { name: "Found", custom: { "history.0": { enabled: true } } },
+      native: { source: "discovered", label: "Kitchen", labelRank: LABEL_RANK.user },
+    });
     await ctx.i.onReady();
     await flush();
-    expect((ctx.i.objects.get("Typed")?.native as { source?: string }).source).toBe("manual");
-    expect((ctx.i.objects.get("Found")?.native as { source?: string }).source).toBe("discovered");
+    expect(ctx.i.objects.get("Typed")?.native).not.toHaveProperty("source");
+    const found = ctx.i.objects.get("Found") as { common: Record<string, unknown>; native: Record<string, unknown> };
+    expect(found.native).not.toHaveProperty("source");
+    // The rest of the object stays: the header and everything a user attached.
+    expect(found.native).toMatchObject({ label: "Kitchen", labelRank: LABEL_RANK.user });
+    expect(found.common).toMatchObject({ name: "Kitchen", custom: { "history.0": { enabled: true } } });
+    expect(ctx.i.deviceRecords.get("Typed")?.source).toBe("manual");
+    expect(ctx.i.deviceRecords.get("Found")?.source).toBe("discovered");
   });
 
   it("only a discovered device arms the search that can find it again", async () => {
@@ -4131,6 +4579,76 @@ describe("the device table and the network search side by side", () => {
 // — in that order. A value written against the old definition is out of range, and the
 // js-controller says so on every refresh (the defect 2.8.0 fixed for the device's own scale
 // change; the same trap is here).
+describe("the percent switch on and off again (review 2026-10-05, A24/A34)", () => {
+  // Proof test percent-unit: a MusicCast speaker declares its own step count with NO unit. Percent on wrote "%", and
+  // back on the device scale the merge kept it: 0…60 steps labelled "%" for good (Y-05).
+  it("back on the device's own scale, a unit-less volume loses the percent unit", async () => {
+    const ctx = setup();
+    const internals = ctx.i as unknown as {
+      writePresented(id: string, def: unknown): Promise<void>;
+      known: { get(id: string): { common: Record<string, unknown> } | undefined };
+    };
+    const speaker = {
+      id: "volume",
+      type: "state",
+      common: {
+        name: "Volume",
+        type: "number",
+        role: "level.volume",
+        read: true,
+        write: true,
+        min: 0,
+        max: 60,
+        step: 1,
+      },
+    };
+    await internals.writePresented("wx.volume", speaker);
+    await ctx.i.setVolumePercent("wx", true);
+    expect(internals.known.get("wx.volume")?.common).toMatchObject({ unit: "%", min: 0, max: 100, step: 0.5 });
+    await ctx.i.setVolumePercent("wx", false);
+    const after = internals.known.get("wx.volume")?.common;
+    expect(after).toMatchObject({ min: 0, max: 60, step: 1 });
+    expect(after).not.toHaveProperty("unit");
+    expect((ctx.i.objects.get("wx.volume")?.common as Record<string, unknown>).unit).toBeUndefined();
+  });
+
+  // Proof test REVIEW G: a report that arrived while the switch was applied was converted twice — −40 dB → 50.5 % →
+  // read again as decibels → 100 %.
+  it("a volume report during the switch is converted once", async () => {
+    const dbVolume = {
+      type: "state",
+      common: { type: "number", role: "level.volume", write: true, min: -80.5, max: 0, step: 0.5, unit: "dB" },
+    };
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    const deps = ctx.calls[0].deps;
+    const upsert = deps.upsertObject as (id: string, def: unknown) => Promise<void>;
+    const setStateAck = deps.setStateAck as (id: string, value: unknown) => void;
+    await upsert("Living_room.volume", dbVolume);
+    setStateAck("Living_room.volume", -40);
+    await flush();
+    const internals = ctx.i as unknown as { extendObject: ReturnType<typeof vi.fn> };
+    const realExtend = internals.extendObject.getMockImplementation() as (id: string, o: unknown) => Promise<void>;
+    internals.extendObject.mockImplementation(async (id: string, obj: unknown) => {
+      await realExtend(id, obj);
+      if ((obj as { native?: { volumeAsPercent?: unknown } }).native?.volumeAsPercent === true) {
+        // the receiver re-reports its (unchanged) volume while the switch is being applied
+        setStateAck("Living_room.volume", -40);
+        await flush();
+      }
+    });
+    await ctx.i.setVolumePercent("Living_room", true);
+    await flush();
+    expect(ctx.i.states.get("Living_room.volume")?.val).toBe(50.5);
+    // And back: the device's own value, not a percentage read as decibels.
+    internals.extendObject.mockImplementation(realExtend);
+    await ctx.i.setVolumePercent("Living_room", false);
+    await flush();
+    expect(ctx.i.states.get("Living_room.volume")?.val).toBe(-40);
+  });
+});
+
 describe("switching one device to percent while the adapter runs", () => {
   const dbVolume = {
     type: "state",
