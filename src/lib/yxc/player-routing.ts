@@ -3,7 +3,7 @@ import type { DeviceValue, StateValue } from "../types";
 import type { YxcClientLike } from "./client-contract";
 import type { PlayerTransport } from "./command-mapper";
 import type { YxcPlayer } from "./http-client";
-import { zonePrefix } from "./zones";
+import { zonePrefix } from "../catalog/zones";
 
 /** What the routing needs from its controller. */
 export interface PlayerRoutingDeps {

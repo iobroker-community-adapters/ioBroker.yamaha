@@ -2,31 +2,29 @@ import { parseYxcFeatures, type YxcCapabilities, type YxcTunerFeatures } from ".
 import {
   mapYxcToObjects,
   NETUSB_PLAY_ERRORS,
+  playerZones,
   rawVolumeFor,
   shownVolumeFor,
   volumeScaleOf,
+  zoneNameDropdowns,
   type VolumeScale,
 } from "./object-mapper";
 import { absoluteDeviceUrl } from "../catalog/device-url";
+import { yxcWrite, type YxcCommand } from "./command-mapper";
+import { distributionSummary, parseYxcDistribution, type DistributionSummary } from "./distribution";
+import { parseYxcClock } from "./clock";
+import { parseYxcPlayInfo, parseYxcTunerInfo } from "./play-info";
+import { parseYxcSignalInfo, parseYxcStatus } from "./status";
 import {
-  distributionSummary,
-  type DistributionSummary,
-  parseYxcClock,
-  parseYxcDistribution,
-  parseYxcPlayInfo,
-  parseYxcPlaylistNames,
-  parseYxcPlayQueue,
-  parseYxcPresetList,
-  parseYxcRecentList,
-  parseYxcSignalInfo,
-  parseYxcStatus,
-  parseYxcTunerInfo,
-  parseYxcTunerPresetLists,
-  stateToYxc,
   CLIENT_SLOT_FIELDS,
   clientSlotEntries,
   NETUSB_SLOT_FIELDS,
   netusbSlotEntries,
+  parseYxcPlaylistNames,
+  parseYxcPlayQueue,
+  parseYxcPresetList,
+  parseYxcRecentList,
+  parseYxcTunerPresetLists,
   PLAYLIST_SLOT_FIELDS,
   playlistSlotEntries,
   playQueueCounters,
@@ -34,8 +32,7 @@ import {
   STATION_SLOT_FIELDS,
   stationSlotEntries,
   type SlotEntry,
-  type YxcCommand,
-} from "./command-mapper";
+} from "./lists";
 import { slotListObjects, slotListValues, type SlotField } from "../catalog/list-slots";
 import {
   mediaTimeUpdates,
@@ -54,8 +51,9 @@ import { errText } from "../err-text";
 import { coerceBool, selfMap } from "../catalog/value-coerce";
 import { PollDropDetector } from "../lifecycle/poll-drop-detector";
 import { answeredByDevice, YxcTransportError } from "./http-client";
-import { splitZone, zonePrefix } from "./zones";
-import { presentSystemEntries, YXC_SYSTEM_CATALOG, type YxcSystemEntry } from "./system-catalog";
+import { splitZone, zonePrefix } from "../catalog/zones";
+import { disableBitOf } from "./catalog";
+import { presentSystemEntries, systemWrite, YXC_SYSTEM_CATALOG, type YxcSystemEntry } from "./system-catalog";
 import { keyedCommon, parentChannels } from "../catalog/types";
 import { knownScenes, resolveSceneNumber, sceneListSurface, sceneRecallStates } from "../catalog/scene-titles";
 import type { WriteOutcome } from "../lifecycle/multi-transport-handle";
@@ -282,12 +280,12 @@ export class YxcDeviceController {
   private lastTunerBand = "fm";
   /** Which media source feeds which zone's "now playing" block, and which zone a recall goes to. */
   private readonly routing = new YxcPlayerRouting({
-    zones: () => this.zones,
+    // Only the zones that have a player block (A48: a zone without a media input has none, so its values would
+    // have no object); a device whose declarations are not known yet keeps every zone.
+    zones: () => (this.capabilities ? playerZones(this.capabilities) : this.zones),
     media: () => this.mediaBlocks,
     emit: (id, value) => this.emit(id, value),
   });
-  /** Each zone's declared value lists (getFeatures), for the on-screen remote's write guard. */
-  private readonly zoneValueLists = new Map<string, Readonly<Record<string, string[]>>>();
   /**
    * The capability report of this connect and the display scale each zone's `volume` is presented on —
    * decided once per receiver and remembered ({@link VOLUME_MODE_KEY}); a status on the other scale is
@@ -450,11 +448,6 @@ export class YxcDeviceController {
     this.zones = capabilities.zones.map(zone => zone.id);
     if (capabilities.zones.some(zone => zone.id === "zone2" && zone.zoneB === true)) {
       this.deps.aliasZone?.("zone2", "zoneB");
-    }
-    for (const zone of capabilities.zones) {
-      if (zone.valueLists) {
-        this.zoneValueLists.set(zone.id, zone.valueLists);
-      }
     }
     // Every zone's status comes BEFORE the objects (zones in parallel — disjoint writes, and a
     // zone stuck in its timeout must not hold up the device's readiness): the value a zone
@@ -853,37 +846,28 @@ export class YxcDeviceController {
       }
       return this.applySystemWrite(systemEntry, value);
     }
-    // The on-screen remote: a word the zone DECLARES (cursor_list/menu_list) goes to the device
-    // even where the shared vocabulary lacks it — help, mode and the four colour keys exist on
-    // some models only. A word in neither list is dropped by the vocabulary check below.
-    if ((name === "remote.cursor" || name === "remote.menu") && typeof value === "string") {
-      const declared = this.zoneValueLists.get(zoneKey)?.[name];
-      if (declared?.includes(value)) {
-        const word = value;
-        return this.applyCommand(stateId, {
-          kind: "run",
-          run: client =>
-            name === "remote.cursor" ? client.controlCursor(word, zoneKey) : client.controlMenu(word, zoneKey),
-        });
+    // The mapping judges the value with the device's declarations (the zone's key lists, ranges, the tuner grid of
+    // the current band) and says why when nothing is sent — the same trace on every protocol (review 2026-10-05, A26).
+    const write = yxcWrite(stateId, value, { capabilities: this.capabilities, tunerBand: this.lastTunerBand });
+    if (!write.command) {
+      this.deps.log.debug(`${this.deviceId}: ${stateId} = ${JSON.stringify(value)} not sent — ${write.dropped}`);
+      // The datapoint gets the device's value back, as after a refusal: a tuner write the tuner's play info, any
+      // other the zone's status (a frequency written on DAB stood until the next poll, C17).
+      if (name.startsWith("tuner.")) {
+        if (this.mediaBlocks.includes("tuner")) {
+          void this.refreshMediaSource("tuner", this.userClient);
+        }
+      } else if (!name.startsWith("remote.")) {
+        // A key shows no value — nothing to put back.
+        void this.refreshZone(zoneKey, this.userClient);
       }
-      // A zone that declares its keys takes those and no other — the shared vocabulary below is for a
-      // zone without a list; before, a word the zone does not have still went out (audit 2026-09-29, C46).
-      if (declared !== undefined) {
-        this.deps.log.debug(`${this.deviceId}: ${stateId} "${value}" is not a key this zone declares — not sent`);
-        return "unavailable";
-      }
-    }
-    const command = stateToYxc(stateId, value);
-    if (!command) {
-      this.deps.log.debug(
-        `${this.deviceId}: ${stateId} — "${String(value)}" is no value MusicCast takes, write dropped`,
-      );
       return "unavailable";
     }
+    const command = write.command;
     // A function the zone reports not operable right now (YXC Basic §5.1 `disable_flags`: b0 volume,
     // b1 mute, b2 link audio delay — a soundbar in standby reports 3) is not sent: the device would
     // refuse it with a warning; the datapoint gets the device's value back (audit 2026-09-24, C27).
-    const bit = ({ volume: 0b1, mute: 0b10, "sound.linkAudioDelay": 0b100 } as Record<string, number>)[name];
+    const bit = disableBitOf(name);
     const disabled = (): boolean => bit !== undefined && ((this.disabledFlags.get(zoneKey) ?? 0) & bit) !== 0;
     if (disabled()) {
       // The flags are those of the zone's LAST status: a script's "power on, then volume" was judged on the
@@ -925,16 +909,16 @@ export class YxcDeviceController {
    * @returns what the device made of the write
    */
   private async applySystemWrite(entry: YxcSystemEntry, value: unknown): Promise<WriteOutcome> {
-    // A switch reads the words a script writes ("false", "off", "0") for what they mean — the
-    // entry's Boolean() would send every non-empty string as on.
-    const input = entry.common.type === "boolean" ? coerceBool(value) : value;
-    if (input === undefined) {
-      this.deps.log.debug(`${this.deviceId}: ${entry.state} — "${String(value)}" is no switch value, write dropped`);
+    // The one value gate of the device-wide settings: switch words read for what they mean, numbers on the declared
+    // grid — a value it refuses is not sent, with the reason in the log.
+    const write = systemWrite(entry, value, this.capabilities);
+    if (!write.run) {
+      this.deps.log.debug(`${this.deviceId}: ${entry.state} = ${JSON.stringify(value)} not sent — ${write.dropped}`);
       return "unavailable";
     }
     let outcome: WriteOutcome = "sent";
     try {
-      await entry.write?.apply(this.deps.client, input);
+      await write.run(this.deps.client);
     } catch (e) {
       this.deps.log.warn(`${this.deviceId}: ${entry.state} could not be set (${errText(e)})`);
       this.checkAliveAfter(e);
@@ -1365,11 +1349,8 @@ export class YxcDeviceController {
         }
         current[zone] = values;
       }
-      const labelled = new Set(
-        this.zones.flatMap(zone => [`${zonePrefix(zone)}input`, `${zonePrefix(zone)}soundProgram`]),
-      );
-      for (const def of mapYxcToObjects(this.capabilities, current)) {
-        if (labelled.has(def.id)) {
+      for (const zone of this.zones) {
+        for (const def of zoneNameDropdowns(this.capabilities, zone, current[zone])) {
           await this.deps.upsertObject(`${this.deviceId}.${def.id}`, def);
         }
       }
@@ -1971,15 +1952,7 @@ export class YxcDeviceController {
           await this.deps.client.setBand(command.band);
           break;
         case "tunerFreq":
-          // setFreq knows only "am" and "fm" (YXC Basic §6.4): on DAB the write goes nowhere — the
-          // datapoint gets the device's value back, and the service buttons choose a station (C17).
-          if (this.lastTunerBand === "dab") {
-            this.deps.log.debug(`${this.deviceId}: ${stateId} — DAB is tuned by service, not by frequency; not sent`);
-            if (this.mediaBlocks.includes("tuner")) {
-              await this.refreshMediaSource("tuner", this.userClient);
-            }
-            return "unavailable";
-          }
+          // On DAB the mapping sends nothing (YXC Basic §6.4: setFreq knows only "am" and "fm").
           await this.deps.client.setFreq(this.lastTunerBand, command.value);
           break;
         case "tunerPreset": {

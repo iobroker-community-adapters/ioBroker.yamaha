@@ -6,7 +6,7 @@ import type { WriteOutcome } from "../lifecycle/multi-transport-handle";
 import { resolveIPv4 } from "../network-interfaces";
 import { parseYxcFeatures, type YxcCapabilities } from "./capability";
 import type { YxcClientLike } from "./client-contract";
-import { distributionSummary, type DistributionSummary } from "./command-mapper";
+import { distributionSummary, type DistributionSummary } from "./distribution";
 import { answeredByDevice } from "./http-client";
 
 /** How often, and how far apart, a new group is read back until it works (YXC Advanced §9.1.8-3: up to 3 min). */

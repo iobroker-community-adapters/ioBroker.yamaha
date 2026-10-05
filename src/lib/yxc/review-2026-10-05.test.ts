@@ -49,16 +49,19 @@ function fixtureClient(answers: Record<string, unknown>): { client: never; calls
         return undefined;
     }
   };
-  const client = new Proxy(
+  // `forUser()` returns the client's user-priority twin synchronously — here the same recorder.
+  const client: object = new Proxy(
     {},
     {
       get: (_target, method: string) =>
         method === "then"
           ? undefined
-          : (...args: unknown[]): Promise<unknown> => {
-              calls.push([method, args]);
-              return Promise.resolve(reply(method, args) ?? { response_code: 0 });
-            },
+          : method === "forUser"
+            ? () => client
+            : (...args: unknown[]): Promise<unknown> => {
+                calls.push([method, args]);
+                return Promise.resolve(reply(method, args) ?? { response_code: 0 });
+              },
     },
   );
   return { client: client as never, calls };

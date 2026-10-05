@@ -1,7 +1,6 @@
 import { ANY_ZONE_PREFIX, splitZone, ZONE_B_PREFIX, ZONE_KEYS, ZONE_PREFIX, ZONES, zonePrefix } from "./zones";
 import { YNCA_ZONES } from "../ynca/catalog";
 import { XML_ZONES } from "../xml/zones";
-import { YXC_ZONE_IDS } from "../yxc/zones";
 
 // One zone table for every transport (audit 2026-09-29, A25): a copy that did not move with the zones
 // once broke the MusicCast equalizer cache for zones 2–4.
@@ -13,7 +12,6 @@ describe("the one zone table", () => {
     expect(XML_ZONES.map(zone => [zone.key, zone.element, zone.prefix])).toEqual(
       ZONES.map(zone => [zone.key, zone.xml, zone.prefix]),
     );
-    expect(YXC_ZONE_IDS).toEqual(ZONE_KEYS);
   });
 
   test("the prefix and the split follow the table", () => {
