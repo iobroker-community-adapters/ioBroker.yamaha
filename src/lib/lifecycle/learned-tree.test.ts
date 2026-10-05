@@ -1,4 +1,5 @@
-import { emptyLearnedTree, hasLearned, parseLearnedTree } from "./learned-tree";
+import { emptyLearnedTree, hasLearned, parseLearnedTree, readInDue } from "./learned-tree";
+import type { Transport } from "../catalog/owner-policy";
 
 describe("learned tree — what a receiver serves over which transport, kept (2026-10-02)", () => {
   test("a stored tree is read back field by field; anything unknown is dropped", () => {
@@ -21,6 +22,19 @@ describe("learned tree — what a receiver serves over which transport, kept (20
   test("a read-in a firmware update opened is read back as one, across a restart (review 2026-10-05, A54)", () => {
     expect(parseLearnedTree({ firmware: { yxc: "2.51" }, firmwareUpdate: true }).firmwareUpdate).toBe(true);
     expect(parseLearnedTree({ firmware: { yxc: "2.51" }, firmwareUpdate: "yes" }).firmwareUpdate).toBeUndefined();
+  });
+
+  test("the read-in completes once: open, every known transport live, every read from a switched-on receiver", () => {
+    const tree = { ...emptyLearnedTree(), transports: ["ynca", "yxc"] as Transport[] };
+    const on = { transport: "ynca" as const, readComplete: () => true };
+    const yxc = { transport: "yxc" as const };
+    expect(readInDue(tree, "3.2.0", [on, yxc], 0)).toBe(true);
+    expect(readInDue({ ...tree, settledVersion: "3.2.0" }, "3.2.0", [on, yxc], 0)).toBe(false);
+    expect(readInDue(tree, undefined, [on, yxc], 0)).toBe(false);
+    expect(readInDue(tree, "3.2.0", [on], 0)).toBe(false);
+    expect(readInDue(tree, "3.2.0", [on, yxc], 1)).toBe(false);
+    expect(readInDue(tree, "3.2.0", [{ transport: "ynca", readComplete: () => false }, yxc], 0)).toBe(false);
+    expect(readInDue(tree, "3.2.0", [], 0)).toBe(false);
   });
 
   test("nothing usable stored is an empty tree", () => {

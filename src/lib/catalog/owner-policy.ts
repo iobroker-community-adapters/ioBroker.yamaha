@@ -199,3 +199,22 @@ export function pickOwner(key: string, candidates: readonly Transport[], unprove
   const owner = preference.find(t => pool.includes(t)) ?? MODERNITY.find(t => pool.includes(t));
   return owner ?? pool[0];
 }
+
+/**
+ * Transports in the order the owner policy prefers them for a capability.
+ *
+ * @param key the capability key
+ * @param candidates the transports to order
+ * @param unproven the candidates that claim without a proof
+ * @returns the candidates, most preferred first
+ */
+export function rankOf(key: string, candidates: readonly Transport[], unproven?: ReadonlySet<Transport>): Transport[] {
+  const rest = [...candidates];
+  const ranked: Transport[] = [];
+  while (rest.length > 0) {
+    const next = pickOwner(key, rest, unproven);
+    ranked.push(next);
+    rest.splice(rest.indexOf(next), 1);
+  }
+  return ranked;
+}

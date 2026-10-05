@@ -102,6 +102,34 @@ export function hasLearned(tree: LearnedTree): boolean {
   );
 }
 
+/**
+ * Whether a device's read-in can complete now: it is open (installation, adapter update, firmware update — the
+ * stored tree was not settled by this version), every transport the device has is live, and every live transport's
+ * read comes from a switched-on receiver. Moved out of the device handle (review 2026-10-05, D): when the read-in
+ * completes is part of what the learned tree means.
+ *
+ * @param tree the device's learned tree
+ * @param adapterVersion the running adapter version
+ * @param live the live transports, each saying whether its read is complete
+ * @param missing how many transports the device has shown that have not answered yet
+ * @returns true when the read-in may complete
+ */
+export function readInDue(
+  tree: LearnedTree,
+  adapterVersion: string | undefined,
+  live: ReadonlyArray<{ transport: Transport; readComplete?(): boolean }>,
+  missing: number,
+): boolean {
+  if (adapterVersion === undefined || tree.settledVersion === adapterVersion || live.length === 0 || missing > 0) {
+    return false;
+  }
+  const liveSet = new Set(live.map(connection => connection.transport));
+  if (tree.transports.some(transport => !liveSet.has(transport))) {
+    return false;
+  }
+  return live.every(connection => connection.readComplete?.() !== false);
+}
+
 function isTransport(value: unknown): value is Transport {
   return value === "yxc" || value === "ynca" || value === "xml";
 }

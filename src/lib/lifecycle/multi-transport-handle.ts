@@ -2,16 +2,17 @@ import type { ObjectDef } from "../catalog/types";
 import {
   canCarryWrite,
   coordinateObjectTree,
-  keepsForm,
+  learnedOwners,
+  servingTransports,
   type DatapointForm,
   type TransportObjects,
 } from "../catalog/object-tree-coordinator";
-import { capabilityKeyOf, ownerOnlyWrite, pickOwner, type Transport } from "../catalog/owner-policy";
+import { capabilityKeyOf, ownerOnlyWrite, type Transport } from "../catalog/owner-policy";
 import type { ConnectionHandle, ControllerLog } from "../controller";
 import { errText } from "../err-text";
 import { readyLine } from "../ready-line";
 import type { HandleCapture, TransportCapture } from "../diagnostics/types";
-import { emptyLearnedTree, type LearnedTree } from "./learned-tree";
+import { emptyLearnedTree, readInDue, type LearnedTree } from "./learned-tree";
 import { RetryLoop, type Backoff } from "./reconnect-strategy";
 import { DropLatch } from "./drop-latch";
 
@@ -79,8 +80,11 @@ export interface ConnectableTransport extends TransportConnection {
   connect(): Promise<boolean>;
 }
 
-/** The adapter callbacks the multi-transport handle drives. */
-export interface MultiTransportDeps {
+/**
+ * What the adapter gives a device's tree — declared once for the handle, the connect and the attempt (review
+ * 2026-10-05, D: three copies, passed on field by field twice).
+ */
+export interface DeviceTreeDeps {
   /**
    * Create an object or add what it learned to it. `settle` is the completion of a read-in — the one
    * moment a definition may also lose something (a list entry, a bound).
@@ -90,6 +94,24 @@ export interface MultiTransportDeps {
   log: ControllerLog;
   /** Report the currently live transports (their id-safe names) after every change. */
   onTransports?(names: string[]): void;
+  /**
+   * The object definitions last written for this DEVICE, shared by every handle it gets. Kept per
+   * handle, a device that came back as a whole (a new handle per attempt) rewrote its entire tree
+   * unchanged (audit 2026-09-24, A14). The owner of the map drops it whenever it deletes objects.
+   */
+  writtenObjects?: Map<string, string>;
+  /** The device's learned tree — read once, written back whenever something was learned. */
+  tree?: { get(): LearnedTree; set(tree: LearnedTree): void };
+  /** The running adapter version — a read-in completed under another version is done again. */
+  adapterVersion?: string;
+  /** A datapoint as it stands in the tree (canonical id), from the one start-up read — never a database read. */
+  existing?(id: string): DatapointForm | undefined;
+  /** At the completion of a read-in: remove the device's objects no transport built (canonical ids). */
+  settleTree?(built: ReadonlySet<string>): Promise<void>;
+}
+
+/** The adapter callbacks the multi-transport handle drives: the tree's, and its per-transport reconnect. */
+export interface MultiTransportDeps extends DeviceTreeDeps {
   /** Build a FRESH connectable for a transport — used to reconnect a single dropped transport. */
   rebuild?(transport: Transport): ConnectableTransport;
   /** Schedule a per-transport reconnect attempt. */
@@ -99,24 +121,10 @@ export interface MultiTransportDeps {
   /** A fresh exponential backoff for one transport's reconnect loop. */
   backoffFactory?(): Backoff;
   /**
-   * The object definitions last written for this DEVICE, shared by every handle it gets. Kept per
-   * handle, a device that came back as a whole (a new handle per attempt) rewrote its entire tree
-   * unchanged (audit 2026-09-24, A14). The owner of the map drops it whenever it deletes objects.
-   */
-  writtenObjects?: Map<string, string>;
-  /**
    * Transports this device has been shown to have (it answered them before) that did not answer
    * this attempt. They are reconnected like a dropped transport; a read-in does not complete without them.
    */
   missing?: readonly Transport[];
-  /** The device's learned tree — read once, written back whenever something was learned. */
-  tree?: { get(): LearnedTree; set(tree: LearnedTree): void };
-  /** The running adapter version — a read-in completed under another version is done again. */
-  adapterVersion?: string;
-  /** A datapoint as it stands in the tree (canonical id), from the one start-up read — never a database read. */
-  existing?(id: string): DatapointForm | undefined;
-  /** At the completion of a read-in: remove the device's objects no transport built (canonical ids). */
-  settleTree?(built: ReadonlySet<string>): Promise<void>;
 }
 
 /**
@@ -295,25 +303,9 @@ export class MultiTransportHandle implements ConnectionHandle {
     await this.addLearned();
   }
 
-  /**
-   * Whether the read-in can complete now: it is open (installation, adapter update, firmware update), every
-   * transport this device has is live, and every live transport's read comes from a switched-on receiver.
-   *
-   * @returns true when {@link settle} may run
-   */
+  /** @returns whether the read-in can complete now (see {@link readInDue}) */
   private readyToSettle(): boolean {
-    const version = this.deps.adapterVersion;
-    if (version === undefined || this.tree.settledVersion === version || this.live.length === 0) {
-      return false;
-    }
-    if (this.missing.size > 0) {
-      return false;
-    }
-    const liveSet = new Set(this.live.map(connection => connection.transport));
-    if (this.tree.transports.some(transport => !liveSet.has(transport))) {
-      return false;
-    }
-    return this.live.every(connection => connection.readComplete?.() !== false);
+    return readInDue(this.tree, this.deps.adapterVersion, this.live, this.missing.size);
   }
 
   /**
@@ -338,7 +330,7 @@ export class MultiTransportHandle implements ConnectionHandle {
     }
     const firmwareUpdate = this.tree.firmwareUpdate === true;
     this.tree = {
-      shared: this.sharedOf(contributions, ownerByCanonicalId),
+      shared: servingTransports(contributions, ownerByCanonicalId),
       transports: this.live.map(connection => connection.transport),
       settledVersion: this.deps.adapterVersion,
       firmware: { ...this.tree.firmware },
@@ -371,7 +363,7 @@ export class MultiTransportHandle implements ConnectionHandle {
    */
   private async addLearned(): Promise<void> {
     const contributions = [...this.built].map(([transport, defs]) => ({ transport, objects: [...defs.values()] }));
-    const learned = this.learnedOwners(contributions);
+    const learned = learnedOwners(contributions, this.tree.shared, this.deps.existing);
     const coordinated = coordinateObjectTree(contributions, learned);
     const owners = new Map(coordinated.ownerByCanonicalId);
     for (const object of coordinated.objects) {
@@ -395,7 +387,7 @@ export class MultiTransportHandle implements ConnectionHandle {
     if (this.closed) {
       return;
     }
-    const shared = { ...this.tree.shared, ...this.sharedOf(contributions, owners) };
+    const shared = { ...this.tree.shared, ...servingTransports(contributions, owners) };
     const transports = [...new Set([...this.tree.transports, ...this.live.map(connection => connection.transport)])];
     const next: LearnedTree = { ...this.tree, shared, transports };
     if (JSON.stringify(next) !== JSON.stringify(this.tree)) {
@@ -403,104 +395,6 @@ export class MultiTransportHandle implements ConnectionHandle {
       this.deps.tree?.set(this.tree);
     }
     await this.arm(owners);
-  }
-
-  /**
-   * The owner each datapoint keeps: the learned one, or — for a datapoint no owner was learned for yet —
-   * the one that keeps the form the datapoint already has in the tree.
-   *
-   * @param contributions what every transport built
-   * @returns canonical id → the owner to keep
-   */
-  private learnedOwners(contributions: readonly TransportObjects[]): Map<string, Transport> {
-    const builders = new Map<string, Map<Transport, ObjectDef>>();
-    for (const { transport, objects } of contributions) {
-      for (const def of objects) {
-        let entry = builders.get(def.id);
-        if (!entry) {
-          entry = new Map();
-          builders.set(def.id, entry);
-        }
-        entry.set(transport, def);
-      }
-    }
-    const owners = new Map<string, Transport>();
-    for (const [id, stored] of Object.entries(this.tree.shared)) {
-      const owner = stored[0];
-      if (owner !== undefined) {
-        owners.set(id, owner);
-      }
-    }
-    for (const [id, defs] of builders) {
-      const key = capabilityKeyOf(defs.keys().next().value!, id);
-      const unproven = new Set([...defs].filter(([, def]) => def.unproven).map(([transport]) => transport));
-      const best = pickOwner(key, [...defs.keys()], unproven);
-      const stored = owners.get(id);
-      if (stored !== undefined) {
-        // Against a learned owner only the RANK counts, never this session's proofs: the owner proved itself
-        // when it was learned (a receiver in standby cannot prove its YNCA menus again, and must not hand them
-        // back to XML for that — forum 85413). One way only: a transport that ranks before the learned owner,
-        // serves the datapoint with a proof and keeps its form takes it over. Never back.
-        const ranked = pickOwner(key, [...defs.keys()]);
-        const storedDef = defs.get(stored);
-        const rankedDef = defs.get(ranked);
-        if (ranked !== stored && storedDef && rankedDef && !rankedDef.unproven && keepsForm(storedDef, rankedDef)) {
-          owners.set(id, ranked);
-        }
-        continue;
-      }
-      const existing = this.deps.existing?.(id);
-      const bestDef = defs.get(best);
-      if (existing === undefined || (bestDef && keepsForm(existing, bestDef))) {
-        continue;
-      }
-      // The datapoint stands in the tree already: the transport that keeps its form owns it.
-      const keeper = rankOf(key, [...defs.keys()], unproven).find(transport =>
-        keepsForm(existing, defs.get(transport)!),
-      );
-      if (keeper !== undefined) {
-        owners.set(id, keeper);
-      }
-    }
-    return owners;
-  }
-
-  /**
-   * Who serves each datapoint more than one transport built, the owner first, then the others in the order
-   * a write falls back to them.
-   *
-   * @param contributions what every transport built
-   * @param owners the owner of each canonical id
-   * @returns canonical id → the transports serving it
-   */
-  private sharedOf(
-    contributions: readonly TransportObjects[],
-    owners: ReadonlyMap<string, Transport>,
-  ): Record<string, Transport[]> {
-    const serving = new Map<string, Transport[]>();
-    for (const { transport, objects } of contributions) {
-      for (const def of objects) {
-        if (def.unproven) {
-          continue;
-        }
-        const list = serving.get(def.id) ?? [];
-        list.push(transport);
-        serving.set(def.id, list);
-      }
-    }
-    const shared: Record<string, Transport[]> = {};
-    for (const [id, transports] of serving) {
-      const owner = owners.get(id);
-      if (transports.length < 2 || owner === undefined) {
-        continue;
-      }
-      const rest = rankOf(
-        capabilityKeyOf(owner, id),
-        transports.filter(transport => transport !== owner),
-      );
-      shared[id] = [owner, ...rest];
-    }
-    return shared;
   }
 
   /**
@@ -841,23 +735,4 @@ export class MultiTransportHandle implements ConnectionHandle {
     this.live.length = 0;
     this.connecting.clear();
   }
-}
-
-/**
- * Transports in the order the owner policy prefers them for a capability.
- *
- * @param key the capability key
- * @param candidates the transports to order
- * @param unproven the candidates that claim without a proof
- * @returns the candidates, most preferred first
- */
-function rankOf(key: string, candidates: readonly Transport[], unproven?: ReadonlySet<Transport>): Transport[] {
-  const rest = [...candidates];
-  const ranked: Transport[] = [];
-  while (rest.length > 0) {
-    const next = pickOwner(key, rest, unproven);
-    ranked.push(next);
-    rest.splice(rest.indexOf(next), 1);
-  }
-  return ranked;
 }

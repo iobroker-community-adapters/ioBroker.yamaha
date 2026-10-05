@@ -7,7 +7,7 @@ import { XmlClient } from "./xml/xml-client";
 import {
   MultiTransportHandle,
   type ConnectableTransport,
-  type MultiTransportDeps,
+  type DeviceTreeDeps,
 } from "./lifecycle/multi-transport-handle";
 import { TransportConnectionAdapter } from "./lifecycle/transport-connection-adapter";
 import { RECONNECT_BASE_MS, RECONNECT_MAX_MS, ReconnectStrategy } from "./lifecycle/reconnect-strategy";
@@ -20,8 +20,7 @@ import type { Transport } from "./catalog/owner-policy";
 import { readyLine } from "./ready-line";
 import { errText } from "./err-text";
 import { captureXml, captureYnca, captureYxc } from "./diagnostics/device-capture";
-import type { ConnectionHandle, ControllerLog } from "./controller";
-import type { ObjectDef } from "./catalog/types";
+import type { ConnectionHandle } from "./controller";
 import type { DeviceRecord } from "./types";
 import type { PushLiveness } from "./yxc/push-liveness";
 import { MEMORY_KEY } from "./lifecycle/memory-keys";
@@ -30,13 +29,9 @@ import { MEMORY_KEY } from "./lifecycle/memory-keys";
 export type { ConnectableTransport };
 
 /** The adapter-bound callbacks {@link attemptDevice} drives — injected so it needs no adapter. */
-export interface AttemptDeps {
+export interface AttemptDeps extends DeviceTreeDeps {
   /** The installation's system language (`system.config`), for the MusicCast menus' language. */
   systemLanguage?: string;
-  /** Adapter log. */
-  log: ControllerLog;
-  /** Create an object or add to it — `settle` at the completion of a read-in (see MultiTransportDeps). */
-  upsertObject(id: string, def: ObjectDef, settle?: boolean): Promise<void>;
   /** Write a state value with ack (device-originated). */
   setStateAck(id: string, value: boolean | number | string | null): void;
   /** Adapter-managed timers (YNCA pacing + per-transport reconnects). */
@@ -56,8 +51,6 @@ export interface AttemptDeps {
   scheduleKeepalive(handler: () => void, ms: number): () => void;
   /** How often to poll an XML/YNC device for state (ms). */
   xmlPollIntervalMs: number;
-  /** Report the transports that are live after every change — the id-safe names ("ynca"/"yxc"/"xml"). */
-  onTransports?(names: string[]): void;
   /** Report the name the device carries for itself (MusicCast), for the device object's label. */
   onDeviceName?(name: string): void;
   /** IPs of all configured devices, so a MusicCast group can resolve a client device by IP. */
@@ -68,16 +61,6 @@ export interface AttemptDeps {
   yncaSubunitCache: YncaSubunitCache;
   /** Per-device memory for device answers that stay constant while it runs (held by the caller). */
   probeMemory: ProbeMemory;
-  /** The object definitions last written for this device (held by the caller, see MultiTransportDeps). */
-  writtenObjects?: Map<string, string>;
-  /** The device's learned tree (see MultiTransportDeps). */
-  tree?: MultiTransportDeps["tree"];
-  /** The running adapter version (see MultiTransportDeps). */
-  adapterVersion?: string;
-  /** A datapoint as it stands in the tree (see MultiTransportDeps). */
-  existing?: MultiTransportDeps["existing"];
-  /** Remove what no transport built, at the completion of a read-in (see MultiTransportDeps). */
-  settleTree?: MultiTransportDeps["settleTree"];
 }
 
 /** One transport to try: its name and a factory building a FRESH connectable (also for reconnects). */
@@ -89,13 +72,7 @@ export interface TransportAttempt {
 }
 
 /** The adapter callbacks {@link connectTransports} drives to build and hold the unified tree. */
-export interface ConnectDeps {
-  /** Adapter log. */
-  log: ControllerLog;
-  /** Create an object or add to it — `settle` at the completion of a read-in (see MultiTransportDeps). */
-  upsertObject(id: string, def: ObjectDef, settle?: boolean): Promise<void>;
-  /** Report the transports that are live after every change — the id-safe names ("ynca"/"yxc"/"xml"). */
-  onTransports?(names: string[]): void;
+export interface ConnectDeps extends DeviceTreeDeps {
   /** Timers for the per-transport reconnect loops (absent in tests → no per-transport retry). */
   timers?: {
     /** Schedule a one-shot timer. */
@@ -103,18 +80,8 @@ export interface ConnectDeps {
     /** Cancel a scheduled timer. */
     cancel(handle: ioBroker.Timeout | undefined): void;
   };
-  /** The object definitions last written for this device (see MultiTransportDeps). */
-  writtenObjects?: Map<string, string>;
   /** Whether this device has been shown to have a transport — it answered it before (D1). */
   proven?(transport: Transport): boolean;
-  /** The device's learned tree (see MultiTransportDeps). */
-  tree?: MultiTransportDeps["tree"];
-  /** The running adapter version (see MultiTransportDeps). */
-  adapterVersion?: string;
-  /** A datapoint as it stands in the tree (see MultiTransportDeps). */
-  existing?: MultiTransportDeps["existing"];
-  /** Remove what no transport built, at the completion of a read-in (see MultiTransportDeps). */
-  settleTree?: MultiTransportDeps["settleTree"];
 }
 
 /**
@@ -263,24 +230,17 @@ async function connectBuilt(
   }
   const rebuilds = new Map(attempts.map(attempt => [attempt.transport, attempt.build] as const));
   const handle = new MultiTransportHandle(deviceId, live, {
-    upsertObject: deps.upsertObject,
-    log: deps.log,
-    onTransports: deps.onTransports,
+    ...deps,
     rebuild: deps.timers ? transport => rebuilds.get(transport)!() : undefined,
     schedule: deps.timers ? (cb, ms) => deps.timers!.schedule(cb, ms) : undefined,
     cancel: deps.timers ? handle_ => deps.timers!.cancel(handle_ as ioBroker.Timeout | undefined) : undefined,
     backoffFactory: () => new ReconnectStrategy(RECONNECT_BASE_MS, RECONNECT_MAX_MS),
-    writtenObjects: deps.writtenObjects,
     // A transport the device has shown before but that did not answer now — reconnected, and a read-in
     // does not complete without it. One it never answered is not retried: every MusicCast-only device
     // would knock on the YNCA port forever.
     missing: attempts
       .map(attempt => attempt.transport)
       .filter(transport => !live.some(conn => conn.transport === transport) && deps.proven?.(transport) === true),
-    tree: deps.tree,
-    adapterVersion: deps.adapterVersion,
-    existing: deps.existing,
-    settleTree: deps.settleTree,
   });
   let running: Transport[];
   try {
@@ -331,7 +291,7 @@ export function attemptDevice(
   deps: AttemptDeps,
   signal?: AbortSignal,
 ): Promise<ConnectionHandle | null> {
-  const { log, upsertObject, setStateAck, timers } = deps;
+  const { log, setStateAck, timers } = deps;
   /**
    * A fresh command gate for one transport connection. EVERY command of that transport
    * goes through it: user writes, the init sweep, the keepalive and browsing alike. It is
@@ -464,11 +424,7 @@ export function attemptDevice(
       ...(services === undefined || services.xml ? [{ transport: "xml" as const, build: buildXml }] : skip("xml")),
     ],
     {
-      upsertObject,
-      log,
-      onTransports: deps.onTransports,
-      timers: deps.timers,
-      writtenObjects: deps.writtenObjects,
+      ...deps,
       // What the device has answered before: the YNCA capability profile, the MusicCast and XML
       // identities — each written only once that transport answered (D1).
       proven: transport =>
@@ -477,10 +433,6 @@ export function attemptDevice(
             deps.yncaSubunitCache.get() !== undefined
           : deps.probeMemory.remembered(transport === "yxc" ? MEMORY_KEY.yxcIdentity : MEMORY_KEY.xmlIdentity) !==
             undefined,
-      tree: deps.tree,
-      adapterVersion: deps.adapterVersion,
-      existing: deps.existing,
-      settleTree: deps.settleTree,
     },
     signal,
   );

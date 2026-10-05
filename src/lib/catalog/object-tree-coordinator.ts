@@ -1,5 +1,5 @@
 import { parentChannels, type ObjectDef } from "./types";
-import { canonicalIdOf, capabilityKeyOf, pickOwner, STATES_VOCABULARY, type Transport } from "./owner-policy";
+import { canonicalIdOf, capabilityKeyOf, pickOwner, rankOf, STATES_VOCABULARY, type Transport } from "./owner-policy";
 import { translateDeclaredStates } from "./musiccast-vocabulary";
 
 /** One transport's contribution: the objects its catalog builds for this device. */
@@ -314,4 +314,107 @@ export function keepsForm(existing: DatapointForm, live: ObjectDef): boolean {
   }
   const now = new Set(Object.keys(live.common.states ?? {}));
   return Object.keys(existing.common.states ?? {}).every(value => now.has(value));
+}
+
+/**
+ * The owner each datapoint keeps: the learned one, or — for a datapoint no owner was learned for yet —
+ * the one that keeps the form the datapoint already has in the tree. Pure ownership policy, moved out of the
+ * device handle beside the coordinator (review 2026-10-05, D).
+ *
+ * @param contributions what every transport built
+ * @param stored the learned tree's `shared` entries — the owner first
+ * @param existing a datapoint as it stands in the tree, if it does
+ * @returns canonical id → the owner to keep
+ */
+export function learnedOwners(
+  contributions: readonly TransportObjects[],
+  stored: Readonly<Record<string, readonly Transport[]>>,
+  existing?: (id: string) => DatapointForm | undefined,
+): Map<string, Transport> {
+  const builders = new Map<string, Map<Transport, ObjectDef>>();
+  for (const { transport, objects } of contributions) {
+    for (const def of objects) {
+      let entry = builders.get(def.id);
+      if (!entry) {
+        entry = new Map();
+        builders.set(def.id, entry);
+      }
+      entry.set(transport, def);
+    }
+  }
+  const owners = new Map<string, Transport>();
+  for (const [id, serving] of Object.entries(stored)) {
+    const owner = serving[0];
+    if (owner !== undefined) {
+      owners.set(id, owner);
+    }
+  }
+  for (const [id, defs] of builders) {
+    const key = capabilityKeyOf(defs.keys().next().value!, id);
+    const unproven = new Set([...defs].filter(([, def]) => def.unproven).map(([transport]) => transport));
+    const best = pickOwner(key, [...defs.keys()], unproven);
+    const kept = owners.get(id);
+    if (kept !== undefined) {
+      // Against a learned owner only the RANK counts, never this session's proofs: the owner proved itself
+      // when it was learned (a receiver in standby cannot prove its YNCA menus again, and must not hand them
+      // back to XML for that — forum 85413). One way only: a transport that ranks before the learned owner,
+      // serves the datapoint with a proof and keeps its form takes it over. Never back.
+      const ranked = pickOwner(key, [...defs.keys()]);
+      const keptDef = defs.get(kept);
+      const rankedDef = defs.get(ranked);
+      if (ranked !== kept && keptDef && rankedDef && !rankedDef.unproven && keepsForm(keptDef, rankedDef)) {
+        owners.set(id, ranked);
+      }
+      continue;
+    }
+    const form = existing?.(id);
+    const bestDef = defs.get(best);
+    if (form === undefined || (bestDef && keepsForm(form, bestDef))) {
+      continue;
+    }
+    // The datapoint stands in the tree already: the transport that keeps its form owns it.
+    const keeper = rankOf(key, [...defs.keys()], unproven).find(transport => keepsForm(form, defs.get(transport)!));
+    if (keeper !== undefined) {
+      owners.set(id, keeper);
+    }
+  }
+  return owners;
+}
+
+/**
+ * Who serves each datapoint more than one transport built, the owner first, then the others in the order
+ * a write falls back to them.
+ *
+ * @param contributions what every transport built
+ * @param owners the owner of each canonical id
+ * @returns canonical id → the transports serving it
+ */
+export function servingTransports(
+  contributions: readonly TransportObjects[],
+  owners: ReadonlyMap<string, Transport>,
+): Record<string, Transport[]> {
+  const serving = new Map<string, Transport[]>();
+  for (const { transport, objects } of contributions) {
+    for (const def of objects) {
+      if (def.unproven) {
+        continue;
+      }
+      const list = serving.get(def.id) ?? [];
+      list.push(transport);
+      serving.set(def.id, list);
+    }
+  }
+  const shared: Record<string, Transport[]> = {};
+  for (const [id, transports] of serving) {
+    const owner = owners.get(id);
+    if (transports.length < 2 || owner === undefined) {
+      continue;
+    }
+    const rest = rankOf(
+      capabilityKeyOf(owner, id),
+      transports.filter(transport => transport !== owner),
+    );
+    shared[id] = [owner, ...rest];
+  }
+  return shared;
 }
