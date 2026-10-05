@@ -4,7 +4,7 @@ import { SWITCHABLE_GROUPS } from "./lib/catalog/groups";
 import { YNCA_CATALOG } from "./lib/ynca/catalog";
 import { YXC_AMP_CATALOG } from "./lib/yxc/catalog";
 import { XML_AMP_CATALOG } from "./lib/xml/catalog";
-import { DAB_FIELDS } from "./lib/yxc/command-mapper";
+import { DAB_FIELDS } from "./lib/yxc/play-info";
 
 /**
  * Manifest and admin wiring the integration boot test cannot see. Both checks here guard

@@ -13,7 +13,8 @@ import { tName, type I18nKey } from "../i18n";
 import { ZONE_KEYS, zonePrefix } from "../catalog/zones";
 import type { YxcCapabilities, YxcZone } from "./capability";
 import { YXC_AMP_CATALOG, type YxcAmpEntry } from "./catalog";
-import { ALARM_DAYS, DAB_FIELDS } from "./command-mapper";
+import { ALARM_DAYS } from "./clock";
+import { DAB_FIELDS } from "./play-info";
 
 /** The zones the adapter maps: main flat, zone2-4 each under multiroom. */
 const ZONES: Array<{ id: string; prefix: string }> = ZONE_KEYS.map(id => ({ id, prefix: zonePrefix(id) }));
@@ -353,47 +354,6 @@ const RDS_STATES: Array<{ id: string; nameKey: I18nKey; descKey: I18nKey }> = [
   { id: "tuner.rdsService", nameKey: "rdsStation", descKey: "descRdsStation" },
   { id: "tuner.rdsProgramType", nameKey: "rdsProgrammeType", descKey: "descRdsProgramType" },
 ];
-
-/** The ids of {@link RDS_STATES}. */
-const RDS_IDS = RDS_STATES.map(state => state.id);
-
-/**
- * The datapoints this device's getFeatures proves absent — a zone's catalog entry whose function the
- * zone does not declare (a zone's maximum volume without `volume`), the RDS and DAB states of a tuner
- * that does not declare them, and the clock format without `format`. getFeatures does not depend
- * on standby, so an earlier version's copy of such a datapoint is proven absent on the first start
- * (audit 2026-09-24: the upgrade from 2.12.0 left both behind).
- *
- * @param capabilities the parsed YXC capabilities
- * @returns the device-relative ids (this transport's own spelling)
- */
-export function yxcDeclaredAbsent(capabilities: YxcCapabilities): string[] {
-  const absent: string[] = [];
-  // What the tuner and clock blocks prove absent — datapoints an earlier version created on every tuner
-  // or clock (audit 2026-09-29, C42).
-  const tunerFuncs = capabilities.tuner?.funcs ?? [];
-  if (capabilities.tuner && !tunerFuncs.includes("rds")) {
-    absent.push(...RDS_IDS);
-  }
-  if (capabilities.tuner?.bands.includes("dab")) {
-    absent.push(...DAB_FIELDS.filter(f => f.requires && !tunerFuncs.includes(f.requires)).map(f => f.id));
-  }
-  if (capabilities.clock && !capabilities.clock.funcs.includes("format")) {
-    absent.push("clock.format");
-  }
-  for (const zoneDef of ZONES) {
-    const zone = capabilities.zones.find(z => z.id === zoneDef.id);
-    if (!zone) {
-      continue;
-    }
-    for (const entry of YXC_AMP_CATALOG) {
-      if (belongsToZone(entry, zoneDef.id) && !declares(entry, zone)) {
-        absent.push(`${zoneDef.prefix}${entry.state}`);
-      }
-    }
-  }
-  return absent;
-}
 
 /**
  * One zone catalog datapoint as its object: the device's bounds (`range_step`, or the display scale of the volume),

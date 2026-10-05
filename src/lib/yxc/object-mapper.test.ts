@@ -5,7 +5,6 @@ import {
   rawVolumeFor,
   shownVolumeFor,
   volumeScaleOf,
-  yxcDeclaredAbsent,
 } from "./object-mapper";
 import rxA2070v287 from "./__fixtures__/RX_A2070_287_208.json";
 import cdNt670d from "./__fixtures__/cd_nt670d.json";
@@ -196,11 +195,6 @@ describe("mapYxcToObjects", () => {
     const receiver = mapYxcToObjects(parseYxcFeatures(rxA2070)).map(o => o.id);
     expect(receiver).toContain("tuner.rdsText");
     expect(receiver).not.toContain("tuner.dab.totalStations");
-    // What a declaration proves absent goes on the first start.
-    expect(yxcDeclaredAbsent(parseYxcFeatures(isx18d))).toEqual(expect.arrayContaining(["tuner.rdsText"]));
-    expect(yxcDeclaredAbsent(parseYxcFeatures(rxA2070))).toEqual(
-      expect.arrayContaining(["tuner.dab.totalStations", "tuner.dab.scanProgress"]),
-    );
   });
 
   test("the DAB fields carry the units and bounds the specification declares", () => {
@@ -331,26 +325,6 @@ describe("mapYxcToObjects", () => {
     expect(vol?.common.max).toBe(60);
     expect(vol?.common.step).toBe(1);
     expect(vol?.common.unit).toBeUndefined();
-  });
-});
-
-// What getFeatures proves absent is removed on the first start after an update — the party switch
-// and the zone-4 maximum volume that 2.12.0 created on every device stayed behind (audit 2026-09-24).
-describe("yxcDeclaredAbsent", () => {
-  it("names a zone's maximum volume without `volume`, and no party switch (it comes from getFuncStatus alone)", () => {
-    const receiver = yxcDeclaredAbsent(parseYxcFeatures(rxA2070));
-    expect(receiver).toContain("multiroom.zone4.advanced.maxVolume");
-    expect(receiver).not.toContain("advanced.maxVolume");
-    const speaker = yxcDeclaredAbsent(parseYxcFeatures(wx10));
-    expect(speaker).not.toContain("multiroom.partyEnable");
-  });
-
-  it("never names a datapoint the same declaration builds", () => {
-    for (const fixture of [rxA2070, wx10, isx18d]) {
-      const capabilities = parseYxcFeatures(fixture);
-      const built = new Set(mapYxcToObjects(capabilities).map(o => o.id));
-      expect(yxcDeclaredAbsent(capabilities).filter(id => built.has(id))).toEqual([]);
-    }
   });
 });
 

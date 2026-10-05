@@ -2720,16 +2720,16 @@ describe("YxcDeviceController tuner on DAB", () => {
     tuner: { func_list: ["fm", "dab"], preset: { type: "common", num: 30 } },
   };
 
-  test("a frequency written while DAB plays is not sent, and the datapoint gets the device's value back", async () => {
+  // The mapping drops it (YXC-DATA's yxcWrite, setFreq knows only am/fm): nothing is sent, and the write says so —
+  // `unavailable` with a trace, so another protocol may carry it (review 2026-10-05, A3/A46).
+  test("a frequency written while DAB plays is not sent — unavailable, with a trace", async () => {
     const s = setup(features, { power: "on", input: "tuner" });
     s.client.tunerPlayInfo = { band: "dab", dab: { freq: 180064 } };
     await s.controller.start();
     s.client.calls.length = 0;
-    s.acks.length = 0;
-    void s.controller.handleWrite("tuner.frequency", 98500);
-    await flush();
-    expect(s.client.calls.map(c => c.method)).toEqual(["getPlayInfo"]);
-    expect(s.acks).toContainEqual({ id: "living.tuner.frequency", value: 180064 });
+    expect(await s.controller.handleWrite("tuner.frequency", 98500)).toBe("unavailable");
+    expect(s.client.calls.filter(c => c.method === "setFreq")).toEqual([]);
+    expect(s.debugs.some(line => line.startsWith("living: tuner.frequency = 98500 not sent — "))).toBe(true);
   });
 
   test("on FM the frequency is sent as before", async () => {

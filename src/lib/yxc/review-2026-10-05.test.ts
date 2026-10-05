@@ -52,13 +52,16 @@ function fixtureClient(answers: Record<string, unknown>): { client: never; calls
   const client = new Proxy(
     {},
     {
-      get: (_target, method: string) =>
+      // `forUser` (the user-priority twin of the read-back, review 2026-10-05, A58) is this same recording client.
+      get: (_target, method: string, receiver: unknown) =>
         method === "then"
           ? undefined
-          : (...args: unknown[]): Promise<unknown> => {
-              calls.push([method, args]);
-              return Promise.resolve(reply(method, args) ?? { response_code: 0 });
-            },
+          : method === "forUser"
+            ? (): unknown => receiver
+            : (...args: unknown[]): Promise<unknown> => {
+                calls.push([method, args]);
+                return Promise.resolve(reply(method, args) ?? { response_code: 0 });
+              },
     },
   );
   return { client: client as never, calls };

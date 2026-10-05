@@ -403,29 +403,3 @@ export function yxcWrite(stateId: string, value: unknown, context: YxcWriteConte
 export function stateToYxc(stateId: string, value: unknown, context: YxcWriteContext = {}): YxcCommand | undefined {
   return yxcWrite(stateId, value, context).command;
 }
-
-// The parsers live in their own modules now (review 2026-10-05, SOLID: the command mapper did five jobs). Re-exported
-// for the importers outside the MusicCast data layer (the device controller, manifest.test.ts) until they import from
-// the modules themselves — then this block goes.
-export { parseYxcSignalInfo, parseYxcStatus } from "./status";
-export { DAB_FIELDS, parseYxcPlayInfo, parseYxcTunerInfo } from "./play-info";
-export {
-  CLIENT_SLOT_FIELDS,
-  clientSlotEntries,
-  NETUSB_SLOT_FIELDS,
-  netusbSlotEntries,
-  parseYxcPlaylistNames,
-  parseYxcPlayQueue,
-  parseYxcPresetList,
-  parseYxcRecentList,
-  parseYxcTunerPresetLists,
-  PLAYLIST_SLOT_FIELDS,
-  playlistSlotEntries,
-  playQueueCounters,
-  playQueueSlotEntries,
-  STATION_SLOT_FIELDS,
-  stationSlotEntries,
-  type SlotEntry,
-} from "./lists";
-export { distributionSummary, parseYxcDistribution, type DistributionSummary } from "./distribution";
-export { ALARM_DAYS, parseYxcClock } from "./clock";

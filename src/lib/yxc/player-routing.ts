@@ -3,7 +3,7 @@ import type { DeviceValue, StateValue } from "../types";
 import type { YxcClientLike } from "./client-contract";
 import type { PlayerTransport } from "./command-mapper";
 import type { YxcPlayer } from "./http-client";
-import { zonePrefix } from "./zones";
+import { zonePrefix } from "../catalog/zones";
 
 /** What the routing needs from its controller. */
 export interface PlayerRoutingDeps {
@@ -238,14 +238,17 @@ export class YxcPlayerRouting {
   /**
    * Give every zone that plays no media source its cleared block — the routing only writes to listening zones,
    * so on a device that starts on HDMI the block would sit valueless until the first media playback (live 2.0.0
-   * deployment check).
+   * deployment check). Only the zones that have a player block: a zone without a network or CD input has none
+   * (RX-A2070 zone 4, review 2026-10-05, A48).
+   *
+   * @param zones the zones with a player block (`playerZones`)
    */
-  public clearIdle(): void {
+  public clearIdle(zones: readonly string[]): void {
     const media = this.deps.media();
     if (!media.includes("netusb") && !media.includes("cd")) {
       return;
     }
-    for (const zone of this.deps.zones()) {
+    for (const zone of zones) {
       if (!this.zoneBlock.has(zone)) {
         this.emitBlock(zone, PLAYER_CLEAR);
       }

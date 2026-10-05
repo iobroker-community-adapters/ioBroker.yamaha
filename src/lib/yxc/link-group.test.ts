@@ -1,5 +1,5 @@
 import { LinkGroup } from "./link-group";
-import { distributionSummary } from "./command-mapper";
+import { distributionSummary } from "./distribution";
 import type { YxcClientLike } from "./client-contract";
 import { CommandGate } from "../lifecycle/command-gate";
 import wx30 from "./__fixtures__/WX30_317_208.json";

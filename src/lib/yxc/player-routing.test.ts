@@ -92,12 +92,16 @@ describe("YxcPlayerRouting", () => {
     const { routing: r, writes } = routing();
     r.noteInput("main", "cd");
     r.route("cd", []);
-    r.clearIdle();
+    r.clearIdle(["main", "zone2"]);
     expect(writes.some(write => write.id.startsWith("player."))).toBe(false);
     expect(writes).toContainEqual({ id: "multiroom.zone2.player.source", value: "" });
     const tunerOnly = routing(["main"], ["tuner"]);
-    tunerOnly.routing.clearIdle();
+    tunerOnly.routing.clearIdle(["main"]);
     expect(tunerOnly.writes).toEqual([]);
+    // A zone without a player block (no network or CD input, A48) gets none.
+    const { routing: three, writes: written } = routing(["main", "zone2", "zone4"]);
+    three.clearIdle(["main", "zone2"]);
+    expect(written.some(write => write.id.startsWith("multiroom.zone4."))).toBe(false);
   });
 
   test("a recall goes to the zone listening to its source, main first, main as the fallback", () => {
