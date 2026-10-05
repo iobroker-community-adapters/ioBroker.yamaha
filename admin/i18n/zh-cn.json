@@ -774,6 +774,6 @@
   "descPreviousHdRadioProgram": "切换到该电台的上一个数字节目。",
   "queueTracks": "播放队列曲目",
   "descQueueTracks": "网络播放器播放队列中的曲目，每首一个位置，与播放器显示一致。",
-  "tabMain": "主要设置",
+  "tabMain": "配置",
   "tabExpert": "专家"
 }

@@ -11,6 +11,8 @@ import {
   encodePut,
   parseBasicStatus,
   parseDescriptor,
+  sleepStep,
+  sleepWire,
   parseInputList,
   parseInputLabels,
   parseInputSources,
@@ -391,7 +393,8 @@ describe("parseDescriptor — the enumerations a classic receiver carries in des
     expect(d.programs[0]).toBe("Hall in Munich");
     expect(d.programs).toContain("5ch Stereo");
     expect(d.programs).toContain("Surround Decoder");
-    expect(d.sleep).toEqual(["120 min", "90 min", "60 min", "30 min", "Off"]);
+    // In the shared order every protocol shows: Off first, then the minutes (Y-30).
+    expect(d.sleep).toEqual(["Off", "30 min", "60 min", "90 min", "120 min"]);
     expect(d.adaptiveDrc).toEqual(["Auto", "Off"]);
     expect(d.puts?.Main_Zone?.["Sound_Video,Dialogue_Adjust,Dialogue_Lvl"]).toBeUndefined();
   });
@@ -409,7 +412,20 @@ describe("parseDescriptor — the enumerations a classic receiver carries in des
     const d = parseDescriptor(readFixture("desc-rx-v3900.xml"));
     expect(d.programs).toEqual([]);
     expect(d.adaptiveDrc).toEqual([]);
-    expect(d.sleep).toEqual(["120", "90", "60", "30", "Off"]);
+    // Its `30` … `120` in the spelling every other receiver shows (Werkbank parity finding, Y-30).
+    expect(d.sleep).toEqual(["Off", "30 min", "60 min", "90 min", "120 min"]);
+  });
+
+  test("a sleep step reads in the shared spelling and is written in the device's own", () => {
+    expect(
+      parseBasicStatus("<Basic_Status><Power_Control><Sleep>60</Sleep></Power_Control></Basic_Status>").sleep,
+    ).toBe("60 min");
+    expect(sleepStep("Off")).toBe("Off");
+    expect(sleepStep("90 min")).toBe("90 min");
+    expect(sleepWire("30 min", "legacy")).toBe("30");
+    expect(sleepWire("Off", "legacy")).toBe("Off");
+    expect(sleepWire("30 min", "classic")).toBe("30 min");
+    expect(sleepWire("30 min")).toBe("30 min");
   });
 
   // The declared frequency grid per band, in kHz (audit 2026-09-29, D6): EU 9/50 kHz, US 10/200 kHz.
@@ -588,7 +604,7 @@ describe("descriptorParam anchors the command path at the Cmd element", () => {
     const xml =
       '<Unit><Menu><Put_1><Cmd ID="P1">Zone_B_Power_Control,Sleep=Param_1</Cmd><Param_1><Direct>Wrong</Direct></Param_1></Put_1>' +
       '<Put_1><Cmd ID="P23">Power_Control,Sleep=Param_1</Cmd><Param_1><Direct>120 min</Direct><Direct>Off</Direct></Param_1></Put_1></Menu></Unit>';
-    expect(parseDescriptor(xml).sleep).toEqual(["120 min", "Off"]);
+    expect(parseDescriptor(xml).sleep).toEqual(["Off", "120 min"]);
   });
 });
 

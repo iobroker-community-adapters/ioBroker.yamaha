@@ -671,12 +671,13 @@ describe("desc.xml — the classic generation's own enumerations (2026-09-09)", 
     const def = (id: string): Def | undefined => s.defs.get(id) as Def | undefined;
     expect(Object.keys(def("living.soundProgram")?.common?.states ?? {})).toHaveLength(19);
     expect(def("living.soundProgram")?.declaredStates).toBe(true);
+    // The declared steps in the order every protocol shows them: Off first, then the minutes (Y-30).
     expect(Object.keys(def("living.sleep")?.common?.states ?? {})).toEqual([
-      "120 min",
-      "90 min",
-      "60 min",
-      "30 min",
       "Off",
+      "30 min",
+      "60 min",
+      "90 min",
+      "120 min",
     ]);
     expect(def("living.sleep")?.declaredStates).toBe(true);
     // Adaptive DRC is a switch on every protocol (krobi 2026-10-05) — a switch carries no word list.
@@ -1891,11 +1892,11 @@ describe("declared functions YNCA and MusicCast carry under the same ids (audit 
     s.client.xmlAnswers["Main_Zone|<Config>GetParam</Config>"] =
       '<YAMAHA_AV rsp="GET" RC="0"><Main_Zone><Config><Name><Zone>Living</Zone><Zone_B>Patio</Zone_B></Name></Config></Main_Zone></YAMAHA_AV>';
     await s.controller.start();
-    expect(s.acks).toContainEqual({ id: "living.multiroom.zoneB.name", value: "Patio" });
+    expect(s.acks).toContainEqual({ id: "living.multiroom.zoneB.zoneName", value: "Patio" });
     s.client.xmlAnswers["Main_Zone|<Config>GetParam</Config>"] =
       '<YAMAHA_AV rsp="GET" RC="0"><Main_Zone><Config><Name><Zone>Living</Zone><Zone_B>Garden</Zone_B></Name></Config></Main_Zone></YAMAHA_AV>';
     s.acks.length = 0;
-    void s.controller.handleWrite("multiroom.zoneB.name", "Garden");
+    void s.controller.handleWrite("multiroom.zoneB.zoneName", "Garden");
     await flush();
     await flush();
     expect(sends(s)).toContainEqual({
@@ -1903,7 +1904,7 @@ describe("declared functions YNCA and MusicCast carry under the same ids (audit 
       inner: "<Config><Name><Zone_B>Garden</Zone_B></Name></Config>",
     });
     // Read back from the Config: the Zone B name, not the zone's own.
-    expect(s.acks).toEqual([{ id: "living.multiroom.zoneB.name", value: "Garden" }]);
+    expect(s.acks).toEqual([{ id: "living.multiroom.zoneB.zoneName", value: "Garden" }]);
   });
 
   // RX-V3900 desc.xml: no `Config,Name,Zone`; the zone name is `Rename,Rename_Latin_1` (P6/G3) per zone.

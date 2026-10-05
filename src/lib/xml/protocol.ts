@@ -641,7 +641,7 @@ export function descriptorPuts(xml: string): Record<string, Record<string, XmlDe
 export interface XmlDescriptor {
   /** `Surround,Program_Sel,Current,Sound_Program` — the SOUNDPRG spelling of Yamaha's lists. */
   programs: string[];
-  /** `Power_Control,Sleep` — "120 min" … "Off" (the 2008 generation says "120" … "Off"). */
+  /** `Power_Control,Sleep` — "Off", "30 min" … "120 min" (the 2008 generation's "30" … "120" in that spelling). */
   sleep: string[];
   /** `Sound_Video,Adaptive_DRC` — Auto/Off. */
   adaptiveDrc: string[];
@@ -788,6 +788,43 @@ function descriptorParam(xml: string, command: string): { values: string[] } {
 }
 
 /**
+ * A sleep step in the one spelling every protocol shows: `Off`, `30 min` … `120 min`. The 2008 generation (RX-V3900)
+ * says `30` … `120` on the wire; its datapoint looked different from every other receiver's (Werkbank parity
+ * finding, accepted 2026-10-05, Y-30).
+ *
+ * @param word the step as the device wrote it
+ * @returns the step in the shared spelling
+ */
+export function sleepStep(word: string): string {
+  const text = word.trim();
+  return /^\d+$/.test(text) ? `${Number(text)} min` : text;
+}
+
+/**
+ * A sleep step in the spelling the device takes: the 2008 generation takes `30`, every later one `30 min`.
+ *
+ * @param value the written step (`Off`, `30 min`)
+ * @param dialect the spelling the device answers with
+ * @returns the wire word
+ */
+export function sleepWire(value: unknown, dialect?: XmlDialect): string {
+  const text = String(value).trim();
+  const minutes = /^(\d+) min$/.exec(text);
+  return dialect === "legacy" && minutes ? minutes[1] : text;
+}
+
+/**
+ * The sleep steps a device declares, in the shared spelling and the shared order: `Off` first, then the minutes.
+ *
+ * @param words the steps as the device declares them
+ * @returns the steps
+ */
+function sleepSteps(words: readonly string[]): string[] {
+  const minutesOf = (step: string): number => (step === "Off" ? 0 : parseInt(step, 10));
+  return words.map(sleepStep).sort((a, b) => minutesOf(a) - minutesOf(b));
+}
+
+/**
  * Parse the enumerations the adapter uses out of `/YamahaRemoteControl/desc.xml`.
  *
  * Measured on nine models 2012–2017 (RX-V473 … RX-A2060, HTR-4069, RX-S601D): 19 or 25 programs
@@ -803,7 +840,7 @@ function descriptorParam(xml: string, command: string): { values: string[] } {
 export function parseDescriptor(xml: string): XmlDescriptor {
   const descriptor: XmlDescriptor = {
     programs: descriptorParam(xml, "Surround,Program_Sel,Current,Sound_Program").values,
-    sleep: descriptorParam(xml, "Power_Control,Sleep").values,
+    sleep: sleepSteps(descriptorParam(xml, "Power_Control,Sleep").values),
     adaptiveDrc: descriptorParam(xml, "Sound_Video,Adaptive_DRC").values,
   };
   const puts = descriptorPuts(xml);
@@ -991,7 +1028,7 @@ export function parseBasicStatus(body: string): BasicStatus {
   }
   const sleepMatch = /<Sleep>([^<]+)<\/Sleep>/.exec(xml);
   if (sleepMatch) {
-    status.sleep = decodeXmlText(sleepMatch[1]);
+    status.sleep = sleepStep(decodeXmlText(sleepMatch[1]));
   }
   // Tone/subwoofer/extra-bass/YPAO — the fields the predecessor adapter (via
   // yamaha-nodejs-soef) read on real pre-2010 devices. Val is scoped to its own

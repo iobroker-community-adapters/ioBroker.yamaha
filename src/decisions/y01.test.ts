@@ -2,7 +2,10 @@ import { describe, expect, test, vi } from "vitest";
 
 // Y-01: a receiver that has been read in keeps its tree. Running code — a protocol that drops, comes back or answers
 // with less, a reconnect, the datapoint balance — never deletes a datapoint and never empties a value list or a
-// limit. Only the completion of a read-in after an adapter update may take something away.
+// limit. Only the completion of a read-in after an adapter update may take something away. One exception (krobi
+// 2026-10-05 22:47 "y01 yes, exactly these exceptions are approved and wanted"): while running, only the LABEL of an
+// existing list entry may change, and only on the lists of names the user gives in the receiver — inputs, scenes,
+// sound programs, zones (`liveLabels`). Keys, type and limits stay.
 
 /** The adapter base: in-memory object and state stores with js-controller's merge semantics. */
 vi.mock("@iobroker/adapter-core", () => {
@@ -192,6 +195,17 @@ import {
 import type { LearnedTree } from "../lib/lifecycle/learned-tree";
 import type { ObjectDef } from "../lib/catalog/types";
 import type { Transport } from "../lib/catalog/owner-policy";
+import { YncaDeviceController } from "../lib/device-controller";
+import { yncaObjectsFor, type InputEvidence } from "../lib/ynca/catalog";
+import type { YncaCapabilities } from "../lib/ynca/capability";
+import type { StatesResolver } from "../lib/catalog/build-objects";
+import { XmlDeviceController } from "../lib/xml/device-controller";
+import type { BasicStatus } from "../lib/xml/protocol";
+import { CommandGate } from "../lib/lifecycle/command-gate";
+import { ProbeMemory } from "../lib/lifecycle/probe-memory";
+import { DISCOVERY_SCHEMA } from "../lib/lifecycle/discovery-schema";
+import { mapYxcToObjects } from "../lib/yxc/object-mapper";
+import { coordinateObjectTree } from "../lib/catalog/object-tree-coordinator";
 
 /** A device that has not been read in yet — built here, so the guard also loads on releases before the learned tree. */
 const emptyTree = (): LearnedTree => ({ shared: {}, transports: [], firmware: {} });
@@ -239,6 +253,17 @@ const SOUND_PROGRAM = {
     read: true,
     write: true,
     states: { Straight: "Straight", Jazz: "Jazz" },
+  },
+};
+const INPUT = {
+  type: "state",
+  common: {
+    name: "i",
+    type: "string",
+    role: "media.input",
+    read: true,
+    write: true,
+    states: { HDMI1: "HDMI1", HDMI2: "Turntable" },
   },
 };
 const BASS = {
@@ -304,6 +329,32 @@ describe("Y-01 a receiver that has been read in keeps its tree", () => {
     expect(i.deleted.filter(id => id.startsWith("living."))).toEqual([]);
     expect(i.objects.has("living.multiroom.zone2.sleep")).toBe(true);
     expect(i.objects.has("living.multiroom.zone4")).toBe(true);
+  });
+
+  test("running, a renamed entry relabels a list of the user's names; no key goes, nothing else changes", async () => {
+    const { i, upsert } = await started({ input: INPUT });
+    await upsert("living.input", {
+      type: "state",
+      common: { name: "i", type: "string", role: "media.input", states: { HDMI1: "Apple TV" } },
+      liveLabels: true,
+    });
+    const common = commonOf(i, "living.input");
+    expect(common.states).toEqual({ HDMI1: "Apple TV", HDMI2: "Turntable" });
+    expect([common.type, common.role]).toEqual(["string", "media.input"]);
+  });
+
+  test("running, a list that is not the user's names keeps its labels", async () => {
+    const { i, upsert } = await started({ soundProgram: SOUND_PROGRAM, input: INPUT });
+    await upsert("living.soundProgram", {
+      type: "state",
+      common: { name: "p", type: "string", role: "text", states: { Straight: "Straight!", Jazz: "Jazz" } },
+    });
+    await upsert("living.input", {
+      type: "state",
+      common: { name: "i", type: "string", role: "media.input", states: { HDMI1: "Apple TV" } },
+    });
+    expect(commonOf(i, "living.soundProgram").states).toEqual({ Straight: "Straight", Jazz: "Jazz" });
+    expect(commonOf(i, "living.input").states).toEqual({ HDMI1: "HDMI1", HDMI2: "Turntable" });
   });
 
   test("the completion of a read-in is the one moment a list and a limit may shrink", async () => {
@@ -386,5 +437,106 @@ describe("Y-01 the device handle never shrinks a read-in tree at runtime", () =>
     expect(writes.length).toBeGreaterThan(0);
     expect(writes.filter(w => w.settle)).toEqual([]);
     handle.close();
+  });
+});
+
+describe("Y-01 only the user's names relabel while running: inputs, scenes, sound programs, zones", () => {
+  /** The datapoints whose list follows renames: the inputs, the scene recall, the sound program, any zone's. */
+  const USER_NAMES = /^(?:multiroom\.zone[234B]\.)?(?:input|scene\.recall|soundProgram)$/;
+
+  /** YNCA through the controller's own value-list resolver: the main zone and zone 2 with inputs and scenes. */
+  function yncaTree(): ObjectDef[] {
+    const caps: YncaCapabilities = {
+      model: "RX-V6A",
+      subunits: {
+        SYS: { INPNAMEHDMI1: "Apple TV" },
+        MAIN: { PWR: "On", INP: "HDMI1", SOUNDPRG: "Standard", SCENE1NAME: "Movie", SLEEP: "Off" },
+        ZONE2: { PWR: "On", INP: "HDMI1", SCENE1NAME: "Patio", SLEEP: "Off" },
+      },
+    };
+    const controller = Object.create(YncaDeviceController.prototype) as {
+      shape: YncaCapabilities;
+      observed: Record<string, unknown>;
+      sceneTitles: Array<{ num: number; title: string }>;
+      zoneSceneTitles: Map<string, Array<{ num: number; title: string }>>;
+      statesResolver(live: YncaCapabilities, evidence: InputEvidence): StatesResolver;
+    };
+    Object.assign(controller, {
+      shape: caps,
+      observed: {},
+      sceneTitles: [{ num: 1, title: "Movie" }],
+      zoneSceneTitles: new Map([["zone2", [{ num: 1, title: "Patio" }]]]),
+    });
+    const evidence: InputEvidence = { present: new Set(["MAIN", "ZONE2"]), probed: new Set() };
+    return yncaObjectsFor(caps, undefined, controller.statesResolver(caps, evidence));
+  }
+
+  /** XML through the real controller: an input list with a user's name and a scene list with a title. */
+  async function xmlTree(): Promise<ObjectDef[]> {
+    const statuses: Record<string, BasicStatus> = {
+      Main_Zone: { power: true, input: "HDMI1", soundProgram: "Standard", sleep: "Off" },
+    };
+    const answers: Record<string, string> = {
+      "Main_Zone|<Input><Input_Sel_Item>GetParam</Input_Sel_Item></Input>":
+        "<Input_Sel_Item><Item_1><Param>HDMI1</Param><RW>RW</RW><Title>Apple TV</Title></Item_1></Input_Sel_Item>",
+      "Main_Zone|<Scene><Scene_Sel_Item>GetParam</Scene_Sel_Item></Scene>":
+        "<Scene_Sel_Item><Item_1><Param>Scene 1</Param><RW>W</RW><Title>Movie</Title></Item_1></Scene_Sel_Item>",
+    };
+    const defs = new Map<string, ObjectDef>();
+    const controller = new XmlDeviceController("living", {
+      gate: new CommandGate({
+        minSpacingMs: 0,
+        timers: {
+          schedule: (h, ms) => setTimeout(h, ms),
+          cancel: t => clearTimeout(t as ReturnType<typeof setTimeout>),
+        },
+      }),
+      probeMemory: new ProbeMemory({ __schema: DISCOVERY_SCHEMA }),
+      client: {
+        getStatus: (zone: string) => Promise.resolve(statuses[zone] ?? {}),
+        getSystemConfig: () => Promise.resolve({}),
+        getDescriptor: () => Promise.resolve(""),
+        send: () => Promise.resolve(),
+        getXml: (zone: string, inner: string) => Promise.resolve(answers[`${zone}|${inner}`] ?? ""),
+      },
+      scheduleKeepalive: () => () => undefined,
+      upsertObject: (id, def) => {
+        defs.set(id.replace(/^living\./, ""), def);
+        return Promise.resolve();
+      },
+      setStateAck: () => undefined,
+      log: { debug: () => undefined, info: () => undefined, warn: () => undefined },
+      host: "192.0.2.10",
+    });
+    await controller.start();
+    controller.close();
+    return [...defs.values()];
+  }
+
+  test("the datapoints that relabel while running are exactly the user's names, over all three protocols", async () => {
+    const ynca = yncaTree();
+    const xml = await xmlTree();
+    const yxc = mapYxcToObjects({
+      zones: [{ id: "main", funcs: ["power", "sleep"], inputs: ["hdmi1"] }],
+      media: [],
+      names: { inputs: { hdmi1: "Apple TV" }, soundPrograms: {} },
+    });
+    const tree = coordinateObjectTree([
+      { transport: "ynca", objects: ynca },
+      { transport: "yxc", objects: yxc },
+      { transport: "xml", objects: xml },
+    ]).objects;
+    const live = [...ynca, ...xml, ...yxc, ...tree].filter(def => def.liveLabels === true).map(def => def.id);
+    // Positive control: the inputs and the scenes of YNCA and XML do relabel, so the set is not empty ...
+    expect(live).toEqual(
+      expect.arrayContaining(["input", "multiroom.zone2.input", "scene.recall", "multiroom.zone2.scene.recall"]),
+    );
+    // ... and on MusicCast too: its input labels are the names from getNameText.
+    expect(yxc.filter(def => def.liveLabels === true).map(def => def.id)).toContain("input");
+    expect(live.filter(id => !USER_NAMES.test(id))).toEqual([]);
+    // Every other list on the same receiver keeps its labels while running.
+    const lists = [...ynca, ...xml, ...yxc].filter(def => def.common.states && !USER_NAMES.test(def.id));
+    expect(lists.length).toBeGreaterThan(0);
+    expect(lists.filter(def => def.liveLabels === true).map(def => def.id)).toEqual([]);
   });
 });

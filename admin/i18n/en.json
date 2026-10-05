@@ -774,6 +774,6 @@
   "descPreviousHdRadioProgram": "Steps back to the station's previous digital programme.",
   "queueTracks": "Play queue tracks",
   "descQueueTracks": "The tracks of the network player's play queue, one slot per track as the player shows them.",
-  "tabMain": "Main settings",
+  "tabMain": "Configuration",
   "tabExpert": "Expert"
 }

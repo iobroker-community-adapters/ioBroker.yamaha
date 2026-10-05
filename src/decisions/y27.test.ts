@@ -3,7 +3,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 // Y-27: how devices are searched for is set in the admin — mixed, manual only (no automatic search at all) or
-// automatic only. How a device got into the list does not matter: nothing marks it.
+// automatic only. How a device got into the list does not matter: nothing marks it. The setting sits on the main tab of
+// exactly two tabs, and the main tab is called "Configuration" as in govee (krobi 2026-10-05 22:47 "the main part is
+// called configuration (as in govee), exactly so wanted with 2 tabs").
 
 vi.mock("@iobroker/adapter-core", () => ({
   Adapter: class {
@@ -37,8 +39,27 @@ import { YamahaDeviceManagement } from "../device-management";
 import { buildDeviceForm } from "../device-management-helpers";
 import type { DeviceRecord } from "../lib/types";
 
-const config = JSON.parse(readFileSync(join(__dirname, "..", "..", "admin", "jsonConfig.json"), "utf-8")) as {
-  items: Record<string, { type?: string; options?: Array<{ value: string }>; default?: string }>;
+type ConfigItem = { type?: string; label?: string; options?: Array<{ value: string }>; default?: string };
+const ADMIN = join(__dirname, "..", "..", "admin");
+const jsonConfig = JSON.parse(readFileSync(join(ADMIN, "jsonConfig.json"), "utf-8")) as {
+  type?: string;
+  items: Record<string, ConfigItem & { items?: Record<string, ConfigItem> }>;
+};
+const config = { items: jsonConfig.items._main?.items ?? {} };
+
+/** The main tab's name in every language — govee's words. */
+const CONFIGURATION: Record<string, string> = {
+  en: "Configuration",
+  de: "Konfiguration",
+  ru: "Конфигурация",
+  pt: "Configuração",
+  nl: "Configuratie",
+  fr: "Configuration",
+  it: "Configurazione",
+  es: "Configuración",
+  pl: "Konfiguracja",
+  uk: "Конфігурація",
+  "zh-cn": "配置",
 };
 
 function searches(mode: string | undefined, table: DeviceRecord[]): boolean {
@@ -53,7 +74,17 @@ function searches(mode: string | undefined, table: DeviceRecord[]): boolean {
 const TYPED: DeviceRecord = { id: "rx-v473", ip: "10.0.0.8", source: "manual" };
 
 describe("Y-27 the device search is a setting: mixed, manual only or automatic only", () => {
-  test("the admin offers exactly the three settings", () => {
+  test("the settings have exactly two tabs, the main one called Configuration in every language", () => {
+    expect(jsonConfig.type).toBe("tabs");
+    expect(Object.keys(jsonConfig.items)).toEqual(["_main", "_expert"]);
+    const key = jsonConfig.items._main.label ?? "";
+    for (const [lang, text] of Object.entries(CONFIGURATION)) {
+      const words = JSON.parse(readFileSync(join(ADMIN, "i18n", `${lang}.json`), "utf-8")) as Record<string, string>;
+      expect([lang, words[key]]).toEqual([lang, text]);
+    }
+  });
+
+  test("the admin offers exactly the three settings, on the main tab", () => {
     const discovery = config.items.discovery;
     expect(discovery?.type).toBe("select");
     expect(discovery?.options?.map(option => option.value)).toEqual(["auto", "always", "never"]);

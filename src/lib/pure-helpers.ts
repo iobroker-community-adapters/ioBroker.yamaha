@@ -465,6 +465,8 @@ export const RENAMED_STATE_IDS = [
   "advanced.speakerB",
   // v3.1.0: the 2010/2011 receivers' lip-sync output joined the one id the 2012+ ones use.
   "hdmi.lipSyncSource",
+  // 3.3.0: Zone B's name sits under `zoneName` like every zone's (krobi 2026-10-05 23:15, Y-35).
+  "multiroom.zoneB.name",
 ];
 
 /**

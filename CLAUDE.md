@@ -71,7 +71,8 @@ Y-04-Rückfall, ein XML-Steuerkreuz, das die Gerätebeschreibung deklariert und 
   Schalter (`Auto` = an, geschriebenes „Auto" bleibt gültig); Bass/Höhen sind überall dB (MusicCast-Halbdezibel-Stufen
   halbiert, `halfDb`); der Subwoofer bleibt bei MusicCast-only-Geräten in Gerätestufen (Bereich je Modell verschieden,
   Schrittweite nirgends belegt). Eine desc.xml-Taste mit `Assigned="No"` wird nicht angeboten. Die Zone-B-Datenpunkte heißen
-  wie die jeder Zone (Power/Mute/Volume/Zone name, Rolle `switch.power.zone`).
+  wie die jeder Zone (Power/Mute/Volume/Zone name, Rolle `switch.power.zone`), mit denselben Ids: der Zonenname ist
+  `multiroom.zoneB.zoneName` (krobi 2026-10-05 23:15, Y-35; die alte Id `name` räumt das Update über `RENAMED_STATE_IDS`).
 - **Jeder Schreibweg liefert ein Ergebnis** (`sent`/`refused`/`unavailable`/`unclear` — bewusst gewählt, nie ein vergessenes
   `undefined`), und **jeder Wert, den ein Controller meldet, hat ein Objekt** (sonst verwirft der Transport-Adapter ihn still).
 - **Prüfung:** `src/lib/parity.test.ts` startet die Inventar-Fixture-Geräte, liest jedes einmal je Protokoll (echter Client,
@@ -308,11 +309,6 @@ Browser, mit Hinweis + mitlaufenden Sekunden, solange der Bericht entsteht; der 
   Werten, Logzeilen (`LogRing`, alle Stufen inkl. debug, auch bei Loglevel info).
 - **Pseudonymisierung** (`pseudonymiser.ts`): IP/MAC/Mail per Form, Seriennummer/MAC/SSID/Netz-/Standort-/Zonennamen aus
   ihren Fundstellen (YXC-Schlüssel, XML-Tags, YNCA `ZONENAME`), stabile Marker je Datei; Seriennummer behält die letzten 4.
-- ⚠️ **Drei versiegelte Schutztests sind rot und warten auf die Werkbank:** Y-11 (`src/decisions/y11.test.ts`
-  verbietet jeden Zugriff auf `system.adapter.<fremd>`, auch lesend — krobi will den musiccast-Stand direkt gelesen),
-  Y-27 (`y27.test.ts` liest `jsonConfig.items.discovery` flach, seit dem Tab-Umbau `items._main.items.discovery`) und
-  Y-07 (`y07.test.ts` erwartet für MusicCast-Bass die rohen Stufen −12…12; seit „dB überall" sind es dieselben Grenzen in
-  dB, −6…6/0,5 und für Zone 2 −5…5/1). Dazu braucht `y25.test.ts` einen YNCA-Fall (Eingangsnamen aus `INPNAME`).
 
 ## Chroniken — verlegt nach `.claude/dev-history.md` (2026-09-21)
 
@@ -527,7 +523,7 @@ Der Upgrade-Pfad vom Ur-Adapter 0.5.4 ist test-bewiesen (`pure-helpers.test.ts` 
 `legacyDeviceRow` (config.ip/IP, Hostname ok, `:port`-Suffix wird gestrippt) + `cleanupStaleObjects`
 räumt den KOMPLETTEN Alt-Baum (47 Instanz-Objekte + dynamische `Realtime.*`/`SystemConfig.*`/`inputEnum`).
 
-**Update-Meldungen (`common.messages`, sieben: 1.0.0, 2.0.0, 2.2.0, 2.8.0, 3.0.0, 3.1.0 — `player.playback` nach Rollenkatalog —, 3.3.0 — Adaptive DRC als Schalter, MusicCast-`sleep` als Text, `advanced.inputNames.*` entfallen) folgen seit 2026-09-27 der Flotten-Form:**
+**Update-Meldungen (`common.messages`, sieben: 1.0.0, 2.0.0, 2.2.0, 2.8.0, 3.0.0, 3.1.0 — `player.playback` nach Rollenkatalog —, 3.3.0 — Adaptive DRC als Schalter, MusicCast-`sleep` als Text, Zone-B-Name unter `zoneName`, `advanced.inputNames.*` entfallen) folgen seit 2026-09-27 der Flotten-Form:**
 Titel = die Warnung, Text je Sprache ≤ 200 Zeichen mit einem Beispiel alt → neu, `link` auf die englische Wiki-Seite
 `Upgrade` (Gate `audit_upgrade_messages_short`, `CLAUDE_CONSISTENCY.md`).
 
@@ -544,16 +540,16 @@ Titel = die Warnung, Text je Sprache ≤ 200 Zeichen mit einem Beispiel alt → 
 
 krobi's decisions for this adapter. The register with his verbatim words lives in the locked Werkbank tool tree; a change is a request to the Werkbank, never an edit here. Each guarded rule has a test under `src/decisions/`.
 
-- **Y-01** A receiver that has been read in stays as it is: running code never deletes or empties a datapoint, a value list or a limit. Only an adapter update may change them.
+- **Y-01** A receiver that has been read in stays as it is: running code never deletes or empties a datapoint, a value list or a limit. Only an adapter update may change them. The one exception: names the user gives in the receiver (inputs, scenes, sound programs, zones) follow at runtime as new labels of existing list entries; keys, type and limits stay.
 - **Y-02** What a receiver can do is determined once and stored, never recomputed on every connect; it is queried again at most after an adapter update.
 - **Y-03** An outage means the power is gone and all protocols drop together; which protocol owns a datapoint does not change back and forth at runtime.
 - **Y-04** A command goes through the most modern protocol that can carry it first (MusicCast before YNCA before XML); if it fails there, through the next one; if it never works, the device cannot do it.
 - **Y-05** Volume is one datapoint, volume: it shows what the receiver reports and sends what the receiver expects, with no display twins and no conversion of its own. The only conversion is the percent switch in the admin: it turns the same datapoint into 0–100 %, per device for all zones, set in one place only.
-- **Y-07** When the device reports a minimum and a maximum, those are the limits; a zone that reports other values is handled on its own.
+- **Y-07** When the device reports a minimum and a maximum, those are the limits; a zone that reports other values is handled on its own. Bass and treble are decibels on every protocol: the steps MusicCast reports are halved, zone by zone.
 - **Y-08** Back is sent as Back. If a device cannot do it, the adapter does not switch to another key on its own; the cursor keys are there for the user.
 - **Y-09** The device id is always the model plus the last four characters of the serial number, set once and never derived again; only in the exceptional case does the -2, -3 fallback apply.
 - **Y-10** The old adapters (musiccast) are neither a yardstick nor a priority; existing users of this adapter are carried along on upgrades.
-- **Y-11** No adapter uninstalls another one; that musiccast must be removed before the update is stated in the documentation.
+- **Y-11** No adapter uninstalls another one; that musiccast must be removed before the update is stated in the documentation. The one exception: the diagnostics report reads the musiccast adapter (installed, instances, enabled, alive) and writes nothing.
 - **Y-13** Before a device is deleted the admin asks for confirmation and says that its datapoints go with it; afterwards it is gone for good, and one log line names the device and the number of deleted datapoints.
 - **Y-14** All three protocols (YNCA, MusicCast, XML) are fully supported, always; none of them is optional.
 - **Y-15** Every device command passes one central command gate, one per device and protocol.
@@ -566,10 +562,17 @@ krobi's decisions for this adapter. The register with his verbatim words lives i
 - **Y-22** With 3.0.0 every existing device moves to its new id automatically on the first start, after a warning dialog.
 - **Y-23** The adapter finds out by itself, quickly and robustly, what the connected device can do, and creates datapoints only for that.
 - **Y-24** What the adapter remembers about a device never becomes a datapoint.
-- **Y-25** Inputs carry the names the user gave them in the receiver; there is no second datapoint with the same content (inputText is gone).
+- **Y-25** Inputs carry the names the user gave them in the receiver, on all three protocols (YNCA from @SYS:INPNAME, the keys stay the device codes); there is no second datapoint with the same content (inputText and advanced.inputNames are gone).
 - **Y-26** Play time exists as a number (for media players and voice assistants) and as text (for VIS).
-- **Y-27** Device search is set in the admin: mixed, manual only (no automatic search) or automatic only. How a device got into the list does not matter; there is no marker for it.
+- **Y-27** Device search is set in the admin: mixed, manual only (no automatic search) or automatic only. How a device got into the list does not matter; there is no marker for it. The settings have exactly two tabs; the main tab is called Configuration as in govee and holds the device search.
 - **Y-28** A device with a new IP address is not offline: the adapter tells the two apart and finds it again at the new address. Whoever enters an IP by hand bears the full consequence.
+- **Y-29** The three protocols behave the same: for the user it makes no difference whether YNCA, MusicCast or XML serves a datapoint — the same form, the same values, the same behaviour on a write and on an error. A difference stands only, with its reason, in the parity check's exception list.
+- **Y-30** If a protocol takes a free number, the datapoint is a number; if it knows only fixed values, a dropdown. A free number is never text. sleep knows only fixed values on every protocol and is the same dropdown everywhere.
+- **Y-31** Adaptive DRC is a switch on every protocol; Auto from the device means on, and a written Auto is still taken.
+- **Y-33** On a MusicCast-only device the subwoofer stays in the device's own steps: the range differs per model and nowhere says how many decibels a step is, so nothing is converted.
+- **Y-34** A remote key the receiver lists as not assigned (desc.xml Assigned="No") is not offered.
+- **Y-35** Zone B is named like every other zone: power, mute, volume and the zone name with the same ids, names and roles as zones 2 to 4.
+- **Y-36** The diagnostics report has an Expert tab of its own, as in govee: pick a device, download the report. It only reads the device and changes nothing.
 
 <!-- core-decisions:end -->
 

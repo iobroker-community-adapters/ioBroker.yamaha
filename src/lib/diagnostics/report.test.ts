@@ -112,7 +112,7 @@ describe("diagnostics report of a device that is not connected (B1)", () => {
     const text = reportText({
       objectTree: [
         { id: "multiroom.zone2.zoneName", type: "string", val: "Kinderzimmer" },
-        { id: "multiroom.zoneB.name", type: "string", val: "Terrasse" },
+        { id: "multiroom.zoneB.zoneName", type: "string", val: "Terrasse" },
         { id: "multiroom.group.name", type: "string", val: "Erdgeschoss" },
         { id: "player.bluetooth.deviceName", type: "string", val: "iPhone von Anna" },
         { id: "player.artist", type: "string", val: "Die Ärzte" },

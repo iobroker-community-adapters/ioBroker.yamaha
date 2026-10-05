@@ -774,6 +774,6 @@
   "descPreviousHdRadioProgram": "Torna al programma digitale precedente della stazione.",
   "queueTracks": "Brani della coda",
   "descQueueTracks": "I brani della coda del lettore di rete, una posizione per brano come li mostra il lettore.",
-  "tabMain": "Impostazioni principali",
+  "tabMain": "Configurazione",
   "tabExpert": "Esperto"
 }

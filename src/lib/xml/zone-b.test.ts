@@ -27,7 +27,7 @@ describe("Zone B takes the zone form over XML (review 2026-10-05, A27)", () => {
     expect(en(common("mute")?.name)).toBe("Mute");
     expect(en(common("volume")?.name)).toBe("Volume");
     expect(common("volume")?.desc).toBeDefined();
-    expect(en(common("name")?.name)).toBe("Zone name");
+    expect(en(common("zoneName")?.name)).toBe("Zone name");
     expect(en(common("available")?.name)).toBe("Zone B availability");
     expect(en(common("interlock")?.name)).toBe("Zone B volume interlock");
     // The main zone's own power stays the main switch.

@@ -1,7 +1,7 @@
 import type { ObjectDef } from "../catalog/types";
 import type { I18nKey } from "../i18n";
 import { escapeXmlText } from "./entities";
-import type { BasicStatus, XmlDialect, XmlZoneForm } from "./protocol";
+import { sleepWire, type BasicStatus, type XmlDialect, type XmlZoneForm } from "./protocol";
 
 /**
  * The single source for XML/YNC amplifier states: one entry per unified state
@@ -224,7 +224,9 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     },
     statusField: "sleep",
     putPaths: ["Power_Control,Sleep"],
-    toInner: value => `<Power_Control><Sleep>${escapeXmlText(value)}</Sleep></Power_Control>`,
+    // The device's own spelling of the step: the 2008 generation takes `30`, every later one `30 min` (Y-30).
+    toInner: (value, dialect) =>
+      `<Power_Control><Sleep>${escapeXmlText(sleepWire(value, dialect))}</Sleep></Power_Control>`,
   },
   // Tone, subwoofer trim and the Extra-Bass/YPAO toggles — exposed by the predecessor
   // adapter (yamaha-nodejs-soef) on real pre-2010 devices, and dropped in the rewrite.

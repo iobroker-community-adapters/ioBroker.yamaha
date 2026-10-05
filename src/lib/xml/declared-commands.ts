@@ -35,7 +35,7 @@ const SYSTEM_POWER_GET = "<Power_Control><Power>GetParam</Power></Power_Control>
 
 /** The zone-relative ids of the zone commands (pads, transport keys, names). */
 const ZONE_COMMAND =
-  /^(remote\.(?:cursor|menu)|player\.(?:play|pause|stop|next|prev)|zoneName|multiroom\.zoneB\.name)$/;
+  /^(remote\.(?:cursor|menu)|player\.(?:play|pause|stop|next|prev)|zoneName|multiroom\.zoneB\.zoneName)$/;
 
 /**
  * The all-zones power from its answer.
@@ -259,7 +259,7 @@ export class XmlDeclaredCommands {
       // The Zone B name rides in the main zone's Config (`Config,Name,Zone_B`, HTR-4069, RX-V579,
       // TSR-5810) — YNCA's ZONEBNAME under the same id (audit 2026-09-29, D15).
       if (zone.key === "main" && names.zoneB) {
-        const stateId = "multiroom.zoneB.name";
+        const stateId = "multiroom.zoneB.zoneName";
         const write = !ctx.hasCommandList() || ctx.declares(zone.element, "Config,Name,Zone_B");
         await ctx.ensureChannels(stateId);
         await ctx.deps.upsertObject(`${ctx.deviceId}.${stateId}`, {
@@ -545,7 +545,7 @@ export class XmlDeclaredCommands {
         ctx.refreshZone(zone, "user"),
       );
     }
-    if (command === "zoneName" || command === "multiroom.zoneB.name") {
+    if (command === "zoneName" || command === "multiroom.zoneB.zoneName") {
       // desc.xml declares the name as `Text 1,9,Latin-1` (7 descriptors) — the same rule as YNCA's
       // ZONENAME: a control character, a tenth character or one Latin-1 cannot carry is not sent
       // (audit 2026-09-24, D18).
@@ -559,14 +559,14 @@ export class XmlDeclaredCommands {
       // A refused name is read back the same way, so the datapoint shows the device's name again.
       const escaped = escapeXmlText(value);
       const nameInner =
-        command === "multiroom.zoneB.name"
+        command === "multiroom.zoneB.zoneName"
           ? `<Config><Name><Zone_B>${escaped}</Zone_B></Name></Config>`
           : ctx.declares(zone.element, RENAME_PATH)
             ? `<Rename><Rename_Latin_1>${escaped}</Rename_Latin_1></Rename>`
             : `<Config><Name><Zone>${escaped}</Zone></Name></Config>`;
       return ctx.applyCommand({ zone: zone.element, inner: nameInner }, async () => {
         const names = await this.probeZoneNames(zone, "user");
-        const name = command === "multiroom.zoneB.name" ? names.zoneB : names.zone;
+        const name = command === "multiroom.zoneB.zoneName" ? names.zoneB : names.zone;
         if (name) {
           ctx.emit(stateId, name);
         }

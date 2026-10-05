@@ -75,7 +75,7 @@ const XML_NAME = /<(?:Rename_Latin_1|Device_Name)>([^<]+)<\//g;
  * paired Bluetooth device). The object tree carries them under `val`, next to their `id`.
  */
 const PERSONAL_STATE =
-  /^(?:(?:multiroom\.zone[2-4]\.)?zoneName|multiroom\.zoneB\.name|multiroom\.group\.name|player\.bluetooth\.deviceName)$/;
+  /^(?:(?:multiroom\.zone[2-4B]\.)?zoneName|multiroom\.group\.name|player\.bluetooth\.deviceName)$/;
 
 /**
  * The adapter's log lines that carry a device's name (main.ts: the SSDP NOTIFY a device announces itself

@@ -18087,11 +18087,11 @@
         "zh-cn": "该区域自动进入待机前的时间：MusicCast 以分钟计，两种文本协议给出功放自带的固定档位。"
       },
       "states": {
-        "30": "30 minutes",
-        "60": "60 minutes",
-        "90": "90 minutes",
-        "120": "120 minutes",
-        "Off": "No sleep timer"
+        "Off": "No sleep timer",
+        "30 min": "30 minutes",
+        "60 min": "60 minutes",
+        "90 min": "90 minutes",
+        "120 min": "120 minutes"
       }
     },
     "native": {},

@@ -88,7 +88,7 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
 - (krobipd) Fixed: Switches on receivers with a device description (2008–2017) no longer show an On/Standby list
 - (krobipd) Fixed: The on-screen remote works over XML on the 2012 entry class (RX-V473 …) as its device description declares
 - (krobipd) Fixed: A YNCA receiver that did not answer its probe once is read in full on the next start instead of keeping only its system datapoints
-- (krobipd) Fixed: Zone B datapoints carry the same names and roles as the other zones on every protocol
+- (krobipd) Fixed: Zone B datapoints carry the same names, roles and ids as the other zones on every protocol; its name moves from `multiroom.zoneB.name` to `multiroom.zoneB.zoneName`
 - (krobipd) Fixed: The lists of found and deleted receivers are never treated as empty when they cannot be read, and are written safely; editing a device card no longer restarts the instance
 - (krobipd) Fixed: Zones on Main Zone Sync show and control the main zone's playback; zones without a media input get no player datapoints
 - (krobipd) Fixed: MusicCast — two quick link commands build one group; a favourite never goes to a zone in standby; "power on, then volume" works on soundbars; a late zone's volume uses the right scale; events of the first seconds are kept

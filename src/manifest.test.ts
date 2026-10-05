@@ -89,7 +89,7 @@ describe("every datapoint has a description decision", () => {
   const OFF_INVENTORY: Record<string, string> = {
     "advanced.speakers.speakerA": "A terminal switch named after the terminal it switches.",
     "advanced.speakers.speakerB": "A terminal switch named after the terminal it switches.",
-    "multiroom.zoneB.name": "Zone B's own name; the zoneB channel explains what Zone B is.",
+    "multiroom.zoneB.zoneName": "Zone B's own name; the zoneB channel explains what Zone B is.",
     "multiroom.zoneB.volume": "Zone B's volume, in the decibels its range already shows.",
     "player.channelName": "The channel name a satellite-radio source delivers; the name is the field.",
     "sound.balance": "The left/right balance of the zone, in the range the device declares.",

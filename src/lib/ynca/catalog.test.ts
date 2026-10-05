@@ -139,7 +139,7 @@ describe("YNCA catalog", () => {
     expect(byId.get("multiroom.zoneB.power")).toMatchObject({ nameKey: "power", role: "switch.power.zone" });
     expect(byId.get("multiroom.zoneB.mute")).toMatchObject({ nameKey: "mute", role: "media.mute" });
     expect(byId.get("multiroom.zoneB.volume")).toMatchObject({ nameKey: "volume", descKey: "descVolume" });
-    expect(byId.get("multiroom.zoneB.name")).toMatchObject({ nameKey: "zoneName", descKey: "descZoneName" });
+    expect(byId.get("multiroom.zoneB.zoneName")).toMatchObject({ nameKey: "zoneName", descKey: "descZoneName" });
     // The zone's own keys stay where no zone counterpart exists; the main zone keeps its plain role.
     expect(byId.get("multiroom.zoneB.available")?.nameKey).toBe("zoneBAvailability");
     expect(byId.get("power")?.role).toBe("switch.power");

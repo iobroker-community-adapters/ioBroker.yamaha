@@ -531,6 +531,18 @@ describe("stripNamespace", () => {
 });
 
 describe("renamedObjectIds", () => {
+  it("removes Zone B's old name id; its new zoneName and every zone's stay (Y-35)", () => {
+    const existing = [
+      "yamaha.0.living.multiroom.zoneB.name",
+      "yamaha.0.living.multiroom.zoneB.zoneName",
+      "yamaha.0.living.multiroom.zone2.zoneName",
+      "yamaha.0.living.zoneName",
+    ];
+    expect(renamedObjectIds(existing, new Set(["living"]), "yamaha.0")).toEqual([
+      "yamaha.0.living.multiroom.zoneB.name",
+    ]);
+  });
+
   it("removes the YNCA input names under advanced.inputNames, the folder included (C2, Y-25)", () => {
     const existing = [
       "yamaha.0.living.advanced.inputNames",
