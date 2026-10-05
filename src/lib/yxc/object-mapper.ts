@@ -11,7 +11,7 @@ import { YXC_CURSOR_VALUES, YXC_MENU_VALUES } from "./remote";
 import { tName, type I18nKey } from "../i18n";
 import { YXC_ZONE_IDS, zonePrefix } from "./zones";
 import type { YxcCapabilities, YxcZone } from "./capability";
-import { YXC_AMP_CATALOG } from "./catalog";
+import { YXC_AMP_CATALOG, type YxcAmpEntry } from "./catalog";
 import { ALARM_DAYS, DAB_FIELDS } from "./command-mapper";
 
 /** The zones the adapter maps: main flat, zone2-4 each under multiroom. */
@@ -395,6 +395,126 @@ export function yxcDeclaredAbsent(capabilities: YxcCapabilities): string[] {
 }
 
 /**
+ * One zone catalog datapoint as its object: the device's bounds (`range_step`, or the display scale of the volume),
+ * its declared value list as a dropdown — labelled with the names the user gave inputs and sound programs, which then
+ * follow a rename (`liveLabels`) — and the value the zone reports right now always selectable.
+ *
+ * @param entry the catalog entry
+ * @param zone the zone as getFeatures declares it
+ * @param prefix the zone's id prefix ("" for the main zone)
+ * @param capabilities the parsed YXC capabilities (names, API version)
+ * @param current the string values the zone reports right now, by state id (and `actualVolumeMode`)
+ * @returns the object
+ */
+function zoneStateObject(
+  entry: YxcAmpEntry,
+  zone: YxcZone,
+  prefix: string,
+  capabilities: YxcCapabilities,
+  current: Readonly<Record<string, string>> | undefined,
+): ObjectDef {
+  const keyed = keyedCommon(entry.common);
+  const common: ObjectDef["common"] = { ...keyed, role: zoneRole(keyed.role, prefix) };
+  // The device declares the bounds of its own numeric controls in `range_step`; whatever
+  // it says wins over anything the catalog could guess. Only `volume` used to be read
+  // (audit 2026-09-06) — bass, treble, subwoofer trim, dialogue level/lift, DTS dialogue
+  // control, balance and the equalizer bands stood there as numbers without a slider.
+  let range: DeclaredRange | undefined;
+  // `volume` shows what the receiver's own display shows. `actual_volume.value` arrives in the
+  // form named by `actual_volume.mode`, so unit and bounds follow that mode; the NAME stays
+  // "Volume" either way. A device without a declared display scale falls through to its own
+  // step scale below, unchanged.
+  const shown = entry.scale === "volume" ? volumePresentation(zone, current?.actualVolumeMode) : undefined;
+  if (shown) {
+    common.unit = shown.unit;
+    common.desc = tName(shown.descKey);
+    range = shown.range;
+  } else if (entry.scale === "volumeLimit") {
+    // `max_volume` arrives in raw steps (YXC Basic §5.1); the controller shows it on the scale the
+    // zone's volume is shown on, so 161 next to a volume of −80.5…16.5 dB reads 0.0 dB (audit
+    // 2026-09-29, C40). Unit only: the maximum's own range is not declared.
+    const scale = volumePresentation(zone, current?.actualVolumeMode);
+    if (scale) {
+      common.unit = scale.unit;
+    }
+  } else {
+    range = entry.range ? zone.ranges?.[entry.range] : undefined;
+  }
+  if (range) {
+    common.min = range.min;
+    common.max = range.max;
+    common.step = range.step;
+  }
+  // The device's own allowed-value lists (getFeatures) become dropdowns — DECLARED, so the
+  // coordinator puts them on a YNCA-owned datapoint too, through the dictionary (#619):
+  // the zone's inputs on the input state, sound_program_list & co on their states. What the
+  // zone REPORTS right now is always selectable as well: the RX-A2070 capture lists only
+  // "manual" as tone-control mode and answers "auto" — a device contradicting itself must
+  // not leave the admin with a raw value nobody can pick again.
+  let declared = false;
+  // The value stays the device's id; the label is the name the user gave it in the MusicCast app
+  // (getNameText) — an input list read "hdmi1, hdmi2, …" where the app says "Apple TV" (C24). An input
+  // the app names nothing keeps its classic spelling (`net_radio` → "NET RADIO"), never the bare id.
+  const labels =
+    entry.state === "input"
+      ? { ...MUSICCAST_INPUT_NAMES, ...capabilities.names?.inputs }
+      : entry.state === "soundProgram"
+        ? capabilities.names?.soundPrograms
+        : undefined;
+  if (entry.state === "input" && zone.inputs.length > 0) {
+    common.states = labelled(zone.inputs, labels);
+    declared = true;
+  }
+  const valueList = zone.valueLists?.[entry.state];
+  if (valueList) {
+    common.states = labelled(valueList, labels);
+    declared = true;
+  }
+  const reported = current?.[entry.state];
+  if (common.states && typeof reported === "string" && reported.length > 0 && !Object.hasOwn(common.states, reported)) {
+    common.states = { ...common.states, [reported]: labels?.[reported] ?? reported };
+  }
+  // The labels of the inputs and the sound programs are the names the user gave in the MusicCast app: they follow
+  // a rename while the adapter runs (krobi 2026-10-05; Y-25). Only where getNameText answered — a classic spelling
+  // standing in for a name the device did not deliver must not overwrite the user's.
+  const live = labels !== undefined && capabilities.names !== undefined && common.states !== undefined;
+  return {
+    id: `${prefix}${entry.state}`,
+    type: "state",
+    common,
+    ...(declared ? { declaredStates: true } : {}),
+    ...(live ? { liveLabels: true } : {}),
+  };
+}
+
+/** The zone datapoints whose dropdown labels are the names the user gives in the MusicCast app. */
+const USER_NAMED: readonly string[] = ["input", "soundProgram"];
+
+/**
+ * The two dropdowns of a zone whose labels are the user's names — its inputs and its sound programs — as their
+ * objects, for a rename the device announces (`name_text_updated`). The controller rebuilt the whole tree per zone to
+ * take these two (review 2026-10-05, SOLID).
+ *
+ * @param capabilities the parsed YXC capabilities, with the names just read
+ * @param zoneId the zone (`main`, `zone2`, …)
+ * @param current the string values the zone reports right now, by state id
+ * @returns the objects the zone has of the two, ids relative to the device
+ */
+export function zoneNameDropdowns(
+  capabilities: YxcCapabilities,
+  zoneId: string,
+  current?: Readonly<Record<string, string>>,
+): ObjectDef[] {
+  const zone = capabilities.zones.find(candidate => candidate.id === zoneId);
+  if (!zone) {
+    return [];
+  }
+  return YXC_AMP_CATALOG.filter(entry => USER_NAMED.includes(entry.state) && declares(entry, zone)).map(entry =>
+    zoneStateObject(entry, zone, zonePrefix(zoneId), capabilities, current),
+  );
+}
+
+/**
  * Turn YXC capabilities into the unified object tree: main's functions as
  * top-level states, each additional zone as a channel with its own states. An
  * input state is added when the zone offers inputs. Player sources (netusb, cd)
@@ -426,71 +546,8 @@ export function mapYxcToObjects(
     // Every parent — the zone channel included — is created by the per-state loop and
     // named from the shared CHANNEL_NAME_KEYS table (a zone exists only with an entry).
     for (const entry of entries) {
-      const fullId = `${zoneDef.prefix}${entry.state}`;
-      objects.push(...parentChannels(fullId, channels));
-      const keyed = keyedCommon(entry.common);
-      const common: ObjectDef["common"] = { ...keyed, role: zoneRole(keyed.role, zoneDef.prefix) };
-      // The device declares the bounds of its own numeric controls in `range_step`; whatever
-      // it says wins over anything the catalog could guess. Only `volume` used to be read
-      // (audit 2026-09-06) — bass, treble, subwoofer trim, dialogue level/lift, DTS dialogue
-      // control, balance and the equalizer bands stood there as numbers without a slider.
-      let range: DeclaredRange | undefined;
-      // `volume` shows what the receiver's own display shows. `actual_volume.value` arrives in the
-      // form named by `actual_volume.mode`, so unit and bounds follow that mode; the NAME stays
-      // "Volume" either way. A device without a declared display scale falls through to its own
-      // step scale below, unchanged.
-      const shown =
-        entry.scale === "volume" ? volumePresentation(zone, current?.[zone.id]?.actualVolumeMode) : undefined;
-      if (shown) {
-        common.unit = shown.unit;
-        common.desc = tName(shown.descKey);
-        range = shown.range;
-      } else if (entry.scale === "volumeLimit") {
-        // `max_volume` arrives in raw steps (YXC Basic §5.1); the controller shows it on the scale the
-        // zone's volume is shown on, so 161 next to a volume of −80.5…16.5 dB reads 0.0 dB (audit
-        // 2026-09-29, C40). Unit only: the maximum's own range is not declared.
-        const scale = volumePresentation(zone, current?.[zone.id]?.actualVolumeMode);
-        if (scale) {
-          common.unit = scale.unit;
-        }
-      } else {
-        range = entry.range ? zone.ranges?.[entry.range] : undefined;
-      }
-      if (range) {
-        common.min = range.min;
-        common.max = range.max;
-        common.step = range.step;
-      }
-      // The device's own allowed-value lists (getFeatures) become dropdowns — DECLARED, so the
-      // coordinator puts them on a YNCA-owned datapoint too, through the dictionary (#619):
-      // the zone's inputs on the input state, sound_program_list & co on their states. What the
-      // zone REPORTS right now is always selectable as well: the RX-A2070 capture lists only
-      // "manual" as tone-control mode and answers "auto" — a device contradicting itself must
-      // not leave the admin with a raw value nobody can pick again.
-      let declared = false;
-      // The value stays the device's id; the label is the name the user gave it in the MusicCast app
-      // (getNameText) — an input list read "hdmi1, hdmi2, …" where the app says "Apple TV" (C24). An input
-      // the app names nothing keeps its classic spelling (`net_radio` → "NET RADIO"), never the bare id.
-      const labels =
-        entry.state === "input"
-          ? { ...MUSICCAST_INPUT_NAMES, ...capabilities.names?.inputs }
-          : entry.state === "soundProgram"
-            ? capabilities.names?.soundPrograms
-            : undefined;
-      if (entry.state === "input" && zone.inputs.length > 0) {
-        common.states = labelled(zone.inputs, labels);
-        declared = true;
-      }
-      const valueList = zone.valueLists?.[entry.state];
-      if (valueList) {
-        common.states = labelled(valueList, labels);
-        declared = true;
-      }
-      const reported = current?.[zone.id]?.[entry.state];
-      if (common.states && typeof reported === "string" && reported.length > 0 && !(reported in common.states)) {
-        common.states = { ...common.states, [reported]: labels?.[reported] ?? reported };
-      }
-      objects.push({ id: fullId, type: "state", common, ...(declared ? { declaredStates: true } : {}) });
+      const object = zoneStateObject(entry, zone, zoneDef.prefix, capabilities, current?.[zone.id]);
+      objects.push(...parentChannels(object.id, channels), object);
     }
     const zoneChannelHelper = (id: string, common: ObjectDef["common"]): void => {
       if (!channels.has(id)) {

@@ -1,6 +1,7 @@
 import {
   mapYxcToObjects,
   playerZones,
+  zoneNameDropdowns,
   rawVolumeFor,
   shownVolumeFor,
   volumeScaleOf,
@@ -929,5 +930,51 @@ describe("the CD drive of a CD receiver", () => {
       ]),
     );
     expect(playerZones(caps)).toEqual(["main"]);
+  });
+});
+
+// krobi 2026-10-05: names the user gives in the receiver follow a rename while the adapter runs (Y-25); `liveLabels`
+// marks the lists whose labels are such names.
+describe("the user-named dropdowns", () => {
+  const zones = [
+    {
+      id: "main",
+      funcs: ["power", "sound_program"],
+      inputs: ["hdmi1", "net_radio"],
+      valueLists: { soundProgram: ["munich", "straight"] },
+    },
+    { id: "zone2", funcs: ["power"], inputs: ["hdmi1"] },
+  ];
+  const names = { inputs: { hdmi1: "Apple TV" }, soundPrograms: { munich: "Concert" } };
+
+  test("the inputs and the sound programs carry liveLabels where getNameText answered", () => {
+    const objects = mapYxcToObjects({ zones, media: [], names });
+    const input = objects.find(o => o.id === "input");
+    expect(input?.common.states).toEqual({ hdmi1: "Apple TV", net_radio: "NET RADIO" });
+    expect(input?.liveLabels).toBe(true);
+    expect(objects.find(o => o.id === "soundProgram")?.liveLabels).toBe(true);
+    // No other list follows the device's labels.
+    expect(objects.filter(o => o.liveLabels).map(o => o.id)).toEqual([
+      "input",
+      "soundProgram",
+      "multiroom.zone2.input",
+    ]);
+  });
+
+  test("without getNameText's answer the classic spellings must not overwrite the user's names", () => {
+    expect(mapYxcToObjects({ zones, media: [] }).filter(o => o.liveLabels)).toEqual([]);
+  });
+
+  test("a rename rebuilds the zone's two dropdowns alone, the reported value selectable", () => {
+    const capabilities = { zones, media: [], names };
+    const dropdowns = zoneNameDropdowns(capabilities, "main", { input: "tv" });
+    expect(dropdowns.map(o => o.id)).toEqual(["input", "soundProgram"]);
+    expect(dropdowns[0].common.states).toEqual({ hdmi1: "Apple TV", net_radio: "NET RADIO", tv: "TV" });
+    expect(zoneNameDropdowns(capabilities, "zone2").map(o => o.id)).toEqual(["multiroom.zone2.input"]);
+    expect(zoneNameDropdowns(capabilities, "zone3")).toEqual([]);
+    // The same objects the whole tree carries.
+    expect(zoneNameDropdowns(capabilities, "main")).toEqual(
+      mapYxcToObjects(capabilities).filter(o => o.id === "input" || o.id === "soundProgram"),
+    );
   });
 });
