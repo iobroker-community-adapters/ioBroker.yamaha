@@ -12,6 +12,7 @@ import { readyLine } from "../ready-line";
 import type { HandleCapture, TransportCapture } from "../diagnostics/types";
 import { emptyLearnedTree, type LearnedTree } from "./learned-tree";
 import { RetryLoop, type Backoff } from "./reconnect-strategy";
+import { DropLatch } from "./drop-latch";
 
 /**
  * What a transport made of a user write:
@@ -155,12 +156,10 @@ export class MultiTransportHandle implements ConnectionHandle {
   private readonly missing: Set<Transport>;
   /** A firmware update opened the read-in in this session — its completion says "ready" again. */
   private firmwareChanged = false;
-  private supervisorDrop: ((reason?: Error) => void) | undefined;
   /** The learn in flight, so two signals never run one concurrently. */
   private learning: Promise<void> = Promise.resolve();
-  /** All transports went down before the supervisor registered onDrop — delivered on registration. */
-  private pendingDrop: Error | undefined | false = false;
-  private droppedAll = false;
+  /** The device is gone (the last transport dropped) — reported once, kept until the supervisor registers. */
+  private readonly gone = new DropLatch();
   private closed = false;
 
   /**
@@ -579,8 +578,10 @@ export class MultiTransportHandle implements ConnectionHandle {
     this.live.splice(index, 1);
     connection.close();
     if (this.live.length === 0) {
+      // The device itself is unreachable: the supervisor (once it registered) closes this handle and
+      // reconnects the whole set.
       this.cancelRetries();
-      this.reportDeviceGone(reason);
+      this.gone.report(reason);
       return;
     }
     this.reportTransports();
@@ -691,25 +692,6 @@ export class MultiTransportHandle implements ConnectionHandle {
   }
 
   /**
-   * The last live transport is gone — the device itself is unreachable. Report once to
-   * the supervisor (latched if it has not registered yet), which closes this handle and
-   * reconnects the whole set.
-   *
-   * @param reason the final drop's reason, if known
-   */
-  private reportDeviceGone(reason?: Error): void {
-    if (this.droppedAll) {
-      return;
-    }
-    this.droppedAll = true;
-    if (this.supervisorDrop) {
-      this.supervisorDrop(reason);
-    } else {
-      this.pendingDrop = reason ?? undefined;
-    }
-  }
-
-  /**
    * Route a user write to the transport that owns the datapoint (a no-op for an acked echo or an id no
    * transport owns). When the owner is offline or the device refused the command there, the write goes to
    * the next transport that serves the datapoint and carries the value unchanged — only for a datapoint
@@ -787,12 +769,7 @@ export class MultiTransportHandle implements ConnectionHandle {
    * @param cb invoked once when the device is judged gone
    */
   public onDrop(cb: (reason?: Error) => void): void {
-    this.supervisorDrop = cb;
-    if (this.pendingDrop !== false) {
-      const reason = this.pendingDrop;
-      this.pendingDrop = false;
-      cb(reason);
-    }
+    this.gone.onDrop(cb);
   }
 
   /**
