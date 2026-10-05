@@ -39,7 +39,7 @@ function withReported(states: Record<string, string>, reported: string | undefin
  * @param ownerDef the owner's definition
  * @param transport the claimant
  * @param def the claimant's definition
- * @returns the map to adopt, or undefined when its keys are not the owner's values
+ * @returns the list to adopt, or undefined when its keys are not the owner's values
  */
 function lentStates(
   key: string,
@@ -47,15 +47,103 @@ function lentStates(
   ownerDef: ObjectDef,
   transport: Transport,
   def: ObjectDef,
-): Record<string, string> | undefined {
+): AdoptedList | undefined {
   const states = def.common.states;
   if (!states || def.common.type !== ownerDef.common.type) {
     return undefined;
   }
   if (def.common.type !== "string" || STATES_VOCABULARY[transport] === STATES_VOCABULARY[owner]) {
-    return states;
+    return { states, liveLabels: def.liveLabels === true };
   }
-  return STATES_VOCABULARY[owner] === "classic" ? translateDeclaredStates(key, states) : undefined;
+  // The dictionary gives words, not the names the user gave: no live labels.
+  const translated = STATES_VOCABULARY[owner] === "classic" ? translateDeclaredStates(key, states) : undefined;
+  return translated ? { states: translated, liveLabels: false } : undefined;
+}
+
+/** A value list a datapoint takes from another transport, and where its labels come from. */
+interface AdoptedList {
+  /** The list. */
+  states: Record<string, string>;
+  /** The list is a device's own declaration (see `ObjectDef.declaredStates`). */
+  declared?: boolean;
+  /** Its labels are names the user gives in the receiver (see `ObjectDef.liveLabels`). */
+  liveLabels: boolean;
+}
+
+/**
+ * The value list another transport gives the owner's datapoint, if any. Three cases. (a) The owner has no list
+ * at all: another claimant's list is taken for its labels (the scene titles over XML/YNCA while MusicCast owns the
+ * recall) — see {@link lentStates} for when its keys fit the owner. (b) The owner carries a catalog UNION and another
+ * transport carries the device's OWN declaration: the declaration wins (#619 — the XML input list on the YNCA-owned
+ * input), but only within one wire vocabulary, because the list's KEYS are what the owner's write path will be
+ * asked to send. (c) No declaration in the owner's vocabulary: a MusicCast declaration reaches a classic owner
+ * through the evidenced dictionary — all or nothing, so no dropdown is ever half translated; the XML list, when
+ * present, was taken in (b): the device's own spelling beats the dictionary. Borrowing never changes routing;
+ * borrowed in modernity-independent claim order (first with one).
+ *
+ * The labels' origin travels with the list: a list whose labels are names the user gives in the receiver
+ * (`liveLabels`) follows renames while the adapter runs, any other keeps its labels (krobi 2026-10-05). A lent or
+ * declared list brings the lender's flag; a dictionary brings words, not names — there the owner keeps its own
+ * label (and flag) for a value it labels, so the input names YNCA reads (Y-25) survive a MusicCast declaration.
+ *
+ * A switch takes no list: its values are `true` and `false` over every protocol. XML's description words
+ * (`On`/`Standby`) were lent to YNCA's and MusicCast's boolean `power` and `mute`, and a dropdown entry
+ * "Standby" sent nothing (review 2026-10-05, A19).
+ *
+ * @param key the transport-neutral capability key
+ * @param owner the owning transport
+ * @param ownerDef the owner's definition
+ * @param defs every transport's definition of the datapoint
+ * @returns the list to adopt, or undefined when the owner keeps its own
+ */
+function adoptedList(
+  key: string,
+  owner: Transport,
+  ownerDef: ObjectDef,
+  defs: ReadonlyMap<Transport, ObjectDef>,
+): AdoptedList | undefined {
+  const own = ownerDef.common.states;
+  if (ownerDef.common.type === "boolean" || (own && ownerDef.declaredStates)) {
+    return undefined;
+  }
+  if (!own) {
+    for (const [transport, def] of defs) {
+      const lent = lentStates(key, owner, ownerDef, transport, def);
+      if (lent) {
+        return lent;
+      }
+    }
+    return undefined;
+  }
+  for (const [transport, def] of defs) {
+    if (def.declaredStates && def.common.states && STATES_VOCABULARY[transport] === STATES_VOCABULARY[owner]) {
+      return {
+        states: withReported(def.common.states, ownerDef.reportedValue),
+        declared: true,
+        liveLabels: def.liveLabels === true,
+      };
+    }
+  }
+  if (STATES_VOCABULARY[owner] !== "classic") {
+    return undefined;
+  }
+  for (const [transport, def] of defs) {
+    const translated =
+      def.declaredStates && def.common.states && STATES_VOCABULARY[transport] === "musiccast"
+        ? translateDeclaredStates(key, def.common.states)
+        : undefined;
+    if (translated) {
+      const labelled = Object.fromEntries(
+        Object.entries(translated).map(([value, word]) => [value, Object.hasOwn(own, value) ? own[value] : word]),
+      );
+      return {
+        states: withReported(labelled, ownerDef.reportedValue),
+        declared: true,
+        liveLabels: ownerDef.liveLabels === true,
+      };
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -113,48 +201,19 @@ export function coordinateObjectTree(
     if (!ownerDef) {
       throw new Error(`coordinateObjectTree: owner ${owner} has no def for ${canonicalId}`);
     }
-    // Dropdown borrowing, two cases. (a) The owner has no labels at all: another claimant's map
-    // is taken for its labels (the scene titles over XML/YNCA while MusicCast owns the recall) —
-    // see lentStates for when its keys fit the owner. (b) The owner carries a catalog UNION and another transport carries the
-    // device's OWN declaration: the declaration wins (#619 — the XML input list on the YNCA-owned
-    // input), but only within one wire vocabulary, because the map's KEYS are what the owner's
-    // write path will be asked to send. Borrowing never changes routing; borrowed in
-    // modernity-independent claim order (first with one).
+    // The owner's definition — with its own list and that list's label origin (`liveLabels`) — unless another
+    // transport gives the datapoint a better list (see adoptedList).
     const resolvedDef: ObjectDef = { ...ownerDef, id: canonicalId };
-    if (!resolvedDef.common.states) {
-      for (const [transport, def] of entry.defs) {
-        const lent = lentStates(entry.key, owner, ownerDef, transport, def);
-        if (lent) {
-          resolvedDef.common = { ...resolvedDef.common, states: lent };
-          break;
-        }
+    const adopted = adoptedList(entry.key, owner, ownerDef, entry.defs);
+    if (adopted) {
+      resolvedDef.common = { ...resolvedDef.common, states: adopted.states };
+      if (adopted.declared) {
+        resolvedDef.declaredStates = true;
       }
-    } else if (!ownerDef.declaredStates) {
-      for (const [transport, def] of entry.defs) {
-        if (def.declaredStates && def.common.states && STATES_VOCABULARY[transport] === STATES_VOCABULARY[owner]) {
-          resolvedDef.common = {
-            ...resolvedDef.common,
-            states: withReported(def.common.states, ownerDef.reportedValue),
-          };
-          resolvedDef.declaredStates = true;
-          break;
-        }
-      }
-      // (c) No declaration in the owner's own vocabulary: a MusicCast declaration reaches a classic
-      // owner through the evidenced dictionary — all or nothing, so no dropdown is ever half
-      // translated. The XML list, when present, was taken above: the device's own spelling beats
-      // the dictionary.
-      if (!resolvedDef.declaredStates && STATES_VOCABULARY[owner] === "classic") {
-        for (const [transport, def] of entry.defs) {
-          if (def.declaredStates && def.common.states && STATES_VOCABULARY[transport] === "musiccast") {
-            const translated = translateDeclaredStates(entry.key, def.common.states);
-            if (translated) {
-              resolvedDef.common = { ...resolvedDef.common, states: withReported(translated, ownerDef.reportedValue) };
-              resolvedDef.declaredStates = true;
-              break;
-            }
-          }
-        }
+      if (adopted.liveLabels) {
+        resolvedDef.liveLabels = true;
+      } else {
+        delete resolvedDef.liveLabels;
       }
     }
     return resolvedDef;
