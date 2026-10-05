@@ -13,5 +13,8 @@
   "yd_exportFailed": "Impossibile creare il rapporto.",
   "yd_privacy": "Indirizzi, numeri di serie, nomi di rete e delle stanze vengono sostituiti da segnaposto prima che il file lasci l'adattatore. L'adattatore non conserva alcuna copia.",
   "yd_generating": "Creazione del rapporto di diagnostica — il ricevitore viene letto tramite ogni protocollo che supporta. Richiede fino a un minuto; poi il file viene offerto per il download.",
-  "yd_elapsed": "%s s"
+  "yd_elapsed": "%s s",
+  "yd_notRunning": "L'istanza non è in esecuzione. Avviala, poi riapri questa scheda.",
+  "yd_stopped": "L'istanza si è fermata mentre il rapporto veniva creato (riavvio o arresto anomalo). Riprova quando è di nuovo in esecuzione: il log dell'istanza indica cosa è successo.",
+  "yd_noAnswer": "L'adattatore non ha risposto entro %s s. Controlla il log dell'istanza, poi riprova."
 }

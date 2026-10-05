@@ -13,5 +13,8 @@
   "yd_exportFailed": "Het rapport kon niet worden gemaakt.",
   "yd_privacy": "Adressen, serienummers, netwerk- en kamernamen worden door markeringen vervangen voordat het bestand de adapter verlaat. De adapter bewaart geen kopie.",
   "yd_generating": "Diagnoserapport wordt gemaakt – de receiver wordt uitgelezen via elk protocol dat hij spreekt. Dit duurt tot een minuut; daarna wordt het bestand aangeboden om te downloaden.",
-  "yd_elapsed": "%s s"
+  "yd_elapsed": "%s s",
+  "yd_notRunning": "De instantie draait niet. Start deze en open dit tabblad daarna opnieuw.",
+  "yd_stopped": "De instantie is gestopt terwijl het rapport werd gemaakt (herstart of crash). Probeer het opnieuw zodra ze weer draait — het logboek van de instantie toont wat er gebeurde.",
+  "yd_noAnswer": "De adapter heeft niet binnen %s s geantwoord. Controleer het logboek van de instantie en probeer het opnieuw."
 }

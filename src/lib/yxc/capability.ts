@@ -1,3 +1,6 @@
+import { YXC_AMP_CATALOG } from "./catalog";
+import { YXC_REMOTE_LISTS } from "./remote";
+
 /** One zone from a YXC getFeatures response. */
 export interface YxcZone {
   /** Zone id (`main`, `zone2`, …). */
@@ -101,6 +104,12 @@ export interface YxcCapabilities {
   systemFuncs?: string[];
   /** The value lists the SYSTEM block declares (`hdmi_standby_through_list`), keyed by their id. */
   systemLists?: Record<string, string[]>;
+  /**
+   * Which player each input feeds — `system.input_list[].play_info_type` (YXC Basic §4.2: `none`, `tuner`, `netusb`,
+   * `cd`), by input id. It decides which zone gets a "now playing" block (review 2026-10-05, A48). Absent in a memory
+   * from an earlier release, and on a device that does not declare it.
+   */
+  playInfoTypes?: Record<string, string>;
   /** The counts the SYSTEM block declares (`speaker_pattern_num`, `video_preset_num`), keyed by their id. */
   systemCounts?: Record<string, number>;
 }
@@ -182,25 +191,15 @@ function parseRanges(rangeStep: unknown): Record<string, { min: number; max: num
 }
 
 /**
- * The getFeatures zone list fields that carry a zone's allowed values, mapped to the
- * unified state id whose dropdown they feed (capture-verified field names).
+ * The getFeatures zone list fields that carry a zone's allowed values, mapped to the unified state id whose
+ * dropdown they feed (capture-verified field names) — read from the catalog entries and the remote's two lists,
+ * where each field is declared once. The parsed lists stay keyed by state id: that is the shape the probe memory
+ * persists.
  */
-const ZONE_VALUE_LISTS: Readonly<Record<string, string>> = {
-  sound_program_list: "soundProgram",
-  surr_decoder_type_list: "sound.surroundDecoder",
-  tone_control_mode_list: "sound.toneMode",
-  equalizer_mode_list: "sound.equalizer.mode",
-  audio_select_list: "sound.audioSelect",
-  link_control_list: "sound.linkControl",
-  link_audio_delay_list: "sound.linkAudioDelay",
-  link_audio_quality_list: "sound.linkAudioQuality",
-  // The on-screen remote words THIS zone accepts. Measured over 26 captures (2026-09-09): one
-  // cursor list everywhere, but three menu variants — 5, 9 and 12 words (help/home/mode and the
-  // four colour keys only on some models). The shared vocabulary is the maximum, the device's
-  // list is the truth; before this the dropdown offered all 12 on every zone.
-  cursor_list: "remote.cursor",
-  menu_list: "remote.menu",
-};
+const ZONE_VALUE_LISTS: ReadonlyArray<readonly [field: string, state: string]> = [
+  ...YXC_AMP_CATALOG.flatMap(entry => (entry.list ? [[entry.list, entry.state] as const] : [])),
+  ...Object.entries(YXC_REMOTE_LISTS).map(([state, field]) => [field, state] as const),
+];
 
 /**
  * Collect a zone's per-device value lists (sound programs, decoder types, …) from its
@@ -211,7 +210,7 @@ const ZONE_VALUE_LISTS: Readonly<Record<string, string>> = {
  */
 function parseValueLists(zone: Record<string, unknown>): Record<string, string[]> | undefined {
   const lists: Record<string, string[]> = {};
-  for (const [field, stateId] of Object.entries(ZONE_VALUE_LISTS)) {
+  for (const [field, stateId] of ZONE_VALUE_LISTS) {
     const values = stringList(zone[field]);
     if (values.length > 0) {
       lists[stateId] = values;
@@ -268,6 +267,26 @@ function parseClockFeatures(clock: unknown): YxcClockFeatures | undefined {
 }
 
 /**
+ * Which player each input feeds, from the system block's input list.
+ *
+ * @param list `system.input_list` (untrusted)
+ * @returns input id → `play_info_type`, or undefined when the list declares none
+ */
+function playInfoTypesOf(list: unknown): Record<string, string> | undefined {
+  const types: Record<string, string> = {};
+  for (const entry of Array.isArray(list) ? list : []) {
+    const { id, play_info_type: type } = (typeof entry === "object" && entry !== null ? entry : {}) as {
+      id?: unknown;
+      play_info_type?: unknown;
+    };
+    if (typeof id === "string" && typeof type === "string") {
+      types[id] = type;
+    }
+  }
+  return Object.keys(types).length > 0 ? types : undefined;
+}
+
+/**
  * Parse a YXC getFeatures response into zones (with their functions and inputs)
  * and the media blocks the device offers. Robust against a malformed response.
  *
@@ -299,9 +318,14 @@ export function parseYxcFeatures(response: unknown): YxcCapabilities {
       }
     }
   }
-  const media = MEDIA_BLOCKS.filter(block => block in obj);
-  const netusb = obj.netusb;
   const system = typeof obj.system === "object" && obj.system !== null ? (obj.system as Record<string, unknown>) : {};
+  const playInfoTypes = playInfoTypesOf(system.input_list);
+  // A media source is declared by its own getFeatures block — the CD drive has none (YXC Basic §4.2; not one of the 28
+  // captures carries a `cd` key, the CD-NT670D's included) and is declared by the input that plays through it
+  // (`play_info_type: "cd"`). Read from the blocks alone, no device ever had its CD surface.
+  const declaredTypes = new Set(Object.values(playInfoTypes ?? {}));
+  const media = MEDIA_BLOCKS.filter(block => block in obj || (block === "cd" && declaredTypes.has("cd")));
+  const netusb = obj.netusb;
   const systemLists: Record<string, string[]> = {};
   const systemCounts: Record<string, number> = {};
   for (const [key, value] of Object.entries(system)) {
@@ -322,6 +346,7 @@ export function parseYxcFeatures(response: unknown): YxcCapabilities {
     systemRanges: parseRanges(system.range_step),
     ...(Object.keys(systemLists).length > 0 ? { systemLists } : {}),
     ...(Object.keys(systemCounts).length > 0 ? { systemCounts } : {}),
+    ...(playInfoTypes ? { playInfoTypes } : {}),
     zones,
     media,
     netusbFuncs:

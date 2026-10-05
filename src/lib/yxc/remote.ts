@@ -21,6 +21,17 @@ export const YXC_CURSOR_VALUES: readonly CursorValue[] = CURSOR_VALUES.filter(va
 export const YXC_MENU_VALUES: readonly MenuValue[] = MENU_VALUES;
 
 /**
+ * The getFeatures fields that declare the remote words a zone takes, by the datapoint they feed. Measured over 26
+ * captures (2026-09-09): one cursor list everywhere, but three menu variants — 5, 9 and 12 words (help/home/mode
+ * and the four colour keys only on some models). The shared vocabulary above is the maximum, the zone's list is
+ * the truth.
+ */
+export const YXC_REMOTE_LISTS: Readonly<Record<"remote.cursor" | "remote.menu", string>> = {
+  "remote.cursor": "cursor_list",
+  "remote.menu": "menu_list",
+};
+
+/**
  * Whether a written word is one this transport accepts. The dropdown on the datapoint is a
  * hint, not a constraint — a script can write anything, and without this check the adapter
  * put the raw string on the wire for the device to reject.

@@ -34,4 +34,25 @@ describe("LogRing", () => {
       "10.0.0.5 answered",
     ]);
   });
+
+  // Review 2026-10-05, B4: a substring match handed a device the lines of every device whose id or address
+  // starts like its own.
+  it("matches ids and addresses as whole tokens, not as prefixes of a longer one", () => {
+    const ring = new LogRing();
+    ring.add("info", "rx-v473-2: ready — YNCA ✓");
+    ring.add("debug", "10.0.0.50: description fetch failed");
+    ring.add("info", "rx-v473: ready — YNCA ✓");
+    ring.add("debug", "state yamaha.0.rx-v473.power written");
+    ring.add("debug", "connected to 10.0.0.5.");
+    expect(ring.about(["rx-v473", "10.0.0.5"], ["rx-v473-2", "10.0.0.50"]).map(line => line.msg)).toEqual([
+      "rx-v473: ready — YNCA ✓",
+      "state yamaha.0.rx-v473.power written",
+      "connected to 10.0.0.5.",
+    ]);
+    // And the other way round: the longer id gets its own lines, never the shorter one's.
+    expect(ring.about(["rx-v473-2", "10.0.0.50"], ["rx-v473", "10.0.0.5"]).map(line => line.msg)).toEqual([
+      "rx-v473-2: ready — YNCA ✓",
+      "10.0.0.50: description fetch failed",
+    ]);
+  });
 });

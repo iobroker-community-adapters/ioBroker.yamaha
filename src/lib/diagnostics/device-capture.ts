@@ -1,7 +1,11 @@
 import { XML_BROWSE_SOURCES } from "../browse/xml-browse-driver";
+import { ZONES } from "../catalog/zones";
 import { errText } from "../err-text";
+import { HttpStatusError } from "../util";
+import { descriptorPuts, parseSystemConfig } from "../xml/protocol";
 import { availGets, sweepGets, YNCA_CATALOG } from "../ynca/catalog";
 import { decodeLine } from "../ynca/protocol";
+import { parseYxcFeatures } from "../yxc/capability";
 import { YxcRefusalError } from "../yxc/http-client";
 import type { TransportCapture } from "./types";
 
@@ -25,6 +29,12 @@ export interface XmlCaptureClient {
   getXml(element: string, inner: string): Promise<string>;
 }
 
+/** One YNCA read: the functions it asked, and whether it ran to its closing marker. */
+interface YncaBatch {
+  gets: ReadonlyArray<{ subunit: string; func: string }>;
+  complete: boolean;
+}
+
 /**
  * Read the YNCA functions the adapter knows, the way the read-in does: first `AVAIL=?` per subunit,
  * then every catalogued function of the subunits that answered, plus SYS (which never answers
@@ -36,51 +46,65 @@ export interface XmlCaptureClient {
 export async function captureYnca(client: YncaCaptureClient): Promise<TransportCapture> {
   const started = Date.now();
   const lines: string[] = [];
-  let complete = true;
-  let asked = 0;
+  const batches: YncaBatch[] = [];
+  const read = async (gets: ReadonlyArray<{ subunit: string; func: string }>): Promise<string[]> => {
+    // Recorded before the wait: a read that throws counts as one that did not reach its end.
+    const batch: YncaBatch = { gets, complete: false };
+    batches.push(batch);
+    const result = await client.capture(gets);
+    lines.push(...result.lines);
+    batch.complete = result.complete;
+    return result.lines;
+  };
+  let error: string | undefined;
   try {
-    const probe = availGets(YNCA_CATALOG);
-    const first = await client.capture(probe);
-    asked += probe.length;
-    lines.push(...first.lines);
-    complete = first.complete;
-    const present = new Set<string>(["SYS"]);
-    for (const line of first.lines) {
-      const decoded = decodeLine(line);
-      if (decoded.status === "ok" && decoded.func === "AVAIL") {
-        present.add(decoded.subunit);
-      }
-    }
-    const all = sweepGets(YNCA_CATALOG);
-    const gets = present.size > 1 ? all.filter(get => present.has(get.subunit)) : all;
+    const probe = await read(availGets(YNCA_CATALOG));
     // Asked even when the probe's closing marker came late: a slow answer is no drop, and a dropped
     // connection ends the second read at once.
-    const second = await client.capture(gets);
-    asked += gets.length;
-    lines.push(...second.lines);
-    complete = complete && second.complete;
-    return yncaCapture(started, complete, asked, lines, [...probe, ...gets]);
+    await read(targetedGets(probe));
   } catch (e) {
-    return { ...yncaCapture(started, false, asked, lines, []), error: errText(e) };
+    error = errText(e);
   }
+  return yncaCapture(started, lines, batches, error);
 }
 
 /**
- * Assemble the YNCA capture from the received lines.
+ * The functions to read after the AVAIL probe: every catalogued one of the subunits that answered
+ * AVAIL, plus SYS — or all of them when no subunit answered (a firmware without AVAIL loses nothing).
+ * Only an AVAIL answer counts as presence; the closing marker's `@SYS:VERSION` is no proof of
+ * anything (the read-in's dead blind-sweep fallback, review 2026-10-05, A1).
+ *
+ * @param probe the lines the AVAIL probe received
+ * @returns the functions to read
+ */
+function targetedGets(probe: readonly string[]): Array<{ subunit: string; func: string }> {
+  const present = new Set<string>();
+  for (const line of probe) {
+    const decoded = decodeLine(line);
+    if (decoded.status === "ok" && decoded.func === "AVAIL") {
+      present.add(decoded.subunit);
+    }
+  }
+  const all = sweepGets(YNCA_CATALOG);
+  return present.size > 0 ? all.filter(get => get.subunit === "SYS" || present.has(get.subunit)) : all;
+}
+
+/**
+ * Assemble the YNCA capture from the received lines. A read that did not reach its closing marker
+ * (a drop, a closed connection, a device that went silent) counts every function it got no value for
+ * as failed — whether the device would have refused it cannot be told any more.
  *
  * @param started when the read started (ms)
- * @param complete whether it ran to its end
- * @param asked how many lines were asked
  * @param lines the received lines
- * @param gets every function asked
+ * @param batches the reads, in order
+ * @param thrown the failure that ended the read, if one threw
  * @returns the capture
  */
 function yncaCapture(
   started: number,
-  complete: boolean,
-  asked: number,
   lines: string[],
-  gets: ReadonlyArray<{ subunit: string; func: string }>,
+  batches: readonly YncaBatch[],
+  thrown: string | undefined,
 ): TransportCapture {
   const answers: Record<string, string> = {};
   for (const line of lines) {
@@ -89,17 +113,144 @@ function yncaCapture(
       answers[`${decoded.subunit}:${decoded.func}`] = decoded.value;
     }
   }
-  const unanswered = [...new Set(gets.map(get => `${get.subunit}:${get.func}`))].filter(key => !(key in answers));
+  const keysOf = (gets: YncaBatch["gets"]): string[] => [...new Set(gets.map(get => `${get.subunit}:${get.func}`))];
+  const unanswered = keysOf(batches.flatMap(batch => batch.gets)).filter(key => !(key in answers));
+  const failed = batches
+    .filter(batch => !batch.complete)
+    .reduce((sum, batch) => sum + keysOf(batch.gets).filter(key => !(key in answers)).length, 0);
+  const complete = thrown === undefined && batches.length > 0 && batches.every(batch => batch.complete);
   return {
     transport: "ynca",
     startedAt: new Date(started).toISOString(),
     durationMs: Date.now() - started,
     complete,
-    asked,
+    asked: batches.reduce((sum, batch) => sum + batch.gets.length, 0),
+    failed,
     answers,
     lines,
     unanswered,
+    ...(complete
+      ? {}
+      : {
+          error:
+            thrown ??
+            "the read ended before the device confirmed its end — the connection dropped or the device stopped answering",
+        }),
   };
+}
+
+/**
+ * After this many transport failures in a row the device is taken as gone and the rest is not asked:
+ * every further question would only wait for its timeout (4–5 s each), and the report of a receiver
+ * that lost its power would take minutes.
+ */
+const GONE_AFTER_FAILURES = 3;
+
+/**
+ * What a failed request says about the device: its own verdict — a MusicCast refusal (`response_code`),
+ * an HTTP status (an XML firmware answers an unknown node with a bodyless 400), a body that is not JSON —
+ * or nothing, when no answer came at all (a timeout, a refused or reset connection, a closed gate). Only
+ * the latter is a transport failure.
+ *
+ * @param e the failure
+ * @returns the verdict as the capture keeps it, or undefined for a transport failure
+ */
+function verdictOf(e: unknown): Record<string, unknown> | undefined {
+  if (e instanceof YxcRefusalError) {
+    return { response_code: e.code };
+  }
+  if (e instanceof HttpStatusError) {
+    return { httpStatus: e.statusCode };
+  }
+  if (e instanceof SyntaxError) {
+    return { invalidBody: errText(e) };
+  }
+  return undefined;
+}
+
+/**
+ * The bookkeeping of one HTTP capture (MusicCast and XML alike): every question is put, its answer — or
+ * the device's verdict — kept under the fixture key, a transport failure kept as `{ error }` and counted.
+ * The read is complete when every question was put and none failed in transport: the same meaning the
+ * YNCA capture gives the word (review 2026-10-05, B5 — it used to mean "anything answered").
+ */
+class HttpCapture {
+  /** The answers, keyed like the inventory fixtures. */
+  public readonly answers: Record<string, unknown> = {};
+  private readonly started = Date.now();
+  private asked = 0;
+  private failed = 0;
+  private inARow = 0;
+  /** Questions not put because the device had stopped answering. */
+  private skipped = 0;
+  private firstError: string | undefined;
+
+  /**
+   * Ask one question — unless the device is gone (see {@link GONE_AFTER_FAILURES}).
+   *
+   * @param key the fixture key the answer is kept under; undefined keeps it out of `answers` (the XML
+   *   description has a field of its own)
+   * @param request sends the question
+   * @returns the answer, or undefined when there is none to use (a verdict, a failure, not asked)
+   */
+  public async ask<T>(key: string | undefined, request: () => Promise<T>): Promise<T | undefined> {
+    if (this.inARow >= GONE_AFTER_FAILURES) {
+      this.skipped++;
+      return undefined;
+    }
+    this.asked++;
+    const keep = (value: unknown): void => {
+      if (key !== undefined) {
+        this.answers[key] = value;
+      }
+    };
+    try {
+      const answer = await request();
+      keep(answer);
+      this.inARow = 0;
+      return answer;
+    } catch (e) {
+      const verdict = verdictOf(e);
+      if (verdict) {
+        keep(verdict);
+        this.inARow = 0;
+      } else {
+        keep({ error: errText(e) });
+        this.failed++;
+        this.inARow++;
+        this.firstError ??= errText(e);
+      }
+      return undefined;
+    }
+  }
+
+  /**
+   * The capture.
+   *
+   * @param transport the protocol read
+   * @param extra transport-specific fields
+   * @returns the capture
+   */
+  public result(transport: TransportCapture["transport"], extra: Partial<TransportCapture> = {}): TransportCapture {
+    return {
+      transport,
+      startedAt: new Date(this.started).toISOString(),
+      durationMs: Date.now() - this.started,
+      complete: this.failed === 0,
+      asked: this.asked,
+      failed: this.failed,
+      answers: this.answers,
+      ...extra,
+      ...(this.firstError === undefined
+        ? {}
+        : {
+            error:
+              this.skipped > 0
+                ? `${this.firstError} — the device stopped answering, ${this.skipped} more question(s) not asked`
+                : this.firstError,
+          }),
+    };
+  }
 }
 
 /** The device-wide MusicCast reads — every `get` of the specification that takes no argument. */
@@ -128,194 +279,126 @@ const YXC_ZONE_READS = ["getStatus", "getSignalInfo", "getSoundProgramList"] as 
 
 /**
  * Read every MusicCast endpoint that only reports: the device-wide ones, each zone `getFeatures`
- * declares, and the tuner presets of each band it declares. A refusal is kept as the device's own
- * answer (`response_code`), a failure as `error`.
+ * declares, and the tuner presets of each band it declares — `getFeatures` read by the adapter's own
+ * parser (`parseYxcFeatures`), which also survives a malformed answer. A refusal is kept as the device's
+ * own answer (`response_code`), a failure as `error`.
  *
  * @param client the device's MusicCast client (its gate serialises the requests)
  * @returns the capture
  */
 export async function captureYxc(client: YxcCaptureClient): Promise<TransportCapture> {
-  const started = Date.now();
-  const answers: Record<string, unknown> = {};
-  let asked = 0;
-  const ask = async (path: string): Promise<unknown> => {
-    asked++;
-    const key = path.replace(/^\//, "");
-    try {
-      answers[key] = await client.read(path);
-    } catch (e) {
-      answers[key] = e instanceof YxcRefusalError ? { response_code: e.code } : { error: errText(e) };
-    }
-    return answers[key];
-  };
+  const capture = new HttpCapture();
+  const ask = (path: string): Promise<unknown> => capture.ask(path.replace(/^\//, ""), () => client.read(path));
   for (const path of YXC_SYSTEM_READS) {
     await ask(path);
   }
-  const features = answers["system/getFeatures"] as
-    { zone?: Array<{ id?: unknown }>; tuner?: { func_list?: unknown; preset?: { type?: unknown } } } | undefined;
-  const zones = (features?.zone ?? []).map(zone => zone.id).filter((id): id is string => typeof id === "string");
+  const features = parseYxcFeatures(capture.answers["system/getFeatures"]);
+  const zones = features.zones.map(zone => zone.id);
   for (const zone of zones.length > 0 ? zones : ["main"]) {
     for (const read of YXC_ZONE_READS) {
       await ask(`/${encodeURIComponent(zone)}/${read}`);
     }
   }
-  for (const band of tunerBands(features?.tuner)) {
+  // One list for every band (`common`), or one per band the tuner offers (YXC Basic §8.5).
+  const tuner = features.tuner;
+  for (const band of !tuner ? [] : tuner.presetType === "common" ? ["common"] : tuner.bands) {
     await ask(`/tuner/getPresetInfo?band=${band}`);
   }
-  const reached = Object.values(answers).some(answer => !isFailure(answer));
-  return {
-    transport: "yxc",
-    startedAt: new Date(started).toISOString(),
-    durationMs: Date.now() - started,
-    complete: reached,
-    asked,
-    answers,
-  };
+  return capture.result("yxc");
 }
 
 /**
- * The preset bands to read: `common` when the device keeps one list for all bands, otherwise each
- * band its tuner lists (YXC Basic §8.5).
+ * The GET body of a node path in the notation desc.xml uses: `Play_Control,Preset,Preset_Sel_Item` →
+ * `<Play_Control><Preset><Preset_Sel_Item>GetParam</Preset_Sel_Item></Preset></Play_Control>`.
  *
- * @param tuner the tuner block of getFeatures
- * @returns the bands
+ * @param path the node path, comma separated
+ * @returns the inner GET request
  */
-function tunerBands(tuner: { func_list?: unknown; preset?: { type?: unknown } } | undefined): string[] {
-  if (!tuner) {
-    return [];
-  }
-  if (tuner.preset?.type === "common") {
-    return ["common"];
-  }
-  const list = Array.isArray(tuner.func_list) ? tuner.func_list : [];
-  return ["am", "fm", "dab"].filter(band => list.includes(band));
-}
-
-/**
- * Whether a captured answer is a failure rather than a device answer.
- *
- * @param answer the captured answer
- * @returns true for `{ error }`
- */
-function isFailure(answer: unknown): boolean {
-  return typeof answer === "object" && answer !== null && "error" in answer;
+function getParam(path: string): string {
+  const nodes = path.split(",");
+  return `${nodes.map(node => `<${node}>`).join("")}GetParam${[...nodes]
+    .reverse()
+    .map(node => `</${node}>`)
+    .join("")}`;
 }
 
 /** The System reads of the XML API: what the receiver declares about itself. */
-const XML_SYSTEM_READS: ReadonlyArray<readonly [string, string]> = [
-  ["Config", "<Config>GetParam</Config>"],
-  ["Power_Control", "<Power_Control><Power>GetParam</Power></Power_Control>"],
-  ["Party_Mode", "<Party_Mode><Mode>GetParam</Mode></Party_Mode>"],
-  ["Unit_Desc", "<Unit_Desc>GetParam</Unit_Desc>"],
-  ["Misc", "<Misc><Network><Info>GetParam</Info></Network></Misc>"],
-];
+const XML_SYSTEM_READS = ["Config", "Power_Control,Power", "Party_Mode,Mode", "Unit_Desc", "Misc,Network,Info"];
 
 /** The zone reads of the XML API. */
-const XML_ZONE_READS: ReadonlyArray<readonly [string, string]> = [
-  ["Basic_Status", "<Basic_Status>GetParam</Basic_Status>"],
-  ["Config", "<Config>GetParam</Config>"],
-  ["Input", "<Input><Input_Sel_Item>GetParam</Input_Sel_Item></Input>"],
-  ["Scene", "<Scene><Scene_Sel_Item>GetParam</Scene_Sel_Item></Scene>"],
-];
+const XML_ZONE_READS = ["Basic_Status", "Config", "Input,Input_Sel_Item", "Scene,Scene_Sel_Item"];
 
-/** The elements a 2008 receiver may have — it declares no `Feature_Existence`. */
-const XML_LEGACY_ELEMENTS = ["Zone_2", "Tuner", "NET_USB", "iPod", "XM", "Rhapsody", "SIRIUS"] as const;
+/** The reads of every source element. */
+const XML_SOURCE_READS = ["Config", "Play_Info"];
+
+/** The tuner's preset list. */
+const XML_TUNER_PRESETS = "Play_Control,Preset,Preset_Sel_Item";
+
+/** The 2008 generation's zone name — asked where the description declares it, as the adapter does (RX-V3900). */
+const XML_RENAME = "Rename,Rename_Latin_1";
+
+/** The sources a 2008 receiver may have — it declares no `Feature_Existence`. */
+const XML_LEGACY_SOURCES = ["Tuner", "NET_USB", "iPod", "XM", "Rhapsody", "SIRIUS"] as const;
 
 /**
  * Read the XML API: the device description, the System block, and per zone and source the reads the
- * adapter itself uses (status, config, input and scene lists, Play_Info, the menu list). Which zones
- * and sources exist comes from the device's own `Feature_Existence`; a 2008 receiver without one is
- * asked for the elements of its generation; the tuner and the menu sources are asked on every receiver,
+ * adapter itself uses (status, config, input and scene lists, the 2008 zone name, Play_Info, the menu
+ * list). Which zones and sources exist comes from the device's own `Feature_Existence`, read by the
+ * adapter's parser (`parseSystemConfig`), and the zones are the ones the adapter probes: every zone not
+ * flagged 0 — all of them when the block is missing (2008) or flags the main zone 0. A 2008 receiver is
+ * asked for the sources of its generation; the tuner and the menu sources are asked on every receiver,
  * as the adapter does. GET only.
  *
  * @param client the device's XML client (its gate serialises the requests)
  * @returns the capture
  */
 export async function captureXml(client: XmlCaptureClient): Promise<TransportCapture> {
-  const started = Date.now();
-  const answers: Record<string, unknown> = {};
-  let asked = 0;
-  const ask = async (element: string, node: string, inner: string): Promise<string | undefined> => {
-    asked++;
-    const key = `${element}/${node}`;
-    try {
-      const body = await client.getXml(element, inner);
-      answers[key] = body;
-      return body;
-    } catch (e) {
-      answers[key] = { error: errText(e) };
-      return undefined;
-    }
-  };
-  let descriptor: string | null = null;
-  asked++;
-  try {
-    descriptor = await client.getDescriptor();
-  } catch {
-    // A model without a description answers 404 — the adapter's own reading of that is "none".
-    descriptor = null;
+  const capture = new HttpCapture();
+  const ask = (element: string, path: string): Promise<string | undefined> =>
+    capture.ask(`${element}/${path.split(",")[0]}`, () => client.getXml(element, getParam(path)));
+  // A model without a description answers 404 — the adapter's own reading of that is "none".
+  const descriptor = (await capture.ask(undefined, () => client.getDescriptor())) ?? null;
+  for (const path of XML_SYSTEM_READS) {
+    await ask("System", path);
   }
-  let config: string | undefined;
-  for (const [node, inner] of XML_SYSTEM_READS) {
-    const body = await ask("System", node, inner);
-    if (node === "Config") {
-      config = body;
-    }
-  }
+  const config = capture.answers["System/Config"];
+  const declared = parseSystemConfig(typeof config === "string" ? config : "");
+  const flags = declared.zones;
+  const zones = flags && flags.Main_Zone !== false ? ZONES.filter(zone => flags[zone.xml] !== false) : ZONES;
+  const sources =
+    declared.features === undefined
+      ? XML_LEGACY_SOURCES
+      : Object.entries(declared.features)
+          .filter(([, on]) => on)
+          .map(([element]) => element);
   // What the device declares, plus what the adapter asks regardless (the tuner and the menu sources it
   // probes on every receiver) — a refusal there is a finding too.
-  const declared = featureExistence(config);
-  const elements = [
-    ...new Set([
-      "Main_Zone",
-      ...(declared.size > 0 ? declared : XML_LEGACY_ELEMENTS),
-      "Tuner",
-      ...XML_BROWSE_SOURCES.map(source => source.element),
-    ]),
-  ];
+  const elements = new Set([
+    ...zones.map(zone => zone.xml),
+    ...sources,
+    "Tuner",
+    ...XML_BROWSE_SOURCES.map(source => source.element),
+  ]);
+  const puts = descriptor ? descriptorPuts(descriptor) : {};
   for (const element of elements) {
-    if (/^(Main_Zone|Zone_\d)$/.test(element)) {
-      for (const [node, inner] of XML_ZONE_READS) {
-        await ask(element, node, inner);
+    if (ZONES.some(zone => zone.xml === element)) {
+      for (const path of XML_ZONE_READS) {
+        await ask(element, path);
+      }
+      if (puts[element]?.[XML_RENAME]) {
+        await ask(element, XML_RENAME);
       }
       continue;
     }
-    await ask(element, "Config", "<Config>GetParam</Config>");
-    await ask(element, "Play_Info", "<Play_Info>GetParam</Play_Info>");
+    for (const path of XML_SOURCE_READS) {
+      await ask(element, path);
+    }
     if (element === "Tuner") {
-      await ask(
-        element,
-        "Play_Control",
-        "<Play_Control><Preset><Preset_Sel_Item>GetParam</Preset_Sel_Item></Preset></Play_Control>",
-      );
+      await ask(element, XML_TUNER_PRESETS);
     }
     for (const list of new Set(XML_BROWSE_SOURCES.filter(s => s.element === element).map(s => s.list))) {
-      await ask(element, list, `<${list}>GetParam</${list}>`);
+      await ask(element, list);
     }
   }
-  const reached = descriptor !== null || Object.values(answers).some(answer => typeof answer === "string");
-  return {
-    transport: "xml",
-    startedAt: new Date(started).toISOString(),
-    durationMs: Date.now() - started,
-    complete: reached,
-    asked,
-    answers,
-    descriptor,
-  };
-}
-
-/**
- * The elements a classic receiver declares as present (`<Feature_Existence>` flags set to 1).
- *
- * @param config the raw System/Config body
- * @returns the present elements, in the device's order
- */
-export function featureExistence(config: string | undefined): Set<string> {
-  const block = config ? /<Feature_Existence>([\s\S]*?)<\/Feature_Existence>/.exec(config)?.[1] : undefined;
-  const present = new Set<string>();
-  for (const match of (block ?? "").matchAll(/<([A-Za-z0-9_]+)>\s*1\s*<\/\1>/g)) {
-    present.add(match[1]);
-  }
-  return present;
+  return capture.result("xml", { descriptor });
 }
