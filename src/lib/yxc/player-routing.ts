@@ -42,6 +42,8 @@ export class YxcPlayerRouting {
   private readonly zoneBlock = new Map<string, YxcPlayer>();
   /** The source the network player is on (netusb `input`, e.g. "net_radio"). */
   private netusbInput = "";
+  /** Per source, the playback word of its last full play info, and that answer whole (see {@link audible}). */
+  private readonly lastInfo = new Map<YxcPlayer, { playback: unknown; print: string }>();
 
   /**
    * @param deps the controller's zones, media blocks and value writer
@@ -88,6 +90,37 @@ export class YxcPlayerRouting {
     if (block === "netusb" && typeof active === "string") {
       this.netusbInput = active;
     }
+    this.lastInfo.set(block, {
+      playback: (info as { playback?: unknown } | null)?.playback,
+      print: JSON.stringify(info),
+    });
+  }
+
+  /**
+   * The sources that last reported playing while a switched-on zone listens to them — a playing source ticks its
+   * play time every second (YXC Basic §10.3), so a keepalive interval without one event while it plays is a change
+   * the device made without telling (review 2026-10-05, A17).
+   *
+   * @returns the sources
+   */
+  public audible(): YxcPlayer[] {
+    const sources = new Set<YxcPlayer>();
+    for (const [zone, block] of this.zoneBlock) {
+      if (this.zonePower.get(zone) !== false && this.lastInfo.get(block)?.playback === "play") {
+        sources.add(block);
+      }
+    }
+    return [...sources];
+  }
+
+  /**
+   * The last full play info of a source, whole — compared across a keepalive to see whether it changed.
+   *
+   * @param block the source
+   * @returns the answer as text, or undefined before the first one
+   */
+  public printOf(block: YxcPlayer): string | undefined {
+    return this.lastInfo.get(block)?.print;
   }
 
   /**

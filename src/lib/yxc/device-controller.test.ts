@@ -3380,3 +3380,55 @@ describe("scene.recall carries the title dropdown on MusicCast too", () => {
     expect(recall?.common).toMatchObject({ type: "number", min: 1, max: 3, write: true });
   });
 });
+
+// Home Assistant takes the events away while titles change: only the main zone's power/input/volume/mute were
+// judged, so the verdict stayed "unknown" and the titles stood up to 30 minutes old (review 2026-10-05, A17).
+describe("push liveness judges a playing source (review 2026-10-05, A17)", () => {
+  const features = { zone: [{ id: "main", func_list: ["power"], input_list: ["net_radio"] }], netusb: {} };
+
+  test("titles changing over keepalives without one event: the events are judged dead, the titles follow", async () => {
+    const liveness = new PushLiveness();
+    const s = setup(features, { power: "on", input: "net_radio" }, {}, () => true, { pushLiveness: liveness });
+    s.client.playInfo = { input: "net_radio", playback: "play", track: "A" };
+    await s.controller.start();
+    const shown: unknown[] = [];
+    for (let run = 1; run <= 3; run++) {
+      s.client.playInfo = { input: "net_radio", playback: "play", track: `T${run}` };
+      s.fire.keepalive?.();
+      await flush();
+      shown.push(s.acks.filter(a => a.id === "living.player.track").at(-1)?.value);
+    }
+    expect(liveness.state).toBe("dead");
+    expect(shown).toEqual(["T1", "T2", "T3"]);
+    expect(s.infos).toContain("living: MusicCast events are not arriving — polling and reading writes back");
+  });
+
+  test("a source whose answer did not change judges nothing; events in between judge nothing either", async () => {
+    const liveness = new PushLiveness();
+    const s = setup(features, { power: "on", input: "net_radio" }, {}, () => true, { pushLiveness: liveness });
+    s.client.playInfo = { input: "net_radio", playback: "play", track: "A" };
+    await s.controller.start();
+    for (let run = 1; run <= 3; run++) {
+      s.fire.keepalive?.();
+      await flush();
+    }
+    expect(liveness.state).toBe("unknown");
+    for (let run = 1; run <= 3; run++) {
+      s.client.playInfo = { input: "net_radio", playback: "play", track: `T${run}` };
+      s.fire.push?.({ netusb: { play_time: run } });
+      s.fire.keepalive?.();
+      await flush();
+    }
+    expect(liveness.state).toBe("alive");
+  });
+
+  test("a paused source or a zone in standby is not read on each keepalive", async () => {
+    const s = setup(features, { power: "on", input: "net_radio" }, {}, () => true);
+    s.client.playInfo = { input: "net_radio", playback: "pause", track: "A" };
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.fire.keepalive?.();
+    await flush();
+    expect(s.client.calls.some(c => c.method === "getPlayInfo")).toBe(false);
+  });
+});

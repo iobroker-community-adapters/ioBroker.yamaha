@@ -1087,27 +1087,29 @@ export class YxcDeviceController {
     // below catches for itself today, so the guard is what makes that a guarantee instead
     // of something the next change has to remember.
     try {
+      const quiet = (): boolean => this.pushEvents === this.eventsAtLastKeepalive;
+      // A source playing to a switched-on zone ticks its play time every second: an interval without one event
+      // while it plays is judged too, not only the main zone's four fields — events taken by another client while
+      // titles changed were never judged, and the titles stood up to 30 minutes old (review 2026-10-05, A17).
+      const printsBefore = new Map((["netusb", "cd"] as const).map(block => [block, this.routing.printOf(block)]));
       // Zones in parallel: their writes are disjoint and one zone stuck in its timeout must
       // not delay the others (a four-zone receiver used to poll them strictly in series).
-      const zones = this.zones.length > 0 ? this.zones : ["main"];
       const announced = ANNOUNCED_MAIN_FIELDS.map(id => this.deviceValues.get(id));
-      const anyOk = (await Promise.all(zones.map(zone => this.refreshZone(zone)))).some(Boolean);
+      const anyOk = (await Promise.all(this.zones.map(zone => this.refreshZone(zone)))).some(Boolean);
       // A main-zone field that changed while no event came since the previous keepalive: the
       // device told nobody. Only a field that HAD a value counts — one reported for the first time
-      // is no change. An event during this refresh moves the counter and judges nothing.
+      // is no change. An event during this keepalive moves the counter and judges nothing.
       const unannounced = ANNOUNCED_MAIN_FIELDS.some((id, i) => {
         const before = announced[i];
         return before !== undefined && this.deviceValues.get(id) !== before;
       });
-      if (unannounced && this.pushEvents === this.eventsAtLastKeepalive) {
-        this.noteMiss();
-      }
-      this.eventsAtLastKeepalive = this.pushEvents;
       // Every request above already carried the subscription headers, so the push
       // registration is renewed either way. What still has to be polled depends on whether
       // push works: with push the device announces media, list and group changes itself, so
       // the full sweep only runs occasionally as a safety net (UDP can drop a packet);
       // without push it is the only way anything ever updates.
+      // Judged after the zones answered: a zone that just left its source listens to it no more.
+      const playing = this.pushWorking() ? this.routing.audible() : [];
       this.keepaliveRuns++;
       const fullSweep = !this.pushWorking() || this.keepaliveRuns % PUSH_MODE_FULL_SWEEP_EVERY === 0;
       if (fullSweep) {
@@ -1117,7 +1119,15 @@ export class YxcDeviceController {
         if (this.hasDistribution) {
           await this.refreshDistribution();
         }
+      } else if (playing.length > 0 && quiet()) {
+        // Only the playing sources, and only while no event came: the read the judgement needs.
+        await Promise.all(playing.map(block => this.refreshMediaSource(block)));
       }
+      const mediaChanged = playing.some(block => this.routing.printOf(block) !== printsBefore.get(block));
+      if ((unannounced || mediaChanged) && quiet()) {
+        this.noteMiss();
+      }
+      this.eventsAtLastKeepalive = this.pushEvents;
       this.dropDetector.record(anyOk);
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: keepalive poll failed: ${errText(e)}`);

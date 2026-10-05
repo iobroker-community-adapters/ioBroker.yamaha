@@ -130,6 +130,21 @@ describe("YxcPlayerRouting", () => {
     expect(r.recallZone("net_radio")).toBe("zone2");
   });
 
+  test("a source is audible while it plays to a switched-on zone (review 2026-10-05, A17)", () => {
+    const { routing: r } = routing();
+    r.noteInput("main", "net_radio");
+    r.notePlayInfo("netusb", { input: "net_radio", playback: "play" });
+    expect(r.audible()).toEqual([]); // no zone fed yet
+    r.route("netusb", []);
+    expect(r.audible()).toEqual(["netusb"]);
+    expect(r.printOf("netusb")).toBe(JSON.stringify({ input: "net_radio", playback: "play" }));
+    r.notePower("main", false);
+    expect(r.audible()).toEqual([]);
+    r.notePower("main", true);
+    r.notePlayInfo("netusb", { input: "net_radio", playback: "pause" });
+    expect(r.audible()).toEqual([]);
+  });
+
   test("a transport key goes to the source the zone plays; without one nothing is sent", async () => {
     const { routing: r } = routing();
     r.notePlayInfo("netusb", { input: "spotify" });
