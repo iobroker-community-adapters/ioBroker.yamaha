@@ -48,18 +48,25 @@ export interface AdaptedController {
 export class TransportConnectionAdapter implements TransportConnection {
   /** Canonical id → the def last collected for it (a later upsert of the same id replaces it). */
   private readonly collected = new Map<string, ObjectDef>();
-  private readonly buffered: Array<{ canonicalId: string; value: boolean | number | string | null }> = [];
+  /** Canonical id → the controller's own id it built the datapoint with — a write goes back under it (A16). */
+  private readonly ownIds = new Map<string, string>();
+  /** The canonical ids this transport owns, as the handle armed them last — undefined until the first arming. */
   private owned: ReadonlySet<string> | undefined;
   private controller: AdaptedController | undefined;
   /** The diagnostics read of this transport's client, set by the builder that owns the client. */
   private reader: (() => Promise<TransportCapture>) | undefined;
   private shapeChanged: (() => void) | undefined;
-  /** Ids upserted since the last {@link seedOwned} — their values wait until the handle learned them. */
-  private readonly awaitingOwnership = new Set<string>();
   /**
-   * The last value the controller reported per canonical id, owned or not. When the handle hands this
-   * transport an id it did not own (a proof it learned, forum 85413), the controller will not repeat an
-   * unchanged value — it is delivered from here at once (audit 2026-09-24, C21).
+   * The collection changed since the handle last took it ({@link buildObjects}). The handle is told once per
+   * such change — a refresh that republishes 1000 objects is one learn, not 1000 (review 2026-10-05, F1) — and
+   * a change that landed while it was not listening yet is told the moment it registers (A8).
+   */
+  private unseen = false;
+  /**
+   * The last value the controller reported per canonical id, owned or not — the one store of values this adapter
+   * keeps (review 2026-10-05, F: a buffer and a wait list stood beside it for the same job). An id the handle
+   * hands this transport for the first time gets its value from here at once: the controller will not repeat a
+   * value that did not change (audit 2026-09-24, C21).
    */
   private readonly latest = new Map<string, boolean | number | string | null>();
   /**
@@ -88,6 +95,7 @@ export class TransportConnectionAdapter implements TransportConnection {
    */
   public readonly interceptUpsert = (_fullId: string, def: ObjectDef): Promise<void> => {
     const id = this.canonical(def.id);
+    this.ownIds.set(id, this.relative(def.id));
     // The renamed zone folder itself takes the name and explanation of its tree id.
     const renamedFolder = this.zoneAlias !== undefined && id === `multiroom.${this.zoneAlias.to}` && def.id !== id;
     const object: ObjectDef = {
@@ -95,23 +103,27 @@ export class TransportConnectionAdapter implements TransportConnection {
       id,
       ...(renamedFolder ? { common: { ...def.common, ...channelCommon(this.zoneAlias!.to) } } : {}),
     };
+    // Only a REAL change counts: a controller may re-upsert the same definition freely (a refresh republishes
+    // everything), and a signal per push would re-fingerprint the whole tree.
     const previous = this.collected.get(object.id);
+    if (previous !== undefined && JSON.stringify(previous) === JSON.stringify(object)) {
+      return Promise.resolve();
+    }
     this.collected.set(object.id, object);
-    // While the handle has not coordinated yet (the connect's own upserts), the collection is
-    // simply filled — it coordinates once afterwards. Later, a controller that learns something
-    // mid-session (a function answered by a background refresh or a push, an XML status field
-    // delivered for the first time, a dropdown grown by an observed value) signals the handle,
-    // which learns what is new. Only a REAL change signals: a controller may re-upsert the same
-    // definition freely, and a signal per push would re-fingerprint the whole tree.
-    if (this.owned && JSON.stringify(previous) !== JSON.stringify(object)) {
-      this.awaitingOwnership.add(object.id);
+    // A controller that learns something mid-session (a function answered by a background refresh or a push, an
+    // XML status field delivered for the first time, a dropdown grown by an observed value) tells the handle, which
+    // learns what is new — once, until the handle takes the collection again.
+    if (!this.unseen) {
+      this.unseen = true;
       this.shapeChanged?.();
     }
     return Promise.resolve();
   };
 
   /**
-   * The setStateAck the controller is built with — owned-filtered live; buffered until owned is known.
+   * The setStateAck the controller is built with — written at once for an id this transport owns, kept as the
+   * id's last value for every other one: before the first arming, for a datapoint the handle has not learned yet,
+   * and for one another transport owns.
    *
    * @param fullId the controller's full state id
    * @param value the state value the controller wrote
@@ -121,13 +133,6 @@ export class TransportConnectionAdapter implements TransportConnection {
     this.latest.set(canonicalId, value);
     if (this.owned?.has(canonicalId)) {
       this.setStateAck(`${this.deviceId}.${canonicalId}`, value);
-      return;
-    }
-    // Before the first ownership arming, and for an object this transport created SINCE that
-    // arming (it is owned only after the handle learned it), the value waits. An id the
-    // adapter never built is another transport's business and is dropped as before.
-    if (!this.owned || this.awaitingOwnership.has(canonicalId)) {
-      this.buffered.push({ canonicalId, value });
     }
   };
 
@@ -164,64 +169,76 @@ export class TransportConnectionAdapter implements TransportConnection {
     return (await this.controller?.start()) ?? false;
   }
 
-  /** The objects the controller built, canonicalized, in first-seen order. Valid after {@link connect}. */
+  /**
+   * The objects the controller built, canonicalized, in first-seen order. Valid after {@link connect}. This is the
+   * handle's snapshot: a change after it is told again (see {@link onShapeChanged}).
+   *
+   * @returns the collected definitions
+   */
   public buildObjects(): readonly ObjectDef[] {
+    this.unseen = false;
     return [...this.collected.values()];
   }
 
   /**
-   * Register the handle's learn callback (2.7.0). Called when an upsert after the first
-   * coordination really changed the shape — never during connect.
+   * Register the handle's learn callback (2.7.0): called once when the collection changed since the handle's last
+   * snapshot ({@link buildObjects}). A change that landed between that snapshot and this registration — during the
+   * handle's first learn, a list grown by a push, an XML field seen for the first time — is told at once: it was
+   * lost before, with its value, until some later unrelated change (review 2026-10-05, A8).
    *
-   * @param cb invoked on every shape change
+   * @param cb invoked when the collection changed
    */
   public onShapeChanged(cb: () => void): void {
     this.shapeChanged = cb;
+    if (this.unseen) {
+      cb();
+    }
   }
 
   /**
-   * Arm the owned filter and flush the buffered seeds for the owned ids.
+   * Arm the owned filter. Every id this arming hands the transport for the first time gets the last value the
+   * controller reported for it — the first arming (the values of the connect), a datapoint learned mid-session,
+   * an id a re-coordination handed over (C21).
    *
    * @param owned the canonical ids this transport owns
    */
   public seedOwned(owned: ReadonlySet<string>): void {
     const previous = this.owned;
     this.owned = owned;
-    // A re-arming that hands this transport ids it did not own: their last reported values now
-    // belong in the tree. The buffered ones below are delivered anyway.
-    if (previous) {
-      const buffered = new Set(this.buffered.map(seed => seed.canonicalId));
-      for (const id of owned) {
-        const value = this.latest.get(id);
-        if (!previous.has(id) && !buffered.has(id) && value !== undefined) {
-          this.setStateAck(`${this.deviceId}.${id}`, value);
-        }
+    for (const [id, value] of this.latest) {
+      if (owned.has(id) && !previous?.has(id)) {
+        this.setStateAck(`${this.deviceId}.${id}`, value);
       }
     }
-    // Values that waited for this arming: delivered when the id landed here, dropped when it
-    // did not (another transport owns it). Either way the wait ends — the buffer stays bounded.
-    for (const seed of this.buffered.splice(0)) {
-      if (owned.has(seed.canonicalId)) {
-        this.setStateAck(`${this.deviceId}.${seed.canonicalId}`, seed.value);
-      }
-    }
-    this.awaitingOwnership.clear();
   }
 
   /**
-   * Route a user write to the controller under its own (drift-reversed, zone-kept) id.
+   * Route a user write to the controller under its own id: EXACTLY the id it built the datapoint with. Derived back
+   * from the canonical id, every `multiroom.zoneB.*` id became `multiroom.zone2.*` — also one the controller had
+   * built under `zoneB` itself (`multiroom.zoneB.volumeSync`), which it then did not find: the RX-V481's Zone B
+   * volume sync was never sent (review 2026-10-05, A16). The derivation stays for an id the controller never built.
    *
    * @param canonicalId the canonical state id the user wrote
    * @param value the value written
    * @returns what the controller made of it — `unclear` when it cannot say
    */
   public async handleWrite(canonicalId: string, value: unknown): Promise<WriteOutcome> {
+    const controllerId = this.ownIds.get(canonicalId) ?? this.derivedOwnId(canonicalId);
+    const outcome = await this.controller?.handleWrite(controllerId, value);
+    return outcome ?? (this.controller ? "unclear" : "unavailable");
+  }
+
+  /**
+   * The controller's id for a canonical id it never built: the zone folder named back, the id drift reversed.
+   *
+   * @param canonicalId the canonical id
+   * @returns the controller's id
+   */
+  private derivedOwnId(canonicalId: string): string {
     const own = this.unalias(canonicalId);
     const zone = ZONE_PREFIX.exec(own)?.[0] ?? "";
     const template = own.slice(zone.length);
-    const controllerId = zone + (INVERSE_DRIFT[this.transport]?.[template] ?? template);
-    const outcome = await this.controller?.handleWrite(controllerId, value);
-    return outcome ?? (this.controller ? "unclear" : "unavailable");
+    return zone + (INVERSE_DRIFT[this.transport]?.[template] ?? template);
   }
 
   /** @returns whether the controller's read comes from a switched-on receiver (true when it cannot tell) */
@@ -284,10 +301,6 @@ export class TransportConnectionAdapter implements TransportConnection {
    * @param id the controller's (device-relative or full) id
    * @returns the canonical id
    */
-  public canonicalId(id: string): string {
-    return this.canonical(id);
-  }
-
   private canonical(id: string): string {
     const canonical = canonicalIdOf(this.transport, this.relative(id));
     const alias = this.zoneAlias;

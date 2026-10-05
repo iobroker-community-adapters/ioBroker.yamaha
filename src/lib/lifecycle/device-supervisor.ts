@@ -1,6 +1,7 @@
 import type { ConnectionHandle } from "../controller";
 import type { HandleCapture } from "../diagnostics/types";
 import { errText } from "../err-text";
+import { RetryLoop, type Backoff } from "./reconnect-strategy";
 
 // Re-exported so existing importers (main.ts) keep resolving it from here.
 export type { ConnectionHandle };
@@ -11,10 +12,11 @@ export interface SupervisorDeps {
    * Try to bring the device online across its transports. Resolves to a live
    * connection handle, or null when no transport is reachable this attempt.
    *
-   * @param signal aborted when the supervisor is closed while this attempt still runs — the
-   *   attempt closes what it built and writes nothing more (a delete or a move during a slow
-   *   first sweep left an orphan tree and, in compact mode, a zombie YNCA socket; audit
-   *   2026-09-24, A3)
+   * @param signal the attempt's lifetime: aborted when the supervisor is closed while the attempt still runs —
+   *   the attempt closes what it built and writes nothing more (a delete or a move during a slow first sweep
+   *   left an orphan tree and, in compact mode, a zombie YNCA socket; audit 2026-09-24, A3) — and, once the
+   *   attempt produced a handle, when that handle is closed (a drop, a delete, a move): everything the handle
+   *   writes checks it (review 2026-10-05, A6). An attempt that produced nothing ends with it aborted.
    */
   attempt: (signal: AbortSignal) => Promise<ConnectionHandle | null>;
   /**
@@ -38,7 +40,7 @@ export interface SupervisorDeps {
    */
   onConnectionChange: (connected: boolean) => void;
   /** Exponential backoff for the retry cadence. */
-  backoff: { nextDelay(): number; reset(): void };
+  backoff: Backoff;
   /** Adapter log. */
   log: { debug(message: string): void; info(message: string): void; warn(message: string): void };
   /** The device the supervisor keeps, so its log lines say which one (audit 2026-09-24, A16). */
@@ -55,17 +57,29 @@ export interface SupervisorDeps {
  */
 export class DeviceSupervisor {
   private handle: ConnectionHandle | undefined;
-  private timer: unknown;
+  /** The next attempt after a failed one or a drop, on the backoff. */
+  private readonly retry: RetryLoop;
   private closed = false;
   /** The attempt currently running, so a caller can wait for it before tearing the device down. */
   private inFlight: Promise<void> | undefined;
-  /** Aborts the attempt in flight when the supervisor is closed. */
-  private attemptAbort: AbortController | undefined;
+  /**
+   * The lifetime of the attempt in flight or of the handle it produced (see `SupervisorDeps.attempt`). It was
+   * dropped as soon as the attempt returned, so closing the supervisor never reached the running handle's
+   * writes: a learn in flight kept writing into a deleted device (review 2026-10-05, A6).
+   */
+  private lifetime: AbortController | undefined;
+  /** The writes the handle closed last still has on their way — {@link settled} waits for them. */
+  private draining: Promise<void> | undefined;
 
   /**
    * @param deps the injected attempt/timer/report callbacks
    */
-  public constructor(private readonly deps: SupervisorDeps) {}
+  public constructor(private readonly deps: SupervisorDeps) {
+    this.retry = new RetryLoop(
+      { schedule: (cb, ms) => deps.schedule(cb, ms), cancel: handle => deps.cancel(handle) },
+      deps.backoff,
+    );
+  }
 
   /** Begin supervising: attempt now, then retry/reconnect as needed. */
   public start(): void {
@@ -73,15 +87,16 @@ export class DeviceSupervisor {
   }
 
   /**
-   * Resolves once the attempt in flight (if any) has finished — connected, failed or closed.
-   * `close()` aborts the attempt's signal, but a tree write already in flight (`handle.start()` →
-   * `coordinate()`) still runs to the end. Deleting that tree while it is being built
-   * leaves orphans behind, so `removeDevice` waits here first.
+   * Resolves once the attempt in flight (if any) has finished — connected, failed or closed — and the handle
+   * {@link close} closed has no write left on its way. `close()` aborts the lifetime signal, but a tree write
+   * already in flight (`handle.start()`, a learn) still runs to the end. Deleting that tree while it is being
+   * built leaves orphans behind, so `removeDevice` waits here first.
    *
-   * @returns a promise that settles with the running attempt, or at once when none runs
+   * @returns a promise that settles with the running attempt and the closed handle's last write, or at once
+   *   when neither runs
    */
   public settled(): Promise<void> {
-    return this.inFlight ?? Promise.resolve();
+    return Promise.all([this.inFlight, this.draining]).then(() => undefined);
   }
 
   private runAttempt(): void {
@@ -119,33 +134,44 @@ export class DeviceSupervisor {
       return;
     }
     let handle: ConnectionHandle | null = null;
-    const abort = new AbortController();
-    this.attemptAbort = abort;
+    const lifetime = new AbortController();
+    this.lifetime = lifetime;
     try {
-      handle = await this.deps.attempt(abort.signal);
+      handle = await this.deps.attempt(lifetime.signal);
     } catch (e) {
       // Never let an attempt failure vanish silently — without this line a repeatable
       // error (e.g. object creation failing) becomes an invisible endless retry loop.
       this.deps.log.debug(`${this.prefix}connection attempt failed, retrying: ${errText(e)}`);
       handle = null;
     }
-    if (this.attemptAbort === abort) {
-      this.attemptAbort = undefined;
-    }
     if (this.closed) {
       handle?.close();
       return;
     }
     if (handle) {
+      // The lifetime stays with the handle: aborted when it drops or the supervisor closes.
       this.handle = handle;
-      this.deps.backoff.reset();
+      this.retry.succeeded();
       this.deps.onConnectionChange(true);
       // Bind the drop to THIS handle: a second drop, or a drop from a handle a
       // reconnect has already superseded, must not schedule another retry.
       handle.onDrop(reason => this.handleDrop(handle, reason));
     } else {
+      this.endLifetime(lifetime);
       this.deps.onConnectionChange(false);
       this.scheduleRetry();
+    }
+  }
+
+  /**
+   * End an attempt's lifetime: whatever it built writes nothing more.
+   *
+   * @param lifetime the lifetime to end (the current one when omitted)
+   */
+  private endLifetime(lifetime = this.lifetime): void {
+    lifetime?.abort();
+    if (this.lifetime === lifetime) {
+      this.lifetime = undefined;
     }
   }
 
@@ -156,6 +182,8 @@ export class DeviceSupervisor {
     if (reason) {
       this.deps.log.debug(`${this.prefix}connection dropped, reconnecting: ${errText(reason)}`);
     }
+    // The dropped handle writes nothing more — its lifetime ends before it is closed.
+    this.endLifetime();
     // Release the dropped connection's resources (keepalive timer, push registration,
     // socket) before reconnecting — not every transport self-cleans on drop.
     handle.close();
@@ -165,7 +193,7 @@ export class DeviceSupervisor {
   }
 
   private scheduleRetry(): void {
-    this.timer = this.deps.schedule(() => this.runAttempt(), this.deps.backoff.nextDelay());
+    this.retry.schedule(() => this.runAttempt());
   }
 
   /** The log prefix naming the device (empty when the caller gave no id). */
@@ -185,9 +213,10 @@ export class DeviceSupervisor {
   /** Stop supervising and close the connection. Synchronous — safe from onUnload. */
   public close(): void {
     this.closed = true;
-    this.attemptAbort?.abort();
-    this.deps.cancel(this.timer);
+    this.endLifetime();
+    this.retry.cancel();
     this.handle?.close();
+    this.draining = this.handle?.settled?.();
     this.handle = undefined;
   }
 }

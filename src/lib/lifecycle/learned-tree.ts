@@ -1,7 +1,4 @@
-import type { Transport } from "../catalog/owner-policy";
-
-/** Every transport, in the order the profile writes them. */
-const TRANSPORTS: readonly Transport[] = ["yxc", "ynca", "xml"];
+import { isTransport, TRANSPORTS, type Transport } from "../catalog/owner-policy";
 
 /**
  * What the adapter learned about ONE receiver's object tree. A receiver does not change what it can over
@@ -30,6 +27,13 @@ export interface LearnedTree {
   settledVersion?: string;
   /** The firmware each transport reported when it was read in — a different one opens the read-in again. */
   firmware: Partial<Record<Transport, string>>;
+  /**
+   * The open read-in was opened by a firmware update: its completion logs the startup's ready line (Y-21). Kept
+   * here, with the read-in, because it often completes in a later connection — a receiver updated in standby is
+   * read in once it is switched on — and a flag of the connection that saw the update was lost with it (review
+   * 2026-10-05, A54).
+   */
+  firmwareUpdate?: boolean;
 }
 
 /**
@@ -74,6 +78,9 @@ export function parseLearnedTree(raw: unknown): LearnedTree {
       }
     }
   }
+  if (raw.firmwareUpdate === true) {
+    tree.firmwareUpdate = true;
+  }
   return tree;
 }
 
@@ -92,8 +99,32 @@ export function hasLearned(tree: LearnedTree): boolean {
   );
 }
 
-function isTransport(value: unknown): value is Transport {
-  return value === "yxc" || value === "ynca" || value === "xml";
+/**
+ * Whether a device's read-in can complete now: it is open (installation, adapter update, firmware update — the
+ * stored tree was not settled by this version), every transport the device has is live, and every live transport's
+ * read comes from a switched-on receiver. Moved out of the device handle (review 2026-10-05, D): when the read-in
+ * completes is part of what the learned tree means.
+ *
+ * @param tree the device's learned tree
+ * @param adapterVersion the running adapter version
+ * @param live the live transports, each saying whether its read is complete
+ * @param missing how many transports the device has shown that have not answered yet
+ * @returns true when the read-in may complete
+ */
+export function readInDue(
+  tree: LearnedTree,
+  adapterVersion: string | undefined,
+  live: ReadonlyArray<{ transport: Transport; readComplete?(): boolean }>,
+  missing: number,
+): boolean {
+  if (adapterVersion === undefined || tree.settledVersion === adapterVersion || live.length === 0 || missing > 0) {
+    return false;
+  }
+  const liveSet = new Set(live.map(connection => connection.transport));
+  if (tree.transports.some(transport => !liveSet.has(transport))) {
+    return false;
+  }
+  return live.every(connection => connection.readComplete?.() !== false);
 }
 
 function isPlain(value: unknown): value is Record<string, unknown> {

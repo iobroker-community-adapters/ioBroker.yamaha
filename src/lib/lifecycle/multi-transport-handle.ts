@@ -2,15 +2,19 @@ import type { ObjectDef } from "../catalog/types";
 import {
   canCarryWrite,
   coordinateObjectTree,
-  keepsForm,
+  learnedOwners,
+  servingTransports,
+  type DatapointForm,
   type TransportObjects,
 } from "../catalog/object-tree-coordinator";
-import { capabilityKeyOf, pickOwner, type Transport } from "../catalog/owner-policy";
+import { capabilityKeyOf, ownerOnlyWrite, type Transport } from "../catalog/owner-policy";
 import type { ConnectionHandle, ControllerLog } from "../controller";
 import { errText } from "../err-text";
 import { readyLine } from "../ready-line";
 import type { HandleCapture, TransportCapture } from "../diagnostics/types";
-import { emptyLearnedTree, type LearnedTree } from "./learned-tree";
+import { emptyLearnedTree, readInDue, type LearnedTree } from "./learned-tree";
+import { RetryLoop, type Backoff } from "./reconnect-strategy";
+import { DropLatch } from "./drop-latch";
 
 /**
  * What a transport made of a user write:
@@ -39,8 +43,9 @@ export interface TransportConnection {
   onDrop(cb: (reason?: Error) => void): void;
   /**
    * Register the handler the transport calls when it learned something mid-session that changes
-   * the objects it would build (2.7.0). Optional: a transport that never changes shape within a
-   * session simply does not offer it.
+   * the objects it would build (2.7.0). A change after the handle's last {@link buildObjects} that
+   * was not told yet is told at registration — the handle registers only after its first learn.
+   * Optional: a transport that never changes shape within a session simply does not offer it.
    */
   onShapeChanged?(cb: () => void): void;
   /**
@@ -75,8 +80,11 @@ export interface ConnectableTransport extends TransportConnection {
   connect(): Promise<boolean>;
 }
 
-/** The adapter callbacks the multi-transport handle drives. */
-export interface MultiTransportDeps {
+/**
+ * What the adapter gives a device's tree — declared once for the handle, the connect and the attempt (review
+ * 2026-10-05, D: three copies, passed on field by field twice).
+ */
+export interface DeviceTreeDeps {
   /**
    * Create an object or add what it learned to it. `settle` is the completion of a read-in — the one
    * moment a definition may also lose something (a list entry, a bound).
@@ -86,6 +94,24 @@ export interface MultiTransportDeps {
   log: ControllerLog;
   /** Report the currently live transports (their id-safe names) after every change. */
   onTransports?(names: string[]): void;
+  /**
+   * The object definitions last written for this DEVICE, shared by every handle it gets. Kept per
+   * handle, a device that came back as a whole (a new handle per attempt) rewrote its entire tree
+   * unchanged (audit 2026-09-24, A14). The owner of the map drops it whenever it deletes objects.
+   */
+  writtenObjects?: Map<string, string>;
+  /** The device's learned tree — read once, written back whenever something was learned. */
+  tree?: { get(): LearnedTree; set(tree: LearnedTree): void };
+  /** The running adapter version — a read-in completed under another version is done again. */
+  adapterVersion?: string;
+  /** A datapoint as it stands in the tree (canonical id), from the one start-up read — never a database read. */
+  existing?(id: string): DatapointForm | undefined;
+  /** At the completion of a read-in: remove the device's objects no transport built (canonical ids). */
+  settleTree?(built: ReadonlySet<string>): Promise<void>;
+}
+
+/** The adapter callbacks the multi-transport handle drives: the tree's, and its per-transport reconnect. */
+export interface MultiTransportDeps extends DeviceTreeDeps {
   /** Build a FRESH connectable for a transport — used to reconnect a single dropped transport. */
   rebuild?(transport: Transport): ConnectableTransport;
   /** Schedule a per-transport reconnect attempt. */
@@ -93,26 +119,12 @@ export interface MultiTransportDeps {
   /** Cancel a scheduled reconnect attempt. */
   cancel?(handle: unknown): void;
   /** A fresh exponential backoff for one transport's reconnect loop. */
-  backoffFactory?(): { nextDelay(): number; reset(): void };
-  /**
-   * The object definitions last written for this DEVICE, shared by every handle it gets. Kept per
-   * handle, a device that came back as a whole (a new handle per attempt) rewrote its entire tree
-   * unchanged (audit 2026-09-24, A14). The owner of the map drops it whenever it deletes objects.
-   */
-  writtenObjects?: Map<string, string>;
+  backoffFactory?(): Backoff;
   /**
    * Transports this device has been shown to have (it answered them before) that did not answer
    * this attempt. They are reconnected like a dropped transport; a read-in does not complete without them.
    */
   missing?: readonly Transport[];
-  /** The device's learned tree — read once, written back whenever something was learned. */
-  tree?: { get(): LearnedTree; set(tree: LearnedTree): void };
-  /** The running adapter version — a read-in completed under another version is done again. */
-  adapterVersion?: string;
-  /** A datapoint as it stands in the tree (canonical id), from the one start-up read — never a database read. */
-  existing?(id: string): { type: string; common: Partial<ObjectDef["common"]> } | undefined;
-  /** At the completion of a read-in: remove the device's objects no transport built (canonical ids). */
-  settleTree?(built: ReadonlySet<string>): Promise<void>;
 }
 
 /**
@@ -142,17 +154,22 @@ export class MultiTransportHandle implements ConnectionHandle {
    */
   private readonly built = new Map<Transport, Map<string, ObjectDef>>();
   private tree: LearnedTree;
-  private readonly retries = new Map<Transport, { timer: unknown; backoff: { nextDelay(): number } }>();
+  /** Each dropped transport's reconnect loop, its backoff kept across the attempts. */
+  private readonly retries = new Map<Transport, RetryLoop>();
+  /**
+   * The transports a reconnect is connecting right now. {@link close} closes them too: a YNCA reconnect sweeps for
+   * 20–40 s, and left alone after its handle was closed it held the receiver's ONE YNCA connection — the next full
+   * reconnect failed on it (review 2026-10-05, A7).
+   */
+  private readonly connecting = new Set<ConnectableTransport>();
   /** The proven transports that have not answered yet this handle (see `MultiTransportDeps.missing`). */
   private readonly missing: Set<Transport>;
-  /** A firmware update opened the read-in in this session — its completion says "ready" again. */
-  private firmwareChanged = false;
-  private supervisorDrop: ((reason?: Error) => void) | undefined;
   /** The learn in flight, so two signals never run one concurrently. */
   private learning: Promise<void> = Promise.resolve();
-  /** All transports went down before the supervisor registered onDrop — delivered on registration. */
-  private pendingDrop: Error | undefined | false = false;
-  private droppedAll = false;
+  /** The learn queued behind the one in flight, not started yet — every signal until it starts rides on it. */
+  private waiting: Promise<void> | undefined;
+  /** The device is gone (the last transport dropped) — reported once, kept until the supervisor registers. */
+  private readonly gone = new DropLatch();
   private closed = false;
 
   /**
@@ -183,6 +200,9 @@ export class MultiTransportHandle implements ConnectionHandle {
     }
     this.learning = this.learn();
     await this.learning;
+    if (this.closed) {
+      return [];
+    }
     // Over a COPY: a drop latched before start is delivered synchronously while its handler is
     // armed, and handleTransportDrop splices it out of `live` — iterating `live` itself skipped
     // the NEXT transport, which then never got a drop handler: a device without power stayed
@@ -193,6 +213,14 @@ export class MultiTransportHandle implements ConnectionHandle {
       }
       connection.onDrop(reason => this.handleTransportDrop(connection, reason));
       this.armSignals(connection);
+    }
+    // A change during the first learn is told while arming (each transport signals what it built since the learn
+    // took its objects). A read that became complete meanwhile told no one — its listener is armed only now — and
+    // the read-in waited for some later, unrelated change (review 2026-10-05, A8).
+    if (this.readyToSettle()) {
+      this.queueLearn().catch((e: unknown) => {
+        this.deps.log.debug(`${this.deviceId}: completing the read-in failed (${errText(e)})`);
+      });
     }
     // A transport this device has but that did not answer is brought back like a dropped one —
     // before, it stayed away for the whole session (audit 2026-09-29, D1).
@@ -227,15 +255,23 @@ export class MultiTransportHandle implements ConnectionHandle {
   }
 
   /**
-   * Run a learn SERIALIZED behind whatever is already in flight. The chain itself never rejects: a
-   * failure is handed back to the caller, so one failed learn cannot poison every later one.
+   * Run a learn SERIALIZED behind whatever is already in flight — at most ONE waits: a learn takes everything the
+   * transports built when it starts, so every signal before that start is answered by it. Each signal queued a
+   * learn of its own before, a full coordination and a fingerprint of every object — 1000 signals of a refresh
+   * held the event loop for 3.4 s (review 2026-10-05, F1). The chain itself never rejects: a failure is handed back
+   * to the callers, so one failed learn cannot poison every later one.
    *
-   * @returns the queued learn, rejecting with its error for the caller to handle
+   * @returns the waiting learn, rejecting with its error for the caller to handle
    */
   private queueLearn(): Promise<void> {
+    if (this.waiting) {
+      return this.waiting;
+    }
     let failure: unknown;
     let failed = false;
     const queued = this.learning.then(async () => {
+      // Started: a change from here on is one this learn may not see — the next signal queues the next learn.
+      this.waiting = undefined;
       if (this.closed) {
         return;
       }
@@ -247,11 +283,12 @@ export class MultiTransportHandle implements ConnectionHandle {
       }
     });
     this.learning = queued;
-    return queued.then(() => {
+    this.waiting = queued.then(() => {
       if (failed) {
         throw failure;
       }
     });
+    return this.waiting;
   }
 
   /** Take what the live transports build now, then complete the read-in or add what is new. */
@@ -266,41 +303,34 @@ export class MultiTransportHandle implements ConnectionHandle {
     await this.addLearned();
   }
 
-  /**
-   * Whether the read-in can complete now: it is open (installation, adapter update, firmware update), every
-   * transport this device has is live, and every live transport's read comes from a switched-on receiver.
-   *
-   * @returns true when {@link settle} may run
-   */
+  /** @returns whether the read-in can complete now (see {@link readInDue}) */
   private readyToSettle(): boolean {
-    const version = this.deps.adapterVersion;
-    if (version === undefined || this.tree.settledVersion === version || this.live.length === 0) {
-      return false;
-    }
-    if (this.missing.size > 0) {
-      return false;
-    }
-    const liveSet = new Set(this.live.map(connection => connection.transport));
-    if (this.tree.transports.some(transport => !liveSet.has(transport))) {
-      return false;
-    }
-    return this.live.every(connection => connection.readComplete?.() !== false);
+    return readInDue(this.tree, this.deps.adapterVersion, this.live, this.missing.size);
   }
 
   /**
    * Complete the read-in: coordinate the live transports in full, write every definition as it is now
    * (the one moment a list or a bound may shrink), remember who serves what, and remove what no
    * transport built.
+   *
+   * Every step checks first whether the handle was closed meanwhile — see {@link addLearned}.
    */
   private async settle(): Promise<void> {
     const contributions = this.liveContributions();
     const { objects, ownerByCanonicalId } = coordinateObjectTree(contributions);
     for (const object of objects) {
+      if (this.closed) {
+        return;
+      }
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object, true);
       this.writtenObjects.set(object.id, JSON.stringify(object));
     }
+    if (this.closed) {
+      return;
+    }
+    const firmwareUpdate = this.tree.firmwareUpdate === true;
     this.tree = {
-      shared: this.sharedOf(contributions, ownerByCanonicalId),
+      shared: servingTransports(contributions, ownerByCanonicalId),
       transports: this.live.map(connection => connection.transport),
       settledVersion: this.deps.adapterVersion,
       firmware: { ...this.tree.firmware },
@@ -308,8 +338,10 @@ export class MultiTransportHandle implements ConnectionHandle {
     this.deps.tree?.set(this.tree);
     await this.deps.settleTree?.(new Set(objects.map(object => object.id)));
     await this.arm(ownerByCanonicalId);
-    if (this.firmwareChanged) {
-      this.firmwareChanged = false;
+    if (this.closed) {
+      return;
+    }
+    if (firmwareUpdate) {
       this.deps.log.info(
         readyLine(
           this.deviceId,
@@ -324,10 +356,14 @@ export class MultiTransportHandle implements ConnectionHandle {
    * a transport that serves a datapoint as well. Nothing is taken away, and a learned owner stays — unless a
    * transport that proves the datapoint now ranks before it and keeps the datapoint's form (a one-way step:
    * the YNCA menu proof over the XML menus, forum 85413).
+   *
+   * A closed handle writes nothing more, so every write checks first: a delete or a move closes the handle and
+   * removes or rebuilds the tree right after, and a learn that kept going wrote 19 objects into a deleted device
+   * and could, on a move, settle away what the new handle had just created (review 2026-10-05, A6).
    */
   private async addLearned(): Promise<void> {
     const contributions = [...this.built].map(([transport, defs]) => ({ transport, objects: [...defs.values()] }));
-    const learned = this.learnedOwners(contributions);
+    const learned = learnedOwners(contributions, this.tree.shared, this.deps.existing);
     const coordinated = coordinateObjectTree(contributions, learned);
     const owners = new Map(coordinated.ownerByCanonicalId);
     for (const object of coordinated.objects) {
@@ -342,10 +378,16 @@ export class MultiTransportHandle implements ConnectionHandle {
       if (this.writtenObjects.get(object.id) === fingerprint) {
         continue;
       }
+      if (this.closed) {
+        return;
+      }
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
       this.writtenObjects.set(object.id, fingerprint);
     }
-    const shared = { ...this.tree.shared, ...this.sharedOf(contributions, owners) };
+    if (this.closed) {
+      return;
+    }
+    const shared = { ...this.tree.shared, ...servingTransports(contributions, owners) };
     const transports = [...new Set([...this.tree.transports, ...this.live.map(connection => connection.transport)])];
     const next: LearnedTree = { ...this.tree, shared, transports };
     if (JSON.stringify(next) !== JSON.stringify(this.tree)) {
@@ -356,112 +398,23 @@ export class MultiTransportHandle implements ConnectionHandle {
   }
 
   /**
-   * The owner each datapoint keeps: the learned one, or — for a datapoint no owner was learned for yet —
-   * the one that keeps the form the datapoint already has in the tree.
-   *
-   * @param contributions what every transport built
-   * @returns canonical id → the owner to keep
-   */
-  private learnedOwners(contributions: readonly TransportObjects[]): Map<string, Transport> {
-    const builders = new Map<string, Map<Transport, ObjectDef>>();
-    for (const { transport, objects } of contributions) {
-      for (const def of objects) {
-        let entry = builders.get(def.id);
-        if (!entry) {
-          entry = new Map();
-          builders.set(def.id, entry);
-        }
-        entry.set(transport, def);
-      }
-    }
-    const owners = new Map<string, Transport>();
-    for (const [id, stored] of Object.entries(this.tree.shared)) {
-      const owner = stored[0];
-      if (owner !== undefined) {
-        owners.set(id, owner);
-      }
-    }
-    for (const [id, defs] of builders) {
-      const key = capabilityKeyOf(defs.keys().next().value!, id);
-      const unproven = new Set([...defs].filter(([, def]) => def.unproven).map(([transport]) => transport));
-      const best = pickOwner(key, [...defs.keys()], unproven);
-      const stored = owners.get(id);
-      if (stored !== undefined) {
-        // Against a learned owner only the RANK counts, never this session's proofs: the owner proved itself
-        // when it was learned (a receiver in standby cannot prove its YNCA menus again, and must not hand them
-        // back to XML for that — forum 85413). One way only: a transport that ranks before the learned owner,
-        // serves the datapoint with a proof and keeps its form takes it over. Never back.
-        const ranked = pickOwner(key, [...defs.keys()]);
-        const storedDef = defs.get(stored);
-        const rankedDef = defs.get(ranked);
-        if (ranked !== stored && storedDef && rankedDef && !rankedDef.unproven && keepsForm(storedDef, rankedDef)) {
-          owners.set(id, ranked);
-        }
-        continue;
-      }
-      const existing = this.deps.existing?.(id);
-      const bestDef = defs.get(best);
-      if (existing === undefined || (bestDef && keepsForm(existing, bestDef))) {
-        continue;
-      }
-      // The datapoint stands in the tree already: the transport that keeps its form owns it.
-      const keeper = rankOf(key, [...defs.keys()], unproven).find(transport =>
-        keepsForm(existing, defs.get(transport)!),
-      );
-      if (keeper !== undefined) {
-        owners.set(id, keeper);
-      }
-    }
-    return owners;
-  }
-
-  /**
-   * Who serves each datapoint more than one transport built, the owner first, then the others in the order
-   * a write falls back to them.
-   *
-   * @param contributions what every transport built
-   * @param owners the owner of each canonical id
-   * @returns canonical id → the transports serving it
-   */
-  private sharedOf(
-    contributions: readonly TransportObjects[],
-    owners: ReadonlyMap<string, Transport>,
-  ): Record<string, Transport[]> {
-    const serving = new Map<string, Transport[]>();
-    for (const { transport, objects } of contributions) {
-      for (const def of objects) {
-        if (def.unproven) {
-          continue;
-        }
-        const list = serving.get(def.id) ?? [];
-        list.push(transport);
-        serving.set(def.id, list);
-      }
-    }
-    const shared: Record<string, Transport[]> = {};
-    for (const [id, transports] of serving) {
-      const owner = owners.get(id);
-      if (transports.length < 2 || owner === undefined) {
-        continue;
-      }
-      const rest = rankOf(
-        capabilityKeyOf(owner, id),
-        transports.filter(transport => transport !== owner),
-      );
-      shared[id] = [owner, ...rest];
-    }
-    return shared;
-  }
-
-  /**
    * Install the owners and seed each live transport with what it owns.
    *
    * @param owners the owner of each canonical id
    */
   private async arm(owners: Map<string, Transport>): Promise<void> {
+    if (this.closed) {
+      return;
+    }
     this.ownerByCanonicalId = owners;
-    for (const connection of this.live) {
-      await connection.seedOwned(this.ownedFor(connection.transport));
+    // Over a copy: a transport may drop while another one is seeded.
+    for (const connection of [...this.live]) {
+      if (this.closed) {
+        return;
+      }
+      if (this.live.includes(connection)) {
+        await connection.seedOwned(this.ownedFor(connection.transport));
+      }
     }
   }
 
@@ -481,7 +434,7 @@ export class MultiTransportHandle implements ConnectionHandle {
    */
   private noteFirmware(connection: TransportConnection): void {
     const firmware = connection.firmware?.();
-    if (!firmware) {
+    if (!firmware || this.closed) {
       return;
     }
     const known = this.tree.firmware[connection.transport];
@@ -493,8 +446,7 @@ export class MultiTransportHandle implements ConnectionHandle {
       this.deps.log.info(
         `${this.deviceId}: new firmware found (${known} → ${firmware}) — reading the receiver again, this can take a few minutes`,
       );
-      this.tree = { ...this.tree, settledVersion: undefined };
-      this.firmwareChanged = true;
+      this.tree = { ...this.tree, settledVersion: undefined, firmwareUpdate: true };
     }
     this.deps.tree?.set(this.tree);
   }
@@ -517,7 +469,9 @@ export class MultiTransportHandle implements ConnectionHandle {
 
   /** Report the live transport set (device-manager card indicators / info.transports.*). */
   private reportTransports(): void {
-    this.deps.onTransports?.(this.live.map(connection => connection.transport));
+    if (!this.closed) {
+      this.deps.onTransports?.(this.live.map(connection => connection.transport));
+    }
   }
 
   /**
@@ -536,8 +490,10 @@ export class MultiTransportHandle implements ConnectionHandle {
     this.live.splice(index, 1);
     connection.close();
     if (this.live.length === 0) {
+      // The device itself is unreachable: the supervisor (once it registered) closes this handle and
+      // reconnects the whole set.
       this.cancelRetries();
-      this.reportDeviceGone(reason);
+      this.gone.report(reason);
       return;
     }
     this.reportTransports();
@@ -564,13 +520,16 @@ export class MultiTransportHandle implements ConnectionHandle {
    * @param transport the transport to bring back
    */
   private scheduleTransportRetry(transport: Transport): void {
-    if (!this.deps.rebuild || !this.deps.schedule || !this.deps.backoffFactory) {
+    const { rebuild, schedule, backoffFactory } = this.deps;
+    if (this.closed || !rebuild || !schedule || !backoffFactory) {
       return;
     }
-    const existing = this.retries.get(transport);
-    const backoff = existing?.backoff ?? this.deps.backoffFactory();
-    const timer = this.deps.schedule(() => void this.attemptTransport(transport), backoff.nextDelay());
-    this.retries.set(transport, { timer, backoff });
+    let loop = this.retries.get(transport);
+    if (!loop) {
+      loop = new RetryLoop({ schedule, cancel: handle => this.deps.cancel?.(handle) }, backoffFactory());
+      this.retries.set(transport, loop);
+    }
+    loop.schedule(() => void this.attemptTransport(transport));
   }
 
   /**
@@ -591,64 +550,56 @@ export class MultiTransportHandle implements ConnectionHandle {
       connection = this.deps.rebuild(transport);
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}/${transport}: could not rebuild the transport (${errText(e)})`);
-      if (!this.closed) {
-        this.scheduleTransportRetry(transport);
-      }
+      this.scheduleTransportRetry(transport);
       return;
     }
+    this.connecting.add(connection);
     let connected = false;
     try {
       connected = await connection.connect();
-      if (connected && !this.closed) {
-        this.live.push(connection);
-        this.missing.delete(transport);
-        this.noteFirmware(connection);
-        connection.onDrop(reason => this.handleTransportDrop(connection, reason));
-        this.armSignals(connection);
-        await this.queueLearn();
-        this.retries.delete(transport);
-        this.reportTransports();
-        this.deps.log.debug(`${this.deviceId}/${transport}: transport reconnected`);
-        return;
-      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}/${transport}: reconnect attempt failed (${errText(e)})`);
+    }
+    if (!this.connecting.delete(connection)) {
+      return; // close() took it and closed it
+    }
+    if (!connected || this.closed) {
+      connection.close();
+      this.scheduleTransportRetry(transport);
+      return;
+    }
+    this.live.push(connection);
+    this.missing.delete(transport);
+    this.noteFirmware(connection);
+    connection.onDrop(reason => this.handleTransportDrop(connection, reason));
+    this.armSignals(connection);
+    try {
+      await this.queueLearn();
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}/${transport}: reconnect attempt failed (${errText(e)})`);
       const index = this.live.indexOf(connection);
       if (index >= 0) {
         this.live.splice(index, 1);
+        connection.close();
+        this.scheduleTransportRetry(transport);
       }
-    }
-    connection.close();
-    if (this.closed) {
       return;
     }
-    this.scheduleTransportRetry(transport);
+    if (!this.live.includes(connection)) {
+      // It dropped again during its first learn (or the handle was closed): its drop already scheduled the next
+      // attempt on the kept backoff. Clearing the loop here forgot that timer — nothing cancelled it on close —
+      // and the "reconnected" line and a reset backoff claimed what had not happened (review 2026-10-05, A52).
+      return;
+    }
+    this.retries.get(transport)?.succeeded();
+    this.reportTransports();
+    this.deps.log.debug(`${this.deviceId}/${transport}: transport reconnected`);
   }
 
   /** Cancel every per-transport reconnect loop. */
   private cancelRetries(): void {
-    for (const { timer } of this.retries.values()) {
-      this.deps.cancel?.(timer);
-    }
-    this.retries.clear();
-  }
-
-  /**
-   * The last live transport is gone — the device itself is unreachable. Report once to
-   * the supervisor (latched if it has not registered yet), which closes this handle and
-   * reconnects the whole set.
-   *
-   * @param reason the final drop's reason, if known
-   */
-  private reportDeviceGone(reason?: Error): void {
-    if (this.droppedAll) {
-      return;
-    }
-    this.droppedAll = true;
-    if (this.supervisorDrop) {
-      this.supervisorDrop(reason);
-    } else {
-      this.pendingDrop = reason ?? undefined;
+    for (const loop of this.retries.values()) {
+      loop.cancel();
     }
   }
 
@@ -687,9 +638,17 @@ export class MultiTransportHandle implements ConnectionHandle {
    */
   private async routeWrite(canonicalId: string, owner: Transport, value: unknown): Promise<void> {
     try {
-      const ownerDef = this.built.get(owner)?.get(canonicalId);
-      // A datapoint that cannot be read is a key or a step: sent twice it would act twice.
-      const repeatable = ownerDef !== undefined && ownerDef.common.read !== false;
+      // The owner's form: as it built the datapoint in this session — or, for an owner away since this handle
+      // started, as the datapoint stands in the tree, where the owner wrote it. Such an owner built nothing here,
+      // and no write ever fell back: with YNCA held by another client at a restart, `power` never went out over
+      // XML (review 2026-10-05, A4).
+      const ownerForm = this.built.get(owner)?.get(canonicalId) ?? this.deps.existing?.(canonicalId);
+      // A datapoint that cannot be read is a key or a step: sent twice it would act twice. The menu and the remote
+      // keys act on the owner's menu, the one on screen — never on another transport's (see ownerOnlyWrite).
+      const repeatable =
+        ownerForm !== undefined &&
+        ownerForm.common.read !== false &&
+        !ownerOnlyWrite(capabilityKeyOf(owner, canonicalId));
       const others = (this.tree.shared[canonicalId] ?? []).filter(transport => transport !== owner);
       let reason = "offline";
       for (const transport of [owner, ...others]) {
@@ -698,9 +657,9 @@ export class MultiTransportHandle implements ConnectionHandle {
           const def = this.built.get(transport)?.get(canonicalId);
           if (
             !repeatable ||
-            !ownerDef ||
+            !ownerForm ||
             !def ||
-            !canCarryWrite({ transport: owner, def: ownerDef }, { transport, def })
+            !canCarryWrite({ transport: owner, def: ownerForm }, { transport, def })
           ) {
             continue;
           }
@@ -730,12 +689,7 @@ export class MultiTransportHandle implements ConnectionHandle {
    * @param cb invoked once when the device is judged gone
    */
   public onDrop(cb: (reason?: Error) => void): void {
-    this.supervisorDrop = cb;
-    if (this.pendingDrop !== false) {
-      const reason = this.pendingDrop;
-      this.pendingDrop = false;
-      cb(reason);
-    }
+    this.gone.onDrop(cb);
   }
 
   /**
@@ -757,32 +711,28 @@ export class MultiTransportHandle implements ConnectionHandle {
     };
   }
 
-  /** Close every transport and stop every reconnect loop. Synchronous — safe from onUnload. */
+  /**
+   * Resolves once the learns this handle started have stopped — after {@link close}, at their next write. A delete
+   * removes the tree only then, or a write already on its way would land in the deleted device (review 2026-10-05,
+   * A6).
+   *
+   * @returns settles when no learn of this handle runs any more (never rejects)
+   */
+  public settled(): Promise<void> {
+    return this.learning.catch(() => undefined);
+  }
+
+  /**
+   * Close every transport — the live ones and those a reconnect is still connecting — and stop every reconnect loop.
+   * Synchronous — safe from onUnload.
+   */
   public close(): void {
     this.closed = true;
     this.cancelRetries();
-    for (const connection of this.live) {
+    for (const connection of [...this.live, ...this.connecting]) {
       connection.close();
     }
     this.live.length = 0;
+    this.connecting.clear();
   }
-}
-
-/**
- * Transports in the order the owner policy prefers them for a capability.
- *
- * @param key the capability key
- * @param candidates the transports to order
- * @param unproven the candidates that claim without a proof
- * @returns the candidates, most preferred first
- */
-function rankOf(key: string, candidates: readonly Transport[], unproven?: ReadonlySet<Transport>): Transport[] {
-  const rest = [...candidates];
-  const ranked: Transport[] = [];
-  while (rest.length > 0) {
-    const next = pickOwner(key, rest, unproven);
-    ranked.push(next);
-    rest.splice(rest.indexOf(next), 1);
-  }
-  return ranked;
 }

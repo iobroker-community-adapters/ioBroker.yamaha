@@ -1,4 +1,6 @@
-import { identifyDevice, type IdentifyDeps } from "./identify-device";
+import { DEFAULT_IDENTIFY_DEPS, identifyDevice, type IdentifyDeps } from "./identify-device";
+import { CommandGate, CommandGateClosedError } from "./lifecycle/command-gate";
+import { LIVE_GATES } from "./lifecycle/gate-registry";
 
 /**
  * Two fake questions: each answers what it is given, or refuses like a device that does not speak
@@ -51,5 +53,29 @@ describe("identifyDevice", () => {
     await expect(
       identifyDevice("10.0.0.9", deps({ model_name: "WX-010", system_id: "00000000", device_id: "xyz" }, offline)),
     ).resolves.toEqual({ model: "WX-010" });
+  });
+});
+
+// The device being added may already run (the search found it): the questions went out in parallel to its running
+// connection's own traffic, past its command gate (review 2026-10-05, A13).
+describe("identifyDevice asks through the device's command gate (Y-15)", () => {
+  test("a running connection's gate holds both questions back while it is busy", async () => {
+    const timers = { schedule: (): undefined => undefined, cancel: (): void => undefined };
+    const ip = "192.0.2.77";
+    const busy = {
+      yxc: new CommandGate({ minSpacingMs: 0, timers }),
+      xml: new CommandGate({ minSpacingMs: 0, timers }),
+    };
+    LIVE_GATES.hold("yxc", ip, busy.yxc);
+    LIVE_GATES.hold("xml", ip, busy.xml);
+    void busy.yxc.run(() => new Promise<void>(() => undefined)).catch(() => undefined);
+    void busy.xml.run(() => new Promise<void>(() => undefined)).catch(() => undefined);
+    const yxc = DEFAULT_IDENTIFY_DEPS.yxcDeviceInfo(ip);
+    const xml = DEFAULT_IDENTIFY_DEPS.xmlSystemConfig(ip);
+    // Queued behind the running work, they never reached the network: closing the gates ends them unsent.
+    busy.yxc.close();
+    busy.xml.close();
+    await expect(yxc).rejects.toBeInstanceOf(CommandGateClosedError);
+    await expect(xml).rejects.toBeInstanceOf(CommandGateClosedError);
   });
 });
