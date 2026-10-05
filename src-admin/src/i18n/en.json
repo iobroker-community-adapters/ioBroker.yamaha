@@ -13,5 +13,8 @@
   "yd_exportFailed": "The report could not be created.",
   "yd_privacy": "Addresses, serial numbers, network and room names are replaced by markers before the file leaves the adapter. The adapter keeps no copy.",
   "yd_generating": "Generating the diagnostics report — the receiver is being read over every protocol it speaks. This takes up to a minute; the file is offered for download when it is done.",
-  "yd_elapsed": "%s s"
+  "yd_elapsed": "%s s",
+  "yd_notRunning": "The instance is not running. Start it, then open this tab again.",
+  "yd_stopped": "The instance stopped while the report was being made (a restart or a crash). Try again once it runs — the instance's log says what happened.",
+  "yd_noAnswer": "The adapter did not answer within %s s. Check the instance's log, then try again."
 }

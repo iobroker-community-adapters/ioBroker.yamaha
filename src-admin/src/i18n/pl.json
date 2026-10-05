@@ -13,5 +13,8 @@
   "yd_exportFailed": "Nie udało się utworzyć raportu.",
   "yd_privacy": "Adresy, numery seryjne, nazwy sieci i pomieszczeń są zastępowane znacznikami, zanim plik opuści adapter. Adapter nie przechowuje kopii.",
   "yd_generating": "Tworzenie raportu diagnostycznego – amplituner jest odczytywany przez każdy obsługiwany protokół. Trwa to do minuty; potem plik zostanie udostępniony do pobrania.",
-  "yd_elapsed": "%s s"
+  "yd_elapsed": "%s s",
+  "yd_notRunning": "Instancja nie działa. Uruchom ją, a następnie ponownie otwórz tę kartę.",
+  "yd_stopped": "Instancja zatrzymała się podczas tworzenia raportu (restart lub awaria). Spróbuj ponownie, gdy znów będzie działać — dziennik instancji pokazuje, co się stało.",
+  "yd_noAnswer": "Adapter nie odpowiedział w ciągu %s s. Sprawdź dziennik instancji i spróbuj ponownie."
 }

@@ -17,11 +17,23 @@ export interface TransportCapture {
   startedAt: string;
   /** How long it took. */
   durationMs: number;
-  /** Whether every question was put and the read ran to its end (no drop, no shutdown). */
+  /**
+   * Whether the read ran to its end without a transport failure: every question was put and got the
+   * device's answer — a refusal (`response_code`, an HTTP status, `@UNDEFINED`) is an answer, a timeout or a
+   * dropped connection is not. The same meaning on all three protocols (review 2026-10-05, B5).
+   */
   complete: boolean;
   /** How many questions went to the device. */
   asked: number;
-  /** The answers, keyed like the inventory fixtures. */
+  /**
+   * How many questions got no answer because the transport failed — what `complete: false` is about. YNCA:
+   * the functions without a value of a read that did not reach its closing marker. Set by every capture.
+   */
+  failed?: number;
+  /**
+   * The answers, keyed like the inventory fixtures. MusicCast and XML keep a device's verdict in place of a
+   * body (`{ response_code }`, `{ httpStatus }`) and a transport failure as `{ error }`.
+   */
   answers: Record<string, unknown>;
   /** YNCA: every line the device sent while the read ran, in arrival order — refusals included. */
   lines?: string[];
@@ -29,7 +41,7 @@ export interface TransportCapture {
   unanswered?: string[];
   /** XML: the device description (`desc.xml`), or null when the device has none. */
   descriptor?: string | null;
-  /** A failure that ended the read early. */
+  /** The first transport failure, and whether it ended the read early — set whenever `complete` is false. */
   error?: string;
 }
 

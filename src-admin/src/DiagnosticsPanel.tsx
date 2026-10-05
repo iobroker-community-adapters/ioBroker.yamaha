@@ -17,7 +17,13 @@ import {
 import { I18n } from "@iobroker/gui-components";
 
 import { errText } from "../../src/lib/err-text";
-import { isReport, makeDiagnosticsApi, type DiagnosticsDevice, type DiagnosticsSocket } from "./diagnosticsApi";
+import {
+  InstanceUnavailableError,
+  isReport,
+  makeDiagnosticsApi,
+  type DiagnosticsDevice,
+  type DiagnosticsSocket,
+} from "./diagnosticsApi";
 import { forgetLastTab } from "./tabMemory";
 
 /** Where a report goes. */
@@ -34,6 +40,26 @@ export interface DiagnosticsPanelProps {
 /** What the card knows about its device list. */
 type ListState =
   { status: "loading" } | { status: "ready"; devices: DiagnosticsDevice[] } | { status: "failed"; message: string };
+
+/**
+ * What the card says when a call got no answer: the instance is not running, it stopped while the card
+ * waited, it did not answer in time — or the failure's own words, and the fallback when it has none.
+ *
+ * @param e the failure
+ * @param fallback the words when the failure says nothing
+ */
+export function failureText(e: unknown, fallback: string): string {
+  if (e instanceof InstanceUnavailableError) {
+    if (e.reason === "notRunning") {
+      return I18n.t("yd_notRunning");
+    }
+    if (e.reason === "stopped") {
+      return I18n.t("yd_stopped");
+    }
+    return I18n.t("yd_noAnswer", String(e.seconds));
+  }
+  return e instanceof Error && e.message ? errText(e) : fallback;
+}
 
 /**
  * Hand the browser a file. The download is the only copy of the report — the adapter stores none — so the
@@ -103,8 +129,7 @@ export function DiagnosticsPanel({ socket, namespace }: DiagnosticsPanelProps): 
       })
       .catch((e: unknown) => {
         if (alive) {
-          const message = e instanceof Error && e.message ? errText(e) : I18n.t("yd_listFailed");
-          setList({ status: "failed", message });
+          setList({ status: "failed", message: failureText(e, I18n.t("yd_listFailed")) });
         }
       });
     return () => {
@@ -126,7 +151,8 @@ export function DiagnosticsPanel({ socket, namespace }: DiagnosticsPanelProps): 
           setError(res.error || I18n.t("yd_exportFailed"));
         }
       })
-      .catch(() => setError(I18n.t("yd_exportFailed")))
+      // A stopped or restarted instance, or no answer in time, ends the wait too — the button is free again.
+      .catch((e: unknown) => setError(failureText(e, I18n.t("yd_exportFailed"))))
       .finally(() => setBusy(false));
   }, [api, selected]);
 
