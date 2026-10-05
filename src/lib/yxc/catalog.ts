@@ -684,3 +684,15 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
   // system catalog's documented pair (`party_mode` / setPartyMode — pyamaha; YXC Basic Rev 1.10 does not document the pair) is
   // the one source (audit 2026-09-29, C46).
 ];
+
+/**
+ * The `disable_flags` bit of a zone datapoint (YXC Basic §5.1: b0 volume, b1 mute, b2 link audio delay) — what the
+ * controller checks before it sends a write the zone cannot operate right now. The bits stood as a literal table in
+ * the controller (review 2026-10-05, DRY).
+ *
+ * @param name the zone-relative datapoint (`volume`, `mute`, …)
+ * @returns the bit, or undefined when the zone never disables the function
+ */
+export function disableBitOf(name: string): number | undefined {
+  return YXC_AMP_CATALOG.find(entry => entry.state === name)?.disableBit;
+}

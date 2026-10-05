@@ -1,4 +1,4 @@
-import { YXC_AMP_CATALOG } from "./catalog";
+import { disableBitOf, YXC_AMP_CATALOG } from "./catalog";
 
 /**
  * Table test over the whole YXC catalog. Every entry with a `write.apply` is a
@@ -123,6 +123,7 @@ describe("YXC_AMP_CATALOG", () => {
     });
     // YXC Basic §5.1 `disable_flags`: b0 volume, b1 mute, b2 link audio delay.
     expect(declared("disableBit")).toEqual({ volume: 0b1, mute: 0b10, "sound.linkAudioDelay": 0b100 });
+    expect([disableBitOf("volume"), disableBitOf("mute"), disableBitOf("sound.bass")]).toEqual([0b1, 0b10, undefined]);
     expect(declared("scale")).toEqual({ volume: "volume", "advanced.maxVolume": "volumeLimit" });
   });
 

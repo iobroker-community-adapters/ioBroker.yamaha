@@ -1,4 +1,5 @@
-import { stateToYxc } from "./command-mapper";
+import { stateToYxc, yxcWrite, type YxcWriteContext } from "./command-mapper";
+import type { YxcCapabilities } from "./capability";
 import type { YxcClientLike } from "./client-contract";
 
 /** A recording client: every method call is captured as [name, args] and resolves {}. */
@@ -270,6 +271,7 @@ describe("scene recall and the on-screen remote (#615, device-verified endpoints
     expect(stateToYxc("remote.cursor", null)).toBeUndefined();
   });
 });
+
 // Spec-covered writes that had no way in (YXC Basic Rev 1.10 §6.4/§6.7/§6.8/§7.4/§7.11/§7.12/§8.2/
 // §9.2/§9.4/§9.5; audit 2026-09-29, C38).
 describe("stateToYxc — store, clear, search, select, jump, clock", () => {
@@ -304,5 +306,124 @@ describe("stateToYxc — store, clear, search, select, jump, clock", () => {
     ]);
     expect(stateToYxc("clock.alarm.oneday.time", "25:00")).toBeUndefined();
     expect(stateToYxc("clock.alarm.oneday.presetName", "x")).toBeUndefined();
+  });
+});
+
+// One rule for every written number, as YNCA and XML apply it (review 2026-10-05, A26): MusicCast recalled scene 2
+// for 1.5 and sent `recallScene(0)` for 0, sent a favourite 2.5 as it was, and put a tuner frequency on no grid.
+describe("written numbers follow the one rule of all three protocols (A26)", () => {
+  /** What the controller knows of an RX-V6A-like receiver: scenes, slots, the tuner's band grids, a zone's ranges. */
+  const capabilities: YxcCapabilities = {
+    zones: [
+      {
+        id: "main",
+        funcs: ["scene", "tone_control", "equalizer"],
+        inputs: [],
+        sceneNum: 8,
+        ranges: { tone_control: { min: -12, max: 12, step: 1 }, equalizer: { min: -10, max: 10, step: 0.5 } },
+        valueLists: { "remote.menu": ["top_menu", "help"] },
+      },
+      { id: "zone2", funcs: ["scene"], inputs: [], sceneNum: 4 },
+    ],
+    media: ["netusb", "tuner"],
+    netusbSlots: { presets: 40, recent: 40 },
+    tuner: {
+      bands: ["am", "fm", "dab"],
+      funcs: ["am", "fm", "dab"],
+      presetType: "common",
+      presetNum: 40,
+      ranges: { fm: { min: 87500, max: 108000, step: 50 }, am: { min: 531, max: 1611, step: 9 } },
+    },
+    clock: { funcs: ["alarm"], alarmModes: ["oneday"], alarmVolumeRange: { min: 5, max: 60, step: 1 } },
+  };
+  const fm: YxcWriteContext = { capabilities, tunerBand: "fm" };
+
+  test("a scene is a whole number from 1 to the zone's declared count — 1.5, 0 and 9 recall nothing", () => {
+    // The review's proof (cross/scene-number): 1.5 recalled scene 2, 0 went out as recallScene(0).
+    expect(stateToYxc("scene.recall", 1.5)).toBeUndefined();
+    expect(stateToYxc("scene.recall", 0)).toBeUndefined();
+    expect(stateToYxc("scene.recall", -1)).toBeUndefined();
+    expect(yxcWrite("scene.recall", 1.5).dropped).toBe("1.5 is no slot number from 1");
+    expect(yxcWrite("scene.recall", 9, fm).dropped).toBe("9 is no slot number from 1 to 8");
+    expect(yxcWrite("multiroom.zone2.scene.recall", 5, fm).dropped).toBe("5 is no slot number from 1 to 4");
+    expect(stateToYxc("scene.recall", "8", fm)).toMatchObject({ kind: "run" });
+  });
+
+  test("a favourite, a recent entry, a stored station and a CD track take a whole slot within the declared count", () => {
+    expect(stateToYxc("player.netPlayer.preset", 2.5)).toBeUndefined();
+    expect(stateToYxc("player.netPlayer.preset", 3, fm)).toEqual({ kind: "netusbPreset", value: 3 });
+    expect(yxcWrite("player.netPlayer.preset", 41, fm).dropped).toBe("41 is no slot number from 1 to 40");
+    expect(stateToYxc("player.netPlayer.recallRecent", 0)).toBeUndefined();
+    expect(stateToYxc("tuner.preset", 2.5)).toBeUndefined();
+    expect(yxcWrite("tuner.preset", 0).dropped).toBe('0 is the device\'s "no preset" — no slot to recall');
+    expect(yxcWrite("tuner.presetSave", 41, fm).dropped).toBe("41 is no slot number from 1 to 40");
+    expect(stateToYxc("tuner.presetClear", 1.5)).toBeUndefined();
+    expect(stateToYxc("player.netPlayer.presetSave", 2.5)).toBeUndefined();
+    expect(stateToYxc("player.cd.trackSelect", 7.5)).toBeUndefined();
+  });
+
+  test("a frequency lands on the grid of the band the tuner is on, and nothing is sent outside it", () => {
+    expect(stateToYxc("tuner.frequency", 98123, fm)).toEqual({ kind: "tunerFreq", value: 98100 });
+    expect(yxcWrite("tuner.frequency", 108100, fm).dropped).toBe("108100 kHz is outside the FM range 87500…108000 kHz");
+    // On AM the FM value names no station — before, it went to setFreq("am", 98100).
+    const am: YxcWriteContext = { capabilities, tunerBand: "am" };
+    expect(stateToYxc("tuner.frequency", 1080, am)).toEqual({ kind: "tunerFreq", value: 1080 });
+    expect(stateToYxc("tuner.frequency", 1083, am)).toEqual({ kind: "tunerFreq", value: 1080 });
+    expect(stateToYxc("tuner.frequency", 98100, am)).toBeUndefined();
+    expect(yxcWrite("tuner.frequency", 98100, { capabilities, tunerBand: "dab" }).dropped).toMatch(
+      /DAB is tuned by service/,
+    );
+    expect(yxcWrite("tuner.frequency", "abc", fm).dropped).toBe('"abc" is no frequency');
+    // Without a declared grid the number stays — an invented grid would be worse than the device's own rounding.
+    expect(stateToYxc("tuner.frequency", 98123)).toEqual({ kind: "tunerFreq", value: 98123 });
+  });
+
+  test("an amplifier number and an equalizer band land on the zone's declared grid", async () => {
+    const { client, calls } = recordingClient();
+    const bass = stateToYxc("sound.bass", 2.4, fm);
+    await (bass as { kind: "run"; run: (c: YxcClientLike) => Promise<unknown> }).run(client);
+    expect(calls).toEqual([["setBassTo", [2, "main"]]]);
+    expect(yxcWrite("sound.bass", 13, fm).dropped).toBe("13 is outside the declared range -12…12");
+    expect(stateToYxc("sound.equalizer.low", 1.3, fm)).toEqual({
+      kind: "equalizer",
+      zone: "main",
+      band: "low",
+      value: 1.5,
+    });
+    expect(stateToYxc("clock.alarm.volume", 70, fm)).toBeUndefined();
+  });
+
+  test("a seek is whole seconds from 0 and reads back the network player (A49)", () => {
+    expect(stateToYxc("player.netPlayer.playPosition", 30.4)).toMatchObject({ kind: "run", source: "netusb" });
+    expect(stateToYxc("player.netPlayer.playPosition", -5)).toBeUndefined();
+  });
+
+  test("a zone's declared remote words decide — the routing of a key stands in one place", async () => {
+    const { client, calls } = recordingClient();
+    const help = stateToYxc("remote.menu", "help", fm);
+    await (help as { kind: "run"; run: (c: YxcClientLike) => Promise<unknown> }).run(client);
+    expect(calls).toEqual([["controlMenu", ["help", "main"]]]);
+    expect(yxcWrite("remote.menu", "red", fm).dropped).toBe('"red" is no key this zone declares');
+    // A zone without a list keeps the shared vocabulary.
+    expect(stateToYxc("multiroom.zone2.remote.menu", "option", fm)).toMatchObject({ kind: "run" });
+    expect(yxcWrite("multiroom.zone2.remote.menu", "red", fm).dropped).toBe('"red" is no key MusicCast takes');
+  });
+
+  test("every write that sends nothing says why", () => {
+    for (const [id, value] of [
+      ["nonsense", 1],
+      ["sound.audioSelect", "auto"],
+      ["power", "maybe"],
+      ["player.repeat", 3],
+      ["clock.format", "25h"],
+      ["clock.alarm.oneday.time", "25:00"],
+      ["constructor", 1],
+    ] as const) {
+      const write = yxcWrite(id, value, fm);
+      expect(write.command, id).toBeUndefined();
+      expect(write.dropped, id).toMatch(/\w/);
+    }
+    expect(yxcWrite("sound.audioSelect", "auto").dropped).toBe("it is read-only on MusicCast");
+    expect(yxcWrite("nonsense", 1).dropped).toBe("MusicCast has no command for it");
   });
 });
