@@ -234,8 +234,12 @@ export function mergeDiscovered(
     byId.set(device.id, { ...device });
   }
   // One search answers in network order; sorted by what the device is, the same finds give the
-  // same ids on every run — and on every installation.
-  const ordered = [...found].sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+  // same ids on every run — and on every installation. A find at the address a remembered record
+  // still carries goes first: the name fallback below gives that record to the find at ITS address,
+  // not to whichever same-named device sorted first (review 2026-10-05, A33).
+  const knownIps = new Set([...byId.values()].map(record => record.ip));
+  const atKnown = (device: DiscoveredDevice): number => (knownIps.has(device.ip) ? 0 : 1);
+  const ordered = [...found].sort((a, b) => atKnown(a) - atKnown(b) || sortKey(a).localeCompare(sortKey(b)));
   for (const device of ordered) {
     const label = device.name || device.ip;
     // Identity first: the serial survives a rename and a new address, the name does neither.
@@ -288,13 +292,16 @@ export function mergeDiscovered(
 }
 
 /**
- * What a find is ordered by: its MAC, its serial, its address — the most stable key it has.
+ * What a find is ordered by: its serial, its MAC, its address — the most stable key it has. The serial first: the id
+ * rule gives the SECOND of two devices whose serials end alike the whole serial, "second" by serial (`serialId`,
+ * the id move sorts the same way) — ordered by MAC, a search could hand the short id to the other one (review
+ * 2026-10-05, A33).
  *
  * @param device the find
  * @returns the key
  */
 function sortKey(device: DiscoveredDevice): string {
-  return device.identity?.mac ?? device.identity?.serial ?? device.ip;
+  return device.identity?.serial ?? device.identity?.mac ?? device.ip;
 }
 
 /**

@@ -325,6 +325,47 @@ describe("staleObjects", () => {
 describe("mergeDiscovered by identity", () => {
   const v6a = { serial: "0A1B2C3D", mac: "00A0DE0A1B2C" };
 
+  // Review 2026-10-05, A33 (proof test merge-discovered): a record stored before its identity was known went to the
+  // first same-named find in MAC order — the speaker at ANOTHER address took the tree, the one at the record's own
+  // address got a fresh one.
+  test("a record without identity goes to the same-named find at its own address", () => {
+    const known = [{ id: "Wohnzimmer", ip: "192.168.1.20" }];
+    const merged = mergeDiscovered(known, [
+      {
+        ip: "192.168.1.20",
+        name: "Wohnzimmer",
+        model: "WX-030",
+        identity: { serial: "0E897553", mac: "FF00DED4F504" },
+      },
+      {
+        ip: "192.168.1.21",
+        name: "Wohnzimmer",
+        model: "WX-030",
+        identity: { serial: "0A1B2B3C", mac: "00A0DED4F505" },
+      },
+    ]);
+    expect(merged.find(r => r.id === "Wohnzimmer")).toMatchObject({
+      ip: "192.168.1.20",
+      identity: { serial: "0E897553" },
+    });
+    expect(merged.find(r => r.identity?.serial === "0A1B2B3C")?.id).toBe("wx-030-2b3c");
+  });
+
+  test("two new devices whose serials end alike: the one with the lower SERIAL gets the short id", () => {
+    // Ordered by MAC, the higher serial (lower MAC) took the short id — the id move orders by serial.
+    const merged = mergeDiscovered(
+      [],
+      [
+        { ip: "10.0.0.6", name: "B", model: "WX-030", identity: { serial: "0F112B3C", mac: "00A0DE000001" } },
+        { ip: "10.0.0.5", name: "A", model: "WX-030", identity: { serial: "0E1A2B3C", mac: "00A0DE000009" } },
+      ],
+    );
+    expect(merged.map(r => [r.ip, r.id])).toEqual([
+      ["10.0.0.5", "wx-030-2b3c"],
+      ["10.0.0.6", "wx-030-0f112b3c"],
+    ]);
+  });
+
   test("a renamed device at a new address keeps its id when the identity matches", () => {
     // The serial survives what the name and the address do not — the id (and the tree) stays.
     const known = [{ id: "Yamaha_RX-V6a", ip: "1.1.1.10", identity: v6a }];
