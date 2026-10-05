@@ -2,6 +2,7 @@ import { channelCommon } from "../catalog/types";
 import { selfMap } from "../catalog/value-coerce";
 import type { ObjectDef } from "../catalog/types";
 import { tName } from "../i18n";
+import { BROWSE_LINES } from "./types";
 
 /**
  * The object tree of the browsing surface. Every capable transport contributes the
@@ -96,7 +97,7 @@ export function browseObjectDefs(sources: Record<string, string>, playLine = fal
         write: false,
       },
     },
-    ...[1, 2, 3, 4, 5, 6, 7, 8].map(line),
+    ...Array.from({ length: BROWSE_LINES }, (_unused, i) => line(i + 1)),
     {
       id: "player.browse.selectLine",
       type: "state",
@@ -108,7 +109,7 @@ export function browseObjectDefs(sources: Record<string, string>, playLine = fal
         read: true,
         write: true,
         min: 1,
-        max: 8,
+        max: BROWSE_LINES,
         step: 1,
       },
     },
@@ -125,7 +126,7 @@ export function browseObjectDefs(sources: Record<string, string>, playLine = fal
               read: true,
               write: true,
               min: 1,
-              max: 8,
+              max: BROWSE_LINES,
               step: 1,
             },
           } satisfies ObjectDef,

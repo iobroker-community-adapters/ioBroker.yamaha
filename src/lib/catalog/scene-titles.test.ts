@@ -1,6 +1,16 @@
-import { knownScenes, resolveSceneNumber, sceneListSurface, sceneNumber } from "./scene-titles";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import {
+  knownScenes,
+  resolveSceneNumber,
+  sceneListSurface,
+  sceneNumber,
+  sceneRecallStates,
+  yncaSceneTitles,
+} from "./scene-titles";
 import { ProbeMemory } from "../lifecycle/probe-memory";
 import { DISCOVERY_SCHEMA } from "../lifecycle/discovery-schema";
+import { parseSceneList } from "../xml/protocol";
 
 const declaration =
   '<YAMAHA_AV rsp="GET" RC="0"><Main_Zone><Scene><Scene_Sel_Item>' +
@@ -35,7 +45,13 @@ describe("scene titles from the shared device memory", () => {
     expect(resolveSceneNumber("3", memory, "main")).toBe(3);
     expect(resolveSceneNumber("movie viewing", memory, "main")).toBe(1);
     expect(resolveSceneNumber("Unknown Scene", memory, "main")).toBeUndefined();
-    expect(resolveSceneNumber(null, undefined, "main")).toBeUndefined();
+    expect(resolveSceneNumber(null, new ProbeMemory(), "main")).toBeUndefined();
+  });
+
+  test("a YNCA scene name is trimmed, and a name of blanks names no scene", () => {
+    expect(yncaSceneTitles({ SCENE1NAME: " BD/DVD ", SCENE2NAME: "   ", SCENE3NAME: "" }, "MAIN")).toEqual([
+      { num: 1, title: "BD/DVD" },
+    ]);
   });
 });
 
@@ -70,29 +86,71 @@ describe("title source precedence", () => {
 
 // Fleet rule 2026-09-28: a JSON list only IN ADDITION — every title is its own datapoint (audit 2026-09-29, D8).
 describe("the scene list surface", () => {
-  test("carries the JSON list and one title datapoint per scene, empty titles included", () => {
+  // Review 2026-10-05, A23: a scene without a title got an empty title datapoint (eight on the RX-V6A).
+  test("carries the JSON list and one title datapoint per TITLED scene — an empty text is no value", () => {
     const surface = sceneListSurface("multiroom.zone2.scene", [
-      { num: 1, title: "Movie" },
+      { num: 1, title: " Movie " },
       { num: 2, title: "" },
+      { num: 3, title: "   " },
     ]);
-    expect(surface.objects.map(o => o.id)).toEqual([
-      "multiroom.zone2.scene.list",
-      "multiroom.zone2.scene.title1",
-      "multiroom.zone2.scene.title2",
-    ]);
+    expect(surface.objects.map(o => o.id)).toEqual(["multiroom.zone2.scene.list", "multiroom.zone2.scene.title1"]);
     expect(surface.objects[1].common).toMatchObject({ type: "string", role: "text", write: false });
     expect((surface.objects[1].common.name as Record<string, string>).en).toBe("Scene 1 title");
     expect(surface.values).toEqual([
       {
         id: "multiroom.zone2.scene.list",
+        // Every declared scene stays in the list — a recall slot exists without a title.
         value: JSON.stringify([
           { num: 1, title: "Movie" },
           { num: 2, title: "" },
+          { num: 3, title: "" },
         ]),
       },
       { id: "multiroom.zone2.scene.title1", value: "Movie" },
-      { id: "multiroom.zone2.scene.title2", value: "" },
     ]);
+  });
+});
+
+// Review 2026-10-05, A23: the ONE label rule of a recall dropdown, for the three protocols.
+describe("sceneRecallStates", () => {
+  test("labels a scene with its trimmed title, a scene without one with its number", () => {
+    expect(
+      sceneRecallStates([
+        { num: 1, title: " Movie " },
+        { num: 2, title: "" },
+        { num: 4, title: "  " },
+      ]),
+    ).toEqual({ 1: "Movie", 2: "2", 4: "4" });
+    expect(sceneRecallStates([])).toEqual({});
+  });
+});
+
+// The RX-V6A declares its eight XML scenes with empty titles (inventory capture): an emptied VIS field recalled
+// scene 1 — input, volume and DSP changed — and the dropdown offered eight blank entries (review 2026-10-05, A23).
+describe("a device that declares its scenes without titles (RX-V6A, XML)", () => {
+  const fixture = JSON.parse(
+    readFileSync(join(__dirname, "..", "..", "..", "test", "fixtures", "inventory", "rxv6a.json"), "utf8"),
+  ) as { xml: { answers: Record<string, string> } };
+  const answer = fixture.xml.answers["Main_Zone/Scene"];
+  const scenes = parseSceneList(answer);
+
+  test("the capture holds eight scenes, all without a title", () => {
+    expect(scenes).toHaveLength(8);
+    expect(scenes.every(scene => scene.title.trim() === "")).toBe(true);
+  });
+
+  test("an empty or blank write names no scene", () => {
+    expect(sceneNumber("", scenes)).toBeUndefined();
+    expect(sceneNumber("   ", scenes)).toBeUndefined();
+    const memory = new ProbeMemory();
+    memory.set("xmlScenes:main", answer);
+    expect(resolveSceneNumber("", memory, "main")).toBeUndefined();
+    expect(resolveSceneNumber(3, memory, "main")).toBe(3);
+  });
+
+  test("the dropdown shows the numbers, and no title datapoint stands empty", () => {
+    expect(sceneRecallStates(scenes)).toEqual({ 1: "1", 2: "2", 3: "3", 4: "4", 5: "5", 6: "6", 7: "7", 8: "8" });
+    expect(sceneListSurface("scene", scenes).objects.map(o => o.id)).toEqual(["scene.list"]);
   });
 });
 

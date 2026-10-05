@@ -113,6 +113,30 @@ describe("groupOf", () => {
     expect(SWITCHABLE_GROUPS).toContain("sound");
     expect(SWITCHABLE_GROUPS).toContain("advanced");
   });
+
+  // One table behind groupOf and the switch list (review 2026-10-05, F): every switch is a theme a
+  // datapoint can have, once, and every theme a datapoint can have is a switch.
+  it("offers exactly the themes a datapoint can have, each once", () => {
+    expect([...SWITCHABLE_GROUPS]).toEqual([
+      "player",
+      "tuner",
+      "multiroom",
+      "hdmi",
+      "scene",
+      "sound",
+      "advanced",
+      "clock",
+    ]);
+    for (const group of SWITCHABLE_GROUPS) {
+      expect(groupOf(`${group}.x`), group).toBe(group);
+    }
+  });
+
+  it("reads an inherited property name as no theme", () => {
+    expect(groupOf("constructor")).toBe("amp");
+    expect(groupOf("toString.x")).toBe("amp");
+    expect(groupOf("__proto__.x")).toBe("amp");
+  });
 });
 
 describe("isGroupEnabled", () => {
