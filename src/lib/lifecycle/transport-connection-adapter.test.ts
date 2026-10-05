@@ -262,7 +262,39 @@ describe("TransportConnectionAdapter — a zone folder named as the tree does", 
     void adapter.handleWrite("multiroom.zoneB.sound.subwooferTrim", 1);
     void adapter.handleWrite("multiroom.zoneB.volume", 30);
     expect(writes).toEqual(["multiroom.zone2.subwooferVolume", "multiroom.zone2.volume"]);
-    expect(adapter.canonicalId("living.multiroom.zone2.mute")).toBe("multiroom.zoneB.mute");
+    // A value of an id the controller built no object for lands under the tree's name too.
+    adapter.interceptSetStateAck("living.multiroom.zone2.mute", true);
+    adapter.seedOwned(new Set(["multiroom.zoneB.volume", "multiroom.zoneB.mute"]));
+    expect(acks.at(-1)).toEqual({ id: "living.multiroom.zoneB.mute", value: true });
+    // And a write to an id it never built is derived back as before.
+    void adapter.handleWrite("multiroom.zoneB.mute", false);
+    expect(writes.at(-1)).toBe("multiroom.zone2.mute");
+  });
+
+  // The RX-V481 (zone2 = Zone B): MusicCast builds the Zone B volume sync under the tree's name itself. Derived back,
+  // the write became `multiroom.zone2.volumeSync`, which the controller did not know — nothing was sent (A16).
+  test("a write goes back under the id the controller built, also one it built under the tree's zone name", async () => {
+    const writes: string[] = [];
+    const adapter = new TransportConnectionAdapter("yxc", "rx", () => {});
+    adapter.bind({
+      start: async () => {
+        adapter.aliasZone("zone2", "zoneB");
+        await adapter.interceptUpsert("rx.multiroom.zoneB.volumeSync", st("multiroom.zoneB.volumeSync"));
+        await adapter.interceptUpsert("rx.multiroom.zone2.volume", st("multiroom.zone2.volume"));
+        return true;
+      },
+      handleWrite: stateId => {
+        writes.push(stateId);
+        return "sent";
+      },
+      onDrop: () => {},
+      close: () => {},
+    });
+    await adapter.connect();
+    expect(adapter.buildObjects().map(o => o.id)).toEqual(["multiroom.zoneB.volumeSync", "multiroom.zoneB.volume"]);
+    await expect(adapter.handleWrite("multiroom.zoneB.volumeSync", true)).resolves.toBe("sent");
+    await adapter.handleWrite("multiroom.zoneB.volume", 30);
+    expect(writes).toEqual(["multiroom.zoneB.volumeSync", "multiroom.zone2.volume"]);
   });
 });
 

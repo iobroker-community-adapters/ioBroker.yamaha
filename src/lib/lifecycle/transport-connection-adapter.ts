@@ -48,6 +48,8 @@ export interface AdaptedController {
 export class TransportConnectionAdapter implements TransportConnection {
   /** Canonical id → the def last collected for it (a later upsert of the same id replaces it). */
   private readonly collected = new Map<string, ObjectDef>();
+  /** Canonical id → the controller's own id it built the datapoint with — a write goes back under it (A16). */
+  private readonly ownIds = new Map<string, string>();
   /** The canonical ids this transport owns, as the handle armed them last — undefined until the first arming. */
   private owned: ReadonlySet<string> | undefined;
   private controller: AdaptedController | undefined;
@@ -93,6 +95,7 @@ export class TransportConnectionAdapter implements TransportConnection {
    */
   public readonly interceptUpsert = (_fullId: string, def: ObjectDef): Promise<void> => {
     const id = this.canonical(def.id);
+    this.ownIds.set(id, this.relative(def.id));
     // The renamed zone folder itself takes the name and explanation of its tree id.
     const renamedFolder = this.zoneAlias !== undefined && id === `multiroom.${this.zoneAlias.to}` && def.id !== id;
     const object: ObjectDef = {
@@ -210,19 +213,32 @@ export class TransportConnectionAdapter implements TransportConnection {
   }
 
   /**
-   * Route a user write to the controller under its own (drift-reversed, zone-kept) id.
+   * Route a user write to the controller under its own id: EXACTLY the id it built the datapoint with. Derived back
+   * from the canonical id, every `multiroom.zoneB.*` id became `multiroom.zone2.*` — also one the controller had
+   * built under `zoneB` itself (`multiroom.zoneB.volumeSync`), which it then did not find: the RX-V481's Zone B
+   * volume sync was never sent (review 2026-10-05, A16). The derivation stays for an id the controller never built.
    *
    * @param canonicalId the canonical state id the user wrote
    * @param value the value written
    * @returns what the controller made of it — `unclear` when it cannot say
    */
   public async handleWrite(canonicalId: string, value: unknown): Promise<WriteOutcome> {
+    const controllerId = this.ownIds.get(canonicalId) ?? this.derivedOwnId(canonicalId);
+    const outcome = await this.controller?.handleWrite(controllerId, value);
+    return outcome ?? (this.controller ? "unclear" : "unavailable");
+  }
+
+  /**
+   * The controller's id for a canonical id it never built: the zone folder named back, the id drift reversed.
+   *
+   * @param canonicalId the canonical id
+   * @returns the controller's id
+   */
+  private derivedOwnId(canonicalId: string): string {
     const own = this.unalias(canonicalId);
     const zone = ZONE_PREFIX.exec(own)?.[0] ?? "";
     const template = own.slice(zone.length);
-    const controllerId = zone + (INVERSE_DRIFT[this.transport]?.[template] ?? template);
-    const outcome = await this.controller?.handleWrite(controllerId, value);
-    return outcome ?? (this.controller ? "unclear" : "unavailable");
+    return zone + (INVERSE_DRIFT[this.transport]?.[template] ?? template);
   }
 
   /** @returns whether the controller's read comes from a switched-on receiver (true when it cannot tell) */
@@ -285,10 +301,6 @@ export class TransportConnectionAdapter implements TransportConnection {
    * @param id the controller's (device-relative or full) id
    * @returns the canonical id
    */
-  public canonicalId(id: string): string {
-    return this.canonical(id);
-  }
-
   private canonical(id: string): string {
     const canonical = canonicalIdOf(this.transport, this.relative(id));
     const alias = this.zoneAlias;
