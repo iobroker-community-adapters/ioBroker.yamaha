@@ -105,4 +105,64 @@ describe("DiagnosticsPanel", () => {
     );
     expect(await screen.findByTestId("diag-list-failed")).toBeInTheDocument();
   });
+
+  it("shows the error the adapter answers instead of its device list", async () => {
+    render(
+      <DiagnosticsPanel
+        socket={socket({ list: { error: "diagnostics failed: boom" } })}
+        namespace="yamaha.0"
+      />,
+    );
+    expect(await screen.findByTestId("diag-list-failed")).toHaveTextContent("diagnostics failed: boom");
+  });
+
+  // Review 2026-10-05, B2: a stopped instance left the card at "Loading devices…" for good.
+  it("says that the instance is not running instead of loading forever", async () => {
+    const s = {
+      sendTo: vi.fn(() => new Promise(() => {})),
+      subscribeState: vi.fn((id: string, handler: (id: string, state: { val: unknown } | null) => void) => {
+        void Promise.resolve().then(() => handler(id, { val: false }));
+      }),
+      unsubscribeState: vi.fn(),
+    };
+    render(
+      <DiagnosticsPanel
+        socket={s}
+        namespace="yamaha.0"
+      />,
+    );
+    expect(await screen.findByTestId("diag-list-failed")).toHaveTextContent("yd_notRunning");
+    expect(s.subscribeState).toHaveBeenCalledWith("system.adapter.yamaha.0.alive", expect.any(Function));
+  });
+
+  // Review 2026-10-05, B2: a restart during a report left the button locked.
+  it("frees the button and says why when the instance stops during a report", async () => {
+    let alive: (val: boolean) => void = () => {};
+    const s = {
+      sendTo: vi.fn((_i: string, _c: string, data: { action: string }) =>
+        data.action === "list"
+          ? Promise.resolve({ devices: [{ value: "rx-v6a-2b3c", label: "RX-V6A", connected: true }] })
+          : new Promise(() => {}),
+      ),
+      subscribeState: vi.fn((id: string, handler: (id: string, state: { val: unknown } | null) => void) => {
+        alive = val => handler(id, { val });
+        handler(id, { val: true });
+      }),
+      unsubscribeState: vi.fn(),
+    };
+    render(
+      <DiagnosticsPanel
+        socket={s}
+        namespace="yamaha.0"
+      />,
+    );
+    const button = await screen.findByTestId("diag-export");
+    await waitFor(() => expect(button).not.toBeDisabled());
+    fireEvent.click(button);
+    expect(await screen.findByTestId("diag-generating")).toBeInTheDocument();
+    alive(false);
+    expect(await screen.findByTestId("diag-error")).toHaveTextContent("yd_stopped");
+    await waitFor(() => expect(screen.getByTestId("diag-export")).not.toBeDisabled());
+    expect(screen.queryByTestId("diag-generating")).toBeNull();
+  });
 });

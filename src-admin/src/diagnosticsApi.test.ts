@@ -1,5 +1,41 @@
-import { describe, expect, it } from "vitest";
-import { DeviceListError, isReport, makeDiagnosticsApi, type DiagnosticsSocket } from "./diagnosticsApi";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  DeviceListError,
+  InstanceUnavailableError,
+  isReport,
+  makeDiagnosticsApi,
+  type DiagnosticsSocket,
+  type StateHandler,
+} from "./diagnosticsApi";
+
+/**
+ * A socket whose instance never answers, with the instance's `alive` state under the test's control.
+ *
+ * @param alive the value the subscription reports first (undefined: it reports nothing)
+ */
+function silentInstance(alive?: boolean): {
+  socket: DiagnosticsSocket;
+  setAlive(val: boolean): void;
+  watchers: Set<StateHandler>;
+} {
+  const watchers = new Set<StateHandler>();
+  return {
+    watchers,
+    setAlive: val => watchers.forEach(handler => handler("system.adapter.yamaha.0.alive", { val })),
+    socket: {
+      sendTo: () => new Promise(() => {}),
+      subscribeState: (id, handler) => {
+        expect(id).toBe("system.adapter.yamaha.0.alive");
+        watchers.add(handler);
+        // Like the admin connection: the current value first, after a round trip.
+        return alive === undefined ? undefined : Promise.resolve().then(() => handler(id, { val: alive }));
+      },
+      unsubscribeState: (_id, handler) => {
+        watchers.delete(handler!);
+      },
+    },
+  };
+}
 
 function socketReturning(value: unknown): { socket: DiagnosticsSocket; calls: unknown[][] } {
   const calls: unknown[][] = [];
@@ -41,5 +77,69 @@ describe("makeDiagnosticsApi", () => {
   it("turns a shapeless answer into an error, never into an empty download", async () => {
     const res = await makeDiagnosticsApi(socketReturning("nonsense").socket, "yamaha.0").exportReport("x");
     expect(isReport(res)).toBe(false);
+  });
+
+  it("hands on the error the adapter answers instead of a list", async () => {
+    const api = makeDiagnosticsApi(socketReturning({ error: "diagnostics failed: boom" }).socket, "yamaha.0");
+    await expect(api.listDevices()).rejects.toThrow(new DeviceListError("diagnostics failed: boom"));
+  });
+});
+
+// Review 2026-10-05, B2: `sendTo` of the admin connection never times out — a stopped instance kept the card
+// loading for good, a restart during a report kept its button locked.
+describe("askInstance (through the API)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("says at once that the instance is not running, instead of waiting for its answer", async () => {
+    const { socket, watchers } = silentInstance(false);
+    const list = makeDiagnosticsApi(socket, "yamaha.0").listDevices();
+    await expect(list).rejects.toEqual(new InstanceUnavailableError("notRunning"));
+    expect(watchers.size).toBe(0);
+  });
+
+  it("ends a report's wait when the instance stops (or restarts) in the middle of it", async () => {
+    const { socket, setAlive, watchers } = silentInstance(true);
+    const report = makeDiagnosticsApi(socket, "yamaha.0").exportReport("rx-v6a-2b3c");
+    await Promise.resolve();
+    await Promise.resolve();
+    setAlive(false);
+    await expect(report).rejects.toMatchObject({ reason: "stopped" });
+    expect(watchers.size).toBe(0);
+  });
+
+  it("gives up after the timeout when the instance runs but does not answer", async () => {
+    vi.useFakeTimers();
+    const { socket, watchers } = silentInstance(true);
+    const report = makeDiagnosticsApi(socket, "yamaha.0", { listMs: 15_000, exportMs: 180_000 }).exportReport("x");
+    const verdict = expect(report).rejects.toEqual(new InstanceUnavailableError("noAnswer", 180));
+    await vi.advanceTimersByTimeAsync(180_000);
+    await verdict;
+    expect(watchers.size).toBe(0);
+  });
+
+  it("gives up after the timeout on a socket without a state subscription", async () => {
+    vi.useFakeTimers();
+    const socket: DiagnosticsSocket = { sendTo: () => new Promise(() => {}) };
+    const list = makeDiagnosticsApi(socket, "yamaha.0", { listMs: 15_000, exportMs: 180_000 }).listDevices();
+    const verdict = expect(list).rejects.toMatchObject({ reason: "noAnswer", seconds: 15 });
+    await vi.advanceTimersByTimeAsync(15_000);
+    await verdict;
+  });
+
+  it("stops watching the instance once the answer is there", async () => {
+    const watchers = new Set<StateHandler>();
+    const socket: DiagnosticsSocket = {
+      sendTo: () => Promise.resolve({ devices: [] }),
+      subscribeState: (_id, handler) => {
+        watchers.add(handler);
+      },
+      unsubscribeState: (_id, handler) => {
+        watchers.delete(handler!);
+      },
+    };
+    expect(await makeDiagnosticsApi(socket, "yamaha.0").listDevices()).toEqual([]);
+    expect(watchers.size).toBe(0);
   });
 });

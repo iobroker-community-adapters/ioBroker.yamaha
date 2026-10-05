@@ -13,5 +13,8 @@
   "yd_exportFailed": "Le rapport n'a pas pu être créé.",
   "yd_privacy": "Les adresses, numéros de série, noms de réseau et de pièces sont remplacés par des marqueurs avant que le fichier ne quitte l'adaptateur. L'adaptateur n'en garde aucune copie.",
   "yd_generating": "Création du rapport de diagnostic — l'ampli est lu par chaque protocole qu'il parle. Cela prend jusqu'à une minute ; le fichier est ensuite proposé au téléchargement.",
-  "yd_elapsed": "%s s"
+  "yd_elapsed": "%s s",
+  "yd_notRunning": "L'instance n'est pas en cours d'exécution. Démarrez-la, puis rouvrez cet onglet.",
+  "yd_stopped": "L'instance s'est arrêtée pendant la création du rapport (redémarrage ou plantage). Réessayez lorsqu'elle tourne à nouveau — le journal de l'instance indique ce qui s'est passé.",
+  "yd_noAnswer": "L'adaptateur n'a pas répondu en %s s. Vérifiez le journal de l'instance, puis réessayez."
 }
