@@ -7,6 +7,7 @@ import {
 import type { ObjectDef } from "../catalog/types";
 import type { Transport } from "../catalog/owner-policy";
 import { emptyLearnedTree, type LearnedTree } from "./learned-tree";
+import { TransportConnectionAdapter } from "./transport-connection-adapter";
 
 const silentLog = { debug: (): void => {}, info: (): void => {}, warn: (): void => {} };
 
@@ -1288,5 +1289,137 @@ describe("MultiTransportHandle — a reconnect in flight and one that drops agai
     expect(h.logs.some(line => line.includes("transport reconnected"))).toBe(true);
     fresh.drop(new Error("socket reset"));
     expect(h.delays).toEqual([1000, 1000]);
+  });
+});
+
+describe("MultiTransportHandle — what changes during the first learn is learned (review 2026-10-05, A8/F1)", () => {
+  const text = (id: string, extra: Record<string, unknown> = {}): ObjectDef => ({
+    id,
+    type: "state",
+    common: { name: id, type: "string", role: "state", read: true, write: true, ...extra },
+  });
+
+  // While the first learn writes (a database round trip), a push grows the input list and a brand-new datapoint
+  // appears with its value. The handle armed its signals only after that learn, so both were never learned — and
+  // the new datapoint's value was dropped — until some later, unrelated change.
+  test("a list grown and a datapoint built while the first learn writes are learned, with their values", async () => {
+    const written: string[] = [];
+    const acks: Array<[string, unknown]> = [];
+    const adapter = new TransportConnectionAdapter("yxc", "dev", (id, value) => void acks.push([id, value]));
+    adapter.bind({
+      start: async () => {
+        await adapter.interceptUpsert("dev.input", text("input", { states: { hdmi1: "HDMI1" } }));
+        adapter.interceptSetStateAck("dev.input", "hdmi1");
+        return true;
+      },
+      handleWrite: () => "sent",
+      onDrop: () => {},
+      close: () => {},
+    });
+    await adapter.connect();
+    let midLearn: (() => void) | undefined = () => {
+      void adapter.interceptUpsert("dev.input", text("input", { states: { hdmi1: "HDMI1", tv: "TV" } }));
+      void adapter.interceptUpsert("dev.sound.dialogueLevel", text("sound.dialogueLevel"));
+      adapter.interceptSetStateAck("dev.sound.dialogueLevel", "2");
+      adapter.interceptSetStateAck("dev.input", "tv");
+    };
+    const defs = new Map<string, ObjectDef>();
+    const handle = new MultiTransportHandle("dev", [adapter], {
+      upsertObject: async (id, def) => {
+        written.push(id);
+        defs.set(id, def);
+        const fire = midLearn;
+        midLearn = undefined;
+        fire?.();
+        await new Promise(resolve => setTimeout(resolve, 1));
+      },
+      log: silentLog,
+    });
+    await handle.start();
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(written).toContain("dev.sound.dialogueLevel");
+    expect(defs.get("dev.input")?.common.states).toEqual({ hdmi1: "HDMI1", tv: "TV" });
+    expect(acks).toContainEqual(["dev.sound.dialogueLevel", "2"]);
+    expect(acks.filter(([id]) => id === "dev.input").at(-1)).toEqual(["dev.input", "tv"]);
+    handle.close();
+  });
+
+  // The YNCA controller tells its listeners once when the switched-on read is complete; a read completing during
+  // the first learn found no listener yet.
+  test("a read that became complete during the first learn completes the read-in", async () => {
+    let complete = false;
+    const ynca = Object.assign(fakeConn("ynca", [state("power", "Power")]), {
+      readComplete: () => complete,
+      onReadComplete: (): void => undefined,
+    });
+    const settled: Array<ReadonlySet<string>> = [];
+    const handle = new MultiTransportHandle("living", [ynca], {
+      upsertObject: () => {
+        complete = true;
+        return Promise.resolve();
+      },
+      log: silentLog,
+      adapterVersion: "3.2.0",
+      tree: { get: () => emptyLearnedTree(), set: () => undefined },
+      settleTree: built => {
+        settled.push(built);
+        return Promise.resolve();
+      },
+    });
+    await handle.start();
+    await new Promise(resolve => setImmediate(resolve));
+    expect(settled).toHaveLength(1);
+    handle.close();
+  });
+
+  // A background refresh republishes every object with a grown list: one signal per object queued one full learn
+  // per object — a coordination and a fingerprint of the whole tree each, 3.4 s of event loop for 1000. Coalesced,
+  // a learn takes what changed while the one before it ran (measured: 19 learns, 146 ms), and each changed object
+  // is written once.
+  test("a refresh that changes 1000 objects is learned in a few learns, each object written once", async () => {
+    const N = 1000;
+    const big = (id: string, rev: number): ObjectDef => text(id, { states: { a: "A", b: "B", [`r${rev}`]: "R" } });
+    const adapter = new TransportConnectionAdapter("ynca", "dev", () => {});
+    adapter.bind({
+      start: async () => {
+        for (let i = 0; i < N; i++) {
+          await adapter.interceptUpsert(`dev.s${i}`, big(`s${i}`, 0));
+        }
+        return true;
+      },
+      handleWrite: () => "sent",
+      onDrop: () => {},
+      close: () => {},
+    });
+    await adapter.connect();
+    const snapshot = adapter.buildObjects.bind(adapter);
+    let learns = 0;
+    adapter.buildObjects = (): readonly ObjectDef[] => {
+      learns++;
+      return snapshot();
+    };
+    let upserts = 0;
+    const handle = new MultiTransportHandle("dev", [adapter], {
+      upsertObject: () => {
+        upserts++;
+        return Promise.resolve();
+      },
+      log: silentLog,
+    });
+    await handle.start();
+    learns = 0;
+    upserts = 0;
+    for (let i = 0; i < N; i++) {
+      await adapter.interceptUpsert(`dev.s${i}`, big(`s${i}`, 1));
+    }
+    let last = -1;
+    while (last !== learns) {
+      last = learns;
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    expect(learns).toBeGreaterThan(0);
+    expect(learns).toBeLessThan(N / 20);
+    expect(upserts).toBe(N);
+    handle.close();
   });
 });

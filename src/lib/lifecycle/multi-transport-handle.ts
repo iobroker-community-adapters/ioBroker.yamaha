@@ -41,8 +41,9 @@ export interface TransportConnection {
   onDrop(cb: (reason?: Error) => void): void;
   /**
    * Register the handler the transport calls when it learned something mid-session that changes
-   * the objects it would build (2.7.0). Optional: a transport that never changes shape within a
-   * session simply does not offer it.
+   * the objects it would build (2.7.0). A change after the handle's last {@link buildObjects} that
+   * was not told yet is told at registration — the handle registers only after its first learn.
+   * Optional: a transport that never changes shape within a session simply does not offer it.
    */
   onShapeChanged?(cb: () => void): void;
   /**
@@ -158,6 +159,8 @@ export class MultiTransportHandle implements ConnectionHandle {
   private firmwareChanged = false;
   /** The learn in flight, so two signals never run one concurrently. */
   private learning: Promise<void> = Promise.resolve();
+  /** The learn queued behind the one in flight, not started yet — every signal until it starts rides on it. */
+  private waiting: Promise<void> | undefined;
   /** The device is gone (the last transport dropped) — reported once, kept until the supervisor registers. */
   private readonly gone = new DropLatch();
   private closed = false;
@@ -204,6 +207,14 @@ export class MultiTransportHandle implements ConnectionHandle {
       connection.onDrop(reason => this.handleTransportDrop(connection, reason));
       this.armSignals(connection);
     }
+    // A change during the first learn is told while arming (each transport signals what it built since the learn
+    // took its objects). A read that became complete meanwhile told no one — its listener is armed only now — and
+    // the read-in waited for some later, unrelated change (review 2026-10-05, A8).
+    if (this.readyToSettle()) {
+      this.queueLearn().catch((e: unknown) => {
+        this.deps.log.debug(`${this.deviceId}: completing the read-in failed (${errText(e)})`);
+      });
+    }
     // A transport this device has but that did not answer is brought back like a dropped one —
     // before, it stayed away for the whole session (audit 2026-09-29, D1).
     if (this.live.length > 0) {
@@ -237,15 +248,23 @@ export class MultiTransportHandle implements ConnectionHandle {
   }
 
   /**
-   * Run a learn SERIALIZED behind whatever is already in flight. The chain itself never rejects: a
-   * failure is handed back to the caller, so one failed learn cannot poison every later one.
+   * Run a learn SERIALIZED behind whatever is already in flight — at most ONE waits: a learn takes everything the
+   * transports built when it starts, so every signal before that start is answered by it. Each signal queued a
+   * learn of its own before, a full coordination and a fingerprint of every object — 1000 signals of a refresh
+   * held the event loop for 3.4 s (review 2026-10-05, F1). The chain itself never rejects: a failure is handed back
+   * to the callers, so one failed learn cannot poison every later one.
    *
-   * @returns the queued learn, rejecting with its error for the caller to handle
+   * @returns the waiting learn, rejecting with its error for the caller to handle
    */
   private queueLearn(): Promise<void> {
+    if (this.waiting) {
+      return this.waiting;
+    }
     let failure: unknown;
     let failed = false;
     const queued = this.learning.then(async () => {
+      // Started: a change from here on is one this learn may not see — the next signal queues the next learn.
+      this.waiting = undefined;
       if (this.closed) {
         return;
       }
@@ -257,11 +276,12 @@ export class MultiTransportHandle implements ConnectionHandle {
       }
     });
     this.learning = queued;
-    return queued.then(() => {
+    this.waiting = queued.then(() => {
       if (failed) {
         throw failure;
       }
     });
+    return this.waiting;
   }
 
   /** Take what the live transports build now, then complete the read-in or add what is new. */
