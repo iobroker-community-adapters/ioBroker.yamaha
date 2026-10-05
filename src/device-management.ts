@@ -1,3 +1,4 @@
+import type { AdapterInstance } from "@iobroker/adapter-core";
 import {
   DeviceManagement,
   type ActionContext,
@@ -9,29 +10,33 @@ import {
 } from "@iobroker/dm-utils";
 import { tName } from "./lib/i18n";
 import { iconForModel, volumeIndicatorIcon } from "./lib/device-type";
-import {
-  readDiscovered,
-  readExcluded,
-  readIgnored,
-  writeDiscovered,
-  writeExcluded,
-  writeIgnored,
-  type ExcludedEntry,
-} from "./lib/discovered-store";
-import { discoveredStoreDeps, excludedStoreDeps, ignoredStoreDeps } from "./lib/discovered-store-deps";
-import type { DeviceRecord } from "./lib/types";
+import { type DeviceStores, deviceStoresOf, rememberedDevices } from "./lib/device-stores";
 import { errText } from "./lib/err-text";
-import { LABEL_RANK, rowDeviceId, sanitizeId, unionDevices, type DeviceRow } from "./lib/pure-helpers";
-import { deviceIdFor, RESERVED_DEVICE_IDS } from "./lib/device-id";
+import {
+  isDottedQuad,
+  LABEL_RANK,
+  parseDevices,
+  rowDeviceId,
+  sanitizeId,
+  unionDevices,
+  type DeviceRow,
+} from "./lib/pure-helpers";
+import { deviceIdFor } from "./lib/device-id";
 import { sameDevice } from "./lib/device-identity";
 import { identifyDevice } from "./lib/identify-device";
 import { identityOfDeviceObject } from "./lib/lifecycle/capability-profile";
-import { buildDeviceForm, buildExcludedForm, findClash, type CardDevice } from "./device-management-helpers";
+import {
+  buildDeviceForm,
+  buildExcludedForm,
+  findClash,
+  takenAddresses,
+  type CardDevice,
+} from "./device-management-helpers";
 import { isIPv4 } from "./lib/network-interfaces";
 import { TRANSPORT_LABELS } from "./lib/ready-line";
 
 /** The adapter methods this backend needs beyond the plain ioBroker surface. */
-interface DeviceOwner {
+export interface DeviceOwner {
   /** Stop supervising a device and delete its object tree. */
   removeDevice(deviceId: string): Promise<void>;
   /** Switch one device's volume datapoints to percent (or back) and rebuild them at once. */
@@ -48,39 +53,39 @@ interface DeviceOwner {
  * add-by-IP dialog. The card list follows the running set — the manual `native.devices`
  * table plus the auto-discovered devices (`unionDevices`, a manual entry wins) — so it
  * matches exactly what the adapter runs. "Yamaha" is never a card line: it is the whole adapter.
+ *
+ * The adapter it runs in is its owner: the delete, the percent switch, the re-admission and every device-object write
+ * reach into it. That surface is a type, not a guess at runtime — the duck-typed lookup with fallback branches existed
+ * for a test double only (review 2026-10-05, G).
  */
-export class YamahaDeviceManagement extends DeviceManagement {
+export class YamahaDeviceManagement extends DeviceManagement<AdapterInstance & DeviceOwner> {
+  /** The one owner of the found/deleted lists — the adapter's own, so both write on one chain (review 2026-10-05, A31). */
+  private readonly stores: DeviceStores;
+
+  /**
+   * @param adapter the running adapter
+   * @param stores the adapter's store owner; a backend built on its own (a test) makes its own
+   */
+  public constructor(adapter: AdapterInstance & DeviceOwner, stores: DeviceStores = deviceStoresOf(adapter)) {
+    super(adapter);
+    this.stores = stores;
+  }
+
   /** The instance object id whose `native` holds the manual device table. */
   private get objId(): string {
     return `system.adapter.${this.adapter.namespace}`;
   }
 
-  /** The running adapter, for the actions that have to reach into it (delete, the percent switch, re-admission, device-object writes). */
-  private get owner(): DeviceOwner | undefined {
-    const candidate = this.adapter as unknown as Partial<DeviceOwner>;
-    return typeof candidate.removeDevice === "function" &&
-      typeof candidate.setVolumePercent === "function" &&
-      typeof candidate.rediscoverNow === "function" &&
-      typeof candidate.writeDeviceObject === "function"
-      ? (candidate as DeviceOwner)
-      : undefined;
-  }
-
   /**
-   * Merge into a device object. Through the adapter's write chain while it runs: two `extendObject`
-   * at the same moment each write what they read, and the later one takes the earlier one's fields
-   * away — a name typed here could vanish under a profile write (audit 2026-09-29, A37).
+   * Merge into a device object, through the adapter's write chain: two `extendObject` at the same moment each write what
+   * they read, and the later one takes the earlier one's fields away — a name typed here could vanish under a profile
+   * write (audit 2026-09-29, A37).
    *
    * @param deviceId the id-safe device id
    * @param patch what to merge
    */
   private async writeDevice(deviceId: string, patch: ioBroker.PartialDeviceObject): Promise<void> {
-    const owner = this.owner;
-    if (owner) {
-      await owner.writeDeviceObject(deviceId, patch);
-    } else {
-      await this.adapter.extendForeignObjectAsync(`${this.adapter.namespace}.${deviceId}`, patch);
-    }
+    await this.adapter.writeDeviceObject(deviceId, patch);
   }
 
   /**
@@ -121,17 +126,6 @@ export class YamahaDeviceManagement extends DeviceManagement {
   }
 
   /**
-   * Whether one device's volume datapoints read 0–100 %, for the edit dialog to prefill.
-   *
-   * @param deviceId the id-safe device id
-   * @returns true when this device is set to percent
-   */
-  private async volumeAsPercentOf(deviceId: string): Promise<boolean> {
-    const node = await this.adapter.getForeignObjectAsync(`${this.adapter.namespace}.${deviceId}`);
-    return (node?.native as { volumeAsPercent?: unknown } | undefined)?.volumeAsPercent === true;
-  }
-
-  /**
    * Set one device's percent switch. The value lives at the DEVICE object — one place the card,
    * the dialog and the running adapter all read, and writing it restarts nothing (an instance
    * object's native would).
@@ -142,11 +136,10 @@ export class YamahaDeviceManagement extends DeviceManagement {
   private async applyVolumePercent(deviceId: string, on: boolean): Promise<void> {
     const id = `${this.adapter.namespace}.${deviceId}`;
     const existing = await this.adapter.getForeignObjectAsync(id);
-    const owner = this.owner;
-    if (existing && owner) {
+    if (existing) {
       // The adapter is running this device: it writes the value AND rebuilds the volume
       // datapoints on the spot, so the change is visible without a restart.
-      await owner.setVolumePercent(deviceId, on);
+      await this.adapter.setVolumePercent(deviceId, on);
       return;
     }
     // A device just added through the dialog has no object yet — seed the shape
@@ -160,28 +153,26 @@ export class YamahaDeviceManagement extends DeviceManagement {
 
   /**
    * The running device set as cards: the manual table AND the discovery store, exactly the
-   * union the adapter itself runs (`unionDevices`), so the list matches what is live.
+   * union the adapter itself runs (`unionDevices`), so the list matches what is live. The table is read by the
+   * adapter's own parser (`parseDevices`: valid rows, no reserved id, the first row of an id) — a second copy of its
+   * rules stood here (review 2026-10-05, E) — and a deleted device a failed write left in the store gets no card (A31).
    *
-   * @returns the cards, each tagged with where its address came from
+   * @returns the cards
    */
   private async cards(): Promise<CardDevice[]> {
+    const rows = await this.readManual();
     const names = new Map<string, string>();
-    const manualRecords: DeviceRecord[] = [];
-    for (const row of await this.readManual()) {
+    for (const row of rows) {
       const id = rowDeviceId(row);
-      // "info" is the adapter's own channel — a device may never claim it.
-      if (RESERVED_DEVICE_IDS.has(id) || names.has(id)) {
-        continue;
+      if (!names.has(id)) {
+        names.set(id, row.name && row.name.length > 0 ? row.name : row.ip);
       }
-      names.set(id, row.name && row.name.length > 0 ? row.name : row.ip);
-      manualRecords.push({ id, ip: row.ip });
     }
-    const discovered = await readDiscovered(discoveredStoreDeps(this.adapter));
-    return unionDevices(manualRecords, discovered).map(device => ({
+    const discovered = rememberedDevices(await this.stores.read());
+    return unionDevices(parseDevices(rows), discovered).map(device => ({
       id: device.id,
       ip: device.ip,
       name: names.get(device.id) ?? device.id,
-      source: device.source ?? "discovered",
     }));
   }
 
@@ -444,7 +435,9 @@ export class YamahaDeviceManagement extends DeviceManagement {
    */
   private async addDevice(context: ActionContext): Promise<{ refresh: boolean }> {
     const manual = await this.readManual();
-    const data = await context.showForm(buildDeviceForm(manual.map(r => r.ip)), { title: tName("dmAdd") });
+    const data = await context.showForm(buildDeviceForm(takenAddresses(await this.cards())), {
+      title: tName("dmAdd"),
+    });
     if (data && typeof data.ip === "string" && data.ip.trim()) {
       const ip = data.ip.trim();
       const typedName = typeof data.name === "string" ? data.name.trim() : "";
@@ -455,7 +448,7 @@ export class YamahaDeviceManagement extends DeviceManagement {
       // A name that IS the address says nothing the address does not — it is no display name.
       const name = typedName === ip ? "" : typedName;
       const report = await identifyDevice(ip);
-      const found = await readDiscovered(discoveredStoreDeps(this.adapter));
+      const found = rememberedDevices(await this.stores.read());
       // The same receiver found by the search already runs — a second card would be a second tree.
       if (found.some(record => sameDevice(record.identity, report.identity))) {
         await context.showMessage(tName("duplicateDevice"));
@@ -474,26 +467,17 @@ export class YamahaDeviceManagement extends DeviceManagement {
       manual.push(row);
       // Adding a device by hand undoes an earlier delete of the same device — otherwise the
       // exclusion would silently outlive the decision that created it. By its id, and by the id
-      // 2.x gave the same name: a device deleted before 3.0.0 is on the list under that one.
+      // 2.x gave the same name: a device deleted before 3.0.0 is on the list under that one. The
+      // same for the exclusion entries — by id, by address and by identity: the entry of a
+      // deleted manual device carries the address the user is typing again right now. A list that
+      // cannot be read is left as it is; the typed row runs whatever the lists say.
       const lifted = new Set([id, ...(name !== "" ? [sanitizeId(name)] : [])]);
-      const ignoredDeps = ignoredStoreDeps(this.adapter);
-      const ignored = await readIgnored(ignoredDeps);
-      if (ignored.some(entry => lifted.has(entry))) {
-        await writeIgnored(
-          ignoredDeps,
-          ignored.filter(entry => !lifted.has(entry)),
-        );
-      }
-      // The same for the exclusion entries — by id, by address and by identity: the entry of a
-      // deleted manual device carries the address the user is typing again right now.
-      const excludedDeps = excludedStoreDeps(this.adapter);
-      const excluded = await readExcluded(excludedDeps);
-      const remaining = excluded.filter(
-        entry => !lifted.has(entry.id) && entry.ip !== row.ip && !sameDevice(entry.identity, report.identity),
-      );
-      if (remaining.length !== excluded.length) {
-        await writeExcluded(excludedDeps, remaining);
-      }
+      await this.stores.update(now => ({
+        ignored: now.ignored.filter(entry => !lifted.has(entry)),
+        excluded: now.excluded.filter(
+          entry => !lifted.has(entry.id) && entry.ip !== row.ip && !sameDevice(entry.identity, report.identity),
+        ),
+      }));
       // Written down right away, so the device starts with the answer the user gave instead of
       // inheriting whatever the instance-wide switch of 2.8.0 was left on.
       await this.applyVolumePercent(id, data.volumeAsPercent === true);
@@ -518,10 +502,13 @@ export class YamahaDeviceManagement extends DeviceManagement {
    * @returns a directive to reload the manager
    */
   private async excludedDevices(context: ActionContext): Promise<{ refresh: boolean }> {
-    const excludedDeps = excludedStoreDeps(this.adapter);
-    const ignoredDeps = ignoredStoreDeps(this.adapter);
-    const excluded = await readExcluded(excludedDeps);
-    const ignored = await readIgnored(ignoredDeps);
+    const { excluded, ignored, unreadable } = await this.stores.read();
+    // A list that cannot be read would show as "nothing excluded" — and the deletes it holds could not be lifted anyway
+    // (review 2026-10-05, A28). Said instead, through the action's error answer.
+    const broken = (["excluded", "ignored"] as const).filter(name => unreadable.has(name));
+    if (broken.length > 0) {
+      throw new Error(`${broken.map(name => `${name}.json`).join(" and ")} cannot be read — see the adapter log`);
+    }
     // One row per id: the entry with address and identity where there is one, the bare id from
     // the plain list otherwise (an exclusion written before there were entries).
     const entries = [
@@ -543,15 +530,11 @@ export class YamahaDeviceManagement extends DeviceManagement {
     if (lifted.length === 0) {
       return { refresh: false };
     }
-    await writeExcluded(
-      excludedDeps,
-      excluded.filter(entry => !lifted.includes(entry.id)),
-    );
-    await writeIgnored(
-      ignoredDeps,
-      ignored.filter(id => !lifted.includes(id)),
-    );
-    this.owner?.rediscoverNow(lifted);
+    await this.stores.update(now => ({
+      excluded: now.excluded.filter(entry => !lifted.includes(entry.id)),
+      ignored: now.ignored.filter(id => !lifted.includes(id)),
+    }));
+    this.adapter.rediscoverNow(lifted);
     return { refresh: true };
   }
 
@@ -585,11 +568,12 @@ export class YamahaDeviceManagement extends DeviceManagement {
     const node = await this.adapter.getForeignObjectAsync(`${this.adapter.namespace}.${cardId}`);
     const shownName =
       typeof node?.common?.name === "string" && node.common.name !== cardId ? node.common.name : card.name;
-    const percent = await this.volumeAsPercentOf(cardId);
-    const data = await context.showForm(
-      buildDeviceForm(cards.filter(entry => entry.id !== cardId).map(entry => entry.ip)),
-      { title: tName("dmEditTitle"), data: { name: shownName, ip: card.ip, volumeAsPercent: percent } },
-    );
+    // From the object just read — no second read for the switch.
+    const percent = (node?.native as { volumeAsPercent?: unknown } | undefined)?.volumeAsPercent === true;
+    const data = await context.showForm(buildDeviceForm(takenAddresses(cards, cardId)), {
+      title: tName("dmEditTitle"),
+      data: { name: shownName, ip: card.ip, volumeAsPercent: percent },
+    });
     if (!data || typeof data.ip !== "string" || !data.ip.trim()) {
       return { refresh: "devices" };
     }
@@ -606,15 +590,18 @@ export class YamahaDeviceManagement extends DeviceManagement {
     }
     let tableChanged = false;
     if (index >= 0) {
-      manual[index] = row;
-      tableChanged = true;
+      // Only a new address changes the table. Name and percent switch live at the device object, and every write of
+      // the table restarts the instance — all devices reconnected and YNCA swept again for a display name (review
+      // 2026-10-05, A10). A row the 0.5.4 migration wrote keeps its address as its NAME — the mark that makes it
+      // follow the receiver (`parseDevices`); written as `{ id, name: id }` it turned into a typed row, stopped
+      // following, and under "Automatic" switched the network search off. Only its `ip` moves, as the adapter's own
+      // address update does (`updateTableAddress`).
+      if (ip !== manual[index].ip) {
+        manual[index] = isDottedQuad(manual[index].name ?? "") ? { ...manual[index], ip } : row;
+        tableChanged = true;
+      }
     } else if (ip !== card.ip) {
-      const store = discoveredStoreDeps(this.adapter);
-      const discovered = await readDiscovered(store);
-      await writeDiscovered(
-        store,
-        discovered.filter((entry: DeviceRecord) => entry.id !== cardId),
-      );
+      await this.stores.update(now => ({ discovered: now.discovered.filter(entry => entry.id !== cardId) }));
       manual.push(row);
       tableChanged = true;
     }
@@ -657,29 +644,39 @@ export class YamahaDeviceManagement extends DeviceManagement {
   private async deleteDevice(cardId: string): Promise<{ delete: string }> {
     const manual = await this.readManual();
     const index = manual.findIndex(r => rowDeviceId(r) === cardId);
-    const store = discoveredStoreDeps(this.adapter);
-    const discovered = await readDiscovered(store);
-    const record = discovered.find((d: DeviceRecord) => d.id === cardId);
-    if (index < 0 && !record) {
+    // Who the device is: the identity the transports learned (`native.identity`), the one in its capability profile, and
+    // the one the search read — with it the exclusion survives a rename and a new address; without it the address has
+    // to do (review 2026-10-05, A11).
+    const node = await this.adapter.getForeignObjectAsync(`${this.adapter.namespace}.${cardId}`);
+    let listed = index >= 0;
+    // The exclusion and the record's removal are ONE step on the stores, the exclusion written first — a search
+    // running right now reads it (review 2026-10-05, A31).
+    const writes = await this.stores.update(now => {
+      const record = now.discovered.find(device => device.id === cardId);
+      if (index < 0 && !record) {
+        return undefined;
+      }
+      listed = true;
+      const ip = index >= 0 ? manual[index].ip : record!.ip;
+      const identity = identityOfDeviceObject(node?.native as Record<string, unknown> | undefined, record?.identity);
+      return {
+        excluded: [...now.excluded, { id: cardId, ip, ...(identity ? { identity } : {}) }],
+        ...(record ? { discovered: now.discovered.filter(device => device.id !== cardId) } : {}),
+      };
+    });
+    if (!listed) {
       return { delete: cardId };
     }
-    const ip = index >= 0 ? manual[index].ip : record!.ip;
-    // The identity the transports learned lives at the device object — with it the exclusion
-    // survives a rename and a new address; without it the address has to do.
-    const node = await this.adapter.getForeignObjectAsync(`${this.adapter.namespace}.${cardId}`);
-    const identity = (node?.native as { identity?: ExcludedEntry["identity"] } | undefined)?.identity;
-    const excludedDeps = excludedStoreDeps(this.adapter);
-    await writeExcluded(excludedDeps, [
-      ...(await readExcluded(excludedDeps)),
-      { id: cardId, ip, ...(identity ? { identity } : {}) },
-    ]);
-    if (record) {
-      await writeDiscovered(
-        store,
-        discovered.filter((d: DeviceRecord) => d.id !== cardId),
-      );
+    // Y-13: a delete is for good. Without its exclusion the next search brings the device back — so nothing is deleted,
+    // and the dialog says why (review 2026-10-05, A28).
+    if (writes.excluded !== "written" && writes.excluded !== "unchanged") {
+      const reason =
+        writes.excluded === "refused"
+          ? "the exclusion list excluded.json cannot be read"
+          : "the exclusion list excluded.json could not be written";
+      throw new Error(`${reason} — ${cardId} was not deleted, the next search would bring it back`);
     }
-    await this.owner?.removeDevice(cardId);
+    await this.adapter.removeDevice(cardId);
     if (index >= 0) {
       manual.splice(index, 1);
       this.adapter.setTimeout(() => {

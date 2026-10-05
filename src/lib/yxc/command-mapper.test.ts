@@ -1,25 +1,6 @@
-import {
-  clientSlotEntries,
-  playQueueCounters,
-  stationSlotEntries,
-  distributionSummary,
-  parseYxcClock,
-  parseYxcDistribution,
-  parseYxcPlayInfo,
-  parseYxcPlaylistNames,
-  parseYxcPlayQueue,
-  parseYxcPresetList,
-  parseYxcRecentList,
-  parseYxcSignalInfo,
-  parseYxcStatus,
-  parseYxcTunerInfo,
-  parseYxcTunerPresetLists,
-  stateToYxc,
-} from "./command-mapper";
-import { absoluteDeviceUrl } from "../catalog/device-url";
+import { stateToYxc, yxcWrite, type YxcWriteContext } from "./command-mapper";
+import type { YxcCapabilities } from "./capability";
 import type { YxcClientLike } from "./client-contract";
-import ysp from "./__fixtures__/status/YSP1600_main.json";
-import rx from "./__fixtures__/status/RX_A2070_main.json";
 
 /** A recording client: every method call is captured as [name, args] and resolves {}. */
 function recordingClient(): { client: YxcClientLike; calls: Array<[string, unknown[]]> } {
@@ -51,108 +32,6 @@ async function ranCall(stateId: string, value: unknown): Promise<[string, unknow
   await command.run(client);
   return calls[0];
 }
-
-describe("parseYxcStatus", () => {
-  test("maps a main getStatus to unified amp states", () => {
-    // YSP-1600: power=standby, volume=30, mute=false, input=hdmi, sound_program=stereo
-    expect(parseYxcStatus(ysp, "main")).toEqual(
-      expect.arrayContaining([
-        { id: "power", value: false },
-        { id: "volume", value: 30 },
-        { id: "mute", value: false },
-        { id: "input", value: "hdmi" },
-        { id: "soundProgram", value: "stereo" },
-      ]),
-    );
-  });
-
-  // `volume` carries what the receiver DISPLAYS, so the RX-A2070 (raw 66, actual_volume -47.5 dB)
-  // reports the decibel value. The raw step count is the wire form and stays out of the tree.
-  test("maps power=on to true and reads the displayed volume", () => {
-    // RX-A2070: power=on, volume=66 raw / -47.5 dB displayed, input=server
-    const updates = parseYxcStatus(rx, "main");
-    expect(updates).toContainEqual({ id: "power", value: true });
-    expect(updates).toContainEqual({ id: "volume", value: -47.5 });
-    expect(updates).toContainEqual({ id: "input", value: "server" });
-  });
-
-  // A device without `actual_volume` has no display scale to report — its raw step count is all
-  // there is, and it must still reach the datapoint (speakers, soundbars, CD receivers).
-  test("falls back to the raw step count where the device reports no display scale", () => {
-    const updates = parseYxcStatus({ power: "on", volume: 30 }, "main");
-    expect(updates).toContainEqual({ id: "volume", value: 30 });
-  });
-
-  test("prefixes the state id for non-main zones", () => {
-    expect(parseYxcStatus(ysp, "zone2")).toContainEqual({ id: "multiroom.zone2.power", value: false });
-  });
-
-  test("returns no updates for malformed input or a status without amp fields", () => {
-    expect(parseYxcStatus(null, "main")).toEqual([]);
-    expect(parseYxcStatus({ response_code: 0 }, "main")).toEqual([]);
-  });
-
-  test("reads nested tone control and flat sleep/dialogue/volume", () => {
-    const status = {
-      tone_control: { mode: "manual", bass: 3, treble: -2 },
-      sleep: 60,
-      dialogue_level: 2,
-      max_volume: 161,
-      actual_volume: { mode: "db", value: -47.5, unit: "dB" },
-      contents_display: true,
-    };
-    const u = parseYxcStatus(status, "main");
-    expect(u).toContainEqual({ id: "sound.bass", value: 3 });
-    expect(u).toContainEqual({ id: "sound.treble", value: -2 });
-    expect(u).toContainEqual({ id: "sleep", value: 60 });
-    expect(u).toContainEqual({ id: "sound.dialogueLevel", value: 2 });
-    expect(u).toContainEqual({ id: "volume", value: -47.5 });
-    expect(u).toContainEqual({ id: "sound.contentsDisplay", value: true });
-  });
-
-  test("reads the always-present getStatus fields (max volume, distribution) — party comes from getFuncStatus", () => {
-    const status = { max_volume: 161, distribution_enable: true, party_enable: false };
-    const u = parseYxcStatus(status, "main");
-    expect(u).toContainEqual({ id: "advanced.maxVolume", value: 161 });
-    expect(u).toContainEqual({ id: "multiroom.group.streamingEnabled", value: true });
-    // One party source (audit 2026-09-29, C46).
-    expect(u.map(update => update.id)).not.toContain("multiroom.partyEnable");
-  });
-
-  test("a zone status never yields zone-prefixed copies of the device-global multiroom states", () => {
-    const status = { volume: 80, distribution_enable: true, party_enable: false };
-    const ids = parseYxcStatus(status, "zone2").map(u => u.id);
-    expect(ids).toContain("multiroom.zone2.volume");
-    expect(ids.filter(id => id.includes(".multiroom."))).toEqual([]);
-  });
-
-  test("reads the remaining amp fields including the nested equalizer", () => {
-    const status = {
-      direct: false,
-      clear_voice: true,
-      bass_extension: true,
-      balance: 3,
-      adaptive_drc: false,
-      extra_bass: true,
-      mono: false,
-      surround_3d: true,
-      dialogue_lift: 2,
-      dts_dialogue_control: 1,
-      equalizer: { mode: "manual", low: 10, mid: 7, high: 8 },
-    };
-    const u = parseYxcStatus(status, "main");
-    expect(u).toContainEqual({ id: "sound.direct", value: false });
-    expect(u).toContainEqual({ id: "sound.clearVoice", value: true });
-    expect(u).toContainEqual({ id: "sound.bassExtension", value: true });
-    expect(u).toContainEqual({ id: "sound.balance", value: 3 });
-    expect(u).toContainEqual({ id: "sound.extraBass", value: true });
-    expect(u).toContainEqual({ id: "sound.surround3d", value: true });
-    expect(u).toContainEqual({ id: "sound.equalizer.low", value: 10 });
-    expect(u).toContainEqual({ id: "sound.equalizer.mid", value: 7 });
-    expect(u).toContainEqual({ id: "sound.equalizer.high", value: 8 });
-  });
-});
-
 describe("stateToYxc control methods (repeat/shuffle/tray, tuner, party, preset)", () => {
   test("toggle buttons: the tray stays a direct run; repeat/shuffle toggles are zone-routed transports", async () => {
     expect(await ranCall("player.cd.tray", true)).toEqual(["toggleTray", []]);
@@ -193,216 +72,6 @@ describe("stateToYxc control methods (repeat/shuffle/tray, tuner, party, preset)
     });
   });
 });
-
-describe("parseYxcDistribution", () => {
-  test("maps getDistributionInfo to the read-only multiroom states", () => {
-    expect(
-      parseYxcDistribution({
-        group_id: "abc",
-        group_name: "Kitchen",
-        role: "server",
-        server_zone: "main",
-        client_list: ["1.2.3.5"],
-      }),
-    ).toEqual([
-      { id: "multiroom.group.role", value: "server" },
-      // Only a server of API 2.00 reports a construction state — none here, not a word outside its list.
-      { id: "multiroom.group.status", value: null },
-      { id: "multiroom.group.id", value: "abc" },
-      { id: "multiroom.group.name", value: "Kitchen" },
-      { id: "multiroom.group.serverZone", value: "main" },
-      { id: "multiroom.group.linkedDevices", value: '["1.2.3.5"]' },
-    ]);
-  });
-
-  test("returns an empty list for a malformed response", () => {
-    expect(parseYxcDistribution(null)).toEqual([]);
-  });
-
-  // YXC Advanced §9.2 and §9.1.7-5: the role word alone flickers; the group id and the roster decide
-  // (audit 2026-09-24, C7). The roster arrives as objects since §5.1 ({ip_address, data_type}).
-  test("the effective role comes from the group id and the roster, not from the role word", () => {
-    const group = "9A237BF5AB80ED3C7251DFF49825CA42";
-    expect(
-      distributionSummary({ role: "none", group_id: group, client_list: [{ ip_address: "10.0.0.7" }] }),
-    ).toMatchObject({
-      role: "server",
-      inGroup: true,
-      clients: ["10.0.0.7"],
-    });
-    expect(distributionSummary({ role: "client", group_id: "" }).role).toBe("none");
-    expect(distributionSummary({ role: "client", group_id: "00000000000000000000000000000000" }).role).toBe("none");
-    expect(distributionSummary({ role: "client", group_id: group }).role).toBe("client");
-    expect(
-      distributionSummary({ role: "server", group_id: group, client_list: ["10.0.0.7"], status: " working " }).status,
-    ).toBe("working");
-    expect(distributionSummary({ role: "client", group_id: group, status: "working" }).status).toBeUndefined();
-  });
-});
-
-describe("parseYxcPlayInfo", () => {
-  test("maps play-info fields to the unified flat player block (v2.0.0)", () => {
-    expect(parseYxcPlayInfo({ playback: "play", artist: "A", album: "B", track: "T", extra: 1 })).toEqual([
-      { id: "player.artist", value: "A" },
-      { id: "player.album", value: "B" },
-      { id: "player.track", value: "T" },
-      { id: "player.playback", value: 1 },
-    ]);
-  });
-
-  test("cd play info lands on the SAME flat block, with cd as the playing source", () => {
-    expect(parseYxcPlayInfo({ playback: "play", artist: "A", album: "B", track: "T" }, "cd")).toEqual([
-      { id: "player.artist", value: "A" },
-      { id: "player.album", value: "B" },
-      { id: "player.track", value: "T" },
-      { id: "player.playback", value: 1 },
-      { id: "player.source", value: "CD" },
-    ]);
-  });
-
-  test("returns an empty list for a malformed response", () => {
-    expect(parseYxcPlayInfo(null)).toEqual([]);
-  });
-
-  // A cover path is fetched from the device's own web server (YXC Basic §7.2); the relative path
-  // loaded from the ioBroker web server and showed nothing (audit 2026-09-24, C6). Captures: RX-A2070
-  // "/YamahaRemoteControl/AlbumART/AlbumART5419.jpg"; recently-played lists carry services' full URLs.
-  test("a cover path becomes the address on the device; a full URL and an empty one stay", () => {
-    const host = "10.0.0.5";
-    expect(absoluteDeviceUrl("/YamahaRemoteControl/AlbumART/AlbumART5419.jpg", host)).toBe(
-      "http://10.0.0.5/YamahaRemoteControl/AlbumART/AlbumART5419.jpg",
-    );
-    expect(absoluteDeviceUrl("xxx/yyy/zzz.jpg", "receiver.lan")).toBe("http://receiver.lan/xxx/yyy/zzz.jpg");
-    expect(absoluteDeviceUrl("https://cdn.example/cover.jpg", host)).toBe("https://cdn.example/cover.jpg");
-    expect(absoluteDeviceUrl("", host)).toBe("");
-    expect(absoluteDeviceUrl("/cover.jpg", undefined)).toBe("/cover.jpg");
-    const cover = (url: string): string => absoluteDeviceUrl(url, host);
-    expect(parseYxcPlayInfo({ albumart_url: "/cover.jpg" }, "netusb", cover)).toEqual([
-      { id: "player.albumArt", value: "http://10.0.0.5/cover.jpg" },
-    ]);
-    const recent = parseYxcRecentList(
-      { recent_info: [{ input: "net_radio", text: "Radio", albumart_url: "/art/1.jpg" }] },
-      cover,
-    );
-    expect(JSON.parse(String(recent?.value))).toEqual([
-      { num: 1, input: "net_radio", name: "Radio", albumArt: "http://10.0.0.5/art/1.jpg" },
-    ]);
-  });
-
-  // YXC Basic §7.2: play_time -60000 is "invalid", -59999…59999 valid; WX-010/WX-030 captures report
-  // -60000 (audit 2026-09-24, C11).
-  test("the invalid play time is no time; a negative valid one keeps its sign", () => {
-    expect(parseYxcPlayInfo({ play_time: -60000 })).toEqual([
-      { id: "player.elapsedTime", value: 0 },
-      { id: "player.elapsedTimeText", value: "" },
-    ]);
-    expect(parseYxcPlayInfo({ play_time: -5 })).toEqual([
-      { id: "player.elapsedTime", value: -5 },
-      { id: "player.elapsedTimeText", value: "-0:05" },
-    ]);
-  });
-
-  // The specification's words outside the old tables (YXC Basic §7.2, §8.1; audit 2026-09-24, C14).
-  test("every repeat, shuffle and playback word of the specification is read", () => {
-    const read = (info: Record<string, unknown>): unknown[] => parseYxcPlayInfo(info, "cd").map(u => u.value);
-    expect(read({ repeat: "folder" })).toEqual([2, "CD"]);
-    expect(read({ repeat: "a-b" })).toEqual([1, "CD"]);
-    for (const shuffle of ["on", "songs", "albums", "folder", "program"]) {
-      expect(read({ shuffle }), shuffle).toEqual([true, "CD"]);
-    }
-    expect(read({ shuffle: "off" })).toEqual([false, "CD"]);
-    expect(read({ playback: "fast_forward" })).toEqual([1, "CD"]);
-    expect(read({ playback: "fast_reverse" })).toEqual([1, "CD"]);
-    expect(read({ repeat: "sometimes", shuffle: "maybe", playback: "rewinding" })).toEqual(["CD"]);
-  });
-
-  test("reads repeat, shuffle, elapsed/total time and album art (verified against captures)", () => {
-    expect(
-      parseYxcPlayInfo({
-        playback: "play",
-        repeat: "one",
-        shuffle: "off",
-        play_time: 42,
-        total_time: 215,
-        albumart_url: "/cover.jpg",
-      }),
-    ).toEqual([
-      // Typed like the YNCA sources: repeat as the media.mode.repeat code, shuffle boolean.
-      { id: "player.repeat", value: 1 },
-      { id: "player.shuffle", value: false },
-      { id: "player.playback", value: 1 },
-      { id: "player.albumArt", value: "/cover.jpg" },
-      // Both forms of each time, from the one reported value — the seconds fill the
-      // media-player slot, the text is what a visualisation shows.
-      { id: "player.elapsedTime", value: 42 },
-      { id: "player.elapsedTimeText", value: "0:42" },
-      { id: "player.totalTime", value: 215 },
-      { id: "player.totalTimeText", value: "3:35" },
-    ]);
-  });
-});
-
-describe("parseYxcTunerInfo", () => {
-  test("maps band, the active band's frequency (kHz), preset/tuned and RDS", () => {
-    // Real RX-V685 tuner getPlayInfo shape: band + nested per-band freq + rds.
-    expect(
-      parseYxcTunerInfo({
-        band: "fm",
-        fm: { preset: 0, freq: 100900, tuned: false },
-        am: { preset: 0, freq: 1080 },
-        rds: { radio_text_a: "Hit", radio_text_b: "" },
-      }),
-    ).toEqual([
-      { id: "tuner.band", value: "fm" },
-      { id: "tuner.frequency", value: 100900 },
-      { id: "tuner.preset", value: 0 },
-      { id: "tuner.tuned", value: false },
-      // No audio_mode in the block: not the last band's any more (audit 2026-09-29, C39).
-      { id: "tuner.audioMode", value: null },
-      { id: "tuner.rdsText", value: "Hit" },
-      { id: "tuner.rdsTextB", value: "" },
-    ]);
-  });
-
-  test("reads the DAB frequency and DAB detail states when the active band is dab", () => {
-    // RX-A2070 reports band "dab" with the frequency nested under dab; the dab block's
-    // detail fields land on the tuner.dab.* ids shared with the YNCA DAB subunit.
-    expect(parseYxcTunerInfo({ band: "dab", dab: { freq: 180064, status: "ready", service_label: "ENERGY" } })).toEqual(
-      [
-        { id: "tuner.band", value: "dab" },
-        { id: "tuner.frequency", value: 180064 },
-        // DAB has no `tuned` — a ready station is tuned; the FM texts go (YXC Basic §6.2, C39).
-        { id: "tuner.tuned", value: true },
-        { id: "tuner.audioMode", value: null },
-        { id: "tuner.rdsText", value: "" },
-        { id: "tuner.rdsTextB", value: "" },
-        { id: "tuner.rdsService", value: "" },
-        { id: "tuner.rdsProgramType", value: "" },
-        { id: "tuner.dab.serviceLabel", value: "ENERGY" },
-        { id: "tuner.dab.status", value: "ready" },
-      ],
-    );
-  });
-
-  test("reads the AM frequency when the active band is am, and tolerates a missing rds block", () => {
-    expect(parseYxcTunerInfo({ band: "am", am: { freq: 1440 }, fm: { freq: 0 } })).toEqual([
-      { id: "tuner.band", value: "am" },
-      { id: "tuner.frequency", value: 1440 },
-      { id: "tuner.tuned", value: false },
-      // AM has no audio mode and no RDS: the FM values do not stand on (C39).
-      { id: "tuner.audioMode", value: null },
-      { id: "tuner.rdsText", value: "" },
-      { id: "tuner.rdsTextB", value: "" },
-      { id: "tuner.rdsService", value: "" },
-      { id: "tuner.rdsProgramType", value: "" },
-    ]);
-  });
-
-  test("returns an empty list for a malformed response", () => {
-    expect(parseYxcTunerInfo(null)).toEqual([]);
-  });
-});
-
 describe("stateToYxc", () => {
   test("the unified transport buttons are declarative — the controller routes them to the zone's source", () => {
     expect(stateToYxc("player.play", true)).toEqual({ kind: "playerTransport", zone: "main", action: "play" });
@@ -490,6 +159,16 @@ describe("stateToYxc", () => {
     expect(await ranCall("soundProgram", "stereo")).toEqual(["setSound", ["stereo", "main"]]);
   });
 
+  // The one gate (review 2026-10-05, KISS): a word datapoint takes text — trimmed — and a number's text; a switch
+  // value or an empty text names no word and went out as "true" or "".
+  test("a word datapoint takes trimmed text; a switch value or an empty text sends nothing", async () => {
+    expect(await ranCall("soundProgram", " stereo ")).toEqual(["setSound", ["stereo", "main"]]);
+    expect(await ranCall("input", 5)).toEqual(["setInput", ["5", "main"]]);
+    expect(stateToYxc("soundProgram", true)).toBeUndefined();
+    expect(stateToYxc("input", "")).toBeUndefined();
+    expect(stateToYxc("input", "   ")).toBeUndefined();
+  });
+
   test("returns undefined for an unmapped state or unknown zone", () => {
     expect(stateToYxc("nonsense", 1)).toBeUndefined();
     expect(stateToYxc("zone9.power", true)).toBeUndefined();
@@ -548,80 +227,7 @@ describe("stateToYxc button actions", () => {
     expect(stateToYxc("player.next", 0)).toMatchObject({ kind: "playerTransport" });
   });
 });
-
-describe("preset/recent selection (musiccast-adapter parity)", () => {
-  test("parseYxcPresetList keeps stored slots with their number, skips empty ones", () => {
-    // Real ISX-18D getPresetInfo shape: empty slots report input "unknown" and no text.
-    const update = parseYxcPresetList({
-      response_code: 0,
-      preset_info: [
-        { input: "net_radio", text: "hr3 (Frankfurt am Main/German)", attribute: 0 },
-        { input: "server", text: "hr3 Stream", attribute: 30 },
-        { input: "unknown", text: "" },
-        { input: "net_radio", text: "80s80s DAB+ (Berlin/German)", attribute: 0 },
-      ],
-    });
-    expect(update?.id).toBe("player.netPlayer.presets");
-    expect(JSON.parse(String(update?.value))).toEqual([
-      { num: 1, input: "net_radio", name: "hr3 (Frankfurt am Main/German)" },
-      { num: 2, input: "server", name: "hr3 Stream" },
-      { num: 4, input: "net_radio", name: "80s80s DAB+ (Berlin/German)" },
-    ]);
-    expect(parseYxcPresetList({ response_code: 2 })).toBeUndefined();
-  });
-
-  test("parseYxcRecentList maps the recently-played items", () => {
-    const update = parseYxcRecentList({
-      response_code: 0,
-      recent_info: [
-        { input: "net_radio", text: "80s80s Deutsch", albumart_url: "http://a/b.png", play_count: 3, attribute: 0 },
-        { input: "spotify", text: "Playlist X" },
-      ],
-    });
-    expect(update?.id).toBe("player.netPlayer.recent");
-    expect(JSON.parse(String(update?.value))).toEqual([
-      { num: 1, input: "net_radio", name: "80s80s Deutsch", albumArt: "http://a/b.png", playCount: 3 },
-      { num: 2, input: "spotify", name: "Playlist X" },
-    ]);
-  });
-
-  test("parseYxcTunerPresetLists keys the slots by band, raw fields kept", () => {
-    const update = parseYxcTunerPresetLists({
-      fm: { response_code: 0, preset_info: [{ band: "fm", number: 100900 }] },
-      dab: { response_code: 4 },
-    });
-    expect(update?.id).toBe("tuner.presets");
-    expect(JSON.parse(String(update?.value))).toEqual({ fm: [{ num: 1, band: "fm", number: 100900 }] });
-    expect(parseYxcTunerPresetLists({ fm: { response_code: 4 } })).toBeUndefined();
-  });
-
-  test("parseYxcTunerPresetLists drops the device's empty slots but keeps anything with content", () => {
-    // A receiver with no presets stored answers with its full slot count — 40 per band of
-    // {band:"unknown", number:0, text:""}. Published raw that is a JSON datapoint of 80 blanks.
-    const update = parseYxcTunerPresetLists({
-      fm: {
-        preset_info: [
-          { band: "unknown", number: 0, hd_program: 0, text: "" },
-          { band: "fm", number: 98100, hd_program: 0, text: "" },
-          { band: "unknown", number: 0, text: "   " },
-          // Only the text is filled — an unfamiliar firmware shape is kept, not swallowed.
-          { band: "unknown", number: 0, text: "Radio Paradise" },
-        ],
-      },
-    });
-    expect(JSON.parse(String(update?.value))).toEqual({
-      fm: [
-        { num: 2, band: "fm", number: 98100, hd_program: 0, text: "" },
-        { num: 4, band: "unknown", number: 0, text: "Radio Paradise" },
-      ],
-    });
-  });
-
-  test("a band whose slots are all empty stays in the JSON as an empty list", () => {
-    const update = parseYxcTunerPresetLists({ dab: { preset_info: [{ band: "unknown", number: 0, text: "" }] } });
-    expect(JSON.parse(String(update?.value))).toEqual({ dab: [] });
-  });
-
+describe("recall and step writes (musiccast-adapter parity)", () => {
   test("recall/step writes map to their client calls; the tuner preset stays declarative", async () => {
     expect(stateToYxc("player.netPlayer.recallRecent", 2)).toEqual({ kind: "netusbRecent", value: 2 });
     expect(await ranCall("tuner.presetUp", true)).toEqual(["switchTunerPreset", ["next"]]);
@@ -633,117 +239,6 @@ describe("preset/recent selection (musiccast-adapter parity)", () => {
     expect(stateToYxc("tuner.preset", null)).toBeUndefined();
   });
 });
-
-describe("netusb source and CD detail parsing", () => {
-  test("the active network source lands on player.source", () => {
-    const updates = parseYxcPlayInfo({ input: "spotify", playback: "play" });
-    // The name, as the YNCA and XML side of a receiver show it — never MusicCast's id (C40).
-    expect(updates).toContainEqual({ id: "player.source", value: "Spotify" });
-  });
-
-  test("cd extras: track number, totals, disc time and drive status stay drive-own", () => {
-    const updates = parseYxcPlayInfo(
-      { track_number: 3, total_tracks: 12, disc_time: 3400, device_status: "ready" },
-      "cd",
-    );
-    expect(updates).toEqual(
-      expect.arrayContaining([
-        { id: "player.cd.trackNumber", value: 3 },
-        { id: "player.cd.totalTracks", value: 12 },
-        { id: "player.cd.discTime", value: 3400 },
-        { id: "player.cd.deviceStatus", value: "ready" },
-      ]),
-    );
-  });
-});
-
-describe("parseYxcClock", () => {
-  test("maps the capture-verified getSettings shape onto the clock states", () => {
-    // Real ISX-18D response.
-    const updates = parseYxcClock({
-      response_code: 0,
-      auto_sync: true,
-      format: "24h",
-      alarm: {
-        alarm_on: false,
-        volume: 25,
-        fade_interval: 180,
-        fade_type: 1,
-        mode: "oneday",
-        repeat: false,
-        oneday: { enable: false, time: "0800", beep: true, playback_type: "resume", resume: { input: "tuner" } },
-      },
-    });
-    expect(updates).toEqual(
-      expect.arrayContaining([
-        { id: "clock.autoSync", value: true },
-        { id: "clock.format", value: "24h" },
-        { id: "clock.alarm.on", value: false },
-        { id: "clock.alarm.volume", value: 25 },
-        { id: "clock.alarm.mode", value: "oneday" },
-        { id: "clock.alarm.oneday.enable", value: false },
-        { id: "clock.alarm.oneday.time", value: "08:00" },
-        { id: "clock.alarm.oneday.beep", value: true },
-        { id: "clock.alarm.oneday.playbackType", value: "resume" },
-        { id: "clock.alarm.oneday.resumeInput", value: "tuner" },
-      ]),
-    );
-  });
-
-  test("maps a weekly day block and a preset-type alarm", () => {
-    const updates = parseYxcClock({
-      alarm: {
-        monday: { enable: true, time: "0630", playback_type: "preset", preset: { type: "netusb", num: 2 } },
-      },
-    });
-    expect(updates).toEqual(
-      expect.arrayContaining([
-        { id: "clock.alarm.monday.enable", value: true },
-        { id: "clock.alarm.monday.time", value: "06:30" },
-        { id: "clock.alarm.monday.playbackType", value: "preset" },
-        { id: "clock.alarm.monday.presetType", value: "netusb" },
-        { id: "clock.alarm.monday.presetNumber", value: 2 },
-      ]),
-    );
-    expect(parseYxcClock(null)).toEqual([]);
-  });
-
-  // YXC Basic §9.1: the slot's source and name under `netusb_info`, band and frequency under `tuner_info`;
-  // the WX-021/WX-051 captures carry `snooze` on the day block (audit 2026-09-29, C34/C35).
-  test("reads the preset's source, name, band and frequency, and the snooze flag", () => {
-    const updates = parseYxcClock({
-      alarm: {
-        oneday: {
-          snooze: true,
-          playback_type: "preset",
-          preset: {
-            type: "netusb",
-            num: 3,
-            netusb_info: { input: "net_radio", text: "Radio Paradise" },
-            tuner_info: { band: "fm", number: 98100 },
-          },
-        },
-        tuesday: {
-          preset: { type: "netusb", num: 1, netusb_info: { input: "unknown", text: "" }, tuner_info: { band: "dab" } },
-        },
-      },
-    });
-    expect(updates).toEqual(
-      expect.arrayContaining([
-        { id: "clock.alarm.oneday.snooze", value: true },
-        { id: "clock.alarm.oneday.presetInput", value: "net_radio" },
-        { id: "clock.alarm.oneday.presetName", value: "Radio Paradise" },
-        { id: "clock.alarm.oneday.presetBand", value: "fm" },
-        { id: "clock.alarm.oneday.presetFrequency", value: 98100 },
-        // An empty slot: no source; a DAB slot has a station id, which is no frequency.
-        { id: "clock.alarm.tuesday.presetInput", value: "" },
-        { id: "clock.alarm.tuesday.presetBand", value: "dab" },
-        { id: "clock.alarm.tuesday.presetFrequency", value: 0 },
-      ]),
-    );
-  });
-});
-
 describe("scene recall and the on-screen remote (#615, device-verified endpoints)", () => {
   test("scene.recall runs recallScene on the written zone", async () => {
     const { client, calls } = recordingClient();
@@ -774,99 +269,6 @@ describe("scene recall and the on-screen remote (#615, device-verified endpoints
     expect(stateToYxc("scene.recall", null)).toBeUndefined();
     expect(stateToYxc("scene.recall", "abc")).toBeUndefined();
     expect(stateToYxc("remote.cursor", null)).toBeUndefined();
-  });
-});
-
-describe("signal info / playlists / play queue parsers (capture-verified shapes)", () => {
-  test("parseYxcSignalInfo maps the audio block onto the zone's sound states", () => {
-    // The captured RX-V6A getSignalInfo shape.
-    const updates = parseYxcSignalInfo(
-      { response_code: 0, audio: { error: 0, format: "PCM", fs: "48 kHz", bit: "24", bitrate: 0 } },
-      "main",
-    );
-    expect(updates).toEqual([
-      { id: "sound.signal.format", value: "PCM" },
-      { id: "sound.signal.sampling", value: "48 kHz" },
-      { id: "sound.signal.bits", value: "24" },
-      { id: "sound.signal.bitrate", value: 0 },
-    ]);
-    expect(parseYxcSignalInfo({ response_code: 0 }, "main")).toEqual([]);
-    // A zone-2 response lands under the zone prefix — and the device's "no signal" dash
-    // placeholder becomes an empty value instead of reading like content.
-    expect(parseYxcSignalInfo({ audio: { format: "---" } }, "zone2")).toEqual([
-      { id: "multiroom.zone2.sound.signal.format", value: "" },
-    ]);
-    expect(parseYxcSignalInfo({ audio: { format: "PCM", fs: "---", bit: "  " } }, "main")).toEqual([
-      { id: "sound.signal.format", value: "PCM" },
-      { id: "sound.signal.sampling", value: "" },
-      { id: "sound.signal.bits", value: "" },
-    ]);
-  });
-
-  test("parseYxcPlaylistNames turns the name list into the numbered JSON state", () => {
-    const update = parseYxcPlaylistNames({ response_code: 0, name_list: ["Playlist 1", "Playlist 2"] });
-    expect(update?.id).toBe("player.netPlayer.playlists");
-    expect(JSON.parse(String(update?.value))).toEqual([
-      { num: 1, name: "Playlist 1" },
-      { num: 2, name: "Playlist 2" },
-    ]);
-    expect(parseYxcPlaylistNames({ response_code: 0 })).toBeUndefined();
-  });
-
-  test("parseYxcPlayQueue keeps the playing index and the tracks", () => {
-    const update = parseYxcPlayQueue({
-      response_code: 0,
-      type: "system",
-      max_line: 2,
-      playing_index: 1,
-      index: 0,
-      track_info: [{ text: "A" }, { text: "B" }],
-    });
-    expect(update?.id).toBe("player.netPlayer.queue");
-    expect(JSON.parse(String(update?.value))).toEqual({
-      playingIndex: 1,
-      totalTracks: 2,
-      tracks: [{ text: "A" }, { text: "B" }],
-    });
-    expect(parseYxcPlayQueue({ response_code: 0 })).toBeUndefined();
-  });
-});
-
-// The lists as slot entries (audit 2026-09-29, C30).
-describe("device lists as slot entries", () => {
-  test("a stored station reads band, name and — AM/FM only — its frequency; an unused slot is empty", () => {
-    expect(
-      stationSlotEntries({
-        preset_info: [
-          { band: "fm", number: 98100, text: "hr3" },
-          { band: "dab", number: 12345, text: "Bayern 3" },
-          { band: "unknown", number: 0, text: "" },
-        ],
-      }),
-    ).toEqual([
-      { band: "fm", name: "hr3", frequency: 98100 },
-      { band: "dab", name: "Bayern 3", frequency: 0 },
-      undefined,
-    ]);
-    expect(stationSlotEntries({})).toBeUndefined();
-  });
-
-  test("a linked device reads its address (Advanced §5.1)", () => {
-    expect(clientSlotEntries({ client_list: [{ ip_address: "192.168.0.5", data_type: "base" }] })).toEqual([
-      { ip: "192.168.0.5" },
-    ]);
-    expect(clientSlotEntries({ role: "client" })).toBeUndefined();
-  });
-
-  test("the play queue's length and 1-based position are values of their own", () => {
-    expect(playQueueCounters({ max_line: 200, playing_index: 4, track_info: [] })).toEqual([
-      { id: "player.netPlayer.queueLength", value: 200 },
-      { id: "player.netPlayer.queuePosition", value: 5 },
-    ]);
-    expect(playQueueCounters({ max_line: 0, playing_index: -1 })).toEqual([
-      { id: "player.netPlayer.queueLength", value: 0 },
-      { id: "player.netPlayer.queuePosition", value: 0 },
-    ]);
   });
 });
 
@@ -904,5 +306,124 @@ describe("stateToYxc — store, clear, search, select, jump, clock", () => {
     ]);
     expect(stateToYxc("clock.alarm.oneday.time", "25:00")).toBeUndefined();
     expect(stateToYxc("clock.alarm.oneday.presetName", "x")).toBeUndefined();
+  });
+});
+
+// One rule for every written number, as YNCA and XML apply it (review 2026-10-05, A26): MusicCast recalled scene 2
+// for 1.5 and sent `recallScene(0)` for 0, sent a favourite 2.5 as it was, and put a tuner frequency on no grid.
+describe("written numbers follow the one rule of all three protocols (A26)", () => {
+  /** What the controller knows of an RX-V6A-like receiver: scenes, slots, the tuner's band grids, a zone's ranges. */
+  const capabilities: YxcCapabilities = {
+    zones: [
+      {
+        id: "main",
+        funcs: ["scene", "tone_control", "equalizer"],
+        inputs: [],
+        sceneNum: 8,
+        ranges: { tone_control: { min: -12, max: 12, step: 1 }, equalizer: { min: -10, max: 10, step: 0.5 } },
+        valueLists: { "remote.menu": ["top_menu", "help"] },
+      },
+      { id: "zone2", funcs: ["scene"], inputs: [], sceneNum: 4 },
+    ],
+    media: ["netusb", "tuner"],
+    netusbSlots: { presets: 40, recent: 40 },
+    tuner: {
+      bands: ["am", "fm", "dab"],
+      funcs: ["am", "fm", "dab"],
+      presetType: "common",
+      presetNum: 40,
+      ranges: { fm: { min: 87500, max: 108000, step: 50 }, am: { min: 531, max: 1611, step: 9 } },
+    },
+    clock: { funcs: ["alarm"], alarmModes: ["oneday"], alarmVolumeRange: { min: 5, max: 60, step: 1 } },
+  };
+  const fm: YxcWriteContext = { capabilities, tunerBand: "fm" };
+
+  test("a scene is a whole number from 1 to the zone's declared count — 1.5, 0 and 9 recall nothing", () => {
+    // The review's proof (cross/scene-number): 1.5 recalled scene 2, 0 went out as recallScene(0).
+    expect(stateToYxc("scene.recall", 1.5)).toBeUndefined();
+    expect(stateToYxc("scene.recall", 0)).toBeUndefined();
+    expect(stateToYxc("scene.recall", -1)).toBeUndefined();
+    expect(yxcWrite("scene.recall", 1.5).dropped).toBe("1.5 is no slot number from 1");
+    expect(yxcWrite("scene.recall", 9, fm).dropped).toBe("9 is no slot number from 1 to 8");
+    expect(yxcWrite("multiroom.zone2.scene.recall", 5, fm).dropped).toBe("5 is no slot number from 1 to 4");
+    expect(stateToYxc("scene.recall", "8", fm)).toMatchObject({ kind: "run" });
+  });
+
+  test("a favourite, a recent entry, a stored station and a CD track take a whole slot within the declared count", () => {
+    expect(stateToYxc("player.netPlayer.preset", 2.5)).toBeUndefined();
+    expect(stateToYxc("player.netPlayer.preset", 3, fm)).toEqual({ kind: "netusbPreset", value: 3 });
+    expect(yxcWrite("player.netPlayer.preset", 41, fm).dropped).toBe("41 is no slot number from 1 to 40");
+    expect(stateToYxc("player.netPlayer.recallRecent", 0)).toBeUndefined();
+    expect(stateToYxc("tuner.preset", 2.5)).toBeUndefined();
+    expect(yxcWrite("tuner.preset", 0).dropped).toBe('0 is the device\'s "no preset" — no slot to recall');
+    expect(yxcWrite("tuner.presetSave", 41, fm).dropped).toBe("41 is no slot number from 1 to 40");
+    expect(stateToYxc("tuner.presetClear", 1.5)).toBeUndefined();
+    expect(stateToYxc("player.netPlayer.presetSave", 2.5)).toBeUndefined();
+    expect(stateToYxc("player.cd.trackSelect", 7.5)).toBeUndefined();
+  });
+
+  test("a frequency lands on the grid of the band the tuner is on, and nothing is sent outside it", () => {
+    expect(stateToYxc("tuner.frequency", 98123, fm)).toEqual({ kind: "tunerFreq", value: 98100 });
+    expect(yxcWrite("tuner.frequency", 108100, fm).dropped).toBe("108100 kHz is outside the FM range 87500…108000 kHz");
+    // On AM the FM value names no station — before, it went to setFreq("am", 98100).
+    const am: YxcWriteContext = { capabilities, tunerBand: "am" };
+    expect(stateToYxc("tuner.frequency", 1080, am)).toEqual({ kind: "tunerFreq", value: 1080 });
+    expect(stateToYxc("tuner.frequency", 1083, am)).toEqual({ kind: "tunerFreq", value: 1080 });
+    expect(stateToYxc("tuner.frequency", 98100, am)).toBeUndefined();
+    expect(yxcWrite("tuner.frequency", 98100, { capabilities, tunerBand: "dab" }).dropped).toMatch(
+      /DAB is tuned by service/,
+    );
+    expect(yxcWrite("tuner.frequency", "abc", fm).dropped).toBe('"abc" is no frequency');
+    // Without a declared grid the number stays — an invented grid would be worse than the device's own rounding.
+    expect(stateToYxc("tuner.frequency", 98123)).toEqual({ kind: "tunerFreq", value: 98123 });
+  });
+
+  test("an amplifier number and an equalizer band land on the zone's declared grid", async () => {
+    const { client, calls } = recordingClient();
+    const bass = stateToYxc("sound.bass", 2.4, fm);
+    await (bass as { kind: "run"; run: (c: YxcClientLike) => Promise<unknown> }).run(client);
+    expect(calls).toEqual([["setBassTo", [2, "main"]]]);
+    expect(yxcWrite("sound.bass", 13, fm).dropped).toBe("13 is outside the declared range -12…12");
+    expect(stateToYxc("sound.equalizer.low", 1.3, fm)).toEqual({
+      kind: "equalizer",
+      zone: "main",
+      band: "low",
+      value: 1.5,
+    });
+    expect(stateToYxc("clock.alarm.volume", 70, fm)).toBeUndefined();
+  });
+
+  test("a seek is whole seconds from 0 and reads back the network player (A49)", () => {
+    expect(stateToYxc("player.netPlayer.playPosition", 30.4)).toMatchObject({ kind: "run", source: "netusb" });
+    expect(stateToYxc("player.netPlayer.playPosition", -5)).toBeUndefined();
+  });
+
+  test("a zone's declared remote words decide — the routing of a key stands in one place", async () => {
+    const { client, calls } = recordingClient();
+    const help = stateToYxc("remote.menu", "help", fm);
+    await (help as { kind: "run"; run: (c: YxcClientLike) => Promise<unknown> }).run(client);
+    expect(calls).toEqual([["controlMenu", ["help", "main"]]]);
+    expect(yxcWrite("remote.menu", "red", fm).dropped).toBe('"red" is no key this zone declares');
+    // A zone without a list keeps the shared vocabulary.
+    expect(stateToYxc("multiroom.zone2.remote.menu", "option", fm)).toMatchObject({ kind: "run" });
+    expect(yxcWrite("multiroom.zone2.remote.menu", "red", fm).dropped).toBe('"red" is no key MusicCast takes');
+  });
+
+  test("every write that sends nothing says why", () => {
+    for (const [id, value] of [
+      ["nonsense", 1],
+      ["sound.audioSelect", "auto"],
+      ["power", "maybe"],
+      ["player.repeat", 3],
+      ["clock.format", "25h"],
+      ["clock.alarm.oneday.time", "25:00"],
+      ["constructor", 1],
+    ] as const) {
+      const write = yxcWrite(id, value, fm);
+      expect(write.command, id).toBeUndefined();
+      expect(write.dropped, id).toMatch(/\w/);
+    }
+    expect(yxcWrite("sound.audioSelect", "auto").dropped).toBe("it is read-only on MusicCast");
+    expect(yxcWrite("nonsense", 1).dropped).toBe("MusicCast has no command for it");
   });
 });

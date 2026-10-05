@@ -1,5 +1,5 @@
 import { parentChannels, type ObjectDef } from "./types";
-import { canonicalIdOf, capabilityKeyOf, pickOwner, STATES_VOCABULARY, type Transport } from "./owner-policy";
+import { canonicalIdOf, capabilityKeyOf, pickOwner, rankOf, STATES_VOCABULARY, type Transport } from "./owner-policy";
 import { translateDeclaredStates } from "./musiccast-vocabulary";
 
 /** One transport's contribution: the objects its catalog builds for this device. */
@@ -39,7 +39,7 @@ function withReported(states: Record<string, string>, reported: string | undefin
  * @param ownerDef the owner's definition
  * @param transport the claimant
  * @param def the claimant's definition
- * @returns the map to adopt, or undefined when its keys are not the owner's values
+ * @returns the list to adopt, or undefined when its keys are not the owner's values
  */
 function lentStates(
   key: string,
@@ -47,15 +47,103 @@ function lentStates(
   ownerDef: ObjectDef,
   transport: Transport,
   def: ObjectDef,
-): Record<string, string> | undefined {
+): AdoptedList | undefined {
   const states = def.common.states;
   if (!states || def.common.type !== ownerDef.common.type) {
     return undefined;
   }
   if (def.common.type !== "string" || STATES_VOCABULARY[transport] === STATES_VOCABULARY[owner]) {
-    return states;
+    return { states, liveLabels: def.liveLabels === true };
   }
-  return STATES_VOCABULARY[owner] === "classic" ? translateDeclaredStates(key, states) : undefined;
+  // The dictionary gives words, not the names the user gave: no live labels.
+  const translated = STATES_VOCABULARY[owner] === "classic" ? translateDeclaredStates(key, states) : undefined;
+  return translated ? { states: translated, liveLabels: false } : undefined;
+}
+
+/** A value list a datapoint takes from another transport, and where its labels come from. */
+interface AdoptedList {
+  /** The list. */
+  states: Record<string, string>;
+  /** The list is a device's own declaration (see `ObjectDef.declaredStates`). */
+  declared?: boolean;
+  /** Its labels are names the user gives in the receiver (see `ObjectDef.liveLabels`). */
+  liveLabels: boolean;
+}
+
+/**
+ * The value list another transport gives the owner's datapoint, if any. Three cases. (a) The owner has no list
+ * at all: another claimant's list is taken for its labels (the scene titles over XML/YNCA while MusicCast owns the
+ * recall) — see {@link lentStates} for when its keys fit the owner. (b) The owner carries a catalog UNION and another
+ * transport carries the device's OWN declaration: the declaration wins (#619 — the XML input list on the YNCA-owned
+ * input), but only within one wire vocabulary, because the list's KEYS are what the owner's write path will be
+ * asked to send. (c) No declaration in the owner's vocabulary: a MusicCast declaration reaches a classic owner
+ * through the evidenced dictionary — all or nothing, so no dropdown is ever half translated; the XML list, when
+ * present, was taken in (b): the device's own spelling beats the dictionary. Borrowing never changes routing;
+ * borrowed in modernity-independent claim order (first with one).
+ *
+ * The labels' origin travels with the list: a list whose labels are names the user gives in the receiver
+ * (`liveLabels`) follows renames while the adapter runs, any other keeps its labels (krobi 2026-10-05). A lent or
+ * declared list brings the lender's flag; a dictionary brings words, not names — there the owner keeps its own
+ * label (and flag) for a value it labels, so the input names YNCA reads (Y-25) survive a MusicCast declaration.
+ *
+ * A switch takes no list: its values are `true` and `false` over every protocol. XML's description words
+ * (`On`/`Standby`) were lent to YNCA's and MusicCast's boolean `power` and `mute`, and a dropdown entry
+ * "Standby" sent nothing (review 2026-10-05, A19).
+ *
+ * @param key the transport-neutral capability key
+ * @param owner the owning transport
+ * @param ownerDef the owner's definition
+ * @param defs every transport's definition of the datapoint
+ * @returns the list to adopt, or undefined when the owner keeps its own
+ */
+function adoptedList(
+  key: string,
+  owner: Transport,
+  ownerDef: ObjectDef,
+  defs: ReadonlyMap<Transport, ObjectDef>,
+): AdoptedList | undefined {
+  const own = ownerDef.common.states;
+  if (ownerDef.common.type === "boolean" || (own && ownerDef.declaredStates)) {
+    return undefined;
+  }
+  if (!own) {
+    for (const [transport, def] of defs) {
+      const lent = lentStates(key, owner, ownerDef, transport, def);
+      if (lent) {
+        return lent;
+      }
+    }
+    return undefined;
+  }
+  for (const [transport, def] of defs) {
+    if (def.declaredStates && def.common.states && STATES_VOCABULARY[transport] === STATES_VOCABULARY[owner]) {
+      return {
+        states: withReported(def.common.states, ownerDef.reportedValue),
+        declared: true,
+        liveLabels: def.liveLabels === true,
+      };
+    }
+  }
+  if (STATES_VOCABULARY[owner] !== "classic") {
+    return undefined;
+  }
+  for (const [transport, def] of defs) {
+    const translated =
+      def.declaredStates && def.common.states && STATES_VOCABULARY[transport] === "musiccast"
+        ? translateDeclaredStates(key, def.common.states)
+        : undefined;
+    if (translated) {
+      const labelled = Object.fromEntries(
+        Object.entries(translated).map(([value, word]) => [value, Object.hasOwn(own, value) ? own[value] : word]),
+      );
+      return {
+        states: withReported(labelled, ownerDef.reportedValue),
+        declared: true,
+        liveLabels: ownerDef.liveLabels === true,
+      };
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -113,48 +201,19 @@ export function coordinateObjectTree(
     if (!ownerDef) {
       throw new Error(`coordinateObjectTree: owner ${owner} has no def for ${canonicalId}`);
     }
-    // Dropdown borrowing, two cases. (a) The owner has no labels at all: another claimant's map
-    // is taken for its labels (the scene titles over XML/YNCA while MusicCast owns the recall) —
-    // see lentStates for when its keys fit the owner. (b) The owner carries a catalog UNION and another transport carries the
-    // device's OWN declaration: the declaration wins (#619 — the XML input list on the YNCA-owned
-    // input), but only within one wire vocabulary, because the map's KEYS are what the owner's
-    // write path will be asked to send. Borrowing never changes routing; borrowed in
-    // modernity-independent claim order (first with one).
+    // The owner's definition — with its own list and that list's label origin (`liveLabels`) — unless another
+    // transport gives the datapoint a better list (see adoptedList).
     const resolvedDef: ObjectDef = { ...ownerDef, id: canonicalId };
-    if (!resolvedDef.common.states) {
-      for (const [transport, def] of entry.defs) {
-        const lent = lentStates(entry.key, owner, ownerDef, transport, def);
-        if (lent) {
-          resolvedDef.common = { ...resolvedDef.common, states: lent };
-          break;
-        }
+    const adopted = adoptedList(entry.key, owner, ownerDef, entry.defs);
+    if (adopted) {
+      resolvedDef.common = { ...resolvedDef.common, states: adopted.states };
+      if (adopted.declared) {
+        resolvedDef.declaredStates = true;
       }
-    } else if (!ownerDef.declaredStates) {
-      for (const [transport, def] of entry.defs) {
-        if (def.declaredStates && def.common.states && STATES_VOCABULARY[transport] === STATES_VOCABULARY[owner]) {
-          resolvedDef.common = {
-            ...resolvedDef.common,
-            states: withReported(def.common.states, ownerDef.reportedValue),
-          };
-          resolvedDef.declaredStates = true;
-          break;
-        }
-      }
-      // (c) No declaration in the owner's own vocabulary: a MusicCast declaration reaches a classic
-      // owner through the evidenced dictionary — all or nothing, so no dropdown is ever half
-      // translated. The XML list, when present, was taken above: the device's own spelling beats
-      // the dictionary.
-      if (!resolvedDef.declaredStates && STATES_VOCABULARY[owner] === "classic") {
-        for (const [transport, def] of entry.defs) {
-          if (def.declaredStates && def.common.states && STATES_VOCABULARY[transport] === "musiccast") {
-            const translated = translateDeclaredStates(entry.key, def.common.states);
-            if (translated) {
-              resolvedDef.common = { ...resolvedDef.common, states: withReported(translated, ownerDef.reportedValue) };
-              resolvedDef.declaredStates = true;
-              break;
-            }
-          }
-        }
+      if (adopted.liveLabels) {
+        resolvedDef.liveLabels = true;
+      } else {
+        delete resolvedDef.liveLabels;
       }
     }
     return resolvedDef;
@@ -175,63 +234,187 @@ export function coordinateObjectTree(
   return { objects: resolved, ownerByCanonicalId };
 }
 
+/** A datapoint's form: as a transport builds it, or as it stands in the tree (the owner wrote it there). */
+export interface DatapointForm {
+  /** The object type. */
+  type: string;
+  /** Its common part. */
+  common: Partial<ObjectDef["common"]>;
+}
+
+/**
+ * Whether two forms carry the same values: the same object type, value type and unit — the comparison
+ * {@link canCarryWrite} and {@link keepsForm} share; each spelled it out by hand (review 2026-10-05, E). A decibel
+ * bass (YNCA) is not MusicCast's step count, a sleep text is not a number.
+ *
+ * @param a one form
+ * @param b the other
+ * @returns whether a value of one means the same in the other
+ */
+function sameValues(a: DatapointForm, b: DatapointForm): boolean {
+  return a.type === b.type && a.common.type === b.common.type && (a.common.unit ?? "") === (b.common.unit ?? "");
+}
+
+/**
+ * Whether a datapoint's dropdown says something about its values. A switch is `true` or `false` over every
+ * protocol, whatever words it is labelled with: XML labelled its switches with its description's `On`/`Standby`
+ * (review 2026-10-05, A19), and a tree that still carries them must neither stop a write from falling back nor a
+ * transport from taking the switch over.
+ *
+ * @param form the datapoint's form
+ * @returns whether its value list matters
+ */
+function listedValues(form: DatapointForm): boolean {
+  return form.common.type !== "boolean" && Boolean(form.common.states);
+}
+
 /**
  * Whether a user write meant for a datapoint's owner may be sent through another transport instead —
  * when the owner is offline or the device refused the command there (krobi 2026-10-02: "always try the
  * most modern one; if the command does not work with it, then the next one"). The ownership itself
- * does not move. Only where the value keeps its meaning: the same object and value type, the same unit,
- * and — where a dropdown is involved — the same wire vocabulary. A decibel bass (YNCA) is not MusicCast's
- * step count, a sleep text is not a number, "HDMI1" is not "hdmi1". A transport that only reads the
+ * does not move. Only where the value keeps its meaning: the same values ({@link sameValues}) and — where a
+ * dropdown is involved — the same wire vocabulary: "HDMI1" is not "hdmi1". A transport that only reads the
  * datapoint cannot carry a write (`hdmi.out3`, `sound.surroundAI` on MusicCast — audit 2026-09-29, A27).
  *
- * @param from the owner and its definition
+ * @param from the owner and its form — as it built the datapoint, or as the datapoint stands in the tree
  * @param from.transport the owner
- * @param from.def its definition
+ * @param from.def its form
  * @param to the other transport and its definition
  * @param to.transport the other transport
  * @param to.def its definition
  * @returns whether the other transport can carry the write unchanged
  */
 export function canCarryWrite(
-  from: { transport: Transport; def: ObjectDef },
+  from: { transport: Transport; def: DatapointForm },
   to: { transport: Transport; def: ObjectDef },
 ): boolean {
-  if (from.def.type !== to.def.type || from.def.common.type !== to.def.common.type) {
+  if (!sameValues(from.def, to.def) || !to.def.common.write) {
     return false;
   }
-  if ((from.def.common.unit ?? "") !== (to.def.common.unit ?? "")) {
-    return false;
-  }
-  if (!to.def.common.write) {
-    return false;
-  }
-  const dropdown = Boolean(from.def.common.states) || Boolean(to.def.common.states);
+  const dropdown = listedValues(from.def) || listedValues(to.def);
   return !dropdown || STATES_VOCABULARY[from.transport] === STATES_VOCABULARY[to.transport];
 }
 
 /**
  * Whether a transport learned later may take a datapoint over: its definition must keep the form the
- * datapoint already has (2026-10-02 — a read-in receiver keeps its tree). The same shape test as
- * {@link canCarryWrite}, judged on the definitions themselves: the existing dropdown values must all
- * still be there (a device's list may grow, `HDMI1` is not `hdmi1`).
+ * datapoint already has (2026-10-02 — a read-in receiver keeps its tree). The same values as
+ * {@link canCarryWrite} judges, the write not lost, and the existing dropdown values all still there
+ * (a device's list may grow, `HDMI1` is not `hdmi1`).
  *
  * @param existing the datapoint as it stands
- * @param existing.type its object type
- * @param existing.common its common
  * @param live the definition a live transport builds now
  * @returns whether writing the live definition leaves the datapoint's form unchanged
  */
-export function keepsForm(existing: { type: string; common: Partial<ObjectDef["common"]> }, live: ObjectDef): boolean {
-  if (existing.type !== live.type || existing.common.type !== live.common.type) {
+export function keepsForm(existing: DatapointForm, live: ObjectDef): boolean {
+  if (!sameValues(existing, live) || (existing.common.write && !live.common.write)) {
     return false;
   }
-  if ((existing.common.unit ?? "") !== (live.common.unit ?? "")) {
-    return false;
+  if (!listedValues(existing)) {
+    return true;
   }
-  if (existing.common.write && !live.common.write) {
-    return false;
-  }
-  const before = Object.keys(existing.common.states ?? {});
   const now = new Set(Object.keys(live.common.states ?? {}));
-  return before.every(value => now.has(value));
+  return Object.keys(existing.common.states ?? {}).every(value => now.has(value));
+}
+
+/**
+ * The owner each datapoint keeps: the learned one, or — for a datapoint no owner was learned for yet —
+ * the one that keeps the form the datapoint already has in the tree. Pure ownership policy, moved out of the
+ * device handle beside the coordinator (review 2026-10-05, D).
+ *
+ * @param contributions what every transport built
+ * @param stored the learned tree's `shared` entries — the owner first
+ * @param existing a datapoint as it stands in the tree, if it does
+ * @returns canonical id → the owner to keep
+ */
+export function learnedOwners(
+  contributions: readonly TransportObjects[],
+  stored: Readonly<Record<string, readonly Transport[]>>,
+  existing?: (id: string) => DatapointForm | undefined,
+): Map<string, Transport> {
+  const builders = new Map<string, Map<Transport, ObjectDef>>();
+  for (const { transport, objects } of contributions) {
+    for (const def of objects) {
+      let entry = builders.get(def.id);
+      if (!entry) {
+        entry = new Map();
+        builders.set(def.id, entry);
+      }
+      entry.set(transport, def);
+    }
+  }
+  const owners = new Map<string, Transport>();
+  for (const [id, serving] of Object.entries(stored)) {
+    const owner = serving[0];
+    if (owner !== undefined) {
+      owners.set(id, owner);
+    }
+  }
+  for (const [id, defs] of builders) {
+    const key = capabilityKeyOf(defs.keys().next().value!, id);
+    const unproven = new Set([...defs].filter(([, def]) => def.unproven).map(([transport]) => transport));
+    const best = pickOwner(key, [...defs.keys()], unproven);
+    const kept = owners.get(id);
+    if (kept !== undefined) {
+      // Against a learned owner only the RANK counts, never this session's proofs: the owner proved itself
+      // when it was learned (a receiver in standby cannot prove its YNCA menus again, and must not hand them
+      // back to XML for that — forum 85413). One way only: a transport that ranks before the learned owner,
+      // serves the datapoint with a proof and keeps its form takes it over. Never back.
+      const ranked = pickOwner(key, [...defs.keys()]);
+      const keptDef = defs.get(kept);
+      const rankedDef = defs.get(ranked);
+      if (ranked !== kept && keptDef && rankedDef && !rankedDef.unproven && keepsForm(keptDef, rankedDef)) {
+        owners.set(id, ranked);
+      }
+      continue;
+    }
+    const form = existing?.(id);
+    const bestDef = defs.get(best);
+    if (form === undefined || (bestDef && keepsForm(form, bestDef))) {
+      continue;
+    }
+    // The datapoint stands in the tree already: the transport that keeps its form owns it.
+    const keeper = rankOf(key, [...defs.keys()], unproven).find(transport => keepsForm(form, defs.get(transport)!));
+    if (keeper !== undefined) {
+      owners.set(id, keeper);
+    }
+  }
+  return owners;
+}
+
+/**
+ * Who serves each datapoint more than one transport built, the owner first, then the others in the order
+ * a write falls back to them.
+ *
+ * @param contributions what every transport built
+ * @param owners the owner of each canonical id
+ * @returns canonical id → the transports serving it
+ */
+export function servingTransports(
+  contributions: readonly TransportObjects[],
+  owners: ReadonlyMap<string, Transport>,
+): Record<string, Transport[]> {
+  const serving = new Map<string, Transport[]>();
+  for (const { transport, objects } of contributions) {
+    for (const def of objects) {
+      if (def.unproven) {
+        continue;
+      }
+      const list = serving.get(def.id) ?? [];
+      list.push(transport);
+      serving.set(def.id, list);
+    }
+  }
+  const shared: Record<string, Transport[]> = {};
+  for (const [id, transports] of serving) {
+    const owner = owners.get(id);
+    if (transports.length < 2 || owner === undefined) {
+      continue;
+    }
+    const rest = rankOf(
+      capabilityKeyOf(owner, id),
+      transports.filter(transport => transport !== owner),
+    );
+    shared[id] = [owner, ...rest];
+  }
+  return shared;
 }

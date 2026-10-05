@@ -7,6 +7,8 @@
  * duplication that drifts apart the moment one of them is touched.
  */
 
+import { DropLatch } from "./drop-latch";
+
 /** Report a drop after this many consecutive polls in which every zone failed. */
 export const MAX_POLL_FAILURES = 3;
 
@@ -15,10 +17,11 @@ export const MAX_POLL_FAILURES = 3;
  */
 export class PollDropDetector {
   private failures = 0;
-  private dropped = false;
-  private handler: ((reason?: Error) => void) | undefined;
-  /** A drop that fired before onDrop was registered — delivered once it is. */
-  private pending: Error | undefined;
+  /**
+   * Reports the drop once and keeps it until the handler is registered: the multi-transport handle registers only
+   * after every transport connected, so a drop judged before would have vanished — and never come again.
+   */
+  private readonly latch = new DropLatch();
   /** The liveness question in flight — later askers ride on it. */
   private aliveCheck: Promise<void> | undefined;
 
@@ -33,12 +36,7 @@ export class PollDropDetector {
    * @param cb invoked once when the device is judged gone
    */
   public onDrop(cb: (reason?: Error) => void): void {
-    this.handler = cb;
-    if (this.pending) {
-      const reason = this.pending;
-      this.pending = undefined;
-      cb(reason);
-    }
+    this.latch.onDrop(cb);
   }
 
   /**
@@ -86,19 +84,8 @@ export class PollDropDetector {
    *   liveness question says so instead of claiming three polls failed (audit 2026-09-24, C29).
    */
   public report(why?: string): void {
-    if (this.dropped) {
-      return;
+    if (!this.latch.dropped) {
+      this.latch.report(new Error(why ?? `${this.maxFailures} polls failed`));
     }
-    this.dropped = true;
-    const reason = new Error(why ?? `${this.maxFailures} polls failed`);
-    if (this.handler) {
-      this.handler(reason);
-      return;
-    }
-    // Latched, not lost: the handler is registered by the multi-transport handle only after
-    // every transport connected, so a drop judged before that would have vanished — and
-    // because `dropped` is set, it would never be reported again either. The YNCA client and
-    // the handle both latch for exactly this; the polled transports were the odd ones out.
-    this.pending = reason;
   }
 }

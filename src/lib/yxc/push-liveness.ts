@@ -25,6 +25,22 @@ export type PushLivenessState = "unknown" | "alive" | "dead";
 export class PushLiveness {
   private current: PushLivenessState = "unknown";
   private misses = 0;
+  /** Whether a connection of this device already wrote the start values of the fields only events carry. */
+  private startValuesWritten = false;
+
+  /**
+   * Claim the one writing of the start values of the fields only an event reports (the network player's error and
+   * message): the device's first connection in this adapter run writes them, a reconnect writes nothing over what
+   * an event reported meanwhile — a returning transport writes nothing (review 2026-10-05, A43). Held here because
+   * this is the device's event state that outlives a connection.
+   *
+   * @returns true for the first connection, false for every later one
+   */
+  public claimStartValues(): boolean {
+    const first = !this.startValuesWritten;
+    this.startValuesWritten = true;
+    return first;
+  }
 
   /** The current verdict. */
   public get state(): PushLivenessState {

@@ -1,13 +1,19 @@
+import type { Transport } from "./catalog/owner-policy";
+
+/**
+ * The label the user sees for every transport, in the order they are reported and shown — typed by the one
+ * transport list, so a transport without a label does not compile (review 2026-10-05, E).
+ */
+const LABELS: Readonly<Record<Transport, string>> = { ynca: "YNCA", yxc: "MusicCast", xml: "XML" };
+
 /**
  * The transports a device can speak, in the fixed order they are reported and shown,
  * each with the label the user sees. Single source for the ready-log line and the
  * device-manager card indicators.
  */
-export const TRANSPORT_LABELS: ReadonlyArray<{ id: string; label: string }> = [
-  { id: "ynca", label: "YNCA" },
-  { id: "yxc", label: "MusicCast" },
-  { id: "xml", label: "XML" },
-];
+export const TRANSPORT_LABELS: ReadonlyArray<{ id: Transport; label: string }> = (
+  Object.keys(LABELS) as Transport[]
+).map(id => ({ id, label: LABELS[id] }));
 
 /**
  * One "ready" log line summarising which transports connected, govee-style: a single

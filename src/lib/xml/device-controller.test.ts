@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { XmlDeviceController } from "./device-controller";
-import type { XmlClientLike } from "./device-controller";
-import { type BasicStatus, type XmlSystemConfig } from "./protocol";
+import type { XmlClientLike } from "./controller-context";
+import { XmlRefusalError, type BasicStatus, type XmlSystemConfig } from "./protocol";
 import { HttpStatusError } from "../util";
 import { CommandGate } from "../lifecycle/command-gate";
 import { ProbeMemory } from "../lifecycle/probe-memory";
@@ -155,13 +155,16 @@ describe("XmlDeviceController", () => {
     expect(s.fire.keepaliveMs).toBe(60000);
   });
 
-  test("reports the model from System/Config into the adapter-created info.model", async () => {
+  test("reports the model and the firmware from System/Config, each with its object", async () => {
     const s = setup({ Main_Zone: { power: true } });
-    s.client.config = { model: "RX-V1900" };
+    s.client.config = { model: "RX-V1900", version: "1.40" };
     await s.controller.start();
-    // The object itself is created once by the adapter (ensureDeviceHeader) for every
-    // device, offline ones included — the transport only fills in the value.
+    // The adapter creates info.model for every device up front (ensureDeviceHeader, offline ones
+    // included), but a value reaches the tree only through an object a transport built — so XML builds
+    // both from the shared entries (review 2026-10-05, A5).
+    expect(s.objects).toEqual(expect.arrayContaining(["living.info.model", "living.info.firmware"]));
     expect(s.acks).toContainEqual({ id: "living.info.model", value: "RX-V1900" });
+    expect(s.acks).toContainEqual({ id: "living.info.firmware", value: "1.40" });
   });
 
   // One missed Basic_Status is no proof a zone is gone (2026-10-02): the zone the receiver answered on before
@@ -201,8 +204,14 @@ describe("XmlDeviceController", () => {
     const s = setup({ Main_Zone: { power: true, volume: -40 } });
     await s.controller.start();
     await expect(Promise.resolve(s.controller.handleWrite("power", false))).resolves.toBe("sent");
-    s.client.sendError = new Error("device refused <Main_Zone> (RC=3)");
+    s.client.sendError = new XmlRefusalError("<Main_Zone>", 3);
     await expect(Promise.resolve(s.controller.handleWrite("power", true))).resolves.toBe("refused");
+    // An HTTP answer outside 2xx is the device saying no as well (review 2026-10-05, E).
+    s.client.sendError = new HttpStatusError("device refused the request (HTTP 400)", 400);
+    await expect(Promise.resolve(s.controller.handleWrite("power", true))).resolves.toBe("refused");
+    // The TYPE decides, not the words of the message: an error that merely reads like a refusal is no answer.
+    s.client.sendError = new Error("device refused — but nothing answered");
+    await expect(Promise.resolve(s.controller.handleWrite("power", true))).resolves.toBe("unavailable");
     s.client.sendError = new Error("ECONNRESET");
     await expect(Promise.resolve(s.controller.handleWrite("power", true))).resolves.toBe("unavailable");
     await expect(Promise.resolve(s.controller.handleWrite("no.such.state", 1))).resolves.toBe("unavailable");
@@ -1120,12 +1129,11 @@ describe("XmlDeviceController probe memory verdicts (audit 2026-09-02)", () => {
       probeMemory: memory,
     });
     await controller.start();
-    expect(memory.remembered("xmlBrowseSources:v2")).toEqual([
-      "NET_USB/NET RADIO",
-      "NET_USB/PC/MCX",
-      "NET_USB/USB",
-      "iPod",
-    ]);
+    // One verdict per source (review 2026-10-05, A21): the proven menus and the ones the model does not have.
+    expect(memory.remembered("xmlBrowseSources:v2")).toEqual({
+      proven: ["NET_USB/NET RADIO", "NET_USB/PC/MCX", "NET_USB/USB", "iPod"],
+      absent: ["NET_RADIO", "SERVER", "USB", "iPod_USB", "JUKE", "Napster", "Pandora", "Rhapsody", "SiriusXM"],
+    });
     expect(objects).toContain("living.player.browse.source");
     // One probe per menu element — the three network inputs share NET_USB.
     expect(client.calls.filter(c => c.zone === "NET_USB")).toHaveLength(1);
@@ -1148,10 +1156,29 @@ describe("XmlDeviceController probe memory verdicts (audit 2026-09-02)", () => {
       probeMemory: memory,
     });
     await controller.start();
-    expect(memory.remembered("xmlBrowseSources:v2")).toEqual([]);
+    expect(memory.remembered("xmlBrowseSources:v2")).toEqual({
+      proven: [],
+      absent: [
+        "NET_RADIO",
+        "SERVER",
+        "USB",
+        "NET_USB/NET RADIO",
+        "NET_USB/PC/MCX",
+        "NET_USB/USB",
+        "iPod",
+        "iPod_USB",
+        "JUKE",
+        "Napster",
+        "Pandora",
+        "Rhapsody",
+        "SiriusXM",
+      ],
+    });
   });
 
-  test("a transient failure during the menu probe leaves the menus un-remembered, not 'none' for good", async () => {
+  // Review 2026-10-05, A21: one verdict per source — the timed-out menu stays undecided and is asked again, the
+  // definite answers of the others are remembered (they were thrown away with it before).
+  test("a transient failure during the menu probe leaves that menu undecided, not 'none' for good", async () => {
     const memory = new ProbeMemory();
     const client = new FakeClient({ Main_Zone: { power: true } });
     client.getXml = (element: string, inner: string): Promise<string> => {
@@ -1178,9 +1205,12 @@ describe("XmlDeviceController probe memory verdicts (audit 2026-09-02)", () => {
     });
     await controller.start();
     expect(objects.some(id => id.includes("player.browse"))).toBe(false);
-    // The NET_RADIO menu could not be asked — so nothing is remembered and the next
-    // connect probes again, instead of "this device has no menus" standing for good.
-    expect(memory.remembered("xmlBrowseSources:v2")).toBeUndefined();
+    // The NET_RADIO menu could not be asked — it is in neither list, so the next connect asks it again,
+    // instead of "this device has no menus" standing for good.
+    const verdicts = memory.remembered<{ proven: string[]; absent: string[] }>("xmlBrowseSources:v2");
+    expect(verdicts?.proven).toEqual([]);
+    expect(verdicts?.absent).not.toContain("NET_RADIO");
+    expect(verdicts?.absent).toContain("SERVER");
   });
 });
 
@@ -1227,7 +1257,7 @@ describe("the 2008 dialect drives every write and is remembered (RX-V3900)", () 
     await s.controller.start();
     s.client.calls.length = 0;
     s.acks.length = 0;
-    s.client.sendError = new Error("device refused Main_Zone (RC=3)");
+    s.client.sendError = new XmlRefusalError("<Main_Zone>", 3);
     void s.controller.handleWrite("volume", -40);
     await new Promise(resolve => setImmediate(resolve));
     expect(s.client.calls.map(c => `${c.method}:${c.zone}`)).toEqual(["send:Main_Zone", "getStatus:Main_Zone"]);
@@ -1446,7 +1476,7 @@ describe("the zone commands desc.xml declares: pads, transport keys, zone names 
       '<YAMAHA_AV rsp="GET" RC="0"><Zone_2><Config><Name><Zone>Kitchen</Zone></Name></Config></Zone_2></YAMAHA_AV>';
     await s.controller.start();
     s.acks.length = 0;
-    s.client.sendError = new Error("device refused Zone_2 (RC=3)");
+    s.client.sendError = new XmlRefusalError("<Zone_2>", 3);
     void s.controller.handleWrite("multiroom.zone2.zoneName", "Küche");
     await tick();
     expect(s.acks.filter(ack => ack.id === "living.multiroom.zone2.zoneName")).toEqual([

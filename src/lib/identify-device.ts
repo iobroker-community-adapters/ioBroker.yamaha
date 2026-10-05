@@ -2,6 +2,8 @@ import { identityFrom, mergeIdentity, type DeviceIdentity } from "./device-ident
 import { XmlClient } from "./xml/xml-client";
 import type { XmlSystemConfig } from "./xml/protocol";
 import { YamahaYxcClient } from "./yxc/http-client";
+import type { CommandGate, CommandGateTimers } from "./lifecycle/command-gate";
+import { LIVE_GATES } from "./lifecycle/gate-registry";
 
 /** What a device says about itself when asked before it is added. */
 export interface DeviceSelfReport {
@@ -19,10 +21,35 @@ export interface IdentifyDeps {
   xmlSystemConfig(ip: string): Promise<XmlSystemConfig>;
 }
 
-/** The real questions, over the adapter's own clients (4 s / 5 s timeouts). */
+/**
+ * The timers of a gate that asks ONE question of a device no connection runs to: a fresh gate without spacing sends
+ * its first request at once and schedules nothing (and no client calls its delay), so it needs no timer — a native
+ * one would outlive onUnload. Should that ever change, the question fails loudly instead of hanging.
+ */
+const ONE_QUESTION: CommandGateTimers = {
+  schedule: () => {
+    throw new Error("a gate for one question schedules nothing");
+  },
+  cancel: () => undefined,
+};
+
+/**
+ * The gate a question to a device goes through (Y-15): the running connection's when the address runs — the search
+ * may have found the device being added — else one of its own. Ungated, the question went out in parallel to the
+ * running connection's own traffic (review 2026-10-05, A13).
+ *
+ * @param transport the protocol asked
+ * @param ip the device's address
+ * @returns the gate
+ */
+function gateFor(transport: "yxc" | "xml", ip: string): CommandGate {
+  return LIVE_GATES.gateFor(transport, ip, ONE_QUESTION);
+}
+
+/** The real questions, over the adapter's own clients (4 s / 5 s timeouts), each through the device's gate. */
 export const DEFAULT_IDENTIFY_DEPS: IdentifyDeps = {
-  yxcDeviceInfo: ip => new YamahaYxcClient(ip).getDeviceInfo(),
-  xmlSystemConfig: ip => new XmlClient(ip).getSystemConfig(),
+  yxcDeviceInfo: ip => new YamahaYxcClient(ip, undefined, gateFor("yxc", ip)).getDeviceInfo(),
+  xmlSystemConfig: ip => new XmlClient(ip, undefined, gateFor("xml", ip)).getSystemConfig(),
 };
 
 /**

@@ -8,12 +8,81 @@ import { errText } from "./err-text";
  * instance data directory.
  */
 export interface DiscoveredStoreDeps {
-  /** Read the store file's content, or resolve undefined when it does not exist. */
+  /**
+   * Read the store file's content; resolve undefined when the file does not exist — and ONLY then: any other failure
+   * rejects (an unreadable store is not an empty one, review 2026-10-05, A2).
+   */
   read(): Promise<string | undefined>;
-  /** Write the store file's content. */
+  /** Replace the store file's content (atomically). */
   write(content: string): Promise<void>;
   /** Logger for diagnostics. */
   log: { debug(message: string): void };
+}
+
+/** What one JSON list file holds — and whether it could be read at all. */
+export interface ListRead<T> {
+  /** The usable entries (empty when the file is missing or unreadable). */
+  items: T[];
+  /**
+   * False when the file exists but could not be read, is empty, or holds no JSON list. Such a file is never the same as an
+   * empty one: a store that cannot be read must not be the reason a remembered device's tree is deleted, nor be written
+   * over with what one search found (review 2026-10-05, A2/A28).
+   */
+  readable: boolean;
+  /** Why it could not be read, for the log line. */
+  problem?: string;
+}
+
+/**
+ * Read one JSON list file — the one reader of the three stores (`discovered.json`, `excluded.json`, `ignored.json`).
+ * Only a missing file is an empty list. An empty file is a write that was cut off (a power cut between the truncate and
+ * the write of the earlier non-atomic writer), not an empty list.
+ *
+ * @param deps file access
+ * @param isItem whether a parsed entry is usable — the others are dropped
+ * @returns the entries and whether the file could be read
+ */
+export async function readJsonList<T>(
+  deps: Pick<DiscoveredStoreDeps, "read">,
+  isItem: (entry: unknown) => entry is T,
+): Promise<ListRead<T>> {
+  let raw: string | undefined;
+  try {
+    raw = await deps.read();
+  } catch (e) {
+    return { items: [], readable: false, problem: errText(e) };
+  }
+  if (raw === undefined) {
+    return { items: [], readable: true };
+  }
+  if (raw.trim() === "") {
+    return { items: [], readable: false, problem: "the file is empty" };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    return { items: [], readable: false, problem: errText(e) };
+  }
+  if (!Array.isArray(parsed)) {
+    return { items: [], readable: false, problem: "the file holds no list" };
+  }
+  return { items: parsed.filter(isItem), readable: true };
+}
+
+/**
+ * The entries of one list read, telling `unreadable` when the file could not be read. The readers keep their array result
+ * (the store owner, `device-stores.ts`, learns the verdict through the callback).
+ *
+ * @param read what {@link readJsonList} returned
+ * @param unreadable told why, when the file could not be read
+ * @returns the entries
+ */
+function itemsOf<T>(read: ListRead<T>, unreadable?: (problem: string) => void): T[] {
+  if (!read.readable) {
+    unreadable?.(read.problem ?? "unreadable");
+  }
+  return read.items;
 }
 
 /**
@@ -28,54 +97,58 @@ function isRecord(entry: unknown): entry is DeviceRecord {
 }
 
 /**
- * Read the devices remembered from earlier auto-discovery runs. A missing or
- * corrupt store yields an empty list rather than an error — losing the memory is
- * recoverable (the next scan refills it), a crash on start is not.
+ * Read the devices remembered from earlier auto-discovery runs. A missing store is an empty list; an unreadable one is an
+ * empty list too, but `unreadable` is told — never a reason to delete a remembered device's tree or to write over the file.
  *
  * @param deps file access and logger
+ * @param unreadable told why, when the file exists but cannot be read
  * @returns the remembered device records (empty when none/unreadable)
  */
-export async function readDiscovered(deps: DiscoveredStoreDeps): Promise<DeviceRecord[]> {
-  return (await readDiscoveredChecked(deps)).records;
+export async function readDiscovered(
+  deps: DiscoveredStoreDeps,
+  unreadable?: (problem: string) => void,
+): Promise<DeviceRecord[]> {
+  return itemsOf(await readJsonList(deps, isRecord), unreadable);
 }
 
 /**
- * The remembered device records, and whether the store could be read at all. An unreadable store is
- * not an empty one: it must never be the reason a remembered device's tree is deleted.
+ * Write one list. A failure is logged and swallowed — the caller learns it from the result.
  *
  * @param deps file access and logger
- * @returns the records (empty when none/unreadable) and whether the read succeeded
+ * @param what the store's name, for the log line
+ * @param content the JSON to store
+ * @returns whether the file was written
  */
-export async function readDiscoveredChecked(
-  deps: DiscoveredStoreDeps,
-): Promise<{ records: DeviceRecord[]; readable: boolean }> {
+async function writeList(deps: DiscoveredStoreDeps, what: string, content: string): Promise<boolean> {
   try {
-    const raw = await deps.read();
-    if (!raw) {
-      return { records: [], readable: true };
-    }
-    const parsed: unknown = JSON.parse(raw);
-    return { records: Array.isArray(parsed) ? parsed.filter(isRecord) : [], readable: Array.isArray(parsed) };
+    await deps.write(content);
+    return true;
   } catch (e) {
-    deps.log.debug(`discovered store: read failed, starting empty (${errText(e)})`);
-    return { records: [], readable: false };
+    deps.log.debug(`${what} store: write failed (${errText(e)})`);
+    return false;
   }
 }
 
 /**
- * Persist the devices found by auto-discovery so a device in deep standby survives
- * a restart. A write failure is logged and swallowed — it only costs the standby
- * protection until the next successful run, it must not break startup.
+ * Persist the devices found by auto-discovery so a device in deep standby survives a restart. A write failure is logged
+ * and swallowed — it costs the standby protection until the next successful write, it must not break startup.
  *
  * @param deps file access and logger
  * @param devices the device records to remember
+ * @returns whether the file was written
  */
-export async function writeDiscovered(deps: DiscoveredStoreDeps, devices: DeviceRecord[]): Promise<void> {
-  try {
-    await deps.write(JSON.stringify(devices));
-  } catch (e) {
-    deps.log.debug(`discovered store: write failed (${errText(e)})`);
-  }
+export function writeDiscovered(deps: DiscoveredStoreDeps, devices: DeviceRecord[]): Promise<boolean> {
+  return writeList(deps, "discovered", JSON.stringify(devices));
+}
+
+/**
+ * A stored 2.x exclusion is a plain id.
+ *
+ * @param entry a parsed store entry
+ * @returns whether it is an id
+ */
+function isId(entry: unknown): entry is string {
+  return typeof entry === "string";
 }
 
 /**
@@ -86,36 +159,26 @@ export async function writeDiscovered(deps: DiscoveredStoreDeps, devices: Device
  * wrote here never matched on a rollback, 2.x derives its ids from the name).
  *
  * @param deps file access and logger
+ * @param unreadable told why, when the file exists but cannot be read
  * @returns the ignored device ids (empty when none/unreadable)
  */
-export async function readIgnored(deps: DiscoveredStoreDeps): Promise<string[]> {
-  try {
-    const raw = await deps.read();
-    if (!raw) {
-      return [];
-    }
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
-  } catch (e) {
-    deps.log.debug(`ignored store: read failed, starting empty (${errText(e)})`);
-    return [];
-  }
+export async function readIgnored(
+  deps: DiscoveredStoreDeps,
+  unreadable?: (problem: string) => void,
+): Promise<string[]> {
+  return itemsOf(await readJsonList(deps, isId), unreadable);
 }
 
 /**
- * Persist the ignored device ids. A write failure is logged and swallowed: it only leaves a
- * re-admitted id on the list until the next successful write, and must not break the add or
- * re-admit action.
+ * Persist the ignored device ids, each once. A write failure is logged and swallowed: it only leaves a re-admitted id on
+ * the list until the next successful write.
  *
  * @param deps file access and logger
  * @param ids the device ids to keep out of auto-discovery
+ * @returns whether the file was written
  */
-export async function writeIgnored(deps: DiscoveredStoreDeps, ids: readonly string[]): Promise<void> {
-  try {
-    await deps.write(JSON.stringify([...new Set(ids)]));
-  } catch (e) {
-    deps.log.debug(`ignored store: write failed (${errText(e)})`);
-  }
+export function writeIgnored(deps: DiscoveredStoreDeps, ids: readonly string[]): Promise<boolean> {
+  return writeList(deps, "ignored", JSON.stringify([...new Set(ids)]));
 }
 
 /** One device the user deleted from the card list — kept out of every following search. */
@@ -142,42 +205,34 @@ function isExcludedEntry(entry: unknown): entry is ExcludedEntry {
 /**
  * Read the exclusion entries — every delete since 2.12.0 lands here. They live NEXT to `ignored.json`
  * (2.x's plain id list), not inside it: the 2.11.0 reader keeps only strings, so objects in that file
- * would vanish on a rollback.
+ * would vanish on a rollback. An unreadable file reads empty but tells `unreadable`: written over, every earlier delete
+ * would be undone (review 2026-10-05, A28).
  *
  * @param deps file access and logger
+ * @param unreadable told why, when the file exists but cannot be read
  * @returns the entries (empty when none/unreadable)
  */
-export async function readExcluded(deps: DiscoveredStoreDeps): Promise<ExcludedEntry[]> {
-  try {
-    const raw = await deps.read();
-    if (!raw) {
-      return [];
-    }
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter(isExcludedEntry) : [];
-  } catch (e) {
-    deps.log.debug(`excluded store: read failed, starting empty (${errText(e)})`);
-    return [];
-  }
+export async function readExcluded(
+  deps: DiscoveredStoreDeps,
+  unreadable?: (problem: string) => void,
+): Promise<ExcludedEntry[]> {
+  return itemsOf(await readJsonList(deps, isExcludedEntry), unreadable);
 }
 
 /**
- * Persist the exclusion entries, one per id (the later entry wins). A write failure is logged
- * and swallowed for the same reason as the id list's: it must not break the delete action.
+ * Persist the exclusion entries, one per id (the later entry wins). A write failure is logged and swallowed; the caller
+ * learns it from the result — a delete whose exclusion was not written is no delete (Y-13).
  *
  * @param deps file access and logger
  * @param entries the entries to keep out of auto-discovery
+ * @returns whether the file was written
  */
-export async function writeExcluded(deps: DiscoveredStoreDeps, entries: readonly ExcludedEntry[]): Promise<void> {
+export function writeExcluded(deps: DiscoveredStoreDeps, entries: readonly ExcludedEntry[]): Promise<boolean> {
   const byId = new Map<string, ExcludedEntry>();
   for (const entry of entries) {
     byId.set(entry.id, entry);
   }
-  try {
-    await deps.write(JSON.stringify([...byId.values()]));
-  } catch (e) {
-    deps.log.debug(`excluded store: write failed (${errText(e)})`);
-  }
+  return writeList(deps, "excluded", JSON.stringify([...byId.values()]));
 }
 
 /**

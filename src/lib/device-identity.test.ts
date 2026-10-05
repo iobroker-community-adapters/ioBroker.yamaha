@@ -1,4 +1,5 @@
-import { identityFrom, macFromUdn, mergeIdentity, sameDevice } from "./device-identity";
+import { identityFrom, macFromUdn, mergeIdentity, sameDevice, storedIdentity } from "./device-identity";
+import { mergedWith } from "./known-objects";
 
 describe("identityFrom", () => {
   it("keeps a hex serial and a 12-digit MAC, trimmed and upper-cased", () => {
@@ -73,5 +74,23 @@ describe("macFromUdn", () => {
   it("is undefined for a uuid without a MAC-shaped tail", () => {
     expect(macFromUdn("uuid:roku:ecp:abc")).toBeUndefined();
     expect(macFromUdn("uuid:00000000-0000-1000-8000-000000000000")).toBeUndefined();
+  });
+});
+
+// Review 2026-10-05, A30 (proof test identity-merge): the objects database merges a patch key by key, so a replacing
+// identity written as it is kept the old device's MAC next to the new serial.
+describe("storedIdentity", () => {
+  it("names both fields, the unknown one null — written over the old identity, nothing of it is left", () => {
+    const old = { serial: "0A1B2B3C", mac: "00A0DED4F504" };
+    const learned = mergeIdentity(old, { serial: "0E897553" })!;
+    expect(learned).toEqual({ serial: "0E897553" });
+    const stored = mergedWith({ native: { identity: old } }, { native: { identity: storedIdentity(learned) } }) as {
+      native: { identity: Record<string, unknown> };
+    };
+    expect(stored.native.identity).toEqual({ serial: "0E897553", mac: null });
+    // Read back, the null is no MAC — and the old receiver found elsewhere by its MAC is not this device.
+    const reread = identityFrom(stored.native.identity);
+    expect(reread).toEqual({ serial: "0E897553" });
+    expect(sameDevice(reread, old)).toBe(false);
   });
 });

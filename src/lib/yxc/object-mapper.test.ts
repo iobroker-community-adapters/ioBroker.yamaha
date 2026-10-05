@@ -1,4 +1,13 @@
-import { mapYxcToObjects, rawVolumeFor, shownVolumeFor, volumeScaleOf, yxcDeclaredAbsent } from "./object-mapper";
+import {
+  mapYxcToObjects,
+  playerZones,
+  zoneNameDropdowns,
+  rawVolumeFor,
+  shownVolumeFor,
+  volumeScaleOf,
+} from "./object-mapper";
+import rxA2070v287 from "./__fixtures__/RX_A2070_287_208.json";
+import cdNt670d from "./__fixtures__/cd_nt670d.json";
 import { parseYxcFeatures } from "./capability";
 import { YXC_MENU_VALUES } from "./remote";
 import rxA2070 from "./__fixtures__/RX_A2070_v1.json";
@@ -186,11 +195,6 @@ describe("mapYxcToObjects", () => {
     const receiver = mapYxcToObjects(parseYxcFeatures(rxA2070)).map(o => o.id);
     expect(receiver).toContain("tuner.rdsText");
     expect(receiver).not.toContain("tuner.dab.totalStations");
-    // What a declaration proves absent goes on the first start.
-    expect(yxcDeclaredAbsent(parseYxcFeatures(isx18d))).toEqual(expect.arrayContaining(["tuner.rdsText"]));
-    expect(yxcDeclaredAbsent(parseYxcFeatures(rxA2070))).toEqual(
-      expect.arrayContaining(["tuner.dab.totalStations", "tuner.dab.scanProgress"]),
-    );
   });
 
   test("the DAB fields carry the units and bounds the specification declares", () => {
@@ -321,26 +325,6 @@ describe("mapYxcToObjects", () => {
     expect(vol?.common.max).toBe(60);
     expect(vol?.common.step).toBe(1);
     expect(vol?.common.unit).toBeUndefined();
-  });
-});
-
-// What getFeatures proves absent is removed on the first start after an update — the party switch
-// and the zone-4 maximum volume that 2.12.0 created on every device stayed behind (audit 2026-09-24).
-describe("yxcDeclaredAbsent", () => {
-  it("names a zone's maximum volume without `volume`, and no party switch (it comes from getFuncStatus alone)", () => {
-    const receiver = yxcDeclaredAbsent(parseYxcFeatures(rxA2070));
-    expect(receiver).toContain("multiroom.zone4.advanced.maxVolume");
-    expect(receiver).not.toContain("advanced.maxVolume");
-    const speaker = yxcDeclaredAbsent(parseYxcFeatures(wx10));
-    expect(speaker).not.toContain("multiroom.partyEnable");
-  });
-
-  it("never names a datapoint the same declaration builds", () => {
-    for (const fixture of [rxA2070, wx10, isx18d]) {
-      const capabilities = parseYxcFeatures(fixture);
-      const built = new Set(mapYxcToObjects(capabilities).map(o => o.id));
-      expect(yxcDeclaredAbsent(capabilities).filter(id => built.has(id))).toEqual([]);
-    }
   });
 });
 
@@ -854,5 +838,117 @@ describe("value lists for the words MusicCast reports (readable values, 2026-09-
     expect(common(objs, "tuner.presetSave")).toMatchObject({ role: "level", read: true, write: true });
     expect(common(objs, "tuner.searchUp")?.desc).toBeDefined();
     expect(common(objs, "tuner.searchDown")?.desc).toBeDefined();
+  });
+});
+
+// A zone that cannot select a media player's input has nothing to show in a "now playing" block (review 2026-10-05,
+// A48; Y-23) — the review's proof: RX-A2070 zone 4 (AV1–AV7, V-AUX) carried 20 such datapoints.
+describe("a player block only where the zone can play a media source (A48)", () => {
+  test("RX-A2070: zone 4 gets no player block; main, zone 2 and zone 3 keep theirs", () => {
+    const caps = parseYxcFeatures(rxA2070v287);
+    expect(caps.zones.find(zone => zone.id === "zone4")?.inputs).toEqual([
+      "av1",
+      "av2",
+      "av3",
+      "av4",
+      "av5",
+      "av6",
+      "av7",
+      "v_aux",
+    ]);
+    const objectIds = mapYxcToObjects(caps).map(o => o.id);
+    expect(objectIds.filter(id => id.startsWith("multiroom.zone4.player"))).toEqual([]);
+    expect(objectIds).toEqual(
+      expect.arrayContaining(["player.playback", "multiroom.zone2.player.playback", "multiroom.zone3.player.playback"]),
+    );
+    // The zone itself stays — power, volume, input.
+    expect(objectIds).toEqual(expect.arrayContaining(["multiroom.zone4.power", "multiroom.zone4.input"]));
+    expect(playerZones(caps)).toEqual(["main", "zone2", "zone3"]);
+  });
+
+  test("the inputs' play info types decide: netusb and cd feed a block, tuner and none do not", () => {
+    const zones = [
+      { id: "main", funcs: ["power"], inputs: ["net_radio", "hdmi1"] },
+      { id: "zone2", funcs: ["power"], inputs: ["cd"] },
+      { id: "zone3", funcs: ["power"], inputs: ["tuner", "main_sync"] },
+    ];
+    const playInfoTypes = { net_radio: "netusb", hdmi1: "none", cd: "cd", tuner: "tuner", main_sync: "none" };
+    expect(playerZones({ zones, media: ["netusb", "cd", "tuner"], playInfoTypes })).toEqual(["main", "zone2"]);
+    // Without a media player no zone has a block.
+    expect(playerZones({ zones, media: ["tuner"], playInfoTypes })).toEqual([]);
+  });
+
+  test("a device that declares no play info types (a memory of an earlier release) keeps a block on every zone", () => {
+    const zones = [
+      { id: "main", funcs: ["power"], inputs: [] },
+      { id: "zone2", funcs: ["power"], inputs: ["av1"] },
+    ];
+    expect(playerZones({ zones, media: ["netusb"] })).toEqual(["main", "zone2"]);
+  });
+});
+
+describe("the CD drive of a CD receiver", () => {
+  test("the CD-NT670D gets its drive's datapoints and plays it through the main zone's block", () => {
+    const caps = parseYxcFeatures(cdNt670d);
+    const objectIds = mapYxcToObjects(caps).map(o => o.id);
+    expect(objectIds).toEqual(
+      expect.arrayContaining([
+        "player.cd",
+        "player.cd.tray",
+        "player.cd.trackSelect",
+        "player.cd.trackNumber",
+        "player.cd.totalTracks",
+        "player.cd.discTime",
+        "player.cd.deviceStatus",
+        "player.playback",
+      ]),
+    );
+    expect(playerZones(caps)).toEqual(["main"]);
+  });
+});
+
+// krobi 2026-10-05: names the user gives in the receiver follow a rename while the adapter runs (Y-25); `liveLabels`
+// marks the lists whose labels are such names.
+describe("the user-named dropdowns", () => {
+  const zones = [
+    {
+      id: "main",
+      funcs: ["power", "sound_program"],
+      inputs: ["hdmi1", "net_radio"],
+      valueLists: { soundProgram: ["munich", "straight"] },
+    },
+    { id: "zone2", funcs: ["power"], inputs: ["hdmi1"] },
+  ];
+  const names = { inputs: { hdmi1: "Apple TV" }, soundPrograms: { munich: "Concert" } };
+
+  test("the inputs and the sound programs carry liveLabels where getNameText answered", () => {
+    const objects = mapYxcToObjects({ zones, media: [], names });
+    const input = objects.find(o => o.id === "input");
+    expect(input?.common.states).toEqual({ hdmi1: "Apple TV", net_radio: "NET RADIO" });
+    expect(input?.liveLabels).toBe(true);
+    expect(objects.find(o => o.id === "soundProgram")?.liveLabels).toBe(true);
+    // No other list follows the device's labels.
+    expect(objects.filter(o => o.liveLabels).map(o => o.id)).toEqual([
+      "input",
+      "soundProgram",
+      "multiroom.zone2.input",
+    ]);
+  });
+
+  test("without getNameText's answer the classic spellings must not overwrite the user's names", () => {
+    expect(mapYxcToObjects({ zones, media: [] }).filter(o => o.liveLabels)).toEqual([]);
+  });
+
+  test("a rename rebuilds the zone's two dropdowns alone, the reported value selectable", () => {
+    const capabilities = { zones, media: [], names };
+    const dropdowns = zoneNameDropdowns(capabilities, "main", { input: "tv" });
+    expect(dropdowns.map(o => o.id)).toEqual(["input", "soundProgram"]);
+    expect(dropdowns[0].common.states).toEqual({ hdmi1: "Apple TV", net_radio: "NET RADIO", tv: "TV" });
+    expect(zoneNameDropdowns(capabilities, "zone2").map(o => o.id)).toEqual(["multiroom.zone2.input"]);
+    expect(zoneNameDropdowns(capabilities, "zone3")).toEqual([]);
+    // The same objects the whole tree carries.
+    expect(zoneNameDropdowns(capabilities, "main")).toEqual(
+      mapYxcToObjects(capabilities).filter(o => o.id === "input" || o.id === "soundProgram"),
+    );
   });
 });

@@ -1,23 +1,53 @@
 import { get as httpGet, request as httpRequest, type IncomingMessage } from "node:http";
-import type { CommandGate } from "../lifecycle/command-gate";
+import type { CommandGate, CommandPriority } from "../lifecycle/command-gate";
 import { HttpStatusError, readDeviceResponse } from "../util";
 import { errText } from "../err-text";
 
 /**
- * Whether a command path changes something on the device (as opposed to reading). The
- * MusicCast API names its endpoints consistently, so the verb at the start of the last
- * path segment decides — that is enough to give user actions priority in the gate.
+ * Whether a command path changes something on the device (as opposed to reading). The MusicCast API
+ * names its endpoints consistently: a READ starts its last path segment with `get`, and everything
+ * else — set, recall, toggle, start, stop, control, switch, store, clear, and whatever verb a later
+ * endpoint brings — acts. So a button press queues with USER priority and overtakes a running
+ * background sweep. The verb list this replaced named verbs no endpoint used and would have demoted a
+ * new action verb to background (review 2026-10-05, F).
  *
  * @param command the API command path
  * @returns true for a write/action command
  */
 export function isWriteCommand(command: string): boolean {
   const last = command.split("?")[0].split("/").pop() ?? "";
-  // Every write/action verb the endpoint methods below actually use — control
-  // (cursor/menu remote), switch (tuner preset step), store and clear (presets) included, so
-  // these presses queue with USER priority and overtake a running background sweep.
-  return /^(set|recall|toggle|start|stop|manage|prepare|control|switch|store|clear)/.test(last);
+  return !/^get/.test(last);
 }
+
+/**
+ * Whether a failed request was ANSWERED by the device: a refusal (`response_code` ≠ 0) or an HTTP error
+ * status (`HttpStatusError` — a booting web server's 503, say). Either is proof the device is there, and
+ * for a write it is the device's no; only a request nobody answered is a reason to ask whether the device
+ * is still alive. The client rejects a non-2xx answer as `HttpStatusError` since the shared device reader
+ * (review 2026-10-05, E), and the controller took that for a lost connection.
+ *
+ * @param e the error a request ended with
+ * @returns true when the device answered
+ */
+export function answeredByDevice(e: unknown): boolean {
+  return e instanceof YxcRefusalError || e instanceof HttpStatusError;
+}
+
+/**
+ * A switch value as the API spells it (`enable=true`) — one place instead of eighteen.
+ *
+ * @param on the switch value
+ * @returns `true` or `false`
+ */
+function flag(on: boolean): string {
+  return on ? "true" : "false";
+}
+
+/** A media player the transport keys drive — its path segment in the API. */
+export type YxcPlayer = "netusb" | "cd";
+
+/** The playback words both players take (YXC Basic §7.3 netusb, §8.2 cd). */
+export type YxcPlayback = "play" | "pause" | "stop" | "next" | "previous";
 
 /** Timeout for a single YXC HTTP request, so an unresponsive device cannot hang the keepalive. */
 const REQUEST_TIMEOUT_MS = 4000;
@@ -254,20 +284,44 @@ function q(value: string | number): string {
  */
 export class YamahaYxcClient {
   private readonly send: YxcSend;
+  /** The same client at user priority, made on first use (see {@link forUser}). */
+  private userTwin: YamahaYxcClient | undefined;
 
   /**
    * @param ip the device IP or hostname
-   * @param send transport seam (defaults to node:http: GET, POST when a body is given); injected in tests
+   * @param transport transport seam (defaults to node:http: GET, POST when a body is given); injected in tests
    * @param gate the device's command gate — when given, every request runs through it, so
    *   an embedded device never sees a burst of parallel requests and a stopped adapter
-   *   cancels what is still queued. Commands that CHANGE something (the verbs `isWriteCommand`
-   *   recognises: set, recall, toggle, start, stop, manage, prepare, control, switch, store,
-   *   clear) are queued with user priority so a button press overtakes background polling.
+   *   cancels what is still queued. Commands that CHANGE something (every endpoint that is not
+   *   a `get`, see `isWriteCommand`) are queued with user priority so a button press overtakes
+   *   background polling.
+   * @param priority every request at this priority instead of the one its verb gives (see {@link forUser})
    */
-  public constructor(ip: string, send: YxcSend = defaultSend(ip), gate?: CommandGate) {
+  public constructor(
+    private readonly ip: string,
+    private readonly transport: YxcSend = defaultSend(ip),
+    private readonly gate?: CommandGate,
+    private readonly priority?: CommandPriority,
+  ) {
     this.send = gate
-      ? (command, body) => gate.run(() => send(command, body), isWriteCommand(command) ? "user" : "background")
-      : send;
+      ? (command, body) =>
+          gate.run(() => transport(command, body), priority ?? (isWriteCommand(command) ? "user" : "background"))
+      : transport;
+  }
+
+  /**
+   * This client with every request queued at USER priority — on the same transport and gate. The read-back of a
+   * user write goes through it: from its verb a read is background work, so it waited behind the poll sweep,
+   * while YNCA reads back at user priority (review 2026-10-05, A58).
+   *
+   * @returns the user-priority twin (the same one on every call)
+   */
+  public forUser(): YamahaYxcClient {
+    if (this.priority === "user") {
+      return this;
+    }
+    this.userTwin ??= new YamahaYxcClient(this.ip, this.transport, this.gate, "user");
+    return this.userTwin;
   }
 
   /**
@@ -315,7 +369,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public setAutoPowerStandby(on: boolean): Promise<unknown> {
-    return this.send(`/system/setAutoPowerStandby?enable=${on ? "true" : "false"}`);
+    return this.send(`/system/setAutoPowerStandby?enable=${flag(on)}`);
   }
 
   /**
@@ -325,7 +379,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public setHdmiOut1(on: boolean): Promise<unknown> {
-    return this.send(`/system/setHdmiOut1?enable=${on ? "true" : "false"}`);
+    return this.send(`/system/setHdmiOut1?enable=${flag(on)}`);
   }
 
   /**
@@ -335,7 +389,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public setHdmiOut2(on: boolean): Promise<unknown> {
-    return this.send(`/system/setHdmiOut2?enable=${on ? "true" : "false"}`);
+    return this.send(`/system/setHdmiOut2?enable=${flag(on)}`);
   }
 
   /**
@@ -408,7 +462,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public mute(on: boolean, zone: string): Promise<unknown> {
-    return this.send(`/${zoneSeg(zone)}/setMute?enable=${on ? "true" : "false"}`);
+    return this.send(`/${zoneSeg(zone)}/setMute?enable=${flag(on)}`);
   }
 
   /**
@@ -441,7 +495,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public setEnhancer(on: boolean, zone: string): Promise<unknown> {
-    return this.send(`/${zoneSeg(zone)}/setEnhancer?enable=${on ? "true" : "false"}`);
+    return this.send(`/${zoneSeg(zone)}/setEnhancer?enable=${flag(on)}`);
   }
 
   /**
@@ -452,7 +506,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public setPureDirect(on: boolean, zone: string): Promise<unknown> {
-    return this.send(`/${zoneSeg(zone)}/setPureDirect?enable=${on ? "true" : "false"}`);
+    return this.send(`/${zoneSeg(zone)}/setPureDirect?enable=${flag(on)}`);
   }
 
   /**
@@ -507,7 +561,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public setDirect(on: boolean, zone: string): Promise<unknown> {
-    return this.send(`/${zoneSeg(zone)}/setDirect?enable=${on ? "true" : "false"}`);
+    return this.send(`/${zoneSeg(zone)}/setDirect?enable=${flag(on)}`);
   }
 
   /**
@@ -518,7 +572,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public setClearVoice(on: boolean, zone: string): Promise<unknown> {
-    return this.send(`/${zoneSeg(zone)}/setClearVoice?enable=${on ? "true" : "false"}`);
+    return this.send(`/${zoneSeg(zone)}/setClearVoice?enable=${flag(on)}`);
   }
 
   /**
@@ -529,7 +583,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public setBassExtension(on: boolean, zone: string): Promise<unknown> {
-    return this.send(`/${zoneSeg(zone)}/setBassExtension?enable=${on ? "true" : "false"}`);
+    return this.send(`/${zoneSeg(zone)}/setBassExtension?enable=${flag(on)}`);
   }
 
   /**
@@ -606,76 +660,35 @@ export class YamahaYxcClient {
   }
 
   /**
-   * Start the network/USB player.
+   * Drive a player's transport (YXC Basic §7.3 netusb, §8.2 cd) — ONE endpoint for both players: the network
+   * player had five fixed wrappers while the CD one was already parametrised (review 2026-10-05, F).
    *
+   * @param player the player (`netusb` or `cd`)
+   * @param playback the playback word
    * @returns the command response
    */
-  public playNet(): Promise<unknown> {
-    return this.send("/netusb/setPlayback?playback=play");
+  public setPlayback(player: YxcPlayer, playback: YxcPlayback): Promise<unknown> {
+    return this.send(`/${player}/setPlayback?playback=${playback}`);
   }
 
   /**
-   * Pause the network/USB player.
+   * Toggle a player's repeat mode.
    *
+   * @param player the player (`netusb` or `cd`)
    * @returns the command response
    */
-  public pauseNet(): Promise<unknown> {
-    return this.send("/netusb/setPlayback?playback=pause");
+  public toggleRepeat(player: YxcPlayer): Promise<unknown> {
+    return this.send(`/${player}/toggleRepeat`);
   }
 
   /**
-   * Stop the network/USB player.
+   * Toggle a player's shuffle mode.
    *
+   * @param player the player (`netusb` or `cd`)
    * @returns the command response
    */
-  public stopNet(): Promise<unknown> {
-    return this.send("/netusb/setPlayback?playback=stop");
-  }
-
-  /**
-   * Skip to the next track.
-   *
-   * @returns the command response
-   */
-  public nextNet(): Promise<unknown> {
-    return this.send("/netusb/setPlayback?playback=next");
-  }
-
-  /**
-   * Skip to the previous track.
-   *
-   * @returns the command response
-   */
-  public prevNet(): Promise<unknown> {
-    return this.send("/netusb/setPlayback?playback=previous");
-  }
-
-  /**
-   * Drive the CD transport with a YXC action word (`play`, `pause`, `stop`, `next`, `previous`).
-   *
-   * @param action the CD action word
-   * @returns the command response
-   */
-  public setCDPlayback(action: string): Promise<unknown> {
-    return this.send(`/cd/setPlayback?playback=${q(action)}`);
-  }
-
-  /**
-   * Toggle the network/USB player's repeat mode.
-   *
-   * @returns the command response
-   */
-  public toggleNetRepeat(): Promise<unknown> {
-    return this.send("/netusb/toggleRepeat");
-  }
-
-  /**
-   * Toggle the network/USB player's shuffle mode.
-   *
-   * @returns the command response
-   */
-  public toggleNetShuffle(): Promise<unknown> {
-    return this.send("/netusb/toggleShuffle");
+  public toggleShuffle(player: YxcPlayer): Promise<unknown> {
+    return this.send(`/${player}/toggleShuffle`);
   }
 
   /**
@@ -698,24 +711,6 @@ export class YamahaYxcClient {
    */
   public setNetShuffle(mode: "off" | "on"): Promise<unknown> {
     return this.send(`/netusb/setShuffle?mode=${mode}`);
-  }
-
-  /**
-   * Toggle the CD player's repeat mode.
-   *
-   * @returns the command response
-   */
-  public toggleCDRepeat(): Promise<unknown> {
-    return this.send("/cd/toggleRepeat");
-  }
-
-  /**
-   * Toggle the CD player's shuffle mode.
-   *
-   * @returns the command response
-   */
-  public toggleCDShuffle(): Promise<unknown> {
-    return this.send("/cd/toggleShuffle");
   }
 
   /**
@@ -781,7 +776,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public set3dSurround(on: boolean, zone: string): Promise<unknown> {
-    return this.send(`/${zoneSeg(zone)}/set3dSurround?enable=${on ? "true" : "false"}`);
+    return this.send(`/${zoneSeg(zone)}/set3dSurround?enable=${flag(on)}`);
   }
 
   /**
@@ -858,7 +853,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public setExtraBass(on: boolean, zone: string): Promise<unknown> {
-    return this.send(`/${zoneSeg(zone)}/setExtraBass?enable=${on ? "true" : "false"}`);
+    return this.send(`/${zoneSeg(zone)}/setExtraBass?enable=${flag(on)}`);
   }
 
   /**
@@ -869,7 +864,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public setAdaptiveDrc(on: boolean, zone: string): Promise<unknown> {
-    return this.send(`/${zoneSeg(zone)}/setAdaptiveDrc?enable=${on ? "true" : "false"}`);
+    return this.send(`/${zoneSeg(zone)}/setAdaptiveDrc?enable=${flag(on)}`);
   }
 
   /**
@@ -910,7 +905,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public setSpeakerA(on: boolean): Promise<unknown> {
-    return this.send(`/system/setSpeakerA?enable=${on ? "true" : "false"}`);
+    return this.send(`/system/setSpeakerA?enable=${flag(on)}`);
   }
 
   /**
@@ -920,7 +915,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public setSpeakerB(on: boolean): Promise<unknown> {
-    return this.send(`/system/setSpeakerB?enable=${on ? "true" : "false"}`);
+    return this.send(`/system/setSpeakerB?enable=${flag(on)}`);
   }
 
   /**
@@ -930,7 +925,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public setIrSensor(on: boolean): Promise<unknown> {
-    return this.send(`/system/setIrSensor?enable=${on ? "true" : "false"}`);
+    return this.send(`/system/setIrSensor?enable=${flag(on)}`);
   }
 
   /**
@@ -940,7 +935,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public setZoneBVolumeSync(on: boolean): Promise<unknown> {
-    return this.send(`/system/setZoneBVolumeSync?enable=${on ? "true" : "false"}`);
+    return this.send(`/system/setZoneBVolumeSync?enable=${flag(on)}`);
   }
 
   /**
@@ -960,7 +955,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public setPartyMode(on: boolean): Promise<unknown> {
-    return this.send(`/system/setPartyMode?enable=${on ? "true" : "false"}`);
+    return this.send(`/system/setPartyMode?enable=${flag(on)}`);
   }
 
   /**
@@ -1148,7 +1143,7 @@ export class YamahaYxcClient {
    * @returns the command response
    */
   public setClockAutoSync(enable: boolean): Promise<unknown> {
-    return this.send(`/clock/setAutoSync?enable=${enable ? "true" : "false"}`);
+    return this.send(`/clock/setAutoSync?enable=${flag(enable)}`);
   }
 
   /**
@@ -1246,13 +1241,12 @@ export class YamahaYxcClient {
   }
 
   /**
-   * Read one window of the network player's play queue.
+   * Read the first window of the network player's play queue — eight entries, the device's cap. Nothing
+   * ever asked for another window, so the index and size parameters went (review 2026-10-05, G).
    *
-   * @param index the 0-based index of the window's first entry
-   * @param size how many entries to fetch (the device caps at 8)
    * @returns the getPlayQueue response
    */
-  public getPlayQueue(index = 0, size = 8): Promise<unknown> {
-    return this.send(`/netusb/getPlayQueue?index=${q(index)}&size=${q(size)}`);
+  public getPlayQueue(): Promise<unknown> {
+    return this.send("/netusb/getPlayQueue?index=0&size=8");
   }
 }

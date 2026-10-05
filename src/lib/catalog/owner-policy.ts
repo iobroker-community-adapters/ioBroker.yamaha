@@ -1,13 +1,26 @@
 import { ZONE_PREFIX } from "./zones";
-/** The transports the adapter speaks. Ordered most-modern-first — the default ownership rank. */
-export type Transport = "yxc" | "ynca" | "xml";
+/**
+ * The transports the adapter speaks — the one list (review 2026-10-05, E: it stood four times). Ordered
+ * most-modern-first, which is the default ownership rank: when several protocols can do the same, the most modern
+ * one serves it (krobi). YXC is push + structured JSON, YNCA the text-poll base, XML the pre-2010 fallback.
+ */
+export const TRANSPORTS = ["yxc", "ynca", "xml"] as const;
+
+/** One of the {@link TRANSPORTS}. */
+export type Transport = (typeof TRANSPORTS)[number];
 
 /**
- * Ownership preference by modernity, used when a shared capability is equally good on each
- * transport (krobi: "when several protocols can do the same, use the most modern one"). YXC is
- * push + structured JSON, YNCA the text-poll base, XML the pre-2010 fallback.
+ * Whether a value (untrusted storage, a request) names a transport.
+ *
+ * @param value the value
+ * @returns true for one of the {@link TRANSPORTS}
  */
-const MODERNITY: readonly Transport[] = ["yxc", "ynca", "xml"];
+export function isTransport(value: unknown): value is Transport {
+  return (TRANSPORTS as readonly unknown[]).includes(value);
+}
+
+/** Ownership preference by modernity — see {@link TRANSPORTS}. */
+const MODERNITY: readonly Transport[] = TRANSPORTS;
 
 /**
  * The wire vocabulary a transport's dropdown VALUES are spelled in. YNCA and the XML API share the
@@ -108,6 +121,12 @@ export const OWNER_OVERRIDES: Record<string, readonly Transport[]> = {
   soundProgram: ["ynca", "yxc", "xml"],
   sleep: ["ynca", "xml", "yxc"],
   "tuner.band": ["ynca", "yxc", "xml"],
+  // Every protocol builds the model and the firmware from one definition (catalog/info-objects.ts) since the
+  // review of 2026-10-05 (A5): before, only YNCA did, and a device without YNCA showed no model and no firmware.
+  // YNCA stays in front so an installation keeps the values it showed — its firmware reads "1.10/2.40", where
+  // MusicCast reports "2.40" — and MusicCast comes before XML by modernity.
+  "info.model": ["ynca", "yxc", "xml"],
+  "info.firmware": ["ynca", "yxc", "xml"],
 };
 
 /**
@@ -151,6 +170,19 @@ export function canonicalIdOf(transport: Transport, stateId: string): string {
 }
 
 /**
+ * Whether a write to a capability belongs to its owner alone and never falls back to another transport (Y-04): the
+ * on-screen menu (`player.browse.*`) and the remote keys (`remote.*`, in every zone). Another transport's menu is not
+ * the one on screen — its states are filtered as a non-owner's, so a line it selected or a key it pressed acted on a
+ * window the user never saw (review 2026-10-05, SHARED report).
+ *
+ * @param key the transport-neutral capability key ({@link capabilityKeyOf})
+ * @returns true when only the owner may carry the write
+ */
+export function ownerOnlyWrite(key: string): boolean {
+  return key.startsWith("player.browse.") || key === "remote" || key.startsWith("remote.");
+}
+
+/**
  * Decide which transport owns a capability, given the transports that actually offer it on
  * this device. Default is the most modern; a census-driven override wins where the modern
  * transport would be lossy. An override that lists none of the present candidates falls back
@@ -179,4 +211,23 @@ export function pickOwner(key: string, candidates: readonly Transport[], unprove
   // present candidates while more than one is present — today it is unobservable.
   const owner = preference.find(t => pool.includes(t)) ?? MODERNITY.find(t => pool.includes(t));
   return owner ?? pool[0];
+}
+
+/**
+ * Transports in the order the owner policy prefers them for a capability.
+ *
+ * @param key the capability key
+ * @param candidates the transports to order
+ * @param unproven the candidates that claim without a proof
+ * @returns the candidates, most preferred first
+ */
+export function rankOf(key: string, candidates: readonly Transport[], unproven?: ReadonlySet<Transport>): Transport[] {
+  const rest = [...candidates];
+  const ranked: Transport[] = [];
+  while (rest.length > 0) {
+    const next = pickOwner(key, rest, unproven);
+    ranked.push(next);
+    rest.splice(rest.indexOf(next), 1);
+  }
+  return ranked;
 }

@@ -7,6 +7,9 @@ import {
 import type { ObjectDef } from "../catalog/types";
 import type { Transport } from "../catalog/owner-policy";
 import { emptyLearnedTree, type LearnedTree } from "./learned-tree";
+import { TransportConnectionAdapter } from "./transport-connection-adapter";
+import { catalogToObjects } from "../catalog/build-objects";
+import { INFO_ENTRIES } from "../catalog/info-objects";
 
 const silentLog = { debug: (): void => {}, info: (): void => {}, warn: (): void => {} };
 
@@ -851,6 +854,76 @@ describe("MultiTransportHandle — learned owners and the write fallback in deta
     expect(s.debug).toContain("living: power — ynca refused it, sent through xml");
   });
 
+  // YNCA allows one connection: a client like Home Assistant holding it at a restart keeps the owner away from
+  // this handle's start. It built nothing here, so a write could not be judged and never fell back
+  // (review 2026-10-05, A4) — while the same owner dropping mid-session did fall back.
+  describe("an owner away since the handle started (review 2026-10-05, A4)", () => {
+    const tree = (): LearnedTree => ({
+      shared: { power: ["ynca", "xml"], "remote.cursor": ["ynca", "xml"] },
+      transports: ["ynca", "xml"],
+      firmware: {},
+      settledVersion: "3.2.0",
+    });
+    const key = state("remote.cursor", "Cursor", { type: "string", role: "button", read: false });
+
+    test("a write falls back, judged on the form the owner left in the tree", async () => {
+      const xml = fakeConn("xml", [power, key]);
+      const s = learnSetup([xml], {
+        tree: tree(),
+        version: "3.2.0",
+        missing: ["ynca"],
+        existing: { power: { type: "state", common: power.common } },
+      });
+      await s.handle.start();
+      s.handle.handleStateChange("living.power", false, true);
+      await flush();
+      expect(xml.writes).toEqual([{ id: "power", value: true }]);
+      expect(s.debug).toContain("living: power — ynca offline, sent through xml");
+    });
+
+    test("without a form in the tree it cannot be judged, and nothing is sent", async () => {
+      const xml = fakeConn("xml", [power, key]);
+      const s = learnSetup([xml], { tree: tree(), version: "3.2.0", missing: ["ynca"] });
+      await s.handle.start();
+      s.handle.handleStateChange("living.power", false, true);
+      await flush();
+      expect(xml.writes).toEqual([]);
+      expect(s.debug).toContain("living: write to power — its transport (ynca) is offline");
+    });
+
+    test("a key the owner left in the tree is never sent a second way", async () => {
+      const xml = fakeConn("xml", [power, key]);
+      const s = learnSetup([xml], {
+        tree: tree(),
+        version: "3.2.0",
+        missing: ["ynca"],
+        existing: { "remote.cursor": { type: "state", common: key.common } },
+      });
+      await s.handle.start();
+      s.handle.handleStateChange("living.remote.cursor", false, "Up");
+      await flush();
+      expect(xml.writes).toEqual([]);
+    });
+  });
+
+  // Another transport's menu is not the one on screen: its browse states are filtered as a non-owner's, so a line it
+  // selected or a key it pressed would act on a window the user never saw.
+  test("a menu or remote-key write never falls back to another transport, in no zone", async () => {
+    const readable = (id: string): ObjectDef => state(id, id, { type: "string", role: "state" });
+    const ids = ["player.browse.selectLine", "remote.cursor", "multiroom.zone2.remote.menu"];
+    const ynca = fakeConn("ynca", ids.map(readable));
+    const xml = fakeConn("xml", ids.map(readable));
+    const s = learnSetup([ynca, xml]);
+    await s.handle.start();
+    ynca.outcome = "refused";
+    for (const id of ids) {
+      s.handle.handleStateChange(`living.${id}`, false, "1");
+    }
+    await flush();
+    expect(ynca.writes.map(w => w.id)).toEqual(ids);
+    expect(xml.writes).toEqual([]);
+  });
+
   test("a returning transport whose objects cannot be built is not taken in — its retry goes on", async () => {
     const ynca = fakeConn("ynca", [power]);
     const yxc = fakeConn("yxc", [state("dist.role", "Role")]);
@@ -942,6 +1015,41 @@ describe("MultiTransportHandle — the read-in completes once, with the receiver
     const second = learnSetup([same], { tree: first.tree() });
     await second.handle.start();
     expect(second.info).toEqual([]);
+  });
+
+  // A receiver updated in standby is read in once it is switched on — often in a later connection. The flag that
+  // said "this read-in came from a firmware update" lived in the connection that saw the update, and the later
+  // one closed the read-in without the ready line (review 2026-10-05, A54).
+  test("a firmware read-in completed by a later connection still ends with the ready line", async () => {
+    const store = {
+      tree: { shared: {}, transports: ["ynca"], firmware: { ynca: "1.80" }, settledVersion: "3.2.0" } as LearnedTree,
+    };
+    const connect = async (complete: boolean): Promise<string[]> => {
+      const info: string[] = [];
+      const ynca = Object.assign(fakeConn("ynca", [state("power", "Power")]), {
+        firmware: () => "1.90",
+        readComplete: () => complete,
+      });
+      const handle = new MultiTransportHandle("living", [ynca], {
+        upsertObject: () => Promise.resolve(),
+        log: { ...silentLog, info: (m: string) => info.push(m) },
+        adapterVersion: "3.2.0",
+        tree: { get: () => store.tree, set: tree => (store.tree = tree) },
+        settleTree: () => Promise.resolve(),
+      });
+      await handle.start();
+      handle.close();
+      return info;
+    };
+    expect(await connect(false)).toEqual([
+      "living: new firmware found (1.80 → 1.90) — reading the receiver again, this can take a few minutes",
+    ]);
+    expect(store.tree.settledVersion).toBeUndefined();
+    expect(await connect(true)).toEqual(["living: ready — YNCA ✓"]);
+    expect(store.tree.settledVersion).toBe("3.2.0");
+    expect(store.tree.firmwareUpdate).toBeUndefined();
+    // Read in: the next connection says nothing.
+    expect(await connect(true)).toEqual([]);
   });
 
   test("in standby the firmware line stands, the ready line waits for the switched-on read", async () => {
@@ -1143,5 +1251,355 @@ describe("MultiTransportHandle capture (diagnostics report)", () => {
     expect(objects).toHaveLength(written);
     expect(ynca.writes).toEqual([]);
     expect(yxc.writes).toEqual([]);
+  });
+});
+
+describe("MultiTransportHandle — a closed handle writes nothing more (review 2026-10-05, A6)", () => {
+  // A delete or a move closes the handle and removes or rebuilds the tree right after. The learn in flight wrote
+  // on: 19 objects landed in the deleted device, and on a move its settle could remove what the new handle had
+  // just created.
+  test("a learn in flight stops at its next write: no upsert starts, no transport is seeded after close", async () => {
+    const objects = [state("volume", "Volume")];
+    const ynca = fakeConn("ynca", objects);
+    const started: Array<{ id: string; afterClose: boolean }> = [];
+    let closed = false;
+    let slow = false;
+    const handle = new MultiTransportHandle("living", [ynca], {
+      upsertObject: async id => {
+        started.push({ id, afterClose: closed });
+        if (slow) {
+          await new Promise(resolve => setTimeout(resolve, 5));
+        }
+      },
+      log: silentLog,
+    });
+    await handle.start();
+    started.length = 0;
+    // A refresh adds 20 objects; the learn writes them one by one, each a database round trip.
+    for (let i = 0; i < 20; i++) {
+      objects.push(state(`sound.x${i}`, `X${i}`));
+    }
+    slow = true;
+    ynca.changeShape();
+    await new Promise(resolve => setTimeout(resolve, 12));
+    const seededAtClose = ynca.seeded.length;
+    handle.close();
+    closed = true;
+    await handle.settled();
+    expect(started.length).toBeGreaterThan(0);
+    expect(started.filter(write => write.afterClose)).toEqual([]);
+    expect(ynca.seeded.length).toBe(seededAtClose);
+  });
+
+  test("a read-in completing after close neither writes the tree nor settles it", async () => {
+    let release: () => void = () => undefined;
+    const settled: string[] = [];
+    const trees: LearnedTree[] = [];
+    const handle = new MultiTransportHandle("living", [fakeConn("ynca", [state("power", "Power")])], {
+      upsertObject: () => new Promise<void>(resolve => (release = resolve)),
+      log: silentLog,
+      adapterVersion: "3.2.0",
+      tree: { get: () => emptyLearnedTree(), set: tree => void trees.push(tree) },
+      settleTree: () => {
+        settled.push("settle");
+        return Promise.resolve();
+      },
+    });
+    const starting = handle.start();
+    await new Promise(resolve => setImmediate(resolve));
+    handle.close();
+    release();
+    await expect(starting).resolves.toEqual([]);
+    expect(trees).toEqual([]);
+    expect(settled).toEqual([]);
+  });
+});
+
+describe("MultiTransportHandle — a reconnect in flight and one that drops again (review 2026-10-05, A7/A52)", () => {
+  const power = state("power", "Power", { type: "boolean", role: "switch.power" });
+
+  // A YNCA reconnect sweeps for 20-40 s. When the device was deleted or moved meanwhile, or its last other
+  // transport dropped, the connection kept sweeping and then held the receiver's ONE YNCA connection: the next
+  // full reconnect failed on it.
+  test("close() closes a transport whose reconnect is still connecting, at once", async () => {
+    let release: (ok: boolean) => void = () => undefined;
+    const sweeping = fakeConn("ynca", [power]);
+    sweeping.connect = (): Promise<boolean> => new Promise<boolean>(resolve => (release = resolve));
+    const ynca = fakeConn("ynca", [power]);
+    const yxc = fakeConn("yxc", [power]);
+    const { handle, fireTimers, transportsReports } = reconnectSetup([ynca, yxc], { ynca: () => sweeping });
+    await handle.start();
+    ynca.drop(new Error("socket reset"));
+    await fireTimers(); // the reconnect starts: socket open, sweep running
+    expect(sweeping.closed).toBe(false);
+    handle.close();
+    expect(sweeping.closed).toBe(true);
+    const reports = transportsReports.length;
+    release(true);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(transportsReports).toHaveLength(reports);
+  });
+
+  // The fresh connection reports a drop it latched while it connected: it is gone again during its first learn.
+  test("a reconnect that drops during its first learn keeps its backoff and its timer, and says no reconnected", async () => {
+    const ynca = fakeConn("ynca", [power]);
+    const yxc = fakeConn("yxc", [power]);
+    const flaky = (): ConnectableTransport => {
+      const conn = fakeConn("ynca", [power]);
+      conn.onDrop = (cb: (reason?: Error) => void): void => cb(new Error("dropped while connecting"));
+      return conn;
+    };
+    const timers: Array<{ id: number; cb: () => void; ms: number }> = [];
+    const cancelled: unknown[] = [];
+    const logs: string[] = [];
+    const reports: string[][] = [];
+    let factories = 0;
+    const handle = new MultiTransportHandle("living", [ynca, yxc], {
+      upsertObject: () => Promise.resolve(),
+      log: { ...silentLog, debug: (m: string) => logs.push(m) },
+      onTransports: names => reports.push([...names]),
+      rebuild: flaky,
+      schedule: (cb, ms) => {
+        const id = timers.length + 1;
+        timers.push({ id, cb, ms });
+        return id;
+      },
+      cancel: id => void cancelled.push(id),
+      backoffFactory: () => {
+        factories++;
+        let n = 0;
+        return { nextDelay: () => 1000 * 2 ** n++, reset: () => (n = 0) };
+      },
+    });
+    await handle.start();
+    ynca.drop(new Error("socket reset"));
+    timers[0].cb();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(logs.some(line => line.includes("transport reconnected"))).toBe(false);
+    expect(reports.at(-1)).toEqual(["yxc"]);
+    // The next attempt is pending on the SAME backoff, one step further — not reset to the first delay.
+    expect(timers.map(timer => timer.ms)).toEqual([1000, 2000]);
+    expect(factories).toBe(1);
+    // And it is still the handle's: close cancels it.
+    handle.close();
+    expect(cancelled).toEqual([2]);
+  });
+
+  test("a reconnect that holds resets the backoff: the next outage starts at the first delay again", async () => {
+    const ynca = fakeConn("ynca", [power]);
+    const yxc = fakeConn("yxc", [power]);
+    const fresh = fakeConn("ynca", [power]);
+    const h = reconnectSetup([ynca, yxc], { ynca: () => fresh });
+    await h.handle.start();
+    ynca.drop(new Error("socket reset"));
+    await h.fireTimers();
+    expect(h.logs.some(line => line.includes("transport reconnected"))).toBe(true);
+    fresh.drop(new Error("socket reset"));
+    expect(h.delays).toEqual([1000, 1000]);
+  });
+});
+
+describe("MultiTransportHandle — what changes during the first learn is learned (review 2026-10-05, A8/F1)", () => {
+  const text = (id: string, extra: Record<string, unknown> = {}): ObjectDef => ({
+    id,
+    type: "state",
+    common: { name: id, type: "string", role: "state", read: true, write: true, ...extra },
+  });
+
+  // While the first learn writes (a database round trip), a push grows the input list and a brand-new datapoint
+  // appears with its value. The handle armed its signals only after that learn, so both were never learned — and
+  // the new datapoint's value was dropped — until some later, unrelated change.
+  test("a list grown and a datapoint built while the first learn writes are learned, with their values", async () => {
+    const written: string[] = [];
+    const acks: Array<[string, unknown]> = [];
+    const adapter = new TransportConnectionAdapter("yxc", "dev", (id, value) => void acks.push([id, value]));
+    adapter.bind({
+      start: async () => {
+        await adapter.interceptUpsert("dev.input", text("input", { states: { hdmi1: "HDMI1" } }));
+        adapter.interceptSetStateAck("dev.input", "hdmi1");
+        return true;
+      },
+      handleWrite: () => "sent",
+      onDrop: () => {},
+      close: () => {},
+    });
+    await adapter.connect();
+    let midLearn: (() => void) | undefined = () => {
+      void adapter.interceptUpsert("dev.input", text("input", { states: { hdmi1: "HDMI1", tv: "TV" } }));
+      void adapter.interceptUpsert("dev.sound.dialogueLevel", text("sound.dialogueLevel"));
+      adapter.interceptSetStateAck("dev.sound.dialogueLevel", "2");
+      adapter.interceptSetStateAck("dev.input", "tv");
+    };
+    const defs = new Map<string, ObjectDef>();
+    const handle = new MultiTransportHandle("dev", [adapter], {
+      upsertObject: async (id, def) => {
+        written.push(id);
+        defs.set(id, def);
+        const fire = midLearn;
+        midLearn = undefined;
+        fire?.();
+        await new Promise(resolve => setTimeout(resolve, 1));
+      },
+      log: silentLog,
+    });
+    await handle.start();
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(written).toContain("dev.sound.dialogueLevel");
+    expect(defs.get("dev.input")?.common.states).toEqual({ hdmi1: "HDMI1", tv: "TV" });
+    expect(acks).toContainEqual(["dev.sound.dialogueLevel", "2"]);
+    expect(acks.filter(([id]) => id === "dev.input").at(-1)).toEqual(["dev.input", "tv"]);
+    handle.close();
+  });
+
+  // The YNCA controller tells its listeners once when the switched-on read is complete; a read completing during
+  // the first learn found no listener yet.
+  test("a read that became complete during the first learn completes the read-in", async () => {
+    let complete = false;
+    const ynca = Object.assign(fakeConn("ynca", [state("power", "Power")]), {
+      readComplete: () => complete,
+      onReadComplete: (): void => undefined,
+    });
+    const settled: Array<ReadonlySet<string>> = [];
+    const handle = new MultiTransportHandle("living", [ynca], {
+      upsertObject: () => {
+        complete = true;
+        return Promise.resolve();
+      },
+      log: silentLog,
+      adapterVersion: "3.2.0",
+      tree: { get: () => emptyLearnedTree(), set: () => undefined },
+      settleTree: built => {
+        settled.push(built);
+        return Promise.resolve();
+      },
+    });
+    await handle.start();
+    await new Promise(resolve => setImmediate(resolve));
+    expect(settled).toHaveLength(1);
+    handle.close();
+  });
+
+  // A background refresh republishes every object with a grown list: one signal per object queued one full learn
+  // per object — a coordination and a fingerprint of the whole tree each, 3.4 s of event loop for 1000. Coalesced,
+  // a learn takes what changed while the one before it ran (measured: 19 learns, 146 ms), and each changed object
+  // is written once.
+  test("a refresh that changes 1000 objects is learned in a few learns, each object written once", async () => {
+    const N = 1000;
+    const big = (id: string, rev: number): ObjectDef => text(id, { states: { a: "A", b: "B", [`r${rev}`]: "R" } });
+    const adapter = new TransportConnectionAdapter("ynca", "dev", () => {});
+    adapter.bind({
+      start: async () => {
+        for (let i = 0; i < N; i++) {
+          await adapter.interceptUpsert(`dev.s${i}`, big(`s${i}`, 0));
+        }
+        return true;
+      },
+      handleWrite: () => "sent",
+      onDrop: () => {},
+      close: () => {},
+    });
+    await adapter.connect();
+    const snapshot = adapter.buildObjects.bind(adapter);
+    let learns = 0;
+    adapter.buildObjects = (): readonly ObjectDef[] => {
+      learns++;
+      return snapshot();
+    };
+    let upserts = 0;
+    const handle = new MultiTransportHandle("dev", [adapter], {
+      upsertObject: () => {
+        upserts++;
+        return Promise.resolve();
+      },
+      log: silentLog,
+    });
+    await handle.start();
+    learns = 0;
+    upserts = 0;
+    for (let i = 0; i < N; i++) {
+      await adapter.interceptUpsert(`dev.s${i}`, big(`s${i}`, 1));
+    }
+    let last = -1;
+    while (last !== learns) {
+      last = learns;
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    expect(learns).toBeGreaterThan(0);
+    expect(learns).toBeLessThan(N / 20);
+    expect(upserts).toBe(N);
+    handle.close();
+  });
+});
+
+describe("the model and the firmware reach the tree over every protocol (review 2026-10-05, A5)", () => {
+  /**
+   * A transport whose controller builds info.model/info.firmware from the one definition and reports them.
+   *
+   * @param transport the protocol
+   * @param model the model it reports
+   * @param firmware the firmware it reports
+   * @param acks where the values the tree gets land
+   * @returns the transport behind its adapter
+   */
+  function reporting(
+    transport: Transport,
+    model: string,
+    firmware: string,
+    acks: Array<[string, unknown]>,
+  ): TransportConnectionAdapter {
+    const adapter = new TransportConnectionAdapter(transport, "dev", (id, value) => void acks.push([id, value]));
+    adapter.bind({
+      start: async () => {
+        for (const def of catalogToObjects([...INFO_ENTRIES])) {
+          await adapter.interceptUpsert(`dev.${def.id}`, def);
+        }
+        adapter.interceptSetStateAck("dev.info.model", model);
+        adapter.interceptSetStateAck("dev.info.firmware", firmware);
+        return true;
+      },
+      handleWrite: () => "sent",
+      onDrop: () => {},
+      close: () => {},
+    });
+    return adapter;
+  }
+
+  test("with YNCA and MusicCast, YNCA's values stand — as they did before every protocol built them", async () => {
+    const acks: Array<[string, unknown]> = [];
+    const ynca = reporting("ynca", "RX-V6A", "1.10/2.40", acks);
+    const yxc = reporting("yxc", "RX-V6A", "2.40", acks);
+    await Promise.all([ynca.connect(), yxc.connect()]);
+    const objects: string[] = [];
+    const handle = new MultiTransportHandle("dev", [ynca, yxc], {
+      upsertObject: id => {
+        objects.push(id);
+        return Promise.resolve();
+      },
+      log: silentLog,
+    });
+    await handle.start();
+    expect(objects.filter(id => id === "dev.info.firmware")).toHaveLength(1);
+    expect(acks).toEqual([
+      ["dev.info.model", "RX-V6A"],
+      ["dev.info.firmware", "1.10/2.40"],
+    ]);
+    handle.close();
+  });
+
+  test("without YNCA, MusicCast's model and firmware reach the tree", async () => {
+    const acks: Array<[string, unknown]> = [];
+    const yxc = reporting("yxc", "WX-030", "2.16", acks);
+    const xml = reporting("xml", "WX-030", "1.00", acks);
+    await Promise.all([yxc.connect(), xml.connect()]);
+    const handle = new MultiTransportHandle("dev", [xml, yxc], {
+      upsertObject: () => Promise.resolve(),
+      log: silentLog,
+    });
+    await handle.start();
+    expect(acks).toEqual([
+      ["dev.info.model", "WX-030"],
+      ["dev.info.firmware", "2.16"],
+    ]);
+    handle.close();
   });
 });

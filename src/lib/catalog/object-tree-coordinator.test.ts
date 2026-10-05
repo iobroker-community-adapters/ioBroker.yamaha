@@ -408,6 +408,107 @@ describe("keepsForm", () => {
     expect(keepsForm(existing({ write: true }), live({ write: false }))).toBe(false);
     expect(keepsForm(existing({ states: { HDMI1: "HDMI1" } }), live({ states: { hdmi1: "HDMI1" } }))).toBe(false);
   });
+
+  // XML labelled its switches with its description's On/Standby, and lent them on (review 2026-10-05, A19). A
+  // tree that still carries them must not keep another transport from taking the switch over.
+  test("a switch's labels are no values: true and false are kept whatever words they carry", () => {
+    const labelled = existing({ type: "boolean", states: { On: "On", Standby: "Standby" } });
+    expect(keepsForm(labelled, live({ type: "boolean" }))).toBe(true);
+  });
+});
+
+describe("a switch takes no list from another transport (review 2026-10-05, A19)", () => {
+  // XML put its description's words on its switches; lent on, YNCA's and MusicCast's boolean power got a dropdown
+  // whose "Standby" sent nothing.
+  test("XML's On/Standby is lent neither to YNCA's nor to MusicCast's boolean power", () => {
+    const power = (states?: Record<string, string>): ObjectDef =>
+      state("power", "Power", { type: "boolean", role: "switch.power", ...(states ? { states } : {}) });
+    const xml = { transport: "xml" as const, objects: [power({ On: "On", Standby: "Standby" })] };
+    for (const owner of ["ynca", "yxc"] as const) {
+      const { objects, ownerByCanonicalId } = coordinateObjectTree([{ transport: owner, objects: [power()] }, xml]);
+      expect(ownerByCanonicalId.get("power")).toBe(owner);
+      expect(objects.find(o => o.id === "power")?.common.states).toBeUndefined();
+    }
+  });
+});
+
+describe("the labels' origin travels with the list (liveLabels, krobi 2026-10-05)", () => {
+  const input = (
+    states: Record<string, string> | undefined,
+    flags: { declared?: boolean; live?: boolean } = {},
+  ): ObjectDef => ({
+    id: "input",
+    type: "state",
+    ...(flags.declared ? { declaredStates: true } : {}),
+    ...(flags.live ? { liveLabels: true } : {}),
+    common: {
+      name: "Input",
+      type: "string",
+      role: "media.input",
+      read: true,
+      write: true,
+      ...(states ? { states } : {}),
+    },
+  });
+  const resolve = (...contributions: Parameters<typeof coordinateObjectTree>[0]): ObjectDef | undefined =>
+    coordinateObjectTree(contributions).objects.find(o => o.id === "input");
+
+  test("the owner's own list keeps the owner's flag", () => {
+    expect(
+      resolve({ transport: "yxc", objects: [input({ hdmi1: "Living TV" }, { declared: true, live: true })] }),
+    ).toMatchObject({ liveLabels: true });
+  });
+
+  test("a list lent to an owner without one brings the lender's flag", () => {
+    const lent = resolve(
+      { transport: "ynca", objects: [input(undefined)] },
+      { transport: "xml", objects: [input({ HDMI1: "Living TV" }, { live: true })] },
+    );
+    expect(lent?.common.states).toEqual({ HDMI1: "Living TV" });
+    expect(lent?.liveLabels).toBe(true);
+  });
+
+  test("a declaration adopted over the owner's union brings the lender's flag, not the owner's", () => {
+    const adopted = resolve(
+      { transport: "ynca", objects: [input({ HDMI1: "HDMI1", AV1: "AV1" })] },
+      { transport: "xml", objects: [input({ HDMI1: "Living TV" }, { declared: true, live: true })] },
+    );
+    expect(adopted?.common.states).toEqual({ HDMI1: "Living TV" });
+    expect(adopted?.liveLabels).toBe(true);
+    const fixed = resolve(
+      { transport: "ynca", objects: [input({ HDMI1: "Living TV", AV1: "AV1" }, { live: true })] },
+      { transport: "xml", objects: [input({ HDMI1: "HDMI1" }, { declared: true })] },
+    );
+    expect(fixed?.liveLabels).toBeUndefined();
+  });
+
+  // The dictionary gives words, not the names the user gave: YNCA's INPNAME labels (Y-25) stay on the values it
+  // labels, with its flag, and only a value YNCA does not label gets the dictionary's word.
+  test("a MusicCast declaration through the dictionary keeps the owner's names and flag", () => {
+    const translated = resolve(
+      { transport: "ynca", objects: [input({ HDMI1: "Living TV", AV1: "AV1" }, { live: true })] },
+      {
+        transport: "yxc",
+        objects: [input({ hdmi1: "Living TV", net_radio: "Radio" }, { declared: true, live: true })],
+      },
+    );
+    expect(translated?.common.states).toEqual({ HDMI1: "Living TV", "NET RADIO": "NET RADIO" });
+    expect(translated?.declaredStates).toBe(true);
+    expect(translated?.liveLabels).toBe(true);
+  });
+});
+
+describe("canCarryWrite and a switch with labels (review 2026-10-05, A19)", () => {
+  test("a write to a switch falls back between vocabularies — true is true over every protocol", () => {
+    const yxcPower = state("power", "Power", { type: "boolean", role: "switch.power" });
+    const xmlPower = state("power", "Power", {
+      type: "boolean",
+      role: "switch.power",
+      states: { On: "On", Standby: "Standby" },
+    });
+    expect(canCarryWrite({ transport: "yxc", def: yxcPower }, { transport: "xml", def: xmlPower })).toBe(true);
+    expect(canCarryWrite({ transport: "yxc", def: xmlPower }, { transport: "xml", def: yxcPower })).toBe(true);
+  });
 });
 
 describe("a learned owner and the write fallback (2026-10-02)", () => {

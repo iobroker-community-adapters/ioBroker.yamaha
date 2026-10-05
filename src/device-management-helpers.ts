@@ -3,9 +3,11 @@ import { tName } from "./lib/i18n";
 import { RESERVED_DEVICE_IDS } from "./lib/device-id";
 import { IPV4_RE } from "./lib/network-interfaces";
 import { rowDeviceId, type DeviceRow } from "./lib/pure-helpers";
-import type { DeviceSource } from "./lib/types";
 
-/** A running device as shown on a card, plus which source it came from. */
+/**
+ * A running device as shown on a card. Nothing on it says how the device got into the list — a found card and a typed
+ * one are the same card (Y-27); the field that said so was carried and never read (review 2026-10-05, C4).
+ */
 export interface CardDevice {
   /** The id-safe device id (object-tree path segment). */
   id: string;
@@ -13,8 +15,6 @@ export interface CardDevice {
   ip: string;
   /** The card header name. */
   name: string;
-  /** Where it lives: the manual `native.devices` table, or the auto-discovery store. */
-  source: DeviceSource;
 }
 
 /**
@@ -61,6 +61,19 @@ export function buildDeviceForm(usedIps: readonly string[]): JsonFormSchema {
       },
     },
   } as unknown as JsonFormSchema;
+}
+
+/**
+ * The addresses the add and the edit dialog refuse: every card's but the edited one's — the table rows AND the found
+ * devices. The add dialog listed the table rows only, so a found receiver's address could be typed in as a second card
+ * while the edit dialog refused it (review 2026-10-05, E).
+ *
+ * @param cards the cards as the list shows them
+ * @param exceptId the card being edited, if any
+ * @returns the addresses that are taken
+ */
+export function takenAddresses(cards: readonly CardDevice[], exceptId?: string): string[] {
+  return cards.filter(card => card.id !== exceptId).map(card => card.ip);
 }
 
 /**

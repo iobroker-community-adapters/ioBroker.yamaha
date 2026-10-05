@@ -1,5 +1,6 @@
 import { volumeIndicatorIcon } from "./lib/device-type";
 import type { Mock } from "vitest";
+import type * as DiscoveredStoreModule from "./lib/discovered-store";
 // tName() returns the key (with its arguments when it has any) so the tests assert on
 // the message CHOICE, not on wording.
 vi.mock("./lib/i18n", () => ({ tName: (key: string, ...args: unknown[]) => (args.length ? { key, args } : key) }));
@@ -11,24 +12,58 @@ const store = vi.hoisted(() => ({
   devices: [] as Array<{ id: string; ip: string }>,
   ignored: [] as string[],
   excluded: [] as Array<{ id: string; ip?: string; identity?: { serial?: string; mac?: string } }>,
+  /** `discovered.json` cannot be read (a damaged file). */
+  discoveredUnreadable: false,
+  /** `excluded.json` cannot be read (a damaged file). */
+  excludedUnreadable: false,
 }));
-vi.mock("./lib/discovered-store", () => ({
-  readDiscovered: vi.fn(() => Promise.resolve(store.devices)),
-  writeDiscovered: vi.fn((_deps: unknown, devices: Array<{ id: string; ip: string }>) => {
-    store.devices = devices;
-    return Promise.resolve();
-  }),
-  readIgnored: vi.fn(() => Promise.resolve(store.ignored)),
-  writeIgnored: vi.fn((_deps: unknown, ids: string[]) => {
-    store.ignored = [...ids];
-    return Promise.resolve();
-  }),
-  readExcluded: vi.fn(() => Promise.resolve(store.excluded)),
-  writeExcluded: vi.fn((_deps: unknown, entries: ExcludedEntry[]) => {
-    store.excluded = [...entries];
-    return Promise.resolve();
-  }),
-}));
+vi.mock("./lib/discovered-store", async importOriginal => {
+  // The matcher stays real. A read answers with a COPY, as a file does; a file that cannot be read answers empty and says
+  // so through the reader's callback.
+  const actual = await importOriginal<typeof DiscoveredStoreModule>();
+  const read =
+    <T>(list: () => T[], broken: () => boolean) =>
+    (_deps: unknown, unreadable?: (problem: string) => void): Promise<T[]> => {
+      if (broken()) {
+        unreadable?.("Unexpected end of JSON input");
+        return Promise.resolve([]);
+      }
+      return Promise.resolve(structuredClone(list()));
+    };
+  return {
+    isExcluded: actual.isExcluded,
+    readDiscovered: vi.fn(
+      read(
+        () => store.devices,
+        () => store.discoveredUnreadable,
+      ),
+    ),
+    writeDiscovered: vi.fn((_deps: unknown, devices: Array<{ id: string; ip: string }>) => {
+      store.devices = devices;
+      return Promise.resolve(true);
+    }),
+    readIgnored: vi.fn(
+      read(
+        () => store.ignored,
+        () => false,
+      ),
+    ),
+    writeIgnored: vi.fn((_deps: unknown, ids: string[]) => {
+      store.ignored = [...ids];
+      return Promise.resolve(true);
+    }),
+    readExcluded: vi.fn(
+      read(
+        () => store.excluded,
+        () => store.excludedUnreadable,
+      ),
+    ),
+    writeExcluded: vi.fn((_deps: unknown, entries: ExcludedEntry[]) => {
+      store.excluded = [...entries];
+      return Promise.resolve(true);
+    }),
+  };
+});
 // Asking a device who it is goes over the network — answered here, nothing by default (a device
 // that is off, or speaks YNCA only).
 const identify = vi.hoisted(() => ({
@@ -315,6 +350,8 @@ describe("YamahaDeviceManagement", () => {
     store.devices = [];
     store.ignored = [];
     store.excluded = [];
+    store.discoveredUnreadable = false;
+    store.excludedUnreadable = false;
     identify.report = {};
     identify.asked = [];
     vi.clearAllMocks();
@@ -591,6 +628,18 @@ describe("YamahaDeviceManagement", () => {
       expect(schema.items.ip.validator).toContain("192.168.1.11");
     });
 
+    // Review 2026-10-05, E (proof test REVIEW E): the add dialog listed the table rows only, the edit dialog every card —
+    // a found receiver's address could be typed in as a second card.
+    it("refuses the found devices' addresses as well, like the edit dialog", async () => {
+      store.devices = [{ id: "rx-v685", ip: "192.168.1.20" }];
+      const i = make([living]);
+      const ctx = mockContext({ form: undefined });
+      await i.addDevice(ctx);
+      const schema = ctx.showForm.mock.calls[0][0] as FormSchema;
+      expect(schema.items.ip.validator).toContain("192.168.1.20");
+      expect(schema.items.ip.validator).toContain("192.168.1.10");
+    });
+
     it("writes nothing on cancel or a blank IP", async () => {
       for (const form of [undefined, { ip: "   " }, { name: "X" }, { ip: 42 }]) {
         const i = make([living]);
@@ -715,6 +764,46 @@ describe("YamahaDeviceManagement", () => {
         common: { name: "Lounge" },
         native: { label: "Lounge", labelRank: LABEL_RANK.user },
       });
+    });
+
+    // Review 2026-10-05, A10 (proof test REVIEW E): every edit rewrote the table — and a write of the instance object
+    // restarts the instance — even when only the percent switch or the name changed; a 0.5.4-migrated row came back
+    // as { id, name: id, ip }, counted as TYPED from then on, stopped following the receiver and, under "Automatic",
+    // switched the network search off.
+    it("toggling only the percent switch of a migrated row writes no table, and the row stays migrated", async () => {
+      const migrated = { name: "192.168.1.10", ip: "192.168.1.10" };
+      expect(parseDevices([migrated])[0].source).toBe("migrated");
+      const i = make([migrated], {}, { "yamaha.0.192_168_1_10": { native: { volumeAsPercent: false } } });
+      await i.editDevice(
+        "192_168_1_10",
+        mockContext({ form: { name: "192.168.1.10", ip: "192.168.1.10", volumeAsPercent: true } }),
+      );
+      expect(adapter.setVolumePercent).toHaveBeenCalledWith("192_168_1_10", true);
+      adapter._runDeferred();
+      const tableWrites = adapter.extendForeignObjectAsync.mock.calls.filter(
+        (c: unknown[]) => c[0] === "system.adapter.yamaha.0",
+      );
+      expect(tableWrites).toHaveLength(0);
+      expect(parseDevices(adapter._stored())[0].source).toBe("migrated");
+    });
+
+    it("renaming a card at the same address writes no table — no restart for a display name", async () => {
+      const i = make([{ name: "Living room", ip: "192.168.1.10" }]);
+      await i.editDevice("Living_room", mockContext({ form: { name: "Lounge", ip: "192.168.1.10" } }));
+      adapter._runDeferred();
+      expect(adapter.extendForeignObjectAsync).not.toHaveBeenCalled();
+      expect(adapter.writeDeviceObject).toHaveBeenCalledWith("Living_room", {
+        common: { name: "Lounge" },
+        native: { label: "Lounge", labelRank: LABEL_RANK.user },
+      });
+    });
+
+    it("a migrated row given a new address keeps its address name — it goes on following the receiver", async () => {
+      const i = make([{ name: "192.168.1.10", ip: "192.168.1.10" }]);
+      await i.editDevice("192_168_1_10", mockContext({ form: { name: "", ip: "192.168.1.77" } }));
+      adapter._runDeferred();
+      expect(adapter._stored()).toEqual([{ name: "192.168.1.10", ip: "192.168.1.77" }]);
+      expect(parseDevices(adapter._stored())[0]).toMatchObject({ id: "192_168_1_10", source: "migrated" });
     });
 
     it("does nothing for a card that is no longer in the table", async () => {
@@ -861,14 +950,56 @@ describe("YamahaDeviceManagement", () => {
     });
   });
 
-  it("an adapter that lacks one of the four owner methods gets no owner — the backend never calls into a partial surface", async () => {
-    // The device manager reaches into the running adapter for four things; a partial surface
-    // (an older adapter build, a test double) must not pass as the owner and then throw.
-    store.excluded = [{ id: "Kitchen", ip: "192.168.1.11" }];
-    const i = make([]);
-    delete adapter.rediscoverNow;
-    await expect(i.excludedDevices(mockContext({ form: { Kitchen: true } }))).resolves.toEqual({ refresh: true });
-    expect(writeExcluded).toHaveBeenCalledWith({}, []);
+  // Review 2026-10-05, A28/A31: a broken excluded.json read as empty — the next delete wrote ONE entry over all the earlier
+  // ones and those devices came back with the next search; and a deleted device a failed store write left behind came back
+  // as a card.
+  describe("the found/deleted lists that cannot be read, or are out of step", () => {
+    it("a deleted device a failed write left in the store gets no card", async () => {
+      store.devices = [
+        { id: "rx-v685", ip: "192.168.1.20" },
+        { id: "wx-021", ip: "192.168.1.21" },
+      ];
+      store.excluded = [{ id: "rx-v685", ip: "192.168.1.20" }];
+      expect((await cards([])).map(card => card.id)).toEqual(["wx-021"]);
+    });
+
+    it("a delete whose exclusion cannot be recorded deletes nothing and says why", async () => {
+      store.devices = [{ id: "rx-v685", ip: "192.168.1.20" }];
+      store.excludedUnreadable = true;
+      const i = make([]);
+      await expect(i.deleteDevice("rx-v685")).rejects.toThrow(/excluded\.json cannot be read.*not deleted/);
+      expect(writeExcluded).not.toHaveBeenCalled();
+      expect(store.devices).toEqual([{ id: "rx-v685", ip: "192.168.1.20" }]);
+      expect(adapter.removeDevice).not.toHaveBeenCalled();
+      // Through the card's action the user reads it, and the list reloads.
+      const ctx = mockContext();
+      const del = (await cards([]))[0].actions.find(action => action.id === "delete");
+      await expect(del?.handler("rx-v685", ctx)).resolves.toEqual({ refresh: "devices" });
+      expect(ctx.showMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it("a delete whose exclusion write fails deletes nothing either", async () => {
+      store.devices = [{ id: "rx-v685", ip: "192.168.1.20" }];
+      (writeExcluded as Mock).mockImplementationOnce(() => Promise.resolve(false)); // a full disk
+      const i = make([]);
+      await expect(i.deleteDevice("rx-v685")).rejects.toThrow(/could not be written.*not deleted/);
+      expect(store.devices).toEqual([{ id: "rx-v685", ip: "192.168.1.20" }]);
+      expect(adapter.removeDevice).not.toHaveBeenCalled();
+    });
+
+    it("the excluded-devices dialog does not show a list it cannot read as empty", async () => {
+      store.excludedUnreadable = true;
+      const i = make([]);
+      const ctx = mockContext({ form: {} });
+      await expect(i.excludedDevices(ctx)).rejects.toThrow(/excluded\.json cannot be read/);
+      expect(ctx.showForm).not.toHaveBeenCalled();
+    });
+
+    it("an unreadable discovery store hides no table row and changes nothing", async () => {
+      store.discoveredUnreadable = true;
+      expect((await cards([living])).map(card => card.id)).toEqual(["Living_room"]);
+      expect(writeDiscovered).not.toHaveBeenCalled();
+    });
   });
 
   describe("excluded devices", () => {

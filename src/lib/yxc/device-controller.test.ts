@@ -1,4 +1,7 @@
 import { YxcRefusalError, YxcTransportError } from "./http-client";
+import { HttpStatusError } from "../util";
+import cdNt670d from "./__fixtures__/cd_nt670d.json";
+import wx30 from "./__fixtures__/WX30_317_208.json";
 import { nameTextLabels, YxcDeviceController, zoneNameFrom } from "./device-controller";
 import type { YxcClientLike } from "./device-controller";
 import type { ObjectDef } from "../catalog/types";
@@ -10,6 +13,7 @@ import { CommandGate } from "../lifecycle/command-gate";
 import { ProbeMemory } from "../lifecycle/probe-memory";
 import { DISCOVERY_SCHEMA } from "../lifecycle/discovery-schema";
 import { PushLiveness } from "./push-liveness";
+import { TransportConnectionAdapter } from "../lifecycle/transport-connection-adapter";
 
 /** A real command gate for the controller under test (pacing has its own suite). */
 const testGate = (): CommandGate =>
@@ -81,6 +85,8 @@ interface FakeClient extends YxcClientLike {
   failNameText: boolean;
   /** The getFuncStatus answer (default: an empty success — no device-wide settings). */
   funcStatus: unknown;
+  /** The methods called through the user-priority twin (`forUser`), in order — they are in `calls` too. */
+  userCalls: string[];
 }
 
 /**
@@ -113,6 +119,7 @@ function makeFakeClient(features: unknown, status: unknown): FakeClient {
     /** When set, every command that is not a read answer rejects with it (a write that never reaches the device). */
     failWrites: undefined as Error | undefined,
     funcStatus: {},
+    userCalls: [] as string[],
   };
   // The answers that are more than "an empty success".
   const replies: Record<string, (args: unknown[]) => unknown> = {
@@ -164,34 +171,46 @@ function makeFakeClient(features: unknown, status: unknown): FakeClient {
         client_list: state.distRole === "server" ? ["1.2.3.5"] : [],
       },
   };
-  return new Proxy(state, {
-    get: (target, prop: string) => {
-      if (prop in target) {
-        return target[prop];
-      }
-      return (...args: unknown[]) => {
-        // Trailing optional arguments the caller left out are not recorded — otherwise
-        // getPlayInfo() would show up as [undefined] instead of [].
-        const recorded = [...args];
-        while (recorded.length > 0 && recorded[recorded.length - 1] === undefined) {
-          recorded.pop();
+  // The device's client and its user-priority twin (`forUser`, review 2026-10-05, A58) share one state; a call
+  // through the twin is recorded in `calls` like any other and, by method, in `userCalls`.
+  const twin: { user?: FakeClient } = {};
+  const client = (user: boolean): FakeClient =>
+    new Proxy(state, {
+      get: (target, prop: string) => {
+        if (prop === "forUser") {
+          return () => twin.user;
         }
-        (target.calls as Array<{ method: string; args: unknown[] }>).push({ method: prop, args: recorded });
-        if (target.failWrites instanceof Error && !(prop in replies)) {
-          return Promise.reject(target.failWrites);
+        if (prop in target) {
+          return target[prop];
         }
-        try {
-          return Promise.resolve(replies[prop]?.(args) ?? {});
-        } catch (e) {
-          return Promise.reject(e instanceof Error ? e : new Error(String(e)));
-        }
-      };
-    },
-    set: (target, prop: string, value) => {
-      target[prop] = value;
-      return true;
-    },
-  }) as unknown as FakeClient;
+        return (...args: unknown[]) => {
+          // Trailing optional arguments the caller left out are not recorded — otherwise
+          // getPlayInfo() would show up as [undefined] instead of [].
+          const recorded = [...args];
+          while (recorded.length > 0 && recorded[recorded.length - 1] === undefined) {
+            recorded.pop();
+          }
+          (target.calls as Array<{ method: string; args: unknown[] }>).push({ method: prop, args: recorded });
+          if (user) {
+            (target.userCalls as string[]).push(prop);
+          }
+          if (target.failWrites instanceof Error && !(prop in replies)) {
+            return Promise.reject(target.failWrites);
+          }
+          try {
+            return Promise.resolve(replies[prop]?.(args) ?? {});
+          } catch (e) {
+            return Promise.reject(e instanceof Error ? e : new Error(String(e)));
+          }
+        };
+      },
+      set: (target, prop: string, value) => {
+        target[prop] = value;
+        return true;
+      },
+    }) as unknown as FakeClient;
+  twin.user = client(true);
+  return client(false);
 }
 
 function setup(
@@ -203,7 +222,6 @@ function setup(
     pushLiveness?: PushLiveness;
     gate?: CommandGate;
     host?: string;
-    reportDeclaredAbsent?: (ids: string[]) => void;
     aliasZone?: (from: string, to: string) => void;
     probeMemory?: ProbeMemory;
   } = {},
@@ -322,16 +340,6 @@ function setup(
 }
 
 describe("YxcDeviceController", () => {
-  // The update from 2.12.0 left a zone's maximum volume behind where the zone has no volume: the
-  // controller now says what its declaration proves absent, so the adapter removes it at once.
-  test("start() reports what getFeatures proves absent, and builds none of it", async () => {
-    const absent: string[] = [];
-    const s = setup(wx10, ysp, {}, undefined, { reportDeclaredAbsent: ids => void absent.push(...ids) });
-    await s.controller.start();
-    expect(absent.length).toBeGreaterThan(0);
-    expect(absent.filter(id => s.objects.includes(`living.${id}`))).toEqual([]);
-  });
-
   test("builds the object tree from getFeatures", async () => {
     const s = setup(wx10, ysp);
     expect(await s.controller.start()).toBe(true);
@@ -352,13 +360,17 @@ describe("YxcDeviceController", () => {
     expect(empty.fire.pushDeviceId).toBeUndefined();
   });
 
-  test("reports the model from getDeviceInfo into the adapter-created info.model", async () => {
+  // MusicCast reported the model but built no object for it: the transport adapter dropped the value, and every
+  // device without YNCA showed no model and no firmware (review 2026-10-05, A5).
+  test("builds info.model and info.firmware from the shared definition and reports both", async () => {
     const s = setup(wx10, ysp);
-    s.client.deviceInfo = { model_name: "WX-010" };
+    s.client.deviceInfo = { model_name: "WX-010", system_version: 2.16 };
     await s.controller.start();
-    // The object itself is created once by the adapter (ensureDeviceHeader) for every
-    // device, offline ones included — the transport only fills in the value.
     expect(s.acks).toContainEqual({ id: "living.info.model", value: "WX-010" });
+    expect(s.acks).toContainEqual({ id: "living.info.firmware", value: "2.16" });
+    expect(s.defs.get("living.info.model")?.common).toMatchObject({ type: "string", role: "text", write: false });
+    expect(s.defs.get("living.info.firmware")?.common).toMatchObject({ type: "string", role: "text", write: false });
+    expect(s.objects).toContain("living.info");
   });
 
   // An answer without a model is no identity (YNCA and XML guard the same way): until 3.1.3 it threw away what
@@ -771,7 +783,7 @@ describe("YxcDeviceController", () => {
     s.client.calls.length = 0;
     void s.controller.handleWrite("player.play", true);
     await flush();
-    expect(s.client.calls).toContainEqual({ method: "setCDPlayback", args: ["play"] });
+    expect(s.client.calls).toContainEqual({ method: "setPlayback", args: ["cd", "play"] });
     // Same button while the zone plays no media source: no transport call goes out.
     const idle = setup(features, { power: "on", input: "hdmi1" });
     await idle.controller.start();
@@ -2015,84 +2027,57 @@ describe("YxcDeviceController recall routing (which zone gets the favourite)", (
   const twoZones = {
     system: {},
     zone: [
-      { id: "main", func_list: ["power"], input_list: ["hdmi1", "net_radio"] },
-      { id: "zone2", func_list: ["power"], input_list: ["net_radio"] },
+      { id: "main", func_list: ["power"], input_list: ["hdmi1", "net_radio", "tuner"] },
+      { id: "zone2", func_list: ["power"], input_list: ["hdmi1", "net_radio", "tuner"] },
     ],
     netusb: {},
+    tuner: { func_list: ["fm"], preset: { type: "common", num: 40 } },
   };
 
-  /** Set up a two-zone device where main plays HDMI and zone 2 plays net radio. */
-  function twoZoneSetup(): Promise<{ controller: YxcDeviceController; client: FakeClient }> {
-    const client = makeFakeClient(twoZones, { response_code: 0 });
-    // getStatus answers per zone via the recorded call; the controller stores each zone's input.
-    const controller = new YxcDeviceController("living", {
-      gate: testGate(),
-      pushLiveness: new PushLiveness(),
-      probeMemory: new ProbeMemory({ __schema: DISCOVERY_SCHEMA }),
-      client,
-      registerPush: () => () => {},
-      scheduleKeepalive: () => () => {},
-      upsertObject: async () => {},
-      setStateAck: () => {},
-      log: silentLog,
-    });
-    return Promise.resolve({ controller, client });
+  /**
+   * A started two-zone device, both zones switched on — through the public surface only: the zones report their
+   * inputs, the network player its source (the routing has its own module and suite, `player-routing.test.ts`).
+   *
+   * @param main the main zone's input
+   * @param zone2 zone 2's input
+   * @param network the network player's source
+   * @returns the started setup, its calls cleared
+   */
+  async function started(main: string, zone2: string, network: string): Promise<ReturnType<typeof setup>> {
+    const s = setup(twoZones, { power: "on", input: main });
+    s.client.statusByZone = { main: { power: "on", input: main }, zone2: { power: "on", input: zone2 } };
+    s.client.playInfo = { input: network, playback: "play" };
+    await s.controller.start();
+    s.client.calls.length = 0;
+    return s;
   }
 
   test("a favourite goes to the zone that is listening to the network player, not always to main", async () => {
-    const { controller, client } = await twoZoneSetup();
-    // Main is on HDMI, zone 2 on net radio — and the network player plays net radio.
-    const inner = controller as unknown as {
-      lastZoneInput: Map<string, string>;
-      lastNetusbInput: string;
-      applyCommand(stateId: string, command: unknown): Promise<void>;
-    };
-    inner.lastZoneInput.set("main", "hdmi1");
-    inner.lastZoneInput.set("zone2", "net_radio");
-    inner.lastNetusbInput = "net_radio";
-    await inner.applyCommand("player.netPlayer.preset", { kind: "netusbPreset", value: 3 });
-    expect(client.calls).toContainEqual({ method: "recallPreset", args: [3, "zone2"] });
+    const s = await started("hdmi1", "net_radio", "net_radio");
+    void s.controller.handleWrite("player.netPlayer.preset", 3);
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "recallPreset", args: [3, "zone2"] });
   });
 
   test("main wins when it is listening to the same source", async () => {
-    const { controller, client } = await twoZoneSetup();
-    const inner = controller as unknown as {
-      lastZoneInput: Map<string, string>;
-      lastNetusbInput: string;
-      applyCommand(stateId: string, command: unknown): Promise<void>;
-    };
-    inner.lastZoneInput.set("main", "net_radio");
-    inner.lastZoneInput.set("zone2", "net_radio");
-    inner.lastNetusbInput = "net_radio";
-    await inner.applyCommand("player.netPlayer.preset", { kind: "netusbPreset", value: 1 });
-    expect(client.calls).toContainEqual({ method: "recallPreset", args: [1, "main"] });
+    const s = await started("net_radio", "net_radio", "net_radio");
+    void s.controller.handleWrite("player.netPlayer.preset", 1);
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "recallPreset", args: [1, "main"] });
   });
 
   test("falls back to main when nothing is listening to that source (every single-zone device)", async () => {
-    const { controller, client } = await twoZoneSetup();
-    const inner = controller as unknown as {
-      lastZoneInput: Map<string, string>;
-      lastNetusbInput: string;
-      applyCommand(stateId: string, command: unknown): Promise<void>;
-    };
-    inner.lastZoneInput.set("main", "hdmi1");
-    inner.lastNetusbInput = "";
-    await inner.applyCommand("player.netPlayer.recallRecent", { kind: "netusbRecent", value: 2 });
-    expect(client.calls).toContainEqual({ method: "recallRecentItem", args: [2, "main"] });
+    const s = await started("hdmi1", "hdmi1", "");
+    void s.controller.handleWrite("player.netPlayer.recallRecent", 2);
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "recallRecentItem", args: [2, "main"] });
   });
 
   test("a tuner preset goes to the zone listening to the tuner", async () => {
-    const { controller, client } = await twoZoneSetup();
-    const inner = controller as unknown as {
-      lastZoneInput: Map<string, string>;
-      tunerFeatures: { presetType: string; bands: string[] };
-      applyCommand(stateId: string, command: unknown): Promise<void>;
-    };
-    inner.lastZoneInput.set("main", "hdmi1");
-    inner.lastZoneInput.set("zone2", "tuner");
-    inner.tunerFeatures = { presetType: "common", bands: ["fm"] };
-    await inner.applyCommand("tuner.preset", { kind: "tunerPreset", value: 4 });
-    expect(client.calls).toContainEqual({ method: "recallTunerPreset", args: ["common", 4, "zone2"] });
+    const s = await started("hdmi1", "tuner", "net_radio");
+    void s.controller.handleWrite("tuner.preset", 4);
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "recallTunerPreset", args: ["common", 4, "zone2"] });
   });
 });
 
@@ -2997,5 +2982,568 @@ describe("the play queue as single datapoints (readable values, 2026-09-30)", ()
     await s.controller.start();
     expect(s.acks).toContainEqual({ id: "living.player.source", value: "Spotify" });
     expect(s.acks).toContainEqual({ id: "living.player.artist", value: "Band" });
+  });
+});
+
+// Every write path says what became of it: a forgotten `undefined` reads as "unclear" in the multi-transport handle,
+// which then never tries the next protocol (Y-04) — on the RX-V6A MusicCast refuses setPartyMode and YNCA's
+// @SYS:PARTY was never tried. A write the controller drops itself is `unavailable` with a debug line, never "sent"
+// (review 2026-10-05, A3/A46).
+describe("every write says what became of it (review 2026-10-05, A3/A46)", () => {
+  const withSettings = async (failure?: Error): Promise<ReturnType<typeof setup>> => {
+    const s = setup(rxV481, { power: "on", volume: 60, input: "hdmi1", actual_volume: { mode: "numeric", value: 30 } });
+    s.client.funcStatus = { response_code: 0, party_mode: false, hdmi_out_1: true, speaker_a: true };
+    await s.controller.start();
+    s.client.failWrites = failure;
+    s.client.calls.length = 0;
+    return s;
+  };
+
+  test.each([
+    ["refused", new YxcRefusalError("/system/setPartyMode?enable=true", 3), "refused"],
+    [
+      "answered with an HTTP error",
+      new HttpStatusError("device refused /system/setPartyMode (HTTP 503)", 503),
+      "refused",
+    ],
+    ["unanswered", new YxcTransportError("/system/setPartyMode", new Error("timeout")), "unavailable"],
+  ] as const)("a device-wide setting %s says so, like a zone setting", async (_label, failure, expected) => {
+    const s = await withSettings(failure);
+    for (const id of ["multiroom.party", "hdmi.out1", "advanced.speakers.speakerA", "mute"]) {
+      expect(await s.controller.handleWrite(id, true), id).toBe(expected);
+    }
+  });
+
+  test("a device-wide setting the device took is sent and read back", async () => {
+    const s = await withSettings();
+    expect(await s.controller.handleWrite("multiroom.party", true)).toBe("sent");
+    await flush();
+    expect(s.client.calls.map(c => c.method)).toEqual(["setPartyMode", "getFuncStatus"]);
+  });
+
+  // An HTTP error status is the device's answer: a write is refused and read back, and nobody asks whether the
+  // device is still there — it just answered.
+  test("a write answered with an HTTP error status is refused and read back, no liveness check", async () => {
+    const s = setup(wx10, { ...(ysp as Record<string, unknown>), power: "on", disable_flags: 0 });
+    await s.controller.start();
+    let dropped = 0;
+    s.controller.onDrop(() => dropped++);
+    s.client.failWrites = new HttpStatusError("device refused /main/setPower?power=standby (HTTP 503)", 503);
+    s.client.calls.length = 0;
+    expect(await s.controller.handleWrite("power", false)).toBe("refused");
+    await flush();
+    expect(s.client.calls.map(c => c.method)).toEqual(["power", "getStatus"]);
+    expect(dropped).toBe(0);
+  });
+
+  test("a zone status answered with an HTTP error status is proof of life", async () => {
+    const s = setup(wx10, ysp);
+    await s.controller.start();
+    let dropped = 0;
+    s.controller.onDrop(() => dropped++);
+    (s.client as unknown as { getStatus: () => Promise<never> }).getStatus = () =>
+      Promise.reject(new HttpStatusError("device refused /main/getStatus (HTTP 503)", 503));
+    for (let run = 0; run < 4; run++) {
+      s.fire.keepalive?.();
+      await flush();
+    }
+    await s.controller.verifyAlive();
+    expect(dropped).toBe(0);
+  });
+
+  // The CD-NT670D plays the disc: repeat is set directly only on the network player (API 1.19+) — the write is
+  // dropped, and says so.
+  test("repeat on a CD is not sent — unavailable, with a debug line", async () => {
+    const s = setup(cdNt670d, { response_code: 0, power: "on", volume: 20, mute: false, input: "cd" });
+    s.client.deviceInfo = { model_name: "CD-NT670D", system_version: "1.0", api_version: 2.11 };
+    await s.controller.start();
+    s.client.calls.length = 0;
+    expect(await s.controller.handleWrite("player.repeat", 2)).toBe("unavailable");
+    await flush();
+    expect(s.client.calls.filter(c => c.method.startsWith("set"))).toEqual([]);
+    expect(s.debugs).toContainEqual("living: player.repeat not sent — only the network player sets it directly");
+  });
+
+  test("a transport key while the zone plays no media source is not sent — unavailable", async () => {
+    const s = setup({ zone: [{ id: "main", func_list: ["power"] }], netusb: {} }, { power: "on", input: "hdmi1" });
+    await s.controller.start();
+    s.client.calls.length = 0;
+    expect(await s.controller.handleWrite("player.play", true)).toBe("unavailable");
+    expect(s.client.calls).toEqual([]);
+    expect(s.debugs).toContainEqual("living: player.play not sent — main is not playing a media source");
+  });
+
+  test("an equalizer band without the other two reported is not sent — unavailable", async () => {
+    const s = setup({ zone: [{ id: "main", func_list: ["power", "equalizer"] }] }, { power: "on", equalizer: {} });
+    await s.controller.start();
+    expect(await s.controller.handleWrite("sound.equalizer.low", 3)).toBe("unavailable");
+    expect(s.client.calls.some(c => c.method === "setEqualizer")).toBe(false);
+  });
+
+  test("the controller's other drops are unavailable and leave a trace", async () => {
+    const features = {
+      zone: [{ id: "main", func_list: ["power", "cursor", "volume"], cursor_list: ["up", "down"] }],
+      distribution: { version: 2 },
+    };
+    const s = setup(features, { ...(ysp as Record<string, unknown>), disable_flags: 1 });
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.debugs.length = 0;
+    // a key the zone does not declare, a value no command takes, a function the zone reports not operable
+    expect(await s.controller.handleWrite("remote.cursor", "left")).toBe("unavailable");
+    expect(await s.controller.handleWrite("sleep", "soon")).toBe("unavailable");
+    expect(await s.controller.handleWrite("volume", 20)).toBe("unavailable");
+    // a menu write on a device without a menu, a group name that is no text, a partner nobody configured
+    expect(await s.controller.handleWrite("player.browse.source", "netRadio")).toBe("unavailable");
+    expect(await s.controller.handleWrite("multiroom.group.name", 7)).toBe("unavailable");
+    expect(await s.controller.handleWrite("multiroom.group.linkDevice", "10.9.9.9")).toBe("unavailable");
+    expect(s.client.calls.filter(c => c.method.startsWith("set") || c.method.startsWith("control"))).toEqual([]);
+    expect(s.debugs.filter(line => line.includes("not sent") || line.includes("write dropped"))).toHaveLength(5);
+  });
+
+  test("a menu write answers with what the menu engine made of it", async () => {
+    const s = setup({ zone: [{ id: "main", func_list: ["power"], input_list: ["net_radio"] }], netusb: {} }, ysp);
+    await s.controller.start();
+    expect(await s.controller.handleWrite("player.browse.source", "netRadio")).toBe("sent");
+    expect(await s.controller.handleWrite("player.browse.source", "noSuchSource")).not.toBe("sent");
+  });
+
+  test("the group writes say what became of them", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], distribution: { version: 2 } };
+    const s = setup(features, ysp);
+    await s.controller.start();
+    expect(await s.controller.handleWrite("multiroom.group.name", "Wohnzimmer")).toBe("sent");
+    expect(await s.controller.handleWrite("multiroom.group.leave", true)).toBe("sent");
+    s.client.failWrites = new YxcRefusalError("/dist/setGroupName", 5);
+    expect(await s.controller.handleWrite("multiroom.group.name", "Küche")).toBe("refused");
+  });
+});
+
+// One resolution for a scene write on all three protocols: a whole number of 1 or more, or a title. MusicCast — the
+// first owner of `scene.recall` wherever it answers — recalled scene 2 for 1.5 and sent recallScene(0) for 0, while
+// YNCA and XML dropped both (review 2026-10-05, A26).
+describe("a scene write resolves the same way as on YNCA and XML (review 2026-10-05, A26)", () => {
+  const features = { zone: [{ id: "main", func_list: ["power", "scene"], input_list: ["hdmi1"], scene_num: 8 }] };
+
+  test.each([1.5, 0, -1, "1.5", "", true])("%j names no scene: nothing is sent, the write says so", async value => {
+    const s = setup(features, { power: "on", input: "hdmi1" });
+    await s.controller.start();
+    s.client.calls.length = 0;
+    expect(await s.controller.handleWrite("scene.recall", value)).toBe("unavailable");
+    expect(s.client.calls.filter(c => c.method === "recallScene")).toEqual([]);
+    expect(
+      s.debugs.some(line => line.startsWith(`living: scene "${String(value)}" is not one this device declares`)),
+    ).toBe(true);
+  });
+
+  test("a whole number, as number or text, recalls that scene", async () => {
+    const s = setup(features, { power: "on", input: "hdmi1" });
+    await s.controller.start();
+    s.client.calls.length = 0;
+    expect(await s.controller.handleWrite("scene.recall", 2)).toBe("sent");
+    expect(await s.controller.handleWrite("scene.recall", " 3 ")).toBe("sent");
+    expect(s.client.calls.filter(c => c.method === "recallScene")).toEqual([
+      { method: "recallScene", args: [2, "main"] },
+      { method: "recallScene", args: [3, "main"] },
+    ]);
+  });
+});
+
+// A script linking kitchen and bath wrote multiroom.group.linkDevice twice in a row: both writes read "no group yet"
+// and drew their own random group id, so the kitchen ended in an orphaned group (review 2026-10-05, A14).
+describe("MusicCast Link changes wait for each other (review 2026-10-05, A14)", () => {
+  test("two linkDevice writes in a row build ONE group", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], distribution: { version: 2 } };
+    const kitchen = makeFakeClient(wx30, {});
+    const bath = makeFakeClient(wx30, {});
+    const s = setup(features, ysp, { "10.0.0.3": kitchen, "10.0.0.4": bath }, undefined, { host: "10.0.0.1" });
+    s.client.distRole = "none";
+    await s.controller.start();
+    let roster: string[] = [];
+    (s.client as unknown as Record<string, unknown>).setServerInfo = (info: {
+      group_id: string;
+      client_list?: string[];
+    }): Promise<unknown> => {
+      roster = [...roster, ...(info.client_list ?? [])];
+      s.client.distInfo = {
+        role: "server",
+        group_id: info.group_id,
+        client_list: roster.map(ip => ({ ip_address: ip })),
+        status: "working",
+      };
+      return Promise.resolve({ response_code: 0 });
+    };
+    const outcomes = await Promise.all([
+      s.controller.handleWrite("multiroom.group.linkDevice", "10.0.0.3"),
+      s.controller.handleWrite("multiroom.group.linkDevice", "10.0.0.4"),
+    ]);
+    await flush();
+    expect(outcomes).toEqual(["sent", "sent"]);
+    const groupOf = (device: FakeClient): unknown =>
+      (device.calls.find(c => c.method === "setClientInfo")?.args[0] as { group_id: string } | undefined)?.group_id;
+    expect(groupOf(kitchen)).toMatch(/^[0-9A-F]{32}$/);
+    expect(groupOf(bath)).toBe(groupOf(kitchen));
+    expect(roster).toEqual(["10.0.0.3", "10.0.0.4"]);
+  });
+});
+
+// Zone 2 in standby, its input still on the old net_radio: the favourite went to zone 2 (review 2026-10-05, A45).
+describe("a recall goes to a switched-on zone (review 2026-10-05, A45)", () => {
+  test("a favourite does not go to a zone in standby whose old input matches the network source", async () => {
+    const s = setup(rxV481, { power: "on", volume: 60, input: "hdmi1", actual_volume: { mode: "numeric", value: 30 } });
+    s.client.statusByZone = {
+      main: { power: "on", volume: 60, input: "hdmi1", actual_volume: { mode: "numeric", value: 30 } },
+      zone2: { power: "standby", volume: 81, input: "net_radio", actual_volume: { mode: "numeric", value: 40.5 } },
+    };
+    s.client.playInfo = { input: "net_radio", playback: "stop" };
+    await s.controller.start();
+    s.client.calls.length = 0;
+    expect(await s.controller.handleWrite("player.netPlayer.preset", 3)).toBe("sent");
+    expect(s.client.calls.find(c => c.method === "recallPreset")?.args).toEqual([3, "main"]);
+    // Switched on, zone 2 is the one listening.
+    s.client.statusByZone = {
+      ...s.client.statusByZone,
+      zone2: { power: "on", volume: 81, input: "net_radio", actual_volume: { mode: "numeric", value: 40.5 } },
+    };
+    s.fire.push?.({ zone2: { power: "on" } });
+    await flush();
+    s.client.calls.length = 0;
+    await s.controller.handleWrite("player.netPlayer.preset", 3);
+    expect(s.client.calls.find(c => c.method === "recallPreset")?.args).toEqual([3, "zone2"]);
+  });
+});
+
+// The YSP-1600 reports disable_flags 3 (volume and mute not operable) in standby. A script writing "power on, then
+// volume" had its volume dropped on the remembered standby flags — push working or not (review 2026-10-05, A18).
+describe("a stale standby flag is checked against the zone first (review 2026-10-05, A18)", () => {
+  test("power on, then volume: the volume goes out once the zone says it is operable", async () => {
+    const s = setup(wx10, ysp, {}, () => true);
+    await s.controller.start();
+    (s.client as unknown as Record<string, unknown>).power = (on: boolean): Promise<unknown> => {
+      s.client.status = on ? { ...(ysp as Record<string, unknown>), power: "on", disable_flags: 0 } : ysp;
+      s.client.calls.push({ method: "power", args: [on, "main"] });
+      return Promise.resolve({ response_code: 0 });
+    };
+    s.client.calls.length = 0;
+    const [power, volume] = await Promise.all([
+      s.controller.handleWrite("power", true),
+      s.controller.handleWrite("volume", 25),
+    ]);
+    expect([power, volume]).toEqual(["sent", "sent"]);
+    expect(s.client.calls).toContainEqual({ method: "setVolumeTo", args: [25, "main"] });
+    expect(s.debugs.some(line => line.includes("not operable"))).toBe(false);
+  });
+
+  test("a zone still in standby keeps the function closed — not sent, the device's value back", async () => {
+    const s = setup(wx10, ysp);
+    await s.controller.start();
+    s.acks.length = 0;
+    s.client.calls.length = 0;
+    expect(await s.controller.handleWrite("volume", 25)).toBe("unavailable");
+    expect(s.client.calls.map(c => c.method)).toEqual(["getStatus"]);
+    expect(s.acks).toContainEqual({ id: "living.volume", value: 30 });
+  });
+});
+
+// From its verb a read is background work: the read-back of a user write waited behind the poll sweep, while YNCA
+// reads back at user priority. Every read that belongs to a user's write goes through the user-priority twin of the
+// client; the polls do not (review 2026-10-05, A58).
+describe("the read-back of a user write runs at user priority (review 2026-10-05, A58)", () => {
+  test("zone, device-wide setting and group reads of a write go through the user-priority client; polls do not", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], distribution: { version: 2 } };
+    const s = setup(features, ysp, {}, () => false);
+    s.client.funcStatus = { response_code: 0, auto_power_standby: true };
+    await s.controller.start();
+    s.fire.keepalive?.();
+    await flush();
+    expect(s.client.userCalls).toEqual([]);
+    expect(await s.controller.handleWrite("power", true)).toBe("sent");
+    await flush();
+    expect(await s.controller.handleWrite("advanced.autoPowerStandby", false)).toBe("sent");
+    await flush();
+    expect(await s.controller.handleWrite("multiroom.group.name", "Wohnzimmer")).toBe("sent");
+    expect(s.client.userCalls).toEqual(["getStatus", "getFuncStatus", "getDistributionInfo"]);
+  });
+});
+
+// A zone whose status did not answer at the connect had no display scale until the next reconnect: its datapoint
+// showed the DISPLAYED value (40.5 numeric) while a write went out as the raw step count — 45 sent setVolume(45),
+// 22.5 instead of 90 steps (review 2026-10-05, A15).
+describe("the volume scale is learned at the first status that reports one (review 2026-10-05, A15)", () => {
+  /**
+   * An RX-V481 whose zone 2 does not answer at the connect and answers `zone2` afterwards.
+   *
+   * @param zone2 zone 2's status once it answers
+   * @param probeMemory the device's memory
+   * @returns the started setup and the switch that brings zone 2 up
+   */
+  async function zone2Late(
+    zone2: Record<string, unknown>,
+    probeMemory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA }),
+  ): Promise<{ s: ReturnType<typeof setup>; up: () => void; probeMemory: ProbeMemory }> {
+    let zone2Up = false;
+    const statuses: Record<string, unknown> = {
+      main: { power: "on", volume: 60, input: "hdmi1", actual_volume: { mode: "numeric", value: 30, unit: "" } },
+      zone2,
+    };
+    const s = setup(rxV481, statuses.main, {}, undefined, { probeMemory });
+    (s.client as unknown as Record<string, unknown>).getStatus = (zone: string): Promise<unknown> =>
+      zone === "zone2" && !zone2Up
+        ? Promise.reject(new YxcTransportError("/zone2/getStatus", new Error("YXC request timed out")))
+        : Promise.resolve(statuses[zone]);
+    expect(await s.controller.start()).toBe(true);
+    return { s, up: () => (zone2Up = true), probeMemory };
+  }
+
+  test("the numeric scale a late zone reports is learned: 45 is sent as 90 steps", async () => {
+    const { s, up, probeMemory } = await zone2Late({
+      power: "on",
+      volume: 81,
+      input: "hdmi1",
+      actual_volume: { mode: "numeric", value: 40.5, unit: "" },
+    });
+    up();
+    s.fire.keepalive?.();
+    await flush();
+    expect(s.acks.filter(a => a.id === "living.multiroom.zone2.volume").at(-1)?.value).toBe(40.5);
+    expect(probeMemory.remembered("yxcVolumeMode")).toEqual({ main: "numeric", zone2: "numeric" });
+    expect(s.defs.get("living.multiroom.zone2.volume")?.common).toMatchObject({ min: 0, max: 97, step: 0.5 });
+    s.client.calls.length = 0;
+    expect(await s.controller.handleWrite("multiroom.zone2.volume", 45)).toBe("sent");
+    expect(s.client.calls).toContainEqual({ method: "setVolumeTo", args: [90, "zone2"] });
+  });
+
+  test("the decibel scale a late zone reports: the datapoint takes it, −40 dB goes out as 81 steps", async () => {
+    const { s, up } = await zone2Late({
+      power: "on",
+      volume: 81,
+      input: "hdmi1",
+      actual_volume: { mode: "db", value: -40, unit: "dB" },
+    });
+    // Before zone 2 answered: no scale yet — the envelope of both, no unit.
+    expect(s.defs.get("living.multiroom.zone2.volume")?.common.unit).toBe("");
+    up();
+    s.fire.keepalive?.();
+    await flush();
+    expect(s.defs.get("living.multiroom.zone2.volume")?.common).toMatchObject({ unit: "dB", min: -80.5, max: 16.5 });
+    expect(s.acks.filter(a => a.id === "living.multiroom.zone2.volume").at(-1)?.value).toBe(-40);
+    s.client.calls.length = 0;
+    expect(await s.controller.handleWrite("multiroom.zone2.volume", -40)).toBe("sent");
+    expect(s.client.calls).toContainEqual({ method: "setVolumeTo", args: [81, "zone2"] });
+  });
+
+  test("a learned scale is kept: a later status on the other scale is converted, the memory stays", async () => {
+    const zone2: Record<string, unknown> = {
+      power: "on",
+      volume: 81,
+      input: "hdmi1",
+      actual_volume: { mode: "numeric", value: 40.5, unit: "" },
+    };
+    const { s, up, probeMemory } = await zone2Late(zone2);
+    up();
+    s.fire.keepalive?.();
+    await flush();
+    zone2.volume = 90;
+    zone2.actual_volume = { mode: "db", value: -35.5, unit: "dB" };
+    s.fire.keepalive?.();
+    await flush();
+    expect(s.acks.filter(a => a.id === "living.multiroom.zone2.volume").at(-1)?.value).toBe(45);
+    expect(probeMemory.remembered("yxcVolumeMode")).toEqual({ main: "numeric", zone2: "numeric" });
+  });
+});
+
+// YNCA and XML give scene.recall a dropdown of the scene titles; MusicCast's recall carried no states — the same
+// datapoint looked different by owner (review 2026-10-05, parity). Titles another transport reported, the number
+// otherwise; names the user gives in the receiver follow at runtime (liveLabels).
+describe("scene.recall carries the title dropdown on MusicCast too", () => {
+  test("titles where another transport reported them, numbers otherwise, labels that follow the receiver", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power", "scene"], scene_num: 3 }], netusb: {} };
+    const s = setup(features, { power: "on", input: "hdmi1" });
+    const memory = new ProbeMemory();
+    memory.set(
+      "xmlScenes:main",
+      `<YAMAHA_AV rsp="GET" RC="0"><Scene><Scene_Sel_Item>` +
+        `<Item_1><Param>Scene 1</Param><RW>W</RW><Title>Movie</Title></Item_1>` +
+        `</Scene_Sel_Item></Scene></YAMAHA_AV>`,
+    );
+    (s.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
+    await s.controller.start();
+    const recall = s.defs.get("living.scene.recall");
+    expect(recall?.common.states).toEqual({ 1: "Movie", 2: "2", 3: "3" });
+    expect(recall?.liveLabels).toBe(true);
+    expect(recall?.common).toMatchObject({ type: "number", min: 1, max: 3, write: true });
+  });
+});
+
+// Home Assistant takes the events away while titles change: only the main zone's power/input/volume/mute were
+// judged, so the verdict stayed "unknown" and the titles stood up to 30 minutes old (review 2026-10-05, A17).
+describe("push liveness judges a playing source (review 2026-10-05, A17)", () => {
+  const features = { zone: [{ id: "main", func_list: ["power"], input_list: ["net_radio"] }], netusb: {} };
+
+  test("titles changing over keepalives without one event: the events are judged dead, the titles follow", async () => {
+    const liveness = new PushLiveness();
+    const s = setup(features, { power: "on", input: "net_radio" }, {}, () => true, { pushLiveness: liveness });
+    s.client.playInfo = { input: "net_radio", playback: "play", track: "A" };
+    await s.controller.start();
+    const shown: unknown[] = [];
+    for (let run = 1; run <= 3; run++) {
+      s.client.playInfo = { input: "net_radio", playback: "play", track: `T${run}` };
+      s.fire.keepalive?.();
+      await flush();
+      shown.push(s.acks.filter(a => a.id === "living.player.track").at(-1)?.value);
+    }
+    expect(liveness.state).toBe("dead");
+    expect(shown).toEqual(["T1", "T2", "T3"]);
+    expect(s.infos).toContain("living: MusicCast events are not arriving — polling and reading writes back");
+  });
+
+  test("a source whose answer did not change judges nothing; events in between judge nothing either", async () => {
+    const liveness = new PushLiveness();
+    const s = setup(features, { power: "on", input: "net_radio" }, {}, () => true, { pushLiveness: liveness });
+    s.client.playInfo = { input: "net_radio", playback: "play", track: "A" };
+    await s.controller.start();
+    for (let run = 1; run <= 3; run++) {
+      s.fire.keepalive?.();
+      await flush();
+    }
+    expect(liveness.state).toBe("unknown");
+    for (let run = 1; run <= 3; run++) {
+      s.client.playInfo = { input: "net_radio", playback: "play", track: `T${run}` };
+      s.fire.push?.({ netusb: { play_time: run } });
+      s.fire.keepalive?.();
+      await flush();
+    }
+    expect(liveness.state).toBe("alive");
+  });
+
+  test("a paused source or a zone in standby is not read on each keepalive", async () => {
+    const s = setup(features, { power: "on", input: "net_radio" }, {}, () => true);
+    s.client.playInfo = { input: "net_radio", playback: "pause", track: "A" };
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.fire.keepalive?.();
+    await flush();
+    expect(s.client.calls.some(c => c.method === "getPlayInfo")).toBe(false);
+  });
+});
+
+// A reconnect wrote the DAB station count 0 before the tuner read wrote 35 again (35 → 0 → 35 in the history), and
+// "none" over the network player's last error (review 2026-10-05, A43).
+describe("start values never stand over a value the device reports (review 2026-10-05, A43)", () => {
+  const dabFeatures = {
+    zone: [{ id: "main", func_list: ["power"], input_list: ["tuner"] }],
+    tuner: { func_list: ["fm", "dab", "dab_initial_scan"], preset: { type: "separate", num: 30 } },
+    netusb: {},
+  };
+  const scanned = {
+    response_code: 0,
+    band: "dab",
+    dab: { preset: 1, id: 1, status: "ready", freq: 222064, total_station_num: 35, initial_scan_progress: 100 },
+  };
+
+  test("a scanned tuner's station count is written once, as the device reports it", async () => {
+    const s = setup(dabFeatures, { power: "on", input: "tuner" });
+    s.client.tunerPlayInfo = scanned;
+    await s.controller.start();
+    expect(s.acks.filter(a => a.id === "living.tuner.dab.totalStations").map(a => a.value)).toEqual([35]);
+  });
+
+  test("a tuner that did not answer gets no start value — the stored count stays", async () => {
+    const s = setup(dabFeatures, { power: "on", input: "tuner" });
+    const getPlayInfo = (s.client as unknown as { getPlayInfo: (source?: string) => Promise<unknown> }).getPlayInfo;
+    (s.client as unknown as Record<string, unknown>).getPlayInfo = (source?: string): Promise<unknown> =>
+      source === "tuner"
+        ? Promise.reject(new YxcTransportError("/tuner/getPlayInfo", new Error("timeout")))
+        : getPlayInfo(source);
+    await s.controller.start();
+    expect(s.acks.some(a => a.id === "living.tuner.dab.totalStations")).toBe(false);
+  });
+
+  test("the network player's error and message get their start values on the device's first connection only", async () => {
+    const liveness = new PushLiveness();
+    const first = setup(dabFeatures, { power: "on", input: "tuner" }, {}, undefined, { pushLiveness: liveness });
+    await first.controller.start();
+    expect(first.acks).toContainEqual({ id: "living.player.netPlayer.playError", value: 0 });
+    const again = setup(dabFeatures, { power: "on", input: "tuner" }, {}, undefined, { pushLiveness: liveness });
+    await again.controller.start();
+    expect(again.acks.some(a => a.id.startsWith("living.player.netPlayer.play"))).toBe(false);
+  });
+});
+
+// Push was registered only after the start's reads: an event in the first second or two was lost, and the value
+// stood wrong until the next keepalive (review 2026-10-05, A47).
+describe("events during the start are not lost (review 2026-10-05, A47)", () => {
+  test("a volume event that arrives while the start reads is handled once the start has written its values", async () => {
+    const s = setup(wx10, { ...(ysp as Record<string, unknown>), power: "on", disable_flags: 0, volume: 30 });
+    s.client.nameText = { zone_list: [{ id: "main", text: "Kitchen" }] };
+    const nameText = (s.client as unknown as { getNameText: () => Promise<unknown> }).getNameText;
+    (s.client as unknown as Record<string, unknown>).getNameText = (): Promise<unknown> => {
+      // The knob turned while the adapter was still connecting: the event arrives mid-start.
+      s.client.status = { ...(ysp as Record<string, unknown>), power: "on", disable_flags: 0, volume: 42 };
+      s.fire.push?.({ main: { volume: 42 } });
+      return nameText();
+    };
+    expect(await s.controller.start()).toBe(true);
+    await flush();
+    expect(s.fire.push).toBeDefined();
+    expect(s.acks.filter(a => a.id === "living.volume").at(-1)?.value).toBe(42);
+  });
+});
+
+// Under the transport adapter a value without an object of its transport is dropped: info.model never reached a
+// MusicCast-only device (review 2026-10-05, A5 — the info-model proof test, expectation inverted).
+describe("info.model reaches the tree on a MusicCast-only device (review 2026-10-05, A5)", () => {
+  test("the transport adapter builds and passes on the model and the firmware", async () => {
+    const written: Array<[string, unknown]> = [];
+    const adapter = new TransportConnectionAdapter("yxc", "dev", (id, value) => void written.push([id, value]));
+    const client = makeFakeClient(wx10, { response_code: 0, power: "on", volume: 20, input: "net_radio" });
+    client.deviceInfo = { response_code: 0, model_name: "WX-010", system_version: "2.16", api_version: 2.08 };
+    const controller = new YxcDeviceController("dev", {
+      client,
+      registerPush: () => () => {},
+      pushLiveness: new PushLiveness(),
+      probeMemory: new ProbeMemory(undefined),
+      scheduleKeepalive: () => () => {},
+      upsertObject: adapter.interceptUpsert,
+      setStateAck: adapter.interceptSetStateAck,
+      log: silentLog,
+      gate: testGate(),
+    });
+    adapter.bind(controller);
+    expect(await adapter.connect()).toBe(true);
+    const built = adapter.buildObjects().map(object => object.id);
+    expect(built).toEqual(expect.arrayContaining(["info.model", "info.firmware"]));
+    adapter.seedOwned(new Set(built));
+    expect(written).toEqual(
+      expect.arrayContaining([
+        ["dev.info.model", "WX-010"],
+        ["dev.info.firmware", "2.16"],
+      ]),
+    );
+    controller.close();
+  });
+});
+
+// A renamed input reaches every zone's dropdown while the receiver runs (liveLabels, krobi 2026-10-05).
+describe("a rename in the MusicCast app reaches every zone's dropdown", () => {
+  test("main and zone 2 carry the new name after name_text_updated; the value stays the id", async () => {
+    const features = {
+      zone: [
+        { id: "main", func_list: ["power"], input_list: ["hdmi1", "net_radio"] },
+        { id: "zone2", func_list: ["power"], input_list: ["hdmi1", "net_radio"] },
+      ],
+    };
+    const s = setup(features, { power: "on", input: "hdmi1" });
+    s.client.nameText = { zone_list: [{ id: "main", text: "Wohnzimmer" }], input_list: [{ id: "hdmi1", text: "TV" }] };
+    await s.controller.start();
+    s.client.nameText = {
+      zone_list: [{ id: "main", text: "Wohnzimmer" }],
+      input_list: [{ id: "hdmi1", text: "Beamer" }],
+    };
+    s.fire.push?.({ system: { name_text_updated: true } });
+    await flush();
+    await flush();
+    expect(s.defs.get("living.input")?.common.states).toMatchObject({ hdmi1: "Beamer" });
+    expect(s.defs.get("living.multiroom.zone2.input")?.common.states).toMatchObject({ hdmi1: "Beamer" });
   });
 });

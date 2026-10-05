@@ -68,6 +68,13 @@ export interface ConnectionHandle {
    * @returns who serves what, and what the device answered
    */
   capture?(): Promise<HandleCapture>;
+  /**
+   * Resolves once nothing this connection started writes any more (optional — a handle without it writes
+   * nothing after close). Called after {@link close}: the supervisor waits for it before the device is deleted.
+   *
+   * @returns settles when the last write already on its way has landed (never rejects)
+   */
+  settled?(): Promise<void>;
   /** Close the connection synchronously — safe to call from onUnload. */
   close(): void;
 }

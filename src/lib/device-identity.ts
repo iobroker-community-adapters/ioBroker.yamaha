@@ -102,6 +102,28 @@ export function mergeIdentity(known?: DeviceIdentity, learned?: DeviceIdentity):
   return { ...known, ...learned };
 }
 
+/** An identity as the device object stores it: both fields always present, an unknown one `null`. */
+export interface StoredIdentity {
+  /** The serial number, or null. */
+  serial: string | null;
+  /** The MAC address, or null. */
+  mac: string | null;
+}
+
+/**
+ * An identity in the form the device object stores it (`native.identity`). The objects database merges a patch key by
+ * key, so an identity that REPLACED another (a replacement receiver at the same address, {@link mergeIdentity}) kept the
+ * old device's MAC next to the new serial — and the old receiver, found elsewhere by that MAC, counted as this device's
+ * twin (review 2026-10-05, A30). Written with both keys, the unknown one `null`, the stored identity is exactly the new
+ * one; {@link identityFrom} reads a `null` field as absent.
+ *
+ * @param identity the identity to store
+ * @returns the stored form
+ */
+export function storedIdentity(identity: DeviceIdentity): StoredIdentity {
+  return { serial: identity.serial ?? null, mac: identity.mac ?? null };
+}
+
 /**
  * The MAC a UPnP `<UDN>uuid:…-<mac></UDN>` carries in its last segment, if it is one.
  *

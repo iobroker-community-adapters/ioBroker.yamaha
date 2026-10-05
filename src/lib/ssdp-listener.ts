@@ -1,5 +1,6 @@
 import { createSocket, type Socket } from "node:dgram";
 import { errText } from "./err-text";
+import { ssdpHeader } from "./ssdp-header";
 
 /**
  * Passive SSDP: hear the `NOTIFY ssdp:alive` a UPnP device multicasts when it comes up. A
@@ -29,18 +30,6 @@ export interface SsdpNotify {
 }
 
 /**
- * One header's value, trimmed — header names are case-insensitive (RFC 2616 / UPnP DA).
- *
- * @param message the datagram text
- * @param name the header name
- * @returns the value, or undefined
- */
-function header(message: string, name: string): string | undefined {
-  const match = new RegExp(`^${name}:\\s*(.*?)\\s*$`, "im").exec(message);
-  return match?.[1] || undefined;
-}
-
-/**
  * Read a NOTIFY datagram. Anything else on the group — M-SEARCH requests, search responses —
  * is not a notification and yields nothing.
  *
@@ -51,13 +40,13 @@ export function parseSsdpNotify(message: string): SsdpNotify | undefined {
   if (!/^NOTIFY \* HTTP\/1\.1/im.test(message)) {
     return undefined;
   }
-  const nts = header(message, "NTS");
+  const nts = ssdpHeader(message, "NTS");
   if (nts !== "ssdp:alive" && nts !== "ssdp:byebye") {
     return undefined;
   }
-  const location = header(message, "LOCATION");
-  const usn = header(message, "USN");
-  const nt = header(message, "NT");
+  const location = ssdpHeader(message, "LOCATION");
+  const usn = ssdpHeader(message, "USN");
+  const nt = ssdpHeader(message, "NT");
   return {
     nts: nts === "ssdp:alive" ? "alive" : "byebye",
     ...(location ? { location } : {}),
