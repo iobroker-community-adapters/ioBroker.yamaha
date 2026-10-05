@@ -560,6 +560,9 @@ export const RENAMED_CHANNELS = [
   "player.tidal",
   "player.musicCastLink",
   "lipSync",
+  // Review 2026-10-05 (decision C2, Y-25): the 29 read-only YNCA input names are gone — the input dropdown carries the
+  // names the user gave the inputs in the receiver, on all three protocols.
+  "advanced.inputNames",
 ];
 
 /**

@@ -531,6 +531,21 @@ describe("stripNamespace", () => {
 });
 
 describe("renamedObjectIds", () => {
+  it("removes the YNCA input names under advanced.inputNames, the folder included (C2, Y-25)", () => {
+    const existing = [
+      "yamaha.0.living.advanced.inputNames",
+      "yamaha.0.living.advanced.inputNames.hdmi1",
+      "yamaha.0.living.advanced.inputNames.av1",
+      "yamaha.0.living.advanced.speakers.speakerA",
+      "yamaha.0.living.input",
+    ];
+    expect(renamedObjectIds(existing, new Set(["living"]), "yamaha.0")).toEqual([
+      "yamaha.0.living.advanced.inputNames.hdmi1",
+      "yamaha.0.living.advanced.inputNames.av1",
+      "yamaha.0.living.advanced.inputNames",
+    ]);
+  });
+
   // The three datapoints v2.8.0 removes exist per zone as well (measured in the fixture
   // inventory: actualVolume 2 bare + 3 zoned, actualVolumeMode likewise, inputText 5 + 4).
   // One list entry has to catch both forms — otherwise the zoned copies survive the update
