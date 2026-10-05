@@ -50,6 +50,14 @@ describe("detectDeviceType", () => {
     expect(detectDeviceType("WX-030")).toBe("speaker");
   });
 
+  // The three prefixes that an earlier, shorter one covered went away (review 2026-10-05, G) — the models still
+  // land in their class.
+  test("models of the dropped prefixes keep their class through the shorter prefix", () => {
+    expect(detectDeviceType("WXAD-10")).toBe("stereoReceiver");
+    expect(detectDeviceType("CD-NT670D")).toBe("cdSystem");
+    expect(detectDeviceType("MusicCast 500")).toBe("speaker");
+  });
+
   test("an underscore in the model name reads like a dash", () => {
     expect(detectDeviceType("R_N803")).toBe("stereoReceiver");
     expect(detectDeviceType("CD_NT670")).toBe("cdSystem");

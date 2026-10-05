@@ -22,11 +22,13 @@ export type DeviceType = "avReceiver" | "stereoReceiver" | "speaker" | "soundbar
 const TYPE_PREFIXES: ReadonlyArray<readonly [DeviceType, readonly string[]]> = [
   // NP- network players, TT-N network turntables, XDA- streaming amplifiers and the WXAD streaming
   // adapter: stereo network devices, none of them an AV receiver (audit 2026-09-24, D13). This list is
-  // checked before the speakers', so WXAD never reads as a WX speaker.
-  ["stereoReceiver", ["R-N", "RN-", "WXA", "WXC", "A-S", "R-S", "NP-", "TT-N", "XDA-", "WXAD"]],
+  // checked before the speakers', so the WXAD — a `WXA` by its prefix — never reads as a WX speaker.
+  // A prefix that an earlier, shorter one already covers decides nothing and is not listed: `WXAD`
+  // (`WXA`), `CD-NT` (`CD-N`), `MUSICCAST 500` (`MUSICCAST 50`) (review 2026-10-05, G).
+  ["stereoReceiver", ["R-N", "RN-", "WXA", "WXC", "A-S", "R-S", "NP-", "TT-N", "XDA-"]],
   ["soundbar", ["YSP", "YAS", "ATS", "SRT", "SR-B", "SR-C", "MUSICCAST BAR"]],
-  ["cdSystem", ["CRX", "MCR", "CD-N", "CD-NT"]],
-  ["speaker", ["WX", "NX-", "ISX", "MUSICCAST 20", "MUSICCAST 50", "MUSICCAST 500"]],
+  ["cdSystem", ["CRX", "MCR", "CD-N"]],
+  ["speaker", ["WX", "NX-", "ISX", "MUSICCAST 20", "MUSICCAST 50"]],
   ["avReceiver", ["RX-V", "RX-A", "RX-S", "TSR", "HTR", "CX-A", "MX-A", "RX-D"]],
 ];
 
