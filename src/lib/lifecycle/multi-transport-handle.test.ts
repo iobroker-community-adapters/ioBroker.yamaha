@@ -8,6 +8,8 @@ import type { ObjectDef } from "../catalog/types";
 import type { Transport } from "../catalog/owner-policy";
 import { emptyLearnedTree, type LearnedTree } from "./learned-tree";
 import { TransportConnectionAdapter } from "./transport-connection-adapter";
+import { catalogToObjects } from "../catalog/build-objects";
+import { INFO_ENTRIES } from "../catalog/info-objects";
 
 const silentLog = { debug: (): void => {}, info: (): void => {}, warn: (): void => {} };
 
@@ -1525,6 +1527,79 @@ describe("MultiTransportHandle — what changes during the first learn is learne
     expect(learns).toBeGreaterThan(0);
     expect(learns).toBeLessThan(N / 20);
     expect(upserts).toBe(N);
+    handle.close();
+  });
+});
+
+describe("the model and the firmware reach the tree over every protocol (review 2026-10-05, A5)", () => {
+  /**
+   * A transport whose controller builds info.model/info.firmware from the one definition and reports them.
+   *
+   * @param transport the protocol
+   * @param model the model it reports
+   * @param firmware the firmware it reports
+   * @param acks where the values the tree gets land
+   * @returns the transport behind its adapter
+   */
+  function reporting(
+    transport: Transport,
+    model: string,
+    firmware: string,
+    acks: Array<[string, unknown]>,
+  ): TransportConnectionAdapter {
+    const adapter = new TransportConnectionAdapter(transport, "dev", (id, value) => void acks.push([id, value]));
+    adapter.bind({
+      start: async () => {
+        for (const def of catalogToObjects([...INFO_ENTRIES])) {
+          await adapter.interceptUpsert(`dev.${def.id}`, def);
+        }
+        adapter.interceptSetStateAck("dev.info.model", model);
+        adapter.interceptSetStateAck("dev.info.firmware", firmware);
+        return true;
+      },
+      handleWrite: () => "sent",
+      onDrop: () => {},
+      close: () => {},
+    });
+    return adapter;
+  }
+
+  test("with YNCA and MusicCast, YNCA's values stand — as they did before every protocol built them", async () => {
+    const acks: Array<[string, unknown]> = [];
+    const ynca = reporting("ynca", "RX-V6A", "1.10/2.40", acks);
+    const yxc = reporting("yxc", "RX-V6A", "2.40", acks);
+    await Promise.all([ynca.connect(), yxc.connect()]);
+    const objects: string[] = [];
+    const handle = new MultiTransportHandle("dev", [ynca, yxc], {
+      upsertObject: id => {
+        objects.push(id);
+        return Promise.resolve();
+      },
+      log: silentLog,
+    });
+    await handle.start();
+    expect(objects.filter(id => id === "dev.info.firmware")).toHaveLength(1);
+    expect(acks).toEqual([
+      ["dev.info.model", "RX-V6A"],
+      ["dev.info.firmware", "1.10/2.40"],
+    ]);
+    handle.close();
+  });
+
+  test("without YNCA, MusicCast's model and firmware reach the tree", async () => {
+    const acks: Array<[string, unknown]> = [];
+    const yxc = reporting("yxc", "WX-030", "2.16", acks);
+    const xml = reporting("xml", "WX-030", "1.00", acks);
+    await Promise.all([yxc.connect(), xml.connect()]);
+    const handle = new MultiTransportHandle("dev", [xml, yxc], {
+      upsertObject: () => Promise.resolve(),
+      log: silentLog,
+    });
+    await handle.start();
+    expect(acks).toEqual([
+      ["dev.info.model", "WX-030"],
+      ["dev.info.firmware", "2.16"],
+    ]);
     handle.close();
   });
 });

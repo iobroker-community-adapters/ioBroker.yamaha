@@ -108,6 +108,12 @@ export const OWNER_OVERRIDES: Record<string, readonly Transport[]> = {
   soundProgram: ["ynca", "yxc", "xml"],
   sleep: ["ynca", "xml", "yxc"],
   "tuner.band": ["ynca", "yxc", "xml"],
+  // Every protocol builds the model and the firmware from one definition (catalog/info-objects.ts) since the
+  // review of 2026-10-05 (A5): before, only YNCA did, and a device without YNCA showed no model and no firmware.
+  // YNCA stays in front so an installation keeps the values it showed — its firmware reads "1.10/2.40", where
+  // MusicCast reports "2.40" — and MusicCast comes before XML by modernity.
+  "info.model": ["ynca", "yxc", "xml"],
+  "info.firmware": ["ynca", "yxc", "xml"],
 };
 
 /**

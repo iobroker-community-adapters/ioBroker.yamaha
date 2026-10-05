@@ -52,11 +52,13 @@ describe("pickOwner — which transport owns a shared capability", () => {
   // drop or add a second one and every behavioural test above would still pass — each of them
   // asks about one key. Pinning the whole table makes any further change a visible, deliberate
   // edit of this list.
-  it("pins the override table — twenty-one keys since XML writes the DTS dialogue control (2026-09-29)", () => {
+  it("pins the override table — twenty-three keys since every protocol builds model and firmware (2026-10-05)", () => {
     expect(Object.keys(OWNER_OVERRIDES).sort()).toEqual([
       "advanced.maxVolume",
       "advanced.speakers.pattern",
       "hdmi.out3",
+      "info.firmware",
+      "info.model",
       "input",
       "player.playback",
       "player.repeat",
@@ -76,8 +78,18 @@ describe("pickOwner — which transport owns a shared capability", () => {
       "soundProgram",
       "tuner.band",
     ]);
-    expect(Object.keys(OWNER_OVERRIDES)).toHaveLength(21);
+    expect(Object.keys(OWNER_OVERRIDES)).toHaveLength(23);
     expect(OWNER_OVERRIDES).not.toHaveProperty("volume");
+  });
+
+  // Every protocol builds info.model/info.firmware now (review 2026-10-05, A5); an installation that showed YNCA's
+  // values keeps them — YNCA's firmware reads "1.10/2.40", MusicCast's "2.40".
+  it("hands the model and the firmware to YNCA first, then MusicCast, then XML", () => {
+    for (const key of ["info.model", "info.firmware"]) {
+      expect(pickOwner(key, ["yxc", "ynca", "xml"])).toBe("ynca");
+      expect(pickOwner(key, ["xml", "yxc"])).toBe("yxc");
+      expect(pickOwner(key, ["xml"])).toBe("xml");
+    }
   });
 
   // MusicCast reads HDMI OUT 3 and the speaker pattern but cannot write them; YNCA can (C20).
