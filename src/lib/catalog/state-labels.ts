@@ -93,11 +93,12 @@ const TUNER_BAND: Readonly<Record<string, Label>> = {
 /**
  * Labels by datapoint — the id relative to the device, a zone's folder left off (`multiroom.zone2.sleep` is
  * `sleep`) — then by value. A value missing here keeps the label its transport gave it.
+ *
+ * A switch has no value list, so it has no entry here: `power` and `mute` are booleans on all three protocols.
+ * Their entries labelled the device-description words XML put on its booleans by mistake (review 2026-10-05,
+ * A19), which made the same datapoint a dropdown on one protocol and a switch on the others.
  */
 export const STATE_LABELS: Readonly<Record<string, Readonly<Record<string, Label>>>> = {
-  // XML's Power_Control and Mute as words (YNCA and MusicCast build switches).
-  power: { On: "labelSwitchedOn", Standby: "labelInStandby" },
-  mute: { On: "labelMuted", Off: "labelNotMuted" },
   muteLevel: MUTE_LEVEL,
   sleep: SLEEP,
   volumeOutput: { Variable: "labelVariableLevel", Fixed: "labelFixedLevel" },
