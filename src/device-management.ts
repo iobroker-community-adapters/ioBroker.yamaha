@@ -12,12 +12,26 @@ import { tName } from "./lib/i18n";
 import { iconForModel, volumeIndicatorIcon } from "./lib/device-type";
 import { type DeviceStores, deviceStoresOf, rememberedDevices } from "./lib/device-stores";
 import { errText } from "./lib/err-text";
-import { LABEL_RANK, parseDevices, rowDeviceId, sanitizeId, unionDevices, type DeviceRow } from "./lib/pure-helpers";
+import {
+  isDottedQuad,
+  LABEL_RANK,
+  parseDevices,
+  rowDeviceId,
+  sanitizeId,
+  unionDevices,
+  type DeviceRow,
+} from "./lib/pure-helpers";
 import { deviceIdFor } from "./lib/device-id";
 import { sameDevice } from "./lib/device-identity";
 import { identifyDevice } from "./lib/identify-device";
 import { identityOfDeviceObject } from "./lib/lifecycle/capability-profile";
-import { buildDeviceForm, buildExcludedForm, findClash, type CardDevice } from "./device-management-helpers";
+import {
+  buildDeviceForm,
+  buildExcludedForm,
+  findClash,
+  takenAddresses,
+  type CardDevice,
+} from "./device-management-helpers";
 import { isIPv4 } from "./lib/network-interfaces";
 import { TRANSPORT_LABELS } from "./lib/ready-line";
 
@@ -109,17 +123,6 @@ export class YamahaDeviceManagement extends DeviceManagement<AdapterInstance & D
    */
   private async writeManual(rows: DeviceRow[]): Promise<void> {
     await this.adapter.extendForeignObjectAsync(this.objId, { native: { devices: rows } });
-  }
-
-  /**
-   * Whether one device's volume datapoints read 0–100 %, for the edit dialog to prefill.
-   *
-   * @param deviceId the id-safe device id
-   * @returns true when this device is set to percent
-   */
-  private async volumeAsPercentOf(deviceId: string): Promise<boolean> {
-    const node = await this.adapter.getForeignObjectAsync(`${this.adapter.namespace}.${deviceId}`);
-    return (node?.native as { volumeAsPercent?: unknown } | undefined)?.volumeAsPercent === true;
   }
 
   /**
@@ -432,7 +435,9 @@ export class YamahaDeviceManagement extends DeviceManagement<AdapterInstance & D
    */
   private async addDevice(context: ActionContext): Promise<{ refresh: boolean }> {
     const manual = await this.readManual();
-    const data = await context.showForm(buildDeviceForm(manual.map(r => r.ip)), { title: tName("dmAdd") });
+    const data = await context.showForm(buildDeviceForm(takenAddresses(await this.cards())), {
+      title: tName("dmAdd"),
+    });
     if (data && typeof data.ip === "string" && data.ip.trim()) {
       const ip = data.ip.trim();
       const typedName = typeof data.name === "string" ? data.name.trim() : "";
@@ -563,11 +568,12 @@ export class YamahaDeviceManagement extends DeviceManagement<AdapterInstance & D
     const node = await this.adapter.getForeignObjectAsync(`${this.adapter.namespace}.${cardId}`);
     const shownName =
       typeof node?.common?.name === "string" && node.common.name !== cardId ? node.common.name : card.name;
-    const percent = await this.volumeAsPercentOf(cardId);
-    const data = await context.showForm(
-      buildDeviceForm(cards.filter(entry => entry.id !== cardId).map(entry => entry.ip)),
-      { title: tName("dmEditTitle"), data: { name: shownName, ip: card.ip, volumeAsPercent: percent } },
-    );
+    // From the object just read — no second read for the switch.
+    const percent = (node?.native as { volumeAsPercent?: unknown } | undefined)?.volumeAsPercent === true;
+    const data = await context.showForm(buildDeviceForm(takenAddresses(cards, cardId)), {
+      title: tName("dmEditTitle"),
+      data: { name: shownName, ip: card.ip, volumeAsPercent: percent },
+    });
     if (!data || typeof data.ip !== "string" || !data.ip.trim()) {
       return { refresh: "devices" };
     }
@@ -584,8 +590,16 @@ export class YamahaDeviceManagement extends DeviceManagement<AdapterInstance & D
     }
     let tableChanged = false;
     if (index >= 0) {
-      manual[index] = row;
-      tableChanged = true;
+      // Only a new address changes the table. Name and percent switch live at the device object, and every write of
+      // the table restarts the instance — all devices reconnected and YNCA swept again for a display name (review
+      // 2026-10-05, A10). A row the 0.5.4 migration wrote keeps its address as its NAME — the mark that makes it
+      // follow the receiver (`parseDevices`); written as `{ id, name: id }` it turned into a typed row, stopped
+      // following, and under "Automatic" switched the network search off. Only its `ip` moves, as the adapter's own
+      // address update does (`updateTableAddress`).
+      if (ip !== manual[index].ip) {
+        manual[index] = isDottedQuad(manual[index].name ?? "") ? { ...manual[index], ip } : row;
+        tableChanged = true;
+      }
     } else if (ip !== card.ip) {
       await this.stores.update(now => ({ discovered: now.discovered.filter(entry => entry.id !== cardId) }));
       manual.push(row);

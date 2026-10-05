@@ -64,6 +64,19 @@ export function buildDeviceForm(usedIps: readonly string[]): JsonFormSchema {
 }
 
 /**
+ * The addresses the add and the edit dialog refuse: every card's but the edited one's — the table rows AND the found
+ * devices. The add dialog listed the table rows only, so a found receiver's address could be typed in as a second card
+ * while the edit dialog refused it (review 2026-10-05, E).
+ *
+ * @param cards the cards as the list shows them
+ * @param exceptId the card being edited, if any
+ * @returns the addresses that are taken
+ */
+export function takenAddresses(cards: readonly CardDevice[], exceptId?: string): string[] {
+  return cards.filter(card => card.id !== exceptId).map(card => card.ip);
+}
+
+/**
  * A duplicate-IP/name or invalid-value clash against the other rows, as a ready-to-show
  * message — the backend safety net behind the form validator (the dialog validator may not
  * fire in every admin version; this never lets a bad row through). Each failure mode gets

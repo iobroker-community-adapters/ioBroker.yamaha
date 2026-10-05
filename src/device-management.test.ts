@@ -628,6 +628,18 @@ describe("YamahaDeviceManagement", () => {
       expect(schema.items.ip.validator).toContain("192.168.1.11");
     });
 
+    // Review 2026-10-05, E (proof test REVIEW E): the add dialog listed the table rows only, the edit dialog every card —
+    // a found receiver's address could be typed in as a second card.
+    it("refuses the found devices' addresses as well, like the edit dialog", async () => {
+      store.devices = [{ id: "rx-v685", ip: "192.168.1.20" }];
+      const i = make([living]);
+      const ctx = mockContext({ form: undefined });
+      await i.addDevice(ctx);
+      const schema = ctx.showForm.mock.calls[0][0] as FormSchema;
+      expect(schema.items.ip.validator).toContain("192.168.1.20");
+      expect(schema.items.ip.validator).toContain("192.168.1.10");
+    });
+
     it("writes nothing on cancel or a blank IP", async () => {
       for (const form of [undefined, { ip: "   " }, { name: "X" }, { ip: 42 }]) {
         const i = make([living]);
@@ -752,6 +764,46 @@ describe("YamahaDeviceManagement", () => {
         common: { name: "Lounge" },
         native: { label: "Lounge", labelRank: LABEL_RANK.user },
       });
+    });
+
+    // Review 2026-10-05, A10 (proof test REVIEW E): every edit rewrote the table — and a write of the instance object
+    // restarts the instance — even when only the percent switch or the name changed; a 0.5.4-migrated row came back
+    // as { id, name: id, ip }, counted as TYPED from then on, stopped following the receiver and, under "Automatic",
+    // switched the network search off.
+    it("toggling only the percent switch of a migrated row writes no table, and the row stays migrated", async () => {
+      const migrated = { name: "192.168.1.10", ip: "192.168.1.10" };
+      expect(parseDevices([migrated])[0].source).toBe("migrated");
+      const i = make([migrated], {}, { "yamaha.0.192_168_1_10": { native: { volumeAsPercent: false } } });
+      await i.editDevice(
+        "192_168_1_10",
+        mockContext({ form: { name: "192.168.1.10", ip: "192.168.1.10", volumeAsPercent: true } }),
+      );
+      expect(adapter.setVolumePercent).toHaveBeenCalledWith("192_168_1_10", true);
+      adapter._runDeferred();
+      const tableWrites = adapter.extendForeignObjectAsync.mock.calls.filter(
+        (c: unknown[]) => c[0] === "system.adapter.yamaha.0",
+      );
+      expect(tableWrites).toHaveLength(0);
+      expect(parseDevices(adapter._stored())[0].source).toBe("migrated");
+    });
+
+    it("renaming a card at the same address writes no table — no restart for a display name", async () => {
+      const i = make([{ name: "Living room", ip: "192.168.1.10" }]);
+      await i.editDevice("Living_room", mockContext({ form: { name: "Lounge", ip: "192.168.1.10" } }));
+      adapter._runDeferred();
+      expect(adapter.extendForeignObjectAsync).not.toHaveBeenCalled();
+      expect(adapter.writeDeviceObject).toHaveBeenCalledWith("Living_room", {
+        common: { name: "Lounge" },
+        native: { label: "Lounge", labelRank: LABEL_RANK.user },
+      });
+    });
+
+    it("a migrated row given a new address keeps its address name — it goes on following the receiver", async () => {
+      const i = make([{ name: "192.168.1.10", ip: "192.168.1.10" }]);
+      await i.editDevice("192_168_1_10", mockContext({ form: { name: "", ip: "192.168.1.77" } }));
+      adapter._runDeferred();
+      expect(adapter._stored()).toEqual([{ name: "192.168.1.10", ip: "192.168.1.77" }]);
+      expect(parseDevices(adapter._stored())[0]).toMatchObject({ id: "192_168_1_10", source: "migrated" });
     });
 
     it("does nothing for a card that is no longer in the table", async () => {
