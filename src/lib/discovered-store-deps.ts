@@ -1,5 +1,5 @@
 import * as utils from "@iobroker/adapter-core";
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { mkdir, open, readFile, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { DiscoveredStoreDeps } from "./discovered-store";
 
@@ -31,6 +31,11 @@ export function ignoredStoreDeps(adapter: ioBroker.Adapter): DiscoveredStoreDeps
 /**
  * One JSON file in the instance data directory as store deps (no `native` write, so no restart).
  *
+ * Only a file that is not there yet reads as "nothing stored" (`undefined`). Every other failure — EACCES after a backup
+ * was restored as root, EIO, a directory in the file's place — rejects: an unreadable store is not an empty one, and the
+ * start cleanup took an empty one for "no device remembered" and deleted every remembered device's tree (review
+ * 2026-10-05, A2).
+ *
  * @param adapter the adapter instance (for the data dir and the log)
  * @param fileName the file inside the instance data directory
  * @returns the store's read/write/log dependencies
@@ -41,16 +46,38 @@ function fileStoreDeps(adapter: ioBroker.Adapter, fileName: string): DiscoveredS
     read: async () => {
       try {
         return await readFile(path, "utf8");
-      } catch {
-        return undefined;
+      } catch (e) {
+        if ((e as { code?: unknown } | null)?.code === "ENOENT") {
+          return undefined;
+        }
+        throw e;
       }
     },
-    write: async content => {
-      await mkdir(dirname(path), { recursive: true });
-      await writeFile(path, content, "utf8");
-    },
+    write: content => writeAtomically(path, content),
     log: { debug: message => adapter.log.debug(message) },
   };
+}
+
+/**
+ * Replace a file in one step: the content goes into a temporary file beside it, is flushed to the disk, and the temporary
+ * file is then renamed over the old one. `writeFile` truncates first — a power cut between the truncate and the write left
+ * a 0-byte store behind (review 2026-10-05, A2). A rename within one directory replaces the file whole, so a reader sees
+ * either the old content or the new one.
+ *
+ * @param path the file to replace
+ * @param content its new content
+ */
+async function writeAtomically(path: string, content: string): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  const temporary = `${path}.tmp`;
+  const file = await open(temporary, "w");
+  try {
+    await file.writeFile(content, "utf8");
+    await file.sync();
+  } finally {
+    await file.close();
+  }
+  await rename(temporary, path);
 }
 
 /**

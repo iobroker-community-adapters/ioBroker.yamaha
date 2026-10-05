@@ -251,6 +251,8 @@ const mocks = vi.hoisted(() => ({
     excluded: [] as Array<{ id: string; ip?: string; identity?: { serial?: string; mac?: string } }>,
     /** When true, the store cannot be read at all (a damaged file) — not the same as an empty one. */
     unreadable: false,
+    /** When true, `excluded.json` cannot be read (a damaged file). */
+    excludedUnreadable: false,
   },
   pushReceivers: [] as Array<{
     start: ReturnType<typeof vi.fn>;
@@ -288,31 +290,49 @@ vi.mock("./lib/ssdp-listener", () => ({
   },
 }));
 vi.mock("./lib/discovered-store", async importOriginal => {
-  // The pure matcher stays real: the tests prove the adapter's use of it, not a copy.
+  // The pure matcher stays real: the tests prove the adapter's use of it, not a copy. A read answers with a COPY, as a
+  // file does; a file that cannot be read answers empty and says so through the reader's callback.
   const actual = await importOriginal<typeof DiscoveredStoreModule>();
+  const read =
+    <T>(list: () => T[], broken: () => boolean) =>
+    (_d: unknown, unreadable?: (problem: string) => void): Promise<T[]> => {
+      if (broken()) {
+        unreadable?.("Unexpected end of JSON input");
+        return Promise.resolve([]);
+      }
+      return Promise.resolve(structuredClone(list()));
+    };
   return {
     isExcluded: actual.isExcluded,
-    readDiscovered: vi.fn(() => Promise.resolve(mocks.discoveredStore.devices)),
-    readDiscoveredChecked: vi.fn(() =>
-      Promise.resolve(
-        mocks.discoveredStore.unreadable
-          ? { records: [], readable: false }
-          : { records: mocks.discoveredStore.devices, readable: true },
+    readDiscovered: vi.fn(
+      read(
+        () => mocks.discoveredStore.devices,
+        () => mocks.discoveredStore.unreadable,
       ),
     ),
     writeDiscovered: vi.fn((_d: unknown, devices: Array<{ id: string; ip: string }>) => {
       mocks.discoveredStore.devices = devices;
-      return Promise.resolve();
+      return Promise.resolve(true);
     }),
-    readIgnored: vi.fn(() => Promise.resolve(mocks.discoveredStore.ignored)),
+    readIgnored: vi.fn(
+      read(
+        () => mocks.discoveredStore.ignored,
+        () => false,
+      ),
+    ),
     writeIgnored: vi.fn((_d: unknown, ids: string[]) => {
       mocks.discoveredStore.ignored = [...ids];
-      return Promise.resolve();
+      return Promise.resolve(true);
     }),
-    readExcluded: vi.fn(() => Promise.resolve(mocks.discoveredStore.excluded)),
+    readExcluded: vi.fn(
+      read(
+        () => mocks.discoveredStore.excluded,
+        () => mocks.discoveredStore.excludedUnreadable,
+      ),
+    ),
     writeExcluded: vi.fn((_d: unknown, entries: typeof mocks.discoveredStore.excluded) => {
       mocks.discoveredStore.excluded = [...entries];
-      return Promise.resolve();
+      return Promise.resolve(true);
     }),
   };
 });
@@ -658,6 +678,7 @@ beforeEach(() => {
   mocks.discoveredStore.ignored = [];
   mocks.discoveredStore.excluded = [];
   mocks.discoveredStore.unreadable = false;
+  mocks.discoveredStore.excludedUnreadable = false;
   mocks.pushReceivers.length = 0;
   mocks.listeners.length = 0;
   mocks.listenerBindFails = false;
@@ -2215,6 +2236,72 @@ describe("Yamaha stale-object cleanup", () => {
     await ctx.i.onReady();
     await flush();
     expect(ctx.i.objects.has("Found_one.volume")).toBe(true);
+  });
+
+  // Review 2026-10-05, A2 (proof test store-guard-chain): with the table empty the start search read the broken store as
+  // empty and WROTE its finds over it before the guard read it — the guard then saw a readable store, and the device in
+  // deep standby lost its tree in the same start.
+  it("a store that cannot be read is not written over by the start search, and no remembered tree goes", async () => {
+    mocks.discoveredStore.unreadable = true;
+    mocks.discoverYamaha.mockResolvedValue([
+      { ip: "10.0.0.5", name: "Wohnzimmer", model: "RX-V6A", identity: { serial: "0A1B2B3C" } },
+    ]);
+    const ctx = setup({ devices: [] });
+    ctx.i.objects.set("wx-030-f504", { type: "device", common: {}, native: {} });
+    ctx.i.objects.set("wx-030-f504.volume", { type: "state", common: {}, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    expect(writeDiscovered).not.toHaveBeenCalled();
+    expect(ctx.i.objects.has("wx-030-f504.volume")).toBe(true);
+    // The find runs all the same — it is only not remembered until the store reads again.
+    expect(ctx.calls.map(c => c.device.ip)).toEqual(["10.0.0.5"]);
+    expect(ctx.i.log.warn).toHaveBeenCalledWith(expect.stringContaining("discovered.json cannot be read"));
+  });
+
+  it("while the store cannot be read, a later search does not start a running found device a second time", async () => {
+    mocks.discoveredStore.unreadable = true;
+    const find = { ip: "10.0.0.5", name: "Wohnzimmer", model: "RX-V6A", identity: { serial: "0A1B2B3C" } };
+    mocks.discoverYamaha.mockResolvedValue([find]);
+    const ctx = setup({ devices: [] });
+    await ctx.i.onReady();
+    await flush();
+    await ctx.i.discoverAdditionalDevices(ctx.i.pushReceiver);
+    await flush();
+    expect([...ctx.i.deviceRecords.keys()]).toEqual(["rx-v6a-2b3c"]);
+    expect(ctx.calls.filter(c => c.device.ip === "10.0.0.5")).toHaveLength(1);
+  });
+
+  // Review 2026-10-05, A31 (proof test REVIEW I): the exclusion filter ran on the automatic path only — with the search
+  // off, a deleted device a failed store write left behind was listed idle and kept its tree.
+  it("a deleted device a failed write left in the store is neither idle nor kept when the search is off", async () => {
+    mocks.discoveredStore.devices = [{ id: "deleted-one", ip: "192.168.1.40" }];
+    mocks.discoveredStore.excluded = [{ id: "deleted-one", ip: "192.168.1.40" }];
+    const ctx = setup({ discovery: "never" });
+    ctx.i.objects.set("deleted-one", { type: "device", common: {}, native: {} });
+    ctx.i.objects.set("deleted-one.info.connection", { type: "state", common: { write: false }, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    const lines = ctx.i.log.info.mock.calls.map(c => String(c[0]));
+    expect(lines.some(line => line.includes("stay idle"))).toBe(false);
+    expect(ctx.i.objects.has("deleted-one")).toBe(false);
+    // And the store is brought back in step, whatever the search mode.
+    expect(mocks.discoveredStore.devices).toEqual([]);
+  });
+
+  // Review 2026-10-05, A28: with excluded.json unreadable every earlier delete is unknown — a new find may be one of them.
+  it("while the exclusion list cannot be read, the search takes no new device — a remembered one still moves", async () => {
+    mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+    mocks.discoveredStore.excludedUnreadable = true;
+    mocks.discoverYamaha.mockResolvedValue([
+      { ip: "192.168.1.25", name: "RX-V685" },
+      { ip: "192.168.1.30", name: "WX-030" },
+    ]);
+    const ctx = setup({ devices: [] });
+    await ctx.i.onReady();
+    await flush();
+    expect(mocks.discoveredStore.devices).toEqual([{ id: "RX-V685", ip: "192.168.1.25" }]);
+    expect(ctx.calls.map(c => c.device.ip)).toEqual(["192.168.1.20", "192.168.1.25"]);
+    expect(ctx.i.log.warn).toHaveBeenCalledWith(expect.stringContaining("excluded.json cannot be read"));
   });
 
   // A found device whose address a typed row took over does not run (the typed row owns the address), but it

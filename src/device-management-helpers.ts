@@ -3,9 +3,11 @@ import { tName } from "./lib/i18n";
 import { RESERVED_DEVICE_IDS } from "./lib/device-id";
 import { IPV4_RE } from "./lib/network-interfaces";
 import { rowDeviceId, type DeviceRow } from "./lib/pure-helpers";
-import type { DeviceSource } from "./lib/types";
 
-/** A running device as shown on a card, plus which source it came from. */
+/**
+ * A running device as shown on a card. Nothing on it says how the device got into the list — a found card and a typed
+ * one are the same card (Y-27); the field that said so was carried and never read (review 2026-10-05, C4).
+ */
 export interface CardDevice {
   /** The id-safe device id (object-tree path segment). */
   id: string;
@@ -13,8 +15,6 @@ export interface CardDevice {
   ip: string;
   /** The card header name. */
   name: string;
-  /** Where it lives: the manual `native.devices` table, or the auto-discovery store. */
-  source: DeviceSource;
 }
 
 /**

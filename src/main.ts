@@ -51,16 +51,9 @@ import { tName } from "./lib/i18n";
 import { withValueLabels } from "./lib/catalog/state-labels";
 import { discoverYamaha, probeDescription, type DiscoveredDevice } from "./lib/discovery";
 import { SsdpListener, type SsdpNotify } from "./lib/ssdp-listener";
-import {
-  isExcluded,
-  readDiscovered,
-  readDiscoveredChecked,
-  readExcluded,
-  readIgnored,
-  writeDiscovered,
-} from "./lib/discovered-store";
+import { isExcluded } from "./lib/discovered-store";
+import { type DeviceStores, deviceStoresOf, rememberedDevices } from "./lib/device-stores";
 import { identityFrom, mergeIdentity, sameDevice, type DeviceIdentity } from "./lib/device-identity";
-import { discoveredStoreDeps, excludedStoreDeps, ignoredStoreDeps } from "./lib/discovered-store-deps";
 import { YxcPushReceiver } from "./lib/yxc/push-receiver";
 import { PushLiveness } from "./lib/yxc/push-liveness";
 import { YamahaDeviceManagement } from "./device-management";
@@ -400,6 +393,20 @@ export class Yamaha extends utils.Adapter {
   private readonly stateMirror = new StateMirror();
   /** See {@link instanceReadOnlyStates}. */
   private manifestReadOnly: ReadonlySet<string> | undefined;
+  /** See {@link stores}. */
+  private storeOwner: DeviceStores | undefined;
+
+  /**
+   * The ONE owner of the three lists in the instance data directory (found, deleted, 2.x-deleted devices) — for this
+   * adapter and its device manager alike; every read and change goes through its one chain (review 2026-10-05,
+   * A2/A28/A31). Made at first use: the data directory and the log are the adapter's from onReady on.
+   *
+   * @returns the store owner
+   */
+  private get stores(): DeviceStores {
+    this.storeOwner ??= deviceStoresOf(this);
+    return this.storeOwner;
+  }
 
   /**
    * @param options adapter options passed through by js-controller
@@ -533,7 +540,7 @@ export class Yamaha extends utils.Adapter {
       // from its constructor on — it is built only once I18n stands (fleet check i18n-before-messages). The names
       // still come from the own tName (lib/i18n.ts); this only makes adapter-core's I18n usable for any caller.
       await utils.I18n.init(join(__dirname, "..", "admin"), this);
-      this.deviceManagement = new YamahaDeviceManagement(this);
+      this.deviceManagement = new YamahaDeviceManagement(this, this.stores);
       // From here on the diagnostics report's log ring hears every line, debug included, and the admin's
       // diagnostics card gets its answers.
       this.logRing.hook(this.log);
@@ -580,8 +587,14 @@ export class Yamaha extends utils.Adapter {
       const instance = await this.getForeignObjectAsync(`system.adapter.${this.namespace}`);
       this.legacyVolumePercent =
         (instance?.native as { volumeAsPercent?: unknown } | undefined)?.volumeAsPercent === true;
+      // One read of the stores for the whole start: the remembered devices the user did not delete, and whether the
+      // discovery store could be read at all (review 2026-10-05, A2/A31).
+      const remembered = await this.loadRemembered();
       this.discovering = this.searchesTheNetwork(configured);
-      const devices = unionDevices(configured, this.discovering ? await this.autoDiscover(configured.length) : []);
+      const devices = unionDevices(
+        configured,
+        this.discovering ? await this.autoDiscover(configured.length, remembered.records) : [],
+      );
       if (this.unloading) {
         // Stopped during the initial network search: it resolves on its own clock, and
         // everything below — push socket, subscriptions, device sockets and timers —
@@ -598,18 +611,19 @@ export class Yamaha extends utils.Adapter {
       // this time, but the user never deleted them — so their trees stay and they are stamped
       // offline instead. Until 2.9.1 the first hand-entered receiver silently took every found
       // one's object tree with it, recordings and VIS bindings included.
-      const idle = this.discovering ? [] : await this.rememberedButIdle(devices);
+      const runningIds = new Set(devices.map(device => device.id));
+      const idle = this.discovering ? [] : remembered.records.filter(device => !runningIds.has(device.id));
       // Every device the discovery store remembers keeps its tree, whether it runs this time or not —
       // and when the store cannot be read, no remembered tree is judged at all: an unreadable store is no
       // proof that a device is gone, and a found device whose address a typed row took over is not gone
-      // either (it is in the store, not in the running set).
-      const stored = await readDiscoveredChecked(discoveredStoreDeps(this));
-      const remembered = stored.readable ? new Set(stored.records.map(device => device.id)) : undefined;
+      // either (it is in the store, not in the running set). A device the user deleted is not remembered,
+      // even when a failed write left it in the store (review 2026-10-05, A31).
+      const keep = remembered.readable ? new Set(remembered.records.map(device => device.id)) : undefined;
       // Before the cleanup and before any device connects — see knownDatapoints. The listing
       // is read once and handed on: the cleanup runs on the very same tree.
       const listing = await this.snapshotExistingDatapoints(unmoved);
       await this.seedStateMirror();
-      await this.cleanupStaleObjects(new Set(devices.map(device => device.id)), remembered, listing);
+      await this.cleanupStaleObjects(runningIds, keep, listing);
       await this.ensureInstanceInfoObjects();
       await this.markIdleDevicesOffline(idle);
       await this.subscribeToStates();
@@ -1020,18 +1034,23 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
-   * The devices the discovery store still remembers that are NOT part of this run: the network
-   * search is off, so nothing looked for them. They keep their objects — switching the search
-   * off is a configuration change, not a delete, and only the card's delete button removes a
-   * device (it takes the record out of the store in the same step).
+   * The devices the discovery store remembers that the user did not delete, read once per start, and whether the store
+   * could be read at all. A record the user deleted that a failed write left in the store is pruned here, whatever the
+   * search mode: only the automatic search used to filter it, and with the search off it came back as an idle device
+   * that kept its tree (review 2026-10-05, A31). A remembered device that does not run this time (search off) keeps its
+   * objects — switching the search off is a configuration change, not a delete; only the card's delete button removes a
+   * device.
    *
-   * @param running the devices this run does start
-   * @returns the remembered records that stay idle
+   * @returns the remembered records, and whether `discovered.json` could be read
    */
-  private async rememberedButIdle(running: readonly DeviceRecord[]): Promise<DeviceRecord[]> {
-    const runningIds = new Set(running.map(device => device.id));
-    const remembered = await readDiscovered(discoveredStoreDeps(this));
-    return remembered.filter(device => !runningIds.has(device.id));
+  private async loadRemembered(): Promise<{ records: DeviceRecord[]; readable: boolean }> {
+    let remembered: { records: DeviceRecord[]; readable: boolean } = { records: [], readable: false };
+    await this.stores.update(now => {
+      const records = rememberedDevices(now);
+      remembered = { records, readable: !now.unreadable.has("discovered") };
+      return records.length === now.discovered.length ? undefined : { discovered: records };
+    });
+    return remembered;
   }
 
   /**
@@ -1197,14 +1216,11 @@ export class Yamaha extends utils.Adapter {
    * @param identity the identity to store
    */
   private async rememberIdentity(deviceId: string, identity: DeviceIdentity): Promise<void> {
-    const store = discoveredStoreDeps(this);
-    const known = await readDiscovered(store);
-    const entry = known.find(device => device.id === deviceId);
-    if (!entry || JSON.stringify(entry.identity) === JSON.stringify(identity)) {
-      return;
-    }
-    entry.identity = identity;
-    await writeDiscovered(store, known);
+    await this.stores.update(now =>
+      now.discovered.some(device => device.id === deviceId)
+        ? { discovered: now.discovered.map(device => (device.id === deviceId ? { ...device, identity } : device)) }
+        : undefined,
+    );
   }
 
   /**
@@ -2343,7 +2359,7 @@ export class Yamaha extends utils.Adapter {
   private async handOverVolumePercent(): Promise<boolean> {
     const known = [
       ...parseDevices(this.config.devices).map(device => device.id),
-      ...(await readDiscovered(discoveredStoreDeps(this))).map(device => device.id),
+      ...rememberedDevices(await this.stores.read()).map(device => device.id),
     ];
     let all = true;
     for (const id of new Set(known)) {
@@ -2412,8 +2428,8 @@ export class Yamaha extends utils.Adapter {
   private async migrateDeviceIds(): Promise<{ listing?: AdapterObjects; rows?: unknown[] }> {
     try {
       const listing = await this.getAdapterObjectsAsync();
-      const store = discoveredStoreDeps(this);
-      const discovered = await readDiscovered(store);
+      // A device the user deleted is not moved — its tree goes with the start cleanup (review 2026-10-05, A31).
+      const discovered = rememberedDevices(await this.stores.read());
       const rows = Array.isArray(this.config.devices) ? this.config.devices : [];
       const known = new Set([...parseDevices(rows).map(device => device.id), ...discovered.map(device => device.id)]);
       const devices = new Map<string, ioBroker.Object>();
@@ -2509,12 +2525,11 @@ export class Yamaha extends utils.Adapter {
         return {};
       }
       const renamed = new Map(done.map(move => [move.from, move.to]));
-      const nextDiscovered = discovered.map(record =>
-        renamed.has(record.id) ? { ...record, id: renamed.get(record.id)! } : record,
-      );
-      if (nextDiscovered.some((record, index) => record !== discovered[index])) {
-        await writeDiscovered(store, nextDiscovered);
-      }
+      await this.stores.update(now => ({
+        discovered: now.discovered.map(record =>
+          renamed.has(record.id) ? { ...record, id: renamed.get(record.id)! } : record,
+        ),
+      }));
       const next = renamedTableRows(rows, renamed);
       // The old device object of a device no STORED row names goes now; one a stored row still names
       // keeps its journal until the settings write of this start has stored the new row and the
@@ -2911,20 +2926,11 @@ export class Yamaha extends utils.Adapter {
    * and never appear here.
    *
    * @param configuredCount how many rows the device table holds
+   * @param known the remembered devices the user did not delete (`loadRemembered` — the exclusion list rules over them
+   *   too, not only over fresh finds: a delete whose store write failed would otherwise run again)
    * @returns the device records to run this session
    */
-  private async autoDiscover(configuredCount: number): Promise<DeviceRecord[]> {
-    const store = discoveredStoreDeps(this);
-    const remembered = await readDiscovered(store);
-    // The exclusion list rules here too, not only over fresh finds: the delete action takes the
-    // record out of this file, but that write swallows its errors — a device recorded as excluded
-    // may still be remembered, and running it from here would undo the delete on the next start.
-    const ignored = await readIgnored(ignoredStoreDeps(this));
-    const excluded = await readExcluded(excludedStoreDeps(this));
-    const known = remembered.filter(device => !isExcluded(ignored, excluded, device));
-    if (known.length !== remembered.length) {
-      await writeDiscovered(store, known);
-    }
+  private async autoDiscover(configuredCount: number, known: readonly DeviceRecord[]): Promise<DeviceRecord[]> {
     if (known.length > 0 || configuredCount > 0) {
       // Remembered devices — and the table's rows — start NOW: the network search used to gate
       // every restart by its collect window although the devices were already known. It still
@@ -2939,7 +2945,7 @@ export class Yamaha extends utils.Adapter {
           ? `connecting ${known.length} remembered device(s); the network search runs in the background`
           : "the network search runs in the background, behind the configured devices",
       );
-      return known;
+      return [...known];
     }
     this.log.info("auto-discovery via SSDP (older XML-only devices must be added manually)");
     const merged = await this.runDiscovery();
@@ -3046,19 +3052,6 @@ export class Yamaha extends utils.Adapter {
    * @returns the records to reconcile: new/remembered discovered devices, plus moved table rows
    */
   private async absorbFinds(found: readonly DiscoveredDevice[]): Promise<DeviceRecord[]> {
-    const store = discoveredStoreDeps(this);
-    const known = await readDiscovered(store);
-    const merged = mergeDiscovered(
-      known,
-      [...found],
-      (dropped, takenId) =>
-        this.warnSearchOnce(
-          `collision|${dropped}|${takenId}`,
-          `discovered device "${dropped}" skipped — its address belongs to device "${takenId}"`,
-        ),
-      // A new find never takes an id a table row or a running device holds.
-      new Set([...parseDevices(this.config.devices).map(device => device.id), ...this.deviceRecords.keys()]),
-    );
     const running = [...this.deviceRecords.values()];
     // Whether a record sits at an address — its typed one, or what its typed hostname resolves to.
     const at = (record: DeviceRecord, ip: string): boolean =>
@@ -3077,8 +3070,6 @@ export class Yamaha extends utils.Adapter {
     // and the store would carry the found address back over the typed one (`mergeDiscovered`
     // updates a known id's address). Both the id and the address are matched — the search reads
     // the name off the device, the user typed their own, so the same receiver can carry two ids.
-    const ignored = await readIgnored(ignoredStoreDeps(this));
-    const excluded = await readExcluded(excludedStoreDeps(this));
     const manual = parseDevices(this.config.devices);
     const manualIds = new Set(manual.map(device => device.id));
     const manualIps = new Set(manual.flatMap(device => [device.ip, this.resolvedHosts.get(device.id) ?? device.ip]));
@@ -3086,49 +3077,80 @@ export class Yamaha extends utils.Adapter {
     // name — a find gets its id by the 3.0.0 rule now, so that one is checked too.
     const legacyIdAt = new Map(found.map(find => [find.ip, sanitizeId(find.name || find.ip)]));
     const moved: DeviceRecord[] = [];
-    const kept = merged.filter(device => {
-      const legacyId = legacyIdAt.get(device.ip);
-      if (
-        this.removed.has(device.id) ||
-        isExcluded(ignored, excluded, device) ||
-        (legacyId !== undefined && legacyId !== device.id && ignored.includes(legacyId)) ||
-        manualIds.has(device.id) ||
-        manualIps.has(device.ip)
-      ) {
-        return false;
-      }
-      const twin = running.find(
-        record => record.source !== "discovered" && sameDevice(record.identity, device.identity),
+    let kept: DeviceRecord[] = [];
+    // ONE step on the stores: the merge is computed on what they hold at that moment and written in the same step — a
+    // delete in the device manager can no longer fall between this read and this write and come back with it (review
+    // 2026-10-05, A31). The owner writes nothing unchanged (a search repeats every five minutes while a device is off)
+    // and nothing over a file it could not read (A2).
+    await this.stores.update(now => {
+      // What this run already runs from a search is remembered too, also while the store cannot be read or after a write
+      // failed — otherwise the next search gave the running device a second id: a second tree at the same address.
+      const runningFound = running
+        .filter(record => record.source === "discovered" && !now.discovered.some(known => known.id === record.id))
+        .map(({ source: _source, ...record }) => record);
+      const known = [...now.discovered, ...runningFound];
+      const merged = mergeDiscovered(
+        known,
+        [...found],
+        (dropped, takenId) =>
+          this.warnSearchOnce(
+            `collision|${dropped}|${takenId}`,
+            `discovered device "${dropped}" skipped — its address belongs to device "${takenId}"`,
+          ),
+        // A new find never takes an id a table row or a running device holds.
+        new Set([...manualIds, ...this.deviceRecords.keys()]),
       );
-      if (twin) {
-        if (at(twin, device.ip)) {
+      // While an exclusion list cannot be read, a find the store does not remember yet may be a device the user deleted
+      // — nothing new is taken until the list reads again (review 2026-10-05, A28).
+      const exclusionsRead = !now.unreadable.has("excluded") && !now.unreadable.has("ignored");
+      kept = merged.filter(device => {
+        const legacyId = legacyIdAt.get(device.ip);
+        if (
+          this.removed.has(device.id) ||
+          isExcluded(now.ignored, now.excluded, device) ||
+          (legacyId !== undefined && legacyId !== device.id && now.ignored.includes(legacyId)) ||
+          manualIds.has(device.id) ||
+          manualIps.has(device.ip)
+        ) {
           return false;
         }
-        if (twin.source === "migrated") {
-          moved.push({
-            ...twin,
-            ip: device.ip,
-            identity: mergeIdentity(twin.identity, device.identity),
-            services: device.services,
-          });
+        const twin = running.find(
+          record => record.source !== "discovered" && sameDevice(record.identity, device.identity),
+        );
+        if (twin) {
+          if (at(twin, device.ip)) {
+            return false;
+          }
+          if (twin.source === "migrated") {
+            moved.push({
+              ...twin,
+              ip: device.ip,
+              identity: mergeIdentity(twin.identity, device.identity),
+              services: device.services,
+            });
+            return false;
+          }
+          if (this.warnedElsewhere.get(twin.id) !== device.ip) {
+            this.warnedElsewhere.set(twin.id, device.ip);
+            this.log.warn(
+              `${twin.id}: the device answers at ${device.ip} now, the device table says ${twin.ip} — it stays at the typed address; edit the card to move it`,
+            );
+          }
           return false;
         }
-        if (this.warnedElsewhere.get(twin.id) !== device.ip) {
-          this.warnedElsewhere.set(twin.id, device.ip);
-          this.log.warn(
-            `${twin.id}: the device answers at ${device.ip} now, the device table says ${twin.ip} — it stays at the typed address; edit the card to move it`,
-          );
+        if (!known.some(record => record.id === device.id)) {
+          const orphan = this.orphanOfModel(found.find(find => find.ip === device.ip)?.model);
+          if (orphan) {
+            moved.push({ ...orphan, ip: device.ip, identity: device.identity, services: device.services });
+            return false;
+          }
+          if (!exclusionsRead) {
+            return false;
+          }
         }
-        return false;
-      }
-      if (!known.some(record => record.id === device.id)) {
-        const orphan = this.orphanOfModel(found.find(find => find.ip === device.ip)?.model);
-        if (orphan) {
-          moved.push({ ...orphan, ip: device.ip, identity: device.identity, services: device.services });
-          return false;
-        }
-      }
-      return true;
+        return true;
+      });
+      return { discovered: kept };
     });
     // Two finds that both claim ONE migrated row (a mixed identity, or two devices of the orphan's
     // model): moving it to either would rewrite the table — and restart the instance — on every
@@ -3142,12 +3164,6 @@ export class Yamaha extends utils.Adapter {
       this.log.debug(`${id}: ${claims.get(id)} devices answer for it — not moved`);
     }
     const unambiguous = moved.filter(record => !ambiguous.includes(record.id));
-    // The file only changes when a device appeared, vanished or moved — while a device is
-    // offline the search runs every five minutes, and it must not rewrite an identical file each
-    // time. Compared on the stored form, before the records are stamped below.
-    if (JSON.stringify(kept) !== JSON.stringify(known)) {
-      await writeDiscovered(store, kept);
-    }
     // Stamped HERE, for both callers: onReady unions the result with the device table and stamps
     // again (harmless), the background search hands its result straight to startDevice — and a
     // record without the stamp is one the rediscovery never searches for after it moved.
