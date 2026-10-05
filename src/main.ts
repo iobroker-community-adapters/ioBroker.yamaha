@@ -5,16 +5,8 @@ import { networkInterfaces } from "node:os";
 import { attemptDevice } from "./lib/attempt-device";
 import { isIPv4, resolveIPv4, searchInterfaces } from "./lib/network-interfaces";
 import { isGroupEnabled } from "./lib/catalog/groups";
-import { writableNumber } from "./lib/catalog/value-coerce";
 import type { ObjectDef } from "./lib/catalog/types";
-import {
-  asPercentObject,
-  fromPercent,
-  isAmpVolumeId,
-  toPercent,
-  volumeBoundsOf,
-  type VolumeBounds,
-} from "./lib/catalog/volume-percent";
+import { VolumePresentation } from "./lib/volume-presentation";
 import { DEVICE_TYPE_ICONS, iconForModel } from "./lib/device-type";
 import {
   BOUND_FIELDS,
@@ -213,18 +205,12 @@ export class Yamaha extends utils.Adapter {
   private readonly fetchesInFlight = new Set<ClientRequest>();
   /** Every collection kept per device — deleting a device forgets them in one call (A28). */
   private readonly perDevice = new PerDeviceCaches();
-  /**
-   * What each volume datapoint declares on the DEVICE'S OWN scale, while percent mode replaces
-   * that declaration with 0…100 %. Filled by `upsertObject` — the object is always written before
-   * any value for it — and read by both value directions, so the conversion has exactly one
-   * source. Keyed by the full state id, so zones and devices never mix.
-   */
-  private readonly volumeScales = this.perDevice.stateMap<VolumeBounds>();
-  /**
-   * Per volume datapoint, the definition the coordinator produced BEFORE percent had its say —
-   * what the live switch rebuilds from, so turning it changes the object without a restart.
-   */
-  private readonly volumeDefs = this.perDevice.stateMap<ObjectDef>();
+  /** The percent switch of the volume datapoints — objects, both value directions, the switch itself (Y-05). */
+  private readonly volume = new VolumePresentation(
+    id => this.percentFor(id),
+    this.perDevice,
+    message => this.log.debug(message),
+  );
   /**
    * Per device, whether its volume datapoints read 0…100 %. A device setting, not an instance
    * one: the adapter serves several receivers and 2.8.0's single checkbox hit all of them.
@@ -1935,7 +1921,13 @@ export class Yamaha extends utils.Adapter {
    */
   private async clearStaleBounds(id: string, next: ObjectDef["common"]): Promise<void> {
     const stored = this.storedBounds.get(id);
-    const gone = BOUND_FIELDS.filter(field => stored?.[field] !== undefined && next[field] === undefined);
+    const gone: string[] = BOUND_FIELDS.filter(field => stored?.[field] !== undefined && next[field] === undefined);
+    // Back on the device's own scale, the percent switch's unit goes with the bounds (review 2026-10-05, A24).
+    if (
+      this.volume.dropsUnit(id, next, (this.known.get(id) as { common?: { unit?: unknown } } | undefined)?.common?.unit)
+    ) {
+      gone.push("unit");
+    }
     if (gone.length === 0) {
       this.storedBounds.set(id, { min: next.min, max: next.max, step: next.step });
       return;
@@ -3378,18 +3370,13 @@ export class Yamaha extends utils.Adapter {
     }
     this.volumePercent.set(deviceId, on);
     await this.writeDeviceObject(deviceId, { native: { volumeAsPercent: on } });
-    for (const [id, def] of [...this.volumeDefs]) {
-      if (!id.startsWith(`${deviceId}.`)) {
-        continue;
-      }
-      const bounds = this.volumeScales.get(id);
+    for (const [id, def] of this.volume.definitionsOf(deviceId)) {
       await this.writePresented(id, def);
-      if (!bounds) {
-        continue;
-      }
       const state = await this.getStateAsync(id);
-      if (typeof state?.val === "number") {
-        this.writeState(id, on ? toPercent(state.val, bounds) : fromPercent(state.val, bounds));
+      // Judged AFTER the read: a report that arrived meanwhile is the value to convert (review 2026-10-05, A34).
+      const value = this.volume.standing(id, on, state?.val);
+      if (value !== undefined) {
+        this.writeState(id, value);
       }
     }
   }
@@ -3479,35 +3466,14 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
-   * The object definition to write for a datapoint, once percent mode has had its say.
-   *
-   * Applied to the FINISHED definition, after the coordinator picked the owner, so one rule covers
-   * all three transports and every zone: the decibels YNCA and XML declare in their catalogs and
-   * the display scale MusicCast reports are all just "the device's own scale" here. The bounds it
-   * replaces are remembered, because they are what the two value directions convert against.
+   * The object definition to write for a datapoint, once percent mode has had its say (see {@link VolumePresentation}).
    *
    * @param id the full object id
    * @param def the definition the coordinator produced
    * @returns the definition to write
    */
   private presentVolume(id: string, def: ObjectDef): ObjectDef {
-    if (def.type !== "state" || !isAmpVolumeId(id.slice(id.indexOf(".") + 1))) {
-      return def;
-    }
-    const bounds = volumeBoundsOf(def);
-    if (!bounds) {
-      // Nothing declared to convert against. Percent would be a number with no meaning, so the
-      // datapoint keeps the device's own scale even with the switch on, and says so once.
-      this.volumeScales.delete(id);
-      this.volumeDefs.delete(id);
-      if (this.percentFor(id)) {
-        this.log.debug(`${id}: no declared range — keeping the device's own scale instead of percent`);
-      }
-      return def;
-    }
-    this.volumeScales.set(id, bounds);
-    this.volumeDefs.set(id, def);
-    return this.percentFor(id) ? asPercentObject(def) : def;
+    return this.volume.present(id, def);
   }
 
   /**
@@ -3518,29 +3484,18 @@ export class Yamaha extends utils.Adapter {
    * @returns the value to store
    */
   private volumeAsShown(id: string, value: boolean | number | string | null): boolean | number | string | null {
-    const bounds = this.percentFor(id) ? this.volumeScales.get(id) : undefined;
-    return bounds && typeof value === "number" ? toPercent(value, bounds) : value;
+    return this.volume.shown(id, value);
   }
 
   /**
    * A user's write on its way out, converted back to the scale the device expects.
-   *
-   * Only unacked writes reach here: an acked one is the adapter's own echo, already in percent,
-   * and converting it a second time would walk the value down on every poll.
    *
    * @param relativeId the state id without the namespace
    * @param value the value the user wrote
    * @returns the value to hand to the device's supervisor
    */
   private volumeAsDeviceScale(relativeId: string, value: ioBroker.StateValue): ioBroker.StateValue {
-    const bounds = this.percentFor(relativeId) ? this.volumeScales.get(relativeId) : undefined;
-    if (!bounds) {
-      return value;
-    }
-    // A number written as text ("50" from a VIS input or MQTT) is still a percentage — passed on
-    // unconverted it reached a speaker as its raw step 50, 83 % of a 0…60 scale (audit 2026-09-24, D1).
-    const percent = writableNumber(value);
-    return percent === undefined ? null : fromPercent(percent, bounds);
+    return this.volume.toDevice(relativeId, value);
   }
 
   /**

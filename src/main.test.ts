@@ -4479,6 +4479,76 @@ describe("the device table and the network search side by side", () => {
 // — in that order. A value written against the old definition is out of range, and the
 // js-controller says so on every refresh (the defect 2.8.0 fixed for the device's own scale
 // change; the same trap is here).
+describe("the percent switch on and off again (review 2026-10-05, A24/A34)", () => {
+  // Proof test percent-unit: a MusicCast speaker declares its own step count with NO unit. Percent on wrote "%", and
+  // back on the device scale the merge kept it: 0…60 steps labelled "%" for good (Y-05).
+  it("back on the device's own scale, a unit-less volume loses the percent unit", async () => {
+    const ctx = setup();
+    const internals = ctx.i as unknown as {
+      writePresented(id: string, def: unknown): Promise<void>;
+      known: { get(id: string): { common: Record<string, unknown> } | undefined };
+    };
+    const speaker = {
+      id: "volume",
+      type: "state",
+      common: {
+        name: "Volume",
+        type: "number",
+        role: "level.volume",
+        read: true,
+        write: true,
+        min: 0,
+        max: 60,
+        step: 1,
+      },
+    };
+    await internals.writePresented("wx.volume", speaker);
+    await ctx.i.setVolumePercent("wx", true);
+    expect(internals.known.get("wx.volume")?.common).toMatchObject({ unit: "%", min: 0, max: 100, step: 0.5 });
+    await ctx.i.setVolumePercent("wx", false);
+    const after = internals.known.get("wx.volume")?.common;
+    expect(after).toMatchObject({ min: 0, max: 60, step: 1 });
+    expect(after).not.toHaveProperty("unit");
+    expect((ctx.i.objects.get("wx.volume")?.common as Record<string, unknown>).unit).toBeUndefined();
+  });
+
+  // Proof test REVIEW G: a report that arrived while the switch was applied was converted twice — −40 dB → 50.5 % →
+  // read again as decibels → 100 %.
+  it("a volume report during the switch is converted once", async () => {
+    const dbVolume = {
+      type: "state",
+      common: { type: "number", role: "level.volume", write: true, min: -80.5, max: 0, step: 0.5, unit: "dB" },
+    };
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    const deps = ctx.calls[0].deps;
+    const upsert = deps.upsertObject as (id: string, def: unknown) => Promise<void>;
+    const setStateAck = deps.setStateAck as (id: string, value: unknown) => void;
+    await upsert("Living_room.volume", dbVolume);
+    setStateAck("Living_room.volume", -40);
+    await flush();
+    const internals = ctx.i as unknown as { extendObject: ReturnType<typeof vi.fn> };
+    const realExtend = internals.extendObject.getMockImplementation() as (id: string, o: unknown) => Promise<void>;
+    internals.extendObject.mockImplementation(async (id: string, obj: unknown) => {
+      await realExtend(id, obj);
+      if ((obj as { native?: { volumeAsPercent?: unknown } }).native?.volumeAsPercent === true) {
+        // the receiver re-reports its (unchanged) volume while the switch is being applied
+        setStateAck("Living_room.volume", -40);
+        await flush();
+      }
+    });
+    await ctx.i.setVolumePercent("Living_room", true);
+    await flush();
+    expect(ctx.i.states.get("Living_room.volume")?.val).toBe(50.5);
+    // And back: the device's own value, not a percentage read as decibels.
+    internals.extendObject.mockImplementation(realExtend);
+    await ctx.i.setVolumePercent("Living_room", false);
+    await flush();
+    expect(ctx.i.states.get("Living_room.volume")?.val).toBe(-40);
+  });
+});
+
 describe("switching one device to percent while the adapter runs", () => {
   const dbVolume = {
     type: "state",
