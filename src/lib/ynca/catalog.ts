@@ -725,9 +725,11 @@ const AMP_FUNCS: FuncDef[] = [
     state: "sound.adaptiveDrc",
     nameKey: "adaptiveDRC",
     descKey: "descAdaptiveDRC",
-    spec: { kind: "enum", states: ADAPTIVEDRC_STATES },
+    // A switch on every protocol — MusicCast reports it as a boolean, and Off/Auto are its only two values
+    // (krobi 2026-10-05: "Schalter überall").
+    spec: { kind: "onoff", on: "Auto", off: "Off" },
     write: true,
-    role: "state",
+    role: "switch",
   },
   {
     func: "SURROUNDAI",
@@ -1384,7 +1386,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     subunit: "TUN",
     func: "TUNED",
     state: "tuner.tuned",
-    nameKey: "tunedToAStation",
+    nameKey: "tuned",
     descKey: "descTunedToAStation",
     spec: { kind: "onoff", on: "Assert", off: "Negate" },
     write: false,
@@ -2151,7 +2153,7 @@ const DAB_FUNCS: FuncDef[] = [
   {
     func: "DABCHLABEL",
     state: "dab.channelLabel",
-    nameKey: "dabChannel",
+    nameKey: "channelLabel",
     descKey: "descDabChannel",
     spec: { kind: "text" },
     write: false,
@@ -2160,7 +2162,7 @@ const DAB_FUNCS: FuncDef[] = [
   {
     func: "DABDLSLABEL",
     state: "dab.dls",
-    nameKey: "dabDLSText",
+    nameKey: "dlsText",
     descKey: "descDabDLSText",
     spec: { kind: "text" },
     write: false,
@@ -2169,7 +2171,7 @@ const DAB_FUNCS: FuncDef[] = [
   {
     func: "DABENSEMBLELABEL",
     state: "dab.ensembleLabel",
-    nameKey: "dabEnsemble",
+    nameKey: "ensembleLabel",
     descKey: "descDabEnsemble",
     spec: { kind: "text" },
     write: false,
@@ -2178,7 +2180,7 @@ const DAB_FUNCS: FuncDef[] = [
   {
     func: "DABSERVICELABEL",
     state: "dab.serviceLabel",
-    nameKey: "dabService",
+    nameKey: "serviceLabel",
     descKey: "descDabService",
     spec: { kind: "text" },
     write: false,
@@ -2208,7 +2210,7 @@ const DAB_FUNCS: FuncDef[] = [
   {
     func: "DABPRGTYPE",
     state: "dab.programType",
-    nameKey: "dabProgramType",
+    nameKey: "programmeType",
     descKey: "descDabProgramType",
     spec: { kind: "text" },
     write: false,
@@ -2284,7 +2286,8 @@ const DAB_FUNCS: FuncDef[] = [
     state: "dab.bitRate",
     nameKey: "bitRate",
     descKey: "descBitRate",
-    spec: { kind: "number", unit: "kbps", decimals: 0 },
+    // The range MusicCast declares for the same field (32–256 kbps, 0 while no service is received).
+    spec: { kind: "number", unit: "kbps", decimals: 0, min: 0, max: 256 },
     write: false,
     role: "media.bitrate",
   },
@@ -2338,7 +2341,7 @@ const DAB_FUNCS: FuncDef[] = [
   {
     func: "FMTUNED",
     state: "tuned",
-    nameKey: "tunedToAStation",
+    nameKey: "tuned",
     descKey: "descTunedToAStation",
     spec: { kind: "onoff", on: "Assert", off: "Negate" },
     write: false,
@@ -2430,7 +2433,7 @@ const HDRADIO_FUNCS: FuncDef[] = [
   {
     func: "TUNED",
     state: "tuned",
-    nameKey: "tunedToAStation",
+    nameKey: "tuned",
     descKey: "descTunedToAStation",
     spec: { kind: "onoff", on: "Assert", off: "Negate" },
     write: false,

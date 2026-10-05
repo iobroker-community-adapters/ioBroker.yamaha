@@ -65,15 +65,45 @@ export interface YxcAmpEntry {
   disableBit?: number;
   /**
    * The scale the value is shown on: `volume` = the zone's display scale (`volumePresentation` sets unit and
-   * bounds), `volumeLimit` = the unit of that scale (the maximum volume arrives in raw steps and is shown on it).
+   * bounds), `volumeLimit` = the unit of that scale (the maximum volume arrives in raw steps and is shown on it),
+   * `halfDb` = decibels from MusicCast's half-decibel steps (value, bounds and step halved; see {@link halfDb}).
    */
-  scale?: "volume" | "volumeLimit";
+  scale?: "volume" | "volumeLimit" | "halfDb";
+  /**
+   * Turn the gated value into what the setter takes; undefined drops the write (it names no value of the datapoint).
+   */
+  accept?: (value: YxcValue) => YxcValue | undefined;
   /**
    * Write mapping — absent means the state is read-only (`common.write: false`). The entry
    * calls the client DIRECTLY, so there is no method-name string to keep in sync with a
    * dispatch switch and no "unknown command" runtime path.
    */
   write?: YxcAmpWrite;
+}
+
+/**
+ * The sleep timer's word for a number of minutes, as YNCA and XML name the steps.
+ *
+ * @param minutes the minutes MusicCast reports
+ * @returns `Off` or `<n> min`
+ */
+export function sleepWord(minutes: number): string {
+  return minutes === 0 ? "Off" : `${minutes} min`;
+}
+
+/**
+ * The minutes a written sleep value names: a word of the list (`Off`, `30 min`) or a number of minutes.
+ *
+ * @param word the written value as text
+ * @returns the minutes, or undefined when it names none
+ */
+export function sleepMinutes(word: string): number | undefined {
+  const text = word.trim().toLowerCase();
+  if (text === "off") {
+    return 0;
+  }
+  const match = /^(\d+)(?:\s*min)?$/.exec(text);
+  return match ? Number(match[1]) : undefined;
 }
 
 /**
@@ -108,6 +138,40 @@ const word = (set: (client: YxcClientLike, value: string, zone: string) => Promi
   kind: "set",
   apply: (client, value, zone) => set(client, String(value), zone),
 });
+
+/**
+ * Bass and treble in decibels, as YNCA and XML show them (krobi 2026-10-05: "dB überall"). MusicCast
+ * counts them in half-decibels — measured over 19 device captures, `tone_control` is −12…+12 in steps of 1, the same 25
+ * steps the YNCA specification calls −6…+6 dB in steps of 0.5 — so the value, its bounds and its step are halved on
+ * the way in and doubled on the way out.
+ */
+export const halfDb = {
+  /**
+   * @param value the raw status value
+   * @returns the decibels, or null where the device names none
+   */
+  read: (value: unknown): number | null => {
+    const steps = readNumber(value);
+    return steps === null ? null : steps / 2;
+  },
+  /**
+   * @param decibels the written decibels (on the halved grid)
+   * @returns the device's step count
+   */
+  wire: (decibels: number): number => Math.round(decibels * 2),
+  /**
+   * @param range the range the device declares in steps
+   * @param range.min the lower end
+   * @param range.max the upper end
+   * @param range.step the step
+   * @returns the same range in decibels
+   */
+  range: (range: { min: number; max: number; step: number }): { min: number; max: number; step: number } => ({
+    min: range.min / 2,
+    max: range.max / 2,
+    step: range.step / 2,
+  }),
+};
 
 /**
  * MusicCast's tone/equalizer numbers are DEVICE STEPS, not decibels — measured, not assumed:
@@ -227,8 +291,9 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
       nameKey: "subwooferTrim",
       descKey: "descSubwooferTrim",
       type: "number",
-      // No unit: MusicCast counts the subwoofer trim in the device's own steps, like the tone controls
-      // — "dB" claimed a scale nobody documented. Written as "" rather than left out, because an
+      // No unit: the subwoofer trim's steps differ by device (−12…12 on a receiver, −10…10 and −4…4 on speakers and
+      // soundbars) and no specification says what a step is — unlike the tone controls (see {@link halfDb}). On a
+      // receiver YNCA or XML serves it in decibels (owner policy). Written as "" rather than left out, because an
       // existing object keeps a unit that is merely omitted (extendObject merges; audit 2026-09-24, C9).
       unit: "",
       role: "level",
@@ -243,21 +308,21 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
   },
   {
     state: "sound.bass",
-    // unit "": an installation from before 2.5.0 still carries "dB" here (see subwooferVolume, C9).
     common: {
       nameKey: "bass",
       descKey: "descBass",
       type: "number",
-      unit: "",
+      unit: "dB",
       role: "level.bass",
       read: true,
       write: true,
     },
     create: { kind: "func", func: "tone_control" },
     read: { path: ["tone_control", "bass"] },
-    fromStatus: readNumber,
-    write: numeric((c, v, z) => c.setBassTo(v, z)),
+    fromStatus: halfDb.read,
+    write: numeric((c, v, z) => c.setBassTo(halfDb.wire(v), z)),
     range: "tone_control",
+    scale: "halfDb",
   },
   {
     state: "sound.toneMode",
@@ -281,38 +346,41 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
       nameKey: "treble",
       descKey: "descTreble",
       type: "number",
-      unit: "",
+      unit: "dB",
       role: "level.treble",
       read: true,
       write: true,
     },
     create: { kind: "func", func: "tone_control" },
     read: { path: ["tone_control", "treble"] },
-    fromStatus: readNumber,
-    write: numeric((c, v, z) => c.setTrebleTo(v, z)),
+    fromStatus: halfDb.read,
+    write: numeric((c, v, z) => c.setTrebleTo(halfDb.wire(v), z)),
     range: "tone_control",
+    scale: "halfDb",
   },
   {
     state: "sleep",
     common: {
       nameKey: "sleepTimer",
       descKey: "descSleepTimer",
-      type: "number",
-      unit: "min",
-      role: "level.timer.sleep",
+      // The same dropdown as over YNCA and XML (krobi 2026-10-05: a dropdown where the device has fixed steps): the
+      // five steps YXC Basic §5.1/§5.4 declares, in the receiver's own words. MusicCast counts minutes on the wire.
+      type: "string",
+      role: "state",
       read: true,
       write: true,
-      // The five values YXC Basic §5.1/§5.4 declares, as a HINT for the dropdown — a value outside
-      // them still goes to the device, which decides; a refusal is read back (audit 2026-09-24, C22).
-      min: 0,
-      max: 120,
-      step: 30,
-      states: { 0: "Off", 30: "30 min", 60: "60 min", 90: "90 min", 120: "120 min" },
+      states: { Off: "Off", "30 min": "30 min", "60 min": "60 min", "90 min": "90 min", "120 min": "120 min" },
     },
     create: { kind: "func", func: "sleep" },
     read: { field: "sleep" },
-    fromStatus: readNumber,
-    write: numeric((c, v, z) => c.sleep(v, z)),
+    fromStatus: (value: unknown): string | null => {
+      const minutes = readNumber(value);
+      return minutes === null ? null : sleepWord(minutes);
+    },
+    // A word of the list, or minutes as a script wrote them before (30, "30") — the device decides on a value
+    // outside its steps, and a refusal is read back (audit 2026-09-24, C22).
+    accept: value => sleepMinutes(String(value)),
+    write: { kind: "set", apply: (client, value, zone) => client.sleep(Number(value), zone) },
   },
   {
     state: "sound.dialogueLevel",

@@ -324,7 +324,17 @@ export function snapToGrid(value: number, grid: NumberGrid | undefined): number 
 }
 
 /** The words a switch datapoint accepts besides a real boolean — compared lower-cased and trimmed. */
-const BOOL_WORDS: Record<string, boolean> = { true: true, on: true, 1: true, false: false, off: false, 0: false };
+const BOOL_WORDS: Record<string, boolean> = {
+  true: true,
+  on: true,
+  1: true,
+  false: false,
+  off: false,
+  0: false,
+  // Adaptive DRC was the word "Auto" before it became a switch on every protocol — a script that still writes it
+  // keeps working (krobi 2026-10-05).
+  auto: true,
+};
 
 /**
  * Read a value written to a SWITCH datapoint. ioBroker lets anything write a state: a

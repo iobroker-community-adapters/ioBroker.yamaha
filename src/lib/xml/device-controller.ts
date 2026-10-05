@@ -359,8 +359,6 @@ export class XmlDeviceController {
         return zoneKey === "main" ? descriptor.programs : undefined;
       case "sleep":
         return descriptor.sleep;
-      case "sound.adaptiveDrc":
-        return descriptor.adaptiveDrc;
       default:
         return undefined;
     }

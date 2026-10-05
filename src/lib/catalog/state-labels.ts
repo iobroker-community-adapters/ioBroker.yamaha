@@ -130,7 +130,6 @@ export const STATE_LABELS: Readonly<Record<string, Readonly<Record<string, Label
   },
   "remote.cursor": REMOTE_CURSOR,
   "remote.menu": REMOTE_MENU,
-  "sound.adaptiveDrc": { Off: "labelSwitchedOff", Auto: "labelAutomatic" },
   "sound.audioSelect": {
     auto: "labelAutomatic",
     hdmi: "labelHdmi",

@@ -1,7 +1,7 @@
 import { splitZone, type ZoneKey } from "../catalog/zones";
 import { slotNumber, snapToGrid, writableNumber, type NumberGrid } from "../catalog/value-coerce";
 import { gateValue, range, shown, type YxcValue } from "./values";
-import { YXC_AMP_CATALOG } from "./catalog";
+import { halfDb, YXC_AMP_CATALOG } from "./catalog";
 import { isRemoteWord, YXC_CURSOR_VALUES, YXC_MENU_VALUES } from "./remote";
 import type { YxcCapabilities, YxcZone } from "./capability";
 import type { YxcClientLike } from "./client-contract";
@@ -349,7 +349,8 @@ function catalogWrite(name: string, value: unknown, context: YxcWriteContext, zo
   if (!write) {
     return drop("it is read-only on MusicCast");
   }
-  const grid = entry.range ? declaredZone(context, zone)?.ranges?.[entry.range] : undefined;
+  const declared = entry.range ? declaredZone(context, zone)?.ranges?.[entry.range] : undefined;
+  const grid = declared && entry.scale === "halfDb" ? halfDb.range(declared) : declared;
   switch (write.kind) {
     case "volume":
       // Declarative: the datapoint carries what the receiver DISPLAYS while setVolume takes only the raw step
@@ -362,9 +363,12 @@ function catalogWrite(name: string, value: unknown, context: YxcWriteContext, zo
         send({ kind: "equalizer", zone, band: write.band, value: Number(num) }),
       );
     case "set":
-      return gated(entry.common.type, value, grid, input =>
-        send({ kind: "run", run: client => write.apply(client, input, zone) }),
-      );
+      return gated(entry.common.type, value, grid, gatedValue => {
+        const input = entry.accept ? entry.accept(gatedValue) : gatedValue;
+        return input === undefined
+          ? drop(`${JSON.stringify(value)} is no value of ${name}`)
+          : send({ kind: "run", run: client => write.apply(client, input, zone) });
+      });
   }
 }
 

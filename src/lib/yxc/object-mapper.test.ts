@@ -9,6 +9,8 @@ import {
 import rxA2070v287 from "./__fixtures__/RX_A2070_287_208.json";
 import cdNt670d from "./__fixtures__/cd_nt670d.json";
 import { parseYxcFeatures } from "./capability";
+import { sleepMinutes } from "./catalog";
+import { yxcWrite } from "./command-mapper";
 import { YXC_MENU_VALUES } from "./remote";
 import rxA2070 from "./__fixtures__/RX_A2070_v1.json";
 import wx10 from "./__fixtures__/WX10_216_208.json";
@@ -408,10 +410,24 @@ describe("mapYxcToObjects tree hygiene", () => {
   });
 
   // Basic §5.1/§5.4: sleep takes 0/30/60/90/120 — the dropdown offers them (a hint, not a gate).
-  test("the sleep timer offers the five values the specification declares", () => {
+  test("the sleep timer offers the five values the specification declares, in the words YNCA and XML use", () => {
     const sleep = mapYxcToObjects(parseYxcFeatures(rxA2070)).find(o => o.id === "sleep");
-    expect(sleep?.common.states).toEqual({ 0: "Off", 30: "30 min", 60: "60 min", 90: "90 min", 120: "120 min" });
-    expect(sleep?.common.max).toBe(120);
+    expect(sleep?.common).toMatchObject({ type: "string", role: "state" });
+    expect(sleep?.common.states).toEqual({
+      Off: "Off",
+      "30 min": "30 min",
+      "60 min": "60 min",
+      "90 min": "90 min",
+      "120 min": "120 min",
+    });
+  });
+
+  test("a sleep value is written as minutes, from a word of the list or a number (krobi 2026-10-05)", () => {
+    expect(sleepMinutes("Off")).toBe(0);
+    expect(sleepMinutes("90 min")).toBe(90);
+    expect(sleepMinutes("30")).toBe(30);
+    expect(sleepMinutes("soon")).toBeUndefined();
+    expect(yxcWrite("sleep", "soon").dropped).toBe('"soon" is no value of sleep');
   });
 
   test("the cd player carries track number, totals, disc time and drive status", () => {

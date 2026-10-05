@@ -141,7 +141,7 @@ describe("parseBasicStatus", () => {
     const status = parseBasicStatus(xml);
     expect(status.straight).toBe(true);
     expect(status.direct).toBe(false);
-    expect(status.adaptiveDrc).toBe("Auto");
+    expect(status.adaptiveDrc).toBe(true);
     expect(status.volume).toBeUndefined();
   });
 
@@ -562,6 +562,9 @@ describe("parseDescriptor — the zone commands and the pad a receiver declares"
     const a2060 = parseDescriptor(readFixture("desc-rx-a2060.xml")).puts ?? {};
     expect(zonePad(a2060, "Main_Zone").cursor).toEqual({ path: "Cursor_Control,Cursor", words: CROSS });
     expect(zonePad(a2060, "Zone_2").menu?.path).toBe("Cursor_Control,Menu_Control");
+    // Zone 2 lists On Screen, Top Menu, Menu and Display with Assigned="No" — desc.xml decides, only Option is offered.
+    expect(zonePad(a2060, "Zone_2").menu?.words).toEqual(["Option"]);
+    expect(zonePad(a2060, "Main_Zone").menu?.words).toEqual(["On Screen", "Top Menu", "Menu", "Option", "Display"]);
     const rxv3900 = (
       JSON.parse(readFileSync(join(__dirname, "../../../test/fixtures/inventory/rxv3900.json"), "utf8")) as {
         xml: { descriptor: string };

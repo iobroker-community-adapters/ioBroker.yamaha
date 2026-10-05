@@ -12,7 +12,7 @@ import { remoteObjectDefs } from "../browse/objects";
 import { tName, type I18nKey } from "../i18n";
 import { ZONE_KEYS, zonePrefix } from "../catalog/zones";
 import type { YxcCapabilities, YxcZone } from "./capability";
-import { YXC_AMP_CATALOG, type YxcAmpEntry } from "./catalog";
+import { halfDb, YXC_AMP_CATALOG, type YxcAmpEntry } from "./catalog";
 import { ALARM_DAYS } from "./clock";
 import { DAB_FIELDS } from "./play-info";
 
@@ -352,7 +352,7 @@ const RDS_STATES: Array<{ id: string; nameKey: I18nKey; descKey: I18nKey }> = [
   { id: "tuner.rdsText", nameKey: "rdsText", descKey: "descRdsText" },
   { id: "tuner.rdsTextB", nameKey: "rdsTextB", descKey: "descRdsTextB" },
   { id: "tuner.rdsService", nameKey: "rdsStation", descKey: "descRdsStation" },
-  { id: "tuner.rdsProgramType", nameKey: "rdsProgrammeType", descKey: "descRdsProgramType" },
+  { id: "tuner.rdsProgramType", nameKey: "rdsProgramType", descKey: "descRdsProgramType" },
 ];
 
 /**
@@ -400,6 +400,9 @@ function zoneStateObject(
     }
   } else {
     range = entry.range ? zone.ranges?.[entry.range] : undefined;
+    if (range && entry.scale === "halfDb") {
+      range = { ...range, ...halfDb.range(range) };
+    }
   }
   if (range) {
     common.min = range.min;
@@ -788,6 +791,8 @@ function tunerObjects(capabilities: YxcCapabilities): ObjectDef[] {
     read: true,
     write: true,
     min: 0,
+    // Whole slots, as YNCA and XML declare them.
+    step: 1,
   };
   if (capabilities.tuner?.presetNum) {
     presetCommon.max = capabilities.tuner.presetNum;

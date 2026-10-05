@@ -116,7 +116,7 @@ export class XmlTuner implements XmlWriteRoute {
       write: false,
     });
     await state("tuned", {
-      name: tName("tunedToAStation"),
+      name: tName("tuned"),
       desc: tName("descTunedToAStation"),
       type: "boolean",
       role: "indicator",

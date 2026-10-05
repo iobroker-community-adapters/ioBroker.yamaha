@@ -52,9 +52,10 @@ describe("parseYxcStatus", () => {
       contents_display: true,
     };
     const u = parseYxcStatus(status, "main");
-    expect(u).toContainEqual({ id: "sound.bass", value: 3 });
-    expect(u).toContainEqual({ id: "sound.treble", value: -2 });
-    expect(u).toContainEqual({ id: "sleep", value: 60 });
+    // Half-decibel steps arrive as decibels.
+    expect(u).toContainEqual({ id: "sound.bass", value: 1.5 });
+    expect(u).toContainEqual({ id: "sound.treble", value: -1 });
+    expect(u).toContainEqual({ id: "sleep", value: "60 min" });
     expect(u).toContainEqual({ id: "sound.dialogueLevel", value: 2 });
     expect(u).toContainEqual({ id: "volume", value: -47.5 });
     expect(u).toContainEqual({ id: "sound.contentsDisplay", value: true });

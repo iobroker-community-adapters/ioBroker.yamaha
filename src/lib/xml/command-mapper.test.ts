@@ -154,11 +154,11 @@ describe("parseXmlStatus", () => {
   });
 
   test("emits straight, direct, adaptive DRC and dialogue level when present", () => {
-    const bs: BasicStatus = { straight: true, direct: false, adaptiveDrc: "Auto", dialogueLevel: 2 };
+    const bs: BasicStatus = { straight: true, direct: false, adaptiveDrc: true, dialogueLevel: 2 };
     const u = parseXmlStatus(bs, "main");
     expect(u).toContainEqual({ id: "sound.straight", value: true });
     expect(u).toContainEqual({ id: "sound.direct", value: false });
-    expect(u).toContainEqual({ id: "sound.adaptiveDrc", value: "Auto" });
+    expect(u).toContainEqual({ id: "sound.adaptiveDrc", value: true });
     expect(u).toContainEqual({ id: "sound.dialogueLevel", value: 2 });
   });
 });

@@ -87,8 +87,8 @@ describe("stateToYxc", () => {
   });
 
   test("runs tone bass/treble and sleep through their setters; read-only fields yield no command", async () => {
-    expect(await ranCall("sound.bass", 4)).toEqual(["setBassTo", [4, "main"]]);
-    expect(await ranCall("sound.treble", -1)).toEqual(["setTrebleTo", [-1, "main"]]);
+    expect(await ranCall("sound.bass", 4)).toEqual(["setBassTo", [8, "main"]]);
+    expect(await ranCall("sound.treble", -1)).toEqual(["setTrebleTo", [-2, "main"]]);
     expect(await ranCall("sleep", 60)).toEqual(["sleep", [60, "main"]]);
     expect(stateToYxc("actualVolume", -40)).toBeUndefined();
     expect(stateToYxc("sound.audioSelect", "auto")).toBeUndefined();
@@ -380,10 +380,11 @@ describe("written numbers follow the one rule of all three protocols (A26)", () 
 
   test("an amplifier number and an equalizer band land on the zone's declared grid", async () => {
     const { client, calls } = recordingClient();
-    const bass = stateToYxc("sound.bass", 2.4, fm);
+    // The declared −12…12 steps are −6…6 dB in steps of 0.5: 1.2 dB lands on 1 dB, sent as 2 steps.
+    const bass = stateToYxc("sound.bass", 1.2, fm);
     await (bass as { kind: "run"; run: (c: YxcClientLike) => Promise<unknown> }).run(client);
     expect(calls).toEqual([["setBassTo", [2, "main"]]]);
-    expect(yxcWrite("sound.bass", 13, fm).dropped).toBe("13 is outside the declared range -12…12");
+    expect(yxcWrite("sound.bass", 7, fm).dropped).toBe("7 is outside the declared range -6…6");
     expect(stateToYxc("sound.equalizer.low", 1.3, fm)).toEqual({
       kind: "equalizer",
       zone: "main",

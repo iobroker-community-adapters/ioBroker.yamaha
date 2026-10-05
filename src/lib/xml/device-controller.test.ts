@@ -664,7 +664,7 @@ describe("desc.xml — the classic generation's own enumerations (2026-09-09)", 
 
   test("program, sleep and Adaptive DRC dropdowns are the receiver's own desc.xml enumerations, declared", async () => {
     const memory = new ProbeMemory();
-    const s = setup({ Main_Zone: { power: true, soundProgram: "Standard", sleep: "Off", adaptiveDrc: "Auto" } });
+    const s = setup({ Main_Zone: { power: true, soundProgram: "Standard", sleep: "Off", adaptiveDrc: true } });
     withMemory(s, memory);
     s.client.descriptor = readFixture("desc-rx-v473.xml");
     await s.controller.start();
@@ -679,7 +679,8 @@ describe("desc.xml — the classic generation's own enumerations (2026-09-09)", 
       "Off",
     ]);
     expect(def("living.sleep")?.declaredStates).toBe(true);
-    expect(def("living.sound.adaptiveDrc")?.common?.states).toEqual({ Auto: "Auto", Off: "Off" });
+    // Adaptive DRC is a switch on every protocol (krobi 2026-10-05) — a switch carries no word list.
+    expect(def("living.sound.adaptiveDrc")?.common?.states).toBeUndefined();
     expect(memory.remembered("xmlDescriptor:v3")).toMatchObject({ programs: expect.any(Array) });
     // The description is read once per device, not once per zone.
     expect(s.client.calls.filter(c => c.method === "getDescriptor")).toHaveLength(1);

@@ -87,7 +87,9 @@ describe("YXC_AMP_CATALOG", () => {
     expect(byState.get("mute")?.fromStatus("maybe")).toBeNull();
     expect(byState.get("power")?.fromStatus("standby")).toBe(false);
     expect(byState.get("power")?.fromStatus("on")).toBe(true);
-    expect(byState.get("sleep")?.fromStatus(60)).toBe(60);
+    // The sleep timer reads in the receiver's words, as over YNCA and XML.
+    expect(byState.get("sleep")?.fromStatus(60)).toBe("60 min");
+    expect(byState.get("sleep")?.fromStatus(0)).toBe("Off");
     expect(byState.get("sleep")?.fromStatus("abc")).toBeNull();
     expect(byState.get("input")?.fromStatus(" hdmi1 ")).toBe("hdmi1");
     expect(byState.get("input")?.fromStatus("")).toBeNull();
@@ -124,7 +126,12 @@ describe("YXC_AMP_CATALOG", () => {
     // YXC Basic §5.1 `disable_flags`: b0 volume, b1 mute, b2 link audio delay.
     expect(declared("disableBit")).toEqual({ volume: 0b1, mute: 0b10, "sound.linkAudioDelay": 0b100 });
     expect([disableBitOf("volume"), disableBitOf("mute"), disableBitOf("sound.bass")]).toEqual([0b1, 0b10, undefined]);
-    expect(declared("scale")).toEqual({ volume: "volume", "advanced.maxVolume": "volumeLimit" });
+    expect(declared("scale")).toEqual({
+      volume: "volume",
+      "advanced.maxVolume": "volumeLimit",
+      "sound.bass": "halfDb",
+      "sound.treble": "halfDb",
+    });
   });
 
   it("keeps every state id unique", () => {

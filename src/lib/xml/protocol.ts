@@ -610,7 +610,9 @@ export function descriptorPuts(xml: string): Record<string, Record<string, XmlDe
     }
     for (const put of block.matchAll(/<Put_1[^>]*\sID="(P\d+)"[^>]*>([^<]*)<\/Put_1>/g)) {
       const declared = defines.get(put[1]);
-      if (declared) {
+      // A key the receiver marks `Assigned="No"` (RX-A2060 Zone 2: On Screen, Top Menu, Menu, Display) is listed but
+      // does nothing there — desc.xml decides, so it is not offered (krobi 2026-10-05).
+      if (declared && !/\sAssigned="No"/.test(put[0])) {
         (declared.words ??= []).push(decodeXmlText(put[2]));
       }
     }
@@ -845,8 +847,8 @@ export interface BasicStatus {
   straight?: boolean;
   /** Direct mode (Sound_Video/Direct). */
   direct?: boolean;
-  /** Adaptive DRC (e.g. "Auto", "Off"). */
-  adaptiveDrc?: string;
+  /** Adaptive DRC on ("Auto") or off. */
+  adaptiveDrc?: boolean;
   /** Dialogue level. */
   dialogueLevel?: number;
   /** Sleep timer (e.g. "Off", "30 min"). */
@@ -978,7 +980,7 @@ export function parseBasicStatus(body: string): BasicStatus {
   }
   const adaptiveDrc = /<Adaptive_DRC>(Auto|Off)<\/Adaptive_DRC>/.exec(xml);
   if (adaptiveDrc) {
-    status.adaptiveDrc = decodeXmlText(adaptiveDrc[1]);
+    status.adaptiveDrc = adaptiveDrc[1] === "Auto";
   }
   // A bare number (HTR-4069 `<Dialogue_Lvl>1</Dialogue_Lvl>`, RX-V6A `…>0<…`); the `<Val>` form the
   // parser expected exists on no device and in no desc.xml — the level was never read (audit

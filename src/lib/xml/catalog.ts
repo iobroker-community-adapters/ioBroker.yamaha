@@ -185,14 +185,15 @@ export const XML_AMP_CATALOG: XmlAmpEntry[] = [
     common: {
       nameKey: "adaptiveDRC",
       descKey: "descAdaptiveDRC",
-      type: "string",
-      role: "state",
+      // A switch on every protocol: Off/Auto are its only two values, MusicCast reports a boolean (krobi 2026-10-05).
+      type: "boolean",
+      role: "switch",
       read: true,
       write: true,
     },
     statusField: "adaptiveDrc",
     putPaths: ["Sound_Video,Adaptive_DRC"],
-    toInner: value => `<Sound_Video><Adaptive_DRC>${escapeXmlText(value)}</Adaptive_DRC></Sound_Video>`,
+    toInner: value => `<Sound_Video><Adaptive_DRC>${value ? "Auto" : "Off"}</Adaptive_DRC></Sound_Video>`,
   },
   {
     // Writable where desc.xml declares it for the zone (`Put_2`, a bare number in `Range 0,3,1` —
