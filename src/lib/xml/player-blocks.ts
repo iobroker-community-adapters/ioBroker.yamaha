@@ -25,6 +25,8 @@ export class XmlPlayerBlocks {
   private readonly inputSources = new Map<string, Record<string, string>>();
   /** The player-block states built so far (built as a source first reports the field). */
   private readonly built = new Set<string>();
+  /** Per zone: the input whose playback the block shows right now. */
+  private readonly shown = new Map<string, string>();
 
   /**
    * @param ctx the controller's shared context
@@ -67,6 +69,7 @@ export class XmlPlayerBlocks {
         if (this.built.has(`${prefix}.playback`)) {
           this.clear(prefix);
         }
+        this.shown.delete(zone.key);
         continue;
       }
       if (!answers.has(source)) {
@@ -84,6 +87,14 @@ export class XmlPlayerBlocks {
       const values: Record<string, boolean | number | string> = { source: input ?? "", ...info };
       if (typeof info.albumArt === "string") {
         values.albumArt = withAlbumArtId(absoluteDeviceUrl(info.albumArt, ctx.deps.host), info.albumArtId);
+      }
+      // Another player source than the block showed: what the new one does not carry goes — the artist, the play
+      // mode and the cover of the media server stood under a radio station (review 2026-10-05, A50). The 2008
+      // generation's three network inputs share one NET_USB element, so the input decides, not the element.
+      const previous = this.shown.get(zone.key);
+      this.shown.set(zone.key, String(values.source));
+      if (previous !== undefined && previous !== values.source) {
+        this.clear(prefix, new Set(Object.keys(values)));
       }
       for (const [state, value] of Object.entries(values)) {
         const def = PLAYER_STATES.find(entry => entry.state === state);
@@ -103,14 +114,17 @@ export class XmlPlayerBlocks {
   }
 
   /**
-   * Clear a player block whose zone left its media source — its old track must not linger.
+   * Clear a player block whose zone left its media source, or the fields the source now playing does not report —
+   * the old track must not linger.
    *
    * @param prefix the block's id prefix (`player`, `multiroom.zone2.player`)
+   * @param keep the fields the source now playing reports — written right after, so not cleared first
    */
-  private clear(prefix: string): void {
+  private clear(prefix: string, keep: ReadonlySet<string> = new Set()): void {
     for (const clear of PLAYER_CLEAR) {
-      const id = `${prefix}.${clear.id.slice("player.".length)}`;
-      if (this.built.has(id)) {
+      const field = clear.id.slice("player.".length);
+      const id = `${prefix}.${field}`;
+      if (this.built.has(id) && !keep.has(field)) {
         this.ctx.emit(id, clear.value);
       }
     }
