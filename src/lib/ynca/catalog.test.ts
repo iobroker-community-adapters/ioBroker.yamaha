@@ -7,6 +7,7 @@ import {
   enumStatesFor,
   funcToEntry,
   idToEntry,
+  labelInputStates,
   perInputSource,
   planSweep,
   presentYncaEntries,
@@ -23,6 +24,7 @@ import {
 } from "./catalog";
 import { CHANNEL_NAME_KEYS } from "../catalog/types";
 import { catalogToObjects } from "../catalog/build-objects";
+import { groupOf } from "../catalog/groups";
 import { decode, type EnumSpec } from "../catalog/value-coerce";
 import type { YncaCapabilities } from "./capability";
 import { capabilitiesFromLines as parseCapabilities } from "../../../test/helpers/capabilities-from-lines";
@@ -173,17 +175,21 @@ describe("YNCA catalog", () => {
     expect(cat.find(e => e.id === "advanced.speakers.pattern")?.spec.kind).toBe("enum");
   });
 
-  test("all 29 input names are read-only text states on SYS", () => {
-    const cat = buildYncaCatalog();
-    expect(cat.find(e => e.id === "advanced.inputNames.hdmi1")).toMatchObject({
-      subunit: "SYS",
-      func: "INPNAMEHDMI1",
-      write: false,
-    });
+  test("all 29 input names are swept on SYS to label the input dropdown — never a datapoint (C2)", () => {
+    const names = YNCA_CATALOG.filter(e => e.func.startsWith("INPNAME"));
     // 29 since the 2026-09-06 audit: an RX-V583 protocol answers INPNAME for the network and
     // system sources too (TUNER, AUX, SERVER, NET RADIO, MusicCast Link, Bluetooth), which the
     // physical-inputs-only list did not carry — a user who renamed those saw nothing.
-    expect(cat.filter(e => e.id.startsWith("advanced.inputNames.")).length).toBe(29);
+    expect(names).toHaveLength(29);
+    expect(names.every(e => e.subunit === "SYS" && e.labelOnly === true && !e.write)).toBe(true);
+    expect(sweepGets(YNCA_CATALOG)).toContainEqual({ subunit: "SYS", func: "INPNAMEHDMI1" });
+    // Before: 29 `advanced.inputNames.*` datapoints repeated what the dropdown should say (Y-25, review 2026-10-05).
+    const caps: YncaCapabilities = { model: "RX", subunits: { SYS: { INPNAMEHDMI1: "Kodi" }, MAIN: { INP: "HDMI1" } } };
+    expect(presentYncaEntries(caps).filter(e => e.func.startsWith("INPNAME"))).toEqual([]);
+    expect(yncaObjectsFor(caps).filter(o => /inputName/i.test(o.id))).toEqual([]);
+    expect(funcToEntry(YNCA_CATALOG).has("SYS:INPNAMEHDMI1")).toBe(false);
+    // The names are read whatever group is switched off: the input dropdown is always there.
+    expect(new Set(names.map(e => groupOf(e.id)))).toEqual(new Set(["amp"]));
   });
 
   test("the AM/FM tuner is complete: RDS text B, program type and search mode", () => {
@@ -251,20 +257,30 @@ describe("YNCA catalog", () => {
     expect(yncaStateUpdate({ subunit: "NETRADIO", func: "ELAPSEDTIME", value: "" }, map)).toBeUndefined();
   });
 
-  test("each assignable input name carries the input it names", () => {
-    // All of them used to read "Input names" — the folder's own label — so the object tree
-    // showed a folder and its children with one and the same text.
-    const named = buildYncaCatalog().filter(e => e.id.startsWith("advanced.inputNames."));
-    expect(named).toHaveLength(29);
-    const objects = catalogToObjects(named).filter(o => o.type === "state");
-    const english = objects.map(o => (o.common.name as Record<string, string>).en);
-    expect(new Set(english).size).toBe(29);
-    expect(english).toContain("Input name (HDMI1)");
-    // The ones that are not simply the upper-cased key follow the device's own spelling.
-    expect(english).toContain("Input name (V-AUX)");
-    expect(english).toContain("Input name (MULTI CH)");
-    expect(english).toContain("Input name (MusicCast Link)");
-    expect(english).toContain("Input name (NET RADIO)");
+  test("each input name labels the dropdown entry of the input it names — trimmed, an empty one keeps the code", () => {
+    const states = deviceInputStates({ present: new Set(), probed: new Set() }, "main");
+    const labelled = labelInputStates(states, {
+      INPNAMEHDMI1: "Kodi   ",
+      INPNAMEHDMI2: "     ",
+      INPNAMEVAUX: "Front",
+      INPNAMEMULTICH: "SACD",
+      INPNAMEMCLINK: "Link",
+      INPNAMENETRADIO: "Radio",
+      INPNAMEBT: "Phone",
+    });
+    // The keys stay the codes a write sends.
+    expect(Object.keys(labelled)).toEqual(Object.keys(states));
+    expect(labelled).toMatchObject({
+      HDMI1: "Kodi",
+      HDMI2: "HDMI2",
+      // The ones that are not simply the upper-cased key follow the device's own spelling.
+      "V-AUX": "Front",
+      "MULTI CH": "SACD",
+      "MusicCast Link": "Link",
+      "NET RADIO": "Radio",
+      Bluetooth: "Phone",
+    });
+    expect(labelInputStates(states, undefined)).toEqual(states);
   });
 
   // ynca-python StrConverter(max_len=9) and the official lists' Latin-1; a control character would
@@ -698,7 +714,8 @@ describe("YNCA catalog", () => {
 
   test("every channel the catalog creates has a curated display name (no raw-id fallback)", () => {
     const segments = new Set<string>();
-    for (const entry of buildYncaCatalog()) {
+    // An entry read only to label another datapoint builds no channel.
+    for (const entry of buildYncaCatalog().filter(e => !e.labelOnly)) {
       const parts = entry.id.split(".");
       for (let i = 1; i < parts.length; i++) {
         segments.add(parts[i - 1]);

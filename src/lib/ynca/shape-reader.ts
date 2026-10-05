@@ -47,6 +47,8 @@ import { MEMORY_KEY } from "../lifecycle/memory-keys";
  * 7. A subunit the snapshot never asked (the catalog gained it with an update) is asked: before the sweep on the slow
  *    path, by the background refresh on the fast path — before A25 only the slow path asked, and an installation on
  *    the fast path never saw the new subunit.
+ * 8. The names are read on every connection and every name the receiver pushes is remembered; the remembered names
+ *    only fill a name a read did not get (C2: a name skipped because it was remembered stayed the old one).
  */
 
 /** Memory key for the remembered names (input and scene names). */
@@ -389,20 +391,7 @@ export class YncaShapeReader {
       // The refresh ran into a drop — the supervisor handles the reconnect.
       return undefined;
     }
-    const statics: Record<string, Record<string, string>> = {};
-    for (const [subunit, funcs] of Object.entries(fresh.subunits)) {
-      for (const [func, value] of Object.entries(funcs)) {
-        if (NAME_FUNC.test(func)) {
-          (statics[subunit] ??= {})[func] = value;
-        }
-      }
-    }
-    // The names a refresh did not get back this time stay remembered (a standby refresh answers less).
-    const rememberedStatics = this.deps.probeMemory.remembered<Record<string, Record<string, string>>>(STATIC_KEY);
-    for (const [subunit, funcs] of Object.entries(rememberedStatics ?? {})) {
-      statics[subunit] = { ...funcs, ...statics[subunit] };
-    }
-    this.deps.probeMemory.set(STATIC_KEY, statics);
+    this.rememberNames(fresh);
     // UNION with the remembered shape (same identity — the fast path proved it): a refresh while the device stands by
     // answers many functions @RESTRICTED and must not strip abilities it proved while awake; a lean standby FIRST
     // capture heals on the next awake refresh instead of staying lean forever (datapoint review finding, 2.0.2).
@@ -477,7 +466,7 @@ export class YncaShapeReader {
       if (present.size === 0) {
         // The device ignores AVAIL — sweep blind so no function is lost. Silence is no proof: `probedSubunits` stays
         // empty, so no source is judged absent (advisor round 2026-09-09), and no snapshot is kept (rule 4).
-        return await this.deps.client.readCapabilities(targetedGets(catalog, present));
+        return this.withNames(await this.deps.client.readCapabilities(targetedGets(catalog, present)));
       }
     }
     this.probedSubunits = PROBED_SUBUNITS;
@@ -554,36 +543,66 @@ export class YncaShapeReader {
       ),
     );
     const gets = targetedGets(catalog, present).filter(get => !answered.has(`${get.subunit}:${get.func}`));
-    const remembered = this.deps.probeMemory.remembered<Record<string, Record<string, string>>>(STATIC_KEY);
     // The zone table, the absent sources and the SYS families decide what is worth sending (2.7.0, `planSweep`); a
-    // function a bundle answered is proof already, whatever the table says. Second connect onwards the statics are
-    // skipped too and the remembered answers put back in, so the objects are built exactly as if the device had
-    // answered them again.
-    const plan = planSweep(
-      remembered ? gets.filter(get => !NAME_FUNC.test(get.func)) : gets,
-      this.inputEvidence(basic),
-    );
-    const swept = await this.sweepInPasses(plan);
+    // function a bundle answered is proof already, whatever the table says. The names the user gives in the receiver
+    // (inputs, scenes) are asked on every connection — they label the dropdowns (Y-25), and a name skipped because it
+    // was remembered stayed the old one until the next adapter update (review 2026-10-05, C2).
+    const swept = await this.sweepInPasses(planSweep(gets, this.inputEvidence(basic)));
     const capabilities: YncaCapabilities = {
       model: swept.model || basic.model,
       subunits: mergeYncaSubunits(basic.subunits, swept.subunits),
     };
-    if (remembered) {
-      for (const [subunit, funcs] of Object.entries(remembered)) {
-        capabilities.subunits[subunit] = { ...funcs, ...capabilities.subunits[subunit] };
-      }
-      return capabilities;
+    return this.withNames(capabilities);
+  }
+
+  /**
+   * A read with the names it got remembered and a name it did not get back (a lost line, a standby answer) filled
+   * from the memory — the fallback only (rule 8).
+   *
+   * @param capabilities what a sweep collected
+   * @returns the same report, names filled in
+   */
+  private withNames(capabilities: YncaCapabilities): YncaCapabilities {
+    for (const [subunit, funcs] of Object.entries(this.rememberNames(capabilities))) {
+      capabilities.subunits[subunit] = { ...funcs, ...capabilities.subunits[subunit] };
     }
-    const statics: Record<string, Record<string, string>> = {};
-    for (const [subunit, funcs] of Object.entries(capabilities.subunits)) {
+    return capabilities;
+  }
+
+  /**
+   * Remember the names a read got (`NAME_FUNC`: input and scene names), over the ones remembered before: a name this
+   * read did not get back stays remembered, a name it got replaces the old one.
+   *
+   * @param read what the read collected
+   * @returns every remembered name, subunit → function → name
+   */
+  private rememberNames(read: YncaCapabilities): Record<string, Record<string, string>> {
+    const remembered = this.deps.probeMemory.remembered<Record<string, Record<string, string>>>(STATIC_KEY);
+    const names: Record<string, Record<string, string>> = {};
+    for (const [subunit, funcs] of Object.entries(remembered ?? {})) {
+      names[subunit] = { ...funcs };
+    }
+    for (const [subunit, funcs] of Object.entries(read.subunits)) {
       for (const [func, value] of Object.entries(funcs)) {
         if (NAME_FUNC.test(func)) {
-          (statics[subunit] ??= {})[func] = value;
+          (names[subunit] ??= {})[func] = value;
         }
       }
     }
-    this.deps.probeMemory.set(STATIC_KEY, statics);
-    return capabilities;
+    this.deps.probeMemory.set(STATIC_KEY, names);
+    return names;
+  }
+
+  /**
+   * A name the receiver pushed while connected (the user renamed an input or a scene at the unit): remembered at once,
+   * so the next connection's fallback is the new name.
+   *
+   * @param subunit the line's subunit
+   * @param func the line's function (`INPNAME…`, `SCENEnNAME`)
+   * @param value the name
+   */
+  public rememberName(subunit: string, func: string, value: string): void {
+    this.rememberNames({ model: "", subunits: { [subunit]: { [func]: value } } });
   }
 
   /**

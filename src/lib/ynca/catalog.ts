@@ -81,6 +81,12 @@ export interface YncaEntry extends CatalogEntry {
    * protocol (review 2026-10-05, A26).
    */
   slot?: "recall" | "store";
+  /**
+   * Read only to LABEL another datapoint's values, never a datapoint itself: the input names (`@SYS:INPNAME…`) are the
+   * labels of the input dropdown (Y-25), and a second datapoint with the same content is what Y-25 rules out (review
+   * 2026-10-05, C2). Swept like every entry; no object, no state, no write.
+   */
+  labelOnly?: boolean;
 }
 
 /**
@@ -1785,6 +1791,30 @@ const INPUT_NAME_LABELS: Readonly<Record<string, string>> = {
 };
 
 /**
+ * The labels of the input dropdown on THIS device: the name the user gave each input in the receiver
+ * (`@SYS:INPNAME<KEY>`), trimmed — the receiver pads it with blanks. The keys stay the YNCA input codes (they are what
+ * a write sends); an input without a name, or with an empty one, keeps its code as its label (Y-25, review
+ * 2026-10-05, C2).
+ *
+ * @param states the zone's input dropdown, code → code (`deviceInputStates`)
+ * @param sys the SYS answers of this device, if any
+ * @returns the dropdown, code → the user's name
+ */
+export function labelInputStates(
+  states: Record<string, string>,
+  sys: Readonly<Record<string, string>> | undefined,
+): Record<string, string> {
+  const names = new Map<string, string>();
+  for (const key of INPUT_NAME_KEYS) {
+    const name = sys?.[`INPNAME${key.toUpperCase()}`]?.trim();
+    if (name) {
+      names.set(INPUT_NAME_LABELS[key] ?? key.toUpperCase(), name);
+    }
+  }
+  return Object.fromEntries(Object.entries(states).map(([code, label]) => [code, names.get(code) ?? label]));
+}
+
+/**
  * The SOURCE input a per-input SYS function (`TRIG<n>INP<KEY>`, `INPNAME<KEY>`) belongs to, in the
  * spelling of {@link SOURCE_INPUTS}. Undefined for a physical input (YNCA cannot judge those, so
  * they are always asked) and for any other function.
@@ -3035,13 +3065,13 @@ export function buildYncaCatalog(): YncaEntry[] {
       });
     }
   }
+  // The 29 input names label the input dropdown of every zone (Y-25) and are no datapoints of their own any more —
+  // `advanced.inputNames.*` repeated the dropdown's content (review 2026-10-05, C2). The id sits in the amplifier core,
+  // so the names are read whatever group is switched off: the input dropdown is always there.
   for (const key of INPUT_NAME_KEYS) {
     const upper = key.toUpperCase();
     entries.push({
-      id: `advanced.inputNames.${key}`,
-      // Each of the 29 carries the input it names — they all read "Input names" before,
-      // the folder's own label, so the object tree showed the folder and its children with
-      // one and the same text and only the id told them apart.
+      id: `inputName.${key}`,
       nameKey: "inputName",
       descKey: "descInputName",
       nameArgs: [INPUT_NAME_LABELS[key] ?? upper],
@@ -3050,6 +3080,7 @@ export function buildYncaCatalog(): YncaEntry[] {
       role: "text",
       subunit: "SYS",
       func: `INPNAME${upper}`,
+      labelOnly: true,
     });
   }
   entries.push(...fnEntries(DAB_FUNCS, "DAB", "tuner."));
@@ -3453,7 +3484,7 @@ export function targetedGets(
 export function funcToEntry(entries: readonly YncaEntry[]): Map<string, YncaEntry> {
   return new Map(
     entries
-      .filter(entry => !entry.writeOnly && !entry.derived)
+      .filter(entry => !entry.writeOnly && !entry.derived && !entry.labelOnly)
       .flatMap(entry => readFuncsOf(entry).map(func => [`${entry.subunit}:${func}`, entry] as const)),
   );
 }
@@ -3523,8 +3554,9 @@ export function presentYncaEntries(
   capabilities: YncaCapabilities,
   catalog: readonly YncaEntry[] = YNCA_CATALOG,
 ): YncaEntry[] {
-  const present = catalog.filter(entry =>
-    readFuncsOf(entry).some(func => capabilities.subunits[entry.subunit]?.[func] !== undefined),
+  const present = catalog.filter(
+    entry =>
+      !entry.labelOnly && readFuncsOf(entry).some(func => capabilities.subunits[entry.subunit]?.[func] !== undefined),
   );
   // A derived value never displaces one the device reports itself (the initial volume mode read
   // from `INITVOLLVL=Off` exists only where the device does not answer `INITVOLMODE`).

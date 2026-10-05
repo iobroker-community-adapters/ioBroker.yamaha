@@ -7,6 +7,7 @@ import { createSubunitCache } from "./ynca/subunit-cache";
 import { CommandGate } from "./lifecycle/command-gate";
 import { ProbeMemory } from "./lifecycle/probe-memory";
 import { DISCOVERY_SCHEMA } from "./lifecycle/discovery-schema";
+import { MEMORY_KEY } from "./lifecycle/memory-keys";
 import { BUNDLE_FUNCS, FakeClient, testGate } from "../../test/helpers/ynca-fake-client";
 
 function makeDeps(client: FakeClient): {
@@ -771,7 +772,8 @@ describe("YncaDeviceController fast restart (persisted capability layer)", () =>
     // inputs and the tuner band decide something (menu claim, write routing), so they are
     // read live before use instead of taken from the memory.
     expect(client.requests[1].map(get => `${get.subunit}:${get.func}`)).toEqual(["MAIN:PWR", "MAIN:INP"]);
-    expect(created).toContain("living.advanced.inputNames.hdmi1");
+    // The input names label the input dropdown and are no datapoints (Y-25, review 2026-10-05, C2).
+    expect(created.filter(id => id.includes("inputName"))).toEqual([]);
     expect(created).toContain("living.power");
     // Stale values are not seeded — the states hold last-known values anyway. The
     // scene list and its per-scene titles are the one deliberate exception: derived
@@ -2532,5 +2534,202 @@ describe("every YNCA write says what became of it (review 2026-10-05, A3/A26)", 
     expect(s.client.sent).toEqual([]);
     void s.controller.handleWrite("tuner.preset", 4);
     expect(s.client.sent).toEqual([{ subunit: "TUN", func: "PRESET", value: "4" }]);
+  });
+});
+
+describe("the names the user gives in the receiver label the YNCA dropdowns (Y-25, review 2026-10-05, C2)", () => {
+  const flushAsync = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
+  const last = (objects: Array<{ id: string; def: ObjectDef }>, id: string): ObjectDef | undefined =>
+    objects.filter(object => object.id === id).at(-1)?.def;
+
+  test("the input dropdown carries the trimmed INPNAME names; the keys stay the codes; no inputNames datapoints", async () => {
+    // Before: YNCA alone (RX-V473, R-N500) showed the raw codes, the names stood in 29 `advanced.inputNames.*`.
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX-V473",
+      subunits: {
+        SYS: {
+          MODELNAME: "RX-V473",
+          VERSION: "1",
+          INPNAMEHDMI1: "Kodi     ",
+          INPNAMEHDMI2: "   ",
+          INPNAMEAV1: "Plattenspieler",
+        },
+        MAIN: { PWR: "On", INP: "HDMI1" },
+        ZONE2: { PWR: "On", INP: "AV1" },
+      },
+    };
+    const { objects, created, deps } = makeDeps(client);
+    await new YncaDeviceController("rx", deps).start();
+    const input = last(objects, "rx.input");
+    expect(input?.common.states).toMatchObject({ HDMI1: "Kodi", HDMI2: "HDMI2", AV1: "Plattenspieler" });
+    expect(input?.liveLabels).toBe(true);
+    expect(last(objects, "rx.multiroom.zone2.input")?.common.states).toMatchObject({ AV1: "Plattenspieler" });
+    expect(created.filter(id => id.includes("inputName"))).toEqual([]);
+  });
+
+  test("an input renamed at the receiver relabels the dropdown in the running session", async () => {
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX",
+      subunits: { SYS: { MODELNAME: "RX", VERSION: "1", INPNAMEHDMI1: "Kodi" }, MAIN: { PWR: "On", INP: "HDMI1" } },
+    };
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA });
+    const { objects, acked, deps } = makeDeps(client);
+    await new YncaDeviceController("rx", { ...deps, probeMemory: memory }).start();
+    acked.length = 0;
+    client.emit({ subunit: "SYS", func: "INPNAMEHDMI1", value: "Apple TV" });
+    await flushAsync();
+    expect(last(objects, "rx.input")?.common.states).toMatchObject({ HDMI1: "Apple TV" });
+    // A name is no state value.
+    expect(acked).toEqual([]);
+    // The memory keeps the new name for the next connection's fallback.
+    expect(memory.remembered(MEMORY_KEY.yncaStaticValues)).toMatchObject({ SYS: { INPNAMEHDMI1: "Apple TV" } });
+  });
+
+  test("the names are read on every connection; the memory only fills a name the read did not get", async () => {
+    // Before: once remembered, the names were never asked again on the slow path — a rename stayed invisible.
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX",
+      subunits: { SYS: { MODELNAME: "RX", VERSION: "1", INPNAMEHDMI1: "New" }, MAIN: { PWR: "On", INP: "HDMI1" } },
+    };
+    const memory = new ProbeMemory({
+      __schema: DISCOVERY_SCHEMA,
+      [MEMORY_KEY.yncaStaticValues]: { SYS: { INPNAMEHDMI1: "Old", INPNAMEHDMI2: "Remembered" } },
+    });
+    const { objects, deps } = makeDeps(client);
+    await new YncaDeviceController("rx", { ...deps, probeMemory: memory }).start();
+    expect(client.requests.some(gets => gets.some(get => get.func === "INPNAMEHDMI1"))).toBe(true);
+    expect(last(objects, "rx.input")?.common.states).toMatchObject({ HDMI1: "New", HDMI2: "Remembered" });
+  });
+
+  test("the scene recall dropdown carries the titles and follows a rename", async () => {
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX",
+      subunits: {
+        SYS: { MODELNAME: "RX", VERSION: "1" },
+        MAIN: { PWR: "On", SCENE1NAME: "Movie" },
+      },
+    };
+    const { objects, deps } = makeDeps(client);
+    await new YncaDeviceController("rx", deps).start();
+    const recall = last(objects, "rx.scene.recall");
+    expect(recall?.common.states).toEqual({ 1: "Movie" });
+    expect(recall?.liveLabels).toBe(true);
+    client.emit({ subunit: "MAIN", func: "SCENE1NAME", value: "Cinema" });
+    await flushAsync();
+    expect(last(objects, "rx.scene.recall")?.common.states).toEqual({ 1: "Cinema" });
+  });
+});
+
+describe("the YNCA player blocks (review 2026-10-05, A40/A41)", () => {
+  const flushAsync = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
+  const refresh = (controller: YncaDeviceController): Promise<void> =>
+    (controller as unknown as { refreshInBackground(c: unknown): Promise<void> }).refreshInBackground(YNCA_CATALOG);
+
+  test("a zone on Main Zone Sync shows the main zone's source and its player keys act on it", async () => {
+    // Before: the zone mapped to no source — an empty block, and every player write dropped.
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX-V673",
+      subunits: {
+        SYS: { MODELNAME: "RX-V673", VERSION: "1" },
+        MAIN: { PWR: "On", INP: "NET RADIO" },
+        ZONE2: { PWR: "On", INP: "Main Zone Sync" },
+        NETRADIO: { PLAYBACKINFO: "Play", STATION: "Radio X" },
+        SERVER: { PLAYBACKINFO: "Stop", SONG: "Song" },
+      },
+    };
+    const { deps, acked } = makeDeps(client);
+    const controller = new YncaDeviceController("rx", deps);
+    await controller.start();
+    expect(acked).toContainEqual({ id: "rx.multiroom.zone2.player.source", value: "NET RADIO" });
+    acked.length = 0;
+    client.emit({ subunit: "NETRADIO", func: "STATION", value: "Radio Y" });
+    expect(acked).toContainEqual({ id: "rx.multiroom.zone2.player.station", value: "Radio Y" });
+    client.sent.length = 0;
+    void controller.handleWrite("multiroom.zone2.player.playback", 2);
+    expect(client.sent).toEqual([{ subunit: "NETRADIO", func: "PLAYBACK", value: "Stop" }]);
+    // The main zone switches source: the following zone switches with it.
+    acked.length = 0;
+    client.emit({ subunit: "MAIN", func: "INP", value: "SERVER" });
+    expect(acked).toContainEqual({ id: "rx.multiroom.zone2.player.source", value: "SERVER" });
+    acked.length = 0;
+    client.emit({ subunit: "SERVER", func: "SONG", value: "Other" });
+    expect(acked).toContainEqual({ id: "rx.multiroom.zone2.player.track", value: "Other" });
+  });
+
+  test("player functions first answered by the background refresh get their zone blocks and their values", async () => {
+    // Before: the zone blocks were built once at the start; a receiver started in standby never got them, and no
+    // value was ever routed into the block the refresh created.
+    const client = new FakeClient();
+    client.availableSubunits = ["MAIN", "ZONE2", "NETRADIO"];
+    client.capabilities = {
+      model: "RX-V673",
+      subunits: {
+        SYS: { MODELNAME: "RX-V673", VERSION: "1" },
+        MAIN: { PWR: "Standby", INP: "NET RADIO" },
+        ZONE2: { PWR: "Standby", INP: "NET RADIO" },
+      },
+    };
+    const { deps, acked, created } = makeDeps(client);
+    const controller = new YncaDeviceController("rx", deps);
+    await controller.start();
+    client.capabilities.subunits.NETRADIO = { PLAYBACKINFO: "Play", STATION: "Radio X" };
+    client.capabilities.subunits.MAIN.PWR = "On";
+    client.gets.length = 0;
+    await refresh(controller);
+    await flushAsync();
+    expect(created).toContain("rx.player.station");
+    expect(created).toContain("rx.multiroom.zone2.player.station");
+    // The new block asks its source — the refresh's answers went nowhere while it did not stand.
+    expect(client.gets).toContainEqual({ subunit: "NETRADIO", func: "STATION" });
+    acked.length = 0;
+    client.emit({ subunit: "NETRADIO", func: "STATION", value: "Radio Y" });
+    expect(acked).toContainEqual({ id: "rx.player.station", value: "Radio Y" });
+    expect(acked).toContainEqual({ id: "rx.multiroom.zone2.player.station", value: "Radio Y" });
+  });
+
+  test("one background refresh at a time — a request while one runs is run once after it", async () => {
+    const client = new FakeClient();
+    client.capabilities = { model: "RX", subunits: { SYS: { MODELNAME: "RX", VERSION: "1" }, MAIN: { PWR: "On" } } };
+    const { deps } = makeDeps(client);
+    const controller = new YncaDeviceController("rx", deps);
+    await controller.start();
+    let running = 0;
+    let overlapped = false;
+    let runs = 0;
+    const read = client.readCapabilities.bind(client);
+    client.readCapabilities = async gets => {
+      running++;
+      overlapped ||= running > 1;
+      runs++;
+      await flushAsync();
+      running--;
+      return read(gets);
+    };
+    await Promise.all([refresh(controller), refresh(controller), refresh(controller)]);
+    expect(overlapped).toBe(false);
+    // The first refresh and ONE queued after it (each asks the AVAIL probe, then sweeps).
+    const sweeps = runs;
+    await refresh(controller);
+    expect(runs - sweeps).toBe(sweeps / 2);
+  });
+
+  test("a scene renamed at the receiver reaches the recall dropdown with the refresh that read it", async () => {
+    // Before: the refresh republished the objects BEFORE taking the new titles — the dropdown kept the old ones.
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX",
+      subunits: { SYS: { MODELNAME: "RX", VERSION: "1" }, MAIN: { PWR: "On", SCENE1NAME: "Movie" } },
+    };
+    const { deps, objects } = makeDeps(client);
+    const controller = new YncaDeviceController("rx", deps);
+    await controller.start();
+    client.capabilities.subunits.MAIN.SCENE1NAME = "Cinema";
+    await refresh(controller);
+    expect(objects.filter(o => o.id === "rx.scene.recall").at(-1)?.def.common.states).toEqual({ 1: "Cinema" });
   });
 });
