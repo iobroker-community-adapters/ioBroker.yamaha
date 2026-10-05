@@ -1,6 +1,7 @@
 import { createServer, type IncomingHttpHeaders } from "node:http";
 import { once } from "node:events";
 import type { AddressInfo } from "node:net";
+import { CommandGate } from "../lifecycle/command-gate";
 import {
   isWriteCommand,
   requestTimeoutFor,
@@ -508,5 +509,36 @@ describe("YamahaYxcClient.read (diagnostics)", () => {
       await expect(client.read(path), path).rejects.toThrow(/not a read/);
     }
     expect(sent).toEqual([]);
+  });
+});
+
+// The read-back of a user write is a read: from its verb it queued as background work and waited behind the poll
+// sweep, while YNCA reads back at user priority (review 2026-10-05, A58).
+describe("YamahaYxcClient.forUser — the read-back of a user write at user priority (review 2026-10-05, A58)", () => {
+  const timers = {
+    schedule: (handler: () => void, ms: number): ReturnType<typeof setTimeout> => setTimeout(handler, ms),
+    cancel: (handle: unknown): void => clearTimeout(handle as ReturnType<typeof setTimeout>),
+  };
+
+  test("a read through the twin overtakes queued background reads; the twin is one and the same", async () => {
+    const gate = new CommandGate({ minSpacingMs: 0, timers });
+    const order: string[] = [];
+    const client = new YamahaYxcClient(
+      "1.2.3.4",
+      command => {
+        order.push(command);
+        return Promise.resolve({ response_code: 0 });
+      },
+      gate,
+    );
+    let release: () => void = () => undefined;
+    const sweep = gate.run(() => new Promise<void>(resolve => (release = resolve)));
+    const background = client.getStatus("zone2");
+    const readBack = client.forUser().getStatus("main");
+    release();
+    await Promise.all([sweep, background, readBack]);
+    expect(order).toEqual(["/main/getStatus", "/zone2/getStatus"]);
+    expect(client.forUser()).toBe(client.forUser());
+    expect(client.forUser().forUser()).toBe(client.forUser());
   });
 });

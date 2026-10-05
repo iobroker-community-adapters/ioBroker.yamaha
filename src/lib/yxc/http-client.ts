@@ -1,5 +1,5 @@
 import { get as httpGet, request as httpRequest, type IncomingMessage } from "node:http";
-import type { CommandGate } from "../lifecycle/command-gate";
+import type { CommandGate, CommandPriority } from "../lifecycle/command-gate";
 import { HttpStatusError, readDeviceResponse } from "../util";
 import { errText } from "../err-text";
 
@@ -284,20 +284,44 @@ function q(value: string | number): string {
  */
 export class YamahaYxcClient {
   private readonly send: YxcSend;
+  /** The same client at user priority, made on first use (see {@link forUser}). */
+  private userTwin: YamahaYxcClient | undefined;
 
   /**
    * @param ip the device IP or hostname
-   * @param send transport seam (defaults to node:http: GET, POST when a body is given); injected in tests
+   * @param transport transport seam (defaults to node:http: GET, POST when a body is given); injected in tests
    * @param gate the device's command gate — when given, every request runs through it, so
    *   an embedded device never sees a burst of parallel requests and a stopped adapter
    *   cancels what is still queued. Commands that CHANGE something (every endpoint that is not
    *   a `get`, see `isWriteCommand`) are queued with user priority so a button press overtakes
    *   background polling.
+   * @param priority every request at this priority instead of the one its verb gives (see {@link forUser})
    */
-  public constructor(ip: string, send: YxcSend = defaultSend(ip), gate?: CommandGate) {
+  public constructor(
+    private readonly ip: string,
+    private readonly transport: YxcSend = defaultSend(ip),
+    private readonly gate?: CommandGate,
+    private readonly priority?: CommandPriority,
+  ) {
     this.send = gate
-      ? (command, body) => gate.run(() => send(command, body), isWriteCommand(command) ? "user" : "background")
-      : send;
+      ? (command, body) =>
+          gate.run(() => transport(command, body), priority ?? (isWriteCommand(command) ? "user" : "background"))
+      : transport;
+  }
+
+  /**
+   * This client with every request queued at USER priority — on the same transport and gate. The read-back of a
+   * user write goes through it: from its verb a read is background work, so it waited behind the poll sweep,
+   * while YNCA reads back at user priority (review 2026-10-05, A58).
+   *
+   * @returns the user-priority twin (the same one on every call)
+   */
+  public forUser(): YamahaYxcClient {
+    if (this.priority === "user") {
+      return this;
+    }
+    this.userTwin ??= new YamahaYxcClient(this.ip, this.transport, this.gate, "user");
+    return this.userTwin;
   }
 
   /**

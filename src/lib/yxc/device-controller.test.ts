@@ -84,6 +84,8 @@ interface FakeClient extends YxcClientLike {
   failNameText: boolean;
   /** The getFuncStatus answer (default: an empty success — no device-wide settings). */
   funcStatus: unknown;
+  /** The methods called through the user-priority twin (`forUser`), in order — they are in `calls` too. */
+  userCalls: string[];
 }
 
 /**
@@ -116,6 +118,7 @@ function makeFakeClient(features: unknown, status: unknown): FakeClient {
     /** When set, every command that is not a read answer rejects with it (a write that never reaches the device). */
     failWrites: undefined as Error | undefined,
     funcStatus: {},
+    userCalls: [] as string[],
   };
   // The answers that are more than "an empty success".
   const replies: Record<string, (args: unknown[]) => unknown> = {
@@ -167,34 +170,46 @@ function makeFakeClient(features: unknown, status: unknown): FakeClient {
         client_list: state.distRole === "server" ? ["1.2.3.5"] : [],
       },
   };
-  return new Proxy(state, {
-    get: (target, prop: string) => {
-      if (prop in target) {
-        return target[prop];
-      }
-      return (...args: unknown[]) => {
-        // Trailing optional arguments the caller left out are not recorded — otherwise
-        // getPlayInfo() would show up as [undefined] instead of [].
-        const recorded = [...args];
-        while (recorded.length > 0 && recorded[recorded.length - 1] === undefined) {
-          recorded.pop();
+  // The device's client and its user-priority twin (`forUser`, review 2026-10-05, A58) share one state; a call
+  // through the twin is recorded in `calls` like any other and, by method, in `userCalls`.
+  const twin: { user?: FakeClient } = {};
+  const client = (user: boolean): FakeClient =>
+    new Proxy(state, {
+      get: (target, prop: string) => {
+        if (prop === "forUser") {
+          return () => twin.user;
         }
-        (target.calls as Array<{ method: string; args: unknown[] }>).push({ method: prop, args: recorded });
-        if (target.failWrites instanceof Error && !(prop in replies)) {
-          return Promise.reject(target.failWrites);
+        if (prop in target) {
+          return target[prop];
         }
-        try {
-          return Promise.resolve(replies[prop]?.(args) ?? {});
-        } catch (e) {
-          return Promise.reject(e instanceof Error ? e : new Error(String(e)));
-        }
-      };
-    },
-    set: (target, prop: string, value) => {
-      target[prop] = value;
-      return true;
-    },
-  }) as unknown as FakeClient;
+        return (...args: unknown[]) => {
+          // Trailing optional arguments the caller left out are not recorded — otherwise
+          // getPlayInfo() would show up as [undefined] instead of [].
+          const recorded = [...args];
+          while (recorded.length > 0 && recorded[recorded.length - 1] === undefined) {
+            recorded.pop();
+          }
+          (target.calls as Array<{ method: string; args: unknown[] }>).push({ method: prop, args: recorded });
+          if (user) {
+            (target.userCalls as string[]).push(prop);
+          }
+          if (target.failWrites instanceof Error && !(prop in replies)) {
+            return Promise.reject(target.failWrites);
+          }
+          try {
+            return Promise.resolve(replies[prop]?.(args) ?? {});
+          } catch (e) {
+            return Promise.reject(e instanceof Error ? e : new Error(String(e)));
+          }
+        };
+      },
+      set: (target, prop: string, value) => {
+        target[prop] = value;
+        return true;
+      },
+    }) as unknown as FakeClient;
+  twin.user = client(true);
+  return client(false);
 }
 
 function setup(
@@ -3232,5 +3247,26 @@ describe("a stale standby flag is checked against the zone first (review 2026-10
     expect(await s.controller.handleWrite("volume", 25)).toBe("unavailable");
     expect(s.client.calls.map(c => c.method)).toEqual(["getStatus"]);
     expect(s.acks).toContainEqual({ id: "living.volume", value: 30 });
+  });
+});
+
+// From its verb a read is background work: the read-back of a user write waited behind the poll sweep, while YNCA
+// reads back at user priority. Every read that belongs to a user's write goes through the user-priority twin of the
+// client; the polls do not (review 2026-10-05, A58).
+describe("the read-back of a user write runs at user priority (review 2026-10-05, A58)", () => {
+  test("zone, device-wide setting and group reads of a write go through the user-priority client; polls do not", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], distribution: { version: 2 } };
+    const s = setup(features, ysp, {}, () => false);
+    s.client.funcStatus = { response_code: 0, auto_power_standby: true };
+    await s.controller.start();
+    s.fire.keepalive?.();
+    await flush();
+    expect(s.client.userCalls).toEqual([]);
+    expect(await s.controller.handleWrite("power", true)).toBe("sent");
+    await flush();
+    expect(await s.controller.handleWrite("advanced.autoPowerStandby", false)).toBe("sent");
+    await flush();
+    expect(await s.controller.handleWrite("multiroom.group.name", "Wohnzimmer")).toBe("sent");
+    expect(s.client.userCalls).toEqual(["getStatus", "getFuncStatus", "getDistributionInfo"]);
   });
 });

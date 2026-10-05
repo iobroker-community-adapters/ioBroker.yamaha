@@ -372,7 +372,7 @@ export class YxcDeviceController {
       gate: deps.gate,
       log: deps.log,
       refresh: async () => {
-        await this.refreshDistribution();
+        await this.refreshDistribution(this.userClient);
         return this.dist;
       },
       summary: () => this.dist,
@@ -850,13 +850,25 @@ export class YxcDeviceController {
       // standby flags and its volume dropped, push or not (YSP-1600, review 2026-10-05, A18). The zone is asked
       // now — behind the power write in the command gate — and that answer decides; it also puts the device's
       // value back on the datapoint when the function is still not operable.
-      await this.refreshZone(zoneKey);
+      await this.refreshZone(zoneKey, this.userClient);
       if (disabled()) {
         this.deps.log.debug(`${this.deviceId}: ${stateId} is not operable on the device right now — not sent`);
         return "unavailable";
       }
     }
     return this.applyCommand(stateId, command, value);
+  }
+
+  /**
+   * The client at USER priority, for every read that belongs to a user's write: its read-back, the zone a
+   * stale standby flag is checked against, the group read inside a group change. From its verb a read is
+   * background work and waited behind the poll sweep, while YNCA reads back at user priority (review
+   * 2026-10-05, A58).
+   *
+   * @returns the user-priority twin of the device's client
+   */
+  private get userClient(): YxcClientLike {
+    return this.deps.client.forUser();
   }
 
   /** @returns the firmware (`system_version`) read on this connection, if any */
@@ -905,7 +917,7 @@ export class YxcDeviceController {
    */
   private async readSystemBack(stateId: string): Promise<void> {
     try {
-      this.applySystemStatus(await this.deps.client.getFuncStatus());
+      this.applySystemStatus(await this.userClient.getFuncStatus());
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: reading ${stateId} back failed (${errText(e)})`);
     }
@@ -1330,10 +1342,14 @@ export class YxcDeviceController {
     }
   }
 
-  /** Fetch the stored netusb favourites and write the JSON list state. */
-  private async refreshNetusbPresets(): Promise<void> {
+  /**
+   * Fetch the stored netusb favourites and write the JSON list state.
+   *
+   * @param via the client to ask through — the user-priority one for the read-back of a user write
+   */
+  private async refreshNetusbPresets(via: YxcClientLike = this.deps.client): Promise<void> {
     try {
-      const info = await this.deps.client.getPresetInfo();
+      const info = await via.getPresetInfo();
       const update = parseYxcPresetList(info);
       if (update) {
         this.emit(update.id, update.value);
@@ -1380,15 +1396,17 @@ export class YxcDeviceController {
   /**
    * Fetch the tuner preset lists — the shared `common` list, or one per band on
    * devices with separate lists — and write the JSON state.
+   *
+   * @param via the client to ask through — the user-priority one for the read-back of a user write
    */
-  private async refreshTunerPresets(): Promise<void> {
+  private async refreshTunerPresets(via: YxcClientLike = this.deps.client): Promise<void> {
     try {
       const common = this.tunerFeatures?.presetType === "common";
       const bands = common ? ["common"] : (this.tunerFeatures?.bands ?? ["fm"]);
       const byBand: Record<string, unknown> = {};
       for (const band of bands) {
         try {
-          byBand[band] = await this.deps.client.getTunerPresetInfo(band);
+          byBand[band] = await via.getTunerPresetInfo(band);
         } catch (e) {
           this.deps.log.debug(`${this.deviceId}: getTunerPresetInfo(${band}) failed: ${errText(e)}`);
         }
@@ -1427,10 +1445,14 @@ export class YxcDeviceController {
     }
   }
 
-  /** Fetch the clock/alarm settings and write the clock states. */
-  private async refreshClock(): Promise<void> {
+  /**
+   * Fetch the clock/alarm settings and write the clock states.
+   *
+   * @param via the client to ask through — the user-priority one for the read-back of a user write
+   */
+  private async refreshClock(via: YxcClientLike = this.deps.client): Promise<void> {
     try {
-      for (const update of parseYxcClock(await this.deps.client.getClockSettings())) {
+      for (const update of parseYxcClock(await via.getClockSettings())) {
         this.emit(update.id, update.value);
       }
     } catch (e) {
@@ -1450,11 +1472,12 @@ export class YxcDeviceController {
    * play-info shape (different channel), the tuner has its own band/frequency/RDS.
    *
    * @param block the media block (`netusb`, `cd`, `tuner`)
+   * @param via the client to ask through — the user-priority one for the read-back of a user write
    */
-  private async refreshMediaSource(block: string): Promise<void> {
+  private async refreshMediaSource(block: string, via: YxcClientLike = this.deps.client): Promise<void> {
     const arg = block === "netusb" ? undefined : block;
     try {
-      const info = await this.deps.client.getPlayInfo(arg);
+      const info = await via.getPlayInfo(arg);
       if (block === "tuner") {
         for (const update of parseYxcTunerInfo(info)) {
           this.emit(update.id, update.value);
@@ -1505,10 +1528,12 @@ export class YxcDeviceController {
   /**
    * Fetch the MusicCast-Link distribution info and write the parsed dist states with ack,
    * caching the role for the leave-group path.
+   *
+   * @param via the client to ask through — the user-priority one inside a user's group change
    */
-  private async refreshDistribution(): Promise<void> {
+  private async refreshDistribution(via: YxcClientLike = this.deps.client): Promise<void> {
     try {
-      const info = await this.deps.client.getDistributionInfo();
+      const info = await via.getDistributionInfo();
       this.dist = distributionSummary(info);
       for (const update of parseYxcDistribution(info)) {
         this.emit(update.id, update.value);
@@ -1559,11 +1584,12 @@ export class YxcDeviceController {
    * Fetch a zone's status and write its amp states with ack.
    *
    * @param zone the zone to refresh
+   * @param via the client to ask through — the user-priority one for the read-back of a user write
    * @returns true if the device answered (with its status, or refusing it — it is there), false if
    *   nothing answered
    */
-  private async refreshZone(zone: string): Promise<boolean> {
-    const answer = await this.fetchZoneStatus(zone);
+  private async refreshZone(zone: string, via: YxcClientLike = this.deps.client): Promise<boolean> {
+    const answer = await this.fetchZoneStatus(zone, via);
     if (answer.kind !== "ok") {
       return answer.kind === "refused";
     }
@@ -1583,11 +1609,12 @@ export class YxcDeviceController {
    * Fetch a zone's status, swallowing the failure of an absent zone or an offline device.
    *
    * @param zone the zone to ask
+   * @param via the client to ask through
    * @returns the answer: the raw status, the device's refusal, or none
    */
-  private async fetchZoneStatus(zone: string): Promise<ZoneAnswer> {
+  private async fetchZoneStatus(zone: string, via: YxcClientLike = this.deps.client): Promise<ZoneAnswer> {
     try {
-      return { kind: "ok", status: await this.deps.client.getStatus(zone) };
+      return { kind: "ok", status: await via.getStatus(zone) };
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getStatus(${zone}) failed: ${errText(e)}`);
       // An answer that says no — its `response_code`, or an HTTP error status of a booting web server — is
@@ -1796,7 +1823,7 @@ export class YxcDeviceController {
           const { zone, band, value } = command;
           let current = this.lastEqualizer.get(zone);
           if (!current) {
-            await this.refreshZone(zone);
+            await this.refreshZone(zone, this.userClient);
             current = this.lastEqualizer.get(zone);
           }
           if (!current) {
@@ -1826,7 +1853,7 @@ export class YxcDeviceController {
           if (this.lastTunerBand === "dab") {
             this.deps.log.debug(`${this.deviceId}: ${stateId} — DAB is tuned by service, not by frequency; not sent`);
             if (this.mediaBlocks.includes("tuner")) {
-              await this.refreshMediaSource("tuner");
+              await this.refreshMediaSource("tuner", this.userClient);
             }
             return "unavailable";
           }
@@ -1957,58 +1984,59 @@ export class YxcDeviceController {
    * @param command the command that was just applied
    */
   private async readBackAfter(stateId: string, command: YxcCommand): Promise<void> {
+    const via = this.userClient;
     switch (command.kind) {
       case "tunerFreq":
       case "tunerPreset":
       case "tunerBand":
       case "tunerSearch":
         if (this.mediaBlocks.includes("tuner")) {
-          await this.refreshMediaSource("tuner");
+          await this.refreshMediaSource("tuner", via);
         }
         return;
       case "tunerClear":
-        await this.refreshTunerPresets();
+        await this.refreshTunerPresets(via);
         return;
       case "netusbPreset":
       case "netusbRecent":
         if (this.mediaBlocks.includes("netusb")) {
-          await this.refreshMediaSource("netusb");
+          await this.refreshMediaSource("netusb", via);
         }
         return;
       case "playerTransport":
       case "playerMode": {
         const block = this.routing.blockOf(command.zone);
         if (block !== undefined) {
-          await this.refreshMediaSource(block);
+          await this.refreshMediaSource(block, via);
         }
         return;
       }
       case "volume":
       case "equalizer":
-        await this.refreshZone(command.zone);
+        await this.refreshZone(command.zone, via);
         return;
       case "run": {
         if (command.source === "clock") {
-          await this.refreshClock();
+          await this.refreshClock(via);
           return;
         }
         if (command.source === "favourites") {
-          await this.refreshNetusbPresets();
+          await this.refreshNetusbPresets(via);
           return;
         }
         if (command.source === "stations") {
-          await this.refreshTunerPresets();
+          await this.refreshTunerPresets(via);
           return;
         }
         if (command.source !== undefined) {
           if (this.mediaBlocks.includes(command.source)) {
-            await this.refreshMediaSource(command.source);
+            await this.refreshMediaSource(command.source, via);
           }
           return;
         }
         const { zone } = splitZone(stateId);
         if (this.zones.includes(zone)) {
-          await this.refreshZone(zone);
+          await this.refreshZone(zone, via);
         }
         return;
       }
