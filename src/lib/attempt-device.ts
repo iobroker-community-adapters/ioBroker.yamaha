@@ -12,6 +12,8 @@ import {
 import { TransportConnectionAdapter } from "./lifecycle/transport-connection-adapter";
 import { RECONNECT_BASE_MS, RECONNECT_MAX_MS, ReconnectStrategy } from "./lifecycle/reconnect-strategy";
 import { CommandGate } from "./lifecycle/command-gate";
+import { COMMAND_SPACING_MS, LIVE_GATES, type GateRegistry } from "./lifecycle/gate-registry";
+import { isIPv4, resolveIPv4 } from "./network-interfaces";
 import type { YncaSubunitCache } from "./ynca/subunit-cache";
 import type { ProbeMemory } from "./lifecycle/probe-memory";
 import type { Transport } from "./catalog/owner-policy";
@@ -26,15 +28,6 @@ import { MEMORY_KEY } from "./lifecycle/memory-keys";
 
 // Re-exported so existing importers (tests) keep resolving it from here.
 export type { ConnectableTransport };
-
-/**
- * Minimum spacing between two commands, per transport. YNCA's 100 ms is Yamaha's
- * specification (`ynca-python` protocol.py: "YNCA spec specifies that there should be at
- * least 100 milliseconds between commands"). The HTTP transports have no documented
- * spacing — 0 ms, but they still run through a gate, which serialises them so an embedded
- * device never faces a burst of parallel requests.
- */
-const COMMAND_SPACING_MS: Readonly<Record<Transport, number>> = { ynca: 100, yxc: 0, xml: 0 };
 
 /** The adapter-bound callbacks {@link attemptDevice} drives — injected so it needs no adapter. */
 export interface AttemptDeps {
@@ -126,21 +119,58 @@ export interface ConnectDeps {
 
 /**
  * Resolve another configured device's client for a multiroom link — never this device
- * itself, and only an address this instance runs. The partner's own gate belongs to its own
- * connection, so this one-off client stays ungated (a single link call, not a stream of
- * commands).
+ * itself, and only an address this instance runs. The client goes through the partner's
+ * command gate (Y-15): the one of its running MusicCast connection, else one of its own.
+ * Ungated, linking a running WX-030 sent getFeatures, setClientInfo and setInput in parallel
+ * to its own keepalive (review 2026-10-05, A13).
  *
  * @param ownIp the address of the device asking
  * @param knownDeviceIps every address this instance runs
  * @param ip the address the link names
+ * @param gateFor the partner's gate at an address (see {@link GateRegistry.gateFor})
  * @returns a client for the partner, or undefined when the address is not a partner
  */
 export function partnerClient(
   ownIp: string,
   knownDeviceIps: ReadonlySet<string>,
   ip: string,
+  gateFor: (ip: string) => CommandGate,
 ): YamahaYxcClient | undefined {
-  return ip !== ownIp && knownDeviceIps.has(ip) ? new YamahaYxcClient(ip) : undefined;
+  return ip !== ownIp && knownDeviceIps.has(ip) ? new YamahaYxcClient(ip, undefined, gateFor(ip)) : undefined;
+}
+
+/**
+ * The MusicCast Link partners of a device: every other configured device ONCE. The address set holds a device
+ * configured by hostname twice — typed and resolved — and counted twice, a server's two clients made
+ * `startDistribution(4)` instead of 2; the device itself stood in it under its resolved address (review 2026-10-05,
+ * A44). Two addresses one running MusicCast connection holds are one device (its IPv4 address is kept, the one a
+ * server's roster lists); the asking device's own connection is no partner.
+ *
+ * @param own the asking device's typed address
+ * @param ownGate the asking device's MusicCast gate
+ * @param known every address this instance runs
+ * @param gates the running connections' gates
+ * @returns one address per partner device
+ */
+export function partnerAddresses(
+  own: string,
+  ownGate: CommandGate,
+  known: Iterable<string>,
+  gates: GateRegistry,
+): string[] {
+  const byDevice = new Map<CommandGate | string, string>();
+  for (const address of known) {
+    const gate = gates.gateAt("yxc", address);
+    if (address === own || gate === ownGate) {
+      continue;
+    }
+    const device = gate ?? address;
+    const kept = byDevice.get(device);
+    if (kept === undefined || (!isIPv4(kept) && isIPv4(address))) {
+      byDevice.set(device, address);
+    }
+  }
+  return [...byDevice.values()];
 }
 
 /**
@@ -312,11 +342,32 @@ export function attemptDevice(
    * of the device connection, so a shared gate would let one receiver's 19-second sweep
    * block another receiver's button press.
    *
+   * It is held in the process's gate registry under every address the device is known by,
+   * so a client another device builds for it (a MusicCast Link partner) or the identification
+   * of a device about to be added goes through it too (review 2026-10-05, A13).
+   *
    * @param transport the transport the gate belongs to
    * @returns the gate
    */
-  const gateFor = (transport: Transport): CommandGate =>
-    new CommandGate({ minSpacingMs: COMMAND_SPACING_MS[transport], timers });
+  const gateFor = (transport: Transport): CommandGate => {
+    const gate = new CommandGate({ minSpacingMs: COMMAND_SPACING_MS[transport], timers });
+    LIVE_GATES.hold(transport, device.ip, gate);
+    if (!isIPv4(device.ip)) {
+      void resolveIPv4(device.ip).then(ip => {
+        if (ip !== undefined) {
+          LIVE_GATES.hold(transport, ip, gate);
+        }
+      });
+    }
+    return gate;
+  };
+  /**
+   * A partner's gate: its running connection's, else one of its own.
+   *
+   * @param ip the partner's address
+   * @returns the gate
+   */
+  const partnerGate = (ip: string): CommandGate => LIVE_GATES.gateFor("yxc", ip, timers);
 
   // 1) YNCA — amp control over a held TCP connection; a socket drop is the genuine gone-signal.
   const buildYnca = (): ConnectableTransport => {
@@ -350,8 +401,8 @@ export function attemptDevice(
         client,
         aliasZone: (from, to) => yxc.aliasZone(from, to),
         systemLanguage: deps.systemLanguage,
-        clientFor: ip => partnerClient(device.ip, deps.knownDeviceIps, ip),
-        partnerIps: () => [...deps.knownDeviceIps].filter(ip => ip !== device.ip),
+        clientFor: ip => partnerClient(device.ip, deps.knownDeviceIps, ip, partnerGate),
+        partnerIps: () => partnerAddresses(device.ip, gate, deps.knownDeviceIps, LIVE_GATES),
         registerPush: (onPush, deviceId) => deps.registerPush(device.ip, onPush, deviceId),
         pushActive: deps.pushActive,
         pushLiveness: deps.pushLiveness,

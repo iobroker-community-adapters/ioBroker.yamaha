@@ -1,5 +1,7 @@
 import { vi } from "vitest";
-import { connectTransports, partnerClient, type ConnectableTransport } from "./attempt-device";
+import { connectTransports, partnerAddresses, partnerClient, type ConnectableTransport } from "./attempt-device";
+import { CommandGate } from "./lifecycle/command-gate";
+import { GateRegistry } from "./lifecycle/gate-registry";
 import { YamahaYxcClient } from "./yxc/http-client";
 import type { ObjectDef } from "./catalog/types";
 import type { Transport } from "./catalog/owner-policy";
@@ -312,11 +314,67 @@ describe("connectTransports ends with what is live (audit 2026-09-24, A21/A3)", 
 });
 
 describe("partnerClient — the multiroom link target", () => {
+  const timers = { schedule: (): undefined => undefined, cancel: (): void => undefined };
+  const ownGate = (): CommandGate => new CommandGate({ minSpacingMs: 0, timers });
+
   test("another device this instance runs gets a client; the device itself and strangers do not", () => {
     const known = new Set(["192.168.1.10", "192.168.1.11"]);
-    expect(partnerClient("192.168.1.10", known, "192.168.1.11")).toBeInstanceOf(YamahaYxcClient);
-    expect(partnerClient("192.168.1.10", known, "192.168.1.10")).toBeUndefined();
-    expect(partnerClient("192.168.1.10", known, "192.168.1.99")).toBeUndefined();
+    expect(partnerClient("192.168.1.10", known, "192.168.1.11", ownGate)).toBeInstanceOf(YamahaYxcClient);
+    expect(partnerClient("192.168.1.10", known, "192.168.1.10", ownGate)).toBeUndefined();
+    expect(partnerClient("192.168.1.10", known, "192.168.1.99", ownGate)).toBeUndefined();
+  });
+
+  // Y-15: linking a running WX-030 sent getFeatures, setClientInfo and setInput in parallel to its own keepalive.
+  test("a partner's requests go through the gate of its running connection (review 2026-10-05, A13)", async () => {
+    const registry = new GateRegistry();
+    const running = new CommandGate({ minSpacingMs: 0, timers });
+    registry.hold("yxc", "192.168.1.11", running);
+    const gate = registry.gateFor("yxc", "192.168.1.11", timers);
+    expect(gate).toBe(running);
+    // Its own connection's poll is running: the partner's request waits for it.
+    const order: string[] = [];
+    let release: () => void = () => undefined;
+    const poll = running.run(() =>
+      new Promise<void>(resolve => (release = resolve)).then(() => void order.push("poll")),
+    );
+    const client = new YamahaYxcClient(
+      "192.168.1.11",
+      command => {
+        order.push(command);
+        return Promise.resolve({ response_code: 0 });
+      },
+      gate,
+    );
+    const link = client.setClientInfo({ group_id: "" });
+    await new Promise(resolve => setImmediate(resolve));
+    expect(order).toEqual([]);
+    release();
+    await Promise.all([poll, link]);
+    expect(order[0]).toBe("poll");
+    // Closed, its connection's gate is no partner's any more: a gate of its own then.
+    running.close();
+    expect(registry.gateAt("yxc", "192.168.1.11")).toBeUndefined();
+    expect(registry.gateFor("yxc", "192.168.1.11", timers)).not.toBe(running);
+  });
+});
+
+// A device configured by hostname stands in the address set twice — typed and resolved. Counted twice as a partner,
+// a server's two clients made startDistribution(4) instead of 2, and the device counted itself under its resolved
+// address (review 2026-10-05, A44).
+describe("partnerAddresses — every other device once", () => {
+  const timers = { schedule: (): undefined => undefined, cancel: (): void => undefined };
+  const gate = (): CommandGate => new CommandGate({ minSpacingMs: 0, timers });
+
+  test("a partner known by hostname and address counts once, by its address; the asking device not at all", () => {
+    const registry = new GateRegistry();
+    const own = gate();
+    const kitchen = gate();
+    registry.hold("yxc", "living.fritz.box", own);
+    registry.hold("yxc", "192.168.1.10", own);
+    registry.hold("yxc", "kitchen.fritz.box", kitchen);
+    registry.hold("yxc", "192.168.1.11", kitchen);
+    const known = ["living.fritz.box", "192.168.1.10", "kitchen.fritz.box", "192.168.1.11", "192.168.1.12"];
+    expect(partnerAddresses("living.fritz.box", own, known, registry)).toEqual(["192.168.1.11", "192.168.1.12"]);
   });
 });
 
