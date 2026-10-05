@@ -183,18 +183,20 @@ export class YxcBrowseDriver implements BrowseDriver {
     await this.fetch();
   }
 
-  /** Return to the menu root: step back until the device reports layer 1. */
+  /** Return to the menu root's first page: step back until the device reports layer 1. */
   public async home(): Promise<void> {
     if (!this.active) {
       return;
     }
+    // The window index belongs to the level on screen: a root paged down to its second page stayed there, so
+    // `home` showed page 2 and a path walk never found the root's first entries (review 2026-10-05, A22).
+    this.index = 0;
     for (let step = 0; step < MAX_HOME_STEPS; step++) {
       const layer = await this.fetch();
       if (layer === undefined || layer <= 1) {
         return;
       }
       await this.client.setListControl("return");
-      this.index = 0;
     }
   }
 
