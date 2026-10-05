@@ -1118,3 +1118,30 @@ describe("canCarryWrite keeps a write off a read-only transport (audit 2026-09-2
     await fireTimers();
   });
 });
+
+describe("MultiTransportHandle capture (diagnostics report)", () => {
+  test("reads each live transport that can be read and names who serves which datapoint, changing nothing", async () => {
+    const ynca = fakeConn("ynca", [state("power", "Power"), state("volume", "Volume")]);
+    const yxc = Object.assign(fakeConn("yxc", [state("volume", "Volume")]), {
+      capture: () =>
+        Promise.resolve({
+          transport: "yxc" as const,
+          startedAt: "",
+          durationMs: 0,
+          complete: true,
+          asked: 1,
+          answers: { a: 1 },
+        }),
+    });
+    const { handle, objects } = setup([ynca, yxc]);
+    await handle.start();
+    const written = objects.length;
+    const capture = await handle.capture();
+    expect(capture.live).toEqual(["ynca", "yxc"]);
+    expect(capture.owners).toEqual({ power: "ynca", volume: "yxc" });
+    expect(capture.captures.map(c => c.transport)).toEqual(["yxc"]);
+    expect(objects).toHaveLength(written);
+    expect(ynca.writes).toEqual([]);
+    expect(yxc.writes).toEqual([]);
+  });
+});

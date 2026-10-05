@@ -4,6 +4,7 @@
  * through this shape; each transport controller (YNCA/YXC/XML) sits behind a
  * TransportConnectionAdapter and contributes its objects and writes to the unified tree.
  */
+import type { HandleCapture } from "./lifecycle/multi-transport-handle";
 
 /** Log surface every device controller needs — one definition, not one per transport. */
 export interface ControllerLog {
@@ -36,6 +37,12 @@ export interface ConnectionHandle {
    * @param value the new value
    */
   handleStateChange(fullStateId: string, ack: boolean, value: unknown): void;
+  /**
+   * Read the device for a diagnostics report (optional — a handle without it reports nothing).
+   *
+   * @returns who serves what, and what the device answered
+   */
+  capture?(): Promise<HandleCapture>;
   /** Close the connection synchronously — safe to call from onUnload. */
   close(): void;
 }

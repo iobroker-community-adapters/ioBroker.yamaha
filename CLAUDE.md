@@ -239,6 +239,30 @@ per `device_id` im Ereignis; ob die Ereignisse eines Geräts WIRKLICH ankommen, 
 Ablehnung — ein abgelehnter Wert steht nie länger als ein Rücklesen auf dem Datenpunkt. Discovery: SSDP-M-SEARCH + HTTP-`fetch` in `main.ts`
 (adapter-Timer, sonst S5005), reine Logik in `lib/discovery.ts`.
 
+## Diagnosebericht (Experte-Tab, krobi 2026-10-05, Vorbild govee-smart)
+
+Instanz-Einstellungen = Tabs `_main` (bisheriger Inhalt) + `_expert` („Experte", Name/Schlüssel wie govee). Der Experte-Tab
+ist die React-Komponente `src-admin/` (Vite + Module Federation, `ConfigCustomYamahaSet/Components/DiagnosticsConfig`),
+gebaut per `npm run build:admin` (`tasks.js`) nach `admin/custom/` — **getrackt** wie bei govee; `src-admin` installiert nur
+mit npm ≥ 11 (npm 10.9 bricht in arborist `edgesOut`). Gerät wählen → `sendTo diagnostics {action:"export"}` → Download im
+Browser, mit Hinweis + mitlaufenden Sekunden, solange der Bericht entsteht; der Adapter speichert keine Kopie.
+`forgetLastTab` löscht den gemerkten Tab, sonst öffnet der Admin ab dem ersten Bericht auf „Experte".
+
+- **Auslesen nur lesend, über die bestehenden Clients und ihre Befehls-Schleuse** (`lib/diagnostics/device-capture.ts`,
+  eingehängt in `attempt-device.ts` per `TransportConnectionAdapter.readWith`, durchgereicht Handle → Supervisor): YNCA
+  `AVAIL`-Probe + Katalog-`=?` der anwesenden Subunits (`YncaClient.capture`, jede empfangene Zeile wörtlich), MusicCast nur
+  Endpunkte `get*` (`YamahaYxcClient.read` weist alles andere ab, bevor es das Gerät erreicht), XML `desc.xml` + GET je Zone/
+  Quelle. Antworten im Format der Inventar-Fixtures — ein Nutzerbericht wird zum Fixture. Kein Einlesen, kein Owner-Wechsel.
+- **Bericht** (`report.ts`): Umgebung (Node, js-controller, **musiccast-Adapter direkt gelesen**: `status` = not installed /
+  installed, no instance / installed, switched off / switched on, not running / running, je Instanz `enabled` + `alive`;
+  dazu Push-Port :41100 belegt?), Gerät, Zuständigkeit je Datenpunkt, Rohantworten, Profil (`native`), Objektbaum mit
+  Werten, Logzeilen (`LogRing`, alle Stufen inkl. debug, auch bei Loglevel info).
+- **Pseudonymisierung** (`pseudonymiser.ts`): IP/MAC/Mail per Form, Seriennummer/MAC/SSID/Netz-/Standort-/Zonennamen aus
+  ihren Fundstellen (YXC-Schlüssel, XML-Tags, YNCA `ZONENAME`), stabile Marker je Datei; Seriennummer behält die letzten 4.
+- ⚠️ **Zwei versiegelte Schutztests sind dadurch rot und warten auf die Werkbank:** Y-11 (`src/decisions/y11.test.ts`
+  verbietet jeden Zugriff auf `system.adapter.<fremd>`, auch lesend — krobi will den musiccast-Stand direkt gelesen) und
+  Y-27 (`y27.test.ts` liest `jsonConfig.items.discovery` flach, seit dem Tab-Umbau `items._main.items.discovery`).
+
 ## Chroniken — verlegt nach `.claude/dev-history.md` (2026-09-21)
 
 Die datierten Audit-, Umbau-, Plan- und Stand-Abschnitte stehen wörtlich in `.claude/dev-history.md`, Eintrag „2026-09-21 — Aus CLAUDE.md verlegt“ (lokal, gitignored). Dort liegen:

@@ -773,5 +773,7 @@
   "descNextHdRadioProgram": "Schaltet zum nächsten digitalen Programm des Senders weiter.",
   "descPreviousHdRadioProgram": "Schaltet zum vorigen digitalen Programm des Senders zurück.",
   "queueTracks": "Titel der Warteschlange",
-  "descQueueTracks": "Die Titel der Warteschlange des Netzwerkspielers, ein Platz je Titel, so wie der Spieler sie anzeigt."
+  "descQueueTracks": "Die Titel der Warteschlange des Netzwerkspielers, ein Platz je Titel, so wie der Spieler sie anzeigt.",
+  "tabMain": "Haupteinstellungen",
+  "tabExpert": "Experte"
 }

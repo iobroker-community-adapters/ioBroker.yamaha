@@ -1,0 +1,262 @@
+import React from "react";
+
+import {
+  Alert,
+  Box,
+  Button,
+  CircularProgress,
+  FormControl,
+  InputLabel,
+  LinearProgress,
+  Link,
+  MenuItem,
+  Select,
+  Stack,
+  Typography,
+} from "@mui/material";
+import { I18n } from "@iobroker/gui-components";
+
+import { errText } from "../../src/lib/err-text";
+import { isReport, makeDiagnosticsApi, type DiagnosticsDevice, type DiagnosticsSocket } from "./diagnosticsApi";
+import { forgetLastTab } from "./tabMemory";
+
+/** Where a report goes. */
+const ISSUES_URL = "https://github.com/iobroker-community-adapters/ioBroker.yamaha/issues/new";
+
+/** Props of the diagnostics card. */
+export interface DiagnosticsPanelProps {
+  /** The admin socket for the sendTo round trips. */
+  socket: unknown;
+  /** The instance, e.g. `yamaha.0`. */
+  namespace: string;
+}
+
+/** What the card knows about its device list. */
+type ListState =
+  { status: "loading" } | { status: "ready"; devices: DiagnosticsDevice[] } | { status: "failed"; message: string };
+
+/**
+ * Hand the browser a file. The download is the only copy of the report — the adapter stores none — so the
+ * user can attach it to an issue right away.
+ *
+ * @param fileName the name to save it under
+ * @param content the report JSON
+ */
+export function offerDownload(fileName: string, content: string): void {
+  const url = URL.createObjectURL(new Blob([content], { type: "application/json" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Give the browser a moment to start the download before the blob goes away.
+  setTimeout(() => URL.revokeObjectURL(url), 1_000);
+}
+
+/**
+ * The diagnostics card: pick a device, press one button, get a file. The adapter reads the receiver over
+ * every protocol it speaks (read only), adds what it knows and its recent log lines, and the browser saves
+ * the result. The list is not filtered: a report is wanted exactly when a device misbehaves.
+ *
+ * @param root0 props
+ * @param root0.socket the admin socket
+ * @param root0.namespace the instance
+ */
+export function DiagnosticsPanel({ socket, namespace }: DiagnosticsPanelProps): React.JSX.Element {
+  const api = React.useMemo(() => makeDiagnosticsApi(socket as DiagnosticsSocket, namespace), [socket, namespace]);
+  const [list, setList] = React.useState<ListState>({ status: "loading" });
+  const [selected, setSelected] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const [done, setDone] = React.useState("");
+  /** Seconds since the report was asked for — the read takes up to a minute, the card counts along. */
+  const [elapsed, setElapsed] = React.useState(0);
+
+  React.useEffect(() => {
+    if (!busy) {
+      return undefined;
+    }
+    setElapsed(0);
+    const started = Date.now();
+    const timer = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000);
+    return () => clearInterval(timer);
+  }, [busy]);
+
+  React.useEffect(() => {
+    forgetLastTab(namespace);
+    return () => forgetLastTab(namespace);
+  }, [namespace]);
+
+  React.useEffect(() => {
+    let alive = true;
+    api
+      .listDevices()
+      .then(devices => {
+        if (alive) {
+          setList({ status: "ready", devices });
+          // One device is the common case — pre-selected, the card is a single click.
+          if (devices.length === 1) {
+            setSelected(devices[0].value);
+          }
+        }
+      })
+      .catch((e: unknown) => {
+        if (alive) {
+          const message = e instanceof Error && e.message ? errText(e) : I18n.t("yd_listFailed");
+          setList({ status: "failed", message });
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, [api]);
+
+  const onExport = React.useCallback((): void => {
+    setBusy(true);
+    setError("");
+    setDone("");
+    api
+      .exportReport(selected)
+      .then(res => {
+        if (isReport(res)) {
+          offerDownload(res.fileName, res.content);
+          setDone(res.fileName);
+        } else {
+          setError(res.error || I18n.t("yd_exportFailed"));
+        }
+      })
+      .catch(() => setError(I18n.t("yd_exportFailed")))
+      .finally(() => setBusy(false));
+  }, [api, selected]);
+
+  if (list.status === "loading") {
+    return (
+      <Box sx={{ p: 2 }}>
+        <Stack
+          direction="row"
+          spacing={2}
+          sx={{ alignItems: "center" }}
+        >
+          <CircularProgress size={24} />
+          <Typography variant="body2">{I18n.t("yd_loadingDevices")}</Typography>
+        </Stack>
+      </Box>
+    );
+  }
+  if (list.status === "failed") {
+    return (
+      <Box sx={{ p: 2 }}>
+        <Alert
+          severity="error"
+          data-testid="diag-list-failed"
+        >
+          {list.message}
+        </Alert>
+      </Box>
+    );
+  }
+  const devices = list.devices;
+  const chosen = devices.find(d => d.value === selected);
+
+  return (
+    <Box sx={{ p: 2, maxWidth: 720 }}>
+      <Stack spacing={2}>
+        <Typography variant="body2">{I18n.t("yd_intro")}</Typography>
+
+        {devices.length === 0 ? (
+          <Alert
+            severity="info"
+            data-testid="diag-no-devices"
+          >
+            {I18n.t("yd_noDevices")}
+          </Alert>
+        ) : (
+          <>
+            <FormControl fullWidth>
+              <InputLabel id="yd-device">{I18n.t("yd_device")}</InputLabel>
+              <Select
+                data-testid="diag-device-select"
+                labelId="yd-device"
+                label={I18n.t("yd_device")}
+                value={selected}
+                onChange={e => setSelected(String(e.target.value))}
+              >
+                {devices.map(d => (
+                  <MenuItem
+                    key={d.value}
+                    value={d.value}
+                  >
+                    {d.connected ? d.label : `${d.label} — ${I18n.t("yd_notConnected")}`}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            {chosen && !chosen.connected ? <Alert severity="warning">{I18n.t("yd_offlineHint")}</Alert> : null}
+
+            <Box>
+              <Button
+                data-testid="diag-export"
+                variant="contained"
+                disabled={!selected || busy}
+                onClick={onExport}
+                startIcon={busy ? <CircularProgress size={16} /> : undefined}
+              >
+                {busy ? I18n.t("yd_reading") : I18n.t("yd_export")}
+              </Button>
+            </Box>
+          </>
+        )}
+
+        {busy ? (
+          <Alert
+            severity="info"
+            data-testid="diag-generating"
+          >
+            <Typography variant="body2">{I18n.t("yd_generating")}</Typography>
+            <LinearProgress sx={{ my: 1 }} />
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              data-testid="diag-elapsed"
+            >
+              {I18n.t("yd_elapsed", String(elapsed))}
+            </Typography>
+          </Alert>
+        ) : null}
+
+        {done ? (
+          <Alert
+            severity="success"
+            data-testid="diag-done"
+          >
+            {I18n.t("yd_done", done)}{" "}
+            <Link
+              href={ISSUES_URL}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {I18n.t("yd_openIssue")}
+            </Link>
+          </Alert>
+        ) : null}
+        {error ? (
+          <Alert
+            severity="error"
+            data-testid="diag-error"
+          >
+            {error}
+          </Alert>
+        ) : null}
+
+        <Typography
+          variant="caption"
+          color="text.secondary"
+        >
+          {I18n.t("yd_privacy")}
+        </Typography>
+      </Stack>
+    </Box>
+  );
+}

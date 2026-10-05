@@ -11,7 +11,12 @@ import type * as DiscoveredStoreModule from "./lib/discovered-store";
  */
 vi.mock("@iobroker/adapter-core", () => {
   class Adapter {
-    public log = { silly: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    // The adapter hooks its diagnostics log ring onto these methods (LogRing.hook); the assignment is
+    // ignored here, so the spies stay what every test reads.
+    public log = new Proxy(
+      { silly: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      { set: () => true },
+    );
     public namespace = "yamaha.0";
     public version = "0.0.0-test";
     public adapterDir = "/tmp/yamaha";

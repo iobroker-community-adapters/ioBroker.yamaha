@@ -162,6 +162,8 @@ export class YncaClient {
    */
   private lastPlainLineAt = Number.NEGATIVE_INFINITY;
   private unknownLineHandler: ((line: string) => void) | undefined;
+  /** Raw-line listeners of a running {@link capture} — every received line, decoded or not. */
+  private readonly rawTaps = new Set<(line: string) => void>();
   /** The refusal window of a bracketed exchange: open between its line and its closing marker. */
   private refusalWindow: { refusal?: "restricted" | "undefined" } | undefined;
   private reachable = false;
@@ -228,6 +230,9 @@ export class YncaClient {
     // answers hold the counter at zero, so a busy socket is never mistaken for a dead one.
     this.unansweredKeepalives = 0;
     for (const line of this.lineBuffer.push(chunk)) {
+      for (const tap of this.rawTaps) {
+        tap(line);
+      }
       const response = decodeLine(line);
       if (response.status === "ok") {
         const message: YncaMessage = { subunit: response.subunit, func: response.func, value: response.value };
@@ -595,6 +600,52 @@ export class YncaClient {
       }
       return buildCapabilities(collected);
     } finally {
+      const index = this.messageHandlers.indexOf(collector);
+      if (index >= 0) {
+        this.messageHandlers.splice(index, 1);
+      }
+    }
+  }
+
+  /**
+   * Read functions for a diagnostics report: the GETs go out like a sweep (background priority, through
+   * the gate), and every line the device sends meanwhile is kept VERBATIM — answers, `@UNDEFINED`/
+   * `@RESTRICTED` and lines nobody decodes. Changes nothing on the device and never throws: a drop
+   * or a closed gate ends the read with what came, marked incomplete. The answers also reach the
+   * message handlers as usual — they are the device's real values.
+   *
+   * @param gets the subunit/function pairs to read
+   * @returns the received lines in arrival order, and whether the read ran to its closing marker
+   */
+  public async capture(
+    gets: ReadonlyArray<{ subunit: string; func: string }>,
+  ): Promise<{ lines: string[]; complete: boolean }> {
+    const lines: string[] = [];
+    let markerSeen: (() => void) | undefined;
+    const tap = (line: string): void => {
+      lines.push(line);
+    };
+    const collector = (message: YncaMessage): void => {
+      if (message.subunit === "SYS" && message.func === "VERSION") {
+        markerSeen?.();
+      }
+    };
+    this.rawTaps.add(tap);
+    this.messageHandlers.push(collector);
+    try {
+      for (const request of gets) {
+        if (!this.reachable || this.closed) {
+          return { lines, complete: false };
+        }
+        await this.writeLine(encodeGet(request.subunit, request.func), "background");
+      }
+      if (!this.reachable || this.closed) {
+        return { lines, complete: false };
+      }
+      const answered = await this.awaitSweepMarker(handler => (markerSeen = handler));
+      return { lines, complete: answered && this.reachable };
+    } finally {
+      this.rawTaps.delete(tap);
       const index = this.messageHandlers.indexOf(collector);
       if (index >= 0) {
         this.messageHandlers.splice(index, 1);

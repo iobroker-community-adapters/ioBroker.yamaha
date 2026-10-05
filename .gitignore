@@ -43,3 +43,8 @@ build/
 # Value dumps of the inventory run (readable-values judge) — generated, never committed
 test/states.inventory.json
 test/objects.inventory.de.json
+
+# Admin component (src-admin/): its build and work dirs. The BUILT admin/custom/ is tracked, like govee-smart's —
+# `npm run build:admin` produces it before a release.
+/src-admin/build
+/src-admin/.__mf__temp

@@ -476,3 +476,32 @@ describe("YamahaYxcClient body cap (audit 2026-09-02)", () => {
     }
   });
 });
+
+describe("YamahaYxcClient.read (diagnostics)", () => {
+  it("sends a read as it is, query included", async () => {
+    const sent: string[] = [];
+    const client = new YamahaYxcClient("1.2.3.4", cmd => {
+      sent.push(cmd);
+      return Promise.resolve({ response_code: 0 });
+    });
+    await client.read("/tuner/getPresetInfo?band=fm");
+    expect(sent).toEqual(["/tuner/getPresetInfo?band=fm"]);
+  });
+
+  it("refuses anything that is not a get, before it reaches the device", async () => {
+    const sent: string[] = [];
+    const client = new YamahaYxcClient("1.2.3.4", cmd => {
+      sent.push(cmd);
+      return Promise.resolve({ response_code: 0 });
+    });
+    for (const path of [
+      "/main/setPower?power=on",
+      "/netusb/recallPreset?num=1",
+      "/system/getFeatures/../setX",
+      "/main/get",
+    ]) {
+      await expect(client.read(path), path).rejects.toThrow(/not a read/);
+    }
+    expect(sent).toEqual([]);
+  });
+});

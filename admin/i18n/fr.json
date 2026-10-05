@@ -773,5 +773,7 @@
   "descNextHdRadioProgram": "Passe au programme numérique suivant de la station.",
   "descPreviousHdRadioProgram": "Revient au programme numérique précédent de la station.",
   "queueTracks": "Titres de la file d'attente",
-  "descQueueTracks": "Les titres de la file d'attente du lecteur réseau, un emplacement par titre, tels que le lecteur les affiche."
+  "descQueueTracks": "Les titres de la file d'attente du lecteur réseau, un emplacement par titre, tels que le lecteur les affiche.",
+  "tabMain": "Paramètres principaux",
+  "tabExpert": "Expert"
 }

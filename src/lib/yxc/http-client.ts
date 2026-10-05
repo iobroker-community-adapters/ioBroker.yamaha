@@ -278,6 +278,22 @@ export class YamahaYxcClient {
   }
 
   /**
+   * Read one endpoint verbatim for a diagnostics report. Only a READ goes out: the last path segment
+   * must start with `get` — anything else is rejected before it reaches the device, so a report can
+   * never change a setting.
+   *
+   * @param path the API path below the version, e.g. `/system/getFeatures` or `/tuner/getPresetInfo?band=fm`
+   * @returns the parsed response body
+   */
+  public read(path: string): Promise<unknown> {
+    const last = path.split("?")[0].split("/").pop() ?? "";
+    if (!/^get[A-Z]/.test(last)) {
+      return Promise.reject(new Error(`not a read: ${path}`));
+    }
+    return this.send(path);
+  }
+
+  /**
    * Read the device's capabilities (zones, functions, inputs, ranges).
    *
    * @returns the getFeatures response

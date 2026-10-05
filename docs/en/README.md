@@ -225,5 +225,11 @@ then shows the device's value again.
 - **Nothing updates any more.** Look for the MusicCast port message above, and check
   `info.connection` on the device.
 
-For anything else, switch the instance log level to debug for a moment — the adapter says
-what it asks, what it gets, and what it refuses to send.
+For anything else, create a diagnostics report: in the instance settings, open the **Expert**
+tab, pick the device and press **Create diagnostics report**. The adapter reads the receiver over
+every protocol it speaks — read only, nothing on the receiver changes — which takes up to a
+minute, and your browser saves one file: what the receiver can do and what it answered, its
+datapoints, the adapter's recent log lines (debug lines included, even with the log level at
+info) and whether the musiccast adapter is installed, switched on and running. Addresses, serial
+numbers, network and room names are replaced by markers, and the adapter keeps no copy. Attach
+the file to a [GitHub issue](https://github.com/iobroker-community-adapters/ioBroker.yamaha/issues).

@@ -1,5 +1,6 @@
 import { channelCommon, type ObjectDef } from "../catalog/types";
 import { canonicalIdOf, ID_DRIFT, ZONE_PREFIX, type Transport } from "../catalog/owner-policy";
+import type { TransportCapture } from "../diagnostics/device-capture";
 import type { TransportConnection, WriteOutcome } from "./multi-transport-handle";
 
 /**
@@ -49,6 +50,8 @@ export class TransportConnectionAdapter implements TransportConnection {
   private readonly buffered: Array<{ canonicalId: string; value: boolean | number | string | null }> = [];
   private owned: ReadonlySet<string> | undefined;
   private controller: AdaptedController | undefined;
+  /** The diagnostics read of this transport's client, set by the builder that owns the client. */
+  private reader: (() => Promise<TransportCapture>) | undefined;
   private shapeChanged: (() => void) | undefined;
   /** Ids upserted since the last {@link seedOwned} — their values wait until the handle learned them. */
   private readonly awaitingOwnership = new Set<string>();
@@ -134,6 +137,25 @@ export class TransportConnectionAdapter implements TransportConnection {
    */
   public bind(controller: AdaptedController): void {
     this.controller = controller;
+  }
+
+  /**
+   * Give this transport its diagnostics read. Set by the builder that holds the client, so the read
+   * goes through the same client and command gate as everything else on this connection.
+   *
+   * @param reader reads the device verbatim, changing nothing
+   */
+  public readWith(reader: () => Promise<TransportCapture>): void {
+    this.reader = reader;
+  }
+
+  /**
+   * Read the device for a diagnostics report.
+   *
+   * @returns the capture, or undefined when this transport has no read
+   */
+  public async capture(): Promise<TransportCapture | undefined> {
+    return this.reader?.();
   }
 
   /** Start the controller (connect + probe + collect objects). Call before {@link buildObjects}. */

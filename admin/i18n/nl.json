@@ -773,5 +773,7 @@
   "descNextHdRadioProgram": "Schakelt door naar het volgende digitale programma van de zender.",
   "descPreviousHdRadioProgram": "Schakelt terug naar het vorige digitale programma van de zender.",
   "queueTracks": "Nummers in de wachtrij",
-  "descQueueTracks": "De nummers in de wachtrij van de netwerkspeler, één plaats per nummer zoals de speler ze toont."
+  "descQueueTracks": "De nummers in de wachtrij van de netwerkspeler, één plaats per nummer zoals de speler ze toont.",
+  "tabMain": "Hoofdinstellingen",
+  "tabExpert": "Expert"
 }

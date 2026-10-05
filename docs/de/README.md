@@ -232,5 +232,12 @@ möglich“. Der Datenpunkt zeigt danach wieder den Wert des Geräts.
 - **Es kommen keine Aktualisierungen mehr.** Achte auf den Hinweis zum MusicCast-Port oben und
   sieh dir `info.connection` am Gerät an.
 
-Für alles Weitere stell die Protokollstufe der Instanz kurz auf `debug` — der Adapter sagt
-dort, was er fragt, was er bekommt und was er nicht abschickt.
+Für alles Weitere erstell einen Diagnosebericht: in den Instanz-Einstellungen den Tab
+**Experte** öffnen, das Gerät wählen und **Diagnosebericht erstellen** drücken. Der Adapter liest
+den Receiver über jedes Protokoll aus, das er spricht — nur lesend, am Receiver ändert sich nichts
+—, das dauert bis zu einer Minute, und dein Browser speichert eine Datei: was der Receiver kann und
+was er geantwortet hat, seine Datenpunkte, die letzten Logzeilen des Adapters (auch die
+Debug-Zeilen, selbst wenn die Protokollstufe auf info steht) und ob der musiccast-Adapter
+installiert, eingeschaltet und gestartet ist. Adressen, Seriennummern, Netzwerk- und Raumnamen
+werden durch Platzhalter ersetzt, und der Adapter behält keine Kopie. Häng die Datei an ein
+[GitHub-Issue](https://github.com/iobroker-community-adapters/ioBroker.yamaha/issues).

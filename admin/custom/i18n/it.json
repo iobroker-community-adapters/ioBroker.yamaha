@@ -1,0 +1,17 @@
+{
+  "yd_loadingDevices": "Caricamento dei dispositivi…",
+  "yd_listFailed": "L'adattatore non ha restituito l'elenco dei dispositivi. L'istanza è in esecuzione?",
+  "yd_intro": "Legge il ricevitore selezionato tramite ogni protocollo che supporta — solo lettura, nulla viene modificato — e salva un file con ciò che sa fare, ciò che risponde, i suoi punti dati e le ultime righe di log dell'adattatore. Allega il file a una issue su GitHub. La lettura richiede fino a un minuto.",
+  "yd_noDevices": "Questa istanza non gestisce ancora alcun dispositivo.",
+  "yd_device": "Dispositivo",
+  "yd_notConnected": "non connesso",
+  "yd_offlineHint": "Il dispositivo non è connesso: il rapporto contiene ciò che l'adattatore ha memorizzato su di esso e le righe di log, ma nessuna lettura in tempo reale.",
+  "yd_export": "Crea rapporto di diagnostica",
+  "yd_reading": "Lettura del ricevitore…",
+  "yd_done": "Salvato come %s.",
+  "yd_openIssue": "Apri una issue su GitHub",
+  "yd_exportFailed": "Impossibile creare il rapporto.",
+  "yd_privacy": "Indirizzi, numeri di serie, nomi di rete e delle stanze vengono sostituiti da segnaposto prima che il file lasci l'adattatore. L'adattatore non conserva alcuna copia.",
+  "yd_generating": "Creazione del rapporto di diagnostica — il ricevitore viene letto tramite ogni protocollo che supporta. Richiede fino a un minuto; poi il file viene offerto per il download.",
+  "yd_elapsed": "%s s"
+}

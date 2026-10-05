@@ -202,6 +202,16 @@ export class YxcPushReceiver {
   }
 
   /**
+   * Whether binding :41100 failed — another MusicCast consumer holds the port (in practice the old
+   * musiccast adapter, #611). Read by the diagnostics report.
+   *
+   * @returns true while the port could not be bound
+   */
+  public isBlocked(): boolean {
+    return this.bindFailed;
+  }
+
+  /**
    * Whether events are actually arriving — i.e. the socket is bound and devices can push.
    * When the port is taken by another MusicCast application the adapter runs poll-only,
    * and the controllers have to widen their polling to compensate.

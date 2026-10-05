@@ -73,6 +73,10 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
     ### **WORK IN PROGRESS**
 -->
 
+### **WORK IN PROGRESS**
+
+- (krobipd) New: Diagnostics report on the new Expert tab of the instance settings — reads the receiver over every protocol (read only), adds its datapoints, the recent log lines and whether the musiccast adapter is installed, switched on and running, and saves it as one file for a GitHub issue; addresses, serial numbers and names are replaced by markers
+
 ### 3.2.0 (2026-10-02)
 
 - (krobipd) Fixed: Dropdown lists such as sound program, sleep timer and Adaptive DRC no longer go empty when the receiver loses power; lists emptied that way come back

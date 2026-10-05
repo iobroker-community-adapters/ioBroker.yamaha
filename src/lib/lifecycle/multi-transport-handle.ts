@@ -9,6 +9,7 @@ import { capabilityKeyOf, pickOwner, type Transport } from "../catalog/owner-pol
 import type { ConnectionHandle, ControllerLog } from "../controller";
 import { errText } from "../err-text";
 import { readyLine } from "../ready-line";
+import type { TransportCapture } from "../diagnostics/device-capture";
 import { emptyLearnedTree, type LearnedTree } from "./learned-tree";
 
 /**
@@ -59,8 +60,27 @@ export interface TransportConnection {
    * Optional — a transport with a socket judges itself.
    */
   verifyAlive?(): Promise<void>;
+  /**
+   * Read the device for a diagnostics report: every question this transport can ask without changing
+   * anything, answered verbatim. Optional — a transport without it is reported as live but unread.
+   */
+  capture?(): Promise<TransportCapture | undefined>;
   /** Close this transport's connection. Synchronous — safe from onUnload. */
   close(): void;
+}
+
+/** What a diagnostics report reads from a running device: who serves what, and what the device answered. */
+export interface HandleCapture {
+  /** The transports live right now. */
+  live: Transport[];
+  /** Transports the device answered before that are not connected now. */
+  missing: Transport[];
+  /** Canonical datapoint id → the transport that serves it. */
+  owners: Record<string, Transport>;
+  /** The learned tree as kept in the capability profile. */
+  tree: LearnedTree;
+  /** The raw reads, one per live transport that can be read. */
+  captures: TransportCapture[];
 }
 
 /** A transport connection that can be brought online — a {@link TransportConnection} plus connect(). */
@@ -730,6 +750,25 @@ export class MultiTransportHandle implements ConnectionHandle {
       this.pendingDrop = false;
       cb(reason);
     }
+  }
+
+  /**
+   * Read the device for a diagnostics report: each live transport asks what it can without changing
+   * anything — in parallel, every transport through its own command gate — and the report learns who
+   * serves which datapoint. Nothing is learned, owned or written differently because of it.
+   *
+   * @returns the live set, the owners and the raw captures
+   */
+  public async capture(): Promise<HandleCapture> {
+    const live = [...this.live];
+    const captures = await Promise.all(live.map(connection => connection.capture?.() ?? Promise.resolve(undefined)));
+    return {
+      live: live.map(connection => connection.transport),
+      missing: [...this.missing],
+      owners: Object.fromEntries([...this.ownerByCanonicalId].sort(([a], [b]) => a.localeCompare(b))),
+      tree: this.tree,
+      captures: captures.filter((capture): capture is TransportCapture => capture !== undefined),
+    };
   }
 
   /** Close every transport and stop every reconnect loop. Synchronous — safe from onUnload. */

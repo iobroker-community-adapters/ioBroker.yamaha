@@ -773,5 +773,7 @@
   "descNextHdRadioProgram": "Avança para o próximo programa digital da estação.",
   "descPreviousHdRadioProgram": "Volta ao programa digital anterior da estação.",
   "queueTracks": "Faixas da fila",
-  "descQueueTracks": "As faixas da fila do leitor de rede, uma posição por faixa, como o leitor as mostra."
+  "descQueueTracks": "As faixas da fila do leitor de rede, uma posição por faixa, como o leitor as mostra.",
+  "tabMain": "Configurações principais",
+  "tabExpert": "Especialista"
 }

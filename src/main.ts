@@ -77,6 +77,12 @@ import {
   modelFrom,
 } from "./lib/lifecycle/capability-profile";
 import { emptyLearnedTree } from "./lib/lifecycle/learned-tree";
+import {
+  DiagnosticsHandler,
+  type DiagnosticsDeviceState,
+  type DiagnosticsHost,
+} from "./lib/diagnostics/diagnostics-handler";
+import { LogRing } from "./lib/diagnostics/log-ring";
 
 /** Supervisor reconnect backoff bounds (exponential: 1s, 2s … capped at 60s). */
 const RECONNECT_BASE_MS = 1000;
@@ -351,10 +357,18 @@ export class Yamaha extends utils.Adapter {
   private stateWritesFailing = false;
   /** Per device, its capability profile (probe memory, YNCA snapshot, learned tree) — see loadDeviceProfile. */
   private readonly profiles = this.perDevice.map<DeviceProfileStore>();
+  /** Per device, whether its MusicCast events arrive — read by the diagnostics report. */
+  private readonly pushLiveness = this.perDevice.map<PushLiveness>();
   /** Per device, the native patch inside its coalescing window (see persistDeviceNative). */
   private readonly pendingDevicePatches = this.perDevice.map<PendingDevicePatch>();
   /** The installation's system language (`system.config`), read at start — the MusicCast menus' language. */
   private systemLanguage: string | undefined;
+  /** The adapter's last log lines at every level — what a diagnostics report shows of the past. */
+  private readonly logRing = new LogRing();
+  /** When this run started — the report says how long the instance has been up. */
+  private readonly startedAt = Date.now();
+  /** Answers the admin's diagnostics card (list the devices, read one and hand back its report). */
+  private readonly diagnostics = new DiagnosticsHandler(this.diagnosticsHost());
   /** Per device, the last write to its device object — the next one waits for it (see writeDeviceObject). */
   private readonly deviceObjectWrites = this.perDevice.map<Promise<unknown>>();
   /** The devices whose id is final under the 3.0.0 rule (`native.idScheme`) — see checkIdDecision. */
@@ -401,6 +415,109 @@ export class Yamaha extends utils.Adapter {
     this.on("unload", this.onUnload.bind(this));
   }
 
+  /**
+   * The admin's own messages (the device manager's `dm:*` go to dm-utils): `diagnostics` lists the
+   * devices and builds one device's report for the download.
+   *
+   * @param obj the message
+   */
+  private async onMessage(obj: ioBroker.Message): Promise<void> {
+    try {
+      if (obj?.command !== "diagnostics") {
+        return;
+      }
+      const answer = await this.diagnostics.handle(obj.message);
+      if (obj.callback) {
+        this.sendTo(obj.from, obj.command, answer as Record<string, unknown>, obj.callback);
+      }
+    } catch (e) {
+      this.log.warn(`diagnostics message failed: ${errText(e)}`);
+    }
+  }
+
+  /**
+   * What the diagnostics handler reads of this adapter — live, so a report shows the state of the moment.
+   *
+   * @returns the host surface
+   */
+  private diagnosticsHost(): DiagnosticsHost {
+    const adapter = this;
+    return {
+      get namespace() {
+        return adapter.namespace;
+      },
+      get version() {
+        return adapter.version ?? "unknown";
+      },
+      get hostName() {
+        return adapter.host ?? "";
+      },
+      get systemLanguage() {
+        return adapter.systemLanguage;
+      },
+      get config() {
+        return adapter.diagnosticsConfig();
+      },
+      startedAt: this.startedAt,
+      logRing: this.logRing,
+      pushPort: () => ({
+        listening: this.pushReceiver?.isListening() ?? false,
+        blocked: this.pushReceiver?.isBlocked() ?? false,
+      }),
+      devices: () => this.diagnosticsDevices(),
+      getForeignObjectAsync: id => this.getForeignObjectAsync(id),
+      getForeignStateAsync: id => this.getForeignStateAsync(id),
+      getObjectViewAsync: (design, search, params) => this.getObjectViewAsync(design, search, params),
+      log: {
+        info: message => this.log.info(message),
+        warn: message => this.log.warn(message),
+        debug: message => this.log.debug(message),
+      },
+    };
+  }
+
+  /**
+   * The instance settings a report shows: the switches that change behaviour, never an address (the
+   * device table only by its size).
+   *
+   * @returns the settings
+   */
+  private diagnosticsConfig(): Record<string, unknown> {
+    const config = this.config;
+    const rows = Array.isArray(config.devices) ? config.devices : [];
+    return {
+      discovery: config.discovery,
+      networkInterfaceSet:
+        typeof config.networkInterface === "string" && !["", "0.0.0.0"].includes(config.networkInterface),
+      xmlPollInterval: config.xmlPollInterval,
+      deviceTableRows: rows.length,
+      groups: Object.fromEntries(Object.entries(config).filter(([key]) => key.startsWith("group_"))),
+    };
+  }
+
+  /**
+   * The devices this instance runs, as the diagnostics handler needs them.
+   *
+   * @returns one entry per running device
+   */
+  private diagnosticsDevices(): DiagnosticsDeviceState[] {
+    return [...this.deviceRecords.values()].map(record => {
+      const profile = this.profiles.get(record.id);
+      return {
+        id: record.id,
+        ip: record.ip,
+        source: record.source,
+        model: profile?.model() ?? record.model,
+        label: this.deviceLabels.get(record.id)?.name,
+        identity: profile?.identity() ?? record.identity,
+        connected: this.deviceConnected.get(record.id) === true,
+        volumeAsPercent: this.volumePercent.get(record.id),
+        pushEvents: this.pushLiveness.get(record.id)?.state,
+        capture: () => this.supervisorById.get(record.id)?.capture() ?? Promise.resolve(undefined),
+      };
+    });
+  }
+
   /** Migrate settings and ids, clean up, subscribe to state changes, then start a supervisor for each device. */
   private async onReady(): Promise<void> {
     try {
@@ -409,6 +526,10 @@ export class Yamaha extends utils.Adapter {
       // still come from the own tName (lib/i18n.ts); this only makes adapter-core's I18n usable for any caller.
       await utils.I18n.init(join(__dirname, "..", "admin"), this);
       this.deviceManagement = new YamahaDeviceManagement(this);
+      // From here on the diagnostics report's log ring hears every line, debug included, and the admin's
+      // diagnostics card gets its answers.
+      this.logRing.hook(this.log);
+      this.on("message", obj => void this.onMessage(obj));
       this.log.info('starting — a "ready" message will follow for each device');
       // The bulk read before the first write: the start marker below is compared in memory, never read
       // back one by one (round 77 resource check); the seed after the migrations refreshes it.
@@ -599,6 +720,7 @@ export class Yamaha extends utils.Adapter {
     // Whether this device's MusicCast events arrive — a verdict of the device, not of one connection
     // (audit 2026-09-24, C1).
     const pushLiveness = new PushLiveness();
+    this.pushLiveness.set(device.id, pushLiveness);
     // Narrowing (attempt-device.ts: only the transports the description advertises) applies
     // INSIDE a streak of failed attempts. The first attempt after a success — the start, and the
     // first reconnect after a drop — always tries all three: a firmware update that brings

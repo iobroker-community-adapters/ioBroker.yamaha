@@ -1,0 +1,17 @@
+{
+  "yd_loadingDevices": "Loading devices…",
+  "yd_listFailed": "The adapter did not answer with its device list. Is the instance running?",
+  "yd_intro": "Reads the selected receiver over every protocol it speaks — read only, nothing is changed — and saves one file with what it can do, what it answers, its datapoints and the adapter's recent log lines. Attach the file to a GitHub issue. Reading takes up to a minute.",
+  "yd_noDevices": "This instance runs no device yet.",
+  "yd_device": "Device",
+  "yd_notConnected": "not connected",
+  "yd_offlineHint": "The device is not connected: the report contains what the adapter remembers about it and the log lines, but no live read.",
+  "yd_export": "Create diagnostics report",
+  "yd_reading": "Reading the receiver…",
+  "yd_done": "Saved as %s.",
+  "yd_openIssue": "Open a GitHub issue",
+  "yd_exportFailed": "The report could not be created.",
+  "yd_privacy": "Addresses, serial numbers, network and room names are replaced by markers before the file leaves the adapter. The adapter keeps no copy.",
+  "yd_generating": "Generating the diagnostics report — the receiver is being read over every protocol it speaks. This takes up to a minute; the file is offered for download when it is done.",
+  "yd_elapsed": "%s s"
+}

@@ -1,0 +1,17 @@
+{
+  "yd_loadingDevices": "Apparaten laden…",
+  "yd_listFailed": "De adapter gaf geen apparaatlijst terug. Draait de instantie?",
+  "yd_intro": "Leest de gekozen receiver uit via elk protocol dat hij spreekt – alleen lezen, er wordt niets gewijzigd – en slaat één bestand op met wat hij kan, wat hij antwoordt, zijn datapunten en de laatste logregels van de adapter. Voeg het bestand toe aan een GitHub-issue. Uitlezen duurt tot een minuut.",
+  "yd_noDevices": "Deze instantie bestuurt nog geen apparaat.",
+  "yd_device": "Apparaat",
+  "yd_notConnected": "niet verbonden",
+  "yd_offlineHint": "Het apparaat is niet verbonden: het rapport bevat wat de adapter over het apparaat heeft onthouden en de logregels, maar geen actuele uitlezing.",
+  "yd_export": "Diagnoserapport maken",
+  "yd_reading": "Receiver wordt uitgelezen…",
+  "yd_done": "Opgeslagen als %s.",
+  "yd_openIssue": "GitHub-issue openen",
+  "yd_exportFailed": "Het rapport kon niet worden gemaakt.",
+  "yd_privacy": "Adressen, serienummers, netwerk- en kamernamen worden door markeringen vervangen voordat het bestand de adapter verlaat. De adapter bewaart geen kopie.",
+  "yd_generating": "Diagnoserapport wordt gemaakt – de receiver wordt uitgelezen via elk protocol dat hij spreekt. Dit duurt tot een minuut; daarna wordt het bestand aangeboden om te downloaden.",
+  "yd_elapsed": "%s s"
+}

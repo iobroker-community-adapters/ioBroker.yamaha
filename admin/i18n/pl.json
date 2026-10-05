@@ -773,5 +773,7 @@
   "descNextHdRadioProgram": "Przełącza na następny program cyfrowy stacji.",
   "descPreviousHdRadioProgram": "Przełącza na poprzedni program cyfrowy stacji.",
   "queueTracks": "Utwory w kolejce",
-  "descQueueTracks": "Utwory z kolejki odtwarzacza sieciowego, jedno miejsce na utwór, tak jak pokazuje je odtwarzacz."
+  "descQueueTracks": "Utwory z kolejki odtwarzacza sieciowego, jedno miejsce na utwór, tak jak pokazuje je odtwarzacz.",
+  "tabMain": "Ustawienia główne",
+  "tabExpert": "Ekspert"
 }

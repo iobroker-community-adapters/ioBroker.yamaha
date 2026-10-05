@@ -1,0 +1,17 @@
+{
+  "yd_loadingDevices": "Geräte werden geladen…",
+  "yd_listFailed": "Der Adapter hat keine Geräteliste geliefert. Läuft die Instanz?",
+  "yd_intro": "Liest den gewählten Receiver über jedes Protokoll aus, das er spricht – nur lesend, es wird nichts verändert – und speichert eine Datei mit dem, was er kann, was er antwortet, seinen Datenpunkten und den letzten Logzeilen des Adapters. Die Datei an ein GitHub-Issue anhängen. Das Auslesen dauert bis zu einer Minute.",
+  "yd_noDevices": "Diese Instanz betreibt noch kein Gerät.",
+  "yd_device": "Gerät",
+  "yd_notConnected": "nicht verbunden",
+  "yd_offlineHint": "Das Gerät ist nicht verbunden: Der Bericht enthält, was der Adapter über das Gerät gespeichert hat, und die Logzeilen, aber kein aktuelles Auslesen.",
+  "yd_export": "Diagnosebericht erstellen",
+  "yd_reading": "Receiver wird ausgelesen…",
+  "yd_done": "Gespeichert als %s.",
+  "yd_openIssue": "GitHub-Issue öffnen",
+  "yd_exportFailed": "Der Bericht konnte nicht erstellt werden.",
+  "yd_privacy": "Adressen, Seriennummern, Netzwerk- und Raumnamen werden durch Platzhalter ersetzt, bevor die Datei den Adapter verlässt. Der Adapter behält keine Kopie.",
+  "yd_generating": "Diagnosebericht wird erstellt – der Receiver wird über jedes Protokoll ausgelesen, das er spricht. Das dauert bis zu einer Minute; danach wird die Datei zum Herunterladen angeboten.",
+  "yd_elapsed": "%s s"
+}

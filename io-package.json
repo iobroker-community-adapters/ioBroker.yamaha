@@ -178,6 +178,7 @@
       "config": "json"
     },
     "supportedMessages": {
+      "custom": true,
       "deviceManager": true
     },
     "messages": [

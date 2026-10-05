@@ -1,257 +1,281 @@
 {
   "i18n": true,
-  "type": "panel",
+  "type": "tabs",
   "items": {
-    "_docLinkDe": {
-      "type": "staticLink",
-      "href": "https://github.com/iobroker-community-adapters/ioBroker.yamaha/wiki/Startseite",
-      "label": "docLinkLabelDe",
-      "button": true,
-      "variant": "outlined",
-      "color": "primary",
-      "xs": 12,
-      "sm": 6,
-      "md": 4,
-      "lg": 4,
-      "xl": 4
-    },
-    "_docLinkEn": {
-      "type": "staticLink",
-      "href": "https://github.com/iobroker-community-adapters/ioBroker.yamaha/wiki/Home",
-      "label": "docLinkLabelEn",
-      "button": true,
-      "variant": "outlined",
-      "color": "primary",
-      "xs": 12,
-      "sm": 6,
-      "md": 4,
-      "lg": 4,
-      "xl": 4
-    },
-    "_devicesHeader": {
-      "type": "header",
-      "text": "header_devices",
-      "size": 4
-    },
-    "_deviceManager": {
-      "type": "deviceManager",
-      "xs": 12,
-      "sm": 12,
-      "md": 12,
-      "lg": 12,
-      "xl": 12
-    },
-    "discovery": {
-      "newLine": true,
-      "type": "select",
-      "label": "label_discovery",
-      "tooltip": "tooltip_discovery",
-      "options": [
-        {
-          "label": "discoveryAuto",
-          "value": "auto"
+    "_main": {
+      "type": "panel",
+      "label": "tabMain",
+      "items": {
+        "_docLinkDe": {
+          "type": "staticLink",
+          "href": "https://github.com/iobroker-community-adapters/ioBroker.yamaha/wiki/Startseite",
+          "label": "docLinkLabelDe",
+          "button": true,
+          "variant": "outlined",
+          "color": "primary",
+          "xs": 12,
+          "sm": 6,
+          "md": 4,
+          "lg": 4,
+          "xl": 4
         },
-        {
-          "label": "discoveryAlways",
-          "value": "always"
+        "_docLinkEn": {
+          "type": "staticLink",
+          "href": "https://github.com/iobroker-community-adapters/ioBroker.yamaha/wiki/Home",
+          "label": "docLinkLabelEn",
+          "button": true,
+          "variant": "outlined",
+          "color": "primary",
+          "xs": 12,
+          "sm": 6,
+          "md": 4,
+          "lg": 4,
+          "xl": 4
         },
-        {
-          "label": "discoveryNever",
-          "value": "never"
+        "_devicesHeader": {
+          "type": "header",
+          "text": "header_devices",
+          "size": 4
+        },
+        "_deviceManager": {
+          "type": "deviceManager",
+          "xs": 12,
+          "sm": 12,
+          "md": 12,
+          "lg": 12,
+          "xl": 12
+        },
+        "discovery": {
+          "newLine": true,
+          "type": "select",
+          "label": "label_discovery",
+          "tooltip": "tooltip_discovery",
+          "options": [
+            {
+              "label": "discoveryAuto",
+              "value": "auto"
+            },
+            {
+              "label": "discoveryAlways",
+              "value": "always"
+            },
+            {
+              "label": "discoveryNever",
+              "value": "never"
+            }
+          ],
+          "default": "auto",
+          "xs": 12,
+          "sm": 12,
+          "md": 6,
+          "lg": 6,
+          "xl": 6
+        },
+        "networkInterface": {
+          "newLine": true,
+          "type": "ip",
+          "label": "networkInterfaceLabel",
+          "tooltip": "networkInterfaceTooltip",
+          "onlyIp4": true,
+          "noInternal": true,
+          "listenOnAllPorts": true,
+          "xs": 12,
+          "sm": 12,
+          "md": 6,
+          "lg": 6,
+          "xl": 6
+        },
+        "port": {
+          "type": "port",
+          "label": "pushPortLabel",
+          "tooltip": "pushPortTooltip",
+          "disabled": true,
+          "min": 41100,
+          "max": 41100,
+          "xs": 12,
+          "sm": 12,
+          "md": 6,
+          "lg": 6,
+          "xl": 6
+        },
+        "xmlPollInterval": {
+          "newLine": true,
+          "type": "number",
+          "label": "label_xmlPollInterval",
+          "tooltip": "tooltip_xmlPollInterval",
+          "min": 30,
+          "max": 300,
+          "default": 60,
+          "xs": 12,
+          "sm": 12,
+          "md": 6,
+          "lg": 4,
+          "xl": 4
+        },
+        "_datapointsHeader": {
+          "newLine": true,
+          "type": "header",
+          "text": "datapointsHeader",
+          "size": 4
+        },
+        "_datapointsHint": {
+          "type": "staticText",
+          "text": "datapointsHint",
+          "xs": 12,
+          "sm": 12,
+          "md": 12,
+          "lg": 12,
+          "xl": 12,
+          "style": {
+            "fontSize": 13,
+            "marginBottom": 8
+          }
+        },
+        "group_player": {
+          "newLine": true,
+          "type": "checkbox",
+          "label": "group_player",
+          "help": "group_player_help",
+          "xs": 12,
+          "sm": 6,
+          "md": 4,
+          "lg": 4,
+          "xl": 3
+        },
+        "group_tuner": {
+          "type": "checkbox",
+          "label": "group_tuner",
+          "help": "group_tuner_help",
+          "xs": 12,
+          "sm": 6,
+          "md": 4,
+          "lg": 4,
+          "xl": 3
+        },
+        "group_multiroom": {
+          "type": "checkbox",
+          "label": "group_multiroom",
+          "help": "group_multiroom_help",
+          "xs": 12,
+          "sm": 6,
+          "md": 4,
+          "lg": 4,
+          "xl": 3
+        },
+        "group_hdmi": {
+          "type": "checkbox",
+          "label": "group_hdmi",
+          "help": "group_hdmi_help",
+          "xs": 12,
+          "sm": 6,
+          "md": 4,
+          "lg": 4,
+          "xl": 3
+        },
+        "group_scene": {
+          "type": "checkbox",
+          "label": "group_scene",
+          "help": "group_scene_help",
+          "xs": 12,
+          "sm": 6,
+          "md": 4,
+          "lg": 4,
+          "xl": 3
+        },
+        "group_clock": {
+          "type": "checkbox",
+          "label": "group_clock",
+          "help": "group_clock_help",
+          "xs": 12,
+          "sm": 6,
+          "md": 4,
+          "lg": 4,
+          "xl": 3
+        },
+        "group_sound": {
+          "type": "checkbox",
+          "label": "group_sound",
+          "help": "group_sound_help",
+          "xs": 12,
+          "sm": 6,
+          "md": 4,
+          "lg": 4,
+          "xl": 3
+        },
+        "group_advanced": {
+          "type": "checkbox",
+          "label": "group_advanced",
+          "help": "group_advanced_help",
+          "xs": 12,
+          "sm": 6,
+          "md": 4,
+          "lg": 4,
+          "xl": 3
+        },
+        "_supportHeader": {
+          "newLine": true,
+          "type": "header",
+          "text": "supportHeader",
+          "size": 5
+        },
+        "_aboutInfo": {
+          "type": "staticText",
+          "text": "aboutInfo",
+          "xs": 12,
+          "sm": 12,
+          "md": 12,
+          "lg": 12,
+          "xl": 12,
+          "style": {
+            "fontSize": 14,
+            "marginBottom": 16
+          }
+        },
+        "_kofiLink": {
+          "type": "staticLink",
+          "href": "https://ko-fi.com/krobipd",
+          "label": "donateKofi",
+          "button": true,
+          "variant": "outlined",
+          "color": "primary",
+          "xs": 12,
+          "sm": 6,
+          "md": 4,
+          "lg": 4,
+          "xl": 4
+        },
+        "_paypalLink": {
+          "type": "staticLink",
+          "href": "https://paypal.me/krobipd",
+          "label": "donatePaypal",
+          "button": true,
+          "variant": "outlined",
+          "color": "primary",
+          "xs": 12,
+          "sm": 6,
+          "md": 4,
+          "lg": 4,
+          "xl": 4
         }
-      ],
-      "default": "auto",
-      "xs": 12,
-      "sm": 12,
-      "md": 6,
-      "lg": 6,
-      "xl": 6
-    },
-    "networkInterface": {
-      "newLine": true,
-      "type": "ip",
-      "label": "networkInterfaceLabel",
-      "tooltip": "networkInterfaceTooltip",
-      "onlyIp4": true,
-      "noInternal": true,
-      "listenOnAllPorts": true,
-      "xs": 12,
-      "sm": 12,
-      "md": 6,
-      "lg": 6,
-      "xl": 6
-    },
-    "port": {
-      "type": "port",
-      "label": "pushPortLabel",
-      "tooltip": "pushPortTooltip",
-      "disabled": true,
-      "min": 41100,
-      "max": 41100,
-      "xs": 12,
-      "sm": 12,
-      "md": 6,
-      "lg": 6,
-      "xl": 6
-    },
-    "xmlPollInterval": {
-      "newLine": true,
-      "type": "number",
-      "label": "label_xmlPollInterval",
-      "tooltip": "tooltip_xmlPollInterval",
-      "min": 30,
-      "max": 300,
-      "default": 60,
-      "xs": 12,
-      "sm": 12,
-      "md": 6,
-      "lg": 4,
-      "xl": 4
-    },
-    "_datapointsHeader": {
-      "newLine": true,
-      "type": "header",
-      "text": "datapointsHeader",
-      "size": 4
-    },
-    "_datapointsHint": {
-      "type": "staticText",
-      "text": "datapointsHint",
-      "xs": 12,
-      "sm": 12,
-      "md": 12,
-      "lg": 12,
-      "xl": 12,
-      "style": {
-        "fontSize": 13,
-        "marginBottom": 8
       }
     },
-    "group_player": {
-      "newLine": true,
-      "type": "checkbox",
-      "label": "group_player",
-      "help": "group_player_help",
-      "xs": 12,
-      "sm": 6,
-      "md": 4,
-      "lg": 4,
-      "xl": 3
-    },
-    "group_tuner": {
-      "type": "checkbox",
-      "label": "group_tuner",
-      "help": "group_tuner_help",
-      "xs": 12,
-      "sm": 6,
-      "md": 4,
-      "lg": 4,
-      "xl": 3
-    },
-    "group_multiroom": {
-      "type": "checkbox",
-      "label": "group_multiroom",
-      "help": "group_multiroom_help",
-      "xs": 12,
-      "sm": 6,
-      "md": 4,
-      "lg": 4,
-      "xl": 3
-    },
-    "group_hdmi": {
-      "type": "checkbox",
-      "label": "group_hdmi",
-      "help": "group_hdmi_help",
-      "xs": 12,
-      "sm": 6,
-      "md": 4,
-      "lg": 4,
-      "xl": 3
-    },
-    "group_scene": {
-      "type": "checkbox",
-      "label": "group_scene",
-      "help": "group_scene_help",
-      "xs": 12,
-      "sm": 6,
-      "md": 4,
-      "lg": 4,
-      "xl": 3
-    },
-    "group_clock": {
-      "type": "checkbox",
-      "label": "group_clock",
-      "help": "group_clock_help",
-      "xs": 12,
-      "sm": 6,
-      "md": 4,
-      "lg": 4,
-      "xl": 3
-    },
-    "group_sound": {
-      "type": "checkbox",
-      "label": "group_sound",
-      "help": "group_sound_help",
-      "xs": 12,
-      "sm": 6,
-      "md": 4,
-      "lg": 4,
-      "xl": 3
-    },
-    "group_advanced": {
-      "type": "checkbox",
-      "label": "group_advanced",
-      "help": "group_advanced_help",
-      "xs": 12,
-      "sm": 6,
-      "md": 4,
-      "lg": 4,
-      "xl": 3
-    },
-    "_supportHeader": {
-      "newLine": true,
-      "type": "header",
-      "text": "supportHeader",
-      "size": 5
-    },
-    "_aboutInfo": {
-      "type": "staticText",
-      "text": "aboutInfo",
-      "xs": 12,
-      "sm": 12,
-      "md": 12,
-      "lg": 12,
-      "xl": 12,
-      "style": {
-        "fontSize": 14,
-        "marginBottom": 16
+    "_expert": {
+      "type": "panel",
+      "label": "tabExpert",
+      "items": {
+        "_diagnosticsPanel": {
+          "type": "custom",
+          "i18n": true,
+          "url": "custom/customComponents.js",
+          "name": "ConfigCustomYamahaSet/Components/DiagnosticsConfig",
+          "guiApi": 2,
+          "xs": 12,
+          "sm": 12,
+          "md": 12,
+          "lg": 12,
+          "xl": 12
+        }
       }
-    },
-    "_kofiLink": {
-      "type": "staticLink",
-      "href": "https://ko-fi.com/krobipd",
-      "label": "donateKofi",
-      "button": true,
-      "variant": "outlined",
-      "color": "primary",
-      "xs": 12,
-      "sm": 6,
-      "md": 4,
-      "lg": 4,
-      "xl": 4
-    },
-    "_paypalLink": {
-      "type": "staticLink",
-      "href": "https://paypal.me/krobipd",
-      "label": "donatePaypal",
-      "button": true,
-      "variant": "outlined",
-      "color": "primary",
-      "xs": 12,
-      "sm": 6,
-      "md": 4,
-      "lg": 4,
-      "xl": 4
     }
   }
 }

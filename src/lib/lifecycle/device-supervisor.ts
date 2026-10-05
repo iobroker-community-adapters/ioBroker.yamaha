@@ -1,4 +1,5 @@
 import type { ConnectionHandle } from "../controller";
+import type { HandleCapture } from "./multi-transport-handle";
 import { errText } from "../err-text";
 
 // Re-exported so existing importers (main.ts) keep resolving it from here.
@@ -170,6 +171,15 @@ export class DeviceSupervisor {
   /** The log prefix naming the device (empty when the caller gave no id). */
   private get prefix(): string {
     return this.deps.deviceId ? `${this.deps.deviceId}: ` : "";
+  }
+
+  /**
+   * Read the device for a diagnostics report through its running connection.
+   *
+   * @returns the read, or undefined when the device is not connected
+   */
+  public capture(): Promise<HandleCapture | undefined> {
+    return this.handle?.capture?.() ?? Promise.resolve(undefined);
   }
 
   /** Stop supervising and close the connection. Synchronous — safe from onUnload. */

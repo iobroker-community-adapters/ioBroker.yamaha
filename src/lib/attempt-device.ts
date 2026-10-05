@@ -17,6 +17,7 @@ import type { ProbeMemory } from "./lifecycle/probe-memory";
 import type { Transport } from "./catalog/owner-policy";
 import { readyLine } from "./ready-line";
 import { errText } from "./err-text";
+import { captureXml, captureYnca, captureYxc } from "./diagnostics/device-capture";
 import type { ConnectionHandle, ControllerLog } from "./controller";
 import type { ObjectDef } from "./catalog/types";
 import type { DeviceRecord } from "./types";
@@ -324,9 +325,11 @@ export function attemptDevice(
   const buildYnca = (): ConnectableTransport => {
     const ynca = new TransportConnectionAdapter("ynca", device.id, setStateAck);
     const gate = gateFor("ynca");
+    const client = new YncaClient(device.ip, timers, gate);
+    ynca.readWith(() => captureYnca(client));
     ynca.bind(
       new YncaDeviceController(device.id, {
-        client: new YncaClient(device.ip, timers, gate),
+        client,
         gate,
         upsertObject: ynca.interceptUpsert,
         setStateAck: ynca.interceptSetStateAck,
@@ -343,9 +346,11 @@ export function attemptDevice(
   const buildYxc = (): ConnectableTransport => {
     const yxc = new TransportConnectionAdapter("yxc", device.id, setStateAck);
     const gate = gateFor("yxc");
+    const client = new YamahaYxcClient(device.ip, undefined, gate);
+    yxc.readWith(() => captureYxc(client));
     yxc.bind(
       new YxcDeviceController(device.id, {
-        client: new YamahaYxcClient(device.ip, undefined, gate),
+        client,
         aliasZone: (from, to) => yxc.aliasZone(from, to),
         systemLanguage: deps.systemLanguage,
         clientFor: ip => partnerClient(device.ip, deps.knownDeviceIps, ip),
@@ -370,11 +375,13 @@ export function attemptDevice(
   const buildXml = (): ConnectableTransport => {
     const xml = new TransportConnectionAdapter("xml", device.id, setStateAck);
     const gate = gateFor("xml");
+    const client = new XmlClient(device.ip, undefined, gate);
+    xml.readWith(() => captureXml(client));
     xml.bind(
       new XmlDeviceController(
         device.id,
         {
-          client: new XmlClient(device.ip, undefined, gate),
+          client,
           scheduleKeepalive: deps.scheduleKeepalive,
           upsertObject: xml.interceptUpsert,
           setStateAck: xml.interceptSetStateAck,

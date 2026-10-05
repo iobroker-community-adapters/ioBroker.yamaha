@@ -414,6 +414,57 @@ describe("YncaClient", () => {
     }
   });
 
+  test("capture keeps every received line verbatim — refusals and undecodable lines too — and ends on the marker", async () => {
+    vi.useFakeTimers();
+    try {
+      const { factory, sockets } = fixtureFactory();
+      const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
+      const connected = client.connect();
+      sockets[0].emitConnect();
+      await connected;
+      const read = client.capture([
+        { subunit: "MAIN", func: "PWR" },
+        { subunit: "MAIN", func: "NOPE" },
+      ]);
+      await vi.advanceTimersByTimeAsync(100);
+      sockets[0].emitData("@MAIN:PWR=On\r\n@UNDEFINED\r\ngarbage\r\n");
+      await vi.advanceTimersByTimeAsync(100);
+      sockets[0].emitData("@SYS:VERSION=1.23\r\n");
+      await vi.advanceTimersByTimeAsync(10);
+      const { lines, complete } = await read;
+      expect(lines).toEqual(["@MAIN:PWR=On", "@UNDEFINED", "garbage", "@SYS:VERSION=1.23"]);
+      expect(complete).toBe(true);
+      // Only reads went out.
+      expect(sockets[0].written.every(line => line.endsWith("=?\r\n"))).toBe(true);
+      // After the read, nothing is tapped any more.
+      sockets[0].emitData("@MAIN:VOL=-30.0\r\n");
+      expect(lines).toHaveLength(4);
+      client.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("capture ends incomplete, without throwing, when the connection drops", async () => {
+    vi.useFakeTimers();
+    try {
+      const { factory, sockets } = fixtureFactory();
+      const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
+      const connected = client.connect();
+      sockets[0].emitConnect();
+      await connected;
+      const read = client.capture([
+        { subunit: "MAIN", func: "PWR" },
+        { subunit: "MAIN", func: "VOL" },
+      ]);
+      sockets[0].emitClose();
+      await vi.advanceTimersByTimeAsync(6000);
+      expect((await read).complete).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("readCapabilities throws on a mid-sweep drop instead of returning a partial report", async () => {
     vi.useFakeTimers();
     try {
