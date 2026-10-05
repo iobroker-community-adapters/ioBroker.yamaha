@@ -1093,10 +1093,14 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     write: true,
     role: "switch",
   },
+  // Zone B takes the zone form — the name and role a zone's own switch, mute, volume and name carry, under the zoneB
+  // folder that names the zone (the zone role comes from the folder, `zoneRole`) — so the datapoint reads the same
+  // whether YNCA, XML or MusicCast serves it. It read "Zone B power" as `switch.power` here and "Power" as
+  // `switch.power.zone` on MusicCast (review 2026-10-05, A27).
   {
     func: "PWRB",
     state: "multiroom.zoneB.power",
-    nameKey: "zoneBPower",
+    nameKey: "power",
     // `Unavailable` comes with `ZONEBAVAIL=Not Ready`: zone B is not playing, and the reason is in
     // `multiroom.zoneB.available` — a `true` left standing was the lie (audit 2026-09-24, B7).
     spec: { kind: "onoff", on: "On", off: "Standby", alsoOff: ["Unavailable"] },
@@ -1115,7 +1119,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
   {
     func: "ZONEBMUTE",
     state: "multiroom.zoneB.mute",
-    nameKey: "zoneBMute",
+    nameKey: "mute",
     spec: { kind: "onoff", on: "On", off: "Off" },
     write: true,
     role: "media.mute",
@@ -1123,7 +1127,8 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
   {
     func: "ZONEBVOL",
     state: "multiroom.zoneB.volume",
-    nameKey: "zoneBVolume",
+    nameKey: "volume",
+    descKey: "descVolume",
     spec: { kind: "number", unit: "dB", min: -80.5, max: 16.5, step: 0.5, decimals: 1 },
     write: true,
     role: "level.volume",
@@ -1131,7 +1136,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
   {
     func: "ZONEBNAME",
     state: "multiroom.zoneB.name",
-    nameKey: "zoneBName",
+    nameKey: "zoneName",
     descKey: "descZoneName",
     spec: { kind: "text", charset: "latin1", maxLength: 9 },
     write: true,
@@ -2949,7 +2954,7 @@ function fnEntries(fns: readonly FuncDef[], subunit: string, prefix = ""): YncaE
     descKey: fn.descKey,
     spec: fn.spec,
     write: fn.write,
-    role: zoneRole(fn.role, prefix),
+    role: zoneRole(fn.role, `${prefix}${fn.state}`),
     subunit,
     func: fn.func,
     wireEncode: fn.wireEncode,

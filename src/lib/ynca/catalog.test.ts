@@ -133,6 +133,19 @@ describe("YNCA catalog", () => {
     });
   });
 
+  test("Zone B takes the zone form — the names and roles XML and MusicCast give it (review 2026-10-05, A27)", () => {
+    // Before: "Zone B power" as `switch.power` here, "Power" as `switch.power.zone` on MusicCast and XML.
+    const byId = idToEntry(YNCA_CATALOG);
+    expect(byId.get("multiroom.zoneB.power")).toMatchObject({ nameKey: "power", role: "switch.power.zone" });
+    expect(byId.get("multiroom.zoneB.mute")).toMatchObject({ nameKey: "mute", role: "media.mute" });
+    expect(byId.get("multiroom.zoneB.volume")).toMatchObject({ nameKey: "volume", descKey: "descVolume" });
+    expect(byId.get("multiroom.zoneB.name")).toMatchObject({ nameKey: "zoneName", descKey: "descZoneName" });
+    // The zone's own keys stay where no zone counterpart exists; the main zone keeps its plain role.
+    expect(byId.get("multiroom.zoneB.available")?.nameKey).toBe("zoneBAvailability");
+    expect(byId.get("power")?.role).toBe("switch.power");
+    expect(byId.get("multiroom.zone2.power")?.role).toBe("switch.power.zone");
+  });
+
   test("scene names are no longer own datapoints — the recall entry sweeps them as aliases (v2.0.0)", () => {
     const cat = buildYncaCatalog();
     expect(cat.find(e => e.id === "scene.name1")).toBeUndefined();
