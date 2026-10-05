@@ -1,4 +1,8 @@
-import { XmlBrowseDriver, parseXmlListInfo } from "./xml-browse-driver";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { XmlBrowseDriver, declaredPadKeys, parseXmlListInfo, type XmlZoneWidePad } from "./xml-browse-driver";
+import { MENU_WIRE, RETURN_CURSOR_WIRE } from "./types";
+import { descriptorPuts, zonePad } from "../xml/protocol";
 import type { BrowseEngine } from "./browse-engine";
 import type { BrowseWindow } from "./types";
 
@@ -246,7 +250,7 @@ describe("XmlBrowseDriver — a cursor press with no open menu says so (audit 20
       },
       new Set(["NET_RADIO"]),
       instantDelay,
-      { debug: () => {}, info: () => {}, warn: message => warnings.push(message) },
+      { log: { debug: () => {}, info: () => {}, warn: message => void warnings.push(message) } },
     );
 
     await driver.cursor("left");
@@ -258,7 +262,7 @@ describe("XmlBrowseDriver — a cursor press with no open menu says so (audit 20
 });
 
 describe("XmlBrowseDriver with the zone-wide pad desc.xml declares (coverage audit 2026-09-09)", () => {
-  function zoneWideSetup(zoneWide: { cursor: boolean; menu: boolean }): {
+  function zoneWideSetup(zoneWide: XmlZoneWidePad): {
     driver: XmlBrowseDriver;
     sent: Array<{ element: string; inner: string }>;
   } {
@@ -273,15 +277,17 @@ describe("XmlBrowseDriver with the zone-wide pad desc.xml declares (coverage aud
       },
       new Set(["NET_RADIO"]),
       instantDelay,
-      undefined,
-      zoneWide,
+      { zoneWide },
     );
     driver.attach({ onWindow: (): void => {} } as unknown as BrowseEngine);
     return { driver, sent };
   }
 
+  const CURSOR = { path: "Cursor_Control,Cursor", keys: ["up", "down", "left", "right", "select", "return", "home"] };
+  const MENU = { path: "Cursor_Control,Menu_Control", keys: ["on_screen", "top_menu", "menu", "option", "display"] };
+
   it("sends the cursor to the main zone's Cursor_Control, menu open or not, and offers the menu keys", async () => {
-    const { driver, sent } = zoneWideSetup({ cursor: true, menu: true });
+    const { driver, sent } = zoneWideSetup({ cursor: CURSOR, menu: MENU });
     expect(driver.menuValues).toEqual(["on_screen", "top_menu", "menu", "option", "display"]);
     await driver.cursor("up");
     await driver.menu?.("top_menu");
@@ -292,10 +298,32 @@ describe("XmlBrowseDriver with the zone-wide pad desc.xml declares (coverage aud
   });
 
   it("without the declaration the pad stays bound to the open menu and offers no menu key", async () => {
-    const { driver, sent } = zoneWideSetup({ cursor: false, menu: false });
+    const { driver, sent } = zoneWideSetup({});
     expect(driver.menuValues).toBeUndefined();
     await driver.cursor("up"); // no menu open → nowhere to send
     expect(sent).toEqual([]);
+  });
+
+  // Decision C3 (review 2026-10-05): the RX-V473 declares its pad under `List_Control` — the cross with Return and
+  // Return to Home, and only On Screen, Option and Display as menu keys. desc.xml decides: that path, those keys.
+  it("the RX-V473's declared List_Control pad: its path, exactly its keys, menu open or not", async () => {
+    const pad = zonePad(
+      descriptorPuts(readFileSync(join(__dirname, "../xml/__fixtures__/desc-rx-v473.xml"), "utf8")),
+      "Main_Zone",
+    );
+    const { driver, sent } = zoneWideSetup({
+      cursor: declaredPadKeys(RETURN_CURSOR_WIRE, pad.cursor),
+      menu: declaredPadKeys(MENU_WIRE, pad.menu),
+    });
+    expect(driver.cursorValues).toEqual(["up", "down", "left", "right", "select", "return", "home"]);
+    expect(driver.menuValues).toEqual(["on_screen", "option", "display"]);
+    await driver.cursor("home");
+    await driver.menu?.("on_screen");
+    await driver.menu?.("top_menu"); // not declared — nothing goes out
+    expect(sent).toEqual([
+      { element: "Main_Zone", inner: "<List_Control><Cursor>Return to Home</Cursor></List_Control>" },
+      { element: "Main_Zone", inner: "<List_Control><Menu_Control>On Screen</Menu_Control></List_Control>" },
+    ]);
   });
 });
 
@@ -392,7 +420,7 @@ describe("XmlBrowseDriver paging and its guards", () => {
         waited.push(ms);
         return Promise.resolve();
       },
-      { debug: () => {}, info: () => {}, warn: line => void warnings.push(line) },
+      { log: { debug: () => {}, info: () => {}, warn: line => void warnings.push(line) } },
     );
     const windows: BrowseWindow[] = [];
     driver.attach({ onWindow: (window: BrowseWindow) => windows.push(window) } as unknown as BrowseEngine);

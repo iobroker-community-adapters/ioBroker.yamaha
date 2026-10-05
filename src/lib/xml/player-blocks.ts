@@ -54,6 +54,16 @@ export class XmlPlayerBlocks {
   }
 
   /**
+   * The input a zone's last status reported.
+   *
+   * @param zoneKey the zone
+   * @returns the input, undefined before a status carried one
+   */
+  public inputOf(zoneKey: string): string | undefined {
+    return this.zoneInput.get(zoneKey);
+  }
+
+  /**
    * Read what every zone's source plays and write the blocks; clear the block of a zone that left its source.
    *
    * @param zones the zones of the device

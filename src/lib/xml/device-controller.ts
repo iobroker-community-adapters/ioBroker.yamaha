@@ -11,6 +11,7 @@ import {
   parseInputLabels,
   parseSceneList,
   parseInputSources,
+  parseReadOnlyInputs,
   XmlRefusalError,
   type BasicStatus,
   type XmlDescriptor,
@@ -73,6 +74,8 @@ export class XmlDeviceController {
    * TV"). The dropdown shows these, the value written to the device stays the protocol's own.
    */
   private inputLabelsByZone: ReadonlyMap<string, Record<string, string>> = new Map();
+  /** Per zone: the inputs its list declares read-only (`RW` = `R`) — reported, never switched to (A51). */
+  private readonly readOnlyInputs = new Map<string, ReadonlySet<string>>();
   private deviceDescriptor: XmlDescriptor = { programs: [], sleep: [], adaptiveDrc: [] };
   /**
    * The spelling this device answers its amplifier block with (see XmlDialect) — learned from
@@ -250,6 +253,7 @@ export class XmlDeviceController {
       inputsByZone.set(zone.key, parseInputList(body));
       inputLabels.set(zone.key, parseInputLabels(body));
       this.players.setSources(zone.key, parseInputSources(body));
+      this.readOnlyInputs.set(zone.key, new Set(parseReadOnlyInputs(body)));
     }
     // The device description — the classic generation's own enumeration of programs, sleep
     // steps, Adaptive DRC values and the declared write commands (2008–2017; the 2020 generation has none).
@@ -525,7 +529,20 @@ export class XmlDeviceController {
     if (available.size === 0) {
       return;
     }
-    const driver = new XmlBrowseDriver(this.deps.client, available, delay, this.deps.log, this.commands.mainZonePad());
+    const log = this.deps.log;
+    const driver = new XmlBrowseDriver(this.deps.client, available, delay, {
+      // The driver's lines name the device, like every other line of this controller.
+      log: {
+        debug: message => log.debug(`${this.deviceId}: ${message}`),
+        info: message => log.info(`${this.deviceId}: ${message}`),
+        warn: message => log.warn(`${this.deviceId}: ${message}`),
+      },
+      zoneWide: this.commands.mainZonePad(),
+      mainZone: {
+        input: () => this.players.inputOf("main"),
+        readOnly: input => this.readOnlyInputs.get("main")?.has(input) === true,
+      },
+    });
     this.browseEngine = await createBrowseSurface(driver, this.deviceId, {
       upsertObject: this.deps.upsertObject,
       emit: (id, value) => this.emit(id, value),

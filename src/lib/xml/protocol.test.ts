@@ -22,6 +22,8 @@ import {
   parseTunerInfo,
   presetSlotNumber,
   descriptorPuts,
+  padInner,
+  zonePad,
 } from "./protocol";
 
 /**
@@ -439,8 +441,6 @@ describe("parseDescriptor — the enumerations a classic receiver carries in des
       programs: [],
       sleep: [],
       adaptiveDrc: [],
-      cursorZones: [],
-      menuZones: [],
       playbackZones: [],
       toneManualZones: [],
       enhancerCurrentZones: [],
@@ -532,18 +532,51 @@ describe("parseBasicStatus — the zone commands desc.xml declares (coverage aud
 });
 
 describe("parseDescriptor — the zone commands and the pad a receiver declares", () => {
-  test("the RX-V675 declares the zone-wide cursor and menu keys and playback per zone", () => {
+  const CROSS = ["Up", "Down", "Left", "Right", "Return", "Sel", "Return to Home"];
+
+  test("the RX-V675 declares the zone-wide Cursor_Control pad and playback per zone", () => {
     const descriptor = parseDescriptor(readFixture("desc-rx-v675.xml"));
-    expect(descriptor.cursorZones).toEqual(["Main_Zone", "Zone_2"]);
-    expect(descriptor.menuZones).toEqual(["Main_Zone", "Zone_2"]);
+    const puts = descriptor.puts ?? {};
+    expect(zonePad(puts, "Main_Zone")).toEqual({
+      cursor: { path: "Cursor_Control,Cursor", words: CROSS },
+      menu: { path: "Cursor_Control,Menu_Control", words: ["On Screen", "Top Menu", "Menu", "Option", "Display"] },
+    });
+    // Zone 2's block names the paths without words: the same command's words on the main zone.
+    expect(zonePad(puts, "Zone_2")).toEqual(zonePad(puts, "Main_Zone"));
     expect(descriptor.playbackZones).toEqual(["Main_Zone", "Zone_2"]);
   });
 
-  test("the 2012 entry class (RX-V473) declares no zone-wide pad — the menu-bound List_Control is all it has (#613) — but main-zone playback", () => {
+  // Decision C3 (review 2026-10-05): this test called the RX-V473's List_Control pad "menu-bound" on purpose, against
+  // the rule that desc.xml decides. Its main zone declares `List_Control,Cursor` and `List_Control,Menu_Control`.
+  test("the 2012 entry class (RX-V473) declares its pad under List_Control, with three menu keys", () => {
     const descriptor = parseDescriptor(readFixture("desc-rx-v473.xml"));
-    expect(descriptor.cursorZones).toEqual([]);
-    expect(descriptor.menuZones).toEqual([]);
+    expect(zonePad(descriptor.puts ?? {}, "Main_Zone")).toEqual({
+      cursor: { path: "List_Control,Cursor", words: CROSS },
+      menu: { path: "List_Control,Menu_Control", words: ["On Screen", "Option", "Display"] },
+    });
+    expect(zonePad(descriptor.puts ?? {}, "Zone_2")).toEqual({});
     expect(descriptor.playbackZones).toEqual(["Main_Zone"]);
+  });
+
+  test("the RX-A2060 keeps its Cursor_Control pads; the 2008 RX-V3900 declares none", () => {
+    const a2060 = parseDescriptor(readFixture("desc-rx-a2060.xml")).puts ?? {};
+    expect(zonePad(a2060, "Main_Zone").cursor).toEqual({ path: "Cursor_Control,Cursor", words: CROSS });
+    expect(zonePad(a2060, "Zone_2").menu?.path).toBe("Cursor_Control,Menu_Control");
+    const rxv3900 = (
+      JSON.parse(readFileSync(join(__dirname, "../../../test/fixtures/inventory/rxv3900.json"), "utf8")) as {
+        xml: { descriptor: string };
+      }
+    ).xml.descriptor;
+    expect(zonePad(descriptorPuts(rxv3900), "Main_Zone")).toEqual({});
+  });
+
+  test("a pad key goes out nested in its declared path, escaped", () => {
+    expect(padInner("List_Control,Cursor", "Return to Home")).toBe(
+      "<List_Control><Cursor>Return to Home</Cursor></List_Control>",
+    );
+    expect(padInner("Cursor_Control,Menu_Control", "A&B")).toBe(
+      "<Cursor_Control><Menu_Control>A&amp;B</Menu_Control></Cursor_Control>",
+    );
   });
 });
 

@@ -1,7 +1,7 @@
 import { MEDIA_STATE } from "../catalog/media-state";
 import { ZONES } from "../catalog/zones";
 import { HttpStatusError } from "../util";
-import { decodeXmlText } from "./entities";
+import { decodeXmlText, escapeXmlText } from "./entities";
 
 /**
  * The device's own verdict on a request: every `<YAMAHA_AV rsp=…>` answer carries an
@@ -262,6 +262,25 @@ export function parseInputSources(xml: string): Record<string, string> {
     }
   }
   return sources;
+}
+
+/**
+ * The inputs an `<Input_Sel_Item>` answer declares as read-only (`<RW>R</RW>`): the zone reports them, but takes no
+ * switch to them — the RX-V3900's iPod and Bluetooth (its iPod is reached through the write-only DOCK).
+ *
+ * @param xml the Input_Sel_Item response body
+ * @returns the read-only input values
+ */
+export function parseReadOnlyInputs(xml: string): string[] {
+  const readOnly: string[] = [];
+  for (const match of xml.matchAll(/<Item_\d+>([\s\S]*?)<\/Item_\d+>/g)) {
+    const param = /<Param>([^<]*)<\/Param>/.exec(match[1]);
+    const rw = /<RW>([^<]*)<\/RW>/.exec(match[1]);
+    if (param && rw && !rw[1].includes("W")) {
+      readOnly.push(decodeXmlText(param[1]));
+    }
+  }
+  return readOnly;
 }
 
 /**
@@ -624,10 +643,6 @@ export interface XmlDescriptor {
   sleep: string[];
   /** `Sound_Video,Adaptive_DRC` — Auto/Off. */
   adaptiveDrc: string[];
-  /** The zone elements whose `Cmd_List` defines `Cursor_Control,Cursor` — the zone-wide cursor pad. */
-  cursorZones?: string[];
-  /** The zone elements with `Cursor_Control,Menu_Control` — the zone-wide menu keys. */
-  menuZones?: string[];
   /** The zone elements with `Play_Control,Playback` — transport keys per zone. */
   playbackZones?: string[];
   /** The zone elements with `Sound_Video,Tone,Manual,Bass` (see {@link XmlZoneForm}). */
@@ -694,6 +709,59 @@ function zonesDeclaring(puts: Record<string, Record<string, XmlDeclaredPut>>, pa
   return Object.keys(puts).filter(element => /^(Main_Zone|Zone_[234])$/.test(element) && puts[element][path]);
 }
 
+/** One zone-wide pad command as desc.xml declares it: its path after the zone element, and its declared words. */
+export interface XmlPadCommand {
+  /** The command path (`Cursor_Control,Cursor`, or the 2012 entry class's `List_Control,Cursor`). */
+  path: string;
+  /** The wire words declared for it (`Up` … `Return to Home`); empty where the description names the path only. */
+  words: string[];
+}
+
+/** A zone's pad as desc.xml declares it: the cursor keys and the menu keys, each where declared. */
+export interface XmlZonePad {
+  /** The cursor keys. */
+  cursor?: XmlPadCommand;
+  /** The menu keys. */
+  menu?: XmlPadCommand;
+}
+
+/**
+ * The zone-wide pad desc.xml declares for one zone element. Two declared forms: `Cursor_Control,Cursor` /
+ * `Menu_Control` (7 of the 10 captured descriptors) and `List_Control,Cursor` / `Menu_Control` of the 2012 entry
+ * class (RX-V473: the cross with Return and Return to Home, and only On Screen/Option/Display as menu keys). Only the
+ * first was read, and a test called the second "menu-bound" on purpose — against the rule that desc.xml decides
+ * (review 2026-10-05, decision C3). The words are the zone's own; where its block declares the path without words
+ * (RX-V675 zone 2), the same command's words on the main zone.
+ *
+ * @param puts the declared write commands (see {@link descriptorPuts})
+ * @param element the zone element
+ * @returns the pad, empty where the zone declares none
+ */
+export function zonePad(puts: Record<string, Record<string, XmlDeclaredPut>>, element: string): XmlZonePad {
+  const command = (key: "Cursor" | "Menu_Control"): XmlPadCommand | undefined => {
+    const path = [`Cursor_Control,${key}`, `List_Control,${key}`].find(candidate => puts[element]?.[candidate]);
+    if (path === undefined) {
+      return undefined;
+    }
+    return { path, words: puts[element][path].words ?? puts.Main_Zone?.[path]?.words ?? [] };
+  };
+  const cursor = command("Cursor");
+  const menu = command("Menu_Control");
+  return { ...(cursor ? { cursor } : {}), ...(menu ? { menu } : {}) };
+}
+
+/**
+ * A pad key on the wire in its declared path: `Cursor_Control,Cursor` + `Up` →
+ * `<Cursor_Control><Cursor>Up</Cursor></Cursor_Control>`.
+ *
+ * @param path the declared command path
+ * @param word the wire word
+ * @returns the inner XML
+ */
+export function padInner(path: string, word: string): string {
+  return path.split(",").reduceRight((inner, element) => `<${element}>${inner}</${element}>`, escapeXmlText(word));
+}
+
 /**
  * The `<Direct>` values of one command's first parameter in desc.xml. The command text is matched
  * as the whole `<Cmd>` content (`…=Param_1`); the zone lives in the `Cmd_List` defines, not in the
@@ -737,8 +805,6 @@ export function parseDescriptor(xml: string): XmlDescriptor {
     adaptiveDrc: descriptorParam(xml, "Sound_Video,Adaptive_DRC").values,
   };
   const puts = descriptorPuts(xml);
-  descriptor.cursorZones = zonesDeclaring(puts, "Cursor_Control,Cursor");
-  descriptor.menuZones = zonesDeclaring(puts, "Cursor_Control,Menu_Control");
   descriptor.playbackZones = zonesDeclaring(puts, "Play_Control,Playback");
   descriptor.toneManualZones = zonesDeclaring(puts, "Sound_Video,Tone,Manual,Bass");
   descriptor.enhancerCurrentZones = zonesDeclaring(puts, "Surround,Current,Enhancer");

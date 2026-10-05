@@ -9,7 +9,8 @@ import type { WriteOutcome } from "../lifecycle/multi-transport-handle";
 import { MEMORY_KEY, xmlZoneNamesKey } from "../lifecycle/memory-keys";
 import type { XmlControllerContext, XmlWriteRoute } from "./controller-context";
 import { decodeXmlText, escapeXmlText } from "./entities";
-import { definiteXmlBody, type XmlDescriptor } from "./protocol";
+import { definiteXmlBody, padInner, zonePad, type XmlDescriptor } from "./protocol";
+import { declaredPadKeys, type XmlZoneWidePad } from "../browse/xml-browse-driver";
 import type { XmlZone } from "./zones";
 
 /** The transport keys of `Play_Control,Playback` and their wire words (desc.xml, RX-V675 & co). */
@@ -57,16 +58,13 @@ export class XmlDeclaredCommands {
   private hasSystemPower = false;
   /** The zones whose contents display answered (D15). */
   private readonly contentsDisplayZones = new Set<string>();
+  /** The zone elements whose description declares the transport keys (`Play_Control,Playback`). */
+  private playbackZones = new Set<string>();
   /**
-   * The zone commands desc.xml declares (zone elements): the zone-wide cursor pad and menu keys,
-   * the transport keys. Read from the device description, so a receiver that declares none
-   * (the 2012 entry class) offers none.
+   * Per zone element, the zone-wide pad the description declares — its path and exactly its keys (`Cursor_Control`,
+   * or the 2012 entry class's `List_Control`; decision C3). A receiver that declares none offers none.
    */
-  private zoneCommands: { cursor: Set<string>; menu: Set<string>; playback: Set<string> } = {
-    cursor: new Set(),
-    menu: new Set(),
-    playback: new Set(),
-  };
+  private readonly pads = new Map<string, XmlZoneWidePad>();
   /** The states this part created — the write routes serve exactly these. */
   private readonly created = new Set<string>();
 
@@ -85,21 +83,26 @@ export class XmlDeclaredCommands {
    * @param descriptor the parsed device description
    */
   public declare(descriptor: XmlDescriptor): void {
-    this.zoneCommands = {
-      cursor: new Set(descriptor.cursorZones ?? []),
-      menu: new Set(descriptor.menuZones ?? []),
-      playback: new Set(descriptor.playbackZones ?? []),
-    };
+    this.playbackZones = new Set(descriptor.playbackZones ?? []);
+    this.pads.clear();
+    for (const element of ["Main_Zone", "Zone_2", "Zone_3", "Zone_4"]) {
+      const pad = zonePad(descriptor.puts ?? {}, element);
+      const cursor = declaredPadKeys(RETURN_CURSOR_WIRE, pad.cursor);
+      const menu = declaredPadKeys(MENU_WIRE, pad.menu);
+      if (cursor || menu) {
+        this.pads.set(element, { ...(cursor ? { cursor } : {}), ...(menu ? { menu } : {}) });
+      }
+    }
   }
 
   /**
    * The zone-wide pad the description declares for the main zone — what the browse driver sends the main zone's keys
    * through.
    *
-   * @returns whether the main zone declares the cursor pad and the menu keys
+   * @returns the declared pad, empty where none is declared
    */
-  public mainZonePad(): { cursor: boolean; menu: boolean } {
-    return { cursor: this.zoneCommands.cursor.has("Main_Zone"), menu: this.zoneCommands.menu.has("Main_Zone") };
+  public mainZonePad(): XmlZoneWidePad {
+    return this.pads.get("Main_Zone") ?? {};
   }
 
   /**
@@ -208,7 +211,7 @@ export class XmlDeclaredCommands {
   public async setupTransportKeys(): Promise<void> {
     const ctx = this.ctx;
     for (const zone of this.zones()) {
-      if (!this.zoneCommands.playback.has(zone.element)) {
+      if (!this.playbackZones.has(zone.element)) {
         continue;
       }
       await ctx.ensureChannels(`${zone.prefix}player.play`);
@@ -278,28 +281,21 @@ export class XmlDeclaredCommands {
 
   /**
    * The zone-wide pads desc.xml declares: `remote.cursor` / `remote.menu` under every zone whose
-   * `Cmd_List` defines `Cursor_Control,Cursor` / `Menu_Control` — the main zone's only when no
-   * browse surface owns it already (then the surface's pad goes zone-wide through the driver).
+   * `Cmd_List` defines a cursor / menu command (`Cursor_Control`, or `List_Control` on the 2012 entry class), with
+   * exactly the declared keys — the main zone's only when no browse surface owns it already (then the surface's pad
+   * goes zone-wide through the driver).
    *
    * @param mainTaken whether a browse surface already carries the main zone's pad
    */
   public async setupZonePads(mainTaken: boolean): Promise<void> {
     const ctx = this.ctx;
     for (const zone of this.zones()) {
-      if (zone.key === "main" && mainTaken) {
-        continue;
-      }
-      const cursor = this.zoneCommands.cursor.has(zone.element);
-      const menu = this.zoneCommands.menu.has(zone.element);
-      if (!cursor && !menu) {
+      const pad = this.pads.get(zone.element);
+      if ((zone.key === "main" && mainTaken) || !pad) {
         continue;
       }
       await ctx.ensureChannels(`${zone.prefix}remote.cursor`);
-      const defs = remoteObjectDefs(
-        cursor ? Object.keys(RETURN_CURSOR_WIRE) : undefined,
-        menu ? Object.keys(MENU_WIRE) : undefined,
-        zone.prefix,
-      );
+      const defs = remoteObjectDefs(pad.cursor?.keys, pad.menu?.keys, zone.prefix);
       for (const def of defs.filter(object => object.type === "state")) {
         await ctx.deps.upsertObject(`${ctx.deviceId}.${def.id}`, def);
         this.markCreated(def.id);
@@ -523,15 +519,16 @@ export class XmlDeclaredCommands {
     }
     if (command === "remote.cursor" || command === "remote.menu") {
       const word = typeof value === "string" ? value : "";
-      const wire = command === "remote.cursor" ? wireFor(RETURN_CURSOR_WIRE, word) : wireFor(MENU_WIRE, word);
-      if (wire === undefined) {
+      const pad = this.pads.get(zone.element);
+      const declared = command === "remote.cursor" ? pad?.cursor : pad?.menu;
+      const wire = wireFor(command === "remote.cursor" ? RETURN_CURSOR_WIRE : MENU_WIRE, word);
+      // Exactly the keys the description declares, on the path it declares them under (decision C3).
+      if (wire === undefined || !declared?.keys.includes(word)) {
         return ctx.dropWrite(stateId, value, "it is no key this receiver declares");
       }
-      const inner =
-        command === "remote.cursor"
-          ? `<Cursor_Control><Cursor>${wire}</Cursor></Cursor_Control>`
-          : `<Cursor_Control><Menu_Control>${wire}</Menu_Control></Cursor_Control>`;
-      return ctx.applyCommand({ zone: zone.element, inner }, () => ctx.refreshZone(zone));
+      return ctx.applyCommand({ zone: zone.element, inner: padInner(declared.path, wire) }, () =>
+        ctx.refreshZone(zone),
+      );
     }
     if (command === "zoneName" || command === "multiroom.zoneB.name") {
       // desc.xml declares the name as `Text 1,9,Latin-1` (7 descriptors) — the same rule as YNCA's
