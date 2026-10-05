@@ -463,6 +463,15 @@ describe("BrowseEngine — every write has an outcome, a dropped one a trace", (
     ]);
   });
 
+  it("takes an inherited property name for no source (A35)", async () => {
+    const { engine, driver, emitted } = setup();
+    expect(engine.handleWrite("player.browse.source", "constructor")).toBe("unavailable");
+    expect(engine.handleWrite("player.browse.source", "toString")).toBe("unavailable");
+    await flush();
+    expect(driver.calls).toEqual([]);
+    expect(emitted.some(entry => entry.id === "player.browse.source")).toBe(false);
+  });
+
   it("takes a line through the one slot gate: 2.5, 0 and a switch's true are no line (A26)", () => {
     const { engine, driver } = setup();
     expect(engine.handleWrite("player.browse.selectLine", 2.5)).toBe("unavailable");

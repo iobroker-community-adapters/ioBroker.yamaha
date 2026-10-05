@@ -9,6 +9,7 @@ import {
   slotNumber,
   snapToGrid,
 } from "./value-coerce";
+import { YNCA_CATALOG, idToEntry, yncaCommand } from "../ynca/catalog";
 
 describe("specToCommon", () => {
   test("an on/off value becomes a boolean switch", () => {
@@ -225,6 +226,25 @@ describe("a numeric datapoint takes only a number (audit 2026-09-24, D2)", () =>
     expect(writableNumber(false)).toBeUndefined();
     expect(writableNumber("0x10")).toBeUndefined();
     expect(writableNumber(null)).toBeUndefined();
+  });
+});
+
+// Review 2026-10-05, A35: `coerceBool("constructor")` was a function — truthy, so a switch write turned the receiver ON.
+describe("coerceBool reads only its own switch words", () => {
+  it("reads an inherited property name as no switch word", () => {
+    expect(coerceBool("constructor")).toBeUndefined();
+    expect(coerceBool("__proto__")).toBeUndefined();
+    expect(coerceBool(" Constructor ")).toBeUndefined();
+    expect(coerceBool("hasOwnProperty")).toBeUndefined();
+    expect(coerceBool(" Off ")).toBe(false);
+    expect(coerceBool("ON")).toBe(true);
+  });
+
+  it("sends nothing for such a word on a YNCA switch", () => {
+    const map = idToEntry(YNCA_CATALOG);
+    expect(yncaCommand("power", "constructor", map)).toBeUndefined();
+    expect(yncaCommand("mute", "__proto__", map)).toBeUndefined();
+    expect(yncaCommand("power", "on", map)?.value).toBe("On");
   });
 });
 
