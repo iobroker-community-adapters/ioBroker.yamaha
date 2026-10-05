@@ -1,7 +1,6 @@
 import * as utils from "@iobroker/adapter-core";
 import { join } from "node:path";
-import { createSocket } from "node:dgram";
-import { get as httpGet } from "node:http";
+import type { ClientRequest } from "node:http";
 import { networkInterfaces } from "node:os";
 import { attemptDevice } from "./lib/attempt-device";
 import { isIPv4, resolveIPv4, searchInterfaces } from "./lib/network-interfaces";
@@ -44,7 +43,7 @@ import { copyDeviceTree, movedId, type DeviceMoveDeps } from "./lib/lifecycle/de
 import { moveAllWithEnums } from "./lib/enum-carry";
 import { StateMirror } from "./lib/lifecycle/write-mirror";
 import { coveredBy, KnownObjects, mergedWith } from "./lib/known-objects";
-import { readDeviceResponse } from "./lib/util";
+import { NetworkSearch } from "./lib/network-search";
 import { errText } from "./lib/err-text";
 import { migrateNativeKeys, type NativeKeyMigration } from "./lib/native-key-migration";
 import { tName } from "./lib/i18n";
@@ -104,14 +103,6 @@ function rememberedModel(native: Record<string, unknown> | undefined): string | 
     return undefined;
   }
 }
-
-/** Abort a discovery description fetch after this long, so a dead device cannot hang it. */
-const FETCH_TIMEOUT_MS = 4000;
-
-/** How often the discovery M-SEARCH is repeated — multicast is lossy, one dropped packet must not hide a receiver. */
-const SSDP_SEARCH_BURST = 3;
-/** Spacing between the repeated M-SEARCH sends, inside the collect window. */
-const SSDP_SEARCH_INTERVAL_MS = 1000;
 
 /**
  * Instance settings an earlier release declared and this one no longer reads. js-controller adds a
@@ -219,7 +210,7 @@ export class Yamaha extends utils.Adapter {
   /** The network searches running now — each one's finish, which `onUnload` calls (E4). */
   private readonly searchesInFlight = new Set<() => void>();
   /** The description fetches running now, destroyed by `onUnload` (E4). */
-  private readonly fetchesInFlight = new Set<ReturnType<typeof httpGet>>();
+  private readonly fetchesInFlight = new Set<ClientRequest>();
   /** Every collection kept per device — deleting a device forgets them in one call (A28). */
   private readonly perDevice = new PerDeviceCaches();
   /**
@@ -411,6 +402,16 @@ export class Yamaha extends utils.Adapter {
   private manifestReadOnly: ReadonlySet<string> | undefined;
   /** See {@link stores}. */
   private storeOwner: DeviceStores | undefined;
+  /** The SSDP M-SEARCH and the description fetch; what is in flight is registered here, for the unload to end. */
+  private readonly network = new NetworkSearch({
+    networkInterface: () => this.config.networkInterface,
+    setTimeout: (callback, ms) => this.setTimeout(callback, ms),
+    log: { info: message => this.log.info(message) },
+    warnOnce: (key, message) => this.warnSearchOnce(key, message),
+    stopping: () => this.unloading,
+    searches: this.searchesInFlight,
+    fetches: this.fetchesInFlight,
+  });
 
   /**
    * The ONE owner of the three lists in the instance data directory (found, deleted, 2.x-deleted devices) — for this
@@ -585,6 +586,12 @@ export class Yamaha extends utils.Adapter {
       // Before anything reads a device id: the table rows and the discovery store come out of it
       // carrying the ids the trees now live under, and the cleanup below never sees an old one.
       const { listing: unmoved, rows: movedRows } = await this.migrateDeviceIds();
+      // Stopped while this start still runs (compact mode: the host process lives on): every section below that
+      // opens something — sockets, subscriptions, devices, timers — is skipped, or it would stay bound in the host
+      // with nothing left to close it (review 2026-10-05, A12). Checked after every wait.
+      if (this.unloading) {
+        return;
+      }
       if (await this.migrateInstanceSettings(legacyRow ? this.config.devices : movedRows, zonesOn)) {
         return; // the host restarts the instance with the migrated settings
       }
@@ -606,11 +613,14 @@ export class Yamaha extends utils.Adapter {
       // One read of the stores for the whole start: the remembered devices the user did not delete, and whether the
       // discovery store could be read at all (review 2026-10-05, A2/A31).
       const remembered = await this.loadRemembered();
+      if (this.unloading) {
+        return;
+      }
       this.discovering = this.searchesTheNetwork(configured);
-      const devices = unionDevices(
-        configured,
-        this.discovering ? await this.autoDiscover(configured.length, remembered.records) : [],
-      );
+      const start = this.discovering
+        ? await this.autoDiscover(configured.length, remembered.records)
+        : { devices: [], searched: false };
+      const devices = unionDevices(configured, start.devices);
       if (this.unloading) {
         // Stopped during the initial network search: it resolves on its own clock, and
         // everything below — push socket, subscriptions, device sockets and timers —
@@ -642,18 +652,21 @@ export class Yamaha extends utils.Adapter {
       await this.cleanupStaleObjects(runningIds, keep, listing);
       await this.ensureInstanceInfoObjects();
       await this.markIdleDevicesOffline(idle);
+      if (this.unloading) {
+        return;
+      }
       await this.subscribeToStates();
+      if (this.unloading) {
+        return;
+      }
+      // Created and handed to the field in one step: from here on onUnload closes it.
       const pushReceiver = new YxcPushReceiver({
-        log: {
-          debug: message => this.log.debug(message),
-          info: message => this.log.info(message),
-          warn: message => this.log.warn(message),
-        },
+        log: this.log,
         schedule: (cb, ms) => this.setTimeout(cb, ms),
         cancel: handle => this.clearTimeout(handle),
       });
-      pushReceiver.start();
       this.pushReceiver = pushReceiver;
+      pushReceiver.start();
       if (configured.length > 0) {
         // Routine, so debug: what the adapter is ABOUT to try is not an event — a device that
         // answers says so with its own "ready" line, one that is off says nothing (krobi
@@ -673,13 +686,17 @@ export class Yamaha extends utils.Adapter {
       }
       // After the table rows, like the search: an announcement is read against the RUNNING set —
       // heard before, a moved device was taken for a stranger (audit 2026-09-24, A8).
-      if (this.discovering) {
+      if (this.discovering && !this.unloading) {
         await this.startSsdpListener();
+      }
+      if (this.unloading) {
+        return;
       }
       this.writeDeviceOverview();
       // Auto mode with remembered devices: they started WITHOUT waiting for the network
       // search — it runs behind them, adds newcomers and moves a device that changed address.
-      if (this.discovering && devices.length > 0) {
+      // Not right behind the first-setup search: that one just looked (review 2026-10-05, A57).
+      if (this.discovering && devices.length > 0 && !start.searched) {
         void this.discoverAdditionalDevices(pushReceiver);
       }
       this.scheduleIdleSearch();
@@ -697,6 +714,11 @@ export class Yamaha extends utils.Adapter {
    * @param pushReceiver the shared YXC push receiver
    */
   private async startDevice(device: DeviceRecord, pushReceiver: YxcPushReceiver): Promise<void> {
+    // Deleted (or the adapter stopping) before the start loop reached it: its header would be written again and the
+    // record counted — a delete undone by its own start (Y-13, review 2026-10-05, A29).
+    if (this.unloading || this.removed.has(device.id)) {
+      return;
+    }
     // One supervisor per device: a second start for a running id would put two of them on the
     // same tree and the same YNCA socket (audit 2026-09-24, A2).
     if (this.supervisorById.has(device.id) || this.starting.has(device.id)) {
@@ -949,6 +971,11 @@ export class Yamaha extends utils.Adapter {
     });
     try {
       await listener.start();
+      if (this.unloading) {
+        // The unload ran while the socket was binding and found no listener to close (review 2026-10-05, A12).
+        listener.close();
+        return;
+      }
       this.ssdpListener = listener;
     } catch (e) {
       listener.close();
@@ -991,7 +1018,7 @@ export class Yamaha extends utils.Adapter {
   private async absorbNotify(location: string, address: string): Promise<void> {
     const found = await probeDescription(
       {
-        fetch: url => this.fetchUrl(url),
+        fetch: url => this.network.fetch(url),
         log: { debug: message => this.log.debug(message), warn: message => this.log.warn(message) },
       },
       location,
@@ -3031,9 +3058,13 @@ export class Yamaha extends utils.Adapter {
    * @param configuredCount how many rows the device table holds
    * @param known the remembered devices the user did not delete (`loadRemembered` — the exclusion list rules over them
    *   too, not only over fresh finds: a delete whose store write failed would otherwise run again)
-   * @returns the device records to run this session
+   * @returns the device records to run this session, and whether this start already searched the network (then no
+   *   background search follows right behind it — review 2026-10-05, A57)
    */
-  private async autoDiscover(configuredCount: number, known: readonly DeviceRecord[]): Promise<DeviceRecord[]> {
+  private async autoDiscover(
+    configuredCount: number,
+    known: readonly DeviceRecord[],
+  ): Promise<{ devices: DeviceRecord[]; searched: boolean }> {
     if (known.length > 0 || configuredCount > 0) {
       // Remembered devices — and the table's rows — start NOW: the network search used to gate
       // every restart by its collect window although the devices were already known. It still
@@ -3048,7 +3079,7 @@ export class Yamaha extends utils.Adapter {
           ? `connecting ${known.length} remembered device(s); the network search runs in the background`
           : "the network search runs in the background, behind the configured devices",
       );
-      return [...known];
+      return { devices: [...known], searched: false };
     }
     this.log.info("auto-discovery via SSDP (older XML-only devices must be added manually)");
     const merged = await this.runDiscovery();
@@ -3059,7 +3090,7 @@ export class Yamaha extends utils.Adapter {
         ? `network search finished — found ${merged.length} device(s)`
         : "network search finished — no Yamaha device answered (older XML-only devices must be added by hand)",
     );
-    return merged;
+    return { devices: merged, searched: true };
   }
 
   /**
@@ -3085,8 +3116,8 @@ export class Yamaha extends utils.Adapter {
     let found: DiscoveredDevice[] = [];
     try {
       found = await discoverYamaha({
-        search: (target, ms) => this.ssdpSearch(target, ms),
-        fetch: url => this.fetchUrl(url),
+        search: (target, ms) => this.network.search(target, ms),
+        fetch: url => this.network.fetch(url),
         log: { debug: message => this.log.debug(message), warn: message => this.log.warn(message) },
       });
     } catch (e) {
@@ -3521,132 +3552,6 @@ export class Yamaha extends utils.Adapter {
   private xmlPollIntervalMs(): number {
     const seconds = Number(this.config.xmlPollInterval);
     return (Number.isFinite(seconds) && seconds > 0 ? seconds : 60) * 1000;
-  }
-
-  /**
-   * Run an SSDP M-SEARCH and collect the responders' description URL and address.
-   *
-   * With a configured network interface the search leaves exactly that one; left empty it
-   * leaves EVERY non-internal IPv4 interface at once (one socket each), because multicast
-   * egress otherwise follows only the host's default route — on a multi-homed host whose
-   * default route is not the AV network that means the receiver is never reached and nothing
-   * is found. Responders from all interfaces are merged into one list; the caller
-   * de-duplicates by address.
-   *
-   * @param target the search target (device type)
-   * @param timeoutMs how long to collect responses
-   * @returns the responders
-   */
-  private ssdpSearch(target: string, timeoutMs: number): Promise<Array<{ location: string; address: string }>> {
-    return new Promise(resolve => {
-      const bindAddrs = searchInterfaces(this.config.networkInterface, networkInterfaces());
-      const responders: Array<{ location: string; address: string }> = [];
-      const sockets: ReturnType<typeof createSocket>[] = [];
-      let settled = false;
-      const finish = (): void => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        this.searchesInFlight.delete(finish);
-        for (const socket of sockets) {
-          try {
-            socket.close();
-          } catch {
-            // already closed
-          }
-        }
-        resolve(responders);
-      };
-      // Open one search socket bound to a single interface (or the default route when bindAddr
-      // is undefined). Every socket shares the responders list and the one settle timeout.
-      const searchFrom = (bindAddr: string | undefined): void => {
-        const socket = createSocket("udp4");
-        sockets.push(socket);
-        socket.on("message", (msg, rinfo) => {
-          const location = /LOCATION:\s*(\S+)/i.exec(msg.toString());
-          if (location) {
-            responders.push({ location: location[1], address: rinfo.address });
-          }
-        });
-        socket.on("error", err => {
-          // One interface failing (typically a stale selected IP after a DHCP change) must not
-          // kill the search on the others — warn and drop just this socket; the timeout still
-          // resolves whatever the rest found.
-          this.warnSearchOnce(
-            `socket|${bindAddr ?? ""}`,
-            `discovery socket failed${bindAddr ? ` on interface ${bindAddr}` : ""}: ${errText(err)}${
-              bindAddr ? " — check the Network Interface setting" : ""
-            }`,
-          );
-          try {
-            socket.close();
-          } catch {
-            // already closed
-          }
-        });
-        const sendSearch = (): void => {
-          if (settled) {
-            return;
-          }
-          const msearch = `M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: "ssdp:discover"\r\nMX: 3\r\nST: ${target}\r\n\r\n`;
-          try {
-            socket.send(msearch, 1900, "239.255.255.250");
-          } catch {
-            // socket already closed by an error above
-          }
-        };
-        socket.bind(0, bindAddr, () => {
-          // Pin OUTGOING multicast to this interface. bind() only sets the source address; the
-          // egress interface is IP_MULTICAST_IF — without it the OS uses its default route, so
-          // the search can leave the wrong NIC on a multi-homed host (Node dgram docs).
-          if (bindAddr) {
-            try {
-              socket.setMulticastInterface(bindAddr);
-            } catch {
-              this.log.info(`discovery: could not pin multicast egress to ${bindAddr} — using the default interface`);
-            }
-          }
-          // Multicast is lossy and a single request can be dropped — repeat the M-SEARCH a few
-          // times inside the collect window so one lost packet does not hide a receiver.
-          for (let i = 0; i < SSDP_SEARCH_BURST; i++) {
-            this.setTimeout(sendSearch, i * SSDP_SEARCH_INTERVAL_MS);
-          }
-        });
-      };
-      this.searchesInFlight.add(finish);
-      // Configured → that one interface; empty → every non-internal IPv4; none usable → default route.
-      if (bindAddrs.length === 0) {
-        searchFrom(undefined);
-      } else {
-        for (const bindAddr of bindAddrs) {
-          searchFrom(bindAddr);
-        }
-      }
-      this.setTimeout(finish, timeoutMs);
-    });
-  }
-
-  /**
-   * Fetch a URL over HTTP and resolve its body.
-   *
-   * @param url the URL to fetch
-   * @returns the response body
-   */
-  private fetchUrl(url: string): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const req = httpGet(url, res => {
-        // Bytes decoded once (a friendlyName "Küche" split inside a character became "K��che" — and a
-        // second id for the same device, audit 2026-09-24 A20), capped, and the status judged: a booting
-        // receiver's 404/503 is no description, so the NOTIFY retry asks again instead of judging it
-        // "no Yamaha" for good (review 2026-10-05, A32).
-        readDeviceResponse(res, url).then(resolve, reject);
-      });
-      this.fetchesInFlight.add(req);
-      req.on("close", () => this.fetchesInFlight.delete(req));
-      req.on("error", reject);
-      req.setTimeout(FETCH_TIMEOUT_MS, () => req.destroy(new Error(`fetch timed out: ${url}`)));
-    });
   }
 }
 

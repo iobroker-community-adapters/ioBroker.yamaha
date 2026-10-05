@@ -4061,6 +4061,106 @@ describe("Yamaha protocol flags at start and stop (audit 2026-09-02)", () => {
   });
 });
 
+describe("Yamaha start and stop overlapping (review 2026-10-05, A12/A29/A57)", () => {
+  // Proof test REVIEW A: the unload came while onReady still ran; push socket and SSDP listener came up behind it and
+  // nothing closed them — in compact mode :41100 stayed bound in the host until it restarted.
+  it("an unload while the start still runs opens no push socket and no SSDP listener", async () => {
+    const ctx = setup({ discovery: "always" });
+    let stopping = false;
+    // js-controller refuses new timers once the stop began (adapter.js setTimeout: _stopInProgress).
+    ctx.i.setTimeout.mockImplementation(() => (stopping ? undefined : { kind: "timeout" }));
+    let unloaded = false;
+    (ctx.i as unknown as { subscribeStatesAsync: unknown }).subscribeStatesAsync = vi.fn(async () => {
+      stopping = true;
+      await new Promise<void>(resolve =>
+        ctx.i.onUnload(() => {
+          unloaded = true;
+          resolve();
+        }),
+      );
+    });
+    await ctx.i.onReady();
+    await flush();
+    expect(unloaded).toBe(true);
+    expect(mocks.pushReceivers).toHaveLength(0);
+    expect(mocks.listeners).toHaveLength(0);
+    expect(ctx.calls).toHaveLength(0);
+  });
+
+  it("a listener whose bind finishes after the unload is closed at once", async () => {
+    const ctx = setup({ discovery: "always" });
+    mocks.listenerStart = () => ctx.i.onUnload(() => undefined);
+    try {
+      await ctx.i.onReady();
+      await flush();
+    } finally {
+      mocks.listenerStart = undefined;
+    }
+    expect(mocks.listeners).toHaveLength(1);
+    expect(mocks.listeners[0].close).toHaveBeenCalled();
+  });
+
+  it("a search asked for while the adapter stops opens no socket and fetches nothing", async () => {
+    const ctx = setup();
+    let search: ((target: string, ms: number) => Promise<unknown[]>) | undefined;
+    let fetch: ((url: string) => Promise<string>) | undefined;
+    mocks.discoverYamaha.mockImplementation((deps: unknown) => {
+      ({ search, fetch } = deps as { search: typeof search; fetch: typeof fetch });
+      return Promise.resolve([]);
+    });
+    ctx.i.config = { devices: [] };
+    await ctx.i.onReady();
+    await flush();
+    ctx.i.onUnload(() => undefined);
+    net.sockets.length = 0;
+    await expect(search!("upnp:rootdevice", 5000)).resolves.toEqual([]);
+    expect(net.sockets).toHaveLength(0);
+    await expect(fetch!("http://192.168.1.20/desc.xml")).rejects.toThrow(/stopping/);
+  });
+
+  // Proof test REVIEW B: a device deleted while the start loop had not reached it yet was set up again — header back,
+  // counted in the overview.
+  it("a device deleted before the start loop reaches it is not set up again", async () => {
+    mocks.discoveredStore.devices = [{ id: "found-one", ip: "192.168.1.20" }];
+    const ctx = setup({ discovery: "always" });
+    let deleted = false;
+    // The user deletes the found card while the first (table) device's header is being written.
+    const extend = (ctx.i as unknown as { extendObject: ReturnType<typeof vi.fn> }).extendObject;
+    const real = extend.getMockImplementation() as (id: string, obj: unknown) => Promise<unknown>;
+    extend.mockImplementation(async (id: string, obj: unknown) => {
+      if (id === "Living_room.info.connection" && !deleted) {
+        deleted = true;
+        await ctx.i.removeDevice("found-one");
+      }
+      return real(id, obj);
+    });
+    await ctx.i.onReady();
+    await flush();
+    expect(deleted).toBe(true);
+    expect(ctx.i.objects.has("found-one")).toBe(false);
+    expect(ctx.i.deviceRecords.has("found-one")).toBe(false);
+    expect(ctx.calls.map(c => c.device.id)).toEqual(["Living_room"]);
+    expect(ctx.i.states.get("info.devicesTotal")?.val).toBe(1);
+  });
+
+  // Proof test REVIEW J: the first setup searched the network, and the background search ran right behind it.
+  it("the first setup searches the network once", async () => {
+    mocks.discoverYamaha.mockResolvedValue([
+      {
+        ip: "192.168.1.20",
+        name: "Wohnzimmer",
+        model: "WX-030",
+        identity: { serial: "0A1B2B3C", mac: "00A0DE0A1B2C" },
+      },
+    ]);
+    const ctx = setup({ devices: [] });
+    await ctx.i.onReady();
+    await flush();
+    expect(mocks.discoverYamaha).toHaveBeenCalledTimes(1);
+    expect(ctx.calls.map(c => c.device.ip)).toEqual(["192.168.1.20"]);
+  });
+});
+
 describe("Yamaha teardown races (audit 2026-09-02)", () => {
   it("does not start a device the background search hands over after unload", async () => {
     mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
