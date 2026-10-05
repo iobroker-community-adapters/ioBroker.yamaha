@@ -643,8 +643,22 @@ export interface XmlDescriptor {
 }
 
 /**
+ * The band a frequency lies in, by its magnitude: AM below 2000 (kHz — the AM band ends at 1710 kHz, every FM band
+ * starts above 76 MHz). The one classification for the declared ranges (where AM is counted in kHz and FM in
+ * hundredths of a MHz, both far from the edge) and for a written frequency in kHz — a write took the band the tuner
+ * last REPORTED instead, so a script that switched to FM and set 98.1 MHz right after tuned `AM 1710` (review
+ * 2026-10-05, A20).
+ *
+ * @param value the frequency (kHz), or a declared range's upper end in the description's own unit
+ * @returns the band
+ */
+export function tunerBandOf(value: number): "AM" | "FM" {
+  return value < 2000 ? "AM" : "FM";
+}
+
+/**
  * The tuner's declared frequency grid (see {@link XmlDescriptor.tunerGrid}): every `<Range>` of a
- * `Tuning,Freq` reading, classified by magnitude — AM in kHz (below 2000), FM in hundredths of a MHz.
+ * `Tuning,Freq` reading, classified by magnitude ({@link tunerBandOf}) — AM in kHz, FM in hundredths of a MHz.
  *
  * @param xml the desc.xml body
  * @returns the grid per band, in kHz
@@ -655,7 +669,7 @@ function tunerGridOf(xml: string): { AM?: XmlRange; FM?: XmlRange } | undefined 
   for (const block of blocks) {
     for (const range of block[1].matchAll(/<Range>(-?\d+),(-?\d+),(\d+)<\/Range>/g)) {
       const [min, max, step] = [Number(range[1]), Number(range[2]), Number(range[3])];
-      if (max < 2000) {
+      if (tunerBandOf(max) === "AM") {
         grid.AM ??= { min, max, step };
       } else {
         grid.FM ??= { min: min * 10, max: max * 10, step: step * 10 };

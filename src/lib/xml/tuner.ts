@@ -1,11 +1,11 @@
 import type { ObjectDef } from "../catalog/types";
-import { writableNumber } from "../catalog/value-coerce";
+import { slotNumber, snapToGrid, writableNumber } from "../catalog/value-coerce";
 import { errText } from "../err-text";
 import { tName } from "../i18n";
 import type { WriteOutcome } from "../lifecycle/multi-transport-handle";
 import { MEMORY_KEY } from "../lifecycle/memory-keys";
 import type { XmlControllerContext, XmlWriteRoute } from "./controller-context";
-import { parsePresetList, parseTunerInfo, type XmlPresetSlot, type XmlTunerInfo } from "./protocol";
+import { parsePresetList, parseTunerInfo, tunerBandOf, type XmlPresetSlot, type XmlTunerInfo } from "./protocol";
 
 /** The tuner's own status read (`Tuner,Play_Info`). */
 const PLAY_INFO_GET = "<Play_Info>GetParam</Play_Info>";
@@ -24,8 +24,7 @@ export class XmlTuner implements XmlWriteRoute {
   private present = false;
   /** The slots the tuner declares (`Preset_Sel_Item`) — the values a recall takes (D2). */
   private presetSlots: XmlPresetSlot[] = [];
-  /** The band the tuner last reported, and how its frequency is spelled (D6). */
-  private tunerBand: string | undefined;
+  /** How the tuner spells its frequency (D6). The band of a write is the value's own, never the one last reported. */
   private freqForm: "band" | "flat" = "band";
 
   /**
@@ -174,14 +173,17 @@ export class XmlTuner implements XmlWriteRoute {
     if (stateId === "tuner.band" || stateId === "tuner.frequency") {
       return this.writeTuning(stateId, value);
     }
-    // Number(true) is 1 — a switch bound here by mistake recalled preset 1 (audit 2026-09-24, D20).
-    const num = Math.round(writableNumber(value) ?? Number.NaN);
-    if (!Number.isFinite(num) || num < 1) {
+    // The one slot rule of every protocol: a whole number ≥ 1, not past the last slot the device declares —
+    // `true` is no preset 1 (audit 2026-09-24, D20), and 2.5 is no preset 3 either (XML and YNCA rounded it while
+    // MusicCast sent it raw; review 2026-10-05, A26).
+    const declared = this.presetSlots;
+    const num = slotNumber(value, declared.length > 0 ? Math.max(...declared.map(slot => slot.num)) : undefined);
+    if (num === undefined) {
       return this.ctx.dropWrite(stateId, value, "it names no preset slot");
     }
     // The device's own spelling of the slot (`A1` on the 2008 generation); a slot it does not
     // declare is not sent (D2).
-    const code = this.presetSlots.length > 0 ? this.presetSlots.find(slot => slot.num === num)?.code : String(num);
+    const code = declared.length > 0 ? declared.find(slot => slot.num === num)?.code : String(num);
     if (code === undefined) {
       return this.ctx.dropWrite(stateId, value, `preset ${num} is not a slot this device declares`);
     }
@@ -204,9 +206,6 @@ export class XmlTuner implements XmlWriteRoute {
       }
     };
     emit("tuner.preset", info.preset);
-    if (info.band !== undefined) {
-      this.tunerBand = info.band;
-    }
     emit("tuner.band", info.band);
     if (info.frequency !== undefined) {
       // Unified kHz (v2.0.0): the device reports FM in MHz, AM in kHz — normalize.
@@ -221,9 +220,14 @@ export class XmlTuner implements XmlWriteRoute {
 
   /**
    * A write to `tuner.band` or `tuner.frequency` (`Tuner,Play_Control,Tuning`, 9 of 10 descriptors):
-   * the band as AM/FM, the frequency in kHz on the current band, snapped to the grid the device
-   * declares (`Tuning,Freq` ranges — 9 kHz/50 kHz in Europe, 10 kHz/200 kHz in the US) and written in
-   * the device's own spelling — `Freq,FM|AM` from 2009, `Freq` alone on the 2008 generation (D6).
+   * the band as AM/FM; the frequency in kHz on the band its magnitude names ({@link tunerBandOf}), on the grid the
+   * device declares for that band (`Tuning,Freq` ranges — 9 kHz/50 kHz in Europe, 10 kHz/200 kHz in the US) and in
+   * the device's own spelling — `Freq,FM|AM` from 2009, `Freq` alone with the unit on the 2008 generation (D6).
+   *
+   * The band used to be the one the tuner last REPORTED and the value was clamped to that band's edge: a script that
+   * set `tuner.band = FM` and `tuner.frequency = 98100` right after sent `Band FM`, then `Freq AM 1710` — another
+   * station than the one written (review 2026-10-05, A20). A value outside the band's declared range is not sent, the
+   * shared grid rule of every protocol (`snapToGrid`, A26).
    *
    * @param stateId `tuner.band` or `tuner.frequency`
    * @param value the written value
@@ -240,20 +244,22 @@ export class XmlTuner implements XmlWriteRoute {
       );
     }
     const khz = writableNumber(value);
-    const band = this.tunerBand === "AM" ? "AM" : this.tunerBand === "FM" ? "FM" : undefined;
     if (khz === undefined) {
       return this.ctx.dropWrite(stateId, value, "it is no frequency");
     }
-    if (band === undefined) {
-      return this.ctx.dropWrite(stateId, value, "the band is not known yet");
+    const band = tunerBandOf(khz);
+    const grids = this.ctx.descriptor().tunerGrid;
+    if (grids && !grids[band]) {
+      return this.ctx.dropWrite(stateId, value, `this tuner declares no ${band} band`);
     }
-    const grid = this.ctx.descriptor().tunerGrid?.[band];
-    const snapped = grid ? grid.min + Math.round((khz - grid.min) / grid.step) * grid.step : Math.round(khz);
-    const bounded = grid ? Math.min(grid.max, Math.max(grid.min, snapped)) : snapped;
+    const target = snapToGrid(khz, grids?.[band]);
+    if (target === undefined) {
+      return this.ctx.dropWrite(stateId, value, `it lies outside the ${band} range this tuner declares`);
+    }
     const wire =
       band === "FM"
-        ? `<Val>${Math.round(bounded / 10)}</Val><Exp>2</Exp><Unit>MHz</Unit>`
-        : `<Val>${bounded}</Val><Exp>0</Exp><Unit>kHz</Unit>`;
+        ? `<Val>${Math.round(target / 10)}</Val><Exp>2</Exp><Unit>MHz</Unit>`
+        : `<Val>${Math.round(target)}</Val><Exp>0</Exp><Unit>kHz</Unit>`;
     const freq = this.freqForm === "flat" ? `<Freq>${wire}</Freq>` : `<Freq><${band}>${wire}</${band}></Freq>`;
     return this.ctx.applyCommand(
       { zone: "Tuner", inner: `<Play_Control><Tuning>${freq}</Tuning></Play_Control>` },
