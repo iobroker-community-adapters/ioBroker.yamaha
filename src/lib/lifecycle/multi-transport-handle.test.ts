@@ -1206,3 +1206,87 @@ describe("MultiTransportHandle — a closed handle writes nothing more (review 2
     expect(settled).toEqual([]);
   });
 });
+
+describe("MultiTransportHandle — a reconnect in flight and one that drops again (review 2026-10-05, A7/A52)", () => {
+  const power = state("power", "Power", { type: "boolean", role: "switch.power" });
+
+  // A YNCA reconnect sweeps for 20-40 s. When the device was deleted or moved meanwhile, or its last other
+  // transport dropped, the connection kept sweeping and then held the receiver's ONE YNCA connection: the next
+  // full reconnect failed on it.
+  test("close() closes a transport whose reconnect is still connecting, at once", async () => {
+    let release: (ok: boolean) => void = () => undefined;
+    const sweeping = fakeConn("ynca", [power]);
+    sweeping.connect = (): Promise<boolean> => new Promise<boolean>(resolve => (release = resolve));
+    const ynca = fakeConn("ynca", [power]);
+    const yxc = fakeConn("yxc", [power]);
+    const { handle, fireTimers, transportsReports } = reconnectSetup([ynca, yxc], { ynca: () => sweeping });
+    await handle.start();
+    ynca.drop(new Error("socket reset"));
+    await fireTimers(); // the reconnect starts: socket open, sweep running
+    expect(sweeping.closed).toBe(false);
+    handle.close();
+    expect(sweeping.closed).toBe(true);
+    const reports = transportsReports.length;
+    release(true);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(transportsReports).toHaveLength(reports);
+  });
+
+  // The fresh connection reports a drop it latched while it connected: it is gone again during its first learn.
+  test("a reconnect that drops during its first learn keeps its backoff and its timer, and says no reconnected", async () => {
+    const ynca = fakeConn("ynca", [power]);
+    const yxc = fakeConn("yxc", [power]);
+    const flaky = (): ConnectableTransport => {
+      const conn = fakeConn("ynca", [power]);
+      conn.onDrop = (cb: (reason?: Error) => void): void => cb(new Error("dropped while connecting"));
+      return conn;
+    };
+    const timers: Array<{ id: number; cb: () => void; ms: number }> = [];
+    const cancelled: unknown[] = [];
+    const logs: string[] = [];
+    const reports: string[][] = [];
+    let factories = 0;
+    const handle = new MultiTransportHandle("living", [ynca, yxc], {
+      upsertObject: () => Promise.resolve(),
+      log: { ...silentLog, debug: (m: string) => logs.push(m) },
+      onTransports: names => reports.push([...names]),
+      rebuild: flaky,
+      schedule: (cb, ms) => {
+        const id = timers.length + 1;
+        timers.push({ id, cb, ms });
+        return id;
+      },
+      cancel: id => void cancelled.push(id),
+      backoffFactory: () => {
+        factories++;
+        let n = 0;
+        return { nextDelay: () => 1000 * 2 ** n++, reset: () => (n = 0) };
+      },
+    });
+    await handle.start();
+    ynca.drop(new Error("socket reset"));
+    timers[0].cb();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(logs.some(line => line.includes("transport reconnected"))).toBe(false);
+    expect(reports.at(-1)).toEqual(["yxc"]);
+    // The next attempt is pending on the SAME backoff, one step further — not reset to the first delay.
+    expect(timers.map(timer => timer.ms)).toEqual([1000, 2000]);
+    expect(factories).toBe(1);
+    // And it is still the handle's: close cancels it.
+    handle.close();
+    expect(cancelled).toEqual([2]);
+  });
+
+  test("a reconnect that holds resets the backoff: the next outage starts at the first delay again", async () => {
+    const ynca = fakeConn("ynca", [power]);
+    const yxc = fakeConn("yxc", [power]);
+    const fresh = fakeConn("ynca", [power]);
+    const h = reconnectSetup([ynca, yxc], { ynca: () => fresh });
+    await h.handle.start();
+    ynca.drop(new Error("socket reset"));
+    await h.fireTimers();
+    expect(h.logs.some(line => line.includes("transport reconnected"))).toBe(true);
+    fresh.drop(new Error("socket reset"));
+    expect(h.delays).toEqual([1000, 1000]);
+  });
+});

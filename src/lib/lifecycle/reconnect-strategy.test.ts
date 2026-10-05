@@ -1,4 +1,4 @@
-import { ReconnectStrategy } from "./reconnect-strategy";
+import { ReconnectStrategy, RetryLoop } from "./reconnect-strategy";
 
 describe("ReconnectStrategy", () => {
   test("backs off exponentially from the base delay", () => {
@@ -66,5 +66,62 @@ describe("ReconnectStrategy jitter", () => {
     } finally {
       random.mockRestore();
     }
+  });
+});
+
+describe("RetryLoop — one reconnect loop for the supervisor and each transport (review 2026-10-05, E)", () => {
+  function loop(): {
+    retry: RetryLoop;
+    timers: Array<{ id: number; cb: () => void; ms: number }>;
+    cancelled: number[];
+  } {
+    const timers: Array<{ id: number; cb: () => void; ms: number }> = [];
+    const cancelled: number[] = [];
+    const retry = new RetryLoop(
+      {
+        schedule: (cb, ms) => {
+          const id = timers.length + 1;
+          timers.push({ id, cb, ms });
+          return id;
+        },
+        cancel: handle => void cancelled.push(handle as number),
+      },
+      new ReconnectStrategy(1000, 60_000, 0),
+    );
+    return { retry, timers, cancelled };
+  }
+
+  test("steps through the backoff across attempts and starts again at the first delay after a success", () => {
+    const { retry, timers } = loop();
+    let attempts = 0;
+    retry.schedule(() => attempts++);
+    timers[0].cb();
+    retry.schedule(() => attempts++);
+    timers[1].cb();
+    retry.succeeded();
+    retry.schedule(() => attempts++);
+    expect(timers.map(timer => timer.ms)).toEqual([1000, 2000, 1000]);
+    expect(attempts).toBe(2);
+  });
+
+  test("never holds two attempts: a second schedule replaces the pending one", () => {
+    const { retry, timers, cancelled } = loop();
+    retry.schedule(() => undefined);
+    retry.schedule(() => undefined);
+    expect(cancelled).toEqual([1]);
+    expect(timers).toHaveLength(2);
+  });
+
+  test("cancel cancels only what is pending", () => {
+    const { retry, timers, cancelled } = loop();
+    retry.cancel();
+    expect(cancelled).toEqual([]);
+    retry.schedule(() => undefined);
+    timers[0].cb();
+    retry.cancel();
+    expect(cancelled).toEqual([]);
+    retry.schedule(() => undefined);
+    retry.cancel();
+    expect(cancelled).toEqual([2]);
   });
 });

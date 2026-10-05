@@ -10,7 +10,7 @@ import {
   type MultiTransportDeps,
 } from "./lifecycle/multi-transport-handle";
 import { TransportConnectionAdapter } from "./lifecycle/transport-connection-adapter";
-import { ReconnectStrategy } from "./lifecycle/reconnect-strategy";
+import { RECONNECT_BASE_MS, RECONNECT_MAX_MS, ReconnectStrategy } from "./lifecycle/reconnect-strategy";
 import { CommandGate } from "./lifecycle/command-gate";
 import type { YncaSubunitCache } from "./ynca/subunit-cache";
 import type { ProbeMemory } from "./lifecycle/probe-memory";
@@ -26,10 +26,6 @@ import { MEMORY_KEY } from "./lifecycle/memory-keys";
 
 // Re-exported so existing importers (tests) keep resolving it from here.
 export type { ConnectableTransport };
-
-/** Per-transport reconnect backoff bounds — same shape as the device supervisor's. */
-const TRANSPORT_RECONNECT_BASE_MS = 1000;
-const TRANSPORT_RECONNECT_MAX_MS = 60000;
 
 /**
  * Minimum spacing between two commands, per transport. YNCA's 100 ms is Yamaha's
@@ -243,7 +239,7 @@ async function connectBuilt(
     rebuild: deps.timers ? transport => rebuilds.get(transport)!() : undefined,
     schedule: deps.timers ? (cb, ms) => deps.timers!.schedule(cb, ms) : undefined,
     cancel: deps.timers ? handle_ => deps.timers!.cancel(handle_ as ioBroker.Timeout | undefined) : undefined,
-    backoffFactory: () => new ReconnectStrategy(TRANSPORT_RECONNECT_BASE_MS, TRANSPORT_RECONNECT_MAX_MS),
+    backoffFactory: () => new ReconnectStrategy(RECONNECT_BASE_MS, RECONNECT_MAX_MS),
     writtenObjects: deps.writtenObjects,
     // A transport the device has shown before but that did not answer now — reconnected, and a read-in
     // does not complete without it. One it never answered is not retried: every MusicCast-only device

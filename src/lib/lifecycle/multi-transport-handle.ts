@@ -11,6 +11,7 @@ import { errText } from "../err-text";
 import { readyLine } from "../ready-line";
 import type { HandleCapture, TransportCapture } from "../diagnostics/types";
 import { emptyLearnedTree, type LearnedTree } from "./learned-tree";
+import { RetryLoop, type Backoff } from "./reconnect-strategy";
 
 /**
  * What a transport made of a user write:
@@ -93,7 +94,7 @@ export interface MultiTransportDeps {
   /** Cancel a scheduled reconnect attempt. */
   cancel?(handle: unknown): void;
   /** A fresh exponential backoff for one transport's reconnect loop. */
-  backoffFactory?(): { nextDelay(): number; reset(): void };
+  backoffFactory?(): Backoff;
   /**
    * The object definitions last written for this DEVICE, shared by every handle it gets. Kept per
    * handle, a device that came back as a whole (a new handle per attempt) rewrote its entire tree
@@ -142,7 +143,14 @@ export class MultiTransportHandle implements ConnectionHandle {
    */
   private readonly built = new Map<Transport, Map<string, ObjectDef>>();
   private tree: LearnedTree;
-  private readonly retries = new Map<Transport, { timer: unknown; backoff: { nextDelay(): number } }>();
+  /** Each dropped transport's reconnect loop, its backoff kept across the attempts. */
+  private readonly retries = new Map<Transport, RetryLoop>();
+  /**
+   * The transports a reconnect is connecting right now. {@link close} closes them too: a YNCA reconnect sweeps for
+   * 20–40 s, and left alone after its handle was closed it held the receiver's ONE YNCA connection — the next full
+   * reconnect failed on it (review 2026-10-05, A7).
+   */
+  private readonly connecting = new Set<ConnectableTransport>();
   /** The proven transports that have not answered yet this handle (see `MultiTransportDeps.missing`). */
   private readonly missing: Set<Transport>;
   /** A firmware update opened the read-in in this session — its completion says "ready" again. */
@@ -599,13 +607,16 @@ export class MultiTransportHandle implements ConnectionHandle {
    * @param transport the transport to bring back
    */
   private scheduleTransportRetry(transport: Transport): void {
-    if (!this.deps.rebuild || !this.deps.schedule || !this.deps.backoffFactory) {
+    const { rebuild, schedule, backoffFactory } = this.deps;
+    if (this.closed || !rebuild || !schedule || !backoffFactory) {
       return;
     }
-    const existing = this.retries.get(transport);
-    const backoff = existing?.backoff ?? this.deps.backoffFactory();
-    const timer = this.deps.schedule(() => void this.attemptTransport(transport), backoff.nextDelay());
-    this.retries.set(transport, { timer, backoff });
+    let loop = this.retries.get(transport);
+    if (!loop) {
+      loop = new RetryLoop({ schedule, cancel: handle => this.deps.cancel?.(handle) }, backoffFactory());
+      this.retries.set(transport, loop);
+    }
+    loop.schedule(() => void this.attemptTransport(transport));
   }
 
   /**
@@ -626,46 +637,57 @@ export class MultiTransportHandle implements ConnectionHandle {
       connection = this.deps.rebuild(transport);
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}/${transport}: could not rebuild the transport (${errText(e)})`);
-      if (!this.closed) {
-        this.scheduleTransportRetry(transport);
-      }
+      this.scheduleTransportRetry(transport);
       return;
     }
+    this.connecting.add(connection);
     let connected = false;
     try {
       connected = await connection.connect();
-      if (connected && !this.closed) {
-        this.live.push(connection);
-        this.missing.delete(transport);
-        this.noteFirmware(connection);
-        connection.onDrop(reason => this.handleTransportDrop(connection, reason));
-        this.armSignals(connection);
-        await this.queueLearn();
-        this.retries.delete(transport);
-        this.reportTransports();
-        this.deps.log.debug(`${this.deviceId}/${transport}: transport reconnected`);
-        return;
-      }
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}/${transport}: reconnect attempt failed (${errText(e)})`);
+    }
+    if (!this.connecting.delete(connection)) {
+      return; // close() took it and closed it
+    }
+    if (!connected || this.closed) {
+      connection.close();
+      this.scheduleTransportRetry(transport);
+      return;
+    }
+    this.live.push(connection);
+    this.missing.delete(transport);
+    this.noteFirmware(connection);
+    connection.onDrop(reason => this.handleTransportDrop(connection, reason));
+    this.armSignals(connection);
+    try {
+      await this.queueLearn();
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}/${transport}: reconnect attempt failed (${errText(e)})`);
       const index = this.live.indexOf(connection);
       if (index >= 0) {
         this.live.splice(index, 1);
+        connection.close();
+        this.scheduleTransportRetry(transport);
       }
-    }
-    connection.close();
-    if (this.closed) {
       return;
     }
-    this.scheduleTransportRetry(transport);
+    if (!this.live.includes(connection)) {
+      // It dropped again during its first learn (or the handle was closed): its drop already scheduled the next
+      // attempt on the kept backoff. Clearing the loop here forgot that timer — nothing cancelled it on close —
+      // and the "reconnected" line and a reset backoff claimed what had not happened (review 2026-10-05, A52).
+      return;
+    }
+    this.retries.get(transport)?.succeeded();
+    this.reportTransports();
+    this.deps.log.debug(`${this.deviceId}/${transport}: transport reconnected`);
   }
 
   /** Cancel every per-transport reconnect loop. */
   private cancelRetries(): void {
-    for (const { timer } of this.retries.values()) {
-      this.deps.cancel?.(timer);
+    for (const loop of this.retries.values()) {
+      loop.cancel();
     }
-    this.retries.clear();
   }
 
   /**
@@ -803,14 +825,18 @@ export class MultiTransportHandle implements ConnectionHandle {
     return this.learning.catch(() => undefined);
   }
 
-  /** Close every transport and stop every reconnect loop. Synchronous — safe from onUnload. */
+  /**
+   * Close every transport — the live ones and those a reconnect is still connecting — and stop every reconnect loop.
+   * Synchronous — safe from onUnload.
+   */
   public close(): void {
     this.closed = true;
     this.cancelRetries();
-    for (const connection of this.live) {
+    for (const connection of [...this.live, ...this.connecting]) {
       connection.close();
     }
     this.live.length = 0;
+    this.connecting.clear();
   }
 }
 

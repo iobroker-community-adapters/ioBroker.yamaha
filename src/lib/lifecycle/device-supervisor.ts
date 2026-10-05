@@ -1,6 +1,7 @@
 import type { ConnectionHandle } from "../controller";
 import type { HandleCapture } from "../diagnostics/types";
 import { errText } from "../err-text";
+import { RetryLoop, type Backoff } from "./reconnect-strategy";
 
 // Re-exported so existing importers (main.ts) keep resolving it from here.
 export type { ConnectionHandle };
@@ -39,7 +40,7 @@ export interface SupervisorDeps {
    */
   onConnectionChange: (connected: boolean) => void;
   /** Exponential backoff for the retry cadence. */
-  backoff: { nextDelay(): number; reset(): void };
+  backoff: Backoff;
   /** Adapter log. */
   log: { debug(message: string): void; info(message: string): void; warn(message: string): void };
   /** The device the supervisor keeps, so its log lines say which one (audit 2026-09-24, A16). */
@@ -56,7 +57,8 @@ export interface SupervisorDeps {
  */
 export class DeviceSupervisor {
   private handle: ConnectionHandle | undefined;
-  private timer: unknown;
+  /** The next attempt after a failed one or a drop, on the backoff. */
+  private readonly retry: RetryLoop;
   private closed = false;
   /** The attempt currently running, so a caller can wait for it before tearing the device down. */
   private inFlight: Promise<void> | undefined;
@@ -72,7 +74,12 @@ export class DeviceSupervisor {
   /**
    * @param deps the injected attempt/timer/report callbacks
    */
-  public constructor(private readonly deps: SupervisorDeps) {}
+  public constructor(private readonly deps: SupervisorDeps) {
+    this.retry = new RetryLoop(
+      { schedule: (cb, ms) => deps.schedule(cb, ms), cancel: handle => deps.cancel(handle) },
+      deps.backoff,
+    );
+  }
 
   /** Begin supervising: attempt now, then retry/reconnect as needed. */
   public start(): void {
@@ -144,7 +151,7 @@ export class DeviceSupervisor {
     if (handle) {
       // The lifetime stays with the handle: aborted when it drops or the supervisor closes.
       this.handle = handle;
-      this.deps.backoff.reset();
+      this.retry.succeeded();
       this.deps.onConnectionChange(true);
       // Bind the drop to THIS handle: a second drop, or a drop from a handle a
       // reconnect has already superseded, must not schedule another retry.
@@ -186,7 +193,7 @@ export class DeviceSupervisor {
   }
 
   private scheduleRetry(): void {
-    this.timer = this.deps.schedule(() => this.runAttempt(), this.deps.backoff.nextDelay());
+    this.retry.schedule(() => this.runAttempt());
   }
 
   /** The log prefix naming the device (empty when the caller gave no id). */
@@ -207,7 +214,7 @@ export class DeviceSupervisor {
   public close(): void {
     this.closed = true;
     this.endLifetime();
-    this.deps.cancel(this.timer);
+    this.retry.cancel();
     this.handle?.close();
     this.draining = this.handle?.settled?.();
     this.handle = undefined;
