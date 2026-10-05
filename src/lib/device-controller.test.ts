@@ -1,6 +1,6 @@
 import { vi } from "vitest";
 import { MAX_OBSERVED_VALUES, YncaDeviceController } from "./device-controller";
-import type { YncaClientLike } from "./device-controller";
+import type { YncaClientLike } from "./ynca/client-like";
 import type { YncaCapabilities } from "./ynca/capability";
 import { availGets, YNCA_CATALOG } from "./ynca/catalog";
 import type { ObjectDef } from "./catalog/types";

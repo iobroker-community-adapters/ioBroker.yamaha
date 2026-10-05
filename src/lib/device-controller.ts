@@ -1,18 +1,14 @@
 import { splitZone } from "./catalog/zones";
-import { mergeYncaSubunits, type YncaCapabilities } from "./ynca/capability";
+import type { YncaCapabilities } from "./ynca/capability";
 import { formatWireNumber, selfMap, writableNumber } from "./catalog/value-coerce";
 import { playTimeTwin } from "./catalog/play-time";
 import type { ObjectDef } from "./catalog/types";
 import { tName } from "./i18n";
 import { errText } from "./err-text";
-import type { ControllerDepsBase, ControllerLog } from "./controller";
+import type { ControllerDepsBase } from "./controller";
 import {
   SOURCE_INPUTS,
   YNCA_CATALOG,
-  availGets,
-  bundleGets,
-  planSweep,
-  SYS_FUNCTION_FAMILIES,
   deviceInputStates,
   enumStatesFor,
   funcToEntry,
@@ -21,7 +17,6 @@ import {
   snapTunerFrequency,
   writeProblem,
   yncaGenerationEvidence,
-  sweepGets,
   yncaCommand,
   yncaObjectsFor,
   yncaStateUpdate,
@@ -31,6 +26,8 @@ import {
 } from "./ynca/catalog";
 import type { StatesResolver } from "./catalog/build-objects";
 import type { YncaSubunitCache } from "./ynca/subunit-cache";
+import type { YncaClientLike } from "./ynca/client-like";
+import { YncaShapeReader } from "./ynca/shape-reader";
 import type { YncaMessage } from "./ynca/protocol";
 import type { WriteOutcome } from "./lifecycle/multi-transport-handle";
 import type { BrowseEngine } from "./browse/browse-engine";
@@ -49,26 +46,7 @@ import { PLAYER_CLEAR } from "./catalog/player-block";
 
 // The YNCA catalog and its lookup maps are static — built once for all devices.
 // SYS:MODELNAME is part of the catalog (info.model), so the sweep already covers it.
-// The AVAIL probe always covers the FULL catalog (not the group-filtered one), so the
-// cached subunit set reflects the device, never the current group configuration.
 const FUNC_MAP = funcToEntry(YNCA_CATALOG);
-const AVAIL_PROBE = availGets(YNCA_CATALOG);
-/** The subunits the AVAIL probe asks — the set a silent subunit is judged absent against. */
-const PROBED_SUBUNITS: ReadonlySet<string> = new Set(AVAIL_PROBE.map(get => get.subunit));
-
-/**
- * Functions whose VALUE cannot change while the device runs: the 29 assignable input names
- * and the scene names (12 on the main zone, SCENE1–4NAME on each of zones 2–4). They answer
- * the same thing every time, so a reconnect reuses what the first connect learned instead of
- * asking them again at the specification's mandatory 100 ms spacing.
- *
- * They live in the PERSISTED probe memory (the device object's `native.capabilityProfile`), so the
- * saving survives a restart too — the freshness guard is the device identity, and a renamed
- * input heals through the background refresh, which re-reads them. (This used to be
- * documented as "per adapter run, not persisted"; that stopped being true with the
- * fast-restart rework and the comment was left behind.)
- */
-const STATIC_FUNC = /^(INPNAME|SCENE\d+NAME$)/;
 
 /**
  * The normalised form an INP value is looked up by: uppercase, alphanumerics only
@@ -117,12 +95,6 @@ function playerSubunitForInput(input: string | undefined): string | undefined {
  * silently dropped BT/AirPlay status while no zone listened to that source).
  */
 const FLAT_PLAYER_ID = /^player\.[^.]+$/;
-
-/** Memory key for the remembered static values. */
-const STATIC_KEY = MEMORY_KEY.yncaStaticValues;
-
-/** Memory key for the persisted capability shape (the fast-restart layer). */
-const CAPS_KEY = MEMORY_KEY.yncaCapabilities;
 
 /**
  * Memory key for the pad dialect a PROBE proved: `{ dialect, proven: true }` (`zone` = the 2015
@@ -225,76 +197,6 @@ function isObservedValues(value: unknown): value is ObservedValues {
 }
 
 /**
- * A remembered string→T record, or undefined when the memory holds something else.
- *
- * @param value the remembered value
- * @param type the expected value type of every field
- * @returns the record, or undefined
- */
-function recordOf<T>(value: unknown, type: "boolean" | "string"): Record<string, T> | undefined {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return undefined;
-  }
-  return Object.values(value).every(item => typeof item === type) ? (value as Record<string, T>) : undefined;
-}
-
-/**
- * The XML `System>Config` declaration as input evidence, when the XML transport remembered
- * one for this device (the probe memory is shared by the three transports): the source
- * flags prove a source absent, the input names add an input. Absent or malformed → nothing.
- *
- * @param remembered the remembered `xmlConfig` value
- * @returns the XML half of the input evidence
- */
-function xmlInputEvidence(remembered: unknown): Pick<InputEvidence, "xmlFeatures" | "xmlInputNames"> {
-  const config = remembered as { features?: unknown; inputNames?: unknown } | null | undefined;
-  if (typeof config !== "object" || config === null) {
-    return {};
-  }
-  const xmlFeatures = recordOf<boolean>(config.features, "boolean");
-  const xmlInputNames = recordOf<string>(config.inputNames, "string");
-  return { ...(xmlFeatures ? { xmlFeatures } : {}), ...(xmlInputNames ? { xmlInputNames } : {}) };
-}
-
-/** The persisted capability shape, keyed by the device identity that validated it. */
-interface CachedCapabilities {
-  /** SYS MODELNAME at capture time — freshness key half 1. */
-  model: string;
-  /** SYS VERSION at capture time — freshness key half 2. */
-  firmware: string;
-  /**
-   * The captured subunit→function map (values are last-known, used for SHAPE only). A sweep whose
-   * closing marker went unanswered may lack functions; the background refresh of every later start
-   * unions its answers into this shape and never takes one away, so a short first sweep heals.
-   */
-  subunits: Record<string, Record<string, string>>;
-  /**
-   * Whether this shape was read with the receiver switched on — a receiver in standby answers many functions
-   * `@RESTRICTED`, so a shape read then lacks what it has. Missing (an older profile) counts as not yet.
-   */
-  awake?: boolean;
-}
-
-/**
- * Whether a remembered value carries the cached-capabilities shape (API boundary —
- * the persisted probe memory is untrusted storage).
- *
- * @param value the remembered value
- * @returns true when usable
- */
-function isCachedCapabilities(value: unknown): value is CachedCapabilities {
-  const candidate = value as Partial<CachedCapabilities> | null;
-  return (
-    typeof candidate === "object" &&
-    candidate !== null &&
-    typeof candidate.model === "string" &&
-    typeof candidate.firmware === "string" &&
-    typeof candidate.subunits === "object" &&
-    candidate.subunits !== null
-  );
-}
-
-/**
  * The functions whose presence proves a subunit really serves menus — the fields a real
  * `LISTINFO=?` answer is made of (RX-A810 reference log). See {@link YncaDeviceController.probeBrowseSubunits}.
  */
@@ -315,39 +217,6 @@ function sceneTitlesOf(
 ): Array<{ num: number; title: string }> {
   return yncaSceneTitles(subunits[subunit], subunit);
 }
-
-/** The subset of the YNCA client the controller uses (so tests can inject a fake). */
-export interface YncaClientLike {
-  /** Open the connection. */
-  connect(): Promise<void>;
-  /** Run the init sweep and return the device's capabilities. */
-  readCapabilities(gets: Array<{ subunit: string; func: string }>): Promise<YncaCapabilities>;
-  /** Send a PUT command. */
-  send(
-    subunit: string,
-    func: string,
-    value: string,
-    charset?: "latin1",
-  ): void | Promise<"ok" | "restricted" | "undefined" | "unclear" | "skipped">;
-  /** Send a GET request (the browse driver reads LISTINFO with it); a read-back asks at user priority. */
-  get(subunit: string, func: string, priority?: "user" | "background"): void;
-  /** Register a handler for pushed messages. */
-  onMessage(handler: (message: { subunit: string; func: string; value: string }) => void): void;
-  /** Register the socket-drop handler the supervisor reconnects on. */
-  onDrop(handler: (reason?: Error) => void): void;
-  /** Register the refusal handler for user commands the device rejects. */
-  onRefusal(handler: (command: string, verdict: "restricted" | "undefined") => void): void;
-  /** Register the handler for lines that decode to nothing. */
-  onUnknownLine(handler: (line: string) => void): void;
-  /** Ask, without changing anything, whether the device knows some functions. */
-  probeKnown(subunit: string, funcs: readonly string[]): Promise<Record<string, "known" | "undefined" | "unclear">>;
-  /** Start the keepalive poll — called after the init sweep, not on connect. */
-  startKeepalive(): void;
-  /** Close the connection synchronously. */
-  close(): void;
-}
-
-export type { ControllerLog };
 
 /** The adapter callbacks the controller drives — narrow, so no adapter mock is needed in tests. */
 export interface ControllerDeps extends ControllerDepsBase {
@@ -412,14 +281,8 @@ export class YncaDeviceController {
   private readonly zoneInputs = new Map<string, string>();
   /** The zones that got a player block (main plus every present ZONEn, when sources exist). */
   private playerZones: string[] = [];
-  /**
-   * The subunits the AVAIL probe asked THIS device — the set a silent source is judged absent
-   * against. Empty when the device ignored the probe (blind sweep) or when the remembered
-   * snapshot came from another firmware: silence then proves nothing and no source is dropped.
-   */
-  private probedSubunits: ReadonlySet<string> = new Set();
-  /** The subunits that answered the AVAIL probe (or were remembered as answering, same identity). */
-  private presentSubunits = new Set<string>();
+  /** Reads the capability shape and keeps it by its rules (identity, AVAIL snapshot, names). */
+  private readonly reader: YncaShapeReader;
   /** The enum values this device ever reported (see OBSERVED_KEY), persisted on every addition. */
   private observed: ObservedValues = {};
   /** The (group-filtered) catalog of this connection, for rebuilding objects mid-session. */
@@ -442,10 +305,6 @@ export class YncaDeviceController {
   private powerOnCatchUp = false;
   /** Set by {@link close} — a catch-up still queued or waiting ends there. */
   private closed = false;
-  /** The firmware (`SYS:VERSION`) read on this connection. */
-  private firmwareRead: string | undefined;
-  /** Whether the shape the objects are built from was read with the receiver switched on. */
-  private awakeRead = false;
   /** Whether the read of a switched-on receiver is queued or running, so a second `PWR=On` adds none. */
   private awakeReadQueued = false;
   /** Called once the shape becomes one of a switched-on receiver (see {@link readComplete}). */
@@ -458,7 +317,14 @@ export class YncaDeviceController {
   public constructor(
     private readonly deviceId: string,
     private readonly deps: ControllerDeps,
-  ) {}
+  ) {
+    this.reader = new YncaShapeReader(deviceId, {
+      client: deps.client,
+      probeMemory: deps.probeMemory,
+      subunitCache: deps.subunitCache,
+      log: deps.log,
+    });
+  }
 
   /**
    * Connect, sweep the device from the catalog, and create its object tree; wire
@@ -474,8 +340,9 @@ export class YncaDeviceController {
       ? YNCA_CATALOG.filter(entry => this.deps.isEntryEnabled!(entry.id))
       : YNCA_CATALOG;
     this.catalog = catalog;
-    const resolved = await this.resolveCapabilities(catalog);
-    const { capabilities, fromCache } = resolved;
+    const { capabilities, fromCache } = await this.reader.resolve(catalog);
+    // After the identity guard ran: a store it dropped is not read back.
+    this.loadObserved();
     // Registered now, not after the ~250 awaited upserts and the menu probe: a change the device
     // pushes meanwhile (a volume turned at the unit) used to be lost; it waits and is played back
     // in order once the tree stands (audit 2026-09-24, B12).
@@ -495,7 +362,7 @@ export class YncaDeviceController {
     // layer is a SHAPE, its values are leftovers. Everything that DECIDES something
     // (which menus may be claimed, which wire function a band-routed write takes, which
     // source a zone's player buttons act on) is therefore re-read live before use.
-    const live = fromCache ? await this.readDecisiveValues(capabilities) : capabilities;
+    const live = fromCache ? await this.reader.readDecisive(capabilities) : capabilities;
     // Seed each zone's input from the sweep — the player routing needs to know what
     // every zone is listening to before the first INP push arrives.
     for (const zone of YNCA_ZONES) {
@@ -507,7 +374,7 @@ export class YncaDeviceController {
     // Every enum value the sweep (or the remembered shape) carries is an observation.
     this.recordObservedAll(capabilities);
     this.recordObservedAll(live);
-    const evidence = this.inputEvidence(capabilities);
+    const evidence = this.reader.inputEvidence(capabilities);
     this.shape = { model: capabilities.model, subunits: capabilities.subunits };
     const objects = yncaObjectsFor(capabilities, catalog, this.statesResolver(live, evidence));
     if (objects.length === 0) {
@@ -612,129 +479,6 @@ export class YncaDeviceController {
   }
 
   /**
-   * The device's capabilities — from the persisted fast-restart layer when the LIVE
-   * identity (model + firmware, three paced reads with the wake-up read, ~0.3 s) matches what the layer was
-   * captured from, else from the full two-pass sweep. The identity read doubles as the
-   * liveness proof the ready line rests on: a cached shape alone must never present a
-   * dead device as connected (the v1.5.0 honesty rule).
-   *
-   * @param catalog the (group-filtered) catalog
-   * @returns the capabilities and whether they came from the persisted layer
-   */
-  private async resolveCapabilities(
-    catalog: readonly YncaEntry[],
-  ): Promise<{ capabilities: YncaCapabilities; fromCache: boolean }> {
-    // The first command after the receiver's power-save state can be lost (ynca-python
-    // `protocol.py` sends two keepalives on connect for that reason): a leading wake-up read, so the
-    // identity is not read as "" and every remembered YNCA answer dropped for it (audit 2026-09-24, B1).
-    const identity = await this.deps.client.readCapabilities([
-      { subunit: "SYS", func: "MODELNAME" },
-      { subunit: "SYS", func: "MODELNAME" },
-      { subunit: "SYS", func: "VERSION" },
-    ]);
-    const model = identity.model;
-    const firmware = identity.subunits.SYS?.VERSION ?? "";
-    this.firmwareRead = firmware || undefined;
-    const remembered = this.deps.probeMemory.remembered(CAPS_KEY);
-    if (model && isCachedCapabilities(remembered) && remembered.model === model && remembered.firmware === firmware) {
-      // The remembered subunit snapshot is proof for narrowing ONLY from the same identity: a
-      // snapshot of another firmware says nothing about which sources this device has now.
-      const cached = this.deps.subunitCache.get();
-      if (cached && cached.model === model && cached.firmware === firmware) {
-        // Only what the snapshot ASKED is judged: a subunit the catalog gained later was never
-        // probed and must not read as absent (audit 2026-09-24, B11).
-        this.probedSubunits = new Set(cached.probed ?? []);
-        this.presentSubunits = new Set(cached.subunits);
-      }
-      this.loadObserved();
-      this.awakeRead = remembered.awake === true;
-      return { capabilities: { model, subunits: remembered.subunits }, fromCache: true };
-    }
-    if (remembered !== undefined && model) {
-      // A different (or updated) device behind this address: its remembered YNCA
-      // answers are void — the observed values, the pad verdicts and the menu proof too. The other transports guard
-      // their own portions. An EMPTY model is no identity at all (a lost first command), not another device.
-      this.deps.probeMemory.drop(
-        key =>
-          key === CAPS_KEY ||
-          key === STATIC_KEY ||
-          key === OBSERVED_KEY ||
-          key === PAD_DIALECT_KEY ||
-          key === ZONE_PAD_KEY ||
-          key === BROWSE_PROOF_KEY,
-      );
-    }
-    this.loadObserved();
-    const capabilities = await this.sweepDevice(catalog, model, firmware);
-    if (capabilities.model) {
-      const captured = capabilities.subunits.SYS?.VERSION ?? firmware;
-      // The same receiver read again (the identity read lost its first answer, so the fast path did not
-      // run): what it proved before stays — a sweep in standby answers many functions @RESTRICTED.
-      const same =
-        isCachedCapabilities(remembered) && remembered.model === capabilities.model && remembered.firmware === captured;
-      const subunits = same ? mergeYncaSubunits(remembered.subunits, capabilities.subunits) : capabilities.subunits;
-      const awake = (same && remembered.awake === true) || capabilities.subunits.MAIN?.PWR === "On";
-      this.deps.probeMemory.set(CAPS_KEY, {
-        model: capabilities.model,
-        firmware: captured,
-        subunits,
-        awake,
-      } satisfies CachedCapabilities);
-      this.awakeRead = awake;
-      return { capabilities: { model: capabilities.model, subunits }, fromCache: false };
-    }
-    // No model, no identity — and without an identity nothing can ever invalidate what was
-    // remembered. The statics (input and scene names) are written by the sweep regardless,
-    // so leaving them behind froze those names for good on a device that does not answer
-    // SYS:MODELNAME. The two keys live and die together.
-    this.deps.probeMemory.drop(key => key === STATIC_KEY);
-    return { capabilities, fromCache: false };
-  }
-
-  /**
-   * Re-read the handful of values the START makes DECISIONS from, and lay them over the
-   * remembered shape (fresh wins).
-   *
-   * The persisted capability layer is a shape whose values are the last run's leftovers —
-   * the type says so ("used for SHAPE only"). Three decisions used them anyway, and a
-   * receiver stands in standby most of the time, so the memory usually says `PWR=Standby`:
-   * - the menu claim skips its proof while the device is not on, so a stale "Standby"
-   *   made YNCA claim `player.browse.*` UNPROVEN and displace the XML driver that does
-   *   probe — issue #613, brought back in through the cache;
-   * - a `tuner.frequency` write is routed by the band, so a stale band sends AMFREQ where
-   *   FMFREQ belongs (a wrong command on the wire, not just a stale reading);
-   * - the player's transport buttons are routed by the zone's input, so a stale input
-   *   sends play/pause to the source the zone listened to LAST time.
-   *
-   * Eight reads at most (~0.8 s through the gate), once per connect. A drop during them
-   * fails the connect — which is honest: the device is gone.
-   *
-   * @param remembered the capability shape from the persisted layer
-   * @returns the remembered shape with the live answers laid over it
-   */
-  private async readDecisiveValues(remembered: YncaCapabilities): Promise<YncaCapabilities> {
-    const gets: Array<{ subunit: string; func: string }> = [];
-    if (remembered.subunits.MAIN !== undefined) {
-      gets.push({ subunit: "MAIN", func: "PWR" });
-    }
-    for (const zone of YNCA_ZONES) {
-      if (remembered.subunits[zone.subunit] !== undefined) {
-        gets.push({ subunit: zone.subunit, func: "INP" });
-      }
-    }
-    for (const subunit of ["TUN", "DAB", "HDRADIO"]) {
-      if (remembered.subunits[subunit] !== undefined) {
-        gets.push({ subunit, func: "BAND" });
-      }
-    }
-    if (gets.length === 0) {
-      return remembered;
-    }
-    const fresh = await this.deps.client.readCapabilities(gets);
-    return { model: remembered.model, subunits: mergeYncaSubunits(remembered.subunits, fresh.subunits) };
-  }
-
-  /**
    * The fast path's second half: re-ask every catalogued function of the present
    * subunits — the answers stream into the states through the live message handler,
    * so current values arrive within the usual sweep time WITHOUT having gated the
@@ -747,56 +491,19 @@ export class YncaDeviceController {
    */
   private async refreshInBackground(catalog: readonly YncaEntry[]): Promise<void> {
     try {
-      const cached = this.deps.subunitCache.get();
-      const gets = sweepGets(catalog).filter(
-        get => get.subunit === "SYS" || !cached || cached.subunits.includes(get.subunit),
-      );
-      // The same plan as the targeted sweep: the union with the remembered shape below keeps
-      // every function a fuller sweep ever answered, so a skipped GET shrinks nothing here.
-      const fresh = await this.sweepInPasses(planSweep(gets, this.inputEvidence({ model: "", subunits: {} })));
-      if (!fresh.model) {
-        // The refresh ran into a drop — the supervisor handles the reconnect.
+      const wasAwake = this.reader.awake;
+      const shape = await this.reader.refresh(catalog);
+      if (!shape) {
         return;
       }
-      const statics: Record<string, Record<string, string>> = {};
-      for (const [subunit, funcs] of Object.entries(fresh.subunits)) {
-        for (const [func, value] of Object.entries(funcs)) {
-          if (STATIC_FUNC.test(func)) {
-            (statics[subunit] ??= {})[func] = value;
-          }
-        }
-      }
-      // The names a refresh did not get back this time stay remembered (a standby refresh answers less).
-      const rememberedStatics = this.deps.probeMemory.remembered<Record<string, Record<string, string>>>(STATIC_KEY);
-      for (const [subunit, funcs] of Object.entries(rememberedStatics ?? {})) {
-        statics[subunit] = { ...funcs, ...statics[subunit] };
-      }
-      this.deps.probeMemory.set(STATIC_KEY, statics);
-      // UNION with the remembered shape (same identity — the fast path proved it):
-      // a refresh while the device stands by answers many functions @RESTRICTED and
-      // must not strip abilities it proved while awake; a lean standby FIRST capture
-      // heals on the next awake refresh instead of staying lean forever (datapoint
-      // review finding, 2.0.2).
-      const remembered = this.deps.probeMemory.remembered(CAPS_KEY);
-      const subunits = isCachedCapabilities(remembered)
-        ? mergeYncaSubunits(remembered.subunits, fresh.subunits)
-        : fresh.subunits;
-      const awake =
-        (isCachedCapabilities(remembered) && remembered.awake === true) || fresh.subunits.MAIN?.PWR === "On";
-      this.deps.probeMemory.set(CAPS_KEY, {
-        model: fresh.model,
-        firmware: fresh.subunits.SYS?.VERSION ?? "",
-        subunits,
-        awake,
-      } satisfies CachedCapabilities);
       // The write map follows the union too — a standby refresh must not shrink the
       // proven write surface until the next restart either.
-      this.presentEntries = presentYncaEntries({ model: fresh.model, subunits }, catalog);
+      this.presentEntries = presentYncaEntries(shape, catalog);
       this.writeMap = idToEntry(this.presentEntries);
       // A function the refresh answered for the first time becomes an object in THIS session
       // (2.7.0): the shape the tree is built from grows, the objects are republished, and the
       // handle adds them. Purely additive — the union above never drops a proven ability.
-      this.shape = { model: fresh.model || this.shape.model, subunits };
+      this.shape = { model: shape.model || this.shape.model, subunits: shape.subunits };
       await this.republishObjects();
       // Scene titles are not datapoints any more (v2.0.0), so nothing else carries them
       // into the running session: on the fast path they came from the memory, and a scene
@@ -805,7 +512,7 @@ export class YncaDeviceController {
       // reads SCENExNAME anyway, so the list and the lookup follow it here.
       // (The recall dropdown's LABELS follow through the republish below, which rebuilds every
       // object from the grown shape — the scene titles among them.)
-      const titles = sceneTitlesOf(subunits);
+      const titles = sceneTitlesOf(shape.subunits);
       if (JSON.stringify(titles) !== JSON.stringify(this.sceneTitles)) {
         this.sceneTitles = titles;
         if (titles.length > 0) {
@@ -816,7 +523,7 @@ export class YncaDeviceController {
         if (zone.key === "main") {
           continue;
         }
-        const zoneTitles = sceneTitlesOf(subunits, zone.subunit);
+        const zoneTitles = sceneTitlesOf(shape.subunits, zone.subunit);
         if (JSON.stringify(zoneTitles) !== JSON.stringify(this.zoneSceneTitles.get(zone.key) ?? [])) {
           this.zoneSceneTitles.set(zone.key, zoneTitles);
           if (zoneTitles.length > 0) {
@@ -824,8 +531,7 @@ export class YncaDeviceController {
           }
         }
       }
-      if (awake && !this.awakeRead) {
-        this.awakeRead = true;
+      if (!wasAwake && this.reader.awake) {
         for (const listener of this.readCompleteListeners) {
           listener();
         }
@@ -834,168 +540,6 @@ export class YncaDeviceController {
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: background value refresh failed: ${errText(e)}`);
     }
-  }
-
-  /**
-   * Read the device's capabilities with the two-pass sweep. Pass 1 probes each
-   * catalogued subunit with `AVAIL=?` (~2 s); pass 2 sweeps only the subunits that
-   * answered, plus SYS (which never answers AVAIL) — on a typical receiver that
-   * saves a third or more of the ~39 s blind sweep. A cached probe result (per
-   * device, surviving reconnects and restarts) skips pass 1 except for the subunits the
-   * snapshot never asked; a device
-   * whose model or firmware no longer matches the cache re-probes. A device that
-   * answers no AVAIL at all falls back to the full blind sweep, so an unknown
-   * firmware loses speed, never features.
-   *
-   * @param catalog the (group-filtered) catalog whose functions to sweep
-   * @param model the live-read SYS model name (from resolveCapabilities)
-   * @param firmware the live-read SYS firmware version
-   * @returns the assembled capabilities
-   */
-  private async sweepDevice(catalog: readonly YncaEntry[], model: string, firmware: string): Promise<YncaCapabilities> {
-    const cached = this.deps.subunitCache.get();
-    // An empty model is no identity (a lost first command, B1): the cache is neither used nor
-    // cleared — a fresh probe runs and its result replaces it.
-    if (cached && model) {
-      // The device's IDENTITY was already read by resolveCapabilities (three reads,
-      // ~0.3 s) — checking it BEFORE sweeping is what keeps a stale cache from costing
-      // a full targeted sweep, then the probe, then a second sweep (~40 s).
-      if (model === cached.model && firmware === cached.firmware) {
-        // A subunit the catalog gained after the snapshot was never asked — asked now, and only
-        // those; a snapshot from before the list was kept is asked in full once (B11).
-        const asked = new Set(cached.probed ?? []);
-        const unasked = AVAIL_PROBE.filter(get => !asked.has(get.subunit));
-        const present = new Set(cached.subunits);
-        if (unasked.length > 0) {
-          const extra = await this.deps.client.readCapabilities(unasked);
-          for (const subunit of Object.keys(extra.subunits)) {
-            present.add(subunit);
-          }
-          this.deps.subunitCache.set({ subunits: [...present], probed: [...PROBED_SUBUNITS], model, firmware });
-        }
-        this.probedSubunits = PROBED_SUBUNITS;
-        this.presentSubunits = present;
-        return await this.targetedSweep(catalog, present);
-      }
-      // The device behind this IP changed (swap or firmware update) — re-probe.
-      this.deps.log.debug(`${this.deviceId}: cached subunit set is stale (model/firmware changed), re-probing`);
-      this.deps.subunitCache.clear();
-    }
-    const probe = await this.deps.client.readCapabilities(AVAIL_PROBE);
-    const present = new Set(Object.keys(probe.subunits));
-    if (present.size === 0) {
-      // Device ignores AVAIL — sweep blind so no function is lost. And silence is no proof:
-      // `probedSubunits` stays empty, so no source is judged absent (advisor round 2026-09-09).
-      return await this.deps.client.readCapabilities(sweepGets(catalog));
-    }
-    this.probedSubunits = PROBED_SUBUNITS;
-    this.presentSubunits = present;
-    const capabilities = await this.targetedSweep(catalog, present);
-    if (capabilities.model) {
-      const captured = capabilities.subunits.SYS?.VERSION ?? "";
-      // The same receiver probed again: a subunit it answered before stays — never replaced by a smaller probe.
-      const same = cached !== undefined && cached.model === capabilities.model && cached.firmware === captured;
-      this.deps.subunitCache.set({
-        subunits: same ? [...new Set([...cached.subunits, ...present])] : [...present],
-        probed: [...PROBED_SUBUNITS],
-        model: capabilities.model,
-        firmware: captured,
-      });
-    }
-    return capabilities;
-  }
-
-  /**
-   * Sweep only the present subunits' functions (SYS always included — it answers no
-   * AVAIL but carries model/firmware/master power).
-   *
-   * @param catalog the (group-filtered) catalog whose functions to sweep
-   * @param present the subunits that answered the AVAIL probe
-   * @returns the assembled capabilities
-   */
-  private async targetedSweep(catalog: readonly YncaEntry[], present: ReadonlySet<string>): Promise<YncaCapabilities> {
-    // The bundles of every present subunit first (BASIC: one GET answers 15–25 functions at
-    // once, the official lists; ynca-python reads it the same way — and SCENENAME, SIGINFO,
-    // RDSINFO, METAINFO likewise). Every function a bundle answered is proof and is not asked
-    // again individually; a function it lacks is still asked — a bundle is additive, never a
-    // filter (the RX-V1067 leaves functions out of BASIC that it does answer on their own,
-    // ynca-python: "Not in BASIC on RX-V1067"). A subunit without the bundle answers nothing
-    // (`@UNDEFINED` carries no subunit) and loses nothing.
-    const basic = await this.readBundles(present);
-    const answered = new Set(
-      Object.entries(basic.subunits).flatMap(([subunit, funcs]) =>
-        Object.keys(funcs).map(func => `${subunit}:${func}`),
-      ),
-    );
-    const gets = sweepGets(catalog).filter(
-      get => (get.subunit === "SYS" || present.has(get.subunit)) && !answered.has(`${get.subunit}:${get.func}`),
-    );
-    const remembered = this.deps.probeMemory.remembered<Record<string, Record<string, string>>>(STATIC_KEY);
-    // The zone table, the absent sources and the SYS families decide what is worth sending
-    // (2.7.0, `planSweep`); a function a bundle answered is proof already, whatever the table
-    // says. Second connect onwards the statics are skipped too and the remembered answers put
-    // back in, so the objects are built exactly as if the device had answered them again.
-    const plan = planSweep(
-      remembered ? gets.filter(get => !STATIC_FUNC.test(get.func)) : gets,
-      this.inputEvidence(basic),
-    );
-    const swept = await this.sweepInPasses(plan);
-    const capabilities: YncaCapabilities = {
-      model: swept.model || basic.model,
-      subunits: mergeYncaSubunits(basic.subunits, swept.subunits),
-    };
-    if (remembered) {
-      for (const [subunit, funcs] of Object.entries(remembered)) {
-        capabilities.subunits[subunit] = { ...funcs, ...capabilities.subunits[subunit] };
-      }
-      return capabilities;
-    }
-    const statics: Record<string, Record<string, string>> = {};
-    for (const [subunit, funcs] of Object.entries(capabilities.subunits)) {
-      for (const [func, value] of Object.entries(funcs)) {
-        if (STATIC_FUNC.test(func)) {
-          (statics[subunit] ??= {})[func] = value;
-        }
-      }
-    }
-    this.deps.probeMemory.set(STATIC_KEY, statics);
-    return capabilities;
-  }
-
-  /**
-   * Send a planned sweep: the first pass, then — only for the SYS families whose head answered
-   * in it — the family members (`planSweep`, `SYS_FUNCTION_FAMILIES`). One GET on the head
-   * decides up to 43 GETs of a family a device has as a whole or not at all.
-   *
-   * @param plan the planned GET lists
-   * @returns the merged answers of both passes
-   */
-  private async sweepInPasses(plan: ReturnType<typeof planSweep>): Promise<YncaCapabilities> {
-    const first = await this.deps.client.readCapabilities(plan.first);
-    const answeredHeads = SYS_FUNCTION_FAMILIES.filter(family => first.subunits.SYS?.[family.head] !== undefined);
-    const second = plan.families.filter(get => answeredHeads.some(family => get.func.startsWith(family.prefix)));
-    if (second.length === 0) {
-      return first;
-    }
-    const members = await this.deps.client.readCapabilities(second);
-    return { model: first.model || members.model, subunits: mergeYncaSubunits(first.subunits, members.subunits) };
-  }
-
-  /**
-   * Read every bundle of the present subunits (BASIC and SCENENAME per zone, SIGINFO/RDSINFO on
-   * the tuner, METAINFO per player — see `bundleGets`) in ONE paced request list; the answers
-   * are ordinary `@SUBUNIT:FUNC=value` lines the collector absorbs. Nothing to ask (no subunit
-   * present, e.g. a blind sweep) → an empty report without a wire round trip.
-   *
-   * @param present the subunits that answered the AVAIL probe
-   * @returns the bundled answers
-   */
-  private async readBundles(present: ReadonlySet<string>): Promise<YncaCapabilities> {
-    const gets = bundleGets(present);
-    if (gets.length === 0) {
-      return { model: "", subunits: {} };
-    }
-    return await this.deps.client.readCapabilities(gets);
   }
 
   /**
@@ -1090,7 +634,7 @@ export class YncaDeviceController {
       const objects = yncaObjectsFor(
         this.shape,
         this.catalog,
-        this.statesResolver(this.shape, this.inputEvidence(this.shape)),
+        this.statesResolver(this.shape, this.reader.inputEvidence(this.shape)),
       );
       for (const object of objects) {
         const titles = this.sceneTitlesFor(object.id);
@@ -1118,22 +662,6 @@ export class YncaDeviceController {
     }
     this.published.set(object.id, fingerprint);
     await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
-  }
-
-  /**
-   * What this connect learned about the device's inputs: the probe's verdicts (present /
-   * asked), every subunit that answered anything, and the XML declaration when remembered.
-   *
-   * @param capabilities the capability report of this connect
-   * @returns the evidence the per-zone input lists are derived from
-   */
-  private inputEvidence(capabilities: YncaCapabilities): InputEvidence {
-    const present = new Set([...this.presentSubunits, ...Object.keys(capabilities.subunits)]);
-    return {
-      present,
-      probed: this.probedSubunits,
-      ...xmlInputEvidence(this.deps.probeMemory.remembered(MEMORY_KEY.xmlConfig)),
-    };
   }
 
   /**
@@ -1627,7 +1155,7 @@ export class YncaDeviceController {
       this.queueCatchUp(() => this.adoptBrowseProof(new Set([message.subunit])));
       return;
     }
-    if (message.subunit === "MAIN" && message.func === "PWR" && message.value === "On" && !this.awakeRead) {
+    if (message.subunit === "MAIN" && message.func === "PWR" && message.value === "On" && !this.reader.awake) {
       this.queueAwakeRead();
     }
     if (message.subunit === "MAIN" && message.func === "PWR" && message.value === "On" && this.proofsMissing()) {
@@ -1659,7 +1187,7 @@ export class YncaDeviceController {
     void (async () => {
       try {
         await this.deps.gate.delay(AWAKE_READ_WAIT_MS);
-        if (!this.ended() && !this.awakeRead) {
+        if (!this.ended() && !this.reader.awake) {
           await this.refreshInBackground(this.catalog);
         }
       } catch (e) {
@@ -1672,7 +1200,7 @@ export class YncaDeviceController {
 
   /** @returns whether the shape the objects are built from was read with the receiver switched on */
   public readComplete(): boolean {
-    return this.awakeRead;
+    return this.reader.awake;
   }
 
   /**
@@ -1686,7 +1214,7 @@ export class YncaDeviceController {
 
   /** @returns the firmware (`SYS:VERSION`) read on this connection, if any */
   public firmware(): string | undefined {
-    return this.firmwareRead;
+    return this.reader.firmware;
   }
 
   /**
