@@ -2,6 +2,7 @@ import type { ObjectDef } from "../catalog/types";
 import { writableNumber } from "../catalog/value-coerce";
 import { errText } from "../err-text";
 import { tName } from "../i18n";
+import type { WriteOutcome } from "../lifecycle/multi-transport-handle";
 import { MEMORY_KEY } from "../lifecycle/memory-keys";
 import type { XmlControllerContext, XmlWriteRoute } from "./controller-context";
 import { parsePresetList, parseTunerInfo, type XmlPresetSlot, type XmlTunerInfo } from "./protocol";
@@ -164,30 +165,27 @@ export class XmlTuner implements XmlWriteRoute {
    *
    * @param stateId the state id relative to the device
    * @param value the written value
+   * @returns what became of the write
    */
-  public write(stateId: string, value: unknown): void {
-    if (stateId === "tuner.band" || stateId === "tuner.frequency") {
-      this.writeTuning(stateId, value);
-      return;
-    }
+  public write(stateId: string, value: unknown): Promise<WriteOutcome> | WriteOutcome {
     if (!this.present) {
-      return;
+      return this.ctx.dropWrite(stateId, value, "this device answered no tuner");
+    }
+    if (stateId === "tuner.band" || stateId === "tuner.frequency") {
+      return this.writeTuning(stateId, value);
     }
     // Number(true) is 1 — a switch bound here by mistake recalled preset 1 (audit 2026-09-24, D20).
     const num = Math.round(writableNumber(value) ?? Number.NaN);
     if (!Number.isFinite(num) || num < 1) {
-      return;
+      return this.ctx.dropWrite(stateId, value, "it names no preset slot");
     }
     // The device's own spelling of the slot (`A1` on the 2008 generation); a slot it does not
     // declare is not sent (D2).
     const code = this.presetSlots.length > 0 ? this.presetSlots.find(slot => slot.num === num)?.code : String(num);
     if (code === undefined) {
-      this.ctx.deps.log.debug(
-        `${this.ctx.deviceId}: tuner preset ${num} is not a slot this device declares — not sent`,
-      );
-      return;
+      return this.ctx.dropWrite(stateId, value, `preset ${num} is not a slot this device declares`);
     }
-    void this.ctx.applyCommand(
+    return this.ctx.applyCommand(
       { zone: "Tuner", inner: `<Play_Control><Preset><Preset_Sel>${code}</Preset_Sel></Preset></Play_Control>` },
       () => this.refresh(),
     );
@@ -229,26 +227,25 @@ export class XmlTuner implements XmlWriteRoute {
    *
    * @param stateId `tuner.band` or `tuner.frequency`
    * @param value the written value
+   * @returns what became of the write
    */
-  private writeTuning(stateId: string, value: unknown): void {
-    if (!this.present) {
-      return;
-    }
+  private writeTuning(stateId: string, value: unknown): Promise<WriteOutcome> | WriteOutcome {
     if (stateId === "tuner.band") {
       if (value !== "AM" && value !== "FM") {
-        return;
+        return this.ctx.dropWrite(stateId, value, "the tuner takes AM or FM");
       }
-      void this.ctx.applyCommand(
+      return this.ctx.applyCommand(
         { zone: "Tuner", inner: `<Play_Control><Tuning><Band>${value}</Band></Tuning></Play_Control>` },
         () => this.refresh(),
       );
-      return;
     }
     const khz = writableNumber(value);
     const band = this.tunerBand === "AM" ? "AM" : this.tunerBand === "FM" ? "FM" : undefined;
-    if (khz === undefined || band === undefined) {
-      this.ctx.deps.log.debug(`${this.ctx.deviceId}: tuner.frequency not written — the band is not known yet`);
-      return;
+    if (khz === undefined) {
+      return this.ctx.dropWrite(stateId, value, "it is no frequency");
+    }
+    if (band === undefined) {
+      return this.ctx.dropWrite(stateId, value, "the band is not known yet");
     }
     const grid = this.ctx.descriptor().tunerGrid?.[band];
     const snapped = grid ? grid.min + Math.round((khz - grid.min) / grid.step) * grid.step : Math.round(khz);
@@ -258,8 +255,9 @@ export class XmlTuner implements XmlWriteRoute {
         ? `<Val>${Math.round(bounded / 10)}</Val><Exp>2</Exp><Unit>MHz</Unit>`
         : `<Val>${bounded}</Val><Exp>0</Exp><Unit>kHz</Unit>`;
     const freq = this.freqForm === "flat" ? `<Freq>${wire}</Freq>` : `<Freq><${band}>${wire}</${band}></Freq>`;
-    void this.ctx.applyCommand({ zone: "Tuner", inner: `<Play_Control><Tuning>${freq}</Tuning></Play_Control>` }, () =>
-      this.refresh(),
+    return this.ctx.applyCommand(
+      { zone: "Tuner", inner: `<Play_Control><Tuning>${freq}</Tuning></Play_Control>` },
+      () => this.refresh(),
     );
   }
 }

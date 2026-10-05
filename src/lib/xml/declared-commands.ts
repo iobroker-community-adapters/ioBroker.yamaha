@@ -5,6 +5,7 @@ import { coerceBool, textWriteProblem } from "../catalog/value-coerce";
 import { splitZone } from "../catalog/zones";
 import { errText } from "../err-text";
 import { tName } from "../i18n";
+import type { WriteOutcome } from "../lifecycle/multi-transport-handle";
 import { MEMORY_KEY, xmlZoneNamesKey } from "../lifecycle/memory-keys";
 import type { XmlControllerContext, XmlWriteRoute } from "./controller-context";
 import { decodeXmlText, escapeXmlText } from "./entities";
@@ -327,7 +328,7 @@ export class XmlDeclaredCommands {
       },
       systemPower: {
         serves: stateId => stateId === "multiroom.masterPower",
-        write: (_stateId, value) => this.writeSystemPower(value),
+        write: (stateId, value) => this.writeSystemPower(stateId, value),
       },
       contentsAndParty: {
         serves: stateId =>
@@ -337,7 +338,7 @@ export class XmlDeclaredCommands {
         write: (stateId, value) =>
           splitZone(stateId).name === "sound.contentsDisplay"
             ? this.writeContentsDisplay(stateId, value)
-            : this.writePartyVolume(stateId),
+            : this.writePartyVolume(stateId, value),
       },
     };
   }
@@ -369,14 +370,19 @@ export class XmlDeclaredCommands {
   /**
    * A write to `multiroom.masterPower` → `System,Power_Control,Power` On/Standby.
    *
+   * @param stateId the state id relative to the device
    * @param value the written value
+   * @returns what became of the write
    */
-  private writeSystemPower(value: unknown): void {
+  private writeSystemPower(stateId: string, value: unknown): Promise<WriteOutcome> | WriteOutcome {
     const on = coerceBool(value);
-    if (!this.hasSystemPower || on === undefined) {
-      return;
+    if (!this.hasSystemPower) {
+      return this.ctx.dropWrite(stateId, value, "this device answered no all-zones power");
     }
-    void this.ctx.applyCommand(
+    if (on === undefined) {
+      return this.ctx.dropWrite(stateId, value, "it is no switch value");
+    }
+    return this.ctx.applyCommand(
       { zone: "System", inner: `<Power_Control><Power>${on ? "On" : "Standby"}</Power></Power_Control>` },
       () => this.refreshSystemPower(),
     );
@@ -418,15 +424,19 @@ export class XmlDeclaredCommands {
    *
    * @param stateId the state id relative to the device
    * @param value the written value
+   * @returns what became of the write
    */
-  private writeContentsDisplay(stateId: string, value: unknown): void {
+  private writeContentsDisplay(stateId: string, value: unknown): Promise<WriteOutcome> | WriteOutcome {
     const zoneKey = splitZone(stateId).zone;
     const zone = this.zones().find(candidate => candidate.key === zoneKey);
     const on = coerceBool(value);
-    if (!zone || !this.contentsDisplayZones.has(zone.key) || on === undefined) {
-      return;
+    if (!zone || !this.contentsDisplayZones.has(zone.key)) {
+      return this.ctx.dropWrite(stateId, value, "this zone answered no contents display");
     }
-    void this.ctx.applyCommand(
+    if (on === undefined) {
+      return this.ctx.dropWrite(stateId, value, "it is no switch value");
+    }
+    return this.ctx.applyCommand(
       {
         zone: zone.element,
         inner: `<Cursor_Control><Contents_Display>${on ? "On" : "Off"}</Contents_Display></Cursor_Control>`,
@@ -439,15 +449,18 @@ export class XmlDeclaredCommands {
    * A press of a party-mode volume key → `System,Party_Mode,Volume,Lvl` Up/Down.
    *
    * @param stateId the state id relative to the device
+   * @param value the written value
+   * @returns what became of the write
    */
-  private writePartyVolume(stateId: string): void {
-    if (this.created.has(stateId)) {
-      const word = stateId === "multiroom.partyVolumeUp" ? "Up" : "Down";
-      void this.ctx.applyCommand({
-        zone: "System",
-        inner: `<Party_Mode><Volume><Lvl>${word}</Lvl></Volume></Party_Mode>`,
-      });
+  private writePartyVolume(stateId: string, value: unknown): Promise<WriteOutcome> | WriteOutcome {
+    if (!this.created.has(stateId)) {
+      return this.ctx.dropWrite(stateId, value, "this device declares no party volume keys");
     }
+    const word = stateId === "multiroom.partyVolumeUp" ? "Up" : "Down";
+    return this.ctx.applyCommand({
+      zone: "System",
+      inner: `<Party_Mode><Volume><Lvl>${word}</Lvl></Volume></Party_Mode>`,
+    });
   }
 
   /**
@@ -491,11 +504,10 @@ export class XmlDeclaredCommands {
    * Whether a write is one of the zone commands this connect created (the declaration is the proof).
    *
    * @param stateId the state id relative to the device
-   * @returns true for a pad key, a transport key or a zone name of a zone this device has
+   * @returns true for a pad key, a transport key or a zone name this connect created
    */
   private servesZoneCommand(stateId: string): boolean {
-    const { zone: zoneKey, name } = splitZone(stateId);
-    return ZONE_COMMAND.test(name) && this.created.has(stateId) && this.zones().some(zone => zone.key === zoneKey);
+    return ZONE_COMMAND.test(splitZone(stateId).name) && this.created.has(stateId);
   }
 
   /**
@@ -504,39 +516,35 @@ export class XmlDeclaredCommands {
    *
    * @param stateId the state id relative to the device
    * @param value the written value
+   * @returns what became of the write
    */
-  private writeZoneCommand(stateId: string, value: unknown): void {
+  private writeZoneCommand(stateId: string, value: unknown): Promise<WriteOutcome> | WriteOutcome {
     const ctx = this.ctx;
     const { zone: zoneKey, name: command } = splitZone(stateId);
     const zone = this.zones().find(candidate => candidate.key === zoneKey);
     if (!zone) {
-      return;
+      return ctx.dropWrite(stateId, value, "this device has no such zone");
     }
     if (command === "remote.cursor" || command === "remote.menu") {
       const word = typeof value === "string" ? value : "";
       const wire = command === "remote.cursor" ? wireFor(RETURN_CURSOR_WIRE, word) : wireFor(MENU_WIRE, word);
       if (wire === undefined) {
-        ctx.deps.log.debug(`${ctx.deviceId}: ${stateId} "${word}" is no key this receiver declares — write dropped`);
-        return;
+        return ctx.dropWrite(stateId, value, "it is no key this receiver declares");
       }
       const inner =
         command === "remote.cursor"
           ? `<Cursor_Control><Cursor>${wire}</Cursor></Cursor_Control>`
           : `<Cursor_Control><Menu_Control>${wire}</Menu_Control></Cursor_Control>`;
-      void ctx.applyCommand({ zone: zone.element, inner }, () => ctx.refreshZone(zone));
-      return;
+      return ctx.applyCommand({ zone: zone.element, inner }, () => ctx.refreshZone(zone));
     }
     if (command === "zoneName" || command === "multiroom.zoneB.name") {
-      if (typeof value !== "string") {
-        return;
-      }
       // desc.xml declares the name as `Text 1,9,Latin-1` (7 descriptors) — the same rule as YNCA's
       // ZONENAME: a control character, a tenth character or one Latin-1 cannot carry is not sent
       // (audit 2026-09-24, D18).
-      const problem = textWriteProblem(value, { maxLength: 9, charset: "latin1" });
+      const problem =
+        typeof value === "string" ? textWriteProblem(value, { maxLength: 9, charset: "latin1" }) : "it is no text";
       if (problem !== undefined) {
-        ctx.deps.log.debug(`${ctx.deviceId}: ${stateId} "${value}" not sent — ${problem}`);
-        return;
+        return ctx.dropWrite(stateId, value, problem);
       }
       // The name is not part of the zone status: read it back from the zone's Config — the fresh
       // probe also updates the memory, which otherwise brings the OLD name back on the next start.
@@ -548,18 +556,17 @@ export class XmlDeclaredCommands {
           : ctx.declares(zone.element, RENAME_PATH)
             ? `<Rename><Rename_Latin_1>${escaped}</Rename_Latin_1></Rename>`
             : `<Config><Name><Zone>${escaped}</Zone></Name></Config>`;
-      void ctx.applyCommand({ zone: zone.element, inner: nameInner }, async () => {
+      return ctx.applyCommand({ zone: zone.element, inner: nameInner }, async () => {
         const names = await this.probeZoneNames(zone);
         const name = command === "multiroom.zoneB.name" ? names.zoneB : names.zone;
         if (name) {
           ctx.emit(stateId, name);
         }
       });
-      return;
     }
     const word = XML_TRANSPORT_WIRE[command.slice("player.".length)];
     // A transport key changes what the player block shows — read it back with the zone (D3).
-    void ctx.applyCommand(
+    return ctx.applyCommand(
       { zone: zone.element, inner: `<Play_Control><Playback>${word}</Playback></Play_Control>` },
       async () => {
         await ctx.refreshZone(zone);

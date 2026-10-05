@@ -111,6 +111,7 @@ export class XmlDeviceController {
       ensureChannels: id => this.ensureChannels(id),
       probeXml: (key, element, inner, fresh) => this.probeXml(key, element, inner, fresh),
       applyCommand: (command, readBack) => this.applyCommand(command, readBack),
+      dropWrite: (stateId, value, reason) => this.dropWrite(stateId, value, reason),
       markWritable: (stateId, write) => this.markWritable(stateId, write),
       descriptor: () => this.deviceDescriptor,
       declares: (element, path) => this.declares(element, path),
@@ -125,19 +126,28 @@ export class XmlDeviceController {
     this.routes = [
       {
         serves: stateId => this.readOnlyStates.has(stateId),
-        write: stateId => {
-          this.deps.log.debug(`${this.deviceId}: ${stateId} — this device declares no write for it, write dropped`);
-          return "unavailable";
-        },
+        write: (stateId, value) => this.dropWrite(stateId, value, "this device declares no write for it"),
       },
+      // The main zone's remote and the menu go to the browse engine, which runs each operation in its own queue and
+      // reports a failure itself: nothing can be said here, so nothing is sent again elsewhere — a menu step or a key
+      // sent twice would act twice.
       {
         serves: stateId => stateId.startsWith("remote.") && this.browseEngine !== undefined,
-        write: (stateId, value) => this.browseEngine?.handleRemoteWrite(stateId, value),
+        write: (stateId, value) => {
+          this.browseEngine?.handleRemoteWrite(stateId, value);
+          return "unclear";
+        },
       },
       declared.zoneCommands,
       {
         serves: stateId => stateId.startsWith("player.browse."),
-        write: (stateId, value) => this.browseEngine?.handleWrite(stateId, value),
+        write: (stateId, value) => {
+          if (!this.browseEngine) {
+            return this.dropWrite(stateId, value, "this device proved no menu");
+          }
+          this.browseEngine.handleWrite(stateId, value);
+          return "unclear";
+        },
       },
       // Scenes and the classic tuner are device-declared (not in the static catalog).
       {
@@ -147,7 +157,6 @@ export class XmlDeviceController {
       this.tuner,
       declared.systemPower,
       declared.contentsAndParty,
-      { serves: () => true, write: (stateId, value) => this.writeCatalogState(stateId, value) },
     ];
   }
 
@@ -465,17 +474,21 @@ export class XmlDeviceController {
    *
    * @param stateId the state id relative to the device
    * @param value the written value
+   * @returns what became of the write
    */
-  private writeScene(stateId: string, value: unknown): void {
+  private writeScene(stateId: string, value: unknown): Promise<WriteOutcome> | WriteOutcome {
     const zoneKey = splitZone(stateId).zone;
     const zone = this.zones.find(z => z.key === zoneKey);
     const scenes = this.scenesByZone.get(zoneKey);
-    // A TITLE is as valid a write as a number ("Movie Viewing" → Scene 1) — the one resolver (D16).
-    const num = sceneNumber(value, scenes ?? []);
-    if (!zone || !scenes || !scenes.some(scene => scene.num === num)) {
-      return;
+    if (!zone || !scenes) {
+      return this.dropWrite(stateId, value, "this zone declares no scenes");
     }
-    void this.applyCommand({ zone: zone.element, inner: `<Scene><Scene_Sel>Scene ${num}</Scene_Sel></Scene>` }, () =>
+    // A TITLE is as valid a write as a number ("Movie Viewing" → Scene 1) — the one resolver (D16).
+    const num = sceneNumber(value, scenes);
+    if (!scenes.some(scene => scene.num === num)) {
+      return this.dropWrite(stateId, value, "it names no scene this zone declares");
+    }
+    return this.applyCommand({ zone: zone.element, inner: `<Scene><Scene_Sel>Scene ${num}</Scene_Sel></Scene>` }, () =>
       this.refreshZone(zone),
     );
   }
@@ -561,8 +574,9 @@ export class XmlDeviceController {
    * @param value the written value
    * @returns what became of the write
    */
-  public handleWrite(stateId: string, value: unknown): Promise<WriteOutcome> | WriteOutcome | void {
-    return this.routes.find(route => route.serves(stateId))?.write(stateId, value);
+  public handleWrite(stateId: string, value: unknown): Promise<WriteOutcome> | WriteOutcome {
+    const route = this.routes.find(candidate => candidate.serves(stateId));
+    return route ? route.write(stateId, value) : this.writeCatalogState(stateId, value);
   }
 
   /**
@@ -581,26 +595,40 @@ export class XmlDeviceController {
     // adapter version before 2.0.1 created and that once carried a value, so no sweep removes
     // it: writing it put a blind command on the wire that the device answers with a refusal.
     if (!this.createdStates.has(stateId)) {
-      this.deps.log.debug(`${this.deviceId}: ${stateId} was not reported by this device — write dropped`);
-      return "unavailable";
+      return this.dropWrite(stateId, value, "this device did not report it");
     }
     const { zone: zoneKey } = splitZone(stateId);
     const element = this.zones.find(candidate => candidate.key === zoneKey)?.element ?? "Main_Zone";
     const command = stateToXml(stateId, value, this.dialect, this.zoneForms.get(element));
-    if (command) {
-      // The zone to read back afterwards: the command's own element, or the main zone for a
-      // command that goes out on the System element (HDMI outputs, party mode).
-      const zone = this.zones.find(candidate => candidate.element === command.zone) ?? this.zones[0];
-      // A new input changes which source the zone's player block shows (D3).
-      const players = /(^|\.)input$/.test(stateId);
-      return this.applyCommand(command, async () => {
-        await this.refreshZone(zone);
-        if (players) {
-          await this.players.refresh(this.zones);
-        }
-      });
+    if (!command) {
+      // The datapoint exists on this device and takes writes, so it is the value that names no command.
+      return this.dropWrite(stateId, value, "it is no value this datapoint takes");
     }
-    this.deps.log.debug(`${this.deviceId}: ${stateId} is not writable on this device — write dropped`);
+    // The zone to read back afterwards: the command's own element, or the main zone for a
+    // command that goes out on the System element (HDMI outputs, party mode).
+    const zone = this.zones.find(candidate => candidate.element === command.zone) ?? this.zones[0];
+    // A new input changes which source the zone's player block shows (D3).
+    const players = /(^|\.)input$/.test(stateId);
+    return this.applyCommand(command, async () => {
+      await this.refreshZone(zone);
+      if (players) {
+        await this.players.refresh(this.zones);
+      }
+    });
+  }
+
+  /**
+   * Drop a write that cannot go out, with its trace: one debug line naming the device, the datapoint, the value and
+   * the reason (#615: a dead button leaves a trace; review 2026-10-05, A56).
+   *
+   * @param stateId the state id relative to the device
+   * @param value the written value
+   * @param reason why it is not sent
+   * @returns `unavailable` — this transport could not send it, so the handle may try the next protocol (Y-04)
+   */
+  private dropWrite(stateId: string, value: unknown, reason: string): WriteOutcome {
+    const shown = typeof value === "string" ? JSON.stringify(value) : String(value);
+    this.deps.log.debug(`${this.deviceId}: ${stateId} = ${shown} not sent — ${reason}`);
     return "unavailable";
   }
 

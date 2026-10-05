@@ -70,6 +70,16 @@ export interface XmlControllerContext {
    */
   applyCommand(command: XmlCommand, readBack?: () => Promise<unknown>): Promise<WriteOutcome>;
   /**
+   * Drop a write that cannot go out, with the trace every dropped write leaves: one debug line naming the device,
+   * the datapoint, the value and why (#615: a dead button leaves a trace; review 2026-10-05, A56).
+   *
+   * @param stateId the state id relative to the device
+   * @param value the written value
+   * @param reason why it is not sent
+   * @returns `unavailable` — this transport could not send it, so the handle may try the next one (Y-04)
+   */
+  dropWrite(stateId: string, value: unknown, reason: string): WriteOutcome;
+  /**
    * Record a state as created, and as read-only where it is not writable (the claim-with-proof gate of the
    * write path).
    *
@@ -103,7 +113,8 @@ export interface XmlControllerContext {
 /**
  * One way a user write can take: the ids it serves, and what it makes of a write. The controller asks its routes in
  * order and the first that serves the id takes the write — instead of a chain of boolean handlers (review
- * 2026-10-05, F).
+ * 2026-10-05, F). Every route answers with a deliberate outcome: a forgotten `undefined` reads as "unclear" in the
+ * handle, which then never tries the next protocol (Y-04; review 2026-10-05, A3).
  */
 export interface XmlWriteRoute {
   /**
@@ -120,5 +131,5 @@ export interface XmlWriteRoute {
    * @param value the written value
    * @returns what became of it
    */
-  write(stateId: string, value: unknown): Promise<WriteOutcome> | WriteOutcome | void;
+  write(stateId: string, value: unknown): Promise<WriteOutcome> | WriteOutcome;
 }
