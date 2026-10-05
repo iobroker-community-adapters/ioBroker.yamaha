@@ -23,20 +23,32 @@
 
 import { ZONE_PREFIX } from "./zones";
 
-/** The switchable groups. `amp` is the amplifier core and can never be turned off. */
-export type GroupId = "amp" | "player" | "tuner" | "multiroom" | "hdmi" | "scene" | "sound" | "advanced" | "clock";
+/**
+ * The theme group of a first path segment — the ONE table behind {@link groupOf}, the group type and the switch list
+ * (an if-chain of nine branches, a type and a hand-kept list before; review 2026-10-05, F). A segment not listed is
+ * the always-on amplifier core.
+ */
+const THEME_BY_SEGMENT = {
+  player: "player",
+  // The on-screen remote operates the menu — see the module comment.
+  remote: "player",
+  tuner: "tuner",
+  multiroom: "multiroom",
+  hdmi: "hdmi",
+  scene: "scene",
+  sound: "sound",
+  advanced: "advanced",
+  clock: "clock",
+} as const;
 
-/** The groups a user can switch off, in display order (amp is always on and not listed here). */
-export const SWITCHABLE_GROUPS: readonly GroupId[] = [
-  "player",
-  "tuner",
-  "multiroom",
-  "hdmi",
-  "scene",
-  "sound",
-  "advanced",
-  "clock",
-];
+/** The groups. `amp` is the amplifier core and can never be turned off. */
+export type GroupId = "amp" | (typeof THEME_BY_SEGMENT)[keyof typeof THEME_BY_SEGMENT];
+
+/**
+ * The groups a user can switch off (amp is always on and not listed here) — every theme of the table, so a group the
+ * code knows cannot miss its switch: the manifest test holds this list against the admin page and the defaults.
+ */
+export const SWITCHABLE_GROUPS: readonly GroupId[] = [...new Set(Object.values(THEME_BY_SEGMENT))];
 
 /**
  * The THEME group a state id belongs to, decided by its first path segment AFTER a zone prefix
@@ -57,34 +69,9 @@ export const SWITCHABLE_GROUPS: readonly GroupId[] = [
  * @returns the theme group the state belongs to
  */
 export function groupOf(stateId: string): GroupId {
-  const template = stateId.replace(ZONE_PREFIX, "");
-  const seg = template.includes(".") ? template.slice(0, template.indexOf(".")) : template;
-
-  if (seg === "multiroom") {
-    return "multiroom";
-  }
-  if (seg === "hdmi") {
-    return "hdmi";
-  }
-  if (seg === "player" || seg === "remote") {
-    return "player";
-  }
-  if (seg === "tuner") {
-    return "tuner";
-  }
-  if (seg === "sound") {
-    return "sound";
-  }
-  if (seg === "advanced") {
-    return "advanced";
-  }
-  if (seg === "scene") {
-    return "scene";
-  }
-  if (seg === "clock") {
-    return "clock";
-  }
-  return "amp";
+  const segment = stateId.replace(ZONE_PREFIX, "").split(".", 1)[0];
+  // Own keys only: an inherited name (`constructor`) is no theme.
+  return Object.hasOwn(THEME_BY_SEGMENT, segment) ? THEME_BY_SEGMENT[segment as keyof typeof THEME_BY_SEGMENT] : "amp";
 }
 
 /**
