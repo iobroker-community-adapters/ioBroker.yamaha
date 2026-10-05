@@ -799,6 +799,129 @@ describe("YncaClient sweep marker (audit 2026-09-24, B2)", () => {
     }
   });
 
+  // Review 2026-10-05, A42: a sweep ended on the FIRST `@SYS:VERSION=` line — a version read in its own list
+  // answered late, it handed back a report the device had not finished.
+  test("a sweep ends on its own marker, not on the answer to a version read in its list", async () => {
+    vi.useFakeTimers();
+    try {
+      const { factory, sockets } = fixtureFactory();
+      const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
+      const connected = client.connect();
+      sockets[0].emitConnect();
+      await connected;
+      let done = false;
+      const caps = client
+        .readCapabilities([
+          { subunit: "SYS", func: "VERSION" },
+          { subunit: "MAIN", func: "PWR" },
+        ])
+        .finally(() => (done = true));
+      await vi.advanceTimersByTimeAsync(10);
+      expect(sockets[0].written.filter(line => line === "@SYS:VERSION=?\r\n")).toHaveLength(2);
+      // A slow device: the answer to the version READ arrives after the closing marker went out.
+      sockets[0].emitData("@SYS:VERSION=1.23\r\n");
+      await vi.advanceTimersByTimeAsync(10);
+      expect(done).toBe(false);
+      sockets[0].emitData("@MAIN:PWR=On\r\n@SYS:VERSION=1.23\r\n");
+      await vi.advanceTimersByTimeAsync(10);
+      await expect(caps).resolves.toMatchObject({ subunits: { MAIN: { PWR: "On" } } });
+      client.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("of two sweeps at once, the second is not ended by the first one's marker", async () => {
+    vi.useFakeTimers();
+    try {
+      const { factory, sockets } = fixtureFactory();
+      const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
+      const connected = client.connect();
+      sockets[0].emitConnect();
+      await connected;
+      // A background refresh and a menu proof, both at the 30 s mark after PWR=On.
+      const refresh = client.readCapabilities([{ subunit: "MAIN", func: "PWR" }]);
+      const proof = client.readCapabilities([{ subunit: "NETRADIO", func: "LISTINFO" }]);
+      await vi.advanceTimersByTimeAsync(10);
+      expect(sockets[0].written).toEqual([
+        "@MAIN:PWR=?\r\n",
+        "@NETRADIO:LISTINFO=?\r\n",
+        "@SYS:VERSION=?\r\n",
+        "@SYS:VERSION=?\r\n",
+      ]);
+      // The network module takes its time: the list arrives after the first marker's answer.
+      sockets[0].emitData("@MAIN:PWR=On\r\n@SYS:VERSION=1.23\r\n");
+      await vi.advanceTimersByTimeAsync(10);
+      sockets[0].emitData("@NETRADIO:LISTLAYER=1\r\n@SYS:VERSION=1.23\r\n");
+      await vi.advanceTimersByTimeAsync(10);
+      await expect(refresh).resolves.toMatchObject({ subunits: { MAIN: { PWR: "On" } } });
+      await expect(proof).resolves.toMatchObject({ subunits: { NETRADIO: { LISTLAYER: "1" } } });
+      client.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // The answer order is the only attribution YNCA has: a version read whose answer never came would hand every
+  // later answer to the exchange before its own — every bracket unclear, every sweep waiting out its timeout.
+  test("a version read whose answer was lost does not shift the answers of later exchanges", async () => {
+    vi.useFakeTimers();
+    try {
+      const { factory, sockets } = fixtureFactory();
+      const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
+      const connected = client.connect();
+      sockets[0].emitConnect();
+      await connected;
+      // A sweep whose marker answer is lost: it ends on its timeout.
+      const lost = client.capture([{ subunit: "MAIN", func: "PWR" }]);
+      await vi.advanceTimersByTimeAsync(6000);
+      expect((await lost).complete).toBe(false);
+      await vi.advanceTimersByTimeAsync(20_000);
+      // The next sweep's marker is answered — that answer is ITS answer, not the lost one's.
+      const next = client.capture([{ subunit: "MAIN", func: "VOL" }]);
+      await vi.advanceTimersByTimeAsync(10);
+      sockets[0].emitData("@MAIN:VOL=-40.0\r\n@SYS:VERSION=1.23\r\n");
+      await vi.advanceTimersByTimeAsync(10);
+      await expect(next).resolves.toEqual({ lines: ["@MAIN:VOL=-40.0", "@SYS:VERSION=1.23"], complete: true });
+      client.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Review 2026-10-05, B7: the diagnostics read and the capability sweep are one loop — the same marker rule for
+  // both, and a drop ends either at once.
+  test("the diagnostics read ends on its own marker too, and keeps the lines that came", async () => {
+    vi.useFakeTimers();
+    try {
+      const { factory, sockets } = fixtureFactory();
+      const client = new YncaClient("1.2.3.4", testTimers, testGate(), factory);
+      const connected = client.connect();
+      sockets[0].emitConnect();
+      await connected;
+      let done = false;
+      const read = client
+        .capture([
+          { subunit: "SYS", func: "VERSION" },
+          { subunit: "MAIN", func: "PWR" },
+        ])
+        .finally(() => (done = true));
+      await vi.advanceTimersByTimeAsync(10);
+      sockets[0].emitData("@SYS:VERSION=1.23\r\n");
+      await vi.advanceTimersByTimeAsync(10);
+      expect(done).toBe(false);
+      sockets[0].emitData("@MAIN:PWR=On\r\n@SYS:VERSION=1.23\r\n");
+      await vi.advanceTimersByTimeAsync(10);
+      await expect(read).resolves.toEqual({
+        lines: ["@SYS:VERSION=1.23", "@MAIN:PWR=On", "@SYS:VERSION=1.23"],
+        complete: true,
+      });
+      client.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("an unanswered marker still hands back the answers that came", async () => {
     vi.useFakeTimers();
     try {

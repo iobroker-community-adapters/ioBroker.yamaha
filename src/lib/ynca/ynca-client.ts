@@ -39,6 +39,31 @@ const ABSOLUTE_NUMBER = /^-?\d+(\.\d+)?$/;
 /** The closing marker every receiver answers (see {@link MAX_ANSWER_MS}). */
 const VERSION_GET = encodeGet("SYS", "VERSION");
 
+/**
+ * How old a `@SYS:VERSION=?` may be before its answer counts as lost. The receiver answers in order and within 1.5 s
+ * (measured), so a line this old was never answered: keeping its entry would hand every later answer to the entry
+ * before its own — every bracket "unclear", every sweep waiting out its timeout for the rest of the connection.
+ */
+const ANSWER_LOST_MS = 15_000;
+
+/** One `@SYS:VERSION=?` on the wire, waiting for its answer (see {@link YncaClient.versionAnswers}). */
+interface VersionWait {
+  /** Called with the answer — a no-op for a plain read and for a marker that timed out. */
+  settle: () => void;
+  /** When the line went out. */
+  sentAt: number;
+}
+
+/** What one sweep collected (see {@link YncaClient.sweep}). */
+interface SweepResult {
+  /** Every decoded line that arrived while the sweep ran — the answers and the closing marker's. */
+  messages: YncaMessage[];
+  /** Whether the device answered THIS sweep's closing marker. */
+  answered: boolean;
+  /** Whether the connection dropped or closed before the sweep ended. */
+  lost: boolean;
+}
+
 /** What a bracketed probe learned about one function (see {@link YncaClient.probeKnown}). */
 export type FunctionVerdict = "known" | "undefined" | "unclear";
 
@@ -150,9 +175,10 @@ export class YncaClient {
   private refusalHandler: ((command: string, verdict: "restricted" | "undefined") => void) | undefined;
   /**
    * One entry per `@SYS:VERSION=?` on the wire, in wire order — the answers come in the same order,
-   * so each answer settles the oldest entry (a marker's, or a plain read's placeholder).
+   * so each answer settles the oldest entry (a bracket's marker, a sweep's closing marker, or a plain
+   * read's placeholder). A sweep ends on ITS entry, never on another's answer (review 2026-10-05, A42).
    */
-  private readonly versionAnswers: Array<() => void> = [];
+  private readonly versionAnswers: VersionWait[] = [];
   /** Woken when the connection drops or closes — a wait for an answer must not outlive it. */
   private readonly dropWaiters = new Set<() => void>();
   /**
@@ -237,7 +263,7 @@ export class YncaClient {
       if (response.status === "ok") {
         const message: YncaMessage = { subunit: response.subunit, func: response.func, value: response.value };
         if (message.subunit === "SYS" && message.func === "VERSION") {
-          this.versionAnswers.shift()?.();
+          this.versionAnswered();
         }
         for (const handler of this.messageHandlers) {
           handler(message);
@@ -254,6 +280,19 @@ export class YncaClient {
         this.unknownLineHandler?.(line);
       }
     }
+  }
+
+  /**
+   * A `@SYS:VERSION=` answer arrived: it belongs to the oldest version read still on the wire. An entry older than
+   * {@link ANSWER_LOST_MS} with a newer one behind it lost its answer — it is let go, so the answer reaches the entry
+   * it belongs to.
+   */
+  private versionAnswered(): void {
+    const now = Date.now();
+    while (this.versionAnswers.length > 1 && now - this.versionAnswers[0].sentAt > ANSWER_LOST_MS) {
+      this.versionAnswers.shift();
+    }
+    this.versionAnswers.shift()?.settle();
   }
 
   private handleClose(): void {
@@ -441,11 +480,14 @@ export class YncaClient {
     return new Promise<boolean>(resolve => {
       let settled = false;
       // Stays queued after a timeout, so a late answer still settles THIS entry and the order holds.
-      this.versionAnswers.push(() => {
-        if (!settled) {
-          settled = true;
-          resolve(true);
-        }
+      this.versionAnswers.push({
+        settle: () => {
+          if (!settled) {
+            settled = true;
+            resolve(true);
+          }
+        },
+        sentAt: Date.now(),
       });
       this.socket?.write(encodeDeviceText(`${VERSION_GET}\r\n`) ?? Buffer.alloc(0));
       this.gate.written();
@@ -502,9 +544,15 @@ export class YncaClient {
    * @param line the encoded YNCA line (without the terminator)
    * @param priority user command or background read
    * @param charset `latin1` for a function the specification declares Latin-1
+   * @param onVersionAnswer for a version read: called with ITS answer (a sweep's closing marker)
    * @returns resolves once the line was written, or once it is clear it never will be
    */
-  private writeLine(line: string, priority: "user" | "background", charset?: "latin1"): Promise<void> {
+  private writeLine(
+    line: string,
+    priority: "user" | "background",
+    charset?: "latin1",
+    onVersionAnswer?: () => void,
+  ): Promise<void> {
     // A function the specification declares Latin-1 (zone names) is sent as Latin-1 bytes; a text it
     // cannot carry is not sent at all — the controller checks that before (audit 2026-09-24, B5/B13).
     const bytes = encodeDeviceText(`${line}\r\n`, charset);
@@ -515,7 +563,7 @@ export class YncaClient {
       .run(() => {
         if (line === VERSION_GET) {
           // A plain read of the version is answered like a marker: its entry keeps the order.
-          this.versionAnswers.push(() => {});
+          this.versionAnswers.push({ settle: onVersionAnswer ?? ((): void => {}), sentAt: Date.now() });
         }
         this.lastPlainLineAt = Date.now();
         this.socket?.write(bytes);
@@ -565,46 +613,18 @@ export class YncaClient {
    * those datapoints would then never be created.
    *
    * @param gets the subunit/function pairs to query
-   * @returns the assembled capabilities
+   * @returns the assembled capabilities — the closing marker's own answer among them (`SYS:VERSION`)
    */
   public async readCapabilities(gets: Array<{ subunit: string; func: string }>): Promise<YncaCapabilities> {
-    const collected: YncaMessage[] = [];
-    let markerSeen: (() => void) | undefined;
-    const collector = (message: YncaMessage): void => {
-      collected.push(message);
-      if (message.subunit === "SYS" && message.func === "VERSION") {
-        markerSeen?.();
-      }
-    };
-    this.messageHandlers.push(collector);
-    try {
-      for (const request of gets) {
-        // A drop mid-sweep makes the write a silent no-op; without this check the loop
-        // would run to the end and hand back a partial report as if it were complete.
-        if (!this.reachable) {
-          throw new Error("connection lost during capability sweep");
-        }
-        await this.writeLine(encodeGet(request.subunit, request.func), "background");
-      }
-      if (!this.reachable) {
-        throw new Error("connection lost during capability sweep");
-      }
-      // An unanswered marker ends the wait too: a busy device's last answers may still be on their
-      // way — what came is used, and the next start's background refresh unions the rest into the
-      // remembered shape (audit 2026-09-29, B13).
-      await this.awaitSweepMarker(handler => (markerSeen = handler));
-      // A drop inside the marker window used to hand back a PARTIAL report after the timeout
-      // (audit 2026-09-24, B2).
-      if (!this.reachable) {
-        throw new Error("connection lost during capability sweep");
-      }
-      return buildCapabilities(collected);
-    } finally {
-      const index = this.messageHandlers.indexOf(collector);
-      if (index >= 0) {
-        this.messageHandlers.splice(index, 1);
-      }
+    const { messages, lost } = await this.sweep(gets);
+    // A drop mid-sweep or inside the marker window must not hand back a PARTIAL report as if it were
+    // complete (audit 2026-09-24, B2). An unanswered marker, though, ends the wait with what came: a busy
+    // device's last answers may still be on their way, and the next start's background refresh unions the
+    // rest into the remembered shape (audit 2026-09-29, B13).
+    if (lost) {
+      throw new Error("connection lost during capability sweep");
     }
+    return buildCapabilities(messages);
   }
 
   /**
@@ -621,31 +641,48 @@ export class YncaClient {
     gets: ReadonlyArray<{ subunit: string; func: string }>,
   ): Promise<{ lines: string[]; complete: boolean }> {
     const lines: string[] = [];
-    let markerSeen: (() => void) | undefined;
-    const tap = (line: string): void => {
-      lines.push(line);
-    };
+    const { answered, lost } = await this.sweep(gets, line => lines.push(line));
+    return { lines, complete: answered && !lost };
+  }
+
+  /**
+   * The one sweep loop behind {@link readCapabilities} and {@link capture} (it stood twice — review 2026-10-05,
+   * B7): send the GETs through the gate, then the closing marker, and collect every decoded line that arrives
+   * meanwhile (and, for a diagnostics read, every raw line). A drop or a close ends it at once.
+   *
+   * @param gets the subunit/function pairs to read
+   * @param raw called with every received line, decoded or not, while the sweep runs
+   * @returns what arrived, whether the closing marker was answered, and whether the connection was lost
+   */
+  private async sweep(
+    gets: ReadonlyArray<{ subunit: string; func: string }>,
+    raw?: (line: string) => void,
+  ): Promise<SweepResult> {
+    const messages: YncaMessage[] = [];
     const collector = (message: YncaMessage): void => {
-      if (message.subunit === "SYS" && message.func === "VERSION") {
-        markerSeen?.();
-      }
+      messages.push(message);
     };
-    this.rawTaps.add(tap);
     this.messageHandlers.push(collector);
+    if (raw) {
+      this.rawTaps.add(raw);
+    }
     try {
       for (const request of gets) {
-        if (!this.reachable || this.closed) {
-          return { lines, complete: false };
+        // A drop mid-sweep makes the write a silent no-op; without this check the loop would run to the end.
+        if (!this.reachable) {
+          return { messages, answered: false, lost: true };
         }
         await this.writeLine(encodeGet(request.subunit, request.func), "background");
       }
-      if (!this.reachable || this.closed) {
-        return { lines, complete: false };
+      if (!this.reachable) {
+        return { messages, answered: false, lost: true };
       }
-      const answered = await this.awaitSweepMarker(handler => (markerSeen = handler));
-      return { lines, complete: answered && this.reachable };
+      const answered = await this.awaitSweepMarker();
+      return { messages, answered, lost: !this.reachable };
     } finally {
-      this.rawTaps.delete(tap);
+      if (raw) {
+        this.rawTaps.delete(raw);
+      }
       const index = this.messageHandlers.indexOf(collector);
       if (index >= 0) {
         this.messageHandlers.splice(index, 1);
@@ -654,40 +691,34 @@ export class YncaClient {
   }
 
   /**
-   * Send the closing marker and wait for the device to answer it — or for the timeout,
-   * so an unusual firmware that stays silent costs a delay, never the whole connection.
+   * Send the closing marker and wait for the device to answer IT — or for the timeout, so an
+   * unusual firmware that stays silent costs a delay, never the whole connection. The answer is
+   * told by its place in the answer order ({@link versionAnswers}): ended on the first
+   * `@SYS:VERSION=` line, a sweep ended on another exchange's answer — a version read in its own
+   * list, a concurrent sweep's marker — and handed back what its device had not finished answering
+   * (review 2026-10-05, A42).
    *
-   * @param arm registers the resolve callback with the sweep's collector
    * @returns true when the marker was answered; false on the timeout or a drop
    */
-  private async awaitSweepMarker(arm: (handler: () => void) => void): Promise<boolean> {
+  private async awaitSweepMarker(): Promise<boolean> {
     let settled = false;
-    let wake: () => void = () => {};
+    let settle: (answered: boolean) => void = () => {};
     const answered = new Promise<boolean>(resolve => {
-      arm(() => {
+      settle = (value: boolean): void => {
         if (!settled) {
           settled = true;
-          resolve(true);
-        }
-      });
-      wake = (): void => {
-        if (!settled) {
-          settled = true;
-          resolve(false);
+          resolve(value);
         }
       };
     });
+    const wake = (): void => settle(false);
     this.dropWaiters.add(wake);
     try {
-      await this.writeLine(encodeGet("SYS", "VERSION"), "background");
-      return await Promise.race([
-        answered,
-        this.gate.delay(SWEEP_MARKER_TIMEOUT_MS).then(() => {
-          settled = true;
-          return false;
-        }),
-      ]);
+      await this.writeLine(VERSION_GET, "background", undefined, () => settle(true));
+      return await Promise.race([answered, this.gate.delay(SWEEP_MARKER_TIMEOUT_MS).then(() => false)]);
     } finally {
+      // The entry stays queued: a late answer settles it (a no-op now), so the order of the ones after it holds.
+      settled = true;
       this.dropWaiters.delete(wake);
     }
   }
