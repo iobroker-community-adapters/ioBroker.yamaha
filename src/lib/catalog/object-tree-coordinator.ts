@@ -175,63 +175,84 @@ export function coordinateObjectTree(
   return { objects: resolved, ownerByCanonicalId };
 }
 
+/** A datapoint's form: as a transport builds it, or as it stands in the tree (the owner wrote it there). */
+export interface DatapointForm {
+  /** The object type. */
+  type: string;
+  /** Its common part. */
+  common: Partial<ObjectDef["common"]>;
+}
+
+/**
+ * Whether two forms carry the same values: the same object type, value type and unit — the comparison
+ * {@link canCarryWrite} and {@link keepsForm} share; each spelled it out by hand (review 2026-10-05, E). A decibel
+ * bass (YNCA) is not MusicCast's step count, a sleep text is not a number.
+ *
+ * @param a one form
+ * @param b the other
+ * @returns whether a value of one means the same in the other
+ */
+function sameValues(a: DatapointForm, b: DatapointForm): boolean {
+  return a.type === b.type && a.common.type === b.common.type && (a.common.unit ?? "") === (b.common.unit ?? "");
+}
+
+/**
+ * Whether a datapoint's dropdown says something about its values. A switch is `true` or `false` over every
+ * protocol, whatever words it is labelled with: XML labelled its switches with its description's `On`/`Standby`
+ * (review 2026-10-05, A19), and a tree that still carries them must neither stop a write from falling back nor a
+ * transport from taking the switch over.
+ *
+ * @param form the datapoint's form
+ * @returns whether its value list matters
+ */
+function listedValues(form: DatapointForm): boolean {
+  return form.common.type !== "boolean" && Boolean(form.common.states);
+}
+
 /**
  * Whether a user write meant for a datapoint's owner may be sent through another transport instead —
  * when the owner is offline or the device refused the command there (krobi 2026-10-02: "always try the
  * most modern one; if the command does not work with it, then the next one"). The ownership itself
- * does not move. Only where the value keeps its meaning: the same object and value type, the same unit,
- * and — where a dropdown is involved — the same wire vocabulary. A decibel bass (YNCA) is not MusicCast's
- * step count, a sleep text is not a number, "HDMI1" is not "hdmi1". A transport that only reads the
+ * does not move. Only where the value keeps its meaning: the same values ({@link sameValues}) and — where a
+ * dropdown is involved — the same wire vocabulary: "HDMI1" is not "hdmi1". A transport that only reads the
  * datapoint cannot carry a write (`hdmi.out3`, `sound.surroundAI` on MusicCast — audit 2026-09-29, A27).
  *
- * @param from the owner and its definition
+ * @param from the owner and its form — as it built the datapoint, or as the datapoint stands in the tree
  * @param from.transport the owner
- * @param from.def its definition
+ * @param from.def its form
  * @param to the other transport and its definition
  * @param to.transport the other transport
  * @param to.def its definition
  * @returns whether the other transport can carry the write unchanged
  */
 export function canCarryWrite(
-  from: { transport: Transport; def: ObjectDef },
+  from: { transport: Transport; def: DatapointForm },
   to: { transport: Transport; def: ObjectDef },
 ): boolean {
-  if (from.def.type !== to.def.type || from.def.common.type !== to.def.common.type) {
+  if (!sameValues(from.def, to.def) || !to.def.common.write) {
     return false;
   }
-  if ((from.def.common.unit ?? "") !== (to.def.common.unit ?? "")) {
-    return false;
-  }
-  if (!to.def.common.write) {
-    return false;
-  }
-  const dropdown = Boolean(from.def.common.states) || Boolean(to.def.common.states);
+  const dropdown = listedValues(from.def) || listedValues(to.def);
   return !dropdown || STATES_VOCABULARY[from.transport] === STATES_VOCABULARY[to.transport];
 }
 
 /**
  * Whether a transport learned later may take a datapoint over: its definition must keep the form the
- * datapoint already has (2026-10-02 — a read-in receiver keeps its tree). The same shape test as
- * {@link canCarryWrite}, judged on the definitions themselves: the existing dropdown values must all
- * still be there (a device's list may grow, `HDMI1` is not `hdmi1`).
+ * datapoint already has (2026-10-02 — a read-in receiver keeps its tree). The same values as
+ * {@link canCarryWrite} judges, the write not lost, and the existing dropdown values all still there
+ * (a device's list may grow, `HDMI1` is not `hdmi1`).
  *
  * @param existing the datapoint as it stands
- * @param existing.type its object type
- * @param existing.common its common
  * @param live the definition a live transport builds now
  * @returns whether writing the live definition leaves the datapoint's form unchanged
  */
-export function keepsForm(existing: { type: string; common: Partial<ObjectDef["common"]> }, live: ObjectDef): boolean {
-  if (existing.type !== live.type || existing.common.type !== live.common.type) {
+export function keepsForm(existing: DatapointForm, live: ObjectDef): boolean {
+  if (!sameValues(existing, live) || (existing.common.write && !live.common.write)) {
     return false;
   }
-  if ((existing.common.unit ?? "") !== (live.common.unit ?? "")) {
-    return false;
+  if (!listedValues(existing)) {
+    return true;
   }
-  if (existing.common.write && !live.common.write) {
-    return false;
-  }
-  const before = Object.keys(existing.common.states ?? {});
   const now = new Set(Object.keys(live.common.states ?? {}));
-  return before.every(value => now.has(value));
+  return Object.keys(existing.common.states ?? {}).every(value => now.has(value));
 }

@@ -852,6 +852,58 @@ describe("MultiTransportHandle — learned owners and the write fallback in deta
     expect(s.debug).toContain("living: power — ynca refused it, sent through xml");
   });
 
+  // YNCA allows one connection: a client like Home Assistant holding it at a restart keeps the owner away from
+  // this handle's start. It built nothing here, so a write could not be judged and never fell back
+  // (review 2026-10-05, A4) — while the same owner dropping mid-session did fall back.
+  describe("an owner away since the handle started (review 2026-10-05, A4)", () => {
+    const tree = (): LearnedTree => ({
+      shared: { power: ["ynca", "xml"], "remote.cursor": ["ynca", "xml"] },
+      transports: ["ynca", "xml"],
+      firmware: {},
+      settledVersion: "3.2.0",
+    });
+    const key = state("remote.cursor", "Cursor", { type: "string", role: "button", read: false });
+
+    test("a write falls back, judged on the form the owner left in the tree", async () => {
+      const xml = fakeConn("xml", [power, key]);
+      const s = learnSetup([xml], {
+        tree: tree(),
+        version: "3.2.0",
+        missing: ["ynca"],
+        existing: { power: { type: "state", common: power.common } },
+      });
+      await s.handle.start();
+      s.handle.handleStateChange("living.power", false, true);
+      await flush();
+      expect(xml.writes).toEqual([{ id: "power", value: true }]);
+      expect(s.debug).toContain("living: power — ynca offline, sent through xml");
+    });
+
+    test("without a form in the tree it cannot be judged, and nothing is sent", async () => {
+      const xml = fakeConn("xml", [power, key]);
+      const s = learnSetup([xml], { tree: tree(), version: "3.2.0", missing: ["ynca"] });
+      await s.handle.start();
+      s.handle.handleStateChange("living.power", false, true);
+      await flush();
+      expect(xml.writes).toEqual([]);
+      expect(s.debug).toContain("living: write to power — its transport (ynca) is offline");
+    });
+
+    test("a key the owner left in the tree is never sent a second way", async () => {
+      const xml = fakeConn("xml", [power, key]);
+      const s = learnSetup([xml], {
+        tree: tree(),
+        version: "3.2.0",
+        missing: ["ynca"],
+        existing: { "remote.cursor": { type: "state", common: key.common } },
+      });
+      await s.handle.start();
+      s.handle.handleStateChange("living.remote.cursor", false, "Up");
+      await flush();
+      expect(xml.writes).toEqual([]);
+    });
+  });
+
   test("a returning transport whose objects cannot be built is not taken in — its retry goes on", async () => {
     const ynca = fakeConn("ynca", [power]);
     const yxc = fakeConn("yxc", [state("dist.role", "Role")]);

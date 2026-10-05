@@ -3,6 +3,7 @@ import {
   canCarryWrite,
   coordinateObjectTree,
   keepsForm,
+  type DatapointForm,
   type TransportObjects,
 } from "../catalog/object-tree-coordinator";
 import { capabilityKeyOf, pickOwner, type Transport } from "../catalog/owner-policy";
@@ -113,7 +114,7 @@ export interface MultiTransportDeps {
   /** The running adapter version — a read-in completed under another version is done again. */
   adapterVersion?: string;
   /** A datapoint as it stands in the tree (canonical id), from the one start-up read — never a database read. */
-  existing?(id: string): { type: string; common: Partial<ObjectDef["common"]> } | undefined;
+  existing?(id: string): DatapointForm | undefined;
   /** At the completion of a read-in: remove the device's objects no transport built (canonical ids). */
   settleTree?(built: ReadonlySet<string>): Promise<void>;
 }
@@ -743,9 +744,13 @@ export class MultiTransportHandle implements ConnectionHandle {
    */
   private async routeWrite(canonicalId: string, owner: Transport, value: unknown): Promise<void> {
     try {
-      const ownerDef = this.built.get(owner)?.get(canonicalId);
+      // The owner's form: as it built the datapoint in this session — or, for an owner away since this handle
+      // started, as the datapoint stands in the tree, where the owner wrote it. Such an owner built nothing here,
+      // and no write ever fell back: with YNCA held by another client at a restart, `power` never went out over
+      // XML (review 2026-10-05, A4).
+      const ownerForm = this.built.get(owner)?.get(canonicalId) ?? this.deps.existing?.(canonicalId);
       // A datapoint that cannot be read is a key or a step: sent twice it would act twice.
-      const repeatable = ownerDef !== undefined && ownerDef.common.read !== false;
+      const repeatable = ownerForm !== undefined && ownerForm.common.read !== false;
       const others = (this.tree.shared[canonicalId] ?? []).filter(transport => transport !== owner);
       let reason = "offline";
       for (const transport of [owner, ...others]) {
@@ -754,9 +759,9 @@ export class MultiTransportHandle implements ConnectionHandle {
           const def = this.built.get(transport)?.get(canonicalId);
           if (
             !repeatable ||
-            !ownerDef ||
+            !ownerForm ||
             !def ||
-            !canCarryWrite({ transport: owner, def: ownerDef }, { transport, def })
+            !canCarryWrite({ transport: owner, def: ownerForm }, { transport, def })
           ) {
             continue;
           }

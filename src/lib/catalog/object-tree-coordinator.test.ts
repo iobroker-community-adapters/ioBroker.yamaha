@@ -408,6 +408,26 @@ describe("keepsForm", () => {
     expect(keepsForm(existing({ write: true }), live({ write: false }))).toBe(false);
     expect(keepsForm(existing({ states: { HDMI1: "HDMI1" } }), live({ states: { hdmi1: "HDMI1" } }))).toBe(false);
   });
+
+  // XML labelled its switches with its description's On/Standby, and lent them on (review 2026-10-05, A19). A
+  // tree that still carries them must not keep another transport from taking the switch over.
+  test("a switch's labels are no values: true and false are kept whatever words they carry", () => {
+    const labelled = existing({ type: "boolean", states: { On: "On", Standby: "Standby" } });
+    expect(keepsForm(labelled, live({ type: "boolean" }))).toBe(true);
+  });
+});
+
+describe("canCarryWrite and a switch with labels (review 2026-10-05, A19)", () => {
+  test("a write to a switch falls back between vocabularies — true is true over every protocol", () => {
+    const yxcPower = state("power", "Power", { type: "boolean", role: "switch.power" });
+    const xmlPower = state("power", "Power", {
+      type: "boolean",
+      role: "switch.power",
+      states: { On: "On", Standby: "Standby" },
+    });
+    expect(canCarryWrite({ transport: "yxc", def: yxcPower }, { transport: "xml", def: xmlPower })).toBe(true);
+    expect(canCarryWrite({ transport: "yxc", def: xmlPower }, { transport: "xml", def: yxcPower })).toBe(true);
+  });
 });
 
 describe("a learned owner and the write fallback (2026-10-02)", () => {
