@@ -7,6 +7,7 @@ import {
   yxcDeclaredAbsent,
 } from "./object-mapper";
 import rxA2070v287 from "./__fixtures__/RX_A2070_287_208.json";
+import cdNt670d from "./__fixtures__/cd_nt670d.json";
 import { parseYxcFeatures } from "./capability";
 import { YXC_MENU_VALUES } from "./remote";
 import rxA2070 from "./__fixtures__/RX_A2070_v1.json";
@@ -908,5 +909,25 @@ describe("a player block only where the zone can play a media source (A48)", () 
       { id: "zone2", funcs: ["power"], inputs: ["av1"] },
     ];
     expect(playerZones({ zones, media: ["netusb"] })).toEqual(["main", "zone2"]);
+  });
+});
+
+describe("the CD drive of a CD receiver", () => {
+  test("the CD-NT670D gets its drive's datapoints and plays it through the main zone's block", () => {
+    const caps = parseYxcFeatures(cdNt670d);
+    const objectIds = mapYxcToObjects(caps).map(o => o.id);
+    expect(objectIds).toEqual(
+      expect.arrayContaining([
+        "player.cd",
+        "player.cd.tray",
+        "player.cd.trackSelect",
+        "player.cd.trackNumber",
+        "player.cd.totalTracks",
+        "player.cd.discTime",
+        "player.cd.deviceStatus",
+        "player.playback",
+      ]),
+    );
+    expect(playerZones(caps)).toEqual(["main"]);
   });
 });

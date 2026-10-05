@@ -318,9 +318,14 @@ export function parseYxcFeatures(response: unknown): YxcCapabilities {
       }
     }
   }
-  const media = MEDIA_BLOCKS.filter(block => block in obj);
-  const netusb = obj.netusb;
   const system = typeof obj.system === "object" && obj.system !== null ? (obj.system as Record<string, unknown>) : {};
+  const playInfoTypes = playInfoTypesOf(system.input_list);
+  // A media source is declared by its own getFeatures block — the CD drive has none (YXC Basic §4.2; not one of the 28
+  // captures carries a `cd` key, the CD-NT670D's included) and is declared by the input that plays through it
+  // (`play_info_type: "cd"`). Read from the blocks alone, no device ever had its CD surface.
+  const declaredTypes = new Set(Object.values(playInfoTypes ?? {}));
+  const media = MEDIA_BLOCKS.filter(block => block in obj || (block === "cd" && declaredTypes.has("cd")));
+  const netusb = obj.netusb;
   const systemLists: Record<string, string[]> = {};
   const systemCounts: Record<string, number> = {};
   for (const [key, value] of Object.entries(system)) {
@@ -336,7 +341,6 @@ export function parseYxcFeatures(response: unknown): YxcCapabilities {
       systemCounts[key] = value;
     }
   }
-  const playInfoTypes = playInfoTypesOf(system.input_list);
   return {
     systemFuncs: stringList(system.func_list),
     systemRanges: parseRanges(system.range_step),
