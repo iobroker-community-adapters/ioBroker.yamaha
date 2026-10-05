@@ -516,6 +516,692 @@ export function zoneNameDropdowns(
 }
 
 /**
+ * The network player's own surface: the favourites and recently played (recall, store, clear, lists), the seek, the
+ * playback error and message, the MusicCast playlists and the play queue where netusb declares them.
+ *
+ * @param capabilities the parsed YXC capabilities
+ * @returns the objects, parents first — none where the device does not declare the block
+ */
+function netusbObjects(capabilities: YxcCapabilities): ObjectDef[] {
+  if (!capabilities.media.includes("netusb")) {
+    return [];
+  }
+  const objects: ObjectDef[] = [];
+  objects.push({ id: "player.netPlayer", type: "channel", common: channelCommon("netPlayer") });
+  objects.push({
+    id: "player.netPlayer.preset",
+    type: "state",
+    common: {
+      name: tName("recallPreset"),
+      desc: tName("descRecallPreset"),
+      type: "number",
+      role: "level",
+      read: true,
+      write: true,
+      min: 1,
+      ...(capabilities.netusbSlots?.presets !== undefined ? { max: capabilities.netusbSlots.presets } : {}),
+    },
+  });
+  // The favourites and recently-played lists (names included) plus the recall-by-number
+  // for recents — the musiccast adapter's selection surface, on our tree.
+  objects.push({
+    id: "player.netPlayer.presets",
+    type: "state",
+    common: {
+      name: tName("favouritesStoredPresets"),
+      desc: tName("descFavouritesStoredPresets"),
+      type: "string",
+      role: "json",
+      read: true,
+      write: false,
+    },
+  });
+  objects.push({
+    id: "player.netPlayer.recent",
+    type: "state",
+    common: {
+      name: tName("recentlyPlayed"),
+      desc: tName("descRecentlyPlayed"),
+      type: "string",
+      role: "json",
+      read: true,
+      write: false,
+    },
+  });
+  // Store and clear a favourite, jump within the track (YXC Basic Rev 1.10 §7.11/§7.12/§7.4; C38).
+  const favourites = { min: 1, max: capabilities.netusbSlots?.presets };
+  objects.push(actionState("player.netPlayer.presetSave", "storeFavourite", "descStoreFavourite", favourites));
+  objects.push(actionState("player.netPlayer.presetClear", "clearFavourite", "descClearFavourite", favourites));
+  const jump = actionState("player.netPlayer.playPosition", "jumpToPosition", "descJumpToPosition", { min: 0 });
+  objects.push({ ...jump, common: { ...jump.common, unit: "s" } });
+  objects.push({
+    id: "player.netPlayer.recallRecent",
+    type: "state",
+    common: {
+      name: tName("recallRecentlyPlayedNumber"),
+      desc: tName("descRecallRecentlyPlayedNumber"),
+      type: "number",
+      role: "level",
+      read: true,
+      write: true,
+      min: 1,
+      ...(capabilities.netusbSlots?.recent !== undefined ? { max: capabilities.netusbSlots.recent } : {}),
+    },
+  });
+  // What the network player reports about the current playback — carried by the push only (YXC
+  // Basic §10.3/§11.3), seeded to "no error / no message" at every connect (audit 2026-09-24, C18).
+  objects.push({
+    id: "player.netPlayer.playError",
+    type: "state",
+    common: {
+      name: tName("playbackError"),
+      desc: tName("descPlaybackError"),
+      type: "number",
+      role: "value",
+      read: true,
+      write: false,
+      states: NETUSB_PLAY_ERRORS,
+    },
+  });
+  // The error codes in words — every one of them when the device reports several at once (C40).
+  objects.push({
+    id: "player.netPlayer.playErrorText",
+    type: "state",
+    common: {
+      name: tName("playbackErrorText"),
+      desc: tName("descPlaybackErrorText"),
+      type: "string",
+      role: "text",
+      read: true,
+      write: false,
+    },
+  });
+  objects.push({
+    id: "player.netPlayer.playMessage",
+    type: "state",
+    common: {
+      name: tName("playbackMessage"),
+      desc: tName("descPlaybackMessage"),
+      type: "string",
+      role: "text",
+      read: true,
+      write: false,
+    },
+  });
+  // MusicCast playlists and the play queue — declared in the netusb func_list.
+  // Read-only surfaces: no write path for them is documented anywhere, and blind
+  // writes are exactly what this adapter no longer does.
+  if (capabilities.netusbFuncs?.includes("mc_playlist")) {
+    objects.push({
+      id: "player.netPlayer.playlists",
+      type: "state",
+      common: {
+        name: tName("musiccastPlaylists"),
+        desc: tName("descMusiccastPlaylists"),
+        type: "string",
+        role: "json",
+        read: true,
+        write: false,
+      },
+    });
+  }
+  if (capabilities.netusbFuncs?.includes("play_queue")) {
+    objects.push({
+      id: "player.netPlayer.queue",
+      type: "state",
+      common: {
+        name: tName("playQueue"),
+        desc: tName("descPlayQueue"),
+        type: "string",
+        role: "json",
+        read: true,
+        write: false,
+      },
+    });
+    // Its length and position as values of their own — the list shows the first eight (C30).
+    for (const [id, nameKey, descKey] of [
+      ["player.netPlayer.queueLength", "queueLength", "descQueueLength"],
+      ["player.netPlayer.queuePosition", "queuePosition", "descQueuePosition"],
+    ] as const) {
+      objects.push({
+        id,
+        type: "state",
+        common: {
+          name: tName(nameKey),
+          desc: tName(descKey),
+          type: "number",
+          role: "value",
+          read: true,
+          write: false,
+        },
+      });
+    }
+  }
+  return objects;
+}
+
+/**
+ * The CD drive's own states — what the disc PLAYS shows in the zones' player blocks.
+ *
+ * @param capabilities the parsed YXC capabilities
+ * @returns the objects, parents first — none where the device does not declare the block
+ */
+function cdObjects(capabilities: YxcCapabilities): ObjectDef[] {
+  if (!capabilities.media.includes("cd")) {
+    return [];
+  }
+  const objects: ObjectDef[] = [];
+  // Drive-own states only — what the disc is PLAYING shows in the flat block above.
+  objects.push({ id: "player.cd", type: "channel", common: channelCommon("cd") });
+  objects.push(actionState("player.cd.trackSelect", "playTrackNumber", "descPlayTrackNumber", { min: 1, max: 512 }));
+  objects.push({
+    id: "player.cd.tray",
+    type: "state",
+    common: {
+      name: tName("toggleTray"),
+      desc: tName("descToggleTray"),
+      type: "boolean",
+      role: "button",
+      read: false,
+      write: true,
+    },
+  });
+  objects.push({
+    id: "player.cd.trackNumber",
+    type: "state",
+    // YXC Basic §8.1: -1 while no track plays — shown as 0, no track number (audit 2026-09-29, C40).
+    common: {
+      name: tName("trackNumber"),
+      desc: tName("descTrackNumber"),
+      type: "number",
+      role: "value",
+      min: 0,
+      read: true,
+      write: false,
+    },
+  });
+  objects.push({
+    id: "player.cd.totalTracks",
+    type: "state",
+    common: { name: tName("totalTracks"), type: "number", role: "value", read: true, write: false },
+  });
+  objects.push({
+    id: "player.cd.discTime",
+    type: "state",
+    common: { name: tName("discTime"), type: "number", unit: "s", role: "value", read: true, write: false },
+  });
+  objects.push({
+    id: "player.cd.deviceStatus",
+    type: "state",
+    common: {
+      name: tName("driveStatus"),
+      desc: tName("descDriveStatus"),
+      type: "string",
+      role: "state",
+      read: true,
+      write: false,
+    },
+  });
+  return objects;
+}
+
+/**
+ * The tuner: band, frequency, RDS where declared, the stored-station surface, DAB where declared.
+ *
+ * @param capabilities the parsed YXC capabilities
+ * @returns the objects, parents first — none where the device does not declare the block
+ */
+function tunerObjects(capabilities: YxcCapabilities): ObjectDef[] {
+  if (!capabilities.media.includes("tuner")) {
+    return [];
+  }
+  const objects: ObjectDef[] = [];
+  objects.push({ id: "tuner", type: "channel", common: channelCommon("tuner") });
+  const bandCommon: ObjectDef["common"] = {
+    name: tName("band"),
+    type: "string",
+    role: "state",
+    read: true,
+    write: true,
+  };
+  const bands = capabilities.tuner?.bands ?? [];
+  const tunerFuncs = capabilities.tuner?.funcs ?? [];
+  if (bands.length > 0) {
+    bandCommon.states = selfMap(bands);
+  }
+  objects.push({ id: "tuner.band", type: "state", common: bandCommon });
+  // Frequency in kHz — FM/AM/DAB all report kHz in getPlayInfo (FM 100900 =
+  // 100.9 MHz, AM 1080, DAB 180064), verified against real device captures. The bounds are
+  // the ENVELOPE of the ranges the device declares per band (AM 531 kHz … FM 108000 kHz):
+  // one datapoint serves every band, so it can carry the outer limits but no single step
+  // (FM steps 50 kHz, 200 in the US; AM 9 or 10).
+  //
+  // ⚠️ The envelope needs a range for EVERY band the device says it has. A DAB receiver
+  // declares `func_list: [fm, rds, dab]` and a `range_step` for `fm` alone — measured on all
+  // three DAB captures (RX-A2070, RX-V6A, CD-NT670D) — and then reports 180064 kHz from the
+  // DAB band into this one datapoint. Taking the FM envelope there narrowed the datapoint
+  // below what the device itself sends, and js-controller warned on every poll. An incomplete
+  // declaration is no declaration: the datapoint stays unbounded rather than carry a limit the
+  // device contradicts (same rule as `volume` — the declared range is taken, never derived).
+  const frequencyCommon: ObjectDef["common"] = {
+    name: tName("frequency"),
+    type: "number",
+    unit: "kHz",
+    role: "level",
+    read: true,
+    write: true,
+  };
+  const declaredRanges = capabilities.tuner?.ranges ?? {};
+  const bandRanges = bands.map(band => declaredRanges[band]);
+  if (bands.length > 0 && bandRanges.every(range => range !== undefined)) {
+    frequencyCommon.min = Math.min(...bandRanges.map(range => range.min));
+    frequencyCommon.max = Math.max(...bandRanges.map(range => range.max));
+  }
+  objects.push({ id: "tuner.frequency", type: "state", common: frequencyCommon });
+  // RDS only where the tuner declares it (YXC Basic §4.2 tuner func_list `rds`; §6.2 "Available only
+  // when RDS is valid") — an ISX-18D has none, and its four RDS datapoints stood empty (audit
+  // 2026-09-29, C42).
+  if (tunerFuncs.includes("rds")) {
+    for (const rds of RDS_STATES) {
+      objects.push({
+        id: rds.id,
+        type: "state",
+        common: {
+          name: tName(rds.nameKey),
+          desc: tName(rds.descKey),
+          type: "string",
+          role: "text",
+          read: true,
+          write: false,
+        },
+      });
+    }
+  }
+  // The stored-station surface: recall by number (writable), the active slot read back
+  // from play info, up/down stepping, and the stored lists (with what the device knows
+  // about each slot) as JSON — the selection surface the musiccast adapter offered.
+  const presetCommon: ObjectDef["common"] = {
+    name: tName("presetRecallByNumber"),
+    desc: tName("descPresetRecallByNumber"),
+    type: "number",
+    role: "level",
+    read: true,
+    write: true,
+    min: 0,
+  };
+  if (capabilities.tuner?.presetNum) {
+    presetCommon.max = capabilities.tuner.presetNum;
+  }
+  objects.push({ id: "tuner.preset", type: "state", common: presetCommon });
+  const stations = { min: 1, max: capabilities.tuner?.presetNum };
+  objects.push(actionState("tuner.presetSave", "storeStationPreset", "descStoreStationPreset", stations));
+  objects.push(actionState("tuner.presetClear", "clearStationPreset", "descClearStationPreset", stations));
+  objects.push(actionState("tuner.searchUp", "searchNextStation", "descSearchNextStation"));
+  objects.push(actionState("tuner.searchDown", "searchPreviousStation", "descSearchPreviousStation"));
+  // `switchPreset` exists from API 1.17 on (YXC Basic §6.6); an older device refused every press.
+  if (capabilities.apiVersion === undefined || capabilities.apiVersion >= 1.17) {
+    objects.push({
+      id: "tuner.presetUp",
+      type: "state",
+      common: { name: tName("nextPreset"), type: "boolean", role: "button", read: false, write: true },
+    });
+    objects.push({
+      id: "tuner.presetDown",
+      type: "state",
+      common: { name: tName("previousPreset"), type: "boolean", role: "button", read: false, write: true },
+    });
+  }
+  objects.push({
+    id: "tuner.presets",
+    type: "state",
+    common: {
+      name: tName("storedPresets"),
+      desc: tName("descStoredPresets"),
+      type: "string",
+      role: "json",
+      read: true,
+      write: false,
+    },
+  });
+  objects.push({
+    id: "tuner.tuned",
+    type: "state",
+    common: {
+      name: tName("tuned"),
+      desc: tName("descTunedToAStation"),
+      type: "boolean",
+      role: "indicator",
+      read: true,
+      write: false,
+    },
+  });
+  objects.push({
+    id: "tuner.audioMode",
+    type: "state",
+    common: {
+      name: tName("audioMode"),
+      desc: tName("descAudioMode"),
+      type: "string",
+      role: "state",
+      read: true,
+      write: false,
+      // YXC Basic §6.2 `audio_mode`; none on AM.
+      states: selfMap(["mono", "stereo"]),
+    },
+  });
+  if (bands.includes("dab")) {
+    objects.push({ id: "tuner.dab", type: "channel", common: channelCommon("dab") });
+    for (const field of DAB_FIELDS) {
+      if (field.requires && !tunerFuncs.includes(field.requires)) {
+        continue;
+      }
+      objects.push({
+        id: field.id,
+        type: "state",
+        common: {
+          name: tName(field.nameKey),
+          ...(field.descKey ? { desc: tName(field.descKey) } : {}),
+          type: field.type,
+          role: field.role ?? (field.type === "boolean" ? "indicator" : field.type === "number" ? "value" : "text"),
+          ...(field.unit ? { unit: field.unit } : {}),
+          ...(field.min !== undefined ? { min: field.min } : {}),
+          ...(field.max !== undefined ? { max: field.max } : {}),
+          ...(field.states ? { states: selfMap(field.states) } : {}),
+          read: true,
+          write: false,
+        },
+      });
+    }
+    // A DAB station is chosen by service, not by frequency (YXC Basic §6.15; audit 2026-09-24, C17).
+    objects.push({
+      id: "tuner.dab.serviceUp",
+      type: "state",
+      common: { name: tName("nextDabService"), type: "boolean", role: "button", read: false, write: true },
+    });
+    objects.push({
+      id: "tuner.dab.serviceDown",
+      type: "state",
+      common: { name: tName("previousDabService"), type: "boolean", role: "button", read: false, write: true },
+    });
+  }
+  return objects;
+}
+
+/**
+ * The clock and alarm block of the desk-audio and clock models.
+ *
+ * @param capabilities the parsed YXC capabilities
+ * @returns the objects, parents first — none where the device does not declare the block
+ */
+function clockObjects(capabilities: YxcCapabilities): ObjectDef[] {
+  if (!capabilities.clock) {
+    return [];
+  }
+  const objects: ObjectDef[] = [];
+  // The clock/alarm block of the desk-audio/clock models. The switches, the volume, the mode and each
+  // day's enable/time/beep are written through the specification's setters (YXC Basic Rev 1.10
+  // §9.2/§9.4/§9.5; audit 2026-09-29, C38); the playback choice of an alarm stays read-only.
+  objects.push({ id: "clock", type: "channel", common: channelCommon("clock") });
+  objects.push({
+    id: "clock.autoSync",
+    type: "state",
+    common: {
+      name: tName("automaticTimeSync"),
+      desc: tName("descAutomaticTimeSync"),
+      type: "boolean",
+      role: "switch",
+      read: true,
+      // setAutoSync: "Available only when date_and_time exists in clock - func_list" (§9.2).
+      write: capabilities.clock.funcs.includes("date_and_time"),
+    },
+  });
+  // Only where the clock block declares it (YXC Basic §4.2 clock func_list) — a WX-021 has no format
+  // setting, and the datapoint stood empty for good (audit 2026-09-29, C42).
+  if (capabilities.clock.funcs.includes("format")) {
+    objects.push({
+      id: "clock.format",
+      type: "state",
+      common: {
+        name: tName("clockFormat"),
+        desc: tName("descClockFormat"),
+        type: "string",
+        role: "state",
+        read: true,
+        write: true,
+        states: { "12h": "12h", "24h": "24h" },
+      },
+    });
+  }
+  objects.push({ id: "clock.alarm", type: "channel", common: channelCommon("alarm") });
+  objects.push({
+    id: "clock.alarm.on",
+    type: "state",
+    common: { name: tName("alarmArmed"), type: "boolean", role: "switch", read: true, write: true },
+  });
+  const volumeCommon: ObjectDef["common"] = {
+    name: tName("alarmVolume"),
+    type: "number",
+    role: "level",
+    read: true,
+    write: true,
+  };
+  if (capabilities.clock.alarmVolumeRange) {
+    volumeCommon.min = capabilities.clock.alarmVolumeRange.min;
+    volumeCommon.max = capabilities.clock.alarmVolumeRange.max;
+    volumeCommon.step = capabilities.clock.alarmVolumeRange.step;
+  }
+  objects.push({ id: "clock.alarm.volume", type: "state", common: volumeCommon });
+  objects.push({
+    id: "clock.alarm.fadeInterval",
+    type: "state",
+    common: {
+      name: tName("fadeInTime"),
+      desc: tName("descFadeInTime"),
+      type: "number",
+      unit: "s",
+      role: "value",
+      read: true,
+      write: false,
+    },
+  });
+  objects.push({
+    id: "clock.alarm.fadeType",
+    type: "state",
+    common: {
+      name: tName("fadeType"),
+      desc: tName("descFadeType"),
+      type: "number",
+      role: "value",
+      read: true,
+      write: false,
+    },
+  });
+  objects.push({
+    id: "clock.alarm.mode",
+    type: "state",
+    common: {
+      name: tName("alarmMode"),
+      type: "string",
+      role: "state",
+      read: true,
+      write: true,
+      states: selfMap(capabilities.clock.alarmModes),
+    },
+  });
+  // YXC Basic §9.1: `alarm.repeat` — whether the one-day alarm repeats; not snooze, which the clock
+  // block declares on its own (audit 2026-09-29, C35).
+  objects.push({
+    id: "clock.alarm.repeat",
+    type: "state",
+    common: {
+      name: tName("alarmRepeat"),
+      desc: tName("descAlarmRepeat"),
+      type: "boolean",
+      role: "switch",
+      read: true,
+      write: true,
+    },
+  });
+  const snooze = capabilities.clock.funcs.includes("snooze");
+  const detailChannels = ["oneday", ...(capabilities.clock.alarmModes.includes("weekly") ? ALARM_DAYS : [])];
+  for (const channel of detailChannels) {
+    // The weekday channels are named by the device; only the fixed one-day channel translates.
+    const label: ioBroker.StringOrTranslated =
+      channel === "oneday" ? tName("oneDayAlarm") : channel.charAt(0).toUpperCase() + channel.slice(1);
+    objects.push({ id: `clock.alarm.${channel}`, type: "channel", common: { name: label } });
+    const detail = (
+      id: string,
+      name: ioBroker.StringOrTranslated,
+      type: "boolean" | "number" | "string",
+      role: string,
+      write = false,
+    ): void => {
+      objects.push({
+        id: `clock.alarm.${channel}.${id}`,
+        type: "state",
+        common: { name, type, role, read: true, write },
+      });
+    };
+    detail("enable", tName("enabled"), "boolean", "switch", true);
+    detail("time", tName("alarmTime"), "string", "text", true);
+    detail("beep", tName("beep"), "boolean", "switch", true);
+    detail("playbackType", tName("playbackType"), "string", "state");
+    detail("resumeInput", tName("resumeInput"), "string", "state");
+    detail("presetType", tName("presetType"), "string", "state");
+    detail("presetNumber", tName("presetNumber"), "number", "value");
+    // YXC Basic §9.1: `preset.netusb_info` (input, text) and `preset.tuner_info` (band, frequency in kHz)
+    // (audit 2026-09-29, C34).
+    detail("presetInput", tName("presetSource"), "string", "state");
+    detail("presetName", tName("presetName"), "string", "text");
+    detail("presetBand", tName("presetBand"), "string", "state");
+    objects.push({
+      id: `clock.alarm.${channel}.presetFrequency`,
+      type: "state",
+      common: {
+        name: tName("presetFrequency"),
+        desc: tName("descPresetFrequency"),
+        type: "number",
+        unit: "kHz",
+        role: "value",
+        read: true,
+        write: false,
+      },
+    });
+    if (snooze) {
+      objects.push({
+        id: `clock.alarm.${channel}.snooze`,
+        type: "state",
+        common: {
+          name: tName("snooze"),
+          desc: tName("descSnooze"),
+          type: "boolean",
+          role: "indicator",
+          read: true,
+          write: false,
+        },
+      });
+    }
+  }
+  return objects;
+}
+
+/**
+ * The MusicCast Link group (YXC Advanced §5.1) under `multiroom.group`.
+ *
+ * @param capabilities the parsed YXC capabilities
+ * @returns the objects, parents first — none where the device does not declare the block
+ */
+function groupObjects(capabilities: YxcCapabilities): ObjectDef[] {
+  if (!capabilities.hasDistribution) {
+    return [];
+  }
+  const objects: ObjectDef[] = [];
+  // The MusicCast-Link states live in their own folder so the tree itself tells the
+  // scope: directly under multiroom = all zones of this device, group = linked devices.
+  // Both channels already exist: the main zone's always-created
+  // multiroom.group.streamingEnabled state brought them in through the parent loop.
+  const distState = (
+    id: string,
+    name: ioBroker.StringOrTranslated,
+    role: string,
+    desc?: ioBroker.StringOrTranslated,
+    values?: readonly string[],
+  ): void => {
+    objects.push({
+      id: `multiroom.group.${id}`,
+      type: "state",
+      common: {
+        name,
+        ...(desc ? { desc } : {}),
+        type: "string",
+        role,
+        read: true,
+        write: false,
+        ...(values ? { states: selfMap(values) } : {}),
+      },
+    });
+  };
+  // YXC Advanced §5.1: `role` server / client / none, `server_zone` main to zone4.
+  distState("role", tName("roleServerClient"), "state", tName("descRoleServerClient"), ["server", "client", "none"]);
+  distState("id", tName("groupID"), "text", tName("descGroupID"));
+  // YXC Advanced §5.1 — reported by the server from API 2.00 on; building a group can take up to
+  // three minutes (§9.1.8-3), and this is how long (audit 2026-09-24, C7).
+  objects.push({
+    id: "multiroom.group.status",
+    type: "state",
+    common: {
+      name: tName("groupStatus"),
+      desc: tName("descGroupStatus"),
+      type: "string",
+      role: "state",
+      read: true,
+      write: false,
+      states: { building: "building", working: "working", deleting: "deleting" },
+    },
+  });
+  // Writable (YXC Advanced §5.6, POST `setGroupName`); the device keeps it in volatile memory only.
+  objects.push({
+    id: "multiroom.group.name",
+    type: "state",
+    common: {
+      name: tName("groupName"),
+      desc: tName("descGroupName"),
+      type: "string",
+      role: "text",
+      read: true,
+      write: true,
+    },
+  });
+  distState("serverZone", tName("serverZoneFeedsTheGroup"), "state", undefined, ["main", "zone2", "zone3", "zone4"]);
+  distState("linkedDevices", tName("linkedDevices"), "json", tName("descLinkedDevices"));
+  objects.push({
+    id: "multiroom.group.leave",
+    type: "state",
+    common: {
+      name: tName("leaveGroup"),
+      desc: tName("descLeaveGroup"),
+      type: "boolean",
+      role: "button",
+      read: false,
+      write: true,
+    },
+  });
+  objects.push({
+    id: "multiroom.group.linkDevice",
+    type: "state",
+    common: {
+      name: tName("linkADeviceItsIP"),
+      desc: tName("descLinkADeviceItsIP"),
+      type: "string",
+      role: "text",
+      read: false,
+      write: true,
+    },
+  });
+  return objects;
+}
+
+/**
  * Turn YXC capabilities into the unified object tree: main's functions as
  * top-level states, each additional zone as a channel with its own states. An
  * input state is added when the zone offers inputs. Player sources (netusb, cd)
@@ -631,630 +1317,10 @@ export function mapYxcToObjects(
       ...playerBlockObjects(`${zonePrefix(zoneId)}player`, PLAYER_STATES, settableModes ? SETTABLE_MODES : undefined),
     );
   }
-  if (capabilities.media.includes("netusb")) {
-    objects.push({ id: "player.netPlayer", type: "channel", common: channelCommon("netPlayer") });
-    objects.push({
-      id: "player.netPlayer.preset",
-      type: "state",
-      common: {
-        name: tName("recallPreset"),
-        desc: tName("descRecallPreset"),
-        type: "number",
-        role: "level",
-        read: true,
-        write: true,
-        min: 1,
-        ...(capabilities.netusbSlots?.presets !== undefined ? { max: capabilities.netusbSlots.presets } : {}),
-      },
-    });
-    // The favourites and recently-played lists (names included) plus the recall-by-number
-    // for recents — the musiccast adapter's selection surface, on our tree.
-    objects.push({
-      id: "player.netPlayer.presets",
-      type: "state",
-      common: {
-        name: tName("favouritesStoredPresets"),
-        desc: tName("descFavouritesStoredPresets"),
-        type: "string",
-        role: "json",
-        read: true,
-        write: false,
-      },
-    });
-    objects.push({
-      id: "player.netPlayer.recent",
-      type: "state",
-      common: {
-        name: tName("recentlyPlayed"),
-        desc: tName("descRecentlyPlayed"),
-        type: "string",
-        role: "json",
-        read: true,
-        write: false,
-      },
-    });
-    // Store and clear a favourite, jump within the track (YXC Basic Rev 1.10 §7.11/§7.12/§7.4; C38).
-    const favourites = { min: 1, max: capabilities.netusbSlots?.presets };
-    objects.push(actionState("player.netPlayer.presetSave", "storeFavourite", "descStoreFavourite", favourites));
-    objects.push(actionState("player.netPlayer.presetClear", "clearFavourite", "descClearFavourite", favourites));
-    const jump = actionState("player.netPlayer.playPosition", "jumpToPosition", "descJumpToPosition", { min: 0 });
-    objects.push({ ...jump, common: { ...jump.common, unit: "s" } });
-    objects.push({
-      id: "player.netPlayer.recallRecent",
-      type: "state",
-      common: {
-        name: tName("recallRecentlyPlayedNumber"),
-        desc: tName("descRecallRecentlyPlayedNumber"),
-        type: "number",
-        role: "level",
-        read: true,
-        write: true,
-        min: 1,
-        ...(capabilities.netusbSlots?.recent !== undefined ? { max: capabilities.netusbSlots.recent } : {}),
-      },
-    });
-    // What the network player reports about the current playback — carried by the push only (YXC
-    // Basic §10.3/§11.3), seeded to "no error / no message" at every connect (audit 2026-09-24, C18).
-    objects.push({
-      id: "player.netPlayer.playError",
-      type: "state",
-      common: {
-        name: tName("playbackError"),
-        desc: tName("descPlaybackError"),
-        type: "number",
-        role: "value",
-        read: true,
-        write: false,
-        states: NETUSB_PLAY_ERRORS,
-      },
-    });
-    // The error codes in words — every one of them when the device reports several at once (C40).
-    objects.push({
-      id: "player.netPlayer.playErrorText",
-      type: "state",
-      common: {
-        name: tName("playbackErrorText"),
-        desc: tName("descPlaybackErrorText"),
-        type: "string",
-        role: "text",
-        read: true,
-        write: false,
-      },
-    });
-    objects.push({
-      id: "player.netPlayer.playMessage",
-      type: "state",
-      common: {
-        name: tName("playbackMessage"),
-        desc: tName("descPlaybackMessage"),
-        type: "string",
-        role: "text",
-        read: true,
-        write: false,
-      },
-    });
-    // MusicCast playlists and the play queue — declared in the netusb func_list.
-    // Read-only surfaces: no write path for them is documented anywhere, and blind
-    // writes are exactly what this adapter no longer does.
-    if (capabilities.netusbFuncs?.includes("mc_playlist")) {
-      objects.push({
-        id: "player.netPlayer.playlists",
-        type: "state",
-        common: {
-          name: tName("musiccastPlaylists"),
-          desc: tName("descMusiccastPlaylists"),
-          type: "string",
-          role: "json",
-          read: true,
-          write: false,
-        },
-      });
-    }
-    if (capabilities.netusbFuncs?.includes("play_queue")) {
-      objects.push({
-        id: "player.netPlayer.queue",
-        type: "state",
-        common: {
-          name: tName("playQueue"),
-          desc: tName("descPlayQueue"),
-          type: "string",
-          role: "json",
-          read: true,
-          write: false,
-        },
-      });
-      // Its length and position as values of their own — the list shows the first eight (C30).
-      for (const [id, nameKey, descKey] of [
-        ["player.netPlayer.queueLength", "queueLength", "descQueueLength"],
-        ["player.netPlayer.queuePosition", "queuePosition", "descQueuePosition"],
-      ] as const) {
-        objects.push({
-          id,
-          type: "state",
-          common: {
-            name: tName(nameKey),
-            desc: tName(descKey),
-            type: "number",
-            role: "value",
-            read: true,
-            write: false,
-          },
-        });
-      }
-    }
-  }
-  if (capabilities.media.includes("cd")) {
-    // Drive-own states only — what the disc is PLAYING shows in the flat block above.
-    objects.push({ id: "player.cd", type: "channel", common: channelCommon("cd") });
-    objects.push(actionState("player.cd.trackSelect", "playTrackNumber", "descPlayTrackNumber", { min: 1, max: 512 }));
-    objects.push({
-      id: "player.cd.tray",
-      type: "state",
-      common: {
-        name: tName("toggleTray"),
-        desc: tName("descToggleTray"),
-        type: "boolean",
-        role: "button",
-        read: false,
-        write: true,
-      },
-    });
-    objects.push({
-      id: "player.cd.trackNumber",
-      type: "state",
-      // YXC Basic §8.1: -1 while no track plays — shown as 0, no track number (audit 2026-09-29, C40).
-      common: {
-        name: tName("trackNumber"),
-        desc: tName("descTrackNumber"),
-        type: "number",
-        role: "value",
-        min: 0,
-        read: true,
-        write: false,
-      },
-    });
-    objects.push({
-      id: "player.cd.totalTracks",
-      type: "state",
-      common: { name: tName("totalTracks"), type: "number", role: "value", read: true, write: false },
-    });
-    objects.push({
-      id: "player.cd.discTime",
-      type: "state",
-      common: { name: tName("discTime"), type: "number", unit: "s", role: "value", read: true, write: false },
-    });
-    objects.push({
-      id: "player.cd.deviceStatus",
-      type: "state",
-      common: {
-        name: tName("driveStatus"),
-        desc: tName("descDriveStatus"),
-        type: "string",
-        role: "state",
-        read: true,
-        write: false,
-      },
-    });
-  }
-  if (capabilities.media.includes("tuner")) {
-    objects.push({ id: "tuner", type: "channel", common: channelCommon("tuner") });
-    const bandCommon: ObjectDef["common"] = {
-      name: tName("band"),
-      type: "string",
-      role: "state",
-      read: true,
-      write: true,
-    };
-    const bands = capabilities.tuner?.bands ?? [];
-    const tunerFuncs = capabilities.tuner?.funcs ?? [];
-    if (bands.length > 0) {
-      bandCommon.states = selfMap(bands);
-    }
-    objects.push({ id: "tuner.band", type: "state", common: bandCommon });
-    // Frequency in kHz — FM/AM/DAB all report kHz in getPlayInfo (FM 100900 =
-    // 100.9 MHz, AM 1080, DAB 180064), verified against real device captures. The bounds are
-    // the ENVELOPE of the ranges the device declares per band (AM 531 kHz … FM 108000 kHz):
-    // one datapoint serves every band, so it can carry the outer limits but no single step
-    // (FM steps 50 kHz, 200 in the US; AM 9 or 10).
-    //
-    // ⚠️ The envelope needs a range for EVERY band the device says it has. A DAB receiver
-    // declares `func_list: [fm, rds, dab]` and a `range_step` for `fm` alone — measured on all
-    // three DAB captures (RX-A2070, RX-V6A, CD-NT670D) — and then reports 180064 kHz from the
-    // DAB band into this one datapoint. Taking the FM envelope there narrowed the datapoint
-    // below what the device itself sends, and js-controller warned on every poll. An incomplete
-    // declaration is no declaration: the datapoint stays unbounded rather than carry a limit the
-    // device contradicts (same rule as `volume` — the declared range is taken, never derived).
-    const frequencyCommon: ObjectDef["common"] = {
-      name: tName("frequency"),
-      type: "number",
-      unit: "kHz",
-      role: "level",
-      read: true,
-      write: true,
-    };
-    const declaredRanges = capabilities.tuner?.ranges ?? {};
-    const bandRanges = bands.map(band => declaredRanges[band]);
-    if (bands.length > 0 && bandRanges.every(range => range !== undefined)) {
-      frequencyCommon.min = Math.min(...bandRanges.map(range => range.min));
-      frequencyCommon.max = Math.max(...bandRanges.map(range => range.max));
-    }
-    objects.push({ id: "tuner.frequency", type: "state", common: frequencyCommon });
-    // RDS only where the tuner declares it (YXC Basic §4.2 tuner func_list `rds`; §6.2 "Available only
-    // when RDS is valid") — an ISX-18D has none, and its four RDS datapoints stood empty (audit
-    // 2026-09-29, C42).
-    if (tunerFuncs.includes("rds")) {
-      for (const rds of RDS_STATES) {
-        objects.push({
-          id: rds.id,
-          type: "state",
-          common: {
-            name: tName(rds.nameKey),
-            desc: tName(rds.descKey),
-            type: "string",
-            role: "text",
-            read: true,
-            write: false,
-          },
-        });
-      }
-    }
-    // The stored-station surface: recall by number (writable), the active slot read back
-    // from play info, up/down stepping, and the stored lists (with what the device knows
-    // about each slot) as JSON — the selection surface the musiccast adapter offered.
-    const presetCommon: ObjectDef["common"] = {
-      name: tName("presetRecallByNumber"),
-      desc: tName("descPresetRecallByNumber"),
-      type: "number",
-      role: "level",
-      read: true,
-      write: true,
-      min: 0,
-    };
-    if (capabilities.tuner?.presetNum) {
-      presetCommon.max = capabilities.tuner.presetNum;
-    }
-    objects.push({ id: "tuner.preset", type: "state", common: presetCommon });
-    const stations = { min: 1, max: capabilities.tuner?.presetNum };
-    objects.push(actionState("tuner.presetSave", "storeStationPreset", "descStoreStationPreset", stations));
-    objects.push(actionState("tuner.presetClear", "clearStationPreset", "descClearStationPreset", stations));
-    objects.push(actionState("tuner.searchUp", "searchNextStation", "descSearchNextStation"));
-    objects.push(actionState("tuner.searchDown", "searchPreviousStation", "descSearchPreviousStation"));
-    // `switchPreset` exists from API 1.17 on (YXC Basic §6.6); an older device refused every press.
-    if (capabilities.apiVersion === undefined || capabilities.apiVersion >= 1.17) {
-      objects.push({
-        id: "tuner.presetUp",
-        type: "state",
-        common: { name: tName("nextPreset"), type: "boolean", role: "button", read: false, write: true },
-      });
-      objects.push({
-        id: "tuner.presetDown",
-        type: "state",
-        common: { name: tName("previousPreset"), type: "boolean", role: "button", read: false, write: true },
-      });
-    }
-    objects.push({
-      id: "tuner.presets",
-      type: "state",
-      common: {
-        name: tName("storedPresets"),
-        desc: tName("descStoredPresets"),
-        type: "string",
-        role: "json",
-        read: true,
-        write: false,
-      },
-    });
-    objects.push({
-      id: "tuner.tuned",
-      type: "state",
-      common: {
-        name: tName("tuned"),
-        desc: tName("descTunedToAStation"),
-        type: "boolean",
-        role: "indicator",
-        read: true,
-        write: false,
-      },
-    });
-    objects.push({
-      id: "tuner.audioMode",
-      type: "state",
-      common: {
-        name: tName("audioMode"),
-        desc: tName("descAudioMode"),
-        type: "string",
-        role: "state",
-        read: true,
-        write: false,
-        // YXC Basic §6.2 `audio_mode`; none on AM.
-        states: selfMap(["mono", "stereo"]),
-      },
-    });
-    if (bands.includes("dab")) {
-      objects.push({ id: "tuner.dab", type: "channel", common: channelCommon("dab") });
-      for (const field of DAB_FIELDS) {
-        if (field.requires && !tunerFuncs.includes(field.requires)) {
-          continue;
-        }
-        objects.push({
-          id: field.id,
-          type: "state",
-          common: {
-            name: tName(field.nameKey),
-            ...(field.descKey ? { desc: tName(field.descKey) } : {}),
-            type: field.type,
-            role: field.role ?? (field.type === "boolean" ? "indicator" : field.type === "number" ? "value" : "text"),
-            ...(field.unit ? { unit: field.unit } : {}),
-            ...(field.min !== undefined ? { min: field.min } : {}),
-            ...(field.max !== undefined ? { max: field.max } : {}),
-            ...(field.states ? { states: selfMap(field.states) } : {}),
-            read: true,
-            write: false,
-          },
-        });
-      }
-      // A DAB station is chosen by service, not by frequency (YXC Basic §6.15; audit 2026-09-24, C17).
-      objects.push({
-        id: "tuner.dab.serviceUp",
-        type: "state",
-        common: { name: tName("nextDabService"), type: "boolean", role: "button", read: false, write: true },
-      });
-      objects.push({
-        id: "tuner.dab.serviceDown",
-        type: "state",
-        common: { name: tName("previousDabService"), type: "boolean", role: "button", read: false, write: true },
-      });
-    }
-  }
-  if (capabilities.clock) {
-    // The clock/alarm block of the desk-audio/clock models. The switches, the volume, the mode and each
-    // day's enable/time/beep are written through the specification's setters (YXC Basic Rev 1.10
-    // §9.2/§9.4/§9.5; audit 2026-09-29, C38); the playback choice of an alarm stays read-only.
-    objects.push({ id: "clock", type: "channel", common: channelCommon("clock") });
-    objects.push({
-      id: "clock.autoSync",
-      type: "state",
-      common: {
-        name: tName("automaticTimeSync"),
-        desc: tName("descAutomaticTimeSync"),
-        type: "boolean",
-        role: "switch",
-        read: true,
-        // setAutoSync: "Available only when date_and_time exists in clock - func_list" (§9.2).
-        write: capabilities.clock.funcs.includes("date_and_time"),
-      },
-    });
-    // Only where the clock block declares it (YXC Basic §4.2 clock func_list) — a WX-021 has no format
-    // setting, and the datapoint stood empty for good (audit 2026-09-29, C42).
-    if (capabilities.clock.funcs.includes("format")) {
-      objects.push({
-        id: "clock.format",
-        type: "state",
-        common: {
-          name: tName("clockFormat"),
-          desc: tName("descClockFormat"),
-          type: "string",
-          role: "state",
-          read: true,
-          write: true,
-          states: { "12h": "12h", "24h": "24h" },
-        },
-      });
-    }
-    objects.push({ id: "clock.alarm", type: "channel", common: channelCommon("alarm") });
-    objects.push({
-      id: "clock.alarm.on",
-      type: "state",
-      common: { name: tName("alarmArmed"), type: "boolean", role: "switch", read: true, write: true },
-    });
-    const volumeCommon: ObjectDef["common"] = {
-      name: tName("alarmVolume"),
-      type: "number",
-      role: "level",
-      read: true,
-      write: true,
-    };
-    if (capabilities.clock.alarmVolumeRange) {
-      volumeCommon.min = capabilities.clock.alarmVolumeRange.min;
-      volumeCommon.max = capabilities.clock.alarmVolumeRange.max;
-      volumeCommon.step = capabilities.clock.alarmVolumeRange.step;
-    }
-    objects.push({ id: "clock.alarm.volume", type: "state", common: volumeCommon });
-    objects.push({
-      id: "clock.alarm.fadeInterval",
-      type: "state",
-      common: {
-        name: tName("fadeInTime"),
-        desc: tName("descFadeInTime"),
-        type: "number",
-        unit: "s",
-        role: "value",
-        read: true,
-        write: false,
-      },
-    });
-    objects.push({
-      id: "clock.alarm.fadeType",
-      type: "state",
-      common: {
-        name: tName("fadeType"),
-        desc: tName("descFadeType"),
-        type: "number",
-        role: "value",
-        read: true,
-        write: false,
-      },
-    });
-    objects.push({
-      id: "clock.alarm.mode",
-      type: "state",
-      common: {
-        name: tName("alarmMode"),
-        type: "string",
-        role: "state",
-        read: true,
-        write: true,
-        states: selfMap(capabilities.clock.alarmModes),
-      },
-    });
-    // YXC Basic §9.1: `alarm.repeat` — whether the one-day alarm repeats; not snooze, which the clock
-    // block declares on its own (audit 2026-09-29, C35).
-    objects.push({
-      id: "clock.alarm.repeat",
-      type: "state",
-      common: {
-        name: tName("alarmRepeat"),
-        desc: tName("descAlarmRepeat"),
-        type: "boolean",
-        role: "switch",
-        read: true,
-        write: true,
-      },
-    });
-    const snooze = capabilities.clock.funcs.includes("snooze");
-    const detailChannels = ["oneday", ...(capabilities.clock.alarmModes.includes("weekly") ? ALARM_DAYS : [])];
-    for (const channel of detailChannels) {
-      // The weekday channels are named by the device; only the fixed one-day channel translates.
-      const label: ioBroker.StringOrTranslated =
-        channel === "oneday" ? tName("oneDayAlarm") : channel.charAt(0).toUpperCase() + channel.slice(1);
-      objects.push({ id: `clock.alarm.${channel}`, type: "channel", common: { name: label } });
-      const detail = (
-        id: string,
-        name: ioBroker.StringOrTranslated,
-        type: "boolean" | "number" | "string",
-        role: string,
-        write = false,
-      ): void => {
-        objects.push({
-          id: `clock.alarm.${channel}.${id}`,
-          type: "state",
-          common: { name, type, role, read: true, write },
-        });
-      };
-      detail("enable", tName("enabled"), "boolean", "switch", true);
-      detail("time", tName("alarmTime"), "string", "text", true);
-      detail("beep", tName("beep"), "boolean", "switch", true);
-      detail("playbackType", tName("playbackType"), "string", "state");
-      detail("resumeInput", tName("resumeInput"), "string", "state");
-      detail("presetType", tName("presetType"), "string", "state");
-      detail("presetNumber", tName("presetNumber"), "number", "value");
-      // YXC Basic §9.1: `preset.netusb_info` (input, text) and `preset.tuner_info` (band, frequency in kHz)
-      // (audit 2026-09-29, C34).
-      detail("presetInput", tName("presetSource"), "string", "state");
-      detail("presetName", tName("presetName"), "string", "text");
-      detail("presetBand", tName("presetBand"), "string", "state");
-      objects.push({
-        id: `clock.alarm.${channel}.presetFrequency`,
-        type: "state",
-        common: {
-          name: tName("presetFrequency"),
-          desc: tName("descPresetFrequency"),
-          type: "number",
-          unit: "kHz",
-          role: "value",
-          read: true,
-          write: false,
-        },
-      });
-      if (snooze) {
-        objects.push({
-          id: `clock.alarm.${channel}.snooze`,
-          type: "state",
-          common: {
-            name: tName("snooze"),
-            desc: tName("descSnooze"),
-            type: "boolean",
-            role: "indicator",
-            read: true,
-            write: false,
-          },
-        });
-      }
-    }
-  }
-  if (capabilities.hasDistribution) {
-    // The MusicCast-Link states live in their own folder so the tree itself tells the
-    // scope: directly under multiroom = all zones of this device, group = linked devices.
-    // Both channels already exist: the main zone's always-created
-    // multiroom.group.streamingEnabled state brought them in through the parent loop.
-    const distState = (
-      id: string,
-      name: ioBroker.StringOrTranslated,
-      role: string,
-      desc?: ioBroker.StringOrTranslated,
-      values?: readonly string[],
-    ): void => {
-      objects.push({
-        id: `multiroom.group.${id}`,
-        type: "state",
-        common: {
-          name,
-          ...(desc ? { desc } : {}),
-          type: "string",
-          role,
-          read: true,
-          write: false,
-          ...(values ? { states: selfMap(values) } : {}),
-        },
-      });
-    };
-    // YXC Advanced §5.1: `role` server / client / none, `server_zone` main to zone4.
-    distState("role", tName("roleServerClient"), "state", tName("descRoleServerClient"), ["server", "client", "none"]);
-    distState("id", tName("groupID"), "text", tName("descGroupID"));
-    // YXC Advanced §5.1 — reported by the server from API 2.00 on; building a group can take up to
-    // three minutes (§9.1.8-3), and this is how long (audit 2026-09-24, C7).
-    objects.push({
-      id: "multiroom.group.status",
-      type: "state",
-      common: {
-        name: tName("groupStatus"),
-        desc: tName("descGroupStatus"),
-        type: "string",
-        role: "state",
-        read: true,
-        write: false,
-        states: { building: "building", working: "working", deleting: "deleting" },
-      },
-    });
-    // Writable (YXC Advanced §5.6, POST `setGroupName`); the device keeps it in volatile memory only.
-    objects.push({
-      id: "multiroom.group.name",
-      type: "state",
-      common: {
-        name: tName("groupName"),
-        desc: tName("descGroupName"),
-        type: "string",
-        role: "text",
-        read: true,
-        write: true,
-      },
-    });
-    distState("serverZone", tName("serverZoneFeedsTheGroup"), "state", undefined, ["main", "zone2", "zone3", "zone4"]);
-    distState("linkedDevices", tName("linkedDevices"), "json", tName("descLinkedDevices"));
-    objects.push({
-      id: "multiroom.group.leave",
-      type: "state",
-      common: {
-        name: tName("leaveGroup"),
-        desc: tName("descLeaveGroup"),
-        type: "boolean",
-        role: "button",
-        read: false,
-        write: true,
-      },
-    });
-    objects.push({
-      id: "multiroom.group.linkDevice",
-      type: "state",
-      common: {
-        name: tName("linkADeviceItsIP"),
-        desc: tName("descLinkADeviceItsIP"),
-        type: "string",
-        role: "text",
-        read: false,
-        write: true,
-      },
-    });
-  }
+  objects.push(...netusbObjects(capabilities));
+  objects.push(...cdObjects(capabilities));
+  objects.push(...tunerObjects(capabilities));
+  objects.push(...clockObjects(capabilities));
+  objects.push(...groupObjects(capabilities));
   return objects;
 }
