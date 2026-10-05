@@ -500,9 +500,7 @@ export class XmlDeclaredCommands {
     };
     try {
       // Fresh on every connection — the names are the user's (D8).
-      return ctx.deps.probeMemory
-        ? await ctx.deps.probeMemory.refresh(xmlZoneNamesKey(zone.key), probe)
-        : await probe();
+      return await ctx.deps.probeMemory.refresh(xmlZoneNamesKey(zone.key), probe);
     } catch (e) {
       ctx.deps.log.debug(`${ctx.deviceId}: ${zone.element} name probe failed (${errText(e)})`);
       return { zone: "", zoneB: "" };

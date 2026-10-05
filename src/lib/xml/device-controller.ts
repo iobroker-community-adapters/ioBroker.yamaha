@@ -370,19 +370,16 @@ export class XmlDeviceController {
    * Read the device description once per device — a model property, remembered like the
    * other declarations. A 404 (the 2020 generation) is the definite "declares none" and is
    * remembered as the empty declaration; a transient failure is not remembered, so the next
-   * connect asks again. A client without the read (older fakes) declares none.
+   * connect asks again.
    *
    * @returns the parsed description (empty lists where the device carries none)
    */
   private async probeDescriptor(): Promise<XmlDescriptor> {
     const empty: XmlDescriptor = { programs: [], sleep: [], adaptiveDrc: [] };
     const client = this.deps.client;
-    if (!client.getDescriptor) {
-      return empty;
-    }
     const probe = async (): Promise<XmlDescriptor> => {
       try {
-        return parseDescriptor(await client.getDescriptor!());
+        return parseDescriptor(await client.getDescriptor());
       } catch (e) {
         if (isPermanentXmlRefusal(e)) {
           return empty; // this generation has no description — definite

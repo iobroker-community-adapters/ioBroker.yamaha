@@ -11,8 +11,8 @@ export interface XmlClientLike {
   getStatus(zone: string, priority?: CommandPriority): Promise<BasicStatus>;
   /** Read the device's declaration of itself (System > Config): model, identity, zones, sources, input names. */
   getSystemConfig(): Promise<XmlSystemConfig>;
-  /** Read the raw device description (`desc.xml`); absent on older fakes → no description is read. */
-  getDescriptor?(): Promise<string>;
+  /** Read the raw device description (`desc.xml`). */
+  getDescriptor(): Promise<string>;
   /** Send an inner command to a zone. */
   send(zone: string, inner: string): Promise<void>;
   /** Read an element's inner GET request and return the raw response body — at `user` priority for a read-back. */
