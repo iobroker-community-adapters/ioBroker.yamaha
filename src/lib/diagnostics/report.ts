@@ -231,11 +231,11 @@ export function buildDiagnosticsReport(input: ReportInput): Record<string, unkno
   }
   const report: Record<string, unknown> = {
     readMe: {
-      what: "Diagnostics export of one Yamaha device for a GitHub issue of ioBroker.yamaha. Addresses, serial numbers, network and room names are replaced by markers.",
+      what: "Diagnostics export of one Yamaha device for a GitHub issue of ioBroker.yamaha. Addresses, serial numbers, MACs, network, room and device names (and a device id made from them) are replaced by markers.",
       markers:
-        "Markers (ip-private-1, name-1, serial-1-…2B3C) are stable INSIDE this file only. Never compare them across two exports.",
+        "Markers (ip-private-1, name-1, device-1, serial-1-…2B3C) are stable INSIDE this file only. Never compare them across two exports.",
       captures:
-        "captures.* holds what the device answered when this report was made, verbatim and read-only: YNCA SUBUNIT:FUNC → value (plus every received line), MusicCast endpoint → JSON body, XML Element/Node → response body and desc.xml. Same shape as test/fixtures/inventory.",
+        "captures.* holds what the device answered when this report was made, verbatim and read-only: YNCA SUBUNIT:FUNC → value (plus every received line), MusicCast endpoint → JSON body, XML Element/Node → response body and desc.xml. Same shape as test/fixtures/inventory. complete = the read ran to its end without a transport failure; failed = questions that got no answer (timeout, lost connection), error = why. A refusal is an answer: kept as {response_code} or {httpStatus}; a transport failure as {error}.",
     },
     adapter: "iobroker.yamaha",
     version: input.adapterVersion,
