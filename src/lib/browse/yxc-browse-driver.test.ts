@@ -1,5 +1,5 @@
 import { yxcListLanguage, YxcBrowseDriver } from "./yxc-browse-driver";
-import type { BrowseEngine } from "./browse-engine";
+import { BrowseEngine } from "./browse-engine";
 import type { BrowseWindow } from "./types";
 
 /**
@@ -195,6 +195,54 @@ describe("YxcBrowseDriver", () => {
       ["return"],
       ["return"],
     ]);
+  });
+
+  // The window index belongs to the level on screen: after a page-down at the root, `home` kept the second page,
+  // so the path walk never saw "Entry 1" (review 2026-10-05, A22).
+  it("home shows the root's FIRST page, and a path walk finds an entry there after a page-down", async () => {
+    const calls: Array<[string, unknown[]]> = [];
+    const root = Array.from({ length: 10 }, (_, i) => ({ text: `Entry ${i + 1}`, attribute: 0b10 }));
+    const sub = [{ text: "Radio Paradise", attribute: 0b100 }];
+    let layer = 0;
+    const driver = new YxcBrowseDriver(
+      {
+        getListInfo: (input, index, size = 8) => {
+          calls.push(["getListInfo", [input, index, size]]);
+          const list = layer === 0 ? root : sub;
+          return Promise.resolve({
+            response_code: 0,
+            menu_layer: layer,
+            menu_name: layer === 0 ? "NET RADIO" : "Entry 1",
+            max_line: list.length,
+            index,
+            list_info: list.slice(index, index + size),
+          });
+        },
+        setListControl: (type, index) => {
+          calls.push(["setListControl", [type, index]]);
+          layer = type === "select" ? 1 : type === "return" ? 0 : layer;
+          return Promise.resolve({ response_code: 0 });
+        },
+      },
+      ["net_radio"],
+    );
+    const warns: string[] = [];
+    const engine = new BrowseEngine(driver, {
+      emit: () => undefined,
+      log: { debug: () => undefined, info: () => undefined, warn: (line: string) => void warns.push(line) },
+      delay: ms => new Promise(resolve => setTimeout(resolve, Math.min(ms, 5))),
+    });
+    driver.attach(engine);
+    await driver.open("netRadio");
+    await driver.pageDown();
+    await driver.home();
+    expect(calls.filter(call => call[0] === "getListInfo").pop()?.[1][1]).toBe(0);
+
+    calls.length = 0;
+    engine.handleWrite("player.browse.path", "Entry 1>Radio Paradise");
+    await vi.waitFor(() => expect(calls).toContainEqual(["setListControl", ["play", 0]]));
+    expect(warns).toEqual([]);
+    expect(calls).toContainEqual(["setListControl", ["select", 0]]);
   });
 });
 
