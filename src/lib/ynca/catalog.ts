@@ -3413,6 +3413,38 @@ export function sweepGets(entries: readonly YncaEntry[]): Array<{ subunit: strin
 }
 
 /**
+ * The subunits that answered `AVAIL=?` — the only proof of presence. The closing marker's `@SYS:VERSION=` and whatever
+ * the receiver pushed meanwhile land in the same answer and prove nothing; SYS never answers AVAIL (review 2026-10-05,
+ * A1). One planner for the read-in and the diagnostics capture, so both read the same functions.
+ *
+ * @param subunits what a probe collected, subunit → function → value
+ * @returns the subunits that answered AVAIL
+ */
+export function availPresent(subunits: Readonly<Record<string, Readonly<Record<string, string>>>>): Set<string> {
+  return new Set(
+    Object.entries(subunits)
+      .filter(([subunit, funcs]) => subunit !== "SYS" && funcs.AVAIL !== undefined)
+      .map(([subunit]) => subunit),
+  );
+}
+
+/**
+ * The functions to read after the AVAIL probe: every catalogued one of the present subunits plus SYS (which never
+ * answers AVAIL) — or all of them when no subunit answered, so a firmware without AVAIL loses nothing.
+ *
+ * @param catalog the catalog entries
+ * @param present the subunits that answered AVAIL (`availPresent`)
+ * @returns the subunit/function pairs to query
+ */
+export function targetedGets(
+  catalog: readonly YncaEntry[],
+  present: ReadonlySet<string>,
+): Array<{ subunit: string; func: string }> {
+  const all = sweepGets(catalog);
+  return present.size > 0 ? all.filter(get => get.subunit === "SYS" || present.has(get.subunit)) : all;
+}
+
+/**
  * Map `subunit:func` → catalog entry, for turning a device line into a state.
  *
  * @param entries the catalog entries

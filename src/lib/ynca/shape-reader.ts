@@ -1,10 +1,11 @@
 import { mergeYncaSubunits, type YncaCapabilities } from "./capability";
 import {
   availGets,
+  availPresent,
   bundleGets,
   planSweep,
   SYS_FUNCTION_FAMILIES,
-  sweepGets,
+  targetedGets,
   YNCA_CATALOG,
   YNCA_ZONES,
   type InputEvidence,
@@ -138,22 +139,6 @@ export function sameReceiver(live: YncaIdentity, remembered: YncaIdentity): bool
     live.model !== "" &&
     live.model === remembered.model &&
     (live.firmware === "" || remembered.firmware === "" || live.firmware === remembered.firmware)
-  );
-}
-
-/**
- * The subunits that answered `AVAIL=?` in a report — the only proof of presence (rule 3). The closing marker's
- * `@SYS:VERSION=` and whatever the receiver pushed meanwhile are in the same report and prove nothing; SYS never
- * answers AVAIL.
- *
- * @param report what a probe collected
- * @returns the subunits that answered AVAIL
- */
-export function answeredAvail(report: YncaCapabilities): Set<string> {
-  return new Set(
-    Object.entries(report.subunits)
-      .filter(([subunit, funcs]) => subunit !== "SYS" && funcs.AVAIL !== undefined)
-      .map(([subunit]) => subunit),
   );
 }
 
@@ -387,7 +372,7 @@ export class YncaShapeReader {
     // installation never saw a subunit an update added (rule 7, review 2026-10-05, A25).
     const unasked = AVAIL_PROBE.filter(get => !snapshot?.probed.has(get.subunit));
     if (remembered && unasked.length > 0) {
-      const found = answeredAvail(await this.deps.client.readCapabilities(unasked));
+      const found = availPresent((await this.deps.client.readCapabilities(unasked)).subunits);
       if (this.storeSnapshot(found, remembered)) {
         snapshot = this.snapshotFor(remembered);
       }
@@ -396,9 +381,7 @@ export class YncaShapeReader {
         this.presentSubunits = snapshot.present;
       }
     }
-    const gets = sweepGets(catalog).filter(
-      get => get.subunit === "SYS" || !snapshot || snapshot.present.has(get.subunit),
-    );
+    const gets = targetedGets(catalog, snapshot?.present ?? new Set());
     // The same plan as the targeted sweep: the union with the remembered shape below keeps every function a fuller
     // sweep ever answered, so a skipped GET shrinks nothing here.
     const fresh = await this.sweepInPasses(planSweep(gets, this.inputEvidence({ model: "", subunits: {} })));
@@ -485,16 +468,16 @@ export class YncaShapeReader {
       present = new Set(snapshot.present);
       const unasked = AVAIL_PROBE.filter(get => !snapshot.probed.has(get.subunit));
       if (unasked.length > 0) {
-        const found = answeredAvail(await this.deps.client.readCapabilities(unasked));
+        const found = availPresent((await this.deps.client.readCapabilities(unasked)).subunits);
         this.storeSnapshot(found, { model: live.model, firmware: live.firmware || snapshot.firmware });
         found.forEach(subunit => present.add(subunit));
       }
     } else {
-      present = answeredAvail(await this.deps.client.readCapabilities(AVAIL_PROBE));
+      present = availPresent((await this.deps.client.readCapabilities(AVAIL_PROBE)).subunits);
       if (present.size === 0) {
         // The device ignores AVAIL — sweep blind so no function is lost. Silence is no proof: `probedSubunits` stays
         // empty, so no source is judged absent (advisor round 2026-09-09), and no snapshot is kept (rule 4).
-        return await this.deps.client.readCapabilities(sweepGets(catalog));
+        return await this.deps.client.readCapabilities(targetedGets(catalog, present));
       }
     }
     this.probedSubunits = PROBED_SUBUNITS;
@@ -570,9 +553,7 @@ export class YncaShapeReader {
         Object.keys(funcs).map(func => `${subunit}:${func}`),
       ),
     );
-    const gets = sweepGets(catalog).filter(
-      get => (get.subunit === "SYS" || present.has(get.subunit)) && !answered.has(`${get.subunit}:${get.func}`),
-    );
+    const gets = targetedGets(catalog, present).filter(get => !answered.has(`${get.subunit}:${get.func}`));
     const remembered = this.deps.probeMemory.remembered<Record<string, Record<string, string>>>(STATIC_KEY);
     // The zone table, the absent sources and the SYS families decide what is worth sending (2.7.0, `planSweep`); a
     // function a bundle answered is proof already, whatever the table says. Second connect onwards the statics are

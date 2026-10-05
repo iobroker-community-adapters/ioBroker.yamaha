@@ -3,7 +3,7 @@ import { ZONES } from "../catalog/zones";
 import { errText } from "../err-text";
 import { HttpStatusError } from "../util";
 import { descriptorPuts, parseSystemConfig } from "../xml/protocol";
-import { availGets, sweepGets, YNCA_CATALOG } from "../ynca/catalog";
+import { availGets, availPresent, targetedGets, YNCA_CATALOG } from "../ynca/catalog";
 import { decodeLine } from "../ynca/protocol";
 import { parseYxcFeatures } from "../yxc/capability";
 import { YxcRefusalError } from "../yxc/http-client";
@@ -61,7 +61,7 @@ export async function captureYnca(client: YncaCaptureClient): Promise<TransportC
     const probe = await read(availGets(YNCA_CATALOG));
     // Asked even when the probe's closing marker came late: a slow answer is no drop, and a dropped
     // connection ends the second read at once.
-    await read(targetedGets(probe));
+    await read(targetedGets(YNCA_CATALOG, availPresent(subunitsOf(probe))));
   } catch (e) {
     error = errText(e);
   }
@@ -69,24 +69,22 @@ export async function captureYnca(client: YncaCaptureClient): Promise<TransportC
 }
 
 /**
- * The functions to read after the AVAIL probe: every catalogued one of the subunits that answered
- * AVAIL, plus SYS — or all of them when no subunit answered (a firmware without AVAIL loses nothing).
- * Only an AVAIL answer counts as presence; the closing marker's `@SYS:VERSION` is no proof of
- * anything (the read-in's dead blind-sweep fallback, review 2026-10-05, A1).
+ * The probe's lines as subunit → function → value, for the read-in's own AVAIL planner (`availPresent` +
+ * `targetedGets`): the capture reads the functions the read-in reads, and only an AVAIL answer counts as presence —
+ * the closing marker's `@SYS:VERSION` proves nothing (review 2026-10-05, A1).
  *
  * @param probe the lines the AVAIL probe received
- * @returns the functions to read
+ * @returns the decoded answers
  */
-function targetedGets(probe: readonly string[]): Array<{ subunit: string; func: string }> {
-  const present = new Set<string>();
+function subunitsOf(probe: readonly string[]): Record<string, Record<string, string>> {
+  const subunits: Record<string, Record<string, string>> = {};
   for (const line of probe) {
     const decoded = decodeLine(line);
-    if (decoded.status === "ok" && decoded.func === "AVAIL") {
-      present.add(decoded.subunit);
+    if (decoded.status === "ok") {
+      (subunits[decoded.subunit] ??= {})[decoded.func] = decoded.value;
     }
   }
-  const all = sweepGets(YNCA_CATALOG);
-  return present.size > 0 ? all.filter(get => get.subunit === "SYS" || present.has(get.subunit)) : all;
+  return subunits;
 }
 
 /**

@@ -1,8 +1,8 @@
 import { vi } from "vitest";
 import { YncaDeviceController } from "../device-controller";
 import { YncaClient } from "./ynca-client";
-import { availGets, YNCA_CATALOG } from "./catalog";
-import { answeredAvail, sameReceiver } from "./shape-reader";
+import { availGets, availPresent, targetedGets, YNCA_CATALOG } from "./catalog";
+import { sameReceiver } from "./shape-reader";
 import { createSubunitCache, type YncaAvailSnapshot } from "./subunit-cache";
 import type { ObjectDef } from "../catalog/types";
 import { CommandGate } from "../lifecycle/command-gate";
@@ -67,11 +67,14 @@ const RECEIVER: Record<string, string> = {
 describe("presence is proven by AVAIL alone (review 2026-10-05, A1)", () => {
   test("the closing marker's answer and a pushed line prove no subunit", () => {
     expect(
-      answeredAvail({
-        model: "",
-        subunits: { SYS: { VERSION: "1.00" }, MAIN: { VOL: "-30.0" }, NETRADIO: { AVAIL: "Not Ready" } },
-      }),
+      availPresent({ SYS: { VERSION: "1.00" }, MAIN: { VOL: "-30.0" }, NETRADIO: { AVAIL: "Not Ready" } }),
     ).toEqual(new Set(["NETRADIO"]));
+  });
+
+  test("the targeted read asks SYS and the present subunits — and everything when none answered", () => {
+    const subunits = (gets: Array<{ subunit: string }>): Set<string> => new Set(gets.map(get => get.subunit));
+    expect(subunits(targetedGets(YNCA_CATALOG, new Set(["MAIN"])))).toEqual(new Set(["SYS", "MAIN"]));
+    expect(subunits(targetedGets(YNCA_CATALOG, new Set())).size).toBeGreaterThan(10);
   });
 
   describe("on the real client against a simulated receiver", () => {
